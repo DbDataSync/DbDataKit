@@ -51,7 +51,7 @@ public sealed class ConsoleCliTests : IDisposable
         Assert.StartsWith("https://console.example:8480/invite#", url);
 
         var code = url.Split('#')[1];
-        var invites = new InviteStore(ConsoleState.Open(directory));
+        var invites = new IdentityInviteStore(ConsoleState.Open(directory));
         var found = invites.Find(code);
         Assert.NotNull(found);
         Assert.Equal(UserRole.Viewer, found!.Role);
@@ -67,7 +67,7 @@ public sealed class ConsoleCliTests : IDisposable
         Assert.Contains("--email", nobody.Err);
         Assert.Equal(2, (await Run("user", "invite", "--repo", directory, "--email", "a@example.com", "--user", "x")).Exit);
 
-        var users = new UserStore(ConsoleState.Open(directory));
+        var users = new IdentityUserStore(ConsoleState.Open(directory));
         var ada = users.CreateUser("Ada", "ada@example.com", UserRole.Admin, emailVerified: true);
         var taken = await Run("user", "invite", "--repo", directory, "--email", "ADA@example.com");
         Assert.Equal(1, taken.Exit);
@@ -79,7 +79,7 @@ public sealed class ConsoleCliTests : IDisposable
     [Fact]
     public async Task An_administrator_sets_a_users_address_from_the_command_line_and_a_held_address_is_refused()
     {
-        var users = new UserStore(ConsoleState.Open(directory));
+        var users = new IdentityUserStore(ConsoleState.Open(directory));
         var old = users.CreateUser("Old", "typed@example.com", UserRole.Admin);         // made before addresses were keyed: shown, never matched
         var ada = users.CreateUser("Ada", "ada@example.com", UserRole.Viewer, emailVerified: true);
 
@@ -103,7 +103,7 @@ public sealed class ConsoleCliTests : IDisposable
         Assert.Equal(0, empty.Exit);
         Assert.Contains("No user yet", empty.Out);
 
-        var users = new UserStore(ConsoleState.Open(directory));
+        var users = new IdentityUserStore(ConsoleState.Open(directory));
         var ada = users.CreateUser("Ada", "ada@example.com", UserRole.Admin);
         users.AddCredential(ada.Id, CredentialMethods.Passkey, "cred-1", "key", label: "Passkey");
 

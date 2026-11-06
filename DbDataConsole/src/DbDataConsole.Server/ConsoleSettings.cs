@@ -39,10 +39,19 @@ public sealed record ConsoleSettings(string Directory, Uri Listen, Uri? PublicUr
 /// <param name="TrustedCertificate">A certificate file (PEM or DER) to trust for the home's address besides the machine's own trust: the home's certificate itself (a serving layer's self-signed one, which it writes beside its PFX as a .cer) or the CA that issued it. Null: the machine's trust only.</param>
 public sealed record IdentityHomeSettings(Uri Authority, string ClientId, string? ClientSecret, string AppId = "console", TimeSpan? RefreshInterval = null, TimeSpan? Grace = null, string? TrustedCertificate = null);
 
-/// <summary>The console's state database: the users, their sessions and invitations, and the notification feed.</summary>
+/// <summary>
+/// The console's state database, built from modules (plan 29a Q15): <c>identity</c> (the users, their sessions, invitations and one-time values), <c>notifications</c> (the feed and each
+/// reader's position) and <c>federation</c> (what it keeps about people who signed in through the identity home). A state database made by the earlier structure, one schema version for the whole
+/// database, is refused with a message naming it; set the console up again on a new one.
+/// </summary>
 public static class ConsoleState
 {
-    public static StateSchema Schema { get; } = new([IdentitySchema.Accounts, IdentitySchema.Invites, NotificationSchema.Feed, DbDataKit.Identity.FederatedSchema.Roles, DbDataKit.Identity.FederatedSchema.Sessions, IdentitySchema.AccountKeys, OneTimeSchema.Values]);
+    /// <summary>The service name the console records on what it writes to a database it may share (the feed's <c>service_id</c>).</summary>
+    public const string ServiceId = ConsoleSettings.Product;
+
+    public static IReadOnlyList<StateModule> Modules { get; } = [IdentityModule.Module, NotificationsModule.Module, DbDataKit.Identity.FederationModule.Module];
+
+    private static string AppliedBy => $"{ConsoleSettings.Product} {typeof(ConsoleState).Assembly.GetName().Version}";
 
     public const string EngineVariable = "DBDATAKIT_CONSOLE_STATE_ENGINE";
     public const string ConnectionVariable = "DBDATAKIT_CONSOLE_STATE_CONNECTION";
@@ -60,9 +69,9 @@ public static class ConsoleState
     {
         System.IO.Directory.CreateDirectory(directory);
         settings ??= new StateSettings();
-        if (settings.IsSqlite) return StateOpener.Open(settings, System.IO.Path.Combine(directory, "state.db"), Schema);
+        if (settings.IsSqlite) return StateOpener.Open(settings, System.IO.Path.Combine(directory, "state.db"), Modules, StateScope.Install, appliedBy: AppliedBy);
         // the password of a server engine is a secret reference: the console's store, then the environment
         var secrets = new DbDataKit.Secrets.SecretResolverChain([ConsoleSecrets.Open(directory, environment), new DbDataKit.Secrets.EnvSecretProvider(environment)]);
-        return StateOpener.Open(settings, System.IO.Path.Combine(directory, "state.db"), Schema, secrets);
+        return StateOpener.Open(settings, System.IO.Path.Combine(directory, "state.db"), Modules, StateScope.Install, secrets, AppliedBy);
     }
 }

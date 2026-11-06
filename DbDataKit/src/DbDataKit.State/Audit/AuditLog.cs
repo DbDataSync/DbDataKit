@@ -53,8 +53,8 @@ public static class AuditModule
 /// <param name="RequestedBy">The person who asked, when the actor is not that person.</param>
 /// <param name="ViaKind">What it came through: <c>app</c>, <c>agent</c>, <c>console</c>, <c>command</c>, <c>api</c>.</param>
 /// <param name="Detail">A small JSON document of context. Never a value, a secret or a statement's text.</param>
-public sealed record AuditEntry(
-    string ActorKind, string ActorId, string Verb, string Outcome = AuditEntry.Ok,
+public sealed record AuditEvent(
+    string ActorKind, string ActorId, string Verb, string Outcome = AuditEvent.Ok,
     string? RequestedBy = null, string? ViaKind = null, string? ViaId = null,
     string? TargetKind = null, string? TargetId = null, string? Detail = null)
 {
@@ -64,14 +64,14 @@ public sealed record AuditEntry(
 }
 
 /// <summary>An entry as it was stored.</summary>
-public sealed record AuditRecord(long Id, string ServiceId, DateTimeOffset At, AuditEntry Entry);
+public sealed record AuditRecord(long Id, string ServiceId, DateTimeOffset At, AuditEvent Entry);
 
 /// <summary>Which entries to read; every field narrows.</summary>
 public sealed record AuditQuery(long? BeforeId = null, string? ActorId = null, string? TargetKind = null, string? TargetId = null, string? Verb = null, string? ServiceId = null, DateTimeOffset? From = null, DateTimeOffset? To = null, int Limit = 100);
 
 /// <summary>
 /// Writes and reads the audit for one service (<paramref name="serviceId"/> is recorded on every entry, so services that share a database share one audit). Something that must be
-/// recorded atomically with the change it describes writes through <see cref="Record(StateDatabase, DbConnection, DbTransaction?, string, AuditEntry)"/> in that change's transaction.
+/// recorded atomically with the change it describes writes through <see cref="Record(StateDatabase, DbConnection, DbTransaction?, string, AuditEvent)"/> in that change's transaction.
 /// </summary>
 public sealed partial class AuditLog(StateDatabase database, string serviceId)
 {
@@ -84,7 +84,7 @@ public sealed partial class AuditLog(StateDatabase database, string serviceId)
     private static partial Regex Verb { get; }
 
     /// <summary>Records one entry on its own.</summary>
-    public long Record(AuditEntry entry) =>
+    public long Record(AuditEvent entry) =>
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
@@ -92,7 +92,7 @@ public sealed partial class AuditLog(StateDatabase database, string serviceId)
         });
 
     /// <summary>Records one entry on a connection the caller owns, in the caller's transaction, so the record and the change it describes stand or fall together.</summary>
-    public static long Record(StateDatabase database, DbConnection connection, DbTransaction? transaction, string serviceId, AuditEntry entry)
+    public static long Record(StateDatabase database, DbConnection connection, DbTransaction? transaction, string serviceId, AuditEvent entry)
     {
         Validate(entry);
         var sql = "INSERT INTO {table:entry} (service_id, happened_at, actor_kind, actor_id, requested_by, via_kind, via_id, verb, target_kind, target_id, outcome, detail) " +
@@ -153,14 +153,14 @@ public sealed partial class AuditLog(StateDatabase database, string serviceId)
             {
                 string? Text(int i) => reader.IsDBNull(i) ? null : reader.GetString(i);
                 found.Add(new AuditRecord(reader.Int64(0), reader.GetString(1), reader.Time(2),
-                    new AuditEntry(reader.GetString(3), reader.GetString(4), reader.GetString(8), reader.GetString(11), Text(5), Text(6), Text(7), Text(9), Text(10), Text(12))));
+                    new AuditEvent(reader.GetString(3), reader.GetString(4), reader.GetString(8), reader.GetString(11), Text(5), Text(6), Text(7), Text(9), Text(10), Text(12))));
             }
 
             return (IReadOnlyList<AuditRecord>)found;
         });
     }
 
-    private static void Validate(AuditEntry entry)
+    private static void Validate(AuditEvent entry)
     {
         if (!Word.IsMatch(entry.ActorKind)) throw new ArgumentException("An audit entry's actor kind is a lower-case word (person, agent, action, system).", nameof(entry));
         if (string.IsNullOrWhiteSpace(entry.ActorId)) throw new ArgumentException("An audit entry names who acted.", nameof(entry));

@@ -304,7 +304,7 @@ public static class ConsoleCli
         var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo" });
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0) { await context.Error.WriteLineAsync("Usage: user list [--repo <console directory>]"); return CliExit.Usage; }
         var database = OpenState(parsed, environment);
-        var users = new UserStore(database);
+        var users = new IdentityUserStore(database);
         var all = users.List();
         if (all.Count == 0) await context.Out.WriteLineAsync("No user yet. Start the console and redeem the invitation it writes, or run: user invite");
         foreach (var user in all)
@@ -336,13 +336,13 @@ public static class ConsoleCli
         }
         var database = OpenState(parsed, environment);
         var forUser = parsed.Get("user");
-        if (forUser is not null && new UserStore(database).Get(forUser) is null)
+        if (forUser is not null && new IdentityUserStore(database).Get(forUser) is null)
         {
             await context.Error.WriteLineAsync($"No user has the id '{forUser}'. 'user list' shows them.");
             return CliExit.Failure;
         }
         MintedInvite minted;
-        try { minted = new InviteStore(database).Create(role, forUser, createdByUserId: null, email: email); }
+        try { minted = new IdentityInviteStore(database).Create(role, forUser, createdByUserId: null, email: email); }
         catch (AccountConflictException ex) { await context.Error.WriteLineAsync(ex.Message); return CliExit.Failure; }
         // the code goes in the fragment, which a browser never sends to a server and an access log never records
         var url = $"{(parsed.Get("url") ?? ConsoleSettings.DefaultListen).TrimEnd('/')}/invite#{minted.Code}";
@@ -362,7 +362,7 @@ public static class ConsoleCli
             await context.Error.WriteLineAsync("Usage: user set-email --user <id> --email <address> [--repo <console directory>]");
             return CliExit.Usage;
         }
-        var users = new UserStore(OpenState(parsed, environment));
+        var users = new IdentityUserStore(OpenState(parsed, environment));
         if (users.Get(id) is null)
         {
             await context.Error.WriteLineAsync($"No user has the id '{id}'. 'user list' shows them.");

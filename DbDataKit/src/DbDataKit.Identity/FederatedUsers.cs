@@ -4,34 +4,39 @@ using DbDataKit.Web.Trust;
 
 namespace DbDataKit.Identity;
 
-/// <summary>What a host that signs people in through the home (a second console) keeps: the roles the home last said each person holds, so a server token can be made from them while the session lasts.</summary>
-public static class FederatedSchema
+/// <summary>
+/// The <c>federation</c> module (plan 29 section 3.4, plan 13a U17): what a console keeps about the people who signed in through the identity home. <c>federated_role</c> is the home's last
+/// word on what a person holds, replaced at each sign-in (a copy, never an assignment); <c>federated_session</c> is what a console keeps for each session that came from the home: the refresh
+/// token that asks the home again and the id token that tells the home whose session to end at sign-out, both kept protected by the host, never as the home gave them. No row: a local session.
+/// </summary>
+public static class FederationModule
 {
-    public const string Roles =
-        """
-        -- The home's last word on what a person holds, replaced at each sign-in. The roles are the home's: this table is a copy, never an assignment.
-        CREATE TABLE FederatedRoles (
-            UserId       {{key}} PRIMARY KEY REFERENCES Users(Id),
-            Roles        {{text}} NOT NULL,   -- the dbdata_roles claim as JSON
-            UpdatedAtUtc {{text}} NOT NULL
-        );
-        """;
+    public const string Name = "federation";
 
-    /// <summary>Appended after <see cref="Roles"/>, which has shipped.</summary>
-    public const string Sessions =
-        """
-        -- What a console keeps for each session of a person who signed in through the home (plan 13a U17): the refresh token that asks the home again, and the id token that tells the home whose session to end at sign-out.
-        -- Both are secrets and are kept protected by the host (never as the home gave them). No row: a local session.
-        CREATE TABLE FederatedSessions (
-            SessionId      {{key}} PRIMARY KEY,
-            UserId         {{key}} NOT NULL,
-            RefreshToken   {{text}} NULL,
-            IdToken        {{text}} NULL,
-            RefreshedAtUtc {{text}} NOT NULL
-        );
-        CREATE INDEX IX_FederatedSessions_User ON FederatedSessions(UserId);
-        """;
+    public static StateModule Module { get; } = new(
+        Name,
+        StateScopeKind.Install,
+        [
+            """
+            CREATE TABLE {table:federated_role} (
+                account_id  {{key}} PRIMARY KEY REFERENCES {table:identity.account}(id),
+                roles       {{json}} NOT NULL,   -- the dbdata_roles claim
+                updated_at  {{time}} NOT NULL
+            );
+
+            CREATE TABLE {table:federated_session} (
+                session_id    {{key}} PRIMARY KEY,
+                account_id    {{key}} NOT NULL,
+                refresh_token {{text}} NULL,
+                id_token      {{text}} NULL,
+                refreshed_at  {{time}} NOT NULL
+            );
+            CREATE INDEX {index:federated_session_by_account} ON {table:federated_session}(account_id);
+            """,
+        ],
+        dependsOn: [IdentityModule.Module]);
 }
+
 
 /// <summary>
 /// How long the home's word on a person's roles is trusted inside a session (plan 13a U17).
@@ -68,11 +73,13 @@ public enum RefreshOutcome
 /// People who sign in through the identity home and so have no password or passkey here (plan 13a U14). A sign-in mirrors the person as a user under the home's id (so every audit entry and token names the same user in
 /// every console), decides what they are here from their roles on this console's app (<c>app:&lt;appId&gt;</c>: admin or anything else), and keeps the roles they hold on servers.
 /// </summary>
-public sealed class FederatedUsers(StateDatabase database, UserStore users, SessionStore sessions, string appId, FederationPolicy policy, TimeProvider? clock = null)
+public sealed class FederatedUsers(StateDatabase database, IUserAccounts users, ISessionStore sessions, string appId, FederationPolicy policy, TimeProvider? clock = null)
 {
-    private readonly TimeProvider _clock = clock ?? TimeProvider.System;
+    private readonly TimeProvider _clock = clock ?? database.Time;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> _locks = new(StringComparer.Ordinal);
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTimeOffset> _failedAt = new(StringComparer.Ordinal);
+
+    private const string Module = FederationModule.Name;
 
     public string AppKey { get; } = "app:" + appId;
 
@@ -86,15 +93,15 @@ public sealed class FederatedUsers(StateDatabase database, UserStore users, Sess
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using (var delete = database.Command(connection, "DELETE FROM FederatedRoles WHERE UserId = $id;"))
+            using (var delete = database.Command(Module, connection, "DELETE FROM {table:federated_role} WHERE account_id = $id;"))
             {
                 delete.Bind(database, "id", user.Id);
                 delete.ExecuteNonQuery();
             }
-            using var insert = database.Command(connection, "INSERT INTO FederatedRoles (UserId, Roles, UpdatedAtUtc) VALUES ($id, $roles, $at);");
+            using var insert = database.Command(Module, connection, "INSERT INTO {table:federated_role} (account_id, roles, updated_at) VALUES ($id, CAST($roles AS {{json}}), $at);");
             insert.Bind(database, "id", user.Id);
             insert.Bind(database, "roles", JsonSerializer.Serialize(identity.Roles));
-            insert.Bind(database, "at", _clock.GetUtcNow().ToString("O"));
+            insert.Bind(database, "at", _clock.GetUtcNow());
             insert.ExecuteNonQuery();
         });
         return user;
@@ -106,10 +113,10 @@ public sealed class FederatedUsers(StateDatabase database, UserStore users, Sess
         var row = database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "SELECT Roles, UpdatedAtUtc FROM FederatedRoles WHERE UserId = $id;");
+            using var cmd = database.Command(Module, connection, "SELECT roles, updated_at FROM {table:federated_role} WHERE account_id = $id;");
             cmd.Bind(database, "id", userId);
             using var reader = cmd.ExecuteReader();
-            return reader.Read() ? (Json: reader.GetString(0), At: DateTimeOffset.Parse(reader.GetString(1))) : ((string Json, DateTimeOffset At)?)null;
+            return reader.Read() ? (Json: reader.GetString(0), At: reader.Time(1)) : ((string Json, DateTimeOffset At)?)null;
         });
         if (row is not { } found) return null;
         // The home's word does not last forever: past the interval and the grace without an answer, nothing is held on any server.
@@ -128,18 +135,18 @@ public sealed class FederatedUsers(StateDatabase database, UserStore users, Sess
         using var connection = database.OpenConnection();
         void Run(string sql, params (string, object)[] values)
         {
-            using var cmd = database.Command(connection, sql);
+            using var cmd = database.Command(Module, connection, sql);
             foreach (var (name, value) in values) cmd.Bind(database, name, value);
             cmd.ExecuteNonQuery();
         }
-        Run("DELETE FROM FederatedSessions WHERE SessionId NOT IN (SELECT Id FROM Sessions);");
-        Run("DELETE FROM FederatedSessions WHERE SessionId = $id;", ("id", sessionId));
-        using var insert = database.Command(connection, "INSERT INTO FederatedSessions (SessionId, UserId, RefreshToken, IdToken, RefreshedAtUtc) VALUES ($id, $user, $refresh, $idToken, $at);");
+        Run("DELETE FROM {table:federated_session} WHERE session_id NOT IN (SELECT id FROM {table:identity.session});");
+        Run("DELETE FROM {table:federated_session} WHERE session_id = $id;", ("id", sessionId));
+        using var insert = database.Command(Module, connection, "INSERT INTO {table:federated_session} (session_id, account_id, refresh_token, id_token, refreshed_at) VALUES ($id, $user, $refresh, $idToken, $at);");
         insert.Bind(database, "id", sessionId);
         insert.Bind(database, "user", userId);
         insert.Bind(database, "refresh", grant.RefreshToken is null ? DBNull.Value : policy.Protect(grant.RefreshToken));
         insert.Bind(database, "idToken", grant.IdToken is null ? DBNull.Value : policy.Protect(grant.IdToken));
-        insert.Bind(database, "at", _clock.GetUtcNow().ToString("O"));
+        insert.Bind(database, "at", _clock.GetUtcNow());
         insert.ExecuteNonQuery();
     });
 
@@ -148,11 +155,11 @@ public sealed class FederatedUsers(StateDatabase database, UserStore users, Sess
     private Held? Read(string sessionId) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, "SELECT UserId, RefreshToken, IdToken, RefreshedAtUtc FROM FederatedSessions WHERE SessionId = $id;");
+        using var cmd = database.Command(Module, connection, "SELECT account_id, refresh_token, id_token, refreshed_at FROM {table:federated_session} WHERE session_id = $id;");
         cmd.Bind(database, "id", sessionId);
         using var reader = cmd.ExecuteReader();
         return reader.Read()
-            ? new Held(reader.GetString(0), reader.IsDBNull(1) ? null : policy.Unprotect(reader.GetString(1)), reader.IsDBNull(2) ? null : policy.Unprotect(reader.GetString(2)), DateTimeOffset.Parse(reader.GetString(3)))
+            ? new Held(reader.GetString(0), reader.IsDBNull(1) ? null : policy.Unprotect(reader.GetString(1)), reader.IsDBNull(2) ? null : policy.Unprotect(reader.GetString(2)), reader.Time(3))
             : null;
     });
 
@@ -210,12 +217,12 @@ public sealed class FederatedUsers(StateDatabase database, UserStore users, Sess
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using (var cmd = database.Command(connection, everySession ? "DELETE FROM FederatedSessions WHERE UserId = $id;" : "DELETE FROM FederatedSessions WHERE SessionId = $id;"))
+            using (var cmd = database.Command(Module, connection, everySession ? "DELETE FROM {table:federated_session} WHERE account_id = $id;" : "DELETE FROM {table:federated_session} WHERE session_id = $id;"))
             {
                 cmd.Bind(database, "id", everySession ? userId : sessionId);
                 cmd.ExecuteNonQuery();
             }
-            using var roles = database.Command(connection, "DELETE FROM FederatedRoles WHERE UserId = $id AND NOT EXISTS (SELECT 1 FROM FederatedSessions WHERE UserId = $id);");
+            using var roles = database.Command(Module, connection, "DELETE FROM {table:federated_role} WHERE account_id = $id AND NOT EXISTS (SELECT 1 FROM {table:federated_session} WHERE account_id = $id);");
             roles.Bind(database, "id", userId);
             roles.ExecuteNonQuery();
         });

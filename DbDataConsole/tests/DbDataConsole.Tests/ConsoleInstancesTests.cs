@@ -35,7 +35,7 @@ public sealed class ConsoleInstancesTests : IAsyncLifetime
     }
 
     private string SessionFor(UserRole role) =>
-        app.Services.GetRequiredService<SessionStore>().Create(app.Services.GetRequiredService<UserStore>().CreateUser(role + " person", null, role).Id).Id;
+        app.Services.GetRequiredService<ISessionStore>().Create(app.Services.GetRequiredService<IUserAccounts>().CreateUser(role + " person", null, role).Id).Id;
 
     private HttpRequestMessage Request(HttpMethod method, string path, string session, object? body = null)
     {

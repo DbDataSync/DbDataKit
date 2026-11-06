@@ -15,7 +15,7 @@ public sealed record SessionRecord(string Id, string UserId, DateTimeOffset Expi
 /// would buy nothing and cost exactly that.
 /// </para>
 /// </summary>
-public sealed class SessionStore(StateDatabase database)
+public sealed class SessionStore(StateDatabase database) : ISessionStore
 {
     public static TimeSpan Lifetime { get; } = TimeSpan.FromHours(12);
 

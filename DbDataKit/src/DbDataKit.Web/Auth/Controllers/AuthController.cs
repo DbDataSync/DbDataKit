@@ -27,7 +27,7 @@ public sealed record AuthStatus(
 [ApiController]
 [Route("api/auth")]
 public sealed class AuthController(
-    AuthOptions options, PasskeyOptions passkeys, UserStore users, SessionStore sessions, CurrentUser currentUser, IEnumerable<ISignOutHandler> signOutHandlers, IEnumerable<SignInMethod> otherMethods)
+    AuthOptions options, PasskeyOptions passkeys, IUserAccounts users, ISessionStore sessions, CurrentUser currentUser, IEnumerable<ISignOutHandler> signOutHandlers, IEnumerable<SignInMethod> otherMethods)
     : ControllerBase
 {
     /// <summary>

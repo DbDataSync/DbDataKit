@@ -39,7 +39,7 @@ public sealed class ConsoleAnnouncementTests : IAsyncLifetime
 
     private HttpRequestMessage AsAdmin(HttpMethod method, string path)
     {
-        var session = app.Services.GetRequiredService<SessionStore>().Create(app.Services.GetRequiredService<UserStore>().CreateUser("An admin", null, UserRole.Admin).Id).Id;
+        var session = app.Services.GetRequiredService<ISessionStore>().Create(app.Services.GetRequiredService<IUserAccounts>().CreateUser("An admin", null, UserRole.Admin).Id).Id;
         var request = new HttpRequestMessage(method, path);
         request.Headers.Add("Cookie", $"{ConsoleHost.Auth.SessionCookie}={session}");
         return request;

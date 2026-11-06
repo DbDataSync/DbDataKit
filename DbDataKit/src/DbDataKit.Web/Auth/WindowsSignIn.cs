@@ -75,6 +75,6 @@ public static class WindowsSignIn
     /// anybody editing them here.
     /// </para>
     /// </summary>
-    public static UserRecord Upsert(UserStore users, WindowsIdentityResult identity, UserRole role) =>
+    public static UserRecord Upsert(IUserAccounts users, WindowsIdentityResult identity, UserRole role) =>
         new AccountLinker(users).SignInWindows(identity.Sid, identity.Name, identity.Upn, role);
 }

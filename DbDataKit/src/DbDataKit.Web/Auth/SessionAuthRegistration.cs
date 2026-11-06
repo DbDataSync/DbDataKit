@@ -26,10 +26,16 @@ public static class SessionAuthRegistration
         services.AddSingleton<CurrentUser>();
         services.AddSingleton(passkeys);
         services.AddSingleton<PasskeyService>();
+        // The stores follow the database: one built from modules (plan 29) has the identity module's stores, an older one the older stores. Code that needs only what a sign-in needs
+        // asks for the interface; the concrete older stores stay registered for the hosts that have not moved (the identity home, Sync), and are created only if asked for.
         services.AddSingleton(sp => new UserStore(state(sp)));
         services.AddSingleton(sp => new SessionStore(state(sp)));
         services.AddSingleton(sp => new InviteStore(state(sp)));
         services.AddSingleton(sp => new OneTimeValues(state(sp), sp.GetService<TimeProvider>()));
+        services.AddSingleton<IUserAccounts>(sp => state(sp).Layout is null ? sp.GetRequiredService<UserStore>() : new IdentityUserStore(state(sp)));
+        services.AddSingleton<ISessionStore>(sp => state(sp).Layout is null ? sp.GetRequiredService<SessionStore>() : new IdentitySessionStore(state(sp)));
+        services.AddSingleton<IInviteStore>(sp => state(sp).Layout is null ? sp.GetRequiredService<InviteStore>() : new IdentityInviteStore(state(sp)));
+        services.AddSingleton<IOneTimeValues>(sp => state(sp).Layout is null ? sp.GetRequiredService<OneTimeValues>() : new IdentityOneTimeValues(state(sp)));
         services.AddSingleton(sp => new BootstrapInviteLocation(firstRunDirectory(sp)));
         services.AddHostedService<BootstrapInvite>();
 

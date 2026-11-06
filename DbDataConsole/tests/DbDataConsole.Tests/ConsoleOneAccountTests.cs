@@ -25,8 +25,8 @@ public sealed class ConsoleOneAccountTests : IAsyncLifetime
     private PairableServer server = null!;
     private UserStore homeUsers = null!;
     private HomeDirectory directory = null!;
-    private UserStore users = null!;
-    private SessionStore sessions = null!;
+    private IUserAccounts users = null!;
+    private ISessionStore sessions = null!;
     private string homeUrl = null!;
 
     private const string ServerId = "server-a";
@@ -70,8 +70,8 @@ public sealed class ConsoleOneAccountTests : IAsyncLifetime
         started.Add(app);
         console = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false, ServerCertificateCustomValidationCallback = (_, _, _, _) => true }) { BaseAddress = new Uri($"https://localhost:{port}") };
         await app.Services.GetRequiredService<ConsoleInstances>().PairAsync(server.Url, server.NewCodeWith(ServerRole.Admin | ServerRole.Operator | ServerRole.Author | ServerRole.Approver), "Server A", default);
-        users = app.Services.GetRequiredService<UserStore>();
-        sessions = app.Services.GetRequiredService<SessionStore>();
+        users = app.Services.GetRequiredService<IUserAccounts>();
+        sessions = app.Services.GetRequiredService<ISessionStore>();
     }
 
     public async ValueTask DisposeAsync()

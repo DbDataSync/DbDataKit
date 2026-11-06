@@ -6,7 +6,7 @@ using System.Data.Common;
 namespace DbDataKit.State;
 
 /// <summary>Server-side sessions on the <c>identity</c> module: the same behaviour and methods as <see cref="SessionStore"/>. The session id is the bearer credential, 32 random bytes in hex.</summary>
-public sealed class IdentitySessionStore(StateDatabase database)
+public sealed class IdentitySessionStore(StateDatabase database) : ISessionStore
 {
     private const string Module = IdentityModule.Name;
 
@@ -56,7 +56,7 @@ public sealed class IdentitySessionStore(StateDatabase database)
 }
 
 /// <summary>Invitations on the <c>identity</c> module: the same behaviour and methods as <see cref="InviteStore"/>. The code is shown once and only its hash is kept.</summary>
-public sealed class IdentityInviteStore(StateDatabase database)
+public sealed class IdentityInviteStore(StateDatabase database) : IInviteStore
 {
     private const string Module = IdentityModule.Name;
     private const string Columns = "id, role, account_id, created_by, created_at, expires_at, redeemed_at, email";
@@ -141,7 +141,7 @@ public sealed class IdentityInviteStore(StateDatabase database)
 }
 
 /// <summary>One-time values on the <c>identity</c> module: the same behaviour and methods as <see cref="OneTimeValues"/>. The clock is the database's.</summary>
-public sealed class IdentityOneTimeValues(StateDatabase database)
+public sealed class IdentityOneTimeValues(StateDatabase database) : IOneTimeValues
 {
     private const string Module = IdentityModule.Name;
     private static readonly TimeSpan SweepEvery = TimeSpan.FromMinutes(1);

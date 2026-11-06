@@ -18,7 +18,7 @@ public sealed class AuditLogTests : IDisposable
     {
         var log = new AuditLog(Open(engine), "serving");
 
-        var id = log.Record(new AuditEntry("action", "action:submit-claim@3", "claim.submit", AuditEntry.Ok, RequestedBy: "alice", ViaKind: "app", ViaId: "expenses",
+        var id = log.Record(new AuditEvent("action", "action:submit-claim@3", "claim.submit", AuditEvent.Ok, RequestedBy: "alice", ViaKind: "app", ViaId: "expenses",
             TargetKind: "claim", TargetId: "c-17", Detail: "{\"from\":\"Draft\",\"to\":\"Submitted\"}"));
 
         var record = Assert.Single(log.Read());
@@ -35,7 +35,7 @@ public sealed class AuditLogTests : IDisposable
     public void Entries_come_newest_first_and_page_by_the_last_id_seen(string engine)
     {
         var log = new AuditLog(Open(engine), "console");
-        for (var i = 1; i <= 5; i++) log.Record(new AuditEntry("person", "ada", "definition.publish", TargetKind: "definition", TargetId: $"d{i}"));
+        for (var i = 1; i <= 5; i++) log.Record(new AuditEvent("person", "ada", "definition.publish", TargetKind: "definition", TargetId: $"d{i}"));
 
         var first = log.Read(new AuditQuery(Limit: 2));
         var next = log.Read(new AuditQuery(BeforeId: first[^1].Id, Limit: 2));
@@ -52,10 +52,10 @@ public sealed class AuditLogTests : IDisposable
         var database = Open(engine, clock);
         var sync = new AuditLog(database, "sync");
         var proxy = new AuditLog(database, "proxy");
-        sync.Record(new AuditEntry("person", "ada", "task.pause", TargetKind: "task", TargetId: "crm"));
+        sync.Record(new AuditEvent("person", "ada", "task.pause", TargetKind: "task", TargetId: "crm"));
         clock.Advance(TimeSpan.FromDays(1));
-        proxy.Record(new AuditEntry("person", "grace", "grant.add", AuditEntry.Refused, TargetKind: "role", TargetId: "admin"));
-        proxy.Record(new AuditEntry("agent", "agent:helper", "task.pause", TargetKind: "task", TargetId: "crm"));
+        proxy.Record(new AuditEvent("person", "grace", "grant.add", AuditEvent.Refused, TargetKind: "role", TargetId: "admin"));
+        proxy.Record(new AuditEvent("agent", "agent:helper", "task.pause", TargetKind: "task", TargetId: "crm"));
 
         Assert.Equal(3, sync.Read().Count);   // one audit for the install: any service reads every service's entries
         Assert.Single(sync.Read(new AuditQuery(ActorId: "grace")));
@@ -75,7 +75,7 @@ public sealed class AuditLogTests : IDisposable
         using (var connection = database.OpenConnection())
         {
             using var transaction = connection.BeginTransaction();
-            AuditLog.Record(database, connection, transaction, "console", new AuditEntry("person", "ada", "grant.add"));
+            AuditLog.Record(database, connection, transaction, "console", new AuditEvent("person", "ada", "grant.add"));
             transaction.Rollback();
         }
 
@@ -89,9 +89,9 @@ public sealed class AuditLogTests : IDisposable
         var clock = new StateTestClock(DateTimeOffset.Parse("2026-11-06T00:00:00Z"));
         var database = Open(engine, clock);
         var log = new AuditLog(database, "console");
-        log.Record(new AuditEntry("person", "ada", "grant.add"));
+        log.Record(new AuditEvent("person", "ada", "grant.add"));
         clock.Advance(TimeSpan.FromDays(3000));
-        log.Record(new AuditEntry("person", "ada", "grant.remove"));
+        log.Record(new AuditEvent("person", "ada", "grant.remove"));
 
         new RetentionJob(database).Run();
         Assert.Equal(2, log.Read().Count);
@@ -111,6 +111,6 @@ public sealed class AuditLogTests : IDisposable
     {
         var log = new AuditLog(Open(StateEngineIds.Sqlite), "console");
 
-        Assert.Throws<ArgumentException>(() => log.Record(new AuditEntry(kind, actor, verb, outcome, Detail: detail)));
+        Assert.Throws<ArgumentException>(() => log.Record(new AuditEvent(kind, actor, verb, outcome, Detail: detail)));
     }
 }

@@ -266,4 +266,46 @@ public interface IUserAccounts
     void SetRole(string userId, UserRole role);
 
     void SetEnabled(string userId, bool enabled);
+
+    IReadOnlyList<UserRecord> List();
+
+    bool Any();
+
+    bool RemoveCredential(string userId, string credentialId);
+}
+
+/// <summary>What sign-in code needs of server-side sessions; <see cref="SessionStore"/> and <see cref="IdentitySessionStore"/> are both one.</summary>
+public interface ISessionStore
+{
+    SessionRecord Create(string userId);
+
+    UserRecord? Resolve(string sessionId, IUserAccounts users);
+
+    void Delete(string sessionId);
+
+    void DeleteAllFor(string userId);
+}
+
+/// <summary>What sign-in code needs of invitations; <see cref="InviteStore"/> and <see cref="IdentityInviteStore"/> are both one.</summary>
+public interface IInviteStore
+{
+    MintedInvite Create(UserRole role, string? forUserId = null, string? createdByUserId = null, TimeSpan? lifetime = null, string? email = null);
+
+    InviteRecord? Find(string code);
+
+    bool Redeem(string inviteId, string userId);
+
+    void DeleteBootstrapInvites();
+
+    IReadOnlyList<InviteRecord> ListOutstanding();
+}
+
+/// <summary>What sign-in code needs of one-time values; <see cref="OneTimeValues"/> and <see cref="IdentityOneTimeValues"/> are both one.</summary>
+public interface IOneTimeValues
+{
+    void Hold(string purpose, string key, string value, DateTimeOffset expires);
+
+    string? Take(string purpose, string key);
+
+    bool TryClaim(string purpose, string key, DateTimeOffset forgetAfter);
 }
