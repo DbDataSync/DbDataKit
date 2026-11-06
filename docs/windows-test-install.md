@@ -56,7 +56,7 @@ dbdatakit server run --repo C:\ProgramData\DbDataKit\console
 
 It listens on `https://localhost:8480`, makes a self-signed certificate in that folder, and with no user yet writes an invitation to
 `FIRST-RUN.txt` there and to the log. Open `https://localhost:8480/invite#<code>` **once** on the machine and register a passkey: that
-person is the first administrator. (`dbdatakit user invite --repo C:\ProgramData\DbDataKit\console` prints a new invitation if the first has expired.) To reach it from
+person is the first administrator. (`dbdatakit user invite --email <your address> --repo C:\ProgramData\DbDataKit\console` prints a new invitation if the first has expired; it needs `--email` for a new person or `--user <id>` for an existing one, and `user list` shows the ids.) To reach it from
 another machine add `--listen https://test-sync.example.com:8480`.
 
 ## 3. Sync, started for the first time
