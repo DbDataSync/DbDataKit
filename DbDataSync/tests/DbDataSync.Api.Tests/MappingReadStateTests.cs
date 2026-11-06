@@ -157,6 +157,43 @@ public sealed class MappingReadStateTests(TestApiFactory factory) : IClassFixtur
         Assert.Null(watermarks.GetReadState(replication, mapping, key)!.Watermark);
     }
 
+    /// <summary>Continuing from the captured position is what a completed load would have done: the position
+    /// captured before the load becomes the live one, the intent is Changes, and the hold clears.</summary>
+    [Fact]
+    public async Task UsingTheCapturedPosition_PromotesIt_AsACompletedLoadWould()
+    {
+        var (replication, mapping) = await SetUpAsync();
+        var key = WatermarkKey.Build(
+            new SourceTableRef { ConnectionName = "src", Database = "App", Schema = "dbo", Table = "Orders" },
+            DbDataSync.Core.Sql.MsSqlDialect.Instance);
+        var watermarks = factory.Services.GetRequiredService<ChangeWatermarkStore>();
+        watermarks.SetPendingLoad(replication, mapping, key, "ABC123", null, "failed-batch");
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/replications/{replication}/table-mappings/{mapping}/read-state",
+            new { intent = ReadIntent.InitialLoad, hold = ReadHold.Loading, useCapturedPosition = true }, JsonOptions);
+        response.EnsureSuccessStatusCode();
+
+        var state = watermarks.GetReadState(replication, mapping, key)!;
+        Assert.Equal("ABC123", state.Watermark);
+        Assert.Equal(ReadIntent.Changes, state.Intent);
+        Assert.Equal(ReadHold.None, state.Hold);
+        Assert.False(watermarks.PromotePendingLoad("failed-batch"));
+    }
+
+    [Fact]
+    public async Task UsingTheCapturedPosition_OnAMappingThatIsNotLoading_IsRefused()
+    {
+        var (replication, mapping) = await SetUpAsync();
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/replications/{replication}/table-mappings/{mapping}/read-state",
+            new { intent = ReadIntent.Changes, hold = ReadHold.None, useCapturedPosition = true }, JsonOptions);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("no captured position", await response.Content.ReadAsStringAsync());
+    }
+
     /// <summary>The one call that moves both at once: an operator recovering from a hold sets a fresh
     /// intent and clears the hold together, never in a request that could leave one half done.</summary>
     [Fact]

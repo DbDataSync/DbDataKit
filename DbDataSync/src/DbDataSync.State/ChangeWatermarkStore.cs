@@ -271,6 +271,40 @@ public sealed class ChangeWatermarkStore(StateDatabase database)
         });
 
     /// <summary>
+    /// The same promotion <see cref="PromotePendingLoad"/> makes when a load's batch completes, but found by
+    /// mapping rather than by batch. For an operator who knows the table is loaded although its own batch
+    /// never completed (it failed, and the table was then loaded by hand): the position captured before the
+    /// load becomes the live one, the intent is <see cref="ReadIntent.Changes"/>, and the hold clears.
+    /// </summary>
+    /// <returns>False when the mapping is not <see cref="ReadHold.Loading"/> or holds no pending position.</returns>
+    public bool PromotePendingLoadFor(string taskName, string mappingName, string sourceTable) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(connection, """
+                UPDATE ChangeWatermarks
+                SET Watermark = PendingWatermark,
+                    WatermarkTimeUtc = PendingWatermarkTimeUtc,
+                    ReadIntent = $intent,
+                    ReadHold = $hold,
+                    PendingWatermark = NULL,
+                    PendingWatermarkTimeUtc = NULL,
+                    PendingBulkLoadBatchId = NULL,
+                    UpdatedAtUtc = $now
+                WHERE TaskName = $task AND MappingName = $mapping AND SourceTable = $table
+                  AND ReadHold = $loading AND PendingWatermark IS NOT NULL;
+                """);
+            cmd.Bind(database, "intent", ReadIntent.Changes.ToString());
+            cmd.Bind(database, "hold", ReadHold.None.ToString());
+            cmd.Bind(database, "loading", ReadHold.Loading.ToString());
+            cmd.Bind(database, "now", DateTimeOffset.UtcNow.ToString("O"));
+            cmd.Bind(database, "task", taskName);
+            cmd.Bind(database, "mapping", mappingName);
+            cmd.Bind(database, "table", sourceTable);
+            return cmd.ExecuteNonQuery() == 1;
+        });
+
+    /// <summary>
     /// Forgets a pending initial load — the position it captured and the batch it was waiting on — without
     /// promoting it. For an operator who is leaving <see cref="ReadHold.Loading"/> by hand (the load failed,
     /// or the table was loaded another way): left in place, the stale batch id would promote the old

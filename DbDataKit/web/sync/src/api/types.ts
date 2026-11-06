@@ -135,6 +135,8 @@ export interface SetMappingReadStateRequest {
   /** Optional — phase 131. Recorded only against a `Paused`-boundary crossing; the quick pause/resume
    * toggle sends no note at all and still works. */
   note?: string | null
+  /** Only for a Loading mapping: continue from the position captured before its initial load. */
+  useCapturedPosition?: boolean
 }
 
 export type ScheduleMode = 'Continuous' | 'Periodic'

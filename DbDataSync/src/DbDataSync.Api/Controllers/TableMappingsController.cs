@@ -170,6 +170,19 @@ public sealed class TableMappingsController(
             return BadRequest(new { error = DriverFailures.Describe(ex) });
         }
 
+        if (request.UseCapturedPosition)
+        {
+            if (!watermarks.PromotePendingLoadFor(replicationName, mappingName, sourceTable))
+                return BadRequest(new
+                {
+                    error = $"Table mapping '{mappingName}' has no captured position to continue from — it is " +
+                        "not waiting on an initial load. Choose a read intent instead.",
+                });
+
+            var promoted = watermarks.GetReadState(replicationName, mappingName, sourceTable)!;
+            return Ok(new MappingReadStateDto(promoted.Intent, promoted.Hold, promoted.Watermark, promoted.WatermarkTimeUtc));
+        }
+
         var previousHold = watermarks.GetReadState(replicationName, mappingName, sourceTable)?.Hold ?? ReadHold.None;
         watermarks.SetReadIntentAndHold(replicationName, mappingName, sourceTable, request.Intent, request.Hold);
 
@@ -585,4 +598,9 @@ public sealed record MappingReadStateDto(ReadIntent Intent, ReadHold Hold, strin
 /// <param name="Note">Optional, and defaulted — phase 131. Recorded against a
 /// <see cref="ReadHold.Paused"/>-boundary crossing only (see <c>SetReadState</c>); a caller that never
 /// mentions it, like the row's own quick pause/resume toggle, still works with no note at all.</param>
-public sealed record SetMappingReadStateRequest(ReadIntent Intent, ReadHold Hold, string? Note = null);
+/// <param name="UseCapturedPosition">Only for a mapping held as <see cref="ReadHold.Loading"/>: the table is
+/// loaded, so the position captured before its initial load becomes the live change position and change
+/// processing continues from it. <c>Intent</c> and <c>Hold</c> are ignored — it always ends in
+/// <see cref="ReadIntent.Changes"/> with no hold, exactly as a completed load would have left it.</param>
+public sealed record SetMappingReadStateRequest(
+    ReadIntent Intent, ReadHold Hold, string? Note = null, bool UseCapturedPosition = false);

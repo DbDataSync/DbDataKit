@@ -41,7 +41,7 @@ export function MappingReadStateDialog({
   onRunVerification: () => void
   busy: boolean
   error?: unknown
-  onConfirm: (next: { intent: ReadIntent; hold: ReadHold; note?: string | null }) => void
+  onConfirm: (next: { intent: ReadIntent; hold: ReadHold; note?: string | null; useCapturedPosition?: boolean }) => void
   onCancel: () => void
 }) {
   const recovering = currentHold === 'PositionExpired'
@@ -122,6 +122,24 @@ export function MappingReadStateDialog({
                   This table is waiting on an initial load, so change processing is held. If that load
                   failed, or you loaded the table another way, choose what its next pass does and set it
                   — that ends the wait. Choosing Initial load starts a fresh load.
+                </div>
+              )}
+              {loading && (
+                <div className="row" style={{ gap: 8, flexDirection: 'column', alignItems: 'stretch' }}>
+                  <span className="hint">
+                    Or, if the whole table is already loaded: continue from the position captured before the
+                    load started. Changes since then are replayed. Only do this after a complete,
+                    whole-table load — a partial reload would leave the rest of the table behind.
+                  </span>
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={busy}
+                    onClick={() => onConfirm({ intent: 'Changes', hold: 'None', useCapturedPosition: true })}
+                    data-testid="read-state-use-captured-position"
+                  >
+                    {busy ? 'Saving…' : 'Table is loaded — continue from the captured position'}
+                  </button>
                 </div>
               )}
               <span className="hint">
