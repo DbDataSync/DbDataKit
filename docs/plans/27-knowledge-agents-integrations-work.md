@@ -334,6 +334,47 @@ lists what needs another look.
 
 **6. Access.** A verified query is visible to whoever may query its model, and running it applies that person's rules (item 1).
 
+### 2.10 Commands and screens
+
+Proposed (2026-11-06).
+
+**Commands**, on the shared command surface (so the same specs give the console, MCP tools and agents' tools), noun `knowledge`:
+
+| Command | Does | Traits (section 3.3) |
+| --- | --- | --- |
+| `knowledge search <text> [--about <subject>] [--kind <kind>] [--channel <c>]` | vector search, access-filtered, grouped per item (section 2.8) | reads definitions; reads data when a result holds column values (section 2.7) |
+| `knowledge show <id> [--section <heading>] [--version <v>]` | an item, a section of it, or an earlier version | reads definitions |
+| `knowledge about <subject>` | everything about a subject: its generated item, the instructions, guardrails, references and verified queries scoped to it | reads definitions |
+| `knowledge context <agent> [--in-play <subject> ...]` | what that agent would be given, in order, with the tokens each part uses against its budget (section 3.5b) | reads definitions |
+| `knowledge check [<path>]` | checks knowledge files in a workspace: format, subjects, roles, owners, and the budgets of the agents they reach | reads definitions |
+| `knowledge suggest <id>\|--new ...`, `knowledge verify --question <q> --request <file>` | a suggestion, or a verified query from an answer (sections 2.5, 2.9) | writes definitions |
+| `knowledge suggestions list\|show\|approve\|reject\|withdraw` | the suggestion queue; approving needs to be the item's owner | writes definitions |
+| `knowledge undescribed [<subject>]`, `knowledge orphans` | what lacks a description (section 2.7); items whose subject is gone (section 3.5c) | reads definitions |
+| `knowledge index status\|rebuild [--channel <c>]` | the index per channel: embedding model, counts, progress; rebuild on request (an administrator) | reads definitions / changes structure |
+
+**The knowledge app** (served by the serving layer, section 2.5), for everyone who may see knowledge:
+
+1. **Search:** one box, results with their excerpts, title, heading path and source, filtered by kind (instruction, guardrail, reference,
+   verified query, generated), subject and owner.
+2. **A subject's page** (a model, a measure, a project): its generated description, then what is scoped to it, its verified queries, and
+   what is undescribed, with **Suggest a description**.
+3. **An item's page:** its text and fields, which channels it is in, its history with a comparison of any two versions, **Suggest a
+   change**.
+4. **The form** for a new item or a change: the `knowledge: 1` fields as fields (role, about, for, owner), the text in a Markdown editor
+   with a preview.
+5. **My suggestions** and, for owners, **Approvals:** each suggestion beside the current text, the agents it reaches and any budget it
+   would exceed, approve or reject with a comment, and the ones that **need another look**.
+6. **Verified queries** per model: the list, the ones that need re-verification, and **Verify this answer** wherever a query and its result
+   are shown.
+
+**The console adds**, for administrators and developers:
+
+7. **The index:** per channel, the embedding model, item and chunk counts, rebuild progress, items that failed their checks, orphans.
+8. **An agent's context:** choose an agent and the subjects in play, and see exactly what it would be given, in order, with each part's
+   share of the budget (the same as `knowledge context`).
+9. **Knowledge projects in workspaces:** the editor checks knowledge files as they are typed (`knowledge check`) and previews the
+   subjects each file reaches.
+
 ## 3. DbDataAgents
 
 **Goal.** An agent is a **definition**, versioned and published like an app, not a prompt pasted into a chat. The same definition runs
@@ -1186,6 +1227,9 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 49 | Used by agents: found by the question, given as a verified example, run directly or adapted, shown to the person as verified | **Decided** (owner, 2026-11-06) (section 2.9) |
 | 50 | Verified queries are the front-end agents' evaluation cases, judged by comparing rows | **Decided** (owner, 2026-11-06) (section 2.9) |
 | 51 | Checked when the model changes; failures marked "needs re-verification", never blocking the model | **Decided** (owner, 2026-11-06) (section 2.9) |
+| 52 | The `knowledge` commands, with their traits, including `knowledge context` to preview an agent's assembled context and budget | proposed (section 2.10) |
+| 53 | The knowledge app: search, subject and item pages, the form, suggestions and approvals, verified queries | proposed (section 2.10) |
+| 54 | The console's additions: the index, an agent's context, knowledge files checked in workspaces | proposed (section 2.10) |
 
 ## 9. Detailed plans to follow
 
