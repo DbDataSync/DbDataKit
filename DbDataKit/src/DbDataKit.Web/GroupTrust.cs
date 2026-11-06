@@ -37,7 +37,15 @@ public static class GroupTrustSchema
 }
 
 /// <summary>A group's settings (<see cref="GroupTrustSchema"/>): a value under a name, written once or replaced only when it is still the value read.</summary>
-public sealed class GroupSettings(StateDatabase database)
+public interface IGroupSettings
+{
+    string? Get(string name);
+
+    /// <summary>Writes <paramref name="value"/> when there is no value yet, or when the value is still <paramref name="expected"/>; returns what is there afterwards.</summary>
+    string Put(string name, string value, string? expected = null);
+}
+
+public sealed class GroupSettings(StateDatabase database) : IGroupSettings
 {
     public string? Get(string name) => database.Retry(() =>
     {
@@ -79,9 +87,12 @@ public static class GroupIdentity
     /// The id the group has; for the first instance to ask, the one its <c>server.yaml</c> has (or makes), so a server that becomes a group keeps the pairings its clients made with it. An instance whose own
     /// <c>server.yaml</c> names another id serves as the group: <see cref="Differs"/> says so, for the host to log.
     /// </summary>
-    public static string InstanceId(StateDatabase state, string serverYaml, string prefix, string pairingCommand)
+    public static string InstanceId(StateDatabase state, string serverYaml, string prefix, string pairingCommand) =>
+        InstanceId(new GroupSettings(state), serverYaml, prefix, pairingCommand);
+
+    /// <inheritdoc cref="InstanceId(StateDatabase, string, string, string)"/>
+    public static string InstanceId(IGroupSettings settings, string serverYaml, string prefix, string pairingCommand)
     {
-        var settings = new GroupSettings(state);
         return settings.Get(InstanceIdSetting) ?? settings.Put(InstanceIdSetting, ServerIdentity.InstanceId(serverYaml, prefix, pairingCommand));
     }
 

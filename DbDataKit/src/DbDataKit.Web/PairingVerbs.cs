@@ -13,7 +13,7 @@ public sealed record PairingFiles(string ServerYaml, string? CodesFile = null, D
 
     public IPairingCodeStore Codes() => Group is { } state ? new StatePairingCodes(state) : new PairingCodes(CodesFile ?? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(ServerYaml))!, "pairing-codes.json"));
 
-    /// <summary>The server's instance id: its <c>server.yaml</c>'s, or the group's (<see cref="GroupIdentity.InstanceId"/>).</summary>
+    /// <summary>The server's instance id: its <c>server.yaml</c>'s, or the group's (<see cref="GroupIdentity.InstanceId(DbDataKit.State.StateDatabase, string, string, string)"/>).</summary>
     public string InstanceId(string prefix, string pairingCommand) =>
         Group is { } state ? GroupIdentity.InstanceId(state, ServerYaml, prefix, pairingCommand) : ServerIdentity.InstanceId(ServerYaml, prefix, pairingCommand);
 }
