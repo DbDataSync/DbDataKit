@@ -221,6 +221,9 @@ jobs:
 
   release:
     needs: [guard, build]
+    # GitHub skips a job whose chain of needs holds a skipped job, even when the job in between has its own `if`. A snapshot skips conformance-full, so
+    # without this the release (and the dry run's artifact) would be skipped too.
+    if: ${{ !cancelled() && needs.guard.result == 'success' && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
