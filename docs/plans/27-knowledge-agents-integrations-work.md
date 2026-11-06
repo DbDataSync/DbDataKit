@@ -11,7 +11,7 @@ detailed plan of its own (section 9) once the questions are answered.
 | **DbDataAgents** | an agent definition: its purpose, the context and knowledge it reads, the tools it may call, the model it uses and how it is tested, for business users on the front end or developers on the back end |
 | **DbDataIntegration** (section 4) | a product of its own: integrations with systems outside the suite's databases (web APIs, file shares, object storage), into the suite and out of it, as ordinary code published to the runner ([plan 28](28-runner.md)) |
 | **Actions** (section 4.4) | scripts in apps and agents as well as Sync, on one shared script format: agents' custom tools and apps' custom server-side logic, including elevated actions that hold the permission to the data while people hold the permission to run them |
-| **DbDataBacklog** (working name; section 5) | backlog, sprint and work management, tied to the suite's own objects |
+| **DbDataBacklog** (section 5) | backlog, sprint and work management, tied to the suite's own objects |
 
 ## 1. What already exists, and what this plan adds
 
@@ -377,7 +377,7 @@ lists what needs another look.
 
 ### 2.10a Standard front-end tools
 
-Proposed (2026-11-06), from the owner's direction that the suite builds standard front-end tools for searching, showing and suggesting
+**Decided (owner, 2026-11-06)**, proposed the same day from the owner's direction that the suite builds standard front-end tools for searching, showing and suggesting
 edits to knowledge. They are a shared web package, **`@dbdatakit/knowledge-ui`**, beside `@dbdatakit/shell`, `@dbdatakit/visuals` and
 `@dbdatakit/store-ui`, used by the knowledge app, the console, agents' chat and assistant panels, and any app that wants them:
 
@@ -398,7 +398,7 @@ edits to knowledge. They are a shared web package, **`@dbdatakit/knowledge-ui`**
 
 ### 2.11 What else is searchable, and how
 
-Proposed (2026-11-06), from the owner's question: do reports, semantic models, agents, source code and other things get into search, and
+**Decided (owner, 2026-11-06)**, proposed the same day from the owner's question: do reports, semantic models, agents, source code and other things get into search, and
 do they use the knowledge index?
 
 **The rule: the knowledge index holds what describes the system. Content is searched where it is kept, by that system's own rules.**
@@ -1147,7 +1147,7 @@ Its progress (checkpoints, processed files, idempotency keys, refused records) i
 
 ## 5. DbDataBacklog: work management
 
-**Name.** **DbDataBacklog** is the working name (owner, 2026-11-03); the final name is undecided. "Backlog" names one view of the tool. Other candidates: DbDataWork (plain, and it covers backlog, sprints and boards),
+**Name: DbDataBacklog** (owner, 2026-11-06; the working name since 2026-11-03). "Backlog" names one view of the tool. Other candidates: DbDataWork (plain, and it covers backlog, sprints and boards),
 DbDataBoard, DbDataTrack, DbDataTasks. DbDataPlan is ruled out, since Build already uses "plan" for its plans. **Owner question 2.**
 
 **Goal.** Backlog, sprint and work management for teams that build on the suite, where a work item can point at the thing it is about.
@@ -1204,8 +1204,8 @@ Workspace server** where authoring happens: workspaces (git branches), builds in
 and actions, bun with vendored packages for apps), tests, the publisher's signing key, and Publisher pairings with serving and runner
 groups. It hosts app, agent, integration, skill and knowledge projects, each kind keeping its own name, command nouns and screens. **Build
 and Sync move into it eventually** (once their runs are on the runner, plan 28 section 8), to reduce the number of services and the size
-of the architecture. Runtime stays elsewhere: the serving layer, the runner, the console for back-end agents. The product name is to be
-set.
+of the architecture. Runtime stays elsewhere: the serving layer, the runner, the console for back-end agents. **Its name is DbDataWorkspace**
+(owner, 2026-11-06); "the Workspace server" in this plan means it.
 
 ## 7. Order
 
@@ -1225,8 +1225,8 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 
 | # | Question | Proposed |
 | --- | --- | --- |
-| 1 | Which of these are servers? | **Decided** (owner, 2026-11-05): one **Workspace server** for authoring (the apps back end, broadened) hosting app, agent, integration, skill and knowledge projects, with Build and Sync moving into it eventually; DbDataRunner a service of its own; knowledge, actions and the work tool are not servers (section 6). Open: the Workspace server's product name |
-| 2 | The work tool's name | **Working name DbDataBacklog** (owner, 2026-11-03); final name undecided |
+| 1 | Which of these are servers? | **Decided** (owner, 2026-11-05): one **Workspace server** for authoring (the apps back end, broadened) hosting app, agent, integration, skill and knowledge projects, with Build and Sync moving into it eventually; DbDataRunner a service of its own; knowledge, actions and the work tool are not servers (section 6). Its name: **DbDataWorkspace** (owner, 2026-11-06) |
+| 2 | The work tool's name | **Decided** (owner, 2026-11-06): DbDataBacklog |
 | 3 | Languages and packaging | **Decided for integrations** (owner, 2026-11-04): `.csx` scripts, compiled .NET projects, any executable through the runner protocol, and hybrids such as a .NET notebook over a project (plan 28 section 4). Actions: `.csx`, SQL, command calls and declarative elevated forms |
 | 4 | Embedding search | **Decided** (owner, 2026-11-05): vector search only, to start, on SQL Server 2025, PostgreSQL (`pgvector`) and SQLite (`sqlite-vec`), with an embedding model connection bound per channel; without vector search there is no knowledge search (section 2.4) |
 | 5 | Agent approvals | **Decided** (owner, 2026-11-03): prompting is configured per action. **Decided** (owner, 2026-11-06) (section 3.3): 5a the three settings, 5b layers (action default, install policy with a minimum, agent definition; the strictest applies), 5c defaults from traits. **Decided** (owner, 2026-11-05): reading definitions and reading data are separate traits |
@@ -1279,10 +1279,10 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 52 | The `knowledge` commands, with their traits, including `knowledge context` to preview an agent's assembled context and budget | **Decided** (owner, 2026-11-06) (section 2.10) |
 | 53 | The knowledge app: search, subject and item pages, the form, suggestions and approvals, verified queries | **Decided** (owner, 2026-11-06) (section 2.10) |
 | 54 | The console's additions: the index, an agent's context, knowledge files checked in workspaces | **Decided** (owner, 2026-11-06) (section 2.10) |
-| 55 | Standard front-end tools: `@dbdatakit/knowledge-ui` (search, item view, subject panel, suggest edit, approvals, verified badge, context view), one typed client, usable in sandboxed apps | proposed (section 2.10a) |
-| 56 | Definitions of every kind (reports, semantic models, agents, apps, integrations and the rest) are searchable as generated knowledge in the same index; packages not served by the serving group publish their description to it | proposed (section 2.11) |
-| 57 | Source code and files are not in the knowledge index; workspace search on the Workspace server, exact text, per repository and branch | proposed (section 2.11) |
-| 58 | Data, documents' contents and operational records stay with their own systems; one search box asks several sources and groups the results | proposed (section 2.11) |
+| 55 | Standard front-end tools: `@dbdatakit/knowledge-ui` (search, item view, subject panel, suggest edit, approvals, verified badge, context view), one typed client, usable in sandboxed apps | **Decided** (owner, 2026-11-06) (section 2.10a) |
+| 56 | Definitions of every kind (reports, semantic models, agents, apps, integrations and the rest) are searchable as generated knowledge in the same index; packages not served by the serving group publish their description to it | **Decided** (owner, 2026-11-06) (section 2.11) |
+| 57 | Source code and files are not in the knowledge index; workspace search on the Workspace server, exact text, per repository and branch | **Decided** (owner, 2026-11-06) (section 2.11) |
+| 58 | Data, documents' contents and operational records stay with their own systems; one search box asks several sources and groups the results | **Decided** (owner, 2026-11-06) (section 2.11) |
 
 ## 9. Detailed plans to follow
 
