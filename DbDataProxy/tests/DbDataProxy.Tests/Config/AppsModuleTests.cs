@@ -55,7 +55,7 @@ public sealed class AppsModuleTests : IAsyncLifetime
     private (string ClientId, string Ada, string Bob, StateDatabase Database) Prepare()
     {
         var database = ProxyState.Open(dataDirectory);
-        var users = new UserStore(database);
+        var users = new IdentityUserStore(database);
         var ada = users.CreateUser("Ada Lovelace", "ada@example.invalid", UserRole.Viewer).Id;
         var bob = users.CreateUser("Bob Babbage", "bob@example.invalid", UserRole.Viewer).Id;
         new HomeDirectory(database).AssignApp(AssignmentSubject.User(ada), "acme", ServerRole.Viewer);

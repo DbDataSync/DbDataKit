@@ -292,7 +292,7 @@ public sealed class GroupStateTests : IAsyncLifetime
             var session = Cookie(back, ProxyIdentityModule.Auth.SessionCookie);
             Assert.NotNull(session);
             var database = a.Services.GetRequiredService<StateDatabase>();
-            var ada = Assert.Single(new UserStore(database).List());
+            var ada = Assert.Single(new IdentityUserStore(database).List());
 
             // a console's authorize request at A with that session gives a code, which B redeems; the id token is signed with the group's key, which A publishes
             var client = new OidcClients(database).Register("Operations console", ["https://console.example.invalid/callback"], confidential: false).Client.ClientId;
@@ -315,7 +315,7 @@ public sealed class GroupStateTests : IAsyncLifetime
             using var passkey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
             var credentialId = RandomNumberGenerator.GetBytes(16);
             var q = passkey.ExportParameters(false);
-            new UserStore(database).AddCredential(ada.Id, CredentialMethods.Passkey, Base64Url.EncodeToString(credentialId), Convert.ToBase64String([0xA5, 0x01, 0x02, 0x03, 0x26, 0x20, 0x01, 0x21, 0x58, 0x20, .. q.Q.X!, 0x22, 0x58, 0x20, .. q.Q.Y!]), label: "Passkey");
+            new IdentityUserStore(database).AddCredential(ada.Id, CredentialMethods.Passkey, Base64Url.EncodeToString(credentialId), Convert.ToBase64String([0xA5, 0x01, 0x02, 0x03, 0x26, 0x20, 0x01, 0x21, 0x58, 0x20, .. q.Q.X!, 0x22, 0x58, 0x20, .. q.Q.Y!]), label: "Passkey");
             var begun = await atB.PostAsync("/api/auth/passkey/begin", null);
             Assert.Equal(HttpStatusCode.OK, begun.StatusCode);
             var passkeyCookie = Cookie(begun, ProxyIdentityModule.Auth.PasskeyAssertionCookie)!;

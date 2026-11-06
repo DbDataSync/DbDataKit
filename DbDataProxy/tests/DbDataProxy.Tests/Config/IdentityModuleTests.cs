@@ -175,7 +175,7 @@ public sealed class IdentityModuleTests : IAsyncLifetime
     {
         await StartAsync();
         var state = app!.Services.GetRequiredService<StateDatabase>();
-        var ada = new UserStore(state).CreateUser("Ada Lovelace", "ada@example.invalid", UserRole.Viewer, emailVerified: true);
+        var ada = new IdentityUserStore(state).CreateUser("Ada Lovelace", "ada@example.invalid", UserRole.Viewer, emailVerified: true);
 
         // the operator's commands, on the same state, with the server running
         static async Task<(int Exit, IDictionary<string, object?> Data)> Run(params string[] args)
@@ -199,7 +199,7 @@ public sealed class IdentityModuleTests : IAsyncLifetime
         Assert.StartsWith(IdentityHome.SignInPath, notSignedIn.Headers.Location!.OriginalString);
 
         var request = new HttpRequestMessage(HttpMethod.Get, authorize);
-        request.Headers.Add("Cookie", $"{ProxyIdentityModule.Auth.SessionCookie}={new SessionStore(state).Create(ada.Id).Id}");
+        request.Headers.Add("Cookie", $"{ProxyIdentityModule.Auth.SessionCookie}={new IdentitySessionStore(state).Create(ada.Id).Id}");
         var back = await browser.SendAsync(request);
         Assert.Equal(HttpStatusCode.Redirect, back.StatusCode);
         Assert.StartsWith(Redirect + "?", back.Headers.Location!.AbsoluteUri);
@@ -305,12 +305,12 @@ public sealed class IdentityModuleTests : IAsyncLifetime
         var refused = await ThroughTenant("error=access_denied");
         Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
         Assert.False(SetsSession(refused));
-        Assert.Empty(new UserStore(state).List());
+        Assert.Empty(new IdentityUserStore(state).List());
 
         var signedIn = await ThroughTenant("code=from-tenant");
         Assert.Equal(HttpStatusCode.Redirect, signedIn.StatusCode);
         Assert.True(SetsSession(signedIn));
-        var ada = Assert.Single(new UserStore(state).List());
+        var ada = Assert.Single(new IdentityUserStore(state).List());
         Assert.Equal("Ada Lovelace", ada.DisplayName);
         Assert.True(new HomeDirectory(state).RolesOn(ada.Id, "build-1").Roles.HasFlag(ServerRole.Operator));
     }

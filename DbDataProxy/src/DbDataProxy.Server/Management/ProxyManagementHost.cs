@@ -109,7 +109,7 @@ public static class ProxyManagementHost
         if (audit.ImportFile(dataDirectory) is > 0 and var imported)
             app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Management").LogInformation("Read {Count} entries of {File} into the state's audit; the file is now {File}.imported.", imported, DbDataProxy.Server.State.StateAuditLog.LegacyFileName, DbDataProxy.Server.State.StateAuditLog.LegacyFileName);
         // a token one instance of a group accepted is refused by every other (plan 20 O02b): the used ids are in the state they share
-        var used = new DbDataKit.State.OneTimeValues(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>());
+        var used = new DbDataKit.State.IdentityOneTimeValues(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>());
         var validator = new ConsoleTokenValidator(instanceId, clients, new StateReplayCache(used, "management:" + instanceId));
         var log = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Management");
 
