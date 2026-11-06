@@ -121,9 +121,10 @@ public sealed class MsSqlBulkInsertWriter : IPassThroughWriter, IStatementPrevie
 
         targetConnection.ChangeDatabase(target.Database);
         var shape = MsSqlTargetShape.FromCachedColumns(mappingName, targetColumns, target, columnMappings);
-        var scope = SegmentScope.Resolve(SegmentSerializer.ReadOptional(options), shape.Columns, columnMappings);
+        var segment = ReadSegment(options);
+        var scope = SegmentScope.Resolve(segment, shape.Columns, columnMappings);
 
-        if (truncate && SegmentSerializer.ReadOptional(options) is not null)
+        if (truncate && segment is not null)
             throw new InvalidOperationException(TruncateSegmentedMessage(mappingName));
 
         var connection = (SqlConnection)targetConnection;
@@ -161,6 +162,11 @@ public sealed class MsSqlBulkInsertWriter : IPassThroughWriter, IStatementPrevie
             throw;
         }
     }
+
+    /// <summary>The pass's segment, or null when it is not segmented. A whole-table Bulk Load still carries
+    /// an explicit <see cref="FullSegment"/> in its options, which is the whole table, not a part of it.</summary>
+    internal static BatchReloadSegment? ReadSegment(IReadOnlyDictionary<string, string> options) =>
+        SegmentSerializer.ReadOptional(options) is FullSegment ? null : SegmentSerializer.ReadOptional(options);
 
     internal static string TruncateSegmentedMessage(string mappingName) =>
         $"Table mapping '{mappingName}' loads in segments, and '{ClearOption}: {ClearTruncate}' empties the whole " +
@@ -245,7 +251,7 @@ public sealed class MsSqlBulkInsertWriter : IPassThroughWriter, IStatementPrevie
         var (truncate, useTransaction) = ReadOptions(request.Options);
         var shape = await MsSqlTargetShape.LoadAsync(
             request.Connection, request.Target, request.ColumnMappings, cancellationToken);
-        var segment = SegmentSerializer.ReadOptional(request.Options);
+        var segment = ReadSegment(request.Options);
 
         if (truncate && segment is not null)
             return [new PreviewStatement(PreviewStages.Write, "Empty the target", null, PreviewOrigin.BuiltIn,
