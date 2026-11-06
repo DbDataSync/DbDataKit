@@ -336,7 +336,7 @@ lists what needs another look.
 
 ### 2.10 Commands and screens
 
-Proposed (2026-11-06).
+**Decided (owner, 2026-11-06).**
 
 **Commands**, on the shared command surface (so the same specs give the console, MCP tools and agents' tools), noun `knowledge`:
 
@@ -374,6 +374,55 @@ Proposed (2026-11-06).
    share of the budget (the same as `knowledge context`).
 9. **Knowledge projects in workspaces:** the editor checks knowledge files as they are typed (`knowledge check`) and previews the
    subjects each file reaches.
+
+### 2.10a Standard front-end tools
+
+Proposed (2026-11-06), from the owner's direction that the suite builds standard front-end tools for searching, showing and suggesting
+edits to knowledge. They are a shared web package, **`@dbdatakit/knowledge-ui`**, beside `@dbdatakit/shell`, `@dbdatakit/visuals` and
+`@dbdatakit/store-ui`, used by the knowledge app, the console, agents' chat and assistant panels, and any app that wants them:
+
+| Component | Shows or does |
+| --- | --- |
+| **Search** | a search box and grouped results (excerpt, title, heading path, source, kind), with filters; it can query several search sources at once (section 2.11) |
+| **Item view** | an item's text, fields, channels and history, with a comparison of two versions |
+| **Subject panel** | everything about one subject, for embedding beside that subject in any screen (a model in the console, a measure in a dashboard) |
+| **Suggest edit** | the form for a new item or a change, with the Markdown editor and preview, sending a suggestion (section 2.5) |
+| **Approvals** | the suggestion queue for an owner, each beside the current text, with the agents it reaches and any budget it would exceed |
+| **Verified badge** and **Verify this answer** | the mark on an answer that came from a verified query, and the action that proposes one (section 2.9) |
+| **Context view** | what an agent was given in a turn, or would be given (section 2.10, item 8) |
+
+- **One typed client** for the knowledge API, generated from the command specs like the other typed clients.
+- **They work inside sandboxed apps** (plan 26): calls go through the shell's token broker, as the person.
+- **They look like the suite** because they are built on the shell's components and themed by its variables, so a portal's branding
+  applies to them too.
+
+### 2.11 What else is searchable, and how
+
+Proposed (2026-11-06), from the owner's question: do reports, semantic models, agents, source code and other things get into search, and
+do they use the knowledge index?
+
+**The rule: the knowledge index holds what describes the system. Content is searched where it is kept, by that system's own rules.**
+
+| What | In the knowledge index? | How it is searched |
+| --- | --- | --- |
+| **Definitions**: semantic models and their members, Build models and columns, DbDataStore models, data sources, apps, portals and navigation, agents, skills, saved queries, reports and dashboards (plan 16 section 2a), integrations | **yes, as generated knowledge** (section 2.7), one item per thing, access-filtered by who may use it | knowledge search |
+| **Knowledge**: instructions, guardrails, references, verified queries | yes (sections 2.1 to 2.9) | knowledge search |
+| **Source code and files** in projects (models' SQL, actions, integration code, app source, configuration) | **no** | **workspace search** on the Workspace server: exact text and file names, per repository and branch, under the rights to that project; for developers, administrators and back-end agents (`workspace search` as a tool) |
+| **Data**: DbDataStore records, rows of a model | no | through the data's own reads: DbDataStore's search and filters, semantic queries; always under row and column rules |
+| **Documents' contents** | only when a knowledge source includes them as references (section 2.4) | otherwise through DbDataStore's documents |
+| **Operational records**: runs, notifications, audit, suggestions, work items | no | their own screens and commands, with structured filters (by name, state, time) |
+
+Why code stays out of the knowledge index: it lives on the private side (the Workspace server), not at the edge where the index is; it
+changes per branch, many times a day; people search code for exact names and text more than for meaning; and its access is the
+project's, not a subject's.
+
+**Definitions not served by the serving group** (integrations run on the runner, plan 28) still get a generated item: when the Workspace
+server publishes such a package, it also publishes its description (name, title, description, what it reads and writes, its owner; never
+its code) to the serving group, so the knowledge module indexes it like the rest.
+
+**One search box, several sources.** The search component (section 2.10a) asks several **search sources** at once and shows their results
+in groups: knowledge always; workspace search in the console for people with rights to projects; DbDataStore records in an app that has
+them. Each source applies its own access rules; nothing is copied between them to make the search work.
 
 ## 3. DbDataAgents
 
@@ -1227,9 +1276,13 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 49 | Used by agents: found by the question, given as a verified example, run directly or adapted, shown to the person as verified | **Decided** (owner, 2026-11-06) (section 2.9) |
 | 50 | Verified queries are the front-end agents' evaluation cases, judged by comparing rows | **Decided** (owner, 2026-11-06) (section 2.9) |
 | 51 | Checked when the model changes; failures marked "needs re-verification", never blocking the model | **Decided** (owner, 2026-11-06) (section 2.9) |
-| 52 | The `knowledge` commands, with their traits, including `knowledge context` to preview an agent's assembled context and budget | proposed (section 2.10) |
-| 53 | The knowledge app: search, subject and item pages, the form, suggestions and approvals, verified queries | proposed (section 2.10) |
-| 54 | The console's additions: the index, an agent's context, knowledge files checked in workspaces | proposed (section 2.10) |
+| 52 | The `knowledge` commands, with their traits, including `knowledge context` to preview an agent's assembled context and budget | **Decided** (owner, 2026-11-06) (section 2.10) |
+| 53 | The knowledge app: search, subject and item pages, the form, suggestions and approvals, verified queries | **Decided** (owner, 2026-11-06) (section 2.10) |
+| 54 | The console's additions: the index, an agent's context, knowledge files checked in workspaces | **Decided** (owner, 2026-11-06) (section 2.10) |
+| 55 | Standard front-end tools: `@dbdatakit/knowledge-ui` (search, item view, subject panel, suggest edit, approvals, verified badge, context view), one typed client, usable in sandboxed apps | proposed (section 2.10a) |
+| 56 | Definitions of every kind (reports, semantic models, agents, apps, integrations and the rest) are searchable as generated knowledge in the same index; packages not served by the serving group publish their description to it | proposed (section 2.11) |
+| 57 | Source code and files are not in the knowledge index; workspace search on the Workspace server, exact text, per repository and branch | proposed (section 2.11) |
+| 58 | Data, documents' contents and operational records stay with their own systems; one search box asks several sources and groups the results | proposed (section 2.11) |
 
 ## 9. Detailed plans to follow
 
