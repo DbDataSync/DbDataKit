@@ -36,8 +36,8 @@ public sealed class SqliteStateDialect : StateDialect
 
     public override string Upsert(
         string table, string columns, string values, string conflictTarget, string updates) =>
-        $"INSERT INTO {table} ({columns}) VALUES ({values}) " +
-        $"ON CONFLICT ({conflictTarget}) DO UPDATE SET {updates.Replace("EXCLUDED.", "excluded.")};";
+        $"INSERT INTO {table} AS existing ({columns}) VALUES ({values}) " +
+        $"ON CONFLICT ({conflictTarget}) DO UPDATE SET {updates.Replace("EXCLUDED.", "excluded.").Replace("EXISTING.", "existing.")};";
 
     public override string IdentityKey(string column) => $"{column} INTEGER PRIMARY KEY AUTOINCREMENT";
 

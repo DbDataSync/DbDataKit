@@ -71,7 +71,8 @@ public abstract class StateDialect
     /// </summary>
     /// <param name="updates">
     /// Assignments in <c>Column = EXCLUDED.Column</c> form, with the incoming row spelled
-    /// <c>EXCLUDED</c> — rewritten per engine. SQL Server's MERGE calls it <c>source</c>.
+    /// <c>EXCLUDED</c> — rewritten per engine. SQL Server's MERGE calls it <c>source</c>. The row already there is spelled <c>EXISTING.Column</c>
+    /// (<c>last_seen = CASE WHEN EXCLUDED.last_seen &gt; EXISTING.last_seen THEN ...</c>).
     /// </param>
     public abstract string Upsert(
         string table, string columns, string values, string conflictTarget, string updates);

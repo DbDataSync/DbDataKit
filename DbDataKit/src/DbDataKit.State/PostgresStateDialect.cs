@@ -49,8 +49,8 @@ public sealed class PostgresStateDialect : StateDialect
 
     public override string Upsert(
         string table, string columns, string values, string conflictTarget, string updates) =>
-        $"INSERT INTO {table} ({columns}) VALUES ({values}) " +
-        $"ON CONFLICT ({conflictTarget}) DO UPDATE SET {updates};";
+        $"INSERT INTO {table} AS existing ({columns}) VALUES ({values}) " +
+        $"ON CONFLICT ({conflictTarget}) DO UPDATE SET {updates.Replace("EXISTING.", "existing.")};";
 
     /// <summary><c>GENERATED ALWAYS</c> rather than <c>SERIAL</c>: the standard spelling, and the one
     /// that refuses an explicit value rather than quietly accepting one and desynchronising the

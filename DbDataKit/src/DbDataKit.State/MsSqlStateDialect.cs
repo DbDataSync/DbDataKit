@@ -84,7 +84,7 @@ public sealed class MsSqlStateDialect : StateDialect
 
     public override string Upsert(
         string table, string columns, string values, string conflictTarget, string updates) =>
-        Merge(table, columns, values, conflictTarget, matched: updates.Replace("EXCLUDED.", "source."));
+        Merge(table, columns, values, conflictTarget, matched: updates.Replace("EXCLUDED.", "source.").Replace("EXISTING.", "target."));
 
     private static string Merge(
         string table, string columns, string values, string conflictTarget, string? matched,
