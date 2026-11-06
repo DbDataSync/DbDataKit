@@ -1182,15 +1182,20 @@ state, as the knowledge module's is.
 
 ### 5.3 Scope
 
-Whether it replaces Jira or Azure Boards for its users, or links to them (import, two-way sync), changes its size a lot. **Owner
-question 7.**
+**Decided (owner, 2026-11-06):**
+
+1. **Its own items:** work items, epics, sprints, boards, estimates, comments and attachments.
+2. **Links to the suite from the start** (section 5.2): to suite objects, to DbDataWorkspace workspaces (following their commits, merge and
+   publish), to GitHub pull requests, and back-end agents that take an item and hand it back for review.
+3. **Outside tools (Jira, Azure Boards) are extremely low priority and may never happen.** If they ever do, an import would be a
+   DbDataIntegration template, not a feature of DbDataBacklog. No two-way sync is planned.
 
 ### 5.4 Custom attributes for any object type
 
-**Decided (owner, 2026-11-06)**, as a rule for the whole suite: the same holds for every object type, not only work items. An object's core
+**Decided (owner, 2026-11-06)**, the rule and how, for the whole suite: the same holds for every object type, not only work items. An object's core
 structure belongs to the product that owns it; **DbDataStore can augment any object type with custom attributes**.
 
-Proposed (2026-11-06) for how:
+How:
 
 - **An extension model** is a DbDataStore model attached to an object type (`work-item`, `semantic-model`, `build-model`, `app`,
   `connection`, ...): its fields are the custom attributes, and each record is keyed by the object's stable identity (the same identity
@@ -1255,7 +1260,7 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 4 | Embedding search | **Decided** (owner, 2026-11-05): vector search only, to start, on SQL Server 2025, PostgreSQL (`pgvector`) and SQLite (`sqlite-vec`), with an embedding model connection bound per channel; without vector search there is no knowledge search (section 2.4) |
 | 5 | Agent approvals | **Decided** (owner, 2026-11-03): prompting is configured per action. **Decided** (owner, 2026-11-06) (section 3.3): 5a the three settings, 5b layers (action default, install policy with a minimum, agent definition; the strictest applies), 5c defaults from traits. **Decided** (owner, 2026-11-05): reading definitions and reading data are separate traits |
 | 6 | Unattended agents in integration tasks | **Decided** (owner, 2026-11-04): actions set to *do not ask* run; actions that would ask become proposals (drafts, work items, notifications) (section 4.9) |
-| 7 | The work tool's scope | its own items first; links to GitHub pull requests and workspaces; import from Jira or Azure Boards later; no two-way sync |
+| 7 | The work tool's scope | **Decided** (owner, 2026-11-06): its own items, with links to suite objects, workspaces and GitHub pull requests from the start; Jira or Azure Boards extremely low priority, maybe never (section 5.3) |
 | 8 | First audience | **Decided** (owner, 2026-11-05): the **back-end** agent first, because it unlocks building apps (section 3.2) |
 | 9 | The integrations product's name | **Decided** (owner, 2026-11-04): DbDataIntegration (section 4.11) |
 | 10 | Outside systems as connections | **Decided** (owner, 2026-11-04): a new kind in `connection/1`, sharing secrets, channel bindings and the console's view (section 4.6) |
@@ -1308,7 +1313,7 @@ Waves 1 and 2 can run side by side once wave 0 is done; wave 5 can start its DbD
 | 57 | Source code and files are not in the knowledge index; workspace search on the Workspace server, exact text, per repository and branch | **Decided** (owner, 2026-11-06) (section 2.11) |
 | 58 | Data, documents' contents and operational records stay with their own systems; one search box asks several sources and groups the results | **Decided** (owner, 2026-11-06) (section 2.11) |
 | 59 | DbDataBacklog's core structure is the application's own (a `backlog` state module and a serving-layer module), created on install; DbDataStore only augments it | **Decided** (owner, 2026-11-06) (section 5.1) |
-| 60 | Custom attributes for any object type through DbDataStore; the core structure stays the owning product's | **Decided** (owner, 2026-11-06) as a rule; how (extension models keyed by object identity) proposed (section 5.4) |
+| 60 | Custom attributes for any object type through DbDataStore; the core structure stays the owning product's | **Decided** (owner, 2026-11-06) as a rule; and how, with extension models keyed by object identity (section 5.4) |
 
 ## 9. Detailed plans to follow
 
