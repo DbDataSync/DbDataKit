@@ -130,6 +130,8 @@ public sealed partial class StateLayout
             var tables = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var table in DeclaredTables(module))
             {
+                if (ReservedWords.IsReserved(prefix + table))
+                    throw new InvalidOperationException($"The module '{module.Name}' names a table '{table}', which is a reserved word on at least one engine (SQL Server refuses a table called checkpoint). Rename the table, or give the namespace a prefix ({SettingName(module, "prefix")}).");
                 var bare = prefix + table;
                 CheckIdentifier(bare, module, "prefix", limit, SettingName(module, "prefix"), $"the table '{table}'");
                 tables[table] = Qualify(schema, bare);
@@ -138,6 +140,8 @@ public sealed partial class StateLayout
 
             foreach (var index in DeclaredIndexes(module))
             {
+                if (ReservedWords.IsReserved(prefix + index))
+                    throw new InvalidOperationException($"The module '{module.Name}' names an index '{index}', which is a reserved word on at least one engine. Rename it.");
                 var bare = prefix + index;
                 CheckIdentifier(bare, module, "prefix", limit, SettingName(module, "prefix"), $"the index '{index}'");
                 Claim(Qualify(schema, bare), $"the index '{index}' of the module '{module.Name}'", SettingName(module, "prefix"));

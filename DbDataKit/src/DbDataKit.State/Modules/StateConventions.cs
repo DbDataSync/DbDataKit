@@ -55,6 +55,8 @@ public static partial class StateConventions
             foreach (Match create in CreateTable.Matches(text))
             {
                 var table = create.Groups["table"].Value;
+                if (ReservedWords.IsReserved(table))
+                    problems.Add($"{where}, {table}: '{table}' is a reserved word on at least one engine (SQL Server refuses a table called checkpoint); the default names have no prefix on SQL Server and PostgreSQL, so rename the table.");
                 var columns = new Dictionary<string, string>(StringComparer.Ordinal);
                 var keyColumns = new List<string>();
                 foreach (var item in TopLevelItems(text, create.Index + create.Length))
@@ -106,6 +108,8 @@ public static partial class StateConventions
     {
         if (!ColumnName.IsMatch(name))
             problems.Add($"{where}, {table}.{name}: column names are lower case with underscores.");
+        else if (ReservedWords.IsReserved(name))
+            problems.Add($"{where}, {table}.{name}: '{name}' is a reserved word on at least one engine; name the column for what it holds (value_text, key_name).");
         if (type == "{{time}}" && !name.EndsWith("_at", StringComparison.Ordinal))
             problems.Add($"{where}, {table}.{name}: a time column is named *_at.");
         if (name.EndsWith("_at", StringComparison.Ordinal) && type != "{{time}}")

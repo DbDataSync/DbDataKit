@@ -4,7 +4,7 @@ namespace DbDataKit.State.Tests;
 public sealed class StateLayoutTests
 {
     private static StateModule Module(string name, StateScopeKind scope = StateScopeKind.Install, IEnumerable<StateModule>? dependsOn = null, params string[] migrations) =>
-        new(name, scope, migrations.Length == 0 ? [$"CREATE TABLE {{table:{name}}} (id {{{{key}}}} PRIMARY KEY);"] : migrations, dependsOn);
+        new(name, scope, migrations.Length == 0 ? [$"CREATE TABLE {{table:{name}_item}} (id {{{{key}}}} PRIMARY KEY);"] : migrations, dependsOn);
 
     [Fact]
     public void Dependencies_come_first_and_each_module_once()
@@ -38,9 +38,9 @@ public sealed class StateLayoutTests
         var sqlite = StateLayout.Create(StateEngineIds.Sqlite, modules);
         var mssql = StateLayout.Create(StateEngineIds.MsSql, modules);
 
-        Assert.Equal("dbdatakit_identity.identity", postgres.Table("identity", "identity"));
-        Assert.Equal("dbdatakit_identity.identity", mssql.Table("identity", "identity"));
-        Assert.Equal("dbdatakit_identity_identity", sqlite.Table("identity", "identity"));
+        Assert.Equal("dbdatakit_identity.identity_item", postgres.Table("identity", "identity_item"));
+        Assert.Equal("dbdatakit_identity.identity_item", mssql.Table("identity", "identity_item"));
+        Assert.Equal("dbdatakit_identity_identity_item", sqlite.Table("identity", "identity_item"));
         Assert.Equal("dbdatakit.modules", postgres.Registry);
         Assert.Equal("dbdatakit_modules", sqlite.Registry);
         Assert.Equal(["dbdatakit", "dbdatakit_identity"], postgres.Schemas);
@@ -56,9 +56,9 @@ public sealed class StateLayoutTests
         var eu = StateLayout.Create(StateEngineIds.Postgres, [sessions], new StateScope(Group: "EU-west"));
         var sqlite = StateLayout.Create(StateEngineIds.Sqlite, [sessions], new StateScope(Group: "main"));
 
-        Assert.Equal("dbdatakit_sessions_main.sessions", main.Table("sessions", "sessions"));
-        Assert.Equal("dbdatakit_sessions_eu_west.sessions", eu.Table("sessions", "sessions"));
-        Assert.Equal("dbdatakit_sessions_main_sessions", sqlite.Table("sessions", "sessions"));
+        Assert.Equal("dbdatakit_sessions_main.sessions_item", main.Table("sessions", "sessions_item"));
+        Assert.Equal("dbdatakit_sessions_eu_west.sessions_item", eu.Table("sessions", "sessions_item"));
+        Assert.Equal("dbdatakit_sessions_main_sessions_item", sqlite.Table("sessions", "sessions_item"));
     }
 
     [Fact]
@@ -76,8 +76,8 @@ public sealed class StateLayoutTests
 
         var layout = StateLayout.Create(StateEngineIds.MsSql, [Module("identity"), Module("runs")], settings: settings);
 
-        Assert.Equal("dbdatakit.identity_identity", layout.Table("identity", "identity"));
-        Assert.Equal("dbdatakit.runs_runs", layout.Table("runs", "runs"));
+        Assert.Equal("dbdatakit.identity_identity_item", layout.Table("identity", "identity_item"));
+        Assert.Equal("dbdatakit.runs_runs_item", layout.Table("runs", "runs_item"));
     }
 
     [Fact]
@@ -91,8 +91,8 @@ public sealed class StateLayoutTests
 
         var layout = StateLayout.Create(StateEngineIds.Postgres, [Module("identity"), Module("runs")], settings: settings);
 
-        Assert.Equal("shared.identity", layout.Table("identity", "identity"));
-        Assert.Equal("shared.r_runs", layout.Table("runs", "runs"));
+        Assert.Equal("shared.identity_item", layout.Table("identity", "identity_item"));
+        Assert.Equal("shared.r_runs_item", layout.Table("runs", "runs_item"));
     }
 
     [Fact]
@@ -102,7 +102,7 @@ public sealed class StateLayoutTests
 
         var layout = StateLayout.Create(StateEngineIds.Postgres, [Module("identity")], settings: settings);
 
-        Assert.Equal("dbdatakit_identity_identity", layout.Table("identity", "identity"));
+        Assert.Equal("dbdatakit_identity_identity_item", layout.Table("identity", "identity_item"));
     }
 
     [Fact]

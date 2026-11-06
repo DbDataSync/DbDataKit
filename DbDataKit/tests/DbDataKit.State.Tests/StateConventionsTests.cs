@@ -126,6 +126,29 @@ public sealed class StateConventionsTests : IDisposable
     }
 
     [Fact]
+    public void A_table_named_with_a_word_one_engine_reserves_is_refused_on_every_engine()
+    {
+        var module = Module("CREATE TABLE {table:checkpoint} (id {{key}} PRIMARY KEY);");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => StateLayout.Create(StateEngineIds.Sqlite, [module], settings: new StateNamespaceSettings { Default = new NamespaceSetting(Prefix: "") }));
+
+        Assert.Contains("checkpoint", ex.Message);
+        Assert.Contains("reserved", ex.Message);
+        Assert.Contains(StateConventions.Violations(module), v => v.Contains("checkpoint") && v.Contains("reserved"));
+        // with SQLite's default prefix the rendered name is fine, which is why the module's own convention test is the early warning
+        StateLayout.Create(StateEngineIds.Sqlite, [module]);
+    }
+
+    [Fact]
+    public void A_column_named_with_a_reserved_word_is_a_convention_violation()
+    {
+        var violations = StateConventions.Violations(Module("CREATE TABLE {table:t} (id {{key}} PRIMARY KEY, \"user\" {{key}} NULL, order {{int}} NULL);".Replace("\"user\"", "user")));
+
+        Assert.Contains(violations, v => v.Contains("t.user") && v.Contains("reserved"));
+        Assert.Contains(violations, v => v.Contains("t.order") && v.Contains("reserved"));
+    }
+
+    [Fact]
     public void New_ids_are_version_7_and_follow_the_clock()
     {
         var clock = new StateTestClock(DateTimeOffset.Parse("2026-11-06T00:00:00Z"));
@@ -144,19 +167,19 @@ public sealed class StateConventionsTests : IDisposable
     [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
     public void A_versioned_update_applies_once_and_the_second_writer_is_refused(string engine)
     {
-        var module = Module("CREATE TABLE {table:checkpoint} (id {{key}} PRIMARY KEY, value {{key}} NOT NULL, row_version {{int}} NOT NULL);");
+        var module = Module("CREATE TABLE {table:position} (id {{key}} PRIMARY KEY, value {{key}} NOT NULL, row_version {{int}} NOT NULL);");
         var database = _engines.Provision(engine).Open([module]);
         using var connection = database.OpenConnection();
-        using (var insert = database.Command("sample", connection, "INSERT INTO {table:checkpoint} (id, value, row_version) VALUES ('c', 'a', 1);"))
+        using (var insert = database.Command("sample", connection, "INSERT INTO {table:position} (id, value, row_version) VALUES ('c', 'a', 1);"))
             insert.ExecuteNonQuery();
 
-        bool Move(string to, long expected) => database.UpdateVersioned("sample", connection, null, "checkpoint", "value = $value", "id = 'c'", expected, c => c.Bind(database, "value", to));
+        bool Move(string to, long expected) => database.UpdateVersioned("sample", connection, null, "position", "value = $value", "id = 'c'", expected, c => c.Bind(database, "value", to));
 
         Assert.True(Move("b", 1));
         Assert.False(Move("c", 1)); // the other writer still holds version 1: refused
         Assert.True(Move("c", 2));
 
-        using var read = database.Command("sample", connection, "SELECT value, row_version FROM {table:checkpoint};");
+        using var read = database.Command("sample", connection, "SELECT value, row_version FROM {table:position};");
         using var reader = read.ExecuteReader();
         Assert.True(reader.Read());
         Assert.Equal("c", reader.GetString(0));
