@@ -3,7 +3,8 @@ namespace DbDataKit.State;
 /// <summary>
 /// The <c>identity</c> module (plan 29 section 3.4): who may use the suite and how they prove it. One copy per install, so one identity home serves every service that shares the
 /// database. <b>People</b> are in the first migration: accounts, their credentials, server-side sessions, invitations and the one-time values a sign-in holds between two requests. The
-/// identity home's directory, clients, tokens and federation are appended as further migrations (plan 29a Q09, second half).
+/// identity home follows as appended migrations: its directory (groups, role assignments, external group mappings), its OpenID provider (clients, codes, signing keys, refresh
+/// tokens) and access tokens with service accounts.
 /// <para>
 /// Names differ from the older tables in two ways the engines force or the conventions ask for: a table called <c>user</c> or <c>group</c> is reserved on SQL Server and PostgreSQL, so
 /// they are <c>account</c> and <c>user_group</c>; and times, booleans and the lower-case column names follow plan 29 section 3.3. Ids stay opaque text (the home's subject ids are shared by
@@ -88,6 +89,147 @@ public static class IdentityModule
             );
             CREATE INDEX {index:one_time_value_by_expiry} ON {table:one_time_value}(expires_at);
             """,
+            """
+            -- The identity home's directory: groups, who is in them, who holds which roles where, and which external groups give which roles.
+            CREATE TABLE {table:user_group} (
+                id          {{key}} PRIMARY KEY,
+                name        {{key}} NOT NULL,
+                created_at  {{time}} NOT NULL
+            );
+            CREATE UNIQUE INDEX {index:user_group_by_name} ON {table:user_group}(name);
+
+            -- slot is a hash of the pair: SQL Server limits an index key to 900 bytes, which two bounded text columns already pass, so uniqueness is one short column's.
+            CREATE TABLE {table:group_member} (
+                slot        {{key}} PRIMARY KEY,
+                group_id    {{key}} NOT NULL REFERENCES {table:user_group}(id),
+                account_id  {{key}} NOT NULL REFERENCES {table:account}(id)
+            );
+            CREATE INDEX {index:group_member_by_account} ON {table:group_member}(account_id);
+
+            -- Roles are assigned once, here, to an account or to a group, and are scoped: a server (target is its instance id), a Build project on a server (target the server,
+            -- project the project) or an app (target is the app). roles is a comma-separated list of role names. A server's own ceiling for the console still applies on top.
+            -- slot is a hash of kind, subject, scope, target and project: one assignment per place.
+            CREATE TABLE {table:role_assignment} (
+                id            {{key}} PRIMARY KEY,
+                slot          {{key}} NOT NULL,
+                subject_kind  {{key}} NOT NULL,
+                subject_id    {{key}} NOT NULL,
+                scope         {{key}} NOT NULL,
+                target        {{key}} NOT NULL,
+                project       {{key}} NOT NULL,
+                roles         {{text}} NOT NULL
+            );
+            CREATE UNIQUE INDEX {index:role_assignment_by_slot} ON {table:role_assignment}(slot);
+            CREATE INDEX {index:role_assignment_by_subject} ON {table:role_assignment}(subject_id);
+
+            -- An external group maps to roles on a server, a Build project of a server or an app, as role_assignment does for a home group. source is entra or windows.
+            -- external_group is the value as written (for display); external_key is what it is compared on (trimmed, Unicode form C, lower case). slot is a hash of source, key,
+            -- scope, target and project: one mapping per place.
+            CREATE TABLE {table:group_mapping} (
+                id              {{key}} PRIMARY KEY,
+                slot            {{key}} NOT NULL,
+                source          {{key}} NOT NULL,
+                external_group  {{text}} NOT NULL,
+                external_key    {{key}} NOT NULL,
+                scope           {{key}} NOT NULL,
+                target          {{key}} NOT NULL,
+                project         {{key}} NOT NULL,
+                roles           {{text}} NOT NULL,
+                created_at      {{time}} NOT NULL
+            );
+            CREATE UNIQUE INDEX {index:group_mapping_by_slot} ON {table:group_mapping}(slot);
+            CREATE INDEX {index:group_mapping_by_group} ON {table:group_mapping}(source, external_key);
+
+            -- The external groups a person was in at their last sign-in through that source, replaced whole at each one. A mapping applies to a person only through a row here.
+            -- slot is a hash of account, source and key.
+            CREATE TABLE {table:external_membership} (
+                slot         {{key}} PRIMARY KEY,
+                account_id   {{key}} NOT NULL REFERENCES {table:account}(id),
+                source       {{key}} NOT NULL,
+                external_key {{key}} NOT NULL,
+                seen_at      {{time}} NOT NULL
+            );
+            CREATE INDEX {index:external_membership_by_account} ON {table:external_membership}(account_id);
+            CREATE INDEX {index:external_membership_by_group} ON {table:external_membership}(source, external_key);
+            """,
+            """
+            -- An application that signs people in through the home: a console, an app host, an agent. A public client (a browser app) has no secret and proves itself with PKCE alone.
+            -- redirect_uris and post_logout_redirect_uris are one per line, compared exactly (the second is where end-session may send a person back to; a client without a row has none).
+            CREATE TABLE {table:oidc_client} (
+                client_id     {{key}} PRIMARY KEY,
+                name          {{text}} NOT NULL,
+                secret_hash   {{text}} NULL,
+                redirect_uris {{text}} NOT NULL,
+                created_at    {{time}} NOT NULL
+            );
+
+            CREATE TABLE {table:oidc_client_logout} (
+                client_id                {{key}} PRIMARY KEY,
+                post_logout_redirect_uris {{text}} NOT NULL
+            );
+
+            -- One sign-in step: the code is returned once, only its hash is kept, and it works once.
+            CREATE TABLE {table:authorization_code} (
+                code_hash      {{key}} PRIMARY KEY,
+                client_id      {{key}} NOT NULL,
+                account_id     {{key}} NOT NULL,
+                redirect_uri   {{text}} NOT NULL,
+                code_challenge {{key}} NOT NULL,
+                nonce          {{text}} NULL,
+                scope          {{text}} NOT NULL,
+                expires_at     {{time}} NOT NULL,
+                used_at        {{time}} NULL
+            );
+
+            -- The keys that sign tokens: the private half protected by the host, the public half published at the JWKS address. A retired key stops signing and is dropped from the JWKS.
+            CREATE TABLE {table:signing_key} (
+                kid         {{key}} PRIMARY KEY,
+                private_key {{text}} NOT NULL,
+                created_at  {{time}} NOT NULL,
+                retired_at  {{time}} NULL
+            );
+
+            -- A refresh token is returned once, only its hash is kept, and it works once: using it makes the next one in the same family. A token used a second time means it was
+            -- copied, so the whole family is revoked. expires_at is the family's, fixed when the person signed in: rotation does not extend it.
+            CREATE TABLE {table:refresh_token} (
+                token_hash  {{key}} PRIMARY KEY,
+                family_id   {{key}} NOT NULL,
+                client_id   {{key}} NOT NULL,
+                account_id  {{key}} NOT NULL,
+                scope       {{text}} NOT NULL,
+                expires_at  {{time}} NOT NULL,
+                used_at     {{time}} NULL,
+                revoked_at  {{time}} NULL
+            );
+            CREATE INDEX {index:refresh_token_by_account} ON {table:refresh_token}(account_id);
+            CREATE INDEX {index:refresh_token_by_family} ON {table:refresh_token}(family_id);
+            """,
+            """
+            -- A token is ddk_<id>_<secret>: the id finds the row, only a hash of the secret is kept. expires_at is null only for a service account's token that never expires.
+            -- Revoked tokens stay, listed as revoked.
+            CREATE TABLE {table:access_token} (
+                id           {{key}} PRIMARY KEY,
+                account_id   {{key}} NOT NULL REFERENCES {table:account}(id),
+                name         {{text}} NOT NULL,
+                secret_hash  {{key}} NOT NULL,
+                created_at   {{time}} NOT NULL,
+                created_by   {{key}} NOT NULL,
+                expires_at   {{time}} NULL,
+                revoked_at   {{time}} NULL,
+                last_used_at {{time}} NULL
+            );
+            CREATE INDEX {index:access_token_by_account} ON {table:access_token}(account_id);
+
+            -- An account for unattended work: an account with no credential, signing in only with its tokens. name is the user name its tokens go with.
+            CREATE TABLE {table:service_account} (
+                account_id   {{key}} PRIMARY KEY REFERENCES {table:account}(id),
+                name         {{key}} NOT NULL,
+                description  {{text}} NULL,
+                created_by   {{key}} NOT NULL,
+                created_at   {{time}} NOT NULL
+            );
+            CREATE UNIQUE INDEX {index:service_account_by_name} ON {table:service_account}(name);
+            """,
         ],
         retention:
         [
@@ -95,6 +237,8 @@ public static class IdentityModule
             new RetentionRule("session", "expires_at"),
             new RetentionRule("invite", "expires_at"),
             new RetentionRule("one_time_value", "expires_at"),
+            new RetentionRule("authorization_code", "expires_at"),
+            new RetentionRule("refresh_token", "expires_at"),
         ]);
 }
 
@@ -120,4 +264,6 @@ public interface IUserAccounts
     UserRecord UpsertFederated(string id, string displayName, string? email, UserRole role, bool emailVerified = false);
 
     void SetRole(string userId, UserRole role);
+
+    void SetEnabled(string userId, bool enabled);
 }
