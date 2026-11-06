@@ -76,7 +76,7 @@ public sealed class ConnectionsControllerTests : IClassFixture<TestApiFactory>
         // The reload writers reconcile, as does the key-diff delete sweep and its SCD2 close ending
         // (phase 129); the incremental MERGE writer is upsert-only.
         Assert.Equal(
-            ["DeleteInsert", "KeyReconcileDelete", "KeyReconcileScd2Close", "MsSqlDeleteInsert", "MsSqlMergeReconcile"],
+            ["DeleteInsert", "KeyReconcileDelete", "KeyReconcileScd2Close", "MsSqlBulkInsert", "MsSqlDeleteInsert", "MsSqlMergeReconcile"],
             capabilities.Writers.Where(w => w.SupportsReconciliation).Select(w => w.Kind).Order());
         Assert.False(capabilities.Writers.Single(w => w.Kind == "MsSqlMerge").SupportsReconciliation);
 

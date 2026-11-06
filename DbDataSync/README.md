@@ -19,8 +19,14 @@ PostgreSQL target, for example. Support varies by engine:
 | Incremental sync              | Native (Change Tracking / CDC)  | Native (logical decoding)  | Watermark column             | Native (Flashback Version Query)    | N/A              |
 | Backfill / batch reload       | Yes                             | Yes                        | Yes                         | Yes                                  | N/A              |
 | Bulk staging                  | Native (SqlBulkCopy)            | Native (binary COPY)       | Generic (batched insert)     | Generic (batched insert)            | N/A              |
+| Direct bulk load (no staging) | Yes (`PassThrough` + `MsSqlBulkInsert`) | Not yet                    | Not yet                      | Not yet                             | N/A              |
 | Delete detection (reconcile)  | Yes                             | Yes                        | Yes                         | Yes                                  | N/A              |
 | SCD2 target                   | Yes                             | Yes                        | Yes                         | Yes                                  | N/A              |
+
+Direct bulk load writes a full load or reload straight into the target instead of staging it first, with
+a clear-first choice of delete or truncate — see
+[Loading straight into the target](docs/replication-concepts.md#loading-straight-into-the-target). The
+other engines still stage first; each needs its own direct-load writer.
 
 Every engine above also offers `TriggerAudit`, a portable trigger-based option — see
 [Replication concepts](docs/replication-concepts.md#reader-kinds).

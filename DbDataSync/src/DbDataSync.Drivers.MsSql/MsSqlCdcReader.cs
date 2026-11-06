@@ -144,12 +144,13 @@ public sealed class MsSqlCdcReader : IChangeReader, IStatementPreview, IReadInte
             // The floor itself, read inclusively — see SupportedIntents and BuildRead's inclusiveFloor.
             // Waited for on the same terms InitialLoad waits for it: not knowing the floor yet is not
             // the same as there being no changes.
-            fromLsn = await WaitForCaptureFloorAsync(sourceConnection, instance, cancellationToken)
-                ?? throw new InvalidOperationException(
-                    $"Change Data Capture has not started capturing '{source.Schema}.{source.Table}' yet " +
-                    $"(capture instance '{instance.CaptureInstance}' has no start position). This pass " +
-                    "will succeed once the capture job has processed the enable — check that SQL Server " +
-                    "Agent is running if it does not.");
+            //
+            // A capture instance on a table that has never changed can report no start position at all
+            // (null, or all zeroes) even though the capture job is running. Reaching this point means
+            // the database's max LSN exists, so the job has run: every change to this table from here on
+            // will land above that max LSN. Starting the inclusive read at it is therefore lossless, and
+            // an unchanged table reads as the empty window it is rather than as a failure.
+            fromLsn = await WaitForCaptureFloorAsync(sourceConnection, instance, cancellationToken) ?? maxLsn;
         }
         else
         {
@@ -473,6 +474,12 @@ public sealed class MsSqlCdcReader : IChangeReader, IStatementPreview, IReadInte
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
+            // An empty window can come back as one row of nothing but nulls rather than as no rows. It
+            // is not a change — a real change always carries an operation — so it is skipped, before it
+            // can count toward the cap or be read as a position.
+            if (reader.IsDBNull(MsSqlCdcStatement.OperationOrdinal))
+                continue;
+
             if (bounded is not null)
             {
                 rowsRead++;

@@ -59,6 +59,7 @@ public sealed class MsSqlDriver : IDriver, IConnectionTester, IDialectProvider, 
     [
         new MsSqlStagingTableProvider(),
         new BatchInsertStagingProvider(MsSqlDialect.Instance, MsSqlCatalog.Instance),
+        new PassThroughStagingProvider(),
     ];
 
     public IReadOnlyList<IChangeWriter> Writers { get; } =
@@ -66,6 +67,7 @@ public sealed class MsSqlDriver : IDriver, IConnectionTester, IDialectProvider, 
         new MsSqlMergeWriter(),
         new MsSqlMergeReconcileWriter(),
         new MsSqlDeleteInsertWriter(),
+        new MsSqlBulkInsertWriter(),
         new DeleteInsertWriter(MsSqlDialect.Instance, MsSqlCatalog.Instance, MsSqlValueBinding.Instance),
         new KeyReconcileDeleteWriter(MsSqlDialect.Instance, MsSqlCatalog.Instance, MsSqlValueBinding.Instance),
         new KeyReconcileScd2CloseWriter(MsSqlDialect.Instance, MsSqlCatalog.Instance, MsSqlValueBinding.Instance),

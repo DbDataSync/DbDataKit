@@ -446,6 +446,47 @@ public sealed class MsSqlCdcReaderTests(MsSqlTestDatabase db) : IClassFixture<Ms
     }
 
     /// <summary>
+    /// A table that has never changed — capture just enabled, no scan of its own yet, so the instance
+    /// can report no start position — must read as an empty window under <c>ChangesFromEarliest</c>,
+    /// not fail with "has not started capturing", and must never yield an all-null row.
+    /// </summary>
+    [Fact]
+    public async Task ChangesFromEarliest_OnATableThatNeverChanged_ReadsNothing_AndDoesNotFail()
+    {
+        var quiet = $"CdcQuiet_{Guid.NewGuid():N}";
+        await ExecuteAsync($"CREATE TABLE dbo.[{quiet}] (Id INT NOT NULL PRIMARY KEY, Name NVARCHAR(50) NOT NULL);");
+        await EnableCaptureWithRetryAsync(quiet);
+        await CdcCaptureJob.ScanAsync(_connection);
+
+        // SQL Server answers "no start position" with all zeroes until the instance's start is recorded
+        // (see MsSqlCdcCatalog.GetMinLsnAsync). A scan normally fills it in, so the state is put back by
+        // hand — the catalog row is what fn_cdc_get_min_lsn reads.
+        await ExecuteAsync(
+            $"UPDATE cdc.change_tables SET start_lsn = 0x00000000000000000000 WHERE capture_instance = N'dbo_{quiet}';");
+        Assert.Null(await MsSqlCdcCatalog.GetMinLsnAsync(_connection, $"dbo_{quiet}", CancellationToken.None));
+
+        var source = new SourceTableRef
+        {
+            ConnectionName = "test", Database = db.DatabaseName, Schema = "dbo", Table = quiet,
+        };
+
+        var result = await _reader.ReadChangesAsync(
+            _connection, source, previousWatermark: null, ReadIntent.ChangesFromEarliest,
+            [], "mapping", [], [], new Dictionary<string, IReadOnlyList<CachedColumn>>(),
+            new Dictionary<string, string>(), CancellationToken.None);
+
+        Assert.Empty(await CollectAsync(result.Rows));
+        Assert.NotNull(result.NewWatermark);
+
+        // And the position it stored is one a later ordinary pass can resume from.
+        var next = await _reader.ReadChangesAsync(
+            _connection, source, result.NewWatermark, ReadIntent.Changes,
+            [], "mapping", [], [], new Dictionary<string, IReadOnlyList<CachedColumn>>(),
+            new Dictionary<string, string>(), CancellationToken.None);
+        Assert.Empty(await CollectAsync(next.Rows));
+    }
+
+    /// <summary>
     /// <see cref="ReadIntent.ChangesFromLatest"/> adopts the current maximum LSN as the new position
     /// without querying the change table at all — a table can be marked already-synced, and this is the
     /// intent that does it.

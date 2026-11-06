@@ -866,6 +866,17 @@ public sealed class RunExecutor(
             var writer = targetDriver.Writers.FirstOrDefault(w => w.Kind == writerKind)
                 ?? throw new InvalidOperationException($"Target driver does not support writer kind '{writerKind}'.");
 
+            // A pass-through cache stages nothing, so only a writer that loads the stream itself can use
+            // it — and such a writer has no staging table to read. Refused here, before anything is read.
+            var passThroughCache = stagingProvider is PassThroughStagingProvider;
+            if (passThroughCache != writer is IPassThroughWriter)
+                throw new InvalidOperationException(passThroughCache
+                    ? $"Cache '{cacheKind}' stages nothing, so it only works with a writer that loads rows straight " +
+                      $"into the target; '{writerKind}' reads from a staging table. Choose a cache that stages " +
+                      "(e.g. the engine's staging table), or a direct-load writer."
+                    : $"Writer '{writerKind}' loads straight into the target and needs the '{cacheKind}' cache " +
+                      $"replaced by '{GenericDriverKinds.PassThrough}'.");
+
             if (item.Kinds != WorkItemKinds.FromConfig)
                 Log(item.RunId, LogSeverity.Info,
                     $"Using reader '{readerKind}', cache '{cacheKind}', writer '{writerKind}' for this {item.RunKind} " +

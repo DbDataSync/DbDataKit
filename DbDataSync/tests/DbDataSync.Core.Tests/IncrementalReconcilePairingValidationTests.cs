@@ -32,6 +32,8 @@ public sealed class IncrementalReconcilePairingValidationTests : IDisposable
     [InlineData("Watermark", "MsSqlDeleteInsert")]
     [InlineData("MsSqlChangeTracking", "MsSqlMergeReconcile")]
     [InlineData("MsSqlCdc", "MsSqlDeleteInsert")]
+    [InlineData("MsSqlCdc", "MsSqlBulkInsert")]
+    [InlineData("Watermark", "MsSqlBulkInsert")]
     [InlineData("TriggerAudit", "DeleteInsert")]
     [InlineData("PgLogicalSlot", "DeleteInsert")]
     [InlineData("OracleFlashback", "DeleteInsert")]
@@ -50,6 +52,7 @@ public sealed class IncrementalReconcilePairingValidationTests : IDisposable
     [InlineData("MsSqlChangeTracking", "Scd2")]
     [InlineData("BatchReload", "DeleteInsert")]
     [InlineData("MsSqlBatchReload", "MsSqlMergeReconcile")]
+    [InlineData("BatchReload", "MsSqlBulkInsert")]
     [InlineData("KeyReconcile", "KeyReconcileDelete")]
     public void AnyOtherPairing_IsNotThisChecksBusiness(string readerKind, string writerKind) =>
         ConfigValidation.ValidateIncrementalReconcilePairing(Mapping(), readerKind, writerKind);

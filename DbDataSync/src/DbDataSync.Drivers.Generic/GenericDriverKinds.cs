@@ -14,6 +14,10 @@ public static class GenericDriverKinds
     public const string TriggerAudit = "TriggerAudit";
     public const string BatchReload = "BatchReload";
     public const string StagingTable = "StagingTable";
+
+    /// <summary>Stages nothing: hands the reader's rows to a writer that loads them straight into the
+    /// target. Only legal beside such a writer (<c>IPassThroughWriter</c>).</summary>
+    public const string PassThrough = "PassThrough";
     public const string DeleteInsert = "DeleteInsert";
 
     /// <summary>Reads only a source table's primary-key values — phase 124's cheap delete-diff sweep.

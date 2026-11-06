@@ -30,7 +30,7 @@ public static class StagingBatches
     /// </summary>
     public static TransferSchema Schema(
         EngineId engine, IReadOnlyList<string> mappedTargetColumns, IReadOnlyDictionary<string, string> nativeTypes, bool includeChangeOrdering,
-        string operationColumn)
+        string? operationColumn)
     {
         var dialect = DialectCatalog.For(engine);
         var columns = new List<TransferColumn>(mappedTargetColumns.Count + 3);
@@ -44,7 +44,9 @@ public static class StagingBatches
             columns.Add(new TransferColumn(ChangeOrdering.OrderingColumn, CanonicalType.String()));
             columns.Add(new TransferColumn(ChangeOrdering.ChangedAtColumn, CanonicalType.Unmappable));
         }
-        columns.Add(new TransferColumn(operationColumn, CanonicalType.String(1, unicode: false)));
+        // Null for a direct load into the target itself, which has no marker column to receive it.
+        if (operationColumn is not null)
+            columns.Add(new TransferColumn(operationColumn, CanonicalType.String(1, unicode: false)));
         return new TransferSchema(columns);
     }
 
@@ -56,7 +58,7 @@ public static class StagingBatches
     public static async IAsyncEnumerable<DataBatch> Batch(
         IAsyncEnumerable<ChangeRow> rows, TransferSchema schema, IReadOnlyList<string> mappedTargetColumns,
         IReadOnlyDictionary<string, string> sourceColumnByTarget, bool includeChangeOrdering, Counter counter, StagingValueGate? gate = null,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default, bool hasOperationColumn = true)
     {
         int[]? sourceOrdinals = null;
         var buffer = new ChangeRow[BatchRows];
@@ -69,7 +71,7 @@ public static class StagingBatches
             if (count < BatchRows) continue;
 
             counter.Rows += count;
-            yield return new ChangeRowBatch(schema, buffer, count, sourceOrdinals, gate);
+            yield return new ChangeRowBatch(schema, buffer, count, sourceOrdinals, gate, hasOperationColumn);
             buffer = new ChangeRow[BatchRows];
             count = 0;
         }
@@ -77,7 +79,7 @@ public static class StagingBatches
         if (count > 0)
         {
             counter.Rows += count;
-            yield return new ChangeRowBatch(schema, buffer, count, sourceOrdinals!, gate);
+            yield return new ChangeRowBatch(schema, buffer, count, sourceOrdinals!, gate, hasOperationColumn);
         }
     }
 
@@ -110,18 +112,18 @@ public static class StagingBatches
         _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, "Unknown change operation."),
     };
 
-    private sealed class ChangeRowBatch(TransferSchema schema, ChangeRow[] rows, int count, int[] sourceOrdinals, StagingValueGate? gate) : DataBatch
+    private sealed class ChangeRowBatch(TransferSchema schema, ChangeRow[] rows, int count, int[] sourceOrdinals, StagingValueGate? gate, bool hasOperation) : DataBatch
     {
         public override int Rows => count;
         public override TransferSchema Schema => schema;
-        public override DbDataReader AsDataReader() => new Reader(schema, rows, count, sourceOrdinals, gate);
+        public override DbDataReader AsDataReader() => new Reader(schema, rows, count, sourceOrdinals, gate, hasOperation);
         public override RecordBatch AsArrow() => throw new NotSupportedException("a staging batch is only ever written through a bulk route, never as Arrow");
     }
 
     /// <summary>Forward-only reader over a batch: the data columns by source ordinal, then the operation marker.</summary>
-    private sealed class Reader(TransferSchema schema, ChangeRow[] rows, int count, int[] sourceOrdinals, StagingValueGate? gate) : DbDataReader
+    private sealed class Reader(TransferSchema schema, ChangeRow[] rows, int count, int[] sourceOrdinals, StagingValueGate? gate, bool hasOperation) : DbDataReader
     {
-        private readonly int _operation = schema.Count - 1;
+        private readonly int _operation = hasOperation ? schema.Count - 1 : -1;
         private int _row = -1;
         private bool _closed;
 
