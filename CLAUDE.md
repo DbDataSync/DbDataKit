@@ -48,7 +48,11 @@ Per product, from its folder: `dotnet build`, then the suites below. Run the sui
 Docker in a cloud (Claude Code on the web) session: Docker is installed but its daemon is not running at start, so `docker info` says it cannot
 connect. Start it yourself, as root: `(nohup dockerd > /tmp/dockerd.log 2>&1 &); sleep 8; docker info` (it listens on `/var/run/docker.sock`).
 Do not conclude Docker is unavailable, and do not skip the SQL Server and PostgreSQL runs of a state or engine test for that reason: start the
-daemon, then `testenv/testenv.sh up mssql postgres`. If an image pull fails, read `/root/.ccr/README.md` (outbound HTTPS goes through a proxy).
+daemon, then `testenv/testenv.sh up mssql postgres`. Two limits of that environment, found by running `testenv` there: Docker Hub answers anonymous pulls with `429 Too Many Requests` (pull through the
+mirror and tag the result: `docker pull mirror.gcr.io/library/postgres:17 && docker tag mirror.gcr.io/library/postgres:17 postgres:17`, the same for
+`mirror.gcr.io/pgvector/pgvector:pg17`, then `DBKIT_TEST_PULL=false testenv/testenv.sh up ...`), and the proxy lets containers reach registries but not
+package repositories (`apt-get` inside a build fails with 403), so a testenv image must be pulled whole, never built with a package install.
+Then `eval "$(testenv/testenv.sh env dbdatakit)"` sets `DBDATA_TEST_SQLSERVER` and `DBDATA_TEST_POSTGRES` for the state suites.
 
 Test engines:
 
