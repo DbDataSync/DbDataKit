@@ -48,6 +48,47 @@ def parse_sums(text):
     return sums
 
 
+def _check_global_env(entries):
+    for e in entries:
+        name, folder = e.get("name"), e.get("programData")
+        if not (isinstance(name, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name)):
+            raise SystemExit(f"globalEnv: '{name}' is not an environment variable name")
+        if not (isinstance(folder, str) and folder and not folder.startswith(("\\", "/")) and ":" not in folder):
+            raise SystemExit(f"globalEnv: '{folder}' must be a folder under %ProgramData%, written without a drive or a leading slash")
+
+
+def _program_data_text(entry):
+    return "%ProgramData%\\" + entry["programData"]
+
+
+def _program_data_ps(entry):
+    return f"(Join-Path $env:ProgramData {_ps(entry['programData'])})"
+
+
+def _global_env_set(entries):
+    """Scoop runs these lines after a global install only: `$global` is Scoop's own flag for `scoop install -g`, which is also elevated, so
+    the machine-level variable can be written. A per-user install leaves the program's own defaults alone."""
+    _check_global_env(entries)
+    lines = ["if ($global) {"]
+    for e in entries:
+        lines.append(f"  [Environment]::SetEnvironmentVariable({_ps(e['name'])}, {_program_data_ps(e)}, 'Machine')")
+    lines.append("}")
+    return lines
+
+
+def _global_env_unset(entries):
+    """Removes only a value this manifest set, so one an administrator pointed elsewhere survives an uninstall or an update."""
+    lines = ["if ($global) {"]
+    for e in entries:
+        name = _ps(e["name"])
+        lines.append(
+            f"  if ([Environment]::GetEnvironmentVariable({name}, 'Machine') -eq {_program_data_ps(e)}) "
+            f"{{ [Environment]::SetEnvironmentVariable({name}, $null, 'Machine') }}"
+        )
+    lines.append("}")
+    return lines
+
+
 def scoop_manifest(meta, version, repo, sums):
     if "win-x64" not in meta["platforms"]:
         return None
@@ -69,8 +110,15 @@ def scoop_manifest(meta, version, repo, sums):
     }
     if meta.get("preserve"):
         manifest["persist"] = meta["preserve"]
-    if meta.get("notes"):
-        manifest["notes"] = meta["notes"]
+    notes = meta.get("notes", "")
+    env = meta.get("globalEnv") or []
+    if env:
+        manifest["post_install"] = _global_env_set(env)
+        manifest["pre_uninstall"] = _global_env_unset(env)
+        listed = ", ".join(f"{e['name']}={_program_data_text(e)}" for e in env)
+        notes = (notes + "\n" if notes else "") + f"A global install (scoop install -g) also sets, for the machine: {listed}. Open a new terminal to see it."
+    if notes:
+        manifest["notes"] = notes
     if meta.get("requiresVcRuntime"):
         manifest["suggest"] = {"Visual C++ Redistributable": ["extras/vcredist2022"]}
     return manifest

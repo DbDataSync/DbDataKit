@@ -13,6 +13,9 @@
     }
   },
   "windowsScope": "machine",
+  "globalEnv": [
+    { "name": "DBDATAKIT_CONSOLE_DIR", "programData": "DbDataKit\\console" }
+  ],
   "service": {
     "name": "DbDataKitConsole",
     "register": "service install",

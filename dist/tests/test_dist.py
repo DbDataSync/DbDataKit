@@ -147,6 +147,31 @@ class DistTestCase(unittest.TestCase):
         return d
 
 
+REPO_ROOT = DIST.parent
+
+
+class ShippedGlobalEnvTests(unittest.TestCase):
+    """The folders a global Scoop install points the products at are the ones the products default to for a service, so the two cannot drift."""
+
+    def meta(self, path):
+        return json.loads((REPO_ROOT / path).read_text(encoding="utf-8"))
+
+    def test_the_console_manifest_names_the_directory_the_console_service_uses(self):
+        env = self.meta("DbDataConsole/dist.json")["globalEnv"]
+        self.assertEqual(env, [{"name": "DBDATAKIT_CONSOLE_DIR", "programData": "DbDataKit\\console"}])
+        settings = (REPO_ROOT / "DbDataConsole/src/DbDataConsole.Server/ConsoleSettings.cs").read_text(encoding="utf-8")
+        self.assertIn('DirectoryVariable = "DBDATAKIT_CONSOLE_DIR"', settings)
+        service = (REPO_ROOT / "DbDataConsole/src/DbDataConsole.Server/ConsoleService.cs").read_text(encoding="utf-8")
+        self.assertIn('SpecialFolder.CommonApplicationData), "DbDataKit", "console")', service)
+
+    def test_the_sync_manifest_names_the_folder_sync_defaults_to(self):
+        env = self.meta("DbDataSync/dist.json")["globalEnv"]
+        self.assertEqual(env, [{"name": "DbDataSync__App__RepoRoot", "programData": "DbDataSync"}])
+        cli = (REPO_ROOT / "DbDataSync/src/DbDataSync.Cli/CliOptions.cs").read_text(encoding="utf-8")
+        self.assertIn('"DbDataSync")', cli)
+        self.assertIn("DbDataSync__App__RepoRoot", cli)
+
+
 class BindTests(DistTestCase):
     def test_scoop_manifest(self):
         out = self.fresh()
@@ -159,6 +184,44 @@ class BindTests(DistTestCase):
         self.assertEqual(m["bin"], "widget.exe")
         self.assertEqual(m["persist"], ["settings.json"])
         self.assertEqual(m["suggest"], {"Visual C++ Redistributable": ["extras/vcredist2022"]})
+        self.assertNotIn("post_install", m)      # no globalEnv in this product
+        self.assertNotIn("pre_uninstall", m)
+
+    def test_a_beta_and_a_snapshot_have_a_manifest_that_pins_their_own_zip(self):
+        for suffix in ("beta", "snapshot.gabc1234"):
+            out = self.fresh()
+            version = f"2026.2.2.0200-{suffix}"
+            name = f"widget-v{version}-win-x64.zip"
+            bind(out, version=version, sums=f"{'cd' * 32}  {name}\n")
+            m = json.loads((out / "widget.json").read_text())
+            self.assertEqual(m["version"], version)
+            self.assertEqual(m["architecture"]["64bit"]["url"], f"https://github.com/{REPO}/releases/download/widget/v{version}/{name}")
+            self.assertEqual(m["architecture"]["64bit"]["hash"], "cd" * 32)
+
+    def test_a_global_install_sets_the_machine_variables_and_an_uninstall_removes_only_those(self):
+        out = self.fresh()
+        meta = dict(META, globalEnv=[{"name": "WIDGET_DIR", "programData": "Acme\\widget"}, {"name": "WIDGET__ROOT", "programData": "Widget"}])
+        name = "widget-v2026.2.2.0200-win-x64.zip"
+        bind(out, meta=meta, version="2026.2.2.0200", sums=f"{'ab' * 32}  {name}\n")
+        m = json.loads((out / "widget.json").read_text())
+        post, pre = m["post_install"], m["pre_uninstall"]
+        self.assertEqual(post[0], "if ($global) {")        # a per-user install changes nothing
+        self.assertEqual(post[-1], "}")
+        self.assertIn("SetEnvironmentVariable('WIDGET_DIR', (Join-Path $env:ProgramData 'Acme\\widget'), 'Machine')", post[1])
+        self.assertIn("SetEnvironmentVariable('WIDGET__ROOT', (Join-Path $env:ProgramData 'Widget'), 'Machine')", post[2])
+        self.assertEqual(pre[0], "if ($global) {")
+        self.assertIn("GetEnvironmentVariable('WIDGET_DIR', 'Machine') -eq (Join-Path $env:ProgramData 'Acme\\widget')", pre[1])
+        self.assertIn("SetEnvironmentVariable('WIDGET_DIR', $null, 'Machine')", pre[1])
+        self.assertIn("scoop install -g", m["notes"])
+        self.assertIn("WIDGET_DIR=%ProgramData%\\Acme\\widget", m["notes"])
+        self.assertIn("Read the manual", m["notes"])         # the product's own notes stay
+
+    def test_a_bad_global_env_entry_is_refused(self):
+        for bad in ({"name": "not a name", "programData": "Widget"}, {"name": "OK", "programData": "C:\\Widget"}, {"name": "OK", "programData": "\\Widget"}, {"name": "OK"}):
+            out = self.fresh()
+            name = "widget-v2026.2.2.0200-win-x64.zip"
+            with self.assertRaises(subprocess.CalledProcessError):
+                bind(out, meta=dict(META, globalEnv=[bad]), version="2026.2.2.0200", sums=f"{'ab' * 32}  {name}\n")
 
     def test_scoop_manifest_needs_the_checksum(self):
         out = self.fresh()

@@ -14,7 +14,7 @@ own (DbDataSync is also a .NET tool package), but these always exist.
 
 The products are `dbdatabuild`, `dbdatasync`, `dbdataproxy` and the console, `dbdatakit` (`DbDataConsole/dist.json`: the zip needs the .NET 10 runtime, the MSI registers the `DbDataKitConsole` service stopped, and its program folder is `DbDataKit`). Each has its own MSI: a product's MSI does not embed the console. To pair them after installing both, make a code on the product (`<program> server pair`) and run `dbdatakit instance add <https address> --code <code>`; `dist-msi-ci.yml` does that on a Windows runner (`dist/tests/msi-pairing-e2e.ps1`: the console's MSI installed, a Build server built from the same commit paired with it).
 
-Releases are tagged `<product>/v<version>` in this repository (`<version>` is CalVer `YYYY.M.D.HHmm`, `-beta` for a prerelease).
+Releases are tagged `<product>/v<version>` in this repository (`<version>` is CalVer `YYYY.M.D.HHmm`; `-beta` is a beta and `-snapshot.g<sha>` a snapshot, both prereleases).
 
 ## Stable URLs
 
@@ -35,7 +35,30 @@ scoop install https://github.com/DbDataSync/DbDataKit/releases/download/dbdatabu
 curl -fsSL https://github.com/DbDataSync/DbDataKit/releases/download/dbdatabuild/dist/install.sh | bash
 ```
 
-A prerelease attaches its own `install.ps1` / `install.sh` to its release and leaves the fixed release alone. To pass options through a pipe:
+### Beta and snapshot
+
+Each channel has its own fixed prerelease per product, replaced by every release of that channel, so "the newest beta" and "the newest snapshot" have URLs that never change either. They carry the Scoop manifest and the Windows
+installer only: `install.ps1` and `install.sh` look for the newest *stable* release, so install a beta or a snapshot with `-Version` / `--version` or with Scoop.
+
+```
+https://github.com/DbDataSync/DbDataKit/releases/download/<product>/dist-beta/<product>.json          the newest beta
+https://github.com/DbDataSync/DbDataKit/releases/download/<product>/dist-beta/<product>.msi
+https://github.com/DbDataSync/DbDataKit/releases/download/<product>/dist-snapshot/<product>.json      the newest snapshot
+https://github.com/DbDataSync/DbDataKit/releases/download/<product>/dist-snapshot/<product>.msi
+```
+
+```powershell
+scoop install https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist-snapshot/dbdatasync.json
+```
+
+Every manifest pins one release's zip and its SHA256. Every release, whatever its channel, also carries its own copy of `install.ps1`, `install.sh` and `<product>.json`, so a particular build can always be installed by its own URL:
+`.../releases/download/<product>/v<version>/<product>.json`.
+
+A **snapshot** is cut from any branch or commit (`suite-release.yml` or a product's release workflow, dispatched against that branch with `-f snapshot=true`; `-f sha=<commit>` picks a commit of it). It skips every guard of a
+release: the commit need not be on `main`, need not have a green CI run, and Build's full conformance suite is not run. The version is `YYYY.M.D.HHmm-snapshot.g<first seven characters of the commit>`, so two snapshots never share a
+version and the version names the commit. A suite snapshot builds no container images. It is always a prerelease, and it never touches the stable `<product>/dist` release.
+
+To pass options through a pipe:
 `... | bash -s -- --version 2026.10.19.1200` and, in PowerShell,
 `& ([scriptblock]::Create((irm <url>))) -Version 2026.10.19.1200`.
 
@@ -80,6 +103,7 @@ Edit `<Product>/dist.json`:
 | `service.unregister` | the command the installer runs on removal (with `register`, `{name}` is substituted) |
 | `requiresVcRuntime` | the Windows program needs the Visual C++ Redistributable: `install.ps1` warns when `vcruntime140.dll` is missing and the Scoop manifest suggests `extras/vcredist2022` |
 | `notes` | printed after install and shown by Scoop |
+| `globalEnv` | `[ { "name": "<VARIABLE>", "programData": "<folder under %ProgramData%>" } ]`: the Scoop manifest sets these **machine** variables after `scoop install -g` and removes them (only while they still hold that value) on uninstall; a per-user install sets nothing. The folder must be the one the product defaults to for a service (`dist/tests` checks it against the source) |
 
 The release workflow builds the zips and `SHA256SUMS`, then calls `.github/actions/publish-dist`, which runs `dist/dist.py bind` to bake
 `dist.json` into copies of the templates here (the installers refuse to run unbound) and uploads them. Tests are in `dist/tests`: they run

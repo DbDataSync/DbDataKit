@@ -7,6 +7,7 @@ name: Suite release
 #
 #   gh workflow run suite-release.yml --ref main -f dry_run=true                 build everything, tag and publish nothing
 #   gh workflow run suite-release.yml --ref main -f beta=true                    a beta release of every product
+#   gh workflow run suite-release.yml --ref <any branch> -f snapshot=true       a snapshot of that branch: no main, CI or conformance guards, no images
 #   gh workflow run suite-release.yml --ref main -f sha=<an older commit on main>
 #
 # A dry run keeps every package on the run (artifacts `release-<product>`) and the last job checks that each holds its zips, its MSI and a SHA256SUMS
@@ -18,6 +19,12 @@ on:
     inputs:
       beta:
         description: Publish every product as a prerelease (-beta suffix, prerelease flag on the GitHub Releases).
+        type: boolean
+        default: false
+      snapshot:
+        description: >-
+          Publish as a snapshot: a prerelease (-snapshot.g<sha> suffix) cut from any branch or commit with none of the release guards (not
+          on main, no green CI run, no conformance gate). `sha` empty means the commit this run was dispatched against. Not with beta.
         type: boolean
         default: false
       sha:
@@ -51,16 +58,23 @@ jobs:
         id: pick
         env:
           WANTED: ${{ inputs.sha }}
+          SNAPSHOT: ${{ inputs.snapshot }}
         run: |
-          if [ "$GITHUB_REF_NAME" != "main" ]; then
-            echo "::error::suite-release.yml must be dispatched against 'main' (got '$GITHUB_REF_NAME'); pass -f sha=<commit> to release an older commit."
-            exit 1
-          fi
-          git fetch origin main
-          sha=$(git rev-parse "${WANTED:-origin/main}^{commit}")
-          if ! git merge-base --is-ancestor "$sha" origin/main; then
-            echo "::error::$sha is not on main. Only commits on main are released."
-            exit 1
+          if [ "$SNAPSHOT" = "true" ]; then
+            # A snapshot is cut from any branch or commit, with none of the release guards: the commit this run was dispatched against, or `sha`.
+            sha=$(git rev-parse "${WANTED:-HEAD}^{commit}")
+            echo "snapshot of $sha, dispatched against $GITHUB_REF_NAME"
+          else
+            if [ "$GITHUB_REF_NAME" != "main" ]; then
+              echo "::error::suite-release.yml must be dispatched against 'main' (got '$GITHUB_REF_NAME'); pass -f sha=<commit> to release an older commit, or -f snapshot=true to cut a snapshot from this branch."
+              exit 1
+            fi
+            git fetch origin main
+            sha=$(git rev-parse "${WANTED:-origin/main}^{commit}")
+            if ! git merge-base --is-ancestor "$sha" origin/main; then
+              echo "::error::$sha is not on main. Only commits on main are released (a snapshot can be cut from anywhere: -f snapshot=true)."
+              exit 1
+            fi
           fi
           echo "releasing $sha"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
@@ -69,12 +83,19 @@ jobs:
         id: version
         env:
           BETA: ${{ inputs.beta }}
+          SNAPSHOT: ${{ inputs.snapshot }}
+          PICKED_SHA: ${{ steps.pick.outputs.sha }}
         run: |
           IFS=. read -r y m d hm <<< "$(date -u +%Y.%m.%d.%H%M)"
           version="$((10#$y)).$((10#$m)).$((10#$d)).$((10#$hm))"
           prerelease=false
           if [ "$BETA" = "true" ]; then
             version="${version}-beta"
+            prerelease=true
+          fi
+          if [ "$SNAPSHOT" = "true" ]; then
+            if [ "$BETA" = "true" ]; then echo "::error::choose beta or snapshot, not both"; exit 1; fi
+            version="${version}-snapshot.g${PICKED_SHA:0:7}"
             prerelease=true
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -96,7 +117,7 @@ jobs:
           ref: ${{ needs.guard.outputs.sha }}
       # A lookup, not a re-run, as in the product releases. A dry run builds whatever is on main.
       - name: Require a green CI run for this exact commit
-        if: ${{ !inputs.dry_run }}
+        if: ${{ !inputs.dry_run && !inputs.snapshot }}
         run: |
           green=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$SHA&status=success" \
             --jq '[.workflow_runs[] | select(.name == "DbDataConsole CI")] | length')
@@ -175,6 +196,7 @@ jobs:
     with:
       sha: ${{ needs.guard.outputs.sha }}
       beta: ${{ inputs.beta }}
+      snapshot: ${{ inputs.snapshot }}
       version: ${{ needs.guard.outputs.version }}
       dry_run: ${{ inputs.dry_run }}
     permissions:
@@ -186,6 +208,7 @@ jobs:
     with:
       sha: ${{ needs.guard.outputs.sha }}
       beta: ${{ inputs.beta }}
+      snapshot: ${{ inputs.snapshot }}
       version: ${{ needs.guard.outputs.version }}
       dry_run: ${{ inputs.dry_run }}
     permissions:
@@ -197,6 +220,7 @@ jobs:
     with:
       sha: ${{ needs.guard.outputs.sha }}
       beta: ${{ inputs.beta }}
+      snapshot: ${{ inputs.snapshot }}
       version: ${{ needs.guard.outputs.version }}
       dry_run: ${{ inputs.dry_run }}
     permissions:
@@ -207,6 +231,8 @@ jobs:
   # and not pushed, because dbdatasync-publish-image.yml makes its multi-architecture image from the tag.
   images:
     needs: guard
+    # A snapshot builds no container images: they are for releases people deploy.
+    if: ${{ !inputs.snapshot }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     strategy:
@@ -256,7 +282,8 @@ jobs:
 
   # The dry run's answer: every product kept its package, and its checksums list what is in it.
   verify:
-    if: ${{ inputs.dry_run }}
+    # The images job is skipped for a snapshot, so this cannot rely on the default (every need succeeded).
+    if: ${{ inputs.dry_run && !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     needs: [console, build, proxy, sync, images]
     runs-on: ubuntu-latest
     timeout-minutes: 10

@@ -1,30 +1,31 @@
 name: Publish the standard distribution files
 description: >
-  Binds dist/install.ps1, dist/install.sh and the Scoop manifest to one product (dist/dist.py, from <Product>/dist.json), attaches the
-  installers to that release, and for a stable release replaces the fixed <product>/dist release that holds the stable URLs.
+  Binds dist/install.ps1, dist/install.sh and the Scoop manifest to one product (dist/dist.py, from <Product>/dist.json), attaches them to
+  that release, and replaces the assets of the fixed release for the release's channel, so the URLs for "the newest of this kind" never change:
+  <product>/dist (stable), <product>/dist-beta (a -beta version) and <product>/dist-snapshot (a -snapshot.g<sha> version).
   Run after the versioned release exists; needs GH_TOKEN and a checkout of the released commit.
 
 inputs:
   product:
-    description: The product's lowercase name, the tag prefix (dbdatabuild, dbdatasync, dbdataproxy).
+    description: The product's lowercase name, the tag prefix (dbdatabuild, dbdatasync, dbdataproxy, dbdatakit).
     required: true
   meta:
     description: Path to the product's dist.json.
     required: true
   version:
-    description: The release version, as in the tag <product>/v<version>.
+    description: The release version, as in the tag <product>/v<version>. Its suffix (-beta, -snapshot.g<sha>, or none) decides the channel.
     required: true
   prerelease:
-    description: "'true' for a beta. A beta attaches installers to its own release and leaves the fixed one alone."
+    description: "'true' for a beta or a snapshot, 'false' for a stable release. Checked against the version's suffix."
     required: true
   sums:
     description: Path to the release's SHA256SUMS.
     required: true
   sha:
-    description: The released commit, used as the target when the fixed release is first created.
+    description: The released commit, used as the target when a fixed release is first created.
     required: true
   msi:
-    description: The product's Windows installer, if the release has one. A stable release also publishes it as <product>.msi in the fixed release.
+    description: The product's Windows installer, if the release has one. Also published as <product>.msi in the channel's fixed release.
     required: false
     default: ''
 
@@ -43,27 +44,45 @@ runs:
         MSI: ${{ inputs.msi }}
       run: |
         set -euo pipefail
+
+        # The channel is the version's suffix, so it cannot disagree with the tag.
+        case "$VERSION" in
+          *-snapshot|*-snapshot.*) channel=snapshot; fixed="$PRODUCT/dist-snapshot"; kind="snapshot" ;;
+          *-beta)     channel=beta;     fixed="$PRODUCT/dist-beta";     kind="beta" ;;
+          *)          channel=stable;   fixed="$PRODUCT/dist";          kind="stable" ;;
+        esac
+        if { [ "$channel" = stable ] && [ "$PRERELEASE" = "true" ]; } || { [ "$channel" != stable ] && [ "$PRERELEASE" != "true" ]; }; then
+          echo "::error::version $VERSION is a $channel release but prerelease=$PRERELEASE"
+          exit 1
+        fi
+
         out="$RUNNER_TEMP/dist-$PRODUCT"
         rm -rf "$out"
-        args=(--meta "$META" --repo "$GITHUB_REPOSITORY" --out "$out")
-        # A manifest pins one release, so a beta (which is not what `scoop install` should get) has none.
-        [ "$PRERELEASE" = "true" ] || args+=(--version "$VERSION" --sums "$SUMS")
+        # Every channel gets a Scoop manifest: it pins this release's zip, so `scoop install` of the fixed URL gets the newest of the channel.
         py=$(command -v python3 || command -v python)
-        "$py" -I dist/dist.py bind "${args[@]}"
+        "$py" -I dist/dist.py bind --meta "$META" --repo "$GITHUB_REPOSITORY" --out "$out" --version "$VERSION" --sums "$SUMS"
         ls -l "$out"
 
-        installers=()
-        for f in install.ps1 install.sh; do [ -f "$out/$f" ] && installers+=("$out/$f"); done
-        gh release upload "$PRODUCT/v$VERSION" "${installers[@]}" --clobber
+        # The release's own copies (pinned to it for good): the installers, and the manifest, so any release can be installed by its own URL.
+        attach=()
+        for f in install.ps1 install.sh "$PRODUCT.json"; do [ -f "$out/$f" ] && attach+=("$out/$f"); done
+        gh release upload "$PRODUCT/v$VERSION" "${attach[@]}" --clobber
 
-        if [ "$PRERELEASE" != "true" ]; then
-          # One fixed release whose assets are replaced, so the URLs never change. It is a prerelease so it stays out of the way of the real ones:
-          #   https://github.com/$GITHUB_REPOSITORY/releases/download/$PRODUCT/dist/{install.ps1,install.sh,$PRODUCT.json,$PRODUCT.msi}
-          if ! gh release view "$PRODUCT/dist" > /dev/null 2>&1; then
-            gh release create "$PRODUCT/dist" --target "$SHA" --prerelease --latest=false \
-              --title "$PRODUCT install files" \
-              --notes "The install scripts and Scoop manifest for the newest stable $PRODUCT release, replaced by each one. See dist/README.md."
-          fi
-          [ -z "$MSI" ] || cp "$MSI" "$out/$PRODUCT.msi"
-          gh release upload "$PRODUCT/dist" "$out"/* --clobber
+        # One fixed release per channel whose assets are replaced, so the URLs never change. It is a prerelease so it stays out of the way of the real ones:
+        #   https://github.com/$GITHUB_REPOSITORY/releases/download/<product>/dist/{install.ps1,install.sh,<product>.json,<product>.msi}     stable
+        #   https://github.com/$GITHUB_REPOSITORY/releases/download/<product>/dist-beta/{<product>.json,<product>.msi}                       newest beta
+        #   https://github.com/$GITHUB_REPOSITORY/releases/download/<product>/dist-snapshot/{<product>.json,<product>.msi}                   newest snapshot
+        if ! gh release view "$fixed" > /dev/null 2>&1; then
+          gh release create "$fixed" --target "$SHA" --prerelease --latest=false \
+            --title "$PRODUCT install files ($kind)" \
+            --notes "The Scoop manifest and installer for the newest $kind $PRODUCT release, replaced by each one. See dist/README.md."
+        fi
+        [ -z "$MSI" ] || cp "$MSI" "$out/$PRODUCT.msi"
+        if [ "$channel" = stable ]; then
+          gh release upload "$fixed" "$out"/* --clobber
+        else
+          # install.ps1 and install.sh find the newest STABLE release, so a beta or snapshot channel does not carry them: install one by version.
+          files=("$out/$PRODUCT.json")
+          [ -f "$out/$PRODUCT.msi" ] && files+=("$out/$PRODUCT.msi")
+          gh release upload "$fixed" "${files[@]}" --clobber
         fi
