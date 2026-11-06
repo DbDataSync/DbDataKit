@@ -1,11 +1,18 @@
-# Trying the 2026.11.6.837 release on a Windows test server
+# Trying the suite release on a Windows test server
 
 A step-by-step for installing the console (`dbdatakit`) and DbDataSync from the first suite release, on a Windows machine that is not
 your live Sync server. It is written from the release's files and the code on `main`; **nothing here has been run on Windows yet**.
 Each step marked *untested* is the first time anyone does it, so write down what happens.
 
-The release is `dbdatakit/v2026.11.6.837` and `dbdatasync/v2026.11.6.837` (Proxy and Build have the same version; they are not needed
-for this test). Every release file is on <https://github.com/DbDataSync/DbDataKit/releases>.
+There are two builds to choose from (Proxy and Build have the same versions; they are not needed for this test):
+
+- **The snapshot `2026.11.6.2114-snapshot.gcf65995`**, cut from `main` at `cf65995`: the first suite release's code plus the Sync fixes
+  merged since (PR #400), and the manifests that set the data folders on a global install. This guide uses it.
+- **The stable release `2026.11.6.837`**, the first suite release. Its manifests do not set the data-folder variables, so with it
+  pass `--repo` to every `dbdatakit` command (see step 2) and read the folders in step 5 as they are.
+
+Every release file is on <https://github.com/DbDataSync/DbDataKit/releases>. The newest snapshot of each product is always at
+`.../releases/download/<product>/dist-snapshot/<product>.json` (and `.msi`), the newest stable one at `.../<product>/dist/`.
 
 ## 0. What you need
 
@@ -23,14 +30,15 @@ Pick one route per machine and do not mix them (they share a folder).
 **Scoop, global** (*untested*):
 
 ```powershell
-scoop install -g https://github.com/DbDataSync/DbDataKit/releases/download/dbdatakit/dist/dbdatakit.json
-scoop install -g https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/dbdatasync.json
+scoop install -g https://github.com/DbDataSync/DbDataKit/releases/download/dbdatakit/dist-snapshot/dbdatakit.json
+scoop install -g https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist-snapshot/dbdatasync.json
 dbdatasync version
 ```
 
 Open a new terminal afterwards so the PATH change is seen; both programs should then be found.
 
-Each manifest is pinned to `2026.11.6.837` and checks the zip's SHA256. A global install puts the programs under
+Each manifest is pinned to the build it was published with (a later snapshot replaces the file at that URL) and checks the zip's SHA256;
+I downloaded both zips and the hashes match. A global install puts the programs under
 `C:\ProgramData\scoop\apps\` and shims on the machine PATH. Both manifests have no `persist` entries; settings and data live in
 `%ProgramData%` (step 2 and 3), not in the Scoop folder, so `scoop uninstall` leaves them.
 
@@ -38,8 +46,20 @@ Each manifest is pinned to `2026.11.6.837` and checks the zip's SHA256. A global
 > service registered against that folder points at a path that `scoop update` replaces. For this test run both in a console window
 > (steps 2 and 3). If you want services, use the MSI instead.
 
-**MSI** (the documented route for a service): `dbdatakit.msi` and `dbdatasync.msi` from the `dbdatakit/dist` and `dbdatasync/dist`
-releases, then `msiexec /i dbdatakit.msi /qn` and the same for Sync. Each installs to `C:\Program Files\<Name>` and registers its
+A global install also sets machine-wide environment variables (*untested*; the manifest does it with a Scoop `post_install` step that
+runs only for `-g`): `DBDATAKIT_CONSOLE_DIR` to `C:\ProgramData\DbDataKit\console` and `DbDataSync__App__RepoRoot` to
+`C:\ProgramData\DbDataSync`. In a **new** elevated terminal check them:
+
+```powershell
+[Environment]::GetEnvironmentVariable('DBDATAKIT_CONSOLE_DIR', 'Machine')
+[Environment]::GetEnvironmentVariable('DbDataSync__App__RepoRoot', 'Machine')
+```
+
+If they are empty, the step did not run: say so, set them by hand, and keep passing `--repo` as step 2 shows. `scoop uninstall -g`
+removes them again, only while they still hold those values.
+
+**MSI** (the documented route for a service): `dbdatakit.msi` and `dbdatasync.msi` from the `dbdatakit/dist-snapshot` and
+`dbdatasync/dist-snapshot` releases (the stable ones are under `dist`), then `msiexec /i dbdatakit.msi /qn` and the same for Sync. Each installs to `C:\Program Files\<Name>` and registers its
 service **stopped**: `DbDataKitConsole` and `DbDataSync`. They are unsigned, so Windows will say "Unknown publisher".
 
 ## 2. The console
