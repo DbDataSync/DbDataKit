@@ -24,7 +24,7 @@ public sealed class ReadinessChecksTests : IDisposable
     public void Dispose() => GitTempDirectory.DeleteRecursively(_root);
 
     [Fact]
-    public async Task FreshSqliteRepo_RepoAndStateStoreAndAuthChecksPass()
+    public async Task FreshSqliteRepo_RepoAndStateStoreChecksPass_AndThereIsNoAuthCheck()
     {
         ServeCommand.Prepare(_root);
 
@@ -34,7 +34,8 @@ public sealed class ReadinessChecksTests : IDisposable
         Assert.Equal(CheckStatus.Ok, Find(results, "Repo").Status);
         Assert.Equal(CheckStatus.Ok, Find(results, "State store").Status);
         Assert.Equal(CheckStatus.Ok, Find(results, "Libraries / drivers").Status);
-        Assert.Equal(CheckStatus.Ok, Find(results, "Auth").Status);
+        // Plan 13a, X06: Sync keeps no sign-in of its own, so there is nothing to check.
+        Assert.DoesNotContain(results, result => result.Name == "Auth");
     }
 
     /// <summary>Phase 135's own marker — informational only, so it's always Ok, but the detail text
@@ -178,19 +179,6 @@ public sealed class ReadinessChecksTests : IDisposable
         var check = Find(results, "Repo");
         Assert.Equal(CheckStatus.Fail, check.Status);
         Assert.Contains("DbDataSync:Auth:Passkeys:RelyingPartyId", check.Detail);
-    }
-
-    [Fact]
-    public async Task WithNoDirectSignIn_TheAuthCheckSaysPeopleSignInAtTheConsole()
-    {
-        ServeCommand.Prepare(_root);
-
-        var context = ReadinessChecks.BuildContext(["--repo", _root]);
-        var results = await ReadinessChecks.RunChecksAsync(context);
-
-        var check = Find(results, "Auth");
-        Assert.Equal(CheckStatus.Ok, check.Status);
-        Assert.Contains("console", check.Detail);
     }
 
     [Fact]
@@ -379,7 +367,6 @@ public sealed class ReadinessChecksTests : IDisposable
         Assert.Contains("State store", names);
         Assert.Contains("Libraries / drivers", names);
         Assert.Contains("Runtime", names);
-        Assert.Contains("Auth", names);
         Assert.Contains("Certificate", names);
         Assert.Contains("Binding", names);
         Assert.DoesNotContain("First admin", names); // Sync has no users of its own to check for (plan 13, X05)

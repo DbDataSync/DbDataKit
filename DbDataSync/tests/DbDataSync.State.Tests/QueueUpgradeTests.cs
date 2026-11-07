@@ -11,7 +11,7 @@ public sealed class QueueUpgradeTests : IDisposable
     public void ADatabaseFromBeforeTheSharedQueue_Opens_WithItsQueuedRunsCancelledAndAWorkingQueue()
     {
         var path = Path.Combine(_tempDir, "state.db");
-        var before = new DbDataKit.State.StateDatabase(path, new DbDataKit.State.StateSchema(Migrations.Templates[..^3]));   // without the shared queue, and without what was appended after it: the account keys (U16) and the one-time values (plan 20 O02b)
+        var before = new DbDataKit.State.StateDatabase(path, new DbDataKit.State.StateSchema(Migrations.Templates[..^4]));   // without the shared queue, and without what was appended after it: the account keys (U16), the one-time values (plan 20 O02b) and the drop of the sign-in tables (plan 13a, X06)
         var queued = Guid.NewGuid();
         var running = Guid.NewGuid();
         using (var connection = before.OpenConnection())

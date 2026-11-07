@@ -1,7 +1,6 @@
 using System.Net;
+using DbDataKit.State;
 using DbDataSync.Core.Secrets;
-using DbDataSync.Api.Auth;
-using DbDataSync.State;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -11,22 +10,19 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 namespace DbDataSync.Api.Tests;
 
 /// <summary>
-/// The API with authentication **on**, which <see cref="TestApiFactory"/> deliberately does not have —
-/// every other test in this project is about what an endpoint does, not about who may call it, and
-/// making all of them sign in first would obscure that.
+/// The API with **no caller by default**, for the tests of who may call what; <see cref="TestApiFactory"/> calls as an administrator, because its tests are about what an endpoint does.
 /// <para>
-/// Sessions are minted by writing rows, not by negotiating: Kerberos against a test host is not
-/// something a Linux container does, and a test-only authentication handler would be a second way in
-/// that has to be impossible to enable in a real deployment. Writing a session row exercises the real
-/// handler, the real store and the real policies — everything except the one method that cannot run
-/// here.
+/// Sync keeps no sign-in of its own (plan 13a, X06): a caller is a console's signed token. <see cref="SignedInAsAsync"/> pairs a test console with the host and returns a client whose every
+/// request carries a new token for the role. That is the real handler and the real policies: only the console that issues the token is the test's.
 /// </para>
 /// </summary>
 public class AuthenticatedApiFactory : WebApplicationFactory<Program>
 {
     public string RepoRoot { get; } = Directory.CreateTempSubdirectory("dbdatasync-auth-tests-").FullName;
 
-    public UserStore Users => Services.GetRequiredService<UserStore>();
+    private ConsoleCaller? _caller;
+
+    public ConsoleCaller Caller => _caller ??= new ConsoleCaller(() => Services);
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -36,10 +32,6 @@ public class AuthenticatedApiFactory : WebApplicationFactory<Program>
             {
                 ["DbDataSync:App:RepoRoot"] = RepoRoot,
                 ["DbDataSync:State:DbPath"] = Path.Combine(RepoRoot, "state.db"),
-                // Named, so AuthOptions.WindowsEnabled is true and the deployment is a configured one
-                // rather than the authentication-disabled escape hatch.
-                ["DbDataSync:Auth:Windows:AdminGroup"] = "DbDataSyncAdmins",
-                ["DbDataSync:Auth:Windows:ViewerGroup"] = "DbDataSyncViewers",
             });
         });
 
@@ -47,25 +39,24 @@ public class AuthenticatedApiFactory : WebApplicationFactory<Program>
         {
             services.RemoveAll<SecretStore>();
             services.AddSingleton(SecretStore.ForProviders(new InMemorySecretProvider()));
-            // This host registers Negotiate for real on Windows, exactly as production does — see
-            // TestServerConnectionItemsFilter for the Kestrel feature TestServer owes it in return.
+            // See TestServerConnectionItemsFilter: the Kestrel connection feature some hosts of this project need on Windows.
             services.AddTestServerConnectionItems();
         });
     }
 
-    public async Task<HttpClient> SignedInAsAsync(UserRole role) => (await SignedInWithUserAsync(role)).Client;
+    /// <summary>A client that calls as a new person (an id of its own, so per-person state such as a read cursor starts empty) who holds <paramref name="role"/>, through a console paired with this host.</summary>
+    public async Task<HttpClient> SignedInAsAsync(UserRole role) => (await SignedInAsPersonAsync(role)).Client;
 
-    public Task<(HttpClient Client, UserRecord User)> SignedInWithUserAsync(UserRole role)
+    /// <summary>The same, and who the person is: the name a token carries is the author of a config change.</summary>
+    public Task<(HttpClient Client, string Id, string Name)> SignedInAsPersonAsync(UserRole role)
     {
-        var user = Users.CreateUser($"{role} {Guid.NewGuid():N}", $"{role}@example.com".ToLowerInvariant(), role);
-        Users.AddCredential(user.Id, CredentialMethods.Windows, $"S-1-5-21-{Guid.NewGuid():N}");
-
-        var session = Services.GetRequiredService<SessionStore>().Create(user.Id);
-
-        var client = CreateClient();
-        client.DefaultRequestHeaders.Add("Cookie", $"{AuthOptions.SessionCookie}={session.Id}");
-        return Task.FromResult((client, user));
+        var id = $"{role}-{Guid.NewGuid():N}".ToLowerInvariant();
+        var name = $"{role} {id[^6..]}";
+        return Task.FromResult((CreateDefaultClient(Caller.Handler(role, id, name)), id, name));
     }
+
+    /// <summary>A handler for a connection that is not an <see cref="HttpClient"/> of this factory's (SignalR over the test server): a new token on every request.</summary>
+    public HttpMessageHandler Signed(UserRole role, HttpMessageHandler inner) => Caller.Handler(role, $"{role}-person".ToLowerInvariant(), $"{role} person", inner);
 
     protected override void Dispose(bool disposing)
     {

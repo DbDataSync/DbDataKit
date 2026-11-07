@@ -55,9 +55,9 @@ public sealed class NotificationsController(
     /// stops counting as unread. Monotonic — see <see cref="NotificationStore.MarkSeen"/>.
     /// </summary>
     /// <remarks>
-    /// **Authentication-disabled deployments get a 200 that says nothing was stored.** With
-    /// <c>DbDataSync:Auth:Network:Admin=loopback</c> there is no <c>CurrentUser.Id</c> to key a cursor to, so the
-    /// feed permanently reads as unread for everybody, and the response says so through
+    /// **A caller with no id gets a 200 that says nothing was stored.** A console's token always names a person (plan 13a, X06), so this is a defensive path; with no
+    /// <c>CurrentUser.Id</c> there is nothing to key a cursor to, so the
+    /// feed permanently reads as unread, and the response says so through
     /// <c>Personalized: false</c> rather than through a 500, a 401, or a silent success that a client
     /// would reasonably read as "cleared". A badge that cannot be dismissed is a defensible mode; a
     /// badge that reports itself dismissed and comes straight back is not.

@@ -26,7 +26,7 @@ public sealed class GitAttributionTests(AuthenticatedApiFactory factory) : IClas
     [Fact]
     public async Task AConfigChange_IsCommittedAsWhoeverMadeIt()
     {
-        var (client, user) = await factory.SignedInWithUserAsync(DbDataKit.State.UserRole.Admin);
+        var (client, _, personName) = await factory.SignedInAsPersonAsync(DbDataKit.State.UserRole.Admin);
         var name = $"attributed-{Guid.NewGuid():N}";
 
         (await client.PutAsJsonAsync($"/api/replications/{name}", new ReplicationTaskConfig
@@ -44,8 +44,9 @@ public sealed class GitAttributionTests(AuthenticatedApiFactory factory) : IClas
         using var repository = new Repository(factory.RepoRoot);
         var commit = repository.Commits.First();
 
-        Assert.Equal(user.DisplayName, commit.Author.Name);
-        Assert.Equal(user.Email, commit.Author.Email);
+        Assert.Equal(personName, commit.Author.Name);
+        // A console's token names the person but carries no address, so the commit has the product's own.
+        Assert.Equal(DbDataSync.Api.Auth.SyncAuth.Product.SystemAuthor.Email, commit.Author.Email);
         Assert.Contains(name, commit.Message);
     }
 }

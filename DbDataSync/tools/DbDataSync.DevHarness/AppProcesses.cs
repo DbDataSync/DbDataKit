@@ -63,13 +63,8 @@ public sealed class AppProcesses : IAsyncDisposable
         // workload; warnings and above still surface anything that actually matters.
         startInfo.Environment["Logging__LogLevel__Default"] = "Warning";
 
-        // The API this harness starts runs open, using the loopback network-trust fallback AuthOptions
-        // already names. Without it `up` cannot configure its own scenario: every /api PUT below comes
-        // back 401, because there is no user yet and the first-run invite is a browser flow. A harness
-        // that needed a human to click through an invite before it could stand anything up would not be
-        // a harness. Only ever set on the process started *here*, on a loopback port, against a scratch
-        // repo — `--no-app` points at somebody else's API and does not touch its configuration.
-        startInfo.Environment["DbDataSync__Auth__Network__Admin"] = "loopback";
+        // Plan 13a, X06: the API keeps no sign-in and no network trust (`Auth:Network:*` is refused at startup), so every /api call here needs a console's signed token.
+        // This harness sends none: its scenario calls answer 401 until it is given a paired console (`dbdatasync server pair`). Nothing is set here to open the API.
 
         // The spawned TaskRunner inherits these. SecretStore falls back to DBDATA_SECRET_* variables when its encrypted store
         // has no password — without them a run fails to resolve the connection password. Same workaround the Playwright

@@ -119,55 +119,6 @@ public sealed class SetupStepsTests : IDisposable
         secrets.Delete(SecretRefs.ForAppSetting("stateConnectionString"));
     }
 
-    [Fact]
-    public void ApplyAuthentication_Console_WritesNothingAndPointsAtPairing()
-    {
-        var result = SetupSteps.ApplyAuthentication(_root, "console", adminGroup: null, viewerGroup: null, noAuthConfirmed: false);
-
-        Assert.False(result.Warning);
-        Assert.Contains("server pair", result.Message);
-        Assert.DoesNotContain(DbDataSyncConfigFile.Read(_root).Keys, key => key.Contains("Passkeys", StringComparison.OrdinalIgnoreCase));
-    }
-
-    [Fact]
-    public void ApplyAuthentication_Windows_WritesAdminAndOptionalViewerGroup()
-    {
-        var result = SetupSteps.ApplyAuthentication(
-            _root, "windows", adminGroup: "DbDataSync Admins", viewerGroup: "", noAuthConfirmed: false);
-
-        Assert.False(result.Warning);
-
-        var config = DbDataSyncConfigFile.Read(_root);
-        Assert.Equal("DbDataSync Admins", config["DbDataSync:Auth:Windows:AdminGroup"]);
-        Assert.False(config.ContainsKey("DbDataSync:Auth:Windows:ViewerGroup"));
-    }
-
-    [Fact]
-    public void ApplyAuthentication_NoneConfirmed_DisablesAuth()
-    {
-        var result = SetupSteps.ApplyAuthentication(
-            _root, "none", adminGroup: null, viewerGroup: null, noAuthConfirmed: true);
-
-        Assert.True(result.Warning);
-        var config = DbDataSyncConfigFile.Read(_root);
-        Assert.Equal("loopback", config["DbDataSync:Auth:Network:Admin"]);
-        Assert.Equal("remote", config["DbDataSync:Auth:Network:Viewer"]);
-    }
-
-    [Fact]
-    public void ApplyAuthentication_NoneNotConfirmed_WritesNothing()
-    {
-        var result = SetupSteps.ApplyAuthentication(
-            _root, "none", adminGroup: null, viewerGroup: null, noAuthConfirmed: false);
-
-        Assert.True(result.Warning);
-        Assert.Contains("Not disabled", result.Message);
-
-        var config = DbDataSyncConfigFile.Read(_root);
-        Assert.False(config.ContainsKey("DbDataSync:Auth:Network:Admin"));
-        Assert.DoesNotContain(config.Keys, key => key.Contains("Passkeys", StringComparison.OrdinalIgnoreCase));
-    }
-
     /// <summary>Phase 130 — printed, not invoked, matching every other certificate step in this
     /// walk-through; the trust caveat has to be in the printed lines, not only in docs.</summary>
     [Fact]

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using DbDataSync.Api.Controllers;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace DbDataSync.Api.Tests;
@@ -17,7 +18,7 @@ namespace DbDataSync.Api.Tests;
 public sealed class AuthorizationCoverageTests
 {
     private static IEnumerable<(Type Controller, MethodInfo Action)> Endpoints() =>
-        new[] { typeof(DbDataSync.Api.Controllers.ReplicationsController).Assembly, typeof(DbDataKit.Web.Auth.Controllers.AuthController).Assembly }.SelectMany(a => a.GetTypes())
+        typeof(DbDataSync.Api.Controllers.ReplicationsController).Assembly.GetTypes()
             .Where(t => typeof(ControllerBase).IsAssignableFrom(t) && !t.IsAbstract)
             .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
                 .Where(m => m.GetCustomAttributes<HttpMethodAttribute>().Any())
@@ -81,7 +82,7 @@ public sealed class AuthorizationEnforcementTests(AuthenticatedApiFactory factor
     [InlineData("/api/connections")]
     [InlineData("/api/replications")]
     [InlineData("/api/scripts")]
-    public async Task WithoutASession_EverythingIsRefused(string path)
+    public async Task WithoutAToken_EverythingIsRefused(string path)
     {
         var response = await factory.CreateClient().GetAsync(path);
 
@@ -91,13 +92,43 @@ public sealed class AuthorizationEnforcementTests(AuthenticatedApiFactory factor
     /// <summary>Health is the container's own probe. A probe that needs a session reports a healthy
     /// application as unreachable.</summary>
     [Fact]
-    public async Task Health_IsReachableWithoutASession() =>
+    public async Task Health_IsReachableWithoutAToken() =>
         Assert.Equal(HttpStatusCode.OK, (await factory.CreateClient().GetAsync("/api/health")).StatusCode);
 
-    /// <summary>The answer to "am I signed in" cannot itself require being signed in.</summary>
+    /// <summary>
+    /// Plan 13a, X06: Sync maps none of the shared sign-in controllers (the console serves them), so the routes are plain 404s even for an administrator's token, and no controller of that assembly is part of this host.
+    /// </summary>
+    [Theory]
+    [InlineData("/api/auth/status")]
+    [InlineData("/api/auth/sign-out")]
+    [InlineData("/api/users")]
+    [InlineData("/api/invites")]
+    public async Task TheSharedSignInRoutes_AreNotMapped(string path)
+    {
+        var client = await factory.SignedInAsAsync(DbDataKit.State.UserRole.Admin);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(path)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsync(path, null)).StatusCode);
+        var parts = factory.Services.GetRequiredService<Microsoft.AspNetCore.Mvc.ApplicationParts.ApplicationPartManager>().ApplicationParts.Select(part => part.Name);
+        Assert.DoesNotContain(typeof(DbDataKit.Web.Auth.Controllers.AuthController).Assembly.GetName().Name, parts);
+    }
+
+    /// <summary>A token that is not a console's, or that a console of ours did not sign, is no way in; a cookie or Basic credentials are not read at all.</summary>
     [Fact]
-    public async Task AuthStatus_IsReachableWithoutASession() =>
-        Assert.Equal(HttpStatusCode.OK, (await factory.CreateClient().GetAsync("/api/auth/status")).StatusCode);
+    public async Task ABadToken_AndEveryOldWayIn_IsRefused()
+    {
+        using var bad = factory.CreateClient();
+        bad.DefaultRequestHeaders.Add(DbDataKit.Web.Trust.ManagementAuthentication.TokenHeader, "not-a-token");
+        Assert.Equal(HttpStatusCode.Unauthorized, (await bad.GetAsync("/api/replications")).StatusCode);
+
+        using var cookie = factory.CreateClient();
+        cookie.DefaultRequestHeaders.Add("Cookie", "dbdatasync.session=anything");
+        Assert.Equal(HttpStatusCode.Unauthorized, (await cookie.GetAsync("/api/replications")).StatusCode);
+
+        using var basic = factory.CreateClient();
+        basic.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", Convert.ToBase64String("ada:secret"u8.ToArray()));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await basic.GetAsync("/api/replications")).StatusCode);
+    }
 
     [Fact]
     public async Task AViewer_CanRead()
@@ -126,30 +157,5 @@ public sealed class AuthorizationEnforcementTests(AuthenticatedApiFactory factor
         var client = await factory.SignedInAsAsync(DbDataKit.State.UserRole.Admin);
 
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/replications")).StatusCode);
-    }
-
-    /// <summary>
-    /// Disabling somebody takes effect on their next request. The session row is still there and still
-    /// unexpired; what changed is the user it points at, which is re-read every time for exactly this.
-    /// </summary>
-    [Fact]
-    public async Task DisablingAUser_TakesEffectOnTheNextRequest()
-    {
-        var (client, user) = await factory.SignedInWithUserAsync(DbDataKit.State.UserRole.Admin);
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/replications")).StatusCode);
-
-        factory.Users.SetEnabled(user.Id, enabled: false);
-
-        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/replications")).StatusCode);
-    }
-
-    [Fact]
-    public async Task SigningOut_EndsTheSession()
-    {
-        var client = await factory.SignedInAsAsync(DbDataKit.State.UserRole.Admin);
-
-        (await client.PostAsync("/api/auth/sign-out", null)).EnsureSuccessStatusCode();
-
-        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/replications")).StatusCode);
     }
 }

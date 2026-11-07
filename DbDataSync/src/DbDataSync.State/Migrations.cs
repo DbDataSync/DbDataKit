@@ -665,6 +665,19 @@ internal static class Migrations
 
         // A passkey ceremony's challenge, held on the server and used once (plan 20 O02b). Appended.
         OneTimeSchema.Values,
+
+        """
+        -- Plan 13a, X06: Sync keeps no sign-in of its own. People sign in at the console (its users, sessions and invitations are the console's), and a console's call reaches Sync as a
+        -- signed token, so these tables have no reader and no writer: the users, their credentials, the sessions, the invitations and the passkey challenges.
+        --
+        -- Dropped, not converted. A user here was only ever a way in to this server (Windows group sign-in and passkeys), and the console's users are its own; nothing in them is history.
+        -- Children first: credentials, sessions and invitations point at users.
+        DROP TABLE UserCredentials;
+        DROP TABLE Sessions;
+        DROP TABLE Invites;
+        DROP TABLE Users;
+        DROP TABLE OneTimeValues;
+        """,
     ];
 
     /// <summary>The schema, for <see cref="StateDatabase"/> to apply.</summary>

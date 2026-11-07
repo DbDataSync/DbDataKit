@@ -25,7 +25,6 @@ using DbDataSync.Drivers.Descriptor;
 using DbDataSync.Drivers.Postgres;
 using DbDataSync.Libraries;
 using DbDataSync.State;
-using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.Extensions.Configuration.EnvironmentVariables;
 
 namespace DbDataSync.Api;
@@ -75,17 +74,15 @@ public static class DbDataSyncHost
 
         // Opt-in, Windows only: HTTP.sys instead of Kestrel, so the port can be shared with other
         // processes. Resolved off builder.Configuration (not DI) for the same reason the certificate
-        // and Negotiate decisions below are: the server has to be chosen before the container exists.
+        // decision below is: the server has to be chosen before the container exists.
         var webServer = WebServerSelection.Resolve(builder.Configuration);
-        var windowsAuthEnabled = OperatingSystem.IsWindows()
-            && AuthOptions.FromConfiguration(builder.Configuration).WindowsEnabled;
         if (webServer == WebServer.HttpSys)
         {
             if (!OperatingSystem.IsWindows())
                 throw new InvalidOperationException(
                     $"'{WebServerSelection.ConfigKey}' is 'httpsys', which only exists on Windows. " +
                     "Use 'kestrel' on this platform.");
-            HttpSysHosting.Use(builder, windowsAuthEnabled);
+            HttpSysHosting.Use(builder);
         }
 
         builder.Services.AddControllers()
@@ -94,8 +91,13 @@ public static class DbDataSyncHost
             // this the host starts perfectly and serves no API at all — "No action descriptors found"
             // in the log and a 404 on every route.
             .AddApplicationPart(typeof(DbDataSyncHost).Assembly)
-            // Sign-in, invitations and users are the shared ones (plan 13, U07): the same controllers the console serves.
-            .AddApplicationPart(typeof(DbDataKit.Web.Auth.Controllers.AuthController).Assembly)
+            // The shared web library holds the console's sign-in, user and invitation controllers, and discovery finds every referenced assembly that has controllers, so it is taken out by name:
+            // Sync keeps no sign-in of its own (plan 13a, X06) and maps none of them.
+            .ConfigureApplicationPartManager(manager =>
+            {
+                foreach (var part in manager.ApplicationParts.OfType<Microsoft.AspNetCore.Mvc.ApplicationParts.AssemblyPart>().Where(p => p.Assembly == typeof(ConsoleTokenValidator).Assembly).ToList())
+                    manager.ApplicationParts.Remove(part);
+            })
             .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
         builder.Services.AddOpenApi();
         builder.Services.AddSignalR();
@@ -106,22 +108,10 @@ public static class DbDataSyncHost
         // since they're applied to the builder as part of Build(), which hasn't run yet at this point.
         builder.Services.AddSingleton(sp => ApiOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
 
-        // No real auth yet (architecture/detailed-design.md §8, open question) — every config write from the
-        // API is attributed to this fixed system identity until per-user auth exists.
-        // Per request, from whoever is signed in — which is what makes the config history in the
-        // Version Control tab able to answer "who", and is the reason this feature is worth more than
-        // access control. Falls back to a system identity where genuinely nobody is signed in.
-        // Sign-in is the shared one (DbDataKit.Web.Auth, plan 13 U07): options, current user, passkeys, the user, session and invitation stores,
-        // the first-run invitation, the session scheme and the policies. The current user is a singleton that reads IHttpContextAccessor per call,
-        // rather than a scoped GitAuthor: a scoped one made every singleton that writes config fail to construct.
+        // Sync keeps no sign-in of its own (plan 13a, X06): a call is a console's signed token (which names the person, so the config history still says who) or the runner's own token
+        // on its own routes. No users, sessions, invitations, passkeys, Windows sign-in or network trust; the way in when no console answers is the command line on the server.
         DbDataSync.Api.Management.SyncManagement.AddServices(builder.Services);
-        var authentication = builder.Services.AddSessionAuth(SyncAuth.Product,
-            sp => sp.GetRequiredService<StateDatabase>(),
-            _ => PasskeyOptions.Disabled,
-            sp => sp.GetRequiredService<ApiOptions>().RepoRoot);
-        // Sync writes no first-run invitation (plan 13, X05): its users and invitations are the console's, as the console's own host also removes this service.
-        foreach (var bootstrap in builder.Services.Where(d => d.ImplementationType == typeof(BootstrapInvite)).ToList())
-            builder.Services.Remove(bootstrap);
+        builder.Services.AddSyncTokenAuth();
         builder.Services.AddSingleton(sp => CertificateOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
 
         builder.Services.AddSingleton(sp => SecretStore.Open(sp.GetRequiredService<ApiOptions>().RepoRoot));
@@ -318,7 +308,7 @@ public static class DbDataSyncHost
         builder.Services.AddHostedService<RunPruningService>();
 
         // Windows-only, registered only there — the same gating this file already uses a few lines
-        // down for Negotiate authentication, not a new idiom. Certificate management is Windows-only
+        // down for HTTP.sys, not a new idiom. Certificate management is Windows-only
         // end to end (phase 82), so a Linux host never constructs this hosted service at all.
         if (OperatingSystem.IsWindows())
             builder.Services.AddHostedService<CertificateExpiryService>();
@@ -343,35 +333,6 @@ public static class DbDataSyncHost
             // existed has no password file and still opens without one until the renewal check replaces it.
             if (ManagedSelfSignedCertificate.PasswordFor(certificateRepoRoot, ManagedSelfSignedCertificate.PfxPath(certificateRepoRoot)) is { } pfxPassword)
                 builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["Kestrel:Certificates:Default:Password"] = pfxPassword });
-        }
-
-        // Negotiate is registered alongside the session scheme and used by exactly one endpoint, which trades a Windows identity for a session.
-        // Also gated on WindowsEnabled (phase 164: mode enabled *and* a group actually configured) —
-        // found necessary by a real failure, not a hypothetical: with no group configured,
-        // AddNegotiate() was still being registered on every Windows host (this check used to be purely
-        // OperatingSystem.IsWindows()-gated), and merely having Negotiate registered as an available
-        // scheme is enough for ASP.NET Core's real, Windows-native SSPI implementation to require
-        // IConnectionItemsFeature on every request through the authentication middleware — a real
-        // Kestrel connection feature TestServer (what WebApplicationFactory-based tests run against)
-        // does not implement, throwing NotSupportedException even for a route nothing ever challenges
-        // for Negotiate. Read directly off builder.Configuration, not DI, for the same reason
-        // certificateRepoRoot above does: this runs before builder.Build(). A deployment with no
-        // Windows group configured gets nothing to lose here either way — Negotiate existing but never
-        // being the effective scheme was already true whenever nothing could ever satisfy it.
-        if (windowsAuthEnabled && webServer == WebServer.HttpSys)
-        {
-            // HTTP.sys authenticates in the kernel and hands the request a Windows principal; the
-            // Negotiate package's handler would be the wrong thing to run here (it wants Kestrel's
-            // connection features). A scheme under Negotiate's own name that forwards to HTTP.sys's
-            // handler keeps AuthController's [Authorize(AuthenticationSchemes = "Negotiate")] — and so
-            // the sign-in endpoint, WindowsSignIn and everything after it — unchanged.
-            authentication.AddPolicyScheme(
-                NegotiateDefaults.AuthenticationScheme, displayName: null,
-                options => options.ForwardDefault = HttpSysHosting.AuthenticationScheme);
-        }
-        else if (windowsAuthEnabled)
-        {
-            authentication.AddNegotiate();
         }
 
         var app = builder.Build();

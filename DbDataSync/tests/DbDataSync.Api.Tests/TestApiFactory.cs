@@ -43,13 +43,6 @@ public class TestApiFactory : WebApplicationFactory<Program>
                 ["DbDataSync:State:DbPath"] = Path.Combine(RepoRoot, "state.db"),
                 ["DbDataSync:App:TaskRunnerDllPath"] = ResolveTaskRunnerDllPathForTests(),
                 ["DbDataSync:App:CliDllPath"] = ResolveSiblingDllPathForTests("DbDataSync.Cli"),
-                // Authentication off, deliberately. Every test using this factory is about what an
-                // endpoint *does*; making all of them sign in first would obscure that and test the
-                // same session plumbing a hundred times. Who may call what is
-                // AuthenticatedApiFactory's subject, and it turns authentication on. TestServer's
-                // requests report loopback (or no) remote address, so Auth:Network:Admin: loopback is
-                // the phase 164 equivalent of the old blanket Auth:Disabled for this factory's purpose.
-                ["DbDataSync:Auth:Network:Admin"] = "loopback",
             });
         });
 
@@ -73,6 +66,24 @@ public class TestApiFactory : WebApplicationFactory<Program>
     /// keep in step with the composition root.
     /// </summary>
     protected virtual void ConfigureTestServices(IServiceCollection services) { }
+
+    private ConsoleCaller? _caller;
+
+    /// <summary>
+    /// The test console every client of this factory calls as. Sync keeps no sign-in (plan 13a, X06), so a client is a console's relay: each request carries a signed token naming an administrator
+    /// (<see cref="AuthenticatedApiFactory"/> is the one that tests who may call what, with a viewer too). These tests are about what an endpoint does, not about who may call it.
+    /// </summary>
+    public ConsoleCaller Caller => _caller ??= new ConsoleCaller(() => Services);
+
+    // The base methods are not virtual, so these hide them: a client made through this factory (typed as one of its classes, as every test here does) carries the administrator's token.
+    public new HttpClient CreateClient() => CreateDefaultClient();
+
+    public new HttpClient CreateDefaultClient(params DelegatingHandler[] handlers) => CreateDefaultClient(BaseAddress, handlers);
+
+    public new HttpClient CreateDefaultClient(Uri baseAddress, params DelegatingHandler[] handlers) =>
+        base.CreateDefaultClient(baseAddress, [Caller.Handler(DbDataKit.State.UserRole.Admin, "test-admin", "Test Admin"), .. handlers]);
+
+    private Uri BaseAddress => new("http://localhost");
 
     protected override void Dispose(bool disposing)
     {

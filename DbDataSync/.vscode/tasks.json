@@ -11,10 +11,7 @@
         "src/DbDataSync.Api"
       ],
       "options": {
-        "cwd": "${workspaceFolder}",
-        "env":{
-          "DbDataSync__Auth__Network__Admin":"loopback"
-        }
+        "cwd": "${workspaceFolder}"
       },
       "dependsOn": "Build solution",
       "dependsOrder": "sequence",

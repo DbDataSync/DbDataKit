@@ -36,7 +36,6 @@ public sealed class AdminConfigServiceTests : IDisposable
         return new AdminConfigService(
             configuration,
             apiOptions,
-            AuthOptions.FromConfiguration(configuration),
             new GitCommitService(_repoRoot),
             SecretStore.ForProviders([new InMemorySecretProvider()]),
             new RestartRequiredState(apiOptions));
@@ -61,7 +60,7 @@ public sealed class AdminConfigServiceTests : IDisposable
     /// The Admin screen lists "every <c>DbDataSync:*</c> key docs/configuration.md documents" — and nothing checked that the
     /// document and the catalog agree, so a key could ship undocumented (or the reverse) and only a reader would find out
     /// (phase 162). Each key's environment-variable form is what the document's tables list beside it, and the form is
-    /// unambiguous: <c>DbDataSync:Auth:Windows:AdminGroup</c> is <c>DbDataSync__Auth__Windows__AdminGroup</c>.
+    /// unambiguous: <c>DbDataSync:State:Retention:RunDays</c> is <c>DbDataSync__State__Retention__RunDays</c>.
     /// </summary>
     [Fact]
     public void EveryKeyTheAdminScreenListsIsDocumentedInConfigurationMd()
@@ -134,8 +133,7 @@ public sealed class AdminConfigServiceTests : IDisposable
         // Beside the control in both states, and for this key only — nothing else on the screen carries one.
         Assert.False(string.IsNullOrWhiteSpace(entry.Caution));
         Assert.Contains("other people's sessions", entry.Caution);
-        Assert.All(service.List().Where(e => e.Key != NotesKey && e.Key != "DbDataSync:Auth:Network:Admin"
-                && e.Key != "DbDataSync:Auth:Network:Viewer"), e => Assert.Null(e.Caution));
+        Assert.All(service.List().Where(e => e.Key != NotesKey), e => Assert.Null(e.Caution));
     }
 
     [Fact]
@@ -171,21 +169,21 @@ public sealed class AdminConfigServiceTests : IDisposable
     }
 
     /// <summary>Phase 164's other confirmed finding: a nested key genuinely is file-writable once the
-    /// catalog says so — Auth:Windows:AdminGroup is the concrete case that used to be display-only.</summary>
+    /// catalog says so — State:Retention:RunDays is the concrete case.</summary>
     [Fact]
-    public void ANestedAuthKey_IsNowFileWritable()
+    public void ANestedKey_IsFileWritable()
     {
-        var key = AdminConfigService.Writable("Auth:Windows:AdminGroup");
+        var key = AdminConfigService.Writable("State:Retention:RunDays");
 
         Assert.NotNull(key);
-        Assert.Contains("Auth:Windows:AdminGroup", AdminConfigService.WritableKeyNames());
+        Assert.Contains("State:Retention:RunDays", AdminConfigService.WritableKeyNames());
 
         var service = Build(ConfigurationWithFile());
         var author = new GitAuthor("Test Admin", "admin@example.com");
-        var written = service.Set("DbDataSync:Auth:Windows:AdminGroup", "DBADMINS", author);
+        var written = service.Set("DbDataSync:State:Retention:RunDays", "45", author);
 
         Assert.NotNull(written);
-        Assert.Equal("DBADMINS", DbDataSyncConfigFile.Read(_repoRoot)["DbDataSync:Auth:Windows:AdminGroup"]);
+        Assert.Equal("45", DbDataSyncConfigFile.Read(_repoRoot)["DbDataSync:State:Retention:RunDays"]);
     }
 
     [Fact]
@@ -357,20 +355,20 @@ public sealed class AdminConfigServiceTests : IDisposable
     [Fact]
     public void AFileKeyACommandLineFlagAlsoSets_IsStillFileSourced_AndNamesWhatOutranksIt()
     {
-        DbDataSyncConfigFile.SetValue(_repoRoot, "DbDataSync", "Auth:Network:Admin", "disabled");
+        DbDataSyncConfigFile.SetValue(_repoRoot, "DbDataSync", "State:Retention:RunDays", "7");
         var builder = new ConfigurationBuilder();
         builder.Add(new DbDataSyncConfigFileSource { InitialData = DbDataSyncConfigFile.Read(_repoRoot) });
         builder.AddInMemoryCollection(new Dictionary<string, string?> { ["DbDataSync:App:RepoRoot"] = _repoRoot });
         builder.AddEnvironmentVariables();
-        builder.AddCommandLine(["--DbDataSync:Auth:Network:Admin", "loopback"]);
+        builder.AddCommandLine(["--DbDataSync:State:Retention:RunDays", "9"]);
         var service = Build(builder.Build());
 
-        var entry = service.Get("DbDataSync:Auth:Network:Admin")!;
+        var entry = service.Get("DbDataSync:State:Retention:RunDays")!;
 
         Assert.Equal("file", entry.Source);
-        Assert.Equal("disabled", entry.Value);
+        Assert.Equal("7", entry.Value);
         Assert.Equal("command line", entry.OverriddenBy);
-        Assert.Equal("loopback", entry.OverriddenValue);
+        Assert.Equal("9", entry.OverriddenValue);
     }
 
     /// <summary>The ordinary case — nothing outranks the file, and the screen says nothing. The
@@ -379,10 +377,10 @@ public sealed class AdminConfigServiceTests : IDisposable
     [Fact]
     public void AFileKeyNothingElseSets_ReportsNoOverride()
     {
-        DbDataSyncConfigFile.SetValue(_repoRoot, "DbDataSync", "Auth:Network:Admin", "disabled");
+        DbDataSyncConfigFile.SetValue(_repoRoot, "DbDataSync", "State:Retention:RunDays", "7");
         var service = Build(ConfigurationWithFile(DbDataSyncConfigFile.Read(_repoRoot)));
 
-        var entry = service.Get("DbDataSync:Auth:Network:Admin")!;
+        var entry = service.Get("DbDataSync:State:Retention:RunDays")!;
 
         Assert.Equal("file", entry.Source);
         Assert.Null(entry.OverriddenBy);
@@ -418,25 +416,16 @@ public sealed class AdminConfigServiceTests : IDisposable
         Assert.Equal("http://from-cli/", entry.Value);
     }
 
-    /// <summary>Phase 164's replacement for the old blanket Auth:Disabled: two independent, role-scoped
-    /// modes, both genuinely file-writable now (unlike the flag they replaced).</summary>
+    /// <summary>Plan 13a, X06: Sync has no sign-in of its own, so the screen lists no <c>Auth:*</c> key and none is writable.</summary>
     [Fact]
-    public void AuthNetworkKeys_AreFileWritable_AndDefaultToDisabled()
+    public void NoAuthKeyIsListedOrWritable()
     {
         var service = Build(ConfigurationWithFile());
 
-        var admin = service.Get("DbDataSync:Auth:Network:Admin")!;
-        var viewer = service.Get("DbDataSync:Auth:Network:Viewer")!;
-        Assert.Equal("disabled", admin.Value);
-        Assert.Equal("disabled", viewer.Value);
-        Assert.NotNull(admin.Caution);
-        Assert.NotNull(viewer.Caution);
-
-        var author = new GitAuthor("Test Admin", "admin@example.com");
-        var written = service.Set("DbDataSync:Auth:Network:Admin", "loopback", author);
-
-        Assert.NotNull(written);
-        Assert.Equal("loopback", DbDataSyncConfigFile.Read(_repoRoot)["DbDataSync:Auth:Network:Admin"]);
+        Assert.DoesNotContain(service.List(), e => e.Key.StartsWith("DbDataSync:Auth:", StringComparison.OrdinalIgnoreCase));
+        Assert.Null(AdminConfigService.Writable("Auth:Windows:AdminGroup"));
+        Assert.Null(AdminConfigService.Writable("Auth:Network:Admin"));
+        Assert.DoesNotContain(AdminConfigService.WritableKeyNames(), name => name.StartsWith("Auth:", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -509,7 +498,6 @@ public sealed class AdminConfigServiceTests : IDisposable
         var service = new AdminConfigService(
             ConfigurationWithFile(),
             apiOptions,
-            AuthOptions.FromConfiguration(ConfigurationWithFile()),
             new GitCommitService(_repoRoot),
             secrets,
             new RestartRequiredState(apiOptions));
@@ -534,7 +522,6 @@ public sealed class AdminConfigServiceTests : IDisposable
         var service = new AdminConfigService(
             ConfigurationWithFile(),
             apiOptions,
-            AuthOptions.FromConfiguration(ConfigurationWithFile()),
             new GitCommitService(_repoRoot),
             secrets,
             new RestartRequiredState(apiOptions));

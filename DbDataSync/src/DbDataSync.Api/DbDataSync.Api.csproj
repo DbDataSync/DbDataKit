@@ -17,9 +17,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <DbDataKitReference Include="Web" />   <!-- session sign-in: cookie, passkeys, Windows sign-in, first-run invite; plan 13, U05 -->
+    <DbDataKitReference Include="Web" />   <!-- the web host's shared parts: the console's signed token, the policies, the management API (plan 13a, X06: no sign-in of Sync's own) -->
     <DbDataKitReference Include="Scheduling" />   <!-- the schedule evaluator (Cronos comes with it); plan 13, M01 -->
-    <PackageReference Include="Fido2.AspNet" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <!-- Lifetime and logging for a process the Windows SCM starts. Cross-platform to reference; the
          helper it provides answers false everywhere else, so nothing is conditional here. -->
@@ -28,9 +27,6 @@
          process systemd starts. Same cross-platform-to-reference reasoning: its own helper answers
          false everywhere but a real systemd unit. -->
     <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" />
-    <!-- Kerberos/NTLM under Kestrel. Cross-platform to reference; it only authenticates anybody on
-         Windows, and the sign-in endpoint says so where it does not. -->
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.Negotiate" />
   </ItemGroup>
 
   <ItemGroup>

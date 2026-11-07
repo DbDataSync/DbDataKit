@@ -29,7 +29,6 @@ internal sealed class ReadinessContext
     public required string Root { get; init; }
     public required IConfiguration Configuration { get; init; }
     public required ApiOptions ApiOptions { get; init; }
-    public required AuthOptions AuthOptions { get; init; }
     public required CertificateOptions CertificateOptions { get; init; }
 
     /// <summary>Opens the configured state database, or null with the exception that stopped it — a
@@ -78,7 +77,6 @@ internal static class ReadinessChecks
         new LibrariesAndDriversCheck(),
         new LibraryCompatibilityCheck(),
         new RuntimeDiscoverabilityCheck(),
-        new AuthCheck(),
         new CertificateCheck(),
         new BindingCheck(),
     ];
@@ -137,7 +135,6 @@ internal static class ReadinessChecks
             Root = root,
             Configuration = configuration,
             ApiOptions = apiOptions,
-            AuthOptions = AuthOptions.FromConfiguration(configuration),
             CertificateOptions = CertificateOptions.FromConfiguration(configuration),
         };
     }
@@ -434,34 +431,6 @@ internal sealed class RuntimeDiscoverabilityCheck : IReadinessCheck
             "Could not confirm the .NET runtime is discoverable machine-wide — a nologin service " +
             "account's own environment may not see it.",
             "Install .NET via your package manager, or set DOTNET_ROOT system-wide."));
-    }
-}
-
-/// <summary>How a person reaches this server directly: network trust (a warning, it is no sign-in) or Windows groups. Otherwise the server is reached through a
-/// console, whose calls carry a signed token (plan 13, X05: Sync has no passkey sign-in of its own).</summary>
-internal sealed class AuthCheck : IReadinessCheck
-{
-    public Task<CheckResult> RunAsync(ReadinessContext context, CancellationToken cancellationToken)
-    {
-        if (context.AuthOptions.NetworkAdmin == AdminNetworkTrust.Loopback)
-        {
-            return Task.FromResult(new CheckResult(
-                "Auth", CheckStatus.Warn,
-                "DbDataSync:Auth:Network:Admin is loopback — any request from this host is accepted as Admin with no sign-in."));
-        }
-
-        if (context.AuthOptions.NetworkViewer == ViewerNetworkTrust.Remote)
-        {
-            return Task.FromResult(new CheckResult(
-                "Auth", CheckStatus.Warn,
-                "DbDataSync:Auth:Network:Viewer is remote — any request, from anywhere, is accepted as Viewer with no sign-in."));
-        }
-
-        return Task.FromResult(new CheckResult(
-            "Auth", CheckStatus.Ok,
-            context.AuthOptions.WindowsEnabled
-                ? $"Windows groups configured (admin: {context.AuthOptions.AdminGroup ?? "none"}), and the console."
-                : "Signed in at the console (`server pair`)."));
     }
 }
 

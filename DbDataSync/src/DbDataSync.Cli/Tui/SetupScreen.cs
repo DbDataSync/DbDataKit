@@ -33,7 +33,6 @@ internal static class SetupScreen
         var general = new GeneralTab();
         var stateDatabase = new StateDatabaseTab();
         var drivers = new DriversTab();
-        var authentication = new AuthenticationTab();
         var service = OperatingSystem.IsWindows() || OperatingSystem.IsLinux() ? new ServiceTab() : null;
         var certificate = new CertificateTab();
 
@@ -42,7 +41,6 @@ internal static class SetupScreen
             var configuration = ReadinessChecks.BuildContext(["--repo", root]).Configuration;
             general.Populate(configuration);
             stateDatabase.Populate(configuration);
-            authentication.Populate(configuration);
         }
 
         const int sidebarWidth = 40;
@@ -53,8 +51,7 @@ internal static class SetupScreen
         tabs.InsertTab(0, general);
         tabs.InsertTab(1, stateDatabase);
         tabs.InsertTab(2, drivers);
-        tabs.InsertTab(3, authentication);
-        var nextIndex = 4;
+        var nextIndex = 3;
         if (service is not null)
             tabs.InsertTab(nextIndex++, service);
         tabs.InsertTab(nextIndex, certificate);
@@ -108,8 +105,6 @@ internal static class SetupScreen
             var driverResult = await drivers.SaveAsync(root, installLibrary);
             if (driverResult is { } result)
                 messages.Add(result.Message);
-
-            messages.Add(authentication.Save(app, root).Message);
 
             var serviceLines = service?.GetInstructions(root, url);
             var certificateLines = certificate.GetInstructions(root, host);

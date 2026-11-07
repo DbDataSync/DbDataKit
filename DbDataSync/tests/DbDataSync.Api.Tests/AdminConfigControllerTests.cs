@@ -55,7 +55,8 @@ public sealed class AdminConfigControllerTests(AuthenticatedApiFactory factory) 
         Assert.NotNull(entries);
         Assert.Contains(entries!, e => e.Key == UrlKey);
         Assert.Contains(entries!, e => e.Key == StateConnectionStringKey);
-        Assert.Contains(entries!, e => e.Key == "DbDataSync:Auth:Network:Admin");
+        // Plan 13a, X06: no sign-in settings of its own either.
+        Assert.DoesNotContain(entries!, e => e.Key.StartsWith("DbDataSync:Auth:", StringComparison.OrdinalIgnoreCase));
         // Sync has no passkeys of its own any more (plan 13, X05), so the screen does not offer their settings.
         Assert.DoesNotContain(entries!, e => e.Key.StartsWith("DbDataSync:Auth:Passkeys", StringComparison.OrdinalIgnoreCase) || e.Key == "DbDataSync:App:AlternateUrls");
 
@@ -67,21 +68,23 @@ public sealed class AdminConfigControllerTests(AuthenticatedApiFactory factory) 
     }
 
     /// <summary>
-    /// Phase 164: unlike the old blanket Auth:Disabled, a nested Auth key genuinely is writable now —
-    /// see AdminConfigService's class doc comment for why that claim was never actually true of the
-    /// writer, only of what the catalog chose to expose before this phase.
+    /// A nested key genuinely is writable (phase 164: see AdminConfigService's class doc comment for why that claim was never actually true of the
+    /// writer, only of what the catalog chose to expose). The Auth keys that were the example are gone with Sync's own sign-in (plan 13a, X06), and a PUT of one is refused.
     /// </summary>
     [Fact]
-    public async Task ANestedAuthKey_CanBeWritten()
+    public async Task ANestedKey_CanBeWritten_AndARemovedAuthKeyCannot()
     {
         using var scoped = new AuthenticatedApiFactory();
         var client = await scoped.SignedInAsAsync(UserRole.Admin);
 
         var response = await client.PutAsJsonAsync(
-            "/api/admin/config/DbDataSync%3AAuth%3ANetwork%3AAdmin", new { value = "loopback" });
+            "/api/admin/config/DbDataSync%3AState%3ARetention%3ARunDays", new { value = "45" });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("loopback", DbDataSyncConfigFile.Read(scoped.RepoRoot)["DbDataSync:Auth:Network:Admin"]);
+        Assert.Equal("45", DbDataSyncConfigFile.Read(scoped.RepoRoot)["DbDataSync:State:Retention:RunDays"]);
+
+        var removed = await client.PutAsJsonAsync("/api/admin/config/DbDataSync%3AAuth%3ANetwork%3AAdmin", new { value = "loopback" });
+        Assert.Equal(HttpStatusCode.NotFound, removed.StatusCode);
     }
 
     /// <summary>App:RepoRoot is how server.yaml itself is found, so a PUT refuses it rather

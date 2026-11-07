@@ -19,20 +19,11 @@ internal static class HttpSysHosting
     private const string AssemblyName = "Microsoft.AspNetCore.Server.HttpSys";
 
     /// <summary>
-    /// <c>HttpSysDefaults.AuthenticationScheme</c> — the scheme HTTP.sys registers its handler under.
-    /// Registered by the server itself when it is constructed at startup (and only when a scheme is
-    /// offered), so it is not in the scheme provider of a host that has been built but not started.
-    /// A test pins this against the real constant.
+    /// Switches <paramref name="builder"/> to HTTP.sys. Anonymous requests stay allowed, because <c>/api/health</c> and
+    /// pairing are open and a console's signed token answers "who is this" everywhere else (plan 13a, X06: Sync has no Windows sign-in, so no
+    /// Windows scheme is offered).
     /// </summary>
-    public const string AuthenticationScheme = "Windows";
-
-    /// <summary>
-    /// Switches <paramref name="builder"/> to HTTP.sys. Anonymous requests stay allowed, because the SPA,
-    /// static files and <c>/api/health</c> are open and sessions (not a Windows identity) answer "who is
-    /// this" everywhere else. Negotiate/NTLM are only offered when Windows sign-in is configured, and only
-    /// <em>challenged</em> by the sign-in endpoint.
-    /// </summary>
-    public static void Use(WebApplicationBuilder builder, bool windowsAuth)
+    public static void Use(WebApplicationBuilder builder)
     {
         Assembly assembly;
         try
@@ -54,7 +45,7 @@ internal static class HttpSysHosting
         // options => { options.Authentication.AllowAnonymous = true; options.Authentication.Schemes = ...; }
         var options = Expression.Parameter(optionsType, "options");
         var authentication = Expression.Property(options, "Authentication");
-        var schemes = Enum.Parse(schemesType, windowsAuth ? "Negotiate, NTLM" : "None");
+        var schemes = Enum.Parse(schemesType, "None");
         var configure = Expression.Lambda(
                 configureType,
                 Expression.Block(

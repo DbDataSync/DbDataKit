@@ -14,19 +14,18 @@ namespace DbDataSync.Api.Services;
 /// it.
 /// <para>
 /// Phase 164 reorganized the whole key surface into groups (<c>App:*</c>, <c>State:*</c>,
-/// <c>Auth:Network:*</c>/<c>Auth:Windows:*</c>, <c>Updates:*</c>, <c>Nuget:Search:*</c>,
+/// <c>Updates:*</c>, <c>Nuget:Search:*</c>,
 /// <c>Notes:*</c>) and replaced every bare boolean with a named mode string. That reorg also found that
 /// the earlier "only flat, top-level keys are file-writable" claim was never actually true for
 /// <see cref="DbDataSyncConfigFile.SetValue"/> — its text-editing writer tolerates a colon-containing
 /// plain-scalar key or section (the exact mechanism <c>SetupSteps.cs</c> already relied on for the TUI
-/// path), so nested keys under <c>Auth:Windows:*</c> are now genuinely
-/// file-writable here too, not just display-only.
+/// path), so nested keys are genuinely file-writable here too, not just display-only. (Plan 13a, X06: the <c>Auth:*</c> group is gone with
+/// Sync's own sign-in.)
 /// </para>
 /// </summary>
 public sealed class AdminConfigService(
     IConfiguration configuration,
     ApiOptions apiOptions,
-    AuthOptions authOptions,
     GitCommitService git,
     SecretStore secrets,
     RestartRequiredState restartRequired)
@@ -135,31 +134,6 @@ public sealed class AdminConfigService(
         new("DbDataSync:Certificates:Template",
             "The certificate template name `dbdatasync cert enroll` and `renew` request. " +
             "`dbdatasync cert discover` lists the ones the CA publishes. Read by the CLI, not the running service.",
-            SupportsWrite: true),
-        new("DbDataSync:Auth:Network:Admin",
-            "Trusts an unauthenticated request from loopback as Admin: loopback or disabled. There is no " +
-            "\"from anywhere\" option for Admin — only Auth:Network:Viewer ever widens past loopback.",
-            SupportsWrite: true, AllowedValues: AllowedValuesFor<AdminNetworkTrust>(),
-            Caution:
-                "Anyone who can reach this loopback address — any local account on a shared host, not only " +
-                "the operator — gets Admin with no sign-in at all. Leave this disabled unless the deployment " +
-                "is a single-operator box."),
-        new("DbDataSync:Auth:Network:Viewer",
-            "Trusts an unauthenticated request as Viewer: remote, loopback, or disabled. Remote trusts any " +
-            "origin as Viewer; loopback restricts that to loopback only.",
-            SupportsWrite: true, AllowedValues: AllowedValuesFor<ViewerNetworkTrust>(),
-            Caution:
-                "A Viewer can read replication state and configuration, just not change it. `remote` means " +
-                "anyone who can reach this deployment at all gets that without signing in."),
-        new("DbDataSync:Auth:Windows:Mode",
-            "Whether Windows group authentication is allowed at all: enabled or disabled. An operator can " +
-            "configure Auth:Windows:AdminGroup/ViewerGroup and still turn this off without clearing them.",
-            SupportsWrite: true, AllowedValues: AllowedValuesFor<FeatureMode>()),
-        new("DbDataSync:Auth:Windows:AdminGroup",
-            "Windows group whose members are admins.",
-            SupportsWrite: true),
-        new("DbDataSync:Auth:Windows:ViewerGroup",
-            "Windows group whose members are viewers.",
             SupportsWrite: true),
     ];
 
@@ -376,7 +350,7 @@ public sealed class AdminConfigService(
 
     /// <summary>
     /// What this key resolves to when nothing configures it — read off the same live options objects
-    /// (<see cref="ApiOptions"/>, <see cref="AuthOptions"/>) the rest of
+    /// (<see cref="ApiOptions"/>) the rest of
     /// the process uses, rather than a second copy of each default that could drift from theirs.
     /// </summary>
     private string? DefaultFor(string key) => key switch
@@ -399,11 +373,6 @@ public sealed class AdminConfigService(
         "DbDataSync:Notes:MarkdownRenderer" => Lower(apiOptions.NotesRenderer),
         "DbDataSync:Updates:Mode" => Lower(apiOptions.SelfUpdateMode),
         "DbDataSync:Updates:Channels" => string.Join(",", apiOptions.SelfUpdateChannels.Select(c => c.ToString().ToLowerInvariant())),
-        "DbDataSync:Auth:Network:Admin" => Lower(authOptions.NetworkAdmin),
-        "DbDataSync:Auth:Network:Viewer" => Lower(authOptions.NetworkViewer),
-        "DbDataSync:Auth:Windows:Mode" => Lower(authOptions.WindowsMode),
-        "DbDataSync:Auth:Windows:AdminGroup" => authOptions.AdminGroup,
-        "DbDataSync:Auth:Windows:ViewerGroup" => authOptions.ViewerGroup,
         _ => null,
     };
 
@@ -440,9 +409,6 @@ public sealed class AdminConfigService(
         "DbDataSync:Notes:MarkdownRenderer" => Lower(ApiOptions.DefaultNotesRenderer),
         "DbDataSync:Updates:Mode" => Lower(ApiOptions.DefaultSelfUpdateMode),
         "DbDataSync:Updates:Channels" => ApiOptions.DefaultSelfUpdateChannels,
-        "DbDataSync:Auth:Network:Admin" => Lower(AdminNetworkTrust.Disabled),
-        "DbDataSync:Auth:Network:Viewer" => Lower(ViewerNetworkTrust.Disabled),
-        "DbDataSync:Auth:Windows:Mode" => Lower(FeatureMode.Enabled),
         _ => null,
     };
 }

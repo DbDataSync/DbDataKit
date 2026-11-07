@@ -93,42 +93,6 @@ internal static class SetupSteps
         }
     }
 
-    /// <summary>
-    /// <paramref name="noAuthConfirmed"/> is resolved by the caller (a hard-confirm dialog, exactly the
-    /// "type ALLOW" guard the console flow used) before this is ever called — this method only decides
-    /// what to write given that already-made decision, the same split <see cref="ApplyStateDatabase"/>
-    /// draws between prompting and writing.
-    /// </summary>
-    internal static StepResult ApplyAuthentication(
-        string root, string choice, string? adminGroup, string? viewerGroup, bool noAuthConfirmed)
-    {
-        if (choice == "console")
-            return new StepResult(false, "Signed in at the console: nothing to set here. Add this server to a dbdatakit console (`dbdatasync server pair`).");
-
-        if (choice == "windows")
-        {
-            DbDataSyncConfigFile.SetValue(root, "DbDataSync:Auth:Windows", "AdminGroup", adminGroup ?? "");
-            if (!string.IsNullOrEmpty(viewerGroup))
-                DbDataSyncConfigFile.SetValue(root, "DbDataSync:Auth:Windows", "ViewerGroup", viewerGroup);
-            return new StepResult(false, "Windows group authentication configured.");
-        }
-
-        // choice == "none" — phase 164 narrowed this: Admin trust from the network can only ever be
-        // loopback, never "from anywhere" the way the old Auth:Disabled flag was. Viewer stays as wide
-        // as "trusted network only" actually means.
-        if (noAuthConfirmed)
-        {
-            DbDataSyncConfigFile.SetValue(root, "DbDataSync:Auth:Network", "Admin", "loopback");
-            DbDataSyncConfigFile.SetValue(root, "DbDataSync:Auth:Network", "Viewer", "remote");
-            return new StepResult(
-                true,
-                "Authentication disabled — anyone on the network can view with no sign-in, and this host " +
-                "itself is Admin with no sign-in.");
-        }
-
-        return new StepResult(true, "Not disabled — signed in at the console (nothing was written).");
-    }
-
     /// <summary>The console URL is the one field with no branching or validation of its own — General
     /// tab builds the final URL string (plain, or scheme-and-host composed for a non-localhost
     /// hostname) and this just writes it.</summary>

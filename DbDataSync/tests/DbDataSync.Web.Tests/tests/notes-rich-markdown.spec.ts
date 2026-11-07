@@ -146,8 +146,7 @@ test.describe('Notes: the rich Markdown opt-in (phase 161)', () => {
     await page.screenshot({ path: path.join(screenshotsDir, '03-admin-config-caution.png') })
     await page.getByTestId('admin-config-caution-close-Notes:MarkdownRenderer').click()
 
-    // Phase 164 added two more: Auth:Network:Admin and Auth:Network:Viewer, both security-sensitive
-    // network-trust fallbacks — this setting is no longer the only one that carries a caution.
-    await expect(page.locator('[data-testid^="admin-config-caution-"]')).toHaveCount(3)
+    // Plan 13a, X06: the two network-trust cautions went with Sync's own sign-in; this setting is the only one that carries a caution.
+    await expect(page.locator('[data-testid^="admin-config-caution-"]')).toHaveCount(1)
   })
 })
