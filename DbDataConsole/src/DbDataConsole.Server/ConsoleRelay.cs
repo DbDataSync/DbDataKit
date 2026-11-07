@@ -95,6 +95,14 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
 
     public async Task RelayAsync(HttpContext context, string server, string path)
     {
+        if (server == ConsoleRunnerSettings.ServerId)
+        {
+            // the embedded runner is answered in this process by its own routes (ConsoleRunnerApi); what those do not answer is not a call a console relays, and there is no server behind this id to forward it to
+            var allowed = ServerProducts.Relayable(ServerProducts.Runner, context.Request.Method, path);
+            await Refuse(context, allowed ? StatusCodes.Status404NotFound : StatusCodes.Status403Forbidden,
+                allowed ? "The embedded runner has no such call." : "The console's embedded runner is a runner: the console serves only its management calls (status, instances, runs, tasks, packages and their life cycle).");
+            return;
+        }
         if (instances.Registry.Find(server) is not { } instance)
         {
             await Refuse(context, StatusCodes.Status404NotFound, "No such server is registered.");

@@ -9,7 +9,7 @@ using DbDataKit.Runner.Staging;
 using DbDataKit.State;
 using DbDataKit.Web.Trust;
 
-namespace DbDataRunner.Server;
+namespace DbDataKit.Runner.Api;
 
 /// <summary>A publishing call that is refused or fails, with the HTTP status the API answers it with (400 invalid, 403 policy, 404 unknown, 409 stale, 413 too large).</summary>
 public sealed class RunnerPublishException(int status, string message) : InvalidOperationException(message)
@@ -79,7 +79,7 @@ public sealed partial class RunnerPublishing
 
     /// <param name="instanceLease">How long an instance may be silent before it is not live to the group (what activation counts as "every live instance").</param>
     /// <param name="activation">How an activation waits for runs in flight; the defaults when null.</param>
-    public RunnerPublishing(StateDatabase state, long maxArtifactBytes = DefaultMaxArtifactBytes, IVersionSignatureVerifier? verifier = null, TimeSpan? instanceLease = null, ActivationOptions? activation = null)
+    public RunnerPublishing(StateDatabase state, long maxArtifactBytes = DefaultMaxArtifactBytes, IVersionSignatureVerifier? verifier = null, TimeSpan? instanceLease = null, ActivationOptions? activation = null, string serviceId = RunnerNames.ServiceId)
     {
         _lease = instanceLease ?? TimeSpan.FromSeconds(90);
         _instances = new RunnerInstances(state);
@@ -91,11 +91,22 @@ public sealed partial class RunnerPublishing
         Publisher = new DefinitionPublisher(state, RunnerPackages.Kinds(), _payloads, "runner");
         Activator = new PackageActivator(state, Publisher, activation);
         _projections = new TaskProjections(state);
-        _audit = new AuditLog(state, RunnerState.ServiceId);
+        _audit = new AuditLog(state, serviceId);
         _settings = new DbDataKit.Web.Trust.GroupSettings(state);
     }
 
     public DefinitionPublisher Publisher { get; }
+
+    /// <summary>
+    /// A host's rule about the channels it serves (the console's embedded runner serves no production channel until an administrator chose it): says why a channel is refused, or null. Asked by every publish, activate, switch and
+    /// rollback, which are refused with 403 and the message when it answers.
+    /// </summary>
+    public Func<string, string?>? ChannelRefusal { get; init; }
+
+    private void RequireChannelServed(string channel)
+    {
+        if (ChannelRefusal?.Invoke(channel) is { } refusal) throw new RunnerPublishException(403, refusal);
+    }
 
     /// <summary>Activation, switch and rollback with the progress migration (plan 28a R18).</summary>
     public PackageActivator Activator { get; }
@@ -209,6 +220,7 @@ public sealed partial class RunnerPublishing
             if (!PackageManifestValidator.NameRule.IsMatch(input.Name)) throw new RunnerPublishException(400, $"'{input.Name}' is not a package name: use 1 to 64 lowercase letters, digits, '-' or '_', starting with a letter or digit.");
             if (!PackageManifestValidator.NameRule.IsMatch(input.Channel)) throw new RunnerPublishException(400, $"'{input.Channel}' is not a channel name: use 1 to 64 lowercase letters, digits, '-' or '_', starting with a letter or digit.");
 
+            RequireChannelServed(input.Channel);
             var refs = new List<ArtifactRef>();
             foreach (var file in input.Files)
             {
@@ -310,6 +322,7 @@ public sealed partial class RunnerPublishing
         {
             if (!PackageManifestValidator.NameRule.IsMatch(name)) throw new RunnerPublishException(400, $"'{name}' is not a package name.");
             if (!PackageManifestValidator.NameRule.IsMatch(channel)) throw new RunnerPublishException(400, $"'{channel}' is not a channel name.");
+            RequireChannelServed(channel);
             T result;
             try { result = await work().ConfigureAwait(false); }
             catch (ProgressMigrationException ex) { throw new RunnerPublishException(400, ex.Message); }

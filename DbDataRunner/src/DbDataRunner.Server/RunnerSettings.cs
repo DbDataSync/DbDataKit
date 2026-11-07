@@ -1,3 +1,5 @@
+using DbDataKit.Runner;
+using DbDataKit.Runner.Api;
 using DbDataKit.State;
 
 namespace DbDataRunner.Server;
@@ -89,6 +91,23 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
 
     /// <summary>A name for the instance's group; instances that share a database and a group name share their queue, instances and pairings.</summary>
     public string Group { get; init; } = RunnerState.DefaultGroup;
+
+    /// <summary>What the engine of <c>DbDataKit.Runner</c> is configured with: this server's directory, group, channels and timing.</summary>
+    public DbDataKit.Runner.RunnerHostSettings ToHostSettings() => new(Directory)
+    {
+        Channels = Channels,
+        Group = Group,
+        Version = typeof(RunnerSettings).Assembly.GetName().Version?.ToString(),
+        Tick = Tick,
+        CancellationGrace = CancellationGrace,
+        InstanceHeartbeat = InstanceHeartbeat,
+        InstanceLeaseOverride = InstanceLeaseOverride,
+        TaskHostPath = TaskHostPath,
+        Staging = Staging,
+        StagingContracts = StagingContracts,
+        TaskEnvironment = TaskEnvironment,
+        ActivationMaxWait = ActivationMaxWait,
+    };
 
     public string ServerYaml => Path.Combine(Directory, "server.yaml");
 

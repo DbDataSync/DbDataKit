@@ -1,6 +1,6 @@
 using DbDataKit.Runner;
 
-namespace DbDataRunner.Server;
+namespace DbDataKit.Runner;
 
 /// <summary>
 /// The contracts this runner serves (plan 30 section 6.1, plan 28a DR4): compiled code depends on the .NET runtime, the kit and the runner protocol it was built against, so a publish whose manifest names others is refused,

@@ -21,5 +21,10 @@
     <PackageVersion Include="DbDataKit.Secrets.Windows" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Secrets.Store" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Secrets" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Runner.Abstractions" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Runner" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Runner.Api" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Monitoring" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Scheduling" Version="$(DbDataKitVersion)" />
   </ItemGroup>
 </Project>

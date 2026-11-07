@@ -1,4 +1,4 @@
-namespace DbDataRunner.Server;
+namespace DbDataKit.Runner;
 
 /// <summary>
 /// Finds the task host, the process a runner starts for a .NET package. The build publishes it into <c>taskhost/</c> beside the program (and the publish output carries it the same way), with its own dependencies and runtime

@@ -1,3 +1,4 @@
+using DbDataKit.Runner.Api;
 using System.Globalization;
 using System.Net.Http;
 using DbDataKit.Cli;
@@ -337,7 +338,7 @@ public static class RunnerCli
         var state = OpenState(parsed, environment);
         try
         {
-            var installed = RunnerPackages.Install(state, parsed.Words[0], parsed.Words[1], channel, "local:" + Environment.UserName);
+            var installed = RunnerPackageInstaller.Install(state, parsed.Words[0], parsed.Words[1], channel, "local:" + Environment.UserName);
             await context.Out.WriteLineAsync(installed.Changed
                 ? $"Installed {installed.Package} on {channel}: version {installed.Version}, {installed.Files} file(s), tasks {string.Join(", ", installed.Tasks)}."
                 : $"{installed.Package} on {channel} is at version {installed.Version} already with this content; its task schedule was refreshed.");

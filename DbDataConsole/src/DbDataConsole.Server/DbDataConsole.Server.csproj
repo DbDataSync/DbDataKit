@@ -24,11 +24,34 @@
     <DbDataKitReference Include="State.Cli" />   <!-- state show, test and grants; plan 29b, C01 -->
     <DbDataKitReference Include="State.Engines" />   <!-- SQLite, SQL Server or PostgreSQL for them, as the operator names; plan 13a, P11 -->
     <DbDataKitReference Include="Web" />
+    <DbDataKitReference Include="Runner.Abstractions" />   <!-- package/1 manifests: the console's system package; plan 28a R20 -->
+    <DbDataKitReference Include="Runner" />   <!-- the engine the console hosts a copy of as its embedded runner; plan 28 section 6a -->
+    <DbDataKitReference Include="Runner.Api" />   <!-- the runner's management API, served for the people signed in to the console -->
+    <DbDataKitReference Include="Monitoring" />
+    <DbDataKitReference Include="Scheduling" />
     <DbDataKitReference Include="Secrets.Abstractions" />   <!-- the key the console signs for its servers with -->
     <DbDataKitReference Include="Secrets" />
     <DbDataKitReference Include="Secrets.Store" />
     <DbDataKitReference Include="Secrets.Windows" />   <!-- sign-in, passkeys, invitations, users: the controllers the console serves -->
   </ItemGroup>
+
+  <ItemGroup Condition="'$(UseLocalDbDataKit)' == 'true'">
+    <!-- the task host an embedded runner starts for a .NET package: published beside the program, as dbdatarunner does (its own dependencies and runtime configuration) -->
+    <ProjectReference Include="$(DbDataKitRoot)src\DbDataKit.Runner.TaskHost\DbDataKit.Runner.TaskHost.csproj" ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+  <Target Name="CopyTaskHost" AfterTargets="Build" Condition="'$(UseLocalDbDataKit)' == 'true'">
+    <PropertyGroup>
+      <_TaskHostDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(OutDir)', 'taskhost'))</_TaskHostDir>
+    </PropertyGroup>
+    <MSBuild Projects="$(DbDataKitRoot)src\DbDataKit.Runner.TaskHost\DbDataKit.Runner.TaskHost.csproj" Targets="Publish" Properties="NoBuild=true;PublishDir=$(_TaskHostDir);SelfContained=false" />
+  </Target>
+  <!-- AFTER the list is computed: added before it, the SDK's file-conflict resolution saw two Microsoft.Data.Sqlite.dll (the console's and the task host's) and dropped the console's, so the image failed at start -->
+  <Target Name="TaskHostIntoPublish" AfterTargets="ComputeResolvedFilesToPublishList" DependsOnTargets="CopyTaskHost" Condition="'$(UseLocalDbDataKit)' == 'true'">
+    <ItemGroup>
+      <_TaskHostFile Include="$(_TaskHostDir)**\*" />
+      <ResolvedFileToPublish Include="@(_TaskHostFile)" RelativePath="taskhost\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
 
   <!--
     The web app is built into wwwroot on publish, which makes the console one artifact. Publish only, and skippable: the test suites run the built app from
