@@ -53,6 +53,12 @@ public sealed class TaskExecutorOptions
     public IReadOnlyCollection<string> InheritedVariables { get; init; } =
         ["PATH", "HOME", "USER", "LANG", "LC_ALL", "TZ", "DOTNET_ROOT", "DOTNET_ROOT_X64", "DOTNET_ROOT_ARM64", "SystemRoot", "windir", "COMSPEC", "PATHEXT"];
 
+    /// <summary>
+    /// The directory under which a runtime package's single-file executable unpacks its natives (plan 28c E05, decision ED8): a directory per runtime version, <c>&lt;this&gt;/&lt;name&gt;@&lt;version&gt;</c>, made by the executor and given to the
+    /// process as <c>DOTNET_BUNDLE_EXTRACT_BASE_DIR</c>. It is outside every view (a view is read-only) and shared by the runs of one version: the first start fills it and the others reuse it. Null: <c>&lt;data&gt;/cache/runtimes</c>.
+    /// </summary>
+    public string? RuntimeExtractDirectory { get; init; }
+
     /// <summary>Variables added to every task process (a proxy setting, say). They are visible to the task and must not hold secrets.</summary>
     public IReadOnlyDictionary<string, string> ExtraEnvironment { get; init; } = new Dictionary<string, string>();
 

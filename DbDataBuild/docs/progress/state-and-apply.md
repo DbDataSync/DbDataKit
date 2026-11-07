@@ -1532,3 +1532,9 @@ Operator decision: correlated subqueries are a hard requirement.
 ### E23: the connection inventory (plan 28c, ED17)
 
 `GET /api/v1/connections` (viewer) lists the connections of every hosted project (`connections/*.yaml`: engine, the read login as a secret reference, never a value) with `used_by`: the server (read), each scheduled refresh plan and each flow a person starts that writes (`deploy --apply`, `ack`, seed; write), the last two not for a `readonly` connection (`BuildConnectionInventory`, `BuildConnectionInventoryTests`). Build keeps its write login for those flows (ED16); this is how an administrator sees where it is used. **Not verified**: a refresh run by a runner (E19 moves that use to the runner, which reports it).
+
+### E05: the Build runtime package (plan 28c)
+
+- **Built**: `scripts/publish-runtime.sh` writes the `dbdatabuild-runtime` package for `win-x64` or `linux-x64` (`package.yaml`, `files/bin/dbdatabuild[.exe]`, `sizes.txt`), `runtime-manifest.sh` prints the manifest, `runtime-sizes.sh` fails a file above 400 MiB; `--framework-dependent` is the fallback layout. A definition names the engine by range (`launch.runtime`). The runner (not the engine) gives every runtime process `DOTNET_BUNDLE_EXTRACT_BASE_DIR=<data>/cache/runtimes/<package>@<version>`, so the single file unpacks once outside the read-only views. Layout and the reasons: `docs/operations.md` section 9.
+- **Verified**: `BuildRuntimePackageTests` (manifest equals the writer's, size failure, three simultaneous starts leave one unpack, a definition run from views on a real runner) and the refresh conformance test through the two packages on SQL Server 2025 and PostgreSQL 17; the executor test for the variable.
+- **Not verified**: Windows (the `runtime package` CI job runs it); a non-root run.

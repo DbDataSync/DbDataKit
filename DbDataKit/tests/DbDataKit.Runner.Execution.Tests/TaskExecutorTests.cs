@@ -439,6 +439,36 @@ public sealed class TaskExecutorTests
     }
 
     [Fact]
+    public async Task A_runtime_gets_an_extraction_directory_of_its_version_outside_every_view_and_a_package_that_runs_itself_gets_none()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "the sample executables are shell scripts");
+        using var h = new ExecutorHarness(Engine.Sqlite);
+        var runtime = await PackageFixture.ScriptPackage();
+        var definition = await h.SampleRequest("anything");
+        var request = definition with
+        {
+            Launch = new PackageLaunch(LaunchKind.Executable, Command: "sh", Args: ["{runtime}/runtime.sh", "first"]),
+            RuntimeDirectory = runtime.Directory,
+            RuntimeKey = "dbdatabuild-runtime@7",
+            RunId = h.Database.NewId(),
+        };
+
+        await h.Executor.RunAsync(request);
+
+        // the directory is the runner's, per version, made before the start, and neither the definition's nor the runtime's view
+        var expected = Path.Combine(h.DataDirectory, "cache", "runtimes", "dbdatabuild-runtime@7");
+        Assert.Contains(h.Log(request.RunId!.Value), l => l.Message == $"extract: {expected}");
+        Assert.True(Directory.Exists(expected));
+        Assert.DoesNotContain(Path.GetFullPath(runtime.Directory), expected);
+        Assert.DoesNotContain(Path.GetFullPath(definition.PackageDirectory), expected);
+
+        // a package that is not run by a runtime has no such variable
+        var plain = request with { RuntimeDirectory = null, RuntimeKey = null, Launch = new PackageLaunch(LaunchKind.Executable, Command: "sh", Args: [runtime.Directory + "/runtime.sh"]), RunId = h.Database.NewId() };
+        await h.Executor.RunAsync(plain);
+        Assert.Contains(h.Log(plain.RunId!.Value), l => l.Message == "extract: ");
+    }
+
+    [Fact]
     public async Task A_task_the_package_does_not_have_is_a_host_failure_with_the_reason_in_the_log()
     {
         using var h = new ExecutorHarness(Engine.Sqlite);

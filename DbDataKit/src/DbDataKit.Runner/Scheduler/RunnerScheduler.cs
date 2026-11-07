@@ -594,6 +594,7 @@ public sealed partial class RunnerScheduler
                     PackageVersion = version,
                     Launch = runtime is null ? content.Manifest.Launch : new PackageLaunch(LaunchKind.Executable, null, runtime.Content.Manifest.Launch.Command, [.. runtime.Content.Manifest.Launch.ArgList, .. content.Manifest.Launch.ArgList]),
                     RuntimeDirectory = runtimeView?.Directory,
+                    RuntimeKey = runtime is null ? null : $"{runtime.Package}@{runtime.Version}",
                     Entry = task.Entry,
                     RunId = item.RunId,
                     Chain = payload.Chain,
