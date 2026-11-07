@@ -80,14 +80,15 @@ public static class StoreCli
 
         var directory = DirectoryOf(args, environment);
         DbDataKit.State.StateSettings state;
-        try { state = StoreState.Resolve(directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection")).Settings; }
+        DbDataKit.State.StateSources sources;
+        try { (state, sources) = StoreState.Resolve(directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection")); }
         catch (InvalidOperationException ex)
         {
             await context.Error.WriteLineAsync(ex.Message);
             return DbDataKit.State.Cli.StateExit.Settings;
         }
 
-        var settings = new StoreSettings(directory, listen) { State = state };
+        var settings = new StoreSettings(directory, listen) { State = state, StateSources = sources };
         Directory.CreateDirectory(settings.Directory);
         var app = StoreServer.Build(settings, StoreServer.Certificate(settings.Directory), line => context.Error.WriteLine(line));
         await context.Out.WriteLineAsync($"Serving on {listen} (instance {StoreServer.InstanceId(settings.Directory, state)}). Pair a client with: dbdatastore server pair --max-role <roles> [--repo <server directory>]");

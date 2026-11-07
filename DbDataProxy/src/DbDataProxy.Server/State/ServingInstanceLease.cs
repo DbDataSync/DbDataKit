@@ -12,7 +12,7 @@ public sealed class SecondInstanceException(string message) : InvalidOperationEx
 /// Each running instance's row in the state (plan 20 O02), refreshed while it runs and removed when it stops. A group of instances shares a SQL Server or PostgreSQL state; SQLite is one instance's, so an instance that finds
 /// another live one on a SQLite state refuses to start, saying so. A row is live while it was refreshed in the last <see cref="Stale"/> and, on this machine, its process is still running; a crashed instance's row is not.
 /// </summary>
-public sealed class ServingInstanceLease(StateDatabase state, ILogger<ServingInstanceLease> log, TimeProvider? clock = null) : IHostedLifecycleService, IDisposable
+public sealed class ServingInstanceLease(StateDatabase state, ILogger<ServingInstanceLease> log, TimeProvider? clock = null) : IHostedLifecycleService, IDisposable, DbDataKit.State.Api.IInstanceDirectory
 {
     public static readonly TimeSpan Stale = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan Every = TimeSpan.FromSeconds(10);
@@ -50,6 +50,10 @@ public sealed class ServingInstanceLease(StateDatabase state, ILogger<ServingIns
             log.LogWarning("This instance's row in the state could not be refreshed ({Reason}).", ex.GetType().Name);
         }
     }
+
+    /// <summary>The live instances of this state, this one marked (<c>GET /api/v1/state</c>): read-only. The row records no software or module versions, so the instances are named without them.</summary>
+    public IReadOnlyList<DbDataKit.State.Api.StateInstance> Live() =>
+        [.. Live(_clock.GetUtcNow()).Select(r => new DbDataKit.State.Api.StateInstance(r.Key, r.Key == _key, r.Host, r.ProcessId, r.Started, r.Heartbeat))];
 
     private sealed record Row(string Key, string Host, int ProcessId, DateTimeOffset Started, DateTimeOffset Heartbeat);
 

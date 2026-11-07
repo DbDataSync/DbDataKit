@@ -115,9 +115,10 @@ internal static class ServerCli
         var settings = new BuildServerSettings(DirectoryOf(args), listen);
         // the scheduler's state: the flags, the environment, then the state section of server.yaml; a state section that is not valid stops the start naming the file
         DbDataKit.State.StateSettings? state = null;
+        DbDataKit.State.StateSources? sources = null;
         if (parsed.Has("scheduler"))
         {
-            try { state = BuildState.Resolve(settings.Directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection")).Settings; }
+            try { (state, sources) = BuildState.Resolve(settings.Directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection")); }
             catch (InvalidOperationException ex)
             {
                 await context.Error.WriteLineAsync(ex.Message);
@@ -140,11 +141,14 @@ internal static class ServerCli
         var runner = new ChildProcessCommandRunner(logins: token => ServerSecrets.LoginsAsync(secrets, token));
         using var sessions = new WarmSessionRunner(logins: token => ServerSecrets.LoginsAsync(secrets, token));
         // running plans on their schedules is opt-in: a server that was only meant to answer reads never writes a target by itself
-        BuildScheduler? scheduler = parsed.Has("scheduler")
-            ? new BuildScheduler(projects, runner, BuildSchedulerSchema.Open(settings.Directory, settings: state), TimeProvider.System, line => context.Error.WriteLine(line))
-            : null;
+        // maintenance mode (plan 29b, C05): the scheduler stops claiming while the gate is on, and the gate is idle when the plans it started have ended
+        BuildScheduler? scheduler = null;
+        var gate = new DbDataKit.State.Api.MaintenanceGate(work: () => scheduler?.Running ?? 0);
+        if (parsed.Has("scheduler"))
+            scheduler = new BuildScheduler(projects, runner, BuildSchedulerSchema.Open(settings.Directory, settings: state), TimeProvider.System, line => context.Error.WriteLine(line), paused: () => gate.Enabled);
         var publisher = new ProxyPublisher(new ProxiesFile(settings.Directory), new ConsoleKeyStore(secrets, secrets), secrets);
-        var app = BuildServer.Build(settings, BuildServer.Certificate(settings.Directory), runner, projects, host.Commands, line => context.Error.WriteLine(line), parsed.Has("read-only") ? BuildManagementApi.ReadOnlySurface : null, scheduler, sessions, publisher);
+        var app = BuildServer.Build(settings, BuildServer.Certificate(settings.Directory), runner, projects, host.Commands, line => context.Error.WriteLine(line), parsed.Has("read-only") ? BuildManagementApi.ReadOnlySurface : null, scheduler, sessions, publisher, gate,
+            state is null ? null : new DbDataKit.State.Cli.StateTarget(state, BuildState.SqlitePath(settings.Directory), () => BuildState.Secrets(settings.Directory, environment), BuildState.SettingsFile(settings.Directory), sources));
         await context.Out.WriteLineAsync($"Serving {projects.All().Count} project(s) on {listen} (instance {BuildServer.InstanceId(settings.ServerYaml)}){(scheduler is null ? "" : ", running scheduled refresh plans")}. Pair a client with: dbdatabuild server pair");
         // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way
         await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(app, context.Cancellation);

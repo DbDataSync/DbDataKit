@@ -22,11 +22,12 @@ public sealed record ManagementResult(int Status, JsonNode Body)
 /// <item><c>GET /api/v1/about</c>: which server this is (viewer).</item>
 /// <item><c>GET /api/v1/config</c>: every effective setting with where it came from, secrets masked, and what the validator says about the current configuration (admin).</item>
 /// <item><c>GET /api/v1/clients</c>: the paired server clients, by id and name, for handing a data source over (admin).</item>
+/// <item><c>GET /api/v1/state</c> (viewer), <c>GET</c> and <c>POST /api/v1/state/maintenance</c> (viewer, admin): the state and its pending migrations, and the maintenance mode (<c>DbDataKit.State.Api</c>).</item>
 /// <item><c>POST /api/v1/config/validate</c>: body <c>{"files": {"server.yaml": "...", "connections/erp.yaml": "..."}}</c>: whether the configuration would be valid with those files in place of the current ones; nothing is written (admin).</item>
 /// </list>
 /// A secret is never part of an answer: the settings are shown the way <c>config show</c> shows them, and the sentinel test puts a value in every place a secret can be and looks for it in every answer.
 /// </summary>
-public sealed partial class ProxyManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, ProxyDataSources? dataSources = null, ProxyIdentities? identities = null, ProxyActivity? activity = null, ProxyCertificate? certificate = null, DbDataKit.Config.Git.GitCommitService? git = null, ProxySecrets? secrets = null, IPairingCodeStore? pairingCodes = null, ProxySemanticModels? semanticModels = null, Func<IReadOnlyList<PairedClient>>? pairedClients = null, DbDataKit.Identity.IdentityAdminApi? identityAdmin = null, ProxyEntityModels? entityModels = null)
+public sealed partial class ProxyManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, ProxyDataSources? dataSources = null, ProxyIdentities? identities = null, ProxyActivity? activity = null, ProxyCertificate? certificate = null, DbDataKit.Config.Git.GitCommitService? git = null, ProxySecrets? secrets = null, IPairingCodeStore? pairingCodes = null, ProxySemanticModels? semanticModels = null, Func<IReadOnlyList<PairedClient>>? pairedClients = null, DbDataKit.Identity.IdentityAdminApi? identityAdmin = null, ProxyEntityModels? entityModels = null, DbDataKit.State.Api.StateManagement? stateApi = null)
 {
     public const string Prefix = "/api/v1";
 
@@ -37,6 +38,12 @@ public sealed partial class ProxyManagement(IConfigurationRoot configuration, st
         var route = path.Split('?')[0].TrimEnd('/');
         var query = path.Contains('?') ? System.Web.HttpUtility.ParseQueryString(path[(path.IndexOf('?') + 1)..]) : new System.Collections.Specialized.NameValueCollection();
         method = method.ToUpperInvariant();
+        // the state of this server and its maintenance mode (plan 29b, C05): the shared endpoints, with the same roles and audit as everywhere
+        if (stateApi is not null && DbDataKit.State.Api.StateManagement.Handles(route))
+        {
+            var answer = await stateApi.HandleAsync(method, route, body, caller.ToStateCaller(), cancellationToken);
+            return new ManagementResult(answer.Status, answer.Body);
+        }
         switch ((method, route))
         {
             case ("GET", Prefix + "/about"):

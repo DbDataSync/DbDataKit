@@ -7,6 +7,9 @@ namespace DbDataKit.State.Tests;
 /// <summary>Plan 29a Q21: the tracking follower, its divergence handling, identities and settings, on every engine for everything that touches state.</summary>
 public sealed class TrackingFollowerTests : IDisposable
 {
+    // the blocking sinks below hold pool threads on purpose: with a small runner (two cores) the pool injects threads slowly and a timeout would only fire late
+    static TrackingFollowerTests() => ThreadPool.SetMinThreads(32, 32);
+
     private const string Production = "mssql://prod-sql01/Warehouse";
     private const string Development = "mssql://dev-sql07/Warehouse";
 
@@ -630,7 +633,7 @@ public sealed class TrackingFollowerTests : IDisposable
         private void Misbehave()
         {
             if (Mode == Chaos.Throw) throw new IOException("the copy is down");
-            if (Mode == Chaos.Block) Release!.Wait();
+            if (Mode == Chaos.Block) Release!.Wait(TimeSpan.FromMinutes(2));      // stuck, but never for ever: a thread left blocked by a test would starve the pool of the tests that run beside it
         }
 
         public Task<IReadOnlyList<TrackingRow>> ReadAfterAsync(string identity, TrackingStream stream, TrackingPosition? after, int limit, CancellationToken ct) { Misbehave(); return inner.ReadAfterAsync(identity, stream, after, limit, ct); }

@@ -33,6 +33,9 @@ public sealed class ManagementCaller
         }
     }
 
+    /// <summary>The same caller for the shared state endpoints (<c>DbDataKit.State.Api</c>): its token, or the local channel's operating-system user.</summary>
+    public DbDataKit.State.Api.StateCaller ToStateCaller() => _token is not null ? DbDataKit.State.Api.StateCaller.FromToken(_token) : DbDataKit.State.Api.StateCaller.Local(_localUser);
+
     public AuditEntry Audit(string command, string? target, string outcome, DateTimeOffset at) =>
         _token is not null
             ? ManagementIdentity.Entry(_token, command, target, outcome, at)

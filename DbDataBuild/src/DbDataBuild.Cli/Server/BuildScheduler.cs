@@ -62,7 +62,7 @@ internal static class BuildSchedulerSchema
 /// down run once (<see cref="MisfirePolicy.RunOnce"/>, as Sync does).
 /// </para>
 /// </summary>
-internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunner runner, StateDatabase database, TimeProvider clock, Action<string> log, TimeSpan? lease = null)
+internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunner runner, StateDatabase database, TimeProvider clock, Action<string> log, TimeSpan? lease = null, Func<bool>? paused = null)
 {
     /// <summary>How long a claimed run stays claimed without a heartbeat; a run beats three times in it, so only a worker that died loses its run.</summary>
     public static readonly TimeSpan DefaultLease = TimeSpan.FromMinutes(10);
@@ -102,17 +102,32 @@ internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunne
         return queued;
     }
 
-    /// <summary>Takes the next queued run, or null.</summary>
+    private int _running;
+
+    /// <summary>Plans this scheduler is running now (claimed and not yet ended), for the maintenance mode's idle check.</summary>
+    public int Running => Volatile.Read(ref _running);
+
+    /// <summary>Takes the next queued run, or null; always null while the server is in maintenance (<c>paused</c>): ticks still queue what is due, nothing is started.</summary>
     public (WorkItem Item, HostedProject Project)? Claim(string workerId)
     {
+        if (paused?.Invoke() == true) return null;
         foreach (var project in projects.All())
             if (_queue.TryClaimNext(project.Id, workerId) is { } item)
+            {
+                Interlocked.Increment(ref _running);
                 return (item, project);
+            }
         return null;
     }
 
     /// <summary>Runs a claimed plan to its end, keeping its lease alive meanwhile, and records how it ended.</summary>
     public async Task RunAsync(WorkItem item, HostedProject project, string workerId, CancellationToken cancellationToken)
+    {
+        try { await RunClaimedAsync(item, project, workerId, cancellationToken); }
+        finally { Interlocked.Decrement(ref _running); }
+    }
+
+    private async Task RunClaimedAsync(WorkItem item, HostedProject project, string workerId, CancellationToken cancellationToken)
     {
         var parts = item.Subject.Split('/', 2);
         var started = clock.GetUtcNow();

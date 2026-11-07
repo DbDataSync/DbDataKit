@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>DbDataKit.State.Api</PackageId>
+    <Description>The state endpoints every server product's management API has (GET /api/v1/state, the maintenance mode): what the state is and what is pending, and a server that stops taking work and drains so its state can be moved.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <Using Include="Microsoft.AspNetCore.Http" />
+    <ProjectReference Include="..\DbDataKit.Web\DbDataKit.Web.csproj" />
+    <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
+    <ProjectReference Include="..\DbDataKit.State.Cli\DbDataKit.State.Cli.csproj" />
+    <ProjectReference Include="..\DbDataKit.State.Engines\DbDataKit.State.Engines.csproj" />
+    <ProjectReference Include="..\DbDataKit.Secrets.Abstractions\DbDataKit.Secrets.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

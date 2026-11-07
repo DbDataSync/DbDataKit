@@ -26,6 +26,7 @@ internal sealed class ScratchStateDatabase : IDisposable
         {
             var builder = new SqlConnectionStringBuilder(admin) { InitialCatalog = _name };
             _password = builder.Password;
+            ResolvedConnection = builder.ConnectionString;
             builder.Password = "env:" + PasswordVariable;
             System.Environment.SetEnvironmentVariable(PasswordVariable, _password);
             Connection = builder.ConnectionString;
@@ -34,6 +35,7 @@ internal sealed class ScratchStateDatabase : IDisposable
         {
             var builder = new NpgsqlConnectionStringBuilder(admin) { Database = _name };
             _password = builder.Password!;
+            ResolvedConnection = builder.ConnectionString;
             builder.Password = "env:" + PasswordVariable;
             System.Environment.SetEnvironmentVariable(PasswordVariable, _password);
             Connection = builder.ConnectionString;
@@ -44,6 +46,9 @@ internal sealed class ScratchStateDatabase : IDisposable
     public string Engine { get; }
 
     public string Connection { get; }
+
+    /// <summary>The same connection with the real password, for a test that talks to the database itself.</summary>
+    public string ResolvedConnection { get; }
 
     /// <summary>Reads the one variable the connection refers to; everything else is unset.</summary>
     public string? Environment(string name) => name == PasswordVariable ? _password : null;

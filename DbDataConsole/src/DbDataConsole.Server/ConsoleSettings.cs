@@ -11,6 +11,9 @@ namespace DbDataConsole.Server;
 /// <param name="PublicUrl">The address people open it at, when that is not the address it listens on (a container listens on every address; a proxy answers on a name of its own). A passkey is bound to this name and port, and an invitation link is made from it, so it has to be the one in the browser's address bar. Null: the address it listens on, or <c>localhost</c> on the same port where that is every address.</param>
 public sealed record ConsoleSettings(string Directory, Uri Listen, Uri? PublicUrl = null, Uri? AnnounceListen = null, StateSettings? State = null, IdentityHomeSettings? Home = null)
 {
+    /// <summary>Where each state setting came from (a flag, the environment, <c>settings.yaml</c>, the default), for <c>GET /api/v1/state</c>; null: not said, the file and the environment are read.</summary>
+    public StateSources? StateSources { get; init; }
+
     /// <summary>The address a browser opens, and the origin a passkey is bound to.</summary>
     public Uri Public => PublicUrl ?? (IsEveryAddress(Listen.Host) ? new UriBuilder(Listen) { Host = "localhost" }.Uri : Listen);
 
