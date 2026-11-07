@@ -19,6 +19,9 @@ public static class MsSqlDriverKinds
     public const string MergeReconcile = "MsSqlMergeReconcile";
     public const string DeleteInsert = "MsSqlDeleteInsert";
 
+    /// <summary>SqlBulkCopy straight into the target, no staging; paired with the <c>PassThrough</c> cache.</summary>
+    public const string BulkInsert = "MsSqlBulkInsert";
+
     /// <summary>Re-exported from <see cref="GenericDriverKinds"/>, same reasoning as
     /// <see cref="Watermark"/> — phase 124's delete-diff sweep is engine-neutral.</summary>
     public const string KeyReconcile = GenericDriverKinds.KeyReconcile;

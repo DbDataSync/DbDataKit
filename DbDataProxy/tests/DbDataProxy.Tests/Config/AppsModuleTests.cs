@@ -72,6 +72,7 @@ public sealed class AppsModuleTests : IAsyncLifetime
     private async Task<(HttpClient Apps, HttpClient Home)> StartAsync(string clientId)
     {
         var identityPort = FreePort();
+        while (identityPort == appsPort) identityPort = FreePort();   // a port given back is free to be handed out again, to the second listener too
         app = ProxyHost.Build([
             $"--Proxy:DataDirectory={dataDirectory}", "--Proxy:Modules:0=apps", "--Proxy:Modules:1=identity",
             "--Proxy:Apps:Address=127.0.0.1", "--Proxy:Apps:RolesRefreshSeconds=1", $"--Proxy:Apps:Port={appsPort}", $"--Proxy:Apps:Home:ClientId={clientId}", 
@@ -181,7 +182,7 @@ public sealed class AppsModuleTests : IAsyncLifetime
         Assert.Contains("data-instance=\"acme\"", shell);
         var script = await apps.GetAsync(AppShell.ScriptPath);
         Assert.Equal(HttpStatusCode.OK, script.StatusCode);
-        Assert.Contains("event.source !== frame.contentWindow", await script.Content.ReadAsStringAsync());   // only the app's own frame is answered
+        Assert.Contains("f.contentWindow === event.source", await script.Content.ReadAsStringAsync());   // only the app's own frame is answered
 
         var response = await PostTokenAsync(apps, "acme", session);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -238,7 +239,93 @@ public sealed class AppsModuleTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task The_data_route_wants_an_apps_token_and_a_paired_store()
+    public async Task A_trusted_app_runs_only_while_an_approval_stands_for_its_version()
+    {
+        appsPort = FreePort();
+        var (clientId, ada, _, database) = Prepare();
+        var definitions = new DefinitionStore(database);
+        new AppInstanceStore(definitions).PublishApp(new AppPackage(Manifest + "trust: trusted\n", new Dictionary<string, byte[]> { ["index.html"] = "<html></html>"u8.ToArray() }), "ada");   // version 2 asks to be trusted
+        var (apps, home) = await StartAsync(clientId);
+        var session = await SignInAsync(apps, home, database, ada, "/apps/acme/");
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await GetAsync(apps, "/apps/acme/", session)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await PostTokenAsync(apps, "acme", session)).StatusCode);
+
+        var approvals = new AppApprovalStore(definitions);
+        var approval = approvals.Approve("notes", 2, "grace");
+        Assert.Equal(HttpStatusCode.OK, (await GetAsync(apps, "/apps/acme/", session)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await PostTokenAsync(apps, "acme", session)).StatusCode);
+
+        approvals.Revoke(approval.Id, "grace");
+        Assert.Equal(HttpStatusCode.Forbidden, (await GetAsync(apps, "/apps/acme/", session)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await PostTokenAsync(apps, "acme", session)).StatusCode);
+    }
+
+    [Fact]
+    public async Task The_origins_an_administrator_approves_become_the_apps_policy_and_nothing_else_does()
+    {
+        appsPort = FreePort();
+        var (clientId, _, _, database) = Prepare();
+        var definitions = new DefinitionStore(database);
+        new AppInstanceStore(definitions).PublishApp(new AppPackage(Manifest + "trust: trusted\negress:\n  connect: [\"https://api.contoso.com\", \"https://other.contoso.com\"]\n", new Dictionary<string, byte[]> { ["index.html"] = "<html></html>"u8.ToArray() }), "ada");
+        var (apps, _) = await StartAsync(clientId);
+        string Policy() => apps.GetAsync("/apps/acme/_app/index.html").GetAwaiter().GetResult().Headers.GetValues("Content-Security-Policy").Single();
+
+        Assert.DoesNotContain("contoso", Policy());                                                                         // asked, not approved
+        var approvals = new AppApprovalStore(definitions);
+        Assert.Throws<AppInstanceException>(() => approvals.Approve("notes", 2, "grace", egress: AppApprovalStore.ParseEgress("connect=https://evil.example")));   // an approval cannot widen
+        approvals.Approve("notes", 2, "grace", egress: AppApprovalStore.ParseEgress("connect=https://api.contoso.com"));
+        var policy = Policy();
+
+        Assert.Contains("https://api.contoso.com", policy);
+        Assert.DoesNotContain("other.contoso.com", policy);                                                                // asked and not approved
+        Assert.Throws<AppInstanceException>(() => AppApprovalStore.ParseEgress("fetch=https://x"));
+    }
+
+    [Fact]
+    public async Task Validate_reports_addresses_of_other_hosts_the_manifest_does_not_ask_for()
+    {
+        var app = Path.Combine(dataDirectory, "leaky-app");
+        Directory.CreateDirectory(app);
+        File.WriteAllText(Path.Combine(app, "app.yaml"), Manifest);
+        File.WriteAllText(Path.Combine(app, "index.html"), "<html>\n<script src=\"https://cdn.evil.example/x.js\"></script></html>");
+
+        var result = await Command("apps", "validate", "--dir", app);
+
+        Assert.True(result.Exit == 0, result.Error);
+        Assert.Contains("index.html:2  https://cdn.evil.example", result.Out);
+        File.WriteAllText(Path.Combine(app, "index.html"), "<html></html>");
+        Assert.Contains("reach no other host", (await Command("apps", "validate", "--dir", app)).Out);
+        File.WriteAllText(Path.Combine(app, "app.yaml"), "name: Bad Name\n");
+        Assert.NotEqual(0, (await Command("apps", "validate", "--dir", app)).Exit);
+    }
+
+    [Fact]
+    public async Task A_trusted_app_is_approved_by_someone_else_listed_and_revoked_at_the_command_line()
+    {
+        var app = Path.Combine(dataDirectory, "trusted-app");
+        Directory.CreateDirectory(app);
+        File.WriteAllText(Path.Combine(app, "app.yaml"), Manifest.Replace("name: notes", "name: vault") + "trust: trusted\n");
+        File.WriteAllText(Path.Combine(app, "index.html"), "<html><body>v1</body></html>");
+        Assert.Equal(0, (await Command("apps", "publish", "--dir", app)).Exit);
+
+        var author = await Command("apps", "approve", "--app", "vault", "--version", "1", "--by", Environment.UserName);   // the publisher is the author
+        Assert.NotEqual(0, author.Exit);
+        Assert.Contains("cannot approve", author.Error);
+        var approved = await Command("apps", "approve", "--app", "vault", "--version", "1", "--by", "grace", "--note", "reviewed");
+        Assert.Equal(0, approved.Exit);
+        var listed = (await Command("apps", "approval-list")).Out;
+        Assert.Contains("vault 1.0.0  approved by grace", listed);
+        Assert.DoesNotContain("revoked", listed);
+
+        var id = System.Text.RegularExpressions.Regex.Match(listed, "apr_[0-9a-f]+").Value;
+        Assert.Equal(0, (await Command("apps", "approval-revoke", "--id", id, "--by", "grace")).Exit);
+        Assert.Contains("revoked", (await Command("apps", "approval-list")).Out);
+        Assert.NotEqual(0, (await Command("apps", "approval-revoke", "--id", "apr_nothing", "--by", "grace")).Exit);
+    }
+
+    [Fact]
+    public async Task The_data_route_wants_an_apps_token_and_answers_from_the_groups_published_models()
     {
         appsPort = FreePort();
         var (clientId, ada, _, database) = Prepare();
@@ -246,16 +333,18 @@ public sealed class AppsModuleTests : IAsyncLifetime
         var session = await SignInAsync(apps, home, database, ada, "/apps/acme/");
 
         // no token (a session cookie is no credential here), and the preflight of a browser call from the sandboxed frame
-        Assert.Equal(HttpStatusCode.Unauthorized, (await GetAsync(apps, "/apps/acme/_data/store-1/api/v1/models/territories/entities/territory/rows", session)).StatusCode);
-        var preflight = await apps.SendAsync(new HttpRequestMessage(HttpMethod.Options, "/apps/acme/_data/store-1/api/v1/models/territories/changes"));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await GetAsync(apps, "/apps/acme/_data/api/v1/models/territories/entities/territory/rows", session)).StatusCode);
+        var preflight = await apps.SendAsync(new HttpRequestMessage(HttpMethod.Options, "/apps/acme/_data/api/v1/models/territories/changes"));
         Assert.Equal(HttpStatusCode.NoContent, preflight.StatusCode);
         Assert.Equal("*", string.Join(' ', preflight.Headers.GetValues("Access-Control-Allow-Origin")));
 
-        // a token the broker made, for a store nobody paired
+        // a token the broker made, for a model nobody published to the group; and the path of a paired store, which is gone
         var token = (string)JsonNode.Parse(await (await PostTokenAsync(apps, "acme", session)).Content.ReadAsStringAsync())!["token"]!;
-        var request = new HttpRequestMessage(HttpMethod.Get, "/apps/acme/_data/store-1/api/v1/models/territories/entities/territory/rows");
-        request.Headers.Add("Authorization", "Bearer " + token);
-        Assert.Equal(HttpStatusCode.NotFound, (await apps.SendAsync(request)).StatusCode);
+        HttpRequestMessage Get(string path) => new(HttpMethod.Get, path) { Headers = { { "Authorization", "Bearer " + token } } };
+        var missing = await apps.SendAsync(Get("/apps/acme/_data/api/v1/models/territories/entities/territory/rows"));
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+        Assert.Contains("published to this group", await missing.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.Gone, (await apps.SendAsync(Get("/apps/acme/_data/store-1/api/v1/models/territories/entities/territory/rows"))).StatusCode);
     }
 
     [Fact]

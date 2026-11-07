@@ -227,6 +227,7 @@ public static class ConfigValidation
     private static readonly HashSet<string> ReconcilingWriterKinds = new(StringComparer.Ordinal)
     {
         "DeleteInsert", "KeyReconcileDelete", "KeyReconcileScd2Close", "MsSqlMergeReconcile", "MsSqlDeleteInsert",
+        "MsSqlBulkInsert",
     };
 
     /// <summary>

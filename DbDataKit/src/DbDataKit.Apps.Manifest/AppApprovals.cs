@@ -48,6 +48,8 @@ public static class AppApprovals
         var allowed = operations ?? manifest.Models;
         if (Exceeds(allowed, manifest.Models) is { } excess) return (null, $"The approval would allow {excess}, which '{manifest.Name}' does not ask for.");
         var approvedEgress = egress ?? AppEgress.None;
+        if (EgressPolicy.Unapproved(approvedEgress, manifest.Egress ?? AppEgress.None) is { Count: > 0 } wider)
+            return (null, $"The approval would allow {wider[0].Directive} to {wider[0].Origin}, which '{manifest.Name}' does not ask for.");
         return (new AppApproval(id ?? "apr_" + Guid.NewGuid().ToString("N")[..12], manifest.Name, manifest.Version, bundleSha256, manifestSha256, approver, now, allowed, approvedEgress, note, carriesOver), null);
     }
 

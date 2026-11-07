@@ -13,6 +13,9 @@
     }
   },
   "windowsScope": "user",
+  "globalEnv": [
+    { "name": "DbDataSync__App__RepoRoot", "programData": "DbDataSync" }
+  ],
   "service": {
     "name": "DbDataSync",
     "register": "service install",

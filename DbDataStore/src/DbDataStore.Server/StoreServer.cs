@@ -60,6 +60,7 @@ public static class StoreServer
         app.MapKeyRotation(new KeyRotationService(instanceId, clients, new MemoryReplayCache()));
         app.UseManagementAuthentication(new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache()), refused => log($"A call was refused ({refused.Failure}): {refused.Detail}"));
         app.UseScopedTokens();
+        app.UsePublishedModels(settings.Directory);
         Map(app, instanceId);
         StoreModels.Map(app, settings.Directory);
         StoreData.Map(app, settings.Directory, new StoreConnections(settings.Directory));

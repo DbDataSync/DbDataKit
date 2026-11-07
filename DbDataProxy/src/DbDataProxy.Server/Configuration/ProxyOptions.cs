@@ -68,6 +68,8 @@ public sealed class ProxyOptions
     /// <summary>The apps host (plan 26, AP05): published apps served by subpath on a listener of its own. Off unless <c>Modules</c> lists <c>apps</c>.</summary>
     public AppsOptions Apps { get; set; } = new();
 
+    public StoreModuleOptions Store { get; set; } = new();
+
     public ListenOptions Listen { get; set; } = new();
     public TlsOptions Tls { get; set; } = new();
 
@@ -210,6 +212,17 @@ public sealed class AppsOptions
 
     /// <summary>The identity home people sign in through. A client registered at the home (<c>identity client-add</c>) with the redirect URI above; a public client needs no secret.</summary>
     public AppsHomeOptions Home { get; set; } = new();
+}
+
+/// <summary>The <c>store</c> module (plan 20 O08): where it listens. Master data is read and written here, as the identity home's people and service accounts, through the models a DbDataStore server published to the group.</summary>
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
+public sealed class StoreModuleOptions
+{
+    /// <summary>Where it listens: every address by default, since apps and agents call it.</summary>
+    public string Address { get; set; } = "0.0.0.0";
+
+    [ConfigKey(Min = 1, Max = 65535)]
+    public int Port { get; set; } = 8819;
 }
 
 [ConfigSchema(Naming = KeyNaming.Verbatim)]

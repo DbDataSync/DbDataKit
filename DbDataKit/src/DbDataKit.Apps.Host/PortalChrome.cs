@@ -30,7 +30,18 @@ public static class PortalChrome
             spec.Identity.FooterText, spec.Identity.SupportLink,
             Theme(spec.Theme), ThemeJson(spec.Theme),
             layout.Menu == PortalMenu.Side, layout.Footer, layout.Width, layout.Header.Contains("person"),
-            Items(instances, portal, spec.Navigation, spec, session, currentApp));
+            Items(instances, portal, spec.Navigation, spec, session, currentApp),
+            Slots(instances, spec, session));
+    }
+
+    /// <summary>The apps in the portal's slots that this person may open (AP13); a slot whose app they hold no role on is left empty, like a menu entry.</summary>
+    private static Dictionary<string, AppShell.SlotApp> Slots(AppInstanceStore instances, PortalSpec spec, AppSession session)
+    {
+        var slots = new Dictionary<string, AppShell.SlotApp>();
+        foreach (var (slot, app) in spec.Slots)
+            if (session.RolesOn(app).Count > 0 && instances.Resolve(app) is { } member)
+                slots[slot] = new AppShell.SlotApp(app, member.Instance.Title ?? member.Manifest.Title ?? app);
+        return slots;
     }
 
     /// <summary>The portal's home (AP12): one tile for each mounted instance the person holds a role on, in the order of the mounts. The same rule as the menu, so the home never advertises what ends in a refusal.</summary>

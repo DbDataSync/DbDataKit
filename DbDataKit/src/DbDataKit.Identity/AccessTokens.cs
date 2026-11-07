@@ -135,9 +135,14 @@ public sealed partial class AccessTokens(StateDatabase database, IUserAccounts u
     /// The user a user name and token sign in as, or null: the token must be well formed, its secret right, not revoked, not expired, its user enabled, and the user name the token's owner's (their address, a service account's
     /// name, or the user id). A token that signs someone in records when it was last used.
     /// </summary>
-    public UserRecord? Verify(string userName, string password)
+    public UserRecord? Verify(string userName, string password) => string.IsNullOrWhiteSpace(userName) ? null : Check(password, userName);
+
+    /// <summary>The user a token alone signs in as (a bearer token, as an API caller sends it: plan 20 O08), or null, on the same terms as <see cref="Verify(string, string)"/> but with no user name to match.</summary>
+    public UserRecord? VerifyBearer(string token) => Check(token, null);
+
+    private UserRecord? Check(string password, string? userName)
     {
-        if (string.IsNullOrWhiteSpace(userName) || !password.StartsWith(Prefix, StringComparison.Ordinal)) return null;
+        if (!password.StartsWith(Prefix, StringComparison.Ordinal)) return null;
         var rest = password[Prefix.Length..];
         var split = rest.IndexOf('_');
         if (split <= 0 || split == rest.Length - 1) return null;
@@ -156,7 +161,7 @@ public sealed partial class AccessTokens(StateDatabase database, IUserAccounts u
         var now = _clock.GetUtcNow();
         if (revoked is not null || expires is { } at && at <= now) return null;
         var user = users.Get(userId);
-        if (user is null || !user.Enabled || !IsUserName(user, userName.Trim())) return null;
+        if (user is null || !user.Enabled || (userName is not null && !IsUserName(user, userName.Trim()))) return null;
 
         database.Retry(() =>
         {

@@ -7,14 +7,14 @@ using DbDataProxy.Server.Configuration;
 namespace DbDataProxy.Server.Hosting;
 
 /// <summary>
-/// <c>dbdataproxy apps ...</c> (plan 26, AP05e): the Store servers the apps host forwards its apps' data calls to. <c>store-pair</c> pairs the host with a Store by the code its administrator made (<c>dbdatastore server pair</c>), as a console
-/// is paired: the Store then knows the host's key and the ceiling it may grant there, and the host pins the Store's certificate. The pairing is kept in the data directory and is used by the running host at once.
+/// <c>dbdataproxy apps ...</c> (plan 26, AP05f): the apps, instances and navigation sets the apps host serves, in the Proxy's state. An app's data is the models published to the group (plan 20 O08c); the <c>store-*</c>
+/// verbs that paired the host with a Store server are gone and say so.
 /// </summary>
 public static class AppsCommand
 {
     private const string Where = "[--repo <data directory>]";
 
-    public static Noun Noun() => new("apps", "The apps host this proxy serves: the stores it forwards app data to",
+    public static Noun Noun() => new("apps", "The apps host this proxy serves: its apps, instances and navigation sets",
     [
         new Verb("publish", "Publish an app version from a folder: its manifest (app.yaml) and the files the host serves", EffectClass.RepoFilesOnly, $"--dir <folder> [--manifest <file, default <folder>/app.yaml>] [--note <text>] {Where}", PublishAsync,
             DataSchemas.Object([("app", DataSchemas.String), ("version", DataSchemas.Integer), ("files", DataSchemas.Integer)], "app", "version", "files")),
@@ -28,11 +28,19 @@ public static class AppsCommand
             DataSchemas.Object([("name", DataSchemas.String), ("version", DataSchemas.Integer)], "name", "version")),
         new Verb("nav-list", "The navigation sets and their members", EffectClass.OfflineOnly, Where, NavListAsync,
             DataSchemas.Object([("sets", DataSchemas.ListOf(DataSchemas.Object([("name", DataSchemas.String), ("title", DataSchemas.String), ("instances", DataSchemas.ListOf(DataSchemas.String))], "name", "title", "instances")))], "sets")),
-        new Verb("store-pair", "Pair the apps host with a Store server, using the code its administrator made", EffectClass.RepoFilesOnly, $"--url <https://store:port> --code <pairing code> [--name <label>] {Where}", PairAsync,
-            DataSchemas.Object([("id", DataSchemas.String), ("url", DataSchemas.String), ("fingerprint", DataSchemas.String)], "id", "url", "fingerprint")),
-        new Verb("store-list", "The Store servers the apps host is paired with; the id is what an app's data calls name", EffectClass.OfflineOnly, Where, ListAsync,
-            DataSchemas.Object([("stores", DataSchemas.ListOf(DataSchemas.Object([("id", DataSchemas.String), ("url", DataSchemas.String), ("name", DataSchemas.String), ("fingerprint", DataSchemas.String)], "id", "url", "name", "fingerprint")))], "stores")),
-        new Verb("store-remove", "Stop forwarding to a Store server (unpair the host there too, with the Store's own command)", EffectClass.RepoFilesOnly, $"--id <store id> {Where}", RemoveAsync, DataSchemas.None),
+        new Verb("approve", "Approve one version of a trusted app, as the person who reviewed it (not its author); the approval is for that version's exact bytes and ends when a new version is published", EffectClass.RepoFilesOnly,
+            $"--app <app> --version <n> --by <approver> [--egress <directive>=<origin>[,...]] [--note <text>] {Where}", ApproveAsync,
+            DataSchemas.Object([("id", DataSchemas.String), ("app", DataSchemas.String), ("version", DataSchemas.String)], "id", "app", "version")),
+        new Verb("approval-list", "The approvals on record, with who gave them and whether they still stand", EffectClass.OfflineOnly, Where, ApprovalListAsync,
+            DataSchemas.Object([("approvals", DataSchemas.ListOf(DataSchemas.Object([("id", DataSchemas.String), ("app", DataSchemas.String), ("version", DataSchemas.String), ("approved_by", DataSchemas.String), ("revoked", DataSchemas.Boolean)], "id", "app", "version", "approved_by", "revoked")))], "approvals")),
+        new Verb("approval-revoke", "End an approval; the app stops running as trusted. The record stays", EffectClass.RepoFilesOnly, $"--id <approval id> --by <name> {Where}", ApprovalRevokeAsync, DataSchemas.None),
+        new Verb("validate", "Check an app folder before publishing: its manifest, its files, and the addresses of other hosts in its built files that the manifest does not ask for (advice; the host's policy is what enforces)", EffectClass.OfflineOnly,
+            "--dir <folder> [--manifest <file, default <folder>/app.yaml>]", ValidateAsync,
+            DataSchemas.Object([("app", DataSchemas.String), ("outside", DataSchemas.ListOf(DataSchemas.Object([("file", DataSchemas.String), ("line", DataSchemas.Integer), ("origin", DataSchemas.String)], "file", "line", "origin")))], "app", "outside")),
+        // apps reach the group's published models now (plan 20 O08c); the verbs that paired a Store say so rather than vanish
+        new Verb("store-pair", "Gone: an app's data is the group's published models, so the apps host pairs with no Store", EffectClass.OfflineOnly, Where, GoneAsync, DataSchemas.None),
+        new Verb("store-list", "Gone: an app's data is the group's published models, so the apps host pairs with no Store", EffectClass.OfflineOnly, Where, GoneAsync, DataSchemas.None),
+        new Verb("store-remove", "Gone: an app's data is the group's published models, so the apps host pairs with no Store", EffectClass.OfflineOnly, Where, GoneAsync, DataSchemas.None),
     ]);
 
     private static ProxyOptions OptionsOf(CliArgs parsed)
@@ -171,57 +179,98 @@ public static class AppsCommand
         return CliExit.Ok;
     }
 
-    private static async Task<int> PairAsync(string[] args, CliContext context)
+    private static async Task<int> ValidateAsync(string[] args, CliContext context)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "url", "code", "name", "repo" });
-        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || !Uri.TryCreate(parsed.Get("url"), UriKind.Absolute, out var url) || parsed.Get("code") is not { Length: > 0 } code)
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "dir", "manifest", "repo" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("dir") is not { Length: > 0 } dir)
         {
-            await context.Error.WriteLineAsync($"Usage: apps store-pair --url <https://store:port> --code <pairing code> [--name <label>] {Where}");
+            await context.Error.WriteLineAsync("Usage: apps validate --dir <folder> [--manifest <file>]");
             return CliExit.Usage;
         }
-        var options = OptionsOf(parsed);
+        var folder = Path.GetFullPath(dir);
+        var manifestPath = parsed.Get("manifest") is { Length: > 0 } m ? Path.GetFullPath(m) : Path.Combine(folder, "app.yaml");
+        if (!Directory.Exists(folder) || !File.Exists(manifestPath))
+        {
+            await context.Error.WriteLineAsync(!Directory.Exists(folder) ? $"{folder} is not a folder." : $"{manifestPath} does not exist.");
+            return CliExit.Failure;
+        }
+        var load = AppManifestLoader.Load(File.ReadAllText(manifestPath));
+        if (!load.Ok)
+        {
+            foreach (var d in load.Diagnostics) await context.Error.WriteLineAsync(d.Message);
+            return CliExit.Failure;
+        }
+        var outside = AppChecks.OutsideUrls(folder, load.Manifest!.Egress ?? AppEgress.None);
+        foreach (var o in outside) await context.Out.WriteLineAsync($"{o.File}:{o.Line}  {o.Origin} is not in the manifest's egress; the browser will block it unless the manifest asks and an administrator approves.");
+        await context.Out.WriteLineAsync(outside.Count == 0 ? $"{load.Manifest.Name} {load.Manifest.Version}: the manifest is valid and the files reach no other host." : $"{load.Manifest.Name} {load.Manifest.Version}: the manifest is valid; {outside.Count} outside address(es) found.");
+        context.Data["app"] = load.Manifest.Name;
+        context.Data["outside"] = outside.Select(o => new Dictionary<string, object?> { ["file"] = o.File, ["line"] = o.Line, ["origin"] = o.Origin }).ToList();
+        return CliExit.Ok;
+    }
+
+    private static async Task<int> ApproveAsync(string[] args, CliContext context)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "app", "version", "by", "note", "egress", "repo" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("app") is not { Length: > 0 } app || !int.TryParse(parsed.Get("version"), out var version) || parsed.Get("by") is not { Length: > 0 } by)
+        {
+            await context.Error.WriteLineAsync($"Usage: apps approve --app <app> --version <n> --by <approver> [--egress <directive>=<origin>[,...]] [--note <text>] {Where}");
+            return CliExit.Usage;
+        }
         try
         {
-            var key = await ProxyAppsModule.SigningKeyAsync(options, default);
-            var paired = await PairingClient.PairAsync(url, code, new ConsoleIdentity(ProxyAppsModule.TokenIssuer, key), ClientKind.Server, "DbDataProxy apps host");
-            ProxyAppsModule.StoresOf(options).Save(new AppStore(paired.InstanceId, url, paired.CertificateFingerprint, parsed.Get("name") ?? paired.Name));
-            await context.Out.WriteLineAsync($"Paired with {paired.Name} ({paired.InstanceId}); the host may be given up to {string.Join(", ", ServerRoles.Names(paired.Ceiling))} there.");
-            context.Data["id"] = paired.InstanceId;
-            context.Data["url"] = url.AbsoluteUri;
-            context.Data["fingerprint"] = paired.CertificateFingerprint;
+            var approval = new AppApprovalStore(new DefinitionStore(IdentityCommand.Open(parsed))).Approve(app, version, by, parsed.Get("note"), egress: AppApprovalStore.ParseEgress(parsed.Get("egress")));
+            await context.Out.WriteLineAsync($"Approved {app} {approval.Version} ({approval.Id}) as {by}.");
+            context.Data["id"] = approval.Id;
+            context.Data["app"] = approval.App;
+            context.Data["version"] = approval.Version;
             return CliExit.Ok;
         }
-        catch (PairingFailedException ex)
+        catch (AppInstanceException ex)
         {
             await context.Error.WriteLineAsync(ex.Message);
             return CliExit.Failure;
         }
     }
 
-    private static async Task<int> ListAsync(string[] args, CliContext context)
+    private static async Task<int> ApprovalListAsync(string[] args, CliContext context)
     {
         var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo" });
-        var stores = ProxyAppsModule.StoresOf(OptionsOf(parsed)).All();
-        foreach (var s in stores) await context.Out.WriteLineAsync($"{s.Id}  {s.Url}  {s.Name}  {s.Fingerprint}");
-        if (stores.Count == 0) await context.Out.WriteLineAsync("No Store server is paired. Pair one with: apps store-pair --url <https://store:port> --code <pairing code>");
-        context.Data["stores"] = stores.Select(s => new Dictionary<string, object?> { ["id"] = s.Id, ["url"] = s.Url.AbsoluteUri, ["name"] = s.Name, ["fingerprint"] = s.Fingerprint }).ToList();
+        var all = new AppApprovalStore(new DefinitionStore(IdentityCommand.Open(parsed))).All();
+        foreach (var a in all) await context.Out.WriteLineAsync($"{a.Id}  {a.App} {a.Version}  approved by {a.ApprovedBy} on {a.ApprovedAt:yyyy-MM-dd}{(a.RevokedAt is null ? "" : "  revoked")}");
+        if (all.Count == 0) await context.Out.WriteLineAsync("No approval is on record. Approve a trusted app's version with: apps approve --app <app> --version <n> --by <approver>");
+        context.Data["approvals"] = all.Select(a => new Dictionary<string, object?> { ["id"] = a.Id, ["app"] = a.App, ["version"] = a.Version, ["approved_by"] = a.ApprovedBy, ["revoked"] = a.RevokedAt is not null }).ToList();
         return CliExit.Ok;
     }
 
-    private static async Task<int> RemoveAsync(string[] args, CliContext context)
+    private static async Task<int> ApprovalRevokeAsync(string[] args, CliContext context)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "id", "repo" });
-        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("id") is not { Length: > 0 } id)
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "id", "by", "repo" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("id") is not { Length: > 0 } id || parsed.Get("by") is not { Length: > 0 } by)
         {
-            await context.Error.WriteLineAsync($"Usage: apps store-remove --id <store id> {Where}");
+            await context.Error.WriteLineAsync($"Usage: apps approval-revoke --id <approval id> --by <name> {Where}");
             return CliExit.Usage;
         }
-        if (!ProxyAppsModule.StoresOf(OptionsOf(parsed)).Remove(id))
+        try
         {
-            await context.Error.WriteLineAsync($"No paired Store server has the id {id}.");
+            new AppApprovalStore(new DefinitionStore(IdentityCommand.Open(parsed))).Revoke(id, by);
+            await context.Out.WriteLineAsync($"Revoked {id}.");
+            return CliExit.Ok;
+        }
+        catch (AppInstanceException ex)
+        {
+            await context.Error.WriteLineAsync(ex.Message);
             return CliExit.Failure;
         }
-        await context.Out.WriteLineAsync($"No longer forwarding to {id}.");
-        return CliExit.Ok;
+    }
+
+    /// <summary>The message of the store-* verbs since the group serves apps' data (plan 20 O08c).</summary>
+    public const string StoresGone =
+        "The apps host no longer pairs with Store servers: an app reads and writes the models published to this group (dbdatastore model publish <model> --proxy <name>), at /apps/<instance>/_data/api/v1/models/<model>/... "
+        + "A pairing made before is not used; remove <data directory>/apps/stores.json, and the host's pairing on the Store (dbdatastore server unpair).";
+
+    private static async Task<int> GoneAsync(string[] args, CliContext context)
+    {
+        await context.Error.WriteLineAsync(StoresGone);
+        return CliExit.Failure;
     }
 }

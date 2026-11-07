@@ -12,11 +12,26 @@ dbdatastore server clients | unpair <client> [--repo <server directory>]
 dbdatastore service install|uninstall|status|start|stop|restart|doctor|unit
 dbdatastore model put --file <model.yaml> [--name <model>] [--repo <server directory>]      # checked first, then saved
 dbdatastore storage create --model <model> [--repo <server directory>]                      # the tables of the model's own copy, on connections/<name>.yaml
+dbdatastore proxy add <name> --url <https address> --code <code> [--repo <server directory>]   # pair with a serving group as a publishing client
+dbdatastore proxy list | remove <name> [--repo <server directory>]
+dbdatastore model publish <model> [--proxy <name>] [--dry-run] [--repo <server directory>]   # make the model as it is now available: its tables, then every group it is published to
+dbdatastore model unpublish <model> --proxy <name> [--repo <server directory>]
 dbdatastore health check [--url <url>]
 ```
 
-The server's directory is `--repo`, or `DBDATASTORE_SERVER_DIR`, or a folder under the user's local application data (`%ProgramData%\DbDataStore\server` for the Windows service). It holds `server.yaml` (the instance id and the clients paired with it),
-the pairing codes, and the self-signed certificate (`tls.pfx` and its password file, readable only by the account that runs the server). A client pins the certificate's fingerprint when it pairs.
+## Publishing to the serving layer
+
+Reads and writes of master data are served by the serving layer (plan 20), from the models this server publishes to it, so they go on with this server stopped. Pair once with the serving group as a publishing client, with a code its administrator made (`dbdataproxy server pair --max-role publisher`): `dbdatastore proxy add edge --url https://serving.example:8815 --code <code>`.
+
+**Publishing is the one act that makes the model you are working on available** (plan 20 O10b). Editing a model's file changes nothing for anyone; `dbdatastore model publish <model>` (the first time with `--proxy <name>`; after that, to every group the model is published to):
+
+1. brings the model's tables to it: creates them when there are none, otherwise only adds to them (a change that needs more, such as a narrower type, is refused and nothing is published);
+2. pins this server's copy to that version;
+3. sends that version to each group, with the write login of the model's connection (kept by the group as its secret, encrypted with its key) and a data source of the same name that refers to it.
+
+A change to rules only (a new `pattern`, a new `max`) is published the same way, with nothing to run on the tables. `--dry-run` lists the statements and the groups and changes nothing. A group that does not take the version (it cannot be reached) keeps the one it had, and the answer says so: the tables and this server's copy are at the new version, and publishing again sends it. Publishing again with no edit sends the same version, which a group takes as unchanged.
+
+**A published model is read and written in its groups only.** This server refuses its rows, changes and change requests (409, naming the groups), and applying a migration or creating its tables here, so one definition is ever enforced on its tables; a dry-run migration still answers. `dbdatastore model unpublish <model> --proxy <name>` takes it off a group; off every one, this server reads and writes it again. A model with instances cannot be published yet (a group serves a model's own copy only), and its approval settings go with it; permissions per entity are not in `model/1` yet.
 
 ## What is served
 

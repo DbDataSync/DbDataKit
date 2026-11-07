@@ -105,7 +105,16 @@ public static class ProxyManagementHost
             pairedClients: clients.All,
             identityAdmin: options.Identity.Enabled
                 ? new DbDataKit.Identity.IdentityAdminApi(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>(), ProxyIdentityModule.PublicUrlOf(options).AbsoluteUri, new DbDataKit.Identity.AccessTokenPolicy(options.Identity.AccessTokenMaxDays))
-                : null);
+                : null,
+            entityModels: new ProxyEntityModels(app.Services.GetRequiredService<Serving.PublishedEntityModels>(),
+                () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue,
+                dataSource =>
+                {
+                    // who made a data source: its file in this instance's configuration, else the group's published one (O04b)
+                    var file = Path.Combine(configDirectory, "connections", dataSource + ".yaml");
+                    var text = File.Exists(file) ? File.ReadAllText(file) : app.Services.GetRequiredService<Serving.PublishedDataSources>().Text(dataSource);
+                    return text is null ? null : DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, dataSource + ".yaml").Definition?.ManagedBy;
+                }, audit));
         if (audit.ImportFile(dataDirectory) is > 0 and var imported)
             app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Management").LogInformation("Read {Count} entries of {File} into the state's audit; the file is now {File}.imported.", imported, DbDataProxy.Server.State.StateAuditLog.LegacyFileName, DbDataProxy.Server.State.StateAuditLog.LegacyFileName);
         // a token one instance of a group accepted is refused by every other (plan 20 O02b): the used ids are in the state they share

@@ -26,6 +26,7 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
         ValidateModules(o, cx);
         ValidateIdentity(o, cx);
         ValidateApps(o, cx);
+        ValidateStore(o, cx);
         ValidateCompression(o.Compression, "Compression", cx);
         ValidateDataSources(o, cx);
         ValidateUsers(o, cx);
@@ -102,6 +103,21 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
             cx.Error("Modules", "A module is listed twice.", "List each module once.");
         if (!ProxyModules.Known.Any(m => ProxyModules.Has(o, m)))
             cx.Error("Modules", "No module is enabled, so the server would serve nothing.", $"List at least one of {string.Join(", ", ProxyModules.Known)}.");
+    }
+
+    private static void ValidateStore(ProxyOptions o, IConfigValidationContext cx)
+    {
+        if (!ProxyModules.Has(o, ProxyModules.Store)) return;
+        if (!IPAddress.TryParse(o.Store.Address, out _))
+            cx.Error("Store.Address", $"`Address` is `{o.Store.Address}`, which is not an IP address.", "Use an IP address such as 0.0.0.0 or 127.0.0.1.");
+        if (o.Store.Port == o.Listen.Port && o.Listen.Port != 0 && ProxyModules.Has(o, ProxyModules.FlightSql))
+            cx.Error("Store.Port", "The store module has its own port; it is the Flight port here.", $"Choose another port than {o.Listen.Port}.");
+        if (o.Management.Enabled && o.Store.Port == o.Management.Port)
+            cx.Error("Store.Port", "The store module has its own port; it is the management API's here.", $"Choose another port than {o.Management.Port}.");
+        if (ProxyModules.Has(o, ProxyModules.Identity) && o.Store.Port == o.Identity.Port)
+            cx.Error("Store.Port", "The store module has its own port; it is the identity home's here.", $"Choose another port than {o.Identity.Port}.");
+        if (ProxyModules.Has(o, ProxyModules.Apps) && o.Store.Port == o.Apps.Port)
+            cx.Error("Store.Port", "The store module has its own port; it is the apps host's here.", $"Choose another port than {o.Apps.Port}.");
     }
 
     private static void ValidateApps(ProxyOptions o, IConfigValidationContext cx)

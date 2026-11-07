@@ -8,9 +8,10 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import pg from 'pg'
 
-// Plan 26, AP05: a sandboxed code app in a real browser. A person signs in at the identity home, opens the app on the apps host, and the app (a document with an opaque origin) reads and writes rows of a Store through the host:
-// the shell hands it a token, the host checks it and forwards to the paired Store with a scoped one. The app cannot read the host's page or its cookies.
-// The Proxy (modules `identity` and `apps`) and the Store are started here. Needs a PostgreSQL (`DBDATA_E2E_PG`, an Npgsql connection string) for the Store's tables.
+// Plan 26, AP05, and plan 20 O08c: a sandboxed code app in a real browser. A person signs in at the identity home, opens the app on the apps host, and the app (a document with an opaque origin) reads and writes rows of a
+// master data model through the host: the shell hands it a token, the host checks it and answers from the model the Store published to the group, within the scope of the app's manifest. The app cannot read the host's
+// page or its cookies. The Proxy (modules `identity` and `apps`, with its management API for the Store to publish to) is started here; the Store's server is never started: its command line publishes the model.
+// Needs a PostgreSQL (`DBDATA_E2E_PG`, an Npgsql connection string) for the model's tables.
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '../../../..')
@@ -23,10 +24,10 @@ const storeDirectory = path.join(os.tmpdir(), 'dbdatakit-e2e-apps-store')
 const appDirectory = path.join(os.tmpdir(), 'dbdatakit-e2e-apps-app')
 const homePort = 8511
 const appsPort = 8512
-const storePort = 8513
+const managementPort = 8513
 const homeUrl = `https://localhost:${homePort}`
 const appsUrl = `https://localhost:${appsPort}`
-const storeUrl = `https://localhost:${storePort}`
+const managementUrl = `https://localhost:${managementPort}`
 const connectionVariable = 'DBDATAKIT_E2E_APPS_MDM'
 
 const running: ChildProcess[] = []
@@ -123,7 +124,7 @@ async function storage() {
   out('storage', 'theme ' + theme.value + '; motd ' + motd.value.text + '; big ' + big)
 }
 storage().catch((e) => out('storage', 'failed: ' + e.message))
-const data = '/apps/acme/_data/__STORE__/api/v1/models/territories'
+const data = '/apps/acme/_data/api/v1/models/territories'
 async function main() {
   const t = await token()
   const headers = { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' }
@@ -149,7 +150,7 @@ test.beforeAll(async () => {
     fs.mkdirSync(directory, { recursive: true })
   }
 
-  // the Store: a model, its tables on the PostgreSQL, paired with the apps host later
+  // the Store: a model on the PostgreSQL, published to the Proxy's group below
   const client = new pg.Client({ connectionString: toPg(warehouse!) })
   await client.connect()
   await client.query('DROP SCHEMA IF EXISTS territories CASCADE')
@@ -163,15 +164,12 @@ test.beforeAll(async () => {
   ].join('\n'))
   const env = { [connectionVariable]: warehouse! }
   run(storeDll, storeDirectory, ['model', 'put', '--file', modelFile])
-  run(storeDll, storeDirectory, ['storage', 'create', '--model', 'territories'], env)
-  const code = /Pairing code: (\S+)/.exec(execFileSync('dotnet', ['exec', storeDll, 'server', 'pair', '--repo', storeDirectory, '--max-role', 'viewer,author'], { encoding: 'utf8' }))![1]
-  const store = start([storeDll, 'server', 'run', '--repo', storeDirectory, '--listen', storeUrl], env)
-  await waitFor(`${storeUrl}/health/live`, store.output)
 
   // the Proxy: the identity home and the apps host, with the apps host's client registered at the home before it starts
   fs.mkdirSync(path.join(proxyDirectory, 'config'), { recursive: true })
   fs.writeFileSync(path.join(proxyDirectory, 'config', 'server.yaml'), [
-    'schemaVersion: 2', 'tls: { mode: selfSigned, hostnames: [localhost] }', 'modules: [identity, apps]',
+    'schemaVersion: 2', 'tls: { mode: selfSigned, hostnames: [localhost] }', 'modules: [identity, apps]', 'state: { definitionPollSeconds: 1 }',
+    `management: { enabled: true, address: 127.0.0.1, port: ${managementPort} }`,
     `identity: { address: 127.0.0.1, port: ${homePort}, publicUrl: '${homeUrl}' }`,
     `apps: { address: 127.0.0.1, port: ${appsPort}, home: { clientId: '__CLIENT__' } }`, '',
   ].join('\n'))
@@ -182,14 +180,12 @@ test.beforeAll(async () => {
   // the app, published and served as the instance `acme`, whose data is the Store's default copy of the model
   fs.writeFileSync(path.join(appDirectory, 'app.yaml'), manifest)
   fs.writeFileSync(path.join(appDirectory, 'index.html'), index)
-  // pair the host with the Store (the host's key is in the Proxy's secret store, so this needs no running Proxy); the app names the Store by its id
-  const paired = run(proxyDll, proxyDirectory, ['apps', 'store-pair', '--url', storeUrl, '--code', code])
-  fs.writeFileSync(path.join(appDirectory, 'app.js'), script.replace('__STORE__', paired.id))
+  fs.writeFileSync(path.join(appDirectory, 'app.js'), script)
   run(proxyDll, proxyDirectory, ['apps', 'publish', '--dir', appDirectory])
   run(proxyDll, proxyDirectory, ['apps', 'instance-save', '--name', 'acme', '--app', 'territory-notes', '--bind', 'territories=default', '--setting', `embed.allowed_origins=${portalOrigin}`])
   // two portals over the same instances; `hidden` is mounted in the first and Ada has no role on it
   for (const [name, text] of [
-    ['portal-alpha', portalYaml('portal-alpha', 'Alpha Co', '#ff0000', 'side', true, '  mounts: [{app: acme, path: /sales/}, {app: beta, path: /beta/}, {app: hidden, path: /hidden/}]\n  navigation: [{app: acme, label: Sales}, {app: beta, label: Beta}, {app: hidden, label: Hidden}]')],
+    ['portal-alpha', portalYaml('portal-alpha', 'Alpha Co', '#ff0000', 'side', true, '  mounts: [{app: acme, path: /sales/}, {app: beta, path: /beta/}, {app: hidden, path: /hidden/}]\n  navigation: [{app: acme, label: Sales}, {app: beta, label: Beta}, {app: hidden, label: Hidden}]\n  slots: {aside: beta}')],
     ['portal-omega', portalYaml('portal-omega', 'Omega Ltd', '#0000ff', 'top', false, '  mounts: [{app: acme, path: /work/}]\n  navigation: [{app: acme, label: Work}]')],
   ]) {
     const directory = path.join(os.tmpdir(), `dbdata-e2e-${name}`)
@@ -205,6 +201,12 @@ test.beforeAll(async () => {
   const proxy = start([proxyDll, 'server', 'run', `--Proxy:DataDirectory=${proxyDirectory}`])
   await waitFor(`${homeUrl}/health/live`, proxy.output)
   await waitFor(`${appsUrl}/health/live`, proxy.output)
+
+  // the Store publishes the model to the group: its tables first, then the login, the data source and the model, which every instance of the group serves from then on
+  const code = /Pairing code: (\S+)/.exec(execFileSync('dotnet', ['exec', proxyDll, 'server', 'pair', '--repo', proxyDirectory, '--max-role', 'publisher'], { encoding: 'utf8' }))![1]
+  run(storeDll, storeDirectory, ['proxy', 'add', 'edge', '--url', managementUrl, '--code', code])
+  run(storeDll, storeDirectory, ['model', 'publish', 'territories', '--proxy', 'edge'], env)
+  await new Promise((resolve) => setTimeout(resolve, 3000))   // the instance reads the group's definitions every second
 })
 
 test.afterAll(async () => {
@@ -217,7 +219,7 @@ function toPg(npgsql: string) {
   return `postgres://${parts.Username}:${parts.Password}@${parts.Host}:${parts.Port ?? 5432}/${parts.Database}`
 }
 
-test('a person signs in and the sandboxed app reads and writes the Store through the host, and reaches nothing else', async ({ page, context }) => {
+test('a person signs in and the sandboxed app reads and writes the published model through the host, and reaches nothing else', async ({ page, context }) => {
   await addAuthenticator(context, page)
 
   // Ada enrols at the home with the first-run invitation, and is given a role on the app
@@ -310,11 +312,19 @@ test('a person signs in and the sandboxed app reads and writes the Store through
   // the home lists the mounted instances Ada may open: not `hidden`
   await expect(page.locator('ul.tiles li a')).toHaveText(['Territory notes', 'Territory notes'])
   await expect(page.locator('ul.tiles li a').first()).toHaveAttribute('href', '/apps/alpha/sales/')
+  // an app in the aside slot is a sandboxed frame of its own, themed like the page
+  await expect(page.locator('iframe.slot-aside')).toHaveAttribute('sandbox', 'allow-scripts allow-forms allow-popups')
+  await expect(page.frameLocator('iframe.slot-aside').locator('#theme')).toHaveText('#ff0000')
   await page.locator('nav.portal a', { hasText: 'Sales' }).click()
   await expect(page).toHaveURL(`${appsUrl}/apps/alpha/sales/`)
   await expect(page.locator('nav.portal a[aria-current=page]')).toHaveText('Sales')
   await expect(page.frameLocator('#app-frame').locator('#theme')).toHaveText('#ff0000')
   expect((await page.goto(`${appsUrl}/apps/alpha/hidden/`))!.status()).toBe(403)
+
+  // the about page lists the manifest's data access, and asks for no consent
+  await page.goto(`${appsUrl}/apps/acme/_about`)
+  await expect(page.locator('ul.access li')).toHaveText(['territories.territory: read and write'])
+  await expect(page.locator('dl.about')).toContainText('sandboxed')
 
   await page.goto(`${appsUrl}/apps/omega/work/`)
   await expect(page.locator('.portal-title')).toHaveText('Omega Ltd')
@@ -323,7 +333,7 @@ test('a person signs in and the sandboxed app reads and writes the Store through
   await expect(page.frameLocator('#app-frame').locator('#theme')).toHaveText('#0000ff')
   await expect(page.frameLocator('#app-frame').locator('#rows')).toContainText('rows North America')   // (the insert is refused the second time: the row exists)
 
-  // the row is in the Store's tables
+  // the row is in the model's tables
   const client = new pg.Client({ connectionString: toPg(warehouse!) })
   await client.connect()
   const rows = await client.query('SELECT name FROM territories.territory')

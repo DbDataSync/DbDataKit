@@ -620,6 +620,383 @@ public sealed class GroupStateTests : IAsyncLifetime
         }
     }
 
+    [Theory]
+    [InlineData("mssql", "DBKIT_TEST_MSSQL")]
+    [InlineData("postgres", "DBKIT_TEST_POSTGRES")]
+    public async Task A_rule_a_store_server_publishes_is_enforced_by_every_instance_of_the_group(string engine, string variable)
+    {
+        // plan 20 O10: the master data models a DbDataStore server publishes, with their rules, are the group's; each instance loads the version published and keeps the last one it could
+        var (state, drop) = ScratchState(engine, variable);
+        try
+        {
+            string[] poll = [.. state, "--Proxy:State:DefinitionPollSeconds=1"];
+            var database = state[1]["--Proxy:State:ConnectionString=".Length..];
+            var storageEngine = engine == "mssql" ? "sqlserver" : "postgres";
+            static string Territories(string? rule) => $$"""
+                schemaVersion: 1
+                name: territories
+                storage: {connection: mdm}
+                entities:
+                  territory:
+                    key: [code]
+                    attributes:
+                      code: {type: VARCHAR(10), required: true{{rule}}}
+                      name: {type: VARCHAR(100), required: true}
+                """;
+            // the model's tables, as the store's server creates them (the structure is the store's to change)
+            var v1 = DbDataKit.DataModel.DataModelLoader.Load(Territories(null)).Model!;
+            async Task<System.Data.Common.DbConnection> Open()
+            {
+                System.Data.Common.DbConnection db = engine == "mssql" ? new SqlConnection(database) : new Npgsql.NpgsqlConnection(database);
+                await db.OpenAsync();
+                return db;
+            }
+            await using (var db = await Open())
+                await DbDataKit.DataModel.Storage.ModelStorage.CreateAsync(db, DbDataKit.DataModel.Storage.ModelStorage.Plan(v1, storageEngine, v1.Name));
+
+            var dirs = new[] { "a", "b", "c" }.Select(d => Path.Combine(_root, d)).ToArray();
+            var (a, managementA, _) = await ServingInstance(dirs[0], poll);
+            var storeA = SecretsRuntime.OpenStore(new ProxyOptions { DataDirectory = dirs[0] });
+            foreach (var other in dirs[1..])
+                foreach (var secret in new[] { GroupSessionKey.Secret, ProxyIdentityModule.SigningKeySecret })
+                    using (var key = await storeA.TryResolveAsync(SecretRef.Parse("secret:" + secret)))
+                        await SecretsRuntime.OpenStore(new ProxyOptions { DataDirectory = other }).SetAsync(SecretName.Parse(secret), key!);
+            var (b, _, _) = await ServingInstance(dirs[1], poll);
+
+            // the store's server, paired with the group as a publishing client, publishes as it does (StorePublisher): the write login, the data source, the model
+            var store = new ConsoleIdentity("store-1", ConsoleSigningKey.Generate());
+            var paired = await PairingClient.PairAsync(new Uri($"https://127.0.0.1:{managementA}"),
+                new PairingFiles(ProxyConfigFile.PathIn(dirs[0]), Group: a.Services.GetRequiredService<StateDatabase>()).Codes().Create(ServerRoles.Close(ServerRole.Publisher)).Code, store, ClientKind.Server, store.Id);
+            async Task<JsonNode> Call(HttpMethod method, string path, object? body = null, HttpStatusCode expect = HttpStatusCode.OK)
+            {
+                using var http = new HttpClient(PairingClient.Pinned(paired.CertificateFingerprint));
+                using var request = new HttpRequestMessage(method, $"https://127.0.0.1:{managementA}{path}");
+                request.Headers.Add(ManagementAuthentication.TokenHeader, store.Issuer().Issue(new ConsoleTokenRequest(paired.InstanceId, "ada", "Ada", ServerRole.Publisher)));
+                if (body is not null) request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+                var response = await http.SendAsync(request);
+                var text = await response.Content.ReadAsStringAsync();
+                Assert.True(response.StatusCode == expect, $"{method} {path}: {response.StatusCode} {text}");
+                return JsonNode.Parse(text)!;
+            }
+            var reference = (string)(await Call(HttpMethod.Put, "/api/v1/secrets/mdm-write", new { value = engine == "postgres" ? database + ";SSL Mode=Require" : database }))["reference"]!;
+            await Call(HttpMethod.Put, "/api/v1/data-sources/mdm", new { text = $"schema: connection/1\nname: mdm\nengine: {storageEngine}\nconnection_string_secret: '{reference}'\n", expected_version = (string?)null });
+            Assert.Equal(1, (int)(await Call(HttpMethod.Put, "/api/v1/entity-models/territories", new Dictionary<string, object?> { ["model"] = Territories(null), ["data_source"] = "mdm", ["expected_version"] = null }))["version"]!);
+
+            // a model on a data source the client did not make is refused
+            await Call(HttpMethod.Put, "/api/v1/entity-models/other", new Dictionary<string, object?> { ["model"] = Territories(null).Replace("name: territories", "name: other"), ["data_source"] = "elsewhere", ["expected_version"] = null }, HttpStatusCode.BadRequest);
+
+            // the new rule, published once through the first instance
+            var withRule = Territories(", pattern: '^[A-Z]{2}$'");
+            Assert.Equal(2, (int)(await Call(HttpMethod.Put, "/api/v1/entity-models/territories", new Dictionary<string, object?> { ["model"] = withRule, ["data_source"] = "mdm", ["expected_version"] = 1 }))["version"]!);
+
+            // every instance enforces it: a write through the model it serves breaks the rule and is refused, naming it; one that keeps it is written
+            async Task Enforces(WebApplication instance, string code, int version = 2)
+            {
+                var models = instance.Services.GetRequiredService<PublishedEntityModels>();
+                for (var i = 0; i < 100 && models.Find("territories")?.Version != version; i++) await Task.Delay(100);
+                var served = models.Find("territories")!;
+                Assert.Equal((version, "mdm"), (served.Version, served.DataSource));
+                await using var db = await Open();
+                var writer = new DbDataKit.Store.ModelWriter(served.Model, db, storageEngine, schema: served.Model.Name);
+                var refused = await Assert.ThrowsAsync<DbDataKit.Store.WriteRefusedException>(() =>
+                    writer.InsertAsync("territory", new Dictionary<string, object?> { ["code"] = "north", ["name"] = "North" }, new DbDataKit.Store.WriteActor("ada")));
+                Assert.Contains(refused.Violations, v => v.Rule == "pattern" && v.Attribute == "code");
+                await writer.InsertAsync("territory", new Dictionary<string, object?> { ["code"] = code, ["name"] = "Somewhere" }, new DbDataKit.Store.WriteActor("ada"));
+            }
+            await Enforces(a, "NO");
+            await Enforces(b, "SO");
+
+            // a version neither instance can load leaves the one each served, and the listing says so
+            new DefinitionStore(a.Services.GetRequiredService<StateDatabase>()).Publish(PublishedEntityModels.DefinitionKind, "territories",
+                JsonSerializer.Serialize(new PublishedEntityModels.Content("schemaVersion: 1\nname: territories\nentities: nope\n", "mdm", store.Id)), "someone");
+            var modelsB = b.Services.GetRequiredService<PublishedEntityModels>();
+            for (var i = 0; i < 100 && modelsB.Failed("territories") is null; i++) await Task.Delay(100);
+            Assert.Equal((3, 2), (modelsB.Failed("territories")!.Value.Version, modelsB.Find("territories")!.Version));
+            var listed = (await Call(HttpMethod.Get, "/api/v1/entity-models"))["models"]!.AsArray().Single()!;
+            Assert.Equal((3, 2), ((int)listed["current_version"]!, (int)listed["served_version"]!));
+
+            // put right, and an instance started with the store's server and the first instance stopped serves it
+            await Call(HttpMethod.Put, "/api/v1/entity-models/territories", new Dictionary<string, object?> { ["model"] = withRule + "  # again\n", ["data_source"] = "mdm", ["expected_version"] = 3 });
+            await a.StopAsync();
+            var (c, _, _) = await ServingInstance(dirs[2], poll);
+            Assert.Equal(4, c.Services.GetRequiredService<PublishedEntityModels>().Find("territories")!.Version);
+            await Enforces(c, "WE", version: 4);
+        }
+        finally
+        {
+            foreach (var app in _apps)
+            {
+                try { await app.StopAsync(); } catch (Exception ex) when (ex is OperationCanceledException or InvalidOperationException) { }
+            }
+            drop();
+        }
+    }
+
+    /// <summary>Makes a model's tables on the scratch database, as <c>dbdatastore model publish</c> does before it sends the model.</summary>
+    private static async Task CreateTablesAsync(string engine, string database, string modelText)
+    {
+        var model = DbDataKit.DataModel.DataModelLoader.Load(modelText).Model!;
+        await using System.Data.Common.DbConnection db = engine == "mssql" ? new SqlConnection(database) : new Npgsql.NpgsqlConnection(database);
+        await db.OpenAsync();
+        await DbDataKit.DataModel.Storage.ModelStorage.CreateAsync(db, DbDataKit.DataModel.Storage.ModelStorage.Plan(model, engine == "mssql" ? "sqlserver" : "postgres", model.Name));
+    }
+
+    /// <summary>
+    /// What a store's server publishes to the group (O10), as StorePublisher sends it: the login as a secret, the data source <c>mdm</c>, and the entity model on it, through the management API of the instance at
+    /// <paramref name="management"/> as a paired publishing client. Returns the group's server id, which the identity home's roles name.
+    /// </summary>
+    private static async Task<string> PublishEntityModelAsync(string engine, string database, int management, string dataDirectory, StateDatabase groupState, string modelText)
+    {
+        var publisher = new ConsoleIdentity("store-1", ConsoleSigningKey.Generate());
+        var paired = await PairingClient.PairAsync(new Uri($"https://127.0.0.1:{management}"),
+            new PairingFiles(ProxyConfigFile.PathIn(dataDirectory), Group: groupState).Codes().Create(ServerRoles.Close(ServerRole.Publisher)).Code, publisher, ClientKind.Server, publisher.Id);
+        async Task<JsonNode> Manage(HttpMethod method, string path, object body)
+        {
+            using var http = new HttpClient(PairingClient.Pinned(paired.CertificateFingerprint));
+            using var request = new HttpRequestMessage(method, $"https://127.0.0.1:{management}{path}") { Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json") };
+            request.Headers.Add(ManagementAuthentication.TokenHeader, publisher.Issuer().Issue(new ConsoleTokenRequest(paired.InstanceId, "ada", "Ada", ServerRole.Publisher)));
+            var response = await http.SendAsync(request);
+            Assert.True(response.IsSuccessStatusCode, $"{path}: {response.StatusCode} {await response.Content.ReadAsStringAsync()}");
+            return JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+        }
+        var storageEngine = engine == "mssql" ? "sqlserver" : "postgres";
+        var name = DbDataKit.DataModel.DataModelLoader.Load(modelText).Model!.Name;
+        var reference = (string)(await Manage(HttpMethod.Put, "/api/v1/secrets/mdm-write", new { value = engine == "postgres" ? database + ";SSL Mode=Require" : database }))["reference"]!;
+        await Manage(HttpMethod.Put, "/api/v1/data-sources/mdm", new { text = $"schema: connection/1\nname: mdm\nengine: {storageEngine}\nconnection_string_secret: '{reference}'\n", expected_version = (string?)null });
+        await Manage(HttpMethod.Put, $"/api/v1/entity-models/{name}", new Dictionary<string, object?> { ["model"] = modelText, ["data_source"] = "mdm", ["expected_version"] = null });
+        return paired.InstanceId;
+    }
+
+    [Theory]
+    [InlineData("mssql", "DBKIT_TEST_MSSQL")]
+    [InlineData("postgres", "DBKIT_TEST_POSTGRES")]
+    public async Task The_store_module_reads_and_writes_master_data_through_any_instance_with_no_store_server_running(string engine, string variable)
+    {
+        // plan 20 O08a: the serving layer's store module, called with identity home tokens, reads and writes through the model the store's server published; that server is not running here at all
+        var (state, drop) = ScratchState(engine, variable);
+        try
+        {
+            var database = state[1]["--Proxy:State:ConnectionString=".Length..];
+            const string Model = """
+                schemaVersion: 1
+                name: territories
+                storage: {connection: mdm}
+                entities:
+                  territory:
+                    key: [code]
+                    history: effective_dated
+                    attributes:
+                      code: {type: VARCHAR(10), required: true, pattern: '^[A-Z]{2}$'}
+                      name: {type: VARCHAR(100), required: true}
+                """;
+            await CreateTablesAsync(engine, database, Model);
+
+            var dirs = new[] { "a", "b" }.Select(d => Path.Combine(_root, d)).ToArray();
+            var (storeA, storeB) = (FreePort(), FreePort());
+            string[] With(int port) => [.. state, "--Proxy:State:DefinitionPollSeconds=1", "--Proxy:Modules:0=flightsql", "--Proxy:Modules:1=store", "--Proxy:Store:Address=127.0.0.1", $"--Proxy:Store:Port={port}"];
+            var (a, managementA, _) = await ServingInstance(dirs[0], With(storeA));
+            var keys = SecretsRuntime.OpenStore(new ProxyOptions { DataDirectory = dirs[0] });
+            foreach (var secret in new[] { GroupSessionKey.Secret, ProxyIdentityModule.SigningKeySecret })
+                using (var key = await keys.TryResolveAsync(SecretRef.Parse("secret:" + secret)))
+                    await SecretsRuntime.OpenStore(new ProxyOptions { DataDirectory = dirs[1] }).SetAsync(SecretName.Parse(secret), key!);
+            var (b, _, _) = await ServingInstance(dirs[1], With(storeB));
+            var groupState = a.Services.GetRequiredService<StateDatabase>();
+
+            var serverId = await PublishEntityModelAsync(engine, database, managementA, dirs[0], groupState, Model);
+            for (var i = 0; i < 100 && (b.Services.GetRequiredService<PublishedEntityModels>().Find("territories") is null
+                || !b.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue.DataSources.ContainsKey("mdm")); i++) await Task.Delay(100);
+
+            // the identity home's people: an author, a viewer, and a service account (an agent); their roles are on the group's server id
+            var users = new UserStore(groupState);
+            var tokens = new AccessTokens(groupState, users);
+            var directory = new HomeDirectory(groupState);
+            string Person(string name, ServerRole roles)
+            {
+                var user = users.CreateUser(name, $"{name.ToLowerInvariant()}@example.invalid", UserRole.Viewer, emailVerified: true);
+                directory.Assign(AssignmentSubject.User(user.Id), serverId, roles);
+                return tokens.Create(user.Id, "store", "test").Secret;
+            }
+            var author = Person("Grace", ServerRole.Viewer | ServerRole.Author);
+            var viewer = Person("Linus", ServerRole.Viewer);
+            var agentAccount = tokens.CreateServiceAccount("nightly-load", null, "test");
+            directory.Assign(AssignmentSubject.User(agentAccount.UserId), serverId, ServerRole.Viewer | ServerRole.Author);
+            var agent = tokens.Create(agentAccount.UserId, "load", "test").Secret;
+
+            async Task<(HttpStatusCode Status, JsonNode? Body)> Store(int port, HttpMethod method, string path, string? token, object? body = null)
+            {
+                using var http = new HttpClient(new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, _, _, _) => true });
+                using var request = new HttpRequestMessage(method, $"https://127.0.0.1:{port}/api/v1/models/territories{path}");
+                if (token is not null) request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                if (body is not null) request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+                var response = await http.SendAsync(request);
+                var text = await response.Content.ReadAsStringAsync();
+                return (response.StatusCode, text.Length == 0 ? null : JsonNode.Parse(text));
+            }
+            object Insert(string code, string name) => new { changes = new[] { new { action = "insert", entity = "territory", values = new { code, name }, effective_from = "2026-01-01T00:00:00Z" } } };
+
+            // written through one instance, read through the other, now and as of a date
+            var written = await Store(storeA, HttpMethod.Post, "/changes", author, Insert("NO", "North"));
+            Assert.True(written.Status == HttpStatusCode.OK, written.Body?.ToJsonString());
+            var row = await Store(storeB, HttpMethod.Get, "/entities/territory/row?key.code=NO", viewer);
+            Assert.Equal(HttpStatusCode.OK, row.Status);
+            Assert.Equal("North", (string)row.Body!["values"]!["name"]!);
+            var version = (long)row.Body["version"]!;
+            var renamed = await Store(storeB, HttpMethod.Post, "/changes", author,
+                new { changes = new[] { new { action = "update", entity = "territory", key = new { code = "NO" }, expected_version = version, values = new { name = "Northern" }, effective_from = "2026-06-01T00:00:00Z" } } });
+            Assert.True(renamed.Status == HttpStatusCode.OK, renamed.Body?.ToJsonString());
+            Assert.Equal("North", (string)(await Store(storeA, HttpMethod.Get, "/entities/territory/row?key.code=NO&as_of=2026-03-01T00:00:00Z", viewer)).Body!["values"]!["name"]!);
+            Assert.Equal("Northern", (string)(await Store(storeA, HttpMethod.Get, "/entities/territory/row?key.code=NO", viewer)).Body!["values"]!["name"]!);
+            Assert.Equal(2, (await Store(storeA, HttpMethod.Get, "/entities/territory/row?key.code=NO&history=true", viewer)).Body!["versions"]!.AsArray().Count);
+            Assert.Single((await Store(storeB, HttpMethod.Get, "/entities/territory/rows", viewer)).Body!["rows"]!.AsArray());
+
+            // a rule violation names the rule, and nothing is written
+            var broken = await Store(storeB, HttpMethod.Post, "/changes", author, Insert("south", "South"));
+            Assert.Equal((HttpStatusCode)422, broken.Status);
+            Assert.Contains(broken.Body!["violations"]!.AsArray(), v => (string)v!["rule"]! == "pattern" && (string)v["attribute"]! == "code");
+            Assert.Equal(HttpStatusCode.NotFound, (await Store(storeA, HttpMethod.Get, "/entities/territory/row?key.code=south", viewer)).Status);
+
+            // who may: no token, a viewer's write
+            Assert.Equal(HttpStatusCode.Unauthorized, (await Store(storeA, HttpMethod.Get, "/entities/territory/rows", null)).Status);
+            Assert.Equal(HttpStatusCode.Forbidden, (await Store(storeA, HttpMethod.Post, "/changes", viewer, Insert("WE", "West"))).Status);
+
+            // an agent's write waits for a person (the model does not let agents write directly), in the group's state: proposed through one instance, approved through the other
+            var proposed = await Store(storeA, HttpMethod.Post, "/changes", agent, Insert("WE", "West"));
+            Assert.Equal(HttpStatusCode.Accepted, proposed.Status);
+            var id = (string)proposed.Body!["id"]!;
+            Assert.True((bool)proposed.Body["by_agent"]!);
+            Assert.Equal(HttpStatusCode.NotFound, (await Store(storeA, HttpMethod.Get, "/entities/territory/row?key.code=WE", viewer)).Status);
+            Assert.Equal(HttpStatusCode.Forbidden, (await Store(storeB, HttpMethod.Post, $"/requests/{id}/approve", agent)).Status);
+            Assert.Single((await Store(storeB, HttpMethod.Get, "/requests?state=pending", viewer)).Body!["requests"]!.AsArray());
+            var approved = await Store(storeB, HttpMethod.Post, $"/requests/{id}/approve", author);
+            Assert.True(approved.Status == HttpStatusCode.OK, approved.Body?.ToJsonString());
+            Assert.Equal("approved", (string)approved.Body!["state"]!);
+            Assert.Equal("West", (string)(await Store(storeA, HttpMethod.Get, "/entities/territory/row?key.code=WE", viewer)).Body!["values"]!["name"]!);
+            Assert.Equal(HttpStatusCode.Conflict, (await Store(storeA, HttpMethod.Post, $"/requests/{id}/reject", author)).Status);
+        }
+        finally
+        {
+            foreach (var app in _apps)
+            {
+                try { await app.StopAsync(); } catch (Exception ex) when (ex is OperationCanceledException or InvalidOperationException) { }
+            }
+            drop();
+        }
+    }
+
+    [Theory]
+    [InlineData("mssql", "DBKIT_TEST_MSSQL")]
+    [InlineData("postgres", "DBKIT_TEST_POSTGRES")]
+    public async Task An_app_reads_and_writes_the_groups_published_model_through_the_apps_host_with_no_store_module_or_store_server(string engine, string variable)
+    {
+        // plan 20 O08c: the apps host answers an app's data calls from the model published to the group, in its own process; no store module listens and no DbDataStore server runs
+        var (state, drop) = ScratchState(engine, variable);
+        try
+        {
+            var database = state[1]["--Proxy:State:ConnectionString=".Length..];
+            const string Model = """
+                schemaVersion: 1
+                name: territories
+                storage: {connection: mdm}
+                entities:
+                  territory:
+                    key: [code]
+                    attributes:
+                      code: {type: VARCHAR(10), required: true, pattern: '^[A-Z]{2}$'}
+                      name: {type: VARCHAR(100), required: true}
+                  region:
+                    key: [code]
+                    attributes:
+                      code: {type: VARCHAR(10), required: true}
+                  district:
+                    key: [code]
+                    attributes:
+                      code: {type: VARCHAR(10), required: true}
+                """;
+            await CreateTablesAsync(engine, database, Model);
+
+            var dir = Path.Combine(_root, "apps");
+            var appsPort = FreePort();
+            var (app, management, _) = await ServingInstance(dir, [.. state, "--Proxy:State:DefinitionPollSeconds=1", "--Proxy:Modules:0=flightsql", "--Proxy:Modules:1=apps",
+                "--Proxy:Apps:Address=127.0.0.1", $"--Proxy:Apps:Port={appsPort}", "--Proxy:Apps:Home:ClientId=apps-host"]);
+            var groupState = app.Services.GetRequiredService<StateDatabase>();
+            await PublishEntityModelAsync(engine, database, management, dir, groupState, Model);
+            for (var i = 0; i < 100 && (app.Services.GetRequiredService<PublishedEntityModels>().Find("territories") is null
+                || !app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue.DataSources.ContainsKey("mdm")); i++) await Task.Delay(100);
+
+            // an app whose manifest may write territories and read regions, saved as two instances: one on the model's default copy, one bound to a copy the group does not serve
+            var instances = new DbDataKit.Apps.AppInstanceStore(new DefinitionStore(groupState));
+            instances.PublishApp("schemaVersion: 1\nname: notes\nversion: 1.0.0\nentry: index.html\nroles: [viewer]\nmodels:\n  - model: territories\n    entities: {territory: [read, write], region: [read]}\n", "ada");
+            instances.Save(new DbDataKit.Apps.AppInstance("acme", "notes", Bindings: new Dictionary<string, string> { ["territories"] = "default" }), "ada");
+            instances.Save(new DbDataKit.Apps.AppInstance("globex", "notes", Bindings: new Dictionary<string, string> { ["territories"] = "globex-data" }), "ada");
+
+            // the tokens the shell's broker hands an app, for a person the home made an author or a viewer on the instance
+            var broker = new DbDataKit.Apps.AppTokenBroker(new ConsoleTokenIssuer(ProxyAppsModule.TokenIssuer, await ProxyAppsModule.SigningKeyAsync(new ProxyOptions { DataDirectory = dir }, default)));
+            string Token(string instance, string role) => broker.Issue(new DbDataKit.Apps.AppSessions().Create(new HomeIdentity("user-" + role, role == "author" ? "Grace" : "Linus", null, [],
+                new Dictionary<string, IReadOnlyList<string>> { ["app:" + instance] = [role] })), instance).Token;
+            var (author, viewer) = (Token("acme", "author"), Token("acme", "viewer"));
+
+            async Task<(HttpStatusCode Status, JsonNode? Body)> Data(HttpMethod method, string path, string token, object? body = null, string instance = "acme")
+            {
+                using var http = new HttpClient(new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, _, _, _) => true });
+                using var request = new HttpRequestMessage(method, $"https://127.0.0.1:{appsPort}/apps/{instance}/_data/{path}");
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                if (body is not null) request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+                var response = await http.SendAsync(request);
+                var text = await response.Content.ReadAsStringAsync();
+                return (response.StatusCode, response.Content.Headers.ContentType?.MediaType == "application/json" && text.Length > 0 ? JsonNode.Parse(text) : JsonValue.Create(text));
+            }
+            const string Territories = "api/v1/models/territories";
+            object Insert(string entity, string code, string? name = null) => new { changes = new[] { new { action = "insert", entity, values = name is null ? (object)new { code } : new { code, name } } } };
+
+            // the author's app writes, and reads it back as one row and a page; the row is in the model's tables, written as the person
+            var written = await Data(HttpMethod.Post, Territories + "/changes", author, Insert("territory", "NO", "North"));
+            Assert.True(written.Status == HttpStatusCode.OK, written.Body?.ToJsonString());
+            Assert.Equal("North", (string)(await Data(HttpMethod.Get, Territories + "/entities/territory/row?key.code=NO", viewer)).Body!["values"]!["name"]!);
+            Assert.Single((await Data(HttpMethod.Get, Territories + "/entities/territory/rows", viewer)).Body!["rows"]!.AsArray());
+            await using (System.Data.Common.DbConnection db = engine == "mssql" ? new SqlConnection(database) : new Npgsql.NpgsqlConnection(database))
+            {
+                await db.OpenAsync();
+                using var cmd = db.CreateCommand();
+                cmd.CommandText = "SELECT name FROM territories.territory WHERE code = 'NO'";
+                Assert.Equal("North", (string?)await cmd.ExecuteScalarAsync());
+            }
+
+            // the model's rules hold for an app as for anyone: a broken one names the rule
+            var broken = await Data(HttpMethod.Post, Territories + "/changes", author, Insert("territory", "south", "South"));
+            Assert.Equal((HttpStatusCode)422, broken.Status);
+            Assert.Contains(broken.Body!["violations"]!.AsArray(), v => (string)v!["rule"]! == "pattern");
+
+            // the person's role and the manifest's scope both decide: a viewer cannot write; regions are read but not written; districts are not the app's at all
+            Assert.Equal(HttpStatusCode.Forbidden, (await Data(HttpMethod.Post, Territories + "/changes", viewer, Insert("territory", "WE", "West"))).Status);
+            Assert.Equal(HttpStatusCode.OK, (await Data(HttpMethod.Get, Territories + "/entities/region/rows", author)).Status);
+            var regionWrite = await Data(HttpMethod.Post, Territories + "/changes", author, Insert("region", "EU"));
+            Assert.Equal(HttpStatusCode.Forbidden, regionWrite.Status);
+            Assert.Contains("region", (string)regionWrite.Body!["error"]!);
+            Assert.Equal(HttpStatusCode.Forbidden, (await Data(HttpMethod.Get, Territories + "/entities/district/rows", author)).Status);
+            Assert.Equal(HttpStatusCode.Forbidden, (await Data(HttpMethod.Get, "api/v1/models/elsewhere/entities/x/rows", author)).Status);   // the scope is asked before the group, so nothing says what else is published
+
+            // an instance bound to a copy the group does not serve, and the path apps used with a paired store, are refused with the reason
+            var bound = await Data(HttpMethod.Get, Territories + "/entities/territory/rows", Token("globex", "author"), instance: "globex");
+            Assert.Equal(HttpStatusCode.NotFound, bound.Status);
+            Assert.Contains("globex-data", (string)bound.Body!["error"]!);
+            Assert.Equal(HttpStatusCode.Gone, (await Data(HttpMethod.Get, "store-1/" + Territories + "/entities/territory/rows", author)).Status);
+
+            // the apps host pairs with no store any more, and says so
+            var output = new StringWriter();
+            var error = new StringWriter();
+            Assert.NotEqual(0, await Cli.Router().RunAsync(["apps", "store-pair", "--repo", dir], new DbDataKit.Cli.CliContext(output, error, TextReader.Null)));
+            Assert.Contains("model publish", error.ToString());
+        }
+        finally
+        {
+            foreach (var running in _apps)
+            {
+                try { await running.StopAsync(); } catch (Exception ex) when (ex is OperationCanceledException or InvalidOperationException) { }
+            }
+            drop();
+        }
+    }
+
     [Fact]
     public async Task The_models_an_instance_published_before_are_read_into_the_groups_state_once()
     {

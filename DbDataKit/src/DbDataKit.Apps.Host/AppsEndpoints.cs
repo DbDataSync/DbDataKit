@@ -19,9 +19,22 @@ public static class AppsEndpoints
     public const string CallbackPath = "/apps/-/callback";
     public const string SessionCookie = "dbdata_apps";
 
-    public static IEndpointRouteBuilder MapApps(this IEndpointRouteBuilder app, AppInstanceStore instances, AppSite site, OpenIdClient client, AppSessions sessions, AppTokenBroker broker, AppDataGateway? data = null, AppStorage? storage = null)
+    public static IEndpointRouteBuilder MapApps(this IEndpointRouteBuilder app, AppInstanceStore instances, AppSite site, OpenIdClient client, AppSessions sessions, AppTokenBroker broker, AppDataGateway? data = null, AppStorage? storage = null, AppApprovalStore? approvals = null)
     {
         app.MapGet("/apps/{instance}/_app/{**path}", async (HttpContext context, string instance, string? path) => await Write(context, site.Get(instance, path ?? "")));
+
+        // what the app can reach and who approved it; for anyone who may open the app
+        app.MapGet("/apps/{instance}/_about", async (HttpContext context, string instance) =>
+        {
+            if (instances.Resolve(instance) is not { } resolved) { await Text(context, 404, "No such app."); return; }
+            if (await sessions.FindAsync(context.Request.Cookies[SessionCookie], context.RequestAborted) is not { } session)
+            {
+                context.Response.Redirect((await client.BeginAsync(context.Request.Path.Value!, context.RequestAborted)).AbsoluteUri);
+                return;
+            }
+            if (session.RolesOn(instance).Count == 0) { await Text(context, 403, "The identity home gives you no role on this app."); return; }
+            await Write(context, AppAbout.Page(resolved, approvals?.ForApp(resolved.Manifest.Name) ?? [], TitleOf(resolved)));
+        });
 
         app.MapGet(AppShell.ScriptPath, async (HttpContext context) => await Write(context, AppShell.ScriptResponse()));
 
@@ -29,9 +42,10 @@ public static class AppsEndpoints
         app.MapPost("/apps/{instance}/_token", async (HttpContext context, string instance) =>
         {
             if (context.Request.Headers["X-DbData-Shell"] != "1") { await Text(context, 400, "Not a request from the shell page."); return; }
-            if (instances.Resolve(instance) is null) { await Text(context, 404, "No such app."); return; }
+            if (instances.Resolve(instance) is not { } resolved) { await Text(context, 404, "No such app."); return; }
             if (await sessions.FindAsync(context.Request.Cookies[SessionCookie], context.RequestAborted) is not { } session) { await Text(context, 401, "Sign in first."); return; }
             if (session.RolesOn(instance).Count == 0) { await Text(context, 403, "The identity home gives you no role on this app."); return; }
+            if (Unapproved(approvals, resolved) is { } why) { await Text(context, 403, why); return; }
             var token = broker.Issue(session, instance);
             context.Response.Headers.CacheControl = "no-store";
             await context.Response.WriteAsJsonAsync(new { token = token.Token, expiresIn = token.ExpiresInSeconds, audience = token.Audience });
@@ -46,13 +60,14 @@ public static class AppsEndpoints
                 if (instances.Resolve(instance) is not { } resolved) { await Text(context, 404, "No such app."); return; }
                 if (await sessions.FindAsync(context.Request.Cookies[SessionCookie], context.RequestAborted) is not { } session) { await Text(context, 401, "Sign in first."); return; }
                 if (session.RolesOn(instance).Count == 0) { await Text(context, 403, "The identity home gives you no role on this app."); return; }
+                if (Unapproved(approvals, resolved) is { } why) { await Text(context, 403, why); return; }
                 await AppStorageEndpoint.HandleAsync(context, storage, resolved, session);
             });
         }
 
         if (data is not null)
         {
-            app.MapMethods("/apps/{instance}/_data/{store}/{**path}", ["GET", "POST", "OPTIONS"], async (HttpContext context, string instance, string store, string? path) =>
+            app.MapMethods("/apps/{instance}/_data/{**path}", ["GET", "POST", "OPTIONS"], async (HttpContext context, string instance, string? path) =>
             {
                 if (HttpMethods.IsOptions(context.Request.Method))
                 {
@@ -61,7 +76,7 @@ public static class AppsEndpoints
                 }
                 using var body = new MemoryStream();
                 await context.Request.Body.CopyToAsync(body, context.RequestAborted);
-                await Write(context, await data.ForwardAsync(instance, store, path ?? "", context.Request.Method, context.Request.QueryString.Value ?? "", context.Request.Headers.Authorization, context.Request.ContentType, body.ToArray(), context.RequestAborted));
+                await Write(context, await data.ForwardAsync(instance, path ?? "", context.Request.Method, context.Request.QueryString.Value ?? "", context.Request.Headers.Authorization, body.ToArray(), context.RequestAborted));
             });
         }
 
@@ -123,6 +138,8 @@ public static class AppsEndpoints
                 if (session.RolesOn(shown.Instance.Name).Count == 0) { await Text(context, 403, "You are signed in, but the identity home gives you no role on this app."); return; }
             }
 
+            if (Unapproved(approvals, shown) is { } unapproved) { await Text(context, 403, unapproved); return; }
+
             // ?embed serves the app without the header, for a page that frames it; only the origins the instance names may do that
             var embed = context.Request.Query.ContainsKey("embed");
             var origins = AppInstanceStore.EmbedOrigins(shown.Instance.Settings.GetValueOrDefault(AppInstanceStore.EmbedSetting), out _) ?? [];
@@ -163,6 +180,12 @@ public static class AppsEndpoints
         }
         return new AppShell.Header(PersonOf(session), menus);
     }
+
+    /// <summary>Why a trusted app may not run (it asked to be trusted and no approval stands for this version), or null. A sandboxed app always runs. Without an approval store nothing is trusted.</summary>
+    private static string? Unapproved(AppApprovalStore? approvals, ResolvedInstance resolved) =>
+        resolved.Manifest.Trust == AppTrust.Sandbox ? null
+            : approvals is null ? $"'{resolved.Manifest.Name}' asks to be trusted and this host keeps no approvals."
+            : approvals.Gate(resolved) is { Allowed: false } gate ? gate.Refusal : null;
 
     private static string TitleOf(ResolvedInstance resolved) => resolved.Instance.Title ?? resolved.Manifest.Title ?? resolved.Instance.Name;
 

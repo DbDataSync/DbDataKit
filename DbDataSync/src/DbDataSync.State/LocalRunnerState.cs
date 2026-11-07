@@ -166,5 +166,10 @@ public sealed class LocalRunnerState(
 
     public void Log(Guid runId, LogSeverity level, string message) => logs.Log(runId, level, message);
 
+    /// <summary>A line that was written earlier, by a runner in another process, and carries the time it
+    /// happened — recorded as that, not as the moment it reached this process.</summary>
+    public void Log(Guid runId, LogSeverity level, string message, DateTimeOffset timestampUtc) =>
+        logs.Log(runId, level, message, timestampUtc, sourceKey: null);
+
     public void Flush() => logs.Flush();
 }

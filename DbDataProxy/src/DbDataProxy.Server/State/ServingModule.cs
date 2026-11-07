@@ -71,5 +71,23 @@ public static class ServingModule
                 PRIMARY KEY (query_id, grantee)
             );
             """,
+            // plan 20 O08: the store module's change requests, a write to a published entity model that waits for a person, kept where any instance can list, approve or reject it
+            """
+            CREATE TABLE {table:store_change_request} (
+                id               {{key}} PRIMARY KEY,
+                model            {{key}} NOT NULL,
+                state            {{key}} NOT NULL,
+                proposed_by      {{key}} NOT NULL,
+                proposed_by_name {{text}} NULL,
+                by_agent         {{bool}} NOT NULL,
+                proposed_at      {{time}} NOT NULL,
+                description      {{text}} NULL,
+                changes          {{text}} NOT NULL,
+                decided_by       {{key}} NULL,
+                decided_at       {{time}} NULL,
+                note             {{text}} NULL
+            );
+            CREATE INDEX {index:store_change_request_by_model} ON {table:store_change_request}(model, state);
+            """,
         ]);
 }
