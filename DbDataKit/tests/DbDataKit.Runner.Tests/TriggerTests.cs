@@ -42,7 +42,7 @@ internal sealed class TriggerHarness : IDisposable
 
     public const string ServiceName = "runner";
 
-    public StateDatabase OpenDatabase() => _location.Open([SchedulingModule.Module, RunnerModule.Module, RunsModule.Module, ProgressModule.Module, PayloadStore.Module], StateScope.Standalone, time: Clock);
+    public StateDatabase OpenDatabase() => _location.Open([SchedulingModule.Module, RunnerModule.Module, RunsModule.Module, ProgressModule.Module, PayloadStore.Module, DefinitionsModule.Module], StateScope.Standalone, time: Clock);
 
     public static PackageTask Def(string name, IReadOnlyList<TaskTrigger>? triggers = null, TaskLimits? limits = null, bool allowOverlap = false) =>
         new(name, new TaskEntry("T"), new Schedule(), triggers ?? [], [], [], ProgressDeclaration.Empty, limits ?? TaskLimits.None, [], [], allowOverlap);
