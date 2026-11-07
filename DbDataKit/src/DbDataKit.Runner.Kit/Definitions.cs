@@ -283,10 +283,17 @@ public static class JobDeclarations
         foreach (var named in job.GetCustomAttributes<RunnerDeclarationsAttribute>(inherit: false).SelectMany(a => a.Holders))
             if (seen.Add(named)) yield return named;
         foreach (var type in job.Assembly.GetTypes())
-            if (type.IsAbstract && type.IsSealed && type.DeclaringType is null && type.Namespace == job.Namespace && type.Name.StartsWith(job.Name, StringComparison.Ordinal)
-                && (type.Name.EndsWith("Steps", StringComparison.Ordinal) || type.Name.EndsWith("Units", StringComparison.Ordinal) || type.Name.EndsWith("Counters", StringComparison.Ordinal))
-                && seen.Add(type))
+            if (type.IsAbstract && type.IsSealed && type.DeclaringType is null && type.Namespace == job.Namespace && NamedAfter(type.Name, job.Name) && seen.Add(type))
                 yield return type;
+    }
+
+    /// <summary><c>DailyDropSteps</c>, <c>InvoiceUnits</c> and <c>OrdersCounters</c> are named after the jobs <c>DailyDrop</c>, <c>Invoices</c> and <c>Orders</c>: the stem before the suffix is the job's name, give or take a plural s.</summary>
+    private static bool NamedAfter(string holder, string job)
+    {
+        foreach (var suffix in new[] { "Steps", "Units", "Counters" })
+            if (holder.EndsWith(suffix, StringComparison.Ordinal))
+                return string.Equals(holder[..^suffix.Length].TrimEnd('s'), job.TrimEnd('s'), StringComparison.Ordinal);
+        return false;
     }
 }
 

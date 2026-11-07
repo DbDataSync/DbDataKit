@@ -53,6 +53,9 @@ public sealed class PackageManifestException(IReadOnlyList<ConfigDiagnostic> dia
 ///     limits: { timeout: 30m, memory_mb: 512, cpu: 1.5, concurrency: 2, attempts: 3, backoff: 30s, max_backoff: 10m }
 ///     requires: [network:outside]
 ///     capabilities: [network]
+///     steps:    [ { name: download, kind: stream, input: DateOnly }, { name: archive, input: DateOnly, result: ArchiveReceipt } ]   # kind: value | stream; for the console
+///     units:    [ { name: customer, item: Customer } ]
+///     counters: [rows]
 /// </code>
 /// </summary>
 public static class PackageManifestReader
@@ -365,7 +368,7 @@ public static class PackageManifestReader
 
         private PackageTask? Task(YamlMapping map, string path)
         {
-            Keys(map, path, "name", "entry", "schedule", "triggers", "inputs", "connections", "progress", "limits", "requires", "capabilities", "allow_overlap");
+            Keys(map, path, "name", "entry", "schedule", "triggers", "inputs", "connections", "progress", "limits", "requires", "capabilities", "allow_overlap", "steps", "units", "counters");
             var name = Text(map, "name", path, required: true);
             var entry = Entry(map, path);
             var schedule = Schedule(map, path);
@@ -377,7 +380,11 @@ public static class PackageManifestReader
             var requires = Strings(map, "requires", path, "[network:outside]");
             var capabilities = Strings(map, "capabilities", path, "[network]");
             var overlap = Flag(map, "allow_overlap", path) ?? false;
-            return name is null ? null : new PackageTask(name, entry, schedule, triggers, inputs, connections, progress, limits, requires, capabilities, overlap);
+            var steps = Steps(map, path);
+            var units = Units(map, path);
+            var counters = Strings(map, "counters", path, "[rows]");
+            return name is null ? null : new PackageTask(name, entry, schedule, triggers, inputs, connections, progress, limits, requires, capabilities, overlap,
+                steps.Count > 0 ? steps : null, units.Count > 0 ? units : null, counters.Count > 0 ? counters : null);
         }
 
         private TaskEntry Entry(YamlMapping task, string path)
@@ -494,6 +501,44 @@ public static class PackageManifestReader
                 var def = Text(map, "default", at, false, allowEmpty: true);
                 var description = Text(map, "description", at, false);
                 if (name is not null) found.Add(new TaskInput(name, type, required, def, description));
+            }
+
+            return found;
+        }
+
+        private List<TaskStep> Steps(YamlMapping task, string path)
+        {
+            var found = new List<TaskStep>();
+            if (Seq(Child(task, "steps", path), Join(path, "steps"), "- {name: download, kind: stream}") is not { } list) return found;
+            for (var i = 0; i < list.Items.Count; i++)
+            {
+                var at = $"{path}.steps[{i}]";
+                positions[at] = list.Items[i];
+                if (Map(list.Items[i], at, "{name: download, kind: stream, input: DateOnly}") is not { } map) continue;
+                Keys(map, at, "name", "kind", "input", "result");
+                var name = Text(map, "name", at, true);
+                var kind = Choice(map, "kind", at, [("value", StepKind.Value), ("stream", StepKind.Stream)]) ?? StepKind.Value;
+                var input = Text(map, "input", at, false);
+                var result = Text(map, "result", at, false);
+                if (name is not null) found.Add(new TaskStep(name, kind, input, result));
+            }
+
+            return found;
+        }
+
+        private List<TaskUnit> Units(YamlMapping task, string path)
+        {
+            var found = new List<TaskUnit>();
+            if (Seq(Child(task, "units", path), Join(path, "units"), "- {name: customer, item: Customer}") is not { } list) return found;
+            for (var i = 0; i < list.Items.Count; i++)
+            {
+                var at = $"{path}.units[{i}]";
+                positions[at] = list.Items[i];
+                if (Map(list.Items[i], at, "{name: customer, item: Customer}") is not { } map) continue;
+                Keys(map, at, "name", "item");
+                var name = Text(map, "name", at, true);
+                var item = Text(map, "item", at, false);
+                if (name is not null) found.Add(new TaskUnit(name, item));
             }
 
             return found;

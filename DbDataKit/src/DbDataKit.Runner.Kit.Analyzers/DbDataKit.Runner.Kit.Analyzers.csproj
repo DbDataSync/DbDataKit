@@ -6,6 +6,7 @@
     <Description>Roslyn analyzer of the runner kit: two steps, units or counters with one name in a job, and a step used inside another step.</Description>
     <IsPackable>false</IsPackable>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <NoWarn>$(NoWarn);RS2008</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />

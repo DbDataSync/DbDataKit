@@ -84,6 +84,21 @@ public sealed record TaskInput(string Name, ProgressType Type = ProgressType.Tex
 /// <summary>A place in the task where a connection is plugged in. The package says what kind of connection it needs; a channel's binding says which one (plan 30).</summary>
 public sealed record ConnectionSlot(string Name, string Kind);
 
+/// <summary>How a declared step keeps its result (plan 28b section 4): a small value as JSON, or a payload written in chunks.</summary>
+public enum StepKind
+{
+    Value,
+    Stream,
+}
+
+/// <summary>
+/// A step the task declares, so the console and the staging check can list it before a run (plan 28b K12). <see cref="Input"/> and <see cref="Result"/> are type names as text, for people; nothing reads them back.
+/// </summary>
+public sealed record TaskStep(string Name, StepKind Kind = StepKind.Value, string? Input = null, string? Result = null);
+
+/// <summary>A unit the task declares: the name its units are recorded under, and the type of the items as text.</summary>
+public sealed record TaskUnit(string Name, string? Item = null);
+
 /// <summary>
 /// What a task may use. Every value is optional: a missing one is the runner's default. Each one written has to be above zero.
 /// <see cref="Concurrency"/> is how many runs of the package may be going at once (plan 28a DR7). <see cref="Attempts"/> counts the first run too (plan 28a DR8); the wait before a retry starts at
@@ -97,7 +112,8 @@ public sealed record TaskLimits(TimeSpan? Timeout = null, int? MemoryMb = null, 
 /// <summary>
 /// One task of a package. <c>Schedule</c> is when it is due by itself (<see cref="Schedule.HasSchedule"/> false: only its triggers and a person start it). <c>Progress</c> is the checkpoints and state values it
 /// keeps between runs, in the model <see cref="ProgressMigration.Plan"/> takes (plan 29 section 4.3). <c>Requires</c> are labels a runner must have to take the task (plan 28 question 7); <c>Capabilities</c> what the
-/// task needs the runner to be able to do. <c>AllowOverlap</c> true lets a run start while the last one is still going; by default a task never overlaps itself.
+/// task needs the runner to be able to do. <c>AllowOverlap</c> true lets a run start while the last one is still going; by default a task never overlaps itself. <c>Steps</c>, <c>Units</c> and <c>Counters</c> are what the task declares for the console
+/// (plan 28b K12); a .NET job's are generated from its declarations, another language writes them by hand, and none is required.
 /// </summary>
 public sealed record PackageTask(
     string Name,
@@ -110,8 +126,17 @@ public sealed record PackageTask(
     TaskLimits Limits,
     IReadOnlyList<string> Requires,
     IReadOnlyList<string> Capabilities,
-    bool AllowOverlap = false)
+    bool AllowOverlap = false,
+    IReadOnlyList<TaskStep>? Steps = null,
+    IReadOnlyList<TaskUnit>? Units = null,
+    IReadOnlyList<string>? Counters = null)
 {
+    public IReadOnlyList<TaskStep> StepList => Steps ?? [];
+
+    public IReadOnlyList<TaskUnit> UnitList => Units ?? [];
+
+    public IReadOnlyList<string> CounterList => Counters ?? [];
+
     public PackageTask(string name, TaskEntry entry)
         : this(name, entry, new Schedule(), [], [], [], ProgressDeclaration.Empty, TaskLimits.None, [], [])
     {

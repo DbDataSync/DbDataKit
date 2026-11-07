@@ -42,6 +42,12 @@ public sealed class PackageManifestTests
               state:
                 - { name: last_file, type: text }
                 - { name: total, type: decimal, per: [customer], default: "0.0" }
+            steps:
+              - { name: download, kind: stream, input: DateOnly }
+              - { name: archive, input: DateOnly, result: ArchiveReceipt }
+            units:
+              - { name: customer, item: Customer }
+            counters: [rows, files]
             limits: { timeout: 30m, memory_mb: 512, cpu: 1.5, concurrency: 2, attempts: 3, backoff: 30s, max_backoff: 10m }
             requires: [network:outside, os:linux]
             capabilities: [network]
@@ -95,7 +101,13 @@ public sealed class PackageManifestTests
         Assert.Equal(["network:outside", "os:linux"], extract.Requires);
         Assert.Equal(["network"], extract.Capabilities);
 
+        Assert.Equal([new TaskStep("download", StepKind.Stream, "DateOnly"), new TaskStep("archive", StepKind.Value, "DateOnly", "ArchiveReceipt")], extract.StepList);
+        Assert.Equal([new TaskUnit("customer", "Customer")], extract.UnitList);
+        Assert.Equal(["rows", "files"], extract.CounterList);
+
         var report = m.Tasks[1];
+        Assert.Empty(report.StepList);                                  // none declared: none required
+        Assert.Null(report.Steps);
         Assert.Equal(TimeSpan.FromMinutes(15), report.Schedule.Every);
         Assert.Equal([RunOutcome.Succeeded, RunOutcome.CompletedWithFailures], report.Triggers[0].Outcomes);
         Assert.True(report.AllowOverlap);
@@ -226,6 +238,36 @@ public sealed class PackageManifestTests
         Assert.Contains(words, line);
         Assert.True(hit.Line > 0, "the problem has a line in the file");
         Assert.Null(PackageManifestReader.Load(yaml, File).Manifest);
+    }
+
+    [Fact]
+    public void Declared_steps_units_and_counters_are_checked_by_name_and_kind()
+    {
+        AssertRefused(Edited("{ name: archive, input: DateOnly,", "{ name: download, input: DateOnly,"), "tasks[0].steps[1].name", "listed twice");
+        AssertRefused(Edited("{ name: download, kind: stream,", "{ name: download, kind: streem,"), "tasks[0].steps[0].kind", "Did you mean `stream`?");
+        AssertRefused(Edited("{ name: download, kind: stream, input: DateOnly }", "{ name: download, kind: stream, imput: DateOnly }"), "tasks[0].steps[0].imput", "unknown key");
+        AssertRefused(Edited("counters: [rows, files]", "counters: [rows, Rows!]"), "tasks[0].counters[1]", "not a name for a counter");
+        AssertRefused(Edited("counters: [rows, files]", "counters: [rows, rows]"), "tasks[0].counters[1]", "listed twice");
+        AssertRefused(Edited("{ name: customer, item: Customer }", "{ name: customer, item: Customer }\n      - { name: customer }"), "tasks[0].units[1].name", "listed twice");
+    }
+
+    [Fact]
+    public void Steps_units_and_counters_built_in_code_round_trip_and_leave_no_trace_when_empty()
+    {
+        var task = new PackageTask("t", new TaskEntry("T.Job"), new Schedule(), [], [], [], ProgressDeclaration.Empty, TaskLimits.None, [], [],
+            Steps: [new TaskStep("make", StepKind.Stream), new TaskStep("send-letter", StepKind.Value, "Invoice", "LetterReceipt")], Units: [new TaskUnit("item")], Counters: ["rows"]);
+        var manifest = new PackageManifest("p", null, new PackageLaunch(LaunchKind.Assembly, "a.dll"), new BuiltAgainst("10.0", null, "dbdatakit.runner.v1"), [task]);
+
+        var text = PackageManifestWriter.Write(manifest);
+
+        Assert.Contains("    steps:\n      - { name: make, kind: stream }\n", text);
+        Assert.Contains("    counters: [rows]\n", text);
+        Assert.Equal(Canonical(manifest), Canonical(Valid(text)));
+        var bare = manifest with { Tasks = [new PackageTask("t", new TaskEntry("T.Job"))] };
+        var bareText = PackageManifestWriter.Write(bare);
+        Assert.DoesNotContain("steps:", bareText);
+        Assert.DoesNotContain("units:", bareText);
+        Assert.DoesNotContain("counters:", bareText);
     }
 
     [Fact]

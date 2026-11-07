@@ -88,6 +88,8 @@ public sealed class World
 
     public PayloadRef? LastPayload { get; set; }
 
+    public object? Seen { get; set; }
+
     public ConcurrentDictionary<string, DateTimeOffset> CustomerSince { get; } = new();
 
     // a hook a test uses to do something to the world while a job runs
@@ -491,4 +493,78 @@ public sealed class Stoppable : RunnerJob<StopInput, NoProgress, NoSlots>
             if (n == 2) throw new InvalidOperationException("number 2 is bad");
             return Task.CompletedTask;
         }, ct, new UnitOptions(Input.Stop ? OnFailure.Stop : OnFailure.Continue));
+}
+
+// ---- every kind of progress value
+
+public enum Speed
+{
+    Fast,
+    Slow,
+}
+
+public sealed class AllProgress : Progress
+{
+    [Checkpoint] public string? Label { get; set; }
+
+    [Checkpoint] public long Whole { get; set; }
+
+    [Checkpoint] public int Small { get; set; }
+
+    [Checkpoint] public decimal Money { get; set; }
+
+    [Checkpoint] public DateTimeOffset At { get; set; }
+
+    [Checkpoint] public DateOnly Day { get; set; }
+
+    [State] public bool Flag { get; set; }
+
+    [State] public Speed Pace { get; set; }
+
+    [State] public Guid Id { get; set; }
+
+    [State] public List<string>? Tags { get; set; }
+
+    [State] public int? Maybe { get; set; }
+
+    [State] public PayloadRef? Blob { get; set; }
+
+    public int NotKept { get; set; }
+}
+
+public static class TypedSteps
+{
+    public static readonly StreamStep<string> Blob = Step.Stream<string>("blob", k => k);
+}
+
+public sealed record AllSeen(string? Label, long Whole, int Small, decimal Money, DateTimeOffset At, DateOnly Day, bool Flag, Speed Pace, Guid Id, List<string>? Tags, int? Maybe, long BlobSize);
+
+[RunnerTask("typed")]
+public sealed class TypedProgress : RunnerJob<NoInput, AllProgress, NoSlots>
+{
+    public static readonly Guid TheId = Guid.Parse("0197f0e0-aaaa-7000-8000-000000000001");
+
+    protected override async Task RunAsync(CancellationToken ct)
+    {
+        World.Current.Seen = new AllSeen(Progress.Label, Progress.Whole, Progress.Small, Progress.Money, Progress.At, Progress.Day, Progress.Flag, Progress.Pace, Progress.Id, Progress.Tags, Progress.Maybe, Progress.Blob?.Size ?? -1);
+        if (Progress.Whole > 0)
+        {
+            Progress.Money += 1.5m;                     // a second run moves one value and leaves the others
+            return;
+        }
+
+        Progress.Label = "délta/token=1";
+        Progress.Whole = 9_000_000_000;
+        Progress.Small = 7;
+        Progress.Money = 123456.789m;
+        Progress.At = DateTimeOffset.Parse("2026-11-07T08:09:10Z");
+        Progress.Day = new DateOnly(2026, 11, 7);
+        Progress.Flag = true;
+        Progress.Pace = Speed.Slow;
+        Progress.Id = TheId;
+        Progress.Tags = ["a", "b"];
+        Progress.Maybe = 5;
+        Progress.NotKept = 99;
+        Progress.Blob = await Step(TypedSteps.Blob, "b").Repeatable().StreamAsync((sink, ct) => sink.WriteAsync(new byte[3000], ct).AsTask(), ct);
+    }
 }
