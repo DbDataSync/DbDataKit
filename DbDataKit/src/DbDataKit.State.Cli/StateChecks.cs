@@ -109,8 +109,9 @@ internal static class StateChecks
             Ok("engine", support?.Message ?? "the engine did not report a version", support is { Tested: false } ? "note" : "ok");
 
             // ---- the features the modules need from the engine (U01)
-            if (context.Modules is not null && inspector.Features() is { } features)
+            if (context.Modules is not null)
             {
+                var features = inspector.Features();
                 var needing = session.Layout.Namespaces.Select(n => n.Module).Where(m => m.RequiresFeatures.Count > 0).ToList();
                 if (EngineSupport.Unmet(needing, features) is { Count: > 0 } unmet)
                     return Fail("features", StateExit.FeatureMissing, unmet[0].Message);

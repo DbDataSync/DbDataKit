@@ -66,6 +66,20 @@ check "postgres: the logical server's variables stay out when only the plain one
 out="$(t "mssql postgres postgres-logical" dbdatakit --dotenv)"
 check "kit: the plain PostgreSQL is still the shared one when the logical one runs too" '[[ "$out" == *"DBDATA_TEST_POSTGRES=Host=127.0.0.1;Port=15432;"* ]]'
 
+# The previous releases of the state engines (N-1, plan 29b U01)
+out="$(t mssql2022 --dotenv)"
+check "mssql2022: its own port and names, and nothing of the current SQL Server" '[[ "$out" == *"DBKIT_TEST_MSSQL2022=Server=127.0.0.1,14333;User Id=sa;Password=DbKit_Test_Pw1;TrustServerCertificate=True;Encrypt=False"* && "$out" == *"DBKIT_TEST_MSSQL2022_SERVER=127.0.0.1,14333"* && "$out" != *"DBKIT_TEST_MSSQL="* && "$out" != *"DBKIT_TEST_MSSQL_SERVER"* ]]'
+out="$(t postgres16 --dotenv)"
+check "postgres16: port 15434, user postgres, and nothing of the current PostgreSQL" '[[ "$out" == *"DBKIT_TEST_POSTGRES16=Host=127.0.0.1;Port=15434;Username=postgres;Password=DbKit_Test_Pw1;Database=postgres"* && "$out" == *"DBKIT_TEST_POSTGRES16_PORT=15434"* && "$out" != *"DBKIT_TEST_POSTGRES="* && "$out" != *"DBKIT_TEST_POSTGRES_PORT"* ]]'
+out="$(t "mssql postgres" --dotenv)"
+check "the current engines do not set the older engines' variables" '[[ "$out" != *MSSQL2022* && "$out" != *POSTGRES16* ]]'
+out="$(t "mssql2022 postgres16" dbdatakit-older --dotenv)"
+check "older: the State suites' variables name SQL Server 2022 and PostgreSQL 16, with explicit variables for the version rows" '[[ "$out" == *"DBDATA_TEST_SQLSERVER=Server=127.0.0.1,14333;"* && "$out" == *"DBDATA_TEST_SQLSERVER2022=Server=127.0.0.1,14333;"* && "$out" == *"DBDATA_TEST_POSTGRES=Host=127.0.0.1;Port=15434;"* && "$out" == *"DBDATA_TEST_POSTGRES16=Host=127.0.0.1;Port=15434;"* ]]'
+check "older: every engine started is required, the version rows too" '[[ "$out" == *"DBDATA_REQUIRE_SQLSERVER=true"* && "$out" == *"DBDATA_REQUIRE_SQLSERVER2022=true"* && "$out" == *"DBDATA_REQUIRE_POSTGRES=true"* && "$out" == *"DBDATA_REQUIRE_POSTGRES16=true"* ]]'
+out="$(t "mssql postgres" dbdatakit-older --dotenv)"
+check "older: nothing is mapped while the older engines are not running" '[[ "$out" != *DBDATA_TEST_SQLSERVER=* && "$out" != *DBDATA_TEST_POSTGRES=* && "$out" != *DBDATA_REQUIRE* ]]'
+check "up with no engine named leaves the older engines out, and 'all' names them" '[[ "$(grep "^engines_default=" "$here/testenv.sh")" != *mssql2022* && "$(grep "^engines_default=" "$here/testenv.sh")" != *postgres16* && "$(grep "^engines_all=" "$here/testenv.sh")" == *mssql2022*postgres16* ]]'
+
 # DbDataSync mapping
 out="$(t "mssql mssql-target postgres-logical mysql mariadb oracle" dbdatasync --dotenv)"
 check "sync: SQL Server source, target and the shared server variable" '[[ "$out" == *"DBDATASYNC_TEST_MSSQL_SERVER=Server=127.0.0.1,14330;"* && "$out" == *"DBDATASYNC_TEST_MSSQL_SOURCE_SERVER=Server=127.0.0.1,14330;"* && "$out" == *"DBDATASYNC_TEST_MSSQL_TARGET_SERVER=Server=127.0.0.1,14331;"* ]]'
@@ -84,6 +98,7 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
   check "compose: the logical server is wal_level=logical with wal2json" '[[ "$cfg" == *"wal_level=logical"* && "$cfg" == *"wal2json"* ]]'
   check "compose: SQL Server Agent on for the first SQL Server only" '[ "$(grep -c "MSSQL_AGENT_ENABLED" <<<"$cfg")" -eq 1 ]'
   check "compose: Oracle runs the init scripts" '[[ "$cfg" == *"/container-entrypoint-initdb.d"* ]]'
+  check "compose: the older engines have their own ports (14333, 15434) and containers, PostgreSQL 16 from the pinned pgvector image" '[[ "$cfg" == *"published: \"14333\""* && "$cfg" == *"published: \"15434\""* && "$cfg" == *"container_name: dbkit-test-mssql2022"* && "$cfg" == *"container_name: dbkit-test-postgres16"* && "$cfg" == *"pgvector/pgvector:pg16"* && "$cfg" == *"mssql/server:2022-latest@sha256:"* ]]'
   check "compose: the slow engines have their own ports (14332, 10000, 9050, 31337, 31338)" '[[ "$cfg" == *"published: \"14332\""* && "$cfg" == *"published: \"10000\""* && "$cfg" == *"published: \"9050\""* && "$cfg" == *"published: \"31337\""* && "$cfg" == *"published: \"31338\""* ]]'
   check "compose: only the TLS Flight server has TLS on, and both share one image" '[ "$(grep -c "TLS_ENABLED: \"1\"" <<<"$cfg")" -eq 1 ] && [ "$(grep -E "^\s+image: voltrondata|^\s+image: .*sqlflite" <<<"$cfg" | sort -u | wc -l)" -eq 1 ]'
   check "each profile named in testenv.sh exists in the compose file" '[ "$(docker compose -f "$here/docker-compose.yml" --profile "*" config --services | sort | tr "\n" " ")" = "$(grep "^engines_all=" "$here/testenv.sh" | sed "s/.*(\(.*\))/\1/" | tr " " "\n" | sort | tr "\n" " ")" ]'

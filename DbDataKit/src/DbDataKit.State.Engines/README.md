@@ -40,3 +40,29 @@ state:
 ## Writing the section
 
 `StateSettingsWriter.Write(path, settings)` replaces only the `state:` block of a settings file (creating the file or the block when absent), validates it through `StateSettingsReader` first and renames a temporary file over the original, so an invalid setting is refused (naming the file and the key) and a crash leaves the old file. The rest of the file, its comments and line endings are kept; comments inside the old `state:` block are not. `Remove(path)` takes the block out; `Load(path)` reads it. Connection strings are written as given, secret references included.
+
+## Support matrix (plan 29b, U01)
+
+| Engine | Supported (N-1 and N) | Newer | Older |
+| --- | --- | --- | --- |
+| SQL Server | 2022 (16.x) and 2025 (17.x) | allowed, noted as untested by `state test` | refused, naming 2022 as the oldest |
+| PostgreSQL | 16 and 17 | allowed, noted as untested | refused, naming 16 as the oldest |
+| SQLite | 3.35 and newer (the library comes with the product) | allowed | refused |
+
+CI runs the State and Scheduling suites on both columns: the current engines (SQL Server 2025, PostgreSQL 17, the `mssql` and `postgres` profiles of `testenv/`) in the ordinary jobs and the older ones (`mssql2022`, `postgres16`) in the job `state-older-engines`. Locally: `testenv/testenv.sh up mssql2022 postgres16`, then `eval "$(testenv/testenv.sh env dbdatakit-older)"`.
+
+**Features per module.** A module that cannot work without something the engine may lack declares it: `new StateModule(..., requiresFeatures: [EngineFeature.Vector])`. No shipped module needs one yet; the first is the knowledge index (plan 27).
+
+| Feature | SQL Server | PostgreSQL | SQLite |
+| --- | --- | --- | --- |
+| `Vector` (vector columns and search) | 2025 or later (the `vector` type) | the `pgvector` extension, installed on the server (`pg_available_extensions`); the module's migration runs `CREATE EXTENSION IF NOT EXISTS vector` | none |
+
+`EngineSupport.Features(engine, version, ...)` and `Features(connection, engine)` say which a server has (`Enabled`: usable; `Creatable`: installed on the server, not created in this database yet, which a migration does; `Missing`). `state show` prints them and `state test` has a `features` step.
+
+**How a refusal reads.** The migrator checks before it runs any DDL (no schema, no registry, no table is made), only for a module that still has migrations to apply, and stops with one sentence naming the module, the feature, the engine and the fix:
+
+```
+The module 'knowledge' needs the engine feature 'vector' (SQL Server 2025's vector type), and this SQL Server 2022 (16.0.4135.4) does not have it; nothing of the module was created. To fix it: use SQL Server 2025 or later for this install, or pick another engine (PostgreSQL with pgvector).
+```
+
+On PostgreSQL the fix is to install the pgvector extension on the server (the package for the PostgreSQL version, or the `pgvector/pgvector` image); on SQLite, to pick SQL Server 2025 or PostgreSQL with pgvector. `state test` fails with exit code 29 and the same sentence, so it is found before the service is started. A module already applied is not checked again: a start never fails for what already works.

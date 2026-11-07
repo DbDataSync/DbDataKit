@@ -161,7 +161,7 @@ public sealed class StateVerbsTests : IDisposable
 
         Assert.Equal(0, ran.Exit);
         Assert.True((bool)ran.Data["ok"]!);
-        Assert.Equal(["settings", "connection", "registry", "rights", "engine", "clash", "migrations"], ran.Data["steps"]!.AsArray().Select(s => (string)s!["name"]!).ToArray());
+        Assert.Equal(["settings", "connection", "registry", "rights", "engine", "features", "clash", "migrations"], ran.Data["steps"]!.AsArray().Select(s => (string)s!["name"]!).ToArray());
         Assert.DoesNotContain("FAILED", ran.Out);
     }
 
@@ -423,5 +423,71 @@ public sealed class StateVerbsTests : IDisposable
         Assert.Equal(0, ran.Exit);
         Assert.DoesNotContain("settings from", ran.Out);
         Assert.Null(ran.Data["sources"]);
+    }
+
+    // ---- engine features (plan 29b, U01)
+
+    private sealed class FakeFeatures(FeatureStatus vector) : IEngineFeatureProbe
+    {
+        public EngineFeatureReport Detect(DbConnection connection, string engine) =>
+            new(engine, null, new Dictionary<EngineFeature, FeatureStatus> { [EngineFeature.Vector] = vector });
+    }
+
+    private static StateModule Knowledge() => new("knowledge", StateScopeKind.Install, ["CREATE TABLE {table:chunk} (id {{key}} PRIMARY KEY);"], requiresFeatures: [EngineFeature.Vector]);
+
+    [Theory]
+    [MemberData(nameof(Engines), MemberType = typeof(StateCliHarness))]
+    public async Task Test_fails_with_its_own_exit_code_when_a_module_needs_a_feature_the_engine_lacks(string engine)
+    {
+        var db = _h.Provision(engine);
+        db.Open([Module("alpha")]);
+
+        var ran = await RunAsync(Context(db, [Module("alpha"), Knowledge()]) with { FeatureProbe = new FakeFeatures(FeatureStatus.Missing) }, "test");
+
+        Assert.Equal(StateExit.FeatureMissing, ran.Exit);
+        Assert.Contains("'knowledge'", ran.Error);
+        Assert.Contains("'vector'", ran.Error);
+        Assert.Contains("To fix it:", ran.Error);
+        Assert.Contains(ran.Data["steps"]!.AsArray(), s => (string)s!["name"]! == "features" && (string)s["status"]! == "failed");
+        Assert.Equal("features", (string)ran.Data["failed"]!);
+    }
+
+    [Theory]
+    [MemberData(nameof(Engines), MemberType = typeof(StateCliHarness))]
+    public async Task Test_names_the_modules_that_need_a_feature_when_the_engine_has_it(string engine)
+    {
+        var db = _h.Provision(engine);
+        db.Open([Module("alpha")]);
+
+        var ran = await RunAsync(Context(db, [Module("alpha"), Knowledge()]) with { FeatureProbe = new FakeFeatures(FeatureStatus.Enabled) }, "test");
+
+        Assert.Equal(0, ran.Exit);
+        var step = ran.Data["steps"]!.AsArray().Single(s => (string)s!["name"]! == "features")!;
+        Assert.Equal("ok", (string)step["status"]!);
+        Assert.Contains("knowledge needs vector", (string)step["message"]!);
+        Assert.Contains("vector (ready)", (string)step["message"]!);
+    }
+
+    [Theory]
+    [MemberData(nameof(Engines), MemberType = typeof(StateCliHarness))]
+    public async Task Show_lists_the_engine_features_and_the_modules_whose_need_is_not_met(string engine)
+    {
+        var db = _h.Provision(engine);
+        db.Open([Module("alpha")]);
+
+        var shown = await RunAsync(Context(db, [Module("alpha"), Knowledge()]) with { FeatureProbe = new FakeFeatures(FeatureStatus.Missing) }, "show");
+
+        Assert.Equal(0, shown.Exit);
+        Assert.Contains("features     none", shown.Out);
+        Assert.Contains("NOT MET", shown.Out);
+        Assert.Equal("missing", (string)shown.Data["features"]!["vector"]!);
+        Assert.Equal("knowledge", (string)shown.Data["features_unmet"]!.AsArray().Single()!["module"]!);
+
+        var real = await RunAsync(Context(db, [Module("alpha")]), "show");
+        Assert.Contains("features     ", real.Out);
+        Assert.Empty(real.Data["features_unmet"]!.AsArray());
+        // the real engines differ by release (SQL Server 2025 and later, PostgreSQL with the extension installed: "creatable" until a migration creates it), SQLite has none
+        var vector = (string)real.Data["features"]!["vector"]!;
+        Assert.Contains(vector, engine == StateEngineIds.Sqlite ? ["missing"] : new[] { "missing", "creatable", "enabled" });
     }
 }

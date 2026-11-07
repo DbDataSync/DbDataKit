@@ -77,8 +77,8 @@ internal static class StateShow
                 data["connected"] = true;
                 if (inspector.ServerVersion() is { } version) { data["engine_version"] = version; await write.WriteLineAsync($"  version      {version}"); }
                 if (inspector.CurrentLogin() is { } login) { data["login"] = login; await write.WriteLineAsync($"  login        {login}"); }
-                if (inspector.Features() is { } features)
                 {
+                    var features = inspector.Features();
                     data["features"] = Enum.GetValues<EngineFeature>().ToDictionary(f => EngineFeatures.Name(f), f => (object?)features.Status(f).ToString().ToLowerInvariant());
                     await write.WriteLineAsync($"  features     {features.Describe()}");
                     if (context.Modules is not null)
