@@ -41,14 +41,16 @@ internal static class RefreshJobs
     }
 }
 
-/// <summary>The server's state database: the shared queue and the shared per-job record.</summary>
+/// <summary>The server's state database (plan 29a Q17): the shared <c>scheduling</c> module, which holds the work queue, the run locks and the per-job record and pause. A database made by the earlier structure, one schema version for the whole database, is refused with a message naming the file.</summary>
 internal static class BuildSchedulerSchema
 {
     public const string Service = "dbdatabuild";
 
-    public static StateSchema Schema => new([WorkQueueSchema.Queue, JobStateSchema.Table, JobPauseSchema.Table]);
+    public static IReadOnlyList<StateModule> Modules { get; } = [SchedulingModule.Module];
 
-    public static StateDatabase Open(string serverDirectory) => new(Path.Combine(serverDirectory, "state.db"), Schema);
+    /// <param name="time">The clock the queue's leases and availability are measured on: the system's, or a test's.</param>
+    public static StateDatabase Open(string serverDirectory, TimeProvider? time = null) =>
+        StateDatabase.OpenModules(Path.Combine(serverDirectory, "state.db"), Modules, StateScope.Install, time);
 }
 
 /// <summary>
@@ -65,9 +67,9 @@ internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunne
     /// <summary>How long a claimed run stays claimed without a heartbeat; a run beats three times in it, so only a worker that died loses its run.</summary>
     public static readonly TimeSpan DefaultLease = TimeSpan.FromMinutes(10);
 
-    private readonly JobStateStore _jobs = new(database, BuildSchedulerSchema.Service);
-    private readonly JobPauseStore _pauses = new(database, BuildSchedulerSchema.Service);
-    private readonly WorkQueueStore _queue = new(database, BuildSchedulerSchema.Service, clock) { LeaseDuration = lease ?? DefaultLease };
+    private readonly ModuleJobStateStore _jobs = new(database, BuildSchedulerSchema.Service);
+    private readonly ModuleJobPauseStore _pauses = new(database, BuildSchedulerSchema.Service);
+    private readonly ModuleWorkQueueStore _queue = new(database, BuildSchedulerSchema.Service) { LeaseDuration = lease ?? DefaultLease };
     public const string Kind = "refresh";
 
     /// <summary>One tick: gives up leases that ran out and queues every plan that is due. Returns what it queued.</summary>
