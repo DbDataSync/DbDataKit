@@ -64,7 +64,8 @@ public sealed class WebhookTests
         Assert.False(record.SignatureOk);
         Assert.Equal(ProgressStore.RefusedBySignature, record.TakenBy);
         Assert.Equal(0, Inbox(h).InboxWaiting());
-        Assert.Empty(await h.RunsAsync());                                                 // nothing ran
+        var runs = await h.RunsAsync();
+        Assert.True(runs.Count == 0, $"nothing should have run, but there are {runs.Count}: {runs.ToJsonString()}\n{string.Join('\n', h.Log)}");   // nothing ran
         var entry = Assert.Single(h.Audit.Read(new AuditQuery(Verb: "runner.webhook.receive")));
         Assert.Equal(AuditEvent.Refused, entry.Entry.Outcome);
         Assert.Equal("invalid", (string)System.Text.Json.Nodes.JsonNode.Parse(entry.Entry.Detail!)!["signature"]!);

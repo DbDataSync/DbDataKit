@@ -67,10 +67,10 @@ public sealed class WebhookReceiver(StateDatabase database, TriggerEngine? engin
 
             var progress = new ProgressStore(database, new ProgressKey(task.Package, task.Channel, task.Task));
             var signatureOk = signatureOkFor(task);
-            progress.Receive(source, signatureOk, id, payloadId);
+            // a refused body is stored already set aside, in the one insert: stored as waiting first, the trigger engine's tick could queue a run for it
+            progress.Receive(source, signatureOk, id, payloadId, signatureOk ? null : ProgressStore.RefusedBySignature);
             var queued = false;
             if (signatureOk) queued = engine?.TriggerWebhook(task) ?? false;
-            else progress.RefuseInboxItem(id, ProgressStore.RefusedBySignature);
             deliveries.Add(new WebhookDelivery(task, id, signatureOk, queued));
         }
 

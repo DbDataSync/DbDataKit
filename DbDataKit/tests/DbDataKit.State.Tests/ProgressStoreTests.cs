@@ -261,6 +261,22 @@ public sealed class ProgressStoreTests : IDisposable
 
     [Theory]
     [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
+    public void A_refused_webhook_is_stored_already_set_aside_and_is_never_visible_as_waiting(string engine)
+    {
+        // CI flake (DbDataRunner WebhookTests, bad signature): the item used to be inserted waiting and refused by a second statement; the trigger engine's sweep that looked in between queued a run for it
+        var store = new ProgressStore(Open(engine), Key);
+        var item = store.Receive("github", signatureOk: false, refusedBy: ProgressStore.RefusedBySignature);
+
+        Assert.Equal(0, store.InboxWaiting());
+        Assert.Null(store.NewestWaiting());
+        Assert.Null(store.TakeNext(Guid.NewGuid()));
+        var record = Assert.Single(store.InboxRecords());
+        Assert.Equal((item, false, ProgressStore.RefusedBySignature), (record.Id, record.SignatureOk, record.TakenBy));
+        Assert.False(store.RefuseInboxItem(item, "again"));       // already set aside
+    }
+
+    [Theory]
+    [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
     public void An_item_a_run_took_and_did_not_finish_is_released_to_the_next_take(string engine)
     {
         var store = new ProgressStore(Open(engine), Key);
