@@ -214,6 +214,37 @@ public sealed class StagingTests
     }
 
     [Theory, MemberData(nameof(Engines))]
+    public async Task A_version_with_an_unbound_connection_slot_fails_staging_naming_the_slot_and_the_channel_and_binding_it_lets_it_stage(string engine)
+    {
+        using var rig = new Rig(engine);
+        var (id, follower) = rig.Instance();
+        rig.Publish(Package(Version1), PublishMode.Serve);
+        var withSlots = Package(Version2Keeps) with
+        {
+            Tasks = [Package(Version2Keeps).Tasks[0] with { Connections = [new ConnectionSlot("source", "postgres", SlotEnvironmentFormats.SyncSecret), new ConnectionSlot("target", "sqlserver"), new ConnectionSlot("other", "sqlserver")] }],
+        };
+        rig.Publish(withSlots, PublishMode.Stage);
+        rig.Publisher.Bind(Prod, PackageActivator.Kind, Name, "target", "wh_db", "ada");
+
+        var pass = await follower.PassAsync();
+
+        Assert.Single(pass.Failed);
+        var status = StatusOf(rig, id);
+        Assert.Equal(InstanceStates.Failed, status.State);
+        Assert.Contains("'source', 'other'", status.Error);
+        Assert.Contains("channel 'prod'", status.Error);
+        Assert.DoesNotContain("'target'", status.Error);
+        Assert.Equal(1, rig.Publisher.Head(PackageActivator.Kind, Name, Prod)!.Active);
+
+        // bound in the channel, a new version of the same shape stages ready
+        rig.Publisher.Bind(Prod, PackageActivator.Kind, Name, "source", "src_db", "ada");
+        rig.Publisher.Bind(Prod, PackageActivator.Kind, Name, "other", "wh_db", "ada");
+        rig.Publish(withSlots with { Description = "again" }, PublishMode.Stage);
+        Assert.Single((await follower.PassAsync()).Prepared);
+        Assert.Equal(InstanceStates.Ready, StatusOf(rig, id).State);
+    }
+
+    [Theory, MemberData(nameof(Engines))]
     public async Task A_package_built_against_another_contract_fails_staging_with_the_republish_message(string engine)
     {
         using var rig = new Rig(engine);

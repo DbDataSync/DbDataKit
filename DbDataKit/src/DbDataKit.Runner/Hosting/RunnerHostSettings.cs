@@ -1,4 +1,6 @@
+using DbDataKit.Runner.Connections;
 using DbDataKit.Runner.Execution;
+using DbDataKit.Secrets;
 using DbDataKit.Runner.Staging;
 
 namespace DbDataKit.Runner;
@@ -59,6 +61,21 @@ public sealed record RunnerHostSettings(string Directory)
 
     /// <summary>Wraps the executor the scheduler runs tasks through (the console runs its own system tasks in its process and hands every other task on); null: tasks run in processes of their own through the executor.</summary>
     public Func<ITaskRunner, ITaskRunner>? WrapRunner { get; init; }
+
+    /// <summary>The connections a channel's slot binding may name (plan 28c E02); null: the <c>connection/1</c> files in <see cref="ConnectionsDirectory"/>.</summary>
+    public IConnectionCatalog? Connections { get; init; }
+
+    /// <summary>The runner's secrets, which the connections' references resolve against; null: <see cref="DefaultSecrets"/> (the runner's environment and the credentials directory).</summary>
+    public ISecretResolver? Secrets { get; init; }
+
+    /// <summary>The environment and the credentials directory (<c>CREDENTIALS_DIRECTORY</c>, systemd and container secret mounts), the providers of the shared secret library that need no key.</summary>
+    public static ISecretResolver DefaultSecrets()
+    {
+        var credentials = Environment.GetEnvironmentVariable("CREDENTIALS_DIRECTORY");
+        return new SecretResolverChain([new EnvSecretProvider(), new FileSecretProvider(new FileSecretOptions { SecretsDirectory = string.IsNullOrWhiteSpace(credentials) ? null : credentials })]);
+    }
+
+    public string ConnectionsDirectory => Path.Combine(Directory, "connections");
 
     public string CacheDirectory => Path.Combine(Directory, "cache");
 

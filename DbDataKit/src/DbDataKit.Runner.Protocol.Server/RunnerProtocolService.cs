@@ -518,6 +518,38 @@ internal sealed class RunnerProtocolService(RunSessions sessions) : RunnerApi.Ru
         return Task.FromResult(new HeartbeatReply { CancelRequested = cancelled, CancelReason = session.CancelReason ?? "" });
     });
 
+    public override Task<ResolveConnectionReply> ResolveConnection(ResolveConnectionRequest request, ServerCallContext context) => Guard(async () =>
+    {
+        var session = Started(context);
+        if (string.IsNullOrWhiteSpace(request.Slot)) throw Refuse(StatusCode.InvalidArgument, "The slot has no name.");
+        var role = string.IsNullOrEmpty(request.Role) ? "default" : request.Role;
+        if (role is not ("default" or "read" or "write")) throw Refuse(StatusCode.InvalidArgument, $"The login role '{role}' is not one of default, read or write.");
+        // only a slot the run was started with: the handles are the channel's bindings as they were when the run began
+        if (!session.Grant.Start.ConnectionHandles.TryGetValue(request.Slot, out var connection))
+            throw Refuse(StatusCode.PermissionDenied, $"The slot '{request.Slot}' is not one this run was given: it is not declared by the task, or it has no binding in channel '{session.Grant.Start.Task.Channel}'.");
+        var resolver = session.Grant.Slots ?? throw Refuse(StatusCode.FailedPrecondition, "This runner has no connection bindings to resolve a slot with.");
+        ConnectionGrant grant;
+        try
+        {
+            grant = await resolver.ResolveAsync(request.Slot, connection, role, context.CancellationToken).ConfigureAwait(false);
+        }
+        catch (SlotResolutionException ex)
+        {
+            throw Refuse(StatusCode.FailedPrecondition, ex.Message);
+        }
+
+        var reply = new ResolveConnectionReply { Connection = grant.Connection, Engine = grant.Engine, Role = grant.Role, ReadOnly = grant.ReadOnly, AuthMode = grant.AuthMode };
+        if (grant.Host is not null) reply.Host = grant.Host;
+        if (grant.Port is { } port) reply.Port = port;
+        if (grant.Database is not null) reply.Database = grant.Database;
+        if (grant.ConnectionString is not null) reply.ConnectionString = grant.ConnectionString;
+        if (grant.User is not null) reply.User = grant.User;
+        if (grant.Password is not null) reply.Password = grant.Password;
+        if (grant.ConnectionStringSecret is not null) reply.ConnectionStringSecret = grant.ConnectionStringSecret;
+        if (grant.Token is not null) reply.Token = grant.Token;
+        return reply;
+    });
+
     public override async Task WatchCancel(WatchCancelRequest request, IServerStreamWriter<CancelNotice> responseStream, ServerCallContext context)
     {
         var session = Started(context);

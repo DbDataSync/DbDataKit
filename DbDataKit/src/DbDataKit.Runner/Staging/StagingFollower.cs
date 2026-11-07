@@ -159,6 +159,12 @@ public sealed class StagingFollower
         if (!load.Ok) throw new StagingFailedException($"The manifest of version {version} does not validate on this runner: {string.Join(" ", load.Diagnostics.Where(d => d.Severity == DbDataKit.Config.Yaml.ConfigSeverity.Error).Select(d => d.ToString()))}");
         var manifest = load.Manifest!;
 
+        // a connection slot with no binding in this channel can never be opened: the version does not become active, and the message names the slot and the channel (plan 28c E02)
+        var bound = _publisher.Bindings(channel, Kind, name).Select(b => b.Slot).ToHashSet(StringComparer.Ordinal);
+        foreach (var task in manifest.Tasks)
+            if (task.Connections.Where(c => !bound.Contains(c.Name)).Select(c => $"'{c.Name}'").Distinct().ToList() is { Count: > 0 } unbound)
+                throw new StagingFailedException($"Task '{task.Name}' needs the connection {(unbound.Count == 1 ? "slot" : "slots")} {string.Join(", ", unbound)} bound in channel '{channel}', and {(unbound.Count == 1 ? "it has" : "they have")} no binding there.");
+
         // compiled code depends on the contracts it was built against (plan 30 section 6.1)
         if (_options.Contracts?.Invoke(manifest) is { } contract)
             throw new StagingFailedException($"Version {version} of '{name}' cannot run on this runner: {contract}");

@@ -33,6 +33,7 @@ public sealed partial class ExecutorHarness : IDisposable
             MaxScratchBytes = settings.MaxScratchBytes,
             Logger = settings.Logger,
             ExitWait = settings.ExitWait,
+            Slots = settings.Slots?.Invoke(Database, Redactor),
         });
     }
 
@@ -44,6 +45,9 @@ public sealed partial class ExecutorHarness : IDisposable
         public long MaxScratchBytes { get; set; } = 1024L * 1024 * 1024;
 
         public ILogger? Logger { get; set; }
+
+        /// <summary>Makes the slot resolver from the harness's state database and the redactor the run log uses.</summary>
+        public Func<StateDatabase, IRedactor, ISlotResolver>? Slots { get; set; }
 
         public TimeSpan ExitWait { get; set; } = TimeSpan.FromSeconds(10);
     }

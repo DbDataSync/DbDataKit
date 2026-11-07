@@ -16,6 +16,12 @@ public sealed class RemoteRunOptions
     /// <summary>Opens the connection a slot is bound to (a connection handle's name goes to the runner, which resolves it; this is the task side of that).</summary>
     public SlotOpener? SlotOpener { get; init; }
 
+    /// <summary>
+    /// Makes the typed connection a job's slot hands out from what the runner resolved (<see cref="ConnectionGrant"/>), for a run with no <see cref="SlotOpener"/>. Null: the grant itself, for a slot typed
+    /// <see cref="ConnectionGrant"/> or <see cref="object"/>; another type is refused.
+    /// </summary>
+    public Func<ConnectionGrant, Type, object>? SlotFactory { get; init; }
+
     /// <summary>How often the task sends a heartbeat (and learns of a cancel it was not pushed). Default 5 seconds.</summary>
     public TimeSpan HeartbeatInterval { get; init; } = TimeSpan.FromSeconds(5);
 
@@ -105,7 +111,7 @@ public static class RemoteJobHost
         }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
 
         var settings = new RunSettings(options.Hooks, options.MaxParallelism, Guid.CreateVersion7);
-        var run = JobRunner.ExecuteAsync(jobType, backend, settings, options.SlotOpener, input, cancel.Token);
+        var run = JobRunner.ExecuteAsync(jobType, backend, settings, options.SlotOpener ?? ConnectionGrant.Opener(client, headers, options.SlotFactory), input, cancel.Token);
         try
         {
             var graceOver = cancelledByRunner.Task.ContinueWith(async _ => await Task.Delay(grace, CancellationToken.None).ConfigureAwait(false), CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default).Unwrap();

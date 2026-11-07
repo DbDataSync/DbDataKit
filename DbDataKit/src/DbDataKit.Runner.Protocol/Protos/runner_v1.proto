@@ -57,6 +57,9 @@ service RunnerApi {
   rpc Heartbeat(HeartbeatRequest) returns (HeartbeatReply);
   // server streaming: the runner's push of a cancel (one message, then the stream stays open until the run ends); Heartbeat carries the same fact for a poller
   rpc WatchCancel(WatchCancelRequest) returns (stream CancelNotice);
+
+  // ---- connections (plan 28c E02)
+  rpc ResolveConnection(ResolveConnectionRequest) returns (ResolveConnectionReply);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
@@ -441,4 +444,30 @@ message WatchCancelRequest {
 message CancelNotice {
   string reason = 1;
   int64 grace_ms = 2;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+// connections (added to v1 by plan 28c E02: additive, a new call and new messages)
+
+// A task asks for the connection a slot of its manifest is bound to in its own channel, with the login of one role ("default", "read" or "write").
+// Only a slot the run was started with can be asked for; the answer is held in the task's memory for the run and never written by the runner to a log.
+message ResolveConnectionRequest {
+  string slot = 1;
+  string role = 2;
+}
+
+message ResolveConnectionReply {
+  string connection = 1;
+  string engine = 2;
+  string role = 3;
+  optional string host = 4;
+  optional int32 port = 5;
+  optional string database = 6;
+  optional string connection_string = 7;   // without credentials
+  bool read_only = 8;
+  string auth_mode = 9;
+  optional string user = 10;
+  optional string password = 11;
+  optional string connection_string_secret = 12;
+  optional string token = 13;
 }

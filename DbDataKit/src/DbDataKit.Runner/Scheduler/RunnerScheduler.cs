@@ -471,6 +471,21 @@ public sealed partial class RunnerScheduler
             }
         }
 
+        // the connection slots as the task's own channel binds them (plan 28c E02); a slot with no binding fails the run before anything starts, naming the slot and the channel
+        IReadOnlyDictionary<string, string> handles = new Dictionary<string, string>();
+        if (task.Connections.Count > 0 && _options.Slots is { } slotResolver)
+        {
+            try
+            {
+                handles = slotResolver.Handles(taskRef, task.Connections);
+            }
+            catch (DbDataKit.Runner.Protocol.Server.SlotResolutionException ex)
+            {
+                FailWithoutRun(item, payload, taskRef, version, ex.Message, temporary: false, null);
+                return;
+            }
+        }
+
         var owner = OwnerOf(taskRef);
         var lockTaken = false;
         if (!task.AllowOverlap)
@@ -577,6 +592,8 @@ public sealed partial class RunnerScheduler
                     Chain = payload.Chain,
                     Attempt = payload.Attempt,
                     Inputs = payload.Inputs,
+                    ConnectionHandles = handles,
+                    Slots = task.Connections,
                     Limits = task.Limits,
                     CancellationGrace = _options.CancellationGrace,
                 };
