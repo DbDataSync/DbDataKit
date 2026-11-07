@@ -50,8 +50,11 @@ public sealed partial class StateModule
         IEnumerable<StateModule>? dependsOn = null,
         IReadOnlyList<RetentionRule>? retention = null,
         IReadOnlyList<PayloadOwner>? payloadOwners = null,
-        IEnumerable<EngineFeature>? requiresFeatures = null)
+        IEnumerable<EngineFeature>? requiresFeatures = null,
+        int compatibleWithPrevious = 0)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(compatibleWithPrevious);
+        CompatibleWithPrevious = compatibleWithPrevious;
         if (name == "default")
             throw new ArgumentException("'default' is the namespace settings' word for every module, so no module is named that.", nameof(name));
         if (!NamePattern.IsMatch(name))
@@ -91,6 +94,12 @@ public sealed partial class StateModule
 
     /// <summary>The engine features this module cannot work without (plan 29b, U01); empty for every module so far. An engine that lacks one is refused before any DDL of the module runs, with a message naming the module, the feature and the fix.</summary>
     public IReadOnlyList<EngineFeature> RequiresFeatures { get; }
+
+    /// <summary>
+    /// How many versions back an instance can still work with the schema of this module (plan 29b U02, plan 24's N and N-1 rule): 0, the default, says an instance one version behind cannot, so a migration is refused while
+    /// one is live; 1 says the previous version still works (the migration only added what older code ignores). The module's author declares it, for every migration they append.
+    /// </summary>
+    public int CompatibleWithPrevious { get; }
 
     /// <summary>The version a database is at when every migration of this module has been applied.</summary>
     public int Version => Migrations.Count;

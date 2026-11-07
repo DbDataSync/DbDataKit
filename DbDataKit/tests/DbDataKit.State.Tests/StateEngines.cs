@@ -48,9 +48,9 @@ public sealed class StateEngines : IDisposable
         public StateDatabase Open(StateSchema schema) =>
             Engine == StateEngineIds.Sqlite ? new StateDatabase(Target, schema) : new StateDatabase(Engine, Target, schema);
 
-        public StateDatabase Open(IEnumerable<StateModule> modules, StateScope? scope = null, StateNamespaceSettings? settings = null, TimeProvider? time = null, string? appliedBy = null, IEngineFeatureProbe? featureProbe = null)
+        public StateDatabase Open(IEnumerable<StateModule> modules, StateScope? scope = null, StateNamespaceSettings? settings = null, TimeProvider? time = null, string? appliedBy = null, IEngineFeatureProbe? featureProbe = null, IGroupInstanceSource? groupInstances = null)
         {
-            var layout = StateLayout.Create(Engine, modules, scope, settings, featureProbe);
+            var layout = StateLayout.Create(Engine, modules, scope, settings, featureProbe, groupInstances);
             return Engine == StateEngineIds.Sqlite ? new StateDatabase(Target, layout, appliedBy, time) : new StateDatabase(Engine, Target, layout, appliedBy, time);
         }
 

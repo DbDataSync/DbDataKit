@@ -36,11 +36,12 @@ public static class StateOpener
     /// Opens a state database built from modules (plan 29): the engine and connection as for <see cref="Open(StateSettings, string, StateSchema, ISecretResolver?)"/>, the
     /// namespaces from <see cref="StateSettings.Namespaces"/>, and <paramref name="scope"/> naming the group and service this process is. Applies what the modules need and
     /// refuses an old database, a module newer than this service, or settings that no longer match what was created, with a message naming the database and the setting.
+    /// <paramref name="groupInstances"/> is the product's source of the live instances of its group (U02): a migration is refused while one of them cannot work with the new schema.
     /// </summary>
-    public static StateDatabase Open(StateSettings settings, string sqlitePath, IEnumerable<StateModule> modules, StateScope? scope = null, ISecretResolver? secrets = null, string? appliedBy = null, TimeProvider? time = null)
+    public static StateDatabase Open(StateSettings settings, string sqlitePath, IEnumerable<StateModule> modules, StateScope? scope = null, ISecretResolver? secrets = null, string? appliedBy = null, TimeProvider? time = null, IGroupInstanceSource? groupInstances = null)
     {
         var engine = settings.EngineId;
-        var layout = StateLayout.Create(engine, modules, scope, settings.Namespaces);
+        var layout = StateLayout.Create(engine, modules, scope, settings.Namespaces, groupInstances: groupInstances);
         if (engine == StateEngineIds.Sqlite) return new StateDatabase(sqlitePath, layout, appliedBy, time);
 
         if (string.IsNullOrWhiteSpace(settings.ConnectionString))
@@ -50,7 +51,7 @@ public static class StateOpener
         return new StateDatabase(engine, ResolveSecrets(settings.ConnectionString, secrets), layout, appliedBy, time);
     }
 
-    /// <summary>Makes the SQL Server and PostgreSQL providers known to the state layer (what <see cref="Open(StateSettings, string, IEnumerable{StateModule}, StateScope?, ISecretResolver?, string?, TimeProvider?)"/> does first), for a command that connects without opening a <see cref="StateDatabase"/>.</summary>
+    /// <summary>Makes the SQL Server and PostgreSQL providers known to the state layer (what <see cref="Open(StateSettings, string, IEnumerable{StateModule}, StateScope?, ISecretResolver?, string?, TimeProvider?, IGroupInstanceSource?)"/> does first), for a command that connects without opening a <see cref="StateDatabase"/>.</summary>
     public static void RegisterProviders()
     {
         lock (Registration) StateDialectRegistry.Default.RegisterLibraryBackedEngines(Factory);
@@ -61,7 +62,7 @@ public static class StateOpener
 
     /// <summary>
     /// Opens the database <b>without creating or migrating anything</b>: what a snapshot export reads, a verification compares and a snapshot import fills (<see cref="StateDatabase.OpenForImport"/>). The engine, connection,
-    /// namespaces and secret references are as for <see cref="Open(StateSettings, string, IEnumerable{StateModule}, StateScope?, ISecretResolver?, string?, TimeProvider?)"/>; nothing is written, and no connection is made until it is used.
+    /// namespaces and secret references are as for <see cref="Open(StateSettings, string, IEnumerable{StateModule}, StateScope?, ISecretResolver?, string?, TimeProvider?, IGroupInstanceSource?)"/>; nothing is written, and no connection is made until it is used.
     /// </summary>
     public static StateDatabase OpenWithoutMigrating(StateSettings settings, string? sqlitePath, IEnumerable<StateModule> modules, StateScope? scope = null, ISecretResolver? secrets = null, string? appliedBy = null, TimeProvider? time = null)
     {
