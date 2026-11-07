@@ -10,8 +10,9 @@ fails (sections 4 to 9). **Nothing is in the surface that a sample does not use.
 
 ## 1. Principles
 
-1. **One object, `IRun`.** A job is a method that receives it. Everything the runner provides (progress, steps, units, files, inbox, reports,
-   connections) hangs off it. There is no other thing to construct, register or inject.
+1. **One base class, `RunnerJob<TInput, TProgress, TSlots>`.** A job is a class that overrides one method. Everything the runner provides (progress,
+   steps, units, files, inbox, counters, connections) is a member of it. There is nothing to construct, register or inject.
+   **Everything the job names is typed:** its input, progress, connection slots, steps, units and counters, so a wrong name or result type does not compile.
 2. **No replay.** On a retry the job's code runs again from the top. Work that must not be repeated is wrapped in a **step**, which the runner
    remembers by name and key and answers from memory. (This is deliberately not the replay model of workflow engines: code outside a step is
    ordinary code and may do anything, including things that differ between runs.)
@@ -19,105 +20,163 @@ fails (sections 4 to 9). **Nothing is in the surface that a sample does not use.
    value (JSON) or a **stream** (a payload written in chunks, never held in memory).
 4. **The author states what a crash in the middle means.** Every step says how it recovers (`Recovery`). It is a required argument, so it cannot
    be forgotten (plan 28 section 5: make the choice explicit).
-5. **Progress is typed and declared** (plan 29 section 4.3). A job reads and writes it through typed members, and saves at commit points.
+5. **Progress is a typed class** (plan 29 section 4.3's declaration, generated from it for a .NET job). A job reads and writes its members and saves at commit points.
 6. **Reporting is two verbs.** `Status` (what I am doing now) and `Count` (how much). Units report for themselves.
 7. **Cancellation is the `CancellationToken`** every method takes; nothing else is needed.
 8. **It is testable without a runner.** `RunSimulator` runs a job in memory with failure injection (section 10).
 
-## 2. Four sample jobs
+## 2. The shape of a job (typed)
 
-### 2.1 Incremental API pull (a checkpoint)
+A .NET job is a class. Its **input, progress and connection slots are types**; its **steps, units and counters are named, typed values**, declared
+once next to the job. Nothing is addressed by a string at a call site, so a misspelled step, a wrong result type or a progress value that does
+not exist is a compile error, and the console, the staging check and the simulator can list every step and counter without running anything.
 
 ```csharp
+public abstract class RunnerJob<TInput, TProgress, TSlots> where TProgress : Progress, new() where TSlots : Slots, new()
+{
+    protected IRun Run { get; }          // run id, attempt, channel, Log, Status, Lineage: the few things not typed by the job
+    protected TInput Input { get; }      // a record: what the manifest's `inputs` declares
+    protected TProgress Progress { get; }// typed checkpoints and state, read at start, saved with the outcome
+    protected TSlots Slots { get; }      // typed connections: Slots.Warehouse is already the right kind of handle
+    protected abstract Task RunAsync(CancellationToken ct);
+}
+```
+
+**The types are the source of truth for a .NET job, and the manifest's task entry is generated from them at publish** (decision K8). A job in another
+language writes the manifest by hand (plan 28b section 9). The runner checks a package's manifest against its own declaration at staging either way.
+
+### 2.1 Incremental API pull (a typed checkpoint)
+
+```csharp
+public sealed record OrdersInput;                                              // no inputs
+public sealed class OrdersProgress : Progress { [Checkpoint] public DateTimeOffset OrdersModified { get; set; } }
+public sealed class OrdersSlots : Slots { public Slot<IWarehouse> Warehouse { get; } = new("warehouse"); }
+public static class OrdersCounters { public static readonly Counter Rows = new("rows"); }
+
 [RunnerTask("orders")]
-public static async Task Orders(IRun run, CancellationToken ct)
+public sealed class Orders : RunnerJob<OrdersInput, OrdersProgress, OrdersSlots>
 {
-    var since = run.Progress.Get<DateTimeOffset>("orders_modified");          // typed, from the declaration
-    await using var warehouse = await run.Connections.OpenAsync("warehouse", ct);
-
-    DateTimeOffset newest = since;
-    await foreach (var page in Crm.OrdersModifiedSince(since, ct))
+    protected override async Task RunAsync(CancellationToken ct)
     {
-        await warehouse.UpsertAsync("orders", page.Rows, ct);
-        newest = page.Newest;
-        run.Count("rows", page.Rows.Count);
-    }
-    run.Progress.Set("orders_modified", newest);                               // saved with the run's outcome
-}
-```
-
-If the job fails, the checkpoint stays where it was (plan 29a Q20's test). Nothing else is needed: no commit call, because the outcome commits it.
-
-### 2.2 A file that disappears when it is downloaded (steps, streaming)
-
-```csharp
-[RunnerTask("daily-drop")]
-public static async Task DailyDrop(IRun run, CancellationToken ct)
-{
-    var day = run.Input<DateOnly>("day");
-
-    // runs once for this key; the file is streamed into the state database; a retry gets the stored file back
-    PayloadRef file = await run.StepStream($"download", key: $"{day:yyyy-MM-dd}", Recovery.Check(
-            check: async ct => await Sftp.ExistsAsync(Remote(day), ct) ? null : await Archive.FindAsync(day, ct)),
-        async (sink, ct) =>
+        await using var warehouse = await Slots.Warehouse.OpenAsync(ct);       // IWarehouse, typed by the slot
+        var newest = Progress.OrdersModified;                                  // a DateTimeOffset, not a string lookup
+        await foreach (var page in Crm.OrdersModifiedSince(newest, ct))
         {
-            await using var source = await Sftp.OpenAsync(Remote(day), ct);
-            await source.CopyToAsync(sink, ct);
-            await Sftp.DeleteAsync(Remote(day), ct);                           // only after the copy finished
-        }, ct);
-
-    var rows = 0L;
-    await using var reader = file.OpenRead();                                  // streams back out, never loaded whole
-    await foreach (var batch in Csv.Batches(reader, 10_000, ct))
-    {
-        await warehouse.InsertAsync("orders_raw", batch, ct);
-        rows += batch.Count;
-        run.Count("rows", batch.Count);
+            await warehouse.UpsertAsync("orders", page.Rows, ct);
+            newest = page.Newest;
+            Count(OrdersCounters.Rows, page.Rows.Count);
+        }
+        Progress.OrdersModified = newest;                                      // saved with the run's outcome
     }
-    run.Status($"loaded {rows} rows from {day}");
 }
 ```
 
-The download step is the only thing that must not run twice. If the process dies after the delete and before the stored result is committed, the
-runner calls `check`: it finds the file in the archive (or reports that nothing happened, and the step runs again).
+### 2.2 A file that disappears when it is downloaded (typed steps, streaming)
 
-### 2.3 Fan-out over customers (units, per-key progress)
+Steps are declared as static values: a **name**, the **input** the key is made from, and the **result type**. The body and the recovery are supplied where
+the step is used, because they need the job's services.
 
 ```csharp
+public static class DailyDropSteps
+{
+    // a streaming step: its result is a PayloadRef; the key is made from the day
+    public static readonly StreamStep<DateOnly> Download = Step.Stream<DateOnly>("download", day => $"{day:yyyy-MM-dd}");
+    // a value step: its result is a small typed record, kept as JSON
+    public static readonly ValueStep<DateOnly, ArchiveReceipt> Archive = Step.Value<DateOnly, ArchiveReceipt>("archive", day => $"{day:yyyy-MM-dd}");
+}
+public sealed record ArchiveReceipt(string Url, long Bytes);
+
+public sealed record DailyDropInput(DateOnly Day);
+
+[RunnerTask("daily-drop")]
+public sealed class DailyDrop : RunnerJob<DailyDropInput, NoProgress, DailyDropSlots>
+{
+    protected override async Task RunAsync(CancellationToken ct)
+    {
+        PayloadRef file = await Step(DailyDropSteps.Download, Input.Day)       // StreamStep: only .StreamAsync is offered
+            .Check(ct => Archive.FindAsync(Input.Day, ct))                     // recovery: required, or there is no RunAsync to call
+            .StreamAsync(async (sink, ct) =>
+            {
+                await using var source = await Sftp.OpenAsync(Remote(Input.Day), ct);
+                await source.CopyToAsync(sink, ct);
+                await Sftp.DeleteAsync(Remote(Input.Day), ct);                 // only after the copy finished
+            }, ct);
+
+        await using var warehouse = await Slots.Warehouse.OpenAsync(ct);
+        await using var reader = file.OpenRead();                              // streams back out, never loaded whole
+        await foreach (var batch in Csv.Batches(reader, 10_000, ct))
+        {
+            await warehouse.InsertAsync("orders_raw", batch, ct);
+            Count(DailyDropCounters.Rows, batch.Count);
+        }
+
+        ArchiveReceipt receipt = await Step(DailyDropSteps.Archive, Input.Day) // ValueStep<DateOnly, ArchiveReceipt>: RunAsync returns ArchiveReceipt
+            .Repeatable()                                                      // copying to the archive is harmless to repeat
+            .RunAsync(async ct => await Archive.PutAsync(file, ct), ct);       // a lambda returning anything else does not compile
+    }
+}
+```
+
+**Type-state recovery.** `Step(def, input)` returns a call that has only `.Repeatable()`, `.Ask()` and `.Check(...)`. Each returns the runner that has
+`RunAsync` (value steps) or `StreamAsync` (streaming steps). A step with no recovery chosen has nothing to run, so "forgot to say what a crash means"
+does not compile.
+
+### 2.3 Fan-out over customers (typed units, typed per-key progress)
+
+```csharp
+public sealed class CustomersProgress : Progress
+{
+    public Keyed<CustomerProgress> Customer { get; } = new();                  // one CustomerProgress per customer id
+}
+public sealed class CustomerProgress { [Checkpoint] public DateTimeOffset Modified { get; set; } }
+
+public static class CustomerUnits { public static readonly Unit<Customer> Sync = Unit.Of<Customer>("customer", c => c.Id); }
+
 [RunnerTask("customers")]
-public static async Task Customers(IRun run, CancellationToken ct)
+public sealed class Customers : RunnerJob<NoInput, CustomersProgress, OrdersSlots>
 {
-    var customers = await Crm.CustomersAsync(ct);
-    await run.ForEachAsync(customers, key: c => c.Id, parallelism: 4, async (unit, c, ct) =>
+    protected override async Task RunAsync(CancellationToken ct)
     {
-        var since = unit.Progress.Get<DateTimeOffset>("customer_modified");    // per key, because the declaration says per: [customer]
-        var rows  = await Crm.ChangesAsync(c.Id, since, ct);
-        await warehouse.UpsertAsync("customer_changes", rows, ct);
-        unit.Progress.Set("customer_modified", rows.Newest);
-        unit.Count("rows", rows.Count);
-    }, ct);
+        var customers = await Crm.CustomersAsync(ct);
+        await ForEachAsync(CustomerUnits.Sync, customers, parallelism: 4, async (c, ct) =>
+        {
+            var mine = Progress.Customer[c.Id];                                // typed, per key, no dictionary of strings
+            var rows = await Crm.ChangesAsync(c.Id, mine.Modified, ct);
+            await warehouse.UpsertAsync("customer_changes", rows, ct);
+            mine.Modified = rows.Newest;
+            Count(CustomerCounters.Rows, rows.Count);                          // counted against this unit and the run
+        }, ct);
+    }
 }
 ```
 
-A retry skips the units that finished in this attempt chain and runs the rest. The console shows 400 units: 312 done, 4 running, 80 waiting, 4
-failed, with the rows and the duration of each.
+A retry skips the units that finished in this attempt chain and runs the rest. The console shows the table of units (done, running, waiting, failed, with
+rows and duration each).
 
-### 2.4 A webhook consumer (inbox, dead letters) and work that is not bytes or rows
+### 2.4 A webhook consumer (typed inbox, dead letters) and work that is not bytes or rows
 
 ```csharp
-[RunnerTask("invoices")]
-public static async Task Invoices(IRun run, CancellationToken ct)
+public static class InvoiceSteps
 {
-    while (await run.Inbox.TakeAsync(ct) is { } item)                          // a webhook the serving layer received
-    {
-        var invoice = await item.ReadJsonAsync<Invoice>(ct);
-        if (!invoice.IsValid(out var why)) { await item.RejectAsync(why, ct); continue; }   // a dead letter, replayable later
+    public static readonly ValueStep<Invoice, LetterReceipt> SendLetter = Step.Value<Invoice, LetterReceipt>("send-letter", i => i.Id);
+}
+public sealed record LetterReceipt(string TrackingNumber, DateTimeOffset SentAt);
 
-        // the work is neither bytes nor rows: send one letter. Once per invoice, remembered.
-        var sent = await run.Step("send-letter", key: invoice.Id, Recovery.Check(async ct => await Mail.FindAsync(invoice.Id, ct)),
-            async ct => await Mail.SendAsync(invoice, ct), ct);                // returns the small result: a tracking number
-        run.Count("letters", 1);
-        await item.CompleteAsync(ct);
+[RunnerTask("invoices")]
+public sealed class Invoices : RunnerJob<NoInput, NoProgress, NoSlots>
+{
+    protected override async Task RunAsync(CancellationToken ct)
+    {
+        while (await Inbox<Invoice>().TakeAsync(ct) is { } item)               // InboxItem<Invoice>: the body is parsed as an Invoice
+        {
+            if (!item.Value.IsValid(out var why)) { await item.RejectAsync(why, ct); continue; }   // a dead letter, replayable later
+
+            LetterReceipt receipt = await Step(InvoiceSteps.SendLetter, item.Value)
+                .Check(ct => Mail.FindAsync(item.Value.Id, ct))                // Task<LetterReceipt?>: checked against the step's result type
+                .RunAsync(ct => Mail.SendAsync(item.Value, ct), ct);
+            Count(InvoiceCounters.Letters, 1);
+            await item.CompleteAsync(ct);
+        }
     }
 }
 ```
@@ -125,61 +184,51 @@ public static async Task Invoices(IRun run, CancellationToken ct)
 ## 3. The surface
 
 ```csharp
-public interface IRun
+// --- declared once, as static values: names, keys and result types -------------------------------------------
+public static class Step
 {
-    // who and where
-    Guid Id { get; }  int Attempt { get; }  string Channel { get; }  string Package { get; }  string Task { get; }
-    T Input<T>(string name);                                                   // declared in the manifest, typed
-
-    // progress (declared, typed): read at start, saved with the outcome, or at a commit point
-    IProgress Progress { get; }
-    Task SaveProgressAsync(CancellationToken ct);                              // an optional commit point; throws ProgressConflictException if another run got there first
-
-    // steps: at most once per name and key; the result is kept
-    Task<T> Step<T>(string name, string key, Recovery<T> recovery, Func<CancellationToken, Task<T>> body, CancellationToken ct);
-    Task<PayloadRef> StepStream(string name, string key, Recovery<PayloadRef> recovery, Func<Stream, CancellationToken, Task> body, CancellationToken ct);
-
-    // units: many pieces of one kind, each reported, retried and skipped on its own
-    Task ForEachAsync<T>(IEnumerable<T> items, Func<T, string> key, int parallelism, Func<IUnit, T, CancellationToken, Task> body, CancellationToken ct, UnitOptions? options = null);
-
-    // files and records that arrive
-    IFiles Files { get; }                                                      // Claim(connection, path, size, modified, hash): null if this content was already processed
-    IInbox Inbox { get; }                                                      // TakeAsync, item.ReadJsonAsync / OpenRead, CompleteAsync, RejectAsync
-    Task RejectAsync(object record, string reason, CancellationToken ct);      // a dead letter from inside the job
-
-    // connections (the suite's own handles; the runner resolves the secrets)
-    IConnections Connections { get; }                                          // OpenAsync(slot, ct)
-
-    // reporting
-    void Status(string text);                                                  // what I am doing now (one line, replaces the last)
-    void Count(string name, long n);                                           // how much; added up per run and per unit
-    ILogger Log { get; }                                                       // Microsoft.Extensions.Logging, redacted by the runner
-    void Lineage(LineageRef reads, LineageRef writes);                         // optional: outside systems as nodes (plan 18)
+    public static ValueStep<TIn, TOut>  Value<TIn, TOut>(string name, Func<TIn, string> key);   // TOut: a record that round-trips through System.Text.Json
+    public static StreamStep<TIn>       Stream<TIn>(string name, Func<TIn, string> key);        // the result is a PayloadRef
 }
+public static class Unit { public static Unit<T> Of<T>(string name, Func<T, string> key); }
+public sealed record Counter(string Name);
+public abstract class Progress { }                                              // members marked [Checkpoint] or [State]; Keyed<T> for per-key sets
+public sealed class Keyed<T> where T : new() { public T this[string key] { get; } }
+public sealed class Slot<TConnection> { public Slot(string name); public Task<TConnection> OpenAsync(CancellationToken ct); }
 
-public interface IUnit { string Key { get; } IProgress Progress { get; } void Status(string text); void Count(string name, long n); }
-public interface IProgress { T Get<T>(string name); void Set<T>(string name, T value); }   // names and types are those of the manifest's declaration
+// --- used in a job (members of RunnerJob) ---------------------------------------------------------------------
+StepCall<TIn, TOut>        Step<TIn, TOut>(ValueStep<TIn, TOut> step, TIn input);
+StreamStepCall<TIn>        Step<TIn>(StreamStep<TIn> step, TIn input);
+//   StepCall:        .Repeatable() | .Ask() | .Check(Func<CancellationToken, Task<TOut?>>)   each returns ValueRunner<TOut>   { Task<TOut> RunAsync(Func<CancellationToken, Task<TOut>> body, CancellationToken ct) }
+//   StreamStepCall:  .Repeatable() | .Ask() | .Check(Func<CancellationToken, Task<PayloadRef?>>)   each returns StreamRunner   { Task<PayloadRef> StreamAsync(Func<Stream, CancellationToken, Task> body, CancellationToken ct) }
+Task ForEachAsync<T>(Unit<T> unit, IEnumerable<T> items, int parallelism, Func<T, CancellationToken, Task> body, CancellationToken ct, UnitOptions? options = null);
+Inbox<T>  Inbox<T>();                           // TakeAsync -> InboxItem<T>? { T Value; Task CompleteAsync; Task RejectAsync(string reason) }
+Files     Files { get; }                        // Claim(connection, path, size, modified, hash) -> FileClaim? (null: this content was already processed)
+Task      RejectAsync<T>(T record, string reason, CancellationToken ct);
+void      Count(Counter counter, long n);       // typed: Counters are declared, so the console knows them
+void      Status(string text);                  // what I am doing now (one line, replaces the last)
+Task      SaveProgressAsync(CancellationToken ct);   // an optional commit point; throws ProgressConflictException if another run got there first
+IRun      Run { get; }                          // Id, Attempt, Channel, Package, Task, Log (ILogger, redacted), Lineage(reads, writes)
 ```
 
-**Typed members instead of strings (a source generator, optional).** The manifest's declaration generates `OrdersProgress` with
-`DateTimeOffset OrdersModified { get; set; }`, and `run.Progress<OrdersProgress>()` returns it. The string form above is what the generated one
-calls, and it is checked at staging against the declaration (a name or type that the declaration does not have fails staging, not a run).
+**What is typed, and from what.**
 
-**Recovery:**
+| Thing | Typed by | Checked |
+| --- | --- | --- |
+| input | a record (`TInput`); its properties are the manifest's `inputs` | compile time; the manifest is generated |
+| progress | a `Progress` class; `[Checkpoint]`/`[State]` members, `Keyed<T>` for per-key | compile time; the declaration is generated, and a change between versions is planned by the progress migration |
+| connections | `Slot<TConnection>` members of a `Slots` class | compile time; the manifest's slots are generated, and binding a slot to a connection of another kind fails at staging |
+| steps | `ValueStep<TIn,TOut>` / `StreamStep<TIn>` static values: name, key, result type | compile time (result type, which method is offered); names are unique per job (checked at first use and by the analyzer) |
+| units, counters | `Unit<T>`, `Counter` static values | compile time; listed in the manifest so the console shows them before a run |
+| recovery | the call's type state (`.Repeatable()`, `.Ask()`, `.Check(...)` before `RunAsync`) | compile time: no recovery, no run |
+| inbox items | `Inbox<T>()` | the body is parsed as `T` at take; a body that does not parse is a dead letter, not a crash |
 
-```csharp
-public abstract record Recovery<T>;
-public static class Recovery
-{
-    public static Recovery<T> Repeatable<T>();                                          // a pure or harmless step: run it again
-    public static Recovery<T> Ask<T>();                                                 // in doubt, stop the run and ask an operator
-    public static Recovery<T> Check<T>(Func<CancellationToken, Task<T?>> check);        // look at the outside world: the result if it happened, null if it did not
-}
-```
+**A small analyzer** (shipped with the kit) adds what the type system cannot: two steps with the same name in one job, a step used inside another step,
+a `Check` that does not return the step's result type (the compiler already catches it), `Progress` members set to a type the declaration cannot store.
 
 ## 4. Steps in detail
 
-**Identity.** A step is identified by `(task, name, key)` within one **attempt chain** (the work item and its retries) by default. The key is a
+**Identity.** A step is identified by `(task, name, key)` (the name is the declared step's, the key is made by its key function) within one **attempt chain** (the work item and its retries) by default. The key is a
 string the job builds, usually from an input or from an earlier step's result (`file.Hash`). A different key is a different step; a step that
 ran with a key is never run again with it in the same chain.
 
@@ -195,18 +244,18 @@ ran with a key is never run again with it in the same chain.
 `failed` (an exception) is not in doubt: the body ran and said it failed. A retry runs it again, unless the exception was classified `Permanent`
 (`TaskFailureException`, or a `ConnectionFailure` the connection classifies as permanent), which fails the run.
 
-**Results.** `Step<T>` stores `T` as JSON (System.Text.Json; `T` must serialise and round-trip, checked on first use) under a cap
-(`step.max_result_bytes`, 64 KiB default). A larger value is refused with a message that says to use `StepStream`. A result is available to any
+**Results.** A `ValueStep<TIn,TOut>` stores `TOut` as JSON (System.Text.Json; `T` must serialise and round-trip, checked on first use) under a cap
+(`step.max_result_bytes`, 64 KiB default). A larger value is refused with a message that says to declare a `StreamStep` instead. A result is available to any
 later step or run of the chain, and is kept under retention (30 days default).
 
-**Streams.** `StepStream` hands the body a write-only `Stream` that is a `PayloadWriter` (plan 29 section 3.6): 1 MiB chunks, SHA-256 as it goes,
+**Streams.** A `StreamStep` hands the body a write-only `Stream` that is a `PayloadWriter` (plan 29 section 3.6): 1 MiB chunks, SHA-256 as it goes,
 memory use one chunk. The payload is **complete only when the body returns normally**; an exception or a crash leaves an incomplete payload that
 retention removes, so a retry can tell "nothing stored" from "stored". `PayloadRef` is `(Id, Size, Sha256, MediaType)` with `OpenRead()`
 (a stream), `ReadAllBytesAsync()` (refused over a cap), and it can be passed to a later step, written to a connection, or named in the run's outputs.
 Per-run and per-step size caps are settings; a stream over the cap fails with a message naming the cap.
 
 **Known limit.** The bytes land in the state database. That is right for files up to a few gigabytes; for larger, the step must be able to name
-another store later (a runner-local directory, an object store) without changing its shape: `StepStream(..., options: new(Store: "scratch"))`. Not in v1.
+another store later (a runner-local directory, an object store) without changing its shape: `Step.Stream<TIn>(name, key, new(Store: "scratch"))`. Not in v1.
 
 **Rules.**
 - A step may not contain another step (a step is the smallest piece; compose steps in the job). Refused at run time with a message naming both.
@@ -216,24 +265,24 @@ another store later (a runner-local directory, an object store) without changing
 
 ## 5. Progress in detail
 
-- **Reading.** The runner hands the job its task's progress at start; `Get` reads from memory (no call). A name or type not in the declaration
-  throws at the first `Get`/`Set` with the list of declared names (and at staging, when the generator or a static check can see it).
-- **Writing.** `Set` marks the value changed. The runner saves all changed values **with the run's outcome, in one transaction** (the `Advance`
+- **Reading.** The runner hands the job its task's progress at start and fills the `Progress` object; a member read is memory (no call). The class
+  is the declaration: a member the job does not have cannot be written, and the manifest's declaration is generated from the class.
+- **Writing.** Setting a member marks it changed. The runner saves all changed values **with the run's outcome, in one transaction** (the `Advance`
   callback of plan 29a Q20): a failed run leaves them. `SaveProgressAsync` is an optional commit point inside a long run (for example, after each
   day of a backfill), so a crash does not lose a day. It returns after the save and throws `ProgressConflictException` if the version moved
   (another run got there first, or an administrator rewound it): the job should stop, and the runner marks the run `Stopped`.
-- **Per key.** `unit.Progress` is the same interface bound to the unit's key; a declaration `per: [customer]` is what makes it legal.
-- **State values** (not a position in a source: a cursor token, a last-seen id) use the same `Get`/`Set`, declared as `state` instead of
-  `checkpoint`. The difference is only in the declaration (history and rewind apply to checkpoints).
+- **Per key.** A `Keyed<T>` member (`Progress.Customer[c.Id].Modified`) is the typed form of the declaration's `per: [customer]`; the key parts come from the
+  member's name and the key given.
+- **State values** (not a position in a source: a cursor token, a last-seen id) are members marked `[State]` instead of `[Checkpoint]`. The difference is only in the declaration (history and rewind apply to checkpoints).
 
 ## 6. Units in detail
 
 - `ForEachAsync` runs the body for each item with the given parallelism (clamped by the task's `concurrency` limit and the connection's).
 - **Skipping.** A unit that completed in this attempt chain is skipped on a retry (its key is the identity). Whether it should run again on the
-  *next scheduled run* is not a unit question: that is what per-key progress (`unit.Progress`) is for.
+  *next scheduled run* is not a unit question: that is what per-key progress (`Keyed<T>`) is for.
 - **Failures.** By default a unit that throws is recorded `failed`, the others continue, and the run ends `CompletedWithFailures` (plan 28a QR4)
   with the first failed key. `new UnitOptions(OnFailure.Stop)` stops at the first.
-- **Reporting.** Each unit reports its status, counts and duration without being asked; `unit.Status` and `unit.Count` add detail. The run view
+- **Reporting.** Each unit reports its status, counts and duration without being asked; `Count` inside a unit body is attributed to that unit. The run view
   is the table in 2.3. Items are enumerated once; a lazy `IAsyncEnumerable<T>` overload is part of the same call.
 
 ## 7. Files, inbox, dead letters, connections
@@ -245,8 +294,8 @@ another store later (a runner-local directory, an object store) without changing
   completed or rejected when the run ends is released and is taken again.
 - **Dead letters.** `run.RejectAsync(record, reason)` stores the record as a payload and a dead letter. They are listed, replayed and discarded
   in the console; a replay becomes an inbox item of the same task.
-- **Connections.** `Connections.OpenAsync("slot")` returns the suite's connection handle (`DbDataKit.Connections`) bound to what the channel binds
-  that slot to. The job never sees a secret and never opens the runner's state.
+- **Connections.** `Slots.Warehouse.OpenAsync(ct)` returns the connection handle the slot's type names (the suite's `DbDataKit.Connections` handles, or
+  an integration kind's), bound to what the channel binds that slot to. The job never sees a secret and never opens the runner's state.
 
 ## 8. Failure and outcome
 
@@ -258,30 +307,33 @@ mapping to run outcomes and retries is R02's.
 
 ## 9. From the same API in other languages
 
-The protocol messages are the calls above; a non-.NET job speaks them through its own thin client.
+The protocol messages are the calls above, with **names and keys as strings on the wire**: the typed definitions are the .NET kit's convenience, and
+a non-.NET job speaks the same messages through its own thin client (and writes the manifest by hand, since there is no class to generate it from).
 
 | .NET call | Protocol message (R03) |
 | --- | --- |
 | start | `Start` (inputs, progress snapshot, run id, attempt) |
-| `Progress.Set`, `SaveProgressAsync`, outcome | `Advance` with the changed values and the expected version |
-| `Step` | `BeginStep(name, key)` returns `reuse(result)`, `run`, or `in_doubt`; then `CompleteStep(result)` |
-| `StepStream` | `BeginStep` then a client stream of `StepChunk` then `CompleteStep(payload)` |
-| `ForEachAsync` | `BeginUnit(key)` returns `run` or `skip`; `UnitProgress`; `EndUnit(outcome)` |
+| setting a `Progress` member, `SaveProgressAsync`, outcome | `Advance` with the changed values and the expected version |
+| `Step(def, input).….RunAsync` | `BeginStep(name, key)` returns `reuse(result)`, `run`, or `in_doubt`; then `CompleteStep(result)` |
+| `Step(def, input).….StreamAsync` | `BeginStep` then a client stream of `StepChunk` then `CompleteStep(payload)` |
+| `ForEachAsync(unit, …)` | `BeginUnit(unit name, key)` returns `run` or `skip`; `UnitProgress`; `EndUnit(outcome)` |
 | `Files.Claim`, `Inbox.TakeAsync`, `RejectAsync` | `ClaimFile`, `TakeInbox`, `Reject` |
 | `Status`, `Count`, `Log`, `Lineage` | `Status`, `Count`, `Log`, `Lineage` (one-way, batched) |
 | cancellation | the runner's `Cancel` with the grace period |
 
 ## 10. Testing a job
 
-`DbDataKit.Runner.Kit.Testing` ships `RunSimulator`: an in-memory `IRun` over the real stores on SQLite (so the semantics are the real ones).
+`DbDataKit.Runner.Kit.Testing` ships `RunSimulator<TJob>`: runs a job in memory over the real stores on SQLite (so the semantics are the real ones).
 
 ```csharp
-var sim = new RunSimulator(inputs: new { day = new DateOnly(2026, 11, 7) });
-sim.FailAfter(step: "download", times: 1, when: FailWhen.AfterBodyBeforeCommit);   // the in-doubt case
-await sim.RunAsync(Jobs.DailyDrop);                                                 // first attempt fails
-await sim.RunAsync(Jobs.DailyDrop);                                                 // retry: the recovery check runs
-Assert.Equal(1, sim.Executions("download"));                                        // the body ran once
-Assert.Equal(CompletedOk, sim.Outcome);
+var sim = new RunSimulator<DailyDrop>(input: new DailyDropInput(new DateOnly(2026, 11, 7)));
+sim.FailAfterBody(DailyDropSteps.Download, times: 1);                       // the in-doubt case: typed, so a renamed step breaks the test at compile time
+await sim.RunAsync();                                                        // first attempt fails
+await sim.RunAsync();                                                        // retry: the recovery check runs
+Assert.Equal(1, sim.Executions(DailyDropSteps.Download));                    // the body ran once
+Assert.Equal(StepStatus.Recovered, sim.StatusOf(DailyDropSteps.Download));
+Assert.Equal(RunOutcome.Succeeded, sim.Outcome);
+Assert.Equal(1_240, sim.Counted(DailyDropCounters.Rows));
 ```
 
 It can inject: a failure before or after a step body, a crash between the body and the commit, a cancellation at a point, a conflict on
@@ -298,19 +350,23 @@ It can inject: a failure before or after a step body, a crash between the body a
 | K5 | Streaming results land in the state database, with per-run and per-step size caps | the first large-file case decides whether a "scratch store" is needed in v1 |
 | K6 | No nested steps | confirm |
 | K7 | Units skip within an attempt chain only; across runs use per-key progress | confirm |
-| K8 | Typed progress members come from a **source generator** over the manifest declaration, with the string form as the base | is a generator acceptable, or should it be only strings plus a staging check? |
-| K9 | `IRun` is an interface so jobs can be tested without the simulator too | none |
+| K8 | **For a .NET job the C# types are the source of truth** (input record, `Progress` class, `Slots` class, step/unit/counter values); the manifest's task entry is **generated from them at publish**. Other languages write the manifest by hand | is generating the manifest from code acceptable? It reverses plan 28's "manifest declares" for .NET only, and the staging check still compares the two |
+| K9 | The base class `RunnerJob<TInput, TProgress, TSlots>` (with `NoInput`, `NoProgress`, `NoSlots`); a job needing none writes `RunnerJob<NoInput, NoProgress, NoSlots>` | is a base class right, or would you prefer an interface plus a source-generated partial? |
+| K10 | **Steps are static typed values** (`ValueStep<TIn,TOut>`, `StreamStep<TIn>`) declared beside the job; body and recovery are supplied at the call | alternative: a step is a class with the body inside it (testable alone, but needs service injection) |
+| K11 | **Recovery by type state:** `.Repeatable()`, `.Ask()` or `.Check(...)` must be called before `RunAsync`/`StreamAsync` exists | confirm: the cost is a slightly longer call chain; the gain is that "forgot" cannot compile |
+| K12 | `Count` takes a declared `Counter`, not a string; counters, units and steps are listed in the generated manifest so the console shows them before a run | confirm |
+| K13 | A small **analyzer** ships with the kit (duplicate step names in a job, a step inside a step) | none |
 
 ## 12. What this changes in plan 28a
 
-- **R03 splits:** **R03a** the kit's `IRun` surface over an **in-process implementation** on the real stores (`RunSimulator` is this with injection
+- **R03 splits:** **R03a** the kit's typed surface (`RunnerJob`, the step/unit/counter definitions, the type-state calls, the analyzer and the manifest generator for .NET) over an **in-process implementation** on the real stores (`RunSimulator` is this with injection
   hooks), so the API is proven on all three engines before any transport exists; **R03b** the `.proto` and the gRPC server and client, derived
   from section 9, with the same job tests run through the protocol.
 - **R04 and the progress store** gain what steps and units need: a **step table** (`step_result`: key, state `started|completed|failed`, result
   JSON or payload id, timing, counts) and a **unit table** (`unit_result`), both under the `runner_progress` module with retention; `PayloadStore`
   gains a size cap on a writer.
-- **The manifest** (R01) gains an optional `steps` and `units` declaration only if a staging check of step names is wanted; otherwise nothing.
+- **The manifest** (R01) gains `steps`, `units` and `counters` lists (names, kinds, result types as a type name) so the console and the staging check can show them; for a .NET job they are generated (K8).
 - **R06 (executor)** reconciles in-doubt steps at run start: it marks any `started` step of a dead run as in doubt before the retry begins.
 
-Slices to add after the review: **R03a** (surface and in-process run, steps, units), **R03c** (`RunSimulator` and the testing package). Not
+Slices to add after the review: **R03a** (surface and in-process run, steps, units), **R03c** (`RunSimulator<TJob>` and the testing package). Not
 added to 28a yet, so that the review can change them.
