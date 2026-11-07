@@ -658,7 +658,7 @@ public sealed class RunnerScheduler
         foreach (var row in Rows())
         {
             var owner = $"{row.Package}/{row.Channel}";
-            if (!queues.TryGetValue(owner, out var inFlight)) queues[owner] = inFlight = _queue.InFlight(owner);
+            if (!queues.TryGetValue(owner, out var inFlight)) queues[owner] = inFlight = _queue.ListInFlight(owner);
             var mine = inFlight.Where(w => w.Item.Subject == row.Task).ToList();
             var reference = TaskRef.Problem(row.Package, row.Channel, row.Task) is null ? new TaskRef(row.Package, row.Channel, row.Task) : null;
             if (reference is null) continue;

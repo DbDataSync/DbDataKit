@@ -239,9 +239,9 @@ public sealed class ModuleWorkQueueStore(StateDatabase database, string service)
         {
             using var connection = database.OpenConnection();
             var runId = database.NewId();
-            using var cmd = database.Command(Module, connection, $"""
-                UPDATE {{table:work_item}} SET status = 'Pending', run_id = $run_id, available_at = $available, payload = $payload, claimed_at = NULL, claimed_by = NULL, lease_expires_at = NULL, cancel_requested_at = NULL
-                WHERE id = $id AND claimed_by = $worker AND {Held};
+            using var cmd = database.Command(Module, connection, $$"""
+                UPDATE {table:work_item} SET status = 'Pending', run_id = $run_id, available_at = $available, payload = $payload, claimed_at = NULL, claimed_by = NULL, lease_expires_at = NULL, cancel_requested_at = NULL
+                WHERE id = $id AND claimed_by = $worker AND {{Held}};
                 """);
             cmd.Bind(database, "run_id", runId).Bind(database, "available", availableAt).Bind(database, "payload", payloadJson, System.Data.DbType.String).Bind(database, "id", id).Bind(database, "worker", workerId);
             return cmd.ExecuteNonQuery() == 1 ? runId : (Guid?)null;
@@ -272,7 +272,7 @@ public sealed class ModuleWorkQueueStore(StateDatabase database, string service)
         });
 
     /// <summary>The unfinished items (Pending, Claimed, Running) of an owner, oldest first: what is waiting, when it may start, and who holds it.</summary>
-    public IReadOnlyList<QueuedWork> InFlight(string owner) =>
+    public IReadOnlyList<QueuedWork> ListInFlight(string owner) =>
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();

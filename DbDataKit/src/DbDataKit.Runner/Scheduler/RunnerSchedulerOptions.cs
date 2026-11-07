@@ -1,4 +1,4 @@
-using DbDataKit.Monitoring;
+using DbDataKit.State;
 using DbDataKit.Runner.Execution;
 using Microsoft.Extensions.Logging;
 
@@ -81,7 +81,7 @@ public sealed record SchedulerProblem(string Subject, string Message, DateTimeOf
 /// <param name="PausedBy">Who paused it.</param>
 /// <param name="Problem">Why its projection row is skipped, or null.</param>
 public sealed record ScheduledTaskStatus(
-    TaskRef Task, string Version, DateTimeOffset? NextDue, Monitoring.StoredRun? LastRun, int Running, int Queued, DateTimeOffset? NextAttemptAt, bool Paused, string? PausedBy, string? Problem);
+    TaskRef Task, string Version, DateTimeOffset? NextDue, StoredRun? LastRun, int Running, int Queued, DateTimeOffset? NextAttemptAt, bool Paused, string? PausedBy, string? Problem);
 
 /// <summary>A snapshot of the loop.</summary>
 /// <param name="WorkerId">This loop's claim name.</param>
