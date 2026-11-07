@@ -28,6 +28,9 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
     /// <summary>The size cap of one uploaded file, in bytes (<see cref="RunnerPublishing.DefaultMaxArtifactBytes"/> when unset).</summary>
     public const string MaxArtifactBytesVariable = "DBDATARUNNER_MAX_ARTIFACT_BYTES";
 
+    /// <summary>The runner group's name (the state's <c>StateScope.Group</c>): servers that share a database and a group name are one group. Default <see cref="RunnerState.DefaultGroup"/>.</summary>
+    public const string GroupVariable = "DBDATARUNNER_GROUP";
+
     public static IReadOnlyList<string> DefaultChannels { get; } = ["prod", "dev"];
 
     /// <summary>The state database's engine and connection; SQLite by default.</summary>
@@ -48,11 +51,14 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
     /// <summary>How long a task has to stop when the runner stops or the task is cancelled, before its process is killed.</summary>
     public TimeSpan CancellationGrace { get; init; } = TimeSpan.FromSeconds(30);
 
-    /// <summary>How often this instance renews its registration.</summary>
-    public TimeSpan InstanceHeartbeat { get; init; } = TimeSpan.FromSeconds(15);
+    /// <summary>How often this instance renews its registration and the leases of the items it runs (plan 28a QR3: 30 seconds).</summary>
+    public TimeSpan InstanceHeartbeat { get; init; } = TimeSpan.FromSeconds(30);
 
-    /// <summary>An instance that has not renewed its registration for this long is not live to the others.</summary>
-    public TimeSpan InstanceLease => InstanceHeartbeat * 4;
+    /// <summary>A lease other than three heartbeats (QR3: 90 seconds with the default heartbeat); must be longer than the heartbeat.</summary>
+    public TimeSpan? InstanceLeaseOverride { get; init; }
+
+    /// <summary>An instance that has not renewed its registration for this long is not live to the others, and the work items it holds are taken by another runner.</summary>
+    public TimeSpan InstanceLease => InstanceLeaseOverride ?? InstanceHeartbeat * 3;
 
     /// <summary>The task host to start for an assembly package; null: the one published beside this program (<see cref="RunnerTaskHost"/>).</summary>
     public string? TaskHostPath { get; init; }
@@ -91,6 +97,17 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
         return long.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var bytes) && bytes > 0
             ? bytes
             : throw new ArgumentException($"{MaxArtifactBytesVariable} is a whole number of bytes, such as 536870912.");
+    }
+
+    /// <summary>The group the flag or <see cref="GroupVariable"/> names, <c>main</c> when neither does.</summary>
+    public static string GroupFrom(Func<string, string?>? environment, string? flag = null)
+    {
+        var text = flag ?? (environment ?? Environment.GetEnvironmentVariable)(GroupVariable);
+        if (string.IsNullOrWhiteSpace(text)) return RunnerState.DefaultGroup;
+        text = text.Trim();
+        if (!DbDataKit.Runner.PackageManifestValidator.NameRule.IsMatch(text))
+            throw new ArgumentException($"'{text}' is not a group name: use 1 to 64 lowercase letters, digits, '-' or '_', starting with a letter or digit.");
+        return text;
     }
 
     public static IReadOnlyList<string> ChannelsFrom(Func<string, string?>? environment, string? flag = null)

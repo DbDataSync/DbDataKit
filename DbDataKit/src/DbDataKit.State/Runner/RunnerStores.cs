@@ -91,6 +91,7 @@ public sealed class RunnerInstances(StateDatabase database)
         if (source is not (InstanceLabel.Admin or InstanceLabel.Reported))
             throw new ArgumentException($"A label's source is '{InstanceLabel.Admin}' or '{InstanceLabel.Reported}'; '{source}' is neither.", nameof(source));
         ArgumentException.ThrowIfNullOrWhiteSpace(label);
+        label = RunnerLabels.Normalize(label);
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
@@ -101,7 +102,9 @@ public sealed class RunnerInstances(StateDatabase database)
     }
 
     /// <summary>Takes a label off; false when the instance did not have it.</summary>
-    public bool RemoveLabel(Guid id, string label) =>
+    public bool RemoveLabel(Guid id, string label) => RemoveNormalized(id, RunnerLabels.Normalize(label));
+
+    private bool RemoveNormalized(Guid id, string label) =>
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
@@ -121,6 +124,77 @@ public sealed class RunnerInstances(StateDatabase database)
             var list = new List<InstanceLabel>();
             while (reader.Read()) list.Add(new InstanceLabel(reader.GetString(0), reader.GetString(1)));
             return (IReadOnlyList<InstanceLabel>)list;
+        });
+
+    /// <summary>All of the instance's labels (administrator's and reported), normalized, as a set.</summary>
+    public IReadOnlySet<string> LabelSet(Guid id) => Labels(id).Select(l => RunnerLabels.Normalize(l.Label)).ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>Makes the labels the instance reports about itself exactly <paramref name="labels"/>: reported labels no longer in the list go, new ones are added; an administrator's label of the same name stays the administrator's.</summary>
+    public void ReplaceReportedLabels(Guid id, IEnumerable<string> labels)
+    {
+        var wanted = labels.Select(RunnerLabels.Normalize).Where(l => l.Length > 0).Distinct(StringComparer.Ordinal).ToList();
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var transaction = database.BeginTransaction(connection, Module);
+            using (var delete = database.Command(Module, connection, transaction, "DELETE FROM {table:instance_label} WHERE instance_id = $id AND source = $source;"))
+            {
+                delete.Bind(database, "id", id).Bind(database, "source", InstanceLabel.Reported);
+                delete.ExecuteNonQuery();
+            }
+
+            foreach (var label in wanted)
+            {
+                using var exists = database.Command(Module, connection, transaction, "SELECT COUNT(*) FROM {table:instance_label} WHERE instance_id = $id AND label = $label;");
+                exists.Bind(database, "id", id).Bind(database, "label", label);
+                if (Convert.ToInt64(exists.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture) > 0) continue;
+                using var insert = database.Command(Module, connection, transaction, "INSERT INTO {table:instance_label} (instance_id, label, source) VALUES ($id, $label, $source);");
+                insert.Bind(database, "id", id).Bind(database, "label", label).Bind(database, "source", InstanceLabel.Reported);
+                insert.ExecuteNonQuery();
+            }
+
+            transaction.Commit();
+        });
+    }
+
+    /// <summary>The live instances (see <see cref="ListLive"/>) with their labels and capabilities: what routing (<see cref="RoutingCheck"/>) and the group view read.</summary>
+    public IReadOnlyList<LiveInstance> LiveInstances(TimeSpan leaseTimeout) =>
+        [.. ListLive(leaseTimeout).Select(i => new LiveInstance(i, LabelSet(i.Id), Capabilities(i.Id).ToDictionary(c => c.Name, c => c.Value, StringComparer.Ordinal)))];
+
+    /// <summary>
+    /// Removes the instance rows of <paramref name="runner"/> on <paramref name="host"/> (any host when <paramref name="anyHost"/>: a state that only one runner may use) other than <paramref name="except"/> that are gone or whose lease ran out, with their labels and capabilities, and returns the administrator labels
+    /// of the most recent of them (an instance that restarts keeps what its administrator set). Rows of other hosts and live rows are left alone.
+    /// </summary>
+    public IReadOnlyList<string> RemoveLapsed(string runner, string host, Guid except, TimeSpan leaseTimeout, bool anyHost = false)
+    {
+        var since = database.Time.GetUtcNow() - leaseTimeout;
+        var lapsed = Query("runner = $runner AND id <> $except AND (state <> $running OR heartbeat_at < $since)",
+            c => c.Bind(database, "runner", runner).Bind(database, "except", except).Bind(database, "running", RunnerInstance.Running).Bind(database, "since", since));
+        if (!anyHost) lapsed = [.. lapsed.Where(i => i.Host == host)];
+        if (lapsed.Count == 0) return [];
+        var sameHost = lapsed.Where(i => i.Host == host).ToList();
+        var inherited = sameHost.Count == 0 ? [] : Labels(sameHost.OrderBy(i => i.HeartbeatAt).Last().Id).Where(l => l.Source == InstanceLabel.Admin).Select(l => l.Label).ToList();
+        foreach (var instance in lapsed) Remove(instance.Id);
+        return inherited;
+    }
+
+    /// <summary>Removes one instance with its labels and capabilities.</summary>
+    public void Remove(Guid id) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var transaction = database.BeginTransaction(connection, Module);
+            foreach (var table in new[] { "instance_label", "capability" })
+            {
+                using var child = database.Command(Module, connection, transaction, $"DELETE FROM {{table:{table}}} WHERE instance_id = $id;");
+                child.Bind(database, "id", id);
+                child.ExecuteNonQuery();
+            }
+
+            using var cmd = database.Command(Module, connection, transaction, "DELETE FROM {table:instance} WHERE id = $id;");
+            cmd.Bind(database, "id", id);
+            cmd.ExecuteNonQuery();
+            transaction.Commit();
         });
 
     // ---------- capabilities ----------

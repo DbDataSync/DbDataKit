@@ -47,6 +47,12 @@ public sealed class RunnerSchedulerOptions
     /// <summary>Names this loop's claims; unique per loop instance. Default host, process and a random part.</summary>
     public string WorkerId { get; init; } = $"{Environment.MachineName}-{Environment.ProcessId}-{Guid.NewGuid():N}";
 
+    /// <summary>
+    /// This runner's row in the group's instances (plan 28a R11, R12): the loop reads its current labels from it at every tick and claims only the items whose task's required labels it has. Null (a loop that is not an instance of a group)
+    /// has no labels, so it serves no task that requires one.
+    /// </summary>
+    public Func<Guid?>? Instance { get; init; }
+
     /// <summary>The jitter of the back-off, a number in [0, 1); null is random. A test passes a constant (0.5 is no jitter).</summary>
     public Func<double>? Jitter { get; init; }
 
@@ -80,8 +86,11 @@ public sealed record SchedulerProblem(string Subject, string Message, DateTimeOf
 /// <param name="Paused">Whether its schedule is paused.</param>
 /// <param name="PausedBy">Who paused it.</param>
 /// <param name="Problem">Why its projection row is skipped, or null.</param>
+/// <param name="RequiredLabels">The labels the task requires of a runner (R12).</param>
+/// <param name="WaitingReason">Why the task cannot run on any live runner: which required label none has (R12); null when some live runner can take it.</param>
 public sealed record ScheduledTaskStatus(
-    TaskRef Task, string Version, DateTimeOffset? NextDue, StoredRun? LastRun, int Running, int Queued, DateTimeOffset? NextAttemptAt, bool Paused, string? PausedBy, string? Problem);
+    TaskRef Task, string Version, DateTimeOffset? NextDue, StoredRun? LastRun, int Running, int Queued, DateTimeOffset? NextAttemptAt, bool Paused, string? PausedBy, string? Problem,
+    IReadOnlyList<string>? RequiredLabels = null, string? WaitingReason = null);
 
 /// <summary>A snapshot of the loop.</summary>
 /// <param name="WorkerId">This loop's claim name.</param>

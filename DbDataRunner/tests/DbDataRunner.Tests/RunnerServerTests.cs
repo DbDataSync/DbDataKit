@@ -205,13 +205,14 @@ public sealed class RunnerServerTests
         // the state of a process that died in the middle of a run: a run still marked running and an instance still marked live
         var stale = new RunStore(h.State, RunnerState.EngineService).Start("sample/dev/ok", package: "sample", packageVersion: "1", channel: "dev", attempt: 1);
         var old = new RunnerInstances(h.State).Register(RunnerState.ServiceId, "gone-host", "0.0.1");
-        await Task.Delay(50);
+        await Task.Delay(h.Settings.InstanceLease + TimeSpan.FromMilliseconds(500));   // a live row would refuse the start: SQLite is one runner's; this one's lease ran out
 
         await h.StartAsync();
 
         Assert.Equal(RunOutcome.Interrupted, h.Runs.Get(stale)!.Run.Outcome);
         var live = new RunnerInstances(h.State).ListLive(TimeSpan.FromMinutes(5));
-        Assert.Contains(live, i => i.Id == old);
+        Assert.DoesNotContain(live, i => i.Id == old);                                  // the dead process's row is cleared at the start
+        Assert.Null(new RunnerInstances(h.State).Get(old));
         Assert.Contains(live, i => i.Host == Environment.MachineName);
     }
 
