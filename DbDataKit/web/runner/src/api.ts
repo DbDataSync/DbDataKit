@@ -61,6 +61,9 @@ export interface RunnerStatus {
   tasks: TaskStatus[]
   instances: RunnerInstance[]
   problems: { subject: string; message: string; at: string }[]
+  /** Present on the runner embedded in the console (plan 28a R20): what it serves and whether production was chosen. */
+  embedded?: boolean
+  console_runner?: { channels: string[]; production_accepted: boolean; production_warning: string | null; account_separate: boolean; max_concurrent: number }
 }
 
 export interface ChannelHead { channel: string; active: number | null; previous: number | null; staged: number | null }
