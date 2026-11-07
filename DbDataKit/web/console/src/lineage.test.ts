@@ -1,6 +1,26 @@
 import type { LineageGraphDoc } from '@dbdatakit/visuals'
 import { describe, expect, it } from 'vitest'
-import { findCards, serverNote } from './lineage'
+import { findCards, serverNote, withoutDeployments } from './lineage'
+
+describe('withoutDeployments', () => {
+  it('drops the deployment nodes and the edges that touch them, and keeps the flow of data', () => {
+    const mixed: LineageGraphDoc = {
+      nodes: [
+        { id: 't1', kind: 'dataset', name: 't1', unknown_upstream: false },
+        { id: 't2', kind: 'dataset', name: 't2', unknown_upstream: false },
+        { id: 'pkg', kind: 'deployment', name: 'orders', unknown_upstream: false },
+        { id: 'run', kind: 'job', name: 'orders/prod/load', unknown_upstream: false, properties: { deployment: 'run' } },
+      ],
+      edges: [
+        { from: 't1', to: 't2', kind: 'derives', granularity: 'table', confidence: 'derived' },
+        { from: 'pkg', to: 'run', kind: 'runs', granularity: 'table', confidence: 'observed' },
+      ],
+    }
+    const result = withoutDeployments(mixed)
+    expect(result.nodes.map((n) => n.id)).toEqual(['t1', 't2'])
+    expect(result.edges).toHaveLength(1)
+  })
+})
 
 const graph: LineageGraphDoc = {
   nodes: [

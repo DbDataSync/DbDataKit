@@ -10,6 +10,7 @@ import { MonitoringPage } from './pages/MonitoringPage'
 import { ServerModule } from './pages/ServerModule'
 import { ServerStatePage } from './pages/ServerStatePage'
 import { LineagePage } from './pages/LineagePage'
+import { DeploymentsPage } from './pages/DeploymentsPage'
 import { ViewsPage } from './pages/ViewsPage'
 
 export default function App() {
@@ -35,6 +36,7 @@ export default function App() {
       <Route path="/docs" element={<DocsDirectoryPage />} />
       <Route path="/docs/:module/*" element={<ModuleDocsPage />} />
       <Route path="/lineage" element={<LineagePage />} />
+      <Route path="/deployments" element={<DeploymentsPage />} />
       <Route path="/views" element={<ViewsPage />} />
       <Route path="/monitoring" element={<MonitoringPage />} />
       <Route path="/users" element={<UsersPage />} />

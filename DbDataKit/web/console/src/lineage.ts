@@ -20,3 +20,9 @@ export function serverNote(s: { nodes: number | null; edges: number | null; erro
   const size = `${s.nodes ?? 0} nodes, ${s.edges ?? 0} edges`
   return s.problems.length > 0 ? `${size}; ${s.problems.length} left out` : size
 }
+
+/** The graph without the deployment nodes (packages, versions, channels, runners, their runs): those have their own screen, Deployments, and are not a flow of data. */
+export function withoutDeployments<T extends LineageGraphDoc>(graph: T): T {
+  const drop = new Set(graph.nodes.filter((n) => n.kind === 'deployment' || n.properties?.deployment !== undefined).map((n) => n.id))
+  return { ...graph, nodes: graph.nodes.filter((n) => !drop.has(n.id)), edges: graph.edges.filter((e) => !drop.has(e.from) && !drop.has(e.to)) }
+}

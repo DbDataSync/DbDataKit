@@ -43,12 +43,78 @@ export interface LineageAnswer extends LineageGraphDoc {
   error?: string
 }
 
+/** One runner's place in a channel's deployment of a definition (plan 28c E24). */
+export interface DeployedInstance {
+  instance: string
+  host?: string
+  version: number
+  state: string
+  reported_at: string
+  error?: string
+  runtime?: string
+  live: boolean
+  on_active: boolean
+}
+
+/** A definition in one channel: its versions, the latest change with who and when, and the runners. */
+export interface DeployedChannel {
+  group: string
+  kind: string
+  name: string
+  channel: string
+  active?: number
+  previous?: number
+  staged?: number
+  last_event?: string
+  last_by?: string
+  last_at?: string
+  history?: string
+  instances: DeployedInstance[]
+}
+
+/** A definition in a channel as one runner holds it. */
+export interface RunnerHolding {
+  kind: string
+  name: string
+  channel: string
+  version: number
+  state: string
+  reported_at: string
+  error?: string
+  channel_active?: number
+  behind: boolean
+}
+
+export interface DeployedRunner {
+  instance: string
+  group: string
+  host?: string
+  runtime?: string
+  runner_version?: string
+  live: boolean
+  holdings: RunnerHolding[]
+}
+
+export interface DeploymentIndex {
+  definitions: { kind: string; name: string }[]
+  runners: { instance: string; host?: string; live: boolean }[]
+  servers: { server: string; error: string | null; nodes: number | null }[]
+}
+
 export const instancesKey = ['instances'] as const
 export const pendingKey = ['instances', 'pending'] as const
 
 export const consoleApi = {
   /** The lineage of every server that keeps one, joined by identity; `refresh` asks the servers again instead of using what was kept for half a minute. */
   lineage: (refresh = false) => request<LineageAnswer>(`/api/lineage${refresh ? '?refresh=true' : ''}`),
+  deployments: {
+    /** The definitions and runners the paired runners know. */
+    index: (refresh = false) => request<DeploymentIndex>(`/api/lineage/deployments${refresh ? '?refresh=true' : ''}`),
+    /** Where is this definition deployed? */
+    where: (definition: string) => request<{ definition: string; channels: DeployedChannel[] }>(`/api/lineage/deployments?definition=${encodeURIComponent(definition)}`),
+    /** What is deployed on this runner (an instance id or a host)? */
+    on: (runner: string) => request<{ runner: string; instances: DeployedRunner[] }>(`/api/lineage/deployments?runner=${encodeURIComponent(runner)}`),
+  },
   instances: {
     list: () => request<InstanceSummary[]>('/api/instances'),
     pair: (url: string, code: string, name: string | null) =>
