@@ -148,6 +148,26 @@ public sealed class ModuleWorkQueueTests : IDisposable
     }
 
     [Theory, MemberData(nameof(Engines))]
+    public void A_claimer_may_leave_subjects_it_may_not_serve_and_the_held_counts_say_who_holds_what(string engine)
+    {
+        var queue = Queue(Open(engine));
+        queue.Enqueue("o", "Primary", "gpu-job");
+        queue.Enqueue("o", "Primary", "plain-a");
+        queue.Enqueue("o", "Primary", "plain-b");
+
+        var first = queue.TryClaimNext("o", "w1", excludeSubjects: ["gpu-job"])!;
+        var second = queue.TryClaimNext("o", "w1", excludeSubjects: ["gpu-job"])!;
+        Assert.Equal(["plain-a", "plain-b"], new[] { first.Subject, second.Subject });
+        Assert.Null(queue.TryClaimNext("o", "w1", excludeSubjects: ["gpu-job"]));        // the excluded item stays Pending
+        Assert.Equal("gpu-job", queue.TryClaimNext("o", "w2", excludeSubjects: [])!.Subject);
+
+        Assert.Equal(2, queue.HeldCounts()["w1"]);
+        Assert.Equal(1, queue.HeldCounts()["w2"]);
+        queue.MarkDone(first.Id);
+        Assert.Equal(1, queue.HeldCounts()["w1"]);
+    }
+
+    [Theory, MemberData(nameof(Engines))]
     public void A_pool_is_shared_across_owners_and_a_released_claim_gives_its_place_back(string engine)
     {
         var queue = Queue(Open(engine));

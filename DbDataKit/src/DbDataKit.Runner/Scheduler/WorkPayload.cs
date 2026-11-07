@@ -47,6 +47,12 @@ public sealed record WorkPayload
     /// <summary>Who asked for a manual run.</summary>
     public string? RequestedBy { get; init; }
 
+    /// <summary>For an item a trigger queued (R13): how many triggered runs came before it in its chain (an after-run trigger adds one to the finished run's; an event that starts a chain is 0). The runtime guard of <c>TriggerOptions.MaxChainDepth</c> reads it.</summary>
+    public int TriggerDepth { get; init; }
+
+    /// <summary>For an item a trigger queued (R13): what set it off, in words: <c>run 3f2a... of pkg/prod/extract (succeeded)</c>, <c>file in/a.csv</c>, <c>webhook shop</c>. Never a body or a secret.</summary>
+    public string? TriggerSource { get; init; }
+
     public string ToJson() => JsonSerializer.Serialize(this, Json);
 
     /// <summary>Reads a payload; null when the text is none or not a payload (the caller reports that and drops the item).</summary>

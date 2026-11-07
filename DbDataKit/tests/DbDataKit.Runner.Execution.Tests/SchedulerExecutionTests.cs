@@ -59,6 +59,23 @@ public sealed class SchedulerExecutionTests : IDisposable
     }
 
     [Theory, MemberData(nameof(Engines))]
+    public async Task A_run_that_ends_starts_the_task_that_follows_it_in_a_real_process_once(string engine)
+    {
+        using var h = new ExecutorHarness(engine);
+        var scheduler = await SchedulerFor(h, Def("ok"), Def("fails") with { Triggers = [TaskTrigger.AfterRun("ok", RunOutcome.Succeeded)] });
+        await Settle(scheduler);                                      // the trigger starts following
+        scheduler.RunNow(new TaskRef("sample", "prod", "ok"));
+        await Settle(scheduler);                                      // ok runs
+        await Settle(scheduler);                                      // its end queues fails, which runs
+        await Settle(scheduler);
+
+        var first = Assert.Single(h.Runs.Read(new RunQuery("runner", "sample/prod/ok")));
+        var follower = Assert.Single(h.Runs.Read(new RunQuery("runner", "sample/prod/fails")));
+        Assert.Equal((RunOutcome.Succeeded, RunOutcome.Failed), (first.Run.Outcome, follower.Run.Outcome));
+        Assert.True(follower.Run.Started >= first.Run.Finished);
+    }
+
+    [Theory, MemberData(nameof(Engines))]
     public async Task A_permanent_failure_is_one_real_run_even_when_the_manifest_allows_attempts(string engine)
     {
         using var h = new ExecutorHarness(engine);

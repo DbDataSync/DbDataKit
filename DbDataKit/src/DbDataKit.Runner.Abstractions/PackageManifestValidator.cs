@@ -201,6 +201,7 @@ public static class PackageManifestValidator
                     break;
                 case TriggerKind.Webhook:
                     if (string.IsNullOrWhiteSpace(trigger.Source)) add($"{path}.source", $"A webhook trigger of {named} names the source the webhook comes from.");
+                    if (trigger.Secret is { } secret && string.IsNullOrWhiteSpace(secret)) add($"{path}.secret", $"`secret` of the webhook trigger of {named} names a secret of the runner's secret store (for example `shop_webhook`); leave it out for a webhook that arrives through the serving layer only.");
                     break;
                 case TriggerKind.File:
                     if (string.IsNullOrWhiteSpace(trigger.Connection)) add($"{path}.connection", $"A file trigger of {named} names the connection slot whose folder it watches.");
@@ -378,6 +379,38 @@ public static class TriggerGraph
         var done = new HashSet<string>(StringComparer.Ordinal);
         foreach (var task in manifest.Tasks)
             if (Walk(task.Name, starts, done, []) is { } cycle) return cycle;
+        return null;
+    }
+
+    /// <summary>
+    /// A loop of after-run triggers among the tasks of every package projected on a channel (a trigger's <c>package</c> names the other package, none means its own), or null. A loop inside one package is found here too;
+    /// <see cref="FindCycle(PackageManifest)"/> finds that one when a manifest is read, this finds the loops that only exist once two packages are active together. Channels do not trigger each other.
+    /// </summary>
+    public static TriggerCycle? FindCycle(IEnumerable<ProjectedTriggers> projections)
+    {
+        ArgumentNullException.ThrowIfNull(projections);
+        foreach (var channel in projections.GroupBy(t => t.Channel, StringComparer.Ordinal).OrderBy(g => g.Key, StringComparer.Ordinal))
+        {
+            // an edge runs from the task that ends to the task it starts
+            var starts = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+            var all = new List<string>();
+            foreach (var task in channel.OrderBy(t => t.Package, StringComparer.Ordinal).ThenBy(t => t.Task, StringComparer.Ordinal))
+            {
+                var name = task.Package + "/" + task.Task;
+                all.Add(name);
+                foreach (var trigger in task.Triggers.Where(t => t.Kind == TriggerKind.AfterRun && t.Task is not null))
+                {
+                    var from = (trigger.Package ?? task.Package) + "/" + trigger.Task;
+                    if (!starts.TryGetValue(from, out var list)) starts[from] = list = [];
+                    list.Add(name);
+                }
+            }
+
+            var done = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var start in all)
+                if (Walk(start, starts, done, []) is { } cycle) return new TriggerCycle(channel.Key, cycle);
+        }
+
         return null;
     }
 

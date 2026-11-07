@@ -49,7 +49,8 @@ public sealed partial class StateModule
         IReadOnlyList<string> migrations,
         IEnumerable<StateModule>? dependsOn = null,
         IReadOnlyList<RetentionRule>? retention = null,
-        IReadOnlyList<PayloadOwner>? payloadOwners = null)
+        IReadOnlyList<PayloadOwner>? payloadOwners = null,
+        IEnumerable<EngineFeature>? requiresFeatures = null)
     {
         if (name == "default")
             throw new ArgumentException("'default' is the namespace settings' word for every module, so no module is named that.", nameof(name));
@@ -63,6 +64,7 @@ public sealed partial class StateModule
         DependsOn = [.. dependsOn ?? []];
         Retention = [.. retention ?? []];
         PayloadOwners = [.. payloadOwners ?? []];
+        RequiresFeatures = [.. (requiresFeatures ?? []).Distinct()];
 
         foreach (var dependency in DependsOn)
         {
@@ -86,6 +88,9 @@ public sealed partial class StateModule
 
     /// <summary>The tables of this module whose rows own payloads, so retention can remove the payloads of rows that are gone.</summary>
     public IReadOnlyList<PayloadOwner> PayloadOwners { get; }
+
+    /// <summary>The engine features this module cannot work without (plan 29b, U01); empty for every module so far. An engine that lacks one is refused before any DDL of the module runs, with a message naming the module, the feature and the fix.</summary>
+    public IReadOnlyList<EngineFeature> RequiresFeatures { get; }
 
     /// <summary>The version a database is at when every migration of this module has been applied.</summary>
     public int Version => Migrations.Count;

@@ -22,6 +22,8 @@
     <DbDataKitReference Include="State" />
     <DbDataKitReference Include="Secrets.Abstractions" />
     <DbDataKitReference Include="Secrets" />
+    <DbDataKitReference Include="Secrets.Store" />   <!-- the key a publishing client signs its tokens with -->
+    <DbDataKitReference Include="Secrets.Windows" />
     <DbDataKitReference Include="Runner.Abstractions" />   <!-- package/1 manifests -->
     <DbDataKitReference Include="Runner" />   <!-- the engine: artifact cache, executor, scheduler loop -->
     <DbDataKitReference Include="Runner.Limits" />   <!-- what this machine can enforce, reported as capabilities -->

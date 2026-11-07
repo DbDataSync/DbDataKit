@@ -39,6 +39,9 @@ public sealed record StateVerbContext(
     /// <summary>For tests: what the engine's version is, in place of asking the engine (the support check of <c>state test</c> is run against it).</summary>
     public Func<DbConnection?, string?>? EngineVersion { get; init; }
 
+    /// <summary>For tests: answers which engine features the engine has, in place of asking it (the layout, the checks and the migration all use it).</summary>
+    public IEngineFeatureProbe? FeatureProbe { get; init; }
+
     /// <summary>For tests: changes the options of <c>state move</c> before it runs (for example <c>MoveOptions.AfterImport</c>, to inject a failure after the import, or a fixed snapshot directory).</summary>
     public Func<DbDataKit.State.Engines.Snapshots.MoveOptions, DbDataKit.State.Engines.Snapshots.MoveOptions>? ConfigureMove { get; init; }
 }
@@ -101,6 +104,9 @@ public static class StateExit
 
     /// <summary><c>state init</c> would point the product at another place while the state it has holds data: it is moved with <c>state move</c>, never by changing the setting.</summary>
     public const int Populated = 19;
+
+    /// <summary>A module of the layout needs an engine feature (U01: pgvector, SQL Server 2025's vector type) that the engine lacks; the service would refuse to start.</summary>
+    public const int FeatureMissing = 29;
 
     /// <summary><c>state init --apply</c>: the administrator's connection failed, or a statement it ran was refused. (28: 20 to 27 are the snapshot verbs'.)</summary>
     public const int Admin = 28;
