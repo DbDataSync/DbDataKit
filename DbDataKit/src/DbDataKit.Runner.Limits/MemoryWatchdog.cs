@@ -29,7 +29,8 @@ internal sealed class MemoryWatchdog : LimitHandle
         try
         {
             using var timer = new PeriodicTimer(interval);
-            do
+            // the first sample is one interval after the start, so a handle disposed at once never samples (and a slow Windows start is not judged)
+            while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false))
             {
                 if (HasExited()) return;
                 var observed = ResidentBytes(_process);
@@ -41,7 +42,6 @@ internal sealed class MemoryWatchdog : LimitHandle
                     return;
                 }
             }
-            while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false));
         }
         catch (OperationCanceledException)
         {

@@ -416,6 +416,10 @@ internal static class ArtifactTestSupport
             else File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
+        if (OperatingSystem.IsWindows())
+            foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+                File.SetAttributes(file, FileAttributes.Normal);      // the cached objects are read-only; Windows will not delete a read-only file
+
         try { Directory.Delete(path, recursive: true); } catch (IOException) { }
     }
 }
