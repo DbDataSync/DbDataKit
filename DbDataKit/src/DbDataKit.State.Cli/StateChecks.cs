@@ -19,7 +19,7 @@ public sealed record StateTestReport(string Engine, IReadOnlyList<StateTestStep>
 
 /// <summary>
 /// The checks of <c>state test</c>, in order, stopping at the first failure with one sentence that names the fix (plan 29b, C01): the settings are usable; the connection works; the login can read the registry (or
-/// create it on an empty database); it has the rights the service runs with; the engine is a supported version; no table of the layout belongs to something else; and what is pending can be applied by this
+/// create it on an empty database); it has the rights the service runs with; the engine is a supported version and has the features the modules need; no table of the layout belongs to something else; and what is pending can be applied by this
 /// login. Nothing is created or changed except a probe file on SQLite, which is made and removed to learn whether the folder is writable.
 /// </summary>
 internal static class StateChecks
@@ -107,6 +107,17 @@ internal static class StateChecks
             if (support is { Supported: false })
                 return Fail("engine", StateExit.EngineVersion, support.Message);
             Ok("engine", support?.Message ?? "the engine did not report a version", support is { Tested: false } ? "note" : "ok");
+
+            // ---- the features the modules need from the engine (U01)
+            if (context.Modules is not null && inspector.Features() is { } features)
+            {
+                var needing = session.Layout.Namespaces.Select(n => n.Module).Where(m => m.RequiresFeatures.Count > 0).ToList();
+                if (EngineSupport.Unmet(needing, features) is { Count: > 0 } unmet)
+                    return Fail("features", StateExit.FeatureMissing, unmet[0].Message);
+                Ok("features", needing.Count == 0
+                    ? $"no module of {context.Product} needs an engine feature; the engine has: {features.Describe()}"
+                    : $"{string.Join(", ", needing.Select(m => $"{m.Name} needs {string.Join(" and ", m.RequiresFeatures.Select(EngineFeatures.Name))}"))}; the engine has: {features.Describe()}");
+            }
 
             // ---- clashes and refusals, from the registry
             if (context.Modules is null)

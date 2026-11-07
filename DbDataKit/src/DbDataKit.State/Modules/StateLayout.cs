@@ -48,6 +48,9 @@ public sealed partial class StateLayout
 
     public string Engine { get; }
 
+    /// <summary>What finds the engine's features before a module that needs one is applied (U01); the engine itself unless a test says otherwise.</summary>
+    public IEngineFeatureProbe FeatureProbe { get; private init; } = EngineFeatures.Default;
+
     /// <summary>The namespaces in the order they are applied: a module after every module it depends on.</summary>
     public IReadOnlyList<StateNamespace> Namespaces { get; private set; } = [];
 
@@ -113,7 +116,7 @@ public sealed partial class StateLayout
     /// <summary>
     /// Works out the layout for <paramref name="modules"/> (and what they depend on) on <paramref name="engine"/>, for the process described by <paramref name="scope"/>, and checks it.
     /// </summary>
-    public static StateLayout Create(string engine, IEnumerable<StateModule> modules, StateScope? scope = null, StateNamespaceSettings? settings = null)
+    public static StateLayout Create(string engine, IEnumerable<StateModule> modules, StateScope? scope = null, StateNamespaceSettings? settings = null, IEngineFeatureProbe? featureProbe = null)
     {
         scope ??= StateScope.Install;
         settings ??= StateNamespaceSettings.Defaults;
@@ -129,7 +132,7 @@ public sealed partial class StateLayout
 
         var registrySchema = RenderSetting(settings.Registry.Schema, sqlite ? null : "dbdatakit", "modules", null);
         var registryPrefix = RenderSetting(settings.Registry.Prefix, sqlite ? "dbdatakit_" : "", "modules", null) ?? "";
-        var layout = new StateLayout(engine, sqlite ? null : NullIfEmpty(registrySchema), registryPrefix + "modules");
+        var layout = new StateLayout(engine, sqlite ? null : NullIfEmpty(registrySchema), registryPrefix + "modules") { FeatureProbe = featureProbe ?? EngineFeatures.Default };
         var claimed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         Claim(layout.Registry, "the registry (dbdatakit_modules)", "the registry's setting");
 

@@ -118,6 +118,9 @@ public sealed class StateInspector : IDisposable
         }
     }
 
+    /// <summary>The features the connected engine has (<see cref="EngineFeatures"/>), asked through the layout's probe; null when there is no database to ask.</summary>
+    public EngineFeatureReport? Features() => Connection is null ? null : _layout.FeatureProbe.Detect(Connection, Engine);
+
     /// <summary>The database role (PostgreSQL) or user (SQL Server) the connection is; null on SQLite.</summary>
     public string? CurrentLogin() => Connection is null ? null : Engine switch
     {
