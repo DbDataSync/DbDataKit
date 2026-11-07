@@ -29,7 +29,12 @@ public sealed record RunTelemetry(
     DateTimeOffset? LastHeartbeat,
     bool Started,
     bool Ended,
-    string? CancelReason);
+    string? CancelReason,
+    ChunkStats Uploaded,
+    ChunkStats Downloaded);
+
+/// <summary>How many chunks a stream carried and the largest one (plan 28b: a stream holds one chunk of at most 1 MiB at a time).</summary>
+public sealed record ChunkStats(long Chunks, long Bytes, int LargestChunk);
 
 /// <summary>The state of one run behind its token: the in-process backend over the stores, and what the task was given and has touched, so a call can only reach what belongs to this run.</summary>
 internal sealed class RunSession
@@ -121,6 +126,28 @@ internal sealed class RunSession
         }
     }
 
+    private long _upChunks, _upBytes, _downChunks, _downBytes;
+    private int _upLargest, _downLargest;
+
+    public void NoteChunk(bool upload, int size)
+    {
+        lock (_gate)
+        {
+            if (upload)
+            {
+                _upChunks++;
+                _upBytes += size;
+                _upLargest = Math.Max(_upLargest, size);
+            }
+            else
+            {
+                _downChunks++;
+                _downBytes += size;
+                _downLargest = Math.Max(_downLargest, size);
+            }
+        }
+    }
+
     public void SetUnitCounts(string name, string key, IReadOnlyDictionary<string, long> counts)
     {
         lock (_gate) _unitCounts[$"{name}/{key}"] = counts;
@@ -130,7 +157,7 @@ internal sealed class RunSession
     {
         lock (_gate)
             return new RunTelemetry(new Dictionary<string, long>(_counts, StringComparer.Ordinal), _status, [.. _lineage], new Dictionary<string, IReadOnlyDictionary<string, long>>(_unitCounts, StringComparer.Ordinal),
-                LastHeartbeat, Started, Ended, CancelReason);
+                LastHeartbeat, Started, Ended, CancelReason, new ChunkStats(_upChunks, _upBytes, _upLargest), new ChunkStats(_downChunks, _downBytes, _downLargest));
     }
 }
 
@@ -138,7 +165,7 @@ internal sealed class RunSession
 internal sealed class RunSessions(TimeProvider time, TimeSpan defaultLifetime)
 {
     private readonly ConcurrentDictionary<string, RunSession> _live = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, string> _gone = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, (string Reason, RunSession Session)> _gone = new(StringComparer.Ordinal);
 
     public TimeProvider Time { get; } = time;
 
@@ -163,7 +190,7 @@ internal sealed class RunSessions(TimeProvider time, TimeSpan defaultLifetime)
         var key = KeyOf(token);
         if (!_live.TryGetValue(key, out var found))
         {
-            reason = _gone.TryGetValue(key, out var why) ? why : "The run token is not one this runner issued.";
+            reason = _gone.TryGetValue(key, out var gone) ? gone.Reason : "The run token is not one this runner issued.";
             return false;
         }
 
@@ -180,11 +207,25 @@ internal sealed class RunSessions(TimeProvider time, TimeSpan defaultLifetime)
 
     public RunSession? Find(string token) => _live.TryGetValue(KeyOf(token), out var session) ? session : null;
 
+    /// <summary>The session of a token that is live or ended and not yet forgotten: what the runner reads after a run to record what it reported.</summary>
+    public RunSession? FindEvenIfEnded(string token)
+    {
+        var key = KeyOf(token);
+        return _live.TryGetValue(key, out var session) ? session : _gone.TryGetValue(key, out var gone) ? gone.Session : null;
+    }
+
+    /// <summary>The runner is done with the token: a live one is revoked, an ended one is forgotten (its reason and its telemetry go).</summary>
+    public bool Forget(string token, string reason)
+    {
+        var revoked = Revoke(token, reason);
+        return _gone.TryRemove(KeyOf(token), out _) || revoked;
+    }
+
     public bool Revoke(string token, string reason)
     {
         var key = KeyOf(token);
         if (!_live.TryRemove(key, out var session)) return false;
-        _gone[key] = reason;
+        _gone[key] = (reason, session);
         session.MarkEnded();
         return true;
     }

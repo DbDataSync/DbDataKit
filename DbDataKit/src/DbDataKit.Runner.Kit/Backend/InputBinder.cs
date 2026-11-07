@@ -11,7 +11,7 @@ namespace DbDataKit.Runner.Kit;
 /// </summary>
 public static class InputBinder
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
 
     private static IEnumerable<PropertyInfo> PropertiesOf(Type input) =>
         input.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.CanRead && p.GetIndexParameters().Length == 0 && p.DeclaringType == input && p.Name != "EqualityContract");

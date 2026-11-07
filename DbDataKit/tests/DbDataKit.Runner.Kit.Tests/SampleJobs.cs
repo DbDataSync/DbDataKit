@@ -88,6 +88,12 @@ public sealed class World
 
     public PayloadRef? LastPayload { get; set; }
 
+    /// <summary>Set by the protocol test jobs when they begin, so a test can act while a run is in flight.</summary>
+    public TaskCompletionSource JobStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>What the job saw when it read its streamed result back (the ref cannot be read once the run is over, when the run is remote).</summary>
+    public ReadBack? ReadBack { get; set; }
+
     public object? Seen { get; set; }
 
     public ConcurrentDictionary<string, DateTimeOffset> CustomerSince { get; } = new();
@@ -349,6 +355,8 @@ public static class BigSteps
 
 public sealed record BigInput(long Bytes);
 
+public sealed record ReadBack(long Total, int BiggestRead, int Reads, string Hash);
+
 /// <summary>Writes <see cref="BigInput.Bytes"/> pseudo-random bytes through a streaming step, in 64 KiB writes, and counts them.</summary>
 [RunnerTask("big")]
 public sealed class Big : RunnerJob<BigInput, NoProgress, NoSlots>
@@ -362,7 +370,29 @@ public sealed class Big : RunnerJob<BigInput, NoProgress, NoSlots>
             for (long written = 0; written < Input.Bytes; written += Block.Length) await sink.WriteAsync(Block.AsMemory(0, (int)Math.Min(Block.Length, Input.Bytes - written)), ct);
         }, ct);
         World.Current.LastPayload = file;
+        World.Current.ReadBack = await ReadBackAsync(file, ct);
         Count(new Counter("bytes"), file.Size);
+    }
+
+    /// <summary>Reads the result back through the ref with a buffer larger than a chunk, hashing as it goes.</summary>
+    private static async Task<ReadBack> ReadBackAsync(PayloadRef file, CancellationToken ct)
+    {
+        using var seen = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var buffer = new byte[4 * 1024 * 1024];
+        long total = 0;
+        var biggest = 0;
+        var reads = 0;
+        await using var stream = file.OpenRead();
+        int n;
+        while ((n = await stream.ReadAsync(buffer, ct)) > 0)
+        {
+            seen.AppendData(buffer, 0, n);
+            total += n;
+            biggest = Math.Max(biggest, n);
+            reads++;
+        }
+
+        return new ReadBack(total, biggest, reads, Convert.ToHexString(seen.GetHashAndReset()));
     }
 }
 

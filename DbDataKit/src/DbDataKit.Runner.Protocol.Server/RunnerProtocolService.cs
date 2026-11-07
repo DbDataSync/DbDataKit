@@ -326,6 +326,7 @@ internal sealed class RunnerProtocolService(RunSessions sessions) : RunnerApi.Ru
                     case StepChunkRequest.PartOneofCase.Data:
                         if (part.Data.Length > RunnerProtocolNames.MaxChunkBytes)
                             throw Refuse(StatusCode.InvalidArgument, $"A chunk of {part.Data.Length} bytes is over the limit of {RunnerProtocolNames.MaxChunkBytes} (1 MiB).");
+                        session.NoteChunk(upload: true, part.Data.Length);
                         await stream.Stream.WriteAsync(part.Data.Memory, ct).ConfigureAwait(false);
                         break;
                     case StepChunkRequest.PartOneofCase.Complete:
@@ -372,7 +373,11 @@ internal sealed class RunnerProtocolService(RunSessions sessions) : RunnerApi.Ru
             var buffer = new byte[RunnerProtocolNames.MaxChunkBytes];
             int read;
             while ((read = await stream.ReadAsync(buffer, context.CancellationToken).ConfigureAwait(false)) > 0)
+            {
+                session.NoteChunk(upload: false, read);
                 await responseStream.WriteAsync(new PayloadChunk { Data = ByteString.CopyFrom(buffer, 0, read) }, context.CancellationToken).ConfigureAwait(false);
+            }
+
             return Empty.Instance;
         }).ConfigureAwait(false);
     }

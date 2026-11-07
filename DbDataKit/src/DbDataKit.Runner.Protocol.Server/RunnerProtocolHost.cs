@@ -154,14 +154,17 @@ public sealed class RunnerProtocolHost : IAsyncDisposable
         return _sessions.Add(grant).Token;
     }
 
-    /// <summary>Ends a token's life (the process is gone, or the runner gave up on it). Calls with it are refused from now on. False when it was not live.</summary>
-    public bool Unregister(string token) => _sessions.Revoke(token, "The run token was withdrawn by the runner.");
+    /// <summary>
+    /// The runner is done with a token (the process is gone, or the runner gave up on it): a live token stops working and an ended one is forgotten, with what it reported. Calls with it are refused from now on. False
+    /// when the token was neither.
+    /// </summary>
+    public bool Unregister(string token) => _sessions.Forget(token, "The run token was withdrawn by the runner.");
 
     /// <summary>Asks the run to stop: pushed to a task that is watching, and answered to its next heartbeat. The task has the grant's cancellation grace to finish. False when the token is not live.</summary>
     public bool Cancel(string token, string? reason = null) => _sessions.Find(token)?.RequestCancel(reason ?? "The runner asked this task to stop.") ?? false;
 
-    /// <summary>What the run reported one way, and whether it started, ended or was told to stop; null when the token is not live.</summary>
-    public RunTelemetry? TelemetryOf(string token) => _sessions.Find(token)?.Telemetry();
+    /// <summary>What the run reported one way, and whether it started, ended or was told to stop; available after the run ended until <see cref="Unregister"/>. Null for a token that was never issued or is forgotten.</summary>
+    public RunTelemetry? TelemetryOf(string token) => _sessions.FindEvenIfEnded(token)?.Telemetry();
 
     public async ValueTask DisposeAsync()
     {

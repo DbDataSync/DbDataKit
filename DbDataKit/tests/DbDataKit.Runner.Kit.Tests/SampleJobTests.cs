@@ -7,8 +7,12 @@ using DbDataKit.State;
 namespace DbDataKit.Runner.Kit.Tests;
 
 /// <summary>Plan 28a R03a: the four sample jobs of plan 28b section 2 as real jobs, on every engine, and what they show of steps, units, checkpoints and streams.</summary>
-public sealed class SampleJobTests
+public abstract class SampleJobTestsBase(bool remote)
 {
+    private readonly bool _remote = remote;
+
+    private Harness NewHarness(string engine) => new(engine, _remote);
+
     private static readonly DateTimeOffset T1 = DateTimeOffset.Parse("2026-11-01T00:00:00Z");
     private static readonly DateTimeOffset T2 = DateTimeOffset.Parse("2026-11-02T00:00:00Z");
     private static readonly DateTimeOffset T3 = DateTimeOffset.Parse("2026-11-03T00:00:00Z");
@@ -21,7 +25,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task The_incremental_pull_moves_its_checkpoint_with_the_run_and_the_next_run_starts_from_it(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
         h.World.OrderPages.Add(new Page([new Row("1", 1), new Row("2", 2)], T1));
         h.World.OrderPages.Add(new Page([new Row("3", 3)], T2));
 
@@ -50,7 +54,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task A_failed_run_leaves_the_checkpoint_where_it_was(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
         h.World.OrderPages.Add(new Page([new Row("1", 1)], T1));
         h.World.OrderPages.Add(new Page([new Row("2", 2)], T2));
         h.World.OrderPagesFailAfter = 1;                                                // the second page never arrives
@@ -75,7 +79,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task A_member_set_but_not_saved_is_not_stored_when_the_run_fails_and_a_commit_point_is_kept(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
         h.World.FailOnDay = 3;                                                          // days 1 and 2 are committed with SaveProgressAsync, day 3 is set and then the run throws
 
         var failed = await h.Run<Backfill>();
@@ -97,7 +101,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task A_checkpoint_moved_by_another_run_stops_this_one_at_the_commit_point(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
         h.World.AfterDay = day =>
         {
             if (day == 1)                                                               // another run (or an administrator) moves the checkpoint
@@ -122,7 +126,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task A_conflict_at_the_final_commit_stops_the_run_and_writes_nothing(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
         h.World.OrderPages.Add(new Page([new Row("1", 1)], T1));
         h.World.OnOrderPage = () =>
         {
@@ -148,7 +152,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task A_step_body_runs_once_across_a_crash_and_its_retry_the_check_finds_the_result(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
         h.World.Sftp["/drop/2026-11-07.csv"] = Csv;
         var input = new DailyDropInput(Day);
 
@@ -177,7 +181,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task A_check_that_finds_nothing_runs_the_body_again(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
         h.World.Sftp["/drop/2026-11-07.csv"] = Csv;
         var input = new DailyDropInput(Day);
         await Assert.ThrowsAsync<SimulatedCrashException>(() => h.Run<DailyDrop>(input, hooks: Harness.CrashAfterStep("archive")));
@@ -194,7 +198,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task A_completed_chain_answers_every_step_from_memory(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
         h.World.Sftp["/drop/2026-11-07.csv"] = Csv;
         var input = new DailyDropInput(Day);
         var first = await h.Run<DailyDrop>(input);
@@ -219,7 +223,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task A_unit_finished_in_one_attempt_is_skipped_in_the_next_and_per_key_progress_is_typed(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
         AddCustomers(h.World, 6);
         h.World.FailingCustomers["c3"] = 1;                                             // fails in the first attempt only
 
@@ -256,7 +260,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task Units_run_in_parallel_but_not_beyond_the_limit_of_the_environment(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
         var running = 0;
         var most = 0;
         var env = h.Environment(maxParallelism: 2);
@@ -277,7 +281,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task The_inbox_job_sends_letters_once_and_makes_dead_letters_of_what_it_refuses(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
         h.Receive("invoices", "billing", new Invoice("inv1", 100));
         h.Receive("invoices", "billing", new Invoice("inv2", -5));                      // invalid: the job rejects it
         h.Receive("invoices", "billing", Encoding.UTF8.GetBytes("this is not json"));  // not an invoice at all: a dead letter, not a crash
@@ -310,7 +314,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task A_result_of_twenty_mebibytes_is_streamed_in_and_out_with_its_hash_and_no_buffer_that_size(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
         const long size = 20L * 1024 * 1024;
 
         var result = await h.Run<Big>(new BigInput(size));
@@ -328,30 +332,14 @@ public sealed class SampleJobTests
         for (long written = 0; written < size; written += Big.Block.Length) expected.AppendData(Big.Block, 0, (int)Math.Min(Big.Block.Length, size - written));
         Assert.Equal(Convert.ToHexString(expected.GetHashAndReset()), info.Sha256!.ToUpperInvariant());
 
-        // read back through the ref the job got: a stream that returns at most one chunk per read, however large the caller's buffer
+        // read back through the ref the job got (inside the run: a stream that returns at most one chunk per read, however large the caller's buffer)
         var file = h.World.LastPayload!;
         Assert.Equal((size, info.Sha256), (file.Size, file.Sha256));
-        using var seen = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        var buffer = new byte[4 * 1024 * 1024];
-        long total = 0;
-        var biggestRead = 0;
-        var reads = 0;
-        await using (var stream = file.OpenRead())
-        {
-            int n;
-            while ((n = await stream.ReadAsync(buffer)) > 0)
-            {
-                seen.AppendData(buffer, 0, n);
-                total += n;
-                biggestRead = Math.Max(biggestRead, n);
-                reads++;
-            }
-        }
-
-        Assert.Equal(size, total);
-        Assert.True(biggestRead <= PayloadStore.DefaultChunkSize, $"a read returned {biggestRead} bytes; one chunk is {PayloadStore.DefaultChunkSize}");
-        Assert.True(reads >= size / PayloadStore.DefaultChunkSize);                     // 20 chunks or more: never the whole result at once
-        Assert.Equal(info.Sha256!.ToUpperInvariant(), Convert.ToHexString(seen.GetHashAndReset()));
+        var back = h.World.ReadBack!;
+        Assert.Equal(size, back.Total);
+        Assert.True(back.BiggestRead <= PayloadStore.DefaultChunkSize, $"a read returned {back.BiggestRead} bytes; one chunk is {PayloadStore.DefaultChunkSize}");
+        Assert.True(back.Reads >= size / PayloadStore.DefaultChunkSize);                // 20 chunks or more: never the whole result at once
+        Assert.Equal(info.Sha256!.ToUpperInvariant(), back.Hash);
 
         // and refused as a whole over the cap
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => file.ReadAllBytesAsync());
@@ -366,7 +354,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task Repeatable_runs_the_body_again_after_a_crash(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
         await Assert.ThrowsAsync<SimulatedCrashException>(() => h.Run<Trouble>(Mode("repeatable"), hooks: Harness.CrashAfterStep("charge")));
         Assert.Equal(1, h.World.Bodies);
 
@@ -381,7 +369,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task Ask_stops_the_run_naming_the_step_until_an_operator_answers(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
         await Assert.ThrowsAsync<SimulatedCrashException>(() => h.Run<Trouble>(Mode("ask"), hooks: Harness.CrashAfterStep("charge")));
 
         var stopped = await h.Run<Trouble>(Mode("ask"), attempt: 2);
@@ -405,7 +393,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task A_step_that_throws_is_failed_and_runs_again_on_the_retry(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
         h.World.Throw = new TimeoutException("the API timed out");
 
         var failed = await h.Run<Trouble>(Mode("throws"));
@@ -426,7 +414,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task Failures_are_classified_through_the_run_model(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
 
         h.World.Throw = new TaskFailureException(TaskFailureKind.Permanent, "The file is not a CSV.", item: "in/a.csv");
         var permanent = await h.Run<Trouble>(Mode("throws"), chain: NewChain());
@@ -453,7 +441,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task A_cancelled_run_is_stopped_and_its_step_stays_in_doubt(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
 
         var stopped = await h.Run<Trouble>(Mode("cancel"), ct: cts.Token);
@@ -473,7 +461,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task A_step_inside_a_step_is_refused_naming_both(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
 
         var result = await h.Run<Trouble>(Mode("nested"));
 
@@ -487,7 +475,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task A_value_over_the_cap_fails_the_step_and_says_to_declare_a_streaming_step(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
 
         var result = await h.Run<Trouble>(Mode("too-big"));
 
@@ -501,7 +489,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task An_interrupted_stream_leaves_nothing_stored_and_the_retry_writes_it_again(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
         await Assert.ThrowsAsync<SimulatedCrashException>(() => h.Run<Trouble>(Mode("stream-repeatable"), hooks: Harness.CrashAfterStep("make")));
         var first = h.StepsOf("trouble").Get(Harness.Chain, "make", "s")!;
         Assert.Equal(StepState.Started, first.State);
@@ -520,7 +508,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task A_file_that_arrives_twice_is_claimed_once(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
 
         var first = await h.Run<Trouble>(Mode("files"));
         Assert.Equal((1, 0), (first.Counters["claimed"], first.Counters["claimed-again"]));      // the renamed copy has the same hash: processed already
@@ -534,7 +522,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task A_rejected_record_is_a_dead_letter_and_the_run_completes_with_failures(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
 
         var result = await h.Run<Trouble>(Mode("reject"));
 
@@ -550,7 +538,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task An_inbox_item_neither_completed_nor_rejected_is_released_when_the_run_ends(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
         h.Receive("trouble", "billing", new Invoice("inv1", 5));
 
         var result = await h.Run<Trouble>(Mode("take-one"));
@@ -563,7 +551,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task The_run_log_gets_the_jobs_lines_and_a_summary(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
 
         var result = await h.Run<Trouble>(Mode("log"));
 
@@ -577,7 +565,7 @@ public sealed class SampleJobTests
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task A_unit_that_throws_does_not_stop_the_others_unless_the_options_say_so(string engine)
     {
-        using var h = new Harness(engine);
+        using var h = NewHarness(engine);
 
         var carry = await h.Run<Stoppable>(new StopInput(false));
         Assert.Equal(RunOutcome.CompletedWithFailures, carry.Outcome);
@@ -595,6 +583,15 @@ public sealed class SampleJobTests
         Assert.Equal(8, h.World.Ran.Count);                                             // six, then 1 and 2 again: 3 to 6 did not run
     }
 }
+
+/// <summary>The sample jobs run in-process over the real stores (plan 28a R03a).</summary>
+public sealed class SampleJobTests() : SampleJobTestsBase(remote: false);
+
+/// <summary>
+/// The same sample jobs with the same assertions, UNCHANGED, through the runner protocol on a real Unix socket (plan 28a R03b): the job code is the same, the task side talks to a <c>RunnerProtocolHost</c> over the same
+/// stores and never opens the database.
+/// </summary>
+public sealed class SampleJobsOverTheProtocolTests() : SampleJobTestsBase(remote: true);
 
 public sealed record ProbeInput(Func<Action> Enter);
 
