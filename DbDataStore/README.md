@@ -10,6 +10,7 @@ dbdatastore server run [--repo <server directory>] [--listen https://127.0.0.1:8
 dbdatastore server pair --max-role <roles> [--repo <server directory>]
 dbdatastore server clients | unpair <client> [--repo <server directory>]
 dbdatastore service install|uninstall|status|start|stop|restart|doctor|unit
+dbdatastore state init --topology service|group|install [--engine mssql|postgres --connection <connection with Password=secret:NAME or env:NAME>] [--login <role or user> [--migrate]] [--admin-connection <reference> --apply] [--group <name>] [--settings <file>] [--repo <server directory>]   # writes the state section of server.yaml (a SQLite file per service is the default)
 dbdatastore state show [--offline] [--repo <server directory>]      # the state database: engine, namespaces, module versions, pending migrations; creates nothing
 dbdatastore state test [--repo <server directory>]                   # opens it read-only and checks rights, engine version and clashes; stops at the first failure with the fix
 dbdatastore state grants --login <database role or user> [--migrate] [--repo <server directory>]

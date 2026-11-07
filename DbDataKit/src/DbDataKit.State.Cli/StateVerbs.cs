@@ -11,6 +11,7 @@ namespace DbDataKit.State.Cli;
 /// <item><c>state show</c>: the effective engine, the connection (secrets masked), the namespaces, each module's registered version, what is pending. Read-only; creates and migrates nothing.</item>
 /// <item><c>state test</c>: connects, reads the registry, checks the rights and the engine version, finds a schema clash and the migrations this login may not apply; stops at the first failure with one sentence that names the fix, and an exit code per kind (<see cref="StateExit"/>).</item>
 /// <item><c>state grants</c>: the <c>GRANT</c> statements a login needs (<see cref="StateGrants"/>).</item>
+/// <item><c>state init</c>: puts the state in one of the three topologies (<see cref="StateTopology"/>): writes the settings, creates the schemas and, with an administrator's connection, the service's rights.</item>
 /// </list>
 /// Verbs that come later (the snapshot verbs, plan 29b X04) are written in files of their own and added to <see cref="Create"/>; the three above do not change when they are.
 /// </summary>
@@ -31,6 +32,7 @@ public static class StateVerbs
             $"--login <database role or user> [--migrate] {context.OptionsUsage}".TrimEnd(),
             (args, output) => StateGrantsVerb.RunAsync(context, args, output),
             DataSchemas.Object([("statements", DataSchemas.StringList)], "statements")),
+        new Verb("init", StateInitVerb.Summary, EffectClass.TargetWrites, StateInitVerb.Usage(context), (args, output) => StateInitVerb.RunAsync(context, args, output), StateInitVerb.Schema),
     ]);
 }
 
