@@ -161,6 +161,26 @@
       }
     },
     {
+      "name": "state_verify",
+      "description": "Compare a snapshot with its manifest (--snapshot), the state with a snapshot (--snapshot --db or --against) or with another database (--other-engine, --other-connection with secret references, or --against a settings file); names the table and rows that differ. [Target read-only] Usage: state verify --snapshot <directory> [--db] | --against <snapshot directory or settings file> | --other-engine sqlite|mssql|postgres [--other-connection <string>] [--other-sqlite <file>] [--other-schema <s>] [--other-prefix <p>] [--rehash-payloads] [--repo <data directory>]",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
       "name": "state_show",
       "description": "Show the effective engine, the connection (secrets masked), where each module's tables are, each module's version in the registry and what is pending; read-only, creates and migrates nothing. [Target read-only] Usage: state show [--offline] [--repo <data directory>]",
       "inputSchema": {

@@ -22,12 +22,12 @@ public static class ConsoleCli
 
     public static Task<int> RunAsync(string[] args, CliContext context) => Router().RunAsync(args, context);
 
-    public static NounRouter Router(Func<string, string?>? environment = null) => new(Program,
+    public static NounRouter Router(Func<string, string?>? environment = null, Func<DbDataKit.State.Engines.Snapshots.MoveOptions, DbDataKit.State.Engines.Snapshots.MoveOptions>? configureMove = null) => new(Program,
     [
         ServerNoun.Create((args, context) => RunServerAsync(args, context, environment)),
         InstanceNoun(environment),
         UserNoun(environment),
-        StateNoun(environment),
+        StateNoun(environment, configureMove),
         IdentityCli.Noun(environment),
         ConsoleService.Noun(ConsoleServiceEnvironment.Real()),
         HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl),
@@ -103,7 +103,7 @@ public static class ConsoleCli
             home = new IdentityHomeSettings(authority, parsed.Get("identity-client")!, secret, parsed.Get("identity-app") ?? "console", TrustedCertificate: trusted);
         }
 
-        var settings = new ConsoleSettings(DirectoryOf(parsed, environment), listen, publicUrl, announce, ConsoleState.SettingsFrom(environment, parsed.Get("state-engine"), parsed.Get("state-connection")), home);
+        var settings = new ConsoleSettings(DirectoryOf(parsed, environment), listen, publicUrl, announce, ConsoleState.SettingsFrom(environment, parsed.Get("state-engine"), parsed.Get("state-connection"), DirectoryOf(parsed, environment)), home);
         Directory.CreateDirectory(settings.Directory);
         var app = ConsoleHost.Build(settings, ConsoleHost.Certificate(settings.Directory), line => context.Error.WriteLine(line), parsed.Get("web-root"));
         await context.Out.WriteLineAsync($"The console is on {listen} (people open it at {settings.Public}). The first administrator redeems the invitation in {Path.Combine(settings.Directory, "FIRST-RUN.txt")}.");
@@ -282,18 +282,19 @@ public static class ConsoleCli
 
     // ---- state ----
 
-    /// <summary>The shared <c>state show|test|grants</c> verbs over the console's state: its settings come from the flags and the environment (<see cref="ConsoleState.SettingsFrom"/>), its file is <c>state.db</c> in its directory, and a password that is a secret reference is looked up in its store, then the environment.</summary>
-    private static Noun StateNoun(Func<string, string?>? environment) => DbDataKit.State.Cli.StateVerbs.Create(new DbDataKit.State.Cli.StateVerbContext(
+    /// <summary>The shared <c>state</c> verbs over the console's state: its settings come from the flags, the environment and <c>settings.yaml</c> in its directory (<see cref="ConsoleState.SettingsFrom"/>; <c>state move</c> writes that file), its file is <c>state.db</c> in its directory, and a password that is a secret reference is looked up in its store, then the environment.</summary>
+    private static Noun StateNoun(Func<string, string?>? environment, Func<DbDataKit.State.Engines.Snapshots.MoveOptions, DbDataKit.State.Engines.Snapshots.MoveOptions>? configureMove = null) => DbDataKit.State.Cli.StateVerbs.Create(new DbDataKit.State.Cli.StateVerbContext(
         Program, "the console",
         args =>
         {
             var directory = DirectoryOf(args, environment);
             return new DbDataKit.State.Cli.StateTarget(
-                ConsoleState.SettingsFrom(environment, args.Get("engine")) ?? new StateSettings(),
+                ConsoleState.SettingsFrom(environment, args.Get("engine"), null, directory) ?? new StateSettings(),
                 Path.Combine(directory, "state.db"),
-                () => new DbDataKit.Secrets.SecretResolverChain([ConsoleSecrets.Open(directory, environment), new DbDataKit.Secrets.EnvSecretProvider(environment)]));
+                () => new DbDataKit.Secrets.SecretResolverChain([ConsoleSecrets.Open(directory, environment), new DbDataKit.Secrets.EnvSecretProvider(environment)]),
+                ConsoleState.SettingsFileIn(directory));
         },
-        ConsoleState.Modules, StateScope.Install, ["engine", "repo"], "[--engine mssql|postgres] [--repo <console directory>]"));
+        ConsoleState.Modules, StateScope.Install, ["engine", "repo"], "[--engine mssql|postgres] [--repo <console directory>]") { ConfigureMove = configureMove });
 
     // ---- user ----
 
@@ -313,7 +314,7 @@ public static class ConsoleCli
     ]);
 
     /// <summary>Opens the state database the way the server does. It is made if there is none, so an invitation can be printed before the first start.</summary>
-    private static StateDatabase OpenState(CliArgs parsed, Func<string, string?>? environment) => ConsoleState.Open(DirectoryOf(parsed, environment), ConsoleState.SettingsFrom(environment), environment);
+    private static StateDatabase OpenState(CliArgs parsed, Func<string, string?>? environment) => ConsoleState.Open(DirectoryOf(parsed, environment), ConsoleState.SettingsFrom(environment, null, null, DirectoryOf(parsed, environment)), environment);
 
     private static async Task<int> UserListAsync(string[] args, CliContext context, Func<string, string?>? environment)
     {

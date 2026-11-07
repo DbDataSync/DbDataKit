@@ -14,6 +14,10 @@ dbdatastore state init --topology service|group|install [--engine mssql|postgres
 dbdatastore state show [--offline] [--repo <server directory>]      # the state database: engine, namespaces, module versions, pending migrations; creates nothing
 dbdatastore state test [--repo <server directory>]                   # opens it read-only and checks rights, engine version and clashes; stops at the first failure with the fix
 dbdatastore state grants --login <database role or user> [--migrate] [--repo <server directory>]
+dbdatastore state export --to <directory> [--include-secrets-check] [--repo <server directory>]   # the pairings and pairing codes as a snapshot; stop the server first
+dbdatastore state import --from <directory> [--migrate-after true|false] [--repo <server directory>]   # into an empty directory's state
+dbdatastore state verify --snapshot <directory> [--db] [--rehash-payloads] [--repo <server directory>]   # the snapshot against itself, or the state against it
+dbdatastore state move --to-engine <engine> [--to-connection <string>] [--yes] [--repo <server directory>]   # the server's state is SQLite only for now: it says so and points to export and import
 dbdatastore model put --file <model.yaml> [--name <model>] [--repo <server directory>]      # checked first, then saved
 dbdatastore storage create --model <model> [--repo <server directory>]                      # the tables of the model's own copy, on connections/<name>.yaml
 dbdatastore proxy add <name> --url <https address> --code <code> [--repo <server directory>]   # pair with a serving group as a publishing client
