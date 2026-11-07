@@ -1,6 +1,6 @@
 # Plan 28: DbDataRunner, a published-to service for scheduled and batch work
 
-Status: **proposed, high level** (2026-11-04, from the owner's direction in the plan 27 discussion). Not sliced. Its first consumer is
+Status: **proposed, high level** (2026-11-04, from the owner's direction in the plan 27 discussion). Sliced in [28a](28a-runner-slices.md). Its first consumer is
 DbDataIntegration ([plan 27](27-knowledge-agents-integrations-work.md) section 4). Moving Sync and Build onto it is later work,
 planned separately (section 8).
 
