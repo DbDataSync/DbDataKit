@@ -12,7 +12,17 @@ public sealed record PayloadInfo(Guid Id, long Size, string? Sha256, string? Med
 /// <summary>Who a payload belongs to and what it is, given when it is opened for writing.</summary>
 /// <param name="OwnerModule">The module whose row refers to the payload; with <paramref name="OwnerRow"/>, how retention knows the owner is gone.</param>
 /// <param name="OwnerRow">The key of the owning row, as text (a UUID in lower-case <c>D</c> format).</param>
-public sealed record PayloadOptions(string? MediaType = null, string? OwnerModule = null, string? OwnerRow = null, string? CreatedBy = null);
+/// <param name="MaxBytes">The most the writer accepts; a write that would pass it throws <see cref="PayloadTooLargeException"/> and leaves the payload incomplete. Null: no cap.</param>
+/// <param name="Label">What the payload is for, named in the too-large message (<c>step 'download'</c>).</param>
+public sealed record PayloadOptions(string? MediaType = null, string? OwnerModule = null, string? OwnerRow = null, string? CreatedBy = null, long? MaxBytes = null, string? Label = null);
+
+/// <summary>A write passed the cap given in <see cref="PayloadOptions.MaxBytes"/>. The payload stays incomplete (and is removed by retention); nothing of the refused write is kept.</summary>
+public sealed class PayloadTooLargeException(string message, Guid payloadId, long maxBytes) : InvalidOperationException(message)
+{
+    public Guid PayloadId { get; } = payloadId;
+
+    public long MaxBytes { get; } = maxBytes;
+}
 
 /// <summary>
 /// The suite's large values (plan 29 section 3.6): kept in chunks in the <c>payloads</c> module, written and read as streams, and never a column of another module's table. Memory
@@ -100,7 +110,8 @@ public sealed class PayloadStore
                 .Bind(_database, "now", _database.Time.GetUtcNow())
                 .Bind(_database, "by", options.CreatedBy, System.Data.DbType.String);
             insert.ExecuteNonQuery();
-            return new PayloadWriter(_database, connection, id, ChunkSize);
+            if (options.MaxBytes is < 0) throw new ArgumentOutOfRangeException(nameof(options), "PayloadOptions.MaxBytes is not negative.");
+            return new PayloadWriter(_database, connection, id, ChunkSize, options.MaxBytes, options.Label);
         }
         catch
         {
@@ -178,11 +189,16 @@ public sealed class PayloadWriter : Stream
     private int _filled;
     private long _sequence;
     private long _length;
+    private readonly long? _maxBytes;
+    private readonly string? _label;
     private bool _completed;
     private bool _disposed;
+    private bool _refused;
 
-    internal PayloadWriter(StateDatabase database, DbConnection connection, Guid id, int chunkSize)
+    internal PayloadWriter(StateDatabase database, DbConnection connection, Guid id, int chunkSize, long? maxBytes = null, string? label = null)
     {
+        _maxBytes = maxBytes;
+        _label = label;
         _database = database;
         _connection = connection;
         _buffer = new byte[chunkSize];
@@ -211,6 +227,7 @@ public sealed class PayloadWriter : Stream
     public override void Write(ReadOnlySpan<byte> buffer)
     {
         EnsureWritable();
+        EnsureWithinCap(buffer.Length);
         while (!buffer.IsEmpty)
         {
             var take = Math.Min(buffer.Length, _buffer.Length - _filled);
@@ -225,6 +242,7 @@ public sealed class PayloadWriter : Stream
     public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
     {
         EnsureWritable();
+        EnsureWithinCap(buffer.Length);
         while (!buffer.IsEmpty)
         {
             var take = Math.Min(buffer.Length, _buffer.Length - _filled);
@@ -276,6 +294,15 @@ public sealed class PayloadWriter : Stream
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_completed) throw new InvalidOperationException($"The payload {Id} is already complete.");
+        if (_refused) throw new InvalidOperationException($"The payload {Id} passed its size cap of {_maxBytes} bytes and stays incomplete; it cannot be written or completed.");
+    }
+
+    private void EnsureWithinCap(int count)
+    {
+        if (_maxBytes is not { } max || _length + count <= max) return;
+        _refused = true;
+        var what = _label is null ? $"The payload {Id}" : $"The payload {Id} of {_label}";
+        throw new PayloadTooLargeException($"{what} would pass its size cap of {max} bytes (it already holds {_length} and {count} more were written); it is left incomplete and retention removes it.", Id, max);
     }
 
     public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();

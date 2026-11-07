@@ -155,6 +155,48 @@ public static class ProgressModule
             );
             CREATE INDEX {index:inbox_item_by_task} ON {table:inbox_item}(package, channel, task, taken_by, received_at);
             """,
+            """
+            -- Steps (plan 28b section 4): one row per task, attempt chain (the work item and its retries), step name and step key. state is started, completed, failed or in_doubt (a started step
+            -- whose run died or was left by an earlier attempt). A completed step holds its result as JSON (result_json) or as a payload (result_payload, owned by this row so retention removes it with
+            -- the row); counts is the JSON of the counts made inside the step. attempt is the attempt that last began the step.
+            CREATE TABLE {table:step_result} (
+                id             {{uuid}} PRIMARY KEY,
+                package        {{key}} NOT NULL,
+                channel        {{key}} NOT NULL,
+                task           {{key}} NOT NULL,
+                chain          {{key}} NOT NULL,
+                step_name      {{key}} NOT NULL,
+                step_key       {{key}} NOT NULL,
+                state          {{key}} NOT NULL,
+                attempt        {{int}} NOT NULL,
+                result_json    {{text}} NULL,
+                result_payload {{uuid}} NULL,
+                counts         {{text}} NULL,
+                started_at     {{time}} NOT NULL,
+                completed_at   {{time}} NULL,
+                error          {{text}} NULL,
+                row_version    {{int}} NOT NULL
+            );
+            CREATE UNIQUE INDEX {index:step_result_by_step} ON {table:step_result}(package, channel, task, chain, step_name, step_key);
+
+            -- Units (plan 28b section 6): one row per task, attempt chain, unit name and unit key. state is started, completed, failed or skipped (not run because the run stopped).
+            CREATE TABLE {table:unit_result} (
+                package        {{key}} NOT NULL,
+                channel        {{key}} NOT NULL,
+                task           {{key}} NOT NULL,
+                chain          {{key}} NOT NULL,
+                unit_name      {{key}} NOT NULL,
+                unit_key       {{key}} NOT NULL,
+                state          {{key}} NOT NULL,
+                attempt        {{int}} NOT NULL,
+                counts         {{text}} NULL,
+                started_at     {{time}} NOT NULL,
+                completed_at   {{time}} NULL,
+                error          {{text}} NULL,
+                row_version    {{int}} NOT NULL,
+                PRIMARY KEY (package, channel, task, chain, unit_name, unit_key)
+            );
+            """,
         ],
         dependsOn: [PayloadStore.Module],
         retention:
@@ -164,8 +206,10 @@ public static class ProgressModule
             new RetentionRule("idempotency_key", "expires_at"),
             new RetentionRule("dead_letter", "last_failed_at", Where: "status <> 'open'"),
             new RetentionRule("inbox_item", "received_at", Where: "taken_by IS NOT NULL"),
+            new RetentionRule("step_result", "started_at"),
+            new RetentionRule("unit_result", "started_at"),
         ],
-        payloadOwners: [new PayloadOwner("dead_letter", "id", KeyIsUuid: true), new PayloadOwner("inbox_item", "id", KeyIsUuid: true)]);
+        payloadOwners: [new PayloadOwner("dead_letter", "id", KeyIsUuid: true), new PayloadOwner("inbox_item", "id", KeyIsUuid: true), new PayloadOwner("step_result", "id", KeyIsUuid: true)]);
 }
 
 /// <summary>What kind of value a checkpoint part or a state value is (plan 29 section 4.3). <see cref="Json"/> is the last resort for a value that has no better type.</summary>
