@@ -87,7 +87,7 @@ public sealed class AppsModuleTests : IAsyncLifetime
         var start = await apps.GetAsync(path);
         Assert.Equal(HttpStatusCode.Redirect, start.StatusCode);
         var authorize = new HttpRequestMessage(HttpMethod.Get, start.Headers.Location);
-        authorize.Headers.Add("Cookie", $"{ProxyIdentityModule.Auth.SessionCookie}={new SessionStore(database).Create(user).Id}");
+        authorize.Headers.Add("Cookie", $"{ProxyIdentityModule.Auth.SessionCookie}={new IdentitySessionStore(database).Create(user).Id}");
         var back = await home.SendAsync(authorize);
         Assert.Equal(HttpStatusCode.Redirect, back.StatusCode);
         var callback = await apps.GetAsync(back.Headers.Location);

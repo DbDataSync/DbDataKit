@@ -133,7 +133,7 @@ public sealed class GroupStateTests : IAsyncLifetime
             // the database never holds the password in the clear, nor the token
             var database = a.Services.GetRequiredService<StateDatabase>();
             using (var conn = database.OpenConnection())
-            using (var cmd = database.Command(conn, "SELECT TokenHash, Principal FROM ClientSessions;"))
+            using (var cmd = database.Command("serving", conn, "SELECT token_hash, principal FROM {table:client_session};"))
             using (var reader = cmd.ExecuteReader())
             {
                 Assert.True(reader.Read());
