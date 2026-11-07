@@ -39,6 +39,9 @@ public partial class StateDatabase
 
     private readonly string _appliedBy;
 
+    /// <summary>False for a database opened by <see cref="OpenForImport"/>: nothing is created or migrated until the snapshot importer (or <see cref="ApplyMigrations"/>) does it.</summary>
+    private bool _migrate = true;
+
     /// <summary>
     /// Where the database's modules are (plan 29): null for a database built from a <see cref="StateSchema"/> (the structure being replaced, kept until every product has
     /// moved), set for one built from modules.
@@ -65,6 +68,11 @@ public partial class StateDatabase
     /// <param name="layout">From <see cref="StateLayout.Create"/>, for the same <paramref name="engine"/>.</param>
     /// <param name="appliedBy">Who is recorded as applying a migration: the service and its version. Defaults to the entry assembly.</param>
     public StateDatabase(string engine, string connectionString, StateLayout layout, string? appliedBy = null, TimeProvider? time = null)
+        : this(engine, connectionString, layout, appliedBy, time, migrate: true)
+    {
+    }
+
+    private StateDatabase(string engine, string connectionString, StateLayout layout, string? appliedBy, TimeProvider? time, bool migrate)
     {
         ArgumentNullException.ThrowIfNull(layout);
         if (layout.Engine != engine)
@@ -75,9 +83,45 @@ public partial class StateDatabase
         Time = time ?? TimeProvider.System;
         _appliedBy = appliedBy ?? DefaultAppliedBy();
 
+        _migrate = migrate;
+        if (!migrate) return;
         using var connection = OpenRawConnection();
         EnsureSchema(connection);
     }
+
+    /// <summary>
+    /// A database built from modules that is opened <b>without</b> creating or migrating anything: the target of a snapshot import (<c>StateSnapshotImporter</c>), which creates each module at the
+    /// snapshot's version itself. Everything else opens a database with the constructors, which migrate. Until <see cref="ApplyMigrations"/> runs (the importer does it when asked to migrate after the
+    /// import) the stores of this instance will not find their tables.
+    /// </summary>
+    public static StateDatabase OpenForImport(string engine, string connectionString, StateLayout layout, string? appliedBy = null, TimeProvider? time = null) =>
+        new(engine, connectionString, layout, appliedBy, time, migrate: false);
+
+    /// <summary>A SQLite file opened for a snapshot import; see <see cref="OpenForImport"/>.</summary>
+    public static StateDatabase OpenSqliteForImport(string sqliteFilePath, StateLayout layout, string? appliedBy = null, TimeProvider? time = null) =>
+        new(StateEngineIds.Sqlite, SqliteConnectionString(sqliteFilePath), layout, appliedBy, time, migrate: false);
+
+    /// <summary>Applies every missing migration of the layout (what opening a database does) to a database opened for import; from then on it behaves like any other.</summary>
+    public void ApplyMigrations()
+    {
+        if (Layout is null) throw new InvalidOperationException("Only a database built from modules has migrations to apply.");
+        using var connection = OpenRawConnection();
+        StateMigrator.Apply(connection, this, Layout, _appliedBy);
+        _migrate = true;
+    }
+
+    /// <summary>
+    /// What the registry says this database holds: each module (with its scope, <c>install</c> or a group's or service's name) and how many migrations are applied. Empty when the registry does not exist (an empty
+    /// or foreign database). Reads only; works on a database opened for import.
+    /// </summary>
+    public IReadOnlyList<StateRegisteredModule> RegisteredModules()
+    {
+        if (Layout is null) throw new InvalidOperationException("Only a database built from modules has a registry.");
+        using var connection = OpenRawConnection();
+        return [.. StateMigrator.RegisteredModules(connection, this, Layout).Select(r => new StateRegisteredModule(r.Module, r.Scope, r.Version))];
+    }
+
+    internal string AppliedBy => _appliedBy;
 
     private static string DefaultAppliedBy()
     {
@@ -146,7 +190,7 @@ public partial class StateDatabase
         var connection = OpenRawConnection();
         // A server engine is verified once, when the database is opened (a pooled connection to a server is not subject to the file problem described above);
         // the older structure keeps re-checking on every open on every engine.
-        if (Layout is null || Dialect.Engine == StateEngineIds.Sqlite)
+        if (_migrate && (Layout is null || Dialect.Engine == StateEngineIds.Sqlite))
             EnsureSchema(connection);
         return connection;
     }
@@ -319,3 +363,6 @@ public static class StateCommandExtensions
         return command;
     }
 }
+
+/// <summary>A registry row: <paramref name="Scope"/> is <c>install</c> or the name of the group or service the module is kept for.</summary>
+public sealed record StateRegisteredModule(string Module, string Scope, int Version);

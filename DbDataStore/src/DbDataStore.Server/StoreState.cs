@@ -16,6 +16,9 @@ public static class StoreState
 
     public static StateScope Scope { get; } = new(Group: "main", Service: ServiceId);
 
+    /// <summary>The modules the server's state is built from.</summary>
+    public static IReadOnlyList<StateModule> Modules { get; } = [TrustModule.Module];
+
     public static StateDatabase Open(string directory)
     {
         var yaml = Path.Combine(directory, "server.yaml");
@@ -24,7 +27,7 @@ public static class StoreState
                 $"{yaml} lists paired clients ({PairedClientsFile.Key}:), which a DbDataStore server now keeps in its state database ({Path.Combine(directory, FileName)}). " +
                 $"Pairings are not converted: remove the {PairedClientsFile.Key} list from {yaml}, then pair each client again with 'dbdatastore server pair'.");
         Directory.CreateDirectory(directory);
-        return StateDatabase.OpenModules(Path.Combine(directory, FileName), [TrustModule.Module], Scope);
+        return StateDatabase.OpenModules(Path.Combine(directory, FileName), Modules, Scope);
     }
 
     /// <summary>Where the server keeps what pairing needs, for the server and for the <c>server pair</c>, <c>clients</c> and <c>unpair</c> verbs.</summary>

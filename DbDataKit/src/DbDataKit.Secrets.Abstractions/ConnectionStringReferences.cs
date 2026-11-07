@@ -91,6 +91,26 @@ public static class ConnectionStringReferences
         return sb.ToString();
     }
 
+    /// <summary>
+    /// The connection string as it may be shown to a person: every credential key whose value is a literal (<c>Password</c>, <c>Pwd</c>, ...) has its value replaced by <c>***</c>, the password of a
+    /// <c>scheme://user:password@host</c> address too. A secret reference (<c>Password=secret:state-db</c>) is shown as the reference, never resolved, and so is a string that is a reference as a whole.
+    /// </summary>
+    public static string Mask(string? connectionString)
+    {
+        if (string.IsNullOrEmpty(connectionString) || IsWholeReference(connectionString, out _)) return connectionString ?? "";
+        var text = connectionString;
+        var sb = new StringBuilder(text.Length);
+        var last = 0;
+        foreach (var (key, value, start, end) in ConnectionStringParser.ParseSpans(text))
+        {
+            if (!CredentialKeyDetector.IsCredentialKey(key) || value.Length == 0 || SecretRef.LooksLikeRef(value)) continue;
+            sb.Append(text, last, start - last).Append("***");
+            last = end;
+        }
+        sb.Append(text, last, text.Length - last);
+        return System.Text.RegularExpressions.Regex.Replace(sb.ToString(), @"(://[^/:@\s]+:)[^@/\s]+(@)", "$1***$2");
+    }
+
     private static bool NeedsQuoting(string v) =>
         v.Length == 0 || v.IndexOfAny([';', '=', '{', '}', '"', '\'']) >= 0 || v != v.Trim();
 }

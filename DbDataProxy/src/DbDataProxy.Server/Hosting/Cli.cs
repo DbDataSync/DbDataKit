@@ -36,6 +36,7 @@ public static class Cli
         IdentityCommand.Noun(),
         AppsCommand.Noun(),
         ConfigNoun(),
+        StateNoun(),
         QueryNoun(),
         DbDataKit.Semantic.Cli.SemanticNoun.Create(ProxySemanticSession.ConnectAsync, ProxySemanticSession.Options, ProxySemanticSession.Flags, ProxySemanticSession.Usage),
         DataSourceNoun(),
@@ -73,6 +74,30 @@ public static class Cli
             return ProxyConfigException.ExitCode;
         }
     }
+
+    // ---- state ----
+
+    /// <summary>
+    /// The shared <c>state show|test|grants</c> verbs over the proxy's state: the engine and connection of its settings (Proxy:State), the file <c>state.db</c> in its data directory (<c>--repo</c> names it, as for the pairing verbs), the
+    /// modules and the default group it opens them with, and a password that is a secret reference looked up as the server looks it up.
+    /// </summary>
+    private static Noun StateNoun() => DbDataKit.State.Cli.StateVerbs.Create(new DbDataKit.State.Cli.StateVerbContext(
+        Program, "the proxy",
+        args =>
+        {
+            try
+            {
+                var directory = args.Get("repo") is { Length: > 0 } repo ? Path.GetFullPath(repo) : null;
+                var options = ProxyConfiguration.LoadOptions(directory);
+                if (directory is not null) options.DataDirectory = directory;
+                return new DbDataKit.State.Cli.StateTarget(
+                    new DbDataKit.State.StateSettings(options.State.Engine, options.State.ConnectionString),
+                    State.ProxyState.PathIn(ProxyHost.ResolveDataDirectory(options)),
+                    () => new DbDataKit.Secrets.SecretResolverChain(Secrets.SecretsRuntime.CreateProviders(options, Secrets.SecretsRuntime.OpenStore(options))));
+            }
+            catch (ProxyConfigException ex) { throw new InvalidOperationException(ex.Message, ex); }
+        },
+        State.ProxyState.Modules, State.ProxyState.ScopeOf(), ["repo"], "[--repo <data directory>]"));
 
     // ---- service ----
 

@@ -38,7 +38,9 @@ internal sealed class InProcessRun : IRunBackend
 
     public Task StartAsync(CancellationToken ct)
     {
-        _runs.Start(Identity.Task.ToString(), Identity.RunId);
+        // a runner's executor records the run (with its package version) before the task starts; a run that nobody recorded is recorded here
+        if (_runs.Get(Identity.RunId) is null)
+            _runs.Start(Identity.Task.ToString(), Identity.RunId, package: Identity.Task.Package, channel: Identity.Task.Channel, attempt: Identity.Attempt);
         return Task.CompletedTask;
     }
 

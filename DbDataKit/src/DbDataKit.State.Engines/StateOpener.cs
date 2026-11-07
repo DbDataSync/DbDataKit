@@ -50,6 +50,40 @@ public static class StateOpener
         return new StateDatabase(engine, ResolveSecrets(settings.ConnectionString, secrets), layout, appliedBy, time);
     }
 
+    /// <summary>Makes the SQL Server and PostgreSQL providers known to the state layer (what <see cref="Open(StateSettings, string, IEnumerable{StateModule}, StateScope?, ISecretResolver?, string?, TimeProvider?)"/> does first), for a command that connects without opening a <see cref="StateDatabase"/>.</summary>
+    public static void RegisterProviders()
+    {
+        lock (Registration) StateDialectRegistry.Default.RegisterLibraryBackedEngines(Factory);
+    }
+
+    /// <summary>The connection string with the secret references in it resolved through <paramref name="secrets"/>; a secret nobody has stops with a message naming the reference, never a value. Without a resolver the string is returned as it is.</summary>
+    public static string ResolveConnectionString(string connectionString, ISecretResolver? secrets) => ResolveSecrets(connectionString, secrets);
+
+    /// <summary>
+    /// Opens the database <b>without creating or migrating anything</b>: what a snapshot export reads, a verification compares and a snapshot import fills (<see cref="StateDatabase.OpenForImport"/>). The engine, connection,
+    /// namespaces and secret references are as for <see cref="Open(StateSettings, string, IEnumerable{StateModule}, StateScope?, ISecretResolver?, string?, TimeProvider?)"/>; nothing is written, and no connection is made until it is used.
+    /// </summary>
+    public static StateDatabase OpenWithoutMigrating(StateSettings settings, string? sqlitePath, IEnumerable<StateModule> modules, StateScope? scope = null, ISecretResolver? secrets = null, string? appliedBy = null, TimeProvider? time = null)
+    {
+        var engine = settings.EngineId;
+        var layout = StateLayout.Create(engine, modules, scope, settings.Namespaces);
+        if (engine == StateEngineIds.Sqlite)
+        {
+            if (string.IsNullOrWhiteSpace(sqlitePath)) throw new InvalidOperationException("The state engine is SQLite, which is a file: the path of the file is needed.");
+            return StateDatabase.OpenSqliteForImport(sqlitePath, layout, appliedBy, time);
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.ConnectionString))
+            throw new InvalidOperationException($"The state engine is {settings.Engine}, which needs a connection string (state connection). Only SQLite is configured by a file.");
+
+        lock (Registration) StateDialectRegistry.Default.RegisterLibraryBackedEngines(Factory);
+        return StateDatabase.OpenForImport(engine, ResolveSecrets(settings.ConnectionString, secrets), layout, appliedBy, time);
+    }
+
+    /// <summary>The connection string with its secret references resolved (for code that has to hide the values again); null for SQLite.</summary>
+    internal static string? ResolveConnectionString(StateSettings settings, ISecretResolver? secrets) =>
+        settings.IsSqlite || string.IsNullOrWhiteSpace(settings.ConnectionString) ? null : ResolveSecrets(settings.ConnectionString, secrets);
+
     private static string ResolveSecrets(string connectionString, ISecretResolver? secrets)
     {
         if (secrets is null) return connectionString;

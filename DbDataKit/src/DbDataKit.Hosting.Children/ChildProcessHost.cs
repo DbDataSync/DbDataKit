@@ -14,6 +14,12 @@ public sealed class ChildProcessSpec
     public IReadOnlyDictionary<string, string> Environment { get; init; } = new Dictionary<string, string>();
 
     /// <summary>
+    /// True: the child does not inherit this process's environment; it gets <see cref="Environment"/> and the launch variables only. For children that run someone else's code and must not see the host's
+    /// secrets (a runner's task process). Default false: the child inherits, as before.
+    /// </summary>
+    public bool ClearEnvironment { get; init; }
+
+    /// <summary>
     /// Handshake transport. Null picks the platform default. <see cref="ChildEndpointKind.None"/> launches without a
     /// listener, for children that host their own server (for example Kestrel on a port the host chooses); the job
     /// object, kill-on-dispose, parent identity and output capture still apply.
@@ -42,11 +48,13 @@ public sealed class ChildProcess : IAsyncDisposable
     private readonly JobObjectHolder _job;
     private readonly string _token;
     private readonly DateTimeOffset _started = DateTimeOffset.UtcNow;
+    private readonly Task _outputCompleted;
     private readonly TaskCompletionSource<ChildExitReport> _exited = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private bool _killed;
 
-    internal ChildProcess(Process process, IChildTransportListener listener, JobObjectHolder job, string token)
+    internal ChildProcess(Process process, IChildTransportListener listener, JobObjectHolder job, string token, Task outputCompleted)
     {
+        _outputCompleted = outputCompleted;
         _process = process;
         _listener = listener;
         _job = job;
@@ -66,6 +74,12 @@ public sealed class ChildProcess : IAsyncDisposable
     public ChildEndpoint Endpoint => _listener.Endpoint;
 
     public Task<ChildExitReport> Exited => _exited.Task;
+
+    /// <summary>
+    /// Completes when the child's standard output and standard error have both reached the end and every line was handed to the callbacks. The process can exit before its last lines are delivered, so a caller that
+    /// records output waits for this (with a timeout: a grandchild that keeps the pipes open delays the end).
+    /// </summary>
+    public Task OutputCompleted => _outputCompleted;
 
     public ProcessStartInfo StartInfo => _process.StartInfo;
 
@@ -126,6 +140,7 @@ public static class ChildProcessHost
             };
             if (spec.WorkingDirectory is not null) psi.WorkingDirectory = spec.WorkingDirectory;
             foreach (var a in spec.Arguments) psi.ArgumentList.Add(a);
+            if (spec.ClearEnvironment) psi.Environment.Clear();
             foreach (var (k, v) in spec.Environment) psi.Environment[k] = v;
             ChildEnvironment.Apply(psi.Environment, info);
 
@@ -134,8 +149,18 @@ public static class ChildProcessHost
             // The redirected pipes must be drained or a chatty child blocks on a full buffer.
             var onOut = spec.OnOutputLine;
             var onErr = spec.OnErrorLine;
-            process.OutputDataReceived += (_, e) => { if (e.Data is { Length: > 0 }) onOut?.Invoke(e.Data); };
-            process.ErrorDataReceived += (_, e) => { if (e.Data is { Length: > 0 }) onErr?.Invoke(e.Data); };
+            var outDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var errDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            process.OutputDataReceived += (_, e) =>
+            {
+                if (e.Data is null) outDone.TrySetResult();
+                else if (e.Data.Length > 0) onOut?.Invoke(e.Data);
+            };
+            process.ErrorDataReceived += (_, e) =>
+            {
+                if (e.Data is null) errDone.TrySetResult();
+                else if (e.Data.Length > 0) onErr?.Invoke(e.Data);
+            };
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
             // Tiny window between start and assignment; documented in the README. Nested jobs are fine on Win8+.
@@ -144,7 +169,7 @@ public static class ChildProcessHost
                 AssignToJob(job, process);
             }
 
-            return new ChildProcess(process, listener, job, token);
+            return new ChildProcess(process, listener, job, token, Task.WhenAll(outDone.Task, errDone.Task));
         }
         catch
         {

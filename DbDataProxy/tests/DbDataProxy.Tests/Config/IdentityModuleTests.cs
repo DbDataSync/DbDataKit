@@ -29,13 +29,19 @@ public sealed class IdentityModuleTests : IAsyncLifetime
     private WebApplication? app;
     private int flightPort, managementPort, identityPort;
 
+    private static readonly HashSet<int> HandedOut = [];
+
+    /// <summary>A free loopback port, never one this process handed out before: a released port can be given out again at once, and the test's three ports must differ (the identity home and the Flight port may not share one).</summary>
     private static int FreePort()
     {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
+        while (true)
+        {
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            listener.Stop();
+            lock (HandedOut) if (HandedOut.Add(port)) return port;
+        }
     }
 
     private static HttpClient Trusting(Uri? baseAddress = null, Version? version = null) =>

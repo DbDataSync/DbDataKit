@@ -84,3 +84,5 @@ The real-engine suite uses throwaway SQL Server and PostgreSQL containers (`test
 ## License
 
 MIT. See `LICENSE` and `THIRD-PARTY-NOTICES.md`.
+
+The server's state database (`state.db` in its directory) can be looked at with `dbdatabuild state show` (engine, namespaces, module versions, pending migrations; read-only) and `dbdatabuild state test` (opens it read-only, checks rights, engine version and clashes, and stops at the first failure with the fix); `dbdatabuild state grants` prints the `GRANT` statements for a server engine (SQLite has none).

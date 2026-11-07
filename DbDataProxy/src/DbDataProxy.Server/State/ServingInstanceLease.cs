@@ -20,6 +20,7 @@ public sealed class ServingInstanceLease(StateDatabase state, ILogger<ServingIns
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
     private readonly string _key = Guid.NewGuid().ToString("N");
     private ITimer? _timer;
+    private bool _registered;
 
     public string InstanceKey => _key;
 
@@ -35,6 +36,7 @@ public sealed class ServingInstanceLease(StateDatabase state, ILogger<ServingIns
                 "Stop that one, or run a group of instances against a SQL Server or PostgreSQL state (state: { engine: mssql|postgres, connectionString: ... } in server.yaml).");
         }
         Write(now, insert: true);
+        _registered = true;
         if (others.Count > 0) log.LogInformation("{Count} other instance(s) share this state.", others.Count);
         _timer = _clock.CreateTimer(_ => Heartbeat(), null, Every, Every);
         return Task.CompletedTask;
@@ -100,8 +102,17 @@ public sealed class ServingInstanceLease(StateDatabase state, ILogger<ServingIns
 
     public Task StoppedAsync(CancellationToken cancellationToken)
     {
+        Release();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Removes this instance's row (once); also done on disposal, so a host that failed part way through starting (a port taken) does not leave a live-looking row behind for the next start.</summary>
+    private void Release()
+    {
         _timer?.Dispose();
         _timer = null;
+        if (!_registered) return;
+        _registered = false;
         try
         {
             state.Retry(() =>
@@ -116,7 +127,6 @@ public sealed class ServingInstanceLease(StateDatabase state, ILogger<ServingIns
         {
             log.LogWarning("This instance's row in the state could not be removed ({Reason}); it lapses in {Seconds} seconds.", ex.GetType().Name, Stale.TotalSeconds);
         }
-        return Task.CompletedTask;
     }
 
     public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -124,7 +134,7 @@ public sealed class ServingInstanceLease(StateDatabase state, ILogger<ServingIns
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     public Task StoppingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
-    public void Dispose() => _timer?.Dispose();
+    public void Dispose() => Release();
 
 
 }

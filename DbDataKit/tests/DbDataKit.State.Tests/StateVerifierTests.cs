@@ -1,4 +1,5 @@
 using System.Data;
+using DbDataKit.State.Snapshots;
 using DbDataKit.State.Verification;
 
 namespace DbDataKit.State.Tests;
@@ -8,7 +9,17 @@ public sealed class StateVerifierTests : IDisposable
 {
     private readonly StateEngines _engines = new();
 
-    public void Dispose() => _engines.Dispose();
+    private readonly List<string> _directories = [];
+
+    public void Dispose()
+    {
+        _engines.Dispose();
+        foreach (var directory in _directories)
+        {
+            try { Directory.Delete(directory, recursive: true); }
+            catch (IOException) { }
+        }
+    }
 
     private static readonly DateTimeOffset T0 = new(2026, 11, 7, 10, 0, 0, TimeSpan.Zero);
     private static readonly Guid Run1 = Guid.Parse("00000000-0000-7000-8000-00000000000a");
@@ -74,6 +85,7 @@ public sealed class StateVerifierTests : IDisposable
         Insert(db, "runner_progress", "checkpoint_part", ("package", "p"), ("channel", "main"), ("task", "t"), ("name", "since"), ("item_key", ""), ("part", "value"), ("value_type", "decimal"),
             ("value_int", 5L), ("value_decimal", 1.5m), ("value_at", T0), ("value_bool", true), ("value_payload", PayloadId), ("value_json", new Json("""{"k": [3, 1, 2], "a": "b"}""")));
 
+        if (db.Layout!.Namespaces.All(n => n.Module.Name != PayloadStore.ModuleName)) return;
         Insert(db, "payloads", "payload", ("id", PayloadId), ("size", 6L), ("sha256", "0123abcd"), ("media_type", "text/plain"), ("state", "complete"), ("chunk_size", 4L), ("created_at", T0), ("completed_at", T0));
         Insert(db, "payloads", "chunk", ("payload_id", PayloadId), ("sequence", 0L), ("data", new byte[] { 1, 2, 3, 4 }));
         Insert(db, "payloads", "chunk", ("payload_id", PayloadId), ("sequence", 1L), ("data", new byte[] { 5, 6 }));
@@ -116,6 +128,44 @@ public sealed class StateVerifierTests : IDisposable
         // the data really is there: identity, runs with logs, audit, notifications, definitions, progress and payloads
         foreach (var (module, table, rows) in new[] { ("identity", "account", 4L), ("runs", "run_log", 5L), ("audit", "entry", 2L), ("notifications", "notification", 2L), ("definitions/main", "definition_version", 1L), ("runner_progress/main", "checkpoint_part", 1L), ("payloads", "chunk", 2L) })
             Assert.Equal(rows, report.Tables.Single(t => t.Module == module && t.Table == table).LeftRows);
+    }
+
+    /// <summary>Everything but the payload tables, whose rows in a snapshot hold offsets into its payload files and so have no digest a database can reproduce.</summary>
+    private static readonly StateModule[] WithoutPayloads = [.. AllModules.Where(m => m.Name != PayloadStore.ModuleName)];
+
+    [Theory]
+    [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
+    public async Task A_database_verifies_against_the_manifest_of_its_own_snapshot_and_a_change_after_the_export_fails_naming_the_table(string engine)
+    {
+        var database = OpenPopulated(engine, WithoutPayloads);
+        Populate(database);
+        var directory = Path.Combine(Path.GetTempPath(), "dbdatakit-verify-" + Guid.NewGuid().ToString("N"));
+        _directories.Add(directory);
+        await StateSnapshotWriter.WriteAsync(database, WithoutPayloads, StateScope.Standalone, directory, SnapshotOptions.Default, null, CancellationToken.None);
+        var manifest = new ManifestDigestSource(directory);
+
+        // the exporter's digests and the verifier's are the same rule, so the live database equals what was exported
+        // (the payload chunks are the one table a manifest cannot digest: the snapshot's rows hold offsets into its payload files, so it is named as not offered and checked through the payload hashes)
+        Assert.Equal(["payloads.chunk"], manifest.NotOffered);
+        var report = new StateVerifier().Verify(new DatabaseDigestSource(database), manifest);
+        Assert.Equal(["payloads.chunk"], report.Differences.Where(d => d.Kind == VerificationDifferenceKind.MissingTable).Select(d => $"{d.Module}.{d.Table}"));
+        Assert.Single(report.Differences);
+        Assert.Equal(TableCount(database) - 1, report.Tables.Count);
+        Assert.All(report.Tables, t => Assert.True(t.Equal, report.Describe()));
+        Assert.Contains(report.Tables, t => t is { Module: "identity", Table: "account", LeftRows: 4 } && t.LeftSha256 == t.RightSha256);
+
+        // a row changed after the export: a manifest cannot list rows, so the table is named with a digest mismatch
+        Assert.Equal(1, Execute(database, "identity", "UPDATE {table:account} SET display_name = $name WHERE id = $id;", ("name", "Robert"), ("id", "bob")));
+        var changed = new StateVerifier().Verify(new DatabaseDigestSource(database), manifest);
+        var difference = Assert.Single(changed.Differences, d => d.Kind != VerificationDifferenceKind.MissingTable);
+        Assert.Equal(VerificationDifferenceKind.DigestMismatch, difference.Kind);
+        Assert.Equal(("identity", "account"), (difference.Module, difference.Table));
+        Assert.Contains("identity.account", difference.Message);
+
+        // and a row added after it as a count mismatch of that table
+        Insert(database, "identity", "account", ("id", "new"), ("display_name", "New"), ("role", "Viewer"), ("enabled", true), ("created_at", T0));
+        var added = new StateVerifier().Verify(new DatabaseDigestSource(database), manifest);
+        Assert.Contains(added.Differences, d => d.Kind == VerificationDifferenceKind.CountMismatch && d is { Module: "identity", Table: "account" });
     }
 
     [Theory]
@@ -219,31 +269,31 @@ public sealed class StateVerifierTests : IDisposable
     {
         foreach (var module in AllModules.Concat([AppStorageModule.Module]))
         {
-            foreach (var (name, table) in LogicalColumns.For(module))
+            foreach (var table in StateTableDefinitions.Read(module))
             {
-                Assert.NotEmpty(table.Key);
+                Assert.NotEmpty(table.PrimaryKey);
                 Assert.NotEmpty(table.Columns);
-                Assert.Equal(name, table.Name);
             }
         }
 
-        var chunk = LogicalColumns.For(PayloadStore.Module)["chunk"];
-        Assert.Equal(new[] { LogicalType.Uuid, LogicalType.Int, LogicalType.Blob }, chunk.Columns.Select(c => c.Type));
-        Assert.Equal(new[] { "payload_id", "sequence" }, chunk.Key.Select(c => c.Name));
-        Assert.Equal(LogicalType.Int, LogicalColumns.For(RunsModule.Module)["run_log"].Key.Single().Type);
-        Assert.Equal(LogicalType.Json, LogicalColumns.For(AuditModule.Module)["entry"].Columns.Last().Type);
+        var chunk = StateTableDefinitions.Read(PayloadStore.Module).Single(t => t.Name == "chunk");
+        Assert.Equal(new[] { SnapshotColumnTypes.Uuid, SnapshotColumnTypes.Int, SnapshotColumnTypes.Blob }, chunk.Columns.Select(c => c.Type));
+        Assert.Equal(new[] { "payload_id", "sequence" }, chunk.PrimaryKey);
+        var runLog = StateTableDefinitions.Read(RunsModule.Module).Single(t => t.Name == "run_log");
+        Assert.Equal(SnapshotColumnTypes.Int, runLog.Columns.Single(c => c.Name == runLog.PrimaryKey.Single()).Type);
+        Assert.Equal(SnapshotColumnTypes.Json, StateTableDefinitions.Read(AuditModule.Module).Single(t => t.Name == "entry").Columns.Last().Type);
     }
 
     [Fact]
     public void Neutral_values_agree_where_engines_store_the_same_thing_differently()
     {
-        Assert.Equal("00000000-0000-7000-8000-00000000000b", LogicalColumns.Normalise(LogicalType.Uuid, "00000000-0000-7000-8000-00000000000B"));
-        Assert.Equal(LogicalColumns.Normalise(LogicalType.Time, "2026-11-07T10:00:00.1234560Z"), LogicalColumns.Normalise(LogicalType.Time, new DateTime(2026, 11, 7, 10, 0, 0, 0, DateTimeKind.Utc).AddTicks(1234560)));
-        Assert.Equal("2026-11-07T10:00:00.1234567Z", LogicalColumns.Normalise(LogicalType.Time, "2026-11-07T10:00:00.1234567Z"));
-        Assert.Equal(LogicalColumns.Normalise(LogicalType.Decimal, "1.5"), LogicalColumns.Normalise(LogicalType.Decimal, 1.5000000000m));
-        Assert.Equal("true", LogicalColumns.Normalise(LogicalType.Bool, 1L));
-        Assert.Equal("""{"a":[1,2.0],"b":{"x":null,"y":true}}""", LogicalColumns.CanonicalJson("""{ "b": {"y": true, "x": null}, "a": [1, 2.0] }"""));
-        Assert.Equal("not json", LogicalColumns.CanonicalJson("not json"));
+        Assert.Equal("00000000-0000-7000-8000-00000000000b", SnapshotValues.Normalise(SnapshotColumnTypes.Uuid, "00000000-0000-7000-8000-00000000000B"));
+        Assert.Equal(SnapshotValues.Normalise(SnapshotColumnTypes.Time, "2026-11-07T10:00:00.1234560Z"), SnapshotValues.Normalise(SnapshotColumnTypes.Time, new DateTime(2026, 11, 7, 10, 0, 0, 0, DateTimeKind.Utc).AddTicks(1234560)));
+        Assert.Equal("2026-11-07T10:00:00.1234567Z", SnapshotValues.Normalise(SnapshotColumnTypes.Time, "2026-11-07T10:00:00.1234567Z"));
+        Assert.Equal(SnapshotValues.Normalise(SnapshotColumnTypes.Decimal, "1.5"), SnapshotValues.Normalise(SnapshotColumnTypes.Decimal, 1.5000000000m));
+        Assert.Equal("true", SnapshotValues.Normalise(SnapshotColumnTypes.Bool, 1L));
+        Assert.Equal("""{"a":[1,2.0],"b":{"x":null,"y":true}}""", SnapshotValues.CanonicalJson("""{ "b": {"y": true, "x": null}, "a": [1, 2.0] }"""));
+        Assert.Equal("not json", SnapshotValues.CanonicalJson("not json"));
     }
 
     [Fact]

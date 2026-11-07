@@ -10,6 +10,9 @@ dbdatastore server run [--repo <server directory>] [--listen https://127.0.0.1:8
 dbdatastore server pair --max-role <roles> [--repo <server directory>]
 dbdatastore server clients | unpair <client> [--repo <server directory>]
 dbdatastore service install|uninstall|status|start|stop|restart|doctor|unit
+dbdatastore state show [--offline] [--repo <server directory>]      # the state database: engine, namespaces, module versions, pending migrations; creates nothing
+dbdatastore state test [--repo <server directory>]                   # opens it read-only and checks rights, engine version and clashes; stops at the first failure with the fix
+dbdatastore state grants --login <database role or user> [--migrate] [--repo <server directory>]
 dbdatastore model put --file <model.yaml> [--name <model>] [--repo <server directory>]      # checked first, then saved
 dbdatastore storage create --model <model> [--repo <server directory>]                      # the tables of the model's own copy, on connections/<name>.yaml
 dbdatastore proxy add <name> --url <https address> --code <code> [--repo <server directory>]   # pair with a serving group as a publishing client

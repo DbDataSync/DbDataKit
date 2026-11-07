@@ -86,6 +86,46 @@ internal static class StateMigrator
         whole?.Commit();
     }
 
+    /// <summary>
+    /// For the snapshot importer: creates the schemas of the layout and the registry (when missing), under no transaction of the caller's. The same statements <see cref="Apply"/> runs first.
+    /// </summary>
+    internal static void PrepareForImport(DbConnection connection, StateDatabase database, StateLayout layout)
+    {
+        var dialect = database.Dialect;
+        var registryExists = dialect.TableExists(connection, layout.Registry);   // before the transaction: SQL Server refuses a command outside one that is pending
+        using var transaction = dialect.BeginMigrationTransaction(connection);
+        foreach (var schema in layout.Schemas)
+            Execute(connection, transaction, dialect.CreateSchema(schema));
+        if (!registryExists)
+            Execute(connection, transaction, StateTemplates.Render(RegistryTemplate(layout), dialect));
+        transaction.Commit();
+    }
+
+    /// <summary>
+    /// For the snapshot importer: applies the first <paramref name="version"/> migrations of one module (not all of them) inside the caller's transaction and records that version and its checksum in
+    /// the registry. A module at its own version is what <see cref="Apply"/> produces; an older one is brought up by <see cref="Apply"/> afterwards.
+    /// </summary>
+    internal static void ApplyModuleTo(DbConnection connection, StateDatabase database, StateLayout layout, StateNamespace ns, int version, DbTransaction transaction, string appliedBy)
+    {
+        var module = ns.Module;
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(version, module.Version);
+        var dialect = database.Dialect;
+        for (var i = 0; i < version; i++)
+        {
+            foreach (var statement in StateTemplates.SplitStatements(StateTemplates.Render(layout.Render(module.Migrations[i], module.Name), dialect)))
+                Execute(connection, transaction, statement);
+        }
+
+        Record(connection, database, transaction, layout, ns, ScopeOf(ns), version, Checksum(module, version), appliedBy);
+    }
+
+    /// <summary>The module names (with their scope) recorded in the registry, or none when there is no registry.</summary>
+    internal static IReadOnlyList<(string Module, string Scope, int Version)> RegisteredModules(DbConnection connection, StateDatabase database, StateLayout layout)
+    {
+        if (!database.Dialect.TableExists(connection, layout.Registry)) return [];
+        return [.. Read(connection, null, layout).Select(r => (r.Key.Module, r.Key.Scope, r.Value.Version))];
+    }
+
     /// <summary>True when the registry exists and every module of the layout is recorded at its current version, with the names it was made with: nothing to apply.</summary>
     private static bool InSync(DbConnection connection, StateDatabase database, StateLayout layout)
     {

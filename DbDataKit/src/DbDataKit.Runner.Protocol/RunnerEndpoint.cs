@@ -16,6 +16,18 @@ public static class RunnerProtocolNames
     /// <summary>The environment variable that holds the run token.</summary>
     public const string TokenVariable = "DBDATAKIT_RUNNER_TOKEN";
 
+    /// <summary>The environment variable that holds the path of the package assembly a task host loads (plan 28a R06). Not a secret.</summary>
+    public const string AssemblyVariable = "DBDATAKIT_TASK_ASSEMBLY";
+
+    /// <summary>The environment variable that holds the name of the task a task host runs: the name in the job's <c>[RunnerTask]</c>. Not a secret.</summary>
+    public const string TaskVariable = "DBDATAKIT_TASK_NAME";
+
+    /// <summary>The environment variable that holds the task's scratch directory (also its working directory and its temp directory): the one place it may write, removed after the run.</summary>
+    public const string ScratchVariable = "DBDATAKIT_SCRATCH_DIR";
+
+    /// <summary>The environment variable that holds the root of the package's materialized version: read-only to the task.</summary>
+    public const string PackageDirectoryVariable = "DBDATAKIT_PACKAGE_DIR";
+
     /// <summary>The largest chunk a stream carries in either direction (plan 28b: streams hold one chunk at a time).</summary>
     public const int MaxChunkBytes = 1024 * 1024;
 }

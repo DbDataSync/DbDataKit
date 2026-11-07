@@ -21,6 +21,7 @@
     <DbDataKitReference Include="Cli" />
     <DbDataKitReference Include="Monitoring" />
     <DbDataKitReference Include="Scheduling" />   <!-- the schedule evaluator and the work queue the server runs plans from; plan 13, M08 -->
+    <DbDataKitReference Include="State.Cli" />   <!-- state show, test and grants; plan 29b, C01 -->
     <DbDataKitReference Include="State" />   <!-- the health rules (overdue, slow) every product shares; plan 13, M09 -->
     <DbDataKitReference Include="Web" />   <!-- the management API: pairing, tokens, roles; plan 13, R01 -->
     <DbDataKitReference Include="Hosting.Abstractions" />   <!-- the shared host: service and systemd modes, drain, /health and /version, limits; plan 13, R05 -->

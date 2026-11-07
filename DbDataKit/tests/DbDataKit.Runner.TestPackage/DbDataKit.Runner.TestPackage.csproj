@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- A package of sample jobs for the executor's tests (plan 28a R06): the tests publish it to a directory and run its tasks in real processes through the task host. -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <UseMicrosoftTestingPlatformRunner>false</UseMicrosoftTestingPlatformRunner>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Remove="xunit.v3" />
+    <ProjectReference Include="..\..\src\DbDataKit.Runner.Kit\DbDataKit.Runner.Kit.csproj" />
+  </ItemGroup>
+</Project>

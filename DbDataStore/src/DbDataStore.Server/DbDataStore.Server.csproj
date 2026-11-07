@@ -10,6 +10,7 @@
     <DbDataKitReference Include="Hosting.Abstractions" />   <!-- the shared host: service and systemd modes, drain, /health and /version -->
     <DbDataKitReference Include="Hosting" />
     <DbDataKitReference Include="Hosting.Cli" />
+    <DbDataKitReference Include="State.Cli" />   <!-- state show, test and grants; plan 29b, C01 -->
     <DbDataKitReference Include="Hosting.WindowsService" />
     <DbDataKitReference Include="Hosting.Systemd" />
     <DbDataKitReference Include="Hosting.Certificates" />
