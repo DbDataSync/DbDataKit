@@ -78,8 +78,7 @@ public sealed class RuntimeTests
         public void Dispose()
         {
             _engines.Dispose();
-            try { Directory.Delete(_directory, recursive: true); }
-            catch (IOException) { /* temp */ }
+            ArtifactTestSupport.DeleteTree(_directory);      // the cache's files are read-only; Windows will not delete a read-only file
         }
     }
 
