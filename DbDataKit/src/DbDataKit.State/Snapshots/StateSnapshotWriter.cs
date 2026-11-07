@@ -28,7 +28,7 @@ namespace DbDataKit.State.Snapshots;
 /// </summary>
 public static class StateSnapshotWriter
 {
-    private static readonly JsonWriterOptions RowOptions = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping, SkipValidation = true };
+    internal static readonly JsonWriterOptions RowOptions = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping, SkipValidation = true };
 
     private static readonly JsonWriterOptions ManifestOptions = new() { Indented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
@@ -297,25 +297,6 @@ public static class StateSnapshotWriter
         {
             // the export's own failure is what the caller needs to see; a file that cannot be removed is left, and the next export refuses the directory, naming it
         }
-    }
-
-    /// <summary>Adds the hash of every row, modulo 2^256 (see <see cref="SnapshotTable.RowsDigest"/>).</summary>
-    private sealed class RowsDigest
-    {
-        private readonly byte[] _sum = new byte[32];
-
-        public void Add(ReadOnlySpan<byte> hash)
-        {
-            var carry = 0;
-            for (var i = 31; i >= 0; i--)
-            {
-                var value = _sum[i] + hash[i] + carry;
-                _sum[i] = (byte)value;
-                carry = value >> 8;
-            }
-        }
-
-        public string Hex() => Convert.ToHexStringLower(_sum);
     }
 
     /// <summary>Passes bytes on and hashes them: the hash of the file as it was written, without reading it back.</summary>

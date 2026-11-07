@@ -59,7 +59,7 @@ public sealed partial class StateSnapshotWriterTests : IDisposable
         return [.. Enumerable.Range(0, reader.FieldCount).Select(reader.GetName)];
     }
 
-    private static void Execute(StateDatabase database, string module, string sql, Action<DbCommand>? bind = null)
+    internal static void Execute(StateDatabase database, string module, string sql, Action<DbCommand>? bind = null)
     {
         using var connection = database.OpenConnection();
         using var command = database.Command(module, connection, sql);
@@ -216,7 +216,7 @@ public sealed partial class StateSnapshotWriterTests : IDisposable
     /// <summary>The sum of the line hashes of the two <c>sample</c> rows below, which every engine has to arrive at (pinned from the format's definition, not from any one engine).</summary>
     private const string SampleRowsDigest = "cddb5b37c36b15e5ec58d6be6e385da2ec8ba1f6154e12a242448c24ccf65663";
 
-    private static void FillTypes(StateDatabase database)
+    internal static void FillTypes(StateDatabase database)
     {
         const string insert = "INSERT INTO {table:sample} (id, label, note, created_at, seen_at, enabled, amount, doc, data, size, extra) VALUES ($id, $label, $note, $created, $seen, $enabled, $amount, CAST($doc AS {{json}}), $data, $size, $extra);";
         Execute(database, "snapshot_types", insert, c => c
