@@ -29,6 +29,16 @@ public static class StateEndpoints
             if (read > MaxBody) return Results.Json(new { error = "The body is larger than 8 KB." }, statusCode: StatusCodes.Status413PayloadTooLarge);
             return await RunAsync(management, context, caller, new string(buffer, 0, read));
         });
+        // the server moves its own state (C06): a small body too; 202 while it runs, 404 where the product has no settings file to write
+        group.MapGet("/move", (Delegate)((HttpContext context) => RunAsync(management, context, caller, null)));
+        group.MapPost("/move", async (HttpContext context) =>
+        {
+            using var reader = new StreamReader(context.Request.Body, Encoding.UTF8);
+            var buffer = new char[MaxBody + 1];
+            var read = await reader.ReadBlockAsync(buffer, context.RequestAborted);
+            if (read > MaxBody) return Results.Json(new { error = "The body is larger than 8 KB." }, statusCode: StatusCodes.Status413PayloadTooLarge);
+            return await RunAsync(management, context, caller, new string(buffer, 0, read));
+        });
         return group;
     }
 

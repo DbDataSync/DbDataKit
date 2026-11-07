@@ -16,7 +16,6 @@ public sealed record PendingInstance(string Product, string InstanceId, string N
 public sealed partial class PendingInstances(string path, TimeProvider? clock = null)
 {
     public const int MaxEntries = 100;
-    private static readonly string[] Products = ["dbdatabuild", "dbdatasync", "dbdataproxy", "dbdatastore"];
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
     private readonly object _gate = new();
@@ -27,7 +26,7 @@ public sealed partial class PendingInstances(string path, TimeProvider? clock = 
     /// </summary>
     public string? Announce(Announcement announcement, System.Net.IPAddress? from, bool hostResolves = false)
     {
-        if (!Products.Contains(announcement.Product)) return "the product is not one this console manages";
+        if (!ServerProducts.Announced.Contains(announcement.Product)) return "the product is not one this console manages";
         if (announcement.InstanceId is not { } id || !IdPattern().IsMatch(id)) return "the instance id is missing or not valid";
         if (string.IsNullOrWhiteSpace(announcement.Name) || announcement.Name.Length > 100 || announcement.Name.Any(char.IsControl)) return "the name is missing, too long or has control characters";
         Uri? url;

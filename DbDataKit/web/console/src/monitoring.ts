@@ -7,24 +7,24 @@ export interface MonitorRow {
   serverName: string
   /** Unique among the rows: the server and what the row is about (for a notice, its number). */
   key: string
-  product: 'dbdatasync' | 'dbdatabuild' | 'dbdataproxy'
-  kind: 'replication' | 'plan' | 'event'
+  product: 'dbdatasync' | 'dbdatabuild' | 'dbdataproxy' | 'dbdatarunner'
+  kind: 'replication' | 'plan' | 'event' | 'task' | 'instance'
   subject: string
   /** What to look at first: a failed last run, a lag past the limit, a notice from a Proxy, a hold, a run going, or nothing. */
-  state: 'failed' | 'lagging' | 'event' | 'paused' | 'running' | 'ok'
+  state: 'failed' | 'gone' | 'lagging' | 'event' | 'paused' | 'running' | 'ok'
   detail: string
   /** Whether the person (or the server) holds it: a failed row can be held too, and then it is the hold that is released. */
   held: boolean
   /** What the row's buttons act on. */
-  target: { replication: string } | { project: string; connection: string; plan: string } | null
+  target: { replication: string } | { project: string; connection: string; plan: string } | { runnerTask: { package: string; channel: string; task: string } } | null
 }
 
 /** A replication whose slowest mapping is this far behind is shown as lagging. */
 export const LAG_LIMIT_MS = 15 * 60 * 1000
 
-const ORDER: Record<MonitorRow['state'], number> = { failed: 0, lagging: 1, event: 2, paused: 3, running: 4, ok: 5 }
+const ORDER: Record<MonitorRow['state'], number> = { failed: 0, gone: 1, lagging: 2, event: 3, paused: 4, running: 5, ok: 6 }
 
-/** Failures first, then lag, then a Proxy's notices, then holds; within a state, by server and name (a Proxy's notices keep the order they came in, newest first). */
+/** Failures first, then a runner that is gone, then lag, then a Proxy's notices, then holds; within a state, by server and name (a Proxy's notices keep the order they came in, newest first). */
 export const sortRows = (rows: MonitorRow[]) =>
   [...rows].sort((a, b) => ORDER[a.state] - ORDER[b.state] || a.serverName.localeCompare(b.serverName) || (a.state === 'event' ? 0 : a.subject.localeCompare(b.subject)))
 
@@ -79,6 +79,34 @@ export function proxyRow(server: InstanceSummary, notice: ProxyNotification): Mo
   return { key: `${server.id}/notice/${notice.id}`, server: server.id, serverName: server.name, product: 'dbdataproxy', kind: 'event', subject: noticeTitle[notice.kind] ?? notice.kind, state: 'event', detail: notice.message, held: false, target: null }
 }
 
+/** What a runner says in `GET /api/v1/status` about a task, and in `GET /api/v1/instances?all=true` about an instance. */
+export interface RunnerTask {
+  package: string; channel: string; task: string; paused: boolean; paused_by?: string | null; running: number | boolean; queued?: number | boolean
+  problem?: string | null; waiting_reason?: string | null; last_run: { outcome: string; started?: string } | null
+}
+export interface RunnerInstanceRow { id: string; host: string; live?: boolean; state?: string; heartbeat?: string }
+
+const runnerBad = (outcome: string) => outcome === 'failed' || outcome === 'completedwithfailures' || outcome === 'interrupted'
+
+/** One task of a runner. A last run that failed outranks everything else; a task that waits (a label no runner has) or has a problem is shown as failed too, since nothing will run it until someone acts. */
+export function runnerTaskRow(server: InstanceSummary, task: RunnerTask): MonitorRow {
+  const ref = { package: task.package, channel: task.channel, task: task.task }
+  const key = `${task.package}/${task.channel}/${task.task}`
+  let state: MonitorRow['state'] = 'ok'
+  let detail = task.last_run ? `Last run ${task.last_run.outcome}` : 'No run yet'
+  if (task.last_run && runnerBad(task.last_run.outcome)) { state = 'failed'; detail = `The last run ${task.last_run.outcome === 'completedwithfailures' ? 'completed with failures' : task.last_run.outcome}` }
+  else if (task.waiting_reason) { state = 'failed'; detail = task.waiting_reason }
+  else if (task.problem) { state = 'failed'; detail = task.problem }
+  else if (task.paused) { state = 'paused'; detail = task.paused_by ? `Paused by ${task.paused_by}` : 'Paused' }
+  else if (task.running === true || (typeof task.running === 'number' && task.running > 0)) { state = 'running'; detail = 'Running now' }
+  return { key: `${server.id}/${key}`, server: server.id, serverName: server.name, product: 'dbdatarunner', kind: 'task', subject: key, state, detail, held: task.paused, target: { runnerTask: ref } }
+}
+
+/** A runner of the group that is not live: it left (marked gone) or went silent past its lease. It has no buttons; what to do is the administrator's. */
+export function runnerGoneRow(server: InstanceSummary, instance: RunnerInstanceRow): MonitorRow {
+  return { key: `${server.id}/instance/${instance.id}`, server: server.id, serverName: server.name, product: 'dbdatarunner', kind: 'instance', subject: `runner on ${instance.host}`, state: 'gone', detail: instance.state === 'Gone' ? 'The runner stopped' : 'The runner stopped reporting', held: false, target: null }
+}
+
 const relay = (server: InstanceSummary, path: string) => `/relay/${server.id}${path}`
 const enc = encodeURIComponent
 
@@ -109,6 +137,12 @@ export async function loadRows(servers: InstanceSummary[], now: number = Date.no
         const { notifications } = await request<{ notifications: ProxyNotification[] }>(relay(server, '/api/v1/notifications'))
         // the feed lists the oldest first; the newest are what matters here
         rows.push(...notifications.filter((n) => now - Date.parse(n.created) <= NOTICE_WINDOW_MS).reverse().slice(0, 20).map((n) => proxyRow(server, n)))
+      } else if (server.product === 'dbdatarunner') {
+        const [status, group] = await Promise.all([
+          request<{ tasks: RunnerTask[] }>(relay(server, '/api/v1/status')),
+          request<{ instances: RunnerInstanceRow[] }>(relay(server, '/api/v1/instances?all=true')),
+        ])
+        rows.push(...status.tasks.map((t) => runnerTaskRow(server, t)), ...group.instances.filter((i) => i.live === false).map((i) => runnerGoneRow(server, i)))
       }
     } catch (error) {
       problems.push({ server: server.name, message: error instanceof Error ? error.message : 'No answer' })
@@ -132,6 +166,10 @@ function act(row: MonitorRow, what: 'pause' | 'resume' | 'run') {
     return what === 'run'
       ? request<unknown>(`${base}/api/replications/${name}/runs`, { method: 'POST' })
       : request<unknown>(`${base}/api/replications/${name}/paused`, { method: 'PUT', body: JSON.stringify({ paused: what === 'pause', note: null }) })
+  }
+  if ('runnerTask' in row.target) {
+    const t = row.target.runnerTask
+    return request<unknown>(`${base}/api/v1/tasks/${enc(t.package)}/${enc(t.channel)}/${enc(t.task)}/${what}`, { method: 'POST', body: what === 'run' ? '{}' : undefined })
   }
   const { project, connection, plan } = row.target
   return request<unknown>(`${base}/api/v1/projects/${enc(project)}/schedule/${enc(connection)}/${enc(plan)}/${what}`, { method: 'POST' })

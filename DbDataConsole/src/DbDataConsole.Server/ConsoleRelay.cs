@@ -14,7 +14,8 @@ namespace DbDataConsole.Server;
 /// that server with a short-lived signed token naming the signed-in person, and answers with what the server answered. The browser never holds a credential for a server and never reaches one directly; the server decides
 /// what the person may do from the roles in the token, which the console's ceiling for that server limits.
 /// <para>
-/// Only <c>api/...</c> and <c>hubs/...</c> are relayed, only to a registered server, and the path is not interpreted: nothing the browser sends can name another host.
+/// Only <c>api/...</c> and <c>hubs/...</c> are relayed, only to a registered server, and the path is not interpreted: nothing the browser sends can name another host. A runner is the one server whose calls are limited further
+/// (<see cref="ServerProducts.Relayable"/>): its publish, upload and webhook calls are not a console's to make.
 /// </para>
 /// </summary>
 public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore keys, CurrentUser current, ILogger<ConsoleRelay> log, DbDataKit.Identity.FederatedUsers? federated = null)
@@ -25,6 +26,23 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
     private static readonly string[] ForwardedResponseHeaders = ["ETag", "Content-Disposition", "Cache-Control", "Last-Modified", "Location"];
 
     private readonly ConcurrentDictionary<string, HttpClient> _clients = new(StringComparer.Ordinal);
+
+    /// <summary>What each server said it is, kept for a few minutes so a relayed call does not ask first every time (a stale answer is used when the server cannot be asked).</summary>
+    private readonly ConcurrentDictionary<string, (string? Product, DateTimeOffset At)> _products = new(StringComparer.Ordinal);
+    private static readonly TimeSpan ProductAge = TimeSpan.FromMinutes(5);
+
+    private async Task<string?> ProductOfAsync(RegisteredInstance instance, CancellationToken ct)
+    {
+        if (_products.TryGetValue(instance.InstanceId, out var known) && DateTimeOffset.UtcNow - known.At < ProductAge) return known.Product;
+        var status = await instances.StatusAsync(instance, ct);
+        if (status.Product is { } product)
+        {
+            _products[instance.InstanceId] = (product, DateTimeOffset.UtcNow);
+            return product;
+        }
+        // not asked successfully: what it said before, or nothing (the call then fails as it would have)
+        return known.Product;
+    }
 
     /// <summary>What a person may do on a server managed from here, until the identity home (U13) assigns roles per server: an administrator everything but publishing, a viewer reading.</summary>
     public static ServerRole RolesOf(UserRole role) => role == UserRole.Admin
@@ -90,6 +108,12 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
         if (current.Id is not { } userId || current.Role is not { } role)
         {
             await Refuse(context, StatusCodes.Status401Unauthorized, "Sign in first.");
+            return;
+        }
+        // a runner has calls for its publishers and the serving layer that a console does not make: only the documented management calls pass
+        if (!ServerProducts.Relayable(await ProductOfAsync(instance, context.RequestAborted), context.Request.Method, path))
+        {
+            await Refuse(context, StatusCodes.Status403Forbidden, $"{instance.Name} is a runner: the console relays only its management calls (status, instances, runs, tasks, packages and their life cycle).");
             return;
         }
 

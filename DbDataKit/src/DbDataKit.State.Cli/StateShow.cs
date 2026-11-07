@@ -90,6 +90,18 @@ internal static class StateShow
                 }
 
                 inspection = inspector.Inspect();
+                if (inspection.RegistryExists && inspector.Connection is { } instanceConnection)
+                {
+                    var registered = inspection.Modules.Where(m => m.Registered is not null).GroupBy(m => m.Namespace.Module.Name).ToDictionary(g => g.Key, g => g.First().Registered!.Version);
+                    var live = new StandardGroupInstanceSource().Live(new GroupInstanceContext(instanceConnection, null, session.Layout, DateTimeOffset.UtcNow, name => registered.TryGetValue(name, out var v) ? v : null));
+                    data["instances"] = live.Select(i => (object?)InstanceData(i)).ToList();
+                    if (live.Count > 0)
+                    {
+                        await write.WriteLineAsync("  instances    live, with the versions their rows record");
+                        foreach (var i in live)
+                            await write.WriteLineAsync($"    {i.Id}  {i.Host}{(i.ProcessId is { } pid ? $" (process {pid})" : "")}  software {i.SoftwareVersion ?? "not recorded"}  modules {(i.ModuleVersions is null ? "not recorded" : string.Join(' ', i.ModuleVersions.OrderBy(m => m.Key, StringComparer.Ordinal).Select(m => $"{m.Key}=v{m.Value}")))}");
+                    }
+                }
             }
             catch (StateSettingsProblem ex) { failure = ex.Message; exit = StateExit.Settings; }
             catch (Exception ex) when (StateDatabaseErrors.IsProviderError(ex))
@@ -173,6 +185,17 @@ internal static class StateShow
         }
 
         return exit;
+    }
+
+    private static Dictionary<string, object?> InstanceData(GroupInstance i)
+    {
+        var item = new Dictionary<string, object?> { ["kind"] = i.Kind, ["key"] = i.Id, ["host"] = i.Host };
+        if (i.ProcessId is { } pid) item["process_id"] = pid;
+        if (i.Started is { } started) item["started"] = started.ToString("O", CultureInfo.InvariantCulture);
+        if (i.Heartbeat is { } beat) item["heartbeat"] = beat.ToString("O", CultureInfo.InvariantCulture);
+        item["software_version"] = i.SoftwareVersion;
+        item["module_versions"] = i.ModuleVersions?.OrderBy(m => m.Key, StringComparer.Ordinal).ToDictionary(m => m.Key, m => (object?)m.Value);
+        return item;
     }
 
     /// <summary>Where a namespace is, in a few words: the schema and prefix, or the file.</summary>

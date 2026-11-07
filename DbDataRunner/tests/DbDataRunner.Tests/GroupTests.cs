@@ -55,6 +55,10 @@ public sealed class GroupTests
         Assert.Equal(0, live.Single(i => Text(i, "id") == two.Engine.InstanceId!.Value.ToString())!["running"]!.GetValue<int>());
         Assert.NotEmpty(Text(mine, "host"));
         Assert.NotEmpty(Text(mine, "version"));
+        // U02: the row carries the software version and the module versions of the binary (a round trip through the instance table)
+        Assert.Equal(Text(mine, "version"), Text(mine, "software_version"));
+        Assert.Equal(RunnerModule.Module.Version, mine["module_versions"]!["runner"]!.GetValue<int>());
+        Assert.All(RunnerState.Modules, m => Assert.Equal(m.Version, mine["module_versions"]![m.Name]!.GetValue<int>()));
         Assert.Contains(mine["labels"]!.AsArray(), l => Text(l, "label") == "os:" + Text(mine["capabilities"], "os") && Text(l, "source") == "reported");
 
         // the first runner goes silent (a stopped process, a cut network): its task goes on, the lease is not renewed
@@ -65,6 +69,12 @@ public sealed class GroupTests
         var taken = runs.Read(new RunQuery(RunnerState.EngineService, "sample/dev/waits", Package: "sample", Channel: "dev")).Single(r => r.Attempt == 2);
         Assert.Equal(RunOutcome.Interrupted, runs.Get(firstRun)!.Run.Outcome);       // the dead run is marked, the same chain goes on
         await two.WaitAsync(async () => (await two.GetAsync("/api/v1/instances")).Body!["instances"]!.AsArray().Count == 1 ? "alone" : null, "the silent runner to lapse from the group view", 20);   // it is no longer live
+
+        // all=true still lists it, marked as not live: what the console shows as a runner that is gone
+        var everyone = (await two.GetAsync("/api/v1/instances?all=true")).Body!["instances"]!.AsArray();
+        Assert.Equal(2, everyone.Count);
+        Assert.False(everyone.Single(i => Text(i, "id") == one.Engine.InstanceId!.Value.ToString())!["live"]!.GetValue<bool>());
+        Assert.True(everyone.Single(i => Text(i, "id") == two.Engine.InstanceId!.Value.ToString())!["live"]!.GetValue<bool>());
 
         // the first runner comes back: it is told, cancels its local task, and records nothing
         one.Engine.SuspendHeartbeats = false;

@@ -21,35 +21,53 @@ public static class RunnerGroupApi
             var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
             if (!decision.Allowed) return Results.Json(new { error = "This needs the viewer role." }, statusCode: StatusCodes.Status403Forbidden);
             var running = engine();
+            // all=true adds the instances that are gone or lapsed (live: false), which the console shows as such
+            var all = context.Request.Query["all"].Count > 0 && bool.TryParse(context.Request.Query["all"][0], out var wanted) && wanted;
             return Results.Json(new JsonObject
             {
                 ["group"] = running.Group,
                 ["this"] = running.InstanceId?.ToString(),
-                ["instances"] = Instances(state, running),
+                ["instances"] = Instances(state, running, all),
             });
         });
     }
 
-    /// <summary>The live instances of the group, oldest first.</summary>
-    public static JsonArray Instances(StateDatabase state, RunnerEngine engine)
+    /// <summary>The live instances of the group, oldest first; with <paramref name="includeGone"/> also the ones that are gone or lapsed, marked <c>live: false</c> (their <c>state</c> says Gone or Running with a stale heartbeat).</summary>
+    public static JsonArray Instances(StateDatabase state, RunnerEngine engine, bool includeGone = false)
     {
         var instances = new RunnerInstances(state);
         var held = new ModuleWorkQueueStore(state, RunnerState.EngineService).HeldCounts();
         var list = new JsonArray();
-        foreach (var live in instances.LiveInstances(engine.Lease))
+        var liveIds = instances.LiveInstances(engine.Lease);
+        var rows = liveIds.Select(l => (Instance: l.Instance, Live: true, Capabilities: (IReadOnlyDictionary<string, string>)l.Capabilities)).ToList();
+        if (includeGone)
         {
-            var worker = live.Capabilities.TryGetValue("worker_id", out var w) ? w : null;
-            var labels = instances.Labels(live.Instance.Id);
+            var liveSet = liveIds.Select(l => l.Instance.Id).ToHashSet();
+            rows.AddRange(instances.ListAll().Where(i => !liveSet.Contains(i.Id)).Select(i => (Instance: i, Live: false,
+                Capabilities: (IReadOnlyDictionary<string, string>)instances.Capabilities(i.Id).ToDictionary(c => c.Name, c => c.Value, StringComparer.Ordinal))));
+            rows = [.. rows.OrderBy(r => r.Instance.StartedAt).ThenBy(r => r.Instance.Id)];
+        }
+
+        foreach (var (instance, isLive, capabilities) in rows)
+        {
+            var worker = capabilities.TryGetValue("worker_id", out var w) ? w : null;
+            var labels = instances.Labels(instance.Id);
             list.Add(new JsonObject
             {
-                ["id"] = live.Instance.Id.ToString(),
-                ["host"] = live.Instance.Host,
-                ["version"] = live.Instance.Version,
-                ["started"] = live.Instance.StartedAt.UtcDateTime.ToString("O"),
-                ["heartbeat"] = live.Instance.HeartbeatAt.UtcDateTime.ToString("O"),
-                ["this"] = live.Instance.Id == engine.InstanceId,
+                ["id"] = instance.Id.ToString(),
+                ["host"] = instance.Host,
+                ["version"] = instance.Version,
+                ["software_version"] = instance.SoftwareVersion ?? instance.Version,
+                ["module_versions"] = ModuleVersionText.Parse(instance.ModuleVersions) is { } modules
+                    ? new JsonObject(modules.OrderBy(m => m.Key, StringComparer.Ordinal).Select(m => KeyValuePair.Create(m.Key, (JsonNode?)JsonValue.Create(m.Value))))
+                    : null,
+                ["started"] = instance.StartedAt.UtcDateTime.ToString("O"),
+                ["heartbeat"] = instance.HeartbeatAt.UtcDateTime.ToString("O"),
+                ["this"] = instance.Id == engine.InstanceId,
+                ["live"] = isLive,
+                ["state"] = instance.State,
                 ["labels"] = new JsonArray(labels.Select(l => (JsonNode)new JsonObject { ["label"] = l.Label, ["source"] = l.Source }).ToArray()),
-                ["capabilities"] = new JsonObject(live.Capabilities.Where(c => !RunnerEngine.InternalCapabilities.Contains(c.Key)).OrderBy(c => c.Key, StringComparer.Ordinal).Select(c => KeyValuePair.Create(c.Key, (JsonNode?)JsonValue.Create(c.Value)))),
+                ["capabilities"] = new JsonObject(capabilities.Where(c => !RunnerEngine.InternalCapabilities.Contains(c.Key)).OrderBy(c => c.Key, StringComparer.Ordinal).Select(c => KeyValuePair.Create(c.Key, (JsonNode?)JsonValue.Create(c.Value)))),
                 ["running"] = worker is not null && held.TryGetValue(worker, out var count) ? count : 0,
             });
         }

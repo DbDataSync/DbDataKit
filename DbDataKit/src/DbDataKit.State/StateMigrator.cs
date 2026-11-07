@@ -39,6 +39,7 @@ internal static class StateMigrator
         // What the modules that still have something to apply need from the engine (U01): checked before any schema, table or registry row is made, so a refusal leaves the database as it was found.
         var rows = registryExists ? Read(connection, whole, layout) : [];
         RequireFeatures(connection, layout, rows);
+        RefuseIncompatibleInstances(connection, whole, layout, rows, database.Time.GetUtcNow());
 
         // Whenever something is applied, not only the first time: a second group's namespace is a new schema in a database that already has its registry.
         // After the legacy check, so a database that is refused is left as it was found.
@@ -87,6 +88,40 @@ internal static class StateMigrator
         }
 
         whole?.Commit();
+    }
+
+    /// <summary>
+    /// The migration guard (plan 29b U02): before a module is migrated, the live instances of the group are asked (<see cref="StateLayout.GroupInstances"/>), under the migration lock, so an instance that starts later
+    /// cannot slip in between the check and the change (it finds the newer version and refuses itself). An instance works with the new schema when its module version is at least the new version minus the
+    /// module's <see cref="StateModule.CompatibleWithPrevious"/>; an instance whose row records no versions is taken to run the version the database is at. An instance that is not live never blocks.
+    /// </summary>
+    private static void RefuseIncompatibleInstances(DbConnection connection, DbTransaction? transaction, StateLayout layout, IReadOnlyDictionary<(string Module, string Scope), Row> rows, DateTimeOffset now)
+    {
+        if (layout.GroupInstances is not { } source) return;
+        var pending = layout.Namespaces.Where(ns => rows.TryGetValue((ns.Module.Name, ScopeOf(ns)), out var r) && r.Version < ns.Module.Version).ToList();
+        if (pending.Count == 0) return;
+        var live = source.Live(new GroupInstanceContext(connection, transaction, layout, now, module =>
+            layout.Namespaces.Where(n => n.Module.Name == module).Select(n => rows.TryGetValue((module, ScopeOf(n)), out var r) ? (int?)r.Version : null).FirstOrDefault()));
+        foreach (var ns in pending)
+        {
+            var module = ns.Module;
+            var from = rows[(module.Name, ScopeOf(ns))].Version;
+            var oldest = module.Version - module.CompatibleWithPrevious;
+            foreach (var instance in live)
+            {
+                int version;
+                if (instance.ModuleVersions is null) version = from;
+                else if (!instance.ModuleVersions.TryGetValue(module.Name, out version)) continue;
+                if (version >= oldest) continue;
+                throw new MigrationRefusedException(
+                    $"The module '{ns.Key}' is not migrated from version {from} to {module.Version}: the instance {instance.Id}" +
+                    $"{(instance.Host is null ? "" : $" on {instance.Host}")}{(instance.ProcessId is { } pid ? $" (process {pid})" : "")}" +
+                    $"{(instance.SoftwareVersion is null ? "" : $", software {instance.SoftwareVersion}")}, is live and runs {module.Name} version {version}{(instance.ModuleVersions is null ? " (its row records no versions, so the version the database is at is assumed)" : "")}. " +
+                    $"This service works with {module.Name} version {oldest} and later of its instances only (CompatibleWithPrevious = {module.CompatibleWithPrevious}). " +
+                    "Stop that instance, or finish the rolling upgrade in the order the plan gives (plan 24): start new instances only after the old ones are stopped, unless the module declares the previous version compatible.",
+                    instance, module.Name, from, module.Version);
+            }
+        }
     }
 
     /// <summary>

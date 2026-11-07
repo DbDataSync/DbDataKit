@@ -10,6 +10,7 @@
     "visuals",
     "store-ui",
     "store",
+    "runner",
     "console"
   ]
 }
