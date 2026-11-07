@@ -49,7 +49,7 @@ public static class ConsoleState
     /// <summary>The service name the console records on what it writes to a database it may share (the feed's <c>service_id</c>).</summary>
     public const string ServiceId = ConsoleSettings.Product;
 
-    public static IReadOnlyList<StateModule> Modules { get; } = [IdentityModule.Module, NotificationsModule.Module, DbDataKit.Identity.FederationModule.Module];
+    public static IReadOnlyList<StateModule> Modules { get; } = [IdentityModule.Module, NotificationsModule.Module, DbDataKit.Identity.FederationModule.Module, RunsModule.Module, AuditModule.Module];
 
     private static string AppliedBy => $"{ConsoleSettings.Product} {typeof(ConsoleState).Assembly.GetName().Version}";
 

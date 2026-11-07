@@ -70,6 +70,7 @@ public static class ConsoleHost
             .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
         builder.Services.AddSingleton(_ => ConsoleState.Open(settings.Directory, settings.State));
         builder.Services.AddSingleton(sp => new NotificationFeedStore(sp.GetRequiredService<StateDatabase>(), ConsoleState.ServiceId));
+        builder.Services.AddSingleton(new ConsoleActivitySource(settings.State is { IsSqlite: false }));
         builder.Services.AddSingleton<DbDataKit.Monitoring.INotificationFeed>(sp => sp.GetRequiredService<NotificationFeedStore>());
         builder.Services.AddSessionAuth(Auth,
             sp => sp.GetRequiredService<StateDatabase>(),
