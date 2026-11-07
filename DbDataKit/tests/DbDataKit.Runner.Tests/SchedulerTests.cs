@@ -248,6 +248,40 @@ public sealed class SchedulerTests
     }
 
     [Theory, MemberData(nameof(Engines))]
+    public async Task A_loop_that_stalled_and_wakes_up_with_its_tick_due_before_its_heartbeat_keeps_its_own_running_item(string engine)
+    {
+        using var h = new SchedulerHarness(engine);
+        h.Activate(Manifest(Package, Def("job", Schedule.Interval(TimeSpan.FromHours(1)))), "1");
+        var release = new TaskCompletionSource();
+        var runner = new FakeRunner(h.Database) { Behaviour = async (_, _) => { await release.Task; return new TaskEnd(TaskEndState.Succeeded); } };
+        var scheduler = h.NewScheduler(runner, worker: "loop-a");
+
+        await scheduler.TickAsync();
+        await FakeStarted(runner, 1);
+        var run = runner.Requests.Single().RunId!.Value;
+
+        // the whole process stalls for longer than the lease (a loaded machine): no renewal happens
+        scheduler.SuspendHeartbeats = true;
+        h.Clock.Advance(TimeSpan.FromSeconds(100));
+        scheduler.SuspendHeartbeats = false;
+        // it wakes up and its tick runs before the item's heartbeat does: the loop is alive and the task is going on here, nobody else took the item, so it is not taken back
+        var report = await scheduler.TickAsync();
+
+        Assert.Equal(0, report.ExpiredLeases);
+        Assert.Single(runner.Requests);                                   // no second attempt was started
+        var inFlight = h.Queue.ListInFlight(Owner).Single();
+        Assert.Equal(WorkItemStatus.Running, inFlight.Item.Status);
+        Assert.Equal(run, inFlight.Item.RunId);
+        Assert.Equal(h.Clock.GetUtcNow() + RunnerSchedulerOptions.DefaultLease, inFlight.LeaseExpiresAt);
+        release.SetResult();
+        await scheduler.WhenIdleAsync();
+
+        var runs = h.Runs.Read(new RunQuery(Service, "pkg/prod/job"));
+        Assert.Equal(RunOutcome.Succeeded, Assert.Single(runs).Run.Outcome);
+        Assert.Empty(h.Queue.ListInFlight(Owner));
+    }
+
+    [Theory, MemberData(nameof(Engines))]
     public async Task A_loop_that_stops_renewing_loses_its_item_to_another_loop_and_its_late_finish_is_refused(string engine)
     {
         using var h = new SchedulerHarness(engine);
