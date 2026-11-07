@@ -400,6 +400,30 @@ public sealed class TaskExecutorTests
     }
 
     [Fact]
+    public async Task A_definition_run_by_a_runtime_starts_the_runtimes_command_in_the_definitions_directory_with_both_directories_in_the_environment()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "the sample executables are shell scripts");
+        using var h = new ExecutorHarness(Engine.Sqlite);
+        var runtime = await PackageFixture.ScriptPackage();
+        var definition = await h.SampleRequest("anything");
+        var request = definition with
+        {
+            Launch = new PackageLaunch(LaunchKind.Executable, Command: "sh", Args: ["{runtime}/runtime.sh", "first"]),
+            RuntimeDirectory = runtime.Directory,
+            Entry = new TaskEntry(Args: ["second"]),
+            RunId = h.Database.NewId(),
+        };
+
+        await h.Executor.RunAsync(request);
+
+        var log = h.Log(request.RunId!.Value);
+        Assert.Contains(log, l => l.Message == $"cwd: {Path.GetFullPath(definition.PackageDirectory)}");
+        Assert.Contains(log, l => l.Message == $"package: {Path.GetFullPath(definition.PackageDirectory)}");
+        Assert.Contains(log, l => l.Message == $"runtime: {Path.GetFullPath(runtime.Directory)}");
+        Assert.Contains(log, l => l.Message == "args: first second");
+    }
+
+    [Fact]
     public async Task A_task_the_package_does_not_have_is_a_host_failure_with_the_reason_in_the_log()
     {
         using var h = new ExecutorHarness(Engine.Sqlite);

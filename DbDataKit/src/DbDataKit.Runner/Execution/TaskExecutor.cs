@@ -262,6 +262,8 @@ public sealed class TaskExecutor : ITaskRunner
         environment["TEMP"] = temp;
         environment[RunnerProtocolNames.ScratchVariable] = scratch;
         environment[RunnerProtocolNames.PackageDirectoryVariable] = package;
+        var runtime = request.RuntimeDirectory is null ? null : Path.GetFullPath(request.RuntimeDirectory);
+        if (runtime is not null) environment[RunnerProtocolNames.RuntimeDirectoryVariable] = runtime;
         environment[RunnerProtocolNames.TaskVariable] = request.Task.Task;
         environment[RunnerProtocolNames.EndpointVariable] = _host.Endpoint.ToString();
         environment[RunnerProtocolNames.TokenVariable] = token;
@@ -278,17 +280,18 @@ public sealed class TaskExecutor : ITaskRunner
         else
         {
             var command = request.Launch.Command ?? throw new ArgumentException("The package is launched as an executable, and its launch names no command.");
-            command = command.Replace("{package}", package, StringComparison.Ordinal);
-            // a command that is a file of the package is that file; any other is a program of the runner, found on its PATH
-            fileName = Path.IsPathRooted(command) ? command : File.Exists(Path.Combine(package, command)) ? InsidePackage(package, command) : command;
-            arguments.AddRange(request.Launch.ArgList.Concat(request.Entry?.ArgList ?? []).Select(a => a.Replace("{package}", package, StringComparison.Ordinal)));
+            command = command.Replace("{package}", package, StringComparison.Ordinal).Replace("{runtime}", runtime ?? package, StringComparison.Ordinal);
+            // a command that is a file of the package (of the runtime, for a package run by one) is that file; any other is a program of the runner, found on its PATH
+            var home = runtime ?? package;
+            fileName = Path.IsPathRooted(command) ? command : File.Exists(Path.Combine(home, command)) ? InsidePackage(home, command) : command;
+            arguments.AddRange(request.Launch.ArgList.Concat(request.Entry?.ArgList ?? []).Select(a => a.Replace("{package}", package, StringComparison.Ordinal).Replace("{runtime}", runtime ?? package, StringComparison.Ordinal)));
         }
 
         return new ChildProcessSpec
         {
             FileName = fileName,
             Arguments = arguments,
-            WorkingDirectory = scratch,
+            WorkingDirectory = runtime is null ? scratch : package,   // a definition run by a runtime starts in the definition (read-only; the task writes to its scratch directory)
             Environment = environment,
             ClearEnvironment = true,
             Transport = ChildEndpointKind.None,

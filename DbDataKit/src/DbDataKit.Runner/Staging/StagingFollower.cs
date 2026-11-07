@@ -20,8 +20,8 @@ public sealed class StagingOptions
     /// <summary>How often the follower looks for staged versions.</summary>
     public TimeSpan Poll { get; init; } = TimeSpan.FromSeconds(2);
 
-    /// <summary>What is wrong with the contracts a package was built against, in words (null: this runner can serve it). Null: nothing is checked here.</summary>
-    public Func<BuiltAgainst, string?>? Contracts { get; init; }
+    /// <summary>What is wrong with the contracts a package was built against and the newer manifest keys it uses, in words (null: this runner can serve it). Null: nothing is checked here.</summary>
+    public Func<PackageManifest, string?>? Contracts { get; init; }
 
     public ILogger? Logger { get; init; }
 }
@@ -160,8 +160,24 @@ public sealed class StagingFollower
         var manifest = load.Manifest!;
 
         // compiled code depends on the contracts it was built against (plan 30 section 6.1)
-        if (_options.Contracts?.Invoke(manifest.BuiltAgainst) is { } contract)
+        if (_options.Contracts?.Invoke(manifest) is { } contract)
             throw new StagingFailedException($"Version {version} of '{name}' cannot run on this runner: {contract}");
+
+        // a definition run by a runtime package (plan 28c E04): the runtime has to be active in this channel and in the range, and both views are prepared here
+        if (manifest.Launch.Runtime is { } reference)
+        {
+            ResolvedRuntime runtime;
+            try { runtime = RuntimeResolution.Resolve(_store, _publisher, reference, channel, $"{name}@{version}"); }
+            catch (RuntimeUnavailableException ex) { throw new StagingFailedException($"Version {version} of '{name}' cannot be staged: {ex.Message}"); }
+            try
+            {
+                using var runtimeView = await _cache.MaterializeAsync($"{runtime.Package}@{runtime.Version}", runtime.Content.Files, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                throw new StagingFailedException($"The files of the runtime '{runtime.Package}' (version {runtime.RuntimeVersion}) could not be materialized here: {ex.Message}");
+            }
+        }
 
         // a task that requires a label no live runner has can never run: the version does not become active, and the message names the label
         foreach (var task in manifest.Tasks)

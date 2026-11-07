@@ -48,8 +48,8 @@ public sealed record RunnerHostSettings(string Directory)
     /// <summary>Whether this runner prepares staged versions and activates them when every live runner is ready (plan 28a R17).</summary>
     public bool Staging { get; init; } = true;
 
-    /// <summary>What staging says of the contracts a package was built against (null: <see cref="RunnerContracts.Check"/>).</summary>
-    public Func<BuiltAgainst, string?>? StagingContracts { get; init; }
+    /// <summary>What staging says of the contracts a package was built against (null: <see cref="RunnerContracts.Check(PackageManifest)"/>).</summary>
+    public Func<PackageManifest, string?>? StagingContracts { get; init; }
 
     /// <summary>The longest an activation waits for the runs of a package in flight (plan 28a R18): ten minutes by default.</summary>
     public TimeSpan ActivationMaxWait { get; init; } = TimeSpan.FromMinutes(10);

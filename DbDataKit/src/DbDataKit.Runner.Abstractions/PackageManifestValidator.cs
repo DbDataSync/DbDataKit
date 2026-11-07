@@ -37,7 +37,8 @@ public static class PackageManifestValidator
         Launch(manifest, Add);
         Contracts(manifest, Add);
 
-        if (manifest.Tasks.Count == 0) Add("tasks", "A package has at least one task.");
+        Runtime(manifest, Add);
+        if (manifest.Tasks.Count == 0 && !manifest.IsRuntime) Add("tasks", "A package has at least one task.");
         foreach (var duplicate in Duplicates(manifest.Tasks.Select(t => t.Name)))
             Add($"tasks[{duplicate.Index}].name", $"The task name '{duplicate.Name}' is used twice (also at tasks[{duplicate.First}]); a task's name is how it is found.");
 
@@ -88,9 +89,34 @@ public static class PackageManifestValidator
             add(path, $"'{name}' is not a name for {what}: lower-case letters, digits and '_', starting with a letter, at most 64.");
     }
 
+    /// <summary>The rules of runtime packages and of the definitions that name one (plan 28c E04).</summary>
+    private static void Runtime(PackageManifest manifest, Action<string, string> add)
+    {
+        if (manifest.IsRuntime)
+        {
+            if (manifest.Tasks.Count > 0) add("tasks", "A runtime package (`runtime: true`) has no tasks of its own: the definitions that name it have them. Remove `tasks:`, or remove `runtime: true`.");
+            if (manifest.Launch.Kind != LaunchKind.Executable) add("launch.kind", "A runtime package starts as an executable: `kind: executable` with the engine's `command`.");
+            if (manifest.Launch.Runtime is not null) add(PackageManifest.LaunchRuntimeKey, "A runtime package is not itself run by another runtime: remove `launch.runtime`.");
+            if (manifest.Version is null) add("version", "A runtime package says its version, for example `version: 2.1.0`, so definitions can name the versions they accept.");
+        }
+        else if (manifest.Version is not null) add("version", "Only a runtime package (`runtime: true`) has a `version`; a package's versions are numbered by the runner.");
+
+        if (manifest.Version is not null && VersionRange.ParseVersion(manifest.Version) is null) add("version", $"'{manifest.Version}' is not a version: write one to three numbers, such as 2.1.0.");
+
+        if (manifest.Launch.Runtime is { } runtime)
+        {
+            Name(runtime.Name, "launch.runtime.name", "a runtime package", add);
+            if (!VersionRange.TryParse(runtime.Range, out _, out var problem)) add("launch.runtime.range", $"'{runtime.Range}': {problem}");
+            if (manifest.Launch.Kind != LaunchKind.Executable) add("launch.kind", "A package run by a runtime (`launch.runtime`) is started as the runtime's executable: leave `kind` out or write `kind: executable`.");
+            if (manifest.Launch.Command is not null) add("launch.command", "A package run by a runtime (`launch.runtime`) has no command of its own: the runtime's executable starts it.");
+            if (manifest.Launch.Assembly is not null) add("launch.assembly", "A package run by a runtime (`launch.runtime`) has no assembly of its own.");
+        }
+    }
+
     private static void Launch(PackageManifest manifest, Action<string, string> add)
     {
         var launch = manifest.Launch;
+        if (launch.Runtime is not null) return;   // the runtime is the launch: Runtime() checks it
         if (launch.Kind == LaunchKind.Assembly)
         {
             if (string.IsNullOrWhiteSpace(launch.Assembly)) add("launch.assembly", "An assembly package names the assembly to load (a path inside the package, such as bin/Orders.dll).");
