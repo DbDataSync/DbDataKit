@@ -53,6 +53,33 @@ public sealed class ConsoleCliTests : IDisposable
     }
 
     [Fact]
+    public async Task State_show_and_test_read_the_consoles_state_and_create_nothing()
+    {
+        // before the first start: nothing there, and nothing made by asking
+        var empty = await Run("state", "show", "--repo", directory);
+        Assert.Equal(0, empty.Exit);
+        Assert.Contains("not created yet", empty.Out);
+        Assert.Contains("identity", empty.Out);
+        Assert.False(Directory.Exists(directory), "state show made the console's directory");
+
+        // after it: every module of the console at its version
+        ConsoleState.Open(directory).OpenConnection().Dispose();
+        var shown = await Run("state", "show", "--repo", directory);
+        Assert.Equal(0, shown.Exit);
+        Assert.Matches(@"identity\s+.*registered v\d+\s+current", shown.Out);
+        Assert.Matches(@"notifications\s+.*registered v\d+\s+current", shown.Out);
+        Assert.Equal(0, Convert.ToInt32(shown.Data["pending_migrations"]));
+
+        var tested = await Run("state", "test", "--repo", directory);
+        Assert.Equal(0, tested.Exit);
+        Assert.Contains("nothing is pending", tested.Out);
+
+        Assert.Equal(2, (await Run("state", "test", "--repo", directory, "--bogus")).Exit);
+        Assert.Equal(DbDataKit.State.Cli.StateExit.Settings, (await Run("state", "test", "--repo", directory, "--engine", "oracle")).Exit);
+        Assert.Equal(DbDataKit.State.Cli.StateExit.Settings, (await Run("state", "show", "--repo", directory, "--engine", "postgres")).Exit);   // a server engine with no connection
+    }
+
+    [Fact]
     public async Task A_wrong_start_is_refused_with_the_usage_exit_code()
     {
         Assert.Equal(2, (await Run("server", "run", "--repo", directory, "--listen", "http://localhost:1")).Exit);

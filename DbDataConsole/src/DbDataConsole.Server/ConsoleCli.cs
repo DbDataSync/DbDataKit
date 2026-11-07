@@ -280,39 +280,22 @@ public static class ConsoleCli
         return pending.Count == 0 ? CliExit.Ok : CliExit.Failure;
     }
 
+    // ---- state ----
+
+    /// <summary>The shared <c>state show|test|grants</c> verbs over the console's state: its settings come from the flags and the environment (<see cref="ConsoleState.SettingsFrom"/>), its file is <c>state.db</c> in its directory, and a password that is a secret reference is looked up in its store, then the environment.</summary>
+    private static Noun StateNoun(Func<string, string?>? environment) => DbDataKit.State.Cli.StateVerbs.Create(new DbDataKit.State.Cli.StateVerbContext(
+        Program, "the console",
+        args =>
+        {
+            var directory = DirectoryOf(args, environment);
+            return new DbDataKit.State.Cli.StateTarget(
+                ConsoleState.SettingsFrom(environment, args.Get("engine")) ?? new StateSettings(),
+                Path.Combine(directory, "state.db"),
+                () => new DbDataKit.Secrets.SecretResolverChain([ConsoleSecrets.Open(directory, environment), new DbDataKit.Secrets.EnvSecretProvider(environment)]));
+        },
+        ConsoleState.Modules, StateScope.Install, ["engine", "repo"], "[--engine mssql|postgres] [--repo <console directory>]"));
+
     // ---- user ----
-
-    private static Noun StateNoun(Func<string, string?>? environment) => new("state", "The console's state database",
-    [
-        new Verb("grants", "Print the GRANT statements a login needs for the console's modules (the login the console runs as, or with --migrate the one that upgrades the database); run them as a database administrator", EffectClass.OfflineOnly,
-            "--login <database role or user> [--migrate] [--engine mssql|postgres] [--repo <console directory>]",
-            (args, context) => StateGrantsAsync(args, context, environment),
-            DataSchemas.Object([("statements", DataSchemas.StringList)], "statements")),
-    ]);
-
-    private static async Task<int> StateGrantsAsync(string[] args, CliContext context, Func<string, string?>? environment)
-    {
-        var parsed = CliArgs.Parse(args, new HashSet<string> { "migrate" }, new HashSet<string> { "login", "engine", "repo" });
-        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("login") is not { Length: > 0 } login)
-        {
-            await context.Error.WriteLineAsync("Usage: state grants --login <database role or user> [--migrate] [--engine mssql|postgres] [--repo <console directory>]");
-            return CliExit.Usage;
-        }
-        try
-        {
-            var settings = ConsoleState.SettingsFrom(environment, parsed.Get("engine")) ?? new StateSettings();
-            var layout = StateLayout.Create(settings.EngineId, ConsoleState.Modules, StateScope.Install, settings.Namespaces);
-            var statements = StateGrants.Statements(layout, login, parsed.Has("migrate") ? GrantLevel.Migrate : GrantLevel.Runtime);
-            foreach (var statement in statements) await context.Out.WriteLineAsync(statement);
-            context.Data["statements"] = statements.ToList();
-            return CliExit.Ok;
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
-        {
-            await context.Error.WriteLineAsync(ex.Message);
-            return CliExit.Usage;
-        }
-    }
 
     private static Noun UserNoun(Func<string, string?>? environment) => new("user", "The people who can sign in to the console",
     [
