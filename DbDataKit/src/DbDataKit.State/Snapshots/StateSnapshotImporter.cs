@@ -131,7 +131,7 @@ public static class StateSnapshotImporter
 
         var tables = manifest.Modules.SelectMany(m => m.Tables).ToList();
         progress?.Report(new SnapshotProgress("done", null, null, context.Rows, context.PayloadBytes));
-        return new SnapshotImportResult(manifest, [.. plan.Select(p => p.Module.Name)], context.Rows, tables.Count, manifest.Payloads.Count, context.PayloadBytes, migrated, warnings, target.Time.GetElapsedTime(started));
+        return new SnapshotImportResult(manifest, [.. plan.Select(p => p.Module.Name)], context.Rows, tables.Count, manifest.Payloads.Count, context.PayloadBytes, migrated, warnings, target.Time.GetElapsedTime(started)) { RoundedTables = [.. context.RoundedTables] };
     }
 
     /// <summary>
@@ -282,6 +282,8 @@ public static class StateSnapshotImporter
         public ImportOptions Options { get; } = options;
         public IProgress<SnapshotProgress>? Progress { get; } = progress;
         public List<string> Warnings { get; } = warnings;
+
+        public List<string> RoundedTables { get; } = [];
         public long Rows { get; set; }
         public long PayloadBytes { get; set; }
         public bool Sqlite => Target.Dialect.Engine == StateEngineIds.Sqlite;
@@ -444,7 +446,10 @@ public static class StateSnapshotImporter
         if (!string.Equals(targetDigest, table.RowsDigest, StringComparison.OrdinalIgnoreCase))
         {
             if (reducedRows > 0 && string.Equals(targetDigest, expectedDigest.Hex(), StringComparison.OrdinalIgnoreCase))
+            {
+                context.RoundedTables.Add(tableName);
                 context.Warnings.Add($"The table '{tableName}': {reducedRows} rows have a time value with more precision than {dialect.Engine} stores (microseconds); it was rounded down, and the table's digest differs from the manifest's for that reason only.");
+            }
             else
                 throw new SnapshotImportException(SnapshotImportRefusal.TableDigestMismatch,
                     $"After the load the target's table '{tableName}' has the rows_digest {targetDigest} and the snapshot's manifest says {table.RowsDigest}: what the target stores is not what the snapshot holds.");

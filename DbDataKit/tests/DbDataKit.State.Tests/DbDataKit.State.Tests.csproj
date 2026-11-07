@@ -12,5 +12,6 @@
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <Using Include="Xunit" />
     <ProjectReference Include="..\..\src\DbDataKit.State\DbDataKit.State.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.State.Engines\DbDataKit.State.Engines.csproj" />
   </ItemGroup>
 </Project>
