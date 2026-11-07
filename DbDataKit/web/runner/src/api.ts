@@ -93,6 +93,15 @@ export interface DefinitionDetail {
 /** What an activation, a switch or a rollback answers: 200 when the version moved, 202 while it waits for the runs in flight. */
 export interface ActivationAnswer { name: string; channel: string; active: number | null; state: string; message: string | null; losses: string[]; busy_tasks: string[] }
 
+/** One connection a runner's packages are bound to, as `GET /api/v1/connections` gives it (plan 28c E23): the name or reference the channel binds, the kind of slot, and who uses it. Never a secret value. */
+export interface RunnerConnection {
+  name: string
+  kind: string
+  secret_ref: string | null
+  roles: string[]
+  used_by: { process: string; name: string; version: string | null; group: string | null; instance: string | null; channel: string | null; role: string }[]
+}
+
 export interface RunFilters { package?: string; channel?: string; outcome?: string }
 
 export const OUTCOMES = ['running', 'succeeded', 'completedwithfailures', 'failed', 'stopped', 'interrupted'] as const
@@ -127,6 +136,7 @@ export const runnerApi = {
   status: () => request<RunnerStatus>('/api/v1/status'),
   /** The group's instances, those that are gone included. */
   instances: () => request<{ group: string; this: string | null; instances: RunnerInstance[] }>('/api/v1/instances?all=true').then((r) => r.instances),
+  connections: () => request<{ connections: RunnerConnection[] }>('/api/v1/connections').then((r) => r.connections),
   runs: (filters: RunFilters) => request<{ runs: RunRecord[] }>(`/api/v1/runs${runsQuery(filters)}`).then((r) => r.runs),
   run: (task: TaskKey) => post<{ run_id: string }>(`${taskPath(task)}/run`, {}),
   pause: (task: TaskKey) => post<unknown>(`${taskPath(task)}/pause`),

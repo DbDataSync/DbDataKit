@@ -1,4 +1,4 @@
-import type { ActivateRequest, ChannelHead, InstanceStagingStatus, RunnerInstance, StagingInfo, TaskStatus } from './api'
+import type { ActivateRequest, ChannelHead, InstanceStagingStatus, RunnerConnection, RunnerInstance, StagingInfo, TaskStatus } from './api'
 
 export type TaskState = 'running' | 'queued' | 'paused' | 'waiting' | 'problem' | 'idle'
 
@@ -75,3 +75,9 @@ export function activationBody(staging: StagingInfo, active: number | null, opti
 
 /** Whether an administrator needs the anyway path: the runners are not all ready. */
 export const needsAnyway = (staging: StagingInfo) => !staging.all_ready
+
+/** What a task connects to: the connections whose users include the task (`package/task`) in its channel, each with the role its use needs. */
+export function connectionsOfTask(connections: RunnerConnection[], task: { package: string; channel: string; task: string }): { name: string; kind: string; role: string }[] {
+  const wanted = `${task.package}/${task.task}`
+  return connections.flatMap((c) => c.used_by.filter((u) => u.process === 'task' && u.name === wanted && u.channel === task.channel).map((u) => ({ name: c.name, kind: c.kind, role: u.role })))
+}

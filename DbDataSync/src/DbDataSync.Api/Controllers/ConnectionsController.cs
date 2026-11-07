@@ -1,3 +1,4 @@
+using DbDataKit.Connections.Inventory;
 using DbDataSync.Core.Config;
 using System.Data.Common;
 using System.Diagnostics;
@@ -32,6 +33,41 @@ public sealed class ConnectionsController(
     [HttpGet]
     public ActionResult<IReadOnlyList<ConnectionConfig>> List() =>
         Ok(configRepository.LoadAllConnections());
+
+    /// <summary>
+    /// The connections and who uses them (plan 28c ED17, E23), in the form every product answers with: the server itself (read) and each replication that names the connection (run), with the secret reference of the credential, never a value.
+    /// A replication that cannot be read is named in <c>problems</c>.
+    /// </summary>
+    [Authorize(Policies.Viewer)]
+    [HttpGet("~/api/v1/connections")]
+    public IActionResult Inventory()
+    {
+        var problems = new System.Text.Json.Nodes.JsonArray();
+        var connections = configRepository.LoadAllConnections();
+        var document = ConnectionInventoryJson.Write("dbdatasync", SyncConnectionInventory.Build(connections, LoadReplications(problems)));
+        document["problems"] = problems;
+        return Ok(document);
+    }
+
+    private List<DbDataSync.Core.Lineage.SyncReplication> LoadReplications(System.Text.Json.Nodes.JsonArray problems)
+    {
+        var replications = new List<DbDataSync.Core.Lineage.SyncReplication>();
+        foreach (var replication in configRepository.ListReplications())
+        {
+            try
+            {
+                var task = configRepository.LoadReplicationTask(replication);
+                replications.Add(new(task, [.. configRepository.ListTableMappings(replication).Select(m => configRepository.LoadTableMapping(replication, m))]));
+            }
+            catch (Exception ex) when (ex is ConfigFileException or ConfigValidationException or MappingLoadingException)
+            {
+                // the type says what went wrong, not the message, which can quote a value
+                problems.Add($"Replication '{replication}' cannot be read ({ex.GetType().Name}), so its use of a connection is not listed.");
+            }
+        }
+
+        return replications;
+    }
 
     [Authorize(Policies.Viewer)]
     [HttpGet("{name}")]
@@ -439,6 +475,9 @@ public sealed class ConnectionsController(
     [HttpDelete("{name}")]
     public IActionResult Delete(string name)
     {
+        // a connection a replication uses is not removed from under it (plan 28c E23): the answer names the replications
+        var uses = SyncConnectionInventory.UsesOf(LoadReplications([])).GetValueOrDefault(name) ?? [];
+        if (ConnectionUsers.RemovalRefusal(name, uses) is { } refusal) return Conflict(new { error = refusal, used_by = uses });
         configRepository.DeleteConnection(name, currentUser.Author);
         return NoContent();
     }

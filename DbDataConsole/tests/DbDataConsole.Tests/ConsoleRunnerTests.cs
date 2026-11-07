@@ -188,6 +188,8 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         Assert.True(ServerProducts.Relayable("dbdatabuild", "PUT", "api/v1/anything"));
         Assert.True(ServerProducts.Relayable(null, "DELETE", "api/anything"));
         Assert.True(ServerProducts.Relayable("dbdatarunner", "GET", "api/v1/runs"));
+        Assert.True(ServerProducts.Relayable("dbdatarunner", "GET", "api/v1/connections"));   // plan 28c E23: the inventory is read, never written
+        Assert.False(ServerProducts.Relayable("dbdatarunner", "DELETE", "api/v1/connections"));
         Assert.True(ServerProducts.Relayable("dbdatarunner", "POST", "api/v1/tasks/orders-sync/prod/extract/run"));
         Assert.False(ServerProducts.Relayable("dbdatarunner", "GET", "api/v1/tasks/orders-sync/prod/extract/run"));
         Assert.False(ServerProducts.Relayable("dbdatarunner", "POST", "api/v1/runs"));

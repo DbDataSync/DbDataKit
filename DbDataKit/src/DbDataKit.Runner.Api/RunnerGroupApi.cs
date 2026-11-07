@@ -16,6 +16,7 @@ public static class RunnerGroupApi
 {
     public static void Map(IEndpointRouteBuilder app, StateDatabase state, Func<RunnerHost> engine, string prefix, RunnerCallerResolver caller)
     {
+        MapConnections(app, state, engine, prefix, caller);
         app.MapGet($"{prefix.TrimEnd('/')}/instances", (HttpContext context) =>
         {
             var decision = caller(context).Authorize(ServerRole.Viewer);
@@ -31,6 +32,15 @@ public static class RunnerGroupApi
             });
         });
     }
+
+    /// <summary>
+    /// <c>GET {prefix}/connections</c> (plan 28c E23): the connections the group's packages are bound to and the tasks and instances that use them, in the form every product answers with (<see cref="DbDataKit.Connections.Inventory.ConnectionInventoryJson"/>). A viewer may read.
+    /// </summary>
+    private static void MapConnections(IEndpointRouteBuilder app, StateDatabase state, Func<RunnerHost> engine, string prefix, RunnerCallerResolver caller) =>
+        app.MapGet($"{prefix.TrimEnd('/')}/connections", (HttpContext context) =>
+            !caller(context).Authorize(ServerRole.Viewer).Allowed
+                ? Results.Json(new { error = "This needs the viewer role." }, statusCode: StatusCodes.Status403Forbidden)
+                : Results.Json(RunnerConnections.Inventory(state, engine().Group, "dbdatarunner")));
 
     /// <summary>The live instances of the group, oldest first; with <paramref name="includeGone"/> also the ones that are gone or lapsed, marked <c>live: false</c> (their <c>state</c> says Gone or Running with a stale heartbeat).</summary>
     public static JsonArray Instances(StateDatabase state, RunnerHost engine, bool includeGone = false)

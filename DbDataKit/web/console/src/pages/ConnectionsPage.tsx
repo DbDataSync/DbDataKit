@@ -4,6 +4,7 @@ import { ErrorBanner, Field } from '@dbdatakit/shell'
 import { consoleApi } from '../api'
 import { canCopy, copyConnection, copyFailure, keepsConnections, loadConnections, type ConnectionRow, type CopyFailure } from '../connections'
 import { ConsoleShell } from '../ConsoleShell'
+import { ConnectionInventory } from './ConnectionInventory'
 import { StateConnections } from './StateConnections'
 
 const columns = '1.2fr 1.6fr 1fr 2.2fr 1fr'
@@ -64,6 +65,7 @@ export function ConnectionsPage() {
             onClose={() => setCopying(null)}
           />
         )}
+        <ConnectionInventory />
         <StateConnections />
       </div>
     </ConsoleShell>
