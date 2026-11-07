@@ -16,6 +16,11 @@ namespace DbDataKit.State;
 /// </summary>
 public sealed class PostgresStateDialect : StateDialect
 {
+
+    // 40P01 deadlock detected and 40001 serialization failure: the transaction was rolled back whole, so the action can run again
+    public override bool ShouldRetry(Exception exception) =>
+        exception is System.Data.Common.DbException { SqlState: "40P01" or "40001" };
+
     /// <summary>The library catalog id this dialect resolves its connection
     /// through.</summary>
     public const string LibraryId = "npgsql";
