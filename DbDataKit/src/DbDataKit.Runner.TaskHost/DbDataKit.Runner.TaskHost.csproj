@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>dbdatakit-taskhost</AssemblyName>
+    <RootNamespace>DbDataKit.Runner.TaskHost</RootNamespace>
+    <Description>The process a runner starts for a .NET package (plan 28a R06): loads the package assembly from its materialized directory into its own load context, finds the job by its task name and runs it through the kit against the runner's socket.</Description>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataKit.Runner.Kit\DbDataKit.Runner.Kit.csproj" />
+    <ProjectReference Include="..\DbDataKit.Runner.Protocol\DbDataKit.Runner.Protocol.csproj" />
+    <ProjectReference Include="..\DbDataKit.Hosting.Children\DbDataKit.Hosting.Children.csproj" />
+  </ItemGroup>
+</Project>

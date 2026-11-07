@@ -60,7 +60,8 @@ public static class ParentDeathMonitor
             try
             {
                 parent = Process.GetProcessById(parentPid);
-                if (parentStartTicks != 0 && ChildEnvironment.StartTicksOf(parent) != parentStartTicks)
+                // a process's start time is derived from the boot time on Linux, which differs by a few milliseconds between two readings in two processes; a reused pid starts much later
+                if (parentStartTicks != 0 && Math.Abs(ChildEnvironment.StartTicksOf(parent) - parentStartTicks) > TimeSpan.FromSeconds(2).Ticks)
                 {
                     onParentExit(); // pid was reused: our real parent is already gone
                     return;

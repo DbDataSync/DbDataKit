@@ -181,6 +181,7 @@ internal sealed class RunnerProtocolService(RunSessions sessions) : RunnerApi.Ru
         var session = Started(context);
         var end = EndOf(session, request.End);
         await session.Backend.FinishAsync(end, CancellationToken.None).ConfigureAwait(false);
+        session.RecordEnd(end);
         Ended(session);
         return new EndReply();
     });
@@ -214,7 +215,11 @@ internal sealed class RunnerProtocolService(RunSessions sessions) : RunnerApi.Ru
 
         var end = request.End is null ? null : EndOf(session, request.End);
         var applied = await session.Backend.CommitProgressAsync(checkpoints, states, end, context.CancellationToken).ConfigureAwait(false);
-        if (applied && end is not null) Ended(session);
+        if (applied && end is not null)
+        {
+            session.RecordEnd(end);
+            Ended(session);
+        }
         return new AdvanceReply { Applied = applied };
     });
 

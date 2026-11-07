@@ -166,6 +166,12 @@ public sealed class RunnerProtocolHost : IAsyncDisposable
     /// <summary>What the run reported one way, and whether it started, ended or was told to stop; available after the run ended until <see cref="Unregister"/>. Null for a token that was never issued or is forgotten.</summary>
     public RunTelemetry? TelemetryOf(string token) => _sessions.FindEvenIfEnded(token)?.Telemetry();
 
+    /// <summary>
+    /// Completes when the run behind the token is over for the protocol: the task sent its end (see <see cref="RunTelemetry.End"/>), the token was withdrawn or it expired. Completes at once for a token that is already
+    /// ended, and for one this host never issued or has forgotten.
+    /// </summary>
+    public Task WaitForEndAsync(string token) => _sessions.FindEvenIfEnded(token)?.EndSignal.Task ?? Task.CompletedTask;
+
     public async ValueTask DisposeAsync()
     {
         await _app.StopAsync().ConfigureAwait(false);

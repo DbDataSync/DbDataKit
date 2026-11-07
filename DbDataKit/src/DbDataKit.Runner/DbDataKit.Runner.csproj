@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <RootNamespace>DbDataKit.Runner</RootNamespace>
-    <Description>The runner's engine (plan 28). So far: the artifact cache, which materializes a published version to a local directory by hash, verifying every file, and gives each run a read-only view of it.</Description>
+    <Description>The runner's engine (plan 28). The artifact cache, which materializes a published version to a local directory by hash and gives each run a read-only view of it, and the executor, which runs one task in its own process.</Description>
     <IsPackable>true</IsPackable>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
@@ -9,5 +9,10 @@
     <None Include="README.md" Pack="true" PackagePath="/" />
     <ProjectReference Include="..\DbDataKit.Runner.Abstractions\DbDataKit.Runner.Abstractions.csproj" />
     <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
+    <ProjectReference Include="..\DbDataKit.Hosting.Children\DbDataKit.Hosting.Children.csproj" />
+    <ProjectReference Include="..\DbDataKit.Runner.Limits\DbDataKit.Runner.Limits.csproj" />
+    <ProjectReference Include="..\DbDataKit.Runner.Protocol.Server\DbDataKit.Runner.Protocol.Server.csproj" />
+    <ProjectReference Include="..\DbDataKit.Secrets.Abstractions\DbDataKit.Secrets.Abstractions.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 </Project>
