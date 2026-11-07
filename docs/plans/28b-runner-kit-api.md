@@ -1,6 +1,6 @@
 # Plan 28b: the runner kit API (what an ETL job writes)
 
-Status: **draft for the owner's review** (2026-11-07). It follows the owner's two points of 2026-11-07: a job needs a **simple, scoped computation
+Status: **accepted by the owner with its defaults (2026-11-07); being built as slices R03s, R03a, R03b and R03c of [28a](28a-runner-slices.md).** It follows the owner's two points of 2026-11-07: a job needs a **simple, scoped computation
 for the pieces of state it must not redo** (a file that disappears when it is downloaded; work that is not bytes or rows), and it must be able
 to **stream large results into the state database** without holding them in memory. This page defines the API a .NET job sees. The wire
 protocol ([plan 28](28-runner.md) section 4.1, slice R03 of [28a](28a-runner-slices.md)) is derived from it, not the other way round.
