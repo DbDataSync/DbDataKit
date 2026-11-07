@@ -197,12 +197,32 @@ public static class ProgressModule
                 PRIMARY KEY (package, channel, task, chain, unit_name, unit_key)
             );
             """,
+            """
+            -- Plan 28a R18: the state values a migration of a task's declaration removed or rewrote, with the actor that names the migration, so a rollback can put them back (state values have no other
+            -- history). Only a migration writes here.
+            CREATE TABLE {table:state_history} (
+                {{identity:id}},
+                package       {{key}} NOT NULL,
+                channel       {{key}} NOT NULL,
+                task          {{key}} NOT NULL,
+                name          {{key}} NOT NULL,
+                item_key      {{key}} NOT NULL,
+                value_type    {{key}} NOT NULL,
+                old_value     {{text}} NULL,
+                old_type      {{key}} NULL,
+                new_value     {{text}} NULL,
+                actor         {{key}} NOT NULL,
+                changed_at    {{time}} NOT NULL
+            );
+            CREATE INDEX {index:state_history_by_actor} ON {table:state_history}(package, channel, actor, id);
+            """,
         ],
         dependsOn: [PayloadStore.Module],
         retention:
         [
             // history, expired keys, settled dead letters and handled webhooks go after the age; a checkpoint's head and parts, state, the ledger of what was processed and open dead letters are current state
             new RetentionRule("checkpoint_history", "changed_at"),
+            new RetentionRule("state_history", "changed_at"),
             new RetentionRule("idempotency_key", "expires_at"),
             new RetentionRule("dead_letter", "last_failed_at", Where: "status <> 'open'"),
             new RetentionRule("inbox_item", "received_at", Where: "taken_by IS NOT NULL"),

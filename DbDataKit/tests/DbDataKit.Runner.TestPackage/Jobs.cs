@@ -20,6 +20,35 @@ public sealed class Ok : RunnerJob<NoInput, NoProgress, NoSlots>
     }
 }
 
+public sealed class TallyProgress : Progress
+{
+    [Checkpoint]
+    public long Seen { get; set; }
+}
+
+/// <summary>Counts its own runs in a checkpoint: prints what it saw, then moves it by one. Staging tests read the checkpoint to see what a migration did to it.</summary>
+[RunnerTask("tally")]
+public sealed class Tally : RunnerJob<NoInput, TallyProgress, NoSlots>
+{
+    protected override Task RunAsync(CancellationToken ct)
+    {
+        Console.WriteLine($"tally saw {Progress.Seen}");
+        Progress.Seen += 1;
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>Runs for twelve seconds and ends by itself: a run in flight while a version is activated.</summary>
+[RunnerTask("lingers")]
+public sealed class Lingers : RunnerJob<NoInput, NoProgress, NoSlots>
+{
+    protected override async Task RunAsync(CancellationToken ct)
+    {
+        Console.WriteLine("lingering");
+        await Task.Delay(TimeSpan.FromSeconds(12), ct);
+    }
+}
+
 /// <summary>Throws: the kit classifies it as a permanent failure and sends the end message.</summary>
 [RunnerTask("fails")]
 public sealed class Fails : RunnerJob<NoInput, NoProgress, NoSlots>

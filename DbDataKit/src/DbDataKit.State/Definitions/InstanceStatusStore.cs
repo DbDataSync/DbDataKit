@@ -3,7 +3,7 @@ using System.Data.Common;
 namespace DbDataKit.State;
 
 /// <summary>What one instance has of a definition in a channel (plan 30 section 3.3). <paramref name="Gone"/> is true for an instance that left the group: shown, and removed by retention.</summary>
-public sealed record InstanceStatus(string Instance, string Kind, string Name, string Channel, int Version, string State, string? Error, DateTimeOffset At, bool Gone);
+public sealed record InstanceStatus(string Instance, string Kind, string Name, string Channel, int Version, string State, string? Error, DateTimeOffset At, bool Gone, string? Note = null, bool HasLosses = false);
 
 /// <summary>The states an instance reports.</summary>
 public static class InstanceStates
@@ -17,7 +17,7 @@ public static class InstanceStates
 }
 
 /// <summary>Where a staged version stands among the live instances: who is ready, who is still preparing, who failed (and why), who has not reported.</summary>
-public sealed record StageProgress(string Kind, string Name, string Channel, int? StagedVersion, IReadOnlyList<string> Ready, IReadOnlyList<string> Preparing, IReadOnlyList<(string Instance, string Error)> Failed, IReadOnlyList<string> NotReported)
+public sealed record StageProgress(string Kind, string Name, string Channel, int? StagedVersion, IReadOnlyList<string> Ready, IReadOnlyList<string> Preparing, IReadOnlyList<(string Instance, string Error)> Failed, IReadOnlyList<string> NotReported, IReadOnlyList<(string Instance, string Note)>? WithLosses = null)
 {
     /// <summary>Something is staged, at least one instance is live, and every live instance is ready for it.</summary>
     public bool IsAllReady => StagedVersion is not null && Ready.Count > 0 && Preparing.Count == 0 && Failed.Count == 0 && NotReported.Count == 0;
@@ -45,7 +45,8 @@ public sealed class InstanceStatusStore(StateDatabase database)
     private const string Module = DefinitionsModule.Name;
 
     /// <summary>Writes an instance's row for a definition in a channel; the instance is live again if it had been marked gone.</summary>
-    public void Report(string instance, string kind, string name, string channel, int version, string state, string? error = null)
+    /// <param name="note">What the instance found beyond ready or failed (for a runner: the dry run of the progress migration); <paramref name="hasLosses"/> says that it would lose progress.</param>
+    public void Report(string instance, string kind, string name, string channel, int version, string state, string? error = null, string? note = null, bool hasLosses = false)
     {
         if (string.IsNullOrWhiteSpace(instance)) throw new ArgumentException("An instance's id is required.", nameof(instance));
         if (!InstanceStates.All.Contains(state)) throw new ArgumentException($"A state is one of {string.Join(", ", InstanceStates.All)}; '{state}' is not.", nameof(state));
@@ -55,16 +56,14 @@ public sealed class InstanceStatusStore(StateDatabase database)
         {
             using var connection = database.OpenConnection();
             using var transaction = connection.BeginTransaction();
-            using var update = database.Command(Module, connection, transaction, text is null
-                ? "UPDATE {table:definition_instance_status} SET version = $version, state = $state, error_text = NULL, reported_at = $now, gone_at = NULL WHERE instance = $instance AND kind = $kind AND name = $name AND channel = $channel;"
-                : "UPDATE {table:definition_instance_status} SET version = $version, state = $state, error_text = $error, reported_at = $now, gone_at = NULL WHERE instance = $instance AND kind = $kind AND name = $name AND channel = $channel;");
-            Bind(update, instance, kind, name, channel, version, state, text, now);
+            using var update = database.Command(Module, connection, transaction,
+                $"UPDATE {{table:definition_instance_status}} SET version = $version, state = $state, error_text = {(text is null ? "NULL" : "$error")}, note_text = {(note is null ? "NULL" : "$note")}, has_losses = $losses, reported_at = $now, gone_at = NULL WHERE instance = $instance AND kind = $kind AND name = $name AND channel = $channel;");
+            Bind(update, instance, kind, name, channel, version, state, text, note, hasLosses, now);
             if (update.ExecuteNonQuery() == 0)
             {
-                using var insert = database.Command(Module, connection, transaction, text is null
-                    ? "INSERT INTO {table:definition_instance_status} (instance, kind, name, channel, version, state, error_text, reported_at, gone_at) VALUES ($instance, $kind, $name, $channel, $version, $state, NULL, $now, NULL);"
-                    : "INSERT INTO {table:definition_instance_status} (instance, kind, name, channel, version, state, error_text, reported_at, gone_at) VALUES ($instance, $kind, $name, $channel, $version, $state, $error, $now, NULL);");
-                Bind(insert, instance, kind, name, channel, version, state, text, now);
+                using var insert = database.Command(Module, connection, transaction,
+                    $"INSERT INTO {{table:definition_instance_status}} (instance, kind, name, channel, version, state, error_text, note_text, has_losses, reported_at, gone_at) VALUES ($instance, $kind, $name, $channel, $version, $state, {(text is null ? "NULL" : "$error")}, {(note is null ? "NULL" : "$note")}, $losses, $now, NULL);");
+                Bind(insert, instance, kind, name, channel, version, state, text, note, hasLosses, now);
                 insert.ExecuteNonQuery();
             }
 
@@ -72,11 +71,12 @@ public sealed class InstanceStatusStore(StateDatabase database)
         });
     }
 
-    private void Bind(DbCommand command, string instance, string kind, string name, string channel, int version, string state, string? error, DateTimeOffset now)
+    private void Bind(DbCommand command, string instance, string kind, string name, string channel, int version, string state, string? error, string? note, bool hasLosses, DateTimeOffset now)
     {
         command.Bind(database, "instance", instance).Bind(database, "kind", kind).Bind(database, "name", name).Bind(database, "channel", channel)
-            .Bind(database, "version", (long)version).Bind(database, "state", state).Bind(database, "now", now);
+            .Bind(database, "version", (long)version).Bind(database, "state", state).Bind(database, "losses", hasLosses ? 1L : 0L).Bind(database, "now", now);
         if (error is not null) command.Bind(database, "error", error);
+        if (note is not null) command.Bind(database, "note", note);
     }
 
     /// <summary>Every instance's row for a definition in a channel, live ones first; gone instances are included and marked.</summary>
@@ -84,7 +84,7 @@ public sealed class InstanceStatusStore(StateDatabase database)
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var command = database.Command(Module, connection, "SELECT instance, kind, name, channel, version, state, error_text, reported_at, gone_at FROM {table:definition_instance_status} WHERE kind = $kind AND name = $name AND channel = $channel ORDER BY instance;");
+            using var command = database.Command(Module, connection, "SELECT instance, kind, name, channel, version, state, error_text, reported_at, gone_at, note_text, has_losses FROM {table:definition_instance_status} WHERE kind = $kind AND name = $name AND channel = $channel ORDER BY instance;");
             command.Bind(database, "kind", kind).Bind(database, "name", name).Bind(database, "channel", channel);
             return Read(command);
         });
@@ -94,7 +94,7 @@ public sealed class InstanceStatusStore(StateDatabase database)
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var command = database.Command(Module, connection, "SELECT instance, kind, name, channel, version, state, error_text, reported_at, gone_at FROM {table:definition_instance_status} WHERE instance = $instance ORDER BY kind, name, channel;");
+            using var command = database.Command(Module, connection, "SELECT instance, kind, name, channel, version, state, error_text, reported_at, gone_at, note_text, has_losses FROM {table:definition_instance_status} WHERE instance = $instance ORDER BY kind, name, channel;");
             command.Bind(database, "instance", instance);
             return Read(command);
         });
@@ -104,7 +104,7 @@ public sealed class InstanceStatusStore(StateDatabase database)
         using var reader = command.ExecuteReader();
         var found = new List<InstanceStatus>();
         while (reader.Read())
-            found.Add(new InstanceStatus(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.Int32(4), reader.GetString(5), reader.IsDBNull(6) ? null : reader.GetString(6), reader.Time(7), !reader.IsDBNull(8)));
+            found.Add(new InstanceStatus(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.Int32(4), reader.GetString(5), reader.IsDBNull(6) ? null : reader.GetString(6), reader.Time(7), !reader.IsDBNull(8), reader.IsDBNull(9) ? null : reader.GetString(9), reader.Int32(10) != 0));
         return [.. found.OrderBy(s => s.Gone).ThenBy(s => s.Instance, StringComparer.Ordinal)];
     }
 
@@ -165,7 +165,7 @@ public sealed class InstanceStatusStore(StateDatabase database)
         var rows = new Dictionary<string, InstanceStatus>(StringComparer.Ordinal);
         if (staged is not null)
         {
-            using var command = database.Command(Module, connection, transaction, "SELECT instance, kind, name, channel, version, state, error_text, reported_at, gone_at FROM {table:definition_instance_status} WHERE kind = $kind AND name = $name AND channel = $channel;");
+            using var command = database.Command(Module, connection, transaction, "SELECT instance, kind, name, channel, version, state, error_text, reported_at, gone_at, note_text, has_losses FROM {table:definition_instance_status} WHERE kind = $kind AND name = $name AND channel = $channel;");
             command.Bind(database, "kind", kind).Bind(database, "name", name).Bind(database, "channel", channel);
             foreach (var row in Read(command).Where(r => !r.Gone)) rows[row.Instance] = row;
         }
@@ -173,15 +173,20 @@ public sealed class InstanceStatusStore(StateDatabase database)
         var ready = new List<string>();
         var preparing = new List<string>();
         var failed = new List<(string, string)>();
+        var losses = new List<(string, string)>();
         var missing = new List<string>();
         foreach (var instance in live.Order(StringComparer.Ordinal))
         {
             if (staged is null || !rows.TryGetValue(instance, out var row) || row.Version != staged) missing.Add(instance);
-            else if (row.State is InstanceStates.Ready or InstanceStates.Active) ready.Add(instance);
+            else if (row.State is InstanceStates.Ready or InstanceStates.Active)
+            {
+                ready.Add(instance);
+                if (row.HasLosses) losses.Add((instance, row.Note ?? "progress would be lost"));
+            }
             else if (row.State == InstanceStates.Failed) failed.Add((instance, row.Error ?? "no reason given"));
             else preparing.Add(instance);
         }
 
-        return new StageProgress(kind, name, channel, staged, ready, preparing, failed, missing);
+        return new StageProgress(kind, name, channel, staged, ready, preparing, failed, missing, losses);
     }
 }

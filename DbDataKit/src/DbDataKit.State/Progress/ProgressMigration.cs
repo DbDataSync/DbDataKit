@@ -157,6 +157,67 @@ public static class ProgressMigration
         if (plan.Losses.Count > 0 && !confirmLosses)
             throw new ProgressMigrationException("This change loses progress: " + string.Join("; ", plan.Losses.Select(l => $"{l.Target}: {l.Detail}")) + ". Confirm it to go on.");
 
+        foreach (var step in BuildWork(store, old, @new, actor, plan)) step();
+    }
+
+    /// <summary>
+    /// The dry run of staging (plan 29 section 4.3 step 6): plans the change and converts every stored value in memory, writing nothing. Returns the plan (its losses are what an administrator has to confirm); throws
+    /// <see cref="ProgressMigrationException"/> naming the value for a change the standard rules cannot make, or a stored value that does not read as its new type.
+    /// </summary>
+    public static MigrationPlan DryRun(ProgressStore store, ProgressDeclaration old, ProgressDeclaration @new)
+    {
+        var plan = Plan(old, @new);
+        BuildWork(store, old, @new, "dry-run", plan);
+        return plan;
+    }
+
+    /// <summary>Whether a migration whose actor starts with <paramref name="actorPrefix"/> left changes for this task that <see cref="Restore"/> can put back.</summary>
+    public static bool CanRestore(ProgressStore store, string actorPrefix) => store.LatestMigrationActor(actorPrefix) is not null;
+
+    /// <summary>
+    /// Puts back what the migration tagged <paramref name="actorPrefix"/> (the newest one with that prefix) changed in this task's progress: checkpoint parts and state values return to what they were before it, from
+    /// <c>checkpoint_history</c> and <c>state_history</c>. A part the migration did not touch keeps its value. Returns how many checkpoints and state values were put back (0: no migration of that name left a trace, nothing was done).
+    /// </summary>
+    public static int Restore(ProgressStore store, string actorPrefix, string actor)
+    {
+        if (store.LatestMigrationActor(actorPrefix) is not { } migration) return 0;
+        var restored = 0;
+
+        // checkpoints: for every part the migration touched, the value before its first change of the part (null: the part did not exist)
+        var changes = store.MigrationChanges(migration);
+        foreach (var checkpoint in changes.GroupBy(c => (c.Name, c.ItemKey)))
+        {
+            var current = store.GetCheckpoint(checkpoint.Key.Name, checkpoint.Key.ItemKey);
+            var parts = current is null ? new Dictionary<string, ProgressValue>(StringComparer.Ordinal) : new Dictionary<string, ProgressValue>(current.Parts, StringComparer.Ordinal);
+            foreach (var part in checkpoint.GroupBy(c => c.Part))
+            {
+                var first = part.First();
+                if (first.Old is null) parts.Remove(part.Key);
+                else parts[part.Key] = ProgressValue.Parse(first.Type, first.Old);
+            }
+
+            if (parts.Count == 0)
+            {
+                if (current is not null) store.DeleteCheckpoint(checkpoint.Key.Name, actor, checkpoint.Key.ItemKey);
+            }
+            else if (!store.Advance(checkpoint.Key.Name, parts, current?.Version ?? 0, itemKey: checkpoint.Key.ItemKey, actor: actor))
+                throw new ProgressMigrationException($"The checkpoint '{checkpoint.Key.Name}' moved while its earlier values were being put back; nothing was changed.");
+            restored++;
+        }
+
+        // state values have no versions of their own to put back: the migration's changes are undone newest first
+        foreach (var (name, itemKey, old, _) in store.MigrationStateChanges(migration).Reverse())
+        {
+            if (old is null) store.DeleteState(name, itemKey);
+            else store.SetState(name, old, itemKey);
+            restored++;
+        }
+
+        return restored;
+    }
+
+    private static List<Action> BuildWork(ProgressStore store, ProgressDeclaration old, ProgressDeclaration @new, string actor, MigrationPlan plan)
+    {
         var work = new List<Action>();
         foreach (var before in old.Checkpoints)
         {
@@ -185,19 +246,24 @@ public static class ProgressMigration
             foreach (var itemKey in store.StateKeys(before.Name))
             {
                 var current = store.GetState(before.Name, itemKey)!;
-                if (next is null) { work.Add(() => store.DeleteState(before.Name, itemKey)); continue; }
+                if (next is null) { work.Add(() => { store.RecordStateChange(before.Name, itemKey, current, null, actor); store.DeleteState(before.Name, itemKey); }); continue; }
                 var newKey = MapKey(itemKey, before.Per, next.Per, next.KeyFill);
                 ProgressValue? value = next.Reset || newKey is null ? null : ConvertOne($"{next.Name}", current, next.Type, next.Format);
                 work.Add(() =>
                 {
+                    store.RecordStateChange(before.Name, itemKey, current, null, actor);
                     store.DeleteState(before.Name, itemKey);
-                    if (newKey is not null && value is not null) store.SetState(next.Name, value, newKey);
+                    if (newKey is not null && value is not null)
+                    {
+                        store.RecordStateChange(next.Name, newKey, store.GetState(next.Name, newKey), value, actor);
+                        store.SetState(next.Name, value, newKey);
+                    }
                 });
             }
         }
 
         // the dry run is the construction of the work above: every conversion has happened in memory, and a value that does not convert has already thrown
-        foreach (var step in work) step();
+        return work;
     }
 
     private static string? MapKey(string itemKey, IReadOnlyList<string>? before, IReadOnlyList<string>? after, string? fill)

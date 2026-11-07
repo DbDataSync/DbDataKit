@@ -3,6 +3,7 @@ using DbDataKit.Runner.Execution;
 using DbDataKit.Runner.Limits;
 using DbDataKit.Runner.Protocol.Server;
 using DbDataKit.Runner.Scheduler;
+using DbDataKit.Runner.Staging;
 using DbDataKit.Secrets;
 using DbDataKit.State;
 using Microsoft.Extensions.Hosting;
@@ -28,6 +29,7 @@ public sealed class RunnerEngine(RunnerSettings settings, StateDatabase state, I
     private RunnerProtocolHost? _host;
     private Task? _loop;
     private Task? _beat;
+    private Task? _staging;
     private Guid? _instance;
     private RunnerControl? _control;
     private RunnerScheduler? _scheduler;
@@ -113,9 +115,10 @@ public sealed class RunnerEngine(RunnerSettings settings, StateDatabase state, I
         Register(instances);
 
         var payloads = new PayloadStore(state);
-        var scheduler = new RunnerScheduler(state, executor,
-            new ArtifactCache(settings.CacheDirectory, new PayloadArtifactSource(payloads)),
-            new DefinitionVersionSource(new DefinitionStore(state), new DefinitionPublisher(state, RunnerPackages.Kinds(), payloads, "runner")),
+        var cache = new ArtifactCache(settings.CacheDirectory, new PayloadArtifactSource(payloads));
+        var publisher = new DefinitionPublisher(state, RunnerPackages.Kinds(), payloads, "runner");
+        var scheduler = new RunnerScheduler(state, executor, cache,
+            new DefinitionVersionSource(new DefinitionStore(state), publisher),
             new RunnerSchedulerOptions
             {
                 Channels = settings.Channels,
@@ -133,6 +136,11 @@ public sealed class RunnerEngine(RunnerSettings settings, StateDatabase state, I
         _control = new RunnerControl(state, scheduler);
         _loop = Task.Run(() => scheduler.RunAsync(_stopping.Token));
         _beat = Task.Run(() => HeartbeatAsync(instances, _stopping.Token));
+
+        // staging (plan 28a R17): every staged version of a package is prepared here and reported; whichever instance sees every live one ready activates it (R18: after the runs in flight, with the progress migration)
+        var activator = new PackageActivator(state, publisher, new ActivationOptions { MaxWait = settings.ActivationMaxWait, Service = RunnerState.EngineService, Logger = _log });
+        var follower = new StagingFollower(state, publisher, cache, activator, new StagingOptions { Instance = () => _instance, Lease = settings.InstanceLease, Poll = settings.Tick, Contracts = settings.StagingContracts ?? RunnerContracts.Check, Logger = _log });
+        if (settings.Staging) _staging = Task.Run(() => follower.RunAsync(_stopping.Token));
         _log.LogInformation("Runner {Instance} serving the channels {Channels} (task host {TaskHost}).", _instance, string.Join(", ", settings.Channels), TaskHostPath);
     }
 
@@ -217,6 +225,7 @@ public sealed class RunnerEngine(RunnerSettings settings, StateDatabase state, I
             // the loop's own end: running tasks are cancelled and given the grace period, their items go back to the queue, the leases are released
             if (_loop is not null) await _loop.ConfigureAwait(false);
             if (_beat is not null) await _beat.ConfigureAwait(false);
+            if (_staging is not null) await _staging.ConfigureAwait(false);
         }
         finally
         {
