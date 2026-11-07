@@ -50,6 +50,9 @@ public sealed class RunnerSchedulerOptions
     /// <summary>The jitter of the back-off, a number in [0, 1); null is random. A test passes a constant (0.5 is no jitter).</summary>
     public Func<double>? Jitter { get; init; }
 
+    /// <summary>How triggers behave (plan 28a R13): the chain-depth guard, the file poll and the source of files. The defaults are right for a runner; see <see cref="DbDataKit.Runner.Triggers.TriggerOptions"/>.</summary>
+    public DbDataKit.Runner.Triggers.TriggerOptions Triggers { get; init; } = new();
+
     /// <summary>Where the loop reports what it skipped and why.</summary>
     public ILogger? Logger { get; init; }
 

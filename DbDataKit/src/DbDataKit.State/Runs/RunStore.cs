@@ -136,6 +136,16 @@ public sealed class RunStore(StateDatabase database, string service)
     /// <summary>The most recent run of a job of this service, or null.</summary>
     public StoredRun? LastRun(string jobId) => Read(new RunQuery(service, jobId, Limit: 1)).FirstOrDefault();
 
+    /// <summary>
+    /// The runs of a job of this service that ended at or after <paramref name="since"/>, oldest end first (up to <paramref name="limit"/>): what a trigger that follows the job reads. Ties on the end time are ordered by id
+    /// (the text of the id, so the order is the same on every engine).
+    /// </summary>
+    public IReadOnlyList<StoredRun> FinishedSince(string jobId, DateTimeOffset since, int limit = 200)
+    {
+        var runs = Read(new RunQuery(service, jobId, Limit: 1000), "finished_at IS NOT NULL AND finished_at >= $finished_since", c => c.Bind(database, "finished_since", since));
+        return [.. runs.OrderBy(r => r.Run.Finished).ThenBy(r => r.Id.ToString("N"), StringComparer.Ordinal).Take(Math.Clamp(limit, 1, 1000))];
+    }
+
     /// <summary>Runs newest first, narrowed by the query: one service's, one job's, or everyone's.</summary>
     public IReadOnlyList<StoredRun> Read(RunQuery? query = null) => Read(query ?? new RunQuery(), null, null);
 

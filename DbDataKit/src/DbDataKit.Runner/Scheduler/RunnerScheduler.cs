@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using DbDataKit.Monitoring;
 using DbDataKit.Runner.Execution;
+using DbDataKit.Runner.Triggers;
 using DbDataKit.Scheduling;
 using DbDataKit.State;
 using Microsoft.Extensions.Logging;
@@ -24,7 +25,7 @@ namespace DbDataKit.Runner.Scheduler;
 /// </list>
 /// The clock is the state database's (<see cref="StateDatabase.Time"/>): the queue's leases and the schedules are judged on one clock, which a test can move. The tick and the heartbeat wait in real time.
 /// </summary>
-public sealed class RunnerScheduler
+public sealed partial class RunnerScheduler
 {
     /// <summary>The kind of every work item of the runner.</summary>
     public const string Kind = "task";
@@ -67,6 +68,7 @@ public sealed class RunnerScheduler
         _runs = new RunStore(database, options.Service);
         _retries = new WorkItemRetries(_queue);
         _log = options.Logger;
+        _triggers = new TriggerEngine(database, options.Service, this, options.Triggers, options.Logger);
     }
 
     /// <summary>This loop's claim name.</summary>
@@ -170,6 +172,8 @@ public sealed class RunnerScheduler
                 else enqueued.Add(task.Ref);
             }
 
+            await _triggers.TickAsync(ct).ConfigureAwait(false);   // R13: events become work items on the same path
+
             var claimed = ClaimAndStart(served.Select(t => OwnerOf(t.Ref)).Distinct(StringComparer.Ordinal).ToList());
             return new TickReport(enqueued, refused, paused, claimed, rowProblems.Count, expired);
         }
@@ -244,7 +248,8 @@ public sealed class RunnerScheduler
     private static string OwnerOf(TaskRef task) => $"{task.Package}/{task.Channel}";
 
     /// <summary>Puts one item of the task on the queue, or returns null when an earlier one is queued or running and the task does not allow overlap.</summary>
-    private Guid? TryEnqueue(Served task, string trigger, IReadOnlyDictionary<string, string>? inputs, string? requestedBy)
+    private Guid? TryEnqueue(Served task, string trigger, IReadOnlyDictionary<string, string>? inputs, string? requestedBy,
+        string? part = null, int triggerDepth = 0, string? triggerSource = null, Action<System.Data.Common.DbConnection, System.Data.Common.DbTransaction, Guid>? alsoWrite = null)
     {
         var payload = new WorkPayload
         {
@@ -254,16 +259,19 @@ public sealed class RunnerScheduler
             Chain = Guid.CreateVersion7().ToString("D"),
             Trigger = trigger,
             RequestedBy = requestedBy,
+            TriggerDepth = triggerDepth,
+            TriggerSource = triggerSource,
         };
         var concurrency = task.Limits.Concurrency;
         try
         {
             return _queue.EnqueueOrThrow(
                 OwnerOf(task.Ref), Kind, task.Ref.Task,
-                part: task.AllowOverlap ? payload.Chain : ModuleWorkQueueStore.NoPart,
+                part: part ?? (task.AllowOverlap ? payload.Chain : ModuleWorkQueueStore.NoPart),
                 resource: concurrency is null ? "" : $"package:{task.Ref.Package}",
                 payloadJson: payload.ToJson(),
-                resourceLimit: concurrency ?? 1);
+                resourceLimit: concurrency ?? 1,
+                alsoWrite: alsoWrite);
         }
         catch (WorkQueueCollisionException)
         {
@@ -676,7 +684,7 @@ public sealed class RunnerScheduler
                 waiting.Count == 0 ? null : waiting.Min(w => w.AvailableAt), pause is not null, pause?.By, parsed ? null : problem));
         }
 
-        var problems = _rowProblems.Values.Concat(_problems).OrderBy(p => p.At).ToList();
+        var problems = _rowProblems.Values.Concat(_problems).Concat(_triggers.Problems()).OrderBy(p => p.At).ToList();
         return new SchedulerStatus(_options.WorkerId, now, tasks, problems, _running.Count, _options.MaxConcurrentRuns);
     }
 

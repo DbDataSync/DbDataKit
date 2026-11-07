@@ -288,6 +288,20 @@ public sealed class ModuleWorkQueueStore(StateDatabase database, string service)
             return (IReadOnlyList<QueuedWork>)list;
         });
 
+    /// <summary>The item (in any status, until retention removes it) whose current run id is <paramref name="runId"/>, or null. A retry gives its item a new run id, so an earlier attempt's id finds nothing.</summary>
+    public WorkItem? FindByRun(Guid runId) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, """
+                SELECT id, service, owner, kind, subject, part, resource, lane, run_id, status, priority, payload
+                FROM {table:work_item} WHERE service = $service AND run_id = $run_id;
+                """);
+            cmd.Bind(database, "service", service).Bind(database, "run_id", runId);
+            using var reader = cmd.ExecuteReader();
+            return reader.Read() ? Read(reader) : null;
+        });
+
     public int ReleaseClaimsForOwner(string owner) => Release("owner = $key", owner);
 
     public int ReleaseClaimsForRun(Guid runId) => Release("run_id = $key", runId);

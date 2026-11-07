@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using DbDataKit.Monitoring;
 using DbDataKit.Scheduling;
 using DbDataKit.State;
 
@@ -112,14 +113,187 @@ public static partial class ProjectionDocuments
         return (limits, overlap);
     }
 
+    // ---- triggers (R13)
+
+    private static readonly (string Word, RunOutcome Outcome)[] OutcomeWords =
+    [
+        ("succeeded", RunOutcome.Succeeded), ("completed_with_failures", RunOutcome.CompletedWithFailures), ("failed", RunOutcome.Failed), ("stopped", RunOutcome.Stopped), ("interrupted", RunOutcome.Interrupted),
+    ];
+
+    /// <summary>
+    /// The text of a row's <c>triggers</c> column: a JSON array with one object per trigger, the kind as its only key and the manifest's own key names inside:
+    /// <c>[{"after":{"task":"extract","package":"other","on":["failed"]}},{"webhook":{"source":"shop","secret":"shop_hook"}},{"file":{"connection":"inbox","path":"in/*.csv","poll":"1m"}},{"store_change":{"model":"orders"}},{"manual":true}]</c>.
+    /// Null for a task with no trigger. <c>on</c> is the outcomes (<c>any</c> for every one); a missing <c>on</c> means succeeded only.
+    /// </summary>
+    public static string? TriggersText(IReadOnlyList<TaskTrigger> triggers)
+    {
+        ArgumentNullException.ThrowIfNull(triggers);
+        if (triggers.Count == 0) return null;
+        using var stream = new MemoryStream();
+        using (var w = new Utf8JsonWriter(stream, Compact))
+        {
+            w.WriteStartArray();
+            foreach (var t in triggers)
+            {
+                w.WriteStartObject();
+                switch (t.Kind)
+                {
+                    case TriggerKind.AfterRun:
+                        w.WriteStartObject("after");
+                        w.WriteString("task", t.Task);
+                        if (t.Package is not null) w.WriteString("package", t.Package);
+                        if (t.On is { Count: > 0 } on)
+                        {
+                            w.WriteStartArray("on");
+                            if (OutcomeWords.All(o => on.Contains(o.Outcome))) w.WriteStringValue("any");
+                            else foreach (var outcome in on) w.WriteStringValue(OutcomeWords.First(o => o.Outcome == outcome).Word);
+                            w.WriteEndArray();
+                        }
+
+                        w.WriteEndObject();
+                        break;
+                    case TriggerKind.Webhook:
+                        w.WriteStartObject("webhook");
+                        w.WriteString("source", t.Source);
+                        if (t.Secret is not null) w.WriteString("secret", t.Secret);
+                        w.WriteEndObject();
+                        break;
+                    case TriggerKind.File:
+                        w.WriteStartObject("file");
+                        w.WriteString("connection", t.Connection);
+                        w.WriteString("path", t.Path);
+                        if (t.Poll is { } poll) w.WriteString("poll", DurationText(poll));
+                        w.WriteEndObject();
+                        break;
+                    case TriggerKind.StoreChange:
+                        w.WriteStartObject("store_change");
+                        w.WriteString("model", t.Model);
+                        if (t.Entity is not null) w.WriteString("entity", t.Entity);
+                        w.WriteEndObject();
+                        break;
+                    default:
+                        w.WriteBoolean("manual", true);
+                        break;
+                }
+
+                w.WriteEndObject();
+            }
+
+            w.WriteEndArray();
+        }
+
+        return System.Text.Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    /// <summary>The triggers a row's text says; none for null or empty. Throws <see cref="FormatException"/> naming the key for text that is not triggers.</summary>
+    public static IReadOnlyList<TaskTrigger> ParseTriggers(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text) || text.Trim() == "null") return [];
+        using var doc = Open(text, "triggers");
+        if (doc.RootElement.ValueKind != JsonValueKind.Array) throw new FormatException("triggers is a JSON array, like [{\"manual\":true}].");
+        var list = new List<TaskTrigger>();
+        var index = 0;
+        foreach (var item in doc.RootElement.EnumerateArray())
+        {
+            var at = $"triggers[{index++}]";
+            if (item.ValueKind != JsonValueKind.Object) throw new FormatException($"{at} is an object with one key, such as {{\"manual\":true}}.");
+            var properties = item.EnumerateObject().ToList();
+            if (properties.Count != 1) throw new FormatException($"{at} has exactly one key: after, webhook, file, store_change or manual.");
+            var (kind, body) = (properties[0].Name, properties[0].Value);
+            if (kind == "manual")
+            {
+                list.Add(TaskTrigger.ByHand());
+                continue;
+            }
+
+            if (body.ValueKind != JsonValueKind.Object) throw new FormatException($"{at}.{kind} is an object.");
+            string Required(string key, string name) => Text(body, key, name) ?? throw new FormatException($"{name}.{key} is missing.");
+            switch (kind)
+            {
+                case "after":
+                    Keys(body, $"{at}.after", ["task", "package", "on"]);
+                    list.Add(new TaskTrigger(TriggerKind.AfterRun, Task: Required("task", $"{at}.after"), Package: Text(body, "package", $"{at}.after"), On: Outcomes(body, $"{at}.after")));
+                    break;
+                case "webhook":
+                    Keys(body, $"{at}.webhook", ["source", "secret"]);
+                    list.Add(new TaskTrigger(TriggerKind.Webhook, Source: Required("source", $"{at}.webhook"), Secret: Text(body, "secret", $"{at}.webhook")));
+                    break;
+                case "file":
+                    Keys(body, $"{at}.file", ["connection", "path", "poll"]);
+                    list.Add(new TaskTrigger(TriggerKind.File, Connection: Required("connection", $"{at}.file"), Path: Required("path", $"{at}.file"), Poll: Duration(body, "poll", $"{at}.file")));
+                    break;
+                case "store_change":
+                    Keys(body, $"{at}.store_change", ["model", "entity"]);
+                    list.Add(new TaskTrigger(TriggerKind.StoreChange, Model: Required("model", $"{at}.store_change"), Entity: Text(body, "entity", $"{at}.store_change")));
+                    break;
+                default:
+                    throw new FormatException($"{at}.{kind} is not a trigger; the kinds are after, webhook, file, store_change and manual.");
+            }
+        }
+
+        return list;
+    }
+
+    private static List<RunOutcome>? Outcomes(JsonElement body, string name)
+    {
+        if (!body.TryGetProperty("on", out var on) || on.ValueKind == JsonValueKind.Null) return null;
+        if (on.ValueKind != JsonValueKind.Array) throw new FormatException($"{name}.on is a list of outcomes.");
+        var found = new List<RunOutcome>();
+        foreach (var word in on.EnumerateArray())
+        {
+            var text = word.ValueKind == JsonValueKind.String ? word.GetString() : null;
+            if (text == "any")
+            {
+                foreach (var every in OutcomeWords) if (!found.Contains(every.Outcome)) found.Add(every.Outcome);
+                continue;
+            }
+
+            var hit = OutcomeWords.FirstOrDefault(o => o.Word == text);
+            if (hit.Word is null) throw new FormatException($"{name}.on has '{text}': the outcomes are {string.Join(", ", OutcomeWords.Select(o => o.Word))} and any.");
+            if (!found.Contains(hit.Outcome)) found.Add(hit.Outcome);
+        }
+
+        return found;
+    }
+
+    /// <summary>
+    /// The first trigger loop among <paramref name="rows"/> as they would be once <paramref name="package"/> on <paramref name="channel"/> is replaced by <paramref name="replacement"/> (null: removed): the rows of every other package of
+    /// the channel as stored, the new rows in place of the package's own. A row whose triggers cannot be read is left out of the check (the scheduler reports it). Null when there is no loop.
+    /// </summary>
+    public static TriggerCycle? FindCycle(IEnumerable<TaskProjection> rows, string package, string channel, IReadOnlyList<TaskProjectionRow>? replacement)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        var all = new List<ProjectedTriggers>();
+        foreach (var row in rows.Where(r => r.Channel == channel && r.Package != package))
+            if (TryTriggers(row.Triggers) is { } triggers) all.Add(new ProjectedTriggers(row.Package, row.Channel, row.Task, triggers));
+        foreach (var row in replacement ?? [])
+            if (TryTriggers(row.Triggers) is { } triggers) all.Add(new ProjectedTriggers(package, channel, row.Task, triggers));
+        return TriggerGraph.FindCycle(all);
+    }
+
+    /// <summary>
+    /// Refuses a replacement of a package's rows that would make tasks start each other for ever: throws <see cref="TriggerCycleException"/> naming the loop. Call it with the rows read from the projection (<c>TaskProjections.ListByChannel</c>)
+    /// and the rows about to replace the package's, before <c>TaskProjections.Replace</c>; the publish path does (plan 28a R13).
+    /// </summary>
+    public static void RequireNoCycle(IEnumerable<TaskProjection> rows, string package, string channel, IReadOnlyList<TaskProjectionRow>? replacement)
+    {
+        if (FindCycle(rows, package, channel, replacement) is { } cycle) throw new TriggerCycleException(cycle);
+    }
+
+    private static IReadOnlyList<TaskTrigger>? TryTriggers(string? text)
+    {
+        try { return ParseTriggers(text); }
+        catch (FormatException) { return null; }
+    }
+
     // ---- rows
 
-    /// <summary>The projection rows of a manifest's tasks at <paramref name="version"/>: schedule and limits as the documents above, the required labels, no triggers yet (R13) and no progress hash yet (R17).</summary>
+    /// <summary>The projection rows of a manifest's tasks at <paramref name="version"/>: schedule, triggers and limits as the documents above, the required labels and no progress hash yet (R17).</summary>
     public static IReadOnlyList<TaskProjectionRow> RowsOf(PackageManifest manifest, string version)
     {
         ArgumentNullException.ThrowIfNull(manifest);
         ArgumentException.ThrowIfNullOrEmpty(version);
-        return [.. manifest.Tasks.Select(t => new TaskProjectionRow(t.Name, version, ScheduleText(t.Schedule), null, LimitsText(t.Limits, t.AllowOverlap), t.Requires, null))];
+        return [.. manifest.Tasks.Select(t => new TaskProjectionRow(t.Name, version, ScheduleText(t.Schedule), TriggersText(t.Triggers), LimitsText(t.Limits, t.AllowOverlap), t.Requires, null))];
     }
 
     // ---- durations
