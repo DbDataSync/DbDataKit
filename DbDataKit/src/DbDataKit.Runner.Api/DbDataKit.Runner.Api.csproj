@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>DbDataKit.Runner.Api</PackageId>
+    <RootNamespace>DbDataKit.Runner.Api</RootNamespace>
+    <Description>The runner's management API as a library (plan 28a R20): status, runs, run now, pause and resume, the group's instances and the read and life-cycle calls of publishing, over a caller resolver, so dbdatarunner (token auth) and the console's embedded runner (session auth) serve the same calls; and the publishing service layer both use.</Description>
+    <IsPackable>true</IsPackable>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\DbDataKit.Runner\DbDataKit.Runner.csproj" />
+    <ProjectReference Include="..\DbDataKit.Web\DbDataKit.Web.csproj" />
+    <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
+    <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
+  </ItemGroup>
+</Project>

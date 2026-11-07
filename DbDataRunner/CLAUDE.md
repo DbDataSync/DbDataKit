@@ -8,18 +8,18 @@ of it too (plan 28 section 6a): keep the engine there and only the host here. Do
 | --- | --- |
 | `RunnerCli.cs` | the command line: the router, `server run`, the local verbs (`runs list`, `tasks ...`, `package install`) |
 | `RunnerServer.cs` | the web host: Kestrel, pairing, the token check, the management API, the engine as a hosted service |
-| `RunnerApi.cs` | the management API (`/api/v1/status`, `/runs`, `/tasks/.../run|pause|resume`) and its roles |
-| `RunnerEngine.cs` | the hosted service: task host, protocol socket, executor, scheduler, the staging follower (`DbDataKit.Runner.Staging`), instance registration and heartbeat, graceful stop |
-| `RunnerGroupApi.cs`, `RunnerLabelVerbs.cs` | the group view (`/api/v1/instances`) and `label add|remove|list` |
+| `RunnerApi.cs` (now in `DbDataKit.Runner.Api`, R20) | the management API (`/api/v1/status`, `/runs`, `/tasks/.../run|pause|resume`) and its roles |
+| `RunnerEngine.cs` | the hosted service, a thin wrapper over `RunnerHost` (`DbDataKit.Runner`, which the console hosts too, R20): task host, protocol socket, executor, scheduler, the staging follower (`DbDataKit.Runner.Staging`), instance registration and heartbeat, graceful stop |
+| `RunnerGroupApi.cs` (in `DbDataKit.Runner.Api`), `RunnerLabelVerbs.cs` | the group view (`/api/v1/instances`) and `label add|remove|list` |
 | `RunnerWebhooks.cs` | `POST /api/v1/webhooks/{package}/{channel}/{source}`: a trusted client or an HMAC signature, the body into the inbox, audited without the body |
-| `RunnerControl.cs` | run now, pause, resume and their audit, shared by the API and the command line |
-| `RunnerPackages.cs` | the `integration` kind (its validator, slots from the manifest) and `package install`, the development path over `RunnerPublishing` |
-| `RunnerPublishing.cs` | the publish service layer (artifact upload, publish, activate, switch, rollback, retire, bind, reads, the projection rebuild, the audit); the API and `package install` both call it |
-| `RunnerPublishApi.cs` | the publish API (`/api/v1/artifacts`, `/definitions/integration`, `/bindings`, `/settings`) and who may call what |
+| `RunnerControl.cs` (in `DbDataKit.Runner`) | run now, pause, resume and their audit, shared by the API and the command line |
+| `RunnerPackages.cs` (the kind: `DbDataKit.Runner`; `RunnerPackageInstaller`: `DbDataKit.Runner.Api`) | the `integration` kind (its validator, slots from the manifest) and `package install`, the development path over `RunnerPublishing` |
+| `RunnerPublishing.cs` (in `DbDataKit.Runner.Api`) | the publish service layer (artifact upload, publish, activate, switch, rollback, retire, bind, reads, the projection rebuild, the audit); the API and `package install` both call it |
+| `RunnerPublishApi.cs` (in `DbDataKit.Runner.Api`: read and life-cycle calls take any caller, the upload, publish, bind and set calls are token-only) | the publish API (`/api/v1/artifacts`, `/definitions/integration`, `/bindings`, `/settings`) and who may call what |
 | `RunnerPublishClient.cs` | the client side: `package pair` and `package publish` (stored pairings, HEAD then upload, then publish) |
-| `RunnerContracts.cs`, `RunnerSignatures.cs` | the .NET, kit and protocol contracts and the newer `package/1` keys (`launch.runtime`, `runtime`) a publish and staging are checked against; the signature seam (`IVersionSignatureVerifier`, not built) |
+| `RunnerContracts.cs` (in `DbDataKit.Runner`), `RunnerSignatures.cs` (in `DbDataKit.Runner.Api`) | the .NET, kit and protocol contracts and the newer `package/1` keys (`launch.runtime`, `runtime`) a publish and staging are checked against; the signature seam (`IVersionSignatureVerifier`, not built) |
 | `RunnerState.cs`, `RunnerSettings.cs` | the modules the state is built from and how it is opened; the directory, the listen address, the channels |
-| `RunnerTaskHost.cs` | finds the task host beside the program |
+| `RunnerTaskHost.cs` (in `DbDataKit.Runner`) | finds the task host beside the program |
 | `RunnerService.cs` | the `service` and `cert` nouns |
 
 ## Rules

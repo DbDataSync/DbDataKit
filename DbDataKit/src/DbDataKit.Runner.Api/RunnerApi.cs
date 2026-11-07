@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 
-namespace DbDataRunner.Server;
+namespace DbDataKit.Runner.Api;
 
 /// <summary>
 /// The management API of a runner (plan 28a R10). Every call needs a token a paired console issued, within the roles the pairing allowed. A viewer reads; an operator (or an administrator, who is one) starts, pauses and resumes
@@ -22,15 +22,20 @@ namespace DbDataRunner.Server;
 /// </summary>
 public static class RunnerApi
 {
-    public static void Map(IEndpointRouteBuilder app, StateDatabase state, Func<RunnerEngine> engine, string instanceId)
+    public static void Map(IEndpointRouteBuilder app, StateDatabase state, Func<RunnerHost> engine, string instanceId, RunnerApiOptions options)
     {
-        app.MapGet("/api/v1/status", (HttpContext context) =>
+        var root = options.Prefix.TrimEnd('/');
+        var caller = options.Caller;
+        IResult? Deny(HttpContext context, ServerRole needed, string? verb = null, RunnerHost? host = null, TaskRef? task = null) => DenyCall(caller(context), needed, verb, host, task);
+        RunnerActor ActorOf(HttpContext context) => caller(context).Actor;
+
+        app.MapGet($"{root}/status", (HttpContext context) =>
         {
             if (Deny(context, ServerRole.Viewer) is { } denied) return denied;
-            return Results.Json(Status(state, engine(), instanceId));
+            return Results.Json(Status(state, engine(), instanceId, options));
         });
 
-        app.MapGet("/api/v1/runs", (HttpContext context) =>
+        app.MapGet($"{root}/runs", (HttpContext context) =>
         {
             if (Deny(context, ServerRole.Viewer) is { } denied) return denied;
             var query = context.Request.Query;
@@ -58,11 +63,11 @@ public static class RunnerApi
             }
 
             var job = task is null ? null : $"{package}/{channel}/{task}";
-            var runs = new RunStore(state, RunnerState.EngineService).Read(new RunQuery(RunnerState.EngineService, job, outcome, StartedBefore: before, Limit: limit, Package: package, Channel: channel));
+            var runs = new RunStore(state, RunnerNames.EngineService).Read(new RunQuery(RunnerNames.EngineService, job, outcome, StartedBefore: before, Limit: limit, Package: package, Channel: channel));
             return Results.Json(new JsonObject { ["runs"] = new JsonArray(runs.Select(r => (JsonNode)Run(r)).ToArray()) });
         });
 
-        app.MapPost("/api/v1/tasks/{package}/{channel}/{task}/run", async (string package, string channel, string task, HttpContext context) =>
+        app.MapPost($"{root}/tasks/{{package}}/{{channel}}/{{task}}/run", async (string package, string channel, string task, HttpContext context) =>
         {
             if (!ParseTask(package, channel, task, out var reference, out var bad)) return bad!;
             if (Deny(context, ServerRole.Operator, RunnerControl.RunVerb, engine(), reference!) is { } denied) return denied;
@@ -97,7 +102,7 @@ public static class RunnerApi
             });
         });
 
-        app.MapPost("/api/v1/tasks/{package}/{channel}/{task}/pause", (string package, string channel, string task, HttpContext context) =>
+        app.MapPost($"{root}/tasks/{{package}}/{{channel}}/{{task}}/pause", (string package, string channel, string task, HttpContext context) =>
         {
             if (!ParseTask(package, channel, task, out var reference, out var bad)) return bad!;
             if (Deny(context, ServerRole.Operator, RunnerControl.PauseVerb, engine(), reference!) is { } denied) return denied;
@@ -108,7 +113,7 @@ public static class RunnerApi
             });
         });
 
-        app.MapPost("/api/v1/tasks/{package}/{channel}/{task}/resume", (string package, string channel, string task, HttpContext context) =>
+        app.MapPost($"{root}/tasks/{{package}}/{{channel}}/{{task}}/resume", (string package, string channel, string task, HttpContext context) =>
         {
             if (!ParseTask(package, channel, task, out var reference, out var bad)) return bad!;
             if (Deny(context, ServerRole.Operator, RunnerControl.ResumeVerb, engine(), reference!) is { } denied) return denied;
@@ -120,12 +125,12 @@ public static class RunnerApi
         });
     }
 
-    public static JsonObject Status(StateDatabase state, RunnerEngine engine, string instanceId)
+    public static JsonObject Status(StateDatabase state, RunnerHost engine, string instanceId, RunnerApiOptions options)
     {
         var status = new JsonObject
         {
-            ["product"] = RunnerSettings.Product,
-            ["version"] = RunnerServer.Version,
+            ["product"] = options.Product,
+            ["version"] = options.Version,
             ["instance_id"] = instanceId,
             ["runner_instance"] = engine.InstanceId?.ToString(),
             ["running"] = engine.Control is not null,
@@ -139,6 +144,7 @@ public static class RunnerApi
             status["tasks"] = new JsonArray();
             status["problems"] = new JsonArray();
             status["instances"] = new JsonArray();
+            options.DecorateStatus?.Invoke(status);
             return status;
         }
 
@@ -171,6 +177,7 @@ public static class RunnerApi
             ["last_fired"] = t.LastFiredAt?.UtcDateTime.ToString("O"), ["problem"] = t.Problem,
         }).ToArray());
         status["problems"] = new JsonArray(scheduler.Problems.Select(p => (JsonNode)new JsonObject { ["subject"] = p.Subject, ["message"] = p.Message, ["at"] = p.At.UtcDateTime.ToString("O") }).ToArray());
+        options.DecorateStatus?.Invoke(status);
         return status;
     }
 
@@ -210,25 +217,19 @@ public static class RunnerApi
         return true;
     }
 
-    private static RunnerActor ActorOf(HttpContext context)
-    {
-        var token = context.ManagementToken();
-        return new RunnerActor(token.SubjectId, token.SubjectName, token.Client.Kind == ClientKind.Console ? "console" : "api", token.Client.Id);
-    }
-
-    private static IResult Control(RunnerEngine engine, Func<RunnerControl, IResult> act)
+    private static IResult Control(RunnerHost engine, Func<RunnerControl, IResult> act)
     {
         if (engine.Control is not { } control) return Results.Json(new { error = "The runner is starting; try again in a moment." }, statusCode: StatusCodes.Status503ServiceUnavailable);
         try { return act(control); }
         catch (UnknownTaskException ex) { return Results.NotFound(new { error = ex.Message }); }
     }
 
-    private static IResult? Deny(HttpContext context, ServerRole needed, string? verb = null, RunnerEngine? engine = null, TaskRef? task = null)
+    private static IResult? DenyCall(RunnerCaller caller, ServerRole needed, string? verb, RunnerHost? engine, TaskRef? task)
     {
-        var decision = ManagementAuthorization.Authorize(context.ManagementToken(), needed);
+        var decision = caller.Authorize(needed);
         if (decision.Allowed) return null;
         // a refused act is on record too, so an operator reading the audit sees who tried
-        if (verb is not null && task is not null && engine?.Control is { } control) control.Refused(verb, task, ActorOf(context), decision.Reason ?? "the role is not enough");
+        if (verb is not null && task is not null && engine?.Control is { } control) control.Refused(verb, task, caller.Actor, decision.Reason ?? "the role is not enough");
         return Results.Json(new { error = $"This needs the {decision.Needed.ToString().ToLowerInvariant()} role." }, statusCode: StatusCodes.Status403Forbidden);
     }
 }

@@ -1,3 +1,4 @@
+using DbDataKit.Runner.Api;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
@@ -78,7 +79,7 @@ public sealed class RunnerHarness : IAsyncDisposable
     public PackageInstalled Install(params PackageTask[] tasks)
     {
         var manifest = SamplePackage.WriteManifest(SamplePackage.Manifest(tasks));
-        return RunnerPackages.Install(State, manifest, SamplePackage.Directory, "dev", "test");
+        return RunnerPackageInstaller.Install(State, manifest, SamplePackage.Directory, "dev", "test");
     }
 
     /// <summary>A single-use pairing code for a client whose ceiling is <paramref name="ceiling"/> (what <c>server pair --max-role</c> makes).</summary>
