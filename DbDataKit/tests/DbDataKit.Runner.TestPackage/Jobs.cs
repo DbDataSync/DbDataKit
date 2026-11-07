@@ -38,14 +38,26 @@ public sealed class Tally : RunnerJob<NoInput, TallyProgress, NoSlots>
     }
 }
 
-/// <summary>Runs for twelve seconds and ends by itself: a run in flight while a version is activated.</summary>
+public sealed record LingersInput(string? ReleaseFile = null);
+
+/// <summary>
+/// A run in flight while a version is activated. With <c>release_file</c> it ends when that file exists (the test says when, so it never ends before the test has seen what it waits for; a stalled CI runner
+/// made a fixed time too short), at the latest after five minutes; without it, after twelve seconds.
+/// </summary>
 [RunnerTask("lingers")]
-public sealed class Lingers : RunnerJob<NoInput, NoProgress, NoSlots>
+public sealed class Lingers : RunnerJob<LingersInput, NoProgress, NoSlots>
 {
     protected override async Task RunAsync(CancellationToken ct)
     {
         Console.WriteLine("lingering");
-        await Task.Delay(TimeSpan.FromSeconds(12), ct);
+        if (Input.ReleaseFile is not { Length: > 0 } release)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(12), ct);
+            return;
+        }
+
+        var until = DateTime.UtcNow.AddMinutes(5);
+        while (!File.Exists(release) && DateTime.UtcNow < until) await Task.Delay(50, ct);
     }
 }
 

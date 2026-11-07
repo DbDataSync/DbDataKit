@@ -1,6 +1,9 @@
 using System.Net;
 using DbDataKit.Web.Trust;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Xunit;
@@ -106,6 +109,38 @@ public sealed class ManagementApiVersionTests
         Assert.Equal(HttpStatusCode.Forbidden, (await http.GetAsync("https://server.invalid/x", TestContext.Current.CancellationToken)).StatusCode);
     }
 
+    [Fact]
+    public async Task AnAnswerWithoutAVersionAnd408IsASlowServersOwnTimeoutAndTheRequestIsSentOnceMore()
+    {
+        var calls = 0;
+        var stub = new Stub(_ => ++calls == 1 ? new HttpResponseMessage(HttpStatusCode.RequestTimeout) : Reply("1"));
+        using var http = new HttpClient(new ManagementVersionHandler(stub, own: 1) { RetryAfterRequestTimeout = TimeSpan.Zero });
+        using var body = new StringContent("{}");
+        var response = await http.PutAsync("https://server.invalid/x", body, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(2, calls);
+    }
+
+    [Fact]
+    public async Task ASecond408WithoutAVersionIsStillNotAServerThisConsoleCanManage()
+    {
+        var calls = 0;
+        var stub = new Stub(_ => { calls++; return new HttpResponseMessage(HttpStatusCode.RequestTimeout); });
+        using var http = new HttpClient(new ManagementVersionHandler(stub, own: 1) { RetryAfterRequestTimeout = TimeSpan.Zero });
+        await Assert.ThrowsAsync<IncompatibleServerException>(() => http.GetAsync("https://server.invalid/x", TestContext.Current.CancellationToken));
+        Assert.Equal(2, calls);   // one more try, not a loop
+    }
+
+    [Fact]
+    public async Task A408WithAVersionIsPassedOnWithoutASecondTry()
+    {
+        var calls = 0;
+        var stub = new Stub(_ => { calls++; var r = Reply("1"); r.StatusCode = HttpStatusCode.RequestTimeout; return r; });
+        using var http = new HttpClient(new ManagementVersionHandler(stub, own: 1) { RetryAfterRequestTimeout = TimeSpan.Zero });
+        Assert.Equal(HttpStatusCode.RequestTimeout, (await http.GetAsync("https://server.invalid/x", TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(1, calls);
+    }
+
     // ---- a real server ----
 
     [Fact]
@@ -120,6 +155,36 @@ public sealed class ManagementApiVersionTests
         var missing = await raw.GetAsync(new Uri(server.Url, "/nothing/here"), TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
         Assert.Equal("1", missing.Headers.GetValues(ManagementApi.VersionHeader).Single());
+    }
+
+    [Fact]
+    public async Task KestrelsOwnRequestTimeoutAnswerIsWrittenBeforeTheMiddlewareAndHasNoVersion()
+    {
+        // the premise of the retry above, shown on a real Kestrel: headers that arrive later than the header timeout (a stalled process does the same) are answered 408 by Kestrel, not by the pipeline
+        using var certificate = TestServer.SelfSigned();
+        var builder = WebApplication.CreateSlimBuilder();
+        builder.Logging.ClearProviders();
+        builder.WebHost.ConfigureKestrel(o =>
+        {
+            o.Limits.RequestHeadersTimeout = TimeSpan.FromSeconds(1);
+            o.Listen(System.Net.IPAddress.Loopback, 0, listen => listen.UseHttps(certificate));
+        });
+        await using var app = builder.Build();
+        app.UseManagementApiVersion();
+        app.MapGet("/ok", () => "ok");
+        await app.StartAsync(TestContext.Current.CancellationToken);
+        var port = new Uri(app.Urls.First()).Port;
+
+        using var tcp = new System.Net.Sockets.TcpClient();
+        await tcp.ConnectAsync(System.Net.IPAddress.Loopback, port, TestContext.Current.CancellationToken);
+        await using var tls = new System.Net.Security.SslStream(tcp.GetStream(), false, (_, _, _, _) => true);
+        await tls.AuthenticateAsClientAsync("localhost");
+        await tls.WriteAsync("GET /ok HTTP/1.1\r\nHost: localhost\r\n"u8.ToArray(), TestContext.Current.CancellationToken);   // no blank line: the headers never end
+        using var reader = new StreamReader(tls);
+        var text = await reader.ReadToEndAsync(TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+        Assert.StartsWith("HTTP/1.1 408", text);
+        Assert.DoesNotContain(ManagementApi.VersionHeader, text, StringComparison.OrdinalIgnoreCase);
+        await app.StopAsync(TestContext.Current.CancellationToken);
     }
 
     private static Task<TestServer> ServerOfVersion(int version, Action<int>? posted = null) =>
