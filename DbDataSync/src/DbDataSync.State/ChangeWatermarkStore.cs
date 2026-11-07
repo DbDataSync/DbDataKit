@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Data.Common;
 using DbDataSync.Core.Config;
 
 namespace DbDataSync.State;
@@ -44,7 +45,7 @@ public sealed record MappingReadState(ReadIntent Intent, ReadHold Hold, string? 
 /// </summary>
 public sealed class ChangeWatermarkStore(StateDatabase database)
 {
-    private const int MaxAttempts = 20;
+    private const int MaxAttempts = 200;
 
     /// <summary>Who is recorded as having moved a position when the caller names nobody: the engine, a worker or the API.</summary>
     public const string DefaultActor = "dbdatasync";
@@ -78,8 +79,18 @@ public sealed class ChangeWatermarkStore(StateDatabase database)
 
             if (change(parts, current is not null) is not { } next)
                 return false;
-            if (database.Retry(() => store.Advance(WatermarkCheckpoint.Name, next, current?.Version ?? 0, itemKey: item, actor: actor)))
-                return true;
+            try
+            {
+                if (database.Retry(() => store.Advance(WatermarkCheckpoint.Name, next, current?.Version ?? 0, itemKey: item, actor: actor)))
+                    return true;
+            }
+            catch (DbException) when (current is null)
+            {
+                // two writers made the same new mapping at once and the other one won the insert: read it again and apply the change to what is there now
+            }
+
+            // refused: another writer moved it between the read and the advance. A short, uneven pause keeps writers that keep colliding from colliding in step.
+            Thread.Sleep(Random.Shared.Next(0, 4 * Math.Min(attempt + 1, 8)));
         }
 
         throw new InvalidOperationException($"The position of '{mappingName}' ({sourceTable}) of '{taskName}' kept moving while it was being written; it was not changed.");
@@ -212,4 +223,49 @@ public sealed class ChangeWatermarkStore(StateDatabase database)
     /// <summary>Removes a mapping's position altogether, so its next pass starts as a new mapping would; the history of the checkpoint stays, naming <paramref name="actor"/>. False when it had none.</summary>
     public bool ClearWatermark(string taskName, string mappingName, string sourceTable, string? actor = null) =>
         database.Retry(() => For(taskName).DeleteCheckpoint(WatermarkCheckpoint.Name, actor ?? DefaultActor, WatermarkCheckpoint.ItemKey(mappingName, sourceTable)));
+
+    // ---------- E15: the version, the strict advance, the history and the rewind ----------
+
+    /// <summary>The version of a mapping's checkpoint (how many times it has been advanced), 0 when it has none: what <see cref="TryAdvancePosition"/> asks for.</summary>
+    public long Version(string taskName, string mappingName, string sourceTable) => Read(taskName, mappingName, sourceTable)?.Version ?? 0;
+
+    /// <summary>
+    /// Moves a mapping's position to <paramref name="position"/> only if the checkpoint is still at <paramref name="expectedVersion"/> (0: it does not exist yet), in the same transaction as
+    /// <paramref name="alsoWrite"/> (which is where a run's outcome is written, so the position and the outcome stand or fall together: a callback that fails leaves the position where it was). False when
+    /// another writer moved it first and nothing was written: the caller reads it again. This is the advance an engine makes after the target write committed (<see cref="SetWatermark"/> is the same move
+    /// without the check, for the callers that were made exclusive by the run lock).
+    /// </summary>
+    public bool TryAdvancePosition(
+        string taskName, string mappingName, string sourceTable, long expectedVersion, string position, DateTimeOffset? positionTime,
+        string actor, Guid? runId = null, Action<DbConnection, DbTransaction>? alsoWrite = null)
+    {
+        var current = Read(taskName, mappingName, sourceTable);
+        if ((current?.Version ?? 0) != expectedVersion)
+            return false;
+
+        var parts = current is null
+            ? new Dictionary<string, ProgressValue>(StringComparer.Ordinal)
+            {
+                [WatermarkCheckpoint.Intent] = ProgressValue.OfText(nameof(ReadIntent.Changes)),
+                [WatermarkCheckpoint.Hold] = ProgressValue.OfText(nameof(ReadHold.None)),
+            }
+            : new Dictionary<string, ProgressValue>(current.Parts, StringComparer.Ordinal);
+        parts[WatermarkCheckpoint.Position] = ProgressValue.OfText(position);
+        if (positionTime is { } time) parts[WatermarkCheckpoint.PositionTime] = ProgressValue.OfTime(time);
+        else parts.Remove(WatermarkCheckpoint.PositionTime);
+
+        return database.Retry(() => For(taskName).Advance(WatermarkCheckpoint.Name, parts, expectedVersion, runId, WatermarkCheckpoint.ItemKey(mappingName, sourceTable), actor, alsoWrite));
+    }
+
+    /// <summary>The changes to a mapping's position, intent, hold and pending load, newest first, each naming who made it (a run, or a person's rewind).</summary>
+    public IReadOnlyList<CheckpointChange> History(string taskName, string mappingName, string sourceTable, int limit = 100) =>
+        database.Retry(() => For(taskName).History(WatermarkCheckpoint.Name, WatermarkCheckpoint.ItemKey(mappingName, sourceTable), limit));
+
+    /// <summary>
+    /// Rewinds a mapping to what it was before the change <paramref name="historyId"/> of its <see cref="History"/> (and so before every later one): "reload everything since Monday". A rewind is a new
+    /// version with <paramref name="actor"/> in its history, so it can itself be undone, and the next pass reads from the earlier position again. False when another writer moved the mapping meanwhile,
+    /// or the change is not this mapping's.
+    /// </summary>
+    public bool Rewind(string taskName, string mappingName, string sourceTable, long historyId, string actor) =>
+        database.Retry(() => For(taskName).Rewind(WatermarkCheckpoint.Name, historyId, actor, WatermarkCheckpoint.ItemKey(mappingName, sourceTable)));
 }
