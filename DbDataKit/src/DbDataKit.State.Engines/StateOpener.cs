@@ -50,6 +50,15 @@ public static class StateOpener
         return new StateDatabase(engine, ResolveSecrets(settings.ConnectionString, secrets), layout, appliedBy, time);
     }
 
+    /// <summary>Makes the SQL Server and PostgreSQL providers known to the state layer (what <see cref="Open(StateSettings, string, IEnumerable{StateModule}, StateScope?, ISecretResolver?, string?, TimeProvider?)"/> does first), for a command that connects without opening a <see cref="StateDatabase"/>.</summary>
+    public static void RegisterProviders()
+    {
+        lock (Registration) StateDialectRegistry.Default.RegisterLibraryBackedEngines(Factory);
+    }
+
+    /// <summary>The connection string with the secret references in it resolved through <paramref name="secrets"/>; a secret nobody has stops with a message naming the reference, never a value. Without a resolver the string is returned as it is.</summary>
+    public static string ResolveConnectionString(string connectionString, ISecretResolver? secrets) => ResolveSecrets(connectionString, secrets);
+
     private static string ResolveSecrets(string connectionString, ISecretResolver? secrets)
     {
         if (secrets is null) return connectionString;

@@ -99,6 +99,7 @@
     <Project Path="DbDataKit/src/DbDataKit.Identity/DbDataKit.Identity.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.State/DbDataKit.State.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.State.Engines/DbDataKit.State.Engines.csproj" />
+    <Project Path="DbDataKit/src/DbDataKit.State.Cli/DbDataKit.State.Cli.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Secrets.Abstractions/DbDataKit.Secrets.Abstractions.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Secrets.Cli/DbDataKit.Secrets.Cli.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Secrets.Store/DbDataKit.Secrets.Store.csproj" />
@@ -173,6 +174,7 @@
     <Project Path="DbDataKit/tests/DbDataKit.Identity.Tests/DbDataKit.Identity.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.State.Tests/DbDataKit.State.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.State.Engines.Tests/DbDataKit.State.Engines.Tests.csproj" />
+    <Project Path="DbDataKit/tests/DbDataKit.State.Cli.Tests/DbDataKit.State.Cli.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Store.Tests/DbDataKit.Store.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Schema.Tests/DbDataKit.Schema.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Runner.Abstractions.Tests/DbDataKit.Runner.Abstractions.Tests.csproj" />
