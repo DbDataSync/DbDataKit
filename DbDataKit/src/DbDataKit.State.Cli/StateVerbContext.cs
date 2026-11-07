@@ -8,7 +8,8 @@ namespace DbDataKit.State.Cli;
 /// <param name="Settings">The effective settings: what the product opens its state with.</param>
 /// <param name="SqlitePath">The file a SQLite state is (the product's directory and <c>state.db</c>); not created by anything here.</param>
 /// <param name="Secrets">The resolver for the references in <see cref="StateSettings.ConnectionString"/>, made when it is first needed: <c>state show</c> never asks for it, <c>state test</c> does. Null: references are left as written.</param>
-public sealed record StateTarget(StateSettings Settings, string SqlitePath, Func<ISecretResolver?>? Secrets = null);
+/// <param name="SettingsFile">The file whose <c>state</c> section holds the product's state settings, when the product has one: where <c>state init</c> writes (the option <c>--settings</c> names another). Null: the product keeps its settings elsewhere (flags, environment) and <c>state init</c> needs <c>--settings</c> to write.</param>
+public sealed record StateTarget(StateSettings Settings, string SqlitePath, Func<ISecretResolver?>? Secrets = null, string? SettingsFile = null);
 
 /// <summary>
 /// What a product tells the shared <c>state</c> verbs (<see cref="StateVerbs.Create"/>): its program name, how to find its state from the options of the command, the modules it is built from and the scope
@@ -63,4 +64,10 @@ public static class StateExit
 
     /// <summary>The service would refuse the database: made by the old structure, a module newer than the binary, a namespace that moved, an edited migration.</summary>
     public const int Refused = 18;
+
+    /// <summary><c>state init</c> would point the product at another place while the state it has holds data: it is moved with <c>state move</c>, never by changing the setting.</summary>
+    public const int Populated = 19;
+
+    /// <summary><c>state init --apply</c>: the administrator's connection failed, or a statement it ran was refused.</summary>
+    public const int Admin = 20;
 }

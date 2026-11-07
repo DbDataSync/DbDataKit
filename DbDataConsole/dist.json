@@ -22,7 +22,7 @@
     "unregister": "service uninstall"
   },
   "requiresDotnet": "10.0",
-  "notes": "Settings and data (the users, sessions, certificate) live in the console's data directory, away from the program files. Start it with: dbdatakit server run. Pair a server with it: run 'server pair' on the server, then dbdatakit instance add <url> --code <code>.",
+  "notes": "Settings and data (the users, sessions, certificate) live in the console's data directory, away from the program files. The state database is a SQLite file in that directory (the 'service' topology, which needs no setup); for one database per group or for the whole install run: dbdatakit state init --topology group|install. Start it with: dbdatakit server run. Pair a server with it: run 'server pair' on the server, then dbdatakit instance add <url> --code <code>.",
   "msi": {
     "upgradeCode": "6D1F8B34-9E2A-4C57-B0A6-4E3C7D95A218"
   }

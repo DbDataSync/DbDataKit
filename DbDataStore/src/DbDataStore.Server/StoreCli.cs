@@ -44,7 +44,11 @@ public static class StoreCli
     /// <summary>The shared <c>state show|test|grants</c> verbs over the server's state: SQLite, <c>state.db</c> in its directory (the server has no setting for another engine), built from <see cref="StoreState.Modules"/>.</summary>
     private static Noun StateNoun(Func<string, string?>? environment) => DbDataKit.State.Cli.StateVerbs.Create(new DbDataKit.State.Cli.StateVerbContext(
         Program, "the server",
-        args => new DbDataKit.State.Cli.StateTarget(new DbDataKit.State.StateSettings(), Path.Combine(Path.GetFullPath(args.Get("repo") ?? StoreSettings.DefaultDirectory(environment)), StoreState.FileName)),
+        args =>
+        {
+            var directory = Path.GetFullPath(args.Get("repo") ?? StoreSettings.DefaultDirectory(environment));
+            return new DbDataKit.State.Cli.StateTarget(new DbDataKit.State.StateSettings(), Path.Combine(directory, StoreState.FileName), null, Path.Combine(directory, "server.yaml"));
+        },
         StoreState.Modules, StoreState.Scope, ["repo"], "[--repo <server directory>]"));
 
     /// <summary>The server's certificate is self-signed, so a probe of its own address cannot validate it; it is accepted for a loopback address only, where the answer is this machine and the probe reads a status code and no body.</summary>

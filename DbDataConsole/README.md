@@ -13,6 +13,7 @@ dbdatakit instance list [--offline] [--repo <console directory>]
 dbdatakit instance remove <id or name> [--repo <console directory>]
 dbdatakit instance rotate-key [--repo <console directory>]
 dbdatakit state grants --login <database role or user> [--migrate] [--engine mssql|postgres] [--repo <console directory>]
+dbdatakit state init --topology service|group|install [--engine mssql|postgres --connection <connection with Password=secret:NAME or env:NAME>] [--login <role or user> [--migrate]] [--admin-connection <reference> --apply] [--group <name>] [--settings <file>]   # one SQLite file per service (the default), one database per group, or one for the install; prints (or with --apply creates) the schemas and the console's rights
 dbdatakit state show [--offline] [--engine mssql|postgres] [--repo <console directory>]   # engine, masked connection, namespaces, versions, pending migrations; creates nothing
 dbdatakit state test [--engine mssql|postgres] [--repo <console directory>]   # connection, registry, rights, engine version, schema clash, pending migrations; stops at the first failure with the fix
 dbdatakit service install|uninstall|status|start|stop|restart|doctor|unit

@@ -14,6 +14,7 @@
   },
   "windowsScope": "user",
   "requiresVcRuntime": true,
+  "notes": "The server's state database is a SQLite file in its directory (the 'service' topology, no setup); for a database shared by a group or the install see: dbdatabuild state init",
   "msi": {
     "upgradeCode": "0E2D6C1A-5B7F-4D3A-9C41-7A8B2F6E1D30",
     "addToPath": true
