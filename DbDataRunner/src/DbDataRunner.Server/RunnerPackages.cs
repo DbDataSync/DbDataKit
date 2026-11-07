@@ -26,7 +26,13 @@ public static class RunnerPackages
     public const string DevChannel = "dev";
 
     /// <summary>The registry a runner accepts: <c>integration</c>, served at once by default, checked by <see cref="Check"/>.</summary>
-    public static DefinitionKinds Kinds() => new DefinitionKinds().Register(new DefinitionKind(Kind, ["runner"], PublishMode.Serve) { Validator = candidate => Check(candidate) });
+    public static DefinitionKinds Kinds() => new DefinitionKinds().Register(new DefinitionKind(Kind, ["runner"], PublishMode.Serve) { Validator = candidate => Check(candidate), SlotsOf = SlotsOfManifest });
+
+    /// <summary>The connection slots the manifest's tasks declare: each needs a binding in a channel before the version serves there (plan 30 section 3.2).</summary>
+    private static IReadOnlyList<DefinitionSlot> SlotsOfManifest(string manifest) =>
+        PackageManifestReader.Load(manifest, "manifest") is { Ok: true, Manifest: { } m }
+            ? [.. m.Tasks.SelectMany(t => t.Connections).Select(c => c.Name).Distinct(StringComparer.Ordinal).Select(n => new DefinitionSlot(n))]
+            : [];
 
     /// <summary>The validator of the kind: the manifest loads without errors, names the definition, and its launch file is among the files; null when it does, the problems in words otherwise.</summary>
     public static string? Check(DefinitionCandidate candidate)
@@ -37,12 +43,21 @@ public static class RunnerPackages
         if (manifest.Name != candidate.Name) return $"the manifest is for the package '{manifest.Name}', not '{candidate.Name}'.";
         if (manifest.Launch.Kind == LaunchKind.Assembly && manifest.Launch.Assembly is { } assembly && candidate.Artifacts.All(a => a.Path != assembly.Replace('\\', '/')))
             return $"the launch assembly '{assembly}' is not among the package's files.";
-        return null;
+        // an executable's command is a path inside the package (it has a directory part and is relative) or a program on the runner; only the first must be among the files
+        if (manifest.Launch.Kind == LaunchKind.Executable && manifest.Launch.Command is { } command)
+        {
+            var path = command.Replace('\\', '/');
+            if (path.Contains('/') && !path.StartsWith('/') && candidate.Artifacts.All(a => a.Path != path))
+                return $"the launch command '{command}' is not among the package's files.";
+        }
+
+        return RunnerContracts.Check(manifest.BuiltAgainst);
     }
 
     /// <summary>
-    /// Reads the manifest file and the files of <paramref name="directory"/>, stores the files as payloads (one that is stored already, by hash, is not stored again), publishes the version on <paramref name="channel"/> (served at once)
-    /// and replaces the channel's task projection with the manifest's tasks. Installing the same content again changes nothing. Throws <see cref="PackageInstallException"/> for what is wrong with the manifest or the files.
+    /// The development path: reads the manifest file and the files of <paramref name="directory"/> and publishes them to this runner's own state through the same service layer the publish API uses
+    /// (<see cref="RunnerPublishing"/>), served at once on <paramref name="channel"/>, in process and without HTTP or pairing. Installing the same content again changes nothing.
+    /// Throws <see cref="PackageInstallException"/> for what is wrong with the manifest or the files.
     /// </summary>
     public static PackageInstalled Install(StateDatabase state, string manifestPath, string directory, string channel, string by)
     {
@@ -55,53 +70,42 @@ public static class RunnerPackages
         if (!load.Ok) throw new PackageInstallException(string.Join(Environment.NewLine, load.Diagnostics.Where(d => d.Severity == ConfigSeverity.Error).Select(d => d.ToString())));
         var manifest = load.Manifest!;
 
-        var payloads = new PayloadStore(state);
-        var publisher = new DefinitionPublisher(state, Kinds(), payloads, "runner");
+        var service = new RunnerPublishing(state);
+        var actor = new RunnerActor(by, by, "command");
         var manifestFile = Path.GetFullPath(manifestPath);
-        var refs = new List<ArtifactRef>();
+        var files = new List<PublishFile>();
         long bytes = 0;
-        foreach (var path in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
-        {
-            // the manifest travels as the version's content, not as one of its files, when it is kept in the package's own directory
-            if (Path.GetFullPath(path) == manifestFile) continue;
-            var relative = Path.GetRelativePath(directory, path).Replace(Path.DirectorySeparatorChar, '/');
-            string sha;
-            long size;
-            using (var stream = File.OpenRead(path))
-            {
-                size = stream.Length;
-                sha = Convert.ToHexStringLower(SHA256.HashData(stream));
-            }
-
-            Guid? existing = publisher.FindArtifact(sha);
-            if (existing is not null && payloads.Get(existing.Value) is not { Complete: true }) existing = null;
-            if (existing is null)
-            {
-                using var stream = File.OpenRead(path);
-                using var writer = payloads.OpenWrite(new PayloadOptions(OwnerModule: "runner", OwnerRow: $"{manifest.Name}/{relative}", CreatedBy: by));
-                stream.CopyTo(writer);
-                writer.Complete();
-                existing = writer.Id;
-            }
-
-            refs.Add(new ArtifactRef(relative, sha, size, null, existing));
-            bytes += size;
-        }
-
-        PublishResult published;
         try
         {
-            published = publisher.Publish(new PublishRequest(Kind, manifest.Name, text, by, channel, PublishMode.Serve, Note: "dbdatarunner package install (development)", Artifacts: refs));
+            foreach (var path in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
+            {
+                // the manifest travels as the version's content, not as one of its files, when it is kept in the package's own directory
+                if (Path.GetFullPath(path) == manifestFile) continue;
+                var relative = Path.GetRelativePath(directory, path).Replace(Path.DirectorySeparatorChar, '/');
+                string sha;
+                long size;
+                using (var stream = File.OpenRead(path))
+                {
+                    size = stream.Length;
+                    sha = Convert.ToHexStringLower(SHA256.HashData(stream));
+                }
+
+                if (!service.HasArtifact(sha))
+                {
+                    using var stream = File.OpenRead(path);
+                    service.StoreArtifactAsync(sha, stream, null, actor, audit: false).GetAwaiter().GetResult();
+                }
+
+                files.Add(new PublishFile(relative, sha, size, null));
+                bytes += size;
+            }
+
+            var published = service.Publish(new PublishInput(manifest.Name, text, files, channel, PublishMode.Serve, Note: "dbdatarunner package install (development)"), actor, RunnerPublishing.InstallVerb);
+            return new PackageInstalled(manifest.Name, channel, published.Version, published.Changed, files.Count, bytes, published.Tasks);
         }
-        catch (Exception ex) when (ex is PublishRefusedException or DefinitionRejectedException or DefinitionConflictException)
+        catch (RunnerPublishException ex)
         {
             throw new PackageInstallException(ex.Message);
         }
-
-        var version = published.Version.Version;
-        new TaskProjections(state).Replace(manifest.Name, channel, ProjectionDocuments.RowsOf(manifest, version.ToString(CultureInfo.InvariantCulture)));
-        new AuditLog(state, RunnerState.ServiceId).Record(new AuditEvent("person", by, "runner.package.install", TargetKind: "package", TargetId: $"{manifest.Name}/{channel}",
-            Detail: JsonSerializer.Serialize(new { version, changed = published.Changed, files = refs.Count })));
-        return new PackageInstalled(manifest.Name, channel, version, published.Changed, refs.Count, bytes, [.. manifest.Tasks.Select(t => t.Name)]);
     }
 }

@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Globalization;
 
 namespace DbDataKit.State;
@@ -11,7 +12,7 @@ public sealed record EngineVersionCheck(bool Supported, string Name, string Mess
 
 /// <summary>
 /// The engine versions the state layer supports (plan 29b, C01): SQL Server 2022 and 2025, PostgreSQL 16 and 17, SQLite 3.35 and newer. Older ones are refused with a message naming the oldest that works; a newer one is
-/// allowed and noted as untested. What each module needs beyond this (pgvector, SQL Server 2025's vector type) is a later slice (U01); this table is only the floor.
+/// allowed and noted as untested. The version table is the floor; what a module needs beyond it (<see cref="EngineFeature"/>: pgvector, SQL Server 2025's vector type) is <see cref="Features(string, string?, FeatureStatus)"/> and the migrator's refusal.
 /// </summary>
 public static class EngineSupport
 {
@@ -38,6 +39,21 @@ public static class EngineSupport
             _ => new EngineVersionCheck(false, engine, $"The engine '{engine}' is not one of sqlite, mssql or postgres."),
         };
     }
+
+    /// <summary>
+    /// The features an engine of this version has (plan 29b, U01): SQL Server 2025 (17) and newer has the vector type; PostgreSQL has pgvector when <paramref name="postgresVector"/> says the extension is installed
+    /// (<see cref="FeatureStatus.Enabled"/>) or available to create (<see cref="FeatureStatus.Creatable"/>), which only the server can tell (<see cref="Features(DbConnection, string, IEngineFeatureProbe?)"/> asks it); SQLite has none.
+    /// </summary>
+    public static EngineFeatureReport Features(string engine, string? version, FeatureStatus postgresVector = FeatureStatus.Missing) => EngineFeatures.Judge(engine, version, postgresVector);
+
+    /// <summary>Asks the connected engine which features it has: its version, and on PostgreSQL <c>pg_available_extensions</c>. Reads only.</summary>
+    public static EngineFeatureReport Features(DbConnection connection, string engine, IEngineFeatureProbe? probe = null) => (probe ?? EngineFeatures.Default).Detect(connection, engine);
+
+    /// <summary>The modules among <paramref name="modules"/> that need a feature <paramref name="report"/> says the engine lacks, each as the sentence the migrator refuses with.</summary>
+    public static IReadOnlyList<(StateModule Module, EngineFeature Feature, string Message)> Unmet(IEnumerable<StateModule> modules, EngineFeatureReport report) =>
+    [
+        .. modules.SelectMany(m => m.RequiresFeatures.Where(f => !report.Has(f)).Select(f => (m, f, EngineFeatures.Refusal(m, f, report.Engine, EngineFeatures.EngineName(report.Engine, report.Version))))),
+    ];
 
     private static EngineVersionCheck Server(int major, string version, string name, int oldest, int newest, string oldestName, string newestName)
     {

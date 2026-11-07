@@ -2,7 +2,8 @@
 # The shared test engines (docs/plans/11-ci-and-testing.md): start, stop, and print the connection variables every suite needs.
 #
 #   testenv/testenv.sh up mssql postgres         start the engines and wait until they are healthy (`up` alone: the seven everyday ones;
-#                                                `up all`: also the slow ones, mssql2025 spark bigquery flight flight-tls)
+#                                                `up all`: also the slow ones, mssql2025 spark bigquery flight flight-tls, and the
+#                                                previous releases mssql2022 postgres16)
 #   testenv/testenv.sh down                      stop and remove them (and their data)
 #   testenv/testenv.sh status                    list the engines that are running
 #   testenv/testenv.sh env [product] [--dotenv]  print the variables for what is running
@@ -29,6 +30,11 @@
 #   oracle    DBKIT_TEST_ORACLE           ODP.NET connection string (user dbkit, service FREEPDB1)
 #             DBKIT_TEST_ORACLE_HOST / _PORT / _SERVICE / _USER / _PASSWORD
 #             DBKIT_TEST_ORACLE_KV        the same as Host=...;Port=...;User Id=...;Password=...;Service=... (Build's probe reads this form)
+# The previous release of each state engine (N-1, plan 29b U01; `up` with no engine named leaves them out):
+#   mssql2022 DBKIT_TEST_MSSQL2022        ADO.NET connection string for SQL Server 2022 (port 14333, user sa, the same password)
+#             DBKIT_TEST_MSSQL2022_SERVER / _USER / _PASSWORD
+#   postgres16 DBKIT_TEST_POSTGRES16      Npgsql connection string for PostgreSQL 16 with pgvector (port 15434, user postgres)
+#             DBKIT_TEST_POSTGRES16_HOST / _PORT / _USER / _PASSWORD / _DB
 # The slow engines (DbDataBuild's conformance suite; `up` with no engine named leaves them out, `up all` starts everything):
 #   mssql2025 DBKIT_TEST_MSSQL2025        ADO.NET connection string for SQL Server 2025 (port 14332)
 #   spark     DBKIT_TEST_SPARK            Host=...;Port=10000
@@ -44,7 +50,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 compose=(docker compose -f "$here/docker-compose.yml")
 password="${DBKIT_TEST_PASSWORD:-DbKit_Test_Pw1}"
 host=127.0.0.1
-engines_all=(mssql mssql-target postgres postgres-logical mysql mariadb oracle mssql2025 spark bigquery flight flight-tls)
+engines_all=(mssql mssql-target postgres postgres-logical mysql mariadb oracle mssql2025 spark bigquery flight flight-tls mssql2022 postgres16)
 engines_default=(mssql mssql-target postgres postgres-logical mysql mariadb oracle)   # what `up` with no engine named starts
 cache="${DBKIT_TEST_CACHE:-$HOME/.cache/dbdatakit-testenv}"
 
@@ -129,6 +135,21 @@ canonical() {
   fi
   if grep -qx mssql2025 <<<"$up"; then
     echo "DBKIT_TEST_MSSQL2025=Server=$host,14332;User Id=sa;Password=$password;TrustServerCertificate=True;Encrypt=False"
+  fi
+  if grep -qx mssql2022 <<<"$up"; then
+    local server22="$host,14333"
+    echo "DBKIT_TEST_MSSQL2022_SERVER=$server22"
+    echo "DBKIT_TEST_MSSQL2022_USER=sa"
+    echo "DBKIT_TEST_MSSQL2022_PASSWORD=$password"
+    echo "DBKIT_TEST_MSSQL2022=Server=$server22;User Id=sa;Password=$password;TrustServerCertificate=True;Encrypt=False"
+  fi
+  if grep -qx postgres16 <<<"$up"; then
+    echo "DBKIT_TEST_POSTGRES16_HOST=$host"
+    echo "DBKIT_TEST_POSTGRES16_PORT=15434"
+    echo "DBKIT_TEST_POSTGRES16_USER=postgres"
+    echo "DBKIT_TEST_POSTGRES16_PASSWORD=$password"
+    echo "DBKIT_TEST_POSTGRES16_DB=postgres"
+    echo "DBKIT_TEST_POSTGRES16=Host=$host;Port=15434;Username=postgres;Password=$password;Database=postgres"
   fi
   if grep -qx spark <<<"$up"; then echo "DBKIT_TEST_SPARK=Host=$host;Port=10000"; fi
   if grep -qx bigquery <<<"$up"; then echo "DBKIT_TEST_BIGQUERY=Host=$host;Port=9050"; fi

@@ -12,6 +12,12 @@
 #   mariadb            13307   MariaDB 11, user root
 #   oracle             15210   Oracle Database Free 23ai (gvenzl/oracle-free:23-slim), service FREEPDB1, user dbkit (sys/system: the same password)
 #
+# The previous release of each state engine (N-1, plan 29b U01), side by side with the current ones: `testenv.sh up` with no engine named leaves
+# them out, `testenv.sh up mssql2022 postgres16` starts them, and `testenv.sh env dbdatakit-older` points the State suites at them:
+#
+#   mssql2022          14333   SQL Server 2022, user sa (no Agent): the older release the state layer supports (no vector type)
+#   postgres16         15434   PostgreSQL 16 with TLS and the pgvector extension installed (pgvector/pgvector:pg16), user postgres
+#
 # The slow engines, which only DbDataBuild's conformance suite uses (its nightly full run starts them; `testenv.sh up` with no engine
 # named leaves them out, `testenv.sh up all` starts everything):
 #
@@ -224,6 +230,46 @@ services:
     ports:
       - "14332:1433"
     healthcheck: *mssql-health
+
+  # The previous releases of the two state engines (U01). Same sa password and database user as their current siblings, own ports, no data kept.
+  # SQL Server 2022 is pinned by digest like the 2025 images (D29): to move it, read the new digest and run the State suites on it before merging.
+  mssql2022:
+    profiles: [mssql2022]
+    image: ${DBKIT_TEST_MSSQL2022_IMAGE:-mcr.microsoft.com/mssql/server:2022-latest@sha256:cf8f0ab2ebe61feec2eed2629061a07d247f791c2a8ddda74a4ac9f06a291718}
+    container_name: dbkit-test-mssql2022
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: *password
+    ports:
+      - "14333:1433"
+    healthcheck: *mssql-health
+
+  # PostgreSQL 16 from the pgvector project's image, pinned by tag like `postgres` (pg17), with the same TLS setup.
+  postgres16:
+    profiles: [postgres16]
+    image: ${DBKIT_TEST_POSTGRES16_IMAGE:-pgvector/pgvector:pg16}
+    container_name: dbkit-test-postgres16
+    entrypoint:
+      - sh
+      - -c
+      - >-
+        openssl req -x509 -nodes -newkey rsa:2048 -days 3650 -subj /CN=localhost
+        -keyout /tmp/server.key -out /tmp/server.crt 2>/dev/null
+        && chown postgres:postgres /tmp/server.key /tmp/server.crt && chmod 600 /tmp/server.key
+        && exec docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=/tmp/server.crt -c ssl_key_file=/tmp/server.key
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: *password
+      POSTGRES_DB: postgres
+    ports:
+      - "15434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
 
   # The Thrift server (HiveServer2) in http mode, which the ADBC Spark driver speaks; Spark 4 in its default ANSI mode.
   spark:

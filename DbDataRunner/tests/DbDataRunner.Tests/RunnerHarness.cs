@@ -23,7 +23,7 @@ public sealed class RunnerHarness : IAsyncDisposable
     private HttpClient? _http;
     private WebApplication? _app;
 
-    public RunnerHarness(string engine, TimeSpan? tick = null, TimeSpan? grace = null, IReadOnlyList<string>? channels = null)
+    public RunnerHarness(string engine, TimeSpan? tick = null, TimeSpan? grace = null, IReadOnlyList<string>? channels = null, long? maxArtifactBytes = null)
     {
         // a short path: the socket's directory is in it, and a Unix socket's path has a small limit
         Directory = System.IO.Directory.CreateTempSubdirectory("dbdr-").FullName;
@@ -35,6 +35,7 @@ public sealed class RunnerHarness : IAsyncDisposable
             InstanceHeartbeat = TimeSpan.FromSeconds(1),
             Channels = channels ?? ["dev"],
             TaskHostPath = ServerBuild.TaskHost,
+            MaxArtifactBytes = maxArtifactBytes ?? RunnerPublishing.DefaultMaxArtifactBytes,
         };
         State = RunnerState.Open(Directory, Settings.State, null, Settings.Group);
     }
@@ -61,6 +62,9 @@ public sealed class RunnerHarness : IAsyncDisposable
         var manifest = SamplePackage.WriteManifest(SamplePackage.Manifest(tasks));
         return RunnerPackages.Install(State, manifest, SamplePackage.Directory, "dev", "test");
     }
+
+    /// <summary>A single-use pairing code for a client whose ceiling is <paramref name="ceiling"/> (what <c>server pair --max-role</c> makes).</summary>
+    public string NewCode(ServerRole ceiling) => new PairingFiles(Settings.ServerYaml, Group: State).Codes().Create(ServerRoles.Close(ceiling)).Code;
 
     public async Task StartAsync()
     {

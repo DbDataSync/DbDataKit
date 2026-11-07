@@ -48,9 +48,9 @@ public sealed class StateEngines : IDisposable
         public StateDatabase Open(StateSchema schema) =>
             Engine == StateEngineIds.Sqlite ? new StateDatabase(Target, schema) : new StateDatabase(Engine, Target, schema);
 
-        public StateDatabase Open(IEnumerable<StateModule> modules, StateScope? scope = null, StateNamespaceSettings? settings = null, TimeProvider? time = null, string? appliedBy = null)
+        public StateDatabase Open(IEnumerable<StateModule> modules, StateScope? scope = null, StateNamespaceSettings? settings = null, TimeProvider? time = null, string? appliedBy = null, IEngineFeatureProbe? featureProbe = null)
         {
-            var layout = StateLayout.Create(Engine, modules, scope, settings);
+            var layout = StateLayout.Create(Engine, modules, scope, settings, featureProbe);
             return Engine == StateEngineIds.Sqlite ? new StateDatabase(Target, layout, appliedBy, time) : new StateDatabase(Engine, Target, layout, appliedBy, time);
         }
 
@@ -66,6 +66,33 @@ public sealed class StateEngines : IDisposable
     }
 
     public StateDatabase Open(string engine, StateSchema? schema = null) => Provision(engine).Open(schema ?? Schema);
+
+    /// <summary>
+    /// The older engines of the support matrix (plan 29b, U01: N-1 beside N), each with the variable that names its server and the one that makes its rows fail instead of skip when the variable is unset.
+    /// The main rows of <see cref="Engines"/> run on whatever <c>DBDATA_TEST_SQLSERVER</c> / <c>DBDATA_TEST_POSTGRES</c> name (SQL Server 2025 and PostgreSQL 17 in <c>testenv</c>); these name SQL Server 2022
+    /// (<c>DBDATA_TEST_SQLSERVER2022</c>, <c>testenv/testenv.sh up mssql2022</c>) and PostgreSQL 16 (<c>DBDATA_TEST_POSTGRES16</c>, profile <c>postgres16</c>), so one run covers both.
+    /// </summary>
+    public static IReadOnlyList<(string Variant, string Engine, string Variable, string RequireVariable)> OlderEngineVariants { get; } =
+    [
+        ("mssql2022", StateEngineIds.MsSql, "DBDATA_TEST_SQLSERVER2022", "DBDATA_REQUIRE_SQLSERVER2022"),
+        ("postgres16", StateEngineIds.Postgres, "DBDATA_TEST_POSTGRES16", "DBDATA_REQUIRE_POSTGRES16"),
+    ];
+
+    public static TheoryData<string> OlderEngines => [.. OlderEngineVariants.Select(v => v.Variant)];
+
+    /// <summary>A scratch database on an older engine of <see cref="OlderEngineVariants"/>; skips (or fails, with its DBDATA_REQUIRE_* variable set to true) when the server is not named.</summary>
+    public Location ProvisionVariant(string variant)
+    {
+        var entry = OlderEngineVariants.Single(v => v.Variant == variant);
+        var server = Environment.GetEnvironmentVariable(entry.Variable);
+        if (string.IsNullOrWhiteSpace(server))
+        {
+            Assert.False(string.Equals(Environment.GetEnvironmentVariable(entry.RequireVariable), "true", StringComparison.OrdinalIgnoreCase), $"{variant} is required but {entry.Variable} is not set");
+            Assert.Skip($"set {entry.Variable} to run on {variant} (testenv/testenv.sh up {(entry.Engine == StateEngineIds.MsSql ? "mssql2022" : "postgres16")})");
+        }
+
+        return ProvisionOn(entry.Engine, server!);
+    }
 
     public Location Provision(string engine)
     {
@@ -83,20 +110,25 @@ public sealed class StateEngines : IDisposable
             Assert.Skip($"set DBDATA_TEST_{(engine == StateEngineIds.MsSql ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
         }
 
+        return ProvisionOn(engine, server!);
+    }
+
+    private Location ProvisionOn(string engine, string server)
+    {
         lock (Registration) StateDialectRegistry.Default.RegisterLibraryBackedEngines(Factory);
         var name = $"dbdatakit_state_{Guid.NewGuid():N}";
-        Execute(engine, server!, engine == StateEngineIds.MsSql ? $"CREATE DATABASE [{name}];" : $"CREATE DATABASE {name};");
+        Execute(engine, server, engine == StateEngineIds.MsSql ? $"CREATE DATABASE [{name}];" : $"CREATE DATABASE {name};");
         _cleanups.Add(() =>
         {
             if (engine == StateEngineIds.MsSql)
             {
                 SqlConnection.ClearAllPools();
-                Execute(engine, server!, $"ALTER DATABASE [{name}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{name}];");
+                Execute(engine, server, $"ALTER DATABASE [{name}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{name}];");
             }
             else
             {
                 NpgsqlConnection.ClearAllPools();
-                Execute(engine, server!, $"DROP DATABASE IF EXISTS {name} WITH (FORCE);");
+                Execute(engine, server, $"DROP DATABASE IF EXISTS {name} WITH (FORCE);");
             }
         });
         var connectionString = engine == StateEngineIds.MsSql
