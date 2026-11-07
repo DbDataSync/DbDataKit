@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using DbDataKit.Config.Git;
 using DbDataKit.Hosting.Local;
+using DbDataKit.State.Api;
 using DbDataKit.Web.Trust;
 using DbDataProxy.Server.Auth;
 using DbDataProxy.Server.Configuration;
@@ -89,6 +90,7 @@ public static class ProxyManagementHost
             git.CommitChanges(found, "Configuration as found", new GitAuthor("dbdataproxy", "dbdataproxy@local.invalid"));
         // the data sources need the management object's validation, and it needs them to route to: made in two steps
         ProxyDataSources? dataSources = null;
+        var maintenance = new MaintenanceGate();
         var management = new ProxyManagement(configuration, configDirectory, instanceId, ProxyHost.Version);
         // one for every kind of change, in the state every instance of a group shares (plan 20 O02); the file it used to be is read in once
         var audit = new DbDataProxy.Server.State.StateAuditLog(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>());
@@ -98,6 +100,22 @@ public static class ProxyManagementHost
             app.Services.GetRequiredService<LoginThrottle>(), () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, audit,
             app.Services.GetRequiredService<DbDataKit.Monitoring.INotificationFeed>(), app.Services.GetRequiredService<RecentFailures>(), instanceId, ProxyHost.Version);
         var certificate = new ProxyCertificate(holder, () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, dataDirectory, app.Services.GetRequiredService<RecentFailures>(), audit, group: app.Services.GetRequiredService<GroupCertificate>());
+        // the state endpoints and the maintenance mode (plan 29b, C05). The Proxy has no loop that claims work (its serving is requests), so the gate has no hook: refusing requests is all it stops.
+        var stateApi = new StateManagement(new StateManagementOptions(
+            "dbdataproxy", "dbdataproxy", "the proxy",
+            () =>
+            {
+                try
+                {
+                    return new DbDataKit.State.Cli.StateTarget(options.State.ToSettings(), DbDataProxy.Server.State.ProxyState.PathIn(dataDirectory),
+                        () => new DbDataKit.Secrets.SecretResolverChain(SecretsRuntime.CreateProviders(options, SecretsRuntime.OpenStore(options))),
+                        ProxyConfigFile.PathIn(dataDirectory), ProxyStateConfig.Resolve(configuration).Sources);
+                }
+                catch (ProxyConfigException ex) { throw new InvalidOperationException(ex.Message, ex); }
+            },
+            DbDataProxy.Server.State.ProxyState.Modules, DbDataProxy.Server.State.ProxyState.ScopeOf(), maintenance,
+            new StateAuditSink(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>(), DbDataProxy.Server.State.ProxyState.ServiceId),
+            instanceId, ProxyHost.Version, app.Services.GetRequiredService<DbDataProxy.Server.State.ServingInstanceLease>()));
         management = new ProxyManagement(configuration, configDirectory, instanceId, ProxyHost.Version, dataSources, identities, activity, certificate, git,
             new ProxySecrets(app.Services.GetRequiredService<GroupSecretStore>() is { Enabled: true } group ? group : SecretsRuntime.OpenStore(options), audit), files.Codes(),
             new ProxySemanticModels(app.Services.GetRequiredService<Serving.PublishedSemanticModels>(), app.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>(),
@@ -106,6 +124,7 @@ public static class ProxyManagementHost
             identityAdmin: options.Identity.Enabled
                 ? new DbDataKit.Identity.IdentityAdminApi(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>(), ProxyIdentityModule.PublicUrlOf(options).AbsoluteUri, new DbDataKit.Identity.AccessTokenPolicy(options.Identity.AccessTokenMaxDays))
                 : null,
+            stateApi: stateApi,
             entityModels: new ProxyEntityModels(app.Services.GetRequiredService<Serving.PublishedEntityModels>(),
                 () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue,
                 dataSource =>
@@ -124,6 +143,8 @@ public static class ProxyManagementHost
 
         app.UseManagementApiVersion();
         app.UseManagementAuthentication(validator, refused => log.LogWarning("A management call was refused ({Failure}): {Detail}", refused.Failure, refused.Detail));
+        // after the token check, so an administrator's call is known: everything else is refused with 503 while the server is in maintenance
+        app.UseMaintenance(maintenance, context => context.ManagementTokenOrNull() is { } token && ManagementAuthorization.Authorize(token, ServerRole.Admin).Allowed);
         app.MapPairing(new PairingService(instanceId,
             () => holder.Current is { } certificate ? PairingProof.CertificateFingerprint(certificate) : throw new InvalidOperationException("This server has no certificate to pair against."),
             clients, files.Codes()));

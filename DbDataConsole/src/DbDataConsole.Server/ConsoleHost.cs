@@ -1,3 +1,4 @@
+using DbDataKit.State.Api;
 using DbDataKit.Identity;
 using System.Net;
 using System.Reflection;
@@ -150,8 +151,12 @@ public static class ConsoleHost
         // A session that came from the identity home asks the home again for the person's roles when the last answer is old (plan 13a U17); before authentication, so a session the home ended is refused on this very request.
         if (settings.Home is not null) app.UseFederationRefresh();
         app.UseAuthentication();
+        // maintenance mode (plan 29b, C05): an administrator's session still works, so does the sign-in; the web app's own files are served before this and stay up
+        var maintenance = new DbDataKit.State.Api.MaintenanceGate();
+        app.UseMaintenance(maintenance, context => context.User.IsInRole(nameof(DbDataKit.State.UserRole.Admin)), ["/api/auth"]);
         app.UseAuthorization();
         app.MapControllers();
+        MapState(app, settings, maintenance);
         app.MapRelay();
         if (settings.Home is not null) app.MapFederation();
 
@@ -175,6 +180,32 @@ public static class ConsoleHost
         // is a deep link under /servers/<id>/, so those paths are matched on their own: nothing under /servers/ is a file, which the static files above would have served before the routes saw it.
         app.MapFallback("/servers/{*path}", webApp).AllowAnonymous();
         return app;
+    }
+
+    /// <summary>
+    /// <c>GET /api/v1/state</c> and the maintenance mode of this console, for its signed-in people: a viewer reads, an administrator changes (the role is checked in the call so a refusal is audited). The audit is the state's own.
+    /// </summary>
+    private static void MapState(WebApplication app, ConsoleSettings settings, DbDataKit.State.Api.IMaintenanceGate maintenance)
+    {
+        var api = new DbDataKit.State.Api.StateManagement(new DbDataKit.State.Api.StateManagementOptions(
+            ConsoleSettings.Product, "dbdatakit", "the console",
+            () =>
+            {
+                var resolved = ConsoleState.Resolve(settings.Directory);
+                return new DbDataKit.State.Cli.StateTarget(settings.State ?? resolved.Settings, settings.StatePath,
+                    () => new DbDataKit.Secrets.SecretResolverChain([ConsoleSecrets.Open(settings.Directory), new DbDataKit.Secrets.EnvSecretProvider()]),
+                    ConsoleState.SettingsFileIn(settings.Directory), settings.StateSources ?? resolved.Sources);
+            },
+            ConsoleState.Modules, StateScope.Install, maintenance, new DbDataKit.State.Api.StateAuditSink(app.Services.GetRequiredService<StateDatabase>(), ConsoleState.ServiceId),
+            Version: Version));
+        app.MapState(api, context =>
+        {
+            var user = context.User;
+            var id = user.FindFirst(Auth.UserIdClaim)?.Value ?? user.Identity?.Name ?? "unknown";
+            return DbDataKit.State.Api.StateCaller.FromSession(id, user.Identity?.Name, role =>
+                role == DbDataKit.Web.Trust.ServerRole.Viewer ? user.IsInRole(nameof(DbDataKit.State.UserRole.Viewer)) || user.IsInRole(nameof(DbDataKit.State.UserRole.Admin))
+                : user.IsInRole(nameof(DbDataKit.State.UserRole.Admin)));
+        }).RequireAuthorization(DbDataKit.Web.Auth.Policies.Viewer);
     }
 
     /// <summary>Whether the console can look the name up, which a name on the network the servers share with it can.</summary>

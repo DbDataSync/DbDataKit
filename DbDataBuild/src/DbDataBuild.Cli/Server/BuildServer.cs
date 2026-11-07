@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using DbDataBuild.Cli.Mcp;
 using DbDataKit.Hosting;
 using DbDataKit.Hosting.Certificates;
+using DbDataKit.State.Api;
 using DbDataKit.Web.Trust;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -44,7 +45,7 @@ internal static class BuildServer
 
     public static X509Certificate2 Certificate(string directory) => DirectoryCertificate.Load(directory);
 
-    public static WebApplication Build(BuildServerSettings settings, X509Certificate2 certificate, IProjectCommandRunner runner, ProjectsFile projects, IReadOnlyList<DbDataBuild.Tui.Model.CommandInfo> commands, Action<string> log, Func<string, IReadOnlyList<DbDataBuild.Tui.Model.CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, WarmSessionRunner? workspaceRunner = null, ProxyPublisher? proxyPublisher = null)
+    public static WebApplication Build(BuildServerSettings settings, X509Certificate2 certificate, IProjectCommandRunner runner, ProjectsFile projects, IReadOnlyList<DbDataBuild.Tui.Model.CommandInfo> commands, Action<string> log, Func<string, IReadOnlyList<DbDataBuild.Tui.Model.CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, WarmSessionRunner? workspaceRunner = null, ProxyPublisher? proxyPublisher = null, IMaintenanceGate? maintenance = null, DbDataKit.State.Cli.StateTarget? state = null)
     {
         if (settings.Listen.Scheme != Uri.UriSchemeHttps) throw new ArgumentException("A Build server listens on HTTPS only.", nameof(settings));
         var instanceId = InstanceId(settings.ServerYaml);
@@ -76,6 +77,13 @@ internal static class BuildServer
         app.AnnounceToConsole("dbdatabuild", instanceId, settings.Listen.Port, clients, files.Codes());
         app.MapKeyRotation(new KeyRotationService(instanceId, clients, new MemoryReplayCache()));
         app.UseManagementAuthentication(new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache()), refused => log($"A call was refused ({refused.Failure}): {refused.Detail}"));
+        // maintenance mode and the state endpoints (plan 29b, C05); the scheduler stops claiming through the gate the caller shares with it
+        maintenance ??= new MaintenanceGate(work: () => scheduler?.Running ?? 0);
+        app.UseMaintenance(maintenance, context => context.ManagementTokenOrNull() is { } token && ManagementAuthorization.Authorize(token, ServerRole.Admin).Allowed);
+        app.MapState(new StateManagement(new StateManagementOptions(
+            "dbdatabuild", "dbdatabuild", "the server",
+            () => state ?? DbDataKit.State.Cli.StateTarget.From(BuildState.Resolve(settings.Directory), BuildState.SqlitePath(settings.Directory), () => BuildState.Secrets(settings.Directory), BuildState.SettingsFile(settings.Directory)),
+            BuildSchedulerSchema.Modules, DbDataKit.State.StateScope.Install, maintenance, new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), instanceId, DbDataBuild.Core.ProductInfo.Version)));
         BuildManagementApi.Map(app, projects, commands, runner, surfaceFor, scheduler, new Workspaces(settings.Directory, TimeProvider.System), workspaceRunner, new ProxiesFile(settings.Directory), proxyPublisher, files.Codes(), $"Build server {instanceId}", new ProjectCreator(settings.Directory, projects), settings.Directory);
         if (workspaceRunner is not null) app.Lifetime.ApplicationStopping.Register(workspaceRunner.Dispose);
         return app;

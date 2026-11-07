@@ -112,7 +112,7 @@ public static class ConsoleCli
             return DbDataKit.State.Cli.StateExit.Settings;
         }
 
-        var settings = new ConsoleSettings(directory, listen, publicUrl, announce, state.Settings, home);
+        var settings = new ConsoleSettings(directory, listen, publicUrl, announce, state.Settings, home) { StateSources = state.Sources };
         Directory.CreateDirectory(settings.Directory);
         var app = ConsoleHost.Build(settings, ConsoleHost.Certificate(settings.Directory), line => context.Error.WriteLine(line), parsed.Get("web-root"));
         await context.Out.WriteLineAsync($"The console is on {listen} (people open it at {settings.Public}). The first administrator redeems the invitation in {Path.Combine(settings.Directory, "FIRST-RUN.txt")}.");
