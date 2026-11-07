@@ -172,8 +172,8 @@ if (!isWorker) {
 
 // The connection inventory story (plan 28c, E23): a Build server hosting a project with a connection file (`connections/sqlserver.yaml`) and a plan scheduled once a day, and a Sync server the story gives a connection and a replication that uses it. Neither runs anything:
 // what is shown is what each reports about its connections and who uses them.
-export const inventoryBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-inventory-build'), port: 8497, project: 'ledger', plan: 'daily', connection: 'sqlserver' }
-export const inventorySync = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-inventory-sync'), port: 8498 }
+export const inventoryBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-inventory-build'), port: 8501, project: 'ledger', plan: 'daily', connection: 'sqlserver' }
+export const inventorySync = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-inventory-sync'), port: 8502 }
 if (!isWorker) {
   fs.rmSync(inventoryBuild.directory, { recursive: true, force: true })
   fs.mkdirSync(inventoryBuild.directory, { recursive: true })
