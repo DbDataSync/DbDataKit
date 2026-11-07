@@ -32,3 +32,7 @@ state:
     modules: { runs: 7 }
     tables:  { runs.run: 14, audit.entry: forever }
 ```
+
+## Writing the section
+
+`StateSettingsWriter.Write(path, settings)` replaces only the `state:` block of a settings file (creating the file or the block when absent), validates it through `StateSettingsReader` first and renames a temporary file over the original, so an invalid setting is refused (naming the file and the key) and a crash leaves the old file. The rest of the file, its comments and line endings are kept; comments inside the old `state:` block are not. `Remove(path)` takes the block out; `Load(path)` reads it. Connection strings are written as given, secret references included.

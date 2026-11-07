@@ -6,6 +6,7 @@
     <PackageReference Include="Microsoft.Data.SqlClient" />
     <PackageReference Include="Npgsql" />
     <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
+    <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
     <ProjectReference Include="..\DbDataKit.Secrets.Abstractions\DbDataKit.Secrets.Abstractions.csproj" />
   </ItemGroup>
 </Project>
