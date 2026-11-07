@@ -87,9 +87,12 @@ public abstract class Slots
 public delegate Task<object> SlotOpener(string slot, Type connectionType, CancellationToken ct);
 
 /// <summary>What the manifest generator and the binder need of a <see cref="Slot{TConnection}"/> without knowing the connection type.</summary>
-public abstract class SlotBase(string name, string kind, Type connectionType)
+public abstract class SlotBase(string name, string kind, Type connectionType, string? env = null)
 {
     public string Name { get; } = name;
+
+    /// <summary>How the runner injects the bound login into the task's environment (<see cref="SlotEnvironmentFormats"/>), or null for none: the job asks for it with <c>OpenAsync</c>.</summary>
+    public string? Env { get; } = env;
 
     /// <summary>The kind of connection the slot takes, as the manifest writes it.</summary>
     public string Kind { get; } = kind;
@@ -110,8 +113,9 @@ public sealed class Slot<TConnection> : SlotBase
 {
     /// <param name="name">The slot's name in the manifest.</param>
     /// <param name="kind">The connection kind the manifest declares; the type's name without a leading I, in lower case (<c>IWarehouse</c> is <c>warehouse</c>), when not given.</param>
-    public Slot(string name, string? kind = null)
-        : base(name, kind ?? DefaultKind(typeof(TConnection)), typeof(TConnection))
+    /// <param name="env">How the runner injects the bound login into the task's environment (<see cref="SlotEnvironmentFormats"/>); null: none.</param>
+    public Slot(string name, string? kind = null, string? env = null)
+        : base(name, kind ?? DefaultKind(typeof(TConnection)), typeof(TConnection), env)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
     }

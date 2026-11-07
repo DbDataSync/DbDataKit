@@ -1,4 +1,5 @@
 using DbDataKit.Runner;
+using DbDataKit.Runner.Connections;
 using DbDataKit.Runner.Execution;
 using DbDataKit.Runner.Limits;
 using DbDataKit.Runner.Protocol.Server;
@@ -94,12 +95,19 @@ public class RunnerHost(RunnerHostSettings settings, StateDatabase state, ILogge
         }
 
         _host = await RunnerProtocolHost.StartAsync(new RunnerProtocolHostOptions { Directory = settings.SocketDirectory }, cancellationToken).ConfigureAwait(false);
+        var payloads = new PayloadStore(state);
+        var publisher = new DefinitionPublisher(state, settings.Kinds ?? RunnerPackages.Kinds(), payloads, "runner");
+
+        // connection slots (plan 28c E02): the bindings are the publisher's, the connections a directory of connection/1 files, the secrets the runner's own providers; every secret the resolver reveals is registered with the redactor the run log uses
+        var redactor = new Redactor();
+        var slots = new RunnerSlotResolver(publisher, settings.Connections ?? new DirectoryConnectionCatalog(settings.ConnectionsDirectory), settings.Secrets ?? RunnerHostSettings.DefaultSecrets(), redactor);
         var executor = new TaskExecutor(state, _host, new TaskExecutorOptions
         {
             DataDirectory = settings.Directory,
             TaskHostPath = TaskHostPath,
             Service = RunnerNames.EngineService,
-            Redactor = new Redactor(),
+            Redactor = redactor,
+            Slots = slots,
             Logger = _log,
         });
 
@@ -113,9 +121,7 @@ public class RunnerHost(RunnerHostSettings settings, StateDatabase state, ILogge
         _capabilities = LimitCapabilities.Detect();
         Register(instances);
 
-        var payloads = new PayloadStore(state);
         var cache = new ArtifactCache(settings.CacheDirectory, new PayloadArtifactSource(payloads));
-        var publisher = new DefinitionPublisher(state, settings.Kinds ?? RunnerPackages.Kinds(), payloads, "runner");
         var scheduler = new RunnerScheduler(state, settings.WrapRunner?.Invoke(executor) ?? executor, cache,
             new DefinitionVersionSource(new DefinitionStore(state), publisher),
             new RunnerSchedulerOptions
@@ -130,6 +136,7 @@ public class RunnerHost(RunnerHostSettings settings, StateDatabase state, ILogge
                 WorkerId = _workerId,
                 Instance = () => _instance,
                 Logger = _log,
+                Slots = slots,
             });
         _scheduler = scheduler;
         scheduler.SuspendHeartbeats = _silent;

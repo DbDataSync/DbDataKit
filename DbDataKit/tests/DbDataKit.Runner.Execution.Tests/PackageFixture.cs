@@ -31,7 +31,15 @@ internal static class PackageFixture
 {
     private static readonly Lazy<string> SampleDirectory = new(Publish);
     private static readonly Lazy<Task<MaterializedVersion>> Sample = new(() => MaterializeAsync(SampleDirectory.Value));
-    private static readonly Lazy<Task<MaterializedVersion>> Scripts = new(() => MaterializeAsync(WriteScripts()));
+    private static readonly Lazy<string> ScriptDirectory = new(WriteScripts);
+    private static readonly Lazy<Task<MaterializedVersion>> Scripts = new(() => MaterializeAsync(ScriptDirectory.Value));
+
+    /// <summary>The scripts package as a version source would list it.</summary>
+    public static async Task<(IArtifactSource Source, IReadOnlyList<ArtifactFile> Files)> ScriptFiles()
+    {
+        var source = new DirectorySource(ScriptDirectory.Value);
+        return (source, await source.ListAsync("scripts"));
+    }
 
     public static Task<MaterializedVersion> SamplePackage() => Sample.Value;
 
@@ -57,6 +65,9 @@ internal static class PackageFixture
         File.WriteAllText(Path.Combine(directory, "exit0.sh"), "echo 'a script that speaks no protocol'\nexit 0\n");
         File.WriteAllText(Path.Combine(directory, "exit3.sh"), "echo 'failing quietly' >&2\nexit 3\n");
         File.WriteAllText(Path.Combine(directory, "args.sh"), "echo \"args: $1 $2\"\necho \"task: $DBDATAKIT_TASK_NAME\"\nexit 0\n");
+        // the names of the DBDATA_ variables the task was given (never the values), and a task that holds still so a test can look at its process
+        File.WriteAllText(Path.Combine(directory, "slots.sh"), "env | cut -d= -f1 | grep -E '^DBDATA_(SECRET|BUILD)_' | sort | sed 's/^/var: /'\nexit 0\n");
+        File.WriteAllText(Path.Combine(directory, "slots-hold.sh"), "echo \"leak: $DBDATA_SECRET_DBDATA_SYNC_CONNECTION_SRC_DB\"\necho ready\nsleep 60\n");
         return directory;
     }
 

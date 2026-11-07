@@ -39,6 +39,9 @@ public sealed record TaskRunRequest
     /// <summary>Connection slot to the name of a handle; names only, never a connection string or a secret.</summary>
     public IReadOnlyDictionary<string, string> ConnectionHandles { get; init; } = new Dictionary<string, string>();
 
+    /// <summary>The task's connection slots as the manifest declares them: the ones that name an injection form (<see cref="ConnectionSlot.Env"/>) have their login put in the process's environment (plan 28c E02).</summary>
+    public IReadOnlyList<ConnectionSlot> Slots { get; init; } = [];
+
     /// <summary>The manifest's limits: time, memory and CPU (in cores, so 1.5 is a core and a half) are applied by the executor; concurrency and attempts are the scheduler's.</summary>
     public TaskLimits Limits { get; init; } = TaskLimits.None;
 

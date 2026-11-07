@@ -44,6 +44,23 @@ public sealed class Stubborn : RunnerJob<NoInput, NoProgress, NoSlots>
     }
 }
 
+public sealed class GrantSlots : Slots
+{
+    public Slot<ConnectionGrant> Source { get; } = new("source", "sqlserver", env: "build-login");
+}
+
+/// <summary>Opens its slot through the runner (plan 28c E02) and keeps what it was given for the test to look at.</summary>
+[RunnerTask("grant")]
+public sealed class GrantReader : RunnerJob<NoInput, NoProgress, GrantSlots>
+{
+    public static ConnectionGrant? Last { get; set; }
+
+    protected override async Task RunAsync(CancellationToken ct)
+    {
+        Last = await Slots.Source.OpenAsync(ct);
+    }
+}
+
 public enum Flavor
 {
     Plain,

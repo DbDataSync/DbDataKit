@@ -165,6 +165,7 @@ public static class PackageManifestValidator
             Identifier(slot.Name, $"{at}.connections[{i}].name", "a connection slot", add);
             if (!declared.Add(slot.Name)) add($"{at}.connections[{i}].name", $"The connection slot '{slot.Name}' is declared twice in {named}.");
             if (string.IsNullOrWhiteSpace(slot.Kind)) add($"{at}.connections[{i}].kind", $"The connection slot '{slot.Name}' of {named} says what kind of connection it takes (sqlserver, postgres, folder, ...).");
+            if (slot.Env is not null && !SlotEnvironmentFormats.IsKnown(slot.Env)) add($"{at}.connections[{i}].env", $"The connection slot '{slot.Name}' of {named} names the injection form '{slot.Env}', which the runner does not know. The forms: {string.Join(", ", SlotEnvironmentFormats.All)}.");
         }
 
         return declared;

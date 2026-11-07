@@ -56,6 +56,9 @@ public sealed class TaskExecutorOptions
     /// <summary>Variables added to every task process (a proxy setting, say). They are visible to the task and must not hold secrets.</summary>
     public IReadOnlyDictionary<string, string> ExtraEnvironment { get; init; } = new Dictionary<string, string>();
 
+    /// <summary>Turns a task's connection slots into logins: the environment of the slots that ask for injection, and the answer to the protocol's <c>ResolveConnection</c>. Null: a runner with no connection bindings (tasks with slots then get no login).</summary>
+    public DbDataKit.Runner.Protocol.Server.ISlotResolver? Slots { get; init; }
+
     /// <summary>How limits are applied (the defaults are the real machine; tests make the watchdog quick or forbid a cgroup).</summary>
     public LimitOptions? Limits { get; init; }
 

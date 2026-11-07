@@ -82,8 +82,28 @@ public sealed record TaskTrigger(
 /// <summary>A value the task is started with, set per channel or per run.</summary>
 public sealed record TaskInput(string Name, ProgressType Type = ProgressType.Text, bool Required = false, string? Default = null, string? Description = null);
 
-/// <summary>A place in the task where a connection is plugged in. The package says what kind of connection it needs; a channel's binding says which one (plan 30).</summary>
-public sealed record ConnectionSlot(string Name, string Kind);
+/// <summary>
+/// A place in the task where a connection is plugged in. The package says what kind of connection it needs; a channel's binding says which one (plan 30). <see cref="Env"/> names how the runner puts the bound login into the
+/// task's environment (one of <see cref="SlotEnvironmentFormats"/>; plan 28c section 6); null: the task asks for it through the protocol's <c>ResolveConnection</c> and the runner writes no variable.
+/// </summary>
+public sealed record ConnectionSlot(string Name, string Kind, string? Env = null);
+
+/// <summary>
+/// The forms in which the runner may inject a bound login into a task process (plan 28c section 6, ED11). A registry, not free text: a package picks a name, and the runner writes the variables of that form, so a package cannot make the
+/// runner write an arbitrary variable.
+/// </summary>
+public static class SlotEnvironmentFormats
+{
+    /// <summary>Sync: one <c>DBDATA_SECRET_&lt;NAME&gt;</c> per connection, the variable the engine's secret store reads for <c>dbdata:sync:connection:&lt;name&gt;</c>.</summary>
+    public const string SyncSecret = "sync-secret";
+
+    /// <summary>Build: <c>DBDATA_BUILD_&lt;CONNECTION&gt;_READ</c> and <c>_WRITE</c>, one per login role the connection has (<c>LoginEnvironment.Name</c>).</summary>
+    public const string BuildLogin = "build-login";
+
+    public static IReadOnlyList<string> All { get; } = [SyncSecret, BuildLogin];
+
+    public static bool IsKnown(string? format) => format is not null && All.Contains(format, StringComparer.Ordinal);
+}
 
 /// <summary>How a declared step keeps its result (plan 28b section 4): a small value as JSON, or a payload written in chunks.</summary>
 public enum StepKind
