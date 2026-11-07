@@ -5,6 +5,7 @@ import { consoleApi, instancesKey, type InstanceSummary } from '../api'
 import { PendingServers } from './PendingServers'
 import { Link } from 'react-router-dom'
 import { ConsoleShell } from '../ConsoleShell'
+import { offersState } from '../stateApi'
 
 const COLUMNS = '1.4fr 1.4fr 1.8fr 2fr 1fr'
 
@@ -68,6 +69,10 @@ export function InstancesPage() {
 
         <PendingServers />
 
+        <div className="page-note" style={{ marginBottom: 10 }}>
+          <Link to="/state/console" data-testid="console-state-link">This console&apos;s own state</Link> (read-only here: its move is the command line).
+        </div>
+
         <div className="card flush" data-testid="instances-table">
           <div className="grid-head" style={{ gridTemplateColumns: COLUMNS, gap: 14 }}>
             <span>Name</span><span>Product</span><span>Status</span><span>Address</span><span></span>
@@ -85,6 +90,9 @@ export function InstancesPage() {
                 <span className="row" style={{ gap: 8 }}>
                   {instance.reachable && (instance.product === 'dbdatasync' || instance.product === 'dbdatabuild' || instance.product === 'dbdataproxy' || instance.product === 'dbdatakit-identity') && (
                     <Link to={`/servers/${instance.id}`} className="btn btn-primary" data-testid="instance-open-link">Open</Link>
+                  )}
+                  {instance.reachable && offersState(instance.product) && (
+                    <Link to={`/state/${instance.id}`} className="btn" data-testid="instance-state-link">State</Link>
                   )}
                   <button type="button" className="btn" disabled={forget.isPending} onClick={() => forget.mutate(instance.id)} data-testid="instance-forget-button">Forget</button>
                 </span>
