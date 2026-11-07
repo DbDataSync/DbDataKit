@@ -152,6 +152,7 @@ public sealed partial class RunnerScheduler
         await _tickGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
+            RenewOwnLeases();
             var expired = _queue.ReleaseExpired();
             var (served, rowProblems) = ReadProjection();
             _rowProblems = rowProblems;
@@ -185,6 +186,26 @@ public sealed partial class RunnerScheduler
         finally
         {
             _tickGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Renews, before the tick gives up the leases that ran out, the leases of the items this loop is running itself. A process that stalled (a machine so loaded that nothing of it ran for longer than the lease) wakes up with its
+    /// heartbeat timers and its tick due at once, and which of them runs first is chance: if the tick did, it took back the item of a run that is going on perfectly well here, and the run was recorded twice (the first record
+    /// interrupted, a second attempt on the same chain) although no other runner had touched the item. A renewal is accepted only while this loop still holds the item (<see cref="ModuleWorkQueueStore.Heartbeat"/>), so an item another
+    /// runner of the group took in the meantime stays lost, and a loop that is stalled for real (<see cref="SuspendHeartbeats"/>) renews nothing.
+    /// </summary>
+    private void RenewOwnLeases()
+    {
+        if (SuspendHeartbeats) return;
+        foreach (var (id, running) in _running)
+        {
+            if (running.LeaseLost) continue;
+            try { _queue.Heartbeat(id, _options.WorkerId); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Report($"item {id}", $"Renewing the lease before the tick failed: {ex.GetType().Name}: {ex.Message}");   // the item's own heartbeat reports it again and tries again
+            }
         }
     }
 
