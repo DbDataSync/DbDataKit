@@ -220,6 +220,23 @@ public sealed class StagingServerTests
         Assert.NotNull(publisher.Head(RunnerPublishing.Kind, "sample", Dev)!.Staged);
     }
 
+    [Theory, MemberData(nameof(Engines))]
+    public async Task A_runner_on_the_old_format_refuses_a_manifest_with_launch_runtime_at_staging_naming_the_key_and_a_current_runner_stages_it_up_to_the_missing_runtime(string engine)
+    {
+        await using var old = new RunnerHarness(engine, staging: true, lease: TimeSpan.FromSeconds(30), stagingContracts: m => RunnerContracts.CheckKeys(m, []));
+        old.Install(Tally(V1()));
+        await old.StartAsync();
+        var definition = SamplePackage.Manifest(Tally(V2Widen()) with { Entry = new TaskEntry() }) with { Launch = new PackageLaunch(LaunchKind.Executable, Runtime: new RuntimeReference("engine", "2.x")) };
+
+        var staged = Publish(old, PackageManifestWriter.Write(definition));
+
+        var described = await DescribeWhenAsync(old, d => Instances(d, staged.Version).Any(i => (string)i!["state"]! == "failed"), "staging to fail on the key");
+        var error = (string)Instances(described, staged.Version).Single()!["error"]!;
+        Assert.Contains("`launch.runtime`", error);
+        Assert.Contains("upgrade the runner", error);
+        Assert.Equal(1, Active(described));
+    }
+
     [Theory, MemberData(nameof(ServerEngines))]
     public async Task With_two_runners_one_failing_to_prepare_the_group_stays_on_the_old_version_the_status_names_the_instance_and_activating_anyway_is_audited(string engine)
     {

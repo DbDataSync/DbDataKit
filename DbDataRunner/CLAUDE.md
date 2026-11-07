@@ -17,7 +17,7 @@ of it too (plan 28 section 6a): keep the engine there and only the host here. Do
 | `RunnerPublishing.cs` | the publish service layer (artifact upload, publish, activate, switch, rollback, retire, bind, reads, the projection rebuild, the audit); the API and `package install` both call it |
 | `RunnerPublishApi.cs` | the publish API (`/api/v1/artifacts`, `/definitions/integration`, `/bindings`, `/settings`) and who may call what |
 | `RunnerPublishClient.cs` | the client side: `package pair` and `package publish` (stored pairings, HEAD then upload, then publish) |
-| `RunnerContracts.cs`, `RunnerSignatures.cs` | the .NET, kit and protocol contracts a publish is checked against; the signature seam (`IVersionSignatureVerifier`, not built) |
+| `RunnerContracts.cs`, `RunnerSignatures.cs` | the .NET, kit and protocol contracts and the newer `package/1` keys (`launch.runtime`, `runtime`) a publish and staging are checked against; the signature seam (`IVersionSignatureVerifier`, not built) |
 | `RunnerState.cs`, `RunnerSettings.cs` | the modules the state is built from and how it is opened; the directory, the listen address, the channels |
 | `RunnerTaskHost.cs` | finds the task host beside the program |
 | `RunnerService.cs` | the `service` and `cert` nouns |
