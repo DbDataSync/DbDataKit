@@ -36,6 +36,10 @@ internal static class StateMigrator
 
         }
 
+        // What the modules that still have something to apply need from the engine (U01): checked before any schema, table or registry row is made, so a refusal leaves the database as it was found.
+        var rows = registryExists ? Read(connection, whole, layout) : [];
+        RequireFeatures(connection, layout, rows);
+
         // Whenever something is applied, not only the first time: a second group's namespace is a new schema in a database that already has its registry.
         // After the legacy check, so a database that is refused is left as it was found.
         foreach (var schema in layout.Schemas)
@@ -43,7 +47,6 @@ internal static class StateMigrator
         if (!registryExists)
             Execute(connection, whole, StateTemplates.Render(RegistryTemplate(layout), dialect));
 
-        var rows = registryExists ? Read(connection, whole, layout) : [];
         foreach (var ns in layout.Namespaces)
         {
             var module = ns.Module;
@@ -84,6 +87,26 @@ internal static class StateMigrator
         }
 
         whole?.Commit();
+    }
+
+    /// <summary>
+    /// Refuses, naming the module, the feature and the fix, a module that has migrations to apply and needs an engine feature the connected engine lacks (<see cref="StateModule.RequiresFeatures"/>). Runs before any DDL of the
+    /// run. A module that is already at its version is not asked again: it works, and a start must not fail for what it already has.
+    /// </summary>
+    private static void RequireFeatures(DbConnection connection, StateLayout layout, IReadOnlyDictionary<(string Module, string Scope), Row> rows)
+    {
+        EngineFeatureReport? report = null;
+        foreach (var ns in layout.Namespaces)
+        {
+            if (ns.Module.RequiresFeatures.Count == 0) continue;
+            if (rows.TryGetValue((ns.Module.Name, ScopeOf(ns)), out var row) && row.Version >= ns.Module.Version) continue;
+            report ??= layout.FeatureProbe.Detect(connection, layout.Engine);
+            foreach (var feature in ns.Module.RequiresFeatures)
+            {
+                if (!report.Has(feature))
+                    throw new InvalidOperationException(EngineFeatures.Refusal(ns.Module, feature, layout.Engine, EngineFeatures.EngineName(layout.Engine, report.Version)));
+            }
+        }
     }
 
     /// <summary>

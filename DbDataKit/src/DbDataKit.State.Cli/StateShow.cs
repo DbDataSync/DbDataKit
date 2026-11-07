@@ -77,6 +77,18 @@ internal static class StateShow
                 data["connected"] = true;
                 if (inspector.ServerVersion() is { } version) { data["engine_version"] = version; await write.WriteLineAsync($"  version      {version}"); }
                 if (inspector.CurrentLogin() is { } login) { data["login"] = login; await write.WriteLineAsync($"  login        {login}"); }
+                {
+                    var features = inspector.Features();
+                    data["features"] = Enum.GetValues<EngineFeature>().ToDictionary(f => EngineFeatures.Name(f), f => (object?)features.Status(f).ToString().ToLowerInvariant());
+                    await write.WriteLineAsync($"  features     {features.Describe()}");
+                    if (context.Modules is not null)
+                    {
+                        var unmet = EngineSupport.Unmet(session.Layout.Namespaces.Select(n => n.Module), features);
+                        data["features_unmet"] = unmet.Select(u => (object?)new Dictionary<string, object?> { ["module"] = u.Module.Name, ["feature"] = EngineFeatures.Name(u.Feature), ["message"] = u.Message }).ToList();
+                        foreach (var u in unmet) await write.WriteLineAsync($"  NOT MET      {u.Message}");
+                    }
+                }
+
                 inspection = inspector.Inspect();
             }
             catch (StateSettingsProblem ex) { failure = ex.Message; exit = StateExit.Settings; }

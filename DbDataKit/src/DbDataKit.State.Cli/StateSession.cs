@@ -57,7 +57,7 @@ internal sealed class StateSession
             throw new StateSettingsProblem($"The state engine is {target.Settings.Engine}, which needs a connection string: set state.connection (a password can be a reference such as Password=secret:state-db).");
 
         StateLayout layout;
-        try { layout = StateLayout.Create(engine, context.Modules ?? [], context.Scope, target.Settings.Namespaces); }
+        try { layout = StateLayout.Create(engine, context.Modules ?? [], context.Scope, target.Settings.Namespaces, context.FeatureProbe); }
         catch (InvalidOperationException ex) { throw new StateSettingsProblem(ex.Message); }
         return new StateSession(context, target, layout);
     }

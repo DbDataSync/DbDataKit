@@ -94,6 +94,41 @@ jobs:
         if: always()
         run: testenv/testenv.sh down
 
+  # The state layer's support matrix, the N-1 half (plan 29b U01): the State and Scheduling suites on the previous release of each engine, SQL Server 2022 and
+  # PostgreSQL 16 (with pgvector), started from the older testenv profiles. The jobs above run the same suites on the current engines (SQL Server 2025, PostgreSQL 17),
+  # so together they are N and N-1. `testenv.sh env dbdatakit-older` points DBDATA_TEST_SQLSERVER and DBDATA_TEST_POSTGRES at the older servers (so every engine-backed
+  # test runs on them) and sets the DBDATA_REQUIRE_* variables, so a server that does not answer fails the run instead of skipping it. Nothing else in this workflow changed.
+  state-older-engines:
+    name: State and Scheduling suites (SQL Server 2022, PostgreSQL 16)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: "DbDataKit/**/*.csproj"
+      - name: Start the previous engines (SQL Server 2022, PostgreSQL 16)
+        run: testenv/testenv.sh up mssql2022 postgres16
+      - name: Point the suites at the previous engines
+        run: testenv/testenv.sh env dbdatakit-older --dotenv >> "$GITHUB_ENV"
+      - name: Test State
+        working-directory: DbDataKit
+        run: dotnet test --project tests/DbDataKit.State.Tests
+      - name: Test State.Engines
+        working-directory: DbDataKit
+        run: dotnet test --project tests/DbDataKit.State.Engines.Tests
+      - name: Test State.Cli
+        working-directory: DbDataKit
+        run: dotnet test --project tests/DbDataKit.State.Cli.Tests
+      - name: Test Scheduling
+        working-directory: DbDataKit
+        run: dotnet test --project tests/DbDataKit.Scheduling.Tests
+      - name: Stop the previous engines
+        if: always()
+        run: testenv/testenv.sh down
+
   # Whether a pull request touches what the SSAS job tests: the DAX emitter, the sample model, or the SSAS executor. Only then does the Windows job run on a pull request.
   ssas-changes:
     name: Does the pull request touch the DAX path?
