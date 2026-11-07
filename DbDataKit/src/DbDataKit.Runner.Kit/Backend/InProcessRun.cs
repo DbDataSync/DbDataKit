@@ -69,6 +69,14 @@ internal sealed class InProcessRun : IRunBackend
 
     public Task<StepBegin.Run> RetakeStepAsync(string name, string key, CancellationToken ct) => Task.FromResult(_steps.Retake(Chain, name, key, Attempt));
 
+    public Task<Guid?> AdoptStepPayloadAsync(string name, string key, CancellationToken ct)
+    {
+        var step = _steps.Get(Chain, name, key) ?? throw new InvalidOperationException($"There is no step '{name}' with key '{key}' in this chain.");
+        if (_steps.FindOwnedCompletePayload(step.Id) is not { } payload) return Task.FromResult<Guid?>(null);
+        _steps.Adopt(Chain, name, key, Attempt, payload.Id);
+        return Task.FromResult<Guid?>(payload.Id);
+    }
+
     public Task CompleteValueStepAsync(string name, string key, string resultJson, IReadOnlyDictionary<string, long>? counts, CancellationToken ct)
     {
         _steps.CompleteValue(Chain, name, key, Attempt, resultJson, counts);

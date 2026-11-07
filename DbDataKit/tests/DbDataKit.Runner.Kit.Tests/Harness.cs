@@ -72,6 +72,12 @@ public sealed class Harness : IDisposable
         AfterStepBody = (name, _, _) => name == step ? throw new SimulatedCrashException($"the process died after the body of '{step}'") : Task.CompletedTask,
     };
 
+    /// <summary>A crash after the body of the named streaming step returned and before its payload was committed: the write was interrupted, an incomplete payload is left.</summary>
+    public static RunnerHooks CrashBeforeCommit(string step) => new()
+    {
+        BeforePayloadCommit = (name, _, _) => name == step ? throw new SimulatedCrashException($"the process died while '{step}' was writing") : Task.CompletedTask,
+    };
+
     public static T Json<T>(string? json) => JsonSerializer.Deserialize<T>(json ?? "null", JsonSerializerOptions.Web)!;
 
     public void Dispose() => _engines.Dispose();

@@ -502,7 +502,7 @@ public sealed class SampleJobTests
     public async Task An_interrupted_stream_leaves_nothing_stored_and_the_retry_writes_it_again(string engine)
     {
         using var h = new Harness(engine);
-        await Assert.ThrowsAsync<SimulatedCrashException>(() => h.Run<Trouble>(Mode("stream-repeatable"), hooks: Harness.CrashAfterStep("make")));
+        await Assert.ThrowsAsync<SimulatedCrashException>(() => h.Run<Trouble>(Mode("stream-repeatable"), hooks: Harness.CrashBeforeCommit("make")));
         var first = h.StepsOf("trouble").Get(Harness.Chain, "make", "s")!;
         Assert.Equal(StepState.Started, first.State);
         Assert.Null(first.ResultPayload);
@@ -514,6 +514,79 @@ public sealed class SampleJobTests
         var step = h.StepsOf("trouble").Get(Harness.Chain, "make", "s")!;
         Assert.Equal(StepState.Completed, step.State);
         Assert.True(new PayloadStore(h.Database).Get(step.ResultPayload!.Value)!.Complete);
+    }
+
+    private static readonly string ZeroHash = Convert.ToHexStringLower(SHA256.HashData(new byte[2048]));
+
+    [Theory]
+    [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
+    public async Task A_complete_payload_of_a_step_that_never_completed_is_adopted_without_the_body_or_the_check(string engine)
+    {
+        using var h = new Harness(engine);
+        // the body finished writing and the payload committed; the process died before the step was marked completed
+        await Assert.ThrowsAsync<SimulatedCrashException>(() => h.Run<Trouble>(Mode("stream-check"), hooks: Harness.CrashAfterStep("make")));
+        var dead = h.StepsOf("trouble").Get(Harness.Chain, "make", "c")!;
+        Assert.Equal(StepState.Started, dead.State);
+        var owned = h.StepsOf("trouble").FindOwnedCompletePayload(dead.Id);
+        Assert.NotNull(owned);
+        Assert.Equal(ZeroHash, owned!.Sha256);
+
+        var retry = await h.Run<Trouble>(Mode("stream-check"), attempt: 2);
+
+        Assert.Equal(RunOutcome.Succeeded, retry.Outcome);
+        Assert.Equal(1, h.World.Bodies);                                                // the body did not run again
+        Assert.Equal(0, h.World.Checks);                                                // and the check was not asked
+        Assert.Equal(StepStatus.Recovered, Status(retry, "make"));
+        var step = h.StepsOf("trouble").Get(Harness.Chain, "make", "c")!;
+        Assert.Equal(StepState.Completed, step.State);
+        Assert.Equal(owned.Id, step.ResultPayload);
+        Assert.Equal(2, step.Attempt);
+        Assert.Contains("adopted", step.Error, StringComparison.Ordinal);               // recorded in the step row
+        var adopted = new PayloadStore(h.Database).Get(step.ResultPayload!.Value)!;
+        Assert.Equal(ZeroHash, adopted.Sha256);
+        var bytes = await new PayloadStore(h.Database).OpenRead(adopted.Id).ReadAllAsync();   // the hash is checked at the end of the read
+        Assert.Equal(2048, bytes.Length);
+    }
+
+    [Theory]
+    [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
+    public async Task A_complete_payload_is_adopted_even_when_the_recovery_is_ask(string engine)
+    {
+        using var h = new Harness(engine);
+        await Assert.ThrowsAsync<SimulatedCrashException>(() => h.Run<Trouble>(Mode("stream-ask"), hooks: Harness.CrashAfterStep("make")));
+
+        var retry = await h.Run<Trouble>(Mode("stream-ask"), attempt: 2);
+
+        Assert.Equal(RunOutcome.Succeeded, retry.Outcome);
+        Assert.Equal(1, h.World.Bodies);
+        Assert.Equal(StepStatus.Recovered, Status(retry, "make"));
+    }
+
+    [Theory]
+    [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
+    public async Task An_incomplete_payload_is_not_adopted_and_the_recovery_choice_applies(string engine)
+    {
+        using var h = new Harness(engine);
+        await Assert.ThrowsAsync<SimulatedCrashException>(() => h.Run<Trouble>(Mode("stream-check"), hooks: Harness.CrashBeforeCommit("make")));
+        var dead = h.StepsOf("trouble").Get(Harness.Chain, "make", "c")!;
+        Assert.Null(h.StepsOf("trouble").FindOwnedCompletePayload(dead.Id));            // the write was interrupted: nothing complete
+
+        var retry = await h.Run<Trouble>(Mode("stream-check"), attempt: 2);
+
+        Assert.Equal(RunOutcome.Succeeded, retry.Outcome);
+        Assert.Equal(1, h.World.Checks);                                                // the check was asked, found nothing
+        Assert.Equal(2, h.World.Bodies);                                                // so the body ran again
+        Assert.Equal(StepStatus.Ran, Status(retry, "make"));
+        var step = h.StepsOf("trouble").Get(Harness.Chain, "make", "c")!;
+        Assert.NotNull(step.ResultPayload);
+        Assert.NotEqual(StepState.Failed, step.State);
+
+        // with Ask the run stops, naming the step
+        using var h2 = new Harness(engine);
+        await Assert.ThrowsAsync<SimulatedCrashException>(() => h2.Run<Trouble>(Mode("stream-ask"), hooks: Harness.CrashBeforeCommit("make")));
+        var asked = await h2.Run<Trouble>(Mode("stream-ask"), attempt: 2);
+        Assert.Equal(RunOutcome.Failed, asked.Outcome);
+        Assert.Contains("'make'", asked.End.Failure!.Message, StringComparison.Ordinal);
     }
 
     [Theory]

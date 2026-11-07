@@ -106,9 +106,12 @@ public abstract class RunnerJob<TInput, TProgress, TSlots> : RunnerJobBase
     /// A commit point inside a long run: saves the progress changed so far (a crash then loses nothing before it). Throws <see cref="ProgressConflictException"/> when another run moved a checkpoint first; the job
     /// should stop, and the run is recorded <c>Stopped</c>.
     /// </summary>
+    private int _saves;
+
     protected async Task SaveProgressAsync(CancellationToken ct)
     {
         var binder = Context.Progress ?? throw new InvalidOperationException("The job has no progress to save.");
+        await Context.BeforeProgressSaveAsync(Interlocked.Increment(ref _saves), ct).ConfigureAwait(false);
         if (!await binder.SaveAsync(null, ct).ConfigureAwait(false))
             throw new ProgressConflictException("A checkpoint of this task moved since the run read it (another run got there first, or it was rewound); this run stops without saving.");
     }

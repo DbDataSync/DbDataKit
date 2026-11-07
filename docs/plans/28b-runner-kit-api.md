@@ -94,7 +94,8 @@ public sealed class DailyDrop : RunnerJob<DailyDropInput, NoProgress, DailyDropS
     protected override async Task RunAsync(CancellationToken ct)
     {
         PayloadRef file = await Step(DailyDropSteps.Download, Input.Day)       // StreamStep: only .StreamAsync is offered
-            .Check(ct => Archive.FindAsync(Input.Day, ct))                     // recovery: required, or there is no RunAsync to call
+            .Repeatable()                                                      // recovery: required. A crash mid-copy leaves the file on the server (it is deleted after the copy); a crash after
+                                                                               // the copy leaves a complete payload, which the kit adopts without asking (K14)
             .StreamAsync(async (sink, ct) =>
             {
                 await using var source = await Sftp.OpenAsync(Remote(Input.Day), ct);
@@ -241,6 +242,12 @@ ran with a key is never run again with it in the same chain.
 | `Check(f)` | call `f`: a non-null result is stored and used (status `recovered`); null runs the body |
 | `Ask` | the run stops with a failure naming the step and key; an operator marks it `happened` (with the result, or a payload) or `did not happen` in the console, and the run is retried |
 
+**A stream step in doubt adopts a complete payload first (K14).** The payload of a streaming step is owned by the step's row and is complete only when the body returned normally. So when a
+streaming step is in doubt on retry and the payload its dead attempt left is **complete**, the body provably finished writing and only the step's completion was lost: the kit **adopts** that payload as the step's
+result (status `recovered`), **without running the body and without calling `Check`**, whatever the step's recovery says (also for `Ask`). The step row records that the result was adopted (its note names the payload and the attempt
+that wrote it). The recovery in the table above applies to a stream step only when **no complete payload** exists (a write that was interrupted leaves an incomplete one). This is what lets a download whose source file is gone
+after the copy be recovered: `Check` can only return a `PayloadRef` that exists outside the step, the adopted payload is inside it.
+
 `failed` (an exception) is not in doubt: the body ran and said it failed. A retry runs it again, unless the exception was classified `Permanent`
 (`TaskFailureException`, or a `ConnectionFailure` the connection classifies as permanent), which fails the run.
 
@@ -356,6 +363,7 @@ It can inject: a failure before or after a step body, a crash between the body a
 | K11 | **Recovery by type state:** `.Repeatable()`, `.Ask()` or `.Check(...)` must be called before `RunAsync`/`StreamAsync` exists | confirm: the cost is a slightly longer call chain; the gain is that "forgot" cannot compile |
 | K12 | `Count` takes a declared `Counter`, not a string; counters, units and steps are listed in the generated manifest so the console shows them before a run | confirm |
 | K13 | A small **analyzer** ships with the kit (duplicate step names in a job, a step inside a step) | none |
+| K14 | **A streaming step in doubt adopts its complete payload** (found by the step row's ownership), status `recovered`, with no body and no `Check`; `Repeatable`/`Ask`/`Check` apply only when no complete payload exists. Found by R03a: a `Check` can only name an outside `PayloadRef`, so a download whose source is gone could not be recovered | none: a complete payload is proof the body returned |
 
 ## 12. What this changes in plan 28a
 

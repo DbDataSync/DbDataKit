@@ -77,6 +77,7 @@ public sealed class World
 
     // counters and switches of the trouble, backfill and stoppable jobs
     public int Bodies;
+    public int Checks;
 
     public Exception? Throw { get; set; }
 
@@ -210,7 +211,7 @@ public sealed class DailyDrop : RunnerJob<DailyDropInput, NoProgress, DailyDropS
     {
         var world = World.Current;
         PayloadRef file = await Step(DailyDropSteps.Download, Input.Day)
-            .Repeatable()                                                      // the sample's Check needs a store of the downloaded bytes; a repeat is what this fake server allows
+            .Repeatable()                                                      // a crash mid-copy leaves the file on the server; after the copy the kit adopts the complete payload (K14)
             .StreamAsync(async (sink, ct) =>
             {
                 Interlocked.Increment(ref world.Downloads);
@@ -446,6 +447,14 @@ public sealed class Trouble : RunnerJob<TroubleInput, NoProgress, NoSlots>
                 break;
             case "stream-repeatable":
                 await Step(BigSteps.Make, "s").Repeatable().StreamAsync(async (sink, ct) => { Interlocked.Increment(ref World.Current.Bodies); await sink.WriteAsync(new byte[2048], ct); }, ct);
+                break;
+            case "stream-check":
+                await Step(BigSteps.Make, "c").Check(ct => { Interlocked.Increment(ref World.Current.Checks); return Task.FromResult<PayloadRef?>(null); })
+                    .StreamAsync(async (sink, ct) => { Interlocked.Increment(ref World.Current.Bodies); await sink.WriteAsync(new byte[2048], ct); }, ct);
+                break;
+            case "stream-ask":
+                await Step(BigSteps.Make, "c").Ask()
+                    .StreamAsync(async (sink, ct) => { Interlocked.Increment(ref World.Current.Bodies); await sink.WriteAsync(new byte[2048], ct); }, ct);
                 break;
             case "files":
                 var first = await Files.ClaimAsync("inbox", "in/a.csv", 10, DateTimeOffset.Parse("2026-11-07T00:00:00Z"), "hash-1", ct);

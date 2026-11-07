@@ -164,6 +164,14 @@ internal sealed class RunContext
     /// <summary>A hook that throws <see cref="SimulatedCrashException"/> makes the process "die" here.</summary>
     public Task AfterStepBodyAsync(string name, string key, CancellationToken ct) => Env.Hooks?.AfterStepBody?.Invoke(name, key, ct) ?? Task.CompletedTask;
 
+    public Task BeforeStepBodyAsync(string name, string key, CancellationToken ct) => Env.Hooks?.BeforeStepBody?.Invoke(name, key, ct) ?? Task.CompletedTask;
+
+    public Task BeforePayloadCommitAsync(string name, string key, CancellationToken ct) => Env.Hooks?.BeforePayloadCommit?.Invoke(name, key, ct) ?? Task.CompletedTask;
+
+    public Task BeforeUnitBodyAsync(string name, string key, CancellationToken ct) => Env.Hooks?.BeforeUnitBody?.Invoke(name, key, ct) ?? Task.CompletedTask;
+
+    public Task BeforeProgressSaveAsync(int number, CancellationToken ct) => Env.Hooks?.BeforeProgressSave?.Invoke(number, ct) ?? Task.CompletedTask;
+
     public Task AfterUnitBodyAsync(string name, string key, CancellationToken ct) => Env.Hooks?.AfterUnitBody?.Invoke(name, key, ct) ?? Task.CompletedTask;
 }
 

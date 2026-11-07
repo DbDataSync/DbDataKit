@@ -40,6 +40,12 @@ internal interface IRunBackend
 
     Task<StepBegin.Run> RetakeStepAsync(string name, string key, CancellationToken ct);
 
+    /// <summary>
+    /// For an in-doubt streaming step: when the dead attempt left a complete payload owned by the step, takes the step over and completes it with that payload (plan 28b K14) and returns the payload's id; null when there
+    /// is none (nothing is changed).
+    /// </summary>
+    Task<Guid?> AdoptStepPayloadAsync(string name, string key, CancellationToken ct);
+
     Task CompleteValueStepAsync(string name, string key, string resultJson, IReadOnlyDictionary<string, long>? counts, CancellationToken ct);
 
     Task CompleteStreamStepAsync(string name, string key, Guid payload, IReadOnlyDictionary<string, long>? counts, CancellationToken ct);

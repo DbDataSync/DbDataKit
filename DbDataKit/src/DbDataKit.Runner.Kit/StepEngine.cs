@@ -82,6 +82,7 @@ internal sealed class StepEngine(RunContext run)
         {
             run.Step.Value = new StepFrame(step.Name, key);
             run.Scope.Value = scope;
+            await run.BeforeStepBodyAsync(step.Name, key, ct).ConfigureAwait(false);
             result = await body(ct).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -132,6 +133,13 @@ internal sealed class StepEngine(RunContext run)
                 toRun = fresh;
                 break;
             case StepBegin.InDoubt doubt:
+                // a complete payload owned by the step proves the body finished writing (a payload is complete only when the body returned normally): adopt it, whatever the recovery says (plan 28b K14)
+                if (await Backend.AdoptStepPayloadAsync(step.Name, key, ct).ConfigureAwait(false) is { } adopted)
+                {
+                    run.AddStep(new StepReport(step.Name, key, StepStatus.Recovered, clock.Elapsed, new Dictionary<string, long>()));
+                    return Backend.GetPayload(adopted);
+                }
+
                 switch (recovery)
                 {
                     case Recovery.Ask:
@@ -160,9 +168,11 @@ internal sealed class StepEngine(RunContext run)
         {
             run.Step.Value = new StepFrame(step.Name, key);
             run.Scope.Value = scope;
+            await run.BeforeStepBodyAsync(step.Name, key, ct).ConfigureAwait(false);
             await body(stream.Stream, ct).ConfigureAwait(false);
+            await run.BeforePayloadCommitAsync(step.Name, key, ct).ConfigureAwait(false);
+            stream.Complete();                                                  // the payload commits: from here on a crash leaves a complete payload the retry adopts
             await run.AfterStepBodyAsync(step.Name, key, ct).ConfigureAwait(false);
-            stream.Complete();
         }
         catch (Exception ex)
         {
