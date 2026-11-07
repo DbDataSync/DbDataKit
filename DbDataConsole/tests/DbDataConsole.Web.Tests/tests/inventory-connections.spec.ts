@@ -5,6 +5,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { inventoryBuild, inventorySync, scratchDirectory } from '../playwright.config'
 
+// The file name matters: the specs run one at a time in the order of their names, and first-run.spec.ts and identity-home.spec.ts need a console that has no user yet. This story invites its own administrator, so it must sort after them (as monitoring.spec.ts does).
 // Plan 28c, E23 (ED17, the condition of ED16): the Connections page shows one table over the paired servers with where each connection goes, the reference of its secret and the processes that use it. A Build server hosts a project with a connection
 // file and a scheduled plan; a Sync server is given a connection and a replication that uses it. The table lists both with their users, the filters answer "where is this connection used" and "what does this task connect to", and removing the Sync
 // connection while the replication uses it is refused naming the replication. No password reaches the page. (A runner's part, the task and instances that use a bound slot, is covered by DbDataRunner.Tests' ConnectionInventoryTests and the web unit tests.)
