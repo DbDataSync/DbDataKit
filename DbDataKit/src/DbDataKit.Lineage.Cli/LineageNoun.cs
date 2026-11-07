@@ -23,12 +23,120 @@ public static class LineageNoun
         [("start", DataSchemas.String), ("reached", DataSchemas.ListOf(ReachedSchema)), ("edges", DataSchemas.ListOf(EdgeSchema)), ("gaps", DataSchemas.StringList), ("truncated", DataSchemas.Boolean)],
         "start", "reached", "edges", "gaps", "truncated");
 
-    public static Noun Create(Func<CancellationToken, Task<LineageGraph>> source) => new("lineage", "What feeds what: the lineage graph, the impact of a change, the provenance of a result",
-    [
-        new Verb("graph", "Every node and edge of the graph", EffectClass.OfflineOnly, "[--kind <kind>]", (args, context) => GraphAsync(source, args, context), GraphSchema),
-        new Verb("impact", "What a node feeds, downstream", EffectClass.OfflineOnly, "<node> [--depth <n>]", (args, context) => SliceAsync(source, args, context, downstream: true), SliceSchema),
-        new Verb("provenance", "What feeds a node, upstream", EffectClass.OfflineOnly, "<node> [--depth <n>]", (args, context) => SliceAsync(source, args, context, downstream: false), SliceSchema),
-    ]);
+    private static readonly string InstanceSchema = DataSchemas.Object(
+        [("instance", DataSchemas.String), ("host", DataSchemas.String), ("version", DataSchemas.Integer), ("state", DataSchemas.String), ("reported_at", DataSchemas.String), ("error", DataSchemas.String),
+            ("runtime", DataSchemas.String), ("live", DataSchemas.Boolean), ("on_active", DataSchemas.Boolean)],
+        "instance", "version", "state", "reported_at", "live", "on_active");
+
+    private static readonly string ChannelSchema = DataSchemas.Object(
+        [("group", DataSchemas.String), ("kind", DataSchemas.String), ("name", DataSchemas.String), ("channel", DataSchemas.String), ("active", DataSchemas.Integer), ("previous", DataSchemas.Integer), ("staged", DataSchemas.Integer),
+            ("last_event", DataSchemas.String), ("last_by", DataSchemas.String), ("last_at", DataSchemas.String), ("history", DataSchemas.String), ("instances", DataSchemas.ListOf(InstanceSchema))],
+        "group", "kind", "name", "channel", "instances");
+
+    private static readonly string WhereSchema = DataSchemas.Object([("definition", DataSchemas.String), ("channels", DataSchemas.ListOf(ChannelSchema))], "definition", "channels");
+
+    private static readonly string HoldingSchema = DataSchemas.Object(
+        [("kind", DataSchemas.String), ("name", DataSchemas.String), ("channel", DataSchemas.String), ("version", DataSchemas.Integer), ("state", DataSchemas.String), ("reported_at", DataSchemas.String), ("error", DataSchemas.String),
+            ("channel_active", DataSchemas.Integer), ("behind", DataSchemas.Boolean)],
+        "kind", "name", "channel", "version", "state", "reported_at", "behind");
+
+    private static readonly string RunnerSchema = DataSchemas.Object(
+        [("instance", DataSchemas.String), ("group", DataSchemas.String), ("host", DataSchemas.String), ("runtime", DataSchemas.String), ("runner_version", DataSchemas.String), ("live", DataSchemas.Boolean), ("holdings", DataSchemas.ListOf(HoldingSchema))],
+        "instance", "group", "live", "holdings");
+
+    private static readonly string OnSchema = DataSchemas.Object([("runner", DataSchemas.String), ("instances", DataSchemas.ListOf(RunnerSchema))], "runner", "instances");
+
+    private static readonly string RunsSchema = DataSchemas.Object(
+        [("definition", DataSchemas.String), ("version", DataSchemas.Integer),
+            ("runs", DataSchemas.ListOf(DataSchemas.Object([("run", DataSchemas.String), ("task", DataSchemas.String), ("channel", DataSchemas.String), ("outcome", DataSchemas.String), ("started_at", DataSchemas.String)], "run")))],
+        "definition", "version", "runs");
+
+    /// <param name="source">The host's graph.</param>
+    /// <param name="deployment">Adds the deployment questions (<c>where</c>, <c>on</c>, <c>runs</c>, plan 28c E24) for a host whose graph has deployment nodes (a runner, a console).</param>
+    public static Noun Create(Func<CancellationToken, Task<LineageGraph>> source, bool deployment = false)
+    {
+        var verbs = new List<Verb>
+        {
+            new("graph", "Every node and edge of the graph", EffectClass.OfflineOnly, "[--kind <kind>]", (args, context) => GraphAsync(source, args, context), GraphSchema),
+            new("impact", "What a node feeds, downstream", EffectClass.OfflineOnly, "<node> [--depth <n>]", (args, context) => SliceAsync(source, args, context, downstream: true), SliceSchema),
+            new("provenance", "What feeds a node, upstream", EffectClass.OfflineOnly, "<node> [--depth <n>]", (args, context) => SliceAsync(source, args, context, downstream: false), SliceSchema),
+        };
+        if (deployment)
+        {
+            verbs.Add(new("where", "Where a definition is deployed: its channels, versions and runners", EffectClass.OfflineOnly, "<definition> [--channel <channel>]", (args, context) => WhereAsync(source, args, context), WhereSchema));
+            verbs.Add(new("on", "What is deployed on a runner (an instance id or a host)", EffectClass.OfflineOnly, "<runner>", (args, context) => OnAsync(source, args, context), OnSchema));
+            verbs.Add(new("runs", "The runs that named a version of a definition", EffectClass.OfflineOnly, "<definition> <version>", (args, context) => RunsAsync(source, args, context), RunsSchema));
+        }
+        return new("lineage", "What feeds what: the lineage graph, the impact of a change, the provenance of a result" + (deployment ? ", and where definitions are deployed" : ""), verbs);
+    }
+
+    private static async Task<int> WhereAsync(Func<CancellationToken, Task<LineageGraph>> source, string[] args, CliContext context)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "channel" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count != 1) return await Usage(context, "lineage where <definition> [--channel <channel>]");
+        var graph = await source(context.Cancellation);
+        var found = graph.WhereDeployed(parsed.Words[0], parsed.Get("channel"));
+        if (found.Count == 0)
+        {
+            await context.Error.WriteLineAsync($"'{parsed.Words[0]}' is not deployed anywhere the graph knows{(parsed.Get("channel") is { } c ? $" in the channel '{c}'" : "")}.");
+            return CliExit.Failure;
+        }
+        context.Data["definition"] = parsed.Words[0];
+        context.Data["channels"] = found.Select(DeploymentDocuments.Of).ToList();
+        foreach (var channel in found)
+        {
+            await context.Out.WriteLineAsync($"{channel.Kind}/{channel.Name} on {channel.Channel}: active {Version(channel.Active)}, previous {Version(channel.Previous)}" + (channel.Staged is { } staged ? $", staged v{staged}" : ""));
+            if (channel.LastEvent is not null) await context.Out.WriteLineAsync($"  last {channel.LastEvent} by {channel.LastBy} at {channel.LastAt:u}");
+            foreach (var i in channel.Instances)
+                await context.Out.WriteLineAsync($"  {i.Host ?? i.InstanceId} ({i.InstanceId}): v{i.Version} {i.State}{(i.Gone ? " (gone)" : "")} since {i.At:u}{(i.Error is null ? "" : $": {i.Error}")}{(i.Runtime is null ? "" : $", runtime {i.Runtime}")}");
+        }
+        return CliExit.Ok;
+    }
+
+    private static string Version(int? version) => version is { } v ? $"v{v}" : "none";
+
+    private static async Task<int> OnAsync(Func<CancellationToken, Task<LineageGraph>> source, string[] args, CliContext context)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string>());
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count != 1) return await Usage(context, "lineage on <runner>");
+        var found = (await source(context.Cancellation)).OnRunner(parsed.Words[0]);
+        if (found.Count == 0)
+        {
+            await context.Error.WriteLineAsync($"The graph has no runner '{parsed.Words[0]}' (an instance id or a host name).");
+            return CliExit.Failure;
+        }
+        context.Data["runner"] = parsed.Words[0];
+        context.Data["instances"] = found.Select(DeploymentDocuments.Of).ToList();
+        foreach (var runner in found)
+        {
+            await context.Out.WriteLineAsync($"{runner.Host ?? runner.InstanceId} ({runner.InstanceId}){(runner.Live ? "" : " not live")}, runtime {runner.Runtime ?? "unknown"}");
+            if (runner.Holdings.Count == 0) await context.Out.WriteLineAsync("  nothing deployed");
+            foreach (var h in runner.Holdings)
+                await context.Out.WriteLineAsync($"  {h.Kind}/{h.Name} on {h.Channel}: v{h.Version} {h.State}" + (h.ChannelActive is { } a && (a != h.Version || h.State != "active") ? $" (the channel is on v{a})" : "") + (h.Error is null ? "" : $": {h.Error}"));
+        }
+        return CliExit.Ok;
+    }
+
+    private static async Task<int> RunsAsync(Func<CancellationToken, Task<LineageGraph>> source, string[] args, CliContext context)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string>());
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count != 2 || !int.TryParse(parsed.Words[1], out var version) || version < 1) return await Usage(context, "lineage runs <definition> <version>");
+        var runs = (await source(context.Cancellation)).RunsOf(parsed.Words[0], version);
+        context.Data["definition"] = parsed.Words[0];
+        context.Data["version"] = version;
+        context.Data["runs"] = runs.Select(DeploymentRun).ToList();
+        await context.Out.WriteLineAsync($"{runs.Count} runs of {parsed.Words[0]} v{version}");
+        foreach (var r in runs) await context.Out.WriteLineAsync($"  {r.PropertyMap.GetValueOrDefault(DeploymentProperties.StartedAt)} {r.Name} {r.PropertyMap.GetValueOrDefault(DeploymentProperties.Outcome)}");
+        return CliExit.Ok;
+    }
+
+    private static Dictionary<string, object?> DeploymentRun(LineageNode run)
+    {
+        var d = new Dictionary<string, object?> { ["run"] = run.Id, ["task"] = run.Name };
+        foreach (var (key, name) in new[] { ("channel", DeploymentProperties.Channel), ("outcome", DeploymentProperties.Outcome), ("started_at", DeploymentProperties.StartedAt) })
+            if (run.PropertyMap.TryGetValue(name, out var value) && value.Length > 0) d[key] = value;
+        return d;
+    }
 
     private static Dictionary<string, object?> Node(LineageNode n) => new() { ["id"] = n.Id, ["kind"] = n.Kind.ToString().ToLowerInvariant(), ["name"] = n.Name, ["unknown_upstream"] = n.UnknownUpstream };
 
