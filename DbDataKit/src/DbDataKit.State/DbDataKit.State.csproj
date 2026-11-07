@@ -6,5 +6,6 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <ProjectReference Include="..\DbDataKit.Monitoring\DbDataKit.Monitoring.csproj" />
+    <InternalsVisibleTo Include="DbDataKit.State.Tests" />
   </ItemGroup>
 </Project>
