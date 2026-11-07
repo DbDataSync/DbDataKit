@@ -9,3 +9,5 @@ When a job is due, as a pure function (plan 13, W10). No product logic: a job is
 * `RunGate.ShouldRun(enabled, paused)`: durable intent and temporary hold.
 
 The work queue with leases and the run lock (M02) and Sync's scheduler on these packages (M03) are the next slices.
+
+`ModuleWorkQueueStore` also has the calls a lease-checking worker needs (plan 28a R08, R09): `TryMarkRunning`, `TryFinish`, `TryRelease`, `Reschedule` (back to Pending with a new run id and a not-before time, for a retry), `Restart`, `TrySetPayload` and `ReleaseClaimsBy` all act only while the named worker holds the item, so a worker that lost its lease cannot finish it late; `ListInFlight` lists unfinished items with their availability and holder; `ModuleRunLockStore.Holder` names the run that holds a lock.
