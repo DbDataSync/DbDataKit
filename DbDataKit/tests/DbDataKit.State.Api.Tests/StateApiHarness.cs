@@ -201,10 +201,10 @@ public sealed class StateApiHost : IAsyncDisposable
     }
 
     /// <summary>The options of a product over <paramref name="db"/>: the settings name its engine and connection as written; <paramref name="resolver"/> looks up the references in it.</summary>
-    public static StateManagementOptions Options(ScratchDatabases.Db db, IReadOnlyList<StateModule> modules, string? connection = null, Func<ISecretResolver?>? resolver = null, IMaintenanceGate? gate = null, IInstanceDirectory? instances = null, MemoryAudit? audit = null) =>
+    public static StateManagementOptions Options(ScratchDatabases.Db db, IReadOnlyList<StateModule> modules, string? connection = null, Func<ISecretResolver?>? resolver = null, IMaintenanceGate? gate = null, IInstanceDirectory? instances = null, MemoryAudit? audit = null, string settingsFile = "settings.yaml", bool move = false, Func<DbDataKit.State.Engines.Snapshots.MoveOptions, DbDataKit.State.Engines.Snapshots.MoveOptions>? tuneMove = null) =>
         new("testproduct", "testtool", "the test product",
             () => new StateTarget(
                 new StateSettings(ScratchDatabases.EngineName(db.Engine), db.Engine == StateEngineIds.Sqlite ? null : connection ?? db.Target) { Namespaces = StateNamespaceSettings.Defaults },
-                db.Engine == StateEngineIds.Sqlite ? db.Target : Path.Combine(Path.GetTempPath(), "unused.db"), resolver, "settings.yaml", StateSources.Defaults),
-            modules, StateScope.Install, gate ?? new MaintenanceGate(), audit ?? new MemoryAudit(), InstanceId: "instance-1", Version: "1.2.3", Instances: instances);
+                db.Engine == StateEngineIds.Sqlite ? db.Target : Path.Combine(Path.GetTempPath(), "unused.db"), resolver, settingsFile, StateSources.Defaults),
+            modules, StateScope.Install, gate ?? new MaintenanceGate(), audit ?? new MemoryAudit(), InstanceId: "instance-1", Version: "1.2.3", Instances: instances, Move: move, TuneMove: tuneMove);
 }

@@ -27,6 +27,8 @@ public sealed record StateResult(int Status, JsonNode Body)
 /// <param name="Version">The product's software version.</param>
 /// <param name="Instances">The product's instance table; null: none.</param>
 /// <param name="Clock">For tests.</param>
+/// <param name="Move">True when the product keeps a settings file the state writer can write, so the server can move its own state (<c>POST /api/v1/state/move</c>, plan 29b C06). False for the console, whose own move is the command line (plan 29b QM3).</param>
+/// <param name="TuneMove">For tests: changes the options of the move before it runs (a failure injected after the import, a fixed snapshot directory).</param>
 public sealed record StateManagementOptions(
     string Product,
     string Program,
@@ -39,7 +41,9 @@ public sealed record StateManagementOptions(
     string? InstanceId = null,
     string? Version = null,
     IInstanceDirectory? Instances = null,
-    TimeProvider? Clock = null);
+    TimeProvider? Clock = null,
+    bool Move = false,
+    Func<DbDataKit.State.Engines.Snapshots.MoveOptions, DbDataKit.State.Engines.Snapshots.MoveOptions>? TuneMove = null);
 
 /// <summary>
 /// The state endpoints of a server's management API (plan 29b, C05), apart from how a call arrives (the same answers whether a console asks over https with its token, a person asks in the console's web app, or the command line asks over the local channel):
@@ -48,6 +52,7 @@ public sealed record StateManagementOptions(
 /// setting came from (flag, environment, file, default), this instance's module versions and the other live instances where the product keeps an instance table, and the maintenance mode. Read-only: nothing is created or migrated.</item>
 /// <item><c>GET /api/v1/state/maintenance</c> (viewer): <c>enabled</c>, <c>idle</c>, <c>since</c>, <c>reason</c>, <c>inflight</c>.</item>
 /// <item><c>POST /api/v1/state/maintenance</c> (admin), body <c>{"enabled": true, "reason": "moving the state to PostgreSQL"}</c>: the server stops taking new work and drains; <c>idle</c> turns true when what was in flight has finished. Audited (<c>state.maintenance</c>, who, the reason), refusals too. Nothing is persisted: a restart leaves maintenance.</item>
+/// <item><c>GET</c> and <c>POST /api/v1/state/move</c>: the server moves its own state to another database (admin to start; see <see cref="StateMoveRunner"/>), on a server in maintenance that reports idle, in a task of its own with progress to read; where the product has no settings file the call is 404.</item>
 /// </list>
 /// A secret is never part of an answer: the connection is shown as <see cref="StateStatusReader"/> shows it and the answer is scrubbed of the literal credentials of the connection string as a last step.
 /// </summary>
@@ -58,17 +63,20 @@ public sealed class StateManagement(StateManagementOptions options)
 
     public const string MaintenancePath = Prefix + "/maintenance";
 
+    public const string MovePath = Prefix + "/move";
+
     public const string AuditCommand = "state.maintenance";
 
     private const int MaxReason = 500;
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly TimeProvider _clock = options.Clock ?? TimeProvider.System;
+    private readonly StateMoveRunner _move = new(options, (caller, command, outcome, target, at) => Record(options, caller, command, outcome, target, at), options.Clock ?? TimeProvider.System);
 
     public IMaintenanceGate Gate => options.Gate;
 
     /// <summary>True when <paramref name="route"/> (a path without its query) is one of this class's.</summary>
-    public static bool Handles(string route) => route.TrimEnd('/') is Prefix or MaintenancePath;
+    public static bool Handles(string route) => route.TrimEnd('/') is Prefix or MaintenancePath or MovePath;
 
     public async Task<StateResult> HandleAsync(string method, string route, string? body, StateCaller caller, CancellationToken cancellationToken = default)
     {
@@ -82,8 +90,12 @@ public sealed class StateManagement(StateManagementOptions options)
                 return caller.Holds(ServerRole.Viewer) ? StateResult.Ok(options.Gate.Status().ToJson()) : Denied(ServerRole.Viewer);
             case ("POST", MaintenancePath):
                 return Maintenance(body, caller);
+            case ("GET", MovePath):
+                return !_move.Enabled ? StateResult.Problem(404, "There is no such call.") : caller.Holds(ServerRole.Viewer) ? _move.Read() : Denied(ServerRole.Viewer);
+            case ("POST", MovePath):
+                return _move.Start(body, caller, ServerRole.Admin);
             default:
-                return StateResult.Problem(route is Prefix or MaintenancePath ? 405 : 404, route is Prefix or MaintenancePath ? "This call is not allowed on this path." : "There is no such call.");
+                return StateResult.Problem(route is Prefix or MaintenancePath or MovePath ? 405 : 404, route is Prefix or MaintenancePath or MovePath ? "This call is not allowed on this path." : "There is no such call.");
         }
     }
 
@@ -146,9 +158,11 @@ public sealed class StateManagement(StateManagementOptions options)
         return StateResult.Problem(400, char.ToUpperInvariant(why[0]) + why[1..] + ".");
     }
 
-    private void Record(StateCaller caller, string outcome, string target, DateTimeOffset at, bool rethrow = false)
+    private void Record(StateCaller caller, string outcome, string target, DateTimeOffset at, bool rethrow = false) => Record(options, caller, AuditCommand, outcome, target, at, rethrow);
+
+    private static void Record(StateManagementOptions options, StateCaller caller, string command, string outcome, string target, DateTimeOffset at, bool rethrow = false)
     {
-        try { options.Audit.Append(caller.Audit(AuditCommand, target, outcome, at)); }
+        try { options.Audit.Append(caller.Audit(command, target, outcome, at)); }
         catch (Exception) when (!rethrow) { /* a refusal is still answered when the audit cannot be written */ }
     }
 
