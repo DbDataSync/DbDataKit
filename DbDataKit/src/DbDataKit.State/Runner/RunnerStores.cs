@@ -235,8 +235,8 @@ public sealed class PostureChoices(StateDatabase database)
 /// <summary>What the runner schedules for one task, as written to <c>task_projection</c>: documents are the text they were written as.</summary>
 public sealed record TaskProjectionRow(string Task, string Version, string? Schedule, string? Triggers, string? Limits, IReadOnlyList<string> RequiredLabels, string? ProgressHash);
 
-/// <summary>A projection row as stored.</summary>
-public sealed record TaskProjection(string Package, string Channel, string Task, string Version, string? Schedule, string? Triggers, string? Limits, IReadOnlyList<string> RequiredLabels, string? ProgressHash, DateTimeOffset RebuiltAt);
+/// <summary>A projection row as stored. <see cref="Problem"/> is set when a column could not be read (the required labels are not a JSON array); the row is still returned, so a reader can skip it and say why instead of losing the whole list.</summary>
+public sealed record TaskProjection(string Package, string Channel, string Task, string Version, string? Schedule, string? Triggers, string? Limits, IReadOnlyList<string> RequiredLabels, string? ProgressHash, DateTimeOffset RebuiltAt, string? Problem = null);
 
 /// <summary>The projection of the active manifests (DR11): one row per package, channel and task, replaced wholesale for a package and channel.</summary>
 public sealed class TaskProjections(StateDatabase database)
@@ -297,8 +297,11 @@ public sealed class TaskProjections(StateDatabase database)
             while (reader.Read())
             {
                 string? Text(int i) => reader.IsDBNull(i) ? null : reader.GetString(i);
-                var labels = Text(7) is { } json ? JsonSerializer.Deserialize<string[]>(json) ?? [] : [];
-                list.Add(new TaskProjection(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), Text(4), Text(5), Text(6), labels, Text(8), reader.Time(9)));
+                string[] labels = [];
+                string? problem = null;
+                try { labels = Text(7) is { } json ? JsonSerializer.Deserialize<string[]>(json) ?? [] : []; }
+                catch (JsonException ex) { problem = $"The required labels are not a JSON array of text: {ex.Message}"; }
+                list.Add(new TaskProjection(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), Text(4), Text(5), Text(6), labels, Text(8), reader.Time(9), problem));
             }
 
             return (IReadOnlyList<TaskProjection>)list;

@@ -35,7 +35,7 @@ public sealed class ExecutionEngines : IDisposable
 
     public StateDatabase Open(string engine)
     {
-        var layout = StateLayout.Create(engine, [ProgressModule.Module, RunsModule.Module], StateScope.Standalone);
+        var layout = StateLayout.Create(engine, [ProgressModule.Module, RunsModule.Module, DbDataKit.Scheduling.SchedulingModule.Module, RunnerModule.Module], StateScope.Standalone);
         if (engine == StateEngineIds.Sqlite)
         {
             var dir = Directory.CreateTempSubdirectory("dbdatakit-exec-");

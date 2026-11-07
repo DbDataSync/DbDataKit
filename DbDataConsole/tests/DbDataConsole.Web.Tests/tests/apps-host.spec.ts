@@ -168,7 +168,7 @@ test.beforeAll(async () => {
   // the Proxy: the identity home and the apps host, with the apps host's client registered at the home before it starts
   fs.mkdirSync(path.join(proxyDirectory, 'config'), { recursive: true })
   fs.writeFileSync(path.join(proxyDirectory, 'config', 'server.yaml'), [
-    'schemaVersion: 2', 'tls: { mode: selfSigned, hostnames: [localhost] }', 'modules: [identity, apps]', 'state: { definitionPollSeconds: 1 }',
+    'schemaVersion: 2', 'tls: { mode: selfSigned, hostnames: [localhost] }', 'modules: [identity, apps]', 'definitionPollSeconds: 1',
     `management: { enabled: true, address: 127.0.0.1, port: ${managementPort} }`,
     `identity: { address: 127.0.0.1, port: ${homePort}, publicUrl: '${homeUrl}' }`,
     `apps: { address: 127.0.0.1, port: ${appsPort}, home: { clientId: '__CLIENT__' } }`, '',

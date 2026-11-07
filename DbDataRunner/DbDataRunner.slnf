@@ -1,0 +1,9 @@
+{
+  "solution": {
+    "path": "../DbDataKit.slnx",
+    "projects": [
+      "DbDataRunner/src/DbDataRunner.Server/DbDataRunner.Server.csproj",
+      "DbDataRunner/tests/DbDataRunner.Tests/DbDataRunner.Tests.csproj"
+    ]
+  }
+}

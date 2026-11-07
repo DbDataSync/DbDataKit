@@ -94,6 +94,13 @@ public static class ProxyConfig
             }
         }
 
+        // The state section is the one every product shares now: a key of the earlier release is refused naming its file, before anything is bound
+        if (ProxyStateConfig.OldKey(configuration) is { } oldKey)
+        {
+            diags.Add(Catalog.Create(SharedCodes.InvalidValue, oldKey.File ?? "configuration", oldKey.Line, oldKey.Column, oldKey.Message, keyPath: "State"));
+            return new ProxyConfigLoad(null, diags, Result(null));
+        }
+
         var bound = new ConfigBinder(Catalog, tree.FileOf).Bind<ProxyOptions>(root, section);
         var value = bound.Value;
         diags.AddRange(bound.Diagnostics);
@@ -322,7 +329,7 @@ public static class ProxyConfig
 
         private static string EnvironmentVariableName(string key, string? value)
         {
-            // The stock provider hides the prefix; find the variable by its two usual spellings (the DBPROXY_ prefix is added last, so it wins).
+            // The stock provider hides the prefix; find the variable by its two usual spellings (the DBPROXY_ prefix wins over the plain name).
             string flat = key.Replace(":", "__");
             foreach (var candidate in new[] { "DBPROXY_" + flat, flat })
             {

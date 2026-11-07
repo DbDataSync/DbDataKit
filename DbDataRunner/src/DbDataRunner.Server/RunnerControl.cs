@@ -1,0 +1,99 @@
+using System.Text.Json;
+using DbDataKit.Monitoring;
+using DbDataKit.Runner;
+using DbDataKit.Runner.Execution;
+using DbDataKit.Runner.Scheduler;
+using DbDataKit.State;
+
+namespace DbDataRunner.Server;
+
+/// <summary>Who asked for a change to a task, for the audit: <c>person</c> (a user of a console, or the operator on the machine) and what it came through.</summary>
+/// <param name="Id">The subject id of the person (a console user), or <c>local:&lt;os user&gt;</c> for the command line.</param>
+/// <param name="ViaKind"><c>console</c>, <c>api</c> or <c>command</c>.</param>
+/// <param name="ViaId">The client that carried the call, when there is one.</param>
+public sealed record RunnerActor(string Id, string? Name, string ViaKind, string? ViaId = null)
+{
+    public static RunnerActor Local() => new("local:" + Environment.UserName, Environment.UserName, "command");
+
+    /// <summary>The name a pause shows as <c>paused by</c>.</summary>
+    public string Display => string.IsNullOrWhiteSpace(Name) ? Id : Name!;
+}
+
+/// <summary>What <see cref="RunnerControl.RunNow"/> did: the run id of the item queued, or that one is queued or running already.</summary>
+public sealed record RunNowResult(bool Queued, Guid? RunId);
+
+/// <summary>A task named in a call is not one this runner serves (not in the projection of a channel it serves, or its row cannot be read).</summary>
+public sealed class UnknownTaskException(string message) : InvalidOperationException(message);
+
+/// <summary>
+/// The acts on a runner's tasks that a person asks for (plan 28a R10): start one now, pause it, resume it, and what the scheduler says of every task. The management API and the command line (<c>tasks run|pause|resume</c>) both
+/// go through here, so both are audited the same way (<c>runner.task.run</c>, <c>runner.task.pause</c>, <c>runner.task.resume</c>; the target is <c>package/channel/task</c>). A control built for the command line has no loop
+/// of its own: what it queues is run by the server that shares the state, as soon as one is running.
+/// </summary>
+public sealed class RunnerControl
+{
+    public const string RunVerb = "runner.task.run";
+    public const string PauseVerb = "runner.task.pause";
+    public const string ResumeVerb = "runner.task.resume";
+    public const string TargetKind = "task";
+
+    private readonly RunnerScheduler _scheduler;
+    private readonly AuditLog _audit;
+
+    public RunnerControl(StateDatabase state, RunnerScheduler scheduler)
+    {
+        State = state;
+        _scheduler = scheduler;
+        _audit = new AuditLog(state, RunnerState.ServiceId);
+    }
+
+    public StateDatabase State { get; }
+
+    /// <summary>A control with no running loop, for the command line: the scheduler is built to read and to queue, with an executor that refuses to run anything.</summary>
+    public static RunnerControl ForCommands(StateDatabase state, IReadOnlyCollection<string> channels, string cacheDirectory) =>
+        new(state, new RunnerScheduler(state, new NoExecutor(), new ArtifactCache(cacheDirectory, new PayloadArtifactSource(new PayloadStore(state))),
+            new DefinitionVersionSource(new DefinitionStore(state), new DefinitionPublisher(state, RunnerPackages.Kinds(), new PayloadStore(state), "runner")),
+            new RunnerSchedulerOptions { Channels = channels, Service = RunnerState.EngineService }));
+
+    public SchedulerStatus Status() => _scheduler.Status();
+
+    /// <summary>Queues a run of the task apart from its schedule (also when it is paused). Throws <see cref="UnknownTaskException"/> for a task this runner does not serve.</summary>
+    public RunNowResult RunNow(TaskRef task, IReadOnlyDictionary<string, string>? inputs, RunnerActor actor)
+    {
+        var runId = Translate(() => _scheduler.RunNow(task, inputs, actor.Display));
+        Record(RunVerb, task, actor, new { run_id = runId, queued = runId is not null, inputs = inputs?.Keys.Order(StringComparer.Ordinal).ToArray() ?? [] });
+        return new RunNowResult(runId is not null, runId);
+    }
+
+    public void Pause(TaskRef task, RunnerActor actor)
+    {
+        Translate(() => { _scheduler.Pause(task, actor.Display); return 0; });
+        Record(PauseVerb, task, actor, null);
+    }
+
+    public void Resume(TaskRef task, RunnerActor actor)
+    {
+        Translate(() => { _scheduler.Resume(task); return 0; });
+        Record(ResumeVerb, task, actor, null);
+    }
+
+    /// <summary>Notes that an actor was refused (the role was not enough): the call changed nothing.</summary>
+    public void Refused(string verb, TaskRef task, RunnerActor actor, string reason) =>
+        Record(verb, task, actor, new { reason }, AuditEvent.Refused);
+
+    private static T Translate<T>(Func<T> act)
+    {
+        try { return act(); }
+        catch (InvalidOperationException ex) { throw new UnknownTaskException(ex.Message); }
+    }
+
+    private void Record(string verb, TaskRef task, RunnerActor actor, object? detail, string outcome = AuditEvent.Ok) =>
+        _audit.Record(new AuditEvent("person", actor.Id, verb, outcome, ViaKind: actor.ViaKind, ViaId: actor.ViaId, TargetKind: TargetKind, TargetId: task.ToString(),
+            Detail: detail is null ? null : JsonSerializer.Serialize(detail)));
+
+    private sealed class NoExecutor : ITaskRunner
+    {
+        public Task<TaskRunResult> RunAsync(TaskRunRequest request, CancellationToken ct = default) =>
+            throw new InvalidOperationException("This control only queues and reads; the running server executes tasks.");
+    }
+}

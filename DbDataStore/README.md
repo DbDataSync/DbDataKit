@@ -10,9 +10,14 @@ dbdatastore server run [--repo <server directory>] [--listen https://127.0.0.1:8
 dbdatastore server pair --max-role <roles> [--repo <server directory>]
 dbdatastore server clients | unpair <client> [--repo <server directory>]
 dbdatastore service install|uninstall|status|start|stop|restart|doctor|unit
-dbdatastore state show [--offline] [--repo <server directory>]      # the state database: engine, namespaces, module versions, pending migrations; creates nothing
+dbdatastore state init --topology service|group|install [--engine mssql|postgres --connection <connection with Password=secret:NAME or env:NAME>] [--login <role or user> [--migrate]] [--admin-connection <reference> --apply] [--group <name>] [--settings <file>] [--repo <server directory>]   # writes the state section of server.yaml (a SQLite file per service is the default)
+dbdatastore state show [--offline] [--engine mssql|postgres] [--repo <server directory>]      # the state database: engine, where each setting came from, namespaces, module versions, pending migrations; creates nothing
 dbdatastore state test [--repo <server directory>]                   # opens it read-only and checks rights, engine version and clashes; stops at the first failure with the fix
 dbdatastore state grants --login <database role or user> [--migrate] [--repo <server directory>]
+dbdatastore state export --to <directory> [--include-secrets-check] [--repo <server directory>]   # the pairings and pairing codes as a snapshot; stop the server first
+dbdatastore state import --from <directory> [--migrate-after true|false] [--repo <server directory>]   # into an empty directory's state
+dbdatastore state verify --snapshot <directory> [--db] [--rehash-payloads] [--repo <server directory>]   # the snapshot against itself, or the state against it
+dbdatastore state move --to-engine <engine> [--to-connection <string>] [--yes] [--repo <server directory>]   # the server's state is SQLite only for now: it says so and points to export and import
 dbdatastore model put --file <model.yaml> [--name <model>] [--repo <server directory>]      # checked first, then saved
 dbdatastore storage create --model <model> [--repo <server directory>]                      # the tables of the model's own copy, on connections/<name>.yaml
 dbdatastore proxy add <name> --url <https address> --code <code> [--repo <server directory>]   # pair with a serving group as a publishing client
@@ -21,6 +26,10 @@ dbdatastore model publish <model> [--proxy <name>] [--dry-run] [--repo <server d
 dbdatastore model unpublish <model> --proxy <name> [--repo <server directory>]
 dbdatastore health check [--url <url>]
 ```
+
+## The state database
+
+`state.db` in the server's directory (SQLite) unless the `state:` section of `server.yaml` names another engine (plan 29b C07): `state: {engine: postgres, connection: "Host=db;Database=dbdatastore_state;Username=store;Password=env:STORE_STATE_PASSWORD", namespaces: {...}, retention: {days: 30}}`. The first place that names a setting wins: `server run --state-engine ... --state-connection ...` (the `state` verbs take `--engine`), then `DBDATASTORE_STATE_ENGINE` and `DBDATASTORE_STATE_CONNECTION`, then the file, then SQLite. A password is a reference (`secret:` from the server's own store, or `env:`). A setting that is not one is refused naming `server.yaml` and the nearest setting that is; `state show` says where each value came from; `state init` writes this file. A server with no `state:` section behaves as before.
 
 ## Publishing to the serving layer
 

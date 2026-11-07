@@ -1,0 +1,71 @@
+name: DbDataRunner CI
+
+# DbDataRunner on the trunk model (docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md): a pull request into `main` runs this.
+# A `changes` job skips the suite when nothing of the store's, of the shared DbDataKit/ code it builds against, or of the build
+# settings changed; the run then still reports success. The shared libraries' own suite is dbdatakit-ci.yml, run once, not per product.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  # Everything, whatever changed.
+  workflow_dispatch:
+  workflow_call:
+
+# A newer push to a PR supersedes the older run; runs on main always complete.
+concurrency:
+  group: dbdatarunner-ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: DbDataRunner
+
+jobs:
+  changes:
+    uses: ./.github/workflows/_changes.yml
+    with:
+      paths: '^(DbDataRunner/|DbDataKit/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdatarunner-|_)|actions/setup-product))'
+
+  # The server, its management API, the scheduler and real task processes, on SQLite (the engines job adds PostgreSQL and SQL Server). Linux only for now: the Windows job comes with the runner's Windows packaging.
+  test:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-product
+        with:
+          product: DbDataRunner
+          global-json: DbDataRunner/global.json
+          duckdb: 'false'
+      - run: dotnet build DbDataRunner.slnf -c Release
+      - run: dotnet test --project tests/DbDataRunner.Tests -c Release --no-build --minimum-expected-tests 12
+
+  # The same suite with both test engines up, so the tests that skip without one run (and fail, not skip, if one is missing): the state of the runner on PostgreSQL and on SQL Server.
+  engines:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-product
+        with:
+          product: DbDataRunner
+          global-json: DbDataRunner/global.json
+          duckdb: 'false'
+      - name: Start the test engines
+        working-directory: .
+        run: |
+          testenv/testenv.sh up mssql postgres
+          testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
+          echo "DBDATA_REQUIRE_POSTGRES=true" >> "$GITHUB_ENV"
+          echo "DBDATA_REQUIRE_SQLSERVER=true" >> "$GITHUB_ENV"
+      - run: dotnet build DbDataRunner.slnf -c Release
+      - run: dotnet test --project tests/DbDataRunner.Tests -c Release --no-build --minimum-expected-tests 27

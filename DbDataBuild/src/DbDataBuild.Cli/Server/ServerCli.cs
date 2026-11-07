@@ -18,36 +18,43 @@ internal static class ServerCli
 {
     public static bool Handles(string[] args) => args.Length > 0 && args[0] is "server" or "secret" or "service" or "health" or "lineage" or "state";
 
-    public static async Task<int> RunAsync(string[] args, TextWriter output, TextWriter error, TextReader input)
+    public static Task<int> RunAsync(string[] args, TextWriter output, TextWriter error, TextReader input) => RunAsync(args, output, error, input, null);
+
+    /// <param name="environment">Reads the environment variables the state settings come from (<see cref="BuildState.EngineVariable"/>); null: the process's.</param>
+    public static async Task<int> RunAsync(string[] args, TextWriter output, TextWriter error, TextReader input, Func<string, string?>? environment)
     {
         // Ctrl+C and the service manager's stop both end `server run` cleanly.
         using var stop = new CancellationTokenSource();
         ConsoleCancelEventHandler onCancel = (_, e) => { e.Cancel = true; stop.Cancel(); };
         Console.CancelKeyPress += onCancel;
         using var terminate = System.Runtime.InteropServices.PosixSignalRegistration.Create(System.Runtime.InteropServices.PosixSignal.SIGTERM, context => { context.Cancel = true; stop.Cancel(); });
-        try { return await Router(args).RunAsync(args, new CliContext(output, error, input, stop.Token)); }
+        try { return await Router(args, environment).RunAsync(args, new CliContext(output, error, input, stop.Token)); }
         finally { Console.CancelKeyPress -= onCancel; }
     }
 
     /// <summary>The JSON Schema of the documents the server's nouns write (for the tests that check them).</summary>
-    internal static string OutputSchema(string[] invocation) => Router(invocation).OutputSchema();
+    internal static string OutputSchema(string[] invocation) => Router(invocation, null).OutputSchema();
 
-    private static NounRouter Router(string[] invocation) => new("dbdatabuild",
+    private static NounRouter Router(string[] invocation, Func<string, string?>? environment) => new("dbdatabuild",
     [
-        ServerNoun.Create(RunServerAsync).With([.. PairingVerbs.Create(args => new PairingFiles(Path.Combine(DirectoryOf(args), "server.yaml"))), new Verb("project", "The projects this server hosts: add, remove, list, pull", EffectClass.RepoFilesOnly, ProjectUsage, ProjectAsync, DataSchemas.None), new Verb("proxy", "The proxies this server publishes data sources to: add, remove, list", EffectClass.RepoFilesOnly, ProxyUsage, ProxyAsync, DataSchemas.None)]),
+        ServerNoun.Create((args, context) => RunServerAsync(args, context, environment)).With([.. PairingVerbs.Create(args => new PairingFiles(Path.Combine(DirectoryOf(args), "server.yaml"))), new Verb("project", "The projects this server hosts: add, remove, list, pull", EffectClass.RepoFilesOnly, ProjectUsage, ProjectAsync, DataSchemas.None), new Verb("proxy", "The proxies this server publishes data sources to: add, remove, list", EffectClass.RepoFilesOnly, ProxyUsage, ProxyAsync, DataSchemas.None)]),
         // the store is opened (and its key made on first use) only for the secret verbs
         .. invocation is ["secret", ..] ? new[] { SecretVerbs(invocation) } : Array.Empty<Noun>(),
         .. invocation is ["health", ..] ? new[] { HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl) } : Array.Empty<Noun>(),
         .. invocation is ["lineage", ..] ? new[] { ServerLineage.Create(invocation) } : Array.Empty<Noun>(),
-        .. invocation is ["state", ..] ? new[] { StateNoun() } : Array.Empty<Noun>(),
+        .. invocation is ["state", ..] ? new[] { StateNoun(environment) } : Array.Empty<Noun>(),
         .. invocation is ["service", ..] ? new[] { BuildService.Noun(BuildServiceEnvironment.Real()) } : Array.Empty<Noun>(),
     ], ProductInfo.Version);
 
-    /// <summary>The shared <c>state show|test|grants</c> verbs over the server's state: SQLite, <c>state.db</c> in its directory (<c>--repo</c>), built from the <c>scheduling</c> module. The server has no setting for another engine.</summary>
-    private static Noun StateNoun() => DbDataKit.State.Cli.StateVerbs.Create(new DbDataKit.State.Cli.StateVerbContext(
+    /// <summary>The shared <c>state show|test|grants|init</c> verbs over the server's state: its settings come from <c>--engine</c>, the environment (<see cref="BuildState.EngineVariable"/>) and the <c>state:</c> section of <c>server.yaml</c> in its directory (<c>--repo</c>), else SQLite in <c>state.db</c>; built from the <c>scheduling</c> module.</summary>
+    private static Noun StateNoun(Func<string, string?>? environment) => DbDataKit.State.Cli.StateVerbs.Create(new DbDataKit.State.Cli.StateVerbContext(
         "dbdatabuild", "the server",
-        args => new DbDataKit.State.Cli.StateTarget(new DbDataKit.State.StateSettings(), Path.Combine(Path.GetFullPath(args.Get("repo") ?? BuildServerSettings.DefaultDirectory()), "state.db")),
-        BuildSchedulerSchema.Modules, DbDataKit.State.StateScope.Install, ["repo"], "[--repo <server directory>]"));
+        args =>
+        {
+            var directory = Path.GetFullPath(args.Get("repo") ?? BuildServerSettings.DefaultDirectory(environment));
+            return DbDataKit.State.Cli.StateTarget.From(BuildState.Resolve(directory, environment, args.Get("engine"), engineFlagName: "--engine"), BuildState.SqlitePath(directory), () => BuildState.Secrets(directory, environment), BuildState.SettingsFile(directory));
+        },
+        BuildSchedulerSchema.Modules, DbDataKit.State.StateScope.Install, ["engine", "repo"], "[--engine mssql|postgres] [--repo <server directory>]"));
 
     /// <summary>The shared <c>secret</c> verbs over the server's own store (<c>dbdatabuild secret ...</c>, with <c>--repo</c> as for the pairing verbs). The value of a secret comes from a hidden prompt or standard input, never an argument.</summary>
     private static Noun SecretVerbs(string[] invocation)
@@ -84,12 +91,12 @@ internal static class ServerCli
         return Path.GetFullPath(i >= 0 && i + 1 < args.Length ? args[i + 1] : BuildServerSettings.DefaultDirectory());
     }
 
-    private static async Task<int> RunServerAsync(string[] args, CliContext context)
+    private static async Task<int> RunServerAsync(string[] args, CliContext context, Func<string, string?>? environment)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string> { "scheduler", "read-only" }, new HashSet<string> { "repo", "listen" });
+        var parsed = CliArgs.Parse(args, new HashSet<string> { "scheduler", "read-only" }, new HashSet<string> { "repo", "listen", "state-engine", "state-connection" });
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0)
         {
-            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <server directory>] [--listen https://<address>:<port>] [--scheduler] [--read-only]. Projects are added with 'server project add'.");
+            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <server directory>] [--listen https://<address>:<port>] [--scheduler [--state-engine sqlite|mssql|postgres --state-connection <connection string>]] [--read-only]. Projects are added with 'server project add'.");
             return CliExit.Usage;
         }
 
@@ -106,6 +113,18 @@ internal static class ServerCli
         }
 
         var settings = new BuildServerSettings(DirectoryOf(args), listen);
+        // the scheduler's state: the flags, the environment, then the state section of server.yaml; a state section that is not valid stops the start naming the file
+        DbDataKit.State.StateSettings? state = null;
+        if (parsed.Has("scheduler"))
+        {
+            try { state = BuildState.Resolve(settings.Directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection")).Settings; }
+            catch (InvalidOperationException ex)
+            {
+                await context.Error.WriteLineAsync(ex.Message);
+                return DbDataKit.State.Cli.StateExit.Settings;
+            }
+        }
+
         Directory.CreateDirectory(settings.Directory);
         var projects = new ProjectsFile(settings.Directory);
         foreach (var problem in projects.Problems) await context.Error.WriteLineAsync(problem);
@@ -122,7 +141,7 @@ internal static class ServerCli
         using var sessions = new WarmSessionRunner(logins: token => ServerSecrets.LoginsAsync(secrets, token));
         // running plans on their schedules is opt-in: a server that was only meant to answer reads never writes a target by itself
         BuildScheduler? scheduler = parsed.Has("scheduler")
-            ? new BuildScheduler(projects, runner, BuildSchedulerSchema.Open(settings.Directory), TimeProvider.System, line => context.Error.WriteLine(line))
+            ? new BuildScheduler(projects, runner, BuildSchedulerSchema.Open(settings.Directory, settings: state), TimeProvider.System, line => context.Error.WriteLine(line))
             : null;
         var publisher = new ProxyPublisher(new ProxiesFile(settings.Directory), new ConsoleKeyStore(secrets, secrets), secrets);
         var app = BuildServer.Build(settings, BuildServer.Certificate(settings.Directory), runner, projects, host.Commands, line => context.Error.WriteLine(line), parsed.Has("read-only") ? BuildManagementApi.ReadOnlySurface : null, scheduler, sessions, publisher);

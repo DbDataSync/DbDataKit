@@ -1,0 +1,118 @@
+$ dbdatarunner help
+Usage: dbdatarunner <noun> <verb> [options]
+
+Commands:
+  server   The long-running process
+  runs     The run history of the tasks
+  tasks    The scheduled tasks of the installed packages
+  package  Packages in this runner (a development path: plan 30's publish API replaces it)
+  state    The state database: where it is, whether it works, and the rights it needs
+  service  Registration of 'server run' with Windows or systemd
+  cert     The server's TLS certificate
+  health   Is a running server answering
+
+Run 'dbdatarunner <noun> help' for the verbs of one.
+Add --format json to any command for a JSON document instead of text.
+
+$ dbdatarunner server help
+dbdatarunner server: The long-running process
+
+Verbs:
+  server run [options]
+      Run the server in the foreground (what the operating system's service runs); not offered through the management API [Offline only]
+  server pair [--max-role <role>[,<role>...]] [--name <label>] [--minutes <n>] [--repo <path>]
+      Make a single-use code that pairs a console, another server or a command line with this server [Repo files only (no target connection)]
+  server clients [--repo <path>]
+      The paired clients: kind, name, id, key fingerprint, ceiling, when paired [Offline only]
+  server unpair <client> [--repo <path>]
+      Remove a pairing, effective on the client's next call [Repo files only (no target connection)]
+
+$ dbdatarunner runs help
+dbdatarunner runs: The run history of the tasks
+
+Verbs:
+  runs list [--package <name>] [--channel <name>] [--task <name>] [--outcome <outcome>] [--limit <n>] [--repo <server directory>]
+      The runs, newest first: when, how it ended, which task and version, the attempt and why it failed [Offline only]
+
+$ dbdatarunner tasks help
+dbdatarunner tasks: The scheduled tasks of the installed packages
+
+Verbs:
+  tasks list [--repo <server directory>]
+      The tasks of the channels this runner serves: version, next due, the last run, whether paused, and a problem with the task's row [Offline only]
+  tasks run <package>/<channel>/<task> [name=value ...] [--repo <server directory>]
+      Queue a run of the task now, apart from its schedule (a running server runs it); inputs are name=value words [Target writes (data only)]
+  tasks pause <package>/<channel>/<task> [--repo <server directory>]
+      Stop the task from being queued at its scheduled times (a run going is not touched; run-now still works) [Target writes (data only)]
+  tasks resume <package>/<channel>/<task> [--repo <server directory>]
+      Let a paused task be queued at its scheduled times again [Target writes (data only)]
+
+$ dbdatarunner package help
+dbdatarunner package: Packages in this runner (a development path: plan 30's publish API replaces it)
+
+Verbs:
+  package install <manifest.yaml> <directory> [--channel <name>] [--repo <server directory>]
+      Put a package into this runner's own state, served at once: reads a package/1 manifest and a directory of files, stores them, makes them the channel's active version and replaces the channel's task schedule [Target writes (data only)]
+
+$ dbdatarunner state help
+dbdatarunner state: The state database: where it is, whether it works, and the rights it needs
+
+Verbs:
+  state export --to <directory> [--include-secrets-check] [--engine mssql|postgres] [--repo <server directory>]
+      Write the state to a snapshot directory (a manifest and one file per table), one progress line per table; offline: the service must be stopped, and a live instance refuses it by name [Repo files only (no target connection)]
+  state import --from <directory> [--migrate-after true|false] [--engine mssql|postgres] [--repo <server directory>]
+      Load a snapshot into the empty state database the settings name, then migrate it to this version; offline, and it prints how to start the service afterwards [Target writes (DDL and/or data, as the plan states)]
+  state verify --snapshot <directory> [--db] | --against <snapshot directory or settings file> | --other-engine sqlite|mssql|postgres [--other-connection <string>] [--other-sqlite <file>] [--other-schema <s>] [--other-prefix <p>] [--rehash-payloads] [--engine mssql|postgres] [--repo <server directory>]
+      Compare a snapshot with its manifest (--snapshot), the state with a snapshot (--snapshot --db or --against) or with another database (--other-engine, --other-connection with secret references, or --against a settings file); names the table and rows that differ [Target read-only]
+  state move --to-engine sqlite|mssql|postgres [--to-connection <string with secret references>] [--to-schema <s>] [--to-prefix <p>] [--keep-snapshot] [--yes] [--engine mssql|postgres] [--repo <server directory>]
+      Move the state to another engine or database offline: export, import into the empty target, verify, and only then write the new settings; the old database is untouched; needs --yes or an answer of yes, and the service stopped [Target writes (DDL and/or data, as the plan states)]
+  state show [--offline] [--engine mssql|postgres] [--repo <server directory>]
+      Show the effective engine, the connection (secrets masked), where each module's tables are, each module's version in the registry and what is pending; read-only, creates and migrates nothing [Target read-only]
+  state test [--engine mssql|postgres] [--repo <server directory>]
+      Connect, read the registry, check the rights and the engine version, and look for a schema clash and for migrations this login may not apply; stops at the first failure with the fix [Target read-only]
+  state grants --login <database role or user> [--migrate] [--engine mssql|postgres] [--repo <server directory>]
+      Print the GRANT statements a login needs for the runner's modules (the login it runs as, or with --migrate the one that upgrades the database); run them as a database administrator [Offline only]
+  state init --topology service|group|install [--engine mssql|postgres --connection <connection with Password=secret:NAME or env:NAME>] [--login <role or user> [--migrate]] [--admin-connection <reference> --apply] [--group <name>] [--settings <file>] [--repo <server directory>]
+      Put the state in one of the three places: a SQLite file per service, one database per group, or one for the whole install; writes the settings, and for a database prints (or with --apply creates) the schemas and the service's rights, then runs 'state test' [Target writes (DDL and/or data, as the plan states)]
+
+$ dbdatarunner service help
+dbdatarunner service: Registration of 'server run' with Windows or systemd
+
+Verbs:
+  service install [--account <account>] [--password-stdin] [--data-dir <path>] [--dry-run]
+      Register the service (again, to update it); needs elevation [Target writes (DDL and/or data, as the plan states)]
+  service uninstall
+      Remove the service registration; needs elevation [Target writes (DDL and/or data, as the plan states)]
+  service status
+      Whether the service is installed and running [Offline only]
+  service start
+      Start the service; needs elevation [Target writes (DDL and/or data, as the plan states)]
+  service stop
+      Stop the service; needs elevation [Target writes (DDL and/or data, as the plan states)]
+  service restart
+      Stop and start the service; needs elevation [Target writes (DDL and/or data, as the plan states)]
+  service doctor
+      Check the registration, the account and the directory permissions [Offline only]
+  service unit
+      Print a hardened systemd unit that runs 'server run' (Linux) [Offline only]
+
+$ dbdatarunner cert help
+dbdatarunner cert: The server's TLS certificate
+
+Verbs:
+  cert show [--repo <server directory>]
+      The certificate in use; never creates or changes anything [Offline only]
+  cert ensure [--repo <server directory>]
+      Create or rotate the managed certificate if needed [Repo files only (no target connection)]
+  cert check [--repo <server directory>]
+      Exit 1 when the certificate is missing or due for rotation [Offline only]
+  cert renew [--repo <server directory>]
+      Replace the managed self-signed certificate now [Repo files only (no target connection)]
+
+$ dbdatarunner health help
+dbdatarunner health: Is a running server answering
+
+Verbs:
+  health check [--url <url>] [--timeout <seconds>]
+      Ask the server's health address; exit 0 when it answers, 1 when it does not [Offline only]
+

@@ -33,7 +33,7 @@ public static class IdentityCommand
     internal static StateDatabase OpenState(ProxyOptions options)
     {
         var resolver = new SecretResolverChain(SecretsRuntime.CreateProviders(options, SecretsRuntime.OpenStore(options)));
-        return ProxyState.Open(ProxyHost.ResolveDataDirectory(options), new StateSettings(options.State.Engine, options.State.ConnectionString),
+        return ProxyState.Open(ProxyHost.ResolveDataDirectory(options), options.State.ToSettings(),
             text => ConnectionStringReferences.ResolveAsync(text, resolver, ConnectionStringReferences.QuoteDouble).AsTask().GetAwaiter().GetResult());
     }
 }

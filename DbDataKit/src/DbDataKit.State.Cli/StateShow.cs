@@ -48,6 +48,20 @@ internal static class StateShow
 
         data["registry_table"] = session.Registry;
         await write.WriteLineAsync($"  registry     {session.Registry}");
+        if (session.Target.Sources is { } sources)
+        {
+            // why the product uses this engine: a flag, an environment variable, its settings file or nothing (the default)
+            data["sources"] = new Dictionary<string, object?>
+            {
+                ["engine"] = sources.Engine.ToData(), ["connection"] = sources.Connection.ToData(), ["namespaces"] = sources.Namespaces.ToData(), ["retention"] = sources.Retention.ToData(),
+            };
+            await write.WriteLineAsync("  settings from");
+            await write.WriteLineAsync($"    engine       {sources.Engine}");
+            if (!session.IsSqlite) await write.WriteLineAsync($"    connection   {sources.Connection}");
+            await write.WriteLineAsync($"    namespaces   {sources.Namespaces}");
+            await write.WriteLineAsync($"    retention    {sources.Retention}");
+        }
+
         data["modules_listed"] = context.Modules is not null;
 
         StateInspection? inspection = null;

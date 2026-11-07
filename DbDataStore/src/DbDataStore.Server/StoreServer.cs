@@ -22,7 +22,7 @@ public static class StoreServer
         (typeof(StoreServer).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0").Split('+')[0];
 
     /// <summary>The server's instance id, made the first time and kept in its state database (<see cref="StoreState"/>) after.</summary>
-    public static string InstanceId(string directory) => InstanceId(new GroupSettings(StoreState.Open(directory)));
+    public static string InstanceId(string directory, DbDataKit.State.StateSettings? state = null) => InstanceId(new GroupSettings(StoreState.Open(directory, state)));
 
     private static string InstanceId(IGroupSettings settings) => GroupIdentity.InstanceId(settings, "store");
 
@@ -31,7 +31,7 @@ public static class StoreServer
     public static WebApplication Build(StoreSettings settings, X509Certificate2 certificate, Action<string> log)
     {
         if (settings.Listen.Scheme != Uri.UriSchemeHttps) throw new ArgumentException("A DbDataStore server listens on HTTPS only.", nameof(settings));
-        var state = StoreState.Open(settings.Directory);
+        var state = StoreState.Open(settings.Directory, settings.State);
         var instanceId = InstanceId(new GroupSettings(state));
         var files = new PairingFiles(settings.ServerYaml, Group: state);
         var clients = files.Clients();

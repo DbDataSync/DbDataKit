@@ -91,20 +91,88 @@ public sealed class ProxyOptions
 
     /// <summary>Where the server keeps its state (notifications and what later slices add, such as saved queries). SQLite in the data directory unless an engine is named. Read at start; a change needs a restart.</summary>
     public ProxyStateOptions State { get; set; } = new();
+
+    /// <summary>How often, in seconds, the instance looks for definitions published to its group (plan 20 O03): a publish through another instance is served here this long after at most. (It was <c>state.definitionPollSeconds</c> until the state section became the one every DbData product shares.)</summary>
+    [ConfigKey(Min = 1, Max = 300)]
+    public int DefinitionPollSeconds { get; set; } = 5;
 }
 
-/// <summary>The state database's engine (plan 13a, P11).</summary>
+/// <summary>
+/// The <c>state:</c> section: the one every DbData product shares (plan 29b C07), read through <c>StateSettingsReader</c> by <see cref="ProxyStateConfig"/>. The Proxy's own layers (file, environment, command line) decide which value wins.
+/// <code>
+/// state:
+///   engine: postgres
+///   connection: Host=db;Database=dbdataproxy_state;Username=proxy;Password=secret:state-db
+///   namespaces: { default: { schema: dbdataproxy } }
+///   retention: { days: 30 }
+/// </code>
+/// </summary>
 public sealed class ProxyStateOptions
 {
-    /// <summary><c>sqlite</c> (the default: <c>state.db</c> in the data directory), <c>mssql</c> or <c>postgres</c> (a database server you name in <see cref="ConnectionString"/>).</summary>
+    /// <summary><c>sqlite</c> (the default: <c>state.db</c> in the data directory), <c>mssql</c> or <c>postgres</c> (a database server you name in <see cref="Connection"/>).</summary>
     public string Engine { get; set; } = "sqlite";
 
     /// <summary>For <c>mssql</c> and <c>postgres</c>: the connection string, with the password as a secret reference (<c>Password=secret:state-db</c>). The Proxy needs a database of its own; a console on the same server uses another.</summary>
-    public string ConnectionString { get; set; } = "";
+    public string Connection { get; set; } = "";
 
-    /// <summary>How often, in seconds, the instance looks for definitions published to its group (plan 20 O03): a publish through another instance is served here this long after at most.</summary>
-    [ConfigKey(Min = 1, Max = 300)]
-    public int DefinitionPollSeconds { get; set; } = 5;
+    /// <summary>Where the registry table is (<c>schema</c>, <c>prefix</c>, <c>file</c>).</summary>
+    public ProxyStateNamespace Registry { get; set; } = new();
+
+    /// <summary>Where each module's tables are: <c>default</c> for every module without an entry of its own, then one entry per module.</summary>
+    public Dictionary<string, ProxyStateNamespace> Namespaces { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>How long history is kept: <c>days</c>, and per module or table.</summary>
+    public ProxyStateRetention Retention { get; set; } = new();
+
+    /// <summary>The settings these options say, read through the shared reader (a setting it refuses raises <see cref="InvalidOperationException"/>).</summary>
+    public DbDataKit.State.StateSettings ToSettings()
+    {
+        var section = new Dictionary<string, object?>(StringComparer.Ordinal);
+        if (!string.IsNullOrWhiteSpace(Engine)) section["engine"] = Engine;
+        if (!string.IsNullOrWhiteSpace(Connection)) section["connection"] = Connection;
+        if (Registry.ToMap() is { } registry) section["registry"] = registry;
+        if (Namespaces.Count > 0) section["namespaces"] = Namespaces.ToDictionary(p => p.Key, p => (object?)(p.Value?.ToMap() ?? []), StringComparer.Ordinal);
+        if (Retention.ToMap() is { } retention) section["retention"] = retention;
+        return DbDataKit.State.StateSettingsReader.Read(section.Count == 0 ? null : section, "state");
+    }
+}
+
+/// <summary>Where one module's tables are: a schema, a table-name prefix, or (SQLite) a file of its own.</summary>
+public sealed class ProxyStateNamespace
+{
+    public string? Schema { get; set; }
+
+    public string? Prefix { get; set; }
+
+    public string? File { get; set; }
+
+    internal Dictionary<string, object?>? ToMap()
+    {
+        var map = new Dictionary<string, object?>(StringComparer.Ordinal);
+        if (Schema is not null) map["schema"] = Schema;
+        if (Prefix is not null) map["prefix"] = Prefix;
+        if (File is not null) map["file"] = File;
+        return map.Count == 0 ? null : map;
+    }
+}
+
+/// <summary>How long history is kept (a number of days above zero, or <c>forever</c>).</summary>
+public sealed class ProxyStateRetention
+{
+    public string? Days { get; set; }
+
+    public Dictionary<string, string> Modules { get; set; } = new(StringComparer.Ordinal);
+
+    public Dictionary<string, string> Tables { get; set; } = new(StringComparer.Ordinal);
+
+    internal Dictionary<string, object?>? ToMap()
+    {
+        var map = new Dictionary<string, object?>(StringComparer.Ordinal);
+        if (Days is not null) map["days"] = Days;
+        if (Modules.Count > 0) map["modules"] = Modules.ToDictionary(p => p.Key, p => (object?)p.Value, StringComparer.Ordinal);
+        if (Tables.Count > 0) map["tables"] = Tables.ToDictionary(p => p.Key, p => (object?)p.Value, StringComparer.Ordinal);
+        return map.Count == 0 ? null : map;
+    }
 }
 
 /// <summary>The semantic models this server answers semantic requests and semantic SQL for. Their data is read through the data sources, as the signed-in client, so a client needs access to those.</summary>

@@ -385,4 +385,43 @@ public sealed class StateVerbsTests : IDisposable
         Assert.Contains("GRANT USAGE ON SCHEMA dbdatakit_alpha TO svc;", ran.Out);
         Assert.Equal(2, (await RunAsync(context, "grants", "--login", "svc")).Exit);   // SQLite: nothing to grant
     }
+
+    // ---- where each setting came from (plan 29b C07)
+
+    [Theory]
+    [MemberData(nameof(Engines), MemberType = typeof(StateCliHarness))]
+    public async Task Show_names_where_each_effective_setting_came_from_in_text_and_json(string engine)
+    {
+        var db = _h.Provision(engine);
+        var file = new StateSource(StateSourceKind.File, "/etc/tool/server.yaml");
+        var sources = new StateSources(new StateSource(StateSourceKind.Environment, "TOOL_STATE_ENGINE"), file, StateSource.Default, new StateSource(StateSourceKind.Flag, "--retention"));
+        var context = Context(db, [Module("alpha")]) with { Locate = args => Context(db, [Module("alpha")]).Locate(args) with { Sources = sources } };
+
+        var ran = await RunAsync(context, "show", "--offline");
+
+        Assert.Equal(0, ran.Exit);
+        Assert.Contains("environment variable TOOL_STATE_ENGINE", ran.Out);
+        Assert.Contains("flag --retention", ran.Out);
+        Assert.Contains("default", ran.Out);
+        Assert.Equal(engine != StateEngineIds.Sqlite, ran.Out.Contains("file /etc/tool/server.yaml"));   // the connection is shown, and so its source, only for a server engine
+        var json = ran.Data["sources"]!;
+        Assert.Equal("environment", json["engine"]!["kind"]!.GetValue<string>());
+        Assert.Equal("TOOL_STATE_ENGINE", json["engine"]!["name"]!.GetValue<string>());
+        Assert.Equal("file", json["connection"]!["kind"]!.GetValue<string>());
+        Assert.Equal("/etc/tool/server.yaml", json["connection"]!["name"]!.GetValue<string>());
+        Assert.Equal("default", json["namespaces"]!["kind"]!.GetValue<string>());
+        Assert.Equal("flag", json["retention"]!["kind"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task A_product_that_gives_no_sources_shows_none()
+    {
+        var db = _h.Provision(StateEngineIds.Sqlite);
+
+        var ran = await RunAsync(Context(db, [Module("alpha")]), "show", "--offline");
+
+        Assert.Equal(0, ran.Exit);
+        Assert.DoesNotContain("settings from", ran.Out);
+        Assert.Null(ran.Data["sources"]);
+    }
 }

@@ -1,0 +1,29 @@
+{
+  "product": "dbdatarunner",
+  "displayName": "DbDataRunner",
+  "description": "The runner: schedules and runs the tasks of published packages, each in a process of its own, with retries, time and memory limits, run history and progress, over a management API a console pairs with. Needs the .NET 10 runtime (ASP.NET Core).",
+  "homepage": "https://github.com/DbDataSync/DbDataKit/tree/main/DbDataRunner",
+  "license": "MIT",
+  "platforms": {
+    "win-x64": {
+      "exe": "dbdatarunner.exe"
+    },
+    "linux-x64": {
+      "exe": "dbdatarunner"
+    }
+  },
+  "windowsScope": "machine",
+  "globalEnv": [
+    { "name": "DBDATARUNNER_SERVER_DIR", "programData": "DbDataRunner\\server" }
+  ],
+  "service": {
+    "name": "DbDataRunner",
+    "register": "service install",
+    "unregister": "service uninstall"
+  },
+  "requiresDotnet": "10.0",
+  "notes": "The state, certificate, package cache and scratch space live in the server's data directory, away from the program files; the task host is installed in the taskhost folder beside the program. Start it with: dbdatarunner server run. Pair a console with it: dbdatarunner server pair --max-role admin. Put a package in for development with: dbdatarunner package install <manifest.yaml> <directory>.",
+  "msi": {
+    "upgradeCode": "0F7142E4-5444-4E14-95AB-7AF46EE02CB4"
+  }
+}

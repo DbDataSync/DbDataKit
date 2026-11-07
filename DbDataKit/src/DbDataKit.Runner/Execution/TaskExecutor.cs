@@ -24,7 +24,7 @@ namespace DbDataKit.Runner.Execution;
 /// <see cref="InterruptStaleRuns"/>.
 /// </para>
 /// </summary>
-public sealed class TaskExecutor
+public sealed class TaskExecutor : ITaskRunner
 {
     private static readonly Task Never = new TaskCompletionSource().Task;
 

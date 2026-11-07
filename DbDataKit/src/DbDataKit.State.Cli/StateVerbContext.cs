@@ -8,7 +8,13 @@ namespace DbDataKit.State.Cli;
 /// <param name="Settings">The effective settings: what the product opens its state with.</param>
 /// <param name="SqlitePath">The file a SQLite state is (the product's directory and <c>state.db</c>); not created by anything here.</param>
 /// <param name="Secrets">The resolver for the references in <see cref="StateSettings.ConnectionString"/>, made when it is first needed: <c>state show</c> never asks for it, <c>state test</c> does. Null: references are left as written.</param>
-public sealed record StateTarget(StateSettings Settings, string SqlitePath, Func<ISecretResolver?>? Secrets = null);
+/// <param name="SettingsFile">The settings file whose <c>state:</c> section these settings were read from, and where <c>state init</c> and <c>state move</c> write the section (<see cref="StateSettingsWriter"/>). Null: the product keeps no such file, <c>state move</c> says so and does nothing, and <c>state init</c> needs <c>--settings</c>.</param>
+/// <param name="Sources">Where each effective setting came from (<see cref="StateSettingsResolver"/>), shown by <c>state show</c>; null: the product does not say.</param>
+public sealed record StateTarget(StateSettings Settings, string SqlitePath, Func<ISecretResolver?>? Secrets = null, string? SettingsFile = null, StateSources? Sources = null)
+{
+    /// <summary>A target from what <see cref="StateSettingsResolver.Resolve"/> found: the settings, where each came from and the file they are read from.</summary>
+    public static StateTarget From(ResolvedState resolved, string sqlitePath, Func<ISecretResolver?>? secrets, string? settingsFile) => new(resolved.Settings, sqlitePath, secrets, settingsFile, resolved.Sources);
+}
 
 /// <summary>
 /// What a product tells the shared <c>state</c> verbs (<see cref="StateVerbs.Create"/>): its program name, how to find its state from the options of the command, the modules it is built from and the scope
@@ -32,6 +38,9 @@ public sealed record StateVerbContext(
 {
     /// <summary>For tests: what the engine's version is, in place of asking the engine (the support check of <c>state test</c> is run against it).</summary>
     public Func<DbConnection?, string?>? EngineVersion { get; init; }
+
+    /// <summary>For tests: changes the options of <c>state move</c> before it runs (for example <c>MoveOptions.AfterImport</c>, to inject a failure after the import, or a fixed snapshot directory).</summary>
+    public Func<DbDataKit.State.Engines.Snapshots.MoveOptions, DbDataKit.State.Engines.Snapshots.MoveOptions>? ConfigureMove { get; init; }
 }
 
 /// <summary>The exit codes of <c>state show</c> and <c>state test</c>: 0 is everything fine, 2 a wrong use (as everywhere); every other code is one kind of failure, so a script can tell them apart.</summary>
@@ -63,4 +72,36 @@ public static class StateExit
 
     /// <summary>The service would refuse the database: made by the old structure, a module newer than the binary, a namespace that moved, an edited migration.</summary>
     public const int Refused = 18;
+
+    // The snapshot verbs (export, import, verify, move; plan 29b X04) use 20 to 29, so the codes of show and test keep their numbers.
+
+    /// <summary>An export was refused: a live instance uses the database (stop the service), the SQLite file is held by another process, or the snapshot directory is not empty.</summary>
+    public const int SnapshotRefused = 20;
+
+    /// <summary>An import or a move was refused because the target already holds modules: it goes into an empty database.</summary>
+    public const int TargetNotEmpty = 21;
+
+    /// <summary>The snapshot cannot be used: no manifest, another format, a damaged or missing file, a module newer than this software.</summary>
+    public const int SnapshotInvalid = 22;
+
+    /// <summary><c>state verify</c> found a difference (the sentence and the list name the table and the rows), or a move's verification did.</summary>
+    public const int VerifyDiffers = 23;
+
+    /// <summary>The database is not ready to be read: empty, not a state database, or older than this software (start the product once so it migrates it).</summary>
+    public const int NotReady = 24;
+
+    /// <summary><c>state move</c> stopped at a step; the settings file was not changed and the old database was not touched.</summary>
+    public const int MoveFailed = 25;
+
+    /// <summary><c>state move</c> was not confirmed: it needs <c>--yes</c> or an answer of yes.</summary>
+    public const int NotConfirmed = 26;
+
+    /// <summary><c>--include-secrets-check</c> found a secret of the connection string in the exported snapshot (the snapshot is removed).</summary>
+    public const int SecretInSnapshot = 27;
+
+    /// <summary><c>state init</c> would point the product at another place while the state it has holds data: it is moved with <c>state move</c>, never by changing the setting.</summary>
+    public const int Populated = 19;
+
+    /// <summary><c>state init --apply</c>: the administrator's connection failed, or a statement it ran was refused. (28: 20 to 27 are the snapshot verbs'.)</summary>
+    public const int Admin = 28;
 }

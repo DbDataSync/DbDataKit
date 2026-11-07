@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsTestProject>true</IsTestProject>
+    <NoWarn>$(NoWarn);xUnit1051;CS1591</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Npgsql" />
+    <Using Include="Xunit" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\..\src\DbDataRunner.Server\DbDataRunner.Server.csproj" />
+    <!-- built, then published by the tests to a directory like a real package -->
+    <ProjectReference Include="..\..\..\DbDataKit\tests\DbDataKit.Runner.TestPackage\DbDataKit.Runner.TestPackage.csproj" ReferenceOutputAssembly="false" />
+    <None Include="help.snapshot.txt" CopyToOutputDirectory="PreserveNewest" />
+    <!-- where the repository is, for the test that publishes the sample package (the output may be elsewhere: an artifacts path) -->
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>RepoRoot</_Parameter1>
+      <_Parameter2>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', '..', '..'))</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <!--
+    The tests run the server from the build output of the server's own project, where the build put the task host beside the program, not from the copy of its assembly in this project's output: the folder it was
+    built in is written to a file the tests read.
+  -->
+  <Target Name="WriteServerOutput" AfterTargets="Build">
+    <MSBuild Projects="..\..\src\DbDataRunner.Server\DbDataRunner.Server.csproj" Targets="GetTargetPath">
+      <Output TaskParameter="TargetOutputs" PropertyName="_ServerDll" />
+    </MSBuild>
+    <WriteLinesToFile File="$(OutDir)server-output.txt" Lines="$([System.IO.Path]::GetDirectoryName('$(_ServerDll)'))" Overwrite="true" />
+  </Target>
+</Project>

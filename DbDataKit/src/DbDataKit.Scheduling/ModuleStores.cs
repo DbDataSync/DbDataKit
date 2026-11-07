@@ -20,6 +20,16 @@ public sealed class ModuleRunLockStore(StateDatabase database, string service)
             return cmd.ExecuteNonQuery() == 1;
         });
 
+    /// <summary>The run that holds the lock, or null when nobody does.</summary>
+    public Guid? Holder(string owner, string kind, string subject) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, "SELECT run_id FROM {table:run_lock} WHERE service = $service AND owner = $owner AND kind = $kind AND subject = $subject;");
+            Bind(cmd, owner, kind, subject);
+            return cmd.ExecuteScalar() is { } value and not DBNull ? StateValues.ToGuid(value) : (Guid?)null;
+        });
+
     public void Release(string owner, string kind, string subject) =>
         database.Retry(() =>
         {
