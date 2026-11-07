@@ -90,6 +90,8 @@
     <Project Path="DbDataKit/src/DbDataKit.Runner/DbDataKit.Runner.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Runner.Limits/DbDataKit.Runner.Limits.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Runner.Kit/DbDataKit.Runner.Kit.csproj" />
+    <Project Path="DbDataKit/src/DbDataKit.Runner.Protocol/DbDataKit.Runner.Protocol.csproj" />
+    <Project Path="DbDataKit/src/DbDataKit.Runner.Protocol.Server/DbDataKit.Runner.Protocol.Server.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Runner.Kit.Analyzers/DbDataKit.Runner.Kit.Analyzers.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Scheduling/DbDataKit.Scheduling.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Scripting/DbDataKit.Scripting.csproj" />

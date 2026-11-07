@@ -155,7 +155,7 @@ internal sealed class StepEngine(RunContext run)
         }
 
         var scope = new CountScope(run.CurrentScope);
-        StepStream stream = await Backend.OpenStepStreamAsync(toRun!, step.Name, step.MediaType, ct).ConfigureAwait(false);
+        StepStream stream = await Backend.OpenStepStreamAsync(toRun!, step.Name, key, step.MediaType, ct).ConfigureAwait(false);
         try
         {
             run.Step.Value = new StepFrame(step.Name, key);
@@ -179,7 +179,7 @@ internal sealed class StepEngine(RunContext run)
         await stream.Stream.DisposeAsync().ConfigureAwait(false);
         try
         {
-            await Backend.CompleteStreamStepAsync(step.Name, key, stream.PayloadId, scope.Snapshot(), ct).ConfigureAwait(false);
+            await Backend.CompleteStreamStepAsync(step.Name, key, stream.PayloadId(), scope.Snapshot(), ct).ConfigureAwait(false);
         }
         catch (InvalidOperationException ex)
         {
@@ -189,7 +189,7 @@ internal sealed class StepEngine(RunContext run)
         }
 
         run.AddStep(new StepReport(step.Name, key, StepStatus.Ran, clock.Elapsed, scope.Snapshot()));
-        return Backend.GetPayload(stream.PayloadId);
+        return Backend.GetPayload(stream.PayloadId());
     }
 
     /// <summary>

@@ -30,6 +30,8 @@ public sealed class RunnerEnvironment(StateDatabase database, string package, st
     public RunnerHooks? Hooks { get; init; }
 
     public TimeProvider Time => Database.Time;
+
+    internal RunSettings Settings => new(Hooks, MaxParallelism, Database.NewId);
 }
 
 /// <summary>Injection points for tests and the simulator (slice R03c). A hook that throws <see cref="SimulatedCrashException"/> ends the run as if the process had died at that point.</summary>

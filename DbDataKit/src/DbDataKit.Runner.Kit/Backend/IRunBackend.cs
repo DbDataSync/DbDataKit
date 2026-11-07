@@ -8,12 +8,12 @@ internal sealed record RunIdentity(Guid RunId, int Attempt, string Chain, TaskRe
 /// <summary>An inbox item as handed out: its body is a payload (<see cref="Body"/>), null for an empty one.</summary>
 internal sealed record InboxTaken(Guid Id, string Source, bool SignatureOk, Guid? Body);
 
-/// <summary>The write side of a streaming step: the stream the body fills, and the call that commits the payload once the body returned normally.</summary>
-internal sealed record StepStream(Stream Stream, Guid PayloadId, Action Complete);
+/// <summary>The write side of a streaming step: the stream the body fills, the call that commits the payload once the body returned normally, and the payload's id (read after the stream is disposed: a remote upload only learns it then).</summary>
+internal sealed record StepStream(Stream Stream, Func<Guid> PayloadId, Action Complete);
 
 /// <summary>
 /// What a run needs from wherever the runner's state lives (plan 28b section 9). The kit's logic (recovery, units, typed progress, counts) sits above this interface and is the same for every implementation; the
-/// in-process one (<see cref="InProcessRun"/>) calls the stores, and the protocol client of slice R03b will send the messages of the same names.
+/// in-process one (<see cref="InProcessRun"/>) calls the stores, and the protocol client (<see cref="GrpcRunBackend"/>, slice R03b) sends the messages of the same names.
 /// </summary>
 internal interface IRunBackend
 {
@@ -46,7 +46,7 @@ internal interface IRunBackend
 
     Task FailStepAsync(string name, string key, string error, IReadOnlyDictionary<string, long>? counts, CancellationToken ct);
 
-    Task<StepStream> OpenStepStreamAsync(StepBegin.Run run, string stepName, string? mediaType, CancellationToken ct);
+    Task<StepStream> OpenStepStreamAsync(StepBegin.Run run, string stepName, string key, string? mediaType, CancellationToken ct);
 
     // ---- units (BeginUnit, EndUnit)
     Task<UnitBegin> BeginUnitAsync(string name, string key, CancellationToken ct);
@@ -65,6 +65,9 @@ internal interface IRunBackend
 
     Task<InboxTaken?> TakeInboxAsync(CancellationToken ct);
 
+    /// <summary>The job finished with an item (the protocol's CompleteInbox). The in-process run has no completed state for an item, so it records nothing.</summary>
+    Task CompleteInboxAsync(Guid id, CancellationToken ct);
+
     Task ReleaseInboxAsync(Guid id, CancellationToken ct);
 
     Task AddDeadLetterAsync(string source, string error, byte[] body, Guid id, CancellationToken ct);
@@ -73,4 +76,11 @@ internal interface IRunBackend
     PayloadRef GetPayload(Guid id);
 
     void Log(string level, string message, string? item = null);
+
+    // ---- one-way (the protocol batches them): counts, the status line, lineage
+    void Count(string name, long n);
+
+    void Status(string text);
+
+    void Lineage(IReadOnlyList<string> reads, IReadOnlyList<string> writes);
 }

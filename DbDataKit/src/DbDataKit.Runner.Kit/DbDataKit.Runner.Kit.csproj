@@ -9,6 +9,8 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <ProjectReference Include="..\DbDataKit.Runner.Abstractions\DbDataKit.Runner.Abstractions.csproj" />
     <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
+    <ProjectReference Include="..\DbDataKit.Runner.Protocol\DbDataKit.Runner.Protocol.csproj" />
+    <InternalsVisibleTo Include="DbDataKit.Runner.Protocol.Server" />
     <!-- the analyzer is built first and travels in the package, under analyzers/ -->
     <ProjectReference Include="..\DbDataKit.Runner.Kit.Analyzers\DbDataKit.Runner.Kit.Analyzers.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
     <None Include="..\DbDataKit.Runner.Kit.Analyzers\bin\$(Configuration)\netstandard2.0\DbDataKit.Runner.Kit.Analyzers.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />

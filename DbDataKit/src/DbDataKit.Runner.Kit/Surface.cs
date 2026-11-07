@@ -80,7 +80,7 @@ public interface IRun
     /// <summary>The run's log: lines go to the run's log in the state database.</summary>
     ILogger Log { get; }
 
-    /// <summary>What this job reads and writes, for lineage (plan 28b section 3). Recorded nowhere yet (a no-op until the lineage slice).</summary>
+    /// <summary>What this job reads and writes, for lineage (plan 28b section 3). Sent to the runner (one-way); recorded nowhere durable yet (the lineage slice gives it a place).</summary>
     void Lineage(IEnumerable<string> reads, IEnumerable<string> writes);
 }
 
@@ -147,7 +147,7 @@ public sealed class InboxItem<T>
     public Task CompleteAsync(CancellationToken ct)
     {
         _run.OpenInbox.TryRemove(Id, out _);
-        return Task.CompletedTask;
+        return _run.Backend.CompleteInboxAsync(Id, ct);
     }
 
     /// <summary>Makes a dead letter of the item (replayable later) and counts a rejected record: the run ends <c>CompletedWithFailures</c>.</summary>
