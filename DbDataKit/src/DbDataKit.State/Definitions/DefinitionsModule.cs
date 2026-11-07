@@ -112,6 +112,24 @@ public static class DefinitionsModule
             );
             CREATE INDEX {index:definition_instance_status_by_definition} ON {table:definition_instance_status}(kind, name, channel);
             """,
+            """
+            -- Plan 28a R17: what an instance found when it prepared a version beyond ready or failed. note_text is the instance's own words (for a runner: what the dry run of the progress migration
+            -- would do, the losses first); has_losses is 1 when that dry run would lose progress, which keeps the version from activating by itself until an administrator confirms the losses.
+            ALTER TABLE {table:definition_instance_status} {{addcolumn}} note_text {{text}} NULL;
+            ALTER TABLE {table:definition_instance_status} {{addcolumn}} has_losses {{int}} NOT NULL DEFAULT 0;
+
+            -- Plan 28a R18: while an activation waits for the runs of a package in flight, no new run of it starts. One row per definition and channel, with a lease (expires_at): a holder that dies
+            -- does not hold forever.
+            CREATE TABLE {table:definition_activation_hold} (
+                kind        {{key}} NOT NULL,
+                name        {{key}} NOT NULL,
+                channel     {{key}} NOT NULL,
+                held_by     {{key}} NOT NULL,
+                held_at     {{time}} NOT NULL,
+                expires_at  {{time}} NOT NULL,
+                PRIMARY KEY (kind, name, channel)
+            );
+            """,
         ],
         // an instance that left the group: its status rows are history after the retention age
         retention: [new RetentionRule("definition_instance_status", "gone_at")]);

@@ -130,8 +130,8 @@ public sealed class PublishApiTests
             var channel = Assert.Single(detail!["channels"]!.AsArray());
             Assert.Equal((1, true), ((int)channel!["staged"]!, channel["active"] is null));
 
-            // an administrator activates it, and the schedule runs it
-            var (activate, _) = await h.PostAsync("/api/v1/definitions/integration/sample/activate", ServerRole.Admin, new { channel = "dev", expected_version = 0 });
+            // an administrator activates it (this harness runs no staging follower, so no runner has reported ready: activating is a recorded "anyway"), and the schedule runs it
+            var (activate, _) = await h.PostAsync("/api/v1/definitions/integration/sample/activate", ServerRole.Admin, new { channel = "dev", expected_version = 0, anyway = true });
             Assert.Equal(HttpStatusCode.OK, activate);
             Assert.Equal("1", TaskVersions(h, "sample"));
             await h.WaitAsync(async () => await h.RunsAsync("?package=sample&outcome=succeeded") is { Count: >= 1 } r ? r : null, "a run of the activated version");

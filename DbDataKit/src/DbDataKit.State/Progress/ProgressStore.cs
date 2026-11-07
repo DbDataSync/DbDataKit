@@ -56,6 +56,44 @@ public sealed class ProgressStore(StateDatabase database, ProgressKey key)
 
     private static readonly string[] ValueColumns = ["value_text", "value_int", "value_decimal", "value_at", "value_bool", "value_payload", "value_json"];
 
+    // ---------- one transaction with other writers ----------
+
+    private (DbConnection Connection, DbTransaction Transaction)? _ambient;
+
+    /// <summary>
+    /// The same task's store on a connection and transaction the caller owns, so that moving progress (a migration, a restore) happens in the same transaction as other writes (the pointer of the definition that
+    /// declares it, the task projection). Every call of the returned store runs on that transaction and commits nothing; the caller commits or rolls back.
+    /// </summary>
+    public ProgressStore Within(DbConnection connection, DbTransaction transaction) => new(database, key) { _ambient = (connection, transaction) };
+
+    private T Read<T>(Func<DbConnection, DbTransaction?, T> work) =>
+        _ambient is { } a
+            ? work(a.Connection, a.Transaction)
+            : database.Retry(() =>
+            {
+                using var connection = database.OpenConnection();
+                return work(connection, null);
+            });
+
+    /// <summary>Runs <paramref name="work"/> on a transaction of its own that commits when it returns true (or on the caller's, which it leaves to the caller).</summary>
+    private bool Write(Func<DbConnection, DbTransaction, bool> work)
+    {
+        if (_ambient is { } a) return work(a.Connection, a.Transaction);
+        return database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var transaction = database.BeginTransaction(connection, Module);
+            if (!work(connection, transaction))
+            {
+                transaction.Rollback();
+                return false;
+            }
+
+            transaction.Commit();
+            return true;
+        });
+    }
+
     private void BindKey(DbCommand cmd) =>
         cmd.Bind(database, "package", key.Package).Bind(database, "channel", key.Channel).Bind(database, "task", key.Task);
 
@@ -122,12 +160,7 @@ public sealed class ProgressStore(StateDatabase database, ProgressKey key)
     // ---------- checkpoints ----------
 
     /// <summary>A checkpoint, or null when it has never been advanced. Its <see cref="Checkpoint.Version"/> is what <see cref="Advance"/> asks for (0 for a checkpoint that does not exist yet).</summary>
-    public Checkpoint? GetCheckpoint(string name, string itemKey = "") =>
-        database.Retry(() =>
-        {
-            using var connection = database.OpenConnection();
-            return ReadCheckpoint(connection, null, name, itemKey);
-        });
+    public Checkpoint? GetCheckpoint(string name, string itemKey = "") => Read((connection, transaction) => ReadCheckpoint(connection, transaction, name, itemKey));
 
     private Checkpoint? ReadCheckpoint(DbConnection connection, DbTransaction? transaction, string name, string itemKey)
     {
@@ -164,18 +197,10 @@ public sealed class ProgressStore(StateDatabase database, ProgressKey key)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         if (parts.Count == 0) throw new ArgumentException("A checkpoint has at least one part.", nameof(parts));
-        return database.Retry(() =>
+        return Write((connection, transaction) =>
         {
-            using var connection = database.OpenConnection();
-            using var transaction = database.BeginTransaction(connection, Module);
-            if (!AdvanceCore(connection, transaction, name, parts, expectedVersion, runId, itemKey, actor))
-            {
-                transaction.Rollback();
-                return false;
-            }
-
+            if (!AdvanceCore(connection, transaction, name, parts, expectedVersion, runId, itemKey, actor)) return false;
             alsoWrite?.Invoke(connection, transaction);
-            transaction.Commit();
             return true;
         });
     }
@@ -251,7 +276,13 @@ public sealed class ProgressStore(StateDatabase database, ProgressKey key)
             insert.Bind(database, "name", name).Bind(database, "item_key", itemKey).Bind(database, "part", part);
             BindValue(insert, value);
             insert.ExecuteNonQuery();
-            History(connection, transaction, name, itemKey, part, value.Type, old?.Canonical(), value.Canonical(), version, runId, actor, now);
+            // a part whose type changed is a removal of the old value (in its own type) and an addition of the new one, so a rewind or a rollback can read the old text back as what it was
+            if (old is not null && old.Type != value.Type)
+            {
+                History(connection, transaction, name, itemKey, part, old.Type, old.Canonical(), null, version, runId, actor, now);
+                History(connection, transaction, name, itemKey, part, value.Type, null, value.Canonical(), version, runId, actor, now);
+            }
+            else History(connection, transaction, name, itemKey, part, value.Type, old?.Canonical(), value.Canonical(), version, runId, actor, now);
         }
 
         foreach (var (part, old) in before.Where(b => !parts.ContainsKey(b.Key)))
@@ -332,10 +363,9 @@ public sealed class ProgressStore(StateDatabase database, ProgressKey key)
     public IReadOnlyList<string> CheckpointNames() => Names("checkpoint_head");
 
     private IReadOnlyList<string> Keys(string table, string name) =>
-        database.Retry(() =>
+        Read((connection, transaction) =>
         {
-            using var connection = database.OpenConnection();
-            using var cmd = database.Command(Module, connection, $"SELECT item_key FROM {{table:{table}}} WHERE {KeyWhere} AND name = $name ORDER BY item_key;");
+            using var cmd = database.Command(Module, connection, transaction, $"SELECT item_key FROM {{table:{table}}} WHERE {KeyWhere} AND name = $name ORDER BY item_key;");
             BindKey(cmd);
             cmd.Bind(database, "name", name);
             using var reader = cmd.ExecuteReader();
@@ -345,10 +375,9 @@ public sealed class ProgressStore(StateDatabase database, ProgressKey key)
         });
 
     private IReadOnlyList<string> Names(string table) =>
-        database.Retry(() =>
+        Read((connection, transaction) =>
         {
-            using var connection = database.OpenConnection();
-            using var cmd = database.Command(Module, connection, $"SELECT DISTINCT name FROM {{table:{table}}} WHERE {KeyWhere} ORDER BY name;");
+            using var cmd = database.Command(Module, connection, transaction, $"SELECT DISTINCT name FROM {{table:{table}}} WHERE {KeyWhere} ORDER BY name;");
             BindKey(cmd);
             using var reader = cmd.ExecuteReader();
             var names = new List<string>();
@@ -358,16 +387,10 @@ public sealed class ProgressStore(StateDatabase database, ProgressKey key)
 
     /// <summary>Removes a checkpoint (its head and parts). The history keeps every value it had, with <paramref name="actor"/> on the removal. False when there was none.</summary>
     public bool DeleteCheckpoint(string name, string actor, string itemKey = "") =>
-        database.Retry(() =>
+        Write((connection, transaction) =>
         {
-            using var connection = database.OpenConnection();
-            using var transaction = database.BeginTransaction(connection, Module);
             var current = ReadCheckpoint(connection, transaction, name, itemKey);
-            if (current is null)
-            {
-                transaction.Rollback();
-                return false;
-            }
+            if (current is null) return false;
 
             var now = database.Time.GetUtcNow();
             foreach (var (part, old) in current.Parts)
@@ -379,7 +402,6 @@ public sealed class ProgressStore(StateDatabase database, ProgressKey key)
             using var head = database.Command(Module, connection, transaction, $"DELETE FROM {{table:checkpoint_head}} WHERE {KeyWhere} AND name = $name AND item_key = $item_key;");
             BindKey(head);
             head.Bind(database, "name", name).Bind(database, "item_key", itemKey).ExecuteNonQuery();
-            transaction.Commit();
             return true;
         });
 
@@ -391,10 +413,9 @@ public sealed class ProgressStore(StateDatabase database, ProgressKey key)
 
     /// <summary>Removes a state value; false when there was none.</summary>
     public bool DeleteState(string name, string itemKey = "") =>
-        database.Retry(() =>
+        Read((connection, transaction) =>
         {
-            using var connection = database.OpenConnection();
-            using var cmd = database.Command(Module, connection, $"DELETE FROM {{table:state_value}} WHERE {KeyWhere} AND name = $name AND item_key = $item_key;");
+            using var cmd = database.Command(Module, connection, transaction, $"DELETE FROM {{table:state_value}} WHERE {KeyWhere} AND name = $name AND item_key = $item_key;");
             BindKey(cmd);
             cmd.Bind(database, "name", name).Bind(database, "item_key", itemKey);
             return cmd.ExecuteNonQuery() == 1;
@@ -406,10 +427,9 @@ public sealed class ProgressStore(StateDatabase database, ProgressKey key)
 
     /// <summary>A state value and the version to name to replace it (0 when there is none).</summary>
     public (ProgressValue Value, long Version)? ReadState(string name, string itemKey = "") =>
-        database.Retry(() =>
+        Read((connection, transaction) =>
         {
-            using var connection = database.OpenConnection();
-            using var cmd = database.Command(Module, connection, $"SELECT row_version, {ValueSelect} FROM {{table:state_value}} WHERE {KeyWhere} AND name = $name AND item_key = $item_key;");
+            using var cmd = database.Command(Module, connection, transaction, $"SELECT row_version, {ValueSelect} FROM {{table:state_value}} WHERE {KeyWhere} AND name = $name AND item_key = $item_key;");
             BindKey(cmd);
             cmd.Bind(database, "name", name).Bind(database, "item_key", itemKey);
             using var reader = cmd.ExecuteReader();
@@ -418,18 +438,74 @@ public sealed class ProgressStore(StateDatabase database, ProgressKey key)
 
     /// <summary>Sets a state value; with <paramref name="expectedVersion"/> only if it is still at that version (0: only if new). False when another writer got there first.</summary>
     public bool SetState(string name, ProgressValue value, string itemKey = "", long? expectedVersion = null) =>
-        database.Retry(() =>
+        Write((connection, transaction) => SetStateCore(connection, transaction, name, value, itemKey, expectedVersion));
+
+    /// <summary>The state values a migration changed, kept so a rollback can put them back: what the value was (null: it did not exist) and what it became (null: removed), under the migration's <paramref name="actor"/>.</summary>
+    internal void RecordStateChange(string name, string itemKey, ProgressValue? old, ProgressValue? @new, string actor) =>
+        Write((connection, transaction) =>
         {
-            using var connection = database.OpenConnection();
-            using var transaction = database.BeginTransaction(connection, Module);
-            if (!SetStateCore(connection, transaction, name, value, itemKey, expectedVersion))
+            using var cmd = database.Command(Module, connection, transaction,
+                "INSERT INTO {table:state_history} (package, channel, task, name, item_key, value_type, old_value, old_type, new_value, actor, changed_at) VALUES ($package, $channel, $task, $name, $item_key, $type, $old, $old_type, $new, $actor, $at);");
+            BindKey(cmd);
+            cmd.Bind(database, "name", name).Bind(database, "item_key", itemKey).Bind(database, "type", (@new ?? old)!.Type.ToString())
+                .Bind(database, "old", old?.Canonical(), System.Data.DbType.String).Bind(database, "old_type", old?.Type.ToString(), System.Data.DbType.String)
+                .Bind(database, "new", @new?.Canonical(), System.Data.DbType.String).Bind(database, "actor", actor).Bind(database, "at", database.Time.GetUtcNow());
+            cmd.ExecuteNonQuery();
+            return true;
+        });
+
+    /// <summary>The newest migration of this task whose actor starts with <paramref name="actorPrefix"/>: the actor, or null when none left a change (or retention removed it). An actor ends in a version 7 GUID, so the later migration sorts last.</summary>
+    internal string? LatestMigrationActor(string actorPrefix) =>
+        Read((connection, transaction) =>
+        {
+            var found = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var sql in new[] { $"SELECT DISTINCT actor FROM {{table:checkpoint_history}} WHERE {KeyWhere} AND actor IS NOT NULL;", $"SELECT DISTINCT actor FROM {{table:state_history}} WHERE {KeyWhere};" })
             {
-                transaction.Rollback();
-                return false;
+                using var cmd = database.Command(Module, connection, transaction, sql);
+                BindKey(cmd);
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                    if (reader.GetString(0).StartsWith(actorPrefix, StringComparison.Ordinal)) found.Add(reader.GetString(0));
             }
 
-            transaction.Commit();
-            return true;
+            return found.Count == 0 ? null : found.Max(StringComparer.Ordinal);
+        });
+
+    /// <summary>The checkpoint changes one migration made, oldest first.</summary>
+    internal IReadOnlyList<CheckpointChange> MigrationChanges(string actor) =>
+        Read((connection, transaction) =>
+        {
+            using var cmd = database.Command(Module, connection, transaction,
+                $"SELECT id, name, item_key, part, value_type, old_value, new_value, head_version, run_id, actor, changed_at FROM {{table:checkpoint_history}} WHERE {KeyWhere} AND actor = $actor ORDER BY id;");
+            BindKey(cmd);
+            cmd.Bind(database, "actor", actor);
+            using var reader = cmd.ExecuteReader();
+            var changes = new List<CheckpointChange>();
+            while (reader.Read())
+                changes.Add(new CheckpointChange(reader.Int64(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), Enum.Parse<ProgressType>(reader.GetString(4)),
+                    reader.IsDBNull(5) ? null : reader.GetString(5), reader.IsDBNull(6) ? null : reader.GetString(6), reader.Int64(7), reader.IsDBNull(8) ? null : reader.GetString(8), reader.GetString(9), reader.Time(10)));
+            return (IReadOnlyList<CheckpointChange>)changes;
+        });
+
+    /// <summary>The state changes one migration made, oldest first: name, item key, the value before (null: none) and the value after (null: removed).</summary>
+    internal IReadOnlyList<(string Name, string ItemKey, ProgressValue? Old, ProgressValue? New)> MigrationStateChanges(string actor) =>
+        Read((connection, transaction) =>
+        {
+            using var cmd = database.Command(Module, connection, transaction,
+                $"SELECT name, item_key, value_type, old_value, old_type, new_value FROM {{table:state_history}} WHERE {KeyWhere} AND actor = $actor ORDER BY id;");
+            BindKey(cmd);
+            cmd.Bind(database, "actor", actor);
+            using var reader = cmd.ExecuteReader();
+            var changes = new List<(string, string, ProgressValue?, ProgressValue?)>();
+            while (reader.Read())
+            {
+                var type = Enum.Parse<ProgressType>(reader.GetString(2));
+                var old = reader.IsDBNull(3) ? null : ProgressValue.Parse(Enum.Parse<ProgressType>(reader.GetString(4)), reader.GetString(3));
+                var @new = reader.IsDBNull(5) ? null : ProgressValue.Parse(type, reader.GetString(5));
+                changes.Add((reader.GetString(0), reader.GetString(1), old, @new));
+            }
+
+            return (IReadOnlyList<(string, string, ProgressValue?, ProgressValue?)>)changes;
         });
 
     private bool SetStateCore(DbConnection connection, DbTransaction transaction, string name, ProgressValue value, string itemKey, long? expectedVersion)

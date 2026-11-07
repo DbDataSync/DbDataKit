@@ -324,29 +324,34 @@ public sealed class TaskProjections(StateDatabase database)
     /// </summary>
     public void Replace(string package, string channel, IReadOnlyList<TaskProjectionRow> rows)
     {
-        var now = database.Time.GetUtcNow();
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
             using var transaction = database.BeginTransaction(connection, Module);
-            using (var delete = database.Command(Module, connection, transaction, "DELETE FROM {table:task_projection} WHERE package = $package AND channel = $channel;"))
-            {
-                delete.Bind(database, "package", package).Bind(database, "channel", channel);
-                delete.ExecuteNonQuery();
-            }
-
-            foreach (var row in rows)
-            {
-                using var insert = database.Command(Module, connection, transaction,
-                    "INSERT INTO {table:task_projection} (package, channel, task, version, schedule, triggers, limits, required_labels, progress_hash, rebuilt_at) VALUES ($package, $channel, $task, $version, $schedule, $triggers, $limits, $labels, $hash, $at);");
-                insert.Bind(database, "package", package).Bind(database, "channel", channel).Bind(database, "task", row.Task).Bind(database, "version", row.Version)
-                    .Bind(database, "schedule", row.Schedule, System.Data.DbType.String).Bind(database, "triggers", row.Triggers, System.Data.DbType.String).Bind(database, "limits", row.Limits, System.Data.DbType.String)
-                    .Bind(database, "labels", JsonSerializer.Serialize(row.RequiredLabels)).Bind(database, "hash", row.ProgressHash, System.Data.DbType.String).Bind(database, "at", now);
-                insert.ExecuteNonQuery();
-            }
-
+            Replace(connection, transaction, package, channel, rows);
             transaction.Commit();
         });
+    }
+
+    /// <summary>As <see cref="Replace(string, string, IReadOnlyList{TaskProjectionRow})"/>, on a transaction the caller owns (the activation of a version rebuilds the projection with the pointer and the progress migration).</summary>
+    public void Replace(DbConnection connection, DbTransaction transaction, string package, string channel, IReadOnlyList<TaskProjectionRow> rows)
+    {
+        var now = database.Time.GetUtcNow();
+        using (var delete = database.Command(Module, connection, transaction, "DELETE FROM {table:task_projection} WHERE package = $package AND channel = $channel;"))
+        {
+            delete.Bind(database, "package", package).Bind(database, "channel", channel);
+            delete.ExecuteNonQuery();
+        }
+
+        foreach (var row in rows)
+        {
+            using var insert = database.Command(Module, connection, transaction,
+                "INSERT INTO {table:task_projection} (package, channel, task, version, schedule, triggers, limits, required_labels, progress_hash, rebuilt_at) VALUES ($package, $channel, $task, $version, $schedule, $triggers, $limits, $labels, $hash, $at);");
+            insert.Bind(database, "package", package).Bind(database, "channel", channel).Bind(database, "task", row.Task).Bind(database, "version", row.Version)
+                .Bind(database, "schedule", row.Schedule, System.Data.DbType.String).Bind(database, "triggers", row.Triggers, System.Data.DbType.String).Bind(database, "limits", row.Limits, System.Data.DbType.String)
+                .Bind(database, "labels", JsonSerializer.Serialize(row.RequiredLabels)).Bind(database, "hash", row.ProgressHash, System.Data.DbType.String).Bind(database, "at", now);
+            insert.ExecuteNonQuery();
+        }
     }
 
     /// <summary>The rows of a channel (of one package when named), by package and task.</summary>

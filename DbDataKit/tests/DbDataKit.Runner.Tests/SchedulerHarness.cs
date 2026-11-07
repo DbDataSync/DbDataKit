@@ -100,7 +100,7 @@ internal sealed class SchedulerHarness : IDisposable
     public ModuleJobStateStore Jobs => new(Database, Service);
 
     /// <summary>A second connection to the same database, on the same clock (a second loop instance).</summary>
-    public StateDatabase OpenDatabase() => _location.Open([SchedulingModule.Module, RunnerModule.Module, RunsModule.Module], StateScope.Standalone, time: Clock);
+    public StateDatabase OpenDatabase() => _location.Open([SchedulingModule.Module, RunnerModule.Module, RunsModule.Module, DefinitionsModule.Module], StateScope.Standalone, time: Clock);
 
     public static PackageTask Def(string name, Schedule? schedule = null, TaskLimits? limits = null, bool allowOverlap = false, string[]? requires = null) =>
         new(name, new TaskEntry("T"), schedule ?? new Schedule(), [], [], [], ProgressDeclaration.Empty, limits ?? TaskLimits.None, requires ?? [], [], allowOverlap);

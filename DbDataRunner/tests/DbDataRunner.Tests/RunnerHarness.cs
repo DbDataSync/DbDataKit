@@ -25,8 +25,9 @@ public sealed class RunnerHarness : IAsyncDisposable
     private WebApplication? _app;
     private readonly bool _ownsDirectory;
 
+    /// <param name="staging">Whether this runner follows staged versions and activates them (R17). Off by default: the older tests drive the manual publish API and expect a staged version to stay staged until they activate it.</param>
     /// <param name="sharedState">The state of another harness: a second runner of the same group (or, on SQLite, a second server on the same file, which needs that harness's <paramref name="directory"/> too).</param>
-    public RunnerHarness(string engine, TimeSpan? tick = null, TimeSpan? grace = null, IReadOnlyList<string>? channels = null, StateSettings? sharedState = null, string? directory = null, long? maxArtifactBytes = null)
+    public RunnerHarness(string engine, TimeSpan? tick = null, TimeSpan? grace = null, IReadOnlyList<string>? channels = null, StateSettings? sharedState = null, string? directory = null, long? maxArtifactBytes = null, TimeSpan? lease = null, bool staging = false, Func<BuiltAgainst, string?>? stagingContracts = null, TimeSpan? activationMaxWait = null)
     {
         // a short path: the socket's directory is in it, and a Unix socket's path has a small limit
         Directory = directory ?? System.IO.Directory.CreateTempSubdirectory("dbdr-").FullName;
@@ -43,6 +44,10 @@ public sealed class RunnerHarness : IAsyncDisposable
             TaskHostPath = ServerBuild.TaskHost,
             MaxArtifactBytes = maxArtifactBytes ?? RunnerPublishing.DefaultMaxArtifactBytes,
             Secrets = new DbDataKit.Secrets.SecretResolverChain([new DbDataKit.Secrets.EnvSecretProvider(k => k == "DBDATA_SECRET_SHOP_HOOK" ? WebhookSecret : null)]),
+            InstanceLeaseOverride = lease,
+            Staging = staging,
+            StagingContracts = stagingContracts,
+            ActivationMaxWait = activationMaxWait ?? TimeSpan.FromMinutes(10),
         };
         State = RunnerState.Open(Directory, Settings.State, null, Settings.Group);
     }
