@@ -40,6 +40,7 @@ public sealed class RunnerScheduler
     private readonly ModuleJobPauseStore _pauses;
     private readonly ModuleRunLockStore _locks;
     private readonly TaskProjections _projections;
+    private readonly ActivationHolds _holds;
     private readonly RunnerInstances _instances;
     private readonly RunStore _runs;
     private readonly WorkItemRetries _retries;
@@ -65,6 +66,7 @@ public sealed class RunnerScheduler
         _pauses = new ModuleJobPauseStore(database, options.Service);
         _locks = new ModuleRunLockStore(database, options.Service);
         _projections = new TaskProjections(database);
+        _holds = new ActivationHolds(database);
         _instances = new RunnerInstances(database);
         _runs = new RunStore(database, options.Service);
         _retries = new WorkItemRetries(_queue);
@@ -282,6 +284,9 @@ public sealed class RunnerScheduler
     {
         // routing (plan 28 question 7): an item is claimed only by a runner that has every label its task requires; the others stay Pending
         var mine = MyLabels();
+        // an activation waits for the runs of these packages: nothing of them starts until it has moved the version (plan 30 section 3.5)
+        var held = _holds.Held(DefinitionVersionSource.Kind).Select(h => $"{h.Name}/{h.Channel}").ToHashSet(StringComparer.Ordinal);
+        if (held.Count > 0) owners = [.. owners.Where(o => !held.Contains(o))];
         var skip = owners.ToDictionary(o => o, o => (IReadOnlyCollection<string>)served.Where(t => OwnerOf(t.Ref) == o && !RoutingCheck.Serves(t.Row.RequiredLabels, mine)).Select(t => t.Ref.Task).ToList(), StringComparer.Ordinal);
         var claimed = 0;
         var progress = true;
@@ -352,6 +357,13 @@ public sealed class RunnerScheduler
         }
 
         var taskRef = TaskRef.Parse(payload.Task);
+        // claimed just as an activation took hold of the package: the item goes back and waits, so the run starts on the version the activation leaves
+        if (_holds.IsHeld(DefinitionVersionSource.Kind, taskRef.Package, taskRef.Channel))
+        {
+            if (_queue.Reschedule(item.Id, worker, _time.GetUtcNow() + _options.Tick, payload.ToJson()) is null) running.LeaseLost = true;
+            return;
+        }
+
         var row = _projections.Get(taskRef.Package, taskRef.Channel, taskRef.Task);
         if (row is null)
         {

@@ -110,15 +110,15 @@ public static class RunnerPublishApi
                 switch (act)
                 {
                     case "activate":
-                        var activated = publishing.Activate(name, channel, expected, actor);
-                        return Results.Json(new JsonObject { ["name"] = name, ["channel"] = channel, ["active"] = activated.Version });
+                        if (!Options(json, out var options, out problem)) return Error(400, problem!);
+                        return Activation(name, channel, await publishing.ActivateAsync(name, channel, expected, actor, options, context.RequestAborted));
                     case "switch":
                         if (!Int(json, "version", out var version, out problem) || version is null) return Error(400, problem ?? "switch names the version: {\"channel\": \"prod\", \"version\": 3}.");
-                        var switched = publishing.Switch(name, channel, version.Value, expected, actor);
-                        return Results.Json(new JsonObject { ["name"] = name, ["channel"] = channel, ["active"] = switched.Version });
+                        if (!Options(json, out var switchOptions, out problem)) return Error(400, problem!);
+                        return Activation(name, channel, await publishing.SwitchAsync(name, channel, version.Value, expected, actor, switchOptions, context.RequestAborted));
                     case "rollback":
-                        var back = publishing.Rollback(name, channel, expected, actor);
-                        return Results.Json(new JsonObject { ["name"] = name, ["channel"] = channel, ["active"] = back.Version });
+                        if (!Options(json, out var rollbackOptions, out problem)) return Error(400, problem!);
+                        return Activation(name, channel, await publishing.RollbackAsync(name, channel, expected, actor, rollbackOptions, context.RequestAborted));
                     default:
                         var retired = publishing.Retire(name, channel, expected, actor);
                         return Results.Json(new JsonObject { ["name"] = name, ["channel"] = channel, ["retired"] = retired });
@@ -168,6 +168,38 @@ public static class RunnerPublishApi
             publishing.SetRequireSignatures(value, ActorOf(context.ManagementToken()));
             return Results.Json(new JsonObject { [RunnerPublishing.RequireSignaturesSetting] = value });
         });
+    }
+
+    /// <summary>The administrator's words of an activation: <c>confirm_losses</c> with the list echoed in <c>losses</c>, <c>anyway</c> and its <c>reason</c>.</summary>
+    private static bool Options(JsonObject json, out ActivateOptions options, out string? problem)
+    {
+        options = new ActivateOptions();
+        problem = null;
+        var confirm = false;
+        var anyway = false;
+        if (json["confirm_losses"] is { } c && !(c is JsonValue cv && cv.TryGetValue(out confirm))) { problem = "confirm_losses is true or false."; return false; }
+        if (json["anyway"] is { } a && !(a is JsonValue av && av.TryGetValue(out anyway))) { problem = "anyway is true or false."; return false; }
+        List<string>? losses = null;
+        if (json["losses"] is { } l)
+        {
+            if (l is not JsonArray list || list.Any(x => x is not JsonValue v || !v.TryGetValue<string>(out _))) { problem = "losses is the list of texts the activation named."; return false; }
+            losses = [.. list.Select(x => (string)x!)];
+        }
+
+        options = new ActivateOptions(confirm, losses, anyway, Text(json, "reason"));
+        return true;
+    }
+
+    /// <summary>200 when the version moved; 202 when the activation is still waiting for the runs in flight (the busy tasks are named; ask again).</summary>
+    private static IResult Activation(string name, string channel, DbDataKit.Runner.Staging.ActivationOutcome outcome)
+    {
+        var body = new JsonObject
+        {
+            ["name"] = name, ["channel"] = channel, ["active"] = outcome.Version, ["state"] = outcome.State.ToString().ToLowerInvariant(), ["message"] = outcome.Message,
+            ["losses"] = new JsonArray([.. outcome.Losses.Select(l => (JsonNode)JsonValue.Create(l)!)]),
+            ["busy_tasks"] = new JsonArray([.. outcome.BusyTasks.Select(t => (JsonNode)JsonValue.Create(t)!)]),
+        };
+        return Results.Json(body, statusCode: outcome.Activated ? StatusCodes.Status200OK : StatusCodes.Status202Accepted);
     }
 
     // ---- authorization

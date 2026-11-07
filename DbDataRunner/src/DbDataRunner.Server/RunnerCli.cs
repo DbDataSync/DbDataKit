@@ -94,7 +94,7 @@ public static class RunnerCli
         RunnerSettings settings;
         try
         {
-            settings = new RunnerSettings(DirectoryOf(args, environment), listen) { State = RunnerSettings.StateFrom(environment), Channels = RunnerSettings.ChannelsFrom(environment, parsed.Get("channels")), MaxArtifactBytes = RunnerSettings.MaxArtifactBytesFrom(environment), Group = RunnerSettings.GroupFrom(environment, parsed.Get("group")) };
+            settings = new RunnerSettings(DirectoryOf(args, environment), listen) { State = RunnerSettings.StateFrom(environment), Channels = RunnerSettings.ChannelsFrom(environment, parsed.Get("channels")), MaxArtifactBytes = RunnerSettings.MaxArtifactBytesFrom(environment), ActivationMaxWait = RunnerSettings.ActivationMaxWaitFrom(environment), Group = RunnerSettings.GroupFrom(environment, parsed.Get("group")) };
         }
         catch (ArgumentException ex)
         {

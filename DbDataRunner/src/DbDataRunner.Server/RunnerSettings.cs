@@ -28,6 +28,9 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
     /// <summary>The size cap of one uploaded file, in bytes (<see cref="RunnerPublishing.DefaultMaxArtifactBytes"/> when unset).</summary>
     public const string MaxArtifactBytesVariable = "DBDATARUNNER_MAX_ARTIFACT_BYTES";
 
+    /// <summary>The longest an activation waits for the runs in flight of a package, in seconds (default 600: ten minutes); after it the activation is not applied, names the busy tasks and is tried again.</summary>
+    public const string ActivationMaxWaitVariable = "DBDATARUNNER_ACTIVATION_MAX_WAIT_SECONDS";
+
     /// <summary>The runner group's name (the state's <c>StateScope.Group</c>): servers that share a database and a group name are one group. Default <see cref="RunnerState.DefaultGroup"/>.</summary>
     public const string GroupVariable = "DBDATARUNNER_GROUP";
 
@@ -38,6 +41,9 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
 
     /// <summary>The size cap of one file uploaded through the publish API.</summary>
     public long MaxArtifactBytes { get; init; } = RunnerPublishing.DefaultMaxArtifactBytes;
+
+    /// <summary>The longest an activation waits for the runs of a package in flight (plan 28a R18): ten minutes by default.</summary>
+    public TimeSpan ActivationMaxWait { get; init; } = TimeSpan.FromMinutes(10);
 
     /// <summary>Checks the signature of a published version (plan 30 section 6.2); null: the default, which finds every version unsigned.</summary>
     public IVersionSignatureVerifier? SignatureVerifier { get; init; }
@@ -88,6 +94,15 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
         var engine = engineFlag ?? environment(StateEngineVariable);
         var connection = environment(StateConnectionVariable);
         return string.IsNullOrWhiteSpace(engine) && string.IsNullOrWhiteSpace(connection) ? new StateSettings() : new StateSettings(engine, connection);
+    }
+
+    public static TimeSpan ActivationMaxWaitFrom(Func<string, string?>? environment)
+    {
+        var text = (environment ?? Environment.GetEnvironmentVariable)(ActivationMaxWaitVariable);
+        if (string.IsNullOrWhiteSpace(text)) return TimeSpan.FromMinutes(10);
+        return double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var seconds) && seconds > 0
+            ? TimeSpan.FromSeconds(seconds)
+            : throw new ArgumentException($"{ActivationMaxWaitVariable} is a number of seconds, such as 600.");
     }
 
     public static long MaxArtifactBytesFrom(Func<string, string?>? environment)

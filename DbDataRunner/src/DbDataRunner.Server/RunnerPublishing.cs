@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using DbDataKit.Runner;
 using DbDataKit.Runner.Scheduler;
+using DbDataKit.Runner.Staging;
 using DbDataKit.State;
 using DbDataKit.Web.Trust;
 
@@ -27,6 +28,9 @@ public sealed record PublishInput(string Name, string Manifest, IReadOnlyList<Pu
 
 /// <summary>What a publish did. <see cref="Signature"/> is what the signature check found (<c>unsigned</c> until the verifier of plan 30 section 6.2 exists).</summary>
 public sealed record PublishOutcome(string Package, string Channel, int Version, bool Changed, PublishMode Mode, string Signature, IReadOnlyList<string> Tasks);
+
+/// <summary>What an administrator says to an activation: the losses confirmed (with the list echoed), or the choice to activate although instances failed.</summary>
+public sealed record ActivateOptions(bool ConfirmLosses = false, IReadOnlyList<string>? Losses = null, bool Anyway = false, string? Reason = null);
 
 /// <summary>What an upload did: the file's hash and size, and whether the runner had it already (nothing was read then).</summary>
 public sealed record ArtifactStored(string Sha256, long Size, bool Already);
@@ -70,21 +74,34 @@ public sealed partial class RunnerPublishing
     private readonly AuditLog _audit;
     private readonly DbDataKit.Web.Trust.GroupSettings _settings;
     private readonly IVersionSignatureVerifier _verifier;
+    private readonly RunnerInstances _instances;
+    private readonly TimeSpan _lease;
 
-    public RunnerPublishing(StateDatabase state, long maxArtifactBytes = DefaultMaxArtifactBytes, IVersionSignatureVerifier? verifier = null)
+    /// <param name="instanceLease">How long an instance may be silent before it is not live to the group (what activation counts as "every live instance").</param>
+    /// <param name="activation">How an activation waits for runs in flight; the defaults when null.</param>
+    public RunnerPublishing(StateDatabase state, long maxArtifactBytes = DefaultMaxArtifactBytes, IVersionSignatureVerifier? verifier = null, TimeSpan? instanceLease = null, ActivationOptions? activation = null)
     {
+        _lease = instanceLease ?? TimeSpan.FromSeconds(90);
+        _instances = new RunnerInstances(state);
         _state = state;
         MaxArtifactBytes = maxArtifactBytes;
         _verifier = verifier ?? new NoSignatureVerifier();
         _payloads = new PayloadStore(state);
         _store = new DefinitionStore(state);
         Publisher = new DefinitionPublisher(state, RunnerPackages.Kinds(), _payloads, "runner");
+        Activator = new PackageActivator(state, Publisher, activation);
         _projections = new TaskProjections(state);
         _audit = new AuditLog(state, RunnerState.ServiceId);
         _settings = new DbDataKit.Web.Trust.GroupSettings(state);
     }
 
     public DefinitionPublisher Publisher { get; }
+
+    /// <summary>Activation, switch and rollback with the progress migration (plan 28a R18).</summary>
+    public PackageActivator Activator { get; }
+
+    /// <summary>The ids of the instances that are live now (inside their lease): what "every instance is ready" is counted over.</summary>
+    public IReadOnlyList<string> LiveInstanceIds() => [.. _instances.LiveInstances(_lease).Select(i => i.Instance.Id.ToString("D"))];
 
     /// <summary>The size cap of one uploaded file, in bytes.</summary>
     public long MaxArtifactBytes { get; }
@@ -227,17 +244,79 @@ public sealed partial class RunnerPublishing
 
     // ---- life cycle
 
-    /// <summary>Makes the staged version the channel's active one (an administrator's act) and rebuilds the projection.</summary>
-    public DefinitionVersion Activate(string name, string channel, int? expectedVersion, RunnerActor actor) =>
-        Act(ActivateVerb, name, channel, actor, () => Publisher.Activate(Kind, name, actor.Id, channel, expectedVersion), v => new { version = v.Version });
+    /// <summary>
+    /// Makes the staged version the channel's active one, as an administrator's act: when every live instance is ready (or <see cref="ActivateOptions.Anyway"/>, a recorded choice: the instances that failed keep the previous version and say so),
+    /// and, when the dry run listed losses, only with <see cref="ActivateOptions.ConfirmLosses"/> and the list echoed. It waits for the runs in flight, migrates the progress and rebuilds the projection in one transaction. The returned outcome says
+    /// when it is still waiting for runs.
+    /// </summary>
+    public Task<ActivationOutcome> ActivateAsync(string name, string channel, int? expectedVersion, RunnerActor actor, ActivateOptions? options = null, CancellationToken ct = default) =>
+        ActAsync(ActivateVerb, name, channel, actor, async () =>
+        {
+            options ??= new ActivateOptions();
+            var preview = Activator.Preview(name, channel) ?? throw new RunnerPublishException(404, $"The integration '{name}' has nothing staged in channel '{channel}'.");
+            var confirmed = false;
+            if (preview.Losses.Count > 0)
+            {
+                if (!options.ConfirmLosses)
+                    throw new RunnerPublishException(409, $"Version {preview.Version} of '{name}' loses progress: {string.Join("; ", preview.Losses)}. To activate it anyway, send confirm_losses: true with the same list in losses.");
+                if (options.Losses is null || !preview.Losses.OrderBy(l => l, StringComparer.Ordinal).SequenceEqual(options.Losses.OrderBy(l => l, StringComparer.Ordinal), StringComparer.Ordinal))
+                    throw new RunnerPublishException(409, $"The losses you confirmed are not the ones version {preview.Version} of '{name}' has now. It loses: {string.Join("; ", preview.Losses)}. Send them in losses with confirm_losses: true.");
+                confirmed = true;
+            }
 
-    /// <summary>Points the channel at any stored version (promotion) and rebuilds the projection.</summary>
-    public DefinitionVersion Switch(string name, string channel, int version, int? expectedVersion, RunnerActor actor) =>
-        Act(SwitchVerb, name, channel, actor, () => Publisher.Switch(Kind, name, version, actor.Id, channel, expectedVersion), v => new { version = v.Version });
+            var outcome = await Activator.ActivateAsync(name, channel, new ActivationRequest(options.Anyway ? ActivationMode.Anyway : ActivationMode.Administrator, actor.Id, LiveInstanceIds(), confirmed, options.Reason, expectedVersion), ct).ConfigureAwait(false);
+            return Settled(name, outcome, anywayHint: !options.Anyway);
+        }, o => new { version = o.Version, state = o.State.ToString(), anyway = options?.Anyway ?? false, confirmed_losses = o.Losses.ToArray(), busy_tasks = o.BusyTasks.ToArray() }, rebuild: false);
 
-    /// <summary>Returns the channel to its previous version; the projection follows.</summary>
-    public DefinitionVersion Rollback(string name, string channel, int? expectedVersion, RunnerActor actor) =>
-        Act(RollbackVerb, name, channel, actor, () => Publisher.Rollback(Kind, name, actor.Id, channel, expectedVersion), v => new { version = v.Version });
+    /// <summary>Points the channel at any stored version (promotion), migrating the progress of every task (a migration that loses progress needs <see cref="ActivateOptions.ConfirmLosses"/> and the list echoed).</summary>
+    public Task<ActivationOutcome> SwitchAsync(string name, string channel, int version, int? expectedVersion, RunnerActor actor, ActivateOptions? options = null, CancellationToken ct = default) =>
+        ActAsync(SwitchVerb, name, channel, actor, async () =>
+        {
+            options ??= new ActivateOptions();
+            var outcome = await Activator.SwitchAsync(name, channel, version, new ActivationRequest(ActivationMode.Administrator, actor.Id, LiveInstanceIds(), options.ConfirmLosses, null, expectedVersion), ct).ConfigureAwait(false);
+            return Settled(name, outcome, anywayHint: false);
+        }, o => new { version = o.Version, state = o.State.ToString(), confirmed_losses = o.Losses.ToArray(), busy_tasks = o.BusyTasks.ToArray() }, rebuild: false);
+
+    /// <summary>Returns the channel to its previous version; the progress the version being left migrated is put back from its history, in one transaction with the pointer and the projection.</summary>
+    public Task<ActivationOutcome> RollbackAsync(string name, string channel, int? expectedVersion, RunnerActor actor, ActivateOptions? options = null, CancellationToken ct = default) =>
+        ActAsync(RollbackVerb, name, channel, actor, async () =>
+        {
+            options ??= new ActivateOptions();
+            var outcome = await Activator.RollbackAsync(name, channel, new ActivationRequest(ActivationMode.Administrator, actor.Id, LiveInstanceIds(), options.ConfirmLosses, null, expectedVersion), ct).ConfigureAwait(false);
+            return Settled(name, outcome, anywayHint: false);
+        }, o => new { version = o.Version, state = o.State.ToString(), confirmed_losses = o.Losses.ToArray(), busy_tasks = o.BusyTasks.ToArray() }, rebuild: false);
+
+    /// <summary>What an activation that did not happen means to the caller: a refusal with its status, or (still waiting for runs) an outcome to show.</summary>
+    private static ActivationOutcome Settled(string name, ActivationOutcome outcome, bool anywayHint) => outcome.State switch
+    {
+        ActivationState.Activated or ActivationState.WaitingForRuns => outcome,
+        ActivationState.NothingStaged => throw new RunnerPublishException(404, outcome.Message),
+        ActivationState.NotReady => throw new RunnerPublishException(409, outcome.Message + (anywayHint ? " An administrator can activate it anyway (anyway: true): the instances that failed keep the previous version and say so, and the choice is recorded." : "")),
+        ActivationState.AlreadyDone => throw new RunnerPublishException(409, outcome.Message),
+        _ => throw new RunnerPublishException(409, outcome.Message),
+    };
+
+    private async Task<T> ActAsync<T>(string verb, string name, string channel, RunnerActor actor, Func<Task<T>> work, Func<T, object> detail, bool rebuild)
+    {
+        var target = $"{name}/{channel}";
+        try
+        {
+            if (!PackageManifestValidator.NameRule.IsMatch(name)) throw new RunnerPublishException(400, $"'{name}' is not a package name.");
+            if (!PackageManifestValidator.NameRule.IsMatch(channel)) throw new RunnerPublishException(400, $"'{channel}' is not a channel name.");
+            T result;
+            try { result = await work().ConfigureAwait(false); }
+            catch (ProgressMigrationException ex) { throw new RunnerPublishException(400, ex.Message); }
+            catch (Exception ex) when (Translate(ex) is { } translated) { throw translated; }
+            if (rebuild) RebuildProjection(name, channel);
+            Record(verb, actor, "package", target, AuditEvent.Ok, Merge(new { kind = Kind, name, channel }, detail(result)));
+            return result;
+        }
+        catch (RunnerPublishException ex)
+        {
+            Record(verb, actor, "package", target, AuditEvent.Refused, new { kind = Kind, name, channel, status = ex.Status, reason = ex.Message });
+            throw;
+        }
+    }
 
     /// <summary>Stops serving the package in the channel and drops its schedule there; the versions stay. False when the channel had nothing.</summary>
     public bool Retire(string name, string channel, int? expectedVersion, RunnerActor actor) =>
@@ -352,6 +431,20 @@ public sealed partial class RunnerPublishing
 
     private JsonArray Channels(string name) => new([.. Publisher.HeadsOf(Kind, name).Select(h => (JsonNode)new JsonObject { ["channel"] = h.Channel, ["active"] = h.Active, ["previous"] = h.Previous, ["staged"] = h.Staged })]);
 
+    /// <summary>For each channel with a staged version: how far the instances are, and the progress its activation would lose (what an administrator confirms).</summary>
+    private JsonArray Staging(string name) => new([.. Publisher.HeadsOf(Kind, name).Where(h => h.Staged is not null).Select(h =>
+    {
+        var progress = Publisher.Status.Progress(Kind, name, h.Channel, LiveInstanceIds());
+        var preview = Activator.Preview(name, h.Channel);
+        return (JsonNode)new JsonObject
+        {
+            ["channel"] = h.Channel, ["version"] = h.Staged, ["summary"] = progress.Describe(), ["all_ready"] = progress.IsAllReady,
+            ["failed"] = new JsonArray([.. progress.Failed.Select(f => (JsonNode)new JsonObject { ["instance"] = f.Instance, ["error"] = f.Error })]),
+            ["losses"] = new JsonArray([.. (preview?.Losses ?? []).Select(l => (JsonNode)JsonValue.Create(l)!)]),
+            ["needs_confirmation"] = (preview?.Losses.Count ?? 0) > 0,
+        };
+    })]);
+
     /// <summary>One integration: its versions, what each channel serves (active, previous, staged), the bindings, what each instance reports and the latest events. Null when there is no such package.</summary>
     public JsonObject? Describe(string name)
     {
@@ -370,10 +463,11 @@ public sealed partial class RunnerPublishing
                 ["depends_on"] = new JsonArray([.. v.DependsOn.Select(d => (JsonNode)JsonValue.Create(d)!)]), ["files"] = Publisher.Artifacts(Kind, name, v.Version).Count,
             })]),
             ["channels"] = Channels(name),
+            ["staging"] = Staging(name),
             ["bindings"] = new JsonArray([.. heads.SelectMany(h => Publisher.Bindings(h.Channel, Kind, name)).Select(b => (JsonNode)new JsonObject { ["channel"] = b.Channel, ["slot"] = b.Slot, ["bound_to"] = b.BoundTo, ["revision"] = b.Revision })]),
             ["instances"] = new JsonArray([.. heads.SelectMany(h => Publisher.Status.List(Kind, name, h.Channel)).Select(s => (JsonNode)new JsonObject
             {
-                ["instance"] = s.Instance, ["channel"] = s.Channel, ["version"] = s.Version, ["state"] = s.State, ["error"] = s.Error, ["at"] = s.At.UtcDateTime.ToString("O"), ["gone"] = s.Gone,
+                ["instance"] = s.Instance, ["channel"] = s.Channel, ["version"] = s.Version, ["state"] = s.State, ["error"] = s.Error, ["note"] = s.Note, ["has_losses"] = s.HasLosses, ["at"] = s.At.UtcDateTime.ToString("O"), ["gone"] = s.Gone,
             })]),
             ["events"] = new JsonArray([.. Publisher.EventsOf(Kind, name).Select(e => (JsonNode)new JsonObject
             {

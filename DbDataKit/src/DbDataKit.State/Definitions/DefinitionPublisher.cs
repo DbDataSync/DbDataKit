@@ -28,8 +28,14 @@ public sealed record PublishRequest(string Kind, string Name, string Manifest, s
 /// <summary>What a publish did: the version, whether anything changed (the same content again changes nothing), and the mode it took.</summary>
 public sealed record PublishResult(DefinitionVersion Version, bool Changed, PublishMode Mode);
 
-/// <summary>The outcome of <see cref="DefinitionPublisher.ActivateIfAllReady"/>: activated, or not, with the progress that decided it.</summary>
-public sealed record ActivationResult(bool Activated, StageProgress Progress, DefinitionVersion? Version);
+/// <summary>The outcome of <see cref="DefinitionPublisher.ActivateIfAllReady"/>: activated, or not, with the progress that decided it. <paramref name="AlreadyDone"/> is true when another caller activated the staged version first (nothing was done here).</summary>
+public sealed record ActivationResult(bool Activated, StageProgress Progress, DefinitionVersion? Version, bool AlreadyDone = false);
+
+/// <summary>
+/// What a pointer change hands the work that must happen in the same transaction (plan 30 section 3.5): the connection and transaction the change is written on, and the versions it moves between
+/// (<paramref name="From"/> null when nothing was active). The work runs after the pointer moved and before the transaction commits; if it throws, the pointer does not move.
+/// </summary>
+public sealed record DefinitionChange(DbConnection Connection, DbTransaction Transaction, string Kind, string Name, string Channel, int? From, int To);
 
 /// <summary>
 /// Plan 30's life cycle on the <c>definitions</c> module (R15): publish (serve or stage), activate, switch, rollback, retire and bind, each in one transaction with an event, each with an
@@ -159,11 +165,13 @@ public sealed partial class DefinitionPublisher
     // ---- activate, switch, rollback, retire
 
     /// <summary>Makes the staged version active; the one it replaces becomes the previous version. Refused when nothing is staged, a dependency is not active, a slot is unbound or approval is missing.</summary>
-    public DefinitionVersion Activate(string kind, string name, string by, string channel = DefinitionStore.Production, int? expectedVersion = null, string? note = null) =>
-        Run(kind, name, channel, connection => ActivateIn(connection.Connection, connection.Transaction, kind, name, channel, by, expectedVersion, "activate", note));
+    /// <param name="inTransaction">Work that must happen in the same transaction as the pointer (a progress migration, a projection rebuild); see <see cref="DefinitionChange"/>.</param>
+    public DefinitionVersion Activate(string kind, string name, string by, string channel = DefinitionStore.Production, int? expectedVersion = null, string? note = null, Action<DefinitionChange>? inTransaction = null) =>
+        Run(kind, name, channel, connection => ActivateIn(connection.Connection, connection.Transaction, kind, name, channel, by, expectedVersion, "activate", note, inTransaction: inTransaction)
+            ?? throw new DefinitionConflictException($"The {kind} '{name}' was activated by someone else while this call was activating it; read it again.", expectedVersion ?? 0, 0));
 
     /// <summary>Activates the staged version when every instance in <paramref name="live"/> has it ready, in one transaction with the check; otherwise nothing changes and the progress says who is not ready.</summary>
-    public ActivationResult ActivateIfAllReady(string kind, string name, IReadOnlyCollection<string> live, string by, string channel = DefinitionStore.Production)
+    public ActivationResult ActivateIfAllReady(string kind, string name, IReadOnlyCollection<string> live, string by, string channel = DefinitionStore.Production, Action<DefinitionChange>? inTransaction = null)
     {
         DefinitionStore.Check(kind, name, channel);
         var now = _database.Time.GetUtcNow();
@@ -174,7 +182,8 @@ public sealed partial class DefinitionPublisher
             var progress = Status.Progress(connection, transaction, kind, name, channel, live);
             if (progress.StagedVersion is null) throw new DefinitionNotFoundException($"The {kind} '{name}' has nothing staged in channel '{channel}'.");
             if (!progress.IsAllReady) return new ActivationResult(false, progress, null);
-            var version = ActivateIn(connection, transaction, kind, name, channel, by, null, "activate", $"automatic: {progress.Describe()}", now);
+            var version = ActivateIn(connection, transaction, kind, name, channel, by, null, "activate", $"automatic: {progress.Describe()}", now, inTransaction);
+            if (version is null) return new ActivationResult(false, progress, null, AlreadyDone: true);
             transaction.Commit();
             return new ActivationResult(true, progress, version);
         });
@@ -184,7 +193,7 @@ public sealed partial class DefinitionPublisher
     /// An administrator's choice to activate the staged version although instances are not ready or failed (the ones that failed keep the previous version and say so). The choice, who made it and what
     /// stood in the way are recorded in the event.
     /// </summary>
-    public ActivationResult ActivateAnyway(string kind, string name, IReadOnlyCollection<string> live, string actor, string channel = DefinitionStore.Production, string? reason = null)
+    public ActivationResult ActivateAnyway(string kind, string name, IReadOnlyCollection<string> live, string actor, string channel = DefinitionStore.Production, string? reason = null, Action<DefinitionChange>? inTransaction = null, string? extraNote = null)
     {
         DefinitionStore.Check(kind, name, channel);
         var now = _database.Time.GetUtcNow();
@@ -194,15 +203,16 @@ public sealed partial class DefinitionPublisher
             using var transaction = connection.BeginTransaction();
             var progress = Status.Progress(connection, transaction, kind, name, channel, live);
             if (progress.StagedVersion is null) throw new DefinitionNotFoundException($"The {kind} '{name}' has nothing staged in channel '{channel}'.");
-            var note = $"anyway: activated by {actor} with {progress.Describe()}{(string.IsNullOrWhiteSpace(reason) ? "" : $"; reason: {reason}")}";
-            var version = ActivateIn(connection, transaction, kind, name, channel, actor, null, "activate", note, now);
+            var note = $"anyway: activated by {actor} with {progress.Describe()}{(string.IsNullOrWhiteSpace(reason) ? "" : $"; reason: {reason}")}{(extraNote is null ? "" : "; " + extraNote)}";
+            var version = ActivateIn(connection, transaction, kind, name, channel, actor, null, "activate", note, now, inTransaction);
+            if (version is null) return new ActivationResult(false, progress, null, AlreadyDone: true);
             transaction.Commit();
             return new ActivationResult(true, progress, version);
         });
     }
 
     /// <summary>Points the channel at any stored version (promotion). The same version again changes nothing.</summary>
-    public DefinitionVersion Switch(string kind, string name, int version, string by, string channel = DefinitionStore.Production, int? expectedVersion = null) =>
+    public DefinitionVersion Switch(string kind, string name, int version, string by, string channel = DefinitionStore.Production, int? expectedVersion = null, Action<DefinitionChange>? inTransaction = null, string? note = null) =>
         Run(kind, name, channel, c =>
         {
             var head = ReadHead(c.Connection, c.Transaction, kind, name, channel);
@@ -211,13 +221,15 @@ public sealed partial class DefinitionPublisher
             if (head is { Active: > 0 } already && already.Active == version) return wanted;
             if (_kinds is not null) CheckCanBeActive(c.Connection, c.Transaction, kind, name, channel, wanted, wanted.DependsOn);
             var after = new Pointer(version, head is { Active: > 0 } ? head.Active : null, head?.Staged == version ? null : head?.Staged, head?.StagedAt, head?.StagedBy);
-            Save(c.Connection, c.Transaction, kind, name, channel, after, head is not null, activeChanged: true, by, c.Now);
-            Log(c.Connection, c.Transaction, "switch", kind, name, channel, version, by, c.Now);
+            if (!Save(c.Connection, c.Transaction, kind, name, channel, after, head is not null, activeChanged: true, by, c.Now, head is null ? null : new Guard(head.Active, null, false)))
+                throw new DefinitionConflictException($"The {kind} '{name}' was changed by someone else while this call switched it; read it again.", expectedVersion ?? 0, head?.Active ?? 0);
+            inTransaction?.Invoke(new DefinitionChange(c.Connection, c.Transaction, kind, name, channel, head is { Active: > 0 } ? head.Active : null, version));
+            Log(c.Connection, c.Transaction, "switch", kind, name, channel, version, by, c.Now, note);
             return wanted;
         });
 
     /// <summary>Returns the channel to the version it had before the current one.</summary>
-    public DefinitionVersion Rollback(string kind, string name, string by, string channel = DefinitionStore.Production, int? expectedVersion = null) =>
+    public DefinitionVersion Rollback(string kind, string name, string by, string channel = DefinitionStore.Production, int? expectedVersion = null, Action<DefinitionChange>? inTransaction = null, string? note = null) =>
         Run(kind, name, channel, c =>
         {
             var head = ReadHead(c.Connection, c.Transaction, kind, name, channel);
@@ -225,8 +237,10 @@ public sealed partial class DefinitionPublisher
             var target = head?.Previous ?? throw new DefinitionNotFoundException($"'{name}' on {channel} has no earlier version to return to.");
             var wanted = _store.ReadVersion(c.Connection, c.Transaction, kind, name, target) ?? throw new DefinitionNotFoundException($"'{name}' has no version {target}.");
             var after = new Pointer(target, head.Active > 0 ? head.Active : null, head.Staged, head.StagedAt, head.StagedBy);
-            Save(c.Connection, c.Transaction, kind, name, channel, after, true, activeChanged: true, by, c.Now);
-            Log(c.Connection, c.Transaction, "rollback", kind, name, channel, target, by, c.Now);
+            if (!Save(c.Connection, c.Transaction, kind, name, channel, after, true, activeChanged: true, by, c.Now, new Guard(head.Active, null, false)))
+                throw new DefinitionConflictException($"The {kind} '{name}' was changed by someone else while this call rolled it back; read it again.", expectedVersion ?? 0, head.Active);
+            inTransaction?.Invoke(new DefinitionChange(c.Connection, c.Transaction, kind, name, channel, head.Active > 0 ? head.Active : null, target));
+            Log(c.Connection, c.Transaction, "rollback", kind, name, channel, target, by, c.Now, note);
             return wanted;
         });
 
@@ -387,7 +401,8 @@ public sealed partial class DefinitionPublisher
         });
     }
 
-    private DefinitionVersion ActivateIn(DbConnection connection, DbTransaction transaction, string kind, string name, string channel, string by, int? expectedVersion, string action, string? note, DateTimeOffset? at = null)
+    /// <summary>Moves the staged version to active in the caller's transaction; null when another transaction did it first (the pointer is moved only if it is still where this one read it, so work in <paramref name="inTransaction"/> runs once).</summary>
+    private DefinitionVersion? ActivateIn(DbConnection connection, DbTransaction transaction, string kind, string name, string channel, string by, int? expectedVersion, string action, string? note, DateTimeOffset? at = null, Action<DefinitionChange>? inTransaction = null)
     {
         var now = at ?? _database.Time.GetUtcNow();
         var head = ReadHead(connection, transaction, kind, name, channel);
@@ -396,7 +411,8 @@ public sealed partial class DefinitionPublisher
         var version = _store.ReadVersion(connection, transaction, kind, name, staged) ?? throw new DefinitionNotFoundException($"'{name}' has no version {staged}.");
         if (_kinds is not null) CheckCanBeActive(connection, transaction, kind, name, channel, version, version.DependsOn);
         var after = new Pointer(staged, head!.Active > 0 ? head.Active : null, null, null, null);
-        Save(connection, transaction, kind, name, channel, after, true, activeChanged: true, by, now);
+        if (!Save(connection, transaction, kind, name, channel, after, true, activeChanged: true, by, now, new Guard(head.Active, staged, true))) return null;
+        inTransaction?.Invoke(new DefinitionChange(connection, transaction, kind, name, channel, head.Active > 0 ? head.Active : null, staged));
         Log(connection, transaction, action, kind, name, channel, staged, by, now, note);
         return version;
     }
@@ -536,7 +552,10 @@ public sealed partial class DefinitionPublisher
     private static DefinitionHead ToHead(string kind, string name, string channel, Pointer head) =>
         new(kind, name, channel, head.Active > 0 ? head.Active : null, head.Previous, head.Staged);
 
-    private void Save(DbConnection connection, DbTransaction transaction, string kind, string name, string channel, Pointer head, bool exists, bool activeChanged, string by, DateTimeOffset now)
+    /// <summary>The pointer as the caller read it: an update that finds it moved changes nothing (the loser of two activations at once).</summary>
+    private sealed record Guard(int Active, int? Staged, bool CheckStaged);
+
+    private bool Save(DbConnection connection, DbTransaction transaction, string kind, string name, string channel, Pointer head, bool exists, bool activeChanged, string by, DateTimeOffset now, Guard? guard = null)
     {
         static string Value(string parameter, bool present) => present ? "$" + parameter : "NULL";
         var previous = Value("previous", head.Previous is not null);
@@ -544,7 +563,7 @@ public sealed partial class DefinitionPublisher
         var stagedAt = Value("staged_at", head.Staged is not null && head.StagedAt is not null);
         var stagedBy = Value("staged_by", head.Staged is not null && head.StagedBy is not null);
         var sql = exists
-            ? $"UPDATE {{table:definition_serving}} SET version = $version, previous_version = {previous}, staged_version = {staged}, staged_at = {stagedAt}, staged_by = {stagedBy}{(activeChanged ? ", switched_at = $now, switched_by = $by" : "")} WHERE kind = $kind AND name = $name AND channel = $channel;"
+            ? $"UPDATE {{table:definition_serving}} SET version = $version, previous_version = {previous}, staged_version = {staged}, staged_at = {stagedAt}, staged_by = {stagedBy}{(activeChanged ? ", switched_at = $now, switched_by = $by" : "")} WHERE kind = $kind AND name = $name AND channel = $channel{(guard is null ? "" : " AND version = $guard_version")}{(guard is { CheckStaged: true } ? " AND staged_version = $guard_staged" : "")};"
             : $"INSERT INTO {{table:definition_serving}} (kind, name, channel, version, previous_version, staged_version, staged_at, staged_by, switched_at, switched_by) VALUES ($kind, $name, $channel, $version, {previous}, {staged}, {stagedAt}, {stagedBy}, $now, $by);";
         using var command = _database.Command(Module, connection, transaction, sql);
         command.Bind(_database, "kind", kind).Bind(_database, "name", name).Bind(_database, "channel", channel).Bind(_database, "version", (long)head.Active);
@@ -553,7 +572,13 @@ public sealed partial class DefinitionPublisher
         if (head.Staged is not null) command.Bind(_database, "staged", (long)head.Staged.Value);
         if (head.Staged is not null && head.StagedAt is not null) command.Bind(_database, "staged_at", head.StagedAt.Value);
         if (head.Staged is not null && head.StagedBy is not null) command.Bind(_database, "staged_by", head.StagedBy);
-        command.ExecuteNonQuery();
+        if (guard is not null && exists)
+        {
+            command.Bind(_database, "guard_version", (long)guard.Active);
+            if (guard.CheckStaged) command.Bind(_database, "guard_staged", (long)guard.Staged!.Value);
+        }
+
+        return command.ExecuteNonQuery() == 1;
     }
 
     private void Log(DbConnection connection, DbTransaction transaction, string action, string kind, string name, string channel, int version, string by, DateTimeOffset now, string? note = null)
