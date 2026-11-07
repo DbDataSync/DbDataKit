@@ -165,13 +165,18 @@ public sealed class ModuleWorkQueueStore(StateDatabase database, string service)
             return cmd.ExecuteNonQuery() == 1;
         });
 
-    public int ReleaseExpired() =>
+    /// <summary>
+    /// Returns every claimed or running item whose lease has run out to the queue. <paramref name="except"/> names items the caller is running itself (their numbers are ids, so they are written into the statement as numbers):
+    /// those are never released, whatever their lease says; only a worker that is not running an item gives it up for another.
+    /// </summary>
+    public int ReleaseExpired(IReadOnlyCollection<long>? except = null) =>
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
+            var skip = except is not { Count: > 0 } ? "" : $"AND id NOT IN ({string.Join(", ", except.Select(i => i.ToString(System.Globalization.CultureInfo.InvariantCulture)))})";
             using var cmd = database.Command(Module, connection, $$"""
                 UPDATE {table:work_item} SET status = 'Pending', claimed_at = NULL, claimed_by = NULL, lease_expires_at = NULL
-                WHERE service = $service AND {{Held}} AND lease_expires_at < $now;
+                WHERE service = $service AND {{Held}} AND lease_expires_at < $now {{skip}};
                 """);
             cmd.Bind(database, "service", service).Bind(database, "now", Now());
             return cmd.ExecuteNonQuery();
