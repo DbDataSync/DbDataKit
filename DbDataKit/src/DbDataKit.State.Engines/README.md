@@ -66,3 +66,15 @@ The module 'knowledge' needs the engine feature 'vector' (SQL Server 2025's vect
 ```
 
 On PostgreSQL the fix is to install the pgvector extension on the server (the package for the PostgreSQL version, or the `pgvector/pgvector` image); on SQLite, to pick SQL Server 2025 or PostgreSQL with pgvector. `state test` fails with exit code 29 and the same sentence, so it is found before the service is started. A module already applied is not checked again: a start never fails for what already works.
+
+## Rolling upgrade of a group (plan 29b, U02)
+
+A group's instances (the Proxy's `serving_instance`, the runner's `instance` table) record their software version and their module versions (`name=version;name=version`) in their row. `state show` and `GET /api/v1/state` list the live instances with them; a row of a binary older than this feature has none (shown as not recorded).
+
+Before `StateMigrator` applies a migration of a module to a group's database it asks the live instances (`IGroupInstanceSource`, supplied by the product when it opens the state: `StateOpener.Open(..., groupInstances: new StandardGroupInstanceSource())`; the default is none), under the same migration lock, and refuses with a `MigrationRefusedException` naming the instance (id, host, process, software and module version) when one cannot work with the new schema:
+
+* a module declares how far back its instances may be with `StateModule.CompatibleWithPrevious` (default 0: the previous version is not compatible; 1: it is, because the migration only adds what the older code ignores, such as a nullable column). An instance works when its module version is at least the new version minus that number; an older one blocks.
+* an instance whose row records no versions is taken to run the version the database is at.
+* an instance that is not live (its heartbeat lapsed: 30 seconds for the Proxy, the lease for a runner; or a runner row marked gone) never blocks. An instance that starts later finds the newer module version and refuses to start, naming itself.
+
+The upgrade order follows from that: when the module declares the previous version compatible, start the new instances while the old ones run (the first one migrates), then stop the old ones; when it does not, stop the old instances first, or stop the one the refusal names, then start the new ones. The author of a migration states the choice (`CompatibleWithPrevious`) for every migration they append; a destructive one (a dropped or renamed column, a changed meaning) keeps the default.
