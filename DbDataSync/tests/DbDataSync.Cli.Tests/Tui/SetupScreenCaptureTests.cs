@@ -48,9 +48,9 @@ public sealed class SetupScreenCaptureTests : IDisposable
         Assert.NotNull(plainText);
 
         // Every tab's title must actually appear — not truncated into an ellipsis or scrolled off, the
-        // exact failure this test caught the first time (Authentication cut to "Au", Service and
+        // exact failure this test caught the first time (Service and
         // Certificate never drawn at all).
-        foreach (var tabTitle in new[] { "General", "State DB", "Drivers", "Auth", "Service", "Cert" })
+        foreach (var tabTitle in new[] { "General", "State DB", "Drivers", "Service", "Cert" })
             Assert.Contains(tabTitle, plainText);
 
         // Every action-bar button must be reachable, not laid out past column 80 — the other failure

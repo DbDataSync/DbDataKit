@@ -48,15 +48,34 @@ public sealed class LegacyHostSettingsHostTests : IDisposable
         }
     }
 
-    /// <summary>Plan 13, X05: a layer other than server.yaml that still sets a removed setting stops the host too, naming it.</summary>
+    /// <summary>Plan 13, X05 and plan 13a, X06: a layer other than server.yaml that still sets a removed setting stops the host too, naming it.</summary>
     [Theory]
     [InlineData("--DbDataSync:Auth:Passkeys:RelyingPartyId=example.com", "DbDataSync:Auth:Passkeys:RelyingPartyId")]
     [InlineData("--DbDataSync:App:AlternateUrls=https://other.example", "DbDataSync:App:AlternateUrls")]
+    [InlineData("--DbDataSync:Auth:Windows:AdminGroup=Admins", "DbDataSync:Auth:Windows:AdminGroup")]
+    [InlineData("--DbDataSync:Auth:Network:Admin=loopback", "DbDataSync:Auth:Network:Admin")]
     public void ARemovedSettingOnTheCommandLine_StopsTheHost_NamingIt(string argument, string key)
     {
         var failure = Assert.Throws<InvalidOperationException>(() => DbDataSyncHost.Build(["--DbDataSync:App:RepoRoot", _root, argument]));
 
         Assert.Contains($"'{key}'", failure.Message);
+    }
+
+    /// <summary>Plan 13a, X06: a server.yaml that sets Windows sign-in or network trust is refused, and the message names the setting and the file.</summary>
+    [Theory]
+    [InlineData("DbDataSync:\n  Auth:\n    Windows:\n      AdminGroup: Admins\n", "DbDataSync:Auth:Windows:AdminGroup")]
+    [InlineData("DbDataSync:\n  Auth:\n    Windows:\n      ViewerGroup: Viewers\n", "DbDataSync:Auth:Windows:ViewerGroup")]
+    [InlineData("DbDataSync:\n  Auth:\n    Network:\n      Admin: loopback\n", "DbDataSync:Auth:Network:Admin")]
+    [InlineData("DbDataSync:\n  Auth:\n    Network:\n      Viewer: remote\n", "DbDataSync:Auth:Network:Viewer")]
+    public void AServerYamlThatSetsWindowsSignInOrNetworkTrust_StopsTheHost_NamingTheSettingAndTheFile(string yaml, string key)
+    {
+        File.WriteAllText(Path.Combine(_root, "server.yaml"), yaml);
+
+        var failure = Assert.Throws<InvalidOperationException>(() => DbDataSyncHost.Build(["--DbDataSync:App:RepoRoot", _root]));
+
+        Assert.Contains($"'{key}'", failure.Message);
+        Assert.Contains("server.yaml", failure.Message);
+        Assert.Contains("no longer read", failure.Message);
     }
 
     [Fact]
@@ -70,12 +89,18 @@ public sealed class LegacyHostSettingsHostTests : IDisposable
     }
 
     [Fact]
-    public void SyncRunsNoFirstRunInvitation_AndHasNoPasskeys()
+    public void SyncRunsNoFirstRunInvitation_AndHasNoPasskeys_NorUsersSessionsOrInvitations()
     {
         var app = DbDataSyncHost.Build(["--DbDataSync:App:RepoRoot", _root, "--DbDataSync:State:Port", "0"]);
 
         Assert.DoesNotContain(app.Services.GetServices<Microsoft.Extensions.Hosting.IHostedService>(), service => service is DbDataKit.Web.Auth.BootstrapInvite);
         Assert.False(app.Services.GetRequiredService<DbDataKit.Web.Auth.PasskeyOptions>().Enabled);
         Assert.False(File.Exists(Path.Combine(_root, DbDataKit.Web.Auth.BootstrapInvite.FileName)));
+        // Plan 13a, X06: no sign-in of its own, so nothing that stores a user, a session or an invitation is registered.
+        Assert.Null(app.Services.GetService<DbDataKit.State.UserStore>());
+        Assert.Null(app.Services.GetService<DbDataKit.State.SessionStore>());
+        Assert.Null(app.Services.GetService<DbDataKit.State.InviteStore>());
+        Assert.Null(app.Services.GetService<DbDataKit.State.IUserAccounts>());
+        Assert.Null(app.Services.GetService<DbDataKit.Web.Auth.PasskeyService>());
     }
 }

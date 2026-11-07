@@ -45,19 +45,15 @@ public sealed class ManagedServerTests(AuthenticatedApiFactory factory) : IClass
     {
         Pair(ServerRole.Admin | ServerRole.Viewer);
 
-        // an administrator reads the replications and the users, and the server says who they are
+        // an administrator reads the replications and the configuration (who the person is shows in the config history: GitAttributionTests)
         var admin = As(ServerRole.Admin);
         Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/replications")).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/users")).StatusCode);
-        var status = JsonNode.Parse(await admin.GetStringAsync("/api/auth/status"))!;
-        Assert.True((bool)status["authenticated"]!);
-        Assert.Equal("Ada", (string)status["displayName"]!);
-        Assert.Equal("Admin", (string)status["role"]!);
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/admin/config")).StatusCode);
 
-        // a viewer reads, and is refused what makes something happen or shows who has access
+        // a viewer reads, and is refused what makes something happen or changes the configuration
         var viewer = As(ServerRole.Viewer);
         Assert.Equal(HttpStatusCode.OK, (await viewer.GetAsync("/api/replications")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await viewer.GetAsync("/api/users")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await viewer.GetAsync("/api/admin/config")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await viewer.PostAsync("/api/connections/anything/test", null)).StatusCode);
     }
 
@@ -107,7 +103,7 @@ public sealed class ManagedServerTests(AuthenticatedApiFactory factory) : IClass
     [Fact]
     public async Task Every_answer_says_which_management_api_version_the_server_speaks()
     {
-        var response = await factory.CreateClient().GetAsync("/api/auth/status");
+        var response = await factory.CreateClient().GetAsync("/api/health");
         Assert.Equal(ManagementApi.Version.ToString(), response.Headers.GetValues(ManagementApi.VersionHeader).Single());
     }
 

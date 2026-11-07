@@ -163,7 +163,7 @@ public sealed class RunLifecycleIntegrationTests : IClassFixture<TestApiFactory>
         await using var hubConnection = new HubConnectionBuilder()
             .WithUrl($"{_factory.Server.BaseAddress}hubs/run", options =>
             {
-                options.HttpMessageHandlerFactory = _ => _factory.Server.CreateHandler();
+                options.HttpMessageHandlerFactory = _ => _factory.Caller.Handler(DbDataKit.State.UserRole.Admin, "test-admin", "Test Admin", _factory.Server.CreateHandler());
                 // TestServer's in-memory pipeline doesn't support real WebSockets — LongPolling is
                 // the standard transport for SignalR-over-WebApplicationFactory testing.
                 options.Transports = HttpTransportType.LongPolling;

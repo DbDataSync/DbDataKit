@@ -56,7 +56,7 @@ public sealed class CrossEngineStateTests : IClassFixture<LibraryInstallFixture>
         foreach (var table in new[]
         {
             "Tasks", "TaskRuns", "ChangeWatermarks", "Logs", "RunLocks", "WorkQueue",
-            "VerificationResults", "Users", "UserCredentials", "Sessions", "Invites", "PauseEvents",
+            "VerificationResults", "PauseEvents",
             "BulkLoadBatches",
         })
         {
@@ -414,23 +414,20 @@ public sealed class CrossEngineStateTests : IClassFixture<LibraryInstallFixture>
         Assert.Null(noMatch.NextCursor);
     }
 
-    /// <summary>Users, credentials and sessions — the tables with foreign keys, and the ones where a
-    /// bounded key column would fail first if the DDL got it wrong.</summary>
+    /// <summary>
+    /// Plan 13a, X06: Sync keeps no sign-in of its own, so the users, credentials, sessions, invitations and passkey challenges of the older schema are dropped by the last migration, on every engine.
+    /// </summary>
     [Theory]
     [MemberData(nameof(Engines))]
-    public void AUserAndTheirCredentialRoundTrip(string engine)
+    public void TheSignInTablesAreGone(string engine)
     {
         var database = Open(engine);
-        var users = new UserStore(database);
 
-        Assert.False(users.Any());
-
-        var user = users.CreateUser("Ada Lovelace", "ada@example.invalid", UserRole.Admin);
-        users.AddCredential(user.Id, "Windows", "S-1-5-21-1", secret: null, label: "work laptop");
-
-        Assert.True(users.Any());
-        Assert.Equal(user.Id, users.FindByCredential("Windows", "S-1-5-21-1")?.Id);
-        Assert.Null(users.FindByCredential("Windows", "S-1-5-21-2"));
-        Assert.Single(users.CredentialsOf(user.Id));
+        foreach (var table in new[] { "Users", "UserCredentials", "Sessions", "Invites", "OneTimeValues" })
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(connection, $"SELECT COUNT(*) FROM {table};");
+            Assert.ThrowsAny<Exception>(() => cmd.ExecuteScalar());
+        }
     }
 }

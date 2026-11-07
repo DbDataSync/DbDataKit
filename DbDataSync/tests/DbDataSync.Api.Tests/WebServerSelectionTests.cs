@@ -50,7 +50,6 @@ public sealed class WebServerSelectionTests : IDisposable
         "--DbDataSync:App:RepoRoot", _repoRoot,
         "--DbDataSync:State:DbPath", Path.Combine(_repoRoot, "state.db"),
         "--DbDataSync:App:TaskRunnerDllPath", Path.Combine(_repoRoot, "DbDataSync.TaskRunner.dll"),
-        "--DbDataSync:Auth:Network:Admin", "loopback",
         .. extra,
     ];
 
@@ -69,35 +68,5 @@ public sealed class WebServerSelectionTests : IDisposable
         using var app = DbDataSyncHost.Build(BaseArgs());
 
         Assert.Equal(WebServer.Kestrel, app.Services.GetRequiredService<ApiOptions>().Server);
-    }
-
-    /// <summary>
-    /// Builds (does not start) the host under HTTP.sys with Windows sign-in configured, and checks the
-    /// auth bridge: a scheme under Negotiate's own name that forwards to HTTP.sys's handler, so the
-    /// sign-in endpoint's attribute is unchanged. Windows only — nothing else has HTTP.sys to resolve.
-    /// <para>
-    /// The forward target is checked against the real <c>HttpSysDefaults.AuthenticationScheme</c>, not
-    /// against the scheme provider: HTTP.sys adds its scheme when the server is constructed at startup,
-    /// which a built-but-unstarted host has not done. (An earlier version of this bridge forwarded to a
-    /// name written from memory and nothing noticed until this ran on Windows.)
-    /// </para>
-    /// </summary>
-    [WindowsOnlyFact]
-    [Trait("Category", "Windows")]
-    public async Task HttpSysOnWindows_BridgesNegotiateToTheHttpSysScheme()
-    {
-        using var app = DbDataSyncHost.Build(BaseArgs(
-            "--DbDataSync:App:Server", "httpsys", "--DbDataSync:Auth:Windows:AdminGroup", "DbDataSync Admins"));
-
-        var negotiate = await app.Services.GetRequiredService<IAuthenticationSchemeProvider>().GetSchemeAsync("Negotiate");
-        Assert.NotNull(negotiate);
-
-        var forwardsTo = app.Services.GetRequiredService<IOptionsMonitor<PolicySchemeOptions>>().Get("Negotiate").ForwardDefault;
-        var real = (string?)System.Reflection.Assembly.Load("Microsoft.AspNetCore.Server.HttpSys")
-            .GetType("Microsoft.AspNetCore.Server.HttpSys.HttpSysDefaults")!
-            .GetField("AuthenticationScheme")!.GetRawConstantValue();
-
-        Assert.Equal(real, forwardsTo);
-        Assert.Equal(real, HttpSysHosting.AuthenticationScheme);
     }
 }

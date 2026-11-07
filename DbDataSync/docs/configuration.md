@@ -190,7 +190,7 @@ dbdatasync config set <key> <value> [--repo <path>]
 Reads or writes one `DbDataSync:*` setting in `server.yaml` — the same settings, and the same commit, as
 **Admin → Configuration** on the server's screens in the dbdatakit console; `dbdatasync server setup` edits some of the same ones. `<key>` is the name from the
 tables below, with or without the `DbDataSync:` prefix (`config set Notes:MarkdownRenderer rich`), and can be nested
-(`config set Auth:Windows:AdminGroup "DbDataSync Admins"`) — any depth works; only
+(`config set State:Retention:RunDays 30`) — any depth works; only
 `App:RepoRoot` (how the file itself is found) is refused. A setting with a caution — a mode that widens what an
 unauthenticated or unverified caller can reach — prints it before it is turned on, as that screen and `setup` show it beside
 the control. The change waits for a restart of the service; `config get` reports what the file says, not what a running
@@ -340,50 +340,22 @@ verification run's `TaskRuns` row is pruned, but its result file and index entry
 | `Updates:Mode` | `DbDataSync__Updates__Mode` | `disabled` | `manual` or `disabled` — whether the Updates screen looks up the releases available, which calls GitHub. The screen never applies an update; it gives the commands to run on the server either way. See [Installing → Updating](install.md#updating) |
 | `Updates:Channels` | `DbDataSync__Updates__Channels` | `stable` | which channels the Updates screen lists, comma-separated: `stable`, `beta`, `snapshot`. A snapshot is a development build, checked only against a checksum published beside it |
 
-### `DbDataSync:Auth:Network:*`
-
-| key | env var | default | meaning |
-| --- | --- | --- | --- |
-| `Auth:Network:Admin` | `DbDataSync__Auth__Network__Admin` | `disabled` | `loopback` or `disabled` — trusts an unauthenticated request from loopback as Admin, no sign-in at all. There is no "from anywhere" option: unlike `Auth:Network:Viewer`, Admin trust never widens past loopback |
-| `Auth:Network:Viewer` | `DbDataSync__Auth__Network__Viewer` | `disabled` | `remote`, `loopback`, or `disabled` — trusts an unauthenticated request as Viewer; `remote` trusts any origin, `loopback` restricts that to loopback only |
-
-These replace the old blanket `Auth:Disabled` (which trusted *every* request, from anywhere, as
-Admin) with these two role-scoped, network-trust settings — deliberately narrower for Admin, and able to
-act as a fallback *alongside* Windows auth being configured, not only as a replacement for it:
-a real session cookie always wins first if present.
-
-**A real security consideration, not a formality**: on a shared host, loopback does not distinguish the
-operator from any other local account — anyone who can reach `127.0.0.1` gets whatever `Auth:Network:*`
-grants, with no sign-in. Leave both `disabled` unless the deployment is a single-operator box, or the
-loopback caller is genuinely trusted (a local health check, a CI runner talking to its own scratch
-instance).
-
-### `DbDataSync:Auth:Windows:*`
-
-| key | env var | default | meaning |
-| --- | --- | --- | --- |
-| `Auth:Windows:Mode` | `DbDataSync__Auth__Windows__Mode` | `enabled` | `enabled` or `disabled` — lets an operator configure a group name and still turn Windows auth off without clearing it |
-| `Auth:Windows:AdminGroup` | `DbDataSync__Auth__Windows__AdminGroup` | none | Windows group whose members are admins |
-| `Auth:Windows:ViewerGroup` | `DbDataSync__Auth__Windows__ViewerGroup` | none | Windows group whose members are viewers |
-
-Windows authentication (`Negotiate`) is registered automatically when the process is running on
-Windows *and* at least one group is configured — it's additive to session-cookie auth, not a mode
-switch. If nothing here or under `Auth:Network:*` is configured, nobody reaches the API directly: people sign in at the
-dbdatakit console, and a console's calls reach this server as signed tokens (`dbdatasync server pair`, see below).
-
 ### Sign-in is the console's; settings Sync no longer has
 
-Sync has no sign-in of its own to configure (plan 13, X05). People and invitations are the dbdatakit console's (`dbdatakit user invite`), and the console reaches this
-server with a short-lived signed token that names the person; `Auth:Windows:*` and `Auth:Network:*` above are what is left for a client that calls the API directly.
-These are gone, and a `server.yaml` (or an environment variable or command-line flag) that still sets one stops `server run` and `config check` with a message that names the setting:
+Sync has no sign-in of its own (plan 13, X05; plan 13a, X06). People and invitations are the dbdatakit console's (`dbdatakit user invite`), and the console reaches this
+server with a short-lived signed token that names the person (`dbdatasync server pair`, see below); the server's own task runner uses a token of its own on its own routes, and `/api/health`,
+pairing and `/version` are open. There are no users, sessions or invitations in Sync's state database, and no `/api/auth`, `/api/users` or `/api/invites`. The way in when no console answers is the
+`dbdatasync` command line on the server. These settings are gone, and a `server.yaml` (or an environment variable or command-line flag) that still sets one stops `server run` and `config check` with a message that names the setting:
 
 | removed | why |
 | --- | --- |
 | `Auth:Passkeys:Mode`, `Auth:Passkeys:RelyingPartyId`, `Auth:Passkeys:RelyingPartyName`, `Auth:Passkeys:Origins` | no screen of this server registers or uses a passkey; the console does |
 | `App:AlternateUrls` | its one reader was the passkey origin check |
+| `Auth:Windows:Mode`, `Auth:Windows:AdminGroup`, `Auth:Windows:ViewerGroup` | no Windows sign-in: a call from a person's Windows account is no longer a way in; sign in at the console |
+| `Auth:Network:Admin`, `Auth:Network:Viewer` | no network trust: a request is never accepted as Administrator or Viewer because of where it came from (loopback or anywhere); a console's token is the only way in |
 | the `invite` command, `FIRST-RUN.txt` | there is no first-run invitation to print (the command now exits 2 and names `dbdatakit user invite`): the console makes the first administrator. An old `FIRST-RUN.txt` in the repository root is not read; delete it |
 
-Delete the settings and start again. Passkeys that people registered with the server's own sign-in stay in the state database and are not used.
+Delete the settings and start again. The users, credentials, sessions, invitations and passkey challenges of the server's own sign-in are dropped from the state database when it is opened by this release (the console has its own).
 
 ### Settings files of earlier releases
 
@@ -446,7 +418,6 @@ What changes, and what you do about it:
 | `App:Url` | any bind address, including `http://0.0.0.0:8080` | a URL *prefix*: `http://dbdatasync.example.com:80` only answers requests whose `Host` is that name. `http://+:80` takes any host and `http://*:80` is the weak wildcard (anything nobody else claimed). `0.0.0.0` is not valid. **Share by host name, not by path** — the console is served from the root of its origin, so a path prefix such as `/dbdatasync/` is not supported (startup logs a warning if you try) |
 | Permission to bind | the port is free or it is not | a URL reservation for the service account unless it is `LocalSystem` or an administrator: `netsh http add urlacl url=http://dbdatasync.example.com:80/ user="<the service account>"`. `dbdatasync service install` does not create it yet |
 | Certificate for https | `Kestrel:Certificates:Default:*` — what `dbdatasync cert bind`, `use-pem`, `use-pfx` and `new-self-signed` write | **Ignored** (startup logs a warning if it is set). Bind a certificate from the machine store to the port in the OS: `netsh http add sslcert hostnameport=dbdatasync.example.com:443 certhash=<thumbprint> appid={<any guid>} certstorename=MY`. The certificate screens, `cert status` and the expiry notification still read the Kestrel keys, so they do not describe an HTTP.sys binding |
-| Windows sign-in | the Negotiate package, inside this process | HTTP.sys authenticates in the kernel and hands over a Windows identity; the same sign-in endpoint turns it into a session, with the same groups and the same rules |
 | Request limits | Kestrel defaults | HTTP.sys defaults (its own request-size, timeout and queue limits). The file upload endpoint's 200 MB limit is set per request on both, but has not been verified under HTTP.sys |
 
 Another process on the same port must claim a different host name (or prefix) with HTTP.sys itself —

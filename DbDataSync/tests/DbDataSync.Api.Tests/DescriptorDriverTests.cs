@@ -243,7 +243,7 @@ public sealed class DescriptorDriverTests : IClassFixture<DescriptorDriverApiFac
         await using var hubConnection = new HubConnectionBuilder()
             .WithUrl($"{_factory.Server.BaseAddress}hubs/run", options =>
             {
-                options.HttpMessageHandlerFactory = _ => _factory.Server.CreateHandler();
+                options.HttpMessageHandlerFactory = _ => _factory.Caller.Handler(DbDataKit.State.UserRole.Admin, "test-admin", "Test Admin", _factory.Server.CreateHandler());
                 options.Transports = HttpTransportType.LongPolling;
             })
             .Build();

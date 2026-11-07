@@ -25,7 +25,6 @@ public sealed class DbDataSyncConfigFilePrecedenceTests : IDisposable
         "--DbDataSync:App:RepoRoot", _repoRoot,
         "--DbDataSync:State:DbPath", Path.Combine(_repoRoot, "state.db"),
         "--DbDataSync:App:TaskRunnerDllPath", Path.Combine(_repoRoot, "DbDataSync.TaskRunner.dll"),
-        "--DbDataSync:Auth:Network:Admin", "loopback",
         .. extra,
     ];
 
