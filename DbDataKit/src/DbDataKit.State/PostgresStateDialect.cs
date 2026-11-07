@@ -76,6 +76,8 @@ public sealed class PostgresStateDialect : StateDialect
 
     public override string Bool => "BOOLEAN";
 
+    public override string Decimal => "NUMERIC(38,10)";
+
     public override string Blob => "BYTEA";
 
     public override int GetSchemaVersion(DbConnection connection)

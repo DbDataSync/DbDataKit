@@ -165,6 +165,8 @@ public sealed class MsSqlStateDialect : StateDialect
 
     public override string Bool => "BIT";
 
+    public override string Decimal => "DECIMAL(38,10)";
+
     public override string Blob => "VARBINARY(MAX)";
 
     public override string AddColumn => "ADD";

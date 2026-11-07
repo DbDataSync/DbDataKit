@@ -33,7 +33,7 @@ public static partial class StateConventions
     [GeneratedRegex(@"\{\{[^}]*\}\}|\{(?:table|index):[^}]*\}")]
     private static partial Regex Token { get; }
 
-    [GeneratedRegex(@"\b(NVARCHAR|VARCHAR|NCHAR|CHAR|TEXT|INTEGER|BIGINT|SMALLINT|INT|BLOB|BYTEA|VARBINARY|JSONB|JSON|UUID|UNIQUEIDENTIFIER|TIMESTAMPTZ|TIMESTAMP|DATETIMEOFFSET|DATETIME2|DATETIME|BOOLEAN|BIT)\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\b(NVARCHAR|VARCHAR|NCHAR|CHAR|TEXT|INTEGER|BIGINT|SMALLINT|INT|BLOB|BYTEA|VARBINARY|JSONB|JSON|UUID|UNIQUEIDENTIFIER|TIMESTAMPTZ|TIMESTAMP|DATETIMEOFFSET|DATETIME2|DATETIME|BOOLEAN|BIT|DECIMAL|NUMERIC)\b", RegexOptions.IgnoreCase)]
     private static partial Regex RawType { get; }
 
     [GeneratedRegex("^[a-z][a-z0-9_]*$")]

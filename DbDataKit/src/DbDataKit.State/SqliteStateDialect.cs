@@ -57,6 +57,8 @@ public sealed class SqliteStateDialect : StateDialect
 
     public override string Bool => "INTEGER";
 
+    public override string Decimal => "TEXT";
+
     public override string Blob => "BLOB";
 
     public override int GetSchemaVersion(DbConnection connection)

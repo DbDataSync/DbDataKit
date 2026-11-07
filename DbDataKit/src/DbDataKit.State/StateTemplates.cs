@@ -20,6 +20,7 @@ public static class StateTemplates
             .ReplaceWhenUsed("{{time}}", () => dialect.Time)
             .ReplaceWhenUsed("{{json}}", () => dialect.Json)
             .ReplaceWhenUsed("{{bool}}", () => dialect.Bool)
+            .ReplaceWhenUsed("{{decimal}}", () => dialect.Decimal)
             .ReplaceWhenUsed("{{blob}}", () => dialect.Blob),
         match => dialect.DropIndex(match.Groups["index"].Value, match.Groups["table"].Value));
 

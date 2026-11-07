@@ -16,6 +16,7 @@ public static class StateValues
     {
         Guid guid when dialect.Engine == StateEngineIds.Sqlite => guid.ToString("D", CultureInfo.InvariantCulture),
         DateTimeOffset time when dialect.Engine == StateEngineIds.Sqlite => FormatTime(time),
+        decimal number when dialect.Engine == StateEngineIds.Sqlite => number.ToString(CultureInfo.InvariantCulture),
         DateTimeOffset time => time.ToUniversalTime(),
         DateTime time => ForParameter(dialect, new DateTimeOffset(time.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(time, DateTimeKind.Utc) : time.ToUniversalTime())),
         _ => value,
@@ -23,6 +24,13 @@ public static class StateValues
 
     /// <summary>The text SQLite stores an instant as.</summary>
     public static string FormatTime(DateTimeOffset time) => time.UtcDateTime.ToString(SqliteTimeFormat, CultureInfo.InvariantCulture);
+
+    public static decimal ToDecimal(object value) => value switch
+    {
+        decimal number => number,
+        string text => decimal.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture),
+        _ => Convert.ToDecimal(value, CultureInfo.InvariantCulture),
+    };
 
     public static Guid ToGuid(object value) => value switch
     {

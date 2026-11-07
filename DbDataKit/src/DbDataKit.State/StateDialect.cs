@@ -112,6 +112,9 @@ public abstract class StateDialect
 
     public virtual string Bool => Integer;
 
+    /// <summary>An exact decimal: <c>DECIMAL(38,10)</c>, <c>NUMERIC(38,10)</c>, and on SQLite exact text (its numeric type is a binary float; <see cref="StateCommandExtensions.Bind"/> writes a decimal as invariant text there). Not for a key or an index.</summary>
+    public virtual string Decimal => throw NoModules();
+
     /// <summary>Bytes: <c>VARBINARY(MAX)</c>, <c>BYTEA</c>, <c>BLOB</c>. Large values do not belong in an ordinary table at all (the payloads module, plan 29 section 3.6).</summary>
     public virtual string Blob => throw NoModules();
 

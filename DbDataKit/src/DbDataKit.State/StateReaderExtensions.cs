@@ -39,5 +39,7 @@ public static class StateReaderExtensions
 
     public static DateTimeOffset? NullableTime(this DbDataReader reader, int ordinal) => reader.IsDBNull(ordinal) ? null : reader.Time(ordinal);
 
+    public static decimal Decimal(this DbDataReader reader, int ordinal) => StateValues.ToDecimal(reader.GetValue(ordinal));
+
     public static bool Bool(this DbDataReader reader, int ordinal) => Convert.ToBoolean(reader.GetValue(ordinal), System.Globalization.CultureInfo.InvariantCulture);
 }
