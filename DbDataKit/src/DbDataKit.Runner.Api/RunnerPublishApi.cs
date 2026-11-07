@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Routing;
 
-namespace DbDataRunner.Server;
+namespace DbDataKit.Runner.Api;
 
 /// <summary>
 /// The publish API of a runner (plan 30 section 4, plan 28a R16), on the management API beside <see cref="RunnerApi"/>:
@@ -25,7 +25,22 @@ public static class RunnerPublishApi
 {
     private const int MaxJsonBytes = 4 * 1024 * 1024;
 
+    /// <summary>Every call, for a host that pairs clients and reads their tokens (<c>dbdatarunner</c>).</summary>
     public static void Map(IEndpointRouteBuilder app, RunnerPublishing publishing)
+    {
+        MapReadAndLifecycle(app, publishing, "/api/v1", RunnerCallers.TokenResolver);
+        MapWrite(app, publishing);
+    }
+
+    private static IResult? Deny(RunnerCaller caller, ServerRole needed, RunnerPublishing? publishing = null, string? verb = null, string? targetKind = null, string? targetId = null)
+    {
+        var decision = caller.Authorize(needed);
+        if (decision.Allowed) return null;
+        if (publishing is not null && verb is not null) publishing.AuditRefused(verb, caller.Actor, targetKind ?? "package", targetId ?? "-", decision.Reason ?? "the role is not enough");
+        return Error(403, $"This needs the {decision.Needed.ToString().ToLowerInvariant()} role.");
+    }
+
+    private static void MapWrite(IEndpointRouteBuilder app, RunnerPublishing publishing)
     {
         app.MapMethods("/api/v1/artifacts/{sha256}", ["HEAD"], (string sha256, HttpContext context) =>
         {
@@ -52,15 +67,6 @@ public static class RunnerPublishApi
             catch (RunnerPublishException ex) { return Error(ex.Status, ex.Message); }
             catch (Microsoft.AspNetCore.Http.BadHttpRequestException ex) when (ex.StatusCode == 413) { return Error(413, $"The file named {sha256} is larger than the cap of {publishing.MaxArtifactBytes} bytes."); }
         }).DisableRequestTimeout();
-
-        app.MapGet("/api/v1/definitions/integration", (HttpContext context) =>
-            Deny(context, ServerRole.Viewer) is { } denied ? denied : Results.Json(publishing.List()));
-
-        app.MapGet("/api/v1/definitions/integration/{name}", (string name, HttpContext context) =>
-        {
-            if (Deny(context, ServerRole.Viewer) is { } denied) return denied;
-            return publishing.Describe(name) is { } found ? Results.Json(found) : Error(404, $"There is no integration '{name}'.");
-        });
 
         app.MapPut("/api/v1/definitions/integration/{name}", async (string name, HttpContext context) =>
         {
@@ -93,40 +99,6 @@ public static class RunnerPublishApi
             catch (RunnerPublishException ex) { return Error(ex.Status, ex.Message); }
         });
 
-        app.MapPost("/api/v1/definitions/integration/{name}/{act}", async (string name, string act, HttpContext context) =>
-        {
-            if (act is not ("activate" or "switch" or "rollback" or "retire")) return Error(404, $"There is no call '{act}'; the life cycle is activate, switch, rollback and retire.");
-            var token = context.ManagementToken();
-            var verb = act switch { "activate" => RunnerPublishing.ActivateVerb, "switch" => RunnerPublishing.SwitchVerb, "rollback" => RunnerPublishing.RollbackVerb, _ => RunnerPublishing.RetireVerb };
-            var body = await ReadBodyAsync(context, optional: true);
-            if (body.Error is { } bad) return bad;
-            var json = body.Json ?? new JsonObject();
-            var channel = Text(json, "channel") ?? Text(context.Request.Query["channel"]) ?? DefinitionStore.Production;
-            if (Deny(context, ServerRole.Admin, publishing, verb, "package", $"{name}/{channel}") is { } denied) return denied;
-            if (!Int(json, "expected_version", out var expected, out var problem)) return Error(400, problem!);
-            var actor = ActorOf(token);
-            try
-            {
-                switch (act)
-                {
-                    case "activate":
-                        if (!Options(json, out var options, out problem)) return Error(400, problem!);
-                        return Activation(name, channel, await publishing.ActivateAsync(name, channel, expected, actor, options, context.RequestAborted));
-                    case "switch":
-                        if (!Int(json, "version", out var version, out problem) || version is null) return Error(400, problem ?? "switch names the version: {\"channel\": \"prod\", \"version\": 3}.");
-                        if (!Options(json, out var switchOptions, out problem)) return Error(400, problem!);
-                        return Activation(name, channel, await publishing.SwitchAsync(name, channel, version.Value, expected, actor, switchOptions, context.RequestAborted));
-                    case "rollback":
-                        if (!Options(json, out var rollbackOptions, out problem)) return Error(400, problem!);
-                        return Activation(name, channel, await publishing.RollbackAsync(name, channel, expected, actor, rollbackOptions, context.RequestAborted));
-                    default:
-                        var retired = publishing.Retire(name, channel, expected, actor);
-                        return Results.Json(new JsonObject { ["name"] = name, ["channel"] = channel, ["retired"] = retired });
-                }
-            }
-            catch (RunnerPublishException ex) { return Error(ex.Status, ex.Message); }
-        });
-
         app.MapPut("/api/v1/bindings/{channel}/integration/{name}", async (string channel, string name, HttpContext context) =>
         {
             var token = context.ManagementToken();
@@ -155,10 +127,6 @@ public static class RunnerPublishApi
             catch (RunnerPublishException ex) { return Error(ex.Status, ex.Message); }
         });
 
-        app.MapGet("/api/v1/settings", (HttpContext context) =>
-            Deny(context, ServerRole.Viewer) is { } denied ? denied
-                : Results.Json(new JsonObject { [RunnerPublishing.RequireSignaturesSetting] = publishing.RequireSignatures, ["max_artifact_bytes"] = publishing.MaxArtifactBytes }));
-
         app.MapPut("/api/v1/settings/require_signatures", async (HttpContext context) =>
         {
             if (Deny(context, ServerRole.Admin, publishing, RunnerPublishing.SettingVerb, "setting", RunnerPublishing.RequireSignaturesSetting) is { } denied) return denied;
@@ -168,6 +136,61 @@ public static class RunnerPublishApi
             publishing.SetRequireSignatures(value, ActorOf(context.ManagementToken()));
             return Results.Json(new JsonObject { [RunnerPublishing.RequireSignaturesSetting] = value });
         });
+    }
+
+    /// <summary>
+    /// The read and life-cycle calls (list and describe the packages, <c>GET settings</c>, activate, switch, rollback and retire) under <paramref name="prefix"/>, for whoever <paramref name="caller"/> says is calling. The calls that
+    /// upload, publish, bind and set are for publishing clients and are not here.
+    /// </summary>
+    public static void MapReadAndLifecycle(IEndpointRouteBuilder app, RunnerPublishing publishing, string prefix, RunnerCallerResolver caller)
+    {
+        var root = prefix.TrimEnd('/');
+        app.MapGet($"{root}/definitions/integration", (HttpContext context) =>
+            Deny(caller(context), ServerRole.Viewer) is { } denied ? denied : Results.Json(publishing.List()));
+
+        app.MapGet($"{root}/definitions/integration/{{name}}", (string name, HttpContext context) =>
+        {
+            if (Deny(caller(context), ServerRole.Viewer) is { } denied) return denied;
+            return publishing.Describe(name) is { } found ? Results.Json(found) : Error(404, $"There is no integration '{name}'.");
+        });
+
+        app.MapPost($"{root}/definitions/integration/{{name}}/{{act}}", async (string name, string act, HttpContext context) =>
+        {
+            if (act is not ("activate" or "switch" or "rollback" or "retire")) return Error(404, $"There is no call '{act}'; the life cycle is activate, switch, rollback and retire.");
+            var callerOf = caller(context);
+            var verb = act switch { "activate" => RunnerPublishing.ActivateVerb, "switch" => RunnerPublishing.SwitchVerb, "rollback" => RunnerPublishing.RollbackVerb, _ => RunnerPublishing.RetireVerb };
+            var body = await ReadBodyAsync(context, optional: true);
+            if (body.Error is { } bad) return bad;
+            var json = body.Json ?? new JsonObject();
+            var channel = Text(json, "channel") ?? Text(context.Request.Query["channel"]) ?? DefinitionStore.Production;
+            if (Deny(callerOf, ServerRole.Admin, publishing, verb, "package", $"{name}/{channel}") is { } denied) return denied;
+            if (!Int(json, "expected_version", out var expected, out var problem)) return Error(400, problem!);
+            var actor = callerOf.Actor;
+            try
+            {
+                switch (act)
+                {
+                    case "activate":
+                        if (!Options(json, out var options, out problem)) return Error(400, problem!);
+                        return Activation(name, channel, await publishing.ActivateAsync(name, channel, expected, actor, options, context.RequestAborted));
+                    case "switch":
+                        if (!Int(json, "version", out var version, out problem) || version is null) return Error(400, problem ?? "switch names the version: {\"channel\": \"prod\", \"version\": 3}.");
+                        if (!Options(json, out var switchOptions, out problem)) return Error(400, problem!);
+                        return Activation(name, channel, await publishing.SwitchAsync(name, channel, version.Value, expected, actor, switchOptions, context.RequestAborted));
+                    case "rollback":
+                        if (!Options(json, out var rollbackOptions, out problem)) return Error(400, problem!);
+                        return Activation(name, channel, await publishing.RollbackAsync(name, channel, expected, actor, rollbackOptions, context.RequestAborted));
+                    default:
+                        var retired = publishing.Retire(name, channel, expected, actor);
+                        return Results.Json(new JsonObject { ["name"] = name, ["channel"] = channel, ["retired"] = retired });
+                }
+            }
+            catch (RunnerPublishException ex) { return Error(ex.Status, ex.Message); }
+        });
+
+        app.MapGet($"{root}/settings", (HttpContext context) =>
+            Deny(caller(context), ServerRole.Viewer) is { } denied ? denied
+                : Results.Json(new JsonObject { [RunnerPublishing.RequireSignaturesSetting] = publishing.RequireSignatures, ["max_artifact_bytes"] = publishing.MaxArtifactBytes }));
     }
 
     /// <summary>The administrator's words of an activation: <c>confirm_losses</c> with the list echoed in <c>losses</c>, <c>anyway</c> and its <c>reason</c>.</summary>

@@ -13,6 +13,8 @@
     <ProjectReference Include="..\DbDataKit.Runner.Limits\DbDataKit.Runner.Limits.csproj" />
     <ProjectReference Include="..\DbDataKit.Runner.Protocol.Server\DbDataKit.Runner.Protocol.Server.csproj" />
     <ProjectReference Include="..\DbDataKit.Secrets.Abstractions\DbDataKit.Secrets.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Secrets\DbDataKit.Secrets.csproj" />
+    <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 </Project>

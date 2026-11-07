@@ -82,6 +82,26 @@ What changes in the file, and what the page tells the person:
 - What the target does not support is its refusal, in its words: the Proxy serves `sqlserver`, `odbc`, `duckdb`, `postgres` and `flightsql` and refuses another engine; Sync refuses `tls`, `read_login`, `write_login`, `connection_string_secret` and `access`.
 - What a person may do is each server's decision from the token (the roles the console grants that person there, never above the server's ceiling): a Proxy takes a copy from an administrator only.
 
+## The embedded runner
+
+The console can host **a copy of the runner engine** (`DbDataKit.Runner`) as a runner group of one, `console` (plan 28 section 6a, plan 28a R20), with its own state in the console's state database (the scope becomes group `console`; the `runner`, `runner_progress`, `definitions`, `scheduling`, `payloads` and `trust` modules are added, and a console that does not turn it on has none of them). **It is off by default**, per install: a console that is updated gains no tables, no child processes and no dependency on the task host until an administrator writes this in `settings.yaml` in the console's directory:
+
+```yaml
+runner:
+  enabled: true
+  channels: [dev, preview]        # the non-production channels it serves (the default); the channel `system` is always served
+  max_concurrent: 2               # runs at once (the default), so a heavy run cannot slow the console's screens
+  data_directory: runner          # cache, scratch and socket; default: `runner` in the console's directory
+  require_separate_account: false # true: packages of its own are refused while their tasks would run under the console's account
+  retention_every_minutes: 60     # how often the console's own state-retention task runs
+```
+
+What it runs: the tasks of packages published to a channel it serves, each **in a process of its own** with the time and memory limits of any runner, and the console's own system tasks (package `console-system`, channel `system`), which run in the console's process: `state-retention` (the shared retention job over the console's state, on its schedule) and `evaluation`, a placeholder for plan 27's evaluation runs. A product's own housekeeping stays with the product. The runner's version is the console's.
+
+**Production is an administrator's recorded choice.** Until then publishing or activating into the production channel (`prod`) is refused with a message that names the choice, and the runner serves no production channel. `dbdatakit runner accept-production --yes [--note <text>]` records it (audited: who and when; so does `POST /api/embedded-runner/accept-production` with `{"confirmed": true}` for an administrator) and the console then logs, and the runner screens show, the warning that **production schedules stop when the console stops**. `dbdatakit runner revoke-production` takes it back.
+
+In the web app the runner is the first entry of the Servers page (id `console-runner`, flagged `embedded`, never paired and not forgettable) and opens the same runner screens as a `dbdatarunner`: the calls are the runner's own management API, served in the console at `/api/embedded-runner/...` and at `/relay/console-runner/api/v1/...` for people signed in (a viewer reads, an administrator runs, pauses, resumes, activates, switches, rolls back and retires); every other call under that id is 403. Stopping the console stops the runner: running tasks are cancelled, given their grace period, and no run is left running. The task host is published beside the console (`taskhost/`) as it is beside `dbdatarunner`.
+
 ## What is served
 
 `/api/auth`, `/api/invites` and `/api/users` are the shared sign-in controllers of `DbDataKit.Web` (the same ones Sync serves), `/health` and `/version` answer without signing in, and everything else under `/api` is closed

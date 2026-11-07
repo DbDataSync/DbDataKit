@@ -1,3 +1,4 @@
+using DbDataKit.Runner.Api;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
@@ -406,7 +407,7 @@ public sealed class PublishApiTests
 
         // the contract check is the same one: a package built for another runtime is refused by install too
         var old = SamplePackage.WriteManifest(new PackageManifest("sample", null, new PackageLaunch(LaunchKind.Assembly, Assembly: "DbDataKit.Runner.TestPackage.dll"), new BuiltAgainst("8.0", null, "dbdatakit.runner.v1"), [SamplePackage.Task("ok")]));
-        var ex = Assert.Throws<PackageInstallException>(() => RunnerPackages.Install(h.State, old, SamplePackage.Directory, "dev", "test"));
+        var ex = Assert.Throws<PackageInstallException>(() => RunnerPackageInstaller.Install(h.State, old, SamplePackage.Directory, "dev", "test"));
         Assert.Contains("8.0", ex.Message);
         Assert.Contains(RunnerContracts.Dotnet, ex.Message);
     }
