@@ -8,6 +8,8 @@
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
     <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
+    <ProjectReference Include="..\DbDataKit.Connections.Abstractions\DbDataKit.Connections.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Monitoring\DbDataKit.Monitoring.csproj" />
     <ProjectReference Include="..\DbDataKit.Scheduling\DbDataKit.Scheduling.csproj" />
     <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
   </ItemGroup>

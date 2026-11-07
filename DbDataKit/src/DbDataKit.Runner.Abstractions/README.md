@@ -1,6 +1,6 @@
 # DbDataKit.Runner.Abstractions
 
-What the runner and the people who publish to it share (plan 28, slice R01 of plan 28a). So far: the **`package/1` manifest**.
+What the runner and the people who publish to it share (plan 28, slice R01 of plan 28a). So far: the **`package/1` manifest** and the **task and run model** (R02, below).
 
 A package is described by `package.yaml`. The first key is the format id, `schema: package/1`; a file in another format, or another version of this one, is refused with a message naming the file.
 
@@ -34,3 +34,13 @@ tasks:
 * `PackageManifestWriter.Write(manifest)` writes the text back; reading it gives an equal manifest.
 * A task's `progress` is read straight into `ProgressDeclaration` of `DbDataKit.State`, the model `ProgressMigration.Plan` takes. Nothing is duplicated.
 * Durations are a number and a unit (`500ms`, `30s`, `5m`, `2h`, `1d`).
+
+## The task and run model (R02)
+
+Plain records and pure mappings, no I/O; the protocol (R03) and the executor (R06) share them.
+
+* `TaskRef(package, channel, task)`: names follow the manifest's name rule; string form `orders-sync/stable/extract`, `TaskRef.Parse` / `TryParse` read it back.
+* `TaskStart`: run id, attempt (first is 1), package version, inputs, connection handles (names only, never a secret), progress snapshot reference, cancellation grace, protocol version (`dbdatakit.runner.v1`).
+* `TaskFailure(kind, message, item)` with `TaskFailureKind` (Temporary, Permanent, Cancelled, TimedOut, ProcessExited, ProtocolViolation, LimitExceeded). `Retryable` is Temporary, TimedOut and ProcessExited. `TaskFailure.From(ConnectionFailure)` maps Network and Timeout to Temporary, every other connection kind to Permanent.
+* `TaskEnd(state, processed, failedItems, firstFailedItem, failure, outputs)` with `TaskEndState` (Succeeded, CompletedWithFailures, Failed, Stopped). Each state has one `RunOutcome` (partly succeeded is `CompletedWithFailures`, QR4) and one final `WorkItemStatus` (Done, Done, Failed, Cancelled).
+* `TaskEndMapping`: `OutcomeOf`, `WorkItemStatusOf`, `ToRunFinish` (the arguments of `RunStore.Finish`), `ShouldRetry(end, attempt, maxAttempts)` (DR8), and the ends the runner makes when a process gave none: `ProcessExited`, `TimedOut`, `Cancelled`, `LimitExceeded`, `ProtocolViolation`.
