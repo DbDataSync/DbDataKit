@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildRow, duration, LAG_LIMIT_MS, loadRows, NOTICE_WINDOW_MS, proxyRow, sortRows, syncRow } from './monitoring'
+import { buildRow, duration, LAG_LIMIT_MS, loadRows, NOTICE_WINDOW_MS, proxyRow, runnerGoneRow, runnerTaskRow, sortRows, syncRow } from './monitoring'
 import type { InstanceSummary } from './api'
 
 const server = (id: string, name: string, product: string): InstanceSummary => ({ id, name, url: 'https://x', product, version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null })
@@ -79,5 +79,29 @@ describe('loading the rows of a Proxy', () => {
       expect(rows.map((r) => r.detail)).toEqual(['newer', 'older'])
       expect(NOTICE_WINDOW_MS).toBe(86_400_000)
     } finally { globalThis.fetch = real }
+  })
+})
+
+describe('runner rows', () => {
+  const runner = server('r1', 'Runner prod', 'dbdatarunner')
+  const task = { package: 'orders', channel: 'prod', task: 'extract', paused: false, running: 0, last_run: { outcome: 'succeeded' } }
+
+  it('shows a task that failed, waits, has a problem, is held or runs', () => {
+    expect(runnerTaskRow(runner, task)).toMatchObject({ state: 'ok', subject: 'orders/prod/extract', target: { runnerTask: { package: 'orders', channel: 'prod', task: 'extract' } } })
+    expect(runnerTaskRow(runner, { ...task, last_run: { outcome: 'failed' } })).toMatchObject({ state: 'failed', detail: 'The last run failed' })
+    expect(runnerTaskRow(runner, { ...task, last_run: { outcome: 'completedwithfailures' } }).detail).toBe('The last run completed with failures')
+    expect(runnerTaskRow(runner, { ...task, waiting_reason: "No live runner has the label 'gpu'" })).toMatchObject({ state: 'failed', detail: "No live runner has the label 'gpu'" })
+    expect(runnerTaskRow(runner, { ...task, problem: 'cannot start' })).toMatchObject({ state: 'failed', detail: 'cannot start' })
+    expect(runnerTaskRow(runner, { ...task, paused: true, paused_by: 'Ada' })).toMatchObject({ state: 'paused', held: true, detail: 'Paused by Ada' })
+    expect(runnerTaskRow(runner, { ...task, running: 1 }).state).toBe('running')
+    expect(runnerTaskRow(runner, { ...task, last_run: null })).toMatchObject({ state: 'ok', detail: 'No run yet' })
+  })
+
+  it('shows a runner that is gone right after the failures, with no buttons', () => {
+    const gone = runnerGoneRow(runner, { id: 'i2', host: 'box-2', live: false, state: 'Gone' })
+    expect(gone).toMatchObject({ state: 'gone', kind: 'instance', target: null, detail: 'The runner stopped' })
+    expect(runnerGoneRow(runner, { id: 'i3', host: 'box-3', live: false, state: 'Running' }).detail).toBe('The runner stopped reporting')
+    const rows = sortRows([runnerTaskRow(runner, task), syncRow(sync, 'orders', status, { highestLagMs: LAG_LIMIT_MS * 2 }, { runs: [] }), gone, runnerTaskRow(runner, { ...task, last_run: { outcome: 'failed' } })])
+    expect(rows.map((r) => r.state)).toEqual(['failed', 'gone', 'lagging', 'ok'])
   })
 })

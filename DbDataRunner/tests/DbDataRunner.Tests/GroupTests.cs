@@ -66,6 +66,12 @@ public sealed class GroupTests
         Assert.Equal(RunOutcome.Interrupted, runs.Get(firstRun)!.Run.Outcome);       // the dead run is marked, the same chain goes on
         await two.WaitAsync(async () => (await two.GetAsync("/api/v1/instances")).Body!["instances"]!.AsArray().Count == 1 ? "alone" : null, "the silent runner to lapse from the group view", 20);   // it is no longer live
 
+        // all=true still lists it, marked as not live: what the console shows as a runner that is gone
+        var everyone = (await two.GetAsync("/api/v1/instances?all=true")).Body!["instances"]!.AsArray();
+        Assert.Equal(2, everyone.Count);
+        Assert.False(everyone.Single(i => Text(i, "id") == one.Engine.InstanceId!.Value.ToString())!["live"]!.GetValue<bool>());
+        Assert.True(everyone.Single(i => Text(i, "id") == two.Engine.InstanceId!.Value.ToString())!["live"]!.GetValue<bool>());
+
         // the first runner comes back: it is told, cancels its local task, and records nothing
         one.Engine.SuspendHeartbeats = false;
         await StatusWhenAsync(one, s => s["problems"]!.AsArray().Any(p => Text(p, "message").Contains("lost the lease", StringComparison.Ordinal)), "the revived runner to find out");
