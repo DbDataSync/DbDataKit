@@ -57,6 +57,7 @@ internal static class SnapshotUseCheck
                     : heartbeat is not null ? time is { } beat && now - beat < options.InstanceLease
                     : true;
                 if (!live) continue;
+                if (options.IgnoredInstances is { } ignored && ignored.Contains(Convert.ToString(reader.GetValue(0), CultureInfo.InvariantCulture) ?? "")) continue;
 
                 var who = $"the instance '{Convert.ToString(reader.GetValue(0), CultureInfo.InvariantCulture)}' ({ns.Module.Name}.{rule.Table}";
                 if (processId is not null) who += $", process {processId}";

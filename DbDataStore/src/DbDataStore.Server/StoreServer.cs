@@ -81,7 +81,7 @@ public static class StoreServer
             return new DbDataKit.State.Cli.StateTarget(settings.State ?? resolved.Settings, Path.Combine(settings.Directory, StoreState.FileName), () => StoreState.Secrets(settings.Directory),
                 StoreState.SettingsFile(settings.Directory), settings.StateSources ?? resolved.Sources);
         },
-        StoreState.Modules, StoreState.Scope, gate, new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), instanceId, Version));
+        StoreState.Modules, StoreState.Scope, gate, new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), instanceId, Version, Move: true));
 
     /// <summary>The management API so far: who the server is. Every call needs a token a paired console issued, and any role may ask.</summary>
     private static void Map(IEndpointRouteBuilder app, string instanceId)

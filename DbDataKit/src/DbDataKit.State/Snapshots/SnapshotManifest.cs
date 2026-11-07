@@ -123,6 +123,12 @@ public sealed record SnapshotOptions
     /// </summary>
     public bool ExportEvenIfInUse { get; init; }
 
+    /// <summary>
+    /// Keys of instance rows that do not count as a live user of the database: the process that exports is itself one of them when it runs a move on its own state (the management API's move, plan 29b C06).
+    /// Other instances still refuse the export.
+    /// </summary>
+    public IReadOnlySet<string>? IgnoredInstances { get; init; }
+
     /// <summary>Rows asked for in one keyset query.</summary>
     public int BatchSize { get; init; } = 1000;
 
