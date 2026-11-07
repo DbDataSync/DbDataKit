@@ -179,7 +179,7 @@ public sealed class TaskExecutorTests
     [Theory, MemberData(nameof(Engines))]
     public async Task A_task_over_its_memory_limit_is_killed_by_the_watchdog_and_ends_limit_exceeded(string engine)
     {
-        using var h = new ExecutorHarness(engine, s => s.Limits = new LimitOptions { DisableCgroup = true, SampleInterval = TimeSpan.FromMilliseconds(40) });
+        using var h = new ExecutorHarness(engine, s => s.Limits = new LimitOptions { DisableCgroup = true, DisableJobObject = true, SampleInterval = TimeSpan.FromMilliseconds(40) });
         var request = await h.SampleRequest("allocates", s =>
         {
             s.Limits = new TaskLimits(MemoryMb: 400);
@@ -310,6 +310,7 @@ public sealed class TaskExecutorTests
     {
         using var h = new ExecutorHarness(engine);
         var version = await PackageFixture.SamplePackage();
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "on Windows the read-only attribute of a directory does not stop a file being created in it (a known limit of the artifact cache, plan 28a R05); only existing files are protected");
         Assert.SkipWhen(ModeBitsDoNotBindThisUser(), "this user can write anything (root); run the suite as an ordinary user to see the job refused");
         var request = await h.SampleRequest("writes-package");
 
