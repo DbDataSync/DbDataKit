@@ -36,13 +36,25 @@ internal sealed class UnitEngine(RunContext run, StepEngine steps)
         {
             try
             {
-                await foreach (var item in items.WithCancellation(cts.Token).ConfigureAwait(false)) await queue.Writer.WriteAsync(item, cts.Token).ConfigureAwait(false);
+                await foreach (var item in items.WithCancellation(ct).ConfigureAwait(false))
+                {
+                    if (state.Fatal is not null) break;
+                    if (state.Stopping)
+                    {
+                        await Backend.SkipUnitAsync(unit.Name, unit.KeyOf(item), CancellationToken.None).ConfigureAwait(false);     // the rest are recorded skipped
+                        continue;
+                    }
+
+                    await queue.Writer.WriteAsync(item, ct).ConfigureAwait(false);
+                }
+
                 queue.Writer.Complete();
             }
             catch (Exception ex)
             {
+                state.Die(ex);
+                cts.Cancel();
                 queue.Writer.Complete(ex);
-                throw;
             }
         }
 
@@ -50,21 +62,19 @@ internal sealed class UnitEngine(RunContext run, StepEngine steps)
         {
             try
             {
-                await foreach (var item in queue.Reader.ReadAllAsync(cts.Token).ConfigureAwait(false))
+                await foreach (var item in queue.Reader.ReadAllAsync(CancellationToken.None).ConfigureAwait(false))
                 {
+                    if (state.Fatal is not null) continue;          // the process "died": nothing more is recorded
                     var key = unit.KeyOf(item);
                     if (state.Stopping) { await Backend.SkipUnitAsync(unit.Name, key, CancellationToken.None).ConfigureAwait(false); continue; }
                     await ProcessAsync(unit, item, key, body, stop, state, cts, ct).ConfigureAwait(false);
                 }
             }
-            catch (OperationCanceledException) when (state.Stopping && !ct.IsCancellationRequested)
+            catch (Exception ex)
             {
-                // another unit failed and the run stops: this worker simply ends
-            }
-            catch (Exception)
-            {
-                cts.Cancel();     // a store error or the like: nothing else can go on, and the producer must not wait for a reader that is gone
-                throw;
+                state.Die(ex);        // a store error or the like: nothing else can go on
+                cts.Cancel();
+                queue.Writer.TryComplete(ex);
             }
         }
 
