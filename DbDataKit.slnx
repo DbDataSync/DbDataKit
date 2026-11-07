@@ -91,6 +91,7 @@
     <Project Path="DbDataKit/src/DbDataKit.Runner.Limits/DbDataKit.Runner.Limits.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Runner.Kit/DbDataKit.Runner.Kit.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Runner.Kit.Analyzers/DbDataKit.Runner.Kit.Analyzers.csproj" />
+    <Project Path="DbDataKit/src/DbDataKit.Runner.Kit.Testing/DbDataKit.Runner.Kit.Testing.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Scheduling/DbDataKit.Scheduling.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Scripting/DbDataKit.Scripting.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Identity/DbDataKit.Identity.csproj" />
@@ -177,6 +178,7 @@
     <Project Path="DbDataKit/tests/DbDataKit.Runner.Limits.TestChild/DbDataKit.Runner.Limits.TestChild.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Runner.Limits.Tests/DbDataKit.Runner.Limits.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Runner.Kit.Tests/DbDataKit.Runner.Kit.Tests.csproj" />
+    <Project Path="DbDataKit/tests/DbDataKit.Runner.Kit.Testing.Tests/DbDataKit.Runner.Kit.Testing.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Scheduling.Tests/DbDataKit.Scheduling.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Scripting.Tests/DbDataKit.Scripting.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Secrets.Abstractions.Tests/DbDataKit.Secrets.Abstractions.Tests.csproj" />

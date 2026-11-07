@@ -87,14 +87,23 @@ internal sealed class RunContext
 
     public string? FirstFailedItem => _firstFailed;
 
-    public void AddStep(StepReport report) => _steps.Enqueue(report);
+    public void AddStep(StepReport report)
+    {
+        _steps.Enqueue(report);
+        Env.Hooks?.StepReported?.Invoke(report);
+    }
 
-    public void AddUnit(UnitReport report) => _units.Enqueue(report);
+    public void AddUnit(UnitReport report)
+    {
+        _units.Enqueue(report);
+        Env.Hooks?.UnitReported?.Invoke(report);
+    }
 
     public void Count(Counter counter, long n)
     {
         ArgumentNullException.ThrowIfNull(counter);
         CurrentScope.Add(counter.Name, n);
+        Env.Hooks?.Counted?.Invoke(counter.Name, n);
     }
 
     public void SetStatus(string text) => _status = text;

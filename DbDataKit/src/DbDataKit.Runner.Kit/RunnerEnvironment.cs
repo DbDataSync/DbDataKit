@@ -55,6 +55,15 @@ public sealed class RunnerHooks
     /// <summary>Called at the start of each <c>SaveProgressAsync</c> of the job, with its number (1 for the first), before anything is written; a hook may throw <see cref="ProgressConflictException"/>.</summary>
     public Func<int, CancellationToken, Task>? BeforeProgressSave { get; init; }
 
+    /// <summary>Told of every step the run finished with, as it is added to the run's report (also in an attempt that then crashes, whose <see cref="RunResult"/> never exists).</summary>
+    public Action<StepReport>? StepReported { get; init; }
+
+    /// <summary>Told of every unit the run finished with (see <see cref="StepReported"/>).</summary>
+    public Action<UnitReport>? UnitReported { get; init; }
+
+    /// <summary>Told of every <c>Count</c> the job makes: the counter's name and the amount.</summary>
+    public Action<string, long>? Counted { get; init; }
+
     /// <summary>Called after a unit's body returned and before the unit is recorded done. Arguments: unit name, unit key.</summary>
     public Func<string, string, CancellationToken, Task>? AfterUnitBody { get; init; }
 }

@@ -108,6 +108,22 @@ public static class JobRunner
         return new RunResult(identity.RunId, attempt, end, context.StepReports, context.UnitReports, context.Root.Snapshot(), context.LastStatus);
     }
 
+    /// <summary>
+    /// The progress of a job's task as stored now, bound the way a run binds it at start (for tests and tools). Members of a <see cref="Keyed{T}"/> are read from the store when first used, so they show the store at
+    /// that moment.
+    /// </summary>
+    public static async Task<Progress> ReadProgressAsync(Type jobType, RunnerEnvironment environment, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(jobType);
+        ArgumentNullException.ThrowIfNull(environment);
+        if (!typeof(RunnerJobBase).IsAssignableFrom(jobType) || jobType.IsAbstract) throw new ArgumentException($"{jobType.Name} is not a job class (a class deriving from RunnerJob<,,>).", nameof(jobType));
+        var job = (RunnerJobBase)(Activator.CreateInstance(jobType, nonPublic: true) ?? throw new InvalidOperationException($"{jobType.Name} cannot be created."));
+        var identity = new RunIdentity(Guid.Empty, 0, "read-progress", new TaskRef(environment.Package, environment.Channel, TaskNameOf(jobType)));
+        var progress = (Progress)Activator.CreateInstance(job.ProgressType)!;
+        await new ProgressBinder(new InProcessRun(environment, identity), ProgressLayout.For(job.ProgressType)).BindAsync(progress, ct).ConfigureAwait(false);
+        return progress;
+    }
+
     private static object DefaultInput(Type type)
     {
         try
