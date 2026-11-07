@@ -269,9 +269,9 @@ internal static class ApplyCommand
         string? logPath = null;
         try
         {
-            if (!dryRun && StatementLogRetention.Prune(Path.Combine(root, InitCommand.StatementLogDir), lifecycle.StatementLogDays, DateTime.UtcNow) is > 0 and var pruned)
+            if (!dryRun && StatementLogRetention.Prune(InitCommand.StatementLogPath(root, env), lifecycle.StatementLogDays, DateTime.UtcNow) is > 0 and var pruned)
                 output.WriteLine($"Removed {pruned} statement log(s) older than {lifecycle.StatementLogDays} day(s) (retention.statement_logs_days).");
-            using var log = new FileStatementLog(Path.Combine(root, InitCommand.StatementLogDir), dryRun ? "apply-dry-run" : "apply", runId);
+            using var log = new FileStatementLog(InitCommand.StatementLogPath(root, env), dryRun ? "apply-dry-run" : "apply", runId);
             logPath = Path.GetRelativePath(root, log.Path);
             output.WriteLine($"Statement log: {logPath}");
             result = Task.Run(() => ApplyEngine.RunAsync(plan, planText, read!, write, tracking.Target is { } tt ? new ApplyTracking(trackRead!, trackWrite, tt.SchemaName) : null, options, log, runId, line => { output.WriteLine(line); hooks?.Progress?.Invoke(line); })).GetAwaiter().GetResult();

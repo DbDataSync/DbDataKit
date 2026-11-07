@@ -381,6 +381,21 @@ public sealed class TaskExecutorTests
         Assert.Equal(RunOutcome.Failed, Stored(h, request.RunId.Value).Run.Outcome);
     }
 
+    [Theory, MemberData(nameof(Engines))]
+    public async Task A_launch_command_that_is_a_file_of_the_package_starts_although_the_stored_object_was_not_executable(string engine)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "the sample executables are shell scripts");
+        using var h = new ExecutorHarness(engine);
+        var request = await h.ProgramRequest("program.sh");
+
+        var result = await h.Executor.RunAsync(request);
+
+        // the script speaks no protocol, so the run ends in a violation, but it started and ran: 'permission denied' would be a failure to start
+        Assert.Equal(TaskFailureKind.ProtocolViolation, result.End.Failure!.Kind);
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains(h.Log(request.RunId!.Value), l => l.Message == "started as a program of the package");
+    }
+
     [Fact]
     public async Task An_executable_that_exits_nonzero_is_process_exited_and_gets_its_arguments_and_the_task_name()
     {

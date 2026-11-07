@@ -109,6 +109,7 @@ public class RunnerHost(RunnerHostSettings settings, StateDatabase state, ILogge
             Redactor = redactor,
             Slots = slots,
             Logger = _log,
+            InheritedVariables = [.. new TaskExecutorOptions { DataDirectory = settings.Directory }.InheritedVariables, .. settings.TaskEnvironment],
         });
 
         // the runs a process that died left behind: those of a SQLite state are this runner's alone; a group's are only marked when no instance of it is live (another one may be running them)
