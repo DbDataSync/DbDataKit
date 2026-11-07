@@ -102,6 +102,46 @@ jobs:
       - run: dotnet build DbDataBuild.slnf -c Release
       - run: dotnet test tests/DbDataBuild.Tests.Unit -c Release --no-build
 
+  # The Build runtime package (plan 28c E05): the engine published for the platform by scripts/publish-runtime.sh (the size check included), then the tests that need no
+  # database engine: the manifest the script prints, a definition run by the runtime from read-only views with the engine unpacked once into the runner's cache, and the start of
+  # three engines at once into one directory. On Windows as well (win-x64: long paths, the extraction directory under the cache).
+  runtime-package:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,  rid: linux-x64 }
+          - { os: windows-latest, rid: win-x64 }
+    name: runtime package (${{ matrix.rid }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-product
+        with:
+          product: DbDataBuild
+          duckdb: 'false'
+      - name: Prebuilt polyglot library
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/fetch-native.sh ${{ matrix.rid }}
+      - name: Pinned DuckDB engine
+        shell: bash
+        working-directory: .
+        run: scripts/fetch-duckdb.sh
+      - name: Publish the runtime package
+        shell: bash
+        run: scripts/publish-runtime.sh ${{ matrix.rid }} "$RUNNER_TEMP/runtime"
+      - run: dotnet build tests/DbDataBuild.Tests.Conformance -c Release
+      - name: Runtime package tests
+        shell: bash
+        env:
+          DBDATABUILD_TEST_PUBLISHED: ${{ runner.temp }}/runtime
+        run: dotnet test tests/DbDataBuild.Tests.Conformance -c Release --no-build --filter "Group=runtime-package"
+
   # The conformance suite against real engines, in groups that run side by side (each starts only the engines it needs): `quick` is
   # everything not named below, `apply` is the whole plan and apply loop, `templates` builds the sample projects and compares every
   # table with DuckDB, `release` (the sample projects again with the rewrites off) runs only in dbdatabuild-conformance-full.yml.
@@ -114,7 +154,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { group: quick,     filter: "Group!=apply&Group!=templates&Group!=release" }
+          - { group: quick,     filter: "Group!=apply&Group!=templates&Group!=release&Group!=runtime-package" }
           - { group: apply,     filter: "Group=apply" }
           - { group: templates, filter: "Group=templates&Group!=release" }
     name: conformance (${{ matrix.group }})

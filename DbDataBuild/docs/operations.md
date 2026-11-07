@@ -121,3 +121,39 @@ Typical use: `dbdatabuild connection status` reports drift on `marts.fct`; the a
 ## 8. Large projects, and what was measured
 
 Measured on local containers with generated projects (a Debug build; a release build is faster): `project compile` of 300 models about 9 s, of 1,500 views in a chain about 40 s; planning 300 models 12 s; applying a plan of 401 steps 9 s on PostgreSQL and 13 s on SQL Server; an incremental load by key of 2 million rows 4 to 10 s; `connection compare --against-connection` of 1 million rows 25 s and 5 million 110 s (SQL Server against PostgreSQL). Statements of an apply have no time limit; the reads that scan a table (resolvers, the bounds of a range) wait ten minutes; `connection compare` has no limit. A name longer than the engine keeps is refused before anything is planned (63 bytes on PostgreSQL, 128 characters on SQL Server, DDB-241). A refused login or a connection the server closed is DDB-242, with the driver's error number (18456, 28P01) and no driver message.
+
+## 9. The runtime package (running refresh plans on a dbdatarunner)
+
+A `dbdatarunner` runs a refresh plan as a task of a **definition package** (a project's committed files: `dbdatabuild.yml`, `rendered/`, the scripts they name) that names the engine by version range. The engine is a second package, the **runtime package** `dbdatabuild-runtime`, published once per platform and shared by every project. Upgrading the engine is one publish and one activation; no project is republished (plan 28c, decision ED1). Two platforms only: `win-x64` and `linux-x64` (decision QE8).
+
+```
+scripts/publish-runtime.sh linux-x64 out/runtime      # or win-x64 (fetch the polyglot library for it first: scripts/fetch-native.sh win-x64)
+```
+
+**Layout** (what the script writes, and what the tests and the runner read):
+
+```
+out/runtime/package.yaml        the manifest (package/1), printed by scripts/runtime-manifest.sh
+out/runtime/files/bin/dbdatabuild        the executable (dbdatabuild.exe on win-x64): runtime, tool, polyglot library and DuckDB in one file
+out/runtime/sizes.txt           the size of every file and the total
+```
+
+```yaml
+schema: package/1
+name: dbdatabuild-runtime
+description: "The dbdatabuild engine 0.4.0 for linux-x64, run by definition packages that name it"
+runtime: true
+version: "0.4.0"
+launch: { kind: executable, command: bin/dbdatabuild, args: ["--runner-task"] }
+built_against: { dotnet: "10.0", kit: "1", protocol: dbdatakit.runner.v1 }
+```
+
+- **The version** is the Build release (`<Version>` in `Directory.Build.props`, or `VERSION=` when publishing) as three numbers. A suffix such as `-beta.4` is cut off, because a range reads numbers only; a prerelease is told from its release by the runner's own version number of the package. A definition names the engine it was compiled for by range: `launch: { runtime: { name: dbdatabuild-runtime, range: "0.4.x" } }` (the minor line; `>=0.4 <0.6` and `*` are also ranges). A definition whose range the channel's active runtime does not satisfy fails staging naming the runtime, the range and the version the channel has. The `rendered/` formats are versioned by their own rules and the engine refuses one it does not read, naming the file.
+- **How the executable is found.** `launch.command` is a path inside the package (the validator refuses a manifest whose command is not among the files). The runner starts it with the **definition's** directory as the working directory and `DBDATAKIT_PACKAGE_DIR` pointing at it, and `DBDATAKIT_RUNTIME_DIR` at the runtime's view. The package view holds links to stored files, so what a view holds must be a program that runs from a link: the single-file executable does; a framework-dependent `dbdatabuild.dll` does not (the host resolves the link and looks for its `runtimeconfig.json` beside the stored file).
+- **Where the engine unpacks.** The single-file executable unpacks its natives (DuckDB, the polyglot library) on its first start, before any of its own code runs, so the place cannot be chosen by the program: the runner puts `DOTNET_BUNDLE_EXTRACT_BASE_DIR` in the environment of every process it starts for a runtime. The directory is `<runner data>/cache/runtimes/dbdatabuild-runtime@<version number the runner gave the package>`, made by the runner, outside every read-only view and shared by the runs of that version: the first start fills it, the others find it complete (the unpack is made in a temporary directory and renamed, so three that start together leave one). A new runtime version gets a new directory; a version the runner no longer keeps can have its directory removed with it. Nothing is unpacked into the home directory.
+- **What the run writes.** Nothing beside the project: the statement log goes to the run's scratch directory (`DBDATABUILD_STATEMENT_LOG_DIR`, set from `DBDATAKIT_SCRATCH_DIR`), which the runner removes after the run.
+- **Size.** Each file of a package is one object of the runner's cache, whose cap is 512 MiB per file. The single file is about 286 MiB for `linux-x64`. `scripts/runtime-sizes.sh` (run by the publish script) prints every file and **fails above 400 MiB**, naming the file. The fallback is `--framework-dependent`: the program and its natives as separate files and `launch: { kind: executable, command: dotnet, args: ["{runtime}/bin/dbdatabuild.dll", "--runner-task"] }`; it needs views made of copies (Windows makes copies; on Linux the cache links), so it is the way out for a file that is too big, not the default.
+- **One name for both platforms.** The package is `dbdatabuild-runtime` whichever platform it was built for; the command differs (`bin/dbdatabuild.exe` on `win-x64`), so a channel is served by runners of one platform. Runners of both platforms need a channel each.
+- **Logins** are not in the package: Build keeps its read and write logins as before (plan 28c, QE6), and the task gets them as the runner is told to give them.
+
+Tests: `BuildRuntimePackageTests` (no database: the manifest the script prints is the one the runner reads, the size check, a definition run from read-only views with the engine unpacked once into the runtime's directory, three engines starting at once), and `A_refresh_plan_runs_as_a_runner_task...` (SQL Server and PostgreSQL, the same runner and the same two packages, the target's rows equal to those of the command). CI runs the first on Linux and Windows (`runtime package` job of `dbdatabuild-ci.yml`).

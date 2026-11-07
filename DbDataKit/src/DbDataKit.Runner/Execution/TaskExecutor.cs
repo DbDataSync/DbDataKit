@@ -109,6 +109,7 @@ public sealed class TaskExecutor : ITaskRunner
         try
         {
             CreateScratch(scratch);
+            if (request is { RuntimeDirectory: not null, RuntimeKey: { } runtimeKey }) Directory.CreateDirectory(ExtractDirectoryOf(runtimeKey));
             inDoubt = _reconciler.Reconcile(task, request.Chain, request.Attempt);
             foreach (var step in inDoubt)
                 log.Note("Warning", $"The step '{step.Name}' ({step.Key}) was started by attempt {step.Attempt} of this chain and never completed; it is in doubt, and the job's recovery for it decides what happens.");
@@ -268,7 +269,11 @@ public sealed class TaskExecutor : ITaskRunner
         environment[RunnerProtocolNames.ScratchVariable] = scratch;
         environment[RunnerProtocolNames.PackageDirectoryVariable] = package;
         var runtime = request.RuntimeDirectory is null ? null : Path.GetFullPath(request.RuntimeDirectory);
-        if (runtime is not null) environment[RunnerProtocolNames.RuntimeDirectoryVariable] = runtime;
+        if (runtime is not null)
+        {
+            environment[RunnerProtocolNames.RuntimeDirectoryVariable] = runtime;
+            if (request.RuntimeKey is { } key) environment[ExtractDirectoryVariable] = ExtractDirectoryOf(key);
+        }
         environment[RunnerProtocolNames.TaskVariable] = request.Task.Task;
         environment[RunnerProtocolNames.EndpointVariable] = _host.Endpoint.ToString();
         environment[RunnerProtocolNames.TokenVariable] = token;
@@ -304,6 +309,16 @@ public sealed class TaskExecutor : ITaskRunner
             OnOutputLine = log.Stdout,
             OnErrorLine = log.Stderr,
         };
+    }
+
+    /// <summary>The variable a .NET single-file executable reads for the directory it unpacks its natives into (default <c>~/.net</c>).</summary>
+    public const string ExtractDirectoryVariable = "DOTNET_BUNDLE_EXTRACT_BASE_DIR";
+
+    /// <summary>The extraction directory of a runtime version (<c>name@version</c>): <see cref="TaskExecutorOptions.RuntimeExtractDirectory"/> or <c>&lt;data&gt;/cache/runtimes</c>, then the key made safe as a directory name.</summary>
+    internal string ExtractDirectoryOf(string key)
+    {
+        var root = _options.RuntimeExtractDirectory ?? Path.Combine(_options.DataDirectory, "cache", "runtimes");
+        return Path.Combine(Path.GetFullPath(root), new string([.. key.Select(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_' or '@' ? c : '_')]));
     }
 
     private (string FileName, string[] Prefix) TaskHostCommand()

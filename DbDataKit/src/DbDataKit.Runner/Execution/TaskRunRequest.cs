@@ -27,6 +27,12 @@ public sealed record TaskRunRequest
     /// </summary>
     public string? RuntimeDirectory { get; init; }
 
+    /// <summary>
+    /// The runtime version's key, <c>name@version</c> (the package's name and the version number the runner gave it), when the package is run by a runtime. The executor makes the runtime's extraction directory from it
+    /// (<see cref="TaskExecutorOptions.RuntimeExtractDirectory"/>, plan 28c E05): a single-file executable unpacks its natives before any of its code runs, so the place must be in the process's environment from the start.
+    /// </summary>
+    public string? RuntimeKey { get; init; }
+
     /// <summary>What the manifest's task entry says (extra arguments of an executable); null: none.</summary>
     public TaskEntry? Entry { get; init; }
 
