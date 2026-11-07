@@ -43,6 +43,9 @@ public sealed class World
 
     public static World Begin() => Held.Value = new World();
 
+    /// <summary>Set when the first body of the `cancel` mode is running, so a test cancels at that moment, not after a guessed time (a slow start, as on Windows, must not matter).</summary>
+    public TaskCompletionSource BodyStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     // the warehouse
     public ConcurrentQueue<(string Table, Row Row)> Warehouse { get; } = new();
 
@@ -464,7 +467,7 @@ public sealed class Trouble : RunnerJob<TroubleInput, NoProgress, NoSlots>
             case "cancel":
                 await Step(StepsOfTrouble.Charge, "a").Repeatable().RunAsync(async ct =>
                 {
-                    if (Interlocked.Increment(ref World.Current.Bodies) == 1) await Task.Delay(Timeout.Infinite, ct);
+                    if (Interlocked.Increment(ref World.Current.Bodies) == 1) { World.Current.BodyStarted.TrySetResult(); await Task.Delay(Timeout.Infinite, ct); }
                     return "done";
                 }, ct);
                 break;

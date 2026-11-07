@@ -442,7 +442,8 @@ public abstract class SampleJobTestsBase(bool remote)
     public async Task A_cancelled_run_is_stopped_and_its_step_stays_in_doubt(string engine)
     {
         using var h = NewHarness(engine);
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+        using var cts = new CancellationTokenSource();
+        _ = h.World.BodyStarted.Task.ContinueWith(_ => cts.Cancel(), TaskScheduler.Default);      // cancel when the body is running, not after a guessed time
 
         var stopped = await h.Run<Trouble>(Mode("cancel"), ct: cts.Token);
 
