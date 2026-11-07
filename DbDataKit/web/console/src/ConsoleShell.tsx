@@ -56,6 +56,7 @@ const rail: RailItem[] = [
   { to: '/connections', title: 'Connections', icon: <ConnectionsIcon />, testId: 'rail-connections-all' },
   { to: '/monitoring', title: 'Monitoring', icon: <MonitoringIcon />, testId: 'rail-monitoring' },
   { to: '/lineage', title: 'Lineage', icon: <LineageIcon />, testId: 'rail-lineage' },
+  { to: '/deployments', title: 'Deployments', icon: <LineageIcon />, testId: 'rail-deployments' },
   { to: '/views', title: 'Views', icon: <ViewsIcon />, testId: 'rail-views' },
   { to: '/docs', title: 'Docs', icon: <DocsIcon />, testId: 'rail-docs' },
   { to: '/users', title: 'Users', icon: <UsersIcon />, testId: 'rail-users', adminOnly: true },

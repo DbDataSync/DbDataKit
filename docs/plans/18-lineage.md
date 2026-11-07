@@ -45,6 +45,7 @@ The owner's rules for the first version:
 | semantic member | a semantic model, its measures and dimensions |
 | serving | a Proxy data source, a published feed (plan 17 R2), a semantic package |
 | consumer | a DbDataApps app, dashboard or report; an external report server (later); an agent action |
+| deployment | a package, one of its versions, a channel it is served on, a runner group or instance, the runtime an instance runs on (plan 28c ED18); its `deployment` property says which, and the runs that name a version join to it |
 
 **Edges**, each with a kind, a granularity (`column` or `table`), and where the knowledge came from:
 
@@ -58,6 +59,8 @@ The owner's rules for the first version:
 | `extracts` | a document to the tables extracted from it |
 | `reads` | a consumer (an app, a report, a dashboard view) to what it queries |
 | `promotes` | a query's ad hoc table to the DbDataStore entity made from it (plan 15) |
+| `deploys` | a package to its versions, a version to the channel that serves it (detail: active, previous or staged), a channel to the runner instance that holds it (detail: version and state), a group or runtime to its instances |
+| `runs` | a deployed version to a run that named it (`package_version`) |
 
 **Two layers**:
 

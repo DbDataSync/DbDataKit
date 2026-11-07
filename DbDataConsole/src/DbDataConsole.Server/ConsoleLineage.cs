@@ -22,7 +22,7 @@ public sealed class ConsoleLineage(ConsoleInstances instances, ConsoleRelay rela
     private readonly ConcurrentDictionary<string, ServerLineageAnswer> _answers = new(StringComparer.Ordinal);
 
     /// <summary>The path of a product's lineage on its management API, or null for a product that keeps none (yet).</summary>
-    public static string? PathOf(string? product) => product switch { "dbdatabuild" => "/api/v1/lineage", "dbdatasync" => "/api/lineage", _ => null };
+    public static string? PathOf(string? product) => product switch { "dbdatabuild" => "/api/v1/lineage", "dbdatasync" => "/api/lineage", "dbdatarunner" => "/api/v1/lineage", _ => null };
 
     public async Task<JoinedLineage> JoinedAsync(bool refresh, CancellationToken ct)
     {

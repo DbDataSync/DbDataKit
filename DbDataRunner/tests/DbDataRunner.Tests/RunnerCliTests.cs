@@ -32,7 +32,7 @@ public sealed class RunnerCliTests : IDisposable
     {
         var text = new StringWriter();
         var router = RunnerCli.Router(_ => null);
-        foreach (var words in new[] { new[] { "help" }, ["server", "help"], ["runs", "help"], ["tasks", "help"], ["label", "help"], ["package", "help"], ["state", "help"], ["service", "help"], ["cert", "help"], ["health", "help"] })
+        foreach (var words in new[] { new[] { "help" }, ["server", "help"], ["runs", "help"], ["tasks", "help"], ["label", "help"], ["lineage", "help"], ["package", "help"], ["state", "help"], ["service", "help"], ["cert", "help"], ["health", "help"] })
         {
             var output = new StringWriter();
             router.RunAsync(words, new CliContext(output, TextWriter.Null, TextReader.Null)).GetAwaiter().GetResult();
@@ -53,9 +53,24 @@ public sealed class RunnerCliTests : IDisposable
 
         Assert.Equal(File.ReadAllText(file).ReplaceLineEndings("\n"), actual);
         // the shared nouns are there with their shared verbs, and the runner's own
-        foreach (var noun in new[] { "server", "runs", "tasks", "label", "package", "state", "service", "cert", "health" }) Assert.Contains($"\n  {noun} ", actual);
+        foreach (var noun in new[] { "server", "runs", "tasks", "label", "lineage", "package", "state", "service", "cert", "health" }) Assert.Contains($"\n  {noun} ", actual);
         foreach (var command in new[] { "server pair", "server clients", "server unpair", "package install", "tasks run", "tasks pause", "tasks resume", "label add", "label remove", "label list", "runs list", "state show", "state test", "state grants", "service unit", "cert ensure", "cert renew" })
             Assert.Contains($"  {command}", actual);
+    }
+
+    [Fact]
+    public async Task The_lineage_noun_says_where_an_installed_package_is_deployed_and_what_a_runner_has()
+    {
+        var manifest = SamplePackage.WriteManifest(SamplePackage.Manifest(SamplePackage.Task("ok", TimeSpan.FromHours(1))));
+        Assert.Equal(0, (await Run("package", "install", manifest, SamplePackage.Directory, "--channel", "dev")).Exit);
+
+        var where = await Run("lineage", "where", "sample");
+        Assert.True(where.Exit == 0, where.Error);
+        Assert.Contains("integration/sample on dev: active v1", where.Out);
+        Assert.Contains("last publish by", where.Out);
+        Assert.Contains("sample", (await Run("lineage", "graph", "--kind", "deployment")).Out);
+        Assert.Equal(1, (await Run("lineage", "where", "nothing")).Exit);
+        Assert.Equal(1, (await Run("lineage", "on", "nowhere")).Exit);
     }
 
     [Fact]

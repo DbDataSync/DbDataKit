@@ -10,6 +10,7 @@
     <ProjectReference Include="..\DbDataKit.Runner.Abstractions\DbDataKit.Runner.Abstractions.csproj" />
     <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
     <ProjectReference Include="..\DbDataKit.Hosting.Children\DbDataKit.Hosting.Children.csproj" />
+    <ProjectReference Include="..\DbDataKit.Lineage\DbDataKit.Lineage.csproj" />
     <ProjectReference Include="..\DbDataKit.Runner.Limits\DbDataKit.Runner.Limits.csproj" />
     <ProjectReference Include="..\DbDataKit.Runner.Protocol.Server\DbDataKit.Runner.Protocol.Server.csproj" />
     <ProjectReference Include="..\DbDataKit.Secrets.Abstractions\DbDataKit.Secrets.Abstractions.csproj" />

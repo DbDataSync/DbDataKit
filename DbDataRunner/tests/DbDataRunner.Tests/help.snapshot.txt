@@ -6,6 +6,7 @@ Commands:
   runs     The run history of the tasks
   tasks    The scheduled tasks of the installed packages
   label    Labels on the runners of the group: an administrator's labels route tasks that require them; reported capabilities are labels too, read-only
+  lineage  What feeds what: the lineage graph, the impact of a change, the provenance of a result
   package  Packages in a runner: publish to a server's API as a paired publisher, or install into this runner's own state (the development path)
   state    The state database: where it is, whether it works, and the rights it needs
   service  Registration of 'server run' with Windows or systemd
@@ -58,6 +59,23 @@ Verbs:
       Take an administrator's label off a runner (a label the runner reports about itself cannot be removed) [Target writes (data only)]
   label list [--instance <id|this>] [--repo <server directory>] [--group <name>]
       The labels of the live runners of the group, or of one runner, each with who set it (admin or reported) [Offline only]
+
+$ dbdatarunner lineage help
+dbdatarunner lineage: What feeds what: the lineage graph, the impact of a change, the provenance of a result
+
+Verbs:
+  lineage graph [--kind <kind>] [--repo <server directory>] [--group <name>]
+      Every node and edge of the graph [Offline only]
+  lineage impact <node> [--depth <n>] [--repo <server directory>] [--group <name>]
+      What a node feeds, downstream [Offline only]
+  lineage provenance <node> [--depth <n>] [--repo <server directory>] [--group <name>]
+      What feeds a node, upstream [Offline only]
+  lineage where <definition> [--channel <channel>] [--repo <server directory>] [--group <name>]
+      Where a definition is deployed: its channels, versions and runners [Offline only]
+  lineage on <runner> [--repo <server directory>] [--group <name>]
+      What is deployed on a runner (an instance id or a host) [Offline only]
+  lineage runs <definition> <version> [--repo <server directory>] [--group <name>]
+      The runs that named a version of a definition [Offline only]
 
 $ dbdatarunner package help
 dbdatarunner package: Packages in a runner: publish to a server's API as a paired publisher, or install into this runner's own state (the development path)
