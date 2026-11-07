@@ -32,6 +32,7 @@ public sealed class CliGrammarTests
               identity    The identity home this proxy serves: register consoles and apps, invite people, give them roles
               apps        The apps host this proxy serves: its apps, instances and navigation sets
               config      The server's own configuration
+              state       The state database: where it is, whether it works, and the rights it needs
               query       A client for smoke-testing a running proxy
               semantic    A served semantic model: what it offers, a query on it, what a query would run, the values of an attribute
               datasource  The proxy's data sources (the name the query client's --datasource uses)
@@ -42,6 +43,30 @@ public sealed class CliGrammarTests
             Add --format json to any command for a JSON document instead of text.
 
             """.Replace("\r\n", "\n"), result.Out);
+    }
+
+    [Fact]
+    public async Task The_state_verbs_read_the_proxys_state_and_create_nothing()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ddk-proxy-state-" + Guid.NewGuid().ToString("N")[..8]);
+        try
+        {
+            var before = await Run("state", "show", "--repo", directory);
+            Assert.Equal(0, before.Exit);
+            Assert.Contains("not created yet", before.Out);
+            Assert.Contains("serving", before.Out);   // the proxy's own module
+            Assert.False(File.Exists(Path.Combine(directory, "state.db")));
+
+            Directory.CreateDirectory(directory);
+            DbDataProxy.Server.State.ProxyState.Open(directory).OpenConnection().Dispose();
+            var tested = await Run("state", "test", "--repo", directory);
+            Assert.Equal(0, tested.Exit);
+            Assert.Contains("nothing is pending", tested.Out);
+
+            var grants = await Run("state", "grants", "--login", "svc");
+            Assert.Equal(CliExit.Usage, grants.Exit);   // SQLite: nothing to grant
+        }
+        finally { try { Directory.Delete(directory, true); } catch (IOException) { } }
     }
 
     [Fact]

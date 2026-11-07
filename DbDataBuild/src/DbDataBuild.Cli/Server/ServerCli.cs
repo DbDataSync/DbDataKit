@@ -16,7 +16,7 @@ namespace DbDataBuild.Cli.Server;
 /// </summary>
 internal static class ServerCli
 {
-    public static bool Handles(string[] args) => args.Length > 0 && args[0] is "server" or "secret" or "service" or "health" or "lineage";
+    public static bool Handles(string[] args) => args.Length > 0 && args[0] is "server" or "secret" or "service" or "health" or "lineage" or "state";
 
     public static async Task<int> RunAsync(string[] args, TextWriter output, TextWriter error, TextReader input)
     {
@@ -39,8 +39,15 @@ internal static class ServerCli
         .. invocation is ["secret", ..] ? new[] { SecretVerbs(invocation) } : Array.Empty<Noun>(),
         .. invocation is ["health", ..] ? new[] { HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl) } : Array.Empty<Noun>(),
         .. invocation is ["lineage", ..] ? new[] { ServerLineage.Create(invocation) } : Array.Empty<Noun>(),
+        .. invocation is ["state", ..] ? new[] { StateNoun() } : Array.Empty<Noun>(),
         .. invocation is ["service", ..] ? new[] { BuildService.Noun(BuildServiceEnvironment.Real()) } : Array.Empty<Noun>(),
     ], ProductInfo.Version);
+
+    /// <summary>The shared <c>state show|test|grants</c> verbs over the server's state: SQLite, <c>state.db</c> in its directory (<c>--repo</c>), built from the <c>scheduling</c> module. The server has no setting for another engine.</summary>
+    private static Noun StateNoun() => DbDataKit.State.Cli.StateVerbs.Create(new DbDataKit.State.Cli.StateVerbContext(
+        "dbdatabuild", "the server",
+        args => new DbDataKit.State.Cli.StateTarget(new DbDataKit.State.StateSettings(), Path.Combine(Path.GetFullPath(args.Get("repo") ?? BuildServerSettings.DefaultDirectory()), "state.db")),
+        BuildSchedulerSchema.Modules, DbDataKit.State.StateScope.Install, ["repo"], "[--repo <server directory>]"));
 
     /// <summary>The shared <c>secret</c> verbs over the server's own store (<c>dbdatabuild secret ...</c>, with <c>--repo</c> as for the pairing verbs). The value of a secret comes from a hidden prompt or standard input, never an argument.</summary>
     private static Noun SecretVerbs(string[] invocation)

@@ -2720,6 +2720,144 @@
       "if": {
         "properties": {
           "command": {
+            "const": "state grants"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_grants"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state grants"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_grants_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state show"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_show"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state show"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_show"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state test"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_test"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state test"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_test"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "ui mcp"
           },
           "ok": {
@@ -4505,6 +4643,190 @@
     "data_service_unit": {
       "type": "object",
       "additionalProperties": false
+    },
+    "data_state_grants": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "statements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "statements"
+      ]
+    },
+    "data_state_grants_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "statements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "data_state_show": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "product": {
+          "type": "string"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "file_size": {
+          "type": "integer"
+        },
+        "connection": {
+          "type": "string"
+        },
+        "registry_table": {
+          "type": "string"
+        },
+        "registry_exists": {
+          "type": "boolean"
+        },
+        "modules_listed": {
+          "type": "boolean"
+        },
+        "connected": {
+          "type": "boolean"
+        },
+        "engine_version": {
+          "type": "string"
+        },
+        "login": {
+          "type": "string"
+        },
+        "modules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "module": {
+                "type": "string"
+              },
+              "scope": {
+                "type": "string"
+              },
+              "place": {
+                "type": "string"
+              },
+              "schema": {
+                "type": "string"
+              },
+              "prefix": {
+                "type": "string"
+              },
+              "file": {
+                "type": "string"
+              },
+              "binary_version": {
+                "type": "integer"
+              },
+              "registered_version": {
+                "type": "integer"
+              },
+              "applied_by": {
+                "type": "string"
+              },
+              "pending": {
+                "type": "integer"
+              },
+              "problem": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "module",
+              "place",
+              "binary_version",
+              "status"
+            ]
+          }
+        },
+        "other_registered": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "module": {
+                "type": "string"
+              },
+              "scope": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "module",
+              "scope",
+              "version"
+            ]
+          }
+        },
+        "pending_migrations": {
+          "type": "integer"
+        },
+        "error": {
+          "type": "string"
+        }
+      }
+    },
+    "data_state_test": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "status",
+              "message"
+            ]
+          }
+        },
+        "failed": {
+          "type": "string"
+        }
+      }
     },
     "data_ui_mcp": {
       "type": "object",
