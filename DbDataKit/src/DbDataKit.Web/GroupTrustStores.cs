@@ -58,7 +58,13 @@ public static class TrustModule
                 value  {{text}} NOT NULL
             );
             """,
+            """
+            -- Plan 24a UC04: the compatibility generation a client reported when it paired (null for a pairing made before, or by a client that does not say).
+            ALTER TABLE {table:paired_client} {{addcolumn}} generation {{int}} NULL;
+            """,
         ],
+        // the second migration only adds a nullable column, which the code of version 1 never reads or writes: an instance of the previous version still works with it
+        compatibleWithPrevious: 1,
         // a code that was never redeemed and has long expired; pairing codes are swept when read, this catches a group nobody has paired with since
         retention: [new RetentionRule("pairing_code", "expires_at")]);
 }
@@ -109,7 +115,7 @@ public sealed class StatePairedClients(StateDatabase database, PairedClientsFile
         var group = database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(Module, connection, "SELECT id, name, public_key, ceiling, kind, paired_at FROM {table:paired_client} ORDER BY id;");
+            using var cmd = database.Command(Module, connection, "SELECT id, name, public_key, ceiling, kind, paired_at, generation FROM {table:paired_client} ORDER BY id;");
             using var reader = cmd.ExecuteReader();
             var found = new List<PairedClient>();
             while (reader.Read())
@@ -118,7 +124,7 @@ public sealed class StatePairedClients(StateDatabase database, PairedClientsFile
                 if (Base64Url.Decode(reader.GetString(2)) is not { Length: ConsoleSigningKey.PublicKeyLength } key
                     || !ServerRoles.TryParse(reader.GetString(3).Split(',', StringSplitOptions.RemoveEmptyEntries), out var ceiling) || ceiling == ServerRole.None
                     || !Enum.TryParse<ClientKind>(reader.GetString(4), ignoreCase: true, out var kind)) continue;
-                found.Add(new PairedClient(reader.GetString(0), reader.GetString(1), key, ceiling, kind, reader.Time(5)));
+                found.Add(new PairedClient(reader.GetString(0), reader.GetString(1), key, ceiling, kind, reader.Time(5), reader.IsDBNull(6) ? null : reader.Int32(6)));
             }
 
             return found;
@@ -135,7 +141,8 @@ public sealed class StatePairedClients(StateDatabase database, PairedClientsFile
             using (var delete = database.Command(Module, connection, transaction, "DELETE FROM {table:paired_client} WHERE id = $id;"))
                 delete.Bind(database, "id", client.Id).ExecuteNonQuery();
             using var insert = database.Command(Module, connection, transaction,
-                "INSERT INTO {table:paired_client} (id, name, public_key, ceiling, kind, paired_at) VALUES ($id, $name, $key, $ceiling, $kind, $at);");
+                "INSERT INTO {table:paired_client} (id, name, public_key, ceiling, kind, paired_at, generation) VALUES ($id, $name, $key, $ceiling, $kind, $at, $generation);");
+            insert.Bind(database, "generation", client.Generation is { } generation ? (long)generation : null, System.Data.DbType.Int64);
             insert.Bind(database, "id", client.Id).Bind(database, "name", client.Name).Bind(database, "key", Base64Url.Encode(client.PublicKey))
                 .Bind(database, "ceiling", string.Join(',', ServerRoles.Names(client.Ceiling))).Bind(database, "kind", client.Kind.ToString().ToLowerInvariant())
                 .Bind(database, "at", client.PairedAt ?? database.Time.GetUtcNow()).ExecuteNonQuery();

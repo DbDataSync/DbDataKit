@@ -24,11 +24,16 @@ public static class PairingEndpoint
         public string? Name { get; set; }
         public string? Kind { get; set; }
         public string? PublicKey { get; set; }
+
+        /// <summary>The client's compatibility generation and program version (24a UC04); null from a client that predates them.</summary>
+        public int? Generation { get; set; }
+        public string? ProgramVersion { get; set; }
     }
 
-    public static IEndpointRouteBuilder MapPairing(this IEndpointRouteBuilder app, PairingService service)
+    /// <summary>Maps the pairing exchange. <paramref name="generation"/> is the compatibility generation this server states in the hello and checks the client against (<see cref="SuiteCompatibility"/>; tests replace it) and <paramref name="programVersion"/> the program version it states (the running program's by default).</summary>
+    public static IEndpointRouteBuilder MapPairing(this IEndpointRouteBuilder app, PairingService service, int generation = SuiteCompatibility.Generation, string? programVersion = null)
     {
-        app.MapGet(ManagementApi.PairingPath, () => Results.Json(new { instanceId = service.InstanceId, apiVersion = ManagementApi.Version }, Json));
+        app.MapGet(ManagementApi.PairingPath, () => Results.Json(new { instanceId = service.InstanceId, apiVersion = ManagementApi.Version, generation, programVersion = programVersion ?? SuiteCompatibility.ProgramVersion }, Json));
         app.MapPost(ManagementApi.PairingPath, async (HttpContext http) =>
         {
             http.Features.Get<IHttpMaxRequestBodySizeFeature>()?.MaxRequestBodySize = MaxBody;
@@ -38,9 +43,13 @@ public static class PairingEndpoint
             if (body is null || !Enum.TryParse<ClientKind>(body.Kind, ignoreCase: true, out var kind) || !Enum.IsDefined(kind))
                 return Results.Json(new { error = "the request needs a client kind of console, server or cli" }, Json, statusCode: 400);
 
+            // a client more than one generation from this server is refused before its code is spent, naming both versions and the side to upgrade (24a UC04)
+            if (SuiteCompatibility.Incompatibility(body.Generation, body.ProgramVersion, generation, programVersion, peerRole: "console") is { } apart)
+                return Results.Json(new { error = apart }, Json, statusCode: StatusCodes.Status409Conflict);
+
             var publicKey = body.PublicKey is { } encoded ? Base64Url.Decode(encoded) : null;
             PairingOutcome outcome;
-            try { outcome = service.Pair(new PairingRequest(body.Proof, body.ClientId, body.Name, kind, publicKey)); }
+            try { outcome = service.Pair(new PairingRequest(body.Proof, body.ClientId, body.Name, kind, publicKey, body.Generation)); }
             catch (InvalidOperationException ex) { return Results.Json(new { error = ex.Message }, Json, statusCode: StatusCodes.Status503ServiceUnavailable); }   // the server cannot yet say which certificate it presents
             if (!outcome.Ok)
             {
@@ -53,6 +62,8 @@ public static class PairingEndpoint
                 certificateFingerprint = outcome.CertificateFingerprint,
                 serverProof = outcome.ServerProof,
                 apiVersion = ManagementApi.Version,
+                generation,
+                programVersion = programVersion ?? SuiteCompatibility.ProgramVersion,
                 name = outcome.Client!.Name,
                 ceiling = ServerRoles.Names(outcome.Client.Ceiling),
             }, Json);

@@ -155,6 +155,31 @@ public sealed class GroupTrustTests : IDisposable
 
     [Theory]
     [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
+    public void A_pairing_record_keeps_the_generation_the_client_reported_and_one_made_before_the_column_reads_as_none(string engine)
+    {
+        // plan 24a UC04: the trust module's second migration adds a nullable column; a database at the first version keeps its clients, with no generation
+        var location = _engines.Provision(engine);
+        var first = new StateModule(TrustModule.Name, StateScopeKind.Group, [TrustModule.Module.Migrations[0]], retention: TrustModule.Module.Retention);
+        var old = location.Open([first], new StateScope(Group: "main"), time: _clock);
+        using (var connection = old.OpenConnection())
+        {
+            using var insert = old.Command("trust", connection, "INSERT INTO {table:paired_client} (id, name, public_key, ceiling, kind, paired_at) VALUES ('console-old', 'old', $key, 'viewer', 'console', $at);");
+            insert.Bind(old, "key", Convert.ToBase64String(ConsoleSigningKey.Generate().PublicKey).TrimEnd((char)61).Replace((char)43, (char)45).Replace((char)47, (char)95)).Bind(old, "at", _clock.GetUtcNow()).ExecuteNonQuery();
+        }
+
+        var state = location.Open([TrustModule.Module], new StateScope(Group: "main"), time: _clock);
+        var clients = new StatePairedClients(state);
+        clients.Upsert(Console("console-new") with { Generation = 3 });
+
+        Assert.Equal(2, TrustModule.Module.Version);
+        Assert.Null(clients.Find("console-old")!.Generation);
+        Assert.Equal(3, clients.Find("console-new")!.Generation);
+        clients.Upsert(Console("console-new") with { Generation = 4 });      // paired again, after its upgrade
+        Assert.Equal(4, clients.Find("console-new")!.Generation);
+    }
+
+    [Theory]
+    [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
     public void Two_groups_in_one_database_have_their_own_trust(string engine)
     {
         var location = _engines.Provision(engine);

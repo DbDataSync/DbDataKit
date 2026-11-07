@@ -30,6 +30,8 @@ public sealed class PairedClientsFile(string path, TimeProvider? clock = null) :
     /// <summary>Removes the client with this id; false when there was none.</summary>
     public bool Remove(string clientId) => _file.Remove(clientId);
 
+    // The client's generation (24a UC04) is not written here: the Proxy reads these entries with a strict schema, so a server.yaml with the key would stop the release before this one (a rollback, plan 24) from loading its own
+    // file. A group keeps the generation in its state (the trust module's paired_client); a file entry that a person gave a `generation` is still read.
     private static string Render(PairedClient c) =>
         $"{{id: {YamlText.FlowScalar(c.Id)}, name: {YamlText.FlowScalar(c.Name)}, kind: {c.Kind.ToString().ToLowerInvariant()}, publicKey: {YamlText.FlowScalar(Base64Url.Encode(c.PublicKey))}, " +
         $"ceiling: {YamlText.FlowList(ServerRoles.Names(c.Ceiling))}, paired: {YamlText.FlowScalar(c.PairedAt!.Value.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture))}}}";
@@ -59,6 +61,8 @@ public sealed class PairedClientsFile(string path, TimeProvider? clock = null) :
         if (entry.Get("ceiling") is not YamlSequence roles || !ServerRoles.TryParse(roles.Items.OfType<YamlScalar>().Select(s => s.Value), out var ceiling) || ceiling == ServerRole.None)
             return (null, $"'{id}' has no valid ceiling");
         DateTimeOffset? paired = DateTimeOffset.TryParse(Text("paired"), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var when) ? when : null;
-        return (new PairedClient(id, Text("name") ?? id, key, ceiling, kind, paired), "");
+        // an entry from before the compatibility generation has none; a value that is not a number is read as none rather than refusing the client
+        int? generation = int.TryParse(Text("generation"), NumberStyles.None, CultureInfo.InvariantCulture, out var g) && g >= 1 ? g : null;
+        return (new PairedClient(id, Text("name") ?? id, key, ceiling, kind, paired, generation), "");
     }
 }

@@ -12,7 +12,8 @@ namespace DbDataConsole.Server;
 /// <param name="Version">The program version it reported.</param>
 /// <param name="ApiVersion">The management API version it reported.</param>
 /// <param name="Problem">Why it could not be reached or is not usable, in words for the person.</param>
-public sealed record InstanceStatus(RegisteredInstance Instance, bool Reachable, bool? Ready, string? Product, string? Version, int? ApiVersion, string? Problem);
+/// <param name="Generation">The compatibility generation it reported (24a UC04); null when it did not answer or states none.</param>
+public sealed record InstanceStatus(RegisteredInstance Instance, bool Reachable, bool? Ready, string? Product, string? Version, int? ApiVersion, string? Problem, int? Generation = null);
 
 /// <summary>
 /// The servers this console manages (plan 13, U12 and T04): pairing one with the code its administrator made, asking each how it is, and forgetting one. The pin of each server's certificate is in
@@ -61,17 +62,20 @@ public sealed class ConsoleInstances(InstanceRegistry registry, ConsoleKeyStore 
     public async Task<InstanceStatus> StatusAsync(RegisteredInstance instance, CancellationToken ct = default)
     {
         int? apiVersion = null;
+        int? generation = null;
         try
         {
-            using var http = new HttpClient(PairingClient.Pinned(instance.CertificateFingerprint, v => apiVersion = v)) { Timeout = AskTimeout };
+            using var http = new HttpClient(PairingClient.Pinned(instance.CertificateFingerprint, v => apiVersion = v, g => generation = g)) { Timeout = AskTimeout };
             using var version = await http.GetAsync(new Uri(instance.Url, "/version"), ct);
             var info = version.IsSuccessStatusCode ? await version.Content.ReadFromJsonAsync<VersionAnswer>(Json, ct) : null;
+            // the registry keeps the generation the server last reported: an upgraded server reports another, and it is recorded when it changes
+            if (generation is { } reported && instance.Generation != reported) registry.SetGeneration(instance.InstanceId, reported);
             return new InstanceStatus(instance, true, info?.Ready, info?.Product, info?.Version, apiVersion,
-                version.IsSuccessStatusCode ? null : $"answered {(int)version.StatusCode} to a version request");
+                version.IsSuccessStatusCode ? null : $"answered {(int)version.StatusCode} to a version request", generation);
         }
         catch (IncompatibleServerException ex)
         {
-            return new InstanceStatus(instance, false, null, null, null, ex.ServerVersion, ex.Message);
+            return new InstanceStatus(instance, false, null, null, null, ex.ServerVersion, ex.Message, ex.ServerGeneration);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
         {

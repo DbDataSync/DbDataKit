@@ -15,7 +15,8 @@ public enum ClientKind
 /// <param name="Ceiling">The roles this client may grant on this server; a token that claims more is refused.</param>
 /// <param name="Kind">What the client is.</param>
 /// <param name="PairedAt">When the pairing was made, if known.</param>
-public sealed record PairedClient(string Id, string Name, byte[] PublicKey, ServerRole Ceiling, ClientKind Kind = ClientKind.Console, DateTimeOffset? PairedAt = null);
+/// <param name="Generation">The client's compatibility generation when it paired (24a UC04); null when it did not say (an older client) or the entry predates it.</param>
+public sealed record PairedClient(string Id, string Name, byte[] PublicKey, ServerRole Ceiling, ClientKind Kind = ClientKind.Console, DateTimeOffset? PairedAt = null, int? Generation = null);
 
 /// <summary>The server's list of paired clients (kept in <c>server.yaml</c> by <see cref="PairedClientsFile"/>).</summary>
 public interface IPairedClients
