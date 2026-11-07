@@ -117,4 +117,8 @@ public sealed class SnapshotImportException(SnapshotImportRefusal reason, string
 /// <param name="Modules">The modules loaded, in order.</param>
 /// <param name="Migrated">Whether the normal migrator ran afterwards.</param>
 /// <param name="Warnings">What differed without being wrong, for example time values the engine stores at a coarser precision (PostgreSQL keeps microseconds).</param>
-public sealed record SnapshotImportResult(SnapshotManifest Manifest, IReadOnlyList<string> Modules, long Rows, int Tables, int PayloadFiles, long PayloadBytes, bool Migrated, IReadOnlyList<string> Warnings, TimeSpan Elapsed);
+public sealed record SnapshotImportResult(SnapshotManifest Manifest, IReadOnlyList<string> Modules, long Rows, int Tables, int PayloadFiles, long PayloadBytes, bool Migrated, IReadOnlyList<string> Warnings, TimeSpan Elapsed)
+{
+    /// <summary>The tables (<c>module.table</c>) whose digest differs from the manifest's only because the engine stores times at a coarser precision (see <see cref="Warnings"/>): a later comparison with the snapshot or the source database has to expect those.</summary>
+    public IReadOnlyList<string> RoundedTables { get; init; } = [];
+}

@@ -22,12 +22,12 @@ public static class ConsoleCli
 
     public static Task<int> RunAsync(string[] args, CliContext context) => Router().RunAsync(args, context);
 
-    public static NounRouter Router(Func<string, string?>? environment = null) => new(Program,
+    public static NounRouter Router(Func<string, string?>? environment = null, Func<DbDataKit.State.Engines.Snapshots.MoveOptions, DbDataKit.State.Engines.Snapshots.MoveOptions>? configureMove = null) => new(Program,
     [
         ServerNoun.Create((args, context) => RunServerAsync(args, context, environment)),
         InstanceNoun(environment),
         UserNoun(environment),
-        StateNoun(environment),
+        StateNoun(environment, configureMove),
         IdentityCli.Noun(environment),
         ConsoleService.Noun(ConsoleServiceEnvironment.Real()),
         HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl),
@@ -291,8 +291,8 @@ public static class ConsoleCli
 
     // ---- state ----
 
-    /// <summary>The shared <c>state show|test|grants|init</c> verbs over the console's state: its settings come from the flag, the environment and <c>server.yaml</c> in its directory (<see cref="ConsoleState.Resolve"/>), its file is <c>state.db</c> in its directory, and a password that is a secret reference is looked up in its store, then the environment.</summary>
-    private static Noun StateNoun(Func<string, string?>? environment) => DbDataKit.State.Cli.StateVerbs.Create(new DbDataKit.State.Cli.StateVerbContext(
+    /// <summary>The shared <c>state</c> verbs over the console's state: its settings come from the flags, the environment and <c>settings.yaml</c> in its directory (<see cref="ConsoleState.Resolve"/>; <c>state move</c> and <c>state init</c> write that file), its file is <c>state.db</c> in its directory, and a password that is a secret reference is looked up in its store, then the environment.</summary>
+    private static Noun StateNoun(Func<string, string?>? environment, Func<DbDataKit.State.Engines.Snapshots.MoveOptions, DbDataKit.State.Engines.Snapshots.MoveOptions>? configureMove = null) => DbDataKit.State.Cli.StateVerbs.Create(new DbDataKit.State.Cli.StateVerbContext(
         Program, "the console",
         args =>
         {
@@ -301,9 +301,9 @@ public static class ConsoleCli
                 ConsoleState.Resolve(directory, environment, args.Get("engine"), engineFlagName: "--engine"),
                 Path.Combine(directory, "state.db"),
                 () => new DbDataKit.Secrets.SecretResolverChain([ConsoleSecrets.Open(directory, environment), new DbDataKit.Secrets.EnvSecretProvider(environment)]),
-                Path.Combine(directory, ConsoleSettings.SettingsFileName));
+                ConsoleState.SettingsFileIn(directory));
         },
-        ConsoleState.Modules, StateScope.Install, ["engine", "repo"], "[--engine mssql|postgres] [--repo <console directory>]"));
+        ConsoleState.Modules, StateScope.Install, ["engine", "repo"], "[--engine mssql|postgres] [--repo <console directory>]") { ConfigureMove = configureMove });
 
     // ---- user ----
 

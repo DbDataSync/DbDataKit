@@ -4,7 +4,7 @@ using DbDataKit.State;
 
 namespace DbDataConsole.Tests;
 
-/// <summary>Plan 29b C07: the console reads the <c>state:</c> section of <c>server.yaml</c> in its directory, with the flag first, then the environment, then the file, then SQLite.</summary>
+/// <summary>Plan 29b C07: the console reads the <c>state:</c> section of <c>settings.yaml</c> in its directory, with the flag first, then the environment, then the file, then SQLite.</summary>
 public sealed class ConsoleStateSettingsFileTests : IDisposable
 {
     private readonly string directory = Directory.CreateTempSubdirectory("ddk-console-c07").FullName;
@@ -17,7 +17,7 @@ public sealed class ConsoleStateSettingsFileTests : IDisposable
         try { Directory.Delete(directory, true); } catch (IOException) { }
     }
 
-    private string SettingsFile => Path.Combine(directory, "server.yaml");
+    private string SettingsFile => Path.Combine(directory, "settings.yaml");
 
     private void Write(string engine, string connection) => new StateSettingsWriter().Write(SettingsFile, new StateSettings(engine, connection));
 
@@ -138,7 +138,7 @@ public sealed class ConsoleStateSettingsFileTests : IDisposable
         var init = await Run(db.Environment, "state", "init", "--topology", "group", "--engine", engine, "--connection", db.Connection, "--admin-connection", db.Connection, "--apply");
 
         Assert.True(init.Exit == 0, init.Out + init.Err);
-        Assert.True(File.Exists(SettingsFile), "init writes server.yaml in the console directory with no --settings");
+        Assert.True(File.Exists(SettingsFile), "init writes settings.yaml in the console directory with no --settings");
         var resolved = ConsoleState.Resolve(directory, db.Environment);
         Assert.Equal(StateSourceKind.File, resolved.Sources.Engine.Kind);
         Assert.False(resolved.Settings.IsSqlite);

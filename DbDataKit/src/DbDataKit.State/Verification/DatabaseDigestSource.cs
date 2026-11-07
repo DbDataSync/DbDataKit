@@ -64,7 +64,7 @@ public sealed class DatabaseDigestSource : IRowDigestSource
 
     // ---- queries
 
-    private sealed record TableQuery(string Module, VerifiedTable Table, IReadOnlyList<string> ReadTypes, int[] KeyOrdinals, string First, string Next, int Batch);
+    private sealed record TableQuery(string Module, VerifiedTable Table, IReadOnlyList<string> ReadTypes, int[] KeyOrdinals, string First, string Next, int Batch, int TimeTicks);
 
     private TableQuery Query(string moduleKey, string table, VerifyOptions options)
     {
@@ -112,7 +112,7 @@ public sealed class DatabaseDigestSource : IRowDigestSource
             ns.Module.Name, logical, types, ordinals,
             $"{select} ORDER BY {order} {limit};",
             $"{select} WHERE {string.Join(" OR ", terms)} ORDER BY {order} {limit};",
-            heavy ? Math.Min(options.BatchSize, options.BlobBatchSize) : options.BatchSize);
+            heavy ? Math.Min(options.BatchSize, options.BlobBatchSize) : options.BatchSize, options.TimeTicks);
     }
 
     private List<RowDigest> ReadPage(DbConnection connection, TableQuery query, IReadOnlyList<object>? after, int take)
@@ -132,7 +132,16 @@ public sealed class DatabaseDigestSource : IRowDigestSource
         while (reader.Read())
         {
             var raw = new object?[width];
-            for (var i = 0; i < width; i++) raw[i] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+            for (var i = 0; i < width; i++)
+            {
+                raw[i] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                if (query.TimeTicks > 0 && raw[i] is not null && query.ReadTypes[i] == SnapshotColumnTypes.Time)
+                {
+                    var time = StateValues.ToTime(raw[i]!);
+                    raw[i] = new DateTimeOffset(time.UtcTicks - time.UtcTicks % query.TimeTicks, TimeSpan.Zero);
+                }
+            }
+
             var key = TableKeys.KeyOf(query.Table.Key, [.. query.KeyOrdinals.Select(o => raw[o])]);
             rows.Add(new RowDigest(key, TableKeys.KeyText(key), SnapshotValues.HashRow(query.ReadTypes, raw)));
         }

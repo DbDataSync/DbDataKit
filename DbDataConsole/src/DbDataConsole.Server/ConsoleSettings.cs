@@ -28,8 +28,8 @@ public sealed record ConsoleSettings(string Directory, Uri Listen, Uri? PublicUr
 
     public string StatePath => System.IO.Path.Combine(Directory, "state.db");
 
-    /// <summary>The console's settings file, <c>server.yaml</c> in its directory, like the other products': its <c>state:</c> section says where the state database is (<see cref="ConsoleState.Resolve"/>). The console never creates it.</summary>
-    public const string SettingsFileName = "server.yaml";
+    /// <summary>The console's settings file, <c>settings.yaml</c> in its directory: its <c>state:</c> section says where the state database is (<see cref="ConsoleState.Resolve"/>). The console never creates it.</summary>
+    public const string SettingsFileName = "settings.yaml";
 
     public string SettingsPath => System.IO.Path.Combine(Directory, SettingsFileName);
 
@@ -61,18 +61,27 @@ public static class ConsoleState
     public const string EngineVariable = "DBDATAKIT_CONSOLE_STATE_ENGINE";
     public const string ConnectionVariable = "DBDATAKIT_CONSOLE_STATE_CONNECTION";
 
+    /// <summary>The console's settings file: the <c>state:</c> section of <c>settings.yaml</c> in its directory (the same section every product reads, plan 29b M7), which <c>state move</c> and <c>state init</c> write. The console never creates it itself.</summary>
+    public static string SettingsFileIn(string directory) => System.IO.Path.Combine(directory, ConsoleSettings.SettingsFileName);
+
     /// <summary>
-    /// The state settings of a console whose directory is <paramref name="directory"/>, from the first place that names them (plan 29b C07): the flags (<c>--state-engine</c> and <c>--state-connection</c>, or whatever <paramref name="engineFlagName"/>
-    /// says they are called), then <see cref="EngineVariable"/> and <see cref="ConnectionVariable"/>, then the <c>state:</c> section of <c>server.yaml</c> in the directory, then SQLite. A file with a setting that is not one is refused with
+    /// The state settings of a console whose directory is <paramref name="directory"/>, from the first place that names each setting (plan 29b C07): the flags (<c>--state-engine</c> and <c>--state-connection</c>, or whatever <paramref name="engineFlagName"/>
+    /// says they are called), then <see cref="EngineVariable"/> and <see cref="ConnectionVariable"/>, then the <c>state:</c> section of <c>settings.yaml</c> in the directory, then SQLite. A file with a setting that is not one is refused with
     /// a message naming the file and the nearest setting that is.
     /// </summary>
     public static ResolvedState Resolve(string directory, Func<string, string?>? environment = null, string? engineFlag = null, string? connectionFlag = null, string engineFlagName = "--state-engine", string connectionFlagName = "--state-connection") =>
         StateSettingsResolver.Resolve(new StateSettingsInputs(
-            System.IO.Path.Combine(directory, ConsoleSettings.SettingsFileName), engineFlag, engineFlagName, connectionFlag, connectionFlagName, EngineVariable, ConnectionVariable, environment ?? Environment.GetEnvironmentVariable));
+            SettingsFileIn(directory), engineFlag, engineFlagName, connectionFlag, connectionFlagName, EngineVariable, ConnectionVariable, environment ?? Environment.GetEnvironmentVariable));
 
-    /// <summary>The state engine the flags or the environment name (the flags win); null when neither does, which is SQLite in the console's directory. Does not read the settings file: <see cref="Resolve"/> does.</summary>
-    public static StateSettings? SettingsFrom(Func<string, string?>? environment, string? engineFlag = null, string? connectionFlag = null)
+    /// <summary>The state settings the flags, the environment and (when <paramref name="directory"/> is given) the settings file name, as <see cref="Resolve"/> finds them; null when nothing names any, which is SQLite in the console's directory.</summary>
+    public static StateSettings? SettingsFrom(Func<string, string?>? environment, string? engineFlag = null, string? connectionFlag = null, string? directory = null)
     {
+        if (directory is not null)
+        {
+            var resolved = Resolve(directory, environment, engineFlag, connectionFlag);
+            return resolved.Sources == StateSources.Defaults ? null : resolved.Settings;
+        }
+
         environment ??= Environment.GetEnvironmentVariable;
         var engine = engineFlag ?? environment(EngineVariable);
         var connection = connectionFlag ?? environment(ConnectionVariable);
