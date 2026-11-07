@@ -1,0 +1,30 @@
+<Project>
+  <!-- the third-party versions are in the root Directory.Packages.props -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Packages.props', '$(MSBuildThisFileDirectory)../'))" />
+  <PropertyGroup>
+    <DbDataKitVersion>0.1.0</DbDataKitVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="DbDataKit.Cli" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Config.Yaml" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Hosting.Abstractions" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Hosting" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Hosting.Cli" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Hosting.WindowsService" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Hosting.Systemd" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Hosting.Certificates" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Security.Acl" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Monitoring" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Scheduling" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.State" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.State.Cli" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.State.Engines" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Web" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Secrets.Abstractions" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Secrets" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Runner.Abstractions" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Runner" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Runner.Limits" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Runner.Protocol.Server" Version="$(DbDataKitVersion)" />
+  </ItemGroup>
+</Project>

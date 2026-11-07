@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <AssemblyName>dbdatarunner</AssemblyName>
+    <Description>DbDataRunner: schedules and runs the tasks of published packages, each in a process of its own, with retries, limits, run history and progress (plan 28).</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" />
+    <DbDataKitReference Include="Cli" />   <!-- the shared noun-verb grammar -->
+    <DbDataKitReference Include="Config.Yaml" />   <!-- package/1 manifests -->
+    <DbDataKitReference Include="Hosting.Abstractions" />   <!-- the shared host: service and systemd modes, drain, /health and /version -->
+    <DbDataKitReference Include="Hosting" />
+    <DbDataKitReference Include="Hosting.Cli" />
+    <DbDataKitReference Include="State.Cli" />   <!-- state show, test and grants; plan 29b, C01 -->
+    <DbDataKitReference Include="State.Engines" />   <!-- SQLite, SQL Server or PostgreSQL for the state -->
+    <DbDataKitReference Include="Hosting.WindowsService" />
+    <DbDataKitReference Include="Hosting.Systemd" />
+    <DbDataKitReference Include="Hosting.Certificates" />
+    <DbDataKitReference Include="Security.Acl" />
+    <DbDataKitReference Include="Monitoring" />
+    <DbDataKitReference Include="Scheduling" />
+    <DbDataKitReference Include="State" />
+    <DbDataKitReference Include="Secrets.Abstractions" />
+    <DbDataKitReference Include="Secrets" />
+    <DbDataKitReference Include="Runner.Abstractions" />   <!-- package/1 manifests -->
+    <DbDataKitReference Include="Runner" />   <!-- the engine: artifact cache, executor, scheduler loop -->
+    <DbDataKitReference Include="Runner.Limits" />   <!-- what this machine can enforce, reported as capabilities -->
+    <DbDataKitReference Include="Runner.Protocol.Server" />   <!-- the socket the task processes talk to -->
+    <DbDataKitReference Include="Web" />   <!-- pairing, key rotation, the version header and the token check -->
+  </ItemGroup>
+  <ItemGroup Condition="'$(UseLocalDbDataKit)' == 'true'">
+    <!-- built for its executable only; published, with its own dependencies, to taskhost/ beside this program (see the targets below) -->
+    <ProjectReference Include="$(DbDataKitRoot)src\DbDataKit.Runner.TaskHost\DbDataKit.Runner.TaskHost.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!--
+    The task host is the process a runner starts for a .NET package (plan 28a R06). It has its own dependency set and its own runtime configuration (plain .NET, not the ASP.NET
+    shared framework this program runs on), so it is published into taskhost/ beside the program on every build, and into the publish output with it.
+  -->
+  <Target Name="CopyTaskHost" AfterTargets="Build" Condition="'$(UseLocalDbDataKit)' == 'true'">
+    <MSBuild Projects="$(DbDataKitRoot)src\DbDataKit.Runner.TaskHost\DbDataKit.Runner.TaskHost.csproj" Targets="Publish"
+             Properties="NoBuild=true;PublishDir=$(OutDir)taskhost\;SelfContained=false" />
+  </Target>
+  <Target Name="TaskHostIntoPublish" BeforeTargets="ComputeResolvedFilesToPublishList" DependsOnTargets="CopyTaskHost" Condition="'$(UseLocalDbDataKit)' == 'true'">
+    <ItemGroup>
+      <_TaskHostFile Include="$(OutDir)taskhost\**\*" />
+      <ResolvedFileToPublish Include="@(_TaskHostFile)" RelativePath="taskhost\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
+</Project>
