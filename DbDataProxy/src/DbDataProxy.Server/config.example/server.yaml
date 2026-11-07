@@ -54,6 +54,16 @@ compression: { mode: arrow, codec: zstd, level: 3, allowClientOverride: true }
 # A person's personal access tokens last at most accessTokenMaxDays (1 to 365; 365 unless lowered here):
 #   accessTokenMaxDays: 90
 
+# The state database: the same section every DbData product reads (plan 29b). SQLite in the data directory (state.db) unless an engine is named.
+# 'dbdataproxy state init --topology service|group|install' writes it; 'dbdataproxy state show' says where each value came from.
+# state:
+#   engine: postgres                     # sqlite (the default), mssql or postgres
+#   connection: Host=db;Database=dbdataproxy_state;Username=proxy;Password=secret:state-db
+#   namespaces: { default: { schema: dbdataproxy } }
+#   retention: { days: 30 }
+# How often an instance looks for definitions published to its group, in seconds (1 to 300; 5 unless set here):
+#   definitionPollSeconds: 5
+
 # Semantic models served as sources named semantic:<model> (the catalog's name); a client sends a JSON request or semantic SQL as a statement with x-datasource: semantic:<model>.
 # Each catalog source is mapped to the data source that holds its tables; clients need access to those data sources. Catalogs are read at start.
 # semantic:

@@ -75,13 +75,23 @@ public sealed class StateSettingsWriter(Action<string, string>? replaceFile = nu
     }
 
     /// <summary>The settings in <paramref name="path"/>'s <c>state:</c> section, read strictly (the defaults when the file or the section is absent): what a product reads at start.</summary>
-    public static StateSettings Load(string path)
+    public static StateSettings Load(string path) => LoadSection(path).Settings;
+
+    /// <summary>Like <see cref="Load"/>, and says which keys the section has (<c>engine</c>, <c>connection</c>, <c>registry</c>, <c>namespaces</c>, <c>retention</c>), so a caller can tell a value the file gave from a default.</summary>
+    public static (StateSettings Settings, IReadOnlySet<string> Keys) LoadSection(string path)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
-        if (!File.Exists(path)) return new StateSettings();
+        var none = (new StateSettings(), (IReadOnlySet<string>)new HashSet<string>());
+        if (!File.Exists(path)) return none;
         var root = Parse(path, File.ReadAllText(path));
-        if (root?.GetEntry(Section) is not { } entry) return new StateSettings();
-        try { return StateSettingsReader.Read(entry.Value is YamlMapping map ? ToDictionary(map) : null, Section); }
+        if (root?.GetEntry(Section) is not { } entry) return none;
+        var section = entry.Value is YamlMapping map ? ToDictionary(map) : null;
+        try
+        {
+            var settings = StateSettingsReader.Read(section, Section);
+            // a key written with nothing after it is the same as no key
+            return (settings, section?.Where(p => p.Value is not null).Select(p => p.Key).ToHashSet(StringComparer.Ordinal) ?? []);
+        }
         catch (InvalidOperationException ex) { throw new InvalidOperationException($"{path}: {ex.Message}", ex); }
     }
 

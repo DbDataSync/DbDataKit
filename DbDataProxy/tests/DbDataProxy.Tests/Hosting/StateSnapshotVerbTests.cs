@@ -12,7 +12,7 @@ namespace DbDataProxy.Tests.Hosting;
 
 /// <summary>
 /// The snapshot verbs on the proxy's command line (plan 29b X04b): the state of a proxy (its group's notifications and pairing codes, among the modules of the serving layer) survives <c>state export</c> and
-/// <c>state import</c> into a fresh database on SQLite, PostgreSQL and SQL Server. <c>state move</c> says the proxy's settings are not a file it writes yet.
+/// <c>state import</c> into a fresh database on SQLite, PostgreSQL and SQL Server. <c>state move</c> writes the <c>state:</c> section of the proxy's <c>server.yaml</c> (the shared section, plan 29b C07).
 /// </summary>
 public sealed class StateSnapshotVerbTests : IDisposable
 {
@@ -41,7 +41,7 @@ public sealed class StateSnapshotVerbTests : IDisposable
     {
         if (engine == "sqlite") return null;
         Directory.CreateDirectory(ProxyConfigFile.DirectoryIn(directory));
-        File.WriteAllText(ProxyConfigFile.PathIn(directory), $"state:\n  engine: {engine}\n  connectionString: \"{connection!.Replace("\"", "\\\"")}\"\n");
+        File.WriteAllText(ProxyConfigFile.PathIn(directory), $"state:\n  engine: {engine}\n  connection: \"{connection!.Replace("\"", "\\\"")}\"\n");
         return new StateSettings(engine, connection);
     }
 
@@ -90,15 +90,25 @@ public sealed class StateSnapshotVerbTests : IDisposable
         if (databases.Password.Length > 0) Assert.DoesNotContain(databases.Password, everything);
     }
 
-    [Fact]
-    public async Task State_move_says_the_proxys_settings_are_not_a_file_it_writes_and_changes_nothing()
+    [Theory]
+    [MemberData(nameof(StateVerbDatabases.ServerEngines), MemberType = typeof(StateVerbDatabases))]
+    public async Task State_move_from_sqlite_to_a_server_engine_writes_the_state_section_of_the_proxys_server_yaml_and_the_proxy_then_reads_it(string engine)
     {
-        OpenState(Dir("source"), null);
+        var target = databases.Provision(engine);
+        Environment.SetEnvironmentVariable(StateVerbDatabases.PasswordVariable, databases.Password);
+        OpenState(Dir("source"), null).OpenConnection().Dispose();
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        Directory.CreateDirectory(ProxyConfigFile.DirectoryIn(Dir("source")));   // an installed proxy has its config folder (service install writes the starter file); move's preflight wants the folder
 
-        var moved = await Run("state", "move", "--to-engine", "postgres", "--to-connection", "Host=h;Database=d;Username=u;Password=env:X", "--yes", "--repo", Dir("source"));
+        var moved = await Run("state", "move", "--to-engine", engine, "--to-connection", target, "--yes", "--repo", Dir("source"));
 
-        Assert.Equal(StateExit.Settings, moved.Exit);
-        Assert.Contains("state export", moved.Error);
-        Assert.False(Directory.Exists(ProxyConfigFile.DirectoryIn(Dir("source"))));
+        Assert.True(moved.Exit == 0, moved.Out + moved.Error);
+        var text = File.ReadAllText(ProxyConfigFile.PathIn(Dir("source")));
+        Assert.Contains($"engine: {engine}", text);
+        Assert.Contains($"Password=env:{StateVerbDatabases.PasswordVariable}", text);
+        Assert.DoesNotContain(databases.Password, text);
+        var read = ProxyConfiguration.LoadState(Dir("source"));
+        Assert.Equal(engine == "mssql" ? StateEngineIds.MsSql : StateEngineIds.Postgres, read.Settings.EngineId);
+        Assert.Equal(StateSourceKind.File, read.Sources.Engine.Kind);
     }
 }

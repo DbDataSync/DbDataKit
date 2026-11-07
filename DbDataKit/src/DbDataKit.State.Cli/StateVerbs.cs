@@ -64,9 +64,12 @@ internal static class StateSchemas
 
     private static readonly string Other = DataSchemas.Object([("module", DataSchemas.String), ("scope", DataSchemas.String), ("version", DataSchemas.Integer)], "module", "scope", "version");
 
+    private static readonly string Source = DataSchemas.Object([("kind", DataSchemas.String), ("name", DataSchemas.String)], "kind");
+
     public static readonly string Show = DataSchemas.Object(
     [
         ("product", DataSchemas.String), ("engine", DataSchemas.String), ("file", DataSchemas.String), ("file_size", DataSchemas.Integer), ("connection", DataSchemas.String),
+        ("sources", DataSchemas.Object([("engine", Source), ("connection", Source), ("namespaces", Source), ("retention", Source)])),
         ("registry_table", DataSchemas.String), ("registry_exists", DataSchemas.Boolean), ("modules_listed", DataSchemas.Boolean), ("connected", DataSchemas.Boolean),
         ("engine_version", DataSchemas.String), ("login", DataSchemas.String), ("modules", DataSchemas.ListOf(Module)), ("other_registered", DataSchemas.ListOf(Other)),
         ("pending_migrations", DataSchemas.Integer), ("error", DataSchemas.String),

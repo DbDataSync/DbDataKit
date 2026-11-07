@@ -8,8 +8,13 @@ namespace DbDataKit.State.Cli;
 /// <param name="Settings">The effective settings: what the product opens its state with.</param>
 /// <param name="SqlitePath">The file a SQLite state is (the product's directory and <c>state.db</c>); not created by anything here.</param>
 /// <param name="Secrets">The resolver for the references in <see cref="StateSettings.ConnectionString"/>, made when it is first needed: <c>state show</c> never asks for it, <c>state test</c> does. Null: references are left as written.</param>
-/// <param name="SettingsFile">The settings file whose <c>state:</c> section these settings were read from, and where <c>state move</c> writes the new section (<see cref="StateSettingsWriter"/>). Null: the product keeps no such file, and <c>state move</c> says so and does nothing.</param>
-public sealed record StateTarget(StateSettings Settings, string SqlitePath, Func<ISecretResolver?>? Secrets = null, string? SettingsFile = null);
+/// <param name="SettingsFile">The settings file whose <c>state:</c> section these settings were read from, and where <c>state init</c> and <c>state move</c> write the section (<see cref="StateSettingsWriter"/>). Null: the product keeps no such file, <c>state move</c> says so and does nothing, and <c>state init</c> needs <c>--settings</c>.</param>
+/// <param name="Sources">Where each effective setting came from (<see cref="StateSettingsResolver"/>), shown by <c>state show</c>; null: the product does not say.</param>
+public sealed record StateTarget(StateSettings Settings, string SqlitePath, Func<ISecretResolver?>? Secrets = null, string? SettingsFile = null, StateSources? Sources = null)
+{
+    /// <summary>A target from what <see cref="StateSettingsResolver.Resolve"/> found: the settings, where each came from and the file they are read from.</summary>
+    public static StateTarget From(ResolvedState resolved, string sqlitePath, Func<ISecretResolver?>? secrets, string? settingsFile) => new(resolved.Settings, sqlitePath, secrets, settingsFile, resolved.Sources);
+}
 
 /// <summary>
 /// What a product tells the shared <c>state</c> verbs (<see cref="StateVerbs.Create"/>): its program name, how to find its state from the options of the command, the modules it is built from and the scope
@@ -68,9 +73,6 @@ public static class StateExit
     /// <summary>The service would refuse the database: made by the old structure, a module newer than the binary, a namespace that moved, an edited migration.</summary>
     public const int Refused = 18;
 
-    /// <summary><c>state init</c> would point the product at another place while the state it has holds data: it is moved with <c>state move</c>, never by changing the setting.</summary>
-    public const int Populated = 19;
-
     // The snapshot verbs (export, import, verify, move; plan 29b X04) use 20 to 29, so the codes of show and test keep their numbers.
 
     /// <summary>An export was refused: a live instance uses the database (stop the service), the SQLite file is held by another process, or the snapshot directory is not empty.</summary>
@@ -97,6 +99,9 @@ public static class StateExit
     /// <summary><c>--include-secrets-check</c> found a secret of the connection string in the exported snapshot (the snapshot is removed).</summary>
     public const int SecretInSnapshot = 27;
 
-    /// <summary><c>state init --apply</c>: the administrator's connection failed, or a statement it ran was refused.</summary>
+    /// <summary><c>state init</c> would point the product at another place while the state it has holds data: it is moved with <c>state move</c>, never by changing the setting.</summary>
+    public const int Populated = 19;
+
+    /// <summary><c>state init --apply</c>: the administrator's connection failed, or a statement it ran was refused. (28: 20 to 27 are the snapshot verbs'.)</summary>
     public const int Admin = 28;
 }

@@ -1,3 +1,4 @@
+using DbDataKit.State;
 using DbDataKit.Hosting.Cli;
 using DbDataKit.Hosting.Systemd;
 using DbDataKit.Hosting.WindowsService;
@@ -345,15 +346,29 @@ public static class ServiceCli
 /// <summary>Reads the proxy's own settings the way the host does, for commands that run without starting it.</summary>
 public static class ProxyConfiguration
 {
-    public static ProxyOptions LoadOptions(string? dataDirectory = null)
-    {
+    private static IConfigurationRoot Build(string? dataDirectory) =>
         // The same layers as the host: the data directory's config folder, then the environment.
-        var configuration = new ConfigurationBuilder()
+        new ConfigurationBuilder()
             .Add(new ProxyConfigDirectorySource(ProxyConfigFile.DirectoryIn(dataDirectory ?? ProxyConfigFile.ResolveDataDirectory())))
             .AddEnvironmentVariables("DBPROXY_")
             .Build();
+
+    /// <summary>The options. A state section with a key of the earlier release, or a setting that is not one, stops with a message naming the file (<see cref="ProxyConfigException"/>).</summary>
+    public static ProxyOptions LoadOptions(string? dataDirectory = null)
+    {
+        var configuration = Build(dataDirectory);
         // read once and let go: the directory provider watches the folder (an inotify instance on Linux, 128 per user), and a command that read its settings has no use for later changes
         using (configuration as IDisposable)
+        {
+            _ = ProxyStateConfig.Resolve(configuration);
             return configuration.GetSection(ProxyOptions.SectionName).Get<ProxyOptions>() ?? new ProxyOptions();
+        }
+    }
+
+    /// <summary>The state settings and where each came from (the file, an environment variable, the default), read through the shared reader.</summary>
+    public static ResolvedState LoadState(string? dataDirectory = null)
+    {
+        var configuration = Build(dataDirectory);
+        using (configuration as IDisposable) return ProxyStateConfig.Resolve(configuration);
     }
 }

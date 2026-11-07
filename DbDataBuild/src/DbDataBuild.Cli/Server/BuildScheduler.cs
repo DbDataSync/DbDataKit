@@ -49,8 +49,8 @@ internal static class BuildSchedulerSchema
     public static IReadOnlyList<StateModule> Modules { get; } = [SchedulingModule.Module];
 
     /// <param name="time">The clock the queue's leases and availability are measured on: the system's, or a test's.</param>
-    public static StateDatabase Open(string serverDirectory, TimeProvider? time = null) =>
-        StateDatabase.OpenModules(Path.Combine(serverDirectory, "state.db"), Modules, StateScope.Install, time);
+    /// <param name="settings">Where the state is; null: what flags-free <see cref="BuildState.Resolve"/> finds (the environment, the <c>state:</c> section of <c>server.yaml</c>, else SQLite in <c>state.db</c>).</param>
+    public static StateDatabase Open(string serverDirectory, TimeProvider? time = null, StateSettings? settings = null) => BuildState.Open(serverDirectory, time, settings);
 }
 
 /// <summary>

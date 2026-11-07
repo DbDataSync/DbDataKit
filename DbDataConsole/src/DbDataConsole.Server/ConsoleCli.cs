@@ -103,7 +103,16 @@ public static class ConsoleCli
             home = new IdentityHomeSettings(authority, parsed.Get("identity-client")!, secret, parsed.Get("identity-app") ?? "console", TrustedCertificate: trusted);
         }
 
-        var settings = new ConsoleSettings(DirectoryOf(parsed, environment), listen, publicUrl, announce, ConsoleState.SettingsFrom(environment, parsed.Get("state-engine"), parsed.Get("state-connection"), DirectoryOf(parsed, environment)), home);
+        var directory = DirectoryOf(parsed, environment);
+        ResolvedState state;
+        try { state = ConsoleState.Resolve(directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection")); }
+        catch (InvalidOperationException ex)
+        {
+            await context.Error.WriteLineAsync(ex.Message);
+            return DbDataKit.State.Cli.StateExit.Settings;
+        }
+
+        var settings = new ConsoleSettings(directory, listen, publicUrl, announce, state.Settings, home);
         Directory.CreateDirectory(settings.Directory);
         var app = ConsoleHost.Build(settings, ConsoleHost.Certificate(settings.Directory), line => context.Error.WriteLine(line), parsed.Get("web-root"));
         await context.Out.WriteLineAsync($"The console is on {listen} (people open it at {settings.Public}). The first administrator redeems the invitation in {Path.Combine(settings.Directory, "FIRST-RUN.txt")}.");
@@ -282,14 +291,14 @@ public static class ConsoleCli
 
     // ---- state ----
 
-    /// <summary>The shared <c>state</c> verbs over the console's state: its settings come from the flags, the environment and <c>settings.yaml</c> in its directory (<see cref="ConsoleState.SettingsFrom"/>; <c>state move</c> writes that file), its file is <c>state.db</c> in its directory, and a password that is a secret reference is looked up in its store, then the environment.</summary>
+    /// <summary>The shared <c>state</c> verbs over the console's state: its settings come from the flags, the environment and <c>settings.yaml</c> in its directory (<see cref="ConsoleState.Resolve"/>; <c>state move</c> and <c>state init</c> write that file), its file is <c>state.db</c> in its directory, and a password that is a secret reference is looked up in its store, then the environment.</summary>
     private static Noun StateNoun(Func<string, string?>? environment, Func<DbDataKit.State.Engines.Snapshots.MoveOptions, DbDataKit.State.Engines.Snapshots.MoveOptions>? configureMove = null) => DbDataKit.State.Cli.StateVerbs.Create(new DbDataKit.State.Cli.StateVerbContext(
         Program, "the console",
         args =>
         {
             var directory = DirectoryOf(args, environment);
-            return new DbDataKit.State.Cli.StateTarget(
-                ConsoleState.SettingsFrom(environment, args.Get("engine"), null, directory) ?? new StateSettings(),
+            return DbDataKit.State.Cli.StateTarget.From(
+                ConsoleState.Resolve(directory, environment, args.Get("engine"), engineFlagName: "--engine"),
                 Path.Combine(directory, "state.db"),
                 () => new DbDataKit.Secrets.SecretResolverChain([ConsoleSecrets.Open(directory, environment), new DbDataKit.Secrets.EnvSecretProvider(environment)]),
                 ConsoleState.SettingsFileIn(directory));
@@ -314,7 +323,11 @@ public static class ConsoleCli
     ]);
 
     /// <summary>Opens the state database the way the server does. It is made if there is none, so an invitation can be printed before the first start.</summary>
-    private static StateDatabase OpenState(CliArgs parsed, Func<string, string?>? environment) => ConsoleState.Open(DirectoryOf(parsed, environment), ConsoleState.SettingsFrom(environment, null, null, DirectoryOf(parsed, environment)), environment);
+    private static StateDatabase OpenState(CliArgs parsed, Func<string, string?>? environment)
+    {
+        var directory = DirectoryOf(parsed, environment);
+        return ConsoleState.Open(directory, ConsoleState.Resolve(directory, environment).Settings, environment);
+    }
 
     private static async Task<int> UserListAsync(string[] args, CliContext context, Func<string, string?>? environment)
     {

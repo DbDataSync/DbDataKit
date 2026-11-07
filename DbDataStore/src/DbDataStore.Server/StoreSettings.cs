@@ -5,6 +5,9 @@ namespace DbDataStore.Server;
 /// <param name="Listen">The address it listens on; HTTPS, and a name or address of this machine.</param>
 public sealed record StoreSettings(string Directory, Uri Listen)
 {
+    /// <summary>Where the state database is, when a flag named it (<c>server run --state-engine</c>); null: the environment and the <c>state:</c> section of <c>server.yaml</c> say (<see cref="StoreState.Resolve"/>), else SQLite.</summary>
+    public DbDataKit.State.StateSettings? State { get; init; }
+
     public const string Product = "dbdatastore";
     public const string DefaultListen = "https://127.0.0.1:8490";
 

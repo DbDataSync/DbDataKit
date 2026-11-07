@@ -33,7 +33,7 @@ public sealed class ServingInstanceLease(StateDatabase state, ILogger<ServingIns
             var other = others[0];
             throw new SecondInstanceException(
                 $"Another instance (process {other.ProcessId} on {other.Host}, started {other.Started:u}) is running against this state database, which is SQLite: one instance at a time may use it. " +
-                "Stop that one, or run a group of instances against a SQL Server or PostgreSQL state (state: { engine: mssql|postgres, connectionString: ... } in server.yaml).");
+                "Stop that one, or run a group of instances against a SQL Server or PostgreSQL state (state: { engine: mssql|postgres, connection: ... } in server.yaml).");
         }
         Write(now, insert: true);
         _registered = true;

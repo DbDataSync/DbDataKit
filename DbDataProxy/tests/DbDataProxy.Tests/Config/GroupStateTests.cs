@@ -108,7 +108,7 @@ public sealed class GroupStateTests : IAsyncLifetime
         try
         {
             var connection = engine == "mssql" ? new SqlConnectionStringBuilder(server) { InitialCatalog = name }.ConnectionString : new Npgsql.NpgsqlConnectionStringBuilder(server) { Database = name }.ConnectionString;
-            string[] state = [$"--Proxy:State:Engine={engine}", $"--Proxy:State:ConnectionString={connection}"];
+            string[] state = [$"--Proxy:State:Engine={engine}", $"--Proxy:State:Connection={connection}"];
 
             // the first instance makes the group's key; the second is given a copy of it, as an operator would
             var (dirA, dirB) = (Path.Combine(_root, "a"), Path.Combine(_root, "b"));
@@ -185,7 +185,7 @@ public sealed class GroupStateTests : IAsyncLifetime
         }
         Admin(engine == "mssql" ? $"CREATE DATABASE [{name}];" : $"CREATE DATABASE {name};");
         var connection = engine == "mssql" ? new SqlConnectionStringBuilder(server) { InitialCatalog = name }.ConnectionString : new Npgsql.NpgsqlConnectionStringBuilder(server) { Database = name }.ConnectionString;
-        return ([$"--Proxy:State:Engine={engine}", $"--Proxy:State:ConnectionString={connection}"], () =>
+        return ([$"--Proxy:State:Engine={engine}", $"--Proxy:State:Connection={connection}"], () =>
         {
             SqlConnection.ClearAllPools();
             Npgsql.NpgsqlConnection.ClearAllPools();
@@ -365,7 +365,7 @@ public sealed class GroupStateTests : IAsyncLifetime
         var (state, drop) = ScratchState(engine, variable);
         try
         {
-            string[] poll = [.. state, "--Proxy:State:DefinitionPollSeconds=1"];
+            string[] poll = [.. state, "--Proxy:DefinitionPollSeconds=1"];
             var catalog = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "semantic", "catalog.yaml"));
             // the data source the model reads, set up on every instance as an operator would (each instance's configuration is its own)
             var data = Path.Combine(_root, "sales.duckdb");
@@ -469,12 +469,12 @@ public sealed class GroupStateTests : IAsyncLifetime
         try
         {
             // the state in server.yaml, as an operator sets a group up, so the command line finds it too
-            var connection = state[1]["--Proxy:State:ConnectionString=".Length..];
+            var connection = state[1]["--Proxy:State:Connection=".Length..];
             var dirs = new[] { "a", "b" }.Select(d => Path.Combine(_root, d)).ToArray();
             foreach (var dir in dirs)
             {
                 Directory.CreateDirectory(ProxyConfigFile.DirectoryIn(dir));
-                File.WriteAllText(ProxyConfigFile.PathIn(dir), $"schemaVersion: 2\ntls: {{ mode: selfSigned }}\nstate: {{ engine: {engine}, connectionString: '{connection}' }}\n");
+                File.WriteAllText(ProxyConfigFile.PathIn(dir), $"schemaVersion: 2\ntls: {{ mode: selfSigned }}\nstate: {{ engine: {engine}, connection: '{connection}' }}\n");
             }
             var (a, managementA, _) = await ServingInstance(dirs[0], []);
             var storeA = SecretsRuntime.OpenStore(new ProxyOptions { DataDirectory = dirs[0] });
@@ -531,8 +531,8 @@ public sealed class GroupStateTests : IAsyncLifetime
         var (state, drop) = ScratchState(engine, variable);
         try
         {
-            string[] poll = [.. state, "--Proxy:State:DefinitionPollSeconds=1"];
-            var database = state[1]["--Proxy:State:ConnectionString=".Length..];
+            string[] poll = [.. state, "--Proxy:DefinitionPollSeconds=1"];
+            var database = state[1]["--Proxy:State:Connection=".Length..];
             var catalog = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "semantic", "catalog.yaml"));
             // the database behind the model: the tables its SQL source names, in the scratch database (the publish checks each can be read)
             using (System.Data.Common.DbConnection db = engine == "mssql" ? new SqlConnection(database) : new Npgsql.NpgsqlConnection(database))
@@ -629,8 +629,8 @@ public sealed class GroupStateTests : IAsyncLifetime
         var (state, drop) = ScratchState(engine, variable);
         try
         {
-            string[] poll = [.. state, "--Proxy:State:DefinitionPollSeconds=1"];
-            var database = state[1]["--Proxy:State:ConnectionString=".Length..];
+            string[] poll = [.. state, "--Proxy:DefinitionPollSeconds=1"];
+            var database = state[1]["--Proxy:State:Connection=".Length..];
             var storageEngine = engine == "mssql" ? "sqlserver" : "postgres";
             static string Territories(string? rule) => $$"""
                 schemaVersion: 1
@@ -776,7 +776,7 @@ public sealed class GroupStateTests : IAsyncLifetime
         var (state, drop) = ScratchState(engine, variable);
         try
         {
-            var database = state[1]["--Proxy:State:ConnectionString=".Length..];
+            var database = state[1]["--Proxy:State:Connection=".Length..];
             const string Model = """
                 schemaVersion: 1
                 name: territories
@@ -793,7 +793,7 @@ public sealed class GroupStateTests : IAsyncLifetime
 
             var dirs = new[] { "a", "b" }.Select(d => Path.Combine(_root, d)).ToArray();
             var (storeA, storeB) = (FreePort(), FreePort());
-            string[] With(int port) => [.. state, "--Proxy:State:DefinitionPollSeconds=1", "--Proxy:Modules:0=flightsql", "--Proxy:Modules:1=store", "--Proxy:Store:Address=127.0.0.1", $"--Proxy:Store:Port={port}"];
+            string[] With(int port) => [.. state, "--Proxy:DefinitionPollSeconds=1", "--Proxy:Modules:0=flightsql", "--Proxy:Modules:1=store", "--Proxy:Store:Address=127.0.0.1", $"--Proxy:Store:Port={port}"];
             var (a, managementA, _) = await ServingInstance(dirs[0], With(storeA));
             var keys = SecretsRuntime.OpenStore(new ProxyOptions { DataDirectory = dirs[0] });
             foreach (var secret in new[] { GroupSessionKey.Secret, ProxyIdentityModule.SigningKeySecret })
@@ -892,7 +892,7 @@ public sealed class GroupStateTests : IAsyncLifetime
         var (state, drop) = ScratchState(engine, variable);
         try
         {
-            var database = state[1]["--Proxy:State:ConnectionString=".Length..];
+            var database = state[1]["--Proxy:State:Connection=".Length..];
             const string Model = """
                 schemaVersion: 1
                 name: territories
@@ -916,7 +916,7 @@ public sealed class GroupStateTests : IAsyncLifetime
 
             var dir = Path.Combine(_root, "apps");
             var appsPort = FreePort();
-            var (app, management, _) = await ServingInstance(dir, [.. state, "--Proxy:State:DefinitionPollSeconds=1", "--Proxy:Modules:0=flightsql", "--Proxy:Modules:1=apps",
+            var (app, management, _) = await ServingInstance(dir, [.. state, "--Proxy:DefinitionPollSeconds=1", "--Proxy:Modules:0=flightsql", "--Proxy:Modules:1=apps",
                 "--Proxy:Apps:Address=127.0.0.1", $"--Proxy:Apps:Port={appsPort}", "--Proxy:Apps:Home:ClientId=apps-host"]);
             var groupState = app.Services.GetRequiredService<StateDatabase>();
             await PublishEntityModelAsync(engine, database, management, dir, groupState, Model);

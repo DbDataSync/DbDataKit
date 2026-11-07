@@ -2858,6 +2858,52 @@
       "if": {
         "properties": {
           "command": {
+            "const": "state init"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_init"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state init"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_init_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "state move"
           },
           "ok": {
@@ -4939,6 +4985,116 @@
         }
       }
     },
+    "data_state_init": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "topology": {
+          "type": "string"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "settings_file": {
+          "type": "string"
+        },
+        "applied": {
+          "type": "boolean"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "status",
+              "message"
+            ]
+          }
+        },
+        "statements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "topology",
+        "steps"
+      ]
+    },
+    "data_state_init_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "topology": {
+          "type": "string"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "settings_file": {
+          "type": "string"
+        },
+        "applied": {
+          "type": "boolean"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "status",
+              "message"
+            ]
+          }
+        },
+        "statements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "data_state_move": {
       "type": "object",
       "additionalProperties": false,
@@ -5008,6 +5164,72 @@
         },
         "connection": {
           "type": "string"
+        },
+        "sources": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "engine": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "connection": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "namespaces": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "retention": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            }
+          }
         },
         "registry_table": {
           "type": "string"
