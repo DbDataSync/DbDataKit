@@ -43,6 +43,9 @@ public sealed class World
 
     public static World Begin() => Held.Value = new World();
 
+    /// <summary>Set when the first body of the `cancel` mode is running, so a test cancels at that moment, not after a guessed time (a slow start, as on Windows, must not matter).</summary>
+    public TaskCompletionSource BodyStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     // the warehouse
     public ConcurrentQueue<(string Table, Row Row)> Warehouse { get; } = new();
 
@@ -77,6 +80,7 @@ public sealed class World
 
     // counters and switches of the trouble, backfill and stoppable jobs
     public int Bodies;
+    public int Checks;
 
     public Exception? Throw { get; set; }
 
@@ -87,6 +91,12 @@ public sealed class World
     public int FailOnDay { get; set; } = -1;
 
     public PayloadRef? LastPayload { get; set; }
+
+    /// <summary>Set by the protocol test jobs when they begin, so a test can act while a run is in flight.</summary>
+    public TaskCompletionSource JobStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>What the job saw when it read its streamed result back (the ref cannot be read once the run is over, when the run is remote).</summary>
+    public ReadBack? ReadBack { get; set; }
 
     public object? Seen { get; set; }
 
@@ -210,7 +220,7 @@ public sealed class DailyDrop : RunnerJob<DailyDropInput, NoProgress, DailyDropS
     {
         var world = World.Current;
         PayloadRef file = await Step(DailyDropSteps.Download, Input.Day)
-            .Repeatable()                                                      // the sample's Check needs a store of the downloaded bytes; a repeat is what this fake server allows
+            .Repeatable()                                                      // a crash mid-copy leaves the file on the server; after the copy the kit adopts the complete payload (K14)
             .StreamAsync(async (sink, ct) =>
             {
                 Interlocked.Increment(ref world.Downloads);
@@ -349,6 +359,8 @@ public static class BigSteps
 
 public sealed record BigInput(long Bytes);
 
+public sealed record ReadBack(long Total, int BiggestRead, int Reads, string Hash);
+
 /// <summary>Writes <see cref="BigInput.Bytes"/> pseudo-random bytes through a streaming step, in 64 KiB writes, and counts them.</summary>
 [RunnerTask("big")]
 public sealed class Big : RunnerJob<BigInput, NoProgress, NoSlots>
@@ -362,7 +374,29 @@ public sealed class Big : RunnerJob<BigInput, NoProgress, NoSlots>
             for (long written = 0; written < Input.Bytes; written += Block.Length) await sink.WriteAsync(Block.AsMemory(0, (int)Math.Min(Block.Length, Input.Bytes - written)), ct);
         }, ct);
         World.Current.LastPayload = file;
+        World.Current.ReadBack = await ReadBackAsync(file, ct);
         Count(new Counter("bytes"), file.Size);
+    }
+
+    /// <summary>Reads the result back through the ref with a buffer larger than a chunk, hashing as it goes.</summary>
+    private static async Task<ReadBack> ReadBackAsync(PayloadRef file, CancellationToken ct)
+    {
+        using var seen = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var buffer = new byte[4 * 1024 * 1024];
+        long total = 0;
+        var biggest = 0;
+        var reads = 0;
+        await using var stream = file.OpenRead();
+        int n;
+        while ((n = await stream.ReadAsync(buffer, ct)) > 0)
+        {
+            seen.AppendData(buffer, 0, n);
+            total += n;
+            biggest = Math.Max(biggest, n);
+            reads++;
+        }
+
+        return new ReadBack(total, biggest, reads, Convert.ToHexString(seen.GetHashAndReset()));
     }
 }
 
@@ -433,7 +467,7 @@ public sealed class Trouble : RunnerJob<TroubleInput, NoProgress, NoSlots>
             case "cancel":
                 await Step(StepsOfTrouble.Charge, "a").Repeatable().RunAsync(async ct =>
                 {
-                    if (Interlocked.Increment(ref World.Current.Bodies) == 1) await Task.Delay(Timeout.Infinite, ct);
+                    if (Interlocked.Increment(ref World.Current.Bodies) == 1) { World.Current.BodyStarted.TrySetResult(); await Task.Delay(Timeout.Infinite, ct); }
                     return "done";
                 }, ct);
                 break;
@@ -446,6 +480,14 @@ public sealed class Trouble : RunnerJob<TroubleInput, NoProgress, NoSlots>
                 break;
             case "stream-repeatable":
                 await Step(BigSteps.Make, "s").Repeatable().StreamAsync(async (sink, ct) => { Interlocked.Increment(ref World.Current.Bodies); await sink.WriteAsync(new byte[2048], ct); }, ct);
+                break;
+            case "stream-check":
+                await Step(BigSteps.Make, "c").Check(ct => { Interlocked.Increment(ref World.Current.Checks); return Task.FromResult<PayloadRef?>(null); })
+                    .StreamAsync(async (sink, ct) => { Interlocked.Increment(ref World.Current.Bodies); await sink.WriteAsync(new byte[2048], ct); }, ct);
+                break;
+            case "stream-ask":
+                await Step(BigSteps.Make, "c").Ask()
+                    .StreamAsync(async (sink, ct) => { Interlocked.Increment(ref World.Current.Bodies); await sink.WriteAsync(new byte[2048], ct); }, ct);
                 break;
             case "files":
                 var first = await Files.ClaimAsync("inbox", "in/a.csv", 10, DateTimeOffset.Parse("2026-11-07T00:00:00Z"), "hash-1", ct);

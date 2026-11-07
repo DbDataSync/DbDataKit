@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Runner.Kit.Testing</RootNamespace>
+    <PackageId>DbDataKit.Runner.Kit.Testing</PackageId>
+    <Description>Test a runner job without a runner (plan 28b section 10): RunSimulator runs a job in memory over the real stores on SQLite, with typed failure injection (crash after or before a step body, cancellation, progress conflict, unit failure) and reports of steps, units, counts, payloads and stored progress.</Description>
+    <IsPackable>true</IsPackable>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataKit.Runner.Kit\DbDataKit.Runner.Kit.csproj" />
+  </ItemGroup>
+</Project>

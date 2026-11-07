@@ -58,9 +58,27 @@ public static class JobRunner
         ArgumentNullException.ThrowIfNull(environment);
         ArgumentException.ThrowIfNullOrEmpty(chain);
         if (attempt < 1) throw new ArgumentOutOfRangeException(nameof(attempt), "The first attempt is 1.");
-        if (!typeof(RunnerJobBase).IsAssignableFrom(jobType) || jobType.IsAbstract) throw new ArgumentException($"{jobType.Name} is not a job class (a class deriving from RunnerJob<,,>).", nameof(jobType));
+        CheckJobType(jobType);
 
         var task = new TaskRef(environment.Package, environment.Channel, TaskNameOf(jobType));
+        var identity = new RunIdentity(runId ?? environment.Database.NewId(), attempt, chain, task);
+        var backend = new InProcessRun(environment, identity);
+        return await ExecuteAsync(jobType, backend, environment.Settings, environment.SlotOpener, input, ct).ConfigureAwait(false);
+    }
+
+    internal static void CheckJobType(Type jobType)
+    {
+        if (!typeof(RunnerJobBase).IsAssignableFrom(jobType) || jobType.IsAbstract) throw new ArgumentException($"{jobType.Name} is not a job class (a class deriving from RunnerJob<,,>).", nameof(jobType));
+    }
+
+    /// <summary>
+    /// The run itself, the same over every <see cref="IRunBackend"/>: records the start, binds input, progress and slots, runs the job, classifies what it threw, and ends the run (the checkpoint moves in the
+    /// transaction that finishes the run record). The log line that summarizes the run is written before the run ends, because a remote run's token stops working when it does.
+    /// </summary>
+    internal static async Task<RunResult> ExecuteAsync(Type jobType, IRunBackend backend, RunSettings settings, SlotOpener? slotOpener, object? input, CancellationToken ct)
+    {
+        CheckJobType(jobType);
+        var identity = backend.Identity;
         var job = (RunnerJobBase)(Activator.CreateInstance(jobType, nonPublic: true) ?? throw new InvalidOperationException($"{jobType.Name} cannot be created."));
         var progress = (Progress)Activator.CreateInstance(job.ProgressType)!;
         var slots = (Slots)Activator.CreateInstance(job.SlotsType)!;
@@ -68,44 +86,67 @@ public static class JobRunner
         var inputValue = input ?? DefaultInput(job.InputType);
         if (!job.InputType.IsInstanceOfType(inputValue)) throw new ArgumentException($"{jobType.Name} takes an input of type {job.InputType.Name}, not {inputValue.GetType().Name}.", nameof(input));
 
-        var identity = new RunIdentity(runId ?? environment.Database.NewId(), attempt, chain, task);
-        var backend = new InProcessRun(environment, identity);
         await backend.StartAsync(ct).ConfigureAwait(false);
-        var context = new RunContext(backend, environment);
+        var context = new RunContext(backend, settings);
         var binder = new ProgressBinder(backend, layout);
         context.Progress = binder;
-        BindSlots(slots, environment.SlotOpener);
+        BindSlots(slots, slotOpener);
         job.Bind(inputValue, progress, slots, context);
 
         TaskEnd end;
-        var crashed = false;
+        var ran = false;
         try
         {
             await binder.BindAsync(progress, ct).ConfigureAwait(false);
             await job.ExecuteAsync(ct).ConfigureAwait(false);
             end = Success(context);
-            if (!await binder.SaveAsync(end, ct).ConfigureAwait(false))
-            {
-                end = TaskEndMapping.Cancelled("A checkpoint of this task moved since the run read it (another run got there first, or it was rewound); the run's progress was not saved.", Processed(context));
-                await backend.FinishAsync(end, CancellationToken.None).ConfigureAwait(false);
-            }
+            ran = true;
         }
         catch (SimulatedCrashException)
         {
-            crashed = true;
             throw;
         }
         catch (Exception ex)
         {
-            end = await FailedAsync(ex, context, ct, backend).ConfigureAwait(false);
-        }
-        finally
-        {
-            if (!crashed) await ReleaseInboxAsync(context, backend).ConfigureAwait(false);
+            end = Classify(ex, context, ct);
         }
 
+        await ReleaseInboxAsync(context, backend).ConfigureAwait(false);
         Summarize(context, end);
-        return new RunResult(identity.RunId, attempt, end, context.StepReports, context.UnitReports, context.Root.Snapshot(), context.LastStatus);
+        try
+        {
+            if (!ran) await backend.FinishAsync(end, CancellationToken.None).ConfigureAwait(false);
+            else if (!await binder.SaveAsync(end, ct).ConfigureAwait(false))
+            {
+                end = TaskEndMapping.Cancelled("A checkpoint of this task moved since the run read it (another run got there first, or it was rewound); the run's progress was not saved.", Processed(context));
+                Summarize(context, end);
+                await backend.FinishAsync(end, CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex) when (ran && ex is not SimulatedCrashException)
+        {
+            end = Classify(ex, context, ct);
+            Summarize(context, end);
+            await backend.FinishAsync(end, CancellationToken.None).ConfigureAwait(false);
+        }
+
+        return new RunResult(identity.RunId, identity.Attempt, end, context.StepReports, context.UnitReports, context.Root.Snapshot(), context.LastStatus);
+    }
+
+    /// <summary>
+    /// The progress of a job's task as stored now, bound the way a run binds it at start (for tests and tools). Members of a <see cref="Keyed{T}"/> are read from the store when first used, so they show the store at
+    /// that moment.
+    /// </summary>
+    public static async Task<Progress> ReadProgressAsync(Type jobType, RunnerEnvironment environment, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(jobType);
+        ArgumentNullException.ThrowIfNull(environment);
+        if (!typeof(RunnerJobBase).IsAssignableFrom(jobType) || jobType.IsAbstract) throw new ArgumentException($"{jobType.Name} is not a job class (a class deriving from RunnerJob<,,>).", nameof(jobType));
+        var job = (RunnerJobBase)(Activator.CreateInstance(jobType, nonPublic: true) ?? throw new InvalidOperationException($"{jobType.Name} cannot be created."));
+        var identity = new RunIdentity(Guid.Empty, 0, "read-progress", new TaskRef(environment.Package, environment.Channel, TaskNameOf(jobType)));
+        var progress = (Progress)Activator.CreateInstance(job.ProgressType)!;
+        await new ProgressBinder(new InProcessRun(environment, identity), ProgressLayout.For(job.ProgressType)).BindAsync(progress, ct).ConfigureAwait(false);
+        return progress;
     }
 
     private static object DefaultInput(Type type)
@@ -144,20 +185,13 @@ public static class JobRunner
             : new TaskEnd(TaskEndState.Succeeded, Processed(context));
     }
 
-    private static async Task<TaskEnd> FailedAsync(Exception thrown, RunContext context, CancellationToken ct, IRunBackend backend)
+    private static TaskEnd Classify(Exception thrown, RunContext context, CancellationToken ct)
     {
         var ex = ExceptionClassifier.Unwrap(thrown);
-        TaskEnd end;
-        if (ex is ProgressConflictException conflict) end = TaskEndMapping.Cancelled(conflict.Message, Processed(context));
-        else if (ex is OperationCanceledException && ct.IsCancellationRequested) end = TaskEndMapping.Cancelled(null, Processed(context));
-        else
-        {
-            var failure = ExceptionClassifier.Failure(ex, context.FirstFailedItem);
-            end = new TaskEnd(TaskEndState.Failed, Processed(context), context.FailedUnits + context.Rejected, context.FirstFailedItem, failure);
-        }
-
-        await backend.FinishAsync(end, CancellationToken.None).ConfigureAwait(false);
-        return end;
+        if (ex is ProgressConflictException conflict) return TaskEndMapping.Cancelled(conflict.Message, Processed(context));
+        if (ex is OperationCanceledException && ct.IsCancellationRequested) return TaskEndMapping.Cancelled(null, Processed(context));
+        var failure = ExceptionClassifier.Failure(ex, context.FirstFailedItem);
+        return new TaskEnd(TaskEndState.Failed, Processed(context), context.FailedUnits + context.Rejected, context.FirstFailedItem, failure);
     }
 
     private static async Task ReleaseInboxAsync(RunContext context, IRunBackend backend)

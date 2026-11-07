@@ -21,6 +21,9 @@ internal sealed class CountScope(CountScope? parent)
     public IReadOnlyDictionary<string, long> Snapshot() => new Dictionary<string, long>(_counts, StringComparer.Ordinal);
 }
 
+/// <summary>What the kit's logic needs besides the backend: where a test makes the process die, the cap on units at once, and how a new id is made. In-process it comes from the <see cref="RunnerEnvironment"/>; remotely, from the options of <see cref="RemoteJobHost"/>.</summary>
+internal sealed record RunSettings(RunnerHooks? Hooks, int? MaxParallelism, Func<Guid> NewId);
+
 /// <summary>The step a body is running in, so a step called inside it is refused naming both.</summary>
 internal sealed record StepFrame(string Name, string Key);
 
@@ -44,18 +47,18 @@ internal sealed class RunContext
     private string? _firstFailed;
     private string? _status;
 
-    public RunContext(IRunBackend backend, RunnerEnvironment env)
+    public RunContext(IRunBackend backend, RunSettings settings)
     {
         Backend = backend;
-        Env = env;
+        Settings = settings;
         Root = new CountScope(null);
         Log = new RunLogger(backend);
-        Run = new RunFacade(backend.Identity, Log);
+        Run = new RunFacade(backend.Identity, Log, backend);
     }
 
     public IRunBackend Backend { get; }
 
-    public RunnerEnvironment Env { get; }
+    public RunSettings Settings { get; }
 
     public CountScope Root { get; }
 
@@ -87,17 +90,31 @@ internal sealed class RunContext
 
     public string? FirstFailedItem => _firstFailed;
 
-    public void AddStep(StepReport report) => _steps.Enqueue(report);
+    public void AddStep(StepReport report)
+    {
+        _steps.Enqueue(report);
+        Settings.Hooks?.StepReported?.Invoke(report);
+    }
 
-    public void AddUnit(UnitReport report) => _units.Enqueue(report);
+    public void AddUnit(UnitReport report)
+    {
+        _units.Enqueue(report);
+        Settings.Hooks?.UnitReported?.Invoke(report);
+    }
 
     public void Count(Counter counter, long n)
     {
         ArgumentNullException.ThrowIfNull(counter);
         CurrentScope.Add(counter.Name, n);
+        Backend.Count(counter.Name, n);
+        Settings.Hooks?.Counted?.Invoke(counter.Name, n);
     }
 
-    public void SetStatus(string text) => _status = text;
+    public void SetStatus(string text)
+    {
+        _status = text;
+        Backend.Status(text);
+    }
 
     public void NoteFailedItem(string item)
     {
@@ -159,15 +176,23 @@ internal sealed class RunContext
     }
 
     public Task RejectAsync<T>(T record, string reason, CancellationToken ct) =>
-        RejectBodyAsync($"record:{typeof(T).Name}", JsonSerializer.SerializeToUtf8Bytes(record, Json), reason, Env.Database.NewId(), ct);
+        RejectBodyAsync($"record:{typeof(T).Name}", JsonSerializer.SerializeToUtf8Bytes(record, Json), reason, Settings.NewId(), ct);
 
     /// <summary>A hook that throws <see cref="SimulatedCrashException"/> makes the process "die" here.</summary>
-    public Task AfterStepBodyAsync(string name, string key, CancellationToken ct) => Env.Hooks?.AfterStepBody?.Invoke(name, key, ct) ?? Task.CompletedTask;
+    public Task AfterStepBodyAsync(string name, string key, CancellationToken ct) => Settings.Hooks?.AfterStepBody?.Invoke(name, key, ct) ?? Task.CompletedTask;
 
-    public Task AfterUnitBodyAsync(string name, string key, CancellationToken ct) => Env.Hooks?.AfterUnitBody?.Invoke(name, key, ct) ?? Task.CompletedTask;
+    public Task BeforeStepBodyAsync(string name, string key, CancellationToken ct) => Settings.Hooks?.BeforeStepBody?.Invoke(name, key, ct) ?? Task.CompletedTask;
+
+    public Task BeforePayloadCommitAsync(string name, string key, CancellationToken ct) => Settings.Hooks?.BeforePayloadCommit?.Invoke(name, key, ct) ?? Task.CompletedTask;
+
+    public Task BeforeUnitBodyAsync(string name, string key, CancellationToken ct) => Settings.Hooks?.BeforeUnitBody?.Invoke(name, key, ct) ?? Task.CompletedTask;
+
+    public Task BeforeProgressSaveAsync(int number, CancellationToken ct) => Settings.Hooks?.BeforeProgressSave?.Invoke(number, ct) ?? Task.CompletedTask;
+
+    public Task AfterUnitBodyAsync(string name, string key, CancellationToken ct) => Settings.Hooks?.AfterUnitBody?.Invoke(name, key, ct) ?? Task.CompletedTask;
 }
 
-internal sealed class RunFacade(RunIdentity identity, ILogger log) : IRun
+internal sealed class RunFacade(RunIdentity identity, ILogger log, IRunBackend backend) : IRun
 {
     public Guid Id => identity.RunId;
 
@@ -181,10 +206,7 @@ internal sealed class RunFacade(RunIdentity identity, ILogger log) : IRun
 
     public ILogger Log => log;
 
-    public void Lineage(IEnumerable<string> reads, IEnumerable<string> writes)
-    {
-        // recorded nowhere yet: the lineage slice gives the kit a place to send it
-    }
+    public void Lineage(IEnumerable<string> reads, IEnumerable<string> writes) => backend.Lineage([.. reads ?? []], [.. writes ?? []]);
 }
 
 /// <summary>An <see cref="ILogger"/> whose lines go to the run's log in the state database (the logger of <see cref="IRun.Log"/>).</summary>

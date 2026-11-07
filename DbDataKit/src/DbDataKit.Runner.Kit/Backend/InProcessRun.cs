@@ -69,6 +69,14 @@ internal sealed class InProcessRun : IRunBackend
 
     public Task<StepBegin.Run> RetakeStepAsync(string name, string key, CancellationToken ct) => Task.FromResult(_steps.Retake(Chain, name, key, Attempt));
 
+    public Task<Guid?> AdoptStepPayloadAsync(string name, string key, CancellationToken ct)
+    {
+        var step = _steps.Get(Chain, name, key) ?? throw new InvalidOperationException($"There is no step '{name}' with key '{key}' in this chain.");
+        if (_steps.FindOwnedCompletePayload(step.Id) is not { } payload) return Task.FromResult<Guid?>(null);
+        _steps.Adopt(Chain, name, key, Attempt, payload.Id);
+        return Task.FromResult<Guid?>(payload.Id);
+    }
+
     public Task CompleteValueStepAsync(string name, string key, string resultJson, IReadOnlyDictionary<string, long>? counts, CancellationToken ct)
     {
         _steps.CompleteValue(Chain, name, key, Attempt, resultJson, counts);
@@ -87,10 +95,10 @@ internal sealed class InProcessRun : IRunBackend
         return Task.CompletedTask;
     }
 
-    public Task<StepStream> OpenStepStreamAsync(StepBegin.Run run, string stepName, string? mediaType, CancellationToken ct)
+    public Task<StepStream> OpenStepStreamAsync(StepBegin.Run run, string stepName, string key, string? mediaType, CancellationToken ct)
     {
         var writer = _steps.OpenStream(run, stepName, mediaType);
-        return Task.FromResult(new StepStream(writer, writer.Id, writer.Complete));
+        return Task.FromResult(new StepStream(writer, () => writer.Id, writer.Complete));
     }
 
     // ---- units
@@ -136,6 +144,8 @@ internal sealed class InProcessRun : IRunBackend
         return Task.FromResult(item is null ? null : new InboxTaken(item.Id, item.Source, item.SignatureOk, item.BodyPayload));
     }
 
+    public Task CompleteInboxAsync(Guid id, CancellationToken ct) => Task.CompletedTask;
+
     public Task ReleaseInboxAsync(Guid id, CancellationToken ct)
     {
         _progress.ReleaseInboxItem(id, Identity.RunId);
@@ -167,4 +177,17 @@ internal sealed class InProcessRun : IRunBackend
     private Stream OpenPayload(Guid id) => _payloads.OpenRead(id);
 
     public void Log(string level, string message, string? item = null) => _runs.Log(Identity.RunId, level, message, item);
+
+    // counts, the status line and lineage have no place in the state database yet (the lineage slice gives them one); the protocol server keeps them in memory for the runner
+    public void Count(string name, long n)
+    {
+    }
+
+    public void Status(string text)
+    {
+    }
+
+    public void Lineage(IReadOnlyList<string> reads, IReadOnlyList<string> writes)
+    {
+    }
 }

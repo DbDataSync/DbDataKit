@@ -37,7 +37,7 @@ public sealed class ManifestAndProgressTests
     {
         var manifest = Generate();
 
-        Assert.Equal(["backfill", "big", "customers", "daily-drop", "invoices", "orders", "probe", "stoppable", "trouble", "typed", "with-inputs"], manifest.Tasks.Select(t => t.Name));
+        Assert.Equal(["backfill", "big", "customers", "daily-drop", "invoices", "orders", "probe", "reporter", "stoppable", "stubborn", "trouble", "typed", "waits", "with-inputs"], manifest.Tasks.Select(t => t.Name));
         Assert.Equal(new PackageLaunch(LaunchKind.Assembly, "bin/DbDataKit.Runner.Kit.Tests.dll"), manifest.Launch);
         Assert.Equal(RunnerProtocol.V1, manifest.BuiltAgainst.Protocol);
         Assert.Equal("DbDataKit.Runner.Kit.Tests.Samples.Orders", Task("orders").Entry.Type);

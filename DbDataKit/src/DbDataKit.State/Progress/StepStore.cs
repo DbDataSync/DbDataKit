@@ -133,6 +133,47 @@ public sealed class StepStore(StateDatabase database, ProgressKey key, StepOptio
             throw new InvalidOperationException($"The step '{name}' with key '{stepKey}' kept changing while it was retaken; try again.");
         });
 
+    /// <summary>
+    /// The newest <b>complete</b> payload owned by the step's row, or null. A streaming step's writer is owned by the row, and a payload is complete only when the body returned normally, so a complete payload of a step
+    /// that never completed proves the body finished writing and the process died before the step was marked completed (plan 28b K14). Incomplete payloads (a write that was interrupted) are not returned.
+    /// </summary>
+    public PayloadInfo? FindOwnedCompletePayload(Guid stepId) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(PayloadStore.ModuleName, connection,
+                "SELECT id FROM {table:payload} WHERE owner_module = $module AND owner_row = $row AND state = $complete ORDER BY created_at DESC, id DESC;");
+            cmd.Bind(database, "module", Module).Bind(database, "row", stepId.ToString("D")).Bind(database, "complete", PayloadStore.CompleteState);
+            using var reader = cmd.ExecuteReader();
+            Guid? id = reader.Read() ? reader.Uuid(0) : null;
+            reader.Close();
+            return id is { } found ? new PayloadStore(database).Get(found) : null;
+        });
+
+    /// <summary>
+    /// Takes over an in-doubt streaming step and completes it with the complete payload its dead attempt left (<paramref name="payloadId"/>, from <see cref="FindOwnedCompletePayload"/>), in one statement. The row
+    /// records that the result was adopted, not produced. Throws when the step is not in doubt or the payload is not complete and owned by it.
+    /// </summary>
+    public void Adopt(string chain, string name, string stepKey, int attempt, Guid payloadId)
+    {
+        var row = Get(chain, name, stepKey) ?? throw new InvalidOperationException($"There is no step '{name}' with key '{stepKey}' in this chain.");
+        if (!IsInDoubt(row, attempt)) throw new InvalidOperationException($"The step '{name}' with key '{stepKey}' is {row.State} (attempt {row.Attempt}), not in doubt.");
+        CheckPayload(name, stepKey, payloadId);
+        var info = new PayloadStore(database).Get(payloadId)!;
+        if (info.OwnerModule != Module || info.OwnerRow != row.Id.ToString("D"))
+            throw new InvalidOperationException($"The payload {payloadId} is not owned by the step '{name}' with key '{stepKey}', so it cannot be adopted as its result.");
+        var done = database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection,
+                $"UPDATE {{table:step_result}} SET state = 'completed', attempt = $attempt, result_json = NULL, result_payload = $payload, completed_at = $now, error = $note, row_version = row_version + 1 WHERE {Where} AND row_version = $version;");
+            Bind(cmd, chain, name, stepKey).Bind(database, "attempt", (long)attempt).Bind(database, "payload", payloadId, System.Data.DbType.Guid).Bind(database, "now", database.Time.GetUtcNow())
+                .Bind(database, "note", $"adopted the complete payload {payloadId:D} that attempt {row.Attempt} wrote before it died", System.Data.DbType.String).Bind(database, "version", row.Version);
+            return cmd.ExecuteNonQuery() == 1;
+        });
+        if (!done) throw new InvalidOperationException($"The step '{name}' with key '{stepKey}' changed while its payload was adopted; try again.");
+    }
+
     private static bool IsInDoubt(StepRecord row, int attempt) => row.State == StepState.InDoubt || (row.State == StepState.Started && row.Attempt < attempt);
 
     private bool Restart(DbConnection connection, DbTransaction transaction, StepRecord row, int attempt)

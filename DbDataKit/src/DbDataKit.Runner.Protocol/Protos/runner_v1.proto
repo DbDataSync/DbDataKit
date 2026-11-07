@@ -1,0 +1,444 @@
+// The runner protocol, version 1 (plan 28 section 4.1; plan 28a DR3, DR4, DR5, slice R03b).
+//
+// How a task's process talks to its runner, over a local socket (a Unix domain socket or a named pipe), the same for every kind of task and every
+// language. Names and keys are strings on the wire: the typed definitions are the .NET kit's convenience (plan 28b section 9).
+//
+// Every call carries the run token in the metadata key "x-dbdatakit-run-token"; the token names the run, and a call can only reach that run's progress,
+// steps, units, payloads and logs. Start is the first call and carries the protocol version of the client.
+//
+// Compatibility: a field is never removed, renumbered or retyped inside v1; a new field takes a new number. An incompatible change is a v2 served beside
+// this one. The test ProtocolCompatibilityTests compares the field numbers and names with a checked-in snapshot and fails on a removed or renumbered field.
+
+syntax = "proto3";
+
+package dbdatakit.runner.v1;
+
+option csharp_namespace = "DbDataKit.Runner.Protocol.V1";
+
+service RunnerApi {
+  // ---- start and end
+  rpc Start(StartRequest) returns (StartInfo);
+  rpc End(EndRequest) returns (EndReply);
+
+  // ---- progress: read once at Start (StartInfo.progress), written at commit points
+  rpc Advance(AdvanceRequest) returns (AdvanceReply);
+
+  // ---- steps
+  rpc BeginStep(BeginStepRequest) returns (BeginStepReply);
+  rpc RetakeStep(StepKey) returns (RetakeStepReply);
+  rpc AdoptStepPayload(StepKey) returns (AdoptStepPayloadReply);
+  rpc CompleteStep(CompleteStepRequest) returns (CompleteStepReply);
+  rpc FailStep(FailStepRequest) returns (FailStepReply);
+  // client streaming: the bytes of a streaming step's result, in chunks of at most 1 MiB; the reply holds the payload id
+  rpc StepChunk(stream StepChunkRequest) returns (StepChunkReply);
+
+  // ---- payloads
+  rpc StatPayload(PayloadRequest) returns (PayloadDescription);
+  // server streaming: the payload, in chunks of at most 1 MiB
+  rpc ReadPayload(PayloadRequest) returns (stream PayloadChunk);
+
+  // ---- units
+  rpc BeginUnit(UnitKey) returns (BeginUnitReply);
+  rpc UnitProgress(UnitProgressRequest) returns (UnitProgressReply);
+  rpc EndUnit(EndUnitRequest) returns (EndUnitReply);
+
+  // ---- files, inbox, dead letters
+  rpc ClaimFile(ClaimFileRequest) returns (ClaimFileReply);
+  rpc CompleteFile(CompleteFileRequest) returns (CompleteFileReply);
+  rpc TakeInbox(TakeInboxRequest) returns (TakeInboxReply);
+  rpc CompleteInbox(InboxItemRef) returns (InboxReply);
+  rpc ReleaseInbox(InboxItemRef) returns (InboxReply);
+  rpc Reject(RejectRequest) returns (RejectReply);
+
+  // ---- one-way, batched: counts, the status line, log lines, lineage
+  rpc Report(ReportBatch) returns (ReportReply);
+
+  // ---- liveness and cancellation
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatReply);
+  // server streaming: the runner's push of a cancel (one message, then the stream stays open until the run ends); Heartbeat carries the same fact for a poller
+  rpc WatchCancel(WatchCancelRequest) returns (stream CancelNotice);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+// start and end
+
+message StartRequest {
+  string protocol_version = 1;   // "dbdatakit.runner.v1"
+  string client = 2;             // free text: the kit or client that speaks, for the log
+}
+
+message StartInfo {
+  string protocol_version = 1;
+  string run_id = 2;
+  int32 attempt = 3;
+  string chain_id = 4;
+  string package = 5;
+  string channel = 6;
+  string task = 7;
+  string package_version = 8;
+  map<string, string> inputs = 9;
+  map<string, string> connection_handles = 10;
+  ProgressSnapshot progress = 11;
+  int64 cancellation_grace_ms = 12;
+}
+
+enum EndState {
+  END_STATE_UNSPECIFIED = 0;
+  END_STATE_SUCCEEDED = 1;
+  END_STATE_COMPLETED_WITH_FAILURES = 2;
+  END_STATE_FAILED = 3;
+  END_STATE_STOPPED = 4;
+}
+
+enum FailureKind {
+  FAILURE_KIND_UNSPECIFIED = 0;
+  FAILURE_KIND_TEMPORARY = 1;
+  FAILURE_KIND_PERMANENT = 2;
+  FAILURE_KIND_CANCELLED = 3;
+  FAILURE_KIND_TIMED_OUT = 4;
+  FAILURE_KIND_PROCESS_EXITED = 5;
+  FAILURE_KIND_PROTOCOL_VIOLATION = 6;
+  FAILURE_KIND_LIMIT_EXCEEDED = 7;
+}
+
+message Failure {
+  FailureKind kind = 1;
+  string message = 2;
+  string item = 3;
+  string code = 4;
+}
+
+message Output {
+  oneof value {
+    string payload_id = 1;   // a payload of this run, or
+    string text = 2;         // a short text; never both
+  }
+}
+
+message TaskEndMessage {
+  EndState state = 1;
+  int64 processed = 2;
+  int64 failed_items = 3;
+  string first_failed_item = 4;
+  Failure failure = 5;
+  map<string, Output> outputs = 6;
+}
+
+message EndRequest {
+  TaskEndMessage end = 1;
+}
+
+message EndReply {
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+// progress
+
+enum ProgressValueType {
+  PROGRESS_VALUE_TYPE_UNSPECIFIED = 0;
+  PROGRESS_VALUE_TYPE_TEXT = 1;
+  PROGRESS_VALUE_TYPE_INT = 2;
+  PROGRESS_VALUE_TYPE_DECIMAL = 3;
+  PROGRESS_VALUE_TYPE_TIME = 4;
+  PROGRESS_VALUE_TYPE_DATE = 5;
+  PROGRESS_VALUE_TYPE_BOOL = 6;
+  PROGRESS_VALUE_TYPE_BYTES = 7;
+  PROGRESS_VALUE_TYPE_JSON = 8;
+}
+
+// A typed value as its invariant text (the form the progress store keeps in its history); a bytes value is a payload id.
+message ProgressValueMessage {
+  ProgressValueType type = 1;
+  string text = 2;
+}
+
+message CheckpointValue {
+  string name = 1;
+  string item_key = 2;
+  int64 version = 3;
+  map<string, ProgressValueMessage> parts = 4;
+}
+
+message StateValueMessage {
+  string name = 1;
+  string item_key = 2;
+  int64 version = 3;
+  ProgressValueMessage value = 4;
+}
+
+// The task's progress as it was when the run started: read once (DR5), and every later write names the version it was read at.
+message ProgressSnapshot {
+  repeated CheckpointValue checkpoints = 1;
+  repeated StateValueMessage states = 2;
+}
+
+message CheckpointChange {
+  string name = 1;
+  string item_key = 2;
+  map<string, ProgressValueMessage> parts = 3;
+  int64 expected_version = 4;
+}
+
+message StateChange {
+  string name = 1;
+  string item_key = 2;
+  ProgressValueMessage value = 3;
+  int64 expected_version = 4;
+}
+
+// The changed values with the version each was read at; with `end` set, the run's outcome is written in the same transaction and the run is over.
+message AdvanceRequest {
+  repeated CheckpointChange checkpoints = 1;
+  repeated StateChange states = 2;
+  TaskEndMessage end = 3;
+}
+
+message AdvanceReply {
+  bool applied = 1;   // false: a version moved, nothing was written and the run is not finished
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+// steps
+
+message StepKey {
+  string name = 1;
+  string key = 2;
+}
+
+message BeginStepRequest {
+  string name = 1;
+  string key = 2;
+}
+
+message StepRecordMessage {
+  string step_id = 1;
+  int32 attempt = 2;
+  string state = 3;
+  string result_json = 4;
+  string result_payload = 5;   // the id of a payload, empty for none
+  map<string, int64> counts = 6;
+}
+
+message StepRun {
+  string step_id = 1;
+}
+
+message BeginStepReply {
+  oneof outcome {
+    StepRecordMessage reuse = 1;     // it completed in this attempt chain: use the stored result
+    StepRun run = 2;                 // run the body
+    StepRecordMessage in_doubt = 3;  // an earlier attempt began it and nothing says whether it finished
+  }
+}
+
+message RetakeStepReply {
+  StepRun run = 1;
+}
+
+// An in-doubt streaming step whose payload the dead attempt finished writing is completed by adopting it (28b K14); payload_id is empty when there is none.
+message AdoptStepPayloadReply {
+  string payload_id = 1;
+}
+
+message CompleteStepRequest {
+  string name = 1;
+  string key = 2;
+  oneof result {
+    string result_json = 3;
+    string payload_id = 4;           // a streaming step: the payload StepChunk returned
+  }
+  map<string, int64> counts = 5;
+}
+
+message CompleteStepReply {
+}
+
+message FailStepRequest {
+  string name = 1;
+  string key = 2;
+  string error = 3;
+  map<string, int64> counts = 4;
+}
+
+message FailStepReply {
+}
+
+message StepChunkHeader {
+  string name = 1;
+  string key = 2;
+  string media_type = 3;
+}
+
+message StepChunkRequest {
+  oneof part {
+    StepChunkHeader header = 1;   // first
+    bytes data = 2;               // at most 1 MiB
+    bool complete = 3;            // last: the body returned normally; without it the upload is abandoned and no payload is kept
+  }
+}
+
+message StepChunkReply {
+  bool completed = 1;
+  string payload_id = 2;
+  int64 size = 3;
+  string sha256 = 4;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+// payloads
+
+message PayloadRequest {
+  string payload_id = 1;
+}
+
+message PayloadDescription {
+  string payload_id = 1;
+  int64 size = 2;
+  string sha256 = 3;
+  string media_type = 4;
+}
+
+message PayloadChunk {
+  bytes data = 1;   // at most 1 MiB
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+// units
+
+message UnitKey {
+  string name = 1;
+  string key = 2;
+}
+
+enum UnitDecision {
+  UNIT_DECISION_UNSPECIFIED = 0;
+  UNIT_DECISION_RUN = 1;
+  UNIT_DECISION_SKIP = 2;
+}
+
+message BeginUnitReply {
+  UnitDecision decision = 1;
+}
+
+message UnitProgressRequest {
+  string name = 1;
+  string key = 2;
+  map<string, int64> counts = 3;
+}
+
+message UnitProgressReply {
+}
+
+enum UnitOutcome {
+  UNIT_OUTCOME_UNSPECIFIED = 0;
+  UNIT_OUTCOME_COMPLETED = 1;
+  UNIT_OUTCOME_FAILED = 2;
+  UNIT_OUTCOME_SKIPPED = 3;
+}
+
+message EndUnitRequest {
+  string name = 1;
+  string key = 2;
+  UnitOutcome outcome = 3;
+  string error = 4;
+  map<string, int64> counts = 5;
+}
+
+message EndUnitReply {
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+// files, inbox, dead letters
+
+message ClaimFileRequest {
+  string connection = 1;
+  string path = 2;
+  int64 size = 3;
+  int64 modified_unix_ms = 4;
+  string hash = 5;
+}
+
+message ClaimFileReply {
+  bool already_processed = 1;
+}
+
+message CompleteFileRequest {
+  string connection = 1;
+  string hash = 2;
+  string outcome = 3;
+}
+
+message CompleteFileReply {
+}
+
+message TakeInboxRequest {
+}
+
+message TakeInboxReply {
+  bool has_item = 1;
+  string item_id = 2;
+  string source = 3;
+  bool signature_ok = 4;
+  string body_payload_id = 5;   // empty for an empty body
+}
+
+message InboxItemRef {
+  string item_id = 1;
+}
+
+message InboxReply {
+}
+
+message RejectRequest {
+  string source = 1;
+  string error = 2;
+  bytes body = 3;
+  string id = 4;
+}
+
+message RejectReply {
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+// one-way, batched
+
+message LogLine {
+  string level = 1;
+  string message = 2;
+  string item = 3;
+  int64 at_unix_ms = 4;
+}
+
+message LineageRecord {
+  repeated string reads = 1;
+  repeated string writes = 2;
+}
+
+message ReportBatch {
+  map<string, int64> counts = 1;      // added to the run's counts
+  string status = 2;                  // the status line now, empty for no change
+  repeated LogLine logs = 3;
+  repeated LineageRecord lineage = 4;
+}
+
+message ReportReply {
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+// liveness and cancellation
+
+message HeartbeatRequest {
+}
+
+message HeartbeatReply {
+  bool cancel_requested = 1;
+  string cancel_reason = 2;
+}
+
+message WatchCancelRequest {
+}
+
+message CancelNotice {
+  string reason = 1;
+  int64 grace_ms = 2;
+}
