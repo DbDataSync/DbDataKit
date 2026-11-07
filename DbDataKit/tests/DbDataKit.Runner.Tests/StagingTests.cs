@@ -51,7 +51,7 @@ public sealed class StagingTests
         public ProgressStore Store(string task = "orders") => new(Database, new ProgressKey(Name, Prod, task));
 
         /// <summary>An instance of the group (live: its heartbeat is now) and the staging follower of it.</summary>
-        public (Guid Id, StagingFollower Follower) Instance(Func<BuiltAgainst, string?>? contracts = null)
+        public (Guid Id, StagingFollower Follower) Instance(Func<PackageManifest, string?>? contracts = null)
         {
             var id = Instances.Register("dbdatarunner", "host-" + Guid.NewGuid().ToString("N")[..4], "1.0");
             return (id, new StagingFollower(Database, Publisher, Cache, Activator, new StagingOptions { Instance = () => id, Contracts = contracts }));
@@ -217,7 +217,7 @@ public sealed class StagingTests
     public async Task A_package_built_against_another_contract_fails_staging_with_the_republish_message(string engine)
     {
         using var rig = new Rig(engine);
-        var (id, follower) = rig.Instance(built => built.Dotnet == "8.0" ? "the package was built against .NET 8.0 and this runner runs .NET 10.0; build it for .NET 10.0 and publish it again." : null);
+        var (id, follower) = rig.Instance(m => m.BuiltAgainst.Dotnet == "8.0" ? "the package was built against .NET 8.0 and this runner runs .NET 10.0; build it for .NET 10.0 and publish it again." : null);
         rig.Publish(Package(Version1), PublishMode.Serve);
         var two = rig.Publish(Package(Version2Keeps, built: new BuiltAgainst("8.0", null, "dbdatakit.runner.v1")), PublishMode.Stage);
 

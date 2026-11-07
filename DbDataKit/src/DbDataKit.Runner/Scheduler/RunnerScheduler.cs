@@ -34,6 +34,7 @@ public sealed partial class RunnerScheduler
     private readonly ITaskRunner _runner;
     private readonly ArtifactCache _cache;
     private readonly IVersionSource _versions;
+    private readonly SharedViewCache _runtimeViews;
     private readonly RunnerSchedulerOptions _options;
     private readonly TimeProvider _time;
     private readonly ModuleWorkQueueStore _queue;
@@ -59,6 +60,7 @@ public sealed partial class RunnerScheduler
         _runner = runner ?? throw new ArgumentNullException(nameof(runner));
         _cache = cache ?? throw new ArgumentNullException(nameof(cache));
         _versions = versions ?? throw new ArgumentNullException(nameof(versions));
+        _runtimeViews = new SharedViewCache(cache);
         _options = options ?? throw new ArgumentNullException(nameof(options));
         options.Validate();
         _time = database.Time;
@@ -428,6 +430,26 @@ public sealed partial class RunnerScheduler
             return;
         }
 
+        // a definition run by a runtime package (plan 28c E04): the runtime's active version in this channel, inside the definition's range, at the start of the run
+        ResolvedRuntime? runtime = null;
+        if (content.Manifest.Launch.Runtime is { } reference)
+        {
+            try
+            {
+                runtime = await _versions.ResolveRuntimeAsync(reference, taskRef.Channel, taskRef.Package, _stop.Token).ConfigureAwait(false);
+            }
+            catch (RuntimeUnavailableException ex)
+            {
+                FailWithoutRun(item, payload, taskRef, version, ex.Message, temporary: false, task);
+                return;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                FailWithoutRun(item, payload, taskRef, version, $"The runtime '{reference.Name}' of '{taskRef.Package}' could not be read: {ex.Message}", IsTemporary(ex), task);
+                return;
+            }
+        }
+
         var owner = OwnerOf(taskRef);
         var lockTaken = false;
         if (!task.AllowOverlap)
@@ -488,6 +510,30 @@ public sealed partial class RunnerScheduler
 
             using (materialized)
             {
+                SharedView? runtimeView = null;
+                if (runtime is not null)
+                {
+                    try
+                    {
+                        runtimeView = await _runtimeViews.AcquireAsync($"{runtime.Package}@{runtime.Version}", runtime.Content.Files, runCts.Token).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        await StopBeating(beat, beatCts).ConfigureAwait(false);
+                        beat = null;
+                        FailWithoutRun(item, payload, taskRef, version, $"The runtime '{runtime.Package}' (version {runtime.RuntimeVersion}) could not be materialized: {ex.Message}", IsTemporary(ex), task);
+                        return;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        await StopBeating(beat, beatCts).ConfigureAwait(false);
+                        beat = null;
+                        Finish(item, running, TaskEndState.Stopped, stoppedByLoop: _stop.IsCancellationRequested && !running.CancelRequested);
+                        return;
+                    }
+                }
+
+                using var runtimeLease = runtimeView;
                 if (!payload.Started)
                 {
                     payload = payload with { Version = version, Started = true };
@@ -503,7 +549,8 @@ public sealed partial class RunnerScheduler
                     Task = taskRef,
                     PackageDirectory = materialized.Directory,
                     PackageVersion = version,
-                    Launch = content.Manifest.Launch,
+                    Launch = runtime is null ? content.Manifest.Launch : new PackageLaunch(LaunchKind.Executable, null, runtime.Content.Manifest.Launch.Command, [.. runtime.Content.Manifest.Launch.ArgList, .. content.Manifest.Launch.ArgList]),
+                    RuntimeDirectory = runtimeView?.Directory,
                     Entry = task.Entry,
                     RunId = item.RunId,
                     Chain = payload.Chain,

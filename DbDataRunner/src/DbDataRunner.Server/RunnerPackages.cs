@@ -51,7 +51,7 @@ public static class RunnerPackages
                 return $"the launch command '{command}' is not among the package's files.";
         }
 
-        return RunnerContracts.Check(manifest.BuiltAgainst);
+        return RunnerContracts.Check(manifest);
     }
 
     /// <summary>

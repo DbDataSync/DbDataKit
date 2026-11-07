@@ -169,7 +169,7 @@ public sealed class PackageActivator
         }
         finally
         {
-            _holds.Release(Kind, name, channel, request.Actor);
+            ReleaseHolds(name, channel, request.Actor);
         }
     }
 
@@ -196,7 +196,7 @@ public sealed class PackageActivator
         }
         finally
         {
-            _holds.Release(Kind, name, channel, request.Actor);
+            ReleaseHolds(name, channel, request.Actor);
         }
     }
 
@@ -238,7 +238,7 @@ public sealed class PackageActivator
         }
         finally
         {
-            _holds.Release(Kind, name, channel, request.Actor);
+            ReleaseHolds(name, channel, request.Actor);
         }
     }
 
@@ -294,22 +294,54 @@ public sealed class PackageActivator
     // ---- waiting for runs
 
     /// <summary>
-    /// Holds new runs of the package and waits until none of its tasks has a run in flight (an item claimed or running), or the longest wait (<see cref="ActivationOptions.MaxWait"/>) ran out. The names of the tasks still running
-    /// then; empty when the package is idle (and the hold stays until the caller releases it).
+    /// The packages whose runs are held and waited for when <paramref name="name"/> changes in <paramref name="channel"/>: the package itself, and, when it is a runtime package (plan 28c E04), every package that has it
+    /// active and names it in <c>launch.runtime</c>: a run in flight finishes on the runtime it started with, and nothing of the dependents starts until the pointer has moved.
+    /// </summary>
+    private IReadOnlyList<string> Affected(string name, string channel)
+    {
+        var affected = new List<string> { name };
+        var isRuntime = false;
+        foreach (var version in new[] { _publisher.Head(Kind, name, channel)?.Active, _publisher.Head(Kind, name, channel)?.Staged })
+            if (version is { } v && _store.Get(Kind, name, v)?.Content is { } text && PackageManifestReader.Load(text, $"{Kind}/{name}@{v}") is { Ok: true, Manifest: { IsRuntime: true } })
+                isRuntime = true;
+        if (!isRuntime) return affected;
+        foreach (var other in _publisher.Names(Kind))
+        {
+            if (other == name || _publisher.Head(Kind, other, channel)?.Active is not { } active) continue;
+            if (_store.Get(Kind, other, active)?.Content is { } text && PackageManifestReader.Load(text, $"{Kind}/{other}@{active}") is { Ok: true, Manifest.Launch.Runtime: { } reference } && reference.Name == name)
+                affected.Add(other);
+        }
+
+        return affected;
+    }
+
+    private void ReleaseHolds(string name, string channel, string actor)
+    {
+        foreach (var package in Affected(name, channel)) _holds.Release(Kind, package, channel, actor);
+    }
+
+    /// <summary>
+    /// Holds new runs of the package (and of the definitions that run on it, when it is a runtime) and waits until none of their tasks has a run in flight (an item claimed or running), or the longest wait
+    /// (<see cref="ActivationOptions.MaxWait"/>) ran out. The names of the tasks still running then (<c>package/task</c> for a dependent); empty when idle (and the holds stay until the caller releases them).
     /// </summary>
     private async Task<IReadOnlyList<string>> WaitForRunsAsync(string name, string channel, string actor, CancellationToken ct)
     {
         var deadline = _state.Time.GetUtcNow() + _options.MaxWait;
-        var owner = $"{name}/{channel}";
+        var affected = Affected(name, channel);
         while (true)
         {
-            _holds.Hold(Kind, name, channel, actor, _options.HoldLease);
-            var busy = _queue.ListInFlight(owner).Where(w => w.Item.Kind == RunnerScheduler.Kind && w.Item.Status is WorkItemStatus.Claimed or WorkItemStatus.Running)
-                .Select(w => w.Item.Subject).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+            var busy = new List<string>();
+            foreach (var package in affected)
+            {
+                _holds.Hold(Kind, package, channel, actor, _options.HoldLease);
+                busy.AddRange(_queue.ListInFlight($"{package}/{channel}").Where(w => w.Item.Kind == RunnerScheduler.Kind && w.Item.Status is WorkItemStatus.Claimed or WorkItemStatus.Running)
+                    .Select(w => package == name ? w.Item.Subject : $"{package}/{w.Item.Subject}").Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal));
+            }
+
             if (busy.Count == 0) return [];
             if (_state.Time.GetUtcNow() >= deadline)
             {
-                _holds.Release(Kind, name, channel, actor);
+                foreach (var package in affected) _holds.Release(Kind, package, channel, actor);
                 _options.Logger?.LogWarning("The activation of {Package} on {Channel} gave up waiting after {Wait} for the runs of {Tasks}; it is tried again.", name, channel, _options.MaxWait, string.Join(", ", busy));
                 return busy;
             }

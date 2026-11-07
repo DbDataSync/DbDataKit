@@ -35,6 +35,8 @@ public sealed class PackageManifestException(IReadOnlyList<ConfigDiagnostic> dia
 /// name: orders-sync
 /// launch: { kind: assembly, assembly: bin/Orders.dll }          # or { kind: executable, command: bin/orders, args: [--quiet] }
 /// built_against: { dotnet: "10.0", kit: "1", protocol: dbdatakit.runner.v1 }
+/// # a definition package is run by a runtime package: launch: { runtime: { name: dbdatabuild-runtime, range: "2.x" } }
+/// # a runtime package: runtime: true, version: 2.1.0, an executable launch and no tasks
 /// tasks:
 ///   - name: extract
 ///     entry: { type: Orders.Tasks.Extract, method: Run }
@@ -255,14 +257,16 @@ public static class PackageManifestReader
 
             if (!Format(map)) return null;
 
-            Keys(map, "", "schema", "name", "description", "launch", "built_against", "tasks");
+            Keys(map, "", "schema", "name", "description", "launch", "built_against", "tasks", PackageManifest.RuntimeKey, "version");
             var name = Text(map, "name", "", required: true);
             var description = Text(map, "description", "", required: false);
+            var isRuntime = Flag(map, PackageManifest.RuntimeKey, "") ?? false;
+            var version = Text(map, "version", "", required: false);
             var launch = Launch(map);
             var built = BuiltAgainst(map);
-            var tasks = Tasks(map);
+            var tasks = isRuntime && map.Get("tasks") is null ? [] : Tasks(map);
             if (name is null) return null;
-            return new PackageManifest(name, description, launch ?? new PackageLaunch(LaunchKind.Assembly), built, tasks);
+            return new PackageManifest(name, description, launch ?? new PackageLaunch(LaunchKind.Assembly), built, tasks, isRuntime, version);
         }
 
         /// <summary>The first key has to be <c>schema: package/1</c>; anything else is refused naming the file and what was found.</summary>
@@ -329,22 +333,39 @@ public static class PackageManifestReader
         {
             if (Child(root, "launch", "") is null) { Report(SharedCodes.MissingKey, "launch", root, "required key is missing: say how the package starts, `launch: {kind: assembly, assembly: bin/Orders.dll}`.", "Add `launch:`."); return null; }
             if (Map(root.Get("launch"), "launch", "{kind: assembly, assembly: bin/Orders.dll} or {kind: executable, command: bin/orders}") is not { } map) return null;
+            var runtime = map.Get("runtime") is null ? null : RuntimeRef(map);
+            if (runtime is not null && map.Get("kind") is null)
+            {
+                Keys(map, "launch", "runtime", "args");
+                return new PackageLaunch(LaunchKind.Executable, null, null, Strings(map, "args", "launch", "[--quiet]") is { Count: > 0 } ra ? ra : null, runtime);
+            }
+
             var kind = Choice(map, "kind", "launch", [("assembly", LaunchKind.Assembly), ("executable", LaunchKind.Executable)]);
             if (kind is null)
             {
                 if (map.Get("kind") is null) Report(SharedCodes.MissingKey, "launch.kind", map, "required key is missing: `assembly` or `executable`.", "Add `kind: assembly`.");
-                Keys(map, "launch", "kind", "assembly", "command", "args");
+                Keys(map, "launch", "kind", "assembly", "command", "args", "runtime");
                 return null;
             }
 
             if (kind == LaunchKind.Assembly)
             {
-                Keys(map, "launch", "kind", "assembly", "command", "args");
-                return new PackageLaunch(LaunchKind.Assembly, Text(map, "assembly", "launch", required: false), Text(map, "command", "launch", required: false), Strings(map, "args", "launch", "[--quiet]") is { Count: > 0 } a ? a : null);
+                Keys(map, "launch", "kind", "assembly", "command", "args", "runtime");
+                return new PackageLaunch(LaunchKind.Assembly, Text(map, "assembly", "launch", required: false), Text(map, "command", "launch", required: false), Strings(map, "args", "launch", "[--quiet]") is { Count: > 0 } a ? a : null, runtime);
             }
 
-            Keys(map, "launch", "kind", "command", "args", "assembly");
-            return new PackageLaunch(LaunchKind.Executable, Text(map, "assembly", "launch", required: false), Text(map, "command", "launch", required: false), Strings(map, "args", "launch", "[--quiet]") is { Count: > 0 } args ? args : null);
+            Keys(map, "launch", "kind", "command", "args", "assembly", "runtime");
+            return new PackageLaunch(LaunchKind.Executable, Text(map, "assembly", "launch", required: false), Text(map, "command", "launch", required: false), Strings(map, "args", "launch", "[--quiet]") is { Count: > 0 } args ? args : null, runtime);
+        }
+
+        /// <summary><c>launch.runtime: { name: dbdatabuild-runtime, range: "2.x" }</c>: the runtime package that runs a definition (plan 28c E04).</summary>
+        private RuntimeReference? RuntimeRef(YamlMapping launch)
+        {
+            if (Map(Child(launch, "runtime", "launch"), "launch.runtime", "{name: dbdatabuild-runtime, range: \"2.x\"}") is not { } map) return null;
+            Keys(map, "launch.runtime", "name", "range");
+            var name = Text(map, "name", "launch.runtime", required: true);
+            var range = Text(map, "range", "launch.runtime", required: true);
+            return name is null || range is null ? null : new RuntimeReference(name, range);
         }
 
         private BuiltAgainst BuiltAgainst(YamlMapping root)

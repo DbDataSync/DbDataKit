@@ -13,12 +13,15 @@ public enum LaunchKind
 
 /// <summary>
 /// How a package is started. <see cref="Assembly"/> (a path inside the package) for <see cref="LaunchKind.Assembly"/>; <see cref="Command"/> (a path inside the package, or a program on the runner) and
-/// <see cref="Args"/> for <see cref="LaunchKind.Executable"/>.
+/// <see cref="Args"/> for <see cref="LaunchKind.Executable"/>. A definition package names the runtime package that runs it (<see cref="Runtime"/>, <c>launch.runtime</c>, plan 28c E04) instead of an assembly or command of its own.
 /// </summary>
-public sealed record PackageLaunch(LaunchKind Kind, string? Assembly = null, string? Command = null, IReadOnlyList<string>? Args = null)
+public sealed record PackageLaunch(LaunchKind Kind, string? Assembly = null, string? Command = null, IReadOnlyList<string>? Args = null, RuntimeReference? Runtime = null)
 {
     public IReadOnlyList<string> ArgList => Args ?? [];
 }
+
+/// <summary>A reference from a definition package to a runtime package: the runtime's name and the versions of it the definition accepts (<see cref="VersionRange"/>: <c>2.x</c>, <c>&gt;=2.1 &lt;3</c>, <c>2.1.4</c>).</summary>
+public sealed record RuntimeReference(string Name, string Range);
 
 /// <summary>The contracts a package was built against, so staging can refuse one a runner cannot serve (plan 28a DR4). Versions are as the contract writes them: <c>10.0</c>, <c>1</c>, <c>dbdatakit.runner.v1</c>.</summary>
 /// <param name="Dotnet">The .NET runtime (<c>10.0</c>); required for an assembly package.</param>
@@ -145,8 +148,17 @@ public sealed record PackageTask(
 }
 
 /// <summary>A package manifest, <c>package/1</c>: what the package is, how it starts, what it was built against and the tasks it holds.</summary>
-public sealed record PackageManifest(string Name, string? Description, PackageLaunch Launch, BuiltAgainst BuiltAgainst, IReadOnlyList<PackageTask> Tasks)
+public sealed record PackageManifest(string Name, string? Description, PackageLaunch Launch, BuiltAgainst BuiltAgainst, IReadOnlyList<PackageTask> Tasks, bool IsRuntime = false, string? Version = null)
 {
+    /// <summary>The key (<c>runtime: true</c>) of a runtime package: no tasks of its own, a <see cref="Version"/>, and a launch that is an executable (plan 28c E04).</summary>
+    public const string RuntimeKey = "runtime";
+
+    /// <summary>The key of a definition package's reference to its runtime, <c>launch.runtime</c>.</summary>
+    public const string LaunchRuntimeKey = "launch.runtime";
+
+    /// <summary>The keys of <c>package/1</c> added after the first runners that this manifest uses; a runner that does not know one refuses the manifest naming it.</summary>
+    public IReadOnlyList<string> NewerKeys => [.. (Launch.Runtime is null ? [] : new[] { LaunchRuntimeKey }), .. (IsRuntime ? new[] { RuntimeKey } : [])];
+
     /// <summary>The format id every manifest starts with, as <c>schema: package/1</c>.</summary>
     public const string FormatId = "package/1";
 
