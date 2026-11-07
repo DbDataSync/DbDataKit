@@ -258,4 +258,55 @@ public sealed class ProgressStoreTests : IDisposable
         Assert.Null(store.TakeNext(Guid.NewGuid()));
         Assert.Contains(first, taken);
     }
+
+    [Theory]
+    [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
+    public void An_item_a_run_took_and_did_not_finish_is_released_to_the_next_take(string engine)
+    {
+        var store = new ProgressStore(Open(engine), Key);
+        var item = store.Receive("github", signatureOk: true);
+        var run = Guid.NewGuid();
+        Assert.Equal(item, store.TakeNext(run)!.Id);
+
+        Assert.False(store.ReleaseInboxItem(item, Guid.NewGuid()));     // another run does not hold it
+        Assert.Equal(0, store.InboxWaiting());
+        Assert.True(store.ReleaseInboxItem(item, run));
+        Assert.Equal(1, store.InboxWaiting());
+        Assert.Equal(item, store.TakeNext(Guid.NewGuid())!.Id);
+    }
+
+    [Theory]
+    [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
+    public void Checkpoints_and_state_commit_together_with_the_runs_outcome_or_not_at_all(string engine)
+    {
+        var database = Open(engine);
+        var store = new ProgressStore(database, Key);
+        var runs = new RunStore(database, "runner");
+        var run = runs.Start("sync-orders");
+        Assert.True(store.Advance("a", Parts(("value", ProgressValue.OfInt(1))), 0));
+
+        // one of three is stale: nothing of the commit is written, and the run is not finished
+        var refused = store.Commit(
+            [new CheckpointWrite("a", "", Parts(("value", ProgressValue.OfInt(2))), 1), new CheckpointWrite("b", "k1", Parts(("value", ProgressValue.OfInt(5))), 0)],
+            [new StateWrite("cursor", "", ProgressValue.OfText("x"), 3)], run,
+            (connection, transaction) => runs.Finish(run, Monitoring.RunOutcome.Succeeded, connection: connection, transaction: transaction));
+        Assert.False(refused);
+        Assert.Equal(1, store.GetCheckpoint("a")!.Parts["value"].AsInt);
+        Assert.Null(store.GetCheckpoint("b", "k1"));
+        Assert.Null(store.GetState("cursor"));
+        Assert.Equal(Monitoring.RunOutcome.Running, runs.Get(run)!.Run.Outcome);
+
+        var accepted = store.Commit(
+            [new CheckpointWrite("a", "", Parts(("value", ProgressValue.OfInt(2))), 1), new CheckpointWrite("b", "k1", Parts(("value", ProgressValue.OfInt(5))), 0)],
+            [new StateWrite("cursor", "", ProgressValue.OfText("x"), 0)], run,
+            (connection, transaction) => runs.Finish(run, Monitoring.RunOutcome.Succeeded, connection: connection, transaction: transaction));
+        Assert.True(accepted);
+        Assert.Equal((2, 2L), (store.GetCheckpoint("a")!.Parts["value"].AsInt, store.GetCheckpoint("a")!.Version));
+        Assert.Equal(5, store.GetCheckpoint("b", "k1")!.Parts["value"].AsInt);
+        Assert.Equal("x", store.GetState("cursor")!.AsText);
+        Assert.Equal(Monitoring.RunOutcome.Succeeded, runs.Get(run)!.Run.Outcome);
+        Assert.Equal(run.ToString("D"), store.History("a").First().RunId);
+
+        Assert.Throws<ArgumentException>(() => store.Commit([new CheckpointWrite("c", "", new Dictionary<string, ProgressValue>(), 0)], []));
+    }
 }
