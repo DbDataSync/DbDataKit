@@ -98,6 +98,7 @@ public sealed class StateSnapshotVerbTests : IDisposable
         Environment.SetEnvironmentVariable(StateVerbDatabases.PasswordVariable, databases.Password);
         OpenState(Dir("source"), null).OpenConnection().Dispose();
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        Directory.CreateDirectory(ProxyConfigFile.DirectoryIn(Dir("source")));   // an installed proxy has its config folder (service install writes the starter file); move's preflight wants the folder
 
         var moved = await Run("state", "move", "--to-engine", engine, "--to-connection", target, "--yes", "--repo", Dir("source"));
 
