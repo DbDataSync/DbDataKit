@@ -46,6 +46,15 @@ public static class RunsModule
             );
             CREATE INDEX {index:run_log_by_run} ON {table:run_log}(run_id, id);
             """,
+            """
+            -- What the runner (plan 28) records about a run: the package, the version of it that ran, the channel it ran on and which attempt this was (1 is the first). Null for a run of a product
+            -- that has no packages, and for every run written before this migration.
+            ALTER TABLE {table:run} {{addcolumn}} package {{key}} NULL;
+            ALTER TABLE {table:run} {{addcolumn}} package_version {{key}} NULL;
+            ALTER TABLE {table:run} {{addcolumn}} channel {{key}} NULL;
+            ALTER TABLE {table:run} {{addcolumn}} attempt {{int}} NULL;
+            CREATE INDEX {index:run_by_package} ON {table:run}(package, channel, started_at);
+            """,
         ],
         retention:
         [
@@ -56,14 +65,18 @@ public static class RunsModule
 }
 
 /// <summary>A run as stored: which service ran it, and the run itself.</summary>
-public sealed record StoredRun(Guid Id, string Service, RunRecord Run);
+/// <param name="Package">The package a runner ran, or null for a run that had none.</param>
+/// <param name="PackageVersion">The version of the package that ran.</param>
+/// <param name="Channel">The channel it ran on.</param>
+/// <param name="Attempt">Which attempt of the work item this run was (1 is the first), or null when not recorded.</param>
+public sealed record StoredRun(Guid Id, string Service, RunRecord Run, string? Package = null, string? PackageVersion = null, string? Channel = null, int? Attempt = null);
 
 /// <summary>One line of a run's log.</summary>
 public sealed record RunLogLine(long Id, Guid RunId, DateTimeOffset At, string Level, string? Item, string Message);
 
 /// <summary>Which runs to read, newest first; every field narrows.</summary>
 /// <param name="StartedBefore">Page by passing the <c>Started</c> of the last run seen.</param>
-public sealed record RunQuery(string? Service = null, string? JobId = null, RunOutcome? Outcome = null, DateTimeOffset? StartedSince = null, DateTimeOffset? StartedBefore = null, int Limit = 100);
+public sealed record RunQuery(string? Service = null, string? JobId = null, RunOutcome? Outcome = null, DateTimeOffset? StartedSince = null, DateTimeOffset? StartedBefore = null, int Limit = 100, string? Package = null, string? Channel = null);
 
 /// <summary>
 /// Writes and reads runs and their logs for one service (<paramref name="service"/> is recorded on every run it starts). A service that records a run in the same transaction as another
@@ -72,16 +85,19 @@ public sealed record RunQuery(string? Service = null, string? JobId = null, RunO
 public sealed class RunStore(StateDatabase database, string service)
 {
     private const string Module = RunsModule.Name;
-    private const string RunColumns = "id, service, job_id, started_at, finished_at, outcome, rows_moved, failed_item, failure_kind, failure_message";
+    private const string RunColumns = "id, service, job_id, started_at, finished_at, outcome, rows_moved, failed_item, failure_kind, failure_message, package, package_version, channel, attempt";
 
     /// <summary>Records that a run began. <paramref name="runId"/> is the queue's run id when the run came from the work queue, so the two records match; a new id otherwise.</summary>
-    public Guid Start(string jobId, Guid? runId = null, DateTimeOffset? at = null, DbConnection? connection = null, DbTransaction? transaction = null)
+    public Guid Start(string jobId, Guid? runId = null, DateTimeOffset? at = null, DbConnection? connection = null, DbTransaction? transaction = null,
+        string? package = null, string? packageVersion = null, string? channel = null, int? attempt = null)
     {
         var id = runId ?? database.NewId();
         Write(connection, c =>
         {
-            using var cmd = database.Command(Module, c, transaction, "INSERT INTO {table:run} (id, service, job_id, started_at, outcome) VALUES ($id, $service, $job, $at, $outcome);");
-            cmd.Bind(database, "id", id).Bind(database, "service", service).Bind(database, "job", jobId).Bind(database, "at", at ?? database.Time.GetUtcNow()).Bind(database, "outcome", RunOutcome.Running.ToString());
+            using var cmd = database.Command(Module, c, transaction, "INSERT INTO {table:run} (id, service, job_id, started_at, outcome, package, package_version, channel, attempt) VALUES ($id, $service, $job, $at, $outcome, $package, $package_version, $channel, $attempt);");
+            cmd.Bind(database, "id", id).Bind(database, "service", service).Bind(database, "job", jobId).Bind(database, "at", at ?? database.Time.GetUtcNow()).Bind(database, "outcome", RunOutcome.Running.ToString())
+                .Bind(database, "package", package, System.Data.DbType.String).Bind(database, "package_version", packageVersion, System.Data.DbType.String)
+                .Bind(database, "channel", channel, System.Data.DbType.String).Bind(database, "attempt", attempt, System.Data.DbType.Int32);
             cmd.ExecuteNonQuery();
         });
         return id;
@@ -166,6 +182,8 @@ public sealed class RunStore(StateDatabase database, string service)
             if (query.Outcome is not null) where.Append(" AND outcome = $outcome");
             if (query.StartedSince is not null) where.Append(" AND started_at >= $since");
             if (query.StartedBefore is not null) where.Append(" AND started_at < $before");
+            if (query.Package is not null) where.Append(" AND package = $package");
+            if (query.Channel is not null) where.Append(" AND channel = $channel");
 
             using var connection = database.OpenConnection();
             using var cmd = database.Command(Module, connection, $"SELECT {RunColumns} FROM {{table:run}} WHERE {where} ORDER BY started_at DESC, id DESC {database.Limit("limit")};");
@@ -175,6 +193,8 @@ public sealed class RunStore(StateDatabase database, string service)
             if (query.Outcome is { } o) cmd.Bind(database, "outcome", o.ToString());
             if (query.StartedSince is { } since) cmd.Bind(database, "since", since);
             if (query.StartedBefore is { } before) cmd.Bind(database, "before", before);
+            if (query.Package is { } package) cmd.Bind(database, "package", package);
+            if (query.Channel is { } channel) cmd.Bind(database, "channel", channel);
             cmd.Bind(database, "limit", (long)Math.Clamp(query.Limit, 1, 1000));
 
             using var reader = cmd.ExecuteReader();
@@ -185,7 +205,7 @@ public sealed class RunStore(StateDatabase database, string service)
                 var id = reader.Uuid(0);
                 var failure = Text(8) is { } kind ? new RunFailure(kind, Text(9) ?? "") : null;
                 runs.Add(new StoredRun(id, reader.GetString(1), new RunRecord(reader.GetString(2), id.ToString("D"), reader.Time(3), reader.NullableTime(4),
-                    Enum.Parse<RunOutcome>(reader.GetString(5)), reader.NullableInt64(6), Text(7), failure)));
+                    Enum.Parse<RunOutcome>(reader.GetString(5)), reader.NullableInt64(6), Text(7), failure), Text(10), Text(11), Text(12), reader.NullableInt32(13)));
             }
 
             return (IReadOnlyList<StoredRun>)runs;
