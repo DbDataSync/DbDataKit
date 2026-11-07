@@ -293,8 +293,9 @@ public sealed class StagingServerTests
         Seed(h);
         Assert.Equal(2L, Store(h).GetCheckpoint("seen")!.Parts["value"].AsInt);
 
-        // a run is in flight when the new version is staged and confirmed
-        Assert.Equal(HttpStatusCode.Accepted, (await h.PostAsync($"/api/v1/tasks/sample/{Dev}/lingers/run")).Status);
+        // a run is in flight when the new version is staged and confirmed; it ends when this test creates the release file, not after a time (a stalled runner would end it before the test looked)
+        var release = Path.Combine(Directory.CreateTempSubdirectory("dbdr-release-").FullName, "release");
+        Assert.Equal(HttpStatusCode.Accepted, (await h.PostAsync($"/api/v1/tasks/sample/{Dev}/lingers/run", body: new { inputs = new { release_file = release } })).Status);
         await h.WaitAsync(async () => (await h.RunsAsync($"?package=sample&channel=dev&task=lingers&outcome=running")).Count == 1 ? "running" : null, "lingers to run");
         var staged = Publish(h, ManifestText(Tally(V2Reset()), SamplePackage.Task("lingers")));
         var described = await DescribeWhenAsync(h, d => Instances(d, staged.Version).Any(i => (string)i!["state"]! == "ready"), "the version to be ready");
@@ -310,10 +311,13 @@ public sealed class StagingServerTests
         Assert.Equal(1, Active((await h.GetAsync("/api/v1/definitions/integration/sample")).Body!));
         Assert.Equal(2L, Store(h).GetCheckpoint("seen")!.Parts["value"].AsInt);
 
-        // the run in flight ends on the version it started with; then the migration applies, once, and the held run starts on the new version
+        // the run in flight ends (the test lets it) on the version it started with; then the migration applies, once, and the held run starts on the new version
+        File.WriteAllText(release, "go");
         var (status, _) = await activation;
         Assert.Equal(HttpStatusCode.OK, status);
-        var lingers = (await h.RunsAsync("?package=sample&channel=dev&task=lingers")).Single()!;
+        var lingerRuns = await h.RunsAsync("?package=sample&channel=dev&task=lingers");
+        Assert.True(lingerRuns.Count == 1, $"the run of lingers is recorded {lingerRuns.Count} times: {lingerRuns.ToJsonString()}\n{string.Join('\n', h.Log)}");
+        var lingers = lingerRuns.Single()!;
         Assert.Equal("succeeded", (string)lingers["outcome"]!);
         Assert.Equal("1", (string)lingers["package_version"]!);
         await h.WaitAsync(async () => await TalliesAsync(h) == 3 ? "ran" : null, "the held run to start once the version moved");
@@ -323,6 +327,7 @@ public sealed class StagingServerTests
         Assert.Single((await h.GetAsync("/api/v1/definitions/integration/sample")).Body!["events"]!.AsArray(), e => (string)e!["action"]! == "activate");
         var tags = Store(h).History("extra", limit: 100).Select(c => c.Actor).Where(a => a is not null && a.StartsWith("migration:", StringComparison.Ordinal)).Distinct().ToList();
         Assert.Single(tags);                                                                         // applied once
+        Directory.Delete(Path.GetDirectoryName(release)!, recursive: true);
     }
 
     [Theory, MemberData(nameof(ServerEngines))]

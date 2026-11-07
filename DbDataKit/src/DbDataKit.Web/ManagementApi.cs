@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.AspNetCore.Builder;
 
 namespace DbDataKit.Web.Trust;
@@ -53,10 +54,22 @@ public sealed class IncompatibleServerException(string message, int? serverVersi
 /// </summary>
 public sealed class ManagementVersionHandler(HttpMessageHandler inner, int own = ManagementApi.Version, Action<int>? observed = null) : DelegatingHandler(inner)
 {
+    /// <summary>How long the handler waits before it sends a request again that the server answered with its own 408 (no version in it).</summary>
+    public TimeSpan RetryAfterRequestTimeout { get; init; } = TimeSpan.FromMilliseconds(250);
+
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         request.Headers.TryAddWithoutValidation(ManagementApi.VersionHeader, own.ToString(System.Globalization.CultureInfo.InvariantCulture));
         var response = await base.SendAsync(request, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.RequestTimeout && !response.Headers.Contains(ManagementApi.VersionHeader))
+        {
+            // Kestrel itself answers 408 when the headers of a request arrive later than its header timeout (the server process stalled, or a loaded machine was slow): that answer is written before any
+            // middleware runs, so it cannot carry the version, and the server never started the request. Send it once more instead of calling a busy server incompatible.
+            response.Dispose();
+            await Task.Delay(RetryAfterRequestTimeout, cancellationToken);
+            try { response = await base.SendAsync(request, cancellationToken); }
+            catch (InvalidOperationException) { throw new HttpRequestException($"{request.RequestUri?.Authority} timed out reading the request, and the request could not be sent again."); }
+        }
         if (!response.Headers.TryGetValues(ManagementApi.VersionHeader, out var values) || !int.TryParse(values.FirstOrDefault(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var version))
         {
             response.Dispose();
