@@ -7,8 +7,12 @@ namespace DbDataKit.State;
 /// <param name="Schema">The schema, or null where there is none (SQLite, or an empty setting).</param>
 /// <param name="Prefix">Put before each table and index name.</param>
 /// <param name="Tables">Each table's name within the module to its qualified, rendered name.</param>
-public sealed record StateNamespace(StateModule Module, string? ScopeName, string? Schema, string Prefix, IReadOnlyDictionary<string, string> Tables)
+/// <param name="File">SQLite only: the file this namespace is in when it is not the main one; <paramref name="Schema"/> is then the alias it is attached as.</param>
+public sealed record StateNamespace(StateModule Module, string? ScopeName, string? Schema, string Prefix, IReadOnlyDictionary<string, string> Tables, string? File = null)
 {
+    /// <summary>What the registry records as the namespace's place: the schema, and for a namespace in a file of its own the file too, so moving a module to another file is noticed rather than starting it again empty.</summary>
+    public string Placement => (Schema ?? "") + (File is null ? "" : "=" + File);
+
     /// <summary>The module's name and, where there is one, its scope, the way a message or the registry says it.</summary>
     public string Key => ScopeName is null ? Module.Name : $"{Module.Name}/{ScopeName}";
 }
@@ -80,13 +84,30 @@ public sealed partial class StateLayout
         {
             var owner = match.Groups["module"].Success ? match.Groups["module"].Value : module
                 ?? throw new InvalidOperationException($"'{match.Value}' does not say which module's table it means; write {{table:module.{match.Groups["table"].Value}}}.");
-            return Table(owner, match.Groups["table"].Value);
+            var name = Table(owner, match.Groups["table"].Value);
+            // SQLite: in a file of its own a table is schema.name, except where the grammar wants the bare name (the table an index is on, the table a foreign key refers to)
+            return Namespace(owner).File is not null && FollowsKeyword(text, match.Index, "ON", "REFERENCES") ? name[(name.LastIndexOf('.') + 1)..] : name;
         });
         return IndexToken.Replace(rendered, match =>
         {
             var owner = module ?? throw new InvalidOperationException($"'{match.Value}' is only meaningful inside a module's own statements.");
-            return Namespace(owner).Prefix + match.Groups["index"].Value;
+            var ns = Namespace(owner);
+            // an index of a table in an attached SQLite file is named schema.index
+            return (ns.File is not null ? ns.Schema + "." : "") + ns.Prefix + match.Groups["index"].Value;
         });
+    }
+
+    /// <summary>Whether the text just before <paramref name="index"/> ends in one of the keywords (case-insensitively), ignoring white space.</summary>
+    private static bool FollowsKeyword(string text, int index, params string[] keywords)
+    {
+        var before = text[..index].TrimEnd();
+        foreach (var keyword in keywords)
+        {
+            if (before.EndsWith(keyword, StringComparison.OrdinalIgnoreCase) && (before.Length == keyword.Length || !char.IsLetterOrDigit(before[before.Length - keyword.Length - 1])))
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -123,6 +144,16 @@ public sealed partial class StateLayout
             var schema = NullIfEmpty(RenderSetting(schemaPattern, $"dbdatakit_{module.Name}{(scopeName is null ? "" : "_" + scopeName)}", module.Name, scopeName));
             var prefix = RenderSetting(prefixPattern, sqlite ? $"dbdatakit_{module.Name}_{(scopeName is null ? "" : scopeName + "_")}" : "", module.Name, scopeName) ?? "";
             if (sqlite) schema = null;
+            var file = NullIfEmpty(moduleSetting.File);
+            if (file is not null)
+            {
+                if (!sqlite) throw new InvalidOperationException($"{Capitalise(SettingName(module, "file"))} is '{file}', and a file is a SQLite setting: on {engine} a module has a schema of its own.");
+                if (file.Any(c => c is '\'' or '"' or '\0' or '\n')) throw Invalid(module, "file", file);
+                schema = "f_" + Regex.Replace(Path.GetFileNameWithoutExtension(file).ToLowerInvariant(), "[^a-z0-9]", "_");
+                if (schema == "f_") throw Invalid(module, "file", file);
+                var other = namespaces.FirstOrDefault(n => n.Schema == schema && n.File != file);
+                if (other is not null) throw new InvalidOperationException($"The files '{file}' (module '{module.Name}') and '{other.File}' (module '{other.Module.Name}') would both be attached as '{schema}'. Give them different names.");
+            }
 
             if (schema is not null) CheckIdentifier(schema, module, "schema", limit, SettingName(module, "schema"));
             if (prefix.Length > 0 && !Identifier.IsMatch(prefix + "x")) throw Invalid(module, "prefix", prefix);
@@ -164,7 +195,7 @@ public sealed partial class StateLayout
                     throw new InvalidOperationException($"The module '{module.Name}' says its table '{owner.Table}' owns payloads, and none of its migrations create it.");
             }
 
-            var ns = new StateNamespace(module, scopeName, schema, prefix, tables);
+            var ns = new StateNamespace(module, scopeName, schema, prefix, tables, file);
             namespaces.Add(ns);
             layout._byModule[module.Name] = ns;
         }
@@ -227,6 +258,8 @@ public sealed partial class StateLayout
                     throw new InvalidOperationException($"The module '{ns.Module.Name}' uses {match.Value} but does not declare a dependency on '{other}'.");
                 // Table() names the module and its tables when the dependency does not declare this one.
                 _ = Table(other, match.Groups["table"].Value);
+                if (!string.Equals(ns.File, Namespace(other).File, StringComparison.Ordinal))
+                    throw new InvalidOperationException($"The module '{ns.Module.Name}' refers to the tables of '{other}' ({match.Value}), and they would be in different SQLite files ({ns.File ?? "the main file"} and {Namespace(other).File ?? "the main file"}): a foreign key cannot cross files, and what commits together stays together. Put them in the same file (the file setting of the namespaces).");
             }
         }
     }

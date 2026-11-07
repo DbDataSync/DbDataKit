@@ -103,10 +103,32 @@ public sealed class SqliteStateDialect : StateDialect
     public override DbTransaction BeginMigrationTransaction(DbConnection connection) =>
         ((SqliteConnection)connection).BeginTransaction(deferred: false);
 
+    /// <summary>Attaches the file of every namespace that has one, under the alias the layout gave it. A relative path is relative to the main file's directory.</summary>
+    public override void OnConnectionOpened(DbConnection connection, StateLayout layout)
+    {
+        var main = Path.GetDirectoryName(Path.GetFullPath(connection.DataSource))!;
+        foreach (var ns in layout.Namespaces.Where(n => n.File is not null).DistinctBy(n => n.Schema))
+        {
+            var path = Path.IsPathRooted(ns.File!) ? ns.File! : Path.Combine(main, ns.File!);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = $"ATTACH DATABASE $path AS {ns.Schema};";
+            var parameter = cmd.CreateParameter();
+            parameter.ParameterName = "$path";
+            parameter.Value = path;
+            cmd.Parameters.Add(parameter);
+            cmd.ExecuteNonQuery();
+        }
+    }
+
     public override bool TableExists(DbConnection connection, string qualifiedName)
     {
+        // a table in an attached file is alias.name, and its catalogue is alias.sqlite_master
+        var dot = qualifiedName.IndexOf('.', StringComparison.Ordinal);
+        var catalogue = dot < 0 ? "sqlite_master" : qualifiedName[..dot] + ".sqlite_master";
+        qualifiedName = dot < 0 ? qualifiedName : qualifiedName[(dot + 1)..];
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = $name;";
+        cmd.CommandText = $"SELECT 1 FROM {catalogue} WHERE type = 'table' AND name = $name;";
         var parameter = cmd.CreateParameter();
         parameter.ParameterName = "$name";
         parameter.Value = qualifiedName;

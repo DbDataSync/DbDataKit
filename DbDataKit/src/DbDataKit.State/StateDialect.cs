@@ -150,6 +150,9 @@ public abstract class StateDialect
     /// <summary>Runs once on every freshly opened connection, before anything else.</summary>
     public virtual void OnConnectionOpened(DbConnection connection) { }
 
+    /// <summary>Runs once on every freshly opened connection of a database built from modules, after <see cref="OnConnectionOpened(DbConnection)"/>: SQLite attaches the files its namespaces are in.</summary>
+    public virtual void OnConnectionOpened(DbConnection connection, StateLayout layout) { }
+
     /// <summary>
     /// Whether a failed statement is worth trying again.
     /// <para>

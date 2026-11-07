@@ -22,7 +22,7 @@ namespace DbDataKit.State;
 public static class StateSettingsReader
 {
     private static readonly string[] SectionKeys = ["engine", "connection", "registry", "namespaces", "retention"];
-    private static readonly string[] NamespaceKeys = ["schema", "prefix"];
+    private static readonly string[] NamespaceKeys = ["schema", "prefix", "file"];
     private static readonly string[] RetentionKeys = ["days", "modules", "tables"];
 
     /// <summary>The settings in <paramref name="section"/>; null or empty is the defaults (SQLite, a file).</summary>
@@ -63,7 +63,7 @@ public static class StateSettingsReader
     {
         if (map is null) return null;
         Known(map, NamespaceKeys, path);
-        return new NamespaceSetting(Text(map, "schema", path), Text(map, "prefix", path));
+        return new NamespaceSetting(Text(map, "schema", path), Text(map, "prefix", path), Text(map, "file", path));
     }
 
     private static RetentionSettings ReadRetention(IReadOnlyDictionary<string, object?> section, string path)

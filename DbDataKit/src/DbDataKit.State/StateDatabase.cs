@@ -156,6 +156,7 @@ public partial class StateDatabase
         var connection = Dialect.CreateConnection(_connectionString);
         connection.Open();
         Dialect.OnConnectionOpened(connection);
+        if (Layout is not null) Dialect.OnConnectionOpened(connection, Layout);
         return connection;
     }
 
@@ -216,6 +217,16 @@ public partial class StateDatabase
         command.Bind(this, "expected_row_version", expectedVersion);
         return command.ExecuteNonQuery() == 1;
     }
+
+    /// <summary>
+    /// Begins a transaction for the stores of <paramref name="module"/>. On SQLite, Microsoft.Data.Sqlite begins an immediate transaction by default, which takes the write lock on every attached file, the
+    /// main one included, and so cancels what putting a module in a file of its own is for. For a module in a file of its own this begins a deferred transaction, which locks only the files it writes to. Anywhere
+    /// else it is <see cref="DbConnection.BeginTransaction()"/>. A store of a module that may be placed in a file (the runner's progress, run logs) begins its transactions here.
+    /// </summary>
+    public DbTransaction BeginTransaction(DbConnection connection, string? module = null) =>
+        module is not null && Dialect.Engine == StateEngineIds.Sqlite && Layout?.Namespace(module).File is not null && connection is SqliteConnection sqlite
+            ? sqlite.BeginTransaction(deferred: true)
+            : connection.BeginTransaction();
 
     /// <summary>Caps a result set — <c>LIMIT</c>, or SQL Server's <c>OFFSET/FETCH</c>. Interpolated
     /// into a query's text, which is why it takes a parameter *name* rather than a value.</summary>

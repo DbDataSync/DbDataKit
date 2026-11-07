@@ -57,9 +57,9 @@ internal static class StateMigrator
                         $"The state database {Describe(connection)} has the module '{ns.Key}' at version {row.Version}, written by {row.AppliedBy}, but this service only knows version {module.Version}. " +
                         "Upgrade this service; a module is never taken back to an older version.");
 
-                if (!string.Equals(row.SchemaName, ns.Schema ?? "", StringComparison.OrdinalIgnoreCase) || !string.Equals(row.Prefix, ns.Prefix, StringComparison.Ordinal))
+                if (!string.Equals(row.SchemaName, ns.Placement, StringComparison.OrdinalIgnoreCase) || !string.Equals(row.Prefix, ns.Prefix, StringComparison.Ordinal))
                     throw new InvalidOperationException(
-                        $"The module '{ns.Key}' in the state database {Describe(connection)} was created with schema '{row.SchemaName}' and prefix '{row.Prefix}', and the settings now say schema '{ns.Schema}' and prefix '{ns.Prefix}'. " +
+                        $"The module '{ns.Key}' in the state database {Describe(connection)} was created at '{row.SchemaName}' with prefix '{row.Prefix}', and the settings now say '{ns.Placement}' and prefix '{ns.Prefix}'. " +
                         $"Put the settings back (state.namespaces.{module.Name}), or move the tables yourself and update the registry.");
 
                 if (Checksum(module, row.Version) != row.Checksum)
@@ -94,7 +94,7 @@ internal static class StateMigrator
         return layout.Namespaces.All(ns => rows.TryGetValue((ns.Module.Name, ScopeOf(ns)), out var row)
             && row.Version == ns.Module.Version
             && row.Checksum == Checksum(ns.Module, row.Version)
-            && string.Equals(row.SchemaName, ns.Schema ?? "", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(row.SchemaName, ns.Placement, StringComparison.OrdinalIgnoreCase)
             && row.Prefix == ns.Prefix);
     }
 
@@ -137,7 +137,7 @@ internal static class StateMigrator
         using var cmd = database.Command(connection, transaction, sql);
         cmd.Bind(database, "module", ns.Module.Name)
             .Bind(database, "scope", scope)
-            .Bind(database, "schema_name", ns.Schema ?? "")
+            .Bind(database, "schema_name", ns.Placement)
             .Bind(database, "prefix", ns.Prefix)
             .Bind(database, "version", (long)version)
             .Bind(database, "checksum", checksum)

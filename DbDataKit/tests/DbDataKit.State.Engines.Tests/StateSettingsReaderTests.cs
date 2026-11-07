@@ -60,6 +60,15 @@ public sealed class StateSettingsReaderTests : IDisposable
     }
 
     [Fact]
+    public void A_namespace_can_name_a_sqlite_file_of_its_own()
+    {
+        var settings = StateSettingsReader.Read(Map(("namespaces", Map(("things", Map(("file", "things.db")))))));
+
+        Assert.Equal("things.db", settings.Namespaces.Modules["things"].File);
+        Assert.Equal("f_things.dbdatakit_things_thing", StateLayout.Create(StateEngineIds.Sqlite, [Things()], settings: settings.Namespaces).Table("things", "thing"));
+    }
+
+    [Fact]
     public void A_misspelt_namespace_key_names_its_whole_path()
     {
         var section = Map(("namespaces", Map(("identity", Map(("shcema", "x"))))));
