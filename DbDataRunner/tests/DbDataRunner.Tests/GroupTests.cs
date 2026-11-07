@@ -55,6 +55,10 @@ public sealed class GroupTests
         Assert.Equal(0, live.Single(i => Text(i, "id") == two.Engine.InstanceId!.Value.ToString())!["running"]!.GetValue<int>());
         Assert.NotEmpty(Text(mine, "host"));
         Assert.NotEmpty(Text(mine, "version"));
+        // U02: the row carries the software version and the module versions of the binary (a round trip through the instance table)
+        Assert.Equal(Text(mine, "version"), Text(mine, "software_version"));
+        Assert.Equal(RunnerModule.Module.Version, mine["module_versions"]!["runner"]!.GetValue<int>());
+        Assert.All(RunnerState.Modules, m => Assert.Equal(m.Version, mine["module_versions"]![m.Name]!.GetValue<int>()));
         Assert.Contains(mine["labels"]!.AsArray(), l => Text(l, "label") == "os:" + Text(mine["capabilities"], "os") && Text(l, "source") == "reported");
 
         // the first runner goes silent (a stopped process, a cut network): its task goes on, the lease is not renewed

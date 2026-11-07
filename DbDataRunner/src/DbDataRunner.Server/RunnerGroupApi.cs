@@ -57,6 +57,10 @@ public static class RunnerGroupApi
                 ["id"] = instance.Id.ToString(),
                 ["host"] = instance.Host,
                 ["version"] = instance.Version,
+                ["software_version"] = instance.SoftwareVersion ?? instance.Version,
+                ["module_versions"] = ModuleVersionText.Parse(instance.ModuleVersions) is { } modules
+                    ? new JsonObject(modules.OrderBy(m => m.Key, StringComparer.Ordinal).Select(m => KeyValuePair.Create(m.Key, (JsonNode?)JsonValue.Create(m.Value))))
+                    : null,
                 ["started"] = instance.StartedAt.UtcDateTime.ToString("O"),
                 ["heartbeat"] = instance.HeartbeatAt.UtcDateTime.ToString("O"),
                 ["this"] = instance.Id == engine.InstanceId,

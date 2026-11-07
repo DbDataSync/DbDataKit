@@ -42,7 +42,7 @@ public static class ProxyState
         // the secret reference in a server engine's connection string is resolved here, so the password is read when the store is opened and never written to the settings
         if (!settings.IsSqlite && settings.ConnectionString is { Length: > 0 } text && resolveConnectionString is not null)
             settings = settings with { ConnectionString = resolveConnectionString(text) };
-        return StateOpener.Open(settings, PathIn(dataDirectory), Modules, ScopeOf(group), appliedBy: $"{ServiceId} {typeof(ProxyState).Assembly.GetName().Version}");
+        return StateOpener.Open(settings, PathIn(dataDirectory), Modules, ScopeOf(group), appliedBy: $"{ServiceId} {typeof(ProxyState).Assembly.GetName().Version}", groupInstances: new StandardGroupInstanceSource());
     }
 }
 

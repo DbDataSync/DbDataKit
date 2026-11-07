@@ -50,6 +50,29 @@ public sealed partial class ManagementTests
             var instance = Assert.Single(state["instances"]!.AsArray())!;
             Assert.True((bool)instance["self"]!);
             Assert.False(string.IsNullOrEmpty((string?)instance["host"]));
+            // U02: its row carries the software version and the module versions of this binary (a round trip through the serving_instance table)
+            Assert.False(string.IsNullOrEmpty((string?)instance["software_version"]));
+            var serving = DbDataProxy.Server.State.ServingModule.Module;
+            Assert.Equal(serving.Version, (int)instance["module_versions"]!["serving"]!);
+            Assert.All(DbDataProxy.Server.State.ProxyState.Modules, m => Assert.Equal(m.Version, (int)instance["module_versions"]![m.Name]!));
+
+            // two instances at different versions are listed with their versions: another instance, one version behind, registers its row
+            var stateDatabase = app.Services.GetRequiredService<StateDatabase>();
+            using (var connection = stateDatabase.OpenConnection())
+            {
+                using var insert = stateDatabase.Command("serving", connection, "INSERT INTO {table:serving_instance} (instance_key, host, process_id, started_at, heartbeat_at, software_version, module_versions) VALUES ($key, $host, $pid, $at, $at, $software, $modules);");
+                insert.Bind(stateDatabase, "key", "older-instance").Bind(stateDatabase, "host", "other-host").Bind(stateDatabase, "pid", 7).Bind(stateDatabase, "at", DateTimeOffset.UtcNow)
+                    .Bind(stateDatabase, "software", "0.9.0").Bind(stateDatabase, "modules", "serving=2;identity=1");
+                insert.ExecuteNonQuery();
+            }
+
+            var again = JsonNode.Parse(await (await CallAsync(server, HttpMethod.Get, "/api/v1/state", ServerRole.Viewer)).Content.ReadAsStringAsync())!;
+            var listed = again["instances"]!.AsArray();
+            Assert.Equal(2, listed.Count);
+            var older = listed.Single(i => (string?)i!["key"] == "older-instance")!;
+            Assert.Equal("0.9.0", (string?)older["software_version"]);
+            Assert.Equal(2, (int)older["module_versions"]!["serving"]!);
+            Assert.False((bool)older["self"]!);
 
             if (engine == "sqlite") Assert.Equal("default", (string?)state["sources"]!["engine"]!["kind"]);
             else

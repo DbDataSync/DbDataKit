@@ -207,7 +207,7 @@ public sealed class StateManagement(StateManagementOptions options)
         if (instance.Started is { } started) node["started"] = started.ToString("O", CultureInfo.InvariantCulture);
         if (instance.Heartbeat is { } heartbeat) node["heartbeat"] = heartbeat.ToString("O", CultureInfo.InvariantCulture);
         if (instance.Version is not null) node["software_version"] = instance.Version;
-        if (instance.Modules is { } modules) node["modules"] = new JsonObject(modules.OrderBy(m => m.Key, StringComparer.Ordinal).Select(m => KeyValuePair.Create(m.Key, (JsonNode?)JsonValue.Create(m.Value))));
+        if (instance.Modules is { } modules) node["module_versions"] = new JsonObject(modules.OrderBy(m => m.Key, StringComparer.Ordinal).Select(m => KeyValuePair.Create(m.Key, (JsonNode?)JsonValue.Create(m.Value))));
         return node;
     }
 
