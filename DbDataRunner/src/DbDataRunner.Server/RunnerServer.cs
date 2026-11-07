@@ -75,6 +75,7 @@ public static class RunnerServer
         app.MapKeyRotation(new KeyRotationService(instanceId, clients, new MemoryReplayCache()));
         app.UseManagementAuthentication(new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache()), refused => log($"A call was refused ({refused.Failure}): {refused.Detail}"));
         RunnerApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), instanceId);
+        RunnerGroupApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>());
         return app;
     }
 }

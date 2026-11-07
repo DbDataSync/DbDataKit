@@ -3,7 +3,7 @@
 The runner: it schedules and runs the tasks of published packages, each in a process of its own, with retries, time and memory limits, a run history, logs and the progress a task keeps between runs (plan 28). A package is a manifest (`package/1`: its tasks, schedules, inputs and limits) and its code; the first kind it runs is a compiled .NET project, started through the task host. This is the single-runner host (slice R10): the engine in `DbDataKit.Runner`, a management API a console pairs with, its own state database and its command line. Groups of runners that share a state, the publish API and the console screens are the slices that follow (plan 28a).
 
 ```
-dbdatarunner server run [--repo <server directory>] [--listen https://127.0.0.1:8495] [--channels prod,dev]
+dbdatarunner server run [--repo <server directory>] [--listen https://127.0.0.1:8495] [--channels prod,dev] [--group main]
 dbdatarunner server pair --max-role <roles> [--repo <server directory>]
 dbdatarunner server clients | unpair <client> [--repo <server directory>]
 dbdatarunner package install <manifest.yaml> <directory> [--channel dev] [--repo <server directory>]   # a development path, see below
@@ -11,6 +11,9 @@ dbdatarunner tasks list [--repo <server directory>]
 dbdatarunner tasks run <package>/<channel>/<task> [name=value ...] [--repo <server directory>]
 dbdatarunner tasks pause <package>/<channel>/<task> [--repo <server directory>]
 dbdatarunner tasks resume <package>/<channel>/<task> [--repo <server directory>]
+dbdatarunner label add <label> --instance <id|this> [--repo <server directory>] [--group <name>]
+dbdatarunner label remove <label> --instance <id|this> [--repo <server directory>] [--group <name>]
+dbdatarunner label list [--instance <id|this>] [--repo <server directory>] [--group <name>]
 dbdatarunner runs list [--package <name>] [--channel <name>] [--task <name>] [--outcome <outcome>] [--limit <n>] [--repo <server directory>]
 dbdatarunner state show [--offline] [--engine mssql|postgres] [--repo <server directory>]    # the state database: engine, namespaces, module versions, pending migrations; creates nothing
 dbdatarunner state test [--engine mssql|postgres] [--repo <server directory>]                  # opens it read-only and checks rights, engine version and clashes; stops at the first failure with the fix
@@ -59,8 +62,16 @@ The runner serves the channels `prod` and `dev` by default (`--channels`, or `DB
 
 ## What the process does
 
-At start it listens on the socket its tasks use, registers an instance in the `runner` module with what the machine can enforce, marks the runs a dead process left behind as interrupted, and starts the scheduler on the channels it serves. It renews its registration every 15 seconds. At stop (Ctrl+C, SIGTERM, the service manager's stop) it cancels the running tasks and gives them their grace period (30 seconds, then the process tree is killed), puts their work items back in the queue, marks the instance gone and closes the socket: no run is left running.
+At start it listens on the socket its tasks use, registers an instance in the `runner` module with what the machine can enforce, marks the runs a dead process left behind as interrupted, and starts the scheduler on the channels it serves. It renews its registration every 30 seconds (the lease is 90 seconds; both are settings). At stop (Ctrl+C, SIGTERM, the service manager's stop) it cancels the running tasks and gives them their grace period (30 seconds, then the process tree is killed), puts their work items back in the queue, marks the instance gone and closes the socket: no run is left running.
 
 ## In a service
 
 `dbdatarunner service install` registers `server run` with Windows (as `NT SERVICE\DbDataRunner`, the low-privilege account every task then runs as) or prints a hardened systemd unit with `service unit`; its directory is then `%ProgramData%\DbDataRunner\server`. `dbdatarunner server pair --max-role admin` makes the code a console pairs with.
+
+## Groups, labels and routing (slices R11, R12)
+
+Runners that share one SQL Server or PostgreSQL state database and one group name (`--group`, or `DBDATARUNNER_GROUP`; default `main`) are a **group**: any runner takes any task. SQLite is for one runner: a second server on the same SQLite state refuses to start and names the first (its instance id, host, start and last heartbeat). Every process has one row in the group's instances, renewed every 30 seconds. A row that stops being renewed lapses after the lease (90 seconds); the work items its runner held go to another runner then. A runner that comes back after its items were taken is told so in its log, cancels the local task and does not record its result: its late finish is refused. A crashed process's row is removed when the next process starts on that machine, or by retention.
+
+`GET /api/v1/instances` and the `instances` list of `GET /api/v1/status` show the live instances: id, host, version, labels (each with who set it), capabilities and how many items each is running.
+
+A **label** is `name` or `name:value`. The runner reports what it finds as read-only labels (`network:outside`, `os:linux`, `memory_limit:enforced|watched`); an administrator adds others with `label add`, for one instance (an id from `label list`, or `this` for the live runner on this machine; a restarted runner keeps its administrator's labels). A task lists the labels it needs in its manifest (`requires: [network:outside, gpu]`); a work item is claimed only by a runner that has every one. A task whose label no live runner has stays pending, and the `waiting_reason` of its entry in the status call (and `tasks list`) names the label; once a runner has the label it starts within a tick. A version whose required label no live runner has must not activate (`RoutingCheck.CanActivate`, used by staging in plan 30).

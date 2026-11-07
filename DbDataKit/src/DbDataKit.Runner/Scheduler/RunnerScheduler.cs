@@ -40,6 +40,7 @@ public sealed class RunnerScheduler
     private readonly ModuleJobPauseStore _pauses;
     private readonly ModuleRunLockStore _locks;
     private readonly TaskProjections _projections;
+    private readonly RunnerInstances _instances;
     private readonly RunStore _runs;
     private readonly WorkItemRetries _retries;
     private readonly ILogger? _log;
@@ -64,6 +65,7 @@ public sealed class RunnerScheduler
         _pauses = new ModuleJobPauseStore(database, options.Service);
         _locks = new ModuleRunLockStore(database, options.Service);
         _projections = new TaskProjections(database);
+        _instances = new RunnerInstances(database);
         _runs = new RunStore(database, options.Service);
         _retries = new WorkItemRetries(_queue);
         _log = options.Logger;
@@ -170,7 +172,7 @@ public sealed class RunnerScheduler
                 else enqueued.Add(task.Ref);
             }
 
-            var claimed = ClaimAndStart(served.Select(t => OwnerOf(t.Ref)).Distinct(StringComparer.Ordinal).ToList());
+            var claimed = ClaimAndStart(served.Select(t => OwnerOf(t.Ref)).Distinct(StringComparer.Ordinal).ToList(), served);
             return new TickReport(enqueued, refused, paused, claimed, rowProblems.Count, expired);
         }
         finally
@@ -271,8 +273,15 @@ public sealed class RunnerScheduler
         }
     }
 
-    private int ClaimAndStart(IReadOnlyList<string> owners)
+    /// <summary>This runner's labels as stored now (the administrator's and the reported ones); none when the loop is not an instance. An administrator adding a label takes effect at the next tick.</summary>
+    private IReadOnlySet<string> MyLabels() =>
+        _options.Instance?.Invoke() is { } id ? _instances.LabelSet(id) : new HashSet<string>(StringComparer.Ordinal);
+
+    private int ClaimAndStart(IReadOnlyList<string> owners, IReadOnlyList<Served> served)
     {
+        // routing (plan 28 question 7): an item is claimed only by a runner that has every label its task requires; the others stay Pending
+        var mine = MyLabels();
+        var skip = owners.ToDictionary(o => o, o => (IReadOnlyCollection<string>)served.Where(t => OwnerOf(t.Ref) == o && !RoutingCheck.Serves(t.Row.RequiredLabels, mine)).Select(t => t.Ref.Task).ToList(), StringComparer.Ordinal);
         var claimed = 0;
         var progress = true;
         while (progress && _running.Count < _options.MaxConcurrentRuns && !_stop.IsCancellationRequested)
@@ -281,7 +290,7 @@ public sealed class RunnerScheduler
             foreach (var owner in owners)
             {
                 if (_running.Count >= _options.MaxConcurrentRuns) break;
-                if (_queue.TryClaimNext(owner, _options.WorkerId) is not { } item) continue;
+                if (_queue.TryClaimNext(owner, _options.WorkerId, excludeSubjects: skip[owner]) is not { } item) continue;
                 Start(item);
                 claimed++;
                 progress = true;
@@ -586,6 +595,7 @@ public sealed class RunnerScheduler
                 if (!_queue.Heartbeat(item.Id, _options.WorkerId))
                 {
                     running.LeaseLost = true;
+                    Report($"item {item.Id}", $"This runner lost the lease on {item.Owner}/{item.Subject} (run {item.RunId}): it did not renew it in time and another runner took the item. The local task is cancelled and its result will not be recorded.");
                     await runCts.CancelAsync().ConfigureAwait(false);   // the item is someone else's now
                     return;
                 }
@@ -654,6 +664,7 @@ public sealed class RunnerScheduler
     {
         var now = _time.GetUtcNow();
         var tasks = new List<ScheduledTaskStatus>();
+        IReadOnlyList<LiveInstance>? live = null;
         var queues = new Dictionary<string, IReadOnlyList<QueuedWork>>(StringComparer.Ordinal);
         foreach (var row in Rows())
         {
@@ -673,11 +684,21 @@ public sealed class RunnerScheduler
             tasks.Add(new ScheduledTaskStatus(
                 reference, row.Version, next, _runs.LastRun(reference.ToString()),
                 mine.Count(w => w.Item.Status is WorkItemStatus.Claimed or WorkItemStatus.Running), waiting.Count,
-                waiting.Count == 0 ? null : waiting.Min(w => w.AvailableAt), pause is not null, pause?.By, parsed ? null : problem));
+                waiting.Count == 0 ? null : waiting.Min(w => w.AvailableAt), pause is not null, pause?.By, parsed ? null : problem,
+                row.RequiredLabels, WaitingReasonOf(row.RequiredLabels, ref live)));
         }
 
         var problems = _rowProblems.Values.Concat(_problems).OrderBy(p => p.At).ToList();
         return new SchedulerStatus(_options.WorkerId, now, tasks, problems, _running.Count, _options.MaxConcurrentRuns);
+    }
+
+    /// <summary>Which required label no live runner has, as a sentence; null when the task requires none or some live runner has them all.</summary>
+    private string? WaitingReasonOf(IReadOnlyList<string> requires, ref IReadOnlyList<LiveInstance>? live)
+    {
+        if (requires.Count == 0) return null;
+        live ??= _instances.LiveInstances(_options.Lease);
+        var missing = RoutingCheck.CanActivate(requires, [.. live]);
+        return missing.Count == 0 ? null : RoutingCheck.Reason(missing, live.Count);
     }
 
     private void Report(string subject, string message)
