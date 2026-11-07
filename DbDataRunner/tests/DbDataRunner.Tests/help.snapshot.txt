@@ -58,12 +58,22 @@ $ dbdatarunner state help
 dbdatarunner state: The state database: where it is, whether it works, and the rights it needs
 
 Verbs:
+  state export --to <directory> [--include-secrets-check] [--engine mssql|postgres] [--repo <server directory>]
+      Write the state to a snapshot directory (a manifest and one file per table), one progress line per table; offline: the service must be stopped, and a live instance refuses it by name [Repo files only (no target connection)]
+  state import --from <directory> [--migrate-after true|false] [--engine mssql|postgres] [--repo <server directory>]
+      Load a snapshot into the empty state database the settings name, then migrate it to this version; offline, and it prints how to start the service afterwards [Target writes (DDL and/or data, as the plan states)]
+  state verify --snapshot <directory> [--db] | --against <snapshot directory or settings file> | --other-engine sqlite|mssql|postgres [--other-connection <string>] [--other-sqlite <file>] [--other-schema <s>] [--other-prefix <p>] [--rehash-payloads] [--engine mssql|postgres] [--repo <server directory>]
+      Compare a snapshot with its manifest (--snapshot), the state with a snapshot (--snapshot --db or --against) or with another database (--other-engine, --other-connection with secret references, or --against a settings file); names the table and rows that differ [Target read-only]
+  state move --to-engine sqlite|mssql|postgres [--to-connection <string with secret references>] [--to-schema <s>] [--to-prefix <p>] [--keep-snapshot] [--yes] [--engine mssql|postgres] [--repo <server directory>]
+      Move the state to another engine or database offline: export, import into the empty target, verify, and only then write the new settings; the old database is untouched; needs --yes or an answer of yes, and the service stopped [Target writes (DDL and/or data, as the plan states)]
   state show [--offline] [--engine mssql|postgres] [--repo <server directory>]
       Show the effective engine, the connection (secrets masked), where each module's tables are, each module's version in the registry and what is pending; read-only, creates and migrates nothing [Target read-only]
   state test [--engine mssql|postgres] [--repo <server directory>]
       Connect, read the registry, check the rights and the engine version, and look for a schema clash and for migrations this login may not apply; stops at the first failure with the fix [Target read-only]
   state grants --login <database role or user> [--migrate] [--engine mssql|postgres] [--repo <server directory>]
       Print the GRANT statements a login needs for the runner's modules (the login it runs as, or with --migrate the one that upgrades the database); run them as a database administrator [Offline only]
+  state init --topology service|group|install [--engine mssql|postgres --connection <connection with Password=secret:NAME or env:NAME>] [--login <role or user> [--migrate]] [--admin-connection <reference> --apply] [--group <name>] [--settings <file>] [--repo <server directory>]
+      Put the state in one of the three places: a SQLite file per service, one database per group, or one for the whole install; writes the settings, and for a database prints (or with --apply creates) the schemas and the service's rights, then runs 'state test' [Target writes (DDL and/or data, as the plan states)]
 
 $ dbdatarunner service help
 dbdatarunner service: Registration of 'server run' with Windows or systemd

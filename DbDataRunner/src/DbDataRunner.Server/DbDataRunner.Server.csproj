@@ -29,8 +29,8 @@
     <DbDataKitReference Include="Web" />   <!-- pairing, key rotation, the version header and the token check -->
   </ItemGroup>
   <ItemGroup Condition="'$(UseLocalDbDataKit)' == 'true'">
-    <!-- built for its executable only; published, with its own dependencies, to taskhost/ beside this program (see the targets below) -->
-    <ProjectReference Include="$(DbDataKitRoot)src\DbDataKit.Runner.TaskHost\DbDataKit.Runner.TaskHost.csproj" ReferenceOutputAssembly="false" />
+    <!-- Private=false: its apphost, deps.json and runtimeconfig.json are not copied to this program's output root. Built for its executable only; published, with its own dependencies, to taskhost/ beside this program (see the targets below) -->
+    <ProjectReference Include="$(DbDataKitRoot)src\DbDataKit.Runner.TaskHost\DbDataKit.Runner.TaskHost.csproj" ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
 
   <!--
@@ -38,12 +38,16 @@
     shared framework this program runs on), so it is published into taskhost/ beside the program on every build, and into the publish output with it.
   -->
   <Target Name="CopyTaskHost" AfterTargets="Build" Condition="'$(UseLocalDbDataKit)' == 'true'">
+    <PropertyGroup>
+      <!-- absolute: OutDir is relative to this project ("bin/Debug/net10.0/") and the nested publish resolves a relative PublishDir against the task host's own folder -->
+      <_TaskHostDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(OutDir)', 'taskhost'))</_TaskHostDir>
+    </PropertyGroup>
     <MSBuild Projects="$(DbDataKitRoot)src\DbDataKit.Runner.TaskHost\DbDataKit.Runner.TaskHost.csproj" Targets="Publish"
-             Properties="NoBuild=true;PublishDir=$(OutDir)taskhost\;SelfContained=false" />
+             Properties="NoBuild=true;PublishDir=$(_TaskHostDir);SelfContained=false" />
   </Target>
   <Target Name="TaskHostIntoPublish" BeforeTargets="ComputeResolvedFilesToPublishList" DependsOnTargets="CopyTaskHost" Condition="'$(UseLocalDbDataKit)' == 'true'">
     <ItemGroup>
-      <_TaskHostFile Include="$(OutDir)taskhost\**\*" />
+      <_TaskHostFile Include="$(_TaskHostDir)**\*" />
       <ResolvedFileToPublish Include="@(_TaskHostFile)" RelativePath="taskhost\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
     </ItemGroup>
   </Target>
