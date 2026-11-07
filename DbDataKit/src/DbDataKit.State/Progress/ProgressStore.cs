@@ -42,6 +42,9 @@ public sealed class ProgressStore(StateDatabase database, ProgressKey key)
 {
     private const string Module = ProgressModule.Name;
 
+    /// <summary>The database this store keeps its checkpoints in: a writer that must move a checkpoint with rows of another module (the tracking follower) checks it is the same one.</summary>
+    public StateDatabase Database => database;
+
     private static readonly string[] ValueColumns = ["value_text", "value_int", "value_decimal", "value_at", "value_bool", "value_payload", "value_json"];
 
     private void BindKey(DbCommand cmd) =>
