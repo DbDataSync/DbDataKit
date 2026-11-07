@@ -128,6 +128,69 @@ public sealed class ModuleWorkQueueTests : IDisposable
     }
 
     [Theory, MemberData(nameof(Engines))]
+    public void A_resource_with_a_limit_of_two_lets_two_items_run_and_holds_the_third_until_one_completes(string engine)
+    {
+        var queue = Queue(Open(engine));
+        foreach (var subject in new[] { "a", "b", "c" })
+            queue.Enqueue("o", "Primary", subject, resource: "pkg:orders", resourceLimit: 2);
+        queue.Enqueue("o", "Primary", "free", resource: "pkg:billing", resourceLimit: 2);
+
+        var first = queue.TryClaimNext("o", "w1")!;
+        var second = queue.TryClaimNext("o", "w2")!;
+        var other = queue.TryClaimNext("o", "w3")!;
+
+        Assert.Equal(["a", "b", "free"], new[] { first.Subject, second.Subject, other.Subject }); // the pool of pkg:orders is full, billing is another pool
+        Assert.Null(queue.TryClaimNext("o", "w4"));
+        queue.MarkRunning(second.Id);
+        Assert.Null(queue.TryClaimNext("o", "w4")); // Running holds a place as Claimed does
+        queue.MarkDone(first.Id);
+        Assert.Equal("c", queue.TryClaimNext("o", "w4")!.Subject);
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public void A_pool_is_shared_across_owners_and_a_released_claim_gives_its_place_back(string engine)
+    {
+        var queue = Queue(Open(engine));
+        queue.Enqueue("crm", "Primary", "x", resource: "conn:dw", resourceLimit: 2);
+        queue.Enqueue("erp", "Primary", "y", resource: "conn:dw", resourceLimit: 2);
+        queue.Enqueue("hr", "Primary", "z", resource: "conn:dw", resourceLimit: 2);
+
+        var x = queue.TryClaimNext("crm", "w1")!;
+        Assert.NotNull(queue.TryClaimNext("erp", "w2"));
+        Assert.Null(queue.TryClaimNext("hr", "w3"));
+        queue.ReleaseClaim(x.Id);
+        Assert.Equal("z", queue.TryClaimNext("hr", "w3")!.Subject);
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public void A_limit_of_one_behaves_exactly_like_the_old_exclusion(string engine)
+    {
+        var queue = Queue(Open(engine));
+        queue.Enqueue("o", "Primary", "a", resource: "target", resourceLimit: 1);
+        queue.Enqueue("o", "Primary", "b", resource: "target"); // the default is 1
+        queue.Enqueue("o", "Primary", "c", resource: "target", resourceLimit: 1);
+
+        var first = queue.TryClaimNext("o", "w1")!;
+
+        Assert.Equal("a", first.Subject);
+        Assert.Null(queue.TryClaimNext("o", "w2"));
+        queue.MarkDone(first.Id);
+        var second = queue.TryClaimNext("o", "w2")!;
+        Assert.Equal("b", second.Subject);
+        Assert.Null(queue.TryClaimNext("o", "w3"));
+        queue.MarkFailed(second.Id);
+        Assert.Equal("c", queue.TryClaimNext("o", "w3")!.Subject);
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public void A_resource_limit_below_one_is_refused(string engine)
+    {
+        var queue = Queue(Open(engine));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => queue.Enqueue("o", "Primary", "a", resource: "r", resourceLimit: 0));
+    }
+
+    [Theory, MemberData(nameof(Engines))]
     public void Two_subjects_that_write_one_resource_take_turns_across_owners(string engine)
     {
         var queue = Queue(Open(engine));

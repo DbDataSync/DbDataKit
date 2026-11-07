@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <ProjectReference Include="..\..\src\DbDataKit.Runner.Limits\DbDataKit.Runner.Limits.csproj" />
+    <!-- built for its executable only: the tests start it as the child that allocates -->
+    <ProjectReference Include="..\DbDataKit.Runner.Limits.TestChild\DbDataKit.Runner.Limits.TestChild.csproj" />
+  </ItemGroup>
+</Project>

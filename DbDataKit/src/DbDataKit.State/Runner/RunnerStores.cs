@@ -180,15 +180,21 @@ public sealed class PostureChoices(StateDatabase database)
         ArgumentException.ThrowIfNullOrWhiteSpace(scope);
         ArgumentException.ThrowIfNullOrWhiteSpace(setting);
         ArgumentException.ThrowIfNullOrWhiteSpace(chosenBy);
-        var now = database.Time.GetUtcNow();
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(Module, connection, database.Dialect.Upsert("{table:posture_choice}", "scope, setting, chosen_by, chosen_at, note", "$scope, $setting, $by, $at, $note", "scope, setting",
-                "chosen_by = EXCLUDED.chosen_by, chosen_at = EXCLUDED.chosen_at, note = EXCLUDED.note"));
-            cmd.Bind(database, "scope", scope).Bind(database, "setting", setting).Bind(database, "by", chosenBy).Bind(database, "at", now).Bind(database, "note", note, System.Data.DbType.String);
-            cmd.ExecuteNonQuery();
+            Record(connection, null, scope, setting, chosenBy, note);
         });
+    }
+
+    /// <summary>Records on a connection (and transaction) the caller owns, so a caller can write the audit entry with it.</summary>
+    internal void Record(DbConnection connection, DbTransaction? transaction, string scope, string setting, string chosenBy, string? note)
+    {
+        var now = database.Time.GetUtcNow();
+        using var cmd = database.Command(Module, connection, transaction, database.Dialect.Upsert("{table:posture_choice}", "scope, setting, chosen_by, chosen_at, note", "$scope, $setting, $by, $at, $note", "scope, setting",
+            "chosen_by = EXCLUDED.chosen_by, chosen_at = EXCLUDED.chosen_at, note = EXCLUDED.note"));
+        cmd.Bind(database, "scope", scope).Bind(database, "setting", setting).Bind(database, "by", chosenBy).Bind(database, "at", now).Bind(database, "note", note, System.Data.DbType.String);
+        cmd.ExecuteNonQuery();
     }
 
     /// <summary>Takes a choice back, so the default applies again; false when there was none.</summary>
@@ -196,10 +202,15 @@ public sealed class PostureChoices(StateDatabase database)
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(Module, connection, "DELETE FROM {table:posture_choice} WHERE scope = $scope AND setting = $setting;");
-            cmd.Bind(database, "scope", scope).Bind(database, "setting", setting);
-            return cmd.ExecuteNonQuery() == 1;
+            return Revoke(connection, null, scope, setting);
         });
+
+    internal bool Revoke(DbConnection connection, DbTransaction? transaction, string scope, string setting)
+    {
+        using var cmd = database.Command(Module, connection, transaction, "DELETE FROM {table:posture_choice} WHERE scope = $scope AND setting = $setting;");
+        cmd.Bind(database, "scope", scope).Bind(database, "setting", setting);
+        return cmd.ExecuteNonQuery() == 1;
+    }
 
     /// <summary>Every choice, or those of one scope, by scope and setting.</summary>
     public IReadOnlyList<PostureChoice> List(string? scope = null) =>

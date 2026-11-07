@@ -85,6 +85,11 @@ public static class SchedulingModule
                 PRIMARY KEY (service, owner, job)
             );
             """,
+            """
+            -- A resource is a pool of resource_limit (plan 28a DR7, R07): at most that many items holding the same resource can be Claimed or Running at once. 1, the default and what every row
+            -- written before this migration has, is the exclusion the queue always had. The item being claimed names the limit.
+            ALTER TABLE {table:work_item} {{addcolumn}} resource_limit {{int}} NOT NULL DEFAULT 1;
+            """,
         ],
         // finished work is history; what is pending, claimed or running is current state and stays
         retention: [new RetentionRule("work_item", "enqueued_at", Where: "status IN ('Done','Failed','Cancelled')")]);
