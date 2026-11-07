@@ -56,16 +56,23 @@ public sealed class StoreStateSnapshotVerbsTests : IDisposable
         Assert.Equal(StateExit.TargetNotEmpty, (await Run("state", "import", "--from", Dir("snapshot"), "--repo", Dir("fresh"))).Exit);
     }
 
-    [Fact]
-    public async Task State_move_says_the_server_has_no_settings_file_for_it_and_changes_nothing()
+    [Theory]
+    [InlineData("postgres")]
+    [InlineData("mssql")]
+    public async Task State_move_to_a_server_engine_writes_the_state_section_of_server_yaml_and_the_server_then_reads_it(string engine)
     {
+        using var db = ScratchStateDatabase.For(engine);
         StoreState.Pairing(Dir("server")).Codes().Create(ServerRoles.Close(ServerRole.Admin));
         SqliteConnection.ClearAllPools();
 
-        var moved = await Run("state", "move", "--to-engine", "postgres", "--to-connection", "Host=h;Database=d;Username=u;Password=env:X", "--yes", "--repo", Dir("server"));
+        var moved = await Run("state", "move", "--to-engine", engine, "--to-connection", db.Connection, "--yes", "--repo", Dir("server"));
 
-        Assert.Equal(StateExit.Settings, moved.Exit);
-        Assert.Contains("state export", moved.Error);
-        Assert.False(File.Exists(Path.Combine(Dir("server"), "server.yaml")));
+        Assert.True(moved.Exit == 0, moved.Out + moved.Error);
+        var text = File.ReadAllText(Path.Combine(Dir("server"), "server.yaml"));
+        Assert.Contains($"engine: {engine}", text);
+        Assert.DoesNotContain("DbKit_Test_Pw1", text);
+        var resolved = StoreState.Resolve(Dir("server"), db.Environment);
+        Assert.Equal(DbDataKit.State.StateSourceKind.File, resolved.Sources.Engine.Kind);
+        Assert.Equal(1, StoreState.Pairing(Dir("server"), db.Environment).Codes().Pending());   // the pairing code moved with the state
     }
 }

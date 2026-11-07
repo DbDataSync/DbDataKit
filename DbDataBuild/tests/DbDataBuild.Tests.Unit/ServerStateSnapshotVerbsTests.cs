@@ -54,15 +54,22 @@ public sealed class ServerStateSnapshotVerbsTests : IDisposable
         Assert.Contains("scheduling", changed.Out);
     }
 
-    [Fact]
-    public async Task State_move_says_the_server_has_no_settings_file_for_it()
+    [Theory]
+    [InlineData("postgres")]
+    [InlineData("mssql")]
+    public async Task State_move_to_a_server_engine_writes_the_state_section_of_server_yaml_and_the_server_then_reads_it(string engine)
     {
+        using var db = ScratchStateDatabase.For(engine);
+        if (db is null) return;
         BuildSchedulerSchema.Open(Dir("server")).OpenConnection().Dispose();
         SqliteConnection.ClearAllPools();
 
-        var moved = await Run("state", "move", "--to-engine", "postgres", "--to-connection", "Host=h;Database=d;Username=u;Password=env:X", "--yes", "--repo", Dir("server"));
+        var moved = await Run("state", "move", "--to-engine", engine, "--to-connection", db.Connection, "--yes", "--repo", Dir("server"));
 
-        Assert.Equal(DbDataKit.State.Cli.StateExit.Settings, moved.Exit);
-        Assert.Contains("state export", moved.Err);
+        Assert.True(moved.Exit == 0, moved.Out + moved.Err);
+        var text = File.ReadAllText(Path.Combine(Dir("server"), "server.yaml"));
+        Assert.Contains($"engine: {engine}", text);
+        Assert.DoesNotContain("DbKit_Test_Pw1", text);
+        Assert.Equal(DbDataKit.State.StateSourceKind.File, BuildState.Resolve(Dir("server"), db.Environment).Sources.Engine.Kind);
     }
 }
