@@ -144,6 +144,10 @@ jobs:
       - name: Build a Store
         working-directory: DbDataStore
         run: dotnet build src/DbDataStore.Server -c Debug
+      # A real runner, for the runner story (plan 28a, R19): the console pairs with it, runs and pauses a task and activates a staged package version.
+      - name: Build a runner
+        working-directory: DbDataRunner
+        run: dotnet build src/DbDataRunner.Server -c Debug
       - name: Install the browser
         working-directory: DbDataConsole/tests/DbDataConsole.Web.Tests
         run: |

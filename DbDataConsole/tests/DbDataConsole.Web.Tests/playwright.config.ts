@@ -196,6 +196,40 @@ if (!isWorker) {
   fs.writeFileSync(path.join(scratchDirectory, 'end-to-end-build-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
 
+// A runner for the runner story (plan 28a, R19): a real `dbdatarunner` with the sample package of the runner's tests (`DbDataKit.Runner.TestPackage`, published to a folder here) published on the `dev` channel by the story (as version 1, then 2), two tasks:
+// `ok` (every hour, so it also has a next time) and `tally` (by hand, with a progress value `seen` its runs move). A pairing code lets the console grant admin; a second, for a publisher, is what the story's `package publish` of
+// version 2 (which resets `seen`: a loss) uses. The runner's directory is short: its task socket lives in it and a Unix socket path is limited.
+export const runnerServer = {
+  directory: path.join(os.tmpdir(), 'ddk-e2e-runner'),
+  port: 8496,
+  url: 'https://localhost:8496',
+  package: path.join(os.tmpdir(), 'ddk-e2e-runner-package'),
+  manifests: path.join(os.tmpdir(), 'ddk-e2e-runner-manifests'),
+  clientDirectory: path.join(os.tmpdir(), 'ddk-e2e-runner-publisher'),
+  dll: path.join(repoRoot, 'DbDataRunner/src/DbDataRunner.Server/bin/Debug/net10.0/dbdatarunner.dll'),
+}
+if (!isWorker) {
+  for (const directory of [runnerServer.directory, runnerServer.package, runnerServer.manifests, runnerServer.clientDirectory]) {
+    fs.rmSync(directory, { recursive: true, force: true })
+    fs.mkdirSync(directory, { recursive: true })
+  }
+  execFileSync('dotnet', ['publish', path.join(repoRoot, 'DbDataKit/tests/DbDataKit.Runner.TestPackage/DbDataKit.Runner.TestPackage.csproj'), '-c', 'Debug', '-o', runnerServer.package, '--nologo', '-v', 'q'], { stdio: 'ignore' })
+  const manifest = (seenReset: boolean) => [
+    'schema: package/1', 'name: sample',
+    'launch: { kind: assembly, assembly: DbDataKit.Runner.TestPackage.dll }',
+    'built_against: { dotnet: "10.0", kit: "1", protocol: dbdatakit.runner.v1 }',
+    'tasks:',
+    '  - name: ok', '    entry: { type: T }', '    schedule: { every: 1h }',
+    '  - name: tally', '    entry: { type: T }', '    progress:', '      checkpoints:', '        - name: seen', ...(seenReset ? ['          reset: true'] : []),
+    '          parts:', `            - { name: value, type: int${seenReset ? ', reset: true' : ''} }`, ''].join('\n')
+  fs.writeFileSync(path.join(runnerServer.manifests, 'v1.yaml'), manifest(false))
+  fs.writeFileSync(path.join(runnerServer.manifests, 'v2.yaml'), manifest(true))
+  const made = execFileSync('dotnet', ['exec', runnerServer.dll, 'server', 'pair', '--repo', runnerServer.directory, '--max-role', 'viewer,operator,admin'], { encoding: 'utf8' })
+  fs.writeFileSync(path.join(scratchDirectory, 'runner-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
+  const madePublisher = execFileSync('dotnet', ['exec', runnerServer.dll, 'server', 'pair', '--repo', runnerServer.directory, '--max-role', 'publisher'], { encoding: 'utf8' })
+  fs.writeFileSync(path.join(scratchDirectory, 'runner-publisher-code.txt'), /Pairing code: (\S+)/.exec(madePublisher)![1])
+}
+
 // A passkey is bound to the host name and the port it was made on, and the server builds its list of allowed origins from the address it is told to listen on,
 // so the address is fixed here and the test opens exactly that.
 const port = 8481
@@ -258,6 +292,15 @@ export default defineConfig({
       stdout: 'pipe' as const,
       stderr: 'pipe' as const,
       env: warehouseConnection ? { DBDATA_BUILD_POSTGRES_READ: warehouseConnection, DBDATA_BUILD_POSTGRES_WRITE: warehouseConnection } : {},
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(runnerServer.dll), 'server', 'run', '--repo', JSON.stringify(runnerServer.directory), '--listen', runnerServer.url].join(' '),
+      url: `${runnerServer.url}/health/live`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
     },
     ...announcers.map((announcer) => ({
       command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(announcer.directory), '--listen', `https://localhost:${announcer.port}`].join(' '),

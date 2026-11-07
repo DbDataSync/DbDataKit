@@ -83,7 +83,7 @@ export function InstancesPage() {
                 <span data-testid="instance-status" data-tone={status.tone}>{status.text}</span>
                 <span className="mono">{instance.url}</span>
                 <span className="row" style={{ gap: 8 }}>
-                  {instance.reachable && (instance.product === 'dbdatasync' || instance.product === 'dbdatabuild' || instance.product === 'dbdataproxy' || instance.product === 'dbdatakit-identity') && (
+                  {instance.reachable && (instance.product === 'dbdatasync' || instance.product === 'dbdatabuild' || instance.product === 'dbdataproxy' || instance.product === 'dbdatarunner' || instance.product === 'dbdatakit-identity') && (
                     <Link to={`/servers/${instance.id}`} className="btn btn-primary" data-testid="instance-open-link">Open</Link>
                   )}
                   <button type="button" className="btn" disabled={forget.isPending} onClick={() => forget.mutate(instance.id)} data-testid="instance-forget-button">Forget</button>
