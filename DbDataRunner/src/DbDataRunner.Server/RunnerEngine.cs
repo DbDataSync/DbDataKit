@@ -102,6 +102,7 @@ public sealed class RunnerEngine(RunnerSettings settings, StateDatabase state, I
             Service = RunnerState.EngineService,
             Redactor = new Redactor(),
             Logger = _log,
+            InheritedVariables = [.. new TaskExecutorOptions { DataDirectory = settings.Directory }.InheritedVariables,.. settings.TaskEnvironment],
         });
 
         // the runs a process that died left behind: those of a SQLite state are this runner's alone; a group's are only marked when no instance of it is live (another one may be running them)

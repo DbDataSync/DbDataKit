@@ -57,6 +57,7 @@ internal static class PackageFixture
         File.WriteAllText(Path.Combine(directory, "exit0.sh"), "echo 'a script that speaks no protocol'\nexit 0\n");
         File.WriteAllText(Path.Combine(directory, "exit3.sh"), "echo 'failing quietly' >&2\nexit 3\n");
         File.WriteAllText(Path.Combine(directory, "args.sh"), "echo \"args: $1 $2\"\necho \"task: $DBDATAKIT_TASK_NAME\"\nexit 0\n");
+        File.WriteAllText(Path.Combine(directory, "program.sh"), "#!/bin/sh\necho \"started as a program of the package\"\nexit 0\n");
         return directory;
     }
 

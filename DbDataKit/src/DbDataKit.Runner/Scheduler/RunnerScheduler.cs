@@ -508,7 +508,7 @@ public sealed partial class RunnerScheduler
                     RunId = item.RunId,
                     Chain = payload.Chain,
                     Attempt = payload.Attempt,
-                    Inputs = payload.Inputs,
+                    Inputs = WithDefaults(task.Inputs, payload.Inputs),
                     Limits = task.Limits,
                     CancellationGrace = _options.CancellationGrace,
                 };
@@ -555,6 +555,16 @@ public sealed partial class RunnerScheduler
             if (beat is not null) await StopBeating(beat, beatCts).ConfigureAwait(false);
             if (lockTaken && _locks.Holder(owner, Kind, taskRef.Task) == item.RunId) _locks.Release(owner, Kind, taskRef.Task);
         }
+    }
+
+    /// <summary>The inputs a run is given, with the manifest's default for each declared input the run (a schedule, a trigger) gave no value for.</summary>
+    public static IReadOnlyDictionary<string, string> WithDefaults(IReadOnlyList<TaskInput> declared, IReadOnlyDictionary<string, string> given)
+    {
+        if (declared.All(i => i.Default is null || given.ContainsKey(i.Name))) return given;
+        var all = new Dictionary<string, string>(given, StringComparer.Ordinal);
+        foreach (var input in declared)
+            if (input.Default is { } value) all.TryAdd(input.Name, value);
+        return all;
     }
 
     private void Finish(WorkItem item, Running running, TaskEndState state, bool stoppedByLoop)

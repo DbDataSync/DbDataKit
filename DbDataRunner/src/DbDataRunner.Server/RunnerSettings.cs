@@ -34,6 +34,12 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
     /// <summary>The runner group's name (the state's <c>StateScope.Group</c>): servers that share a database and a group name are one group. Default <see cref="RunnerState.DefaultGroup"/>.</summary>
     public const string GroupVariable = "DBDATARUNNER_GROUP";
 
+    /// <summary>
+    /// Names of variables of the runner's own environment that task processes also see, separated by commas (test grade: how the logins of a Build refresh reach it before the runner resolves connection slots, plan 28c E02).
+    /// They are visible to every task of the runner; never in a package, argv or a file.
+    /// </summary>
+    public const string TaskEnvironmentVariable = "DBDATARUNNER_TASK_ENVIRONMENT";
+
     public static IReadOnlyList<string> DefaultChannels { get; } = ["prod", "dev"];
 
     /// <summary>The state database's engine and connection; SQLite by default.</summary>
@@ -56,6 +62,9 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
 
     /// <summary>Where the secrets a manifest names are looked up (a webhook trigger's <c>secret</c>); null: the environment (<c>DBDATA_SECRET_&lt;NAME&gt;</c>).</summary>
     public DbDataKit.Secrets.ISecretResolver? Secrets { get; init; }
+
+    /// <summary>Variables of the runner's environment a task process sees in addition to the executor's default list (<see cref="TaskEnvironmentVariable"/>).</summary>
+    public IReadOnlyList<string> TaskEnvironment { get; init; } = [];
 
     /// <summary>The channels whose tasks this runner schedules.</summary>
     public IReadOnlyList<string> Channels { get; init; } = DefaultChannels;
@@ -112,6 +121,12 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
         return double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var seconds) && seconds > 0
             ? TimeSpan.FromSeconds(seconds)
             : throw new ArgumentException($"{ActivationMaxWaitVariable} is a number of seconds, such as 600.");
+    }
+
+    public static IReadOnlyList<string> TaskEnvironmentFrom(Func<string, string?>? environment)
+    {
+        var text = (environment ?? Environment.GetEnvironmentVariable)(TaskEnvironmentVariable);
+        return string.IsNullOrWhiteSpace(text) ? [] : text.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.Ordinal).ToList();
     }
 
     public static long MaxArtifactBytesFrom(Func<string, string?>? environment)
