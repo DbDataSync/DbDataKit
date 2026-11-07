@@ -77,3 +77,8 @@ Test engines:
   plan in that pull request and say so.
 - A clean break is allowed, but never a silent one: a changed file format fails with a message naming the file, and a test says so.
 - Commit and push often. Large suites run in CI on the pull request.
+- Branches (keep the remote clean): a branch exists to carry one pull request. Push a branch only when you will open its pull request, name it
+  `suite/<id>-<short-name>` (or `fix/<short-name>`), and do not push experiments, scratch copies, "draft" or "wip" branches, or a second branch for the
+  same change. The workflow `delete-merged-branch.yml` deletes a pull request's branch when it merges. A branch whose work you abandon is deleted by
+  whoever abandoned it, in the same session. A subagent that is not asked for a pull request reports its work and pushes one branch at most; it never
+  leaves a branch behind for someone to find. Bring a branch up to date by merging `main` into it, not by copying it to a new name.

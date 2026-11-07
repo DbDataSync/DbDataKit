@@ -1,0 +1,32 @@
+# Deletes the branch of a pull request once it is merged, so branches do not pile up.
+# (The repository setting "Automatically delete head branches" does the same; this keeps the rule in the repository where it can be read and does not depend on the setting.)
+# It leaves the branch alone when another open pull request is based on it, and never touches a branch of a fork or the default branch.
+name: Delete merged branch
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  delete:
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref != github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete the head branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          stacked="$(gh pr list --repo "$GITHUB_REPOSITORY" --base "$BRANCH" --state open --json number --jq 'length')"
+          if [ "$stacked" != "0" ]; then
+            echo "Keeping '$BRANCH': $stacked open pull request(s) are based on it."
+            exit 0
+          fi
+          gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$BRANCH" --silent && echo "Deleted '$BRANCH'." || echo "'$BRANCH' was already gone."
