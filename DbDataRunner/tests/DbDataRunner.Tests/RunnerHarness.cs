@@ -42,9 +42,13 @@ public sealed class RunnerHarness : IAsyncDisposable
             Channels = channels ?? ["dev"],
             TaskHostPath = ServerBuild.TaskHost,
             MaxArtifactBytes = maxArtifactBytes ?? RunnerPublishing.DefaultMaxArtifactBytes,
+            Secrets = new DbDataKit.Secrets.SecretResolverChain([new DbDataKit.Secrets.EnvSecretProvider(k => k == "DBDATA_SECRET_SHOP_HOOK" ? WebhookSecret : null)]),
         };
         State = RunnerState.Open(Directory, Settings.State, null, Settings.Group);
     }
+
+    /// <summary>The value of the secret <c>shop_hook</c> in the runner's secret store (what a signed webhook is signed with).</summary>
+    public const string WebhookSecret = "s3cret-for-tests";
 
     public string Directory { get; }
 
@@ -106,6 +110,18 @@ public sealed class RunnerHarness : IAsyncDisposable
         using var request = new HttpRequestMessage(method, path);
         if (token) request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, _console.Issuer().Issue(new ConsoleTokenRequest(_paired!.InstanceId, subject, char.ToUpperInvariant(subject[0]) + subject[1..], role)));
         if (body is not null) request.Content = JsonContent.Create(body);
+        using var response = await http.SendAsync(request);
+        var text = await response.Content.ReadAsStringAsync();
+        return (response.StatusCode, text.Length == 0 ? null : JsonNode.Parse(text));
+    }
+
+    /// <summary>A POST of raw bytes with the headers given, with a token of <paramref name="role"/> or, when it is null, none (a sender that signs its body).</summary>
+    public async Task<(HttpStatusCode Status, JsonNode? Body)> PostRawAsync(string path, byte[] body, IReadOnlyDictionary<string, string>? headers = null, ServerRole? role = null)
+    {
+        var http = await ClientAsync(ServerRole.Admin);
+        using var request = new HttpRequestMessage(HttpMethod.Post, path) { Content = new ByteArrayContent(body) };
+        if (role is { } r) request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, _console.Issuer().Issue(new ConsoleTokenRequest(_paired!.InstanceId, "ada", "Ada", r)));
+        foreach (var (name, value) in headers ?? new Dictionary<string, string>()) request.Headers.TryAddWithoutValidation(name, value);
         using var response = await http.SendAsync(request);
         var text = await response.Content.ReadAsStringAsync();
         return (response.StatusCode, text.Length == 0 ? null : JsonNode.Parse(text));

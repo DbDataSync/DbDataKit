@@ -73,7 +73,9 @@ public static class RunnerServer
         app.MapPairing(new PairingService(instanceId, fingerprint, clients, files.Codes()));
         app.AnnounceToConsole(RunnerSettings.Product, instanceId, settings.Listen.Port, clients, files.Codes());
         app.MapKeyRotation(new KeyRotationService(instanceId, clients, new MemoryReplayCache()));
-        app.UseManagementAuthentication(new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache()), refused => log($"A call was refused ({refused.Failure}): {refused.Detail}"));
+        var tokens = new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache());
+        RunnerWebhooks.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), tokens, settings.Secrets ?? RunnerState.Secrets(null));   // before the token check: a signed webhook has no token
+        app.UseManagementAuthentication(tokens, refused => log($"A call was refused ({refused.Failure}): {refused.Detail}"));
         RunnerApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), instanceId);
         RunnerPublishApi.Map(app, new RunnerPublishing(state, settings.MaxArtifactBytes, settings.SignatureVerifier));
         RunnerGroupApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>());

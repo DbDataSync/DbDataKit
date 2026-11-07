@@ -57,6 +57,9 @@ public sealed class RunnerControl
 
     public SchedulerStatus Status() => _scheduler.Status();
 
+    /// <summary>The triggers of this runner's tasks (plan 28a R13): what a webhook arrival asks to queue, and what the status reports.</summary>
+    public DbDataKit.Runner.Triggers.TriggerEngine Triggers => _scheduler.Triggers;
+
     /// <summary>Queues a run of the task apart from its schedule (also when it is paused). Throws <see cref="UnknownTaskException"/> for a task this runner does not serve.</summary>
     public RunNowResult RunNow(TaskRef task, IReadOnlyDictionary<string, string>? inputs, RunnerActor actor)
     {

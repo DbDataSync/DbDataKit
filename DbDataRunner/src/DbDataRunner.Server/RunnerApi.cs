@@ -165,6 +165,11 @@ public static class RunnerApi
             ["waiting_reason"] = t.WaitingReason,
         }).ToArray());
         status["instances"] = RunnerGroupApi.Instances(state, engine);
+        status["triggers"] = new JsonArray(control.Triggers.Statuses().Select(t => (JsonNode)new JsonObject
+        {
+            ["package"] = t.Task.Package, ["channel"] = t.Task.Channel, ["task"] = t.Task.Task, ["kind"] = t.Kind, ["id"] = t.Id, ["state"] = t.State,
+            ["last_fired"] = t.LastFiredAt?.UtcDateTime.ToString("O"), ["problem"] = t.Problem,
+        }).ToArray());
         status["problems"] = new JsonArray(scheduler.Problems.Select(p => (JsonNode)new JsonObject { ["subject"] = p.Subject, ["message"] = p.Message, ["at"] = p.At.UtcDateTime.ToString("O") }).ToArray());
         return status;
     }

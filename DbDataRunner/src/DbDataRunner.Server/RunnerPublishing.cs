@@ -205,6 +205,13 @@ public sealed partial class RunnerPublishing
                 throw new RunnerPublishException(403, $"This runner requires signed versions (require_signatures is on) and the {Kind} '{input.Name}' has no valid signature: the signature of its manifest, which lists every file's path and SHA-256, is missing"
                     + (verdict.Message is null ? "" : $" ({verdict.Message})") + ". Publish it signed, or have an administrator turn require_signatures off.");
 
+            // a trigger loop across the packages of the channel is refused before anything is published, naming the loop (plan 28a R13)
+            if (PackageManifestReader.Load(input.Manifest, $"{Kind}/{input.Name}") is { Ok: true, Manifest: { } candidate })
+            {
+                try { ProjectionDocuments.RequireNoCycle(_projections.ListByChannel(input.Channel), input.Name, input.Channel, ProjectionDocuments.RowsOf(candidate, "0")); }
+                catch (TriggerCycleException ex) { throw new RunnerPublishException(400, ex.Message); }
+            }
+
             PublishResult result;
             try
             {

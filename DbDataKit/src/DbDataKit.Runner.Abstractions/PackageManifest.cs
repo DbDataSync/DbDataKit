@@ -49,7 +49,7 @@ public enum TriggerKind
 }
 
 /// <summary>
-/// One way a task is started besides its schedule. Which fields count depends on <see cref="Kind"/>: after-run uses <see cref="Task"/>, <see cref="Package"/> and <see cref="On"/>; webhook <see cref="Source"/>;
+/// One way a task is started besides its schedule. Which fields count depends on <see cref="Kind"/>: after-run uses <see cref="Task"/>, <see cref="Package"/> and <see cref="On"/>; webhook <see cref="Source"/> and, to check a signature, <see cref="Secret"/> (the name of a secret in the runner's secret store);
 /// file <see cref="Connection"/> (a slot of the task), <see cref="Path"/> and <see cref="Poll"/>; store change <see cref="Model"/> and <see cref="Entity"/>.
 /// </summary>
 public sealed record TaskTrigger(
@@ -62,14 +62,15 @@ public sealed record TaskTrigger(
     string? Path = null,
     TimeSpan? Poll = null,
     string? Model = null,
-    string? Entity = null)
+    string? Entity = null,
+    string? Secret = null)
 {
     /// <summary>The outcomes an after-run trigger fires on; <see cref="RunOutcome.Succeeded"/> when none is written.</summary>
     public IReadOnlyList<RunOutcome> Outcomes => On is { Count: > 0 } ? On : [RunOutcome.Succeeded];
 
     public static TaskTrigger AfterRun(string task, params RunOutcome[] on) => new(TriggerKind.AfterRun, Task: task, On: on.Length == 0 ? null : on);
 
-    public static TaskTrigger OnWebhook(string source) => new(TriggerKind.Webhook, Source: source);
+    public static TaskTrigger OnWebhook(string source, string? secret = null) => new(TriggerKind.Webhook, Source: source, Secret: secret);
 
     public static TaskTrigger OnFile(string connection, string path, TimeSpan? poll = null) => new(TriggerKind.File, Connection: connection, Path: path, Poll: poll);
 

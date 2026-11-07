@@ -400,6 +400,41 @@ public sealed class TriggerStates(StateDatabase database)
             return reader.Read() ? new TriggerState(reader.GetString(0), reader.NullableTime(1), reader.IsDBNull(2) ? null : reader.GetString(2)) : null;
         });
 
+    /// <summary>
+    /// Moves the trigger's cursor from <paramref name="expectedCursor"/> to <paramref name="newCursor"/> only if it still is the one the caller read (null: the trigger has no cursor yet), and says whether it did. It is how two
+    /// runners that both see the same event agree on which one handles it: the one whose move succeeds. <paramref name="firedAt"/> is stored as the time the trigger last fired.
+    /// </summary>
+    public bool TryAdvance(string package, string channel, string task, string triggerId, string? expectedCursor, string newCursor, DateTimeOffset? firedAt) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            return TryAdvance(connection, null, package, channel, task, triggerId, expectedCursor, newCursor, firedAt);
+        });
+
+    /// <summary>The same on a connection and transaction the caller owns, so the move stands or falls with other writes (the work item a trigger queues).</summary>
+    public bool TryAdvance(DbConnection connection, DbTransaction? transaction, string package, string channel, string task, string triggerId, string? expectedCursor, string newCursor, DateTimeOffset? firedAt)
+    {
+        void BindKey(DbCommand cmd) =>
+            cmd.Bind(database, "package", package).Bind(database, "channel", channel).Bind(database, "task", task).Bind(database, "trigger", triggerId);
+
+        if (expectedCursor is null)
+        {
+            using var insert = database.Command(Module, connection, transaction, database.Dialect.InsertOrIgnore("{table:trigger_state}", "package, channel, task, trigger_id, last_fired_at, cursor_text",
+                "$package, $channel, $task, $trigger, $fired, $cursor", "package, channel, task, trigger_id"));
+            BindKey(insert);
+            insert.Bind(database, "fired", firedAt, System.Data.DbType.DateTimeOffset).Bind(database, "cursor", newCursor, System.Data.DbType.String);
+            if (insert.ExecuteNonQuery() == 1) return true;
+        }
+
+        using var update = database.Command(Module, connection, transaction,
+            "UPDATE {table:trigger_state} SET last_fired_at = $fired, cursor_text = $cursor WHERE package = $package AND channel = $channel AND task = $task AND trigger_id = $trigger AND "
+            + (expectedCursor is null ? "cursor_text IS NULL;" : "cursor_text = $expected;"));
+        BindKey(update);
+        update.Bind(database, "fired", firedAt, System.Data.DbType.DateTimeOffset).Bind(database, "cursor", newCursor, System.Data.DbType.String);
+        if (expectedCursor is not null) update.Bind(database, "expected", expectedCursor, System.Data.DbType.String);
+        return update.ExecuteNonQuery() == 1;
+    }
+
     /// <summary>Sets what the trigger remembers (both values are replaced).</summary>
     public void Set(string package, string channel, string task, string triggerId, DateTimeOffset? lastFiredAt, string? cursor) =>
         database.Retry(() =>

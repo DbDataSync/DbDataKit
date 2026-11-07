@@ -42,6 +42,9 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
     /// <summary>Checks the signature of a published version (plan 30 section 6.2); null: the default, which finds every version unsigned.</summary>
     public IVersionSignatureVerifier? SignatureVerifier { get; init; }
 
+    /// <summary>Where the secrets a manifest names are looked up (a webhook trigger's <c>secret</c>); null: the environment (<c>DBDATA_SECRET_&lt;NAME&gt;</c>).</summary>
+    public DbDataKit.Secrets.ISecretResolver? Secrets { get; init; }
+
     /// <summary>The channels whose tasks this runner schedules.</summary>
     public IReadOnlyList<string> Channels { get; init; } = DefaultChannels;
 

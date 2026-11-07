@@ -97,6 +97,9 @@ public static class PackageManifestReader
     /// <summary>Reads <paramref name="yaml"/> or throws a <see cref="PackageManifestException"/> naming <paramref name="file"/>.</summary>
     public static PackageManifest Read(string yaml, string file = "package.yaml") => Load(yaml, file).ThrowIfInvalid();
 
+    /// <summary>The word of an after-run trigger's <c>on</c> that stands for every outcome a run ends with (a failed run, a stopped one, an interrupted one and a succeeded one alike).</summary>
+    public const string AnyOutcome = "any";
+
     internal static readonly (string Word, RunOutcome Outcome)[] OutcomeWords =
     [
         ("succeeded", RunOutcome.Succeeded),
@@ -447,8 +450,8 @@ public static class PackageManifestReader
                         found.Add(new TaskTrigger(TriggerKind.AfterRun, Task: Text(trigger, "task", body, true), Package: Text(trigger, "package", body, false), On: on));
                         break;
                     case "webhook":
-                        Keys(trigger, body, "source");
-                        found.Add(new TaskTrigger(TriggerKind.Webhook, Source: Text(trigger, "source", body, true)));
+                        Keys(trigger, body, "source", "secret");
+                        found.Add(new TaskTrigger(TriggerKind.Webhook, Source: Text(trigger, "source", body, true), Secret: Text(trigger, "secret", body, false)));
                         break;
                     case "file":
                         Keys(trigger, body, "connection", "path", "poll");
@@ -473,11 +476,17 @@ public static class PackageManifestReader
                 var at = $"{Join(body, "on")}[{i}]";
                 positions[at] = list.Items[i];
                 var word = (list.Items[i] as YamlScalar)?.Value;
+                if (word == AnyOutcome)
+                {
+                    foreach (var every in OutcomeWords.Where(o => !found.Contains(o.Outcome))) found.Add(every.Outcome);
+                    continue;
+                }
+
                 var hit = OutcomeWords.FirstOrDefault(o => o.Word == word);
                 if (hit.Word is null)
                 {
-                    var near = word is null ? null : DidYouMean.Closest(word, OutcomeWords.Select(o => o.Word));
-                    Bad(at, list.Items[i], $"'{word}' is not an outcome: {string.Join(", ", OutcomeWords.Select(o => o.Word))}." + (near is null ? "" : $" Did you mean `{near}`?"));
+                    var near = word is null ? null : DidYouMean.Closest(word, OutcomeWords.Select(o => o.Word).Append(AnyOutcome));
+                    Bad(at, list.Items[i], $"'{word}' is not an outcome: {string.Join(", ", OutcomeWords.Select(o => o.Word))}, or {AnyOutcome} for every one." + (near is null ? "" : $" Did you mean `{near}`?"));
                 }
                 else if (!found.Contains(hit.Outcome)) found.Add(hit.Outcome);
             }
