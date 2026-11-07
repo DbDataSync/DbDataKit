@@ -25,10 +25,19 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
     /// <summary>The channels the runner serves, separated by commas; default <see cref="DefaultChannels"/>.</summary>
     public const string ChannelsVariable = "DBDATARUNNER_CHANNELS";
 
+    /// <summary>The size cap of one uploaded file, in bytes (<see cref="RunnerPublishing.DefaultMaxArtifactBytes"/> when unset).</summary>
+    public const string MaxArtifactBytesVariable = "DBDATARUNNER_MAX_ARTIFACT_BYTES";
+
     public static IReadOnlyList<string> DefaultChannels { get; } = ["prod", "dev"];
 
     /// <summary>The state database's engine and connection; SQLite by default.</summary>
     public StateSettings State { get; init; } = new();
+
+    /// <summary>The size cap of one file uploaded through the publish API.</summary>
+    public long MaxArtifactBytes { get; init; } = RunnerPublishing.DefaultMaxArtifactBytes;
+
+    /// <summary>Checks the signature of a published version (plan 30 section 6.2); null: the default, which finds every version unsigned.</summary>
+    public IVersionSignatureVerifier? SignatureVerifier { get; init; }
 
     /// <summary>The channels whose tasks this runner schedules.</summary>
     public IReadOnlyList<string> Channels { get; init; } = DefaultChannels;
@@ -73,6 +82,15 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
         var engine = engineFlag ?? environment(StateEngineVariable);
         var connection = environment(StateConnectionVariable);
         return string.IsNullOrWhiteSpace(engine) && string.IsNullOrWhiteSpace(connection) ? new StateSettings() : new StateSettings(engine, connection);
+    }
+
+    public static long MaxArtifactBytesFrom(Func<string, string?>? environment)
+    {
+        var text = (environment ?? Environment.GetEnvironmentVariable)(MaxArtifactBytesVariable);
+        if (string.IsNullOrWhiteSpace(text)) return RunnerPublishing.DefaultMaxArtifactBytes;
+        return long.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var bytes) && bytes > 0
+            ? bytes
+            : throw new ArgumentException($"{MaxArtifactBytesVariable} is a whole number of bytes, such as 536870912.");
     }
 
     public static IReadOnlyList<string> ChannelsFrom(Func<string, string?>? environment, string? flag = null)
