@@ -9,7 +9,12 @@ namespace DbDataKit.State.Cli;
 /// <param name="SqlitePath">The file a SQLite state is (the product's directory and <c>state.db</c>); not created by anything here.</param>
 /// <param name="Secrets">The resolver for the references in <see cref="StateSettings.ConnectionString"/>, made when it is first needed: <c>state show</c> never asks for it, <c>state test</c> does. Null: references are left as written.</param>
 /// <param name="SettingsFile">The file whose <c>state</c> section holds the product's state settings, when the product has one: where <c>state init</c> writes (the option <c>--settings</c> names another). Null: the product keeps its settings elsewhere (flags, environment) and <c>state init</c> needs <c>--settings</c> to write.</param>
-public sealed record StateTarget(StateSettings Settings, string SqlitePath, Func<ISecretResolver?>? Secrets = null, string? SettingsFile = null);
+/// <param name="Sources">Where each effective setting came from (<see cref="StateSettingsResolver"/>), shown by <c>state show</c>; null: the product does not say.</param>
+public sealed record StateTarget(StateSettings Settings, string SqlitePath, Func<ISecretResolver?>? Secrets = null, string? SettingsFile = null, StateSources? Sources = null)
+{
+    /// <summary>A target from what <see cref="StateSettingsResolver.Resolve"/> found: the settings, where each came from and the file they are read from.</summary>
+    public static StateTarget From(ResolvedState resolved, string sqlitePath, Func<ISecretResolver?>? secrets, string? settingsFile) => new(resolved.Settings, sqlitePath, secrets, settingsFile, resolved.Sources);
+}
 
 /// <summary>
 /// What a product tells the shared <c>state</c> verbs (<see cref="StateVerbs.Create"/>): its program name, how to find its state from the options of the command, the modules it is built from and the scope

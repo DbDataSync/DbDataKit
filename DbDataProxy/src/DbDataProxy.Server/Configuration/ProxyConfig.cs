@@ -94,6 +94,13 @@ public static class ProxyConfig
             }
         }
 
+        // The state section is the one every product shares now: a key of the earlier release is refused naming its file, before anything is bound
+        if (ProxyStateConfig.OldKey(configuration) is { } oldKey)
+        {
+            diags.Add(Catalog.Create(SharedCodes.InvalidValue, oldKey.File ?? "configuration", oldKey.Line, oldKey.Column, oldKey.Message, keyPath: "State"));
+            return new ProxyConfigLoad(null, diags, Result(null));
+        }
+
         var bound = new ConfigBinder(Catalog, tree.FileOf).Bind<ProxyOptions>(root, section);
         var value = bound.Value;
         diags.AddRange(bound.Diagnostics);

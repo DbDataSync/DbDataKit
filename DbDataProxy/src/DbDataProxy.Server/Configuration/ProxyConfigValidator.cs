@@ -53,13 +53,18 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
     {
         try
         {
-            var settings = new DbDataKit.State.StateSettings(o.State.Engine, o.State.ConnectionString);
-            if (!settings.IsSqlite && string.IsNullOrWhiteSpace(o.State.ConnectionString))
-                cx.Error("State.ConnectionString", $"The state engine is `{o.State.Engine}`, which needs a connection string.", "Give the connection string of a database for the proxy's state, with the password as a secret reference, or use `sqlite`.");
+            var settings = o.State.ToSettings();
+            _ = settings.EngineId;
+            if (!settings.IsSqlite && string.IsNullOrWhiteSpace(settings.ConnectionString))
+                cx.Error("State.Connection", $"The state engine is `{o.State.Engine}`, which needs a connection string.", "Give the connection string of a database for the proxy's state, with the password as a secret reference, or use `sqlite`.");
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException ex) when (ex.Message.Contains("is not one of sqlite", StringComparison.Ordinal))
         {
             cx.Error("State.Engine", $"`{o.State.Engine}` is not a state engine.", "Use `sqlite`, `mssql` or `postgres`.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            cx.Error("State", ex.Message, "See the state section in the README.");
         }
     }
 

@@ -55,7 +55,7 @@ public static class Cli
         // a group (a SQL Server or PostgreSQL state) keeps its pairings in the state, so a code made here is redeemed through any of its instances (plan 20 O04)
         var options = ProxyConfiguration.LoadOptions(dataDirectory);
         options.DataDirectory = dataDirectory;
-        var group = string.Equals(options.State.Engine, DbDataKit.State.StateEngineIds.Sqlite, StringComparison.OrdinalIgnoreCase) ? null : IdentityCommand.OpenState(options);
+        var group = options.State.ToSettings().IsSqlite ? null : IdentityCommand.OpenState(options);
         return new PairingFiles(ProxyConfigFile.PathIn(dataDirectory), Path.Combine(dataDirectory, "pairing-codes.json"), group);
     }
 
@@ -78,7 +78,7 @@ public static class Cli
     // ---- state ----
 
     /// <summary>
-    /// The shared <c>state show|test|grants</c> verbs over the proxy's state: the engine and connection of its settings (Proxy:State), the file <c>state.db</c> in its data directory (<c>--repo</c> names it, as for the pairing verbs), the
+    /// The shared <c>state show|test|grants|init</c> verbs over the proxy's state: the <c>state:</c> section of its <c>server.yaml</c> (and the environment variables that override it), where <c>state init</c> writes it, the file <c>state.db</c> in its data directory (<c>--repo</c> names it, as for the pairing verbs), the
     /// modules and the default group it opens them with, and a password that is a secret reference looked up as the server looks it up.
     /// </summary>
     private static Noun StateNoun() => DbDataKit.State.Cli.StateVerbs.Create(new DbDataKit.State.Cli.StateVerbContext(
@@ -90,10 +90,12 @@ public static class Cli
                 var directory = args.Get("repo") is { Length: > 0 } repo ? Path.GetFullPath(repo) : null;
                 var options = ProxyConfiguration.LoadOptions(directory);
                 if (directory is not null) options.DataDirectory = directory;
-                return new DbDataKit.State.Cli.StateTarget(
-                    new DbDataKit.State.StateSettings(options.State.Engine, options.State.ConnectionString),
-                    State.ProxyState.PathIn(ProxyHost.ResolveDataDirectory(options)),
-                    () => new DbDataKit.Secrets.SecretResolverChain(Secrets.SecretsRuntime.CreateProviders(options, Secrets.SecretsRuntime.OpenStore(options))));
+                var dataDirectory = ProxyHost.ResolveDataDirectory(options);
+                return DbDataKit.State.Cli.StateTarget.From(
+                    ProxyConfiguration.LoadState(directory),
+                    State.ProxyState.PathIn(dataDirectory),
+                    () => new DbDataKit.Secrets.SecretResolverChain(Secrets.SecretsRuntime.CreateProviders(options, Secrets.SecretsRuntime.OpenStore(options))),
+                    ProxyConfigFile.PathIn(dataDirectory));
             }
             catch (ProxyConfigException ex) { throw new InvalidOperationException(ex.Message, ex); }
         },

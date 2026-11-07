@@ -258,8 +258,8 @@ public static class ProxyHost
         string dataDirectory = ResolveDataDirectory(options);
         var holder = new TlsCertificateHolder();
         builder.Services.AddSingleton(holder);
-        builder.Services.AddSingleton(sp => DbDataProxy.Server.State.ProxyState.Open(dataDirectory, new DbDataKit.State.StateSettings(options.State.Engine, options.State.ConnectionString),
-            text => sp.GetRequiredService<SecretsRuntime>().ResolveConnectionString("Proxy:State:ConnectionString", text, "state")));
+        builder.Services.AddSingleton(sp => DbDataProxy.Server.State.ProxyState.Open(dataDirectory, options.State.ToSettings(),
+            text => sp.GetRequiredService<SecretsRuntime>().ResolveConnectionString("Proxy:State:Connection", text, "state")));
         builder.Services.AddSingleton(sp => new DbDataKit.State.NotificationFeedStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>(), DbDataProxy.Server.State.ProxyState.ServiceId));
         builder.Services.AddSingleton<DbDataKit.Monitoring.INotificationFeed>(sp => sp.GetRequiredService<DbDataKit.State.NotificationFeedStore>());
         builder.Services.AddSingleton(sp => new DbDataProxy.Server.State.SavedQueryStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
