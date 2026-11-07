@@ -38,14 +38,14 @@ public sealed class Tally : RunnerJob<NoInput, TallyProgress, NoSlots>
     }
 }
 
-/// <summary>Runs for a few seconds and ends by itself: a run in flight while a version is activated.</summary>
+/// <summary>Runs for twelve seconds and ends by itself: a run in flight while a version is activated.</summary>
 [RunnerTask("lingers")]
 public sealed class Lingers : RunnerJob<NoInput, NoProgress, NoSlots>
 {
     protected override async Task RunAsync(CancellationToken ct)
     {
         Console.WriteLine("lingering");
-        await Task.Delay(TimeSpan.FromSeconds(5), ct);
+        await Task.Delay(TimeSpan.FromSeconds(12), ct);
     }
 }
 
