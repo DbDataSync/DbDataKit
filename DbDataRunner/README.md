@@ -17,6 +17,12 @@ dbdatarunner tasks resume <package>/<channel>/<task> [--repo <server directory>]
 dbdatarunner label add <label> --instance <id|this> [--repo <server directory>] [--group <name>]
 dbdatarunner label remove <label> --instance <id|this> [--repo <server directory>] [--group <name>]
 dbdatarunner label list [--instance <id|this>] [--repo <server directory>] [--group <name>]
+dbdatarunner lineage graph [--kind <kind>] [--repo <server directory>] [--group <name>]   # the deployment lineage of the group (plan 28c E24): packages, versions, channels, runners, runs; the directory and group are the other local verbs'
+dbdatarunner lineage impact <node> [--depth <n>] [--repo <server directory>] [--group <name>]
+dbdatarunner lineage provenance <node> [--depth <n>] [--repo <server directory>] [--group <name>]
+dbdatarunner lineage where <definition> [--channel <channel>] [--repo <server directory>] [--group <name>]   # where is this deployed: channels, active and previous version, who activated and when, the runners ready or active
+dbdatarunner lineage on <runner> [--repo <server directory>] [--group <name>]   # what is deployed on a runner (an instance id or a host)
+dbdatarunner lineage runs <definition> <version> [--repo <server directory>] [--group <name>]   # the runs that named a version
 dbdatarunner runs list [--package <name>] [--channel <name>] [--task <name>] [--outcome <outcome>] [--limit <n>] [--repo <server directory>]
 dbdatarunner state show [--offline] [--engine mssql|postgres] [--repo <server directory>]    # the state database: engine, namespaces, module versions, pending migrations; creates nothing
 dbdatarunner state test [--engine mssql|postgres] [--repo <server directory>]                  # opens it read-only and checks rights, engine version and clashes; stops at the first failure with the fix
@@ -70,6 +76,7 @@ The runner serves the channels `prod` and `dev` by default (`--channels`, or `DB
 | --- | --- |
 | `GET /api/v1/status` | the state engine, the channels served, what this machine reports (`memory_limit`, `cpu_limit`, `os`, `network`), this process's instance id and every task's status: next due, last run, what is running or waiting, whether it is paused |
 | `GET /api/v1/instances[?all=true]` | the group's live instances (host, version, labels with their source, capabilities, items running); `all=true` adds the ones that are gone or silent past their lease, marked `live: false`, which is how the console shows a runner that left |
+| `GET /api/v1/lineage` | the deployment graph of the group in the shared lineage wire form (plan 18, plan 28c E24): package, version, channel, runner instance and runtime nodes, the version each instance holds in each channel with its state, and the newest runs joined to the version they named; the console joins it with the other servers and answers "where is this deployed" from it (viewer) |
 | `GET /api/v1/runs?package=&channel=&task=&outcome=&limit=&before=` | the run history, newest first; `task` needs the package and the channel |
 | `POST /api/v1/tasks/<package>/<channel>/<task>/run` with an optional `{"inputs": {"name": "value"}}` | queues a run now, apart from the schedule (202 and the run id; 409 when one is queued or running already) |
 | `POST /api/v1/webhooks/<package>/<channel>/<source>` with the body as is | delivers a webhook to the tasks with a webhook trigger for the source: a client with the operator or publisher role (the serving layer's call), or a sender with no token and `X-Signature: sha256=<hmac of the body>` under the trigger's `secret`. 202 with the inbox items; 401 for a signature that does not hold (the body is kept, flagged, and no run takes it); 404 when no task listens. Audited without the body |

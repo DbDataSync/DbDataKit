@@ -53,22 +53,20 @@ public static class LineageNoun
 
     /// <param name="source">The host's graph.</param>
     /// <param name="deployment">Adds the deployment questions (<c>where</c>, <c>on</c>, <c>runs</c>, plan 28c E24) for a host whose graph has deployment nodes (a runner, a console).</param>
-    public static Noun Create(Func<CancellationToken, Task<LineageGraph>> source, bool deployment = false)
-    {
-        var verbs = new List<Verb>
-        {
-            new("graph", "Every node and edge of the graph", EffectClass.OfflineOnly, "[--kind <kind>]", (args, context) => GraphAsync(source, args, context), GraphSchema),
-            new("impact", "What a node feeds, downstream", EffectClass.OfflineOnly, "<node> [--depth <n>]", (args, context) => SliceAsync(source, args, context, downstream: true), SliceSchema),
-            new("provenance", "What feeds a node, upstream", EffectClass.OfflineOnly, "<node> [--depth <n>]", (args, context) => SliceAsync(source, args, context, downstream: false), SliceSchema),
-        };
-        if (deployment)
-        {
-            verbs.Add(new("where", "Where a definition is deployed: its channels, versions and runners", EffectClass.OfflineOnly, "<definition> [--channel <channel>]", (args, context) => WhereAsync(source, args, context), WhereSchema));
-            verbs.Add(new("on", "What is deployed on a runner (an instance id or a host)", EffectClass.OfflineOnly, "<runner>", (args, context) => OnAsync(source, args, context), OnSchema));
-            verbs.Add(new("runs", "The runs that named a version of a definition", EffectClass.OfflineOnly, "<definition> <version>", (args, context) => RunsAsync(source, args, context), RunsSchema));
-        }
-        return new("lineage", "What feeds what: the lineage graph, the impact of a change, the provenance of a result" + (deployment ? ", and where definitions are deployed" : ""), verbs);
-    }
+    public static Noun Create(Func<CancellationToken, Task<LineageGraph>> source, bool deployment = false) => new Noun("lineage", "What feeds what: the lineage graph, the impact of a change, the provenance of a result",
+    [
+        new Verb("graph", "Every node and edge of the graph", EffectClass.OfflineOnly, "[--kind <kind>]", (args, context) => GraphAsync(source, args, context), GraphSchema),
+        new Verb("impact", "What a node feeds, downstream", EffectClass.OfflineOnly, "<node> [--depth <n>]", (args, context) => SliceAsync(source, args, context, downstream: true), SliceSchema),
+        new Verb("provenance", "What feeds a node, upstream", EffectClass.OfflineOnly, "<node> [--depth <n>]", (args, context) => SliceAsync(source, args, context, downstream: false), SliceSchema),
+        .. deployment ? DeploymentVerbs(source) : [],
+    ]);
+
+    private static Verb[] DeploymentVerbs(Func<CancellationToken, Task<LineageGraph>> source) =>
+    [
+        new Verb("where", "Where a definition is deployed: its channels, versions and runners", EffectClass.OfflineOnly, "<definition> [--channel <channel>]", (args, context) => WhereAsync(source, args, context), WhereSchema),
+        new Verb("on", "What is deployed on a runner (an instance id or a host)", EffectClass.OfflineOnly, "<runner>", (args, context) => OnAsync(source, args, context), OnSchema),
+        new Verb("runs", "The runs that named a version of a definition", EffectClass.OfflineOnly, "<definition> <version>", (args, context) => RunsAsync(source, args, context), RunsSchema),
+    ];
 
     private static async Task<int> WhereAsync(Func<CancellationToken, Task<LineageGraph>> source, string[] args, CliContext context)
     {

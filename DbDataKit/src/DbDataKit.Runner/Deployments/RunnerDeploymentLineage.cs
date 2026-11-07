@@ -17,7 +17,8 @@ public static class RunnerDeploymentLineage
     /// <summary>The newest runs of a package that are laid in the graph.</summary>
     public const int RunsPerPackage = 25;
 
-    private static readonly string[] ChangesOfTheServingVersion = ["activate", "switch", "rollback", "retire"];
+    /// <summary>The events that move what a channel serves: a publish that serves at once, an activation, a switch, a rollback, a retire (a stage does not).</summary>
+    private static readonly string[] ChangesOfTheServingVersion = ["publish", "activate", "switch", "rollback", "retire"];
 
     /// <param name="state">The group's state database.</param>
     /// <param name="group">The runner group's name, the instance id of the identities.</param>
