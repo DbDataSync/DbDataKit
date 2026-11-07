@@ -13,7 +13,7 @@ public sealed record DefinitionVersion(string Kind, string Name, int Version, st
 public sealed record DefinitionEvent(long Id, string Action, string Kind, string Name, string Channel, int Version, string ActorId, DateTimeOffset At);
 
 /// <summary>The validation a publish asked for refused the content, so nothing was stored and the channel still serves what it served.</summary>
-public sealed class DefinitionRejectedException(string message) : Exception(message);
+public class DefinitionRejectedException(string message) : Exception(message);
 
 /// <summary>A switch or rollback that cannot be done: no such version, nothing to roll back to.</summary>
 public sealed class DefinitionNotFoundException(string message) : Exception(message);
@@ -31,76 +31,22 @@ public sealed partial class DefinitionStore(StateDatabase database) : IDefinitio
 
     private const string VersionColumns = "kind, name, version, hash, content, depends_on, published_by, published_at, note";
 
-    /// <inheritdoc cref="DefinitionStore.Publish"/>
-    public DefinitionVersion Publish(string kind, string name, string content, string by, IReadOnlyList<string>? dependsOn = null, string? note = null, string channel = Production, Func<string, string?>? validate = null)
-    {
-        Check(kind, name, channel);
-        if (validate?.Invoke(content) is { } refusal) throw new DefinitionRejectedException(refusal);
-        var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(content)));
-        var now = database.Time.GetUtcNow();
-        return database.Retry(() =>
-        {
-            using var connection = database.OpenConnection();
-            using var transaction = connection.BeginTransaction();
-            var serving = Serving(connection, transaction, kind, name, channel);
-            if (serving is not null && ReadVersion(connection, transaction, kind, name, serving.Value.Version) is { } current && current.Hash == hash) return current;
+    /// <summary>The older API's publish is the life cycle's publish with <see cref="PublishMode.Serve"/>, no registry and no dependency or slot checks (see <see cref="DefinitionPublisher"/>).</summary>
+    private DefinitionPublisher Publisher => new(database, kinds: null);
 
-            using var latest = database.Command(Module, connection, transaction, "SELECT MAX(version) FROM {table:definition_version} WHERE kind = $kind AND name = $name;");
-            latest.Bind(database, "kind", kind).Bind(database, "name", name);
-            var version = (latest.ExecuteScalar() is { } top and not DBNull ? Convert.ToInt32(top) : 0) + 1;
-            using var insert = database.Command(Module, connection, transaction,
-                "INSERT INTO {table:definition_version} (kind, name, version, hash, content, depends_on, published_by, published_at, note) VALUES ($kind, $name, $version, $hash, $content, CAST($depends AS {{json}}), $by, $now, $note);");
-            insert.Bind(database, "kind", kind).Bind(database, "name", name).Bind(database, "version", (long)version).Bind(database, "hash", hash).Bind(database, "content", content)
-                .Bind(database, "depends", JsonSerializer.Serialize(dependsOn ?? [])).Bind(database, "by", by).Bind(database, "now", now).Bind(database, "note", note, System.Data.DbType.String).ExecuteNonQuery();
-            Point(connection, transaction, kind, name, channel, version, serving?.Version, by, now);
-            Log(connection, transaction, "publish", kind, name, channel, version, by, now);
-            transaction.Commit();
-            return ReadVersion(connection, null, kind, name, version)!;
-        });
-    }
+    /// <inheritdoc cref="DefinitionPublisher.Publish"/>
+    public DefinitionVersion Publish(string kind, string name, string content, string by, IReadOnlyList<string>? dependsOn = null, string? note = null, string channel = Production, Func<string, string?>? validate = null) =>
+        Publisher.Publish(new PublishRequest(kind, name, content, by, channel, PublishMode.Serve, dependsOn, note), validate).Version;
 
     public DefinitionVersion Switch(string kind, string name, int version, string by, string channel = Production) =>
-        Move("switch", kind, name, channel, by, _ => version);
+        Publisher.Switch(kind, name, version, by, channel);
 
     public DefinitionVersion Rollback(string kind, string name, string by, string channel = Production) =>
-        Move("rollback", kind, name, channel, by, serving => serving.Previous ?? throw new DefinitionNotFoundException($"'{name}' on {channel} has no earlier version to return to."));
+        Publisher.Rollback(kind, name, by, channel);
 
-    private DefinitionVersion Move(string action, string kind, string name, string channel, string by, Func<(int Version, int? Previous), int> target)
-    {
-        Check(kind, name, channel);
-        var now = database.Time.GetUtcNow();
-        return database.Retry(() =>
-        {
-            using var connection = database.OpenConnection();
-            using var transaction = connection.BeginTransaction();
-            var serving = Serving(connection, transaction, kind, name, channel);
-            var version = serving is null ? target((0, null)) : target(serving.Value);
-            if (ReadVersion(connection, transaction, kind, name, version) is not { } wanted) throw new DefinitionNotFoundException($"'{name}' has no version {version}.");
-            if (serving is { } already && already.Version == version) return wanted;
-            Point(connection, transaction, kind, name, channel, version, serving?.Version, by, now);
-            Log(connection, transaction, action, kind, name, channel, version, by, now);
-            transaction.Commit();
-            return wanted;
-        });
-    }
-
-    /// <inheritdoc cref="DefinitionStore.Retire"/>
-    public bool Retire(string kind, string name, string by, string channel = Production)
-    {
-        Check(kind, name, channel);
-        var now = database.Time.GetUtcNow();
-        return database.Retry(() =>
-        {
-            using var connection = database.OpenConnection();
-            using var transaction = connection.BeginTransaction();
-            if (Serving(connection, transaction, kind, name, channel) is not { } serving) return false;
-            using var delete = database.Command(Module, connection, transaction, "DELETE FROM {table:definition_serving} WHERE kind = $kind AND name = $name AND channel = $channel;");
-            delete.Bind(database, "kind", kind).Bind(database, "name", name).Bind(database, "channel", channel).ExecuteNonQuery();
-            Log(connection, transaction, "retire", kind, name, channel, serving.Version, by, now);
-            transaction.Commit();
-            return true;
-        });
-    }
+    /// <inheritdoc cref="DefinitionPublisher.Retire"/>
+    public bool Retire(string kind, string name, string by, string channel = Production) =>
+        Publisher.Retire(kind, name, by, channel);
 
     public long LatestEventId() =>
         database.Retry(() =>
@@ -169,23 +115,7 @@ public sealed partial class DefinitionStore(StateDatabase database) : IDefinitio
         return reader.Read() ? (reader.Int32(0), reader.NullableInt32(1)) : null;
     }
 
-    private void Point(DbConnection connection, DbTransaction transaction, string kind, string name, string channel, int version, int? was, string by, DateTimeOffset now)
-    {
-        using var command = database.Command(Module, connection, transaction, was is null
-            ? "INSERT INTO {table:definition_serving} (kind, name, channel, version, previous_version, switched_at, switched_by) VALUES ($kind, $name, $channel, $version, NULL, $now, $by);"
-            : "UPDATE {table:definition_serving} SET version = $version, previous_version = $was, switched_at = $now, switched_by = $by WHERE kind = $kind AND name = $name AND channel = $channel;");
-        command.Bind(database, "kind", kind).Bind(database, "name", name).Bind(database, "channel", channel).Bind(database, "version", (long)version).Bind(database, "now", now).Bind(database, "by", by);
-        if (was is not null) command.Bind(database, "was", (long)was.Value);
-        command.ExecuteNonQuery();
-    }
-
-    private void Log(DbConnection connection, DbTransaction transaction, string action, string kind, string name, string channel, int version, string by, DateTimeOffset now)
-    {
-        using var command = database.Command(Module, connection, transaction, "INSERT INTO {table:definition_event} (action, kind, name, channel, version, actor_id, happened_at) VALUES ($action, $kind, $name, $channel, $version, $by, $now);");
-        command.Bind(database, "action", action).Bind(database, "kind", kind).Bind(database, "name", name).Bind(database, "channel", channel).Bind(database, "version", (long)version).Bind(database, "by", by).Bind(database, "now", now).ExecuteNonQuery();
-    }
-
-    private DefinitionVersion? ReadVersion(DbConnection connection, DbTransaction? transaction, string kind, string name, int version)
+    internal DefinitionVersion? ReadVersion(DbConnection connection, DbTransaction? transaction, string kind, string name, int version)
     {
         using var command = database.Command(Module, connection, transaction, $"SELECT {VersionColumns} FROM {{table:definition_version}} WHERE kind = $kind AND name = $name AND version = $version;");
         command.Bind(database, "kind", kind).Bind(database, "name", name).Bind(database, "version", (long)version);
@@ -196,7 +126,7 @@ public sealed partial class DefinitionStore(StateDatabase database) : IDefinitio
     private static DefinitionVersion Read(DbDataReader reader) =>
         new(reader.GetString(0), reader.GetString(1), reader.Int32(2), reader.GetString(3), reader.GetString(4), JsonSerializer.Deserialize<string[]>(reader.GetString(5)) ?? [], reader.GetString(6), reader.Time(7), reader.IsDBNull(8) ? null : reader.GetString(8));
 
-    private static void Check(string kind, string name, string channel)
+    internal static void Check(string kind, string name, string channel)
     {
         if (!Word().IsMatch(kind)) throw new ArgumentException("A definition's kind is lowercase letters, digits, dashes and underscores.", nameof(kind));
         if (!NameWord().IsMatch(name)) throw new ArgumentException("A definition's name is letters, digits, dots, dashes and underscores.", nameof(name));

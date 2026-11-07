@@ -65,8 +65,8 @@ public sealed class DefinitionFollower(IDefinitionSource store, IEnumerable<IDef
             {
                 var events = store.Changes(_since);
                 if (events.Count == 0) return applied;
-                // the latest word per definition is all that matters: each one moved is read again as it stands now
-                foreach (var moved in events.Where(e => e.Channel == channel && _byKind.ContainsKey(e.Kind)).Select(e => (e.Kind, e.Name)).Distinct())
+                // a stage moves nothing this instance serves; the latest word per definition is all that matters: each one moved is read again as it stands now
+                foreach (var moved in events.Where(e => e.Channel == channel && e.Action != "stage" && _byKind.ContainsKey(e.Kind)).Select(e => (e.Kind, e.Name)).Distinct())
                 {
                     Apply(_byKind[moved.Kind], moved.Name, store.Current(moved.Kind, moved.Name, channel));
                     applied++;
