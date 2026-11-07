@@ -692,17 +692,22 @@ public sealed class ProgressStore(StateDatabase database, ProgressKey key)
 
     // ---------- the inbox ----------
 
-    /// <summary>Records a webhook for the task (filled by the serving layer, which receives them). <paramref name="bodyPayload"/> is owned by this row.</summary>
-    public Guid Receive(string source, bool signatureOk, Guid? id = null, Guid? bodyPayload = null)
+    /// <summary>
+    /// Records a webhook for the task (filled by the serving layer, which receives them). <paramref name="bodyPayload"/> is owned by this row. <paramref name="refusedBy"/> (<see cref="RefusedBySignature"/>) stores the item already set aside, in
+    /// the one insert: a record inserted as waiting and refused by a second statement is visible to the trigger engine's sweep and to a run's take in between, which queued a run for a webhook that was refused.
+    /// </summary>
+    public Guid Receive(string source, bool signatureOk, Guid? id = null, Guid? bodyPayload = null, string? refusedBy = null)
     {
         var item = id ?? database.NewId();
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
             using var cmd = database.Command(Module, connection,
-                "INSERT INTO {table:inbox_item} (id, package, channel, task, source, signature_ok, received_at, body_payload) VALUES ($id, $package, $channel, $task, $source, $ok, $now, $body);");
+                "INSERT INTO {table:inbox_item} (id, package, channel, task, source, signature_ok, received_at, body_payload, taken_by, taken_at) VALUES ($id, $package, $channel, $task, $source, $ok, $now, $body, $by, $takenAt);");
             BindKey(cmd);
-            cmd.Bind(database, "id", item).Bind(database, "source", source).Bind(database, "ok", signatureOk).Bind(database, "now", database.Time.GetUtcNow()).Bind(database, "body", bodyPayload, System.Data.DbType.Guid);
+            var now = database.Time.GetUtcNow();
+            cmd.Bind(database, "id", item).Bind(database, "source", source).Bind(database, "ok", signatureOk).Bind(database, "now", now).Bind(database, "body", bodyPayload, System.Data.DbType.Guid)
+                .Bind(database, "by", refusedBy, System.Data.DbType.String).Bind(database, "takenAt", refusedBy is null ? null : now);
             cmd.ExecuteNonQuery();
         });
         return item;
