@@ -35,6 +35,9 @@ public sealed record DeadLetter(Guid Id, string Source, string Error, int Attemp
 /// <summary>A webhook received for a task.</summary>
 public sealed record InboxItem(Guid Id, string Source, bool SignatureOk, DateTimeOffset ReceivedAt, Guid? BodyPayload);
 
+/// <summary>A received webhook as stored, taken or not: <see cref="TakenBy"/> is the run that took it, <c>refused:signature</c> when it was set aside, or null while it waits.</summary>
+public sealed record InboxRecord(Guid Id, string Source, bool SignatureOk, DateTimeOffset ReceivedAt, string? TakenBy, Guid? BodyPayload);
+
 /// <summary>
 /// The progress store of one task (plan 29 section 4; plan 29a Q20): what the task needs to rerun without losing or repeating work, in the <c>runner_progress</c> module. Reached through the runner, so a
 /// task never holds a login to it. See <see cref="ProgressModule"/> for the tables.
@@ -488,6 +491,18 @@ public sealed class ProgressStore(StateDatabase database, ProgressKey key)
             return cmd.ExecuteNonQuery() == 1;
         });
 
+    /// <summary>Records that the task has seen a file, on a connection and transaction the caller owns, so the note stands or falls with other writes (the work item queued for the file). True when it was new.</summary>
+    public bool NoteFile(DbConnection connection, DbTransaction? transaction, string connectionName, string path, long size, DateTimeOffset modifiedAt, string contentHash)
+    {
+        using var cmd = database.Command(Module, connection, transaction, database.Dialect.InsertOrIgnore(
+            "{table:file_ledger}", "package, channel, task, connection, path, size, modified_at, content_hash, first_seen_at",
+            "$package, $channel, $task, $connection, $path, $size, $modified, $hash, $now", "package, channel, task, connection, content_hash"));
+        BindKey(cmd);
+        cmd.Bind(database, "connection", connectionName).Bind(database, "path", path).Bind(database, "size", size).Bind(database, "modified", modifiedAt)
+            .Bind(database, "hash", contentHash).Bind(database, "now", database.Time.GetUtcNow());
+        return cmd.ExecuteNonQuery() == 1;
+    }
+
     /// <summary>Records which run processed the file and how it went (<paramref name="outcome"/> is a word such as <c>done</c> or <c>failed</c>).</summary>
     public bool MarkFileProcessed(string connectionName, string contentHash, Guid runId, string outcome) =>
         database.Retry(() =>
@@ -658,6 +673,48 @@ public sealed class ProgressStore(StateDatabase database, ProgressKey key)
             using var cmd = database.Command(Module, connection, "UPDATE {table:inbox_item} SET taken_by = NULL, taken_at = NULL WHERE id = $id AND taken_by = $run;");
             cmd.Bind(database, "id", id).Bind(database, "run", runId.ToString("D"));
             return cmd.ExecuteNonQuery() == 1;
+        });
+
+    /// <summary>
+    /// Sets a webhook aside so no run takes it: the receiving end found the signature did not hold, so the item is kept as a record (<c>signature_ok</c> false) and marked taken by <paramref name="by"/>
+    /// (<see cref="RefusedBySignature"/>), which retention removes with the other handled items. False when it was taken already or does not exist.
+    /// </summary>
+    public bool RefuseInboxItem(Guid id, string by) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, "UPDATE {table:inbox_item} SET taken_by = $by, taken_at = $now WHERE id = $id AND taken_by IS NULL;");
+            cmd.Bind(database, "by", by).Bind(database, "now", database.Time.GetUtcNow()).Bind(database, "id", id);
+            return cmd.ExecuteNonQuery() == 1;
+        });
+
+    /// <summary>What <c>taken_by</c> says of a webhook set aside because its signature did not hold.</summary>
+    public const string RefusedBySignature = "refused:signature";
+
+    /// <summary>When the newest webhook nobody has taken was received, or null when none waits.</summary>
+    public DateTimeOffset? NewestWaiting() =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, $"SELECT received_at FROM {{table:inbox_item}} WHERE {KeyWhere} AND taken_by IS NULL ORDER BY received_at DESC {database.Limit("take")};");
+            BindKey(cmd);
+            cmd.Bind(database, "take", 1L);
+            using var reader = cmd.ExecuteReader();
+            return reader.Read() ? reader.Time(0) : (DateTimeOffset?)null;
+        });
+
+    /// <summary>The webhooks received for the task, newest first, with whether the signature held and which run took them (for a status view and tests).</summary>
+    public IReadOnlyList<InboxRecord> InboxRecords(int limit = 100) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, $"SELECT id, source, signature_ok, received_at, taken_by, body_payload FROM {{table:inbox_item}} WHERE {KeyWhere} ORDER BY received_at DESC, id {database.Limit("take")};");
+            BindKey(cmd);
+            cmd.Bind(database, "take", (long)limit);
+            using var reader = cmd.ExecuteReader();
+            var list = new List<InboxRecord>();
+            while (reader.Read()) list.Add(new InboxRecord(reader.Uuid(0), reader.GetString(1), reader.Bool(2), reader.Time(3), reader.IsDBNull(4) ? null : reader.GetString(4), reader.NullableUuid(5)));
+            return (IReadOnlyList<InboxRecord>)list;
         });
 
     /// <summary>How many webhooks wait for a run.</summary>

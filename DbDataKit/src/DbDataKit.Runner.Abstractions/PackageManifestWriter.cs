@@ -106,8 +106,8 @@ public static partial class PackageManifestWriter
 
     private static string Trigger(TaskTrigger t) => t.Kind switch
     {
-        TriggerKind.AfterRun => "after: " + Flow(("task", S(t.Task)), ("package", S(t.Package)), ("on", t.On is { Count: > 0 } on ? ListOf(on.Select(o => PackageManifestReader.OutcomeWords.First(w => w.Outcome == o).Word)) : null)),
-        TriggerKind.Webhook => "webhook: " + Flow(("source", S(t.Source))),
+        TriggerKind.AfterRun => "after: " + Flow(("task", S(t.Task)), ("package", S(t.Package)), ("on", t.On is { Count: > 0 } on ? (PackageManifestReader.OutcomeWords.All(w => on.Contains(w.Outcome)) ? "[any]" : ListOf(on.Select(o => PackageManifestReader.OutcomeWords.First(w => w.Outcome == o).Word))) : null)),
+        TriggerKind.Webhook => "webhook: " + Flow(("source", S(t.Source)), ("secret", S(t.Secret))),
         TriggerKind.File => "file: " + Flow(("connection", S(t.Connection)), ("path", S(t.Path)), ("poll", t.Poll is { } poll ? Duration(poll) : null)),
         TriggerKind.StoreChange => "store_change: " + Flow(("model", S(t.Model)), ("entity", S(t.Entity))),
         _ => "manual: true",

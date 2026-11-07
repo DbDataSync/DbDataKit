@@ -132,7 +132,7 @@ public sealed class PackageManifestTests
         var task = new PackageTask("pull", new TaskEntry(Args: ["--full"]))
         {
             Schedule = Schedule.Interval(TimeSpan.FromMilliseconds(1500), MisfirePolicy.Skip),
-            Triggers = [TaskTrigger.AfterRun("push", RunOutcome.Failed), TaskTrigger.OnWebhook("shop"), TaskTrigger.OnFile("drop", "*.csv"), TaskTrigger.OnStoreChange("orders"), TaskTrigger.ByHand()],
+            Triggers = [TaskTrigger.AfterRun("push", RunOutcome.Failed), TaskTrigger.OnWebhook("shop", "shop_hook"), TaskTrigger.OnFile("drop", "*.csv"), TaskTrigger.OnStoreChange("orders"), TaskTrigger.ByHand()],
             Connections = [new ConnectionSlot("drop", "folder")],
             Inputs = [new TaskInput("note", Default: "say \"hi\": ok")],
             Limits = new TaskLimits(Timeout: TimeSpan.FromHours(2)),
@@ -144,6 +144,32 @@ public sealed class PackageManifestTests
         var read = Valid(PackageManifestWriter.Write(manifest));
 
         Assert.Equal(Canonical(manifest), Canonical(read));
+    }
+
+    [Fact]
+    public void An_after_trigger_can_say_any_outcome_and_a_webhook_trigger_can_name_a_secret_and_both_survive_writing()
+    {
+        var m = Valid("""
+            schema: package/1
+            name: hooks
+            launch: { kind: executable, command: bin/x }
+            built_against: { protocol: dbdatakit.runner.v1 }
+            tasks:
+              - name: first
+              - name: second
+                triggers:
+                  - after: { task: first, on: [any] }
+                  - webhook: { source: shop, secret: shop_hook }
+            """);
+
+        var triggers = m.Tasks[1].Triggers;
+        Assert.Equal(5, triggers[0].Outcomes.Count);
+        Assert.Contains(RunOutcome.Failed, triggers[0].Outcomes);
+        Assert.Equal("shop_hook", triggers[1].Secret);
+        var again = Valid(PackageManifestWriter.Write(m)).Tasks[1].Triggers;
+        Assert.Equal(triggers[0].Outcomes, again[0].Outcomes);
+        Assert.Equal("shop_hook", again[1].Secret);
+        Assert.Contains("[any]", PackageManifestWriter.Write(m), StringComparison.Ordinal);
     }
 
     [Fact]

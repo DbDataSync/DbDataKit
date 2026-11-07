@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using DbDataKit.Monitoring;
 using DbDataKit.Runner.Execution;
+using DbDataKit.Runner.Triggers;
 using DbDataKit.Scheduling;
 using DbDataKit.State;
 using Microsoft.Extensions.Logging;
@@ -24,7 +25,7 @@ namespace DbDataKit.Runner.Scheduler;
 /// </list>
 /// The clock is the state database's (<see cref="StateDatabase.Time"/>): the queue's leases and the schedules are judged on one clock, which a test can move. The tick and the heartbeat wait in real time.
 /// </summary>
-public sealed class RunnerScheduler
+public sealed partial class RunnerScheduler
 {
     /// <summary>The kind of every work item of the runner.</summary>
     public const string Kind = "task";
@@ -40,6 +41,7 @@ public sealed class RunnerScheduler
     private readonly ModuleJobPauseStore _pauses;
     private readonly ModuleRunLockStore _locks;
     private readonly TaskProjections _projections;
+    private readonly RunnerInstances _instances;
     private readonly RunStore _runs;
     private readonly WorkItemRetries _retries;
     private readonly ILogger? _log;
@@ -64,9 +66,11 @@ public sealed class RunnerScheduler
         _pauses = new ModuleJobPauseStore(database, options.Service);
         _locks = new ModuleRunLockStore(database, options.Service);
         _projections = new TaskProjections(database);
+        _instances = new RunnerInstances(database);
         _runs = new RunStore(database, options.Service);
         _retries = new WorkItemRetries(_queue);
         _log = options.Logger;
+        _triggers = new TriggerEngine(database, options.Service, this, options.Triggers, options.Logger);
     }
 
     /// <summary>This loop's claim name.</summary>
@@ -93,6 +97,7 @@ public sealed class RunnerScheduler
             using var timer = new PeriodicTimer(_options.Tick, _time);
             do
             {
+                if (SuspendHeartbeats) continue;   // a frozen process neither renews nor takes anything
                 try { await TickAsync(ct).ConfigureAwait(false); }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -170,7 +175,9 @@ public sealed class RunnerScheduler
                 else enqueued.Add(task.Ref);
             }
 
-            var claimed = ClaimAndStart(served.Select(t => OwnerOf(t.Ref)).Distinct(StringComparer.Ordinal).ToList());
+            await _triggers.TickAsync(ct).ConfigureAwait(false);   // R13: events become work items on the same path
+
+            var claimed = ClaimAndStart(served.Select(t => OwnerOf(t.Ref)).Distinct(StringComparer.Ordinal).ToList(), served);
             return new TickReport(enqueued, refused, paused, claimed, rowProblems.Count, expired);
         }
         finally
@@ -244,7 +251,8 @@ public sealed class RunnerScheduler
     private static string OwnerOf(TaskRef task) => $"{task.Package}/{task.Channel}";
 
     /// <summary>Puts one item of the task on the queue, or returns null when an earlier one is queued or running and the task does not allow overlap.</summary>
-    private Guid? TryEnqueue(Served task, string trigger, IReadOnlyDictionary<string, string>? inputs, string? requestedBy)
+    private Guid? TryEnqueue(Served task, string trigger, IReadOnlyDictionary<string, string>? inputs, string? requestedBy,
+        string? part = null, int triggerDepth = 0, string? triggerSource = null, Action<System.Data.Common.DbConnection, System.Data.Common.DbTransaction, Guid>? alsoWrite = null)
     {
         var payload = new WorkPayload
         {
@@ -254,16 +262,19 @@ public sealed class RunnerScheduler
             Chain = Guid.CreateVersion7().ToString("D"),
             Trigger = trigger,
             RequestedBy = requestedBy,
+            TriggerDepth = triggerDepth,
+            TriggerSource = triggerSource,
         };
         var concurrency = task.Limits.Concurrency;
         try
         {
             return _queue.EnqueueOrThrow(
                 OwnerOf(task.Ref), Kind, task.Ref.Task,
-                part: task.AllowOverlap ? payload.Chain : ModuleWorkQueueStore.NoPart,
+                part: part ?? (task.AllowOverlap ? payload.Chain : ModuleWorkQueueStore.NoPart),
                 resource: concurrency is null ? "" : $"package:{task.Ref.Package}",
                 payloadJson: payload.ToJson(),
-                resourceLimit: concurrency ?? 1);
+                resourceLimit: concurrency ?? 1,
+                alsoWrite: alsoWrite);
         }
         catch (WorkQueueCollisionException)
         {
@@ -271,8 +282,15 @@ public sealed class RunnerScheduler
         }
     }
 
-    private int ClaimAndStart(IReadOnlyList<string> owners)
+    /// <summary>This runner's labels as stored now (the administrator's and the reported ones); none when the loop is not an instance. An administrator adding a label takes effect at the next tick.</summary>
+    private IReadOnlySet<string> MyLabels() =>
+        _options.Instance?.Invoke() is { } id ? _instances.LabelSet(id) : new HashSet<string>(StringComparer.Ordinal);
+
+    private int ClaimAndStart(IReadOnlyList<string> owners, IReadOnlyList<Served> served)
     {
+        // routing (plan 28 question 7): an item is claimed only by a runner that has every label its task requires; the others stay Pending
+        var mine = MyLabels();
+        var skip = owners.ToDictionary(o => o, o => (IReadOnlyCollection<string>)served.Where(t => OwnerOf(t.Ref) == o && !RoutingCheck.Serves(t.Row.RequiredLabels, mine)).Select(t => t.Ref.Task).ToList(), StringComparer.Ordinal);
         var claimed = 0;
         var progress = true;
         while (progress && _running.Count < _options.MaxConcurrentRuns && !_stop.IsCancellationRequested)
@@ -281,7 +299,7 @@ public sealed class RunnerScheduler
             foreach (var owner in owners)
             {
                 if (_running.Count >= _options.MaxConcurrentRuns) break;
-                if (_queue.TryClaimNext(owner, _options.WorkerId) is not { } item) continue;
+                if (_queue.TryClaimNext(owner, _options.WorkerId, excludeSubjects: skip[owner]) is not { } item) continue;
                 Start(item);
                 claimed++;
                 progress = true;
@@ -294,6 +312,14 @@ public sealed class RunnerScheduler
     private void Start(WorkItem item)
     {
         var running = new Running();
+        // this loop's own lease ran out and its own tick took the item back while the earlier attempt still runs here: the earlier attempt is a lost one, whoever holds the item now
+        if (_running.TryGetValue(item.Id, out var earlier))
+        {
+            earlier.LeaseLost = true;
+            earlier.Cancel?.Invoke();
+            Report($"item {item.Id}", $"This runner's lease on {item.Owner}/{item.Subject} ran out and the item was taken again (as a new attempt) while the earlier attempt still ran here; the earlier attempt is cancelled and its result will not be recorded.");
+        }
+
         _running[item.Id] = running;
         _ = Task.Run(async () =>
         {
@@ -307,7 +333,7 @@ public sealed class RunnerScheduler
             }
             finally
             {
-                _running.TryRemove(item.Id, out _);
+                _running.TryRemove(new KeyValuePair<long, Running>(item.Id, running));
                 running.Done.TrySetResult();
             }
         }, CancellationToken.None);
@@ -317,6 +343,7 @@ public sealed class RunnerScheduler
     {
         public TaskCompletionSource Done { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public volatile bool LeaseLost;
+        public volatile Action? Cancel;
         public volatile bool CancelRequested;
     }
 
@@ -413,6 +440,7 @@ public sealed class RunnerScheduler
         }
 
         using var runCts = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
+        running.Cancel = () => { try { runCts.Cancel(); } catch (ObjectDisposedException) { /* the run ended */ } };
         using var beatCts = new CancellationTokenSource();
         Task? beat = null;
         try
@@ -583,27 +611,32 @@ public sealed class RunnerScheduler
             while (await timer.WaitForNextTickAsync(stop).ConfigureAwait(false))
             {
                 if (SuspendHeartbeats) continue;
-                if (!_queue.Heartbeat(item.Id, _options.WorkerId))
+                try
                 {
-                    running.LeaseLost = true;
-                    await runCts.CancelAsync().ConfigureAwait(false);   // the item is someone else's now
-                    return;
-                }
+                    if (!_queue.Heartbeat(item.Id, _options.WorkerId))
+                    {
+                        running.LeaseLost = true;
+                        Report($"item {item.Id}", $"This runner lost the lease on {item.Owner}/{item.Subject} (run {item.RunId}): it did not renew it in time and another runner took the item. The local task is cancelled and its result will not be recorded.");
+                        await runCts.CancelAsync().ConfigureAwait(false);   // the item is someone else's now
+                        return;
+                    }
 
-                if (!running.CancelRequested && _queue.IsCancelRequested(item.RunId))
+                    if (!running.CancelRequested && _queue.IsCancelRequested(item.RunId))
+                    {
+                        running.CancelRequested = true;
+                        await runCts.CancelAsync().ConfigureAwait(false);
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    running.CancelRequested = true;
-                    await runCts.CancelAsync().ConfigureAwait(false);
+                    // a database that is briefly out of reach must not end the renewals for good: the next beat tries again
+                    Report($"item {item.Id}", $"Renewing the lease failed: {ex.GetType().Name}: {ex.Message}");
                 }
             }
         }
         catch (OperationCanceledException)
         {
             // the run ended
-        }
-        catch (Exception ex)
-        {
-            Report($"item {item.Id}", $"Renewing the lease failed: {ex.GetType().Name}: {ex.Message}");
         }
     }
 
@@ -654,6 +687,7 @@ public sealed class RunnerScheduler
     {
         var now = _time.GetUtcNow();
         var tasks = new List<ScheduledTaskStatus>();
+        IReadOnlyList<LiveInstance>? live = null;
         var queues = new Dictionary<string, IReadOnlyList<QueuedWork>>(StringComparer.Ordinal);
         foreach (var row in Rows())
         {
@@ -673,11 +707,21 @@ public sealed class RunnerScheduler
             tasks.Add(new ScheduledTaskStatus(
                 reference, row.Version, next, _runs.LastRun(reference.ToString()),
                 mine.Count(w => w.Item.Status is WorkItemStatus.Claimed or WorkItemStatus.Running), waiting.Count,
-                waiting.Count == 0 ? null : waiting.Min(w => w.AvailableAt), pause is not null, pause?.By, parsed ? null : problem));
+                waiting.Count == 0 ? null : waiting.Min(w => w.AvailableAt), pause is not null, pause?.By, parsed ? null : problem,
+                row.RequiredLabels, WaitingReasonOf(row.RequiredLabels, ref live)));
         }
 
-        var problems = _rowProblems.Values.Concat(_problems).OrderBy(p => p.At).ToList();
+        var problems = _rowProblems.Values.Concat(_problems).Concat(_triggers.Problems()).OrderBy(p => p.At).ToList();
         return new SchedulerStatus(_options.WorkerId, now, tasks, problems, _running.Count, _options.MaxConcurrentRuns);
+    }
+
+    /// <summary>Which required label no live runner has, as a sentence; null when the task requires none or some live runner has them all.</summary>
+    private string? WaitingReasonOf(IReadOnlyList<string> requires, ref IReadOnlyList<LiveInstance>? live)
+    {
+        if (requires.Count == 0) return null;
+        live ??= _instances.LiveInstances(_options.Lease);
+        var missing = RoutingCheck.CanActivate(requires, [.. live]);
+        return missing.Count == 0 ? null : RoutingCheck.Reason(missing, live.Count);
     }
 
     private void Report(string subject, string message)

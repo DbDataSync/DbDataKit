@@ -130,6 +130,7 @@ public static class RunnerApi
             ["runner_instance"] = engine.InstanceId?.ToString(),
             ["running"] = engine.Control is not null,
             ["state_engine"] = state.Dialect.Engine,
+            ["group"] = engine.Group,
             ["capabilities"] = new JsonObject(engine.Capabilities.OrderBy(c => c.Key, StringComparer.Ordinal).Select(c => KeyValuePair.Create(c.Key, (JsonNode?)JsonValue.Create(c.Value)))),
         };
         if (engine.Control is not { } control)
@@ -137,6 +138,7 @@ public static class RunnerApi
             status["channels"] = new JsonArray();
             status["tasks"] = new JsonArray();
             status["problems"] = new JsonArray();
+            status["instances"] = new JsonArray();
             return status;
         }
 
@@ -159,6 +161,14 @@ public static class RunnerApi
             ["paused"] = t.Paused,
             ["paused_by"] = t.PausedBy,
             ["problem"] = t.Problem,
+            ["required_labels"] = new JsonArray((t.RequiredLabels ?? []).Select(l => (JsonNode)JsonValue.Create(l)!).ToArray()),
+            ["waiting_reason"] = t.WaitingReason,
+        }).ToArray());
+        status["instances"] = RunnerGroupApi.Instances(state, engine);
+        status["triggers"] = new JsonArray(control.Triggers.Statuses().Select(t => (JsonNode)new JsonObject
+        {
+            ["package"] = t.Task.Package, ["channel"] = t.Task.Channel, ["task"] = t.Task.Task, ["kind"] = t.Kind, ["id"] = t.Id, ["state"] = t.State,
+            ["last_fired"] = t.LastFiredAt?.UtcDateTime.ToString("O"), ["problem"] = t.Problem,
         }).ToArray());
         status["problems"] = new JsonArray(scheduler.Problems.Select(p => (JsonNode)new JsonObject { ["subject"] = p.Subject, ["message"] = p.Message, ["at"] = p.At.UtcDateTime.ToString("O") }).ToArray());
         return status;

@@ -42,6 +42,7 @@ public static class RunnerCli
             .With([.. PairingVerbs.Create(args => RunnerState.Pairing(DirectoryOf(args, environment), RunnerSettings.StateFrom(environment), environment))]),
         RunsNoun(environment),
         TasksNoun(environment),
+        RunnerLabelVerbs.Create(environment),
         PackageNoun(environment),
         StateNoun(environment),
         RunnerService.Noun(RunnerServiceEnvironment.Real()),
@@ -78,10 +79,10 @@ public static class RunnerCli
 
     private static async Task<int> RunServerAsync(string[] args, CliContext context, Func<string, string?>? environment)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "listen", "channels" });
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "listen", "channels", "group" });
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0)
         {
-            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <server directory>] [--listen https://<address>:<port>] [--channels <name>[,<name>...]].");
+            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <server directory>] [--listen https://<address>:<port>] [--channels <name>[,<name>...]] [--group <name>].");
             return CliExit.Usage;
         }
         if (!Uri.TryCreate(parsed.Get("listen") ?? RunnerSettings.DefaultListen, UriKind.Absolute, out var listen) || listen.Scheme != Uri.UriSchemeHttps)
@@ -93,7 +94,7 @@ public static class RunnerCli
         RunnerSettings settings;
         try
         {
-            settings = new RunnerSettings(DirectoryOf(args, environment), listen) { State = RunnerSettings.StateFrom(environment), Channels = RunnerSettings.ChannelsFrom(environment, parsed.Get("channels")), MaxArtifactBytes = RunnerSettings.MaxArtifactBytesFrom(environment) };
+            settings = new RunnerSettings(DirectoryOf(args, environment), listen) { State = RunnerSettings.StateFrom(environment), Channels = RunnerSettings.ChannelsFrom(environment, parsed.Get("channels")), MaxArtifactBytes = RunnerSettings.MaxArtifactBytesFrom(environment), Group = RunnerSettings.GroupFrom(environment, parsed.Get("group")) };
         }
         catch (ArgumentException ex)
         {
@@ -236,10 +237,10 @@ public static class RunnerCli
         {
             var last = t.LastRun is { } run ? $"last {run.Run.Outcome.ToString().ToLowerInvariant()} {run.Run.Started.UtcDateTime:yyyy-MM-dd HH:mm}" : "never run";
             var next = t.NextDue is { } due ? $"next {due.UtcDateTime:yyyy-MM-dd HH:mm}" : "no schedule";
-            await context.Out.WriteLineAsync($"{t.Task}  v{t.Version}  {next}  {last}{(t.Paused ? $"  PAUSED by {t.PausedBy}" : "")}{(t.Problem is null ? "" : $"  PROBLEM: {t.Problem}")}");
+            await context.Out.WriteLineAsync($"{t.Task}  v{t.Version}  {next}  {last}{(t.Paused ? $"  PAUSED by {t.PausedBy}" : "")}{(t.Problem is null ? "" : $"  PROBLEM: {t.Problem}")}{(t.WaitingReason is null ? "" : $"  WAITING: {t.WaitingReason}")}");
         }
 
-        context.Data["tasks"] = status.Tasks.Select(t => new Dictionary<string, object?> { ["task"] = t.Task.ToString(), ["version"] = t.Version, ["paused"] = t.Paused, ["next_due"] = t.NextDue?.UtcDateTime.ToString("O"), ["problem"] = t.Problem }).ToList();
+        context.Data["tasks"] = status.Tasks.Select(t => new Dictionary<string, object?> { ["task"] = t.Task.ToString(), ["version"] = t.Version, ["paused"] = t.Paused, ["next_due"] = t.NextDue?.UtcDateTime.ToString("O"), ["problem"] = t.Problem, ["waiting_reason"] = t.WaitingReason }).ToList();
         return CliExit.Ok;
     }
 

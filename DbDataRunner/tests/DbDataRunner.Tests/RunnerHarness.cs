@@ -7,6 +7,7 @@ using DbDataKit.State;
 using DbDataKit.Web.Trust;
 using DbDataRunner.Server;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DbDataRunner.Tests;
 
@@ -17,30 +18,42 @@ namespace DbDataRunner.Tests;
 public sealed class RunnerHarness : IAsyncDisposable
 {
     private readonly StateEngines _engines = new();
-    private readonly ConsoleIdentity _console = new("console-1", ConsoleSigningKey.Generate());
+    private readonly ConsoleIdentity _console;
     private readonly List<string> _log = [];
     private PairedServer? _paired;
     private HttpClient? _http;
     private WebApplication? _app;
+    private readonly bool _ownsDirectory;
 
-    public RunnerHarness(string engine, TimeSpan? tick = null, TimeSpan? grace = null, IReadOnlyList<string>? channels = null, long? maxArtifactBytes = null)
+    /// <param name="sharedState">The state of another harness: a second runner of the same group (or, on SQLite, a second server on the same file, which needs that harness's <paramref name="directory"/> too).</param>
+    public RunnerHarness(string engine, TimeSpan? tick = null, TimeSpan? grace = null, IReadOnlyList<string>? channels = null, StateSettings? sharedState = null, string? directory = null, long? maxArtifactBytes = null)
     {
         // a short path: the socket's directory is in it, and a Unix socket's path has a small limit
-        Directory = System.IO.Directory.CreateTempSubdirectory("dbdr-").FullName;
+        Directory = directory ?? System.IO.Directory.CreateTempSubdirectory("dbdr-").FullName;
+        _ownsDirectory = directory is null;
+        // runners of one group share their paired clients, so each harness is a console of its own
+        _console = new(sharedState is null ? "console-1" : "console-" + Guid.NewGuid().ToString("N")[..8], ConsoleSigningKey.Generate());
         Settings = new RunnerSettings(Directory, new Uri("https://127.0.0.1:0"))
         {
-            State = _engines.Provision(engine),
+            State = sharedState ?? _engines.Provision(engine),
             Tick = tick ?? TimeSpan.FromMilliseconds(100),
             CancellationGrace = grace ?? TimeSpan.FromSeconds(10),
             InstanceHeartbeat = TimeSpan.FromSeconds(1),
             Channels = channels ?? ["dev"],
             TaskHostPath = ServerBuild.TaskHost,
             MaxArtifactBytes = maxArtifactBytes ?? RunnerPublishing.DefaultMaxArtifactBytes,
+            Secrets = new DbDataKit.Secrets.SecretResolverChain([new DbDataKit.Secrets.EnvSecretProvider(k => k == "DBDATA_SECRET_SHOP_HOOK" ? WebhookSecret : null)]),
         };
         State = RunnerState.Open(Directory, Settings.State, null, Settings.Group);
     }
 
+    /// <summary>The value of the secret <c>shop_hook</c> in the runner's secret store (what a signed webhook is signed with).</summary>
+    public const string WebhookSecret = "s3cret-for-tests";
+
     public string Directory { get; }
+
+    /// <summary>The runner engine of the running server.</summary>
+    public RunnerEngine Engine => _app!.Services.GetRequiredService<RunnerEngine>();
 
     public RunnerSettings Settings { get; }
 
@@ -102,6 +115,18 @@ public sealed class RunnerHarness : IAsyncDisposable
         return (response.StatusCode, text.Length == 0 ? null : JsonNode.Parse(text));
     }
 
+    /// <summary>A POST of raw bytes with the headers given, with a token of <paramref name="role"/> or, when it is null, none (a sender that signs its body).</summary>
+    public async Task<(HttpStatusCode Status, JsonNode? Body)> PostRawAsync(string path, byte[] body, IReadOnlyDictionary<string, string>? headers = null, ServerRole? role = null)
+    {
+        var http = await ClientAsync(ServerRole.Admin);
+        using var request = new HttpRequestMessage(HttpMethod.Post, path) { Content = new ByteArrayContent(body) };
+        if (role is { } r) request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, _console.Issuer().Issue(new ConsoleTokenRequest(_paired!.InstanceId, "ada", "Ada", r)));
+        foreach (var (name, value) in headers ?? new Dictionary<string, string>()) request.Headers.TryAddWithoutValidation(name, value);
+        using var response = await http.SendAsync(request);
+        var text = await response.Content.ReadAsStringAsync();
+        return (response.StatusCode, text.Length == 0 ? null : JsonNode.Parse(text));
+    }
+
     public Task<(HttpStatusCode Status, JsonNode? Body)> GetAsync(string path, ServerRole role = ServerRole.Viewer, string subject = "ada") => CallAsync(HttpMethod.Get, path, role, null, subject);
 
     public Task<(HttpStatusCode Status, JsonNode? Body)> PostAsync(string path, ServerRole role = ServerRole.Operator, object? body = null, string subject = "ada") => CallAsync(HttpMethod.Post, path, role, body, subject);
@@ -132,7 +157,8 @@ public sealed class RunnerHarness : IAsyncDisposable
         await StopAsync();
         _http?.Dispose();
         _engines.Dispose();
-        try { System.IO.Directory.Delete(Directory, recursive: true); }
+        if (_ownsDirectory)
+            try { System.IO.Directory.Delete(Directory, recursive: true); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* temp */ }
     }
 }
