@@ -329,7 +329,7 @@ public static class ProxyConfig
 
         private static string EnvironmentVariableName(string key, string? value)
         {
-            // The stock provider hides the prefix; find the variable by its two usual spellings (the DBPROXY_ prefix is added last, so it wins).
+            // The stock provider hides the prefix; find the variable by its two usual spellings (the DBPROXY_ prefix wins over the plain name).
             string flat = key.Replace(":", "__");
             foreach (var candidate in new[] { "DBPROXY_" + flat, flat })
             {

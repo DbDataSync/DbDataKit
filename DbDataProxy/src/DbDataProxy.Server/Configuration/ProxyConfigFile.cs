@@ -71,9 +71,10 @@ public static class ProxyConfigFile
     public static void AddDataDirectory(IConfigurationBuilder configuration, string dataDirectory, string[] args)
     {
         configuration.Add(new ProxyConfigDirectorySource(DirectoryIn(dataDirectory)));
+        // lowest first, as the README says: the files, the plain variables, the DBPROXY_ ones, the command line (the command line used to come before DBPROXY_, so a DBPROXY_ variable beat it; plan 29b C07 makes the flag win)
         configuration.AddEnvironmentVariables();
-        configuration.AddCommandLine(args);
         configuration.AddEnvironmentVariables("DBPROXY_");
+        configuration.AddCommandLine(args);
     }
 
     /// <summary>Writes <see cref="Starter"/> when the data directory has no <c>server.yaml</c> yet. True when it wrote one.</summary>

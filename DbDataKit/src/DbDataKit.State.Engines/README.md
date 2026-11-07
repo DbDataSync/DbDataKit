@@ -33,6 +33,10 @@ state:
     tables:  { runs.run: 14, audit.entry: forever }
 ```
 
+## One order for every product
+
+`StateSettingsResolver.Resolve(new StateSettingsInputs(settingsFile, engineFlag, ..., engineVariable, connectionVariable, environment))` is the order every product reads its state settings in (plan 29b C07): the flag, then the environment variable, then the `state:` section of the product's settings file (read strictly through `StateSettingsReader`; an error names the file and, for a misspelt key, the one that was meant), then the default (SQLite). The engine and the connection each come from the first place that names them; `registry`, `namespaces` and `retention` come from the file. The result (`ResolvedState`) says where each part came from (`StateSources`), which is what `state show` prints. The file is never created. The Proxy keeps its own layering of file, environment and command line and reports through the same types (`ProxyStateConfig`).
+
 ## Writing the section
 
 `StateSettingsWriter.Write(path, settings)` replaces only the `state:` block of a settings file (creating the file or the block when absent), validates it through `StateSettingsReader` first and renames a temporary file over the original, so an invalid setting is refused (naming the file and the key) and a crash leaves the old file. The rest of the file, its comments and line endings are kept; comments inside the old `state:` block are not. `Remove(path)` takes the block out; `Load(path)` reads it. Connection strings are written as given, secret references included.

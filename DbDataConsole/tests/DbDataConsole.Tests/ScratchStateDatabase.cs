@@ -10,7 +10,7 @@ namespace DbDataConsole.Tests;
 /// </summary>
 internal sealed class ScratchStateDatabase : IDisposable
 {
-    public const string PasswordVariable = "STATE_TEST_PASSWORD";
+    public string PasswordVariable { get; } = "C07_STATE_PW_" + Guid.NewGuid().ToString("N")[..8];
 
     private readonly string _admin;
     private readonly string _name = $"c07_{Guid.NewGuid():N}";
@@ -18,6 +18,7 @@ internal sealed class ScratchStateDatabase : IDisposable
 
     private ScratchStateDatabase(string engine, string admin)
     {
+        // the same variable is set for the process, so a host built in the test (which reads the real environment) resolves the reference too
         Engine = engine;
         _admin = admin;
         Run(engine == "mssql" ? $"CREATE DATABASE [{_name}];" : $"CREATE DATABASE {_name};");
@@ -26,6 +27,7 @@ internal sealed class ScratchStateDatabase : IDisposable
             var builder = new SqlConnectionStringBuilder(admin) { InitialCatalog = _name };
             _password = builder.Password;
             builder.Password = "env:" + PasswordVariable;
+            System.Environment.SetEnvironmentVariable(PasswordVariable, _password);
             Connection = builder.ConnectionString;
         }
         else
@@ -33,6 +35,7 @@ internal sealed class ScratchStateDatabase : IDisposable
             var builder = new NpgsqlConnectionStringBuilder(admin) { Database = _name };
             _password = builder.Password!;
             builder.Password = "env:" + PasswordVariable;
+            System.Environment.SetEnvironmentVariable(PasswordVariable, _password);
             Connection = builder.ConnectionString;
         }
     }
@@ -74,6 +77,7 @@ internal sealed class ScratchStateDatabase : IDisposable
 
     public void Dispose()
     {
+        System.Environment.SetEnvironmentVariable(PasswordVariable, null);
         SqlConnection.ClearAllPools();
         NpgsqlConnection.ClearAllPools();
         try { Run(Engine == "mssql" ? $"ALTER DATABASE [{_name}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{_name}];" : $"DROP DATABASE IF EXISTS {_name} WITH (FORCE);"); }

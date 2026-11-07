@@ -474,7 +474,7 @@ public sealed class GroupStateTests : IAsyncLifetime
             foreach (var dir in dirs)
             {
                 Directory.CreateDirectory(ProxyConfigFile.DirectoryIn(dir));
-                File.WriteAllText(ProxyConfigFile.PathIn(dir), $"schemaVersion: 2\ntls: {{ mode: selfSigned }}\nstate: {{ engine: {engine}, connectionString: '{connection}' }}\n");
+                File.WriteAllText(ProxyConfigFile.PathIn(dir), $"schemaVersion: 2\ntls: {{ mode: selfSigned }}\nstate: {{ engine: {engine}, connection: '{connection}' }}\n");
             }
             var (a, managementA, _) = await ServingInstance(dirs[0], []);
             var storeA = SecretsRuntime.OpenStore(new ProxyOptions { DataDirectory = dirs[0] });
