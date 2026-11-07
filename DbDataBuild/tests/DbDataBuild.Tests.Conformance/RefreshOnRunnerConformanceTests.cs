@@ -83,7 +83,7 @@ public partial class ApplyConformanceTests
                 new BuiltAgainst("10.0", null, "dbdatakit.runner.v1"), [task]);
             var manifestPath = Path.Combine(_root, "package.yaml");
             await File.WriteAllTextAsync(manifestPath, PackageManifestWriter.Write(manifest));
-            RunnerPackages.Install(State, manifestPath, package, "dev", "test");
+            DbDataKit.Runner.Api.RunnerPackageInstaller.Install(State, manifestPath, package, "dev", "test");
 
             _app = RunnerServer.Build(settings, RunnerServer.Certificate(data), _log.Add, State);
             await _app.StartAsync();
