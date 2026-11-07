@@ -3,13 +3,13 @@ name: DbDataBuild CI
 # DbDataBuild is the first product on the trunk model (docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md, "Trunk model"): short feature
 # branches, a pull request into `main` that runs this, and a rebase merge. There is no dev/test lane and nothing here moves a branch.
 #
-#   pull request  the unit suite on Linux and Windows and the core conformance groups (SQL Server 2022 and PostgreSQL). The slow engines
+#   pull request  the unit suite on Linux and Windows and the core conformance groups (SQL Server 2025 and PostgreSQL). The slow engines
 #                 (SQL Server 2025, Oracle, Spark SQL, the BigQuery emulator) run too when the PR has the `ci:full` label.
 #   push to main  everything, on the commit as it actually landed (a rebase merge makes new commits, so the PR's own run is not theirs).
 #   nightly       dbdatabuild-conformance-full.yml, every engine in one job.
 #
 # Each run starts with `changes`: a push or PR that touches nothing of DbDataBuild's skips the suites and still reports success.
-# Every group starts its engines with testenv/testenv.sh: the quick, apply and templates groups on SQL Server 2022 and PostgreSQL 17, the
+# Every group starts its engines with testenv/testenv.sh: the quick, apply and templates groups on SQL Server 2025 and PostgreSQL 17, the
 # slow groups on the slow profiles (mssql2025, oracle, spark, bigquery).
 #
 # Ported from the product's own ci.yml (kept in this repo's history under DbDataBuild/).

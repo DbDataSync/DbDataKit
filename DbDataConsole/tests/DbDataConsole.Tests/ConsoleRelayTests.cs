@@ -43,8 +43,8 @@ public sealed class ConsoleRelayTests : IAsyncLifetime
 
     private (string Session, string UserId) Session(UserRole role)
     {
-        var user = app.Services.GetRequiredService<UserStore>().CreateUser(role + " person", null, role);
-        return (app.Services.GetRequiredService<SessionStore>().Create(user.Id).Id, user.Id);
+        var user = app.Services.GetRequiredService<IUserAccounts>().CreateUser(role + " person", null, role);
+        return (app.Services.GetRequiredService<ISessionStore>().Create(user.Id).Id, user.Id);
     }
 
     private Task<HttpResponseMessage> Send(HttpMethod method, string path, string? session, string? body = null, string contentType = "application/json")

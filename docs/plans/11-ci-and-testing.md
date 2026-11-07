@@ -12,7 +12,7 @@ Branching and releases are in [09](09-MONOREPO-BRANCHING-AND-RELEASES.md); this 
 | | DbDataSync | DbDataProxy | DbDataBuild | DbDataKit (shared) |
 | --- | --- | --- | --- | --- |
 | how databases start | `docker-compose.yml`, fixed ports 14330/14331/15432/13306/13307/15210 | one GitHub `services:` SQL Server container, port 1433 | `scripts/test-engines.sh` (`docker run`, dynamic ports) | none |
-| engines | SQL Server (×2: source, target), PostgreSQL 17 with logical replication (custom image), MySQL 9, MariaDB 11, Oracle Free 23 | SQL Server 2022 (SqlClient and ODBC), DuckDB, text ODBC | SQL Server 2022 and 2025, PostgreSQL, Oracle Free 23, Spark, BigQuery emulator, Arrow Flight | PostgreSQL, SQL Server, DuckDB, ODBC (env-gated live tests) |
+| engines | SQL Server 2025 (×2: source, target), PostgreSQL 17 with pgvector, PostgreSQL 17 with logical replication (custom image), MySQL 9, MariaDB 11, Oracle Free 23 | SQL Server 2025 (SqlClient and ODBC), DuckDB, text ODBC | SQL Server 2022 and 2025, PostgreSQL, Oracle Free 23, Spark, BigQuery emulator, Arrow Flight | PostgreSQL, SQL Server, DuckDB, ODBC (env-gated live tests) |
 | connection env vars | `DBDATASYNC_TEST_MSSQL_SERVER`, `…_POSTGRES_SERVER`, `…_MYSQL_SERVER`, … | `DBPROXY_TEST_SQLSERVER`, `…_USER`, `…_PASSWORD`, `DBPROXY_REQUIRE_SQLSERVER` | `DBDATABUILD_TEST_MSSQL`, `…_PG`, `…_ORACLE`, `…_SPARK`, … | `DBDATA_TEST_SQLSERVER`, `DBDATA_TEST_POSTGRES`, `DBDATA_TEST_ODBC` |
 | Linux job | build + unit + `dotnet-integration` (compose) + Playwright | build + tests against the SQL Server container | unit on Linux and Windows; conformance matrix on Linux | **none** |
 | Windows job | `Category!=Integration` + the Windows-only tests | build + tests + package smoke test | unit | **none** |

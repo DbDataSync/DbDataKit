@@ -115,7 +115,7 @@ public abstract class StoreDataTests(string engine) : IAsyncLifetime
         if (server is null && string.Equals(Environment.GetEnvironmentVariable(SqlServer ? "DBDATA_REQUIRE_SQLSERVER" : "DBDATA_REQUIRE_POSTGRES"), "true", StringComparison.OrdinalIgnoreCase)) Assert.Fail($"{engine} is required but its DBDATA_TEST_* variable is not set");
         Assert.SkipWhen(server is null, $"set DBDATA_TEST_{(SqlServer ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
         var url = new Uri(app!.Urls.First());
-        var code = new PairingFiles(settings.ServerYaml).Codes().Create(ServerRoles.Close(ServerRole.Admin | ServerRole.Author));
+        var code = StoreState.Pairing(settings.Directory).Codes().Create(ServerRoles.Close(ServerRole.Admin | ServerRole.Author));
         var paired = await PairingClient.PairAsync(url, code.Code, console, ClientKind.Console, "test console");
         var http = new HttpClient(PairingClient.Pinned(paired.CertificateFingerprint)) { BaseAddress = url };
         return (method, path, body, role) =>

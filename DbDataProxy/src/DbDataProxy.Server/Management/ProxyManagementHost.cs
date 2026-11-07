@@ -96,7 +96,7 @@ public static class ProxyManagementHost
         var identities = new ProxyIdentities(configDirectory, management, provider.ReloadNow, () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, audit, git);
         var activity = new ProxyActivity(app.Services.GetRequiredService<SessionStore>(), app.Services.GetRequiredService<ActiveQueries>(), app.Services.GetRequiredService<QueryLimits>(),
             app.Services.GetRequiredService<LoginThrottle>(), () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, audit,
-            app.Services.GetRequiredService<DbDataKit.State.NotificationStore>(), app.Services.GetRequiredService<RecentFailures>(), instanceId, ProxyHost.Version);
+            app.Services.GetRequiredService<DbDataKit.Monitoring.INotificationFeed>(), app.Services.GetRequiredService<RecentFailures>(), instanceId, ProxyHost.Version);
         var certificate = new ProxyCertificate(holder, () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue, dataDirectory, app.Services.GetRequiredService<RecentFailures>(), audit, group: app.Services.GetRequiredService<GroupCertificate>());
         management = new ProxyManagement(configuration, configDirectory, instanceId, ProxyHost.Version, dataSources, identities, activity, certificate, git,
             new ProxySecrets(app.Services.GetRequiredService<GroupSecretStore>() is { Enabled: true } group ? group : SecretsRuntime.OpenStore(options), audit), files.Codes(),
@@ -118,7 +118,7 @@ public static class ProxyManagementHost
         if (audit.ImportFile(dataDirectory) is > 0 and var imported)
             app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Management").LogInformation("Read {Count} entries of {File} into the state's audit; the file is now {File}.imported.", imported, DbDataProxy.Server.State.StateAuditLog.LegacyFileName, DbDataProxy.Server.State.StateAuditLog.LegacyFileName);
         // a token one instance of a group accepted is refused by every other (plan 20 O02b): the used ids are in the state they share
-        var used = new DbDataKit.State.OneTimeValues(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>());
+        var used = new DbDataKit.State.IdentityOneTimeValues(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>());
         var validator = new ConsoleTokenValidator(instanceId, clients, new StateReplayCache(used, "management:" + instanceId));
         var log = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Management");
 

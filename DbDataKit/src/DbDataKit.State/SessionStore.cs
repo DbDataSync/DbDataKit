@@ -15,7 +15,7 @@ public sealed record SessionRecord(string Id, string UserId, DateTimeOffset Expi
 /// would buy nothing and cost exactly that.
 /// </para>
 /// </summary>
-public sealed class SessionStore(StateDatabase database)
+public sealed class SessionStore(StateDatabase database) : ISessionStore
 {
     public static TimeSpan Lifetime { get; } = TimeSpan.FromHours(12);
 
@@ -47,7 +47,7 @@ public sealed class SessionStore(StateDatabase database)
     /// The user behind a session id, or null. Expiry is enforced here rather than by a sweep, so a
     /// session that outlives its row's deletion schedule is still refused.
     /// </summary>
-    public UserRecord? Resolve(string sessionId, UserStore users)
+    public UserRecord? Resolve(string sessionId, IUserAccounts users)
     {
         var userId = database.Retry(() =>
         {

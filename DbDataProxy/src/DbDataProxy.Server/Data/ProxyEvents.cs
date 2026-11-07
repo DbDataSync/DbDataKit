@@ -8,7 +8,7 @@ namespace DbDataProxy.Server.Data;
 /// API, next to the health of everything else it manages. The same thing is told once per <see cref="Quiet"/> per subject, because a client that retries a refused statement a hundred times a second is one event, not a hundred.
 /// Messages name people, sources and clients; never a statement, a password or a driver's text.
 /// </summary>
-public sealed class ProxyEvents(NotificationStore store, TimeProvider? clock = null)
+public sealed class ProxyEvents(DbDataKit.Monitoring.INotificationFeed store, TimeProvider? clock = null)
 {
     public static readonly TimeSpan Quiet = TimeSpan.FromMinutes(10);
 

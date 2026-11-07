@@ -12,7 +12,7 @@ public sealed class AppSiteTests : IDisposable
     public AppSiteTests()
     {
         Directory.CreateDirectory(folder);
-        store = new AppInstanceStore(new DefinitionStore(new StateDatabase(Path.Combine(folder, "state.db"), new StateSchema([DefinitionSchema.Tables]))));
+        store = new AppInstanceStore(new DefinitionStore(StateDatabase.OpenModules(Path.Combine(folder, "state.db"), [DefinitionsModule.Module])));
     }
 
     public void Dispose()

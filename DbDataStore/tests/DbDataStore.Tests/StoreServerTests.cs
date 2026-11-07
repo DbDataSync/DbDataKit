@@ -35,7 +35,7 @@ public sealed class StoreServerTests : IAsyncLifetime
 
     private async Task<(HttpClient Http, PairedServer Paired)> Pair(ServerRole ceiling = ServerRole.Viewer)
     {
-        var code = new PairingFiles(settings.ServerYaml).Codes().Create(ServerRoles.Close(ceiling));
+        var code = StoreState.Pairing(settings.Directory).Codes().Create(ServerRoles.Close(ceiling));
         var paired = await PairingClient.PairAsync(url, code.Code, console, ClientKind.Console, "test console");
         return (new HttpClient(PairingClient.Pinned(paired.CertificateFingerprint)) { BaseAddress = url }, paired);
     }
@@ -67,10 +67,28 @@ public sealed class StoreServerTests : IAsyncLifetime
     [Fact]
     public async Task The_instance_id_is_the_same_after_a_restart_because_it_is_written_to_the_servers_directory()
     {
-        var first = StoreServer.InstanceId(settings.ServerYaml);
-        Assert.Equal(first, StoreServer.InstanceId(settings.ServerYaml));
-        Assert.True(File.Exists(settings.ServerYaml));
+        var first = StoreServer.InstanceId(settings.Directory);
+        Assert.Equal(first, StoreServer.InstanceId(settings.Directory));
+        Assert.True(File.Exists(Path.Combine(settings.Directory, StoreState.FileName)));   // kept in the state database, not in server.yaml
         await Task.CompletedTask;
+    }
+
+    [Fact]
+    public void A_server_yaml_that_still_lists_paired_clients_stops_the_start_naming_the_file_and_what_to_do()
+    {
+        var other = Directory.CreateTempSubdirectory("ddstore-old-").FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(other, "server.yaml"), "instanceId: store-old\npairedClients:\n  - {id: console-1, name: Ops}\n");
+
+            var refused = Assert.Throws<InvalidOperationException>(() => StoreState.Open(other));
+
+            Assert.Contains(Path.Combine(other, "server.yaml"), refused.Message);
+            Assert.Contains("pairedClients", refused.Message);
+            Assert.Contains("pair each client again", refused.Message);
+            Assert.False(File.Exists(Path.Combine(other, StoreState.FileName)));   // refused before anything was made
+        }
+        finally { Directory.Delete(other, recursive: true); }
     }
 
     [Fact]
@@ -90,7 +108,7 @@ public sealed class StoreServerTests : IAsyncLifetime
         // a token for another server is no use here
         var elsewhere = console.Issuer().Issue(new ConsoleTokenRequest("someone-else", "ada", "Ada", ServerRole.Viewer));
         Assert.Equal(HttpStatusCode.Unauthorized, (await Send(http, "/api/v1/info", elsewhere)).StatusCode);
-        Assert.Equal(paired.InstanceId, StoreServer.InstanceId(settings.ServerYaml));
+        Assert.Equal(paired.InstanceId, StoreServer.InstanceId(settings.Directory));
     }
 
     [Fact]

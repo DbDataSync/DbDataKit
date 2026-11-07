@@ -69,7 +69,7 @@ public sealed class IdentityHostTests : IAsyncLifetime
 
         // the operator's commands, offline, before the home has ever run
         var db = IdentityHostState.Open(homeDirectory);
-        ada = new UserStore(db).CreateUser("Ada Lovelace", "ada@example.invalid", UserRole.Viewer).Id;
+        ada = new IdentityUserStore(db).CreateUser("Ada Lovelace", "ada@example.invalid", UserRole.Viewer).Id;
         var consolePort = FreePort();
         var registered = await Cli("identity", "client-add", "--repo", homeDirectory, "--name", "Console", "--redirect", $"https://localhost:{consolePort}{ConsoleFederation.CallbackPath}", "--logout-redirect", $"https://localhost:{consolePort}/");
         Assert.Equal(0, registered.Exit);
@@ -110,7 +110,7 @@ public sealed class IdentityHostTests : IAsyncLifetime
     }
 
     /// <summary>The person has a session at the home (a passkey sign-in makes one; the test makes the row the sign-in would).</summary>
-    private string HomeSession(string userId) => home!.Services.GetRequiredService<SessionStore>().Create(userId).Id;
+    private string HomeSession(string userId) => home!.Services.GetRequiredService<ISessionStore>().Create(userId).Id;
 
     private async Task<string> SignIn()
     {
@@ -214,7 +214,7 @@ public sealed class IdentityHostTests : IAsyncLifetime
         var stored = db.Retry(() =>
         {
             using var connection = db.OpenConnection();
-            using var cmd = db.Command(connection, "SELECT PrivateKey FROM SigningKeys;");
+            using var cmd = db.Command("identity", connection, "SELECT private_key FROM {table:signing_key};");
             return (string)cmd.ExecuteScalar()!;
         });
         using var ecdsa = ECDsa.Create();
@@ -262,8 +262,8 @@ public sealed class IdentityHostTests : IAsyncLifetime
         // sign-out: the console sends the browser to the home's end-session endpoint from another site, so no cookie of the home comes with it; the id token hint names the person
         var session = await SignIn();
         var homeSession = HomeSession(ada);
-        var users = home!.Services.GetRequiredService<UserStore>();
-        var sessions = home.Services.GetRequiredService<SessionStore>();
+        var users = home!.Services.GetRequiredService<IUserAccounts>();
+        var sessions = home.Services.GetRequiredService<ISessionStore>();
         Assert.NotNull(sessions.Resolve(homeSession, users));
         var signOut = new HttpRequestMessage(HttpMethod.Post, "/api/auth/sign-out");
         signOut.Headers.Add("Cookie", $"{ConsoleHost.Auth.SessionCookie}={session}");
@@ -304,7 +304,7 @@ public sealed class IdentityHostTests : IAsyncLifetime
     {
         var directory = Path.Combine(root, "cli-map");
         var db = IdentityHostState.Open(directory);
-        var entra = new UserStore(db).CreateUser("Grace", "grace@example.invalid", UserRole.Viewer);
+        var entra = new IdentityUserStore(db).CreateUser("Grace", "grace@example.invalid", UserRole.Viewer);
         var homeDirectory = new HomeDirectory(db);
         homeDirectory.SetExternalGroups(entra.Id, ExternalSources.Entra, ["Group-1"]);
 

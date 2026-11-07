@@ -36,8 +36,8 @@ public sealed class SqliteStateDialect : StateDialect
 
     public override string Upsert(
         string table, string columns, string values, string conflictTarget, string updates) =>
-        $"INSERT INTO {table} ({columns}) VALUES ({values}) " +
-        $"ON CONFLICT ({conflictTarget}) DO UPDATE SET {updates.Replace("EXCLUDED.", "excluded.")};";
+        $"INSERT INTO {table} AS existing ({columns}) VALUES ({values}) " +
+        $"ON CONFLICT ({conflictTarget}) DO UPDATE SET {updates.Replace("EXCLUDED.", "excluded.").Replace("EXISTING.", "existing.")};";
 
     public override string IdentityKey(string column) => $"{column} INTEGER PRIMARY KEY AUTOINCREMENT";
 
@@ -48,6 +48,18 @@ public sealed class SqliteStateDialect : StateDialect
     public override string KeyText => "TEXT";
 
     public override string Integer => "INTEGER";
+
+    public override string Uuid => "TEXT";
+
+    public override string Time => "TEXT";
+
+    public override string Json => "TEXT";
+
+    public override string Bool => "INTEGER";
+
+    public override string Decimal => "TEXT";
+
+    public override string Blob => "BLOB";
 
     public override int GetSchemaVersion(DbConnection connection)
     {
@@ -87,4 +99,48 @@ public sealed class SqliteStateDialect : StateDialect
     // needs an application-level retry.
     public override bool ShouldRetry(Exception exception) =>
         exception is SqliteException { SqliteErrorCode: 5 or 6 };
+
+    public override bool MigratesInOneTransaction => true;
+
+    public override DbTransaction BeginMigrationTransaction(DbConnection connection) =>
+        ((SqliteConnection)connection).BeginTransaction(deferred: false);
+
+    /// <summary>Attaches the file of every namespace that has one, under the alias the layout gave it. A relative path is relative to the main file's directory.</summary>
+    public override void OnConnectionOpened(DbConnection connection, StateLayout layout)
+    {
+        var main = Path.GetDirectoryName(Path.GetFullPath(connection.DataSource))!;
+        foreach (var ns in layout.Namespaces.Where(n => n.File is not null).DistinctBy(n => n.Schema))
+        {
+            var path = Path.IsPathRooted(ns.File!) ? ns.File! : Path.Combine(main, ns.File!);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = $"ATTACH DATABASE $path AS {ns.Schema};";
+            var parameter = cmd.CreateParameter();
+            parameter.ParameterName = "$path";
+            parameter.Value = path;
+            cmd.Parameters.Add(parameter);
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    public override bool TableExists(DbConnection connection, string qualifiedName)
+    {
+        // a table in an attached file is alias.name, and its catalogue is alias.sqlite_master
+        var dot = qualifiedName.IndexOf('.', StringComparison.Ordinal);
+        var catalogue = dot < 0 ? "sqlite_master" : qualifiedName[..dot] + ".sqlite_master";
+        qualifiedName = dot < 0 ? qualifiedName : qualifiedName[(dot + 1)..];
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT 1 FROM {catalogue} WHERE type = 'table' AND name = $name;";
+        var parameter = cmd.CreateParameter();
+        parameter.ParameterName = "$name";
+        parameter.Value = qualifiedName;
+        cmd.Parameters.Add(parameter);
+        return cmd.ExecuteScalar() is not null;
+    }
+
+    public override string? FindLegacySchemaVersion(DbConnection connection)
+    {
+        var version = GetSchemaVersion(connection);
+        return version > 0 ? $"PRAGMA user_version is {version}" : null;
+    }
 }

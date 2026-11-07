@@ -27,11 +27,11 @@ public sealed class SessionStore(IOptionsMonitor<ProxyOptions> options, TimeProv
         state.Retry(() =>
         {
             using var connection = state.OpenConnection();
-            using var cmd = state.Command(connection, "INSERT INTO ClientSessions (TokenHash, Principal, ExpiresAtUtc, LastUsedAtUtc) VALUES ($hash, $principal, $expires, $used);");
+            using var cmd = state.Command("serving", connection, "INSERT INTO {table:client_session} (token_hash, principal, expires_at, last_used_at) VALUES ($hash, $principal, $expires, $used);");
             cmd.Bind(state, "hash", Key(token));
             cmd.Bind(state, "principal", serialized);
-            cmd.Bind(state, "expires", Stamp(now.AddHours(options.CurrentValue.Auth.SessionMaxHours)));
-            cmd.Bind(state, "used", Stamp(now));
+            cmd.Bind(state, "expires", now.AddHours(options.CurrentValue.Auth.SessionMaxHours));
+            cmd.Bind(state, "used", now);
             cmd.ExecuteNonQuery();
         });
         return token;
@@ -43,10 +43,10 @@ public sealed class SessionStore(IOptionsMonitor<ProxyOptions> options, TimeProv
         var row = state.Retry(() =>
         {
             using var connection = state.OpenConnection();
-            using var cmd = state.Command(connection, "SELECT Principal, ExpiresAtUtc, LastUsedAtUtc FROM ClientSessions WHERE TokenHash = $hash;");
+            using var cmd = state.Command("serving", connection, "SELECT principal, expires_at, last_used_at FROM {table:client_session} WHERE token_hash = $hash;");
             cmd.Bind(state, "hash", hash);
             using var reader = cmd.ExecuteReader();
-            return reader.Read() ? (reader.GetString(0), Time(reader.GetString(1)), Time(reader.GetString(2))) : ((string, DateTimeOffset, DateTimeOffset)?)null;
+            return reader.Read() ? (reader.GetString(0), reader.Time(1), reader.Time(2)) : ((string, DateTimeOffset, DateTimeOffset)?)null;
         });
         if (row is not var (serialized, expires, lastUsed)) return null;
 
@@ -82,11 +82,11 @@ public sealed class SessionStore(IOptionsMonitor<ProxyOptions> options, TimeProv
         var rows = state.Retry(() =>
         {
             using var connection = state.OpenConnection();
-            using var cmd = state.Command(connection, "SELECT TokenHash, Principal, ExpiresAtUtc, LastUsedAtUtc FROM ClientSessions WHERE ExpiresAtUtc > $now;");
-            cmd.Bind(state, "now", Stamp(now));
+            using var cmd = state.Command("serving", connection, "SELECT token_hash, principal, expires_at, last_used_at FROM {table:client_session} WHERE expires_at > $now;");
+            cmd.Bind(state, "now", now);
             using var reader = cmd.ExecuteReader();
             var list = new List<(string Hash, string Principal, DateTimeOffset Expires, DateTimeOffset Used)>();
-            while (reader.Read()) list.Add((reader.GetString(0), reader.GetString(1), Time(reader.GetString(2)), Time(reader.GetString(3))));
+            while (reader.Read()) list.Add((reader.GetString(0), reader.GetString(1), reader.Time(2), reader.Time(3)));
             return list;
         });
         return [.. rows.Where(r => now - r.Used <= idle)
@@ -103,14 +103,14 @@ public sealed class SessionStore(IOptionsMonitor<ProxyOptions> options, TimeProv
         return state.Retry(() =>
         {
             using var connection = state.OpenConnection();
-            using var find = state.Command(connection, "SELECT TokenHash FROM ClientSessions WHERE TokenHash LIKE $prefix;");
+            using var find = state.Command("serving", connection, "SELECT token_hash FROM {table:client_session} WHERE token_hash LIKE $prefix;");
             find.Bind(state, "prefix", id.ToUpperInvariant() + "%");
             using var reader = find.ExecuteReader();
             var matches = new List<string>();
             while (reader.Read()) matches.Add(reader.GetString(0));
             reader.Close();
             if (matches.Count != 1) return false;
-            using var delete = state.Command(connection, "DELETE FROM ClientSessions WHERE TokenHash = $hash;");
+            using var delete = state.Command("serving", connection, "DELETE FROM {table:client_session} WHERE token_hash = $hash;");
             delete.Bind(state, "hash", matches[0]);
             return delete.ExecuteNonQuery() == 1;
         });
@@ -124,9 +124,9 @@ public sealed class SessionStore(IOptionsMonitor<ProxyOptions> options, TimeProv
         return state.Retry(() =>
         {
             using var connection = state.OpenConnection();
-            using var cmd = state.Command(connection, "DELETE FROM ClientSessions WHERE ExpiresAtUtc <= $now OR LastUsedAtUtc < $idle;");
-            cmd.Bind(state, "now", Stamp(now));
-            cmd.Bind(state, "idle", Stamp(now - idle));
+            using var cmd = state.Command("serving", connection, "DELETE FROM {table:client_session} WHERE expires_at <= $now OR last_used_at < $idle;");
+            cmd.Bind(state, "now", now);
+            cmd.Bind(state, "idle", now - idle);
             return cmd.ExecuteNonQuery();
         });
     }
@@ -134,7 +134,7 @@ public sealed class SessionStore(IOptionsMonitor<ProxyOptions> options, TimeProv
     private void Delete(string hash) => state.Retry(() =>
     {
         using var connection = state.OpenConnection();
-        using var cmd = state.Command(connection, "DELETE FROM ClientSessions WHERE TokenHash = $hash;");
+        using var cmd = state.Command("serving", connection, "DELETE FROM {table:client_session} WHERE token_hash = $hash;");
         cmd.Bind(state, "hash", hash);
         cmd.ExecuteNonQuery();
     });
@@ -142,8 +142,8 @@ public sealed class SessionStore(IOptionsMonitor<ProxyOptions> options, TimeProv
     private void Touch(string hash, DateTimeOffset now) => state.Retry(() =>
     {
         using var connection = state.OpenConnection();
-        using var cmd = state.Command(connection, "UPDATE ClientSessions SET LastUsedAtUtc = $used WHERE TokenHash = $hash;");
-        cmd.Bind(state, "used", Stamp(now));
+        using var cmd = state.Command("serving", connection, "UPDATE {table:client_session} SET last_used_at = $used WHERE token_hash = $hash;");
+        cmd.Bind(state, "used", now);
         cmd.Bind(state, "hash", hash);
         cmd.ExecuteNonQuery();
     });
@@ -196,9 +196,7 @@ public sealed class SessionStore(IOptionsMonitor<ProxyOptions> options, TimeProv
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or NullReferenceException) { return null; }
     }
 
-    private static string Stamp(DateTimeOffset at) => at.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
 
-    private static DateTimeOffset Time(string text) => DateTimeOffset.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
 
     // Keyed by hash so the table does not reveal usable tokens.
     private static string Key(string token) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));

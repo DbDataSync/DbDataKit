@@ -47,7 +47,7 @@ public sealed class BuildSchedulerTests : IDisposable
         Directory.CreateDirectory(root);
         projects = new ProjectsFile(root);
         projects.Add(new HostedProject("sales", project, null, null));
-        scheduler = new BuildScheduler(projects, runner, BuildSchedulerSchema.Open(root), clock, log.Add);
+        scheduler = new BuildScheduler(projects, runner, BuildSchedulerSchema.Open(root, clock), clock, log.Add);
     }
 
     public void Dispose()
@@ -62,6 +62,19 @@ public sealed class BuildSchedulerTests : IDisposable
         if (scheduler.Claim("test") is not var (item, hosted)) return false;
         await scheduler.RunAsync(item, hosted, "test", CancellationToken.None);
         return true;
+    }
+
+    [Fact]
+    public void A_server_state_database_from_before_the_modules_is_refused_naming_the_file()
+    {
+        var other = Path.Combine(root, "old-server");
+        // what an earlier server wrote: one schema version for the whole database
+        _ = new DbDataKit.State.StateDatabase(Path.Combine(other, "state.db"), new DbDataKit.State.StateSchema(["CREATE TABLE WorkQueue (Id {{key}} PRIMARY KEY);"]));
+
+        var refused = Assert.Throws<InvalidOperationException>(() => BuildSchedulerSchema.Open(other));
+
+        Assert.Contains("state.db", refused.Message);
+        Assert.Contains("one schema version", refused.Message);
     }
 
     [Fact]
@@ -116,7 +129,7 @@ public sealed class BuildSchedulerTests : IDisposable
         scheduler.Tick();
         clock.To(At(12, 16));
         scheduler.Tick();
-        var patient = new BuildScheduler(projects, runner, BuildSchedulerSchema.Open(root), clock, log.Add, lease: TimeSpan.FromHours(3));
+        var patient = new BuildScheduler(projects, runner, BuildSchedulerSchema.Open(root, clock), clock, log.Add, lease: TimeSpan.FromHours(3));
         Assert.NotNull(patient.Claim("test"));                // claimed, not finished, and its worker is alive (the lease holds)
 
         clock.To(At(13, 16));
@@ -157,7 +170,7 @@ public sealed class BuildSchedulerTests : IDisposable
     {
         scheduler.Tick();                                      // 12:00 noted
         clock.To(At(12, 16));
-        var restarted = new BuildScheduler(projects, runner, BuildSchedulerSchema.Open(root), clock, log.Add);
+        var restarted = new BuildScheduler(projects, runner, BuildSchedulerSchema.Open(root, clock), clock, log.Add);
 
         Assert.Single(restarted.Tick());                       // the new instance knew 12:00, so 12:15 is due
     }
@@ -252,7 +265,7 @@ public sealed class BuildSchedulerTests : IDisposable
         var serverProjects = new ProjectsFile(serverDir);
         serverProjects.Add(new HostedProject("sales", project, null, null));
         var settings = new BuildServerSettings(serverDir, new Uri("https://127.0.0.1:0"));
-        var ownScheduler = new BuildScheduler(serverProjects, runner, BuildSchedulerSchema.Open(serverDir), clock, log.Add);
+        var ownScheduler = new BuildScheduler(serverProjects, runner, BuildSchedulerSchema.Open(serverDir, clock), clock, log.Add);
         var withScheduler = BuildServer.Build(settings, BuildServer.Certificate(serverDir), runner, serverProjects, new TuiCommand.CliHost(_ => null).Commands, log.Add, scheduler: ownScheduler);
         await withScheduler.StartAsync();
         try

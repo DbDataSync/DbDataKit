@@ -34,6 +34,25 @@ public sealed class ConsoleCliTests : IDisposable
     }
 
     [Fact]
+    public async Task State_grants_prints_the_statements_a_login_needs_for_the_consoles_modules_and_only_for_servers()
+    {
+        var runtime = await Run("state", "grants", "--login", "console_svc", "--engine", "postgres");
+        Assert.Equal(0, runtime.Exit);
+        Assert.Contains("GRANT USAGE ON SCHEMA dbdatakit_identity TO console_svc;", runtime.Out);
+        Assert.Contains("GRANT USAGE ON SCHEMA dbdatakit_notifications TO console_svc;", runtime.Out);
+        Assert.DoesNotContain("CREATE", runtime.Out);
+        Assert.DoesNotContain("dbdatakit_definitions", runtime.Out);   // a module the console does not use
+
+        var migrate = await Run("state", "grants", "--login", "console_admin", "--engine", "mssql", "--migrate");
+        Assert.Equal(0, migrate.Exit);
+        Assert.Contains("GRANT CREATE TABLE, CREATE SCHEMA TO [console_admin];", migrate.Out);
+
+        Assert.Equal(2, (await Run("state", "grants", "--login", "x; DROP TABLE y", "--engine", "postgres")).Exit);
+        Assert.Equal(2, (await Run("state", "grants", "--engine", "postgres")).Exit);
+        Assert.Equal(2, (await Run("state", "grants", "--login", "svc")).Exit);   // SQLite: nothing to grant
+    }
+
+    [Fact]
     public async Task A_wrong_start_is_refused_with_the_usage_exit_code()
     {
         Assert.Equal(2, (await Run("server", "run", "--repo", directory, "--listen", "http://localhost:1")).Exit);
@@ -51,7 +70,7 @@ public sealed class ConsoleCliTests : IDisposable
         Assert.StartsWith("https://console.example:8480/invite#", url);
 
         var code = url.Split('#')[1];
-        var invites = new InviteStore(ConsoleState.Open(directory));
+        var invites = new IdentityInviteStore(ConsoleState.Open(directory));
         var found = invites.Find(code);
         Assert.NotNull(found);
         Assert.Equal(UserRole.Viewer, found!.Role);
@@ -67,7 +86,7 @@ public sealed class ConsoleCliTests : IDisposable
         Assert.Contains("--email", nobody.Err);
         Assert.Equal(2, (await Run("user", "invite", "--repo", directory, "--email", "a@example.com", "--user", "x")).Exit);
 
-        var users = new UserStore(ConsoleState.Open(directory));
+        var users = new IdentityUserStore(ConsoleState.Open(directory));
         var ada = users.CreateUser("Ada", "ada@example.com", UserRole.Admin, emailVerified: true);
         var taken = await Run("user", "invite", "--repo", directory, "--email", "ADA@example.com");
         Assert.Equal(1, taken.Exit);
@@ -79,7 +98,7 @@ public sealed class ConsoleCliTests : IDisposable
     [Fact]
     public async Task An_administrator_sets_a_users_address_from_the_command_line_and_a_held_address_is_refused()
     {
-        var users = new UserStore(ConsoleState.Open(directory));
+        var users = new IdentityUserStore(ConsoleState.Open(directory));
         var old = users.CreateUser("Old", "typed@example.com", UserRole.Admin);         // made before addresses were keyed: shown, never matched
         var ada = users.CreateUser("Ada", "ada@example.com", UserRole.Viewer, emailVerified: true);
 
@@ -103,7 +122,7 @@ public sealed class ConsoleCliTests : IDisposable
         Assert.Equal(0, empty.Exit);
         Assert.Contains("No user yet", empty.Out);
 
-        var users = new UserStore(ConsoleState.Open(directory));
+        var users = new IdentityUserStore(ConsoleState.Open(directory));
         var ada = users.CreateUser("Ada", "ada@example.com", UserRole.Admin);
         users.AddCredential(ada.Id, CredentialMethods.Passkey, "cred-1", "key", label: "Passkey");
 

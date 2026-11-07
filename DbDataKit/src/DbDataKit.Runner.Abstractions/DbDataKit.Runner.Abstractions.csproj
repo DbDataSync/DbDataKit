@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Runner</RootNamespace>
+    <Description>What the runner and the people who publish to it share (plan 28): the package/1 manifest of a package (its tasks, schedules, triggers, connection slots, progress declaration, limits, labels and capabilities), read strictly with the file and key named in every problem, and validated.</Description>
+    <IsPackable>true</IsPackable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
+    <ProjectReference Include="..\DbDataKit.Connections.Abstractions\DbDataKit.Connections.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Monitoring\DbDataKit.Monitoring.csproj" />
+    <ProjectReference Include="..\DbDataKit.Scheduling\DbDataKit.Scheduling.csproj" />
+    <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
+  </ItemGroup>
+</Project>

@@ -20,7 +20,7 @@ public sealed class AppDataGatewayTests : IDisposable
     public AppDataGatewayTests()
     {
         Directory.CreateDirectory(folder);
-        instances = new AppInstanceStore(new DefinitionStore(new StateDatabase(Path.Combine(folder, "state.db"), new StateSchema([DefinitionSchema.Tables]))));
+        instances = new AppInstanceStore(new DefinitionStore(StateDatabase.OpenModules(Path.Combine(folder, "state.db"), [DefinitionsModule.Module])));
         instances.PublishApp("schemaVersion: 1\nname: notes\nversion: 1.0.0\nentry: index.html\nroles: [viewer]\nmodels:\n  - model: territories\n    entities: {territory: [read, write], region: [read]}\n", "ada");
         instances.Save(new AppInstance("acme", "notes", Bindings: new Dictionary<string, string> { ["territories"] = "acme-data" }), "ada");
         gateway = new AppDataGateway(instances, data, host);
@@ -113,7 +113,7 @@ public sealed class AppDataGatewayTests : IDisposable
     [Fact]
     public async Task A_trusted_apps_data_calls_stop_when_no_approval_stands_for_its_version()
     {
-        var definitions = new DefinitionStore(new StateDatabase(Path.Combine(folder, "state.db"), new StateSchema([DefinitionSchema.Tables])));
+        var definitions = new DefinitionStore(StateDatabase.OpenModules(Path.Combine(folder, "state.db"), [DefinitionsModule.Module]));
         instances.PublishApp("schemaVersion: 1\nname: vault\nversion: 1.0.0\nentry: index.html\nroles: [viewer]\ntrust: trusted\nmodels:\n  - model: territories\n    entities: {territory: [read]}\n", "ada");
         instances.Save(new AppInstance("acme", "vault"), "ada");
         var approvals = new AppApprovalStore(definitions);

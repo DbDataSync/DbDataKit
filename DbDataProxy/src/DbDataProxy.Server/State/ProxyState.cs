@@ -5,62 +5,44 @@ using Microsoft.Extensions.Logging;
 namespace DbDataProxy.Server.State;
 
 /// <summary>
-/// The proxy's own state database (plan 13, P02; decision D18): SQLite through <c>DbDataKit.State</c>, in the data directory beside the certificate, created on first start; or SQL Server or PostgreSQL when the operator names one (P11).
-/// Today it holds the notification feed and each console's read position, the saved queries (J27), the identity home (plan 20 O06: its tables are there whether or not the home is on), and what a group of instances shares (O02: the client sessions, the management audit, the running instances); the rest of what a console shows are added to <see cref="Schema"/> by the slices
-/// that produce them (P06, P10). Append to the schema, never edit an entry that has shipped.
+/// The proxy's own state database (plan 13, P02; decision D18; plan 29a Q16): SQLite through <c>DbDataKit.State</c>, in the data directory beside the certificate, created on first start; or SQL Server
+/// or PostgreSQL when the operator names one (P11). It is built from modules, each applied and versioned on its own: <c>identity</c> (the identity home, plan 20 O06: its tables are there whether or not
+/// the home is on), <c>notifications</c>, <c>audit</c> (the management audit), and the modules kept per group: <c>definitions</c>, <c>app_storage</c>, <c>trust</c> (the group's instance id, paired clients,
+/// pairing codes, key check and secrets) and the proxy's own <see cref="ServingModule"/> (client sessions, running instances, saved queries). A state database made by the earlier structure, one schema
+/// version for the whole database with the proxy's tables interleaved among the home's, is refused with a message naming it.
 /// </summary>
 public static class ProxyState
 {
     public const string FileName = "state.db";
 
-    /// <summary>How many of the identity home's scripts there were when the group's tables (<see cref="ProxyGroupSchema"/>) were appended after them. The home's later scripts come after the group's, since a database
-    /// knows its scripts by position.</summary>
-    public const int HomeTemplatesBeforeGroup = 8;
+    /// <summary>The service name the proxy records on what it writes to a database it may share (the feed's and the audit's <c>service_id</c>).</summary>
+    public const string ServiceId = "dbdataproxy";
 
-    /// <summary>How many of the home's scripts there were when the group's trust (<see cref="DbDataKit.Web.Trust.GroupTrustSchema"/>, plan 20 O04) was appended after them.</summary>
-    public const int HomeTemplatesBeforeTrust = 9;
+    /// <summary>The group the instances of one proxy belong to when none is named: every instance that shares a database and does not say otherwise is one group.</summary>
+    public const string DefaultGroup = "main";
 
-    /// <summary>How many of the home's scripts there were when the group's secrets (<see cref="ProxyGroupSchema.Secrets"/>, plan 20 O04b) were appended after them.</summary>
-    public const int HomeTemplatesBeforeSecrets = 9;
-
-    /// <summary>The proxy's own scripts among the identity home's: each after the number of the home's scripts there were when it was added, in the order added (a database knows its scripts by position).</summary>
-    private static readonly (int AfterHome, string Script)[] OwnAmongHome =
+    /// <summary>The modules the proxy's state is built from.</summary>
+    public static IReadOnlyList<StateModule> Modules { get; } =
     [
-        (HomeTemplatesBeforeGroup, ProxyGroupSchema.Tables),                        // plan 20 O02: sessions, audit, the group's key check, the running instances
-        (HomeTemplatesBeforeTrust, DbDataKit.Web.Trust.GroupTrustSchema.Tables),    // plan 20 O04a: the group's instance id, paired clients, pairing codes and certificate
-        (HomeTemplatesBeforeSecrets, ProxyGroupSchema.Secrets),                     // plan 20 O04b: the secrets the group's clients keep on it
-        (HomeTemplatesBeforeSecrets, ProxyGroupSchema.ChangeRequests),              // plan 20 O08: the store module's change requests
+        IdentityModule.Module, NotificationsModule.Module, AuditModule.Module,
+        DefinitionsModule.Module, AppStorageModule.Module, DbDataKit.Web.Trust.TrustModule.Module, ServingModule.Module,
     ];
 
-    /// <summary>The proxy's tables, in the order they were added.</summary>
-    public static StateSchema Schema { get; } = new([
-        NotificationSchema.Feed, SavedQuerySchema.Tables, DbDataKit.State.DefinitionSchema.Tables, DbDataKit.State.AppStorageSchema.Tables,
-        .. Interleave(DbDataKit.Identity.HomeSchema.Templates, OwnAmongHome),
-    ]);
-
-    private static IEnumerable<string> Interleave(IReadOnlyList<string> home, (int AfterHome, string Script)[] own)
-    {
-        for (var i = 0; i <= home.Count; i++)
-        {
-            foreach (var (after, script) in own.Where(o => o.AfterHome == i)) yield return script;
-            if (i < home.Count) yield return home[i];
-        }
-        foreach (var (_, script) in own.Where(o => o.AfterHome > home.Count)) yield return script;
-    }
+    public static StateScope ScopeOf(string? group = null) => new(Group: string.IsNullOrWhiteSpace(group) ? DefaultGroup : group, Service: ServiceId);
 
     public static string PathIn(string dataDirectory) => Path.Combine(dataDirectory, FileName);
 
     /// <summary>Whether the state is a group's (SQL Server or PostgreSQL), whose instances share their identity and pairings; a SQLite state is one instance's.</summary>
     public static bool IsGroup(StateDatabase state) => !string.Equals(state.Dialect.Engine, DbDataKit.State.StateEngineIds.Sqlite, StringComparison.OrdinalIgnoreCase);
 
-    public static StateDatabase Open(string dataDirectory, StateSettings? settings = null, Func<string, string>? resolveConnectionString = null)
+    public static StateDatabase Open(string dataDirectory, StateSettings? settings = null, Func<string, string>? resolveConnectionString = null, string? group = null)
     {
         Directory.CreateDirectory(dataDirectory);
         settings ??= new StateSettings();
         // the secret reference in a server engine's connection string is resolved here, so the password is read when the store is opened and never written to the settings
         if (!settings.IsSqlite && settings.ConnectionString is { Length: > 0 } text && resolveConnectionString is not null)
             settings = settings with { ConnectionString = resolveConnectionString(text) };
-        return StateOpener.Open(settings, PathIn(dataDirectory), Schema);
+        return StateOpener.Open(settings, PathIn(dataDirectory), Modules, ScopeOf(group), appliedBy: $"{ServiceId} {typeof(ProxyState).Assembly.GetName().Version}");
     }
 }
 

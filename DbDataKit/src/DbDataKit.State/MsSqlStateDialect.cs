@@ -84,7 +84,7 @@ public sealed class MsSqlStateDialect : StateDialect
 
     public override string Upsert(
         string table, string columns, string values, string conflictTarget, string updates) =>
-        Merge(table, columns, values, conflictTarget, matched: updates.Replace("EXCLUDED.", "source."));
+        Merge(table, columns, values, conflictTarget, matched: updates.Replace("EXCLUDED.", "source.").Replace("EXISTING.", "target."));
 
     private static string Merge(
         string table, string columns, string values, string conflictTarget, string? matched,
@@ -155,6 +155,20 @@ public sealed class MsSqlStateDialect : StateDialect
 
     public override string Integer => "BIGINT";
 
+    public override string Uuid => "UNIQUEIDENTIFIER";
+
+    public override string UuidAsText(string column) => $"LOWER(CAST({column} AS NVARCHAR(36)))";
+
+    public override string Time => "DATETIMEOFFSET(7)";
+
+    public override string Json => "NVARCHAR(MAX)";
+
+    public override string Bool => "BIT";
+
+    public override string Decimal => "DECIMAL(38,10)";
+
+    public override string Blob => "VARBINARY(MAX)";
+
     public override string AddColumn => "ADD";
 
     /// <summary>Index names here are scoped to a table rather than to the schema, so dropping one
@@ -187,5 +201,47 @@ public sealed class MsSqlStateDialect : StateDialect
         parameter.Value = version;
         cmd.Parameters.Add(parameter);
         cmd.ExecuteNonQuery();
+    }
+
+    public override string? CreateSchema(string schema) => $"IF SCHEMA_ID('{schema}') IS NULL EXEC('CREATE SCHEMA {schema}');";
+
+    public override bool TableExists(DbConnection connection, string qualifiedName)
+    {
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT CASE WHEN OBJECT_ID(@name, 'U') IS NULL THEN 0 ELSE 1 END;";
+        var parameter = cmd.CreateParameter();
+        parameter.ParameterName = "@name";
+        parameter.Value = qualifiedName;
+        cmd.Parameters.Add(parameter);
+        return Convert.ToInt32(cmd.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture) == 1;
+    }
+
+    /// <summary>An application lock owned by the session, so it goes with the connection if the process dies. A negative result is a timeout or a deadlock: the start fails rather than migrating unlocked.</summary>
+    public override IDisposable? AcquireMigrationLock(DbConnection connection)
+    {
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "DECLARE @r INT; EXEC @r = sp_getapplock @Resource = 'dbdatakit_state_migration', @LockMode = 'Exclusive', @LockOwner = 'Session', @LockTimeout = 120000; SELECT @r;";
+        var result = Convert.ToInt32(cmd.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
+        if (result < 0)
+            throw new InvalidOperationException($"Another service has been migrating this state database for two minutes (sp_getapplock returned {result}); try the start again.");
+        return new Release(connection);
+    }
+
+    public override string? FindLegacySchemaVersion(DbConnection connection)
+    {
+        if (!TableExists(connection, "SchemaVersion")) return null;
+        using var read = connection.CreateCommand();
+        read.CommandText = "SELECT TOP 1 Version FROM SchemaVersion;";
+        return $"the table SchemaVersion holds version {read.ExecuteScalar()}";
+    }
+
+    private sealed class Release(DbConnection connection) : IDisposable
+    {
+        public void Dispose()
+        {
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = "EXEC sp_releaseapplock @Resource = 'dbdatakit_state_migration', @LockOwner = 'Session';";
+            cmd.ExecuteNonQuery();
+        }
     }
 }

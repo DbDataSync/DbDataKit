@@ -39,7 +39,7 @@ public sealed class MemoryReplayCache(TimeProvider? clock = null, int maxEntries
 /// </summary>
 /// <param name="values">The state's one-time values.</param>
 /// <param name="purpose">Which tokens these are (management calls, key rotations), so one kind's ids never stand for another's.</param>
-public sealed class StateReplayCache(DbDataKit.State.OneTimeValues values, string purpose) : IReplayCache
+public sealed class StateReplayCache(DbDataKit.State.IOneTimeValues values, string purpose) : IReplayCache
 {
     public bool TryAdd(string consoleId, string tokenId, DateTimeOffset forgetAfter) => values.TryClaim(purpose, consoleId + "\n" + tokenId, forgetAfter);
 }

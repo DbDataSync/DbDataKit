@@ -52,13 +52,13 @@ public static class UpstreamSignIn
 
     internal static void Register(IServiceCollection services, IdentityHomeOptions options)
     {
-        services.AddSingleton(sp => new ExternalSignIns(sp.GetRequiredService<UserStore>(), sp.GetRequiredService<HomeDirectory>()));
+        services.AddSingleton(sp => new ExternalSignIns(sp.GetRequiredService<IUserAccounts>(), sp.GetRequiredService<HomeDirectory>()));
         if (options.Entra is { } entra)
         {
             var redirect = new Uri(options.PublicUrl, EntraCallbackPath).AbsoluteUri;
             // the attempts are in the state, so the tenant may send the browser back to any instance of the home's group
             services.AddSingleton(sp => new EntraClient(new OpenIdClient(new OpenIdClientOptions(entra.Authority, entra.ClientId, entra.ClientSecret, redirect), entra.Http?.Invoke() ?? new HttpClient(),
-                sp.GetService<TimeProvider>(), new StateOpenIdAttempts(sp.GetRequiredService<OneTimeValues>(), "upstream:entra"))));
+                sp.GetService<TimeProvider>(), new StateOpenIdAttempts(sp.GetRequiredService<IOneTimeValues>(), "upstream:entra"))));
         }
     }
 
@@ -134,7 +134,7 @@ public static class UpstreamSignIn
         if (!user.Enabled) return Refused(options, log, $"'{user.DisplayName}' is disabled at the identity home.");
 
         var auth = context.RequestServices.GetRequiredService<AuthOptions>();
-        var session = context.RequestServices.GetRequiredService<SessionStore>().Create(user.Id);
+        var session = context.RequestServices.GetRequiredService<ISessionStore>().Create(user.Id);
         context.Response.Cookies.Append(auth.CookieName, session.Id, new CookieOptions
         {
             HttpOnly = true, SameSite = SameSiteMode.Strict, Secure = context.Request.IsHttps, Expires = session.ExpiresAtUtc, Path = "/",

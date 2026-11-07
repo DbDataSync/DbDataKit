@@ -25,8 +25,8 @@ public sealed class SessionAuthenticationHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options,
     ILoggerFactory logger,
     UrlEncoder encoder,
-    SessionStore sessions,
-    UserStore users,
+    ISessionStore sessions,
+    IUserAccounts users,
     AuthOptions authOptions,
     ConsoleTokenValidator? tokens = null,
     IPasswordCredentials? passwords = null)

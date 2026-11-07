@@ -18,7 +18,7 @@ namespace DbDataKit.Web.Auth;
 /// invites the opposite assumption, which is exactly why this says so.
 /// </para>
 /// </summary>
-public sealed class PasskeyService(PasskeyOptions options, UserStore users)
+public sealed class PasskeyService(PasskeyOptions options, IUserAccounts users)
 {
     private readonly IFido2 _fido2 = new Fido2(new Fido2Configuration
     {

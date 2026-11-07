@@ -9,6 +9,12 @@ namespace DbDataKit.State;
 /// <param name="ConnectionString">The connection string of the server engines; ignored for SQLite.</param>
 public sealed record StateSettings(string? Engine = null, string? ConnectionString = null)
 {
+    /// <summary>Where each module's tables are (plan 29 section 3.2); everything the operator did not say gets the defaults.</summary>
+    public StateNamespaceSettings Namespaces { get; init; } = StateNamespaceSettings.Defaults;
+
+    /// <summary>How long history is kept (plan 29 section 3.3); pass it to <see cref="RetentionJob"/>.</summary>
+    public RetentionSettings Retention { get; init; } = RetentionSettings.Defaults;
+
     /// <summary>The engine id <see cref="StateEngineIds"/> uses for the name given, or a message saying what is accepted.</summary>
     public string EngineId => (Engine ?? "").Trim().ToLowerInvariant() switch
     {

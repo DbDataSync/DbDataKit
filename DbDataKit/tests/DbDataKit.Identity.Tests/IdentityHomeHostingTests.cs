@@ -28,7 +28,7 @@ public sealed class IdentityHomeHostingTests : IDisposable
         try { Directory.Delete(_directory, true); } catch (IOException) { /* released later */ }
     }
 
-    private StateDatabase NewDatabase(string name = "state.db") => new(Path.Combine(_directory, name), HomeSchema.Schema);
+    private StateDatabase NewDatabase(string name = "state.db") => StateDatabase.OpenModules(Path.Combine(_directory, name), IdentityHomeState.Modules);
 
     [Fact]
     public void Instances_given_the_same_key_share_the_signing_keys_and_another_key_cannot_read_them()
@@ -140,7 +140,7 @@ public sealed class IdentityHomeHostingTests : IDisposable
         Assert.StartsWith("https://identity.example.invalid/invite#", (string)invite.Data["url"]!);
         Assert.Equal("Admin", invite.Data["role"]);
 
-        var ada = new UserStore(database).CreateUser("Ada Lovelace", "grace@example.invalid", UserRole.Viewer, emailVerified: true);
+        var ada = new IdentityUserStore(database).CreateUser("Ada Lovelace", "grace@example.invalid", UserRole.Viewer, emailVerified: true);
         var list = await Run("user-list");
         Assert.Equal(CliExit.Ok, list.Exit);
         Assert.Contains(ada.Id, list.Out);

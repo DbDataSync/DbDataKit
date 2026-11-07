@@ -69,7 +69,9 @@ public static class ConsoleHost
             .AddApplicationPart(typeof(ConsoleHost).Assembly)
             .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
         builder.Services.AddSingleton(_ => ConsoleState.Open(settings.Directory, settings.State));
-        builder.Services.AddSingleton(sp => new NotificationStore(sp.GetRequiredService<StateDatabase>()));
+        builder.Services.AddSingleton(sp => new NotificationFeedStore(sp.GetRequiredService<StateDatabase>(), ConsoleState.ServiceId));
+        builder.Services.AddSingleton(new ConsoleActivitySource(settings.State is { IsSqlite: false }));
+        builder.Services.AddSingleton<DbDataKit.Monitoring.INotificationFeed>(sp => sp.GetRequiredService<NotificationFeedStore>());
         builder.Services.AddSessionAuth(Auth,
             sp => sp.GetRequiredService<StateDatabase>(),
             sp => PasskeyOptions.FromConfiguration(sp.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>(), Auth, settings.Public.GetLeftPart(UriPartial.Authority), [], []),
@@ -101,7 +103,7 @@ public static class ConsoleHost
                     RefreshInterval = home.RefreshInterval ?? FederationPolicy.DefaultRefreshInterval,
                     Grace = home.Grace ?? FederationPolicy.DefaultGrace,
                 };
-                return new FederatedUsers(sp.GetRequiredService<StateDatabase>(), sp.GetRequiredService<UserStore>(), sp.GetRequiredService<SessionStore>(), home.AppId, policy, sp.GetService<TimeProvider>());
+                return new FederatedUsers(sp.GetRequiredService<StateDatabase>(), sp.GetRequiredService<IUserAccounts>(), sp.GetRequiredService<ISessionStore>(), home.AppId, policy, sp.GetService<TimeProvider>());
             });
             builder.Services.AddSingleton<ISignOutHandler, FederationSignOut>();
         }

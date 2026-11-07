@@ -37,14 +37,14 @@ public sealed record RedeemInviteRequest(string Code, string DisplayName, string
 [ApiController]
 [Route("api/invites")]
 public sealed class InvitesController(
-    InviteStore invites,
-    UserStore users,
-    SessionStore sessions,
+    IInviteStore invites,
+    IUserAccounts users,
+    ISessionStore sessions,
     PasskeyService passkeys,
     CurrentUser currentUser,
     AuthOptions authOptions,
     BootstrapInviteLocation bootstrapLocation,
-    OneTimeValues held) : ControllerBase
+    IOneTimeValues held) : ControllerBase
 {
     /// <summary>How long a passkey ceremony may take between its two calls.</summary>
     private static readonly TimeSpan CeremonyLifetime = TimeSpan.FromMinutes(5);

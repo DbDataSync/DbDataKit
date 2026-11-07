@@ -12,6 +12,21 @@ public sealed class ConsoleStateEngineTests : IDisposable
     public void Dispose() => Directory.Delete(directory, recursive: true);
 
     [Fact]
+    public void A_state_database_from_before_the_modules_is_refused_naming_the_file_and_is_left_as_it_was()
+    {
+        var path = Path.Combine(directory, "state.db");
+        // what an earlier console wrote: one schema version for the whole database
+        var old = new StateDatabase(path, new StateSchema([IdentitySchema.Accounts, IdentitySchema.Invites, NotificationSchema.Feed, IdentitySchema.AccountKeys]));
+        new UserStore(old).CreateUser("Pat", null, UserRole.Admin);
+
+        var refused = Assert.Throws<InvalidOperationException>(() => ConsoleState.Open(directory));
+
+        Assert.Contains("state.db", refused.Message);
+        Assert.Contains("one schema version", refused.Message);
+        Assert.Single(new UserStore(old).List());   // refused, not converted and not damaged
+    }
+
+    [Fact]
     public void Nothing_named_is_sqlite_in_the_console_directory_and_the_flags_win_over_the_environment()
     {
         Assert.Null(ConsoleState.SettingsFrom(_ => null));
@@ -54,7 +69,7 @@ public sealed class ConsoleStateEngineTests : IDisposable
             var settings = new StateSettings("postgres", builder.ConnectionString + ";Password=env:CONSOLE_STATE_PASSWORD");
             var database = ConsoleState.Open(directory, settings, key => key == "CONSOLE_STATE_PASSWORD" ? password : null);
 
-            var users = new UserStore(database);
+            var users = new IdentityUserStore(database);
             var made = users.CreateUser("Pat", null, UserRole.Admin);
             Assert.Equal(made.Id, users.List().Single().Id);
             Assert.False(File.Exists(Path.Combine(directory, "state.db")), "a server engine keeps no SQLite file");

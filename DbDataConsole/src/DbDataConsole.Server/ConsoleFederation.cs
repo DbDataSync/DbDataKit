@@ -27,7 +27,7 @@ public static class ConsoleFederation
             catch (OpenIdClientException e) { return Results.Text(e.Message, "text/plain", statusCode: StatusCodes.Status502BadGateway); }
         }).AllowAnonymous();
 
-        app.MapGet(CallbackPath, async (HttpContext context, OpenIdClient client, FederatedUsers federated, SessionStore sessions, AuthOptions options) =>
+        app.MapGet(CallbackPath, async (HttpContext context, OpenIdClient client, FederatedUsers federated, ISessionStore sessions, AuthOptions options) =>
         {
             var q = context.Request.Query;
             try

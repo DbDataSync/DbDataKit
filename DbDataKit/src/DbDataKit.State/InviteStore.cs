@@ -29,7 +29,7 @@ public sealed record MintedInvite(InviteRecord Invite, string Code);
 /// remembers.
 /// </para>
 /// </summary>
-public sealed class InviteStore(StateDatabase database)
+public sealed class InviteStore(StateDatabase database) : IInviteStore
 {
     public static TimeSpan DefaultLifetime { get; } = TimeSpan.FromHours(24);
 

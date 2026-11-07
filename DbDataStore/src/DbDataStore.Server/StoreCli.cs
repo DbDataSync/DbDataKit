@@ -32,7 +32,7 @@ public static class StoreCli
     public static NounRouter Router(Func<string, string?>? environment = null) => new(Program,
     [
         ServerNoun.Create((args, context) => RunServerAsync(args, context, environment))
-            .With([.. PairingVerbs.Create(args => new PairingFiles(Path.Combine(DirectoryOf(args, environment), "server.yaml")))]),
+            .With([.. PairingVerbs.Create(args => StoreState.Pairing(DirectoryOf(args, environment)))]),
         StoreAdminCommand.Model(),
         StoreAdminCommand.Storage(),
         StoreAdminCommand.Proxy(),
@@ -70,7 +70,7 @@ public static class StoreCli
         var settings = new StoreSettings(DirectoryOf(args, environment), listen);
         Directory.CreateDirectory(settings.Directory);
         var app = StoreServer.Build(settings, StoreServer.Certificate(settings.Directory), line => context.Error.WriteLine(line));
-        await context.Out.WriteLineAsync($"Serving on {listen} (instance {StoreServer.InstanceId(settings.ServerYaml)}). Pair a client with: dbdatastore server pair --max-role <roles> [--repo <server directory>]");
+        await context.Out.WriteLineAsync($"Serving on {listen} (instance {StoreServer.InstanceId(settings.Directory)}). Pair a client with: dbdatastore server pair --max-role <roles> [--repo <server directory>]");
         // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way
         await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(app, context.Cancellation);
         return CliExit.Ok;

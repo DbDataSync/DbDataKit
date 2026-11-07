@@ -46,7 +46,7 @@ public sealed class StoreModelsTests : IAsyncLifetime
 
     private async Task<Func<HttpMethod, string, string?, ServerRole, Task<HttpResponseMessage>>> Client()
     {
-        var code = new PairingFiles(settings.ServerYaml).Codes().Create(ServerRoles.Close(ServerRole.Admin | ServerRole.Author));
+        var code = StoreState.Pairing(settings.Directory).Codes().Create(ServerRoles.Close(ServerRole.Admin | ServerRole.Author));
         var paired = await PairingClient.PairAsync(url, code.Code, console, ClientKind.Console, "test console");
         var http = new HttpClient(PairingClient.Pinned(paired.CertificateFingerprint)) { BaseAddress = url };
         return (method, path, body, role) =>

@@ -75,7 +75,7 @@ public static class IdentityVerbs
     private static AccessTokens Tokens(CliArgs parsed, IdentityAdminLocation where)
     {
         var database = where.Open(parsed);
-        return new AccessTokens(database, new UserStore(database), where.Tokens?.Invoke(parsed));
+        return new AccessTokens(database, new IdentityUserStore(database), where.Tokens?.Invoke(parsed));
     }
 
     private static async Task<int> ServiceAccountAddAsync(string[] args, CliContext context, IdentityAdminLocation where)
@@ -227,7 +227,7 @@ public static class IdentityVerbs
     {
         var parsed = CliArgs.Parse(args, new HashSet<string>(), Options());
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0) { await context.Error.WriteLineAsync($"Usage: identity user-list {where.Usage}"); return CliExit.Usage; }
-        var users = new UserStore(where.Open(parsed));
+        var users = new IdentityUserStore(where.Open(parsed));
         var all = users.List();
         if (all.Count == 0) await context.Out.WriteLineAsync("Nobody yet. The first administrator redeems the invitation in FIRST-RUN.txt, or run: identity invite --email <address>");
         foreach (var user in all)
@@ -260,13 +260,13 @@ public static class IdentityVerbs
         }
         var database = where.Open(parsed);
         var forUser = parsed.Get("user");
-        if (forUser is not null && new UserStore(database).Get(forUser) is null)
+        if (forUser is not null && new IdentityUserStore(database).Get(forUser) is null)
         {
             await context.Error.WriteLineAsync($"No user has the id '{forUser}'. 'identity user-list' shows them.");
             return CliExit.Failure;
         }
         MintedInvite minted;
-        try { minted = new InviteStore(database).Create(role, forUser, createdByUserId: null, email: email); }
+        try { minted = new IdentityInviteStore(database).Create(role, forUser, createdByUserId: null, email: email); }
         catch (AccountConflictException ex) { await context.Error.WriteLineAsync(ex.Message); return CliExit.Failure; }
         // the code goes in the fragment, which a browser never sends to a server and an access log never records
         var url = $"{(parsed.Get("url") ?? where.PublicUrl(parsed)).TrimEnd('/')}{IdentityHome.InvitePath}#{minted.Code}";
@@ -311,7 +311,7 @@ public static class IdentityVerbs
             return CliExit.Usage;
         }
         var database = where.Open(parsed);
-        if (new UserStore(database).Get(userId) is not { } user)
+        if (new IdentityUserStore(database).Get(userId) is not { } user)
         {
             await context.Error.WriteLineAsync($"No user has the id '{userId}'. 'identity user-list' shows them.");
             return CliExit.Failure;

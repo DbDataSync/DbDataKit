@@ -71,7 +71,8 @@ public abstract class StateDialect
     /// </summary>
     /// <param name="updates">
     /// Assignments in <c>Column = EXCLUDED.Column</c> form, with the incoming row spelled
-    /// <c>EXCLUDED</c> — rewritten per engine. SQL Server's MERGE calls it <c>source</c>.
+    /// <c>EXCLUDED</c> — rewritten per engine. SQL Server's MERGE calls it <c>source</c>. The row already there is spelled <c>EXISTING.Column</c>
+    /// (<c>last_seen = CASE WHEN EXCLUDED.last_seen &gt; EXISTING.last_seen THEN ...</c>).
     /// </param>
     public abstract string Upsert(
         string table, string columns, string values, string conflictTarget, string updates);
@@ -97,6 +98,28 @@ public abstract class StateDialect
     public abstract string KeyText { get; }
 
     public abstract string Integer { get; }
+
+    // ---- The convention types (plan 29 section 3.3), one token each in a template ----
+
+    /// <summary>A UUID: <c>UNIQUEIDENTIFIER</c>, <c>UUID</c>, and on SQLite lower-case text (<see cref="StateCommandExtensions.Bind"/> writes it that way). Ids are UUID v7.</summary>
+    public virtual string Uuid => KeyText;
+
+    /// <summary>A UTC instant: <c>DATETIMEOFFSET(7)</c>, <c>TIMESTAMPTZ</c>, and on SQLite fixed-width ISO 8601 text, which sorts as time does. Columns of this type are named <c>*_at</c>.</summary>
+    public virtual string Time => KeyText;
+
+    /// <summary>A JSON document: <c>NVARCHAR(MAX)</c>, <c>JSONB</c>, <c>TEXT</c>. Never part of a key. Written as <c>CAST($doc AS {{json}})</c>, which PostgreSQL needs to take text into a <c>jsonb</c> column.</summary>
+    public virtual string Json => Text;
+
+    public virtual string Bool => Integer;
+
+    /// <summary>An exact decimal: <c>DECIMAL(38,10)</c>, <c>NUMERIC(38,10)</c>, and on SQLite exact text (its numeric type is a binary float; <see cref="StateCommandExtensions.Bind"/> writes a decimal as invariant text there). Not for a key or an index.</summary>
+    public virtual string Decimal => throw NoModules();
+
+    /// <summary>Bytes: <c>VARBINARY(MAX)</c>, <c>BYTEA</c>, <c>BLOB</c>. Large values do not belong in an ordinary table at all (the payloads module, plan 29 section 3.6).</summary>
+    public virtual string Blob => throw NoModules();
+
+    /// <summary>An expression that reads a UUID column as the lower-case text the state layer stores references to rows as (<see cref="StateValues"/>).</summary>
+    public virtual string UuidAsText(string column) => column;
 
     /// <summary>
     /// How a column is added to an existing table. SQLite and Postgres write <c>ADD COLUMN</c>; SQL
@@ -130,6 +153,9 @@ public abstract class StateDialect
     /// <summary>Runs once on every freshly opened connection, before anything else.</summary>
     public virtual void OnConnectionOpened(DbConnection connection) { }
 
+    /// <summary>Runs once on every freshly opened connection of a database built from modules, after <see cref="OnConnectionOpened(DbConnection)"/>: SQLite attaches the files its namespaces are in.</summary>
+    public virtual void OnConnectionOpened(DbConnection connection, StateLayout layout) { }
+
     /// <summary>
     /// Whether a failed statement is worth trying again.
     /// <para>
@@ -140,4 +166,37 @@ public abstract class StateDialect
     /// </para>
     /// </summary>
     public virtual bool ShouldRetry(Exception exception) => false;
+
+    // ---- What the module migrator needs (plan 29a Q02) ----
+
+    /// <summary>The statement that creates a schema that does not exist yet; null on an engine with no schemas in a database (SQLite).</summary>
+    public virtual string? CreateSchema(string schema) => null;
+
+    /// <summary>Whether a table exists. <paramref name="qualifiedName"/> is the rendered name, schema included where there is one.</summary>
+    public virtual bool TableExists(DbConnection connection, string qualifiedName) => throw NoModules();
+
+    /// <summary>
+    /// Takes the lock that keeps two services opening one database from migrating it at once, for as long as the result lives; null where the engine needs none (see
+    /// <see cref="MigratesInOneTransaction"/>).
+    /// </summary>
+    public virtual IDisposable? AcquireMigrationLock(DbConnection connection) => null;
+
+    /// <summary>
+    /// True where the whole migration is one transaction that takes the write lock when it begins (SQLite), so a second process waits and then finds the work done. False where a
+    /// lock is taken first and each migration is its own transaction.
+    /// </summary>
+    public virtual bool MigratesInOneTransaction => false;
+
+    /// <summary>Begins the migration's transaction, taking the write lock at once where the engine has only one writer.</summary>
+    public virtual DbTransaction BeginMigrationTransaction(DbConnection connection) => connection.BeginTransaction();
+
+    /// <summary>
+    /// What the database says if it was made by the old structure, one schema version for the whole database (plan 29 section 3.1's clean break): a description of the marker
+    /// found, or null for a database that was never used that way.
+    /// </summary>
+    public virtual string? FindLegacySchemaVersion(DbConnection connection) => throw NoModules();
+
+    /// <summary>What a dialect that does not override the members modules need says when a database is built from modules on it: such a dialect still works with a <see cref="StateSchema"/>.</summary>
+    protected NotSupportedException NoModules() =>
+        new($"The state dialect '{Engine}' does not support databases built from modules (plan 29): it has to say how a table is found, how an old database is recognised and what its UUID, time, JSON, boolean and binary columns are. The built-in engines do.");
 }

@@ -23,10 +23,10 @@ public sealed class ConsoleOneAccountTests : IAsyncLifetime
     private HttpClient home = null!, console = null!;
     private WebApplication app = null!;
     private PairableServer server = null!;
-    private UserStore homeUsers = null!;
+    private IUserAccounts homeUsers = null!;
     private HomeDirectory directory = null!;
-    private UserStore users = null!;
-    private SessionStore sessions = null!;
+    private IUserAccounts users = null!;
+    private ISessionStore sessions = null!;
     private string homeUrl = null!;
 
     private const string ServerId = "server-a";
@@ -44,8 +44,8 @@ public sealed class ConsoleOneAccountTests : IAsyncLifetime
         Directory.CreateDirectory(root);
         var homePort = FreePort();
         homeUrl = $"http://127.0.0.1:{homePort}";
-        var db = new StateDatabase(Path.Combine(root, "home.db"), HomeSchema.Schema);
-        homeUsers = new UserStore(db);
+        var db = StateDatabase.OpenModules(Path.Combine(root, "home.db"), DbDataKit.Identity.IdentityHomeState.Modules);
+        homeUsers = new IdentityUserStore(db);
         directory = new HomeDirectory(db);
         var clients = new OidcClients(db);
         var keys = new SigningKeys(db, new Mask());
@@ -70,8 +70,8 @@ public sealed class ConsoleOneAccountTests : IAsyncLifetime
         started.Add(app);
         console = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false, ServerCertificateCustomValidationCallback = (_, _, _, _) => true }) { BaseAddress = new Uri($"https://localhost:{port}") };
         await app.Services.GetRequiredService<ConsoleInstances>().PairAsync(server.Url, server.NewCodeWith(ServerRole.Admin | ServerRole.Operator | ServerRole.Author | ServerRole.Approver), "Server A", default);
-        users = app.Services.GetRequiredService<UserStore>();
-        sessions = app.Services.GetRequiredService<SessionStore>();
+        users = app.Services.GetRequiredService<IUserAccounts>();
+        sessions = app.Services.GetRequiredService<ISessionStore>();
     }
 
     public async ValueTask DisposeAsync()
@@ -180,7 +180,7 @@ public sealed class ConsoleOneAccountTests : IAsyncLifetime
         {
             connection.Open();
             using var cmd = connection.CreateCommand();
-            cmd.CommandText = "UPDATE Users SET EmailKey = NULL WHERE Id = $id;";
+            cmd.CommandText = "UPDATE dbdatakit_identity_account SET email_key = NULL WHERE id = $id;";
             cmd.Parameters.AddWithValue("$id", first.Id);
             cmd.ExecuteNonQuery();
         }

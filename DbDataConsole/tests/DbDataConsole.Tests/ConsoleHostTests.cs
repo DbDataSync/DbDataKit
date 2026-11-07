@@ -47,8 +47,8 @@ public sealed class ConsoleHostTests : IAsyncLifetime
 
     private string SessionFor(UserRole role)
     {
-        var users = app.Services.GetRequiredService<UserStore>();
-        return app.Services.GetRequiredService<SessionStore>().Create(users.CreateUser(role + " person", null, role).Id).Id;
+        var users = app.Services.GetRequiredService<IUserAccounts>();
+        return app.Services.GetRequiredService<ISessionStore>().Create(users.CreateUser(role + " person", null, role).Id).Id;
     }
 
     [Fact]
@@ -190,7 +190,7 @@ public sealed class ConsoleHostTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Conflict, bad.Status);                    // not an address, so no account could be matched on it
         Assert.Contains("not an email address", (string)bad.Body!["error"]!);
 
-        var users = app.Services.GetRequiredService<UserStore>();
+        var users = app.Services.GetRequiredService<IUserAccounts>();
         var ada = users.CreateUser("Ada", "Ada@Example.com", UserRole.Viewer, emailVerified: true);
         var taken = await Send(HttpMethod.Post, "/api/invites", admin, new { role = "Viewer", email = "ADA@example.com" });
         Assert.Equal(HttpStatusCode.Conflict, taken.Status);
@@ -211,7 +211,7 @@ public sealed class ConsoleHostTests : IAsyncLifetime
     public async Task An_administrator_sets_an_address_through_the_users_api_and_the_list_says_whether_it_is_verified()
     {
         var admin = SessionFor(UserRole.Admin);
-        var users = app.Services.GetRequiredService<UserStore>();
+        var users = app.Services.GetRequiredService<IUserAccounts>();
         var typed = users.CreateUser("Typed", "typed@example.com", UserRole.Viewer);                 // an address nobody checked
         var ada = users.CreateUser("Ada", "ada@example.com", UserRole.Viewer, emailVerified: true);
 

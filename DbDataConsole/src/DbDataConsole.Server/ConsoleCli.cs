@@ -27,6 +27,7 @@ public static class ConsoleCli
         ServerNoun.Create((args, context) => RunServerAsync(args, context, environment)),
         InstanceNoun(environment),
         UserNoun(environment),
+        StateNoun(environment),
         IdentityCli.Noun(environment),
         ConsoleService.Noun(ConsoleServiceEnvironment.Real()),
         HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl),
@@ -281,6 +282,38 @@ public static class ConsoleCli
 
     // ---- user ----
 
+    private static Noun StateNoun(Func<string, string?>? environment) => new("state", "The console's state database",
+    [
+        new Verb("grants", "Print the GRANT statements a login needs for the console's modules (the login the console runs as, or with --migrate the one that upgrades the database); run them as a database administrator", EffectClass.OfflineOnly,
+            "--login <database role or user> [--migrate] [--engine mssql|postgres] [--repo <console directory>]",
+            (args, context) => StateGrantsAsync(args, context, environment),
+            DataSchemas.Object([("statements", DataSchemas.StringList)], "statements")),
+    ]);
+
+    private static async Task<int> StateGrantsAsync(string[] args, CliContext context, Func<string, string?>? environment)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string> { "migrate" }, new HashSet<string> { "login", "engine", "repo" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("login") is not { Length: > 0 } login)
+        {
+            await context.Error.WriteLineAsync("Usage: state grants --login <database role or user> [--migrate] [--engine mssql|postgres] [--repo <console directory>]");
+            return CliExit.Usage;
+        }
+        try
+        {
+            var settings = ConsoleState.SettingsFrom(environment, parsed.Get("engine")) ?? new StateSettings();
+            var layout = StateLayout.Create(settings.EngineId, ConsoleState.Modules, StateScope.Install, settings.Namespaces);
+            var statements = StateGrants.Statements(layout, login, parsed.Has("migrate") ? GrantLevel.Migrate : GrantLevel.Runtime);
+            foreach (var statement in statements) await context.Out.WriteLineAsync(statement);
+            context.Data["statements"] = statements.ToList();
+            return CliExit.Ok;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            await context.Error.WriteLineAsync(ex.Message);
+            return CliExit.Usage;
+        }
+    }
+
     private static Noun UserNoun(Func<string, string?>? environment) => new("user", "The people who can sign in to the console",
     [
         new Verb("list", "The users: name, role, whether enabled, and how many ways each can sign in", EffectClass.OfflineOnly, "[--repo <console directory>]",
@@ -304,7 +337,7 @@ public static class ConsoleCli
         var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo" });
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0) { await context.Error.WriteLineAsync("Usage: user list [--repo <console directory>]"); return CliExit.Usage; }
         var database = OpenState(parsed, environment);
-        var users = new UserStore(database);
+        var users = new IdentityUserStore(database);
         var all = users.List();
         if (all.Count == 0) await context.Out.WriteLineAsync("No user yet. Start the console and redeem the invitation it writes, or run: user invite");
         foreach (var user in all)
@@ -336,13 +369,13 @@ public static class ConsoleCli
         }
         var database = OpenState(parsed, environment);
         var forUser = parsed.Get("user");
-        if (forUser is not null && new UserStore(database).Get(forUser) is null)
+        if (forUser is not null && new IdentityUserStore(database).Get(forUser) is null)
         {
             await context.Error.WriteLineAsync($"No user has the id '{forUser}'. 'user list' shows them.");
             return CliExit.Failure;
         }
         MintedInvite minted;
-        try { minted = new InviteStore(database).Create(role, forUser, createdByUserId: null, email: email); }
+        try { minted = new IdentityInviteStore(database).Create(role, forUser, createdByUserId: null, email: email); }
         catch (AccountConflictException ex) { await context.Error.WriteLineAsync(ex.Message); return CliExit.Failure; }
         // the code goes in the fragment, which a browser never sends to a server and an access log never records
         var url = $"{(parsed.Get("url") ?? ConsoleSettings.DefaultListen).TrimEnd('/')}/invite#{minted.Code}";
@@ -362,7 +395,7 @@ public static class ConsoleCli
             await context.Error.WriteLineAsync("Usage: user set-email --user <id> --email <address> [--repo <console directory>]");
             return CliExit.Usage;
         }
-        var users = new UserStore(OpenState(parsed, environment));
+        var users = new IdentityUserStore(OpenState(parsed, environment));
         if (users.Get(id) is null)
         {
             await context.Error.WriteLineAsync($"No user has the id '{id}'. 'user list' shows them.");

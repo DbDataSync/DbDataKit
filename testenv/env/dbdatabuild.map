@@ -1,4 +1,4 @@
-# DbDataBuild's conformance suite. The quick, apply and templates groups need SQL Server 2022 and PostgreSQL 17; the slow groups and
+# DbDataBuild's conformance suite. The quick, apply and templates groups need SQL Server 2025 and PostgreSQL 17; the slow groups and
 # the nightly full run add the engines below (`testenv/testenv.sh up mssql postgres mssql2025 oracle spark bigquery flight flight-tls`,
 # or `up all`, which also starts the others).
 DBDATABUILD_TEST_MSSQL     <- DBKIT_TEST_MSSQL

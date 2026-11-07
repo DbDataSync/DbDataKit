@@ -130,7 +130,7 @@ public sealed class ConsoleConnectionsTests : IAsyncLifetime
 
     private async Task<(HttpStatusCode Status, JsonNode Body)> Copy(object body, UserRole role = UserRole.Admin, string person = "Ana")
     {
-        var session = app.Services.GetRequiredService<SessionStore>().Create(app.Services.GetRequiredService<UserStore>().CreateUser(person, null, role).Id).Id;
+        var session = app.Services.GetRequiredService<ISessionStore>().Create(app.Services.GetRequiredService<IUserAccounts>().CreateUser(person, null, role).Id).Id;
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/connections/copy") { Content = JsonContent.Create(body) };
         request.Headers.Add("Cookie", $"{ConsoleHost.Auth.SessionCookie}={session}");
         var response = await http.SendAsync(request);

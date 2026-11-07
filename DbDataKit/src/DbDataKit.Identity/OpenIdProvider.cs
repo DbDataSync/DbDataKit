@@ -35,8 +35,10 @@ public sealed class OAuthException(string error, string description, int status 
 /// The OpenID Connect provider of the identity home: the authorization code flow with PKCE (S256 only), id tokens and access tokens signed ES256, discovery and userinfo. Signing a person in is the host's (it hands the
 /// signed-in user id to <see cref="Authorize"/>); this issues the code and trades it for tokens that carry the home's user id as <c>sub</c>, the groups, and the roles held on every server and app (<c>dbdata_roles</c>).
 /// </summary>
-public sealed class OpenIdProvider(StateDatabase database, UserStore users, HomeDirectory directory, OidcClients clients, SigningKeys keys, string issuer, TimeProvider? clock = null)
-{
+public sealed class OpenIdProvider(StateDatabase database, IUserAccounts users, HomeDirectory directory, OidcClients clients, SigningKeys keys, string issuer, TimeProvider? clock = null)
+{    private const string Module = IdentityModule.Name;
+
+
     public static readonly TimeSpan CodeLifetime = TimeSpan.FromSeconds(60);
     public static readonly TimeSpan TokenLifetime = TimeSpan.FromMinutes(10);
 
@@ -87,8 +89,8 @@ public sealed class OpenIdProvider(StateDatabase database, UserStore users, Home
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, """
-                INSERT INTO AuthorizationCodes (CodeHash, ClientId, UserId, RedirectUri, CodeChallenge, Nonce, Scope, ExpiresAtUtc)
+            using var cmd = database.Command(Module, connection, """
+                INSERT INTO {table:authorization_code} (code_hash, client_id, account_id, redirect_uri, code_challenge, nonce, scope, expires_at)
                 VALUES ($hash, $client, $user, $redirect, $challenge, $nonce, $scope, $expires);
                 """);
             cmd.Bind(database, "hash", Hash(code));
@@ -96,9 +98,9 @@ public sealed class OpenIdProvider(StateDatabase database, UserStore users, Home
             cmd.Bind(database, "user", signedInUserId);
             cmd.Bind(database, "redirect", request.RedirectUri);
             cmd.Bind(database, "challenge", request.CodeChallenge);
-            cmd.Bind(database, "nonce", (object?)request.Nonce ?? DBNull.Value);
+            cmd.Bind(database, "nonce", request.Nonce, System.Data.DbType.String);
             cmd.Bind(database, "scope", string.Join(' ', scopes.Where(KnownScopes.Contains)));
-            cmd.Bind(database, "expires", (_clock.GetUtcNow() + CodeLifetime).ToString("O"));
+            cmd.Bind(database, "expires", _clock.GetUtcNow() + CodeLifetime);
             cmd.ExecuteNonQuery();
         });
         return new(Redirect(request.RedirectUri, ("code", code), ("state", request.State)), null);
@@ -191,8 +193,8 @@ public sealed class OpenIdProvider(StateDatabase database, UserStore users, Home
     public void RevokeUser(string userId) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, "UPDATE RefreshTokens SET RevokedAtUtc = $at WHERE UserId = $user AND RevokedAtUtc IS NULL;");
-        cmd.Bind(database, "at", _clock.GetUtcNow().ToString("O"));
+        using var cmd = database.Command(Module, connection, "UPDATE {table:refresh_token} SET revoked_at = $at WHERE account_id = $user AND revoked_at IS NULL;");
+        cmd.Bind(database, "at", _clock.GetUtcNow());
         cmd.Bind(database, "user", userId);
         cmd.ExecuteNonQuery();
     });
@@ -200,8 +202,8 @@ public sealed class OpenIdProvider(StateDatabase database, UserStore users, Home
     private void RevokeFamily(string familyId) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, "UPDATE RefreshTokens SET RevokedAtUtc = $at WHERE FamilyId = $family AND RevokedAtUtc IS NULL;");
-        cmd.Bind(database, "at", _clock.GetUtcNow().ToString("O"));
+        using var cmd = database.Command(Module, connection, "UPDATE {table:refresh_token} SET revoked_at = $at WHERE family_id = $family AND revoked_at IS NULL;");
+        cmd.Bind(database, "at", _clock.GetUtcNow());
         cmd.Bind(database, "family", familyId);
         cmd.ExecuteNonQuery();
     });
@@ -212,13 +214,13 @@ public sealed class OpenIdProvider(StateDatabase database, UserStore users, Home
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "INSERT INTO RefreshTokens (TokenHash, FamilyId, ClientId, UserId, Scope, ExpiresAtUtc) VALUES ($hash, $family, $client, $user, $scope, $expires);");
+            using var cmd = database.Command(Module, connection, "INSERT INTO {table:refresh_token} (token_hash, family_id, client_id, account_id, scope, expires_at) VALUES ($hash, $family, $client, $user, $scope, $expires);");
             cmd.Bind(database, "hash", Hash(token));
             cmd.Bind(database, "family", familyId);
             cmd.Bind(database, "client", clientId);
             cmd.Bind(database, "user", userId);
             cmd.Bind(database, "scope", scope);
-            cmd.Bind(database, "expires", expires.ToString("O"));
+            cmd.Bind(database, "expires", expires);
             cmd.ExecuteNonQuery();
         });
         return token;
@@ -229,11 +231,11 @@ public sealed class OpenIdProvider(StateDatabase database, UserStore users, Home
     private RefreshRow? ReadRefresh(string hash) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, "SELECT FamilyId, ClientId, UserId, Scope, ExpiresAtUtc, RevokedAtUtc FROM RefreshTokens WHERE TokenHash = $hash;");
+        using var cmd = database.Command(Module, connection, "SELECT family_id, client_id, account_id, scope, expires_at, revoked_at FROM {table:refresh_token} WHERE token_hash = $hash;");
         cmd.Bind(database, "hash", hash);
         using var reader = cmd.ExecuteReader();
         return reader.Read()
-            ? new RefreshRow(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), DateTimeOffset.Parse(reader.GetString(4)), reader.IsDBNull(5) ? null : DateTimeOffset.Parse(reader.GetString(5)))
+            ? new RefreshRow(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.Time(4), reader.NullableTime(5))
             : null;
     });
 
@@ -241,8 +243,8 @@ public sealed class OpenIdProvider(StateDatabase database, UserStore users, Home
     private bool MarkRefreshUsed(string hash) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, "UPDATE RefreshTokens SET UsedAtUtc = $at WHERE TokenHash = $hash AND UsedAtUtc IS NULL AND RevokedAtUtc IS NULL;");
-        cmd.Bind(database, "at", _clock.GetUtcNow().ToString("O"));
+        using var cmd = database.Command(Module, connection, "UPDATE {table:refresh_token} SET used_at = $at WHERE token_hash = $hash AND used_at IS NULL AND revoked_at IS NULL;");
+        cmd.Bind(database, "at", _clock.GetUtcNow());
         cmd.Bind(database, "hash", hash);
         return cmd.ExecuteNonQuery() == 1;
     });
@@ -297,17 +299,17 @@ public sealed class OpenIdProvider(StateDatabase database, UserStore users, Home
     private Grant? Consume(string codeHash) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using (var mark = database.Command(connection, "UPDATE AuthorizationCodes SET UsedAtUtc = $at WHERE CodeHash = $hash AND UsedAtUtc IS NULL;"))
+        using (var mark = database.Command(Module, connection, "UPDATE {table:authorization_code} SET used_at = $at WHERE code_hash = $hash AND used_at IS NULL;"))
         {
-            mark.Bind(database, "at", _clock.GetUtcNow().ToString("O"));
+            mark.Bind(database, "at", _clock.GetUtcNow());
             mark.Bind(database, "hash", codeHash);
             if (mark.ExecuteNonQuery() != 1) return null;
         }
-        using var cmd = database.Command(connection, "SELECT ClientId, UserId, RedirectUri, CodeChallenge, Nonce, Scope, ExpiresAtUtc FROM AuthorizationCodes WHERE CodeHash = $hash;");
+        using var cmd = database.Command(Module, connection, "SELECT client_id, account_id, redirect_uri, code_challenge, nonce, scope, expires_at FROM {table:authorization_code} WHERE code_hash = $hash;");
         cmd.Bind(database, "hash", codeHash);
         using var reader = cmd.ExecuteReader();
         return reader.Read()
-            ? new Grant(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.IsDBNull(4) ? null : reader.GetString(4), reader.GetString(5), DateTimeOffset.Parse(reader.GetString(6)))
+            ? new Grant(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.IsDBNull(4) ? null : reader.GetString(4), reader.GetString(5), reader.Time(6))
             : null;
     });
 

@@ -17,7 +17,7 @@ public sealed class AppStorageTests : IDisposable
     public AppStorageTests()
     {
         Directory.CreateDirectory(folder);
-        database = new StateDatabase(Path.Combine(folder, "state.db"), new StateSchema([DefinitionSchema.Tables, AppStorageSchema.Tables]));
+        database = StateDatabase.OpenModules(Path.Combine(folder, "state.db"), [DefinitionsModule.Module, AppStorageModule.Module]);
         storage = new AppStorage(database);
         instances = new AppInstanceStore(new DefinitionStore(database));
     }

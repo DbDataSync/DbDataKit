@@ -46,7 +46,7 @@ public sealed class AccessTokenTests : IDisposable
         // the secret is in no column and no listing
         var secret = made.Secret.Split('_', 3)[2];
         using (var connection = _home.Database.OpenConnection())
-        using (var cmd = _home.Database.Command(connection, "SELECT * FROM AccessTokens;"))
+        using (var cmd = _home.Database.Command("identity", connection, "SELECT * FROM {table:access_token};"))
         using (var reader = cmd.ExecuteReader())
             while (reader.Read())
                 for (var i = 0; i < reader.FieldCount; i++)
@@ -164,7 +164,7 @@ public sealed class AccessTokenTests : IDisposable
         try
         {
             using var http = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}") };
-            var session = new SessionStore(_home.Database).Create(ada.Id).Id;
+            var session = new IdentitySessionStore(_home.Database).Create(ada.Id).Id;
             HttpRequestMessage WithSession(HttpMethod method, string path, object? body = null)
             {
                 var request = new HttpRequestMessage(method, path) { Content = body is null ? null : JsonContent.Create(body) };

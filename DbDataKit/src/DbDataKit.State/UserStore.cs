@@ -50,7 +50,7 @@ public sealed record UserCredentialRecord(
 /// a passkey from home" a row rather than a schema change.
 /// </para>
 /// </summary>
-public sealed class UserStore(StateDatabase database)
+public sealed class UserStore(StateDatabase database) : IUserAccounts
 {
     private const string Columns = "Id, DisplayName, Email, Role, Enabled, CreatedAtUtc, EmailKey";
 

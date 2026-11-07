@@ -2,5 +2,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\DbDataKit.Web\DbDataKit.Web.csproj" />
     <ProjectReference Include="..\..\src\DbDataKit.Config.Git\DbDataKit.Config.Git.csproj" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Npgsql" />
+    <Using Include="Xunit" />
+    <!-- the throwaway state database per engine, the same one the State tests use -->
+    <Compile Include="..\DbDataKit.State.Tests\StateEngines.cs" Link="StateEngines.cs" />
   </ItemGroup>
 </Project>

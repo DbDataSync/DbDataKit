@@ -21,7 +21,7 @@ namespace DbDataKit.Web.Auth;
 public sealed record BootstrapInviteLocation(string Directory);
 
 public sealed class BootstrapInvite(
-    UserStore users, InviteStore invites, AuthOptions authOptions, BootstrapInviteLocation location,
+    IUserAccounts users, IInviteStore invites, AuthOptions authOptions, BootstrapInviteLocation location,
     ILogger<BootstrapInvite> logger)
     : IHostedService
 {

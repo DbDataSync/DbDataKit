@@ -26,7 +26,7 @@ public static class OneTimeSchema
 /// <summary>
 /// Values that are used once, in the state (<see cref="OneTimeSchema.Values"/>), so any instance sharing the state can use what another put there, and only one of them can. A purpose keeps one use's keys apart from another's.
 /// </summary>
-public sealed class OneTimeValues(StateDatabase database, TimeProvider? clock = null)
+public sealed class OneTimeValues(StateDatabase database, TimeProvider? clock = null) : IOneTimeValues
 {
     private static readonly TimeSpan SweepEvery = TimeSpan.FromMinutes(1);
 

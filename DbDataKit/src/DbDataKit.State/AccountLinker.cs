@@ -10,7 +10,7 @@ namespace DbDataKit.State;
 /// is found by one. An address is held by one account; a sign-in that would take one another account holds is refused with a message, not merged and not renamed.
 /// </para>
 /// </summary>
-public sealed class AccountLinker(UserStore users)
+public sealed class AccountLinker(IUserAccounts users)
 {
     /// <summary>
     /// The user for a Windows sign-in. A SID already known is that user (its UPN, when the domain gives one, becomes the account's address, or is refused if another account holds it). A new SID needs the UPN: it joins the account that

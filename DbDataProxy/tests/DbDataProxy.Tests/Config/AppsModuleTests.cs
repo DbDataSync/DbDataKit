@@ -55,7 +55,7 @@ public sealed class AppsModuleTests : IAsyncLifetime
     private (string ClientId, string Ada, string Bob, StateDatabase Database) Prepare()
     {
         var database = ProxyState.Open(dataDirectory);
-        var users = new UserStore(database);
+        var users = new IdentityUserStore(database);
         var ada = users.CreateUser("Ada Lovelace", "ada@example.invalid", UserRole.Viewer).Id;
         var bob = users.CreateUser("Bob Babbage", "bob@example.invalid", UserRole.Viewer).Id;
         new HomeDirectory(database).AssignApp(AssignmentSubject.User(ada), "acme", ServerRole.Viewer);
@@ -88,7 +88,7 @@ public sealed class AppsModuleTests : IAsyncLifetime
         var start = await apps.GetAsync(path);
         Assert.Equal(HttpStatusCode.Redirect, start.StatusCode);
         var authorize = new HttpRequestMessage(HttpMethod.Get, start.Headers.Location);
-        authorize.Headers.Add("Cookie", $"{ProxyIdentityModule.Auth.SessionCookie}={new SessionStore(database).Create(user).Id}");
+        authorize.Headers.Add("Cookie", $"{ProxyIdentityModule.Auth.SessionCookie}={new IdentitySessionStore(database).Create(user).Id}");
         var back = await home.SendAsync(authorize);
         Assert.Equal(HttpStatusCode.Redirect, back.StatusCode);
         var callback = await apps.GetAsync(back.Headers.Location);

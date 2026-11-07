@@ -74,10 +74,10 @@ public sealed class IdentityAdminApiTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, invite.Status);
         Assert.Contains("/invite#", (string)invite.Body!["url"]!);
         var state = IdentityHostState.Open(directory);
-        var ada = new UserStore(state).CreateUser("Ada Lovelace", "ada@example.invalid", UserRole.Viewer, emailVerified: true);
+        var ada = new IdentityUserStore(state).CreateUser("Ada Lovelace", "ada@example.invalid", UserRole.Viewer, emailVerified: true);
         Assert.Contains(await List("people", "people"), p => (string)p!["id"]! == ada.Id);
         Assert.Equal(HttpStatusCode.NoContent, (await Call(HttpMethod.Delete, $"people/{ada.Id}")).Status);
-        Assert.False(new UserStore(state).Get(ada.Id)!.Enabled);
+        Assert.False(new IdentityUserStore(state).Get(ada.Id)!.Enabled);
         Assert.Equal(HttpStatusCode.NoContent, (await Call(HttpMethod.Post, $"people/{ada.Id}/enable")).Status);
 
         // groups, with a member
@@ -119,7 +119,7 @@ public sealed class IdentityAdminApiTests : IAsyncLifetime
         var made = await Call(HttpMethod.Post, "service-accounts/nightly/tokens", new { name = "report server", no_expiry = true });
         Assert.Equal(HttpStatusCode.OK, made.Status);
         var secret = (string)made.Body!["token"]!;
-        var tokens = new AccessTokens(state, new UserStore(state));
+        var tokens = new AccessTokens(state, new IdentityUserStore(state));
         Assert.NotNull(tokens.Verify("nightly", secret));
         var adasToken = tokens.Create(ada.Id, "Excel", ada.Id);
         var listed = await List("tokens", "tokens");
@@ -156,7 +156,7 @@ public sealed class IdentityAdminApiTests : IAsyncLifetime
         var state = IdentityHostState.Open(directory);
         Assert.Empty(new HomeDirectory(state).Groups());
         Assert.Empty(new OidcClients(state).List());
-        Assert.Empty(new AccessTokens(state, new UserStore(state)).ServiceAccounts());
+        Assert.Empty(new AccessTokens(state, new IdentityUserStore(state)).ServiceAccounts());
     }
 
     [Fact]

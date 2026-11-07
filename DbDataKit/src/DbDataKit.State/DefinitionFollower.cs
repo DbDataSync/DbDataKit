@@ -12,6 +12,18 @@ public interface IDefinitionSubscriber
     void Apply(string name, DefinitionVersion? current);
 }
 
+/// <summary>What a <see cref="DefinitionFollower"/> reads: the definitions a channel serves and the log of what moved. Both <see cref="DefinitionStore"/> and the module's <see cref="DefinitionStore"/> are one.</summary>
+public interface IDefinitionSource
+{
+    long LatestEventId();
+
+    IReadOnlyList<DefinitionVersion> CurrentOfKind(string kind, string channel = DefinitionStore.Production);
+
+    DefinitionVersion? Current(string kind, string name, string channel = DefinitionStore.Production);
+
+    IReadOnlyList<DefinitionEvent> Changes(long sinceId = 0, int limit = 500);
+}
+
 /// <summary>
 /// Keeps an instance serving what its channel serves (plan 20 O03): at start it hands each subscriber every definition of its kind, then <see cref="Poll"/> reads the store's change log and hands over each definition
 /// that moved. The log is in the state every instance of a group shares, so a publish through any instance, or by a publisher that has since stopped, reaches all of them; nothing here calls the publisher.
@@ -20,7 +32,7 @@ public interface IDefinitionSubscriber
 /// <param name="subscribers">What serves each kind.</param>
 /// <param name="problem">Told when a subscriber could not use a version (the one it served before keeps serving): the kind, the name, the version and why.</param>
 /// <param name="channel">The channel this instance serves.</param>
-public sealed class DefinitionFollower(DefinitionStore store, IEnumerable<IDefinitionSubscriber> subscribers, Action<string, string, int?, Exception> problem, string channel = DefinitionStore.Production)
+public sealed class DefinitionFollower(IDefinitionSource store, IEnumerable<IDefinitionSubscriber> subscribers, Action<string, string, int?, Exception> problem, string channel = DefinitionStore.Production)
 {
     private readonly Dictionary<string, IDefinitionSubscriber> _byKind = subscribers.ToDictionary(s => s.Kind, StringComparer.Ordinal);
     private readonly object _gate = new();

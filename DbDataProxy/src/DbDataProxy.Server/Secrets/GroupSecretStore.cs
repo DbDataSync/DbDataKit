@@ -30,7 +30,7 @@ public sealed class GroupSecretStore(Func<StateDatabase> state, Func<GroupSessio
         var stored = database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "SELECT Value FROM GroupSecrets WHERE Name = $name;");
+            using var cmd = database.Command("trust", connection, "SELECT value FROM {table:group_secret} WHERE name = $name;");
             cmd.Bind(database, "name", reference.Target);
             return cmd.ExecuteScalar() as string;
         });
@@ -53,9 +53,9 @@ public sealed class GroupSecretStore(Func<StateDatabase> state, Func<GroupSessio
         {
             using var connection = database.OpenConnection();
             using var transaction = connection.BeginTransaction();
-            using (var delete = database.Command(connection, transaction, "DELETE FROM GroupSecrets WHERE Name = $name;"))
+            using (var delete = database.Command("trust", connection, transaction, "DELETE FROM {table:group_secret} WHERE name = $name;"))
                 delete.Bind(database, "name", full).ExecuteNonQuery();
-            using (var insert = database.Command(connection, transaction, "INSERT INTO GroupSecrets (Name, Value) VALUES ($name, $value);"))
+            using (var insert = database.Command("trust", connection, transaction, "INSERT INTO {table:group_secret} (name, value) VALUES ($name, $value);"))
                 insert.Bind(database, "name", full).Bind(database, "value", sealedValue).ExecuteNonQuery();
             transaction.Commit();
         });
@@ -68,7 +68,7 @@ public sealed class GroupSecretStore(Func<StateDatabase> state, Func<GroupSessio
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "DELETE FROM GroupSecrets WHERE Name = $name;");
+            using var cmd = database.Command("trust", connection, "DELETE FROM {table:group_secret} WHERE name = $name;");
             cmd.Bind(database, "name", name.ToString()).ExecuteNonQuery();
         });
         return Task.CompletedTask;
@@ -80,7 +80,7 @@ public sealed class GroupSecretStore(Func<StateDatabase> state, Func<GroupSessio
         var names = database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "SELECT Name FROM GroupSecrets ORDER BY Name;");
+            using var cmd = database.Command("trust", connection, "SELECT name FROM {table:group_secret} ORDER BY name;");
             using var reader = cmd.ExecuteReader();
             var found = new List<string>();
             while (reader.Read()) found.Add(reader.GetString(0));

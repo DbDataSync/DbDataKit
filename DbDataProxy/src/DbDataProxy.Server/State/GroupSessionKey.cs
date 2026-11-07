@@ -58,12 +58,12 @@ public sealed class GroupSessionKey(StateDatabase state, IOptionsMonitor<ProxyOp
         var existing = state.Retry(() =>
         {
             using var connection = state.OpenConnection();
-            using var read = state.Command(connection, "SELECT CheckValue FROM GroupKeys WHERE Name = $name;");
+            using var read = state.Command("trust", connection, "SELECT check_value FROM {table:group_key} WHERE name = $name;");
             read.Bind(state, "name", CheckName);
             if (read.ExecuteScalar() is string found) return found;
             try
             {
-                using var insert = state.Command(connection, "INSERT INTO GroupKeys (Name, CheckValue) VALUES ($name, $check);");
+                using var insert = state.Command("trust", connection, "INSERT INTO {table:group_key} (name, check_value) VALUES ($name, $check);");
                 insert.Bind(state, "name", CheckName);
                 insert.Bind(state, "check", check);
                 insert.ExecuteNonQuery();
@@ -72,7 +72,7 @@ public sealed class GroupSessionKey(StateDatabase state, IOptionsMonitor<ProxyOp
             catch (System.Data.Common.DbException)
             {
                 // another instance wrote it first: its is the group's
-                using var again = state.Command(connection, "SELECT CheckValue FROM GroupKeys WHERE Name = $name;");
+                using var again = state.Command("trust", connection, "SELECT check_value FROM {table:group_key} WHERE name = $name;");
                 again.Bind(state, "name", CheckName);
                 return (string)again.ExecuteScalar()!;
             }

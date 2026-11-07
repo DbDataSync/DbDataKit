@@ -14,7 +14,7 @@ public sealed class AppAboutTests : IDisposable
     public AppAboutTests()
     {
         Directory.CreateDirectory(folder);
-        definitions = new DefinitionStore(new StateDatabase(Path.Combine(folder, "state.db"), new StateSchema([DefinitionSchema.Tables])));
+        definitions = new DefinitionStore(StateDatabase.OpenModules(Path.Combine(folder, "state.db"), [DefinitionsModule.Module]));
         store = new AppInstanceStore(definitions);
         approvals = new AppApprovalStore(definitions);
     }

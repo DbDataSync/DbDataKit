@@ -12,6 +12,7 @@ dbdatakit instance add <https address> --code <code> [--name <label>] [--repo <c
 dbdatakit instance list [--offline] [--repo <console directory>]
 dbdatakit instance remove <id or name> [--repo <console directory>]
 dbdatakit instance rotate-key [--repo <console directory>]
+dbdatakit state grants --login <database role or user> [--migrate] [--engine mssql|postgres] [--repo <console directory>]
 dbdatakit service install|uninstall|status|start|stop|restart|doctor|unit
 dbdatakit health check [--url <url>]
 ```

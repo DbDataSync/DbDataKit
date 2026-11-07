@@ -27,7 +27,7 @@ public sealed record UpdateUserRequest(string? Role, bool? Enabled, string? Emai
 /// </summary>
 [ApiController]
 [Route("api/users")]
-public sealed class UsersController(UserStore users, SessionStore sessions)
+public sealed class UsersController(IUserAccounts users, ISessionStore sessions)
     : ControllerBase
 {
     [HttpGet]

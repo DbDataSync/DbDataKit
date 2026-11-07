@@ -52,7 +52,7 @@ public sealed class MemoryOpenIdAttempts(TimeProvider? clock = null) : IOpenIdAt
 /// </summary>
 /// <param name="values">The state's one-time values.</param>
 /// <param name="purpose">Which client's attempts these are (one state may hold several clients').</param>
-public sealed class StateOpenIdAttempts(OneTimeValues values, string purpose) : IOpenIdAttempts
+public sealed class StateOpenIdAttempts(IOneTimeValues values, string purpose) : IOpenIdAttempts
 {
     public void Hold(string state, OpenIdAttempt attempt) => values.Hold(purpose, state, JsonSerializer.Serialize(attempt), attempt.Expires);
 

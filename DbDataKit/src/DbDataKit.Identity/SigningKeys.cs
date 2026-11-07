@@ -14,6 +14,8 @@ public interface ISigningKeyProtector
 /// <summary>The keys the home signs tokens with: ES256 (ECDSA P-256), which every OpenID Connect library supports. One is current; a retired one stays out of the JWKS.</summary>
 public sealed class SigningKeys(StateDatabase database, ISigningKeyProtector protector)
 {
+    private const string Module = IdentityModule.Name;
+
     public sealed record Key(string Kid, ECDsa Private);
 
     /// <summary>The newest key that is not retired, made on first use.</summary>
@@ -32,10 +34,10 @@ public sealed class SigningKeys(StateDatabase database, ISigningKeyProtector pro
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "INSERT INTO SigningKeys (Kid, PrivateKey, CreatedAtUtc) VALUES ($kid, $key, $at);");
+            using var cmd = database.Command(Module, connection, "INSERT INTO {table:signing_key} (kid, private_key, created_at) VALUES ($kid, $key, $at);");
             cmd.Bind(database, "kid", kid);
             cmd.Bind(database, "key", stored);
-            cmd.Bind(database, "at", DateTimeOffset.UtcNow.ToString("O"));
+            cmd.Bind(database, "at", database.Time.GetUtcNow());
             cmd.ExecuteNonQuery();
         });
         return new Key(kid, ecdsa);
@@ -47,9 +49,9 @@ public sealed class SigningKeys(StateDatabase database, ISigningKeyProtector pro
     public void Retire(string kid) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, "UPDATE SigningKeys SET RetiredAtUtc = $at WHERE Kid = $kid AND RetiredAtUtc IS NULL;");
+        using var cmd = database.Command(Module, connection, "UPDATE {table:signing_key} SET retired_at = $at WHERE kid = $kid AND retired_at IS NULL;");
         cmd.Bind(database, "kid", kid);
-        cmd.Bind(database, "at", DateTimeOffset.UtcNow.ToString("O"));
+        cmd.Bind(database, "at", database.Time.GetUtcNow());
         cmd.ExecuteNonQuery();
     });
 
@@ -66,9 +68,9 @@ public sealed class SigningKeys(StateDatabase database, ISigningKeyProtector pro
     private List<Key> Load(bool activeOnly) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, activeOnly
-            ? "SELECT Kid, PrivateKey FROM SigningKeys WHERE RetiredAtUtc IS NULL ORDER BY CreatedAtUtc DESC, Kid;"
-            : "SELECT Kid, PrivateKey FROM SigningKeys ORDER BY CreatedAtUtc DESC, Kid;");
+        using var cmd = database.Command(Module, connection, activeOnly
+            ? "SELECT kid, private_key FROM {table:signing_key} WHERE retired_at IS NULL ORDER BY created_at DESC, kid;"
+            : "SELECT kid, private_key FROM {table:signing_key} ORDER BY created_at DESC, kid;");
         using var reader = cmd.ExecuteReader();
         var keys = new List<Key>();
         while (reader.Read())

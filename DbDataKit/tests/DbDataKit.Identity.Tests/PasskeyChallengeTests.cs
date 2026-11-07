@@ -33,8 +33,8 @@ public sealed class PasskeyChallengeTests : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         Directory.CreateDirectory(_directory);
-        _database = new StateDatabase(Path.Combine(_directory, "state.db"), HomeSchema.Schema);
-        var users = new UserStore(_database);
+        _database = StateDatabase.OpenModules(Path.Combine(_directory, "state.db"), IdentityHomeState.Modules);
+        var users = new IdentityUserStore(_database);
         _ada = users.CreateUser("Ada Lovelace", "ada@example.invalid", UserRole.Admin, emailVerified: true);
         users.AddCredential(_ada.Id, CredentialMethods.Passkey, Base64Url.EncodeToString(_credentialId), Convert.ToBase64String(CosePublicKey()), label: "Passkey");
         await Task.CompletedTask;

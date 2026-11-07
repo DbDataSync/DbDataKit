@@ -24,7 +24,9 @@ public sealed class AppStorage(StateDatabase database, TimeProvider? clock = nul
     public const string User = "user";
     public const string Instance = "instance";
 
-    private readonly TimeProvider _clock = clock ?? TimeProvider.System;
+    private const string Module = AppStorageModule.Name;
+
+    private readonly TimeProvider _clock = clock ?? database.Time;
 
     public static bool IsScope(string scope) => scope is User or Instance;
 
@@ -34,7 +36,7 @@ public sealed class AppStorage(StateDatabase database, TimeProvider? clock = nul
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var read = database.Command(connection, "SELECT Value, Version FROM AppStorage WHERE Instance = $i AND Scope = $s AND Owner = $o AND StoredKey = $k;");
+            using var read = database.Command(Module, connection, "SELECT value, row_version FROM {table:entry} WHERE instance = $i AND scope = $s AND owner = $o AND stored_key = $k;");
             read.Bind(database, "i", instance).Bind(database, "s", scope).Bind(database, "o", OwnerOf(scope, person)).Bind(database, "k", key);
             using var reader = read.ExecuteReader();
             return reader.Read() ? new StoredValue(key, reader.GetString(0), reader.GetInt32(1)) : null;
@@ -44,7 +46,7 @@ public sealed class AppStorage(StateDatabase database, TimeProvider? clock = nul
         database.Retry<IReadOnlyList<StoredValue>>(() =>
         {
             using var connection = database.OpenConnection();
-            using var read = database.Command(connection, "SELECT StoredKey, Value, Version FROM AppStorage WHERE Instance = $i AND Scope = $s AND Owner = $o ORDER BY StoredKey;");
+            using var read = database.Command(Module, connection, "SELECT stored_key, value, row_version FROM {table:entry} WHERE instance = $i AND scope = $s AND owner = $o ORDER BY stored_key;");
             read.Bind(database, "i", instance).Bind(database, "s", scope).Bind(database, "o", OwnerOf(scope, person));
             using var reader = read.ExecuteReader();
             var found = new List<StoredValue>();
@@ -61,14 +63,14 @@ public sealed class AppStorage(StateDatabase database, TimeProvider? clock = nul
         if (size > limits.MaximumValueBytes) throw new AppStorageException("value", $"A value is at most {limits.MaximumValueBytes / 1024} KB; this one is {size / 1024} KB.");
         try { using var _ = JsonDocument.Parse(json); }
         catch (JsonException) { throw new AppStorageException("value", "A value is JSON."); }
-        var now = _clock.GetUtcNow().ToString("O");
+        var now = _clock.GetUtcNow();
         var owner = OwnerOf(scope, person);
 
         return database.Retry(() =>
         {
             using var connection = database.OpenConnection();
             using var transaction = connection.BeginTransaction();
-            using var read = database.Command(connection, transaction, "SELECT Version, Size FROM AppStorage WHERE Instance = $i AND Scope = $s AND Owner = $o AND StoredKey = $k;");
+            using var read = database.Command(Module, connection, transaction, "SELECT row_version, size FROM {table:entry} WHERE instance = $i AND scope = $s AND owner = $o AND stored_key = $k;");
             read.Bind(database, "i", instance).Bind(database, "s", scope).Bind(database, "o", owner).Bind(database, "k", key);
             int? current = null;
             long oldSize = 0;
@@ -76,15 +78,15 @@ public sealed class AppStorage(StateDatabase database, TimeProvider? clock = nul
                 if (reader.Read()) { current = reader.GetInt32(0); oldSize = reader.GetInt32(1); }
             if (ifVersion is { } expected && expected != (current ?? 0)) throw new AppStorageException("conflict", $"The key '{key}' is at version {current ?? 0}, not {expected}; read it again.");
 
-            using var total = database.Command(connection, transaction, "SELECT SUM(Size) FROM AppStorage WHERE Instance = $i;");
+            using var total = database.Command(Module, connection, transaction, "SELECT SUM(size) FROM {table:entry} WHERE instance = $i;");
             total.Bind(database, "i", instance);
             var used = total.ExecuteScalar() is { } sum and not DBNull ? Convert.ToInt64(sum) : 0;
             if (used - oldSize + size > limits.QuotaBytes) throw new AppStorageException("quota", $"The instance's storage is limited to {limits.QuotaBytes / (1024 * 1024)} MB.");
 
             var version = (current ?? 0) + 1;
-            using var write = database.Command(connection, transaction, current is null
-                ? "INSERT INTO AppStorage (Instance, Scope, Owner, StoredKey, Value, Size, Version, UpdatedAtUtc) VALUES ($i, $s, $o, $k, $v, $z, $n, $t);"
-                : "UPDATE AppStorage SET Value = $v, Size = $z, Version = $n, UpdatedAtUtc = $t WHERE Instance = $i AND Scope = $s AND Owner = $o AND StoredKey = $k;");
+            using var write = database.Command(Module, connection, transaction, current is null
+                ? "INSERT INTO {table:entry} (instance, scope, owner, stored_key, value, size, row_version, updated_at) VALUES ($i, $s, $o, $k, $v, $z, $n, $t);"
+                : "UPDATE {table:entry} SET value = $v, size = $z, row_version = $n, updated_at = $t WHERE instance = $i AND scope = $s AND owner = $o AND stored_key = $k;");
             write.Bind(database, "i", instance).Bind(database, "s", scope).Bind(database, "o", owner).Bind(database, "k", key).Bind(database, "v", json).Bind(database, "z", size).Bind(database, "n", version).Bind(database, "t", now).ExecuteNonQuery();
             transaction.Commit();
             return version;
@@ -95,7 +97,7 @@ public sealed class AppStorage(StateDatabase database, TimeProvider? clock = nul
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var delete = database.Command(connection, "DELETE FROM AppStorage WHERE Instance = $i AND Scope = $s AND Owner = $o AND StoredKey = $k;");
+            using var delete = database.Command(Module, connection, "DELETE FROM {table:entry} WHERE instance = $i AND scope = $s AND owner = $o AND stored_key = $k;");
             delete.Bind(database, "i", instance).Bind(database, "s", scope).Bind(database, "o", OwnerOf(scope, person)).Bind(database, "k", key);
             return delete.ExecuteNonQuery() > 0;
         });

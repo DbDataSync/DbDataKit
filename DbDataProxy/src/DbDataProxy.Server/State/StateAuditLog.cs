@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using DbDataKit.State;
 using DbDataKit.Web.Trust;
@@ -6,40 +5,42 @@ using DbDataKit.Web.Trust;
 namespace DbDataProxy.Server.State;
 
 /// <summary>
-/// The management audit in the proxy's state (plan 20 O02), so every instance of a group writes to one log and any of them reads it: who (the person a console vouched for, and which console), what and how it ended, never a
-/// value. Entries are kept in the order they were written.
+/// The management audit on the shared <c>audit</c> module (plan 29a Q13, Q16): one entry per change made through the management API (who, which console, what, the outcome; never a value). The
+/// module's own columns carry what it can say in common (the person, the console it came through, the verb <c>management.&lt;command&gt;</c>, the target, the outcome) and the whole entry is kept in
+/// <c>detail</c>, so reading it back gives exactly what was written. Services that share a database share one audit; this one reads only the management entries.
 /// </summary>
 public sealed class StateAuditLog(StateDatabase state) : IAuditLog
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    /// <summary>The file the audit was written to before it moved into the state; its entries are read in once (<see cref="ImportFile"/>).</summary>
     public const string LegacyFileName = "management-audit.log";
 
-    public void Append(AuditEntry entry) => state.Retry(() =>
-    {
-        using var connection = state.OpenConnection();
-        using var cmd = state.Command(connection, "INSERT INTO ManagementAudit (AtUtc, Entry) VALUES ($at, $entry);");
-        cmd.Bind(state, "at", entry.At.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
-        cmd.Bind(state, "entry", JsonSerializer.Serialize(entry, Json));
-        cmd.ExecuteNonQuery();
-    });
+    private const string VerbPrefix = "management.";
 
-    public IReadOnlyList<AuditEntry> Read(int limit = 100) => state.Retry(() =>
+    private readonly AuditLog _audit = new(state, ProxyState.ServiceId);
+
+    public void Append(DbDataKit.Web.Trust.AuditEntry entry) => state.Retry(() => _audit.Record(new AuditEvent(
+        "person", entry.UserId, VerbPrefix + Word(entry.Command), Word(entry.Outcome),
+        ViaKind: "console", ViaId: entry.ConsoleId, TargetKind: entry.Target is null ? null : "management", TargetId: entry.Target,
+        Detail: JsonSerializer.Serialize(entry, Json))));
+
+    public IReadOnlyList<DbDataKit.Web.Trust.AuditEntry> Read(int limit = 100)
     {
-        using var connection = state.OpenConnection();
-        using var cmd = state.Command(connection, "SELECT Entry FROM ManagementAudit ORDER BY Id DESC;");
-        using var reader = cmd.ExecuteReader();
-        var newest = new List<AuditEntry>();
-        while (newest.Count < limit && reader.Read())
-            if (JsonSerializer.Deserialize<AuditEntry>(reader.GetString(0), Json) is { } entry) newest.Add(entry);
+        var newest = new List<DbDataKit.Web.Trust.AuditEntry>();
+        foreach (var record in _audit.Read(new AuditQuery(ServiceId: ProxyState.ServiceId, VerbPrefix: VerbPrefix, Limit: limit)))
+            if (record.Entry.Detail is { } detail && JsonSerializer.Deserialize<DbDataKit.Web.Trust.AuditEntry>(detail, Json) is { } entry) newest.Add(entry);
         newest.Reverse();
-        return (IReadOnlyList<AuditEntry>)newest;
-    });
+        return newest;
+    }
 
-    /// <summary>
-    /// Reads the entries of the file the audit used to be written to into the state, in their order, and renames the file to <c>.imported</c> so it is read once. Returns how many there were; 0 when there is no file.
-    /// </summary>
+    /// <summary>A management command or outcome as the audit's lower-case word: anything that is not a letter or digit becomes an underscore.</summary>
+    private static string Word(string text)
+    {
+        var word = new string([.. text.ToLowerInvariant().Select(c => char.IsAsciiLetterOrDigit(c) ? c : '_')]).Trim('_');
+        return word.Length == 0 || !char.IsAsciiLetter(word[0]) ? "x" + word : word;
+    }
+
+    /// <summary>Takes the entries of the earlier file-based audit into the state, once, and sets the file aside.</summary>
     public int ImportFile(string dataDirectory)
     {
         var path = Path.Combine(dataDirectory, LegacyFileName);
@@ -48,8 +49,8 @@ public sealed class StateAuditLog(StateDatabase state) : IAuditLog
         foreach (var line in File.ReadLines(path))
         {
             if (line.Length == 0) continue;
-            AuditEntry? entry;
-            try { entry = JsonSerializer.Deserialize<AuditEntry>(line, Json); }
+            DbDataKit.Web.Trust.AuditEntry? entry;
+            try { entry = JsonSerializer.Deserialize<DbDataKit.Web.Trust.AuditEntry>(line, Json); }
             catch (JsonException) { continue; }
             if (entry is null) continue;
             Append(entry);

@@ -139,7 +139,7 @@ public sealed class StorePublishingTests : IAsyncLifetime
         _store = StoreServer.Build(settings, StoreServer.Certificate(StoreDir), _ => { });
         await _store.StartAsync();
         var url = new Uri(_store.Urls.First());
-        var paired = await PairingClient.PairAsync(url, new PairingFiles(settings.ServerYaml).Codes().Create(ServerRoles.Close(ServerRole.Admin | ServerRole.Author)).Code, _console, ClientKind.Console, "test console");
+        var paired = await PairingClient.PairAsync(url, StoreState.Pairing(settings.Directory).Codes().Create(ServerRoles.Close(ServerRole.Admin | ServerRole.Author)).Code, _console, ClientKind.Console, "test console");
         var http = new HttpClient(PairingClient.Pinned(paired.CertificateFingerprint)) { BaseAddress = url };
         return async (method, path) =>
         {

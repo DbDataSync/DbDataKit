@@ -62,7 +62,7 @@ public sealed class ConsoleLinkTests : IAsyncLifetime
 
     private Task<HttpResponseMessage> Link(UserRole role, object body)
     {
-        var session = app.Services.GetRequiredService<SessionStore>().Create(app.Services.GetRequiredService<UserStore>().CreateUser("Ana", null, role).Id).Id;
+        var session = app.Services.GetRequiredService<ISessionStore>().Create(app.Services.GetRequiredService<IUserAccounts>().CreateUser("Ana", null, role).Id).Id;
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/instances/link") { Content = JsonContent.Create(body) };
         request.Headers.Add("Cookie", $"{ConsoleHost.Auth.SessionCookie}={session}");
         return http.SendAsync(request);

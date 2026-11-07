@@ -11,13 +11,25 @@ namespace DbDataKit.State;
 public static class StateTemplates
 {
     public static string Render(string template, StateDialect dialect) => DropIndexToken.Replace(
-        template
+        IdentityToken.Replace(template, match => dialect.IdentityKey(match.Groups["column"].Value))
             .Replace("{{text}}", dialect.Text)
             .Replace("{{key}}", dialect.KeyText)
             .Replace("{{int}}", dialect.Integer)
             .Replace("{{addcolumn}}", dialect.AddColumn)
-            .Replace("{{identity:Id}}", dialect.IdentityKey("Id")),
+            .ReplaceWhenUsed("{{uuid}}", () => dialect.Uuid)
+            .ReplaceWhenUsed("{{time}}", () => dialect.Time)
+            .ReplaceWhenUsed("{{json}}", () => dialect.Json)
+            .ReplaceWhenUsed("{{bool}}", () => dialect.Bool)
+            .ReplaceWhenUsed("{{decimal}}", () => dialect.Decimal)
+            .ReplaceWhenUsed("{{blob}}", () => dialect.Blob),
         match => dialect.DropIndex(match.Groups["index"].Value, match.Groups["table"].Value));
+
+    /// <summary>Replaces a token with the dialect's word for it, asking the dialect only when the template uses the token: a custom dialect that does not know the convention types still renders a template that does not need them.</summary>
+    private static string ReplaceWhenUsed(this string text, string token, Func<string> value) =>
+        text.Contains(token, StringComparison.Ordinal) ? text.Replace(token, value(), StringComparison.Ordinal) : text;
+
+    /// <summary><c>{{identity:column}}</c>: an auto-assigned integer key under any column name (the modules write lower-case ones).</summary>
+    private static readonly Regex IdentityToken = new(@"\{\{identity:(?<column>\w+)\}\}");
 
     /// <summary><c>{{dropindex:IndexName:TableName}}</c> — the table is part of the token because SQL
     /// Server needs it and the other two do not, so the schema has to state it either way.</summary>

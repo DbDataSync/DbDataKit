@@ -68,7 +68,7 @@ public sealed class ConsoleLineageTests : IAsyncLifetime
 
     private async Task<(HttpStatusCode Status, JsonNode Body)> Get(string path, UserRole role = UserRole.Viewer)
     {
-        var session = app.Services.GetRequiredService<SessionStore>().Create(app.Services.GetRequiredService<UserStore>().CreateUser("Ana-" + Guid.NewGuid().ToString("N")[..6], null, role).Id).Id;
+        var session = app.Services.GetRequiredService<ISessionStore>().Create(app.Services.GetRequiredService<IUserAccounts>().CreateUser("Ana-" + Guid.NewGuid().ToString("N")[..6], null, role).Id).Id;
         var request = new HttpRequestMessage(HttpMethod.Get, path);
         request.Headers.Add("Cookie", $"{ConsoleHost.Auth.SessionCookie}={session}");
         var response = await http.SendAsync(request);

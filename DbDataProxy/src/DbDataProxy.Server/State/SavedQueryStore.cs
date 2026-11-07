@@ -34,7 +34,7 @@ public sealed partial class SavedQueryStore(StateDatabase database, TimeProvider
     {
         if (!NamePattern().IsMatch(name)) throw new ArgumentException("A saved query's name is lowercase letters, digits and underscores, starting with a letter.", nameof(name));
         if ((query.Sql is null) == (query.Request is null)) throw new ArgumentException("A saved query has a sql text or a request, and not both.", nameof(query));
-        var now = _clock.GetUtcNow().ToString("O");
+        var now = _clock.GetUtcNow();
         return database.Retry(() =>
         {
             using var connection = database.OpenConnection();
@@ -47,28 +47,28 @@ public sealed partial class SavedQueryStore(StateDatabase database, TimeProvider
             var version = (current?.Version ?? 0) + 1;
             if (current is null)
             {
-                using var insert = database.Command(connection, transaction, """
-                    INSERT INTO SavedQueries (Owner, Model, Name, Version, Description, Sql, RequestJson, ParametersJson, CreatedAtUtc, UpdatedAtUtc)
+                using var insert = database.Command("serving", connection, transaction, """
+                    INSERT INTO {table:saved_query} (owner, model, name, version, description, query_sql, request_json, parameters_json, created_at, updated_at)
                     VALUES ($owner, $model, $name, $version, $description, $sql, $request, $parameters, $now, $now);
                     """);
                 BindDefinition(insert, owner, model, name, version, query).Bind(database, "now", now);
                 insert.ExecuteNonQuery();
-                using var lookup = database.Command(connection, transaction, "SELECT Id FROM SavedQueries WHERE Owner = $owner AND Model = $model AND Name = $name;");
+                using var lookup = database.Command("serving", connection, transaction, "SELECT id FROM {table:saved_query} WHERE owner = $owner AND model = $model AND name = $name;");
                 lookup.Bind(database, "owner", owner).Bind(database, "model", model).Bind(database, "name", name);
                 id = Convert.ToInt64(lookup.ExecuteScalar());
             }
             else
             {
                 id = current.Id;
-                using var update = database.Command(connection, transaction, """
-                    UPDATE SavedQueries SET Version = $version, Description = $description, Sql = $sql, RequestJson = $request, ParametersJson = $parameters, UpdatedAtUtc = $now
-                    WHERE Id = $id;
+                using var update = database.Command("serving", connection, transaction, """
+                    UPDATE {table:saved_query} SET version = $version, description = $description, query_sql = $sql, request_json = $request, parameters_json = $parameters, updated_at = $now
+                    WHERE id = $id;
                     """);
                 BindDefinition(update, owner, model, name, version, query).Bind(database, "now", now).Bind(database, "id", id);
                 update.ExecuteNonQuery();
             }
-            using var history = database.Command(connection, transaction, """
-                INSERT INTO SavedQueryVersions (QueryId, Version, Description, Sql, RequestJson, ParametersJson, SavedBy, SavedAtUtc)
+            using var history = database.Command("serving", connection, transaction, """
+                INSERT INTO {table:saved_query_version} (query_id, version, description, query_sql, request_json, parameters_json, saved_by, saved_at)
                 VALUES ($id, $version, $description, $sql, $request, $parameters, $savedBy, $now);
                 """);
             BindDefinition(history, owner, model, name, version, query).Bind(database, "id", id).Bind(database, "savedBy", savedBy).Bind(database, "now", now);
@@ -86,7 +86,7 @@ public sealed partial class SavedQueryStore(StateDatabase database, TimeProvider
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var command = database.Command(connection, $"{Select} WHERE Owner = $owner{(model is null ? "" : " AND Model = $model")} ORDER BY Model, Name;");
+            using var command = database.Command("serving", connection, $"{Select} WHERE owner = $owner{(model is null ? "" : " AND model = $model")} ORDER BY model, name;");
             command.Bind(database, "owner", owner);
             if (model is not null) command.Bind(database, "model", model);
             return ReadAll(command);
@@ -97,16 +97,16 @@ public sealed partial class SavedQueryStore(StateDatabase database, TimeProvider
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var command = database.Command(connection, """
-                SELECT v.Version, v.Description, v.Sql, v.RequestJson, v.ParametersJson, v.SavedBy, v.SavedAtUtc
-                FROM SavedQueryVersions v JOIN SavedQueries q ON q.Id = v.QueryId
-                WHERE q.Owner = $owner AND q.Model = $model AND q.Name = $name ORDER BY v.Version;
+            using var command = database.Command("serving", connection, """
+                SELECT v.version, v.description, v.query_sql, v.request_json, v.parameters_json, v.saved_by, v.saved_at
+                FROM {table:saved_query_version} v JOIN {table:saved_query} q ON q.id = v.query_id
+                WHERE q.owner = $owner AND q.model = $model AND q.name = $name ORDER BY v.version;
                 """);
             command.Bind(database, "owner", owner).Bind(database, "model", model).Bind(database, "name", name);
             using var reader = command.ExecuteReader();
             var versions = new List<SavedQueryVersion>();
             while (reader.Read())
-                versions.Add(new SavedQueryVersion(reader.Int32(0), Definition(reader, 1), reader.GetString(5), DateTimeOffset.Parse(reader.GetString(6))));
+                versions.Add(new SavedQueryVersion(reader.Int32(0), Definition(reader, 1), reader.GetString(5), reader.Time(6)));
             return (IReadOnlyList<SavedQueryVersion>)versions;
         });
 
@@ -125,12 +125,12 @@ public sealed partial class SavedQueryStore(StateDatabase database, TimeProvider
             using var transaction = connection.BeginTransaction();
             var current = Read(connection, transaction, owner, model, name);
             if (current is null) return false;
-            foreach (var table in new[] { "SavedQueryShares", "SavedQueryVersions" })
+            foreach (var table in new[] { "saved_query_share", "saved_query_version" })
             {
-                using var children = database.Command(connection, transaction, $"DELETE FROM {table} WHERE QueryId = $id;");
+                using var children = database.Command("serving", connection, transaction, $"DELETE FROM {{table:{table}}} WHERE query_id = $id;");
                 children.Bind(database, "id", current.Id).ExecuteNonQuery();
             }
-            using var query = database.Command(connection, transaction, "DELETE FROM SavedQueries WHERE Id = $id;");
+            using var query = database.Command("serving", connection, transaction, "DELETE FROM {table:saved_query} WHERE id = $id;");
             query.Bind(database, "id", current.Id).ExecuteNonQuery();
             transaction.Commit();
             return true;
@@ -144,10 +144,10 @@ public sealed partial class SavedQueryStore(StateDatabase database, TimeProvider
         {
             using var connection = database.OpenConnection();
             var current = Read(connection, null, owner, model, name) ?? throw new SavedQueryConflictException($"There is no saved query '{name}' of {owner} on {model}.", null);
-            using var existing = database.Command(connection, "SELECT COUNT(*) FROM SavedQueryShares WHERE QueryId = $id AND Grantee = $grantee;");
+            using var existing = database.Command("serving", connection, "SELECT COUNT(*) FROM {table:saved_query_share} WHERE query_id = $id AND grantee = $grantee;");
             existing.Bind(database, "id", current.Id).Bind(database, "grantee", grantee);
             if (Convert.ToInt32(existing.ExecuteScalar()) > 0) return;
-            using var insert = database.Command(connection, "INSERT INTO SavedQueryShares (QueryId, Grantee) VALUES ($id, $grantee);");
+            using var insert = database.Command("serving", connection, "INSERT INTO {table:saved_query_share} (query_id, grantee) VALUES ($id, $grantee);");
             insert.Bind(database, "id", current.Id).Bind(database, "grantee", grantee).ExecuteNonQuery();
         });
     }
@@ -156,8 +156,8 @@ public sealed partial class SavedQueryStore(StateDatabase database, TimeProvider
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var command = database.Command(connection, """
-                DELETE FROM SavedQueryShares WHERE Grantee = $grantee AND QueryId IN (SELECT Id FROM SavedQueries WHERE Owner = $owner AND Model = $model AND Name = $name);
+            using var command = database.Command("serving", connection, """
+                DELETE FROM {table:saved_query_share} WHERE grantee = $grantee AND query_id IN (SELECT id FROM {table:saved_query} WHERE owner = $owner AND model = $model AND name = $name);
                 """);
             command.Bind(database, "grantee", grantee).Bind(database, "owner", owner).Bind(database, "model", model).Bind(database, "name", name).ExecuteNonQuery();
         });
@@ -166,9 +166,9 @@ public sealed partial class SavedQueryStore(StateDatabase database, TimeProvider
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var command = database.Command(connection, """
-                SELECT s.Grantee FROM SavedQueryShares s JOIN SavedQueries q ON q.Id = s.QueryId
-                WHERE q.Owner = $owner AND q.Model = $model AND q.Name = $name ORDER BY s.Grantee;
+            using var command = database.Command("serving", connection, """
+                SELECT s.grantee FROM {table:saved_query_share} s JOIN {table:saved_query} q ON q.id = s.query_id
+                WHERE q.owner = $owner AND q.model = $model AND q.name = $name ORDER BY s.grantee;
                 """);
             command.Bind(database, "owner", owner).Bind(database, "model", model).Bind(database, "name", name);
             using var reader = command.ExecuteReader();
@@ -193,10 +193,10 @@ public sealed partial class SavedQueryStore(StateDatabase database, TimeProvider
             var grantees = new List<string> { "*", "user:" + caller.Name.ToLowerInvariant() };
             grantees.AddRange(caller.Roles.Select(role => "group:" + role.ToLowerInvariant()));
             var names = string.Join(", ", grantees.Select((_, i) => "$g" + i));
-            using var command = database.Command(connection, $"""
-                {Select}
-                WHERE Model = $model AND (Owner = $owner OR Id IN (SELECT QueryId FROM SavedQueryShares WHERE LOWER(Grantee) IN ({names})))
-                ORDER BY CreatedAtUtc, Id;
+            using var command = database.Command("serving", connection, $$"""
+                {{Select}}
+                WHERE model = $model AND (owner = $owner OR id IN (SELECT query_id FROM {table:saved_query_share} WHERE LOWER(grantee) IN ({{names}})))
+                ORDER BY created_at, id;
                 """);
             command.Bind(database, "model", model).Bind(database, "owner", caller.Name);
             for (int i = 0; i < grantees.Count; i++) command.Bind(database, "g" + i, grantees[i]);
@@ -208,11 +208,11 @@ public sealed partial class SavedQueryStore(StateDatabase database, TimeProvider
 
     // ---------- rows ----------
 
-    private const string Select = "SELECT Id, Owner, Model, Name, Version, Description, Sql, RequestJson, ParametersJson, CreatedAtUtc, UpdatedAtUtc FROM SavedQueries";
+    private const string Select = "SELECT id, owner, model, name, version, description, query_sql, request_json, parameters_json, created_at, updated_at FROM {table:saved_query}";
 
     private SavedQueryRecord? Read(DbConnection connection, DbTransaction? transaction, string owner, string model, string name)
     {
-        using var command = database.Command(connection, transaction, $"{Select} WHERE Owner = $owner AND Model = $model AND Name = $name;");
+        using var command = database.Command("serving", connection, transaction, $"{Select} WHERE owner = $owner AND model = $model AND name = $name;");
         command.Bind(database, "owner", owner).Bind(database, "model", model).Bind(database, "name", name);
         return ReadAll(command).FirstOrDefault();
     }
@@ -223,7 +223,7 @@ public sealed partial class SavedQueryStore(StateDatabase database, TimeProvider
         var all = new List<SavedQueryRecord>();
         while (reader.Read())
             all.Add(new SavedQueryRecord(reader.Int64(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.Int32(4), Definition(reader, 5),
-                DateTimeOffset.Parse(reader.GetString(9)), DateTimeOffset.Parse(reader.GetString(10))));
+                reader.Time(9), reader.Time(10)));
         return all;
     }
 

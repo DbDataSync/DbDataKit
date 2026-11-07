@@ -4,9 +4,9 @@
 #
 # Host ports are fixed and documented here so a suite's connection settings never depend on discovery:
 #
-#   mssql              14330   SQL Server 2022, user sa, SQL Server Agent on (Sync's CDC needs it)
-#   mssql-target       14331   a second SQL Server 2022, user sa: Sync's cross-instance replication and its targets
-#   postgres           15432   PostgreSQL 17 with TLS, user postgres
+#   mssql              14330   SQL Server 2025, user sa, SQL Server Agent on (Sync's CDC needs it)
+#   mssql-target       14331   a second SQL Server 2025, user sa: Sync's cross-instance replication and its targets
+#   postgres           15432   PostgreSQL 17 with TLS and the pgvector extension installed (pgvector/pgvector:pg17), user postgres
 #   postgres-logical   15433   PostgreSQL 17 with wal_level=logical and wal2json, user dbdatasync (see below)
 #   mysql              13306   MySQL 9, user root
 #   mariadb            13307   MariaDB 11, user root
@@ -41,7 +41,11 @@ name: dbkit-test
 x-password: &password ${DBKIT_TEST_PASSWORD:-DbKit_Test_Pw1}
 
 # Images from 2025 onward ship /opt/mssql-tools18 only, whose sqlcmd needs -C for the container's self-signed certificate;
-# try that first and fall back, since `:2022-latest` moves under you.
+# try that first and fall back, since a `-latest` tag moves under you.
+#
+# SQL Server 2025 since plan 27 (the knowledge index's vector search needs its vector type). The image is pinned by digest, the same one
+# as `mssql2025` below (D29); to move it, change MSSQL_IMAGE here and the digest on `mssql2025` together.
+x-mssql-image: &mssql-image ${DBKIT_TEST_MSSQL_IMAGE:-mcr.microsoft.com/mssql/server:2025-latest@sha256:245f6b1c8903edae52cb20fa31419cefcde1a49938bb8c3447099011fc871ca3}
 x-mssql-health: &mssql-health
   test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' || exit 1"]
   interval: 5s
@@ -52,7 +56,7 @@ x-mssql-health: &mssql-health
 services:
   mssql:
     profiles: [mssql]
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    image: *mssql-image
     container_name: dbkit-test-mssql
     environment:
       ACCEPT_EULA: "Y"
@@ -69,7 +73,7 @@ services:
   # The second SQL Server, for Sync's cross-instance replication (source on 14330, target here) and anything that must cross servers.
   mssql-target:
     profiles: [mssql-target]
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    image: *mssql-image
     container_name: dbkit-test-mssql-target
     environment:
       ACCEPT_EULA: "Y"
@@ -81,7 +85,10 @@ services:
 
   postgres:
     profiles: [postgres]
-    image: postgres:17
+    # The pgvector project's own image: postgres:17 (Debian) with the extension installed, so there is no build step and nothing to install from a package
+    # repository (a machine behind a proxy that allows only registries could not). The extension is installed, not created: `CREATE EXTENSION vector`
+    # is run by whatever uses it.
+    image: ${DBKIT_TEST_POSTGRES_IMAGE:-pgvector/pgvector:pg17}
     container_name: dbkit-test-postgres
     # TLS on with a throwaway self-signed certificate, like SQL Server's container, so the libraries' secure default
     # (encrypt, with verification switched off for the self-signed cert) is what the live tests exercise.

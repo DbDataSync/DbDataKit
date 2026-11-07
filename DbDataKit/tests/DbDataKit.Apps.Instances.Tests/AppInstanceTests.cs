@@ -12,7 +12,7 @@ public sealed class AppInstanceTests : IDisposable
     public AppInstanceTests()
     {
         Directory.CreateDirectory(folder);
-        var database = new StateDatabase(Path.Combine(folder, "state.db"), new StateSchema([DefinitionSchema.Tables]));
+        var database = StateDatabase.OpenModules(Path.Combine(folder, "state.db"), [DefinitionsModule.Module]);
         store = new AppInstanceStore(new DefinitionStore(database));
     }
 
@@ -68,7 +68,7 @@ public sealed class AppInstanceTests : IDisposable
     [Fact]
     public void A_change_to_an_instance_is_a_new_version_that_rolls_back()
     {
-        var definitions = new DefinitionStore(new StateDatabase(Path.Combine(folder, "other.db"), new StateSchema([DefinitionSchema.Tables])));
+        var definitions = new DefinitionStore(StateDatabase.OpenModules(Path.Combine(folder, "other.db"), [DefinitionsModule.Module]));
         var instances = new AppInstanceStore(definitions);
         instances.PublishApp(Manifest("1.0.0"), "ada");
         instances.Save(new AppInstance("acme", "sales-planning", Settings: Map(("theme", "blue"))), "ada");

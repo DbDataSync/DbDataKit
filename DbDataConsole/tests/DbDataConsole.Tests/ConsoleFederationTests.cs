@@ -53,8 +53,8 @@ public sealed class ConsoleFederationTests : IAsyncLifetime
         // the identity home
         var homePort = FreePort();
         homeUrl = $"http://127.0.0.1:{homePort}";
-        var db = new StateDatabase(Path.Combine(root, "home.db"), HomeSchema.Schema);
-        var users = new UserStore(db);
+        var db = StateDatabase.OpenModules(Path.Combine(root, "home.db"), DbDataKit.Identity.IdentityHomeState.Modules);
+        var users = new IdentityUserStore(db);
         directory = new HomeDirectory(db);
         var clients = new OidcClients(db);
         var keys = new SigningKeys(db, new Mask());
@@ -184,9 +184,9 @@ public sealed class ConsoleFederationTests : IAsyncLifetime
         Assert.Equal("Ada Lovelace", (string)seenByA["name"]!);
 
         // each console holds her under the home's id, with no credential of its own
-        var mirrored = appA.Services.GetRequiredService<UserStore>().Get(ada.Id);
+        var mirrored = appA.Services.GetRequiredService<IUserAccounts>().Get(ada.Id);
         Assert.Equal("Ada Lovelace", mirrored!.DisplayName);
-        Assert.Empty(appA.Services.GetRequiredService<UserStore>().CredentialsOf(ada.Id));
+        Assert.Empty(appA.Services.GetRequiredService<IUserAccounts>().CredentialsOf(ada.Id));
     }
 
     [Fact]
@@ -210,14 +210,14 @@ public sealed class ConsoleFederationTests : IAsyncLifetime
         var (session, status) = await SignIn(consoleA, bob.Id);
         Assert.Null(session);
         Assert.Equal(HttpStatusCode.Forbidden, status);
-        Assert.Null(appA.Services.GetRequiredService<UserStore>().Get(bob.Id));
+        Assert.Null(appA.Services.GetRequiredService<IUserAccounts>().Get(bob.Id));
     }
 
     [Fact]
     public async Task A_console_that_signs_in_through_a_home_keeps_no_first_run_invitation_and_no_users_of_its_own()
     {
         Assert.False(File.Exists(Path.Combine(root, "a", "FIRST-RUN.txt")));
-        Assert.False(appA.Services.GetRequiredService<UserStore>().Any());
+        Assert.False(appA.Services.GetRequiredService<IUserAccounts>().Any());
         Assert.Equal(HttpStatusCode.Unauthorized, (await consoleA.GetAsync("/api/users")).StatusCode);
 
         // the sign-in screen is told the home is a way in (plan 20 O06), beside the local ways
@@ -265,7 +265,7 @@ public sealed class ConsoleFederationTests : IAsyncLifetime
 
         // the console's own session is over at once
         Assert.Equal(HttpStatusCode.Unauthorized, await EchoStatus(consoleA, sessionA!, ServerAId));
-        Assert.Null(appA.Services.GetRequiredService<SessionStore>().Resolve(sessionA!, appA.Services.GetRequiredService<UserStore>()));
+        Assert.Null(appA.Services.GetRequiredService<ISessionStore>().Resolve(sessionA!, appA.Services.GetRequiredService<IUserAccounts>()));
 
         // and the browser is sent to the home's end-session endpoint, with the id token that says whose session and which client
         Assert.Equal(homeUrl, redirectTo.GetLeftPart(UriPartial.Authority));
@@ -343,8 +343,8 @@ public sealed class ConsoleFederationTests : IAsyncLifetime
     {
         var (sessionA, _) = await SignIn(consoleA, ada.Id);
         // another account on this console holds an address the home now gives Ada, verified (plan 13a U16)
-        appA.Services.GetRequiredService<UserStore>().CreateUser("Local Lovelace", "ada.work@example.invalid", UserRole.Viewer, emailVerified: true);
-        new UserStore(new StateDatabase(Path.Combine(root, "home.db"), HomeSchema.Schema)).SetVerifiedEmail(ada.Id, "ada.work@example.invalid");
+        appA.Services.GetRequiredService<IUserAccounts>().CreateUser("Local Lovelace", "ada.work@example.invalid", UserRole.Viewer, emailVerified: true);
+        new IdentityUserStore(StateDatabase.OpenModules(Path.Combine(root, "home.db"), DbDataKit.Identity.IdentityHomeState.Modules)).SetVerifiedEmail(ada.Id, "ada.work@example.invalid");
         Assert.Equal(HttpStatusCode.OK, await EchoStatus(consoleA, sessionA!, ServerAId));       // not before the interval
         clockA.Offset = PastTheInterval;
         Assert.Equal(HttpStatusCode.Unauthorized, await EchoStatus(consoleA, sessionA!, ServerAId));
@@ -373,8 +373,8 @@ public sealed class ConsoleFederationTests : IAsyncLifetime
     [Fact]
     public async Task A_local_user_is_kept_and_neither_the_refresh_nor_the_sign_out_involves_the_home()
     {
-        var local = appA.Services.GetRequiredService<UserStore>().CreateUser("Local Admin", "local@example.invalid", UserRole.Admin);
-        var session = appA.Services.GetRequiredService<SessionStore>().Create(local.Id).Id;
+        var local = appA.Services.GetRequiredService<IUserAccounts>().CreateUser("Local Admin", "local@example.invalid", UserRole.Admin);
+        var session = appA.Services.GetRequiredService<ISessionStore>().Create(local.Id).Id;
         clockA.Offset = PastTheGrace;
         await homeApp.StopAsync();
         var users = new HttpRequestMessage(HttpMethod.Get, "/api/users");
