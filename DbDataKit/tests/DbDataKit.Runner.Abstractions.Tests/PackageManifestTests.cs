@@ -326,6 +326,28 @@ public sealed class PackageManifestTests
     }
 
     [Fact]
+    public void A_connection_slot_names_how_its_login_is_injected_and_it_survives_writing()
+    {
+        var m = Valid(Edited("      - { name: inbox, kind: folder }\n", "      - { name: inbox, kind: folder }\n      - { name: warehouse, kind: sqlserver, env: build-login }\n      - { name: target, kind: postgres, env: sync-secret }\n"));
+
+        var slots = m.Tasks[0].Connections;
+        Assert.Equal([new ConnectionSlot("source", "sqlserver"), new ConnectionSlot("inbox", "folder"), new ConnectionSlot("warehouse", "sqlserver", "build-login"), new ConnectionSlot("target", "postgres", "sync-secret")], slots);
+        var text = PackageManifestWriter.Write(m);
+        Assert.Contains("env: build-login", text, StringComparison.Ordinal);
+        Assert.Equal(slots, Valid(text).Tasks[0].Connections);
+    }
+
+    [Fact]
+    public void An_injection_form_the_runner_does_not_know_is_refused_naming_the_slot_and_the_forms()
+    {
+        AssertRefused(Edited("      - { name: inbox, kind: folder }\n", "      - { name: inbox, kind: folder, env: DBDATA_ANYTHING }\n"), "tasks[0].connections[1].env", "sync-secret, build-login");
+
+        var task = new PackageTask("pull", new TaskEntry()) { Connections = [new ConnectionSlot("db", "postgres", "free-text")] };
+        var manifest = new PackageManifest("p", null, new PackageLaunch(LaunchKind.Executable, Command: "x"), new BuiltAgainst(null, null, "dbdatakit.runner.v1"), [task]);
+        Assert.Contains(PackageManifestValidator.Problems(manifest), p => p.KeyPath == "tasks[0].connections[0].env" && p.Message.Contains("'db'", StringComparison.Ordinal) && p.Message.Contains("free-text", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void A_progress_declaration_with_two_values_of_one_name_is_refused()
     {
         AssertRefused(Edited("- { name: last_file, type: text }", "- { name: last_file, type: text }\n        - { name: last_file, type: int }"), "tasks[0].progress.state[1].name", "declared twice");

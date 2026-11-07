@@ -73,7 +73,7 @@ public static partial class PackageManifestWriter
         if (task.Connections.Count > 0)
         {
             w.Append("    connections:\n");
-            foreach (var c in task.Connections) w.Append("      - ").Append(Flow(("name", S(c.Name)), ("kind", S(c.Kind)))).Append('\n');
+            foreach (var c in task.Connections) w.Append("      - ").Append(Flow(("name", S(c.Name)), ("kind", S(c.Kind)), ("env", S(c.Env)))).Append('\n');
         }
 
         Progress(w, task.Progress);

@@ -115,9 +115,13 @@ public sealed class TaskExecutor : ITaskRunner
 
             var start = new TaskStart(task, runId, request.Attempt, request.PackageVersion, request.Inputs, request.ConnectionHandles, null, request.CancellationGrace);
             var lifetime = (timeout ?? TimeSpan.FromDays(1)) + request.CancellationGrace + _options.ExitWait + TimeSpan.FromMinutes(5);
-            token = _host.Register(new RunGrant(start, request.Chain, new RunnerEnvironment(_database, task.Package, task.Channel) { Service = _options.Service }, lifetime));
+            // the logins of the slots that ask for injection (plan 28c E02): resolved here, put in the child's environment and nowhere else; a login that cannot be resolved fails the run before a process exists
+            IReadOnlyDictionary<string, string> injected = request.Slots.Count > 0 && _options.Slots is { } slots
+                ? await slots.EnvironmentAsync(request.ConnectionHandles, request.Slots, ct).ConfigureAwait(false)
+                : new Dictionary<string, string>();
+            token = _host.Register(new RunGrant(start, request.Chain, new RunnerEnvironment(_database, task.Package, task.Channel) { Service = _options.Service }, lifetime, _options.Slots));
 
-            var spec = BuildSpec(request, scratch, token, log);
+            var spec = BuildSpec(request, scratch, token, log, injected);
             child = ChildProcessHost.Launch(spec);
             (limits, limited) = ApplyLimits(child, limitSpec);
             log.Note("Information", Describe(request, child.ProcessId, timeout, limitSpec, limits));
@@ -249,13 +253,14 @@ public sealed class TaskExecutor : ITaskRunner
         return ReferenceEquals(current, Never) ? next : Task.WhenAny(current, next).ContinueWith(_ => { }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
 
-    private ChildProcessSpec BuildSpec(TaskRunRequest request, string scratch, string token, OutputLogger log)
+    private ChildProcessSpec BuildSpec(TaskRunRequest request, string scratch, string token, OutputLogger log, IReadOnlyDictionary<string, string> injected)
     {
         var package = Path.GetFullPath(request.PackageDirectory);
         var environment = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var name in _options.InheritedVariables)
             if (Environment.GetEnvironmentVariable(name) is { } value) environment[name] = value;
         foreach (var (name, value) in _options.ExtraEnvironment) environment[name] = value;
+        foreach (var (name, value) in injected) environment[name] = value;
         var temp = Path.Combine(scratch, "tmp");
         environment["TMPDIR"] = temp;
         environment["TMP"] = temp;

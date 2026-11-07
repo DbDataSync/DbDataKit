@@ -48,7 +48,7 @@ public sealed class PackageManifestException(IReadOnlyList<ConfigDiagnostic> dia
 ///       - store_change: { model: orders, entity: order }
 ///       - manual: true
 ///     inputs:      [ { name: since, type: date, required: false, default: "2024-01-01" } ]
-///     connections: [ { name: inbox, kind: folder } ]
+///     connections: [ { name: inbox, kind: folder } ]            # optional env: sync-secret | build-login (the runner injects the bound login in that form)
 ///     progress:
 ///       checkpoints: [ { name: orders, per: [customer], parts: [ { name: modified, type: time }, { name: id, type: int } ] } ]
 ///       state:       [ { name: last_file, type: text } ]
@@ -583,10 +583,17 @@ public static class PackageManifestReader
                 var at = $"{path}.connections[{i}]";
                 positions[at] = list.Items[i];
                 if (Map(list.Items[i], at, "{name: source, kind: sqlserver}") is not { } map) continue;
-                Keys(map, at, "name", "kind");
+                Keys(map, at, "name", "kind", "env");
                 var name = Text(map, "name", at, true);
                 var kind = Text(map, "kind", at, true);
-                if (name is not null && kind is not null) found.Add(new ConnectionSlot(name, kind));
+                var env = Text(map, "env", at, false);
+                if (env is not null && !SlotEnvironmentFormats.IsKnown(env))
+                {
+                    Bad(Join(at, "env"), map.Get("env")!, $"`{env}` is not a form the runner injects a login in. The forms: {string.Join(", ", SlotEnvironmentFormats.All)}.", "Remove `env:` to take the login through the protocol instead.");
+                    env = null;
+                }
+
+                if (name is not null && kind is not null) found.Add(new ConnectionSlot(name, kind, env));
             }
 
             return found;

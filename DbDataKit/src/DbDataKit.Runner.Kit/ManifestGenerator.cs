@@ -40,7 +40,7 @@ public static class ManifestGenerator
             new Schedule(),
             [],
             Inputs(instance.InputType),
-            [.. SlotsOf(slots).Select(s => new ConnectionSlot(s.Name, s.Kind))],
+            [.. SlotsOf(slots).Select(s => new ConnectionSlot(s.Name, s.Kind, s.Env))],
             ProgressLayout.For(instance.ProgressType).ToDeclaration(),
             TaskLimits.None,
             [],
