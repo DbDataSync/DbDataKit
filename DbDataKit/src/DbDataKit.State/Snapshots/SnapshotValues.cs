@@ -1,5 +1,7 @@
 using System.Buffers;
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 
 namespace DbDataKit.State.Snapshots;
@@ -10,10 +12,33 @@ internal static class SnapshotValues
     /// <summary>The decimal with the trailing zeros of its scale removed: SQL Server's <c>DECIMAL(38,10)</c> gives <c>1.5000000000</c> for what SQLite stores as <c>1.5</c>.</summary>
     internal static string DecimalText(decimal value) => (value / 1.000000000000000000000000000000000m).ToString(CultureInfo.InvariantCulture);
 
-    /// <summary>Writes <paramref name="raw"/> (what <c>DbDataReader.GetValue</c> returned) as the neutral value of <paramref name="type"/>.</summary>
-    public static void Write(Utf8JsonWriter json, string type, object raw)
+    /// <summary>The writer options of a table file's lines and of the row hashes (the same bytes): no white space, non-ASCII text as it is.</summary>
+    internal static readonly JsonWriterOptions RowOptions = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping, SkipValidation = true };
+
+    /// <summary>
+    /// The neutral form of what a reader returned for a column of <paramref name="type"/> as a string, or for a blob a <see cref="byte"/> array; null for NULL. The verifier orders and pages keys by it
+    /// and the table file writes the same text (an int and a bool are a number and a boolean there, <see cref="Write"/> says so).
+    /// </summary>
+    internal static object? Normalise(string type, object? raw)
     {
-        if (raw is DBNull)
+        if (raw is null or DBNull) return null;
+        return type switch
+        {
+            SnapshotColumnTypes.Uuid => StateValues.ToGuid(raw).ToString("D", CultureInfo.InvariantCulture),
+            SnapshotColumnTypes.Time => StateValues.FormatTime(StateValues.ToTime(raw)),
+            SnapshotColumnTypes.Bool => Convert.ToBoolean(raw, CultureInfo.InvariantCulture) ? "true" : "false",
+            SnapshotColumnTypes.Int => Convert.ToInt64(raw, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture),
+            SnapshotColumnTypes.Decimal => DecimalText(StateValues.ToDecimal(raw)),
+            SnapshotColumnTypes.Json => CanonicalJson(raw as string ?? Convert.ToString(raw, CultureInfo.InvariantCulture)!),
+            SnapshotColumnTypes.Blob => raw as byte[] ?? throw new InvalidCastException($"A blob column held a {raw.GetType().Name}."),
+            _ => raw as string ?? Convert.ToString(raw, CultureInfo.InvariantCulture),
+        };
+    }
+
+    /// <summary>Writes <paramref name="raw"/> (what <c>DbDataReader.GetValue</c> returned) as the neutral value of <paramref name="type"/>.</summary>
+    public static void Write(Utf8JsonWriter json, string type, object? raw)
+    {
+        if (raw is null or DBNull)
         {
             json.WriteNullValue();
             return;
@@ -21,31 +46,36 @@ internal static class SnapshotValues
 
         switch (type)
         {
-            case SnapshotColumnTypes.Uuid:
-                json.WriteStringValue(StateValues.ToGuid(raw).ToString("D", CultureInfo.InvariantCulture));
-                break;
-            case SnapshotColumnTypes.Time:
-                json.WriteStringValue(StateValues.FormatTime(StateValues.ToTime(raw)));
-                break;
             case SnapshotColumnTypes.Bool:
                 json.WriteBooleanValue(Convert.ToBoolean(raw, CultureInfo.InvariantCulture));
                 break;
             case SnapshotColumnTypes.Int:
                 json.WriteNumberValue(Convert.ToInt64(raw, CultureInfo.InvariantCulture));
                 break;
-            case SnapshotColumnTypes.Decimal:
-                json.WriteStringValue(DecimalText(StateValues.ToDecimal(raw)));
-                break;
-            case SnapshotColumnTypes.Json:
-                json.WriteStringValue(CanonicalJson(Convert.ToString(raw, CultureInfo.InvariantCulture)!));
-                break;
             case SnapshotColumnTypes.Blob:
                 json.WriteBase64StringValue((byte[])raw);
                 break;
             default:
-                json.WriteStringValue(Convert.ToString(raw, CultureInfo.InvariantCulture));
+                json.WriteStringValue((string)Normalise(type, raw)!);
                 break;
         }
+    }
+
+    /// <summary>
+    /// The hash of one row: SHA-256 of its table-file line (a JSON array, no white space, no line break) of the columns' neutral values in declaration order. What the exporter hashes and the
+    /// verifier hashes, so a database and a manifest agree.
+    /// </summary>
+    internal static byte[] HashRow(IReadOnlyList<string> types, object?[] raw)
+    {
+        var buffer = new ArrayBufferWriter<byte>(256);
+        using (var json = new Utf8JsonWriter(buffer, RowOptions))
+        {
+            json.WriteStartArray();
+            for (var i = 0; i < types.Count; i++) Write(json, types[i], raw[i]);
+            json.WriteEndArray();
+        }
+
+        return SHA256.HashData(buffer.WrittenSpan);
     }
 
     /// <summary>
@@ -92,4 +122,23 @@ internal static class SnapshotValues
                 break;
         }
     }
+}
+
+/// <summary>Adds row hashes modulo 2^256, each read as a big-endian number: a table's <c>rows_digest</c>, which does not depend on the order the rows were read in.</summary>
+internal sealed class RowsDigest
+{
+    private readonly byte[] _sum = new byte[32];
+
+    public void Add(ReadOnlySpan<byte> hash)
+    {
+        var carry = 0;
+        for (var i = 31; i >= 0; i--)
+        {
+            var value = _sum[i] + hash[i] + carry;
+            _sum[i] = (byte)value;
+            carry = value >> 8;
+        }
+    }
+
+    public string Hex() => Convert.ToHexStringLower(_sum);
 }
