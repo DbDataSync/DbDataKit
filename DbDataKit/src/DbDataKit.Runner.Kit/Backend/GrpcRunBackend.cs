@@ -153,6 +153,12 @@ internal sealed class GrpcRunBackend : IRunBackend, IAsyncDisposable
         return new StepBegin.Run(WireConvert.ParseId(reply.Run.StepId, "step id"));
     }
 
+    public async Task<Guid?> AdoptStepPayloadAsync(string name, string key, CancellationToken ct)
+    {
+        var reply = await CallAsync(h => _client.AdoptStepPayloadAsync(new StepKey { Name = name, Key = key }, h, cancellationToken: ct).ResponseAsync).ConfigureAwait(false);
+        return reply.PayloadId.Length == 0 ? null : WireConvert.ParseId(reply.PayloadId, "payload id");
+    }
+
     public async Task CompleteValueStepAsync(string name, string key, string resultJson, IReadOnlyDictionary<string, long>? counts, CancellationToken ct)
     {
         var request = new CompleteStepRequest { Name = name, Key = key, ResultJson = resultJson };

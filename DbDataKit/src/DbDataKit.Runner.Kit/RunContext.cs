@@ -90,15 +90,24 @@ internal sealed class RunContext
 
     public string? FirstFailedItem => _firstFailed;
 
-    public void AddStep(StepReport report) => _steps.Enqueue(report);
+    public void AddStep(StepReport report)
+    {
+        _steps.Enqueue(report);
+        Settings.Hooks?.StepReported?.Invoke(report);
+    }
 
-    public void AddUnit(UnitReport report) => _units.Enqueue(report);
+    public void AddUnit(UnitReport report)
+    {
+        _units.Enqueue(report);
+        Settings.Hooks?.UnitReported?.Invoke(report);
+    }
 
     public void Count(Counter counter, long n)
     {
         ArgumentNullException.ThrowIfNull(counter);
         CurrentScope.Add(counter.Name, n);
         Backend.Count(counter.Name, n);
+        Settings.Hooks?.Counted?.Invoke(counter.Name, n);
     }
 
     public void SetStatus(string text)
@@ -171,6 +180,14 @@ internal sealed class RunContext
 
     /// <summary>A hook that throws <see cref="SimulatedCrashException"/> makes the process "die" here.</summary>
     public Task AfterStepBodyAsync(string name, string key, CancellationToken ct) => Settings.Hooks?.AfterStepBody?.Invoke(name, key, ct) ?? Task.CompletedTask;
+
+    public Task BeforeStepBodyAsync(string name, string key, CancellationToken ct) => Settings.Hooks?.BeforeStepBody?.Invoke(name, key, ct) ?? Task.CompletedTask;
+
+    public Task BeforePayloadCommitAsync(string name, string key, CancellationToken ct) => Settings.Hooks?.BeforePayloadCommit?.Invoke(name, key, ct) ?? Task.CompletedTask;
+
+    public Task BeforeUnitBodyAsync(string name, string key, CancellationToken ct) => Settings.Hooks?.BeforeUnitBody?.Invoke(name, key, ct) ?? Task.CompletedTask;
+
+    public Task BeforeProgressSaveAsync(int number, CancellationToken ct) => Settings.Hooks?.BeforeProgressSave?.Invoke(number, ct) ?? Task.CompletedTask;
 
     public Task AfterUnitBodyAsync(string name, string key, CancellationToken ct) => Settings.Hooks?.AfterUnitBody?.Invoke(name, key, ct) ?? Task.CompletedTask;
 }

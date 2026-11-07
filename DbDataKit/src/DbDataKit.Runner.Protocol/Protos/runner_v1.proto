@@ -26,6 +26,7 @@ service RunnerApi {
   // ---- steps
   rpc BeginStep(BeginStepRequest) returns (BeginStepReply);
   rpc RetakeStep(StepKey) returns (RetakeStepReply);
+  rpc AdoptStepPayload(StepKey) returns (AdoptStepPayloadReply);
   rpc CompleteStep(CompleteStepRequest) returns (CompleteStepReply);
   rpc FailStep(FailStepRequest) returns (FailStepReply);
   // client streaming: the bytes of a streaming step's result, in chunks of at most 1 MiB; the reply holds the payload id
@@ -232,6 +233,11 @@ message BeginStepReply {
 
 message RetakeStepReply {
   StepRun run = 1;
+}
+
+// An in-doubt streaming step whose payload the dead attempt finished writing is completed by adopting it (28b K14); payload_id is empty when there is none.
+message AdoptStepPayloadReply {
+  string payload_id = 1;
 }
 
 message CompleteStepRequest {

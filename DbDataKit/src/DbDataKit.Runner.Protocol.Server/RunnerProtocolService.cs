@@ -274,6 +274,14 @@ internal sealed class RunnerProtocolService(RunSessions sessions) : RunnerApi.Ru
         return new RetakeStepReply { Run = new StepRun { StepId = run.StepId.ToString("D") } };
     });
 
+    public override Task<AdoptStepPayloadReply> AdoptStepPayload(StepKey request, ServerCallContext context) => Guard(async () =>
+    {
+        var session = Started(context);
+        Named(request.Name, request.Key);
+        var payload = await session.Backend.AdoptStepPayloadAsync(request.Name, request.Key, context.CancellationToken).ConfigureAwait(false);
+        return new AdoptStepPayloadReply { PayloadId = payload?.ToString("D") ?? "" };
+    });
+
     public override Task<CompleteStepReply> CompleteStep(CompleteStepRequest request, ServerCallContext context) => Guard(async () =>
     {
         var session = Started(context);

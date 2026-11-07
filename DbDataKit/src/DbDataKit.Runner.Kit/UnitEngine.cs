@@ -140,6 +140,7 @@ internal sealed class UnitEngine(RunContext run, StepEngine steps)
         {
             run.Unit.Value = new UnitFrame(unit.Name, key);
             run.Scope.Value = scope;
+            await run.BeforeUnitBodyAsync(unit.Name, key, ct).ConfigureAwait(false);
             await body(item, cts.Token).ConfigureAwait(false);
             await run.AfterUnitBodyAsync(unit.Name, key, ct).ConfigureAwait(false);
             await Backend.CompleteUnitAsync(unit.Name, key, scope.Snapshot(), ct).ConfigureAwait(false);

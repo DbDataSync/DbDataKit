@@ -37,8 +37,34 @@ public sealed class RunnerEnvironment(StateDatabase database, string package, st
 /// <summary>Injection points for tests and the simulator (slice R03c). A hook that throws <see cref="SimulatedCrashException"/> ends the run as if the process had died at that point.</summary>
 public sealed class RunnerHooks
 {
-    /// <summary>Called after a step's body returned and before its result is stored: the in-doubt moment. Arguments: step name, step key.</summary>
+    /// <summary>Called when a step is about to run its body (the step is recorded started), before the body. Arguments: step name, step key.</summary>
+    public Func<string, string, CancellationToken, Task>? BeforeStepBody { get; init; }
+
+    /// <summary>
+    /// Called after a streaming step's body returned and before its payload is committed: a crash here is a write interrupted at its very end (an incomplete payload, nothing stored). Arguments: step name, step key.
+    /// </summary>
+    public Func<string, string, CancellationToken, Task>? BeforePayloadCommit { get; init; }
+
+    /// <summary>
+    /// Called after a step's body returned and before its result is stored: the in-doubt moment. For a streaming step the payload is already committed (complete), so a crash here leaves a complete payload the retry
+    /// adopts (plan 28b K14). Arguments: step name, step key.
+    /// </summary>
     public Func<string, string, CancellationToken, Task>? AfterStepBody { get; init; }
+
+    /// <summary>Called when a unit is about to run its body, before it. Arguments: unit name, unit key.</summary>
+    public Func<string, string, CancellationToken, Task>? BeforeUnitBody { get; init; }
+
+    /// <summary>Called at the start of each <c>SaveProgressAsync</c> of the job, with its number (1 for the first), before anything is written; a hook may throw <see cref="ProgressConflictException"/>.</summary>
+    public Func<int, CancellationToken, Task>? BeforeProgressSave { get; init; }
+
+    /// <summary>Told of every step the run finished with, as it is added to the run's report (also in an attempt that then crashes, whose <see cref="RunResult"/> never exists).</summary>
+    public Action<StepReport>? StepReported { get; init; }
+
+    /// <summary>Told of every unit the run finished with (see <see cref="StepReported"/>).</summary>
+    public Action<UnitReport>? UnitReported { get; init; }
+
+    /// <summary>Told of every <c>Count</c> the job makes: the counter's name and the amount.</summary>
+    public Action<string, long>? Counted { get; init; }
 
     /// <summary>Called after a unit's body returned and before the unit is recorded done. Arguments: unit name, unit key.</summary>
     public Func<string, string, CancellationToken, Task>? AfterUnitBody { get; init; }
