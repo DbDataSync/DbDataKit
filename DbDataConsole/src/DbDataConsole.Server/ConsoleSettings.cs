@@ -56,13 +56,20 @@ public static class ConsoleState
     public const string EngineVariable = "DBDATAKIT_CONSOLE_STATE_ENGINE";
     public const string ConnectionVariable = "DBDATAKIT_CONSOLE_STATE_CONNECTION";
 
-    /// <summary>The state engine the flags or the environment name (the flags win); null when neither does, which is SQLite in the console's directory.</summary>
-    public static StateSettings? SettingsFrom(Func<string, string?>? environment, string? engineFlag = null, string? connectionFlag = null)
+    /// <summary>The console's settings file: the <c>state:</c> section of <c>settings.yaml</c> in its directory (the same section every product reads, plan 29b M7), which <c>state move</c> writes.</summary>
+    public static string SettingsFileIn(string directory) => System.IO.Path.Combine(directory, "settings.yaml");
+
+    /// <summary>
+    /// The state settings the flags or the environment name (the flags win, and when either names one the settings file is not read); else the <c>state:</c> section of <see cref="SettingsFileIn"/> when
+    /// <paramref name="directory"/> has one; null when none of them does, which is SQLite in the console's directory.
+    /// </summary>
+    public static StateSettings? SettingsFrom(Func<string, string?>? environment, string? engineFlag = null, string? connectionFlag = null, string? directory = null)
     {
         environment ??= Environment.GetEnvironmentVariable;
         var engine = engineFlag ?? environment(EngineVariable);
         var connection = connectionFlag ?? environment(ConnectionVariable);
-        return string.IsNullOrWhiteSpace(engine) && string.IsNullOrWhiteSpace(connection) ? null : new StateSettings(engine, connection);
+        if (!string.IsNullOrWhiteSpace(engine) || !string.IsNullOrWhiteSpace(connection)) return new StateSettings(engine, connection);
+        return directory is not null && System.IO.File.Exists(SettingsFileIn(directory)) ? StateSettingsWriter.Load(SettingsFileIn(directory)) : null;
     }
 
     public static StateDatabase Open(string directory, StateSettings? settings = null, Func<string, string?>? environment = null)
