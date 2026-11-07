@@ -57,6 +57,7 @@ public static class DrainUnits
 /// protocol call that follows the target's commit), where the definition is read from (the package's view) and where the engine may write (the run's scratch, never the view).
 /// </summary>
 [RunnerTask("drain")]
+[RunnerDeclarations(typeof(DrainUnits), typeof(DrainCounters))]
 public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
 {
     private readonly SemaphoreSlim _save = new(1, 1);
