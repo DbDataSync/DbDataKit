@@ -18,6 +18,8 @@
     <DbDataKitReference Include="Hosting.Certificates" />
     <DbDataKitReference Include="Security.Acl" />
     <DbDataKitReference Include="Monitoring" />
+    <DbDataKitReference Include="Lineage.Cli" />   <!-- the lineage noun: deployment lineage (E24) -->
+    <DbDataKitReference Include="Lineage" />
     <DbDataKitReference Include="Scheduling" />
     <DbDataKitReference Include="State" />
     <DbDataKitReference Include="Secrets.Abstractions" />

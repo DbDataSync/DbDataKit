@@ -13,7 +13,7 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 | | Connections (Sync and Proxy, one list) | – | – | – | Copy between servers | `ConnectionsPage.tsx` |
 | | State databases (connections of kind `state`) | Yes | Yes | Yes | Test | `StateConnections.tsx` |
 | | Server state: panel, maintenance and the Move wizard | – | – | – | Maintenance on and off, check and run a move | `ServerStatePage.tsx` |
-| | Lineage, Views, Monitoring, Docs | – | – | – | Read-only | `LineagePage.tsx`, `ViewsPage.tsx`, `MonitoringPage.tsx`, `DocsPages.tsx`, `HomePage.tsx` |
+| | Lineage, Deployments (where a package is deployed and what a runner holds, from the runners' lineage), Views, Monitoring, Docs | – | – | – | Read-only | `LineagePage.tsx`, `DeploymentsPage.tsx`, `ViewsPage.tsx`, `MonitoringPage.tsx`, `DocsPages.tsx`, `HomePage.tsx` |
 | **Sync** | Connections | Yes | Yes | Yes | Test | `ConnectionsPage.tsx`, `ConnectionEditPage.tsx` |
 | | Replications | Yes | Yes | Yes | Enable, pause and resume | `ReplicationsPage.tsx`, `ReplicationDetailPage.tsx` |
 | | Table mappings | Yes | Yes (columns, transforms, segmenting, provisioning, pipeline) | – | Verify, preview, diagnostics, history diff | `ReplicationDetailPage.tsx` |

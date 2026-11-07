@@ -44,6 +44,7 @@ public static class RunnerCli
         RunsNoun(environment),
         TasksNoun(environment),
         RunnerLabelVerbs.Create(environment),
+        RunnerLineageNoun.Create(environment),
         PackageNoun(environment),
         StateNoun(environment),
         RunnerService.Noun(RunnerServiceEnvironment.Real()),

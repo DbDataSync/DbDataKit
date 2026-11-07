@@ -4,7 +4,7 @@ import { ErrorBanner } from '@dbdatakit/shell'
 import { LineageGraphView, projectLineage, reach } from '@dbdatakit/visuals'
 import { consoleApi } from '../api'
 import { ConsoleShell } from '../ConsoleShell'
-import { findCards, serverNote } from '../lineage'
+import { findCards, serverNote, withoutDeployments } from '../lineage'
 
 /**
  * What feeds what, across the servers (plan 18, G10): the graphs of the Build and Sync servers joined by identity, drawn at the table level with a dataset opening to its columns. Pick a card (click it, or search) and what feeds
@@ -15,7 +15,7 @@ export function LineagePage() {
   const lineage = useQuery({ queryKey: ['lineage'], queryFn: () => consoleApi.lineage(false) })
   const [selected, setSelected] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const graph = lineage.data
+  const graph = useMemo(() => (lineage.data ? withoutDeployments(lineage.data) : undefined), [lineage.data])
   const found = useMemo(() => (graph ? findCards(graph, search) : []), [graph, search])
   const chosen = graph?.nodes.find((n) => n.id === selected)
   const counts = useMemo(() => {
