@@ -30,7 +30,7 @@ public sealed class RunnerCliTests : IDisposable
     {
         var text = new StringWriter();
         var router = RunnerCli.Router(_ => null);
-        foreach (var words in new[] { new[] { "help" }, ["server", "help"], ["runs", "help"], ["tasks", "help"], ["package", "help"], ["state", "help"], ["service", "help"], ["cert", "help"], ["health", "help"] })
+        foreach (var words in new[] { new[] { "help" }, ["server", "help"], ["runs", "help"], ["tasks", "help"], ["label", "help"], ["package", "help"], ["state", "help"], ["service", "help"], ["cert", "help"], ["health", "help"] })
         {
             var output = new StringWriter();
             router.RunAsync(words, new CliContext(output, TextWriter.Null, TextReader.Null)).GetAwaiter().GetResult();
@@ -51,8 +51,8 @@ public sealed class RunnerCliTests : IDisposable
 
         Assert.Equal(File.ReadAllText(file).ReplaceLineEndings("\n"), actual);
         // the shared nouns are there with their shared verbs, and the runner's own
-        foreach (var noun in new[] { "server", "runs", "tasks", "package", "state", "service", "cert", "health" }) Assert.Contains($"\n  {noun} ", actual);
-        foreach (var command in new[] { "server pair", "server clients", "server unpair", "package install", "tasks run", "tasks pause", "tasks resume", "runs list", "state show", "state test", "state grants", "service unit", "cert ensure", "cert renew" })
+        foreach (var noun in new[] { "server", "runs", "tasks", "label", "package", "state", "service", "cert", "health" }) Assert.Contains($"\n  {noun} ", actual);
+        foreach (var command in new[] { "server pair", "server clients", "server unpair", "package install", "tasks run", "tasks pause", "tasks resume", "label add", "label remove", "label list", "runs list", "state show", "state test", "state grants", "service unit", "cert ensure", "cert renew" })
             Assert.Contains($"  {command}", actual);
     }
 

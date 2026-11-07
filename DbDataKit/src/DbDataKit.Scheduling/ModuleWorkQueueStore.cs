@@ -77,8 +77,10 @@ public sealed class ModuleWorkQueueStore(StateDatabase database, string service)
 
     public WorkItem? TryClaimNext(
         string owner, string workerId, string? lane = null, int? maxRunningInLane = null, Guid? runId = null,
-        Action<DbConnection, DbTransaction, WorkItem, DateTimeOffset>? alsoWrite = null)
+        Action<DbConnection, DbTransaction, WorkItem, DateTimeOffset>? alsoWrite = null,
+        IReadOnlyCollection<string>? excludeSubjects = null)
     {
+        // a claimer that may not serve some subjects (the runner's label routing: it lacks a label the task requires) names them; those items stay Pending for a claimer that may
         for (var attempt = 0; attempt < 5; attempt++)
         {
             var candidate = database.Retry(() =>
@@ -86,6 +88,7 @@ public sealed class ModuleWorkQueueStore(StateDatabase database, string service)
                 using var connection = database.OpenConnection();
                 var laneFilter = lane is null ? "" : "AND w.lane = $lane";
                 var runFilter = runId is null ? "" : "AND w.run_id = $run_id";
+                var subjectFilter = excludeSubjects is not { Count: > 0 } ? "" : "AND w.subject NOT IN (" + string.Join(", ", excludeSubjects.Select((_, i) => "$skip" + i)) + ")";
                 var capFilter = maxRunningInLane is null ? "" :
                     "AND (SELECT COUNT(*) FROM {table:work_item} c WHERE c.service = w.service AND c.owner = w.owner AND c.lane = w.lane AND c.status IN ('Claimed','Running')) < $cap";
                 using var cmd = database.Command(Module, connection, $$"""
@@ -94,6 +97,7 @@ public sealed class ModuleWorkQueueStore(StateDatabase database, string service)
                     WHERE w.service = $service AND w.owner = $owner AND w.status = 'Pending' AND w.available_at <= $now
                       {{laneFilter}}
                       {{runFilter}}
+                      {{subjectFilter}}
                       AND NOT EXISTS (
                         SELECT 1 FROM {table:work_item} b
                         WHERE b.service = w.service AND b.owner = w.owner AND b.kind = w.kind AND b.subject = w.subject
@@ -108,6 +112,7 @@ public sealed class ModuleWorkQueueStore(StateDatabase database, string service)
                 cmd.Bind(database, "service", service).Bind(database, "owner", owner).Bind(database, "now", Now());
                 if (lane is not null) cmd.Bind(database, "lane", lane);
                 if (runId is { } id) cmd.Bind(database, "run_id", id);
+                if (excludeSubjects is { Count: > 0 }) { var n = 0; foreach (var subject in excludeSubjects) cmd.Bind(database, "skip" + n++, subject); }
                 if (maxRunningInLane is { } cap) cmd.Bind(database, "cap", (long)cap);
                 cmd.Bind(database, "take", 1L);
                 using var reader = cmd.ExecuteReader();
@@ -286,6 +291,19 @@ public sealed class ModuleWorkQueueStore(StateDatabase database, string service)
             while (reader.Read())
                 list.Add(new QueuedWork(Read(reader), reader.Time(12), reader.IsDBNull(13) ? null : reader.GetString(13), reader.NullableTime(14)));
             return (IReadOnlyList<QueuedWork>)list;
+        });
+
+    /// <summary>How many items each claimer holds (Claimed or Running), by the claimer's name: the group view's "running" count.</summary>
+    public IReadOnlyDictionary<string, int> HeldCounts() =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, $"SELECT claimed_by, COUNT(*) FROM {{table:work_item}} WHERE service = $service AND {Held} AND claimed_by IS NOT NULL GROUP BY claimed_by;");
+            cmd.Bind(database, "service", service);
+            using var reader = cmd.ExecuteReader();
+            var map = new Dictionary<string, int>(StringComparer.Ordinal);
+            while (reader.Read()) map[reader.GetString(0)] = Convert.ToInt32(reader.GetValue(1), System.Globalization.CultureInfo.InvariantCulture);
+            return (IReadOnlyDictionary<string, int>)map;
         });
 
     public int ReleaseClaimsForOwner(string owner) => Release("owner = $key", owner);

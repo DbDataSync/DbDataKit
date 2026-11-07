@@ -76,6 +76,7 @@ public static class RunnerServer
         app.UseManagementAuthentication(new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache()), refused => log($"A call was refused ({refused.Failure}): {refused.Detail}"));
         RunnerApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), instanceId);
         RunnerPublishApi.Map(app, new RunnerPublishing(state, settings.MaxArtifactBytes, settings.SignatureVerifier));
+        RunnerGroupApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>());
         return app;
     }
 }

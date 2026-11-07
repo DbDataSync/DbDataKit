@@ -7,6 +7,7 @@ using DbDataKit.State;
 using DbDataKit.Web.Trust;
 using DbDataRunner.Server;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DbDataRunner.Tests;
 
@@ -17,19 +18,24 @@ namespace DbDataRunner.Tests;
 public sealed class RunnerHarness : IAsyncDisposable
 {
     private readonly StateEngines _engines = new();
-    private readonly ConsoleIdentity _console = new("console-1", ConsoleSigningKey.Generate());
+    private readonly ConsoleIdentity _console;
     private readonly List<string> _log = [];
     private PairedServer? _paired;
     private HttpClient? _http;
     private WebApplication? _app;
+    private readonly bool _ownsDirectory;
 
-    public RunnerHarness(string engine, TimeSpan? tick = null, TimeSpan? grace = null, IReadOnlyList<string>? channels = null, long? maxArtifactBytes = null)
+    /// <param name="sharedState">The state of another harness: a second runner of the same group (or, on SQLite, a second server on the same file, which needs that harness's <paramref name="directory"/> too).</param>
+    public RunnerHarness(string engine, TimeSpan? tick = null, TimeSpan? grace = null, IReadOnlyList<string>? channels = null, StateSettings? sharedState = null, string? directory = null, long? maxArtifactBytes = null)
     {
         // a short path: the socket's directory is in it, and a Unix socket's path has a small limit
-        Directory = System.IO.Directory.CreateTempSubdirectory("dbdr-").FullName;
+        Directory = directory ?? System.IO.Directory.CreateTempSubdirectory("dbdr-").FullName;
+        _ownsDirectory = directory is null;
+        // runners of one group share their paired clients, so each harness is a console of its own
+        _console = new(sharedState is null ? "console-1" : "console-" + Guid.NewGuid().ToString("N")[..8], ConsoleSigningKey.Generate());
         Settings = new RunnerSettings(Directory, new Uri("https://127.0.0.1:0"))
         {
-            State = _engines.Provision(engine),
+            State = sharedState ?? _engines.Provision(engine),
             Tick = tick ?? TimeSpan.FromMilliseconds(100),
             CancellationGrace = grace ?? TimeSpan.FromSeconds(10),
             InstanceHeartbeat = TimeSpan.FromSeconds(1),
@@ -41,6 +47,9 @@ public sealed class RunnerHarness : IAsyncDisposable
     }
 
     public string Directory { get; }
+
+    /// <summary>The runner engine of the running server.</summary>
+    public RunnerEngine Engine => _app!.Services.GetRequiredService<RunnerEngine>();
 
     public RunnerSettings Settings { get; }
 
@@ -132,7 +141,8 @@ public sealed class RunnerHarness : IAsyncDisposable
         await StopAsync();
         _http?.Dispose();
         _engines.Dispose();
-        try { System.IO.Directory.Delete(Directory, recursive: true); }
+        if (_ownsDirectory)
+            try { System.IO.Directory.Delete(Directory, recursive: true); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* temp */ }
     }
 }

@@ -102,8 +102,8 @@ internal sealed class SchedulerHarness : IDisposable
     /// <summary>A second connection to the same database, on the same clock (a second loop instance).</summary>
     public StateDatabase OpenDatabase() => _location.Open([SchedulingModule.Module, RunnerModule.Module, RunsModule.Module], StateScope.Standalone, time: Clock);
 
-    public static PackageTask Def(string name, Schedule? schedule = null, TaskLimits? limits = null, bool allowOverlap = false) =>
-        new(name, new TaskEntry("T"), schedule ?? new Schedule(), [], [], [], ProgressDeclaration.Empty, limits ?? TaskLimits.None, [], [], allowOverlap);
+    public static PackageTask Def(string name, Schedule? schedule = null, TaskLimits? limits = null, bool allowOverlap = false, string[]? requires = null) =>
+        new(name, new TaskEntry("T"), schedule ?? new Schedule(), [], [], [], ProgressDeclaration.Empty, limits ?? TaskLimits.None, requires ?? [], [], allowOverlap);
 
     public static PackageManifest Manifest(string package, params PackageTask[] tasks) =>
         new(package, null, new PackageLaunch(LaunchKind.Assembly, Assembly: "x.dll"), new BuiltAgainst(null, null, null), tasks);
@@ -119,7 +119,7 @@ internal sealed class SchedulerHarness : IDisposable
     public void SeedHandled(string task, string package = Package, string channel = Channel) => Jobs.SaveHandled($"{package}/{channel}", task, Clock.GetUtcNow());
 
     public RunnerScheduler NewScheduler(
-        ITaskRunner runner, string? worker = null, StateDatabase? database = null, TimeSpan? heartbeat = null, int maxRuns = 4, double jitter = 0.5, TimeSpan? tick = null, string[]? channels = null) =>
+        ITaskRunner runner, string? worker = null, StateDatabase? database = null, TimeSpan? heartbeat = null, int maxRuns = 4, double jitter = 0.5, TimeSpan? tick = null, string[]? channels = null, Func<Guid?>? instance = null) =>
         new(database ?? Database, runner, Cache, Versions, new RunnerSchedulerOptions
         {
             Channels = channels ?? [Channel],
@@ -128,6 +128,7 @@ internal sealed class SchedulerHarness : IDisposable
             Tick = tick ?? TimeSpan.FromSeconds(5),
             MaxConcurrentRuns = maxRuns,
             Jitter = () => jitter,
+            Instance = instance,
         });
 
     public static async Task<TickReport> Tick(RunnerScheduler scheduler)
