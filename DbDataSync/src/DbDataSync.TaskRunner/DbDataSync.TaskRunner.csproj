@@ -11,6 +11,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <DbDataKitReference Include="Runner.Kit" />   <!-- the kit a drain is written against, and the protocol client it speaks; plan 28c, E03 -->
     <ProjectReference Include="..\DbDataSync.Core\DbDataSync.Core.csproj" />
     <ProjectReference Include="..\DbDataSync.Scripting\DbDataSync.Scripting.csproj" />
     <ProjectReference Include="..\DbDataSync.Drivers.Abstractions\DbDataSync.Drivers.Abstractions.csproj" />
@@ -33,6 +34,10 @@
     <Using Include="DbDataKit.Monitoring" />
     <Using Include="DbDataSync.State.StateDatabase" Alias="StateDatabase" />
     <ProjectReference Include="..\DbDataSync.Verification\DbDataSync.Verification.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DbDataSync.TaskRunner.Tests" />
   </ItemGroup>
 
   <PropertyGroup>

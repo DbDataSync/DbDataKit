@@ -19,6 +19,8 @@
          test projects" framing did not anticipate, found by actually running the full suite rather than
          assumed. -->
     <PackageReference Include="Microsoft.Data.SqlClient" />
+    <!-- the runner's own state (progress, runs, scheduling) on PostgreSQL, when DBDATA_TEST_POSTGRES is set -->
+    <PackageReference Include="Npgsql" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,6 +29,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\DbDataSync.TaskRunner\DbDataSync.TaskRunner.csproj" />
+    <!-- the runner a drain is run by in DrainOnTheRunnerTests (plan 28c, E03): its executor and the listener tasks speak to -->
+    <DbDataKitReference Include="Runner" />
+    <DbDataKitReference Include="Runner.Protocol.Server" />
     <Using Include="DbDataKit.State" />
     <Using Include="DbDataKit.Monitoring" />   <!-- plan 13, U04 -->
     <Using Include="DbDataSync.State.StateDatabase" Alias="StateDatabase" />
