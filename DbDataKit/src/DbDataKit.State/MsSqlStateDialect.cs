@@ -22,6 +22,11 @@ namespace DbDataKit.State;
 /// </summary>
 public sealed class MsSqlStateDialect : StateDialect
 {
+
+    // 1205: this statement was chosen as the deadlock victim and nothing of it was applied, so the whole action can run again (two readers and a writer on the same rows, as the inbox's take does)
+    public override bool ShouldRetry(Exception exception) =>
+        exception is System.Data.Common.DbException && exception.GetType().GetProperty("Number")?.GetValue(exception) is 1205;
+
     /// <summary>
     /// The longest key an index can cover. SQL Server's limit is 900 bytes for a clustered key and
     /// 1700 for a non-clustered one; at two bytes per character, 450 is the value that is safe for

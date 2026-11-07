@@ -84,3 +84,7 @@ What changes in the file, and what the page tells the person:
 
 `/api/auth`, `/api/invites` and `/api/users` are the shared sign-in controllers of `DbDataKit.Web` (the same ones Sync serves), `/health` and `/version` answer without signing in, and everything else under `/api` is closed
 to anyone who is not an administrator unless an endpoint says otherwise. The web app is the build of `@dbdatakit/console` in `wwwroot` beside the program; without it the console serves the API and says the app is not installed.
+
+## The state and the maintenance mode
+
+For the people signed in to the console: `GET /api/v1/state` (a viewer: the engine, the connection with secrets masked, each module's version in the registry against this binary, the migrations pending, where each setting came from) and `GET`/`POST /api/v1/state/maintenance` (an administrator puts the console into maintenance with `{"enabled": true, "reason": "..."}`: everything but the sign-in, the web app's files, the health endpoints and an administrator's own requests answers 503 with `Retry-After` and the reason, and `idle` says when what was in flight has finished). Every change and every refusal is in the audit as `state.maintenance`. Nothing is persisted: a restart leaves maintenance, which a move of the state needs anyway (`dbdatakit state move`). The same endpoints are on a paired server's management API; the shared component is `DbDataKit.State.Api`.

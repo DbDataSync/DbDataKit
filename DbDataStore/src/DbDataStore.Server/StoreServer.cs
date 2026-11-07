@@ -4,6 +4,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json.Nodes;
 using DbDataKit.Hosting;
 using DbDataKit.Hosting.Certificates;
+using DbDataKit.State.Api;
 using DbDataKit.Web.Trust;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -59,6 +60,10 @@ public static class StoreServer
         app.AnnounceToConsole("dbdatastore", instanceId, settings.Listen.Port, clients, files.Codes());
         app.MapKeyRotation(new KeyRotationService(instanceId, clients, new MemoryReplayCache()));
         app.UseManagementAuthentication(new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache()), refused => log($"A call was refused ({refused.Failure}): {refused.Detail}"));
+        // maintenance mode (plan 29b, C05): after the token check, so a request from an administrator is known, and before the product's own calls
+        var maintenance = new MaintenanceGate();
+        app.UseMaintenance(maintenance, context => context.ManagementTokenOrNull() is { } token && ManagementAuthorization.Authorize(token, ServerRole.Admin).Allowed);
+        app.MapState(StateApi(settings, instanceId, maintenance));
         app.UseScopedTokens();
         app.UsePublishedModels(settings.Directory);
         Map(app, instanceId);
@@ -66,6 +71,17 @@ public static class StoreServer
         StoreData.Map(app, settings.Directory, new StoreConnections(settings.Directory));
         return app;
     }
+
+    /// <summary>The state endpoints (<c>GET /api/v1/state</c>, the maintenance mode) over this server's state: the settings it was started with, the audit in a file beside <c>server.yaml</c> (the state has no audit module).</summary>
+    private static StateManagement StateApi(StoreSettings settings, string instanceId, IMaintenanceGate gate) => new(new StateManagementOptions(
+        StoreSettings.Product, StoreSettings.Product, "the server",
+        () =>
+        {
+            var resolved = StoreState.Resolve(settings.Directory);
+            return new DbDataKit.State.Cli.StateTarget(settings.State ?? resolved.Settings, Path.Combine(settings.Directory, StoreState.FileName), () => StoreState.Secrets(settings.Directory),
+                StoreState.SettingsFile(settings.Directory), settings.StateSources ?? resolved.Sources);
+        },
+        StoreState.Modules, StoreState.Scope, gate, new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), instanceId, Version));
 
     /// <summary>The management API so far: who the server is. Every call needs a token a paired console issued, and any role may ask.</summary>
     private static void Map(IEndpointRouteBuilder app, string instanceId)
