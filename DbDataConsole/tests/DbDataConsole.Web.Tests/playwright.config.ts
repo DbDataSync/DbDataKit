@@ -170,6 +170,37 @@ if (!isWorker) {
   fs.writeFileSync(path.join(scratchDirectory, 'monitor-proxy-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeProxy)![1])
 }
 
+// The connection inventory story (plan 28c, E23): a Build server hosting a project with a connection file (`connections/sqlserver.yaml`) and a plan scheduled once a day, and a Sync server the story gives a connection and a replication that uses it. Neither runs anything:
+// what is shown is what each reports about its connections and who uses them.
+export const inventoryBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-inventory-build'), port: 8497, project: 'ledger', plan: 'daily', connection: 'sqlserver' }
+export const inventorySync = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-inventory-sync'), port: 8498 }
+if (!isWorker) {
+  fs.rmSync(inventoryBuild.directory, { recursive: true, force: true })
+  fs.mkdirSync(inventoryBuild.directory, { recursive: true })
+  const project = path.join(os.tmpdir(), 'dbdatakit-console-e2e-inventory-project')
+  fs.rmSync(project, { recursive: true, force: true })
+  const write = (relative: string, text: string) => { const file = path.join(project, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text) }
+  const columns = 'grain: [event_id]\ncolumns:\n  - {name: event_id, type: BIGINT, nullable: false}\n  - {name: event_ts, type: TIMESTAMP, nullable: false}\n  - {name: amount, type: "DECIMAL(14, 2)"}\n'
+  write('dbdatabuild.yml', 'defaults: {connections: [sqlserver]}\nstring_semantics:\n  case: sensitive\n  trailing_space: ignored\n  collations:\n    default: { duckdb: NFC, sqlserver: Latin1_General_100_CS_AS }\n' +
+    `refresh:\n  plans:\n    ${inventoryBuild.plan}: { schedule: "0 3 * * *", time_zone: UTC }\n`)
+  write('models/staging/events.yml', 'name: staging.events\nkind: mapped\n' + columns)
+  write('models/marts/fct_events.yml', 'name: marts.fct_events\nkind: {incremental_by_time_range: {time_column: event_ts}}\n' + columns +
+    'loads:\n  incremental:\n    default: true\n    strategy: watermark_append\n    watermark: {column: event_ts, resolver: target_max, on_null: initial, initial: "2000-01-01 00:00:00"}\n' +
+    `refresh: { ${inventoryBuild.plan}: incremental }\n`)
+  write('models/marts/fct_events.sql', 'SELECT e.event_id, e.event_ts, e.amount FROM staging.events e\n')
+  // a project's connection is a file; it holds no address and no login
+  write(`connections/${inventoryBuild.connection}.yaml`, `schema: connection/1\nname: ${inventoryBuild.connection}\nengine: sqlserver\n`)
+  execFileSync('dotnet', ['exec', buildDll, 'project', 'compile', '--project', project], { stdio: 'ignore' })
+  execFileSync('dotnet', ['exec', buildDll, 'server', 'project', 'add', inventoryBuild.project, '--path', project, '--repo', inventoryBuild.directory], { stdio: 'ignore' })
+  const madeBuild = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', inventoryBuild.directory, '--max-role', 'viewer,author,operator,approver'], { encoding: 'utf8' })
+  fs.writeFileSync(path.join(scratchDirectory, 'inventory-build-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeBuild)![1])
+
+  fs.rmSync(inventorySync.directory, { recursive: true, force: true })
+  fs.mkdirSync(inventorySync.directory, { recursive: true })
+  const madeSync = execFileSync('dotnet', ['exec', syncDll, 'server', 'pair', '--repo', inventorySync.directory, '--max-role', 'admin'], { encoding: 'utf8' })
+  fs.writeFileSync(path.join(scratchDirectory, 'inventory-sync-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeSync)![1])
+}
+
 // A Build server for the authoring story (plan 13a, W07): it hosts no project, so the story makes one from a template. Its connection `origin` (added by the story to the project it makes) is a DuckDB file, which needs no engine:
 // the tables of the adventureworks template, seeded, with the login for it (the file's path) in the server's own store. The story imports some of them as mapped models.
 export const authoringBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-authoring-build'), port: 8493, origin: path.join(os.tmpdir(), 'dbdatakit-console-e2e-origin.duckdb') }
@@ -331,6 +362,25 @@ export default defineConfig({
       timeout: 60_000,
       stdout: 'pipe' as const,
       stderr: 'pipe' as const,
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(inventoryBuild.directory), '--listen', `https://localhost:${inventoryBuild.port}`].join(' '),
+      url: `https://localhost:${inventoryBuild.port}/health/live`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(syncDll), 'server', 'run', '--repo', JSON.stringify(inventorySync.directory), '--url', `https://localhost:${inventorySync.port}`].join(' '),
+      url: `https://localhost:${inventorySync.port}/api/health`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 90_000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
+      env: { Kestrel__Certificates__Default__Path: syncCertificate, Kestrel__Certificates__Default__Password: syncCertificatePassword },
     },
     {
       command: ['dotnet', 'exec', JSON.stringify(proxyDll), 'server', 'run',

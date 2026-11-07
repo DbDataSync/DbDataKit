@@ -10,6 +10,7 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\DbDataKit.Runner\DbDataKit.Runner.csproj" />
     <ProjectReference Include="..\DbDataKit.Web\DbDataKit.Web.csproj" />
+    <ProjectReference Include="..\DbDataKit.Connections.Abstractions\DbDataKit.Connections.Abstractions.csproj" />
     <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
     <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
   </ItemGroup>

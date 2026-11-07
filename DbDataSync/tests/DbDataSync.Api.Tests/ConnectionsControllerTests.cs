@@ -155,6 +155,66 @@ public sealed class ConnectionsControllerTests : IClassFixture<TestApiFactory>
         Assert.Equal(HttpStatusCode.NotFound, getResponse.StatusCode);
     }
 
+    // ---- the connection inventory (plan 28c, E23) ----
+
+    private async Task<string> ReplicationUsingAsync(string connection)
+    {
+        var replication = $"repl-{Guid.NewGuid():N}";
+        (await _client.PutAsJsonAsync($"/api/replications/{replication}", new ReplicationTaskConfig
+        {
+            Name = replication,
+            Enabled = false,
+            Scheduling = new SchedulingConfig { Mode = ScheduleMode.Continuous, FrequencySeconds = 30 },
+            Endpoints = new TaskEndpoints { Source = new EndpointRef { ConnectionName = connection } },
+            ChangeProcessing = new ChangeProcessingConfig
+            {
+                Reader = new ReaderConfig { Kind = "MsSqlChangeTracking" },
+                Cache = new CacheConfig { Kind = "MsSqlStagingTable" },
+                Writer = new WriterConfig { Kind = "MsSqlMerge" },
+            },
+        }, JsonOptions)).EnsureSuccessStatusCode();
+        return replication;
+    }
+
+    [Fact]
+    public async Task Inventory_ReportsTheConnectionWithItsUsers_AndNoSecret()
+    {
+        var name = $"conn-{Guid.NewGuid():N}";
+        await _client.PutAsJsonAsync($"/api/connections/{name}", MakeInput(name), JsonOptions);
+        var replication = await ReplicationUsingAsync(name);
+
+        var response = await _client.GetAsync("/api/v1/connections");
+        response.EnsureSuccessStatusCode();
+        var text = await response.Content.ReadAsStringAsync();
+        var row = JsonDocument.Parse(text).RootElement.GetProperty("connections").EnumerateArray().Single(c => c.GetProperty("name").GetString() == name);
+
+        Assert.Equal("sql01:1433", row.GetProperty("host").GetString());
+        Assert.Equal("App", row.GetProperty("database").GetString());
+        Assert.StartsWith("secret:", row.GetProperty("secret_ref").GetString());
+        var users = row.GetProperty("used_by").EnumerateArray().Select(u => (u.GetProperty("process").GetString(), u.GetProperty("name").GetString(), u.GetProperty("role").GetString())).ToList();
+        Assert.Contains(("server", "this server", "read"), users);
+        Assert.Contains(("replication", replication, "run"), users);
+        Assert.DoesNotContain("sup3r-s3cr3t", text);
+    }
+
+    [Fact]
+    public async Task Delete_OfAConnectionAReplicationUses_IsRefusedNamingTheReplication()
+    {
+        var name = $"conn-{Guid.NewGuid():N}";
+        await _client.PutAsJsonAsync($"/api/connections/{name}", MakeInput(name), JsonOptions);
+        var replication = await ReplicationUsingAsync(name);
+
+        var refused = await _client.DeleteAsync($"/api/connections/{name}");
+
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Contains($"replication {replication}", await refused.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.OK, (await _client.GetAsync($"/api/connections/{name}")).StatusCode);
+
+        // once the replication is gone the connection can go
+        Assert.Equal(HttpStatusCode.NoContent, (await _client.DeleteAsync($"/api/replications/{replication}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await _client.DeleteAsync($"/api/connections/{name}")).StatusCode);
+    }
+
     // ---- the connection as a file (plan 13, E05: the console copies a connection to another server) ----
 
     private static string FileText(string name, string? secret = null) =>
