@@ -118,6 +118,8 @@ public sealed class PackageActivator
         if (head?.Staged is not { } staged)
             return new ActivationOutcome(ActivationState.NothingStaged, head?.Active, [], [], $"The integration '{name}' has nothing staged in channel '{channel}'.");
 
+        if (request.ExpectedVersion is { } expected && expected != (head.Active ?? 0))
+            throw new DefinitionConflictException($"The {Kind} '{name}' has version {head.Active ?? 0} active, not {expected}: it changed since you looked. Read it again and decide.", expected, head.Active ?? 0);
         var next = Load(name, staged);
         var previous = head.Active is { } active ? Load(name, active) : null;
         var plans = Plans(previous, next);

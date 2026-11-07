@@ -139,8 +139,8 @@ public sealed class RunnerEngine(RunnerSettings settings, StateDatabase state, I
 
         // staging (plan 28a R17): every staged version of a package is prepared here and reported; whichever instance sees every live one ready activates it (R18: after the runs in flight, with the progress migration)
         var activator = new PackageActivator(state, publisher, new ActivationOptions { MaxWait = settings.ActivationMaxWait, Service = RunnerState.EngineService, Logger = _log });
-        var follower = new StagingFollower(state, publisher, cache, activator, new StagingOptions { Instance = () => _instance, Lease = settings.InstanceLease, Poll = settings.Tick, Contracts = RunnerContracts.Check, Logger = _log });
-        _staging = Task.Run(() => follower.RunAsync(_stopping.Token));
+        var follower = new StagingFollower(state, publisher, cache, activator, new StagingOptions { Instance = () => _instance, Lease = settings.InstanceLease, Poll = settings.Tick, Contracts = settings.StagingContracts ?? RunnerContracts.Check, Logger = _log });
+        if (settings.Staging) _staging = Task.Run(() => follower.RunAsync(_stopping.Token));
         _log.LogInformation("Runner {Instance} serving the channels {Channels} (task host {TaskHost}).", _instance, string.Join(", ", settings.Channels), TaskHostPath);
     }
 

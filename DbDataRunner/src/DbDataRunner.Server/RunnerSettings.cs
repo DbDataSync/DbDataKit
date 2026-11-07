@@ -42,6 +42,12 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
     /// <summary>The size cap of one file uploaded through the publish API.</summary>
     public long MaxArtifactBytes { get; init; } = RunnerPublishing.DefaultMaxArtifactBytes;
 
+    /// <summary>Whether this runner prepares staged versions and activates them when every live runner is ready (plan 28a R17). On; a test of the manual publish API or a diagnosis turns it off.</summary>
+    public bool Staging { get; init; } = true;
+
+    /// <summary>What staging says of the contracts a package was built against (null: <see cref="RunnerContracts.Check"/>). Lets this instance judge them as an older runner of a mixed group would, which a test uses.</summary>
+    public Func<DbDataKit.Runner.BuiltAgainst, string?>? StagingContracts { get; init; }
+
     /// <summary>The longest an activation waits for the runs of a package in flight (plan 28a R18): ten minutes by default.</summary>
     public TimeSpan ActivationMaxWait { get; init; } = TimeSpan.FromMinutes(10);
 
