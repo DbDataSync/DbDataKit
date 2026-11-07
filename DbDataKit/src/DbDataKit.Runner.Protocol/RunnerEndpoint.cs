@@ -81,7 +81,7 @@ public sealed record RunnerEndpoint(RunnerEndpointKind Kind, string Address)
                     try
                     {
                         await socket.ConnectAsync(new UnixDomainSocketEndPoint(endpoint.Address), cancellationToken).ConfigureAwait(false);
-                        return new NetworkStream(socket, ownsSocket: true);
+                        return new CountingStream(new NetworkStream(socket, ownsSocket: true));
                     }
                     catch
                     {
@@ -94,7 +94,7 @@ public sealed record RunnerEndpoint(RunnerEndpointKind Kind, string Address)
                 try
                 {
                     await pipe.ConnectAsync(cancellationToken).ConfigureAwait(false);
-                    return pipe;
+                    return new CountingStream(pipe);
                 }
                 catch
                 {
@@ -111,4 +111,82 @@ public sealed record RunnerEndpoint(RunnerEndpointKind Kind, string Address)
             MaxSendMessageSize = 64 * 1024 * 1024,
         });
     }
+}
+
+/// <summary>
+/// What this process has sent to and received from runners over the local socket, in bytes of the connection (HTTP/2 framing included): the measure of plan 28c ED5, that rows never go through the runner. Counted in
+/// the client, so a task process can say what its own run cost; a process with several channels counts them all.
+/// </summary>
+public static class RunnerSocketTraffic
+{
+    private static long _sent;
+    private static long _received;
+
+    public static long BytesSent => Interlocked.Read(ref _sent);
+
+    public static long BytesReceived => Interlocked.Read(ref _received);
+
+    internal static void Sent(long n) => Interlocked.Add(ref _sent, n);
+
+    internal static void Received(long n) => Interlocked.Add(ref _received, n);
+}
+
+/// <summary>A stream that adds what passes through it to <see cref="RunnerSocketTraffic"/>.</summary>
+internal sealed class CountingStream(Stream inner) : Stream
+{
+    public override bool CanRead => inner.CanRead;
+
+    public override bool CanSeek => false;
+
+    public override bool CanWrite => inner.CanWrite;
+
+    public override long Length => throw new NotSupportedException();
+
+    public override long Position
+    {
+        get => throw new NotSupportedException();
+        set => throw new NotSupportedException();
+    }
+
+    public override void Flush() => inner.Flush();
+
+    public override Task FlushAsync(CancellationToken cancellationToken) => inner.FlushAsync(cancellationToken);
+
+    public override int Read(byte[] buffer, int offset, int count)
+    {
+        var n = inner.Read(buffer, offset, count);
+        RunnerSocketTraffic.Received(n);
+        return n;
+    }
+
+    public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+    {
+        var n = await inner.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+        RunnerSocketTraffic.Received(n);
+        return n;
+    }
+
+    public override void Write(byte[] buffer, int offset, int count)
+    {
+        inner.Write(buffer, offset, count);
+        RunnerSocketTraffic.Sent(count);
+    }
+
+    public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+    {
+        await inner.WriteAsync(buffer, cancellationToken).ConfigureAwait(false);
+        RunnerSocketTraffic.Sent(buffer.Length);
+    }
+
+    public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+    public override void SetLength(long value) => throw new NotSupportedException();
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) inner.Dispose();
+        base.Dispose(disposing);
+    }
+
+    public override ValueTask DisposeAsync() => inner.DisposeAsync();
 }

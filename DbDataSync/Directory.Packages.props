@@ -8,6 +8,7 @@
     <PackageVersion Include="DbDataKit.Hosting.Certificates.Windows" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Hosting.Cli" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Hosting.Systemd" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Runner.Kit" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Scheduling" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.State" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Web" Version="$(DbDataKitVersion)" />
