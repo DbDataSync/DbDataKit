@@ -89,7 +89,7 @@ None blocks R01 to R15. Each has a default; answer when convenient.
 
 | Milestone | Slices | What it gives |
 | --- | --- | --- |
-| **R-A: the model** | R01 to R04 | the manifest, the task model, the protocol, the `runner` module: nothing runs yet, but Q20's remainder is unblocked |
+| **R-A: the model** | R01 to R04, R03s, R03a to R03c | the manifest, the task model, the protocol, the `runner` module: nothing runs yet, but Q20's remainder is unblocked |
 | **R-B: running a task** | R05 to R10 | one runner runs a published task in a process with limits, retries and progress; `dbdatarunner` exists |
 | **R-C: a group** | R11 to R14 | several runners share a database; leases, labels, capabilities, triggers; Q21 and Q22 can start on the library parts |
 | **R-D: published to** | R15 to R19 | plan 30's publishing for the `integration` kind; staging with the progress migration dry run; the console shows runners |
