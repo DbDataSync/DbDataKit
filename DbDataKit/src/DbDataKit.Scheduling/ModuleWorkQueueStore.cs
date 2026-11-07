@@ -187,6 +187,107 @@ public sealed class ModuleWorkQueueStore(StateDatabase database, string service)
             cmd.ExecuteNonQuery();
         });
 
+    /// <summary>
+    /// Marks an item Running, only while <paramref name="workerId"/> still holds it. False when the lease was lost (it ran out and the item went back to Pending or to another worker): the caller must not run the item.
+    /// </summary>
+    public bool TryMarkRunning(long id, string workerId) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, $"UPDATE {{table:work_item}} SET status = 'Running' WHERE id = $id AND claimed_by = $worker AND {Held};");
+            cmd.Bind(database, "id", id).Bind(database, "worker", workerId);
+            return cmd.ExecuteNonQuery() == 1;
+        });
+
+    /// <summary>
+    /// Finishes an item (<see cref="WorkItemStatus.Done"/>, <see cref="WorkItemStatus.Failed"/> or <see cref="WorkItemStatus.Cancelled"/>), only while <paramref name="workerId"/> still holds its lease. False when it does not: a worker whose lease
+    /// ran out and whose item another worker took cannot finish it late (plan 28a R09). <see cref="MarkDone"/> and <see cref="MarkFailed"/> do not check.
+    /// </summary>
+    public bool TryFinish(long id, string workerId, WorkItemStatus status)
+    {
+        if (status is not (WorkItemStatus.Done or WorkItemStatus.Failed or WorkItemStatus.Cancelled))
+            throw new ArgumentOutOfRangeException(nameof(status), status, "An item is finished as Done, Failed or Cancelled.");
+        return database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, $"UPDATE {{table:work_item}} SET status = $status, lease_expires_at = NULL WHERE id = $id AND claimed_by = $worker AND {Held};");
+            cmd.Bind(database, "status", status.ToString()).Bind(database, "id", id).Bind(database, "worker", workerId);
+            return cmd.ExecuteNonQuery() == 1;
+        });
+    }
+
+    /// <summary>Gives a claimed item back (Pending, no claim), only while <paramref name="workerId"/> holds it. False when it does not.</summary>
+    public bool TryRelease(long id, string workerId) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, $"UPDATE {{table:work_item}} SET status = 'Pending', claimed_at = NULL, claimed_by = NULL, lease_expires_at = NULL WHERE id = $id AND claimed_by = $worker AND {Held};");
+            cmd.Bind(database, "id", id).Bind(database, "worker", workerId);
+            return cmd.ExecuteNonQuery() == 1;
+        });
+
+    /// <summary>Gives back every item <paramref name="workerId"/> holds (a worker that stops). The count.</summary>
+    public int ReleaseClaimsBy(string workerId) => Release("claimed_by = $key", workerId);
+
+    /// <summary>
+    /// Puts a claimed item back as Pending for another try (plan 28a DR8): the same row, so the same owner, kind, subject and part, with a <b>new run id</b> (the retry is a run of its own), not claimable before
+    /// <paramref name="availableAt"/>, and with <paramref name="payloadJson"/> (the attempt number and what else the caller carries). Only while <paramref name="workerId"/> still holds the item; returns the new run id, or null when
+    /// it does not.
+    /// </summary>
+    public Guid? Reschedule(long id, string workerId, DateTimeOffset availableAt, string? payloadJson) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            var runId = database.NewId();
+            using var cmd = database.Command(Module, connection, $"""
+                UPDATE {{table:work_item}} SET status = 'Pending', run_id = $run_id, available_at = $available, payload = $payload, claimed_at = NULL, claimed_by = NULL, lease_expires_at = NULL, cancel_requested_at = NULL
+                WHERE id = $id AND claimed_by = $worker AND {Held};
+                """);
+            cmd.Bind(database, "run_id", runId).Bind(database, "available", availableAt).Bind(database, "payload", payloadJson, System.Data.DbType.String).Bind(database, "id", id).Bind(database, "worker", workerId);
+            return cmd.ExecuteNonQuery() == 1 ? runId : (Guid?)null;
+        });
+
+    /// <summary>
+    /// Gives a claimed item a new run id and payload without releasing it: for an item another worker's run left a record under (its lease ran out), so the new run has a record of its own. Only while
+    /// <paramref name="workerId"/> holds the item; returns the new run id, or null.
+    /// </summary>
+    public Guid? Restart(long id, string workerId, string? payloadJson) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            var runId = database.NewId();
+            using var cmd = database.Command(Module, connection, $"UPDATE {{table:work_item}} SET run_id = $run_id, payload = $payload WHERE id = $id AND claimed_by = $worker AND {Held};");
+            cmd.Bind(database, "run_id", runId).Bind(database, "payload", payloadJson, System.Data.DbType.String).Bind(database, "id", id).Bind(database, "worker", workerId);
+            return cmd.ExecuteNonQuery() == 1 ? runId : (Guid?)null;
+        });
+
+    /// <summary>Replaces the payload of an item <paramref name="workerId"/> holds (what the holder learned about the work: it started, on which version). False when the lease was lost.</summary>
+    public bool TrySetPayload(long id, string workerId, string? payloadJson) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, $"UPDATE {{table:work_item}} SET payload = $payload WHERE id = $id AND claimed_by = $worker AND {Held};");
+            cmd.Bind(database, "payload", payloadJson, System.Data.DbType.String).Bind(database, "id", id).Bind(database, "worker", workerId);
+            return cmd.ExecuteNonQuery() == 1;
+        });
+
+    /// <summary>The unfinished items (Pending, Claimed, Running) of an owner, oldest first: what is waiting, when it may start, and who holds it.</summary>
+    public IReadOnlyList<QueuedWork> InFlight(string owner) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, $$"""
+                SELECT id, service, owner, kind, subject, part, resource, lane, run_id, status, priority, payload, available_at, claimed_by, lease_expires_at
+                FROM {table:work_item} WHERE service = $service AND owner = $owner AND {{InFlight}} ORDER BY enqueued_at ASC, id ASC;
+                """);
+            cmd.Bind(database, "service", service).Bind(database, "owner", owner);
+            using var reader = cmd.ExecuteReader();
+            var list = new List<QueuedWork>();
+            while (reader.Read())
+                list.Add(new QueuedWork(Read(reader), reader.Time(12), reader.IsDBNull(13) ? null : reader.GetString(13), reader.NullableTime(14)));
+            return (IReadOnlyList<QueuedWork>)list;
+        });
+
     public int ReleaseClaimsForOwner(string owner) => Release("owner = $key", owner);
 
     public int ReleaseClaimsForRun(Guid runId) => Release("run_id = $key", runId);

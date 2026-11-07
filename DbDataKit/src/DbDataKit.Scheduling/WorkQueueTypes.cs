@@ -28,6 +28,13 @@ public sealed record WorkItem(
     long Id, string Service, string Owner, string Kind, string Subject, string Part, string Resource, string Lane,
     Guid RunId, WorkItemStatus Status, int Priority, string? PayloadJson);
 
+/// <summary>An unfinished item with what a status view needs: when it may be claimed and who holds it.</summary>
+/// <param name="Item">The item.</param>
+/// <param name="AvailableAt">Not claimable before this time (a retry waits here).</param>
+/// <param name="ClaimedBy">The worker that holds it, or null.</param>
+/// <param name="LeaseExpiresAt">When the holder's lease runs out, or null.</param>
+public sealed record QueuedWork(WorkItem Item, DateTimeOffset AvailableAt, string? ClaimedBy, DateTimeOffset? LeaseExpiresAt);
+
 /// <summary>An enqueue that must not join other work found some already in flight for the same owner, kind, subject and part.</summary>
 public sealed class WorkQueueCollisionException(string owner, string kind, string subject, string part)
     : InvalidOperationException($"'{kind}' for '{owner}' / '{subject}'{(part.Length == 0 ? "" : $" / '{part}'")} is already queued or running.")
