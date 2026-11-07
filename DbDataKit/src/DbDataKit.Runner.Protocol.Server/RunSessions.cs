@@ -31,7 +31,8 @@ public sealed record RunTelemetry(
     bool Ended,
     string? CancelReason,
     ChunkStats Uploaded,
-    ChunkStats Downloaded);
+    ChunkStats Downloaded,
+    TaskEnd? End = null);
 
 /// <summary>How many chunks a stream carried and the largest one (plan 28b: a stream holds one chunk of at most 1 MiB at a time).</summary>
 public sealed record ChunkStats(long Chunks, long Bytes, int LargestChunk);
@@ -86,6 +87,11 @@ internal sealed class RunSession
     public bool Started => _info is not null;
 
     public bool Ended { get; private set; }
+
+    /// <summary>The end the task sent (<c>End</c>, or <c>Advance</c> that applied with an outcome); null while it has sent none.</summary>
+    public TaskEnd? EndMessage { get; private set; }
+
+    public void RecordEnd(TaskEnd end) => EndMessage = end;
 
     public DateTimeOffset? LastHeartbeat { get; set; }
 
@@ -157,7 +163,7 @@ internal sealed class RunSession
     {
         lock (_gate)
             return new RunTelemetry(new Dictionary<string, long>(_counts, StringComparer.Ordinal), _status, [.. _lineage], new Dictionary<string, IReadOnlyDictionary<string, long>>(_unitCounts, StringComparer.Ordinal),
-                LastHeartbeat, Started, Ended, CancelReason, new ChunkStats(_upChunks, _upBytes, _upLargest), new ChunkStats(_downChunks, _downBytes, _downLargest));
+                LastHeartbeat, Started, Ended, CancelReason, new ChunkStats(_upChunks, _upBytes, _upLargest), new ChunkStats(_downChunks, _downBytes, _downLargest), EndMessage);
     }
 }
 
