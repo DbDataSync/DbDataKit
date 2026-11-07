@@ -104,7 +104,9 @@ public sealed class PostgresStateDialect : StateDialect
         cmd.ExecuteNonQuery();
     }
 
-    public override string? CreateSchema(string schema) => $"CREATE SCHEMA IF NOT EXISTS {schema};";
+    /// <summary>Only when the schema is missing: <c>CREATE SCHEMA IF NOT EXISTS</c> asks for the database-level right even when the schema is there, which would make every upgrade need it.</summary>
+    public override string? CreateSchema(string schema) =>
+        $"DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = '{schema}') THEN CREATE SCHEMA {schema}; END IF; END $$;";
 
     public override bool TableExists(DbConnection connection, string qualifiedName)
     {

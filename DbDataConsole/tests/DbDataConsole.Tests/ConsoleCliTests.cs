@@ -34,6 +34,25 @@ public sealed class ConsoleCliTests : IDisposable
     }
 
     [Fact]
+    public async Task State_grants_prints_the_statements_a_login_needs_for_the_consoles_modules_and_only_for_servers()
+    {
+        var runtime = await Run("state", "grants", "--login", "console_svc", "--engine", "postgres");
+        Assert.Equal(0, runtime.Exit);
+        Assert.Contains("GRANT USAGE ON SCHEMA dbdatakit_identity TO console_svc;", runtime.Out);
+        Assert.Contains("GRANT USAGE ON SCHEMA dbdatakit_notifications TO console_svc;", runtime.Out);
+        Assert.DoesNotContain("CREATE", runtime.Out);
+        Assert.DoesNotContain("dbdatakit_definitions", runtime.Out);   // a module the console does not use
+
+        var migrate = await Run("state", "grants", "--login", "console_admin", "--engine", "mssql", "--migrate");
+        Assert.Equal(0, migrate.Exit);
+        Assert.Contains("GRANT CREATE TABLE, CREATE SCHEMA TO [console_admin];", migrate.Out);
+
+        Assert.Equal(2, (await Run("state", "grants", "--login", "x; DROP TABLE y", "--engine", "postgres")).Exit);
+        Assert.Equal(2, (await Run("state", "grants", "--engine", "postgres")).Exit);
+        Assert.Equal(2, (await Run("state", "grants", "--login", "svc")).Exit);   // SQLite: nothing to grant
+    }
+
+    [Fact]
     public async Task A_wrong_start_is_refused_with_the_usage_exit_code()
     {
         Assert.Equal(2, (await Run("server", "run", "--repo", directory, "--listen", "http://localhost:1")).Exit);
