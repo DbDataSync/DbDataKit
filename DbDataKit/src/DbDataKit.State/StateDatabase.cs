@@ -110,6 +110,17 @@ public partial class StateDatabase
         _migrate = true;
     }
 
+    /// <summary>
+    /// What the registry says this database holds: each module (with its scope, <c>install</c> or a group's or service's name) and how many migrations are applied. Empty when the registry does not exist (an empty
+    /// or foreign database). Reads only; works on a database opened for import.
+    /// </summary>
+    public IReadOnlyList<StateRegisteredModule> RegisteredModules()
+    {
+        if (Layout is null) throw new InvalidOperationException("Only a database built from modules has a registry.");
+        using var connection = OpenRawConnection();
+        return [.. StateMigrator.RegisteredModules(connection, this, Layout).Select(r => new StateRegisteredModule(r.Module, r.Scope, r.Version))];
+    }
+
     internal string AppliedBy => _appliedBy;
 
     private static string DefaultAppliedBy()
@@ -352,3 +363,6 @@ public static class StateCommandExtensions
         return command;
     }
 }
+
+/// <summary>A registry row: <paramref name="Scope"/> is <c>install</c> or the name of the group or service the module is kept for.</summary>
+public sealed record StateRegisteredModule(string Module, string Scope, int Version);

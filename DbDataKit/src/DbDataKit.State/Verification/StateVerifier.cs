@@ -20,11 +20,18 @@ public sealed record VerifyOptions
     /// </summary>
     public bool RehashPayloads { get; init; }
 
+    /// <summary>
+    /// Compare times truncated to this many ticks on a database side (10 is a microsecond, what PostgreSQL stores; 0, the default, compares them whole). After a move between engines a time with a seventh
+    /// digit was stored without it, so two databases compare equal only at the coarser precision. A manifest's digests are fixed by the exporting engine and are not affected.
+    /// </summary>
+    public int TimeTicks { get; init; }
+
     internal void Validate()
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(BatchSize, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(BlobBatchSize, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(KeysPerDifference, 0);
+        ArgumentOutOfRangeException.ThrowIfLessThan(TimeTicks, 0);
     }
 }
 

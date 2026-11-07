@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using DbDataKit.Monitoring;
+using DbDataKit.State.Engines.Snapshots;
 using DbDataKit.State.Snapshots;
 
 namespace DbDataKit.State.Tests;
@@ -577,12 +578,14 @@ public sealed class StateSnapshotImporterTests : IDisposable
         var directory = NewDirectory();
         var exported = await Export(source, directory, AllModules);
 
-        ISnapshotBulkLoader loader = engine == StateEngineIds.Postgres ? new PostgresCopyLoader() : new SqlServerBulkCopyLoader();
+        var loader = SnapshotBulkLoaders.For(engine)!;
+        var statistics = (IBulkLoadStatistics)loader;
         var target = OpenTarget(engine, AllModules);
         var result = await Import(directory, target, AllModules, new ImportOptions { BulkLoader = loader, BatchRows = 30 });
 
         Assert.Equal(exported.Rows, result.Rows);
-        Assert.True((loader as PostgresCopyLoader)?.Batches > 10 || (loader as SqlServerBulkCopyLoader)?.Batches > 10, "the loader was used for the tables");
+        Assert.True(statistics.Batches > 10, "the loader was used for the tables");
+        Assert.True(statistics.Rows > 0);
         await AssertSameAsManifest(target, exported.Manifest);
         using var reader = new PayloadStore(target, chunkSize: 1024).OpenRead(body);
         reader.CopyTo(Stream.Null);
