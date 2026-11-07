@@ -72,13 +72,21 @@ Test engines:
 
 ## Making changes
 
-- Plan 13a splits the standardization into slices, each with a "Done when" test. One slice, one branch `suite/<id>-<short-name>`, one
-  pull request; set the slice's status in `docs/plans/13a-suite-slices.md` in the same change. If a slice turns out wrong, change the
-  plan in that pull request and say so.
+Work goes in **batches**: one integration branch, one pull request, one CI run, a linear history. Parallel work (subagents) is welcome; what is not
+welcome is a branch and a pull request per task, each running into the same CI problems on its own.
+
+- A batch is one branch `suite/batch-<n>` from `main`, pushed once or a few times, one pull request. Each slice (a row of plan 13a, 28a, 28c, 26 and so on)
+  is **one commit** on it whose message starts with the slice id (`E04: ...`); set the slice's status in its plan in that same commit. If a slice turns out
+  wrong, change the plan in the batch and say so.
+- Subagents work in their own local worktrees and **do not push and do not open pull requests**. They commit on a local branch and report it. The
+  coordinator brings each slice into the batch with `git merge --squash` (one commit per slice, no merge commits), resolves the overlaps once, builds and
+  tests the combination, and only then pushes the batch. A fix to a CI problem that more than one slice meets goes into the batch at once (and into
+  `docs/ci-lessons.md`), and slices still being built pick it up by merging the batch branch into their worktree.
+- `main` stays linear: the batch pull request is merged with "Rebase and merge" (or squashed when it is a single slice), never with a merge commit.
+- Before anything is pushed, read `docs/ci-lessons.md` and run its "before you push" list: the CI problems already found and fixed are written there with
+  how to recognise them. A new CI problem and its fix are added to that file in the same commit that fixes it.
 - A clean break is allowed, but never a silent one: a changed file format fails with a message naming the file, and a test says so.
-- Commit and push often. Large suites run in CI on the pull request.
-- Branches (keep the remote clean): a branch exists to carry one pull request. Push a branch only when you will open its pull request, name it
-  `suite/<id>-<short-name>` (or `fix/<short-name>`), and do not push experiments, scratch copies, "draft" or "wip" branches, or a second branch for the
-  same change. The workflow `delete-merged-branch.yml` deletes a pull request's branch when it merges. A branch whose work you abandon is deleted by
-  whoever abandoned it, in the same session. A subagent that is not asked for a pull request reports its work and pushes one branch at most; it never
-  leaves a branch behind for someone to find. Bring a branch up to date by merging `main` into it, not by copying it to a new name.
+- Branches: do not push experiments, scratch copies, "draft" or "wip" branches, or one branch per task. The workflow `delete-merged-branch.yml` deletes a
+  pull request's branch when it merges; a branch whose work is abandoned is deleted by whoever abandoned it, in the same session. Sessions cannot delete
+  remote branches themselves: the list `scripts/branches-to-delete.txt` and the workflow `delete-listed-branches.yml` (see `docs/branch-cleanup.md`) do it.
+  Bring a branch up to date by merging `main` into it, not by copying it to a new name.

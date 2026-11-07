@@ -1,0 +1,33 @@
+# Deletes the remote branches named in scripts/branches-to-delete.txt, with the repository's own token, for sessions (and people) who cannot delete branches
+# themselves. Intent and history: docs/branch-cleanup.md. Run it by hand from the Actions tab: the dry run (the default) only lists what it would delete.
+# The script refuses the default branch, a branch with an open pull request, and a branch that is not there any more.
+name: Delete listed branches
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'true: only list what would be deleted; false: delete'
+        type: choice
+        options: ['true', 'false']
+        default: 'true'
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  delete:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Delete the listed branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = "false" ]; then
+            python3 -I scripts/delete_branches.py --apply
+          else
+            python3 -I scripts/delete_branches.py
+          fi
