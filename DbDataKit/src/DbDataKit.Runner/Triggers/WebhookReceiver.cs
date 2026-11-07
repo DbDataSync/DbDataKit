@@ -44,7 +44,11 @@ public sealed class WebhookReceiver(StateDatabase database, TriggerEngine? engin
         return tasks;
     }
 
-    public async Task<WebhookReceipt> ReceiveAsync(string package, string channel, string source, bool signatureOk, ReadOnlyMemory<byte> body, CancellationToken ct = default)
+    public Task<WebhookReceipt> ReceiveAsync(string package, string channel, string source, bool signatureOk, ReadOnlyMemory<byte> body, CancellationToken ct = default) =>
+        ReceiveAsync(package, channel, source, _ => signatureOk, body, ct);
+
+    /// <summary>The same where the signature is judged per task (each task's trigger may name its own secret).</summary>
+    public async Task<WebhookReceipt> ReceiveAsync(string package, string channel, string source, Func<TaskRef, bool> signatureOkFor, ReadOnlyMemory<byte> body, CancellationToken ct = default)
     {
         if (TaskRef.Problem(package, channel, "task") is { } problem) throw new ArgumentException(problem);
         ArgumentException.ThrowIfNullOrWhiteSpace(source);
@@ -62,6 +66,7 @@ public sealed class WebhookReceiver(StateDatabase database, TriggerEngine? engin
             }
 
             var progress = new ProgressStore(database, new ProgressKey(task.Package, task.Channel, task.Task));
+            var signatureOk = signatureOkFor(task);
             progress.Receive(source, signatureOk, id, payloadId);
             var queued = false;
             if (signatureOk) queued = engine?.TriggerWebhook(task) ?? false;

@@ -30,6 +30,9 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
     /// <summary>The state database's engine and connection; SQLite by default.</summary>
     public StateSettings State { get; init; } = new();
 
+    /// <summary>Where the secrets a manifest names are looked up (a webhook trigger's <c>secret</c>); null: the environment (<c>DBDATA_SECRET_&lt;NAME&gt;</c>).</summary>
+    public DbDataKit.Secrets.ISecretResolver? Secrets { get; init; }
+
     /// <summary>The channels whose tasks this runner schedules.</summary>
     public IReadOnlyList<string> Channels { get; init; } = DefaultChannels;
 

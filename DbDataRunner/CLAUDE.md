@@ -10,6 +10,7 @@ of it too (plan 28 section 6a): keep the engine there and only the host here. Do
 | `RunnerServer.cs` | the web host: Kestrel, pairing, the token check, the management API, the engine as a hosted service |
 | `RunnerApi.cs` | the management API (`/api/v1/status`, `/runs`, `/tasks/.../run|pause|resume`) and its roles |
 | `RunnerEngine.cs` | the hosted service: task host, protocol socket, executor, scheduler, instance registration and heartbeat, graceful stop |
+| `RunnerWebhooks.cs` | `POST /api/v1/webhooks/{package}/{channel}/{source}`: a trusted client or an HMAC signature, the body into the inbox, audited without the body |
 | `RunnerControl.cs` | run now, pause, resume and their audit, shared by the API and the command line |
 | `RunnerPackages.cs` | the `integration` kind and `package install` (the development stand-in for plan 30's publish API) |
 | `RunnerState.cs`, `RunnerSettings.cs` | the modules the state is built from and how it is opened; the directory, the listen address, the channels |

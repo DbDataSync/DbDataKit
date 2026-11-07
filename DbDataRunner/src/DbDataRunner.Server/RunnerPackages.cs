@@ -88,6 +88,11 @@ public static class RunnerPackages
             bytes += size;
         }
 
+        // a trigger loop across the packages of the channel is refused before anything is published, naming the loop (plan 28a R13)
+        var rows = ProjectionDocuments.RowsOf(manifest, "0");
+        try { ProjectionDocuments.RequireNoCycle(new TaskProjections(state).ListByChannel(channel), manifest.Name, channel, rows); }
+        catch (TriggerCycleException ex) { throw new PackageInstallException(ex.Message); }
+
         PublishResult published;
         try
         {
