@@ -147,7 +147,7 @@ public static partial class StateConventions
     }
 
     /// <summary>The comma-separated items of a parenthesised list that starts at <paramref name="start"/> (just after the opening parenthesis), up to its matching close.</summary>
-    private static IEnumerable<string> TopLevelItems(string text, int start)
+    internal static IEnumerable<string> TopLevelItems(string text, int start)
     {
         var depth = 1;
         var inString = false;
@@ -180,7 +180,7 @@ public static partial class StateConventions
     }
 
     /// <summary>The column names inside the first parenthesised list of <paramref name="item"/>.</summary>
-    private static IEnumerable<string> ColumnList(string item)
+    internal static IEnumerable<string> ColumnList(string item)
     {
         var open = item.IndexOf('(', StringComparison.Ordinal);
         if (open < 0) yield break;

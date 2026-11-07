@@ -1,0 +1,104 @@
+# Plan 29b: moving state between engines, and simpler state configuration
+
+Status: **proposed** (2026-11-07), from the owner's direction: a state migration that needs a **service restart is fine** (it is rare), and the goal is
+**simpler install and configuration** and **better infrastructure upgrade paths**. It changes one decision of [plan 29](29-unified-state.md) (question 6,
+"no moving between engines"): moving is now supported, offline. Slices follow the shape of [29a](29a-state-slices.md).
+
+## 1. What exists
+
+| Piece | State |
+| --- | --- |
+| Modules with versioned, append-only migrations, a registry (`dbdatakit.modules`) with versions and checksums | built (Q01-Q06) |
+| Convention tokens (`{{uuid}} {{time}} {{json}} {{bool}} {{blob}} {{decimal}} {{int}} {{key}} {{text}}`) that make one logical schema on three engines | built |
+| Settings reader and opener (`StateSettingsReader`, `StateOpener`): engine, connection (secret reference), namespaces, retention | built (Q05) |
+| `state grants` (rights per namespace) and SQLite files per namespace | built (Q23, Q24) |
+| Payloads as chunked streams with hashes | built (Q03) |
+| Moving a state database to another engine, an export or an import, a `state` section edited by a tool, a state database shown in the console | **not built** |
+
+The conventions are what make this feasible: every column has one of nine logical types, so a row can be written out in a neutral form and read in on
+any engine.
+
+## 2. Decisions made while planning
+
+| # | Decision | Why |
+| --- | --- | --- |
+| M1 | **Moving is offline.** The service is stopped, the state is exported, imported into the new database, verified, the settings are changed, and the service is started. The tool refuses to export a database a live instance is using. | the owner accepts a restart; offline needs no change capture and cannot lose a write |
+| M2 | **The unit is a snapshot: a directory of files**, one `manifest.json` (format `state-snapshot/1`, the modules and their versions and checksums, per-table row counts and SHA-256 digests) and one gzipped JSON-lines file per table, rows in the logical types of the conventions, payload chunks as binary files named by id. | readable, diffable, engine-neutral; the same snapshot serves backup (plan 22 section 4) |
+| M3 | **Import goes into an empty target only** and applies each module's migrations to the snapshot's version first, then loads rows in dependency order (D1). A target that already has any module is refused naming it. | no merge rules; the registry says what is there |
+| M4 | **A snapshot newer than the binary is refused** (a module version the binary does not know), naming the module. An older snapshot is imported at its version and then migrated up by the normal migrator. | upgrades and moves compose |
+| M5 | **Every move is verified** by a second pass that compares row counts and per-table digests of the target against the manifest, and writes `state verify` output. The old database is left untouched, so going back is a settings change. | the move is reversible until the old database is deleted |
+| M6 | **Secrets stay secrets.** Rows that hold encrypted values (group secrets, signing keys) are copied as stored; the keys that decrypt them live in the secret store and are not part of a snapshot. The move command checks the target can decrypt a sample before it succeeds. | a snapshot must be safe to put in a backup |
+| M7 | **One `state` section in every product's settings**, written and read by shared code, so the verbs are the same everywhere (`dbdatakit state show|test|export|import|verify|move|grants`, `dbdatasync state ...`). | simpler install and support |
+| M8 | **The console shows state databases as connections** of a kind `state`: named, tested, with the module versions each service reports; a move is started from there, and the console only coordinates (the service stops itself into maintenance, the operator restarts it). | the owner's request; the console already manages servers and connections |
+
+## 3. Questions for the owner (defaults apply until answered)
+
+| # | Question | Default |
+| --- | --- | --- |
+| QM1 | Is a **snapshot format of gzipped JSON lines** acceptable, or should it be a database-native backup per engine? | JSON lines (engine-neutral); native backups stay the administrator's tool |
+| QM2 | When the old database is left behind after a move, should the tool **offer to remove it**? | no; it prints how to, and the administrator does it |
+| QM3 | May the console's own state be moved from the console UI? | no: the console's own move is the command line (it cannot stop itself); other servers' moves can be started from the console |
+
+## 4. Milestones and slices
+
+| Milestone | Slices | What it gives |
+| --- | --- | --- |
+| **M-A: snapshots** | X01 to X04 | export, import, verify on all three engines |
+| **M-B: simpler configuration** | C01 to C03 | one `state` section, the shared verbs, presets by topology |
+| **M-C: moving from the product** | C04 to C06 | `state move`, the management API, the console screens |
+| **M-D: upgrade paths** | U01 to U03 | engine versions, mixed-version groups, scheduled snapshots as backups |
+
+Size: S under a day, M a few days, L about a week.
+
+### M-A: snapshots
+
+| Slice | What | Needs | Size | Done when |
+| --- | --- | --- | --- | --- |
+| X01 | **The snapshot format and exporter** (M2): `StateSnapshotWriter` reads every module of a `StateDatabase` through the layout (so namespaces and prefixes are resolved), writes the manifest, the table files and the payload chunks, streaming, bounded memory; refuses a database a live instance uses (a `serving_instance` or runner `instance` row inside its lease, or a SQLite file held open by another process) | Q06 | L | an export of a populated state on each engine has the manifest counts equal to the tables; a 1 GiB payload exports with bounded memory; a live instance's row makes the export refuse, naming it. **Status: done** (session branch `suite/x01-snapshot-export`). `DbDataKit.State.Snapshots`: `StateSnapshotWriter.WriteAsync(source, modules, scope, directory, options, progress, ct)` returning a `SnapshotResult` (manifest, counts), the format types (`SnapshotManifest` and friends, `SnapshotFormat.Id` = `state-snapshot/1`), `StateTableDefinitions`, `SnapshotRefusedException` with a `SnapshotRefusal` reason. Tests (`StateSnapshotWriterTests`, `StateSnapshotPayloadTests`, `StateTableDefinitionsTests` in `DbDataKit.State.Tests`): 40 on SQLite, SQL Server 2025 and PostgreSQL 17, each engine row passing. **Logical types** come from the module migrations, not from the engines: `StateTableDefinitions` parses `CREATE TABLE`, `ALTER TABLE ... {{addcolumn}}`, `DROP COLUMN` and `DROP TABLE` across the migrations (the constructs `StateConventions` knows; `StateConventions.TopLevelItems` and `ColumnList` became `internal` for it). A column type that is not a token, a table without a primary key, or a layout table the parser did not find stops the export naming it, and a test compares every populated table's manifest columns with the columns each engine really has. A SQLite column has no type that tells a time from a key, and SQL Server and PostgreSQL would each need mapping back, so the templates are the one source. **Format as built:** `manifest.json` (format first; `created_at`, `engine`, `tool`, `scope`, modules in dependency order with `scope_kind`, `scope_name`, `version`, `checksum`, tables with `physical_name`, `file`, ordered `columns` (name, logical type, nullable, `identity`, `storage`), `primary_key`, `rows`, `sha256`, `rows_digest`; `payloads` with id, file, size, hash, chunk count), `tables/<module>.<table>.jsonl.gz` (one array per line), `payloads/<id>.bin`. Neutral forms: uuid lower-case hyphenated, time `yyyy-MM-ddTHH:mm:ss.fffffffZ` UTC, bool, int, decimal as invariant text without trailing zeros, json as the canonical document (members sorted, no spaces, so PostgreSQL's `jsonb` agrees with the others), text, blob base64. The `chunk.data` column of the payloads module holds `{payload, offset, length}` and the bytes are in the payload's file (chunks in sequence, one file per payload, never in memory). The manifest is written last, so a directory that has one is complete; a failed or cancelled export removes its files. **Digests (a deliberate change to the plan's wording):** engines order a UUID key (SQL Server by byte groups) and a text key (collations) differently, and keyset paging has to follow the engine's own index order to be fast, so the table file's bytes are the same on every engine only where the key order agrees (integers; a test shows it). `sha256` is the digest of the file as written (stable: export twice gives equal values, tested), and `rows_digest` is the sum modulo 2^256 of the SHA-256 of each row line, independent of row order, so it is engine-independent (tested: the same logical rows on SQLite, SQL Server and PostgreSQL give the pinned value). X03 should compare `rows_digest`, or read both sides in one canonical order. **Refusals:** a `serving_instance` row of module `serving` (heartbeat inside `SnapshotOptions.InstanceLease`, 30 s as the Proxy's lease), or an `instance` row of module `runner` (inside `lease_expires_at`, or `lease_until`, else the heartbeat, else any row counts), found only for modules in the database's layout and named by key, host and process; a SQLite file another process holds (`BEGIN EXCLUSIVE` with a one second timeout); a directory that is not empty (named). `ExportEvenIfInUse` skips the first two. **Memory:** a 200 MiB payload (the plan says 1 GiB; the slice was run with 200 MiB) exports on each engine with live memory (forced collections at each progress report) growing by about 1 MiB; the test allows 32 MiB and runs alone (`DisableParallelization`) so other tests do not disturb it. Rows are read through keyset paging (`WHERE (a > $k0) OR (a = $k0 AND b > $k1) ORDER BY ... LIMIT`), never `OFFSET`, 1000 per query by default; tested with batch sizes 1, 7, 10, 99, 100, 101 and 1000 against a composite key. **Gaps:** the runner `instance` table does not exist yet (R04), so its lease column names are a guess covered by a test module (`lease_expires_at`); the Proxy's own `serving` module lives in DbDataProxy, which State cannot reference, so the live check works on table and column names and the tests use a copy of the instance table; the secret test uses a stand-in `trust.group_secret` table with an AES-GCM value (the real module is the Proxy's); only the State project's modules are run through the exporter in tests (the parser is tested on every module of that project, not on those of Identity, Web, Lineage, Scheduling or the Proxy); a payload's hash in its own row is not re-checked against the file (X03); a very large table with a blob column (outside the payloads module) is read row by row but a blob is one array in memory; a decimal wider than .NET's 28 digits would overflow (the engines' `DECIMAL(38,10)` allows it, nothing stores one); SQLite's file-held check does not see a reader in WAL mode (the state is not in WAL). No import, verify or CLI (X02 to X04). |
+| X02 | **Import** (M3, M4, M6): `StateSnapshotReader` creates the modules at the snapshot's versions through the migrator, loads rows in dependency order with bulk inserts per engine (batched `INSERT`, `COPY` on PostgreSQL where it helps, `SqlBulkCopy` on SQL Server), handles every logical type (uuid text vs native, time as fixed-width UTC, bool, decimal, blob, json vs text), preserves payload ids and hashes, refuses a non-empty target or a newer snapshot | X01 | L | each pair of engines (SQLite, PostgreSQL, SQL Server, nine pairs including same-engine) round-trips a populated state: after import, `state verify` reports every table equal; a snapshot with a newer module version is refused naming it; a non-empty target is refused naming the module |
+| X03 | **`StateVerifier`** (M5): compares two databases or a database and a manifest: row counts, per-table digests computed in key order over the logical values (so engines compare equal), payload hashes; a report of the first differences | X01 | M | a changed row, a missing row and a changed payload byte are each found and named; two engines holding the same data compare equal |
+| X04 | **The verbs** `state export`, `state import`, `state verify` in `DbDataKit.Hosting.Cli` (M7), taking the same `--engine/--connection/--namespaces` settings as a server's `state` section and a snapshot directory; progress lines and a non-zero exit on refusal; added to the console, Proxy, DbDataStore and Build CLIs (Sync with its own slice later) | X01-X03 | M | each product's `state export` then `state import` into a fresh database starts the product with the same users and settings; the docs check (`scripts/check_docs_commands.py`) knows the verbs |
+
+### M-B: simpler configuration
+
+| Slice | What | Needs | Size | Done when |
+| --- | --- | --- | --- | --- |
+| C01 | **`state show` and `state test`**: show the effective engine, connection (secrets masked), namespaces, per-module versions from the registry and pending migrations; test opens the connection, checks rights (the grants of Q23) and the engine version (U01), and says what to do | Q23 | S | each failure (bad password, missing right, an engine too old, a schema clash) gives one sentence naming the fix |
+| C02 | **A shared settings writer**: `StateSettingsWriter` writes the `state` section of a product's settings file atomically (a temp file and rename), preserving the rest of the file and comments where the YAML library allows, and validating with the reader first | Q05 | S | a write then a read round-trips; an invalid setting is refused and the file is untouched |
+| C03 | **Topology presets** (plan 29 section 5): `state init --topology service|group|install` writes the settings (SQLite files, one database per group, one per install), creates the schemas and prints or applies the grants for each service's login; the installers (`dist/`) call it with the default for the install kind | C01, C02 | M | on a fresh machine each preset yields a working install; the install-time test of `dist/` uses the single-machine default; a service's login granted by the preset cannot read another service's module |
+
+### M-C: moving from the product
+
+| Slice | What | Needs | Size | Done when |
+| --- | --- | --- | --- | --- |
+| C04 | **`state move`** (M1, M5): export the current state, import into the named target, verify, and only then write the new settings (C02); the old database is untouched; prints the restart instruction and how to go back; refuses while the service runs | X04, C02 | M | a console moved from SQLite to PostgreSQL, restarted, shows the same users, sessions and notifications; a verify failure leaves the settings unchanged |
+| C05 | **The management API**: `GET /api/v1/state` (engine, namespaces, module versions, instances and their versions, last verify) and `POST /api/v1/state/maintenance` (the service stops taking work, drains, reports idle) on each server product, for a Viewer and an Admin respectively | C01 | M | a paired console reads another server's state status; an admin puts it into maintenance and it reports idle; the call is audited |
+| C06 | **Console screens**: state databases as connections of kind `state` (M8: add, test, show module versions per service), and a **Move** wizard for another server (maintenance, `state move` on that machine's agent or the printed command when no agent exists, restart check, verify), with the audit of each step | C04, C05 | L | an admin registers a PostgreSQL state connection, tests it, moves a paired Proxy onto it and sees the Proxy report the new engine after its restart |
+
+### M-D: upgrade paths
+
+| Slice | What | Needs | Size | Done when |
+| --- | --- | --- | --- | --- |
+| U01 | **Engine support matrix**: each module declares the engine features it needs (pgvector, SQL Server 2025's vector type); `state test` reports the engine version and whether it is supported; CI runs the State suite on N and N-1 of each engine (SQL Server 2022 and 2025, PostgreSQL 16 and 17) | C01 | M | the suite passes on the older engines for the modules that do not need new features; a module needing a feature refuses an engine without it, naming the feature |
+| U02 | **Mixed-version groups**: an instance writes its module versions into its `serving_instance` / runner `instance` row; `state show` and the console list them; a migration refuses to apply while an instance that cannot read the new version is live, naming it (plan 24's N and N-1 rule) | C05 | M | two instances at different versions are listed; a migration is refused with the instance named; after the old instance stops it applies |
+| U03 | **Snapshots as backups**: a scheduled system task (on the console's embedded runner, plan 28 section 6a) writes a snapshot to a configured folder with retention and a verify; restore is import (X02) into an empty database | X02, X03, runner R20 | M | a scheduled snapshot is written, verified and pruned; a restore from it starts the product with its state |
+
+## 5. What each slice unblocks
+
+| Waiting for | Unblocked by |
+| --- | --- |
+| Moving an install from the single-machine SQLite default to a server database when it grows | C04 (command line), C06 (console) |
+| An infrastructure upgrade (new SQL Server or PostgreSQL major, a new host) | X01 to X04 (export, import, verify) then C04 |
+| Plan 22 section 4's backup | U03 on the same snapshot format |
+| Simpler support of installs | C01, C03 |
+
+## 6. What can start now
+
+X01 needs nothing that is not built. X03 and C02 are independent of it and can run beside it. Then X02, then X04, which is the first thing an
+administrator can use (export and import by hand, a restart each side).
+
+## 7. Risks
+
+- **Large states and long exports:** payload streaming is bounded-memory by construction; a very large `runs` or `audit` table may take long, and offline means downtime. A later option, not in this plan, is the follower pattern of plan 29 section 4a applied to whole modules.
+- **Identity columns of the older kind** (`{{identity:col}}`) are not UUIDs: import must reseed sequences; X02's test covers each engine.
+- **Secrets at rest:** a snapshot holds ciphertext only (M6); a test greps a snapshot of a populated state for the plain values of seeded secrets and fails if any appears.
