@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Runner.Protocol</RootNamespace>
+    <Description>The runner protocol dbdatakit.runner.v1 (plan 28 section 4.1, 28a R03b): the .proto of the calls a task makes to its runner, the generated client and server types, the endpoint of the local socket and the run-token header.</Description>
+    <IsPackable>true</IsPackable>
+    <!-- generated code carries no XML documentation and trips the analyzers the hand-written code obeys -->
+    <NoWarn>$(NoWarn);CS1591;CS0612;CS8981;CS1570;CS1587</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Net.Client" />
+    <PackageReference Include="Grpc.Tools" PrivateAssets="all" />
+    <Protobuf Include="Protos\runner_v1.proto" GrpcServices="Both" />
+  </ItemGroup>
+</Project>

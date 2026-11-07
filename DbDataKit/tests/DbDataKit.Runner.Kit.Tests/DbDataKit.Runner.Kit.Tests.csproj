@@ -6,8 +6,11 @@
     <PackageReference Include="Microsoft.Data.SqlClient" />
     <PackageReference Include="Npgsql" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <Using Include="Xunit" />
+    <None Include="Protocol\runner.v1.snapshot.txt" CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="..\..\src\DbDataKit.Runner.Kit\DbDataKit.Runner.Kit.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Runner.Protocol.Server\DbDataKit.Runner.Protocol.Server.csproj" />
     <ProjectReference Include="..\..\src\DbDataKit.Runner.Kit.Analyzers\DbDataKit.Runner.Kit.Analyzers.csproj" />
   </ItemGroup>
 </Project>

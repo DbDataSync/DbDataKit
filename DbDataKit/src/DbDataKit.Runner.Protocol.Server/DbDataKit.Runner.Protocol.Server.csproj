@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Runner.Protocol.Server</RootNamespace>
+    <Description>The runner's side of the protocol dbdatakit.runner.v1 (plan 28a R03b): the gRPC service over the run stores, bound to a per-run token, and the host that listens on a Unix domain socket (a named pipe on Windows) and never on TCP.</Description>
+    <IsPackable>true</IsPackable>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Grpc.AspNetCore.Server" />
+    <ProjectReference Include="..\DbDataKit.Runner.Protocol\DbDataKit.Runner.Protocol.csproj" />
+    <ProjectReference Include="..\DbDataKit.Runner.Kit\DbDataKit.Runner.Kit.csproj" />
+  </ItemGroup>
+</Project>
