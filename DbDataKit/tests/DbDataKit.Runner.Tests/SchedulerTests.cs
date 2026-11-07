@@ -282,6 +282,39 @@ public sealed class SchedulerTests
     }
 
     [Theory, MemberData(nameof(Engines))]
+    public async Task A_tick_that_finds_the_lease_of_an_item_it_runs_itself_expired_leaves_it_alone_even_when_nothing_renewed_it(string engine)
+    {
+        using var h = new SchedulerHarness(engine);
+        h.Activate(Manifest(Package, Def("job", Schedule.Interval(TimeSpan.FromHours(1)))), "1");
+        var release = new TaskCompletionSource();
+        var runner = new FakeRunner(h.Database) { Behaviour = async (_, _) => { await release.Task; return new TaskEnd(TaskEndState.Succeeded); } };
+        var scheduler = h.NewScheduler(runner, worker: "loop-a");
+
+        await scheduler.TickAsync();
+        await FakeStarted(runner, 1);
+        var run = runner.Requests.Single().RunId!.Value;
+
+        // the process stalls between the renewal and the release (nothing renews here: the renewal is off), the lease is over when the tick looks
+        scheduler.SuspendHeartbeats = true;
+        h.Clock.Advance(TimeSpan.FromSeconds(100));
+        var report = await scheduler.TickAsync();
+
+        Assert.Equal(0, report.ExpiredLeases);
+        Assert.Equal(0, report.Claimed);
+        Assert.Single(runner.Requests);                                   // no second attempt, no second run record
+        var inFlight = h.Queue.ListInFlight(Owner).Single();
+        Assert.Equal(WorkItemStatus.Running, inFlight.Item.Status);
+        Assert.Equal(run, inFlight.Item.RunId);
+        Assert.Single(h.Runs.Read(new RunQuery(Service, "pkg/prod/job")));
+
+        scheduler.SuspendHeartbeats = false;
+        release.SetResult();
+        await scheduler.WhenIdleAsync();
+        Assert.Equal(RunOutcome.Succeeded, Assert.Single(h.Runs.Read(new RunQuery(Service, "pkg/prod/job"))).Run.Outcome);
+        Assert.Empty(h.Queue.ListInFlight(Owner));
+    }
+
+    [Theory, MemberData(nameof(Engines))]
     public async Task A_loop_that_stops_renewing_loses_its_item_to_another_loop_and_its_late_finish_is_refused(string engine)
     {
         using var h = new SchedulerHarness(engine);

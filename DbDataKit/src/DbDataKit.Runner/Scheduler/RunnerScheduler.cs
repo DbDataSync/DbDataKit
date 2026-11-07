@@ -155,7 +155,7 @@ public sealed partial class RunnerScheduler
         try
         {
             RenewOwnLeases();
-            var expired = _queue.ReleaseExpired();
+            var expired = _queue.ReleaseExpired(RunningHere());
             var (served, rowProblems) = ReadProjection();
             _rowProblems = rowProblems;
 
@@ -197,6 +197,13 @@ public sealed partial class RunnerScheduler
     /// interrupted, a second attempt on the same chain) although no other runner had touched the item. A renewal is accepted only while this loop still holds the item (<see cref="ModuleWorkQueueStore.Heartbeat"/>), so an item another
     /// runner of the group took in the meantime stays lost, and a loop that is stalled for real (<see cref="SuspendHeartbeats"/>) renews nothing.
     /// </summary>
+    /// <summary>
+    /// The items whose run is active in this process: a record that is not finished and has not lost its lease. The tick never gives these up, whatever the clock says (a stall between the renewal and the release made it
+    /// possible: the item was taken back and run a second time while the first run went on here). A run whose task process is gone has ended its record (the record is removed when its run ends, whatever the end), so it is not
+    /// in the set; a record that has lost its lease is not either, and the item belongs to whoever has it.
+    /// </summary>
+    private List<long> RunningHere() => [.. _running.Where(r => !r.Value.LeaseLost && !r.Value.Done.Task.IsCompleted).Select(r => r.Key)];
+
     private void RenewOwnLeases()
     {
         if (SuspendHeartbeats) return;
