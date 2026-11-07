@@ -106,6 +106,21 @@ public sealed partial class ExecutorHarness : IDisposable
         };
     }
 
+    /// <summary>A request for an executable package whose launch command is a file of the package itself (not a program of the runner).</summary>
+    public async Task<TaskRunRequest> ProgramRequest(string program)
+    {
+        var version = await PackageFixture.ScriptPackage();
+        return new TaskRunRequest
+        {
+            Task = new TaskRef("scripts", Channel, "run"),
+            PackageDirectory = version.Directory,
+            PackageVersion = "1.0.0",
+            Launch = new PackageLaunch(LaunchKind.Executable, Command: program),
+            RunId = Database.NewId(),
+            Chain = Chain,
+        };
+    }
+
     public sealed class RequestSettings
     {
         public Guid? RunId { get; set; }

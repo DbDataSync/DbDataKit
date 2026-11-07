@@ -43,7 +43,21 @@
     <ProjectReference Include="..\..\src\DbDataBuild.State\DbDataBuild.State.csproj" />
     <ProjectReference Include="..\..\src\DbDataBuild.Execution\DbDataBuild.Execution.csproj" />
     <ProjectReference Include="..\..\src\DbDataBuild.Cli\DbDataBuild.Cli.csproj" />
+    <!-- a real dbdatarunner server, in process, runs a refresh plan as a task (plan 28c, E01: RefreshOnRunnerConformanceTests) -->
+    <ProjectReference Include="..\..\..\DbDataRunner\src\DbDataRunner.Server\DbDataRunner.Server.csproj" />
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>BuildCliProject</_Parameter1>
+      <_Parameter2>$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)', '..', '..', 'src', 'DbDataBuild.Cli', 'DbDataBuild.Cli.csproj'))</_Parameter2>
+    </AssemblyAttribute>
   </ItemGroup>
+
+  <!-- the server's own build output, where the build put the task host beside the program (as DbDataRunner.Tests does) -->
+  <Target Name="WriteServerOutput" AfterTargets="Build">
+    <MSBuild Projects="..\..\..\DbDataRunner\src\DbDataRunner.Server\DbDataRunner.Server.csproj" Targets="GetTargetPath">
+      <Output TaskParameter="TargetOutputs" PropertyName="_ServerDll" />
+    </MSBuild>
+    <WriteLinesToFile File="$(OutDir)server-output.txt" Lines="$([System.IO.Path]::GetDirectoryName('$(_ServerDll)'))" Overwrite="true" />
+  </Target>
 
   <ItemGroup>
     <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />

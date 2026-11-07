@@ -69,6 +69,7 @@ internal static class PackageFixture
         // the names of the DBDATA_ variables the task was given (never the values), and a task that holds still so a test can look at its process
         File.WriteAllText(Path.Combine(directory, "slots.sh"), "env | cut -d= -f1 | grep -E '^DBDATA_(SECRET|BUILD)_' | sort | sed 's/^/var: /'\nexit 0\n");
         File.WriteAllText(Path.Combine(directory, "slots-hold.sh"), "echo \"leak: $DBDATA_SECRET_DBDATA_SYNC_CONNECTION_SRC_DB\"\necho ready\nsleep 60\n");
+        File.WriteAllText(Path.Combine(directory, "program.sh"), "#!/bin/sh\necho \"started as a program of the package\"\nexit 0\n");
         return directory;
     }
 

@@ -53,6 +53,9 @@ public sealed record RunnerHostSettings(string Directory)
     /// <summary>What staging says of the contracts a package was built against (null: <see cref="RunnerContracts.Check(PackageManifest)"/>).</summary>
     public Func<PackageManifest, string?>? StagingContracts { get; init; }
 
+    /// <summary>Variables of the runner's environment a task process sees in addition to the executor's default list (test grade: how the logins of a Build refresh reach it before the runner resolves connection slots, plan 28c E02).</summary>
+    public IReadOnlyList<string> TaskEnvironment { get; init; } = [];
+
     /// <summary>The longest an activation waits for the runs of a package in flight (plan 28a R18): ten minutes by default.</summary>
     public TimeSpan ActivationMaxWait { get; init; } = TimeSpan.FromMinutes(10);
 

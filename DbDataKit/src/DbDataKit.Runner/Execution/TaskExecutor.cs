@@ -289,6 +289,7 @@ public sealed class TaskExecutor : ITaskRunner
             // a command that is a file of the package (of the runtime, for a package run by one) is that file; any other is a program of the runner, found on its PATH
             var home = runtime ?? package;
             fileName = Path.IsPathRooted(command) ? command : File.Exists(Path.Combine(home, command)) ? InsidePackage(home, command) : command;
+            if (!Path.IsPathRooted(command) && fileName != command) MakeExecutable(fileName);
             arguments.AddRange(request.Launch.ArgList.Concat(request.Entry?.ArgList ?? []).Select(a => a.Replace("{package}", package, StringComparison.Ordinal).Replace("{runtime}", runtime ?? package, StringComparison.Ordinal)));
         }
 
@@ -333,6 +334,26 @@ public sealed class TaskExecutor : ITaskRunner
         }
 
         return "dotnet";
+    }
+
+    /// <summary>
+    /// A file of a package view is a link to a stored object with mode 0444 (no artifact says it is a program), so a launch command that is a file of the package would be refused with "permission denied". The object it
+    /// names is made executable (0555) before the start; every view that links the same bytes sees it, which is harmless for a file nobody runs by that name. Only on a system with Unix modes.
+    /// </summary>
+    internal static void MakeExecutable(string path)
+    {
+        if (OperatingSystem.IsWindows()) return;
+        try
+        {
+            var target = File.ResolveLinkTarget(path, returnFinalTarget: true)?.FullName ?? path;
+            var mode = File.GetUnixFileMode(target);
+            const UnixFileMode Execute = UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute;
+            if ((mode & Execute) != Execute) File.SetUnixFileMode(target, mode | Execute);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // not ours to change (a read-only mount): the start says why it cannot run
+        }
     }
 
     /// <summary>The full path of a file the manifest names inside the package, refused when it leaves the package.</summary>
