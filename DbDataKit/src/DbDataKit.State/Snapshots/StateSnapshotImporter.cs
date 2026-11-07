@@ -331,7 +331,8 @@ public static class StateSnapshotImporter
         var isChunks = module.Name == PayloadStore.ModuleName && table.Name == "chunk";
         var identity = columns.Where(c => c.Identity).Select(c => c.Name).ToList();
         var maxParameters = context.Options.MaxParameters ?? (context.Sqlite ? SqliteParameters : context.MsSql ? SqlServerParameters : PostgresParameters);
-        var batchRows = Math.Max(1, Math.Min(Math.Min(context.Options.BatchRows, 1000), maxParameters / columns.Count));
+        var bulk = context.Options.BulkLoader is { } loader && loader.CanLoad(target, table) ? loader : null;
+        var batchRows = bulk is not null ? context.Options.BatchRows : Math.Max(1, Math.Min(Math.Min(context.Options.BatchRows, 1000), maxParameters / columns.Count));
         var token = $"{{table:{module.Name}.{table.Name}}}";
         var types = columns.Select(c => DbTypeOf(c.Type, context.Sqlite)).ToArray();
 
@@ -402,7 +403,7 @@ public static class StateSnapshotImporter
                     rows++;
                     if (pending.Count >= batchRows || pendingBytes >= context.Options.BatchBytes)
                     {
-                        await FlushAsync(context, connection, transaction, token, table, identity.Count > 0, types, pending, ct).ConfigureAwait(false);
+                        await FlushAsync(context, connection, transaction, token, module, table, identity.Count > 0, types, pending, bulk, ct).ConfigureAwait(false);
                         pending.Clear();
                         pendingBytes = 0;
                         context.Progress?.Report(new SnapshotProgress("rows", module.Name, table.Name, context.Rows + rows, context.PayloadBytes + (payloads?.Bytes ?? 0)));
@@ -412,7 +413,7 @@ public static class StateSnapshotImporter
 
             if (pending.Count > 0)
             {
-                await FlushAsync(context, connection, transaction, token, table, identity.Count > 0, types, pending, ct).ConfigureAwait(false);
+                await FlushAsync(context, connection, transaction, token, module, table, identity.Count > 0, types, pending, bulk, ct).ConfigureAwait(false);
                 pending.Clear();
             }
 
@@ -552,10 +553,18 @@ public static class StateSnapshotImporter
     }
 
     /// <summary>One multi-row INSERT of the pending rows.</summary>
-    private static async Task FlushAsync(ImportContext context, DbConnection connection, DbTransaction transaction, string tableToken, SnapshotTable table, bool hasIdentity, DbType[] types, List<object?[]> rows, CancellationToken ct)
+    private static async Task FlushAsync(
+        ImportContext context, DbConnection connection, DbTransaction transaction, string tableToken, SnapshotModule module, SnapshotTable table, bool hasIdentity, DbType[] types, List<object?[]> rows,
+        ISnapshotBulkLoader? bulk, CancellationToken ct)
     {
         var target = context.Target;
         var columns = table.Columns;
+        if (bulk is not null)
+        {
+            await bulk.LoadAsync(connection, transaction, target, context.Layout.Table(module.Name, table.Name), columns, hasIdentity, rows, ct).ConfigureAwait(false);
+            return;
+        }
+
         var sql = new StringBuilder(64 + (rows.Count * columns.Count * 12));
         sql.Append("INSERT INTO ").Append(tableToken).Append(" (").AppendJoin(", ", columns.Select(c => c.Name)).Append(')');
         if (hasIdentity && context.Postgres) sql.Append(" OVERRIDING SYSTEM VALUE");

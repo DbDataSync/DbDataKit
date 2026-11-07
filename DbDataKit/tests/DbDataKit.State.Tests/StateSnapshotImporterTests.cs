@@ -567,6 +567,33 @@ public sealed class StateSnapshotImporterTests : IDisposable
     }
 
     [Theory]
+    [InlineData(StateEngineIds.Postgres)]
+    [InlineData(StateEngineIds.MsSql)]
+    public async Task The_optimised_loaders_load_the_same_rows_as_the_batched_insert(string engine)
+    {
+        var source = OpenSource(StateEngineIds.Sqlite, AllModules);
+        var body = SnapshotPopulate.Fill(source);
+        StateSnapshotWriterTests.FillTypes(source);
+        var directory = NewDirectory();
+        var exported = await Export(source, directory, AllModules);
+
+        ISnapshotBulkLoader loader = engine == StateEngineIds.Postgres ? new PostgresCopyLoader() : new SqlServerBulkCopyLoader();
+        var target = OpenTarget(engine, AllModules);
+        var result = await Import(directory, target, AllModules, new ImportOptions { BulkLoader = loader, BatchRows = 30 });
+
+        Assert.Equal(exported.Rows, result.Rows);
+        Assert.True((loader as PostgresCopyLoader)?.Batches > 10 || (loader as SqlServerBulkCopyLoader)?.Batches > 10, "the loader was used for the tables");
+        await AssertSameAsManifest(target, exported.Manifest);
+        using var reader = new PayloadStore(target, chunkSize: 1024).OpenRead(body);
+        reader.CopyTo(Stream.Null);
+        // identity keys were kept and counting on
+        var runs = new RunStore(target, "dbdatasync");
+        var run = runs.Read(new RunQuery(JobId: "orders-sync")).Single().Id;
+        var max = runs.Logs(run, limit: 1000).Max(l => l.Id);
+        Assert.True(runs.Log(run, "Info", "after the import") > max);
+    }
+
+    [Theory]
     [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
     public async Task The_target_keeps_the_names_its_own_layout_gives_not_the_sources(string engine)
     {

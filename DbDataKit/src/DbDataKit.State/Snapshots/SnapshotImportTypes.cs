@@ -31,6 +31,27 @@ public sealed record ImportOptions
 
     /// <summary>A progress line each time this many payload bytes were loaded.</summary>
     public long ProgressBytes { get; init; } = 8 * 1024 * 1024;
+
+    /// <summary>
+    /// An optimised way of loading rows for engines that have one (PostgreSQL <c>COPY</c>, SQL Server <c>SqlBulkCopy</c>), supplied by code that references the provider; null loads every table with the batched
+    /// parameterised INSERT, which is correct everywhere. A loader says per table whether it takes it; the rows are then handed over in batches of <see cref="BatchRows"/> (not bounded by the parameter limit).
+    /// </summary>
+    public ISnapshotBulkLoader? BulkLoader { get; init; }
+}
+
+/// <summary>
+/// Loads a batch of rows into a table faster than a parameterised INSERT can. Values arrive already converted for the target engine (<see cref="StateValues.ForParameter"/>): <see cref="Guid"/> (SQL Server,
+/// PostgreSQL) or text (SQLite) for a uuid, <see cref="DateTimeOffset"/> in UTC or text for a time, <see cref="bool"/>, <see cref="long"/>, <see cref="decimal"/> or text, <c>byte[]</c>, and
+/// <see cref="string"/> for text and json; null is null. The loader runs inside the importer's transaction on the importer's connection and must not commit it.
+/// </summary>
+public interface ISnapshotBulkLoader
+{
+    /// <summary>Whether this loader loads the table on this target (by engine, usually).</summary>
+    bool CanLoad(StateDatabase target, SnapshotTable table);
+
+    /// <param name="qualifiedTable">The target's real name for the table.</param>
+    /// <param name="hasIdentity">The table has an identity-style key whose values are in the rows and have to be kept.</param>
+    Task LoadAsync(System.Data.Common.DbConnection connection, System.Data.Common.DbTransaction transaction, StateDatabase target, string qualifiedTable, IReadOnlyList<SnapshotColumn> columns, bool hasIdentity, IReadOnlyList<object?[]> rows, CancellationToken ct);
 }
 
 /// <summary>Why an import was refused or stopped.</summary>
