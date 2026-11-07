@@ -11,6 +11,8 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 | **Console** | Servers | Pair by announcement, or by address and code | – | Remove | Confirm or reject a waiting server | `InstancesPage.tsx`, `PendingServers.tsx`, `ServerModule.tsx` |
 | | Users and invitations | Invite | Set roles and email | Yes | Redeem an invitation | `UsersPage.tsx`, `InvitePage.tsx` |
 | | Connections (Sync and Proxy, one list) | – | – | – | Copy between servers | `ConnectionsPage.tsx` |
+| | State databases (connections of kind `state`) | Yes | Yes | Yes | Test | `StateConnections.tsx` |
+| | Server state: panel, maintenance and the Move wizard | – | – | – | Maintenance on and off, check and run a move | `ServerStatePage.tsx` |
 | | Lineage, Views, Monitoring, Docs | – | – | – | Read-only | `LineagePage.tsx`, `ViewsPage.tsx`, `MonitoringPage.tsx`, `DocsPages.tsx`, `HomePage.tsx` |
 | **Sync** | Connections | Yes | Yes | Yes | Test | `ConnectionsPage.tsx`, `ConnectionEditPage.tsx` |
 | | Replications | Yes | Yes | Yes | Enable, pause and resume | `ReplicationsPage.tsx`, `ReplicationDetailPage.tsx` |

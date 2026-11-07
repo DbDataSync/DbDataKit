@@ -41,7 +41,7 @@ public static class RunnerState
         Directory.CreateDirectory(directory);
         settings ??= new StateSettings();
         var secrets = settings.IsSqlite ? null : Secrets(environment);
-        return StateOpener.Open(settings, PathIn(directory), Modules, ScopeOf(group), secrets, $"{ServiceId} {typeof(RunnerState).Assembly.GetName().Version}", time);
+        return StateOpener.Open(settings, PathIn(directory), Modules, ScopeOf(group), secrets, $"{ServiceId} {typeof(RunnerState).Assembly.GetName().Version}", time, new StandardGroupInstanceSource());
     }
 
     public static ISecretResolver Secrets(Func<string, string?>? environment) => new SecretResolverChain([new EnvSecretProvider(environment)]);

@@ -115,7 +115,7 @@ public static class ProxyManagementHost
             },
             DbDataProxy.Server.State.ProxyState.Modules, DbDataProxy.Server.State.ProxyState.ScopeOf(), maintenance,
             new StateAuditSink(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>(), DbDataProxy.Server.State.ProxyState.ServiceId),
-            instanceId, ProxyHost.Version, app.Services.GetRequiredService<DbDataProxy.Server.State.ServingInstanceLease>()));
+            instanceId, ProxyHost.Version, app.Services.GetRequiredService<DbDataProxy.Server.State.ServingInstanceLease>(), Move: true));
         management = new ProxyManagement(configuration, configDirectory, instanceId, ProxyHost.Version, dataSources, identities, activity, certificate, git,
             new ProxySecrets(app.Services.GetRequiredService<GroupSecretStore>() is { Enabled: true } group ? group : SecretsRuntime.OpenStore(options), audit), files.Codes(),
             new ProxySemanticModels(app.Services.GetRequiredService<Serving.PublishedSemanticModels>(), app.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>(),

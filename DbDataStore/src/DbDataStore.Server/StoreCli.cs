@@ -25,11 +25,11 @@ public static class StoreCli
         ConsoleCancelEventHandler onCancel = (_, e) => { e.Cancel = true; stop.Cancel(); };
         Console.CancelKeyPress += onCancel;
         using var terminate = System.Runtime.InteropServices.PosixSignalRegistration.Create(System.Runtime.InteropServices.PosixSignal.SIGTERM, c => { c.Cancel = true; stop.Cancel(); });
-        try { return await Router().RunAsync(args, context with { Cancellation = context.Cancellation.CanBeCanceled ? context.Cancellation : stop.Token }); }
+        try { return await Router(invocation: args).RunAsync(args, context with { Cancellation = context.Cancellation.CanBeCanceled ? context.Cancellation : stop.Token }); }
         finally { Console.CancelKeyPress -= onCancel; }
     }
 
-    public static NounRouter Router(Func<string, string?>? environment = null) => new(Program,
+    public static NounRouter Router(Func<string, string?>? environment = null, string[]? invocation = null) => new(Program,
     [
         ServerNoun.Create((args, context) => RunServerAsync(args, context, environment))
             .With([.. PairingVerbs.Create(args => StoreState.Pairing(DirectoryOf(args, environment), environment))]),
@@ -37,9 +37,44 @@ public static class StoreCli
         StoreAdminCommand.Storage(),
         StoreAdminCommand.Proxy(),
         StateNoun(environment),
+        // the store is opened (and its key made on first use) only for the secret verbs
+        .. invocation is ["secret", ..] ? new[] { SecretVerbs(invocation) } : Array.Empty<Noun>(),
         StoreService.Noun(StoreServiceEnvironment.Real()),
         HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl),
     ], StoreServer.Version);
+
+    /// <summary>
+    /// The shared <c>secret</c> verbs over the server's own store (<c>dbdatastore secret set dbdata:console:state:&lt;name&gt; --stdin</c>, with <c>--repo</c> as for the pairing verbs), so a state connection a console names by secret reference can be resolved here (plan 29b, C06). The value of a
+    /// secret comes from a hidden prompt or standard input, never an argument.
+    /// </summary>
+    private static Noun SecretVerbs(string[] invocation)
+    {
+        var i = Array.LastIndexOf(invocation, "--repo");
+        var directory = Path.GetFullPath(i >= 0 && i + 1 < invocation.Length ? invocation[i + 1] : StoreSettings.DefaultDirectory(null));
+        var store = StorePublisher.OpenSecrets(directory);
+        var cli = new DbDataKit.Secrets.Cli.SecretCli(new DbDataKit.Secrets.SecretResolverChain([store]), store, store, () => []);
+        return new Noun("secret", "The server's secrets: the logins its state connection refers to (dbdata:console:state:<name>)",
+            DbDataKit.Secrets.Cli.SecretNoun.Create(cli, context => DbDataKit.Secrets.Cli.SecretNoun.Captured(context, new InputConsole(context.In))).Verbs
+                .Select(v => v with { Run = (args, context) => v.Run(WithoutRepo(args), context) }).ToList());
+    }
+
+    private static string[] WithoutRepo(string[] args)
+    {
+        var i = Array.IndexOf(args, "--repo");
+        return i < 0 ? args : [.. args.Take(i), .. args.Skip(i + 2)];
+    }
+
+    /// <summary>Where a secret's value is read from: the context's standard input when it is redirected (or not the process's own), a hidden prompt on the terminal otherwise.</summary>
+    private sealed class InputConsole(TextReader input) : DbDataKit.Secrets.Cli.IConsole
+    {
+        private bool OwnTerminal => ReferenceEquals(input, Console.In) && !Console.IsInputRedirected;
+
+        public void WriteLine(string text) => Console.Out.WriteLine(text);
+        public void WriteError(string text) => Console.Error.WriteLine(text);
+        public bool IsInputRedirected => !OwnTerminal;
+        public string ReadStdin() => input.ReadToEnd();
+        public string? ReadSecret(string prompt) => OwnTerminal ? new DbDataKit.Secrets.Cli.SystemConsole().ReadSecret(prompt) : null;
+    }
 
     /// <summary>The shared <c>state show|test|grants|init</c> verbs over the server's state: its settings come from <c>--engine</c>, the environment (<see cref="StoreState.EngineVariable"/>) and the <c>state:</c> section of <c>server.yaml</c> in its directory, else SQLite in <c>state.db</c>; built from <see cref="StoreState.Modules"/>.</summary>
     private static Noun StateNoun(Func<string, string?>? environment) => DbDataKit.State.Cli.StateVerbs.Create(new DbDataKit.State.Cli.StateVerbContext(

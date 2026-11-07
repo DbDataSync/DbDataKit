@@ -66,6 +66,9 @@ public sealed record MoveOptions
     public string BackupSuffix { get; init; } = ".before-state-move";
 }
 
+/// <summary>What <see cref="StateMoveService.Preflight"/> found fit: the databases as a sentence names them.</summary>
+public sealed record MovePreflight(string Source, string Target);
+
 /// <summary>A move that did not finish. The settings file is unchanged; <see cref="SnapshotDirectory"/> is the temporary snapshot, kept when it holds anything.</summary>
 public sealed class StateMoveException(MoveStep step, string message, string? snapshotDirectory, Exception? inner = null) : InvalidOperationException(message, inner)
 {
@@ -116,10 +119,7 @@ public sealed class StateMoveService(ISecretResolver? secrets = null, TimeProvid
         {
             // ---- preflight: everything that can be known before the first write
             Report(progress, step, "Checking the source, the target and the settings file.");
-            if (StateEndpoints.Same(from, to)) throw new StateServiceException(StateServiceRefusal.SameDatabase, "The source and the target are the same database; name another target.");
-            CheckSettingsCanBeWritten(settingsPath, to);
-            var source = StateEndpoints.Open(from, modules, scope, StateEndpoints.Role.Read, _secrets, redactor, _appliedBy, _time);
-            var target = StateEndpoints.Open(to, modules, scope, StateEndpoints.Role.Target, _secrets, redactor, _appliedBy, _time);
+            var (source, target) = PreflightCore(from, to, settingsPath, modules, scope, redactor);
             snapshot = PrepareSnapshotDirectory(settingsPath, options);
 
             // ---- export (the writer refuses a source a live instance uses, naming it)
@@ -185,6 +185,30 @@ public sealed class StateMoveService(ISecretResolver? secrets = null, TimeProvid
             if (step is MoveStep.VerifySnapshot or MoveStep.VerifyDatabases) text.Append($" The target holds the imported data; empty or recreate it before trying again.");
             throw new StateMoveException(step, text.ToString(), kept, ex);
         }
+    }
+
+    /// <summary>
+    /// The checks of a move that need no write: the source and the target are not the same database, the settings file can take the new section, the source opens and is at this software's versions, the target opens (its login works)
+    /// and is empty. Nothing is created, copied or changed. Raises <see cref="StateServiceException"/> naming the fix; it never holds a password.
+    /// </summary>
+    public MovePreflight Preflight(StateEndpoint from, StateEndpoint to, string settingsFile, IReadOnlyList<StateModule> modules, StateScope scope)
+    {
+        ArgumentNullException.ThrowIfNull(from);
+        ArgumentNullException.ThrowIfNull(to);
+        ArgumentException.ThrowIfNullOrWhiteSpace(settingsFile);
+        var redactor = new Redactor(_secrets, from, to);
+        try { PreflightCore(from, to, Path.GetFullPath(settingsFile), modules, scope, redactor); }
+        catch (StateServiceException ex) { throw new StateServiceException(ex.Reason, redactor.Apply(ex.Message)); }
+        return new MovePreflight(from.Describe(), to.Describe());
+    }
+
+    private (StateDatabase Source, StateDatabase Target) PreflightCore(StateEndpoint from, StateEndpoint to, string settingsPath, IReadOnlyList<StateModule> modules, StateScope scope, Redactor redactor)
+    {
+        if (StateEndpoints.Same(from, to)) throw new StateServiceException(StateServiceRefusal.SameDatabase, "The source and the target are the same database; name another target.");
+        CheckSettingsCanBeWritten(settingsPath, to);
+        var source = StateEndpoints.Open(from, modules, scope, StateEndpoints.Role.Read, _secrets, redactor, _appliedBy, _time);
+        var target = StateEndpoints.Open(to, modules, scope, StateEndpoints.Role.Target, _secrets, redactor, _appliedBy, _time);
+        return (source, target);
     }
 
     private static void Report(IProgress<MoveProgress>? progress, MoveStep step, string message) => progress?.Report(new MoveProgress(step, message));

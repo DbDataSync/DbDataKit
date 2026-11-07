@@ -92,7 +92,14 @@ public static class RunnerModule
                 PRIMARY KEY (package, channel, task, trigger_id)
             );
             """,
+            // plan 29b U02: what an instance records about its binary, so a migration can tell whether a live instance still works with it (module_versions is name=version;name=version)
+            """
+            ALTER TABLE {table:instance} {{addcolumn}} software_version {{key}} NULL;
+            ALTER TABLE {table:instance} {{addcolumn}} module_versions {{text}} NULL;
+            """,
         ],
+        // version 2 only adds nullable columns, which the code of version 1 never reads or writes: a version 1 instance still works with it
+        compatibleWithPrevious: 1,
         retention:
         [
             // an instance that went quiet is history; its labels and capabilities go with it

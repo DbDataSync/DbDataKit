@@ -293,7 +293,7 @@ public sealed class StateApiTests : IDisposable
         Assert.True((bool)listed[0]!["self"]!);
         Assert.False((bool)listed[1]!["self"]!);
         Assert.Equal("1.2.2", (string?)listed[1]!["software_version"]);
-        Assert.Equal(1, (int)listed[1]!["modules"]!["alpha"]!);
+        Assert.Equal(1, (int)listed[1]!["module_versions"]!["alpha"]!);
     }
 
     [Fact]

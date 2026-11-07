@@ -83,7 +83,7 @@ internal static class BuildServer
         app.MapState(new StateManagement(new StateManagementOptions(
             "dbdatabuild", "dbdatabuild", "the server",
             () => state ?? DbDataKit.State.Cli.StateTarget.From(BuildState.Resolve(settings.Directory), BuildState.SqlitePath(settings.Directory), () => BuildState.Secrets(settings.Directory), BuildState.SettingsFile(settings.Directory)),
-            BuildSchedulerSchema.Modules, DbDataKit.State.StateScope.Install, maintenance, new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), instanceId, DbDataBuild.Core.ProductInfo.Version)));
+            BuildSchedulerSchema.Modules, DbDataKit.State.StateScope.Install, maintenance, new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), instanceId, DbDataBuild.Core.ProductInfo.Version, Move: true)));
         BuildManagementApi.Map(app, projects, commands, runner, surfaceFor, scheduler, new Workspaces(settings.Directory, TimeProvider.System), workspaceRunner, new ProxiesFile(settings.Directory), proxyPublisher, files.Codes(), $"Build server {instanceId}", new ProjectCreator(settings.Directory, projects), settings.Directory);
         if (workspaceRunner is not null) app.Lifetime.ApplicationStopping.Register(workspaceRunner.Dispose);
         return app;

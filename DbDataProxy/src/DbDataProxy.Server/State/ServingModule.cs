@@ -89,5 +89,12 @@ public static class ServingModule
             );
             CREATE INDEX {index:store_change_request_by_model} ON {table:store_change_request}(model, state);
             """,
-        ]);
+            // plan 29b U02: what an instance records about its binary, so a migration can tell whether a live instance still works with it (module_versions is name=version;name=version)
+            """
+            ALTER TABLE {table:serving_instance} {{addcolumn}} software_version {{key}} NULL;
+            ALTER TABLE {table:serving_instance} {{addcolumn}} module_versions {{text}} NULL;
+            """,
+        ],
+        // the third migration only adds nullable columns, which the code of version 2 never reads or writes: an instance of the previous version still works with it
+        compatibleWithPrevious: 1);
 }

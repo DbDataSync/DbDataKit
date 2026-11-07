@@ -22,6 +22,7 @@
     <DbDataKitReference Include="Connections.SqlServer" />
     <DbDataKitReference Include="Connections.Postgres" />
     <DbDataKitReference Include="Secrets" />
+    <DbDataKitReference Include="Secrets.Cli" />   <!-- the secret verbs; plan 29b, C06 -->
     <DbDataKitReference Include="Secrets.Store" />   <!-- this server's own key, as a client of the serving groups it publishes to (plan 20 O10) -->
     <DbDataKitReference Include="Secrets.Windows" />
     <DbDataKitReference Include="Web" />   <!-- pairing, key rotation, the version header and the token check -->

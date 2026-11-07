@@ -341,9 +341,9 @@ public sealed class ProtocolTests
                     await call.RequestStream.WriteAsync(new StepChunkRequest { Data = ByteString.CopyFrom(new byte[chunkBytes]) });
                     await call.RequestStream.CompleteAsync();
                 }
-                catch (Exception ex) when (ex is not RpcException)
+                catch (Exception)
                 {
-                    // the runner has already answered: its status is the response
+                    // the runner has already answered and closed the call, so a write can fail first (with a cancellation, or a broken stream) depending on timing: the status that counts is the response's
                 }
 
                 await call.ResponseAsync;
