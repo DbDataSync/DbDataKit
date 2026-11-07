@@ -28,7 +28,7 @@ namespace DbDataKit.State.Snapshots;
 /// </summary>
 public static class StateSnapshotWriter
 {
-    internal static readonly JsonWriterOptions RowOptions = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping, SkipValidation = true };
+    internal static readonly JsonWriterOptions RowOptions = SnapshotValues.RowOptions;
 
     private static readonly JsonWriterOptions ManifestOptions = new() { Indented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 

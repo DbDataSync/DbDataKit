@@ -7,7 +7,7 @@ namespace DbDataKit.State.Verification;
 /// <param name="Tables">The module's tables, by name.</param>
 public sealed record DigestModule(string Key, string Name, int Version, string? Checksum, IReadOnlyList<string> Tables);
 
-/// <summary>A table's row count and its digest: lower-case hex of the sum modulo 2^256 of the SHA-256 of every row's snapshot line, independent of row order: the manifest's <c>rows_digest</c> (see <c>LogicalColumns</c>).</summary>
+/// <summary>A table's row count and its digest: lower-case hex of the sum modulo 2^256 of the SHA-256 of every row's snapshot line, independent of row order: the manifest's <c>rows_digest</c> (see <c>SnapshotValues</c>).</summary>
 public sealed record TableDigest(long Rows, string Sha256);
 
 /// <summary>The hash of one row and its key, for finding which rows differ once two tables' digests do.</summary>

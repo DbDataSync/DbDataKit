@@ -253,7 +253,7 @@ public sealed class StateVerifier(VerifyOptions? options = null)
             var x = a.Peek();
             var y = b.Peek();
             if (x is null && y is null) break;
-            var order = x is null ? 1 : y is null ? -1 : LogicalColumns.Compare(x.Key, y.Key);
+            var order = x is null ? 1 : y is null ? -1 : TableKeys.Compare(x.Key, y.Key);
             if (order < 0)
             {
                 missing.Add(x!.KeyText);
