@@ -131,7 +131,12 @@ public sealed class PackageActivator
         {
             var progress = _publisher.Status.Progress(Kind, name, channel, request.Live);
             if (!progress.IsAllReady)
+            {
+                // another runner may have activated the version between the look above and this one: an activation resets the instances' states, which reads as not ready
+                if (_publisher.Head(Kind, name, channel) is { } now && now.Staged != staged)
+                    return new ActivationOutcome(ActivationState.AlreadyDone, now.Active, losses, [], $"Another runner activated '{name}' first.", progress);
                 return new ActivationOutcome(ActivationState.NotReady, null, losses, [], $"Version {staged} of '{name}' is not ready everywhere: {progress.Describe()}.", progress);
+            }
         }
 
         var busy = await WaitForRunsAsync(name, channel, request.Actor, ct).ConfigureAwait(false);
