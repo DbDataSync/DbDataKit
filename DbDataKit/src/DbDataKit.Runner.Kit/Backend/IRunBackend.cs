@@ -1,0 +1,76 @@
+using DbDataKit.State;
+
+namespace DbDataKit.Runner.Kit;
+
+/// <summary>Who a run is: its record, its attempt, the attempt chain it belongs to (a retry reuses the chain) and the task.</summary>
+internal sealed record RunIdentity(Guid RunId, int Attempt, string Chain, TaskRef Task);
+
+/// <summary>An inbox item as handed out: its body is a payload (<see cref="Body"/>), null for an empty one.</summary>
+internal sealed record InboxTaken(Guid Id, string Source, bool SignatureOk, Guid? Body);
+
+/// <summary>The write side of a streaming step: the stream the body fills, and the call that commits the payload once the body returned normally.</summary>
+internal sealed record StepStream(Stream Stream, Guid PayloadId, Action Complete);
+
+/// <summary>
+/// What a run needs from wherever the runner's state lives (plan 28b section 9). The kit's logic (recovery, units, typed progress, counts) sits above this interface and is the same for every implementation; the
+/// in-process one (<see cref="InProcessRun"/>) calls the stores, and the protocol client of slice R03b will send the messages of the same names.
+/// </summary>
+internal interface IRunBackend
+{
+    RunIdentity Identity { get; }
+
+    /// <summary>Records that the run began.</summary>
+    Task StartAsync(CancellationToken ct);
+
+    // ---- progress (Start, Advance)
+    Task<Checkpoint?> ReadCheckpointAsync(string name, string itemKey, CancellationToken ct);
+
+    Task<(ProgressValue Value, long Version)?> ReadStateAsync(string name, string itemKey, CancellationToken ct);
+
+    /// <summary>
+    /// Writes the changed progress in one transaction, and with it the run's outcome when <paramref name="end"/> is given. False when a version moved (nothing is written, the run is not finished).
+    /// </summary>
+    Task<bool> CommitProgressAsync(IReadOnlyList<CheckpointWrite> checkpoints, IReadOnlyList<StateWrite> states, TaskEnd? end, CancellationToken ct);
+
+    /// <summary>Records how the run ended, without progress.</summary>
+    Task FinishAsync(TaskEnd end, CancellationToken ct);
+
+    // ---- steps (BeginStep, CompleteStep)
+    Task<StepBegin> BeginStepAsync(string name, string key, CancellationToken ct);
+
+    Task<StepBegin.Run> RetakeStepAsync(string name, string key, CancellationToken ct);
+
+    Task CompleteValueStepAsync(string name, string key, string resultJson, IReadOnlyDictionary<string, long>? counts, CancellationToken ct);
+
+    Task CompleteStreamStepAsync(string name, string key, Guid payload, IReadOnlyDictionary<string, long>? counts, CancellationToken ct);
+
+    Task FailStepAsync(string name, string key, string error, IReadOnlyDictionary<string, long>? counts, CancellationToken ct);
+
+    Task<StepStream> OpenStepStreamAsync(StepBegin.Run run, string stepName, string? mediaType, CancellationToken ct);
+
+    // ---- units (BeginUnit, EndUnit)
+    Task<UnitBegin> BeginUnitAsync(string name, string key, CancellationToken ct);
+
+    Task CompleteUnitAsync(string name, string key, IReadOnlyDictionary<string, long>? counts, CancellationToken ct);
+
+    Task FailUnitAsync(string name, string key, string error, IReadOnlyDictionary<string, long>? counts, CancellationToken ct);
+
+    Task SkipUnitAsync(string name, string key, CancellationToken ct);
+
+    // ---- files, inbox, dead letters (ClaimFile, TakeInbox, Reject)
+    /// <summary>True when a file with this hash was already processed on the connection; otherwise the file is noted as seen.</summary>
+    Task<bool> ClaimFileAsync(string connection, string path, long size, DateTimeOffset modified, string hash, CancellationToken ct);
+
+    Task MarkFileProcessedAsync(string connection, string hash, string outcome, CancellationToken ct);
+
+    Task<InboxTaken?> TakeInboxAsync(CancellationToken ct);
+
+    Task ReleaseInboxAsync(Guid id, CancellationToken ct);
+
+    Task AddDeadLetterAsync(string source, string error, byte[] body, Guid id, CancellationToken ct);
+
+    // ---- payloads, log
+    PayloadRef GetPayload(Guid id);
+
+    void Log(string level, string message, string? item = null);
+}

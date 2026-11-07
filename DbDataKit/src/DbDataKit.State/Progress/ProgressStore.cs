@@ -12,6 +12,12 @@ public sealed record Checkpoint(string Name, string ItemKey, long Version, IRead
 /// <summary>One change to one part of a checkpoint. <paramref name="Old"/> null: the part did not exist; <paramref name="New"/> null: the part was removed.</summary>
 public sealed record CheckpointChange(long Id, string Name, string ItemKey, string Part, ProgressType Type, string? Old, string? New, long HeadVersion, string? RunId, string? Actor, DateTimeOffset At);
 
+/// <summary>One checkpoint to move in <see cref="ProgressStore.Commit"/>: its whole set of parts and the version the writer read (0: it does not exist yet).</summary>
+public sealed record CheckpointWrite(string Name, string ItemKey, IReadOnlyDictionary<string, ProgressValue> Parts, long ExpectedVersion);
+
+/// <summary>One state value to set in <see cref="ProgressStore.Commit"/>, with the version the writer read (0: it does not exist yet).</summary>
+public sealed record StateWrite(string Name, string ItemKey, ProgressValue Value, long ExpectedVersion);
+
 /// <summary>A file a task has seen.</summary>
 public sealed record LedgerFile(string Connection, string Path, long Size, DateTimeOffset ModifiedAt, string ContentHash, DateTimeOffset FirstSeenAt, string? RunId, string? Outcome)
 {
@@ -156,61 +162,99 @@ public sealed class ProgressStore(StateDatabase database, ProgressKey key)
         {
             using var connection = database.OpenConnection();
             using var transaction = database.BeginTransaction(connection, Module);
-            var now = database.Time.GetUtcNow();
-            var current = ReadCheckpoint(connection, transaction, name, itemKey);
-            if ((current?.Version ?? 0) != expectedVersion)
+            if (!AdvanceCore(connection, transaction, name, parts, expectedVersion, runId, itemKey, actor))
             {
                 transaction.Rollback();
                 return false;
-            }
-
-            var version = expectedVersion + 1;
-            if (current is null)
-            {
-                using var insert = database.Command(Module, connection, transaction,
-                    "INSERT INTO {table:checkpoint_head} (package, channel, task, name, item_key, row_version, updated_at, updated_by) VALUES ($package, $channel, $task, $name, $item_key, $version, $at, $by);");
-                BindKey(insert);
-                insert.Bind(database, "name", name).Bind(database, "item_key", itemKey).Bind(database, "version", version).Bind(database, "at", now).Bind(database, "by", runId?.ToString("D") ?? actor, System.Data.DbType.String);
-                insert.ExecuteNonQuery();
-            }
-            else
-            {
-                using var update = database.Command(Module, connection, transaction,
-                    $"UPDATE {{table:checkpoint_head}} SET row_version = $version, updated_at = $at, updated_by = $by WHERE {KeyWhere} AND name = $name AND item_key = $item_key AND row_version = $expected;");
-                BindKey(update);
-                update.Bind(database, "name", name).Bind(database, "item_key", itemKey).Bind(database, "version", version).Bind(database, "expected", expectedVersion)
-                    .Bind(database, "at", now).Bind(database, "by", runId?.ToString("D") ?? actor, System.Data.DbType.String);
-                if (update.ExecuteNonQuery() != 1)
-                {
-                    transaction.Rollback();
-                    return false;
-                }
-            }
-
-            var before = current?.Parts ?? new Dictionary<string, ProgressValue>();
-            foreach (var (part, value) in parts)
-            {
-                before.TryGetValue(part, out var old);
-                if (old is not null && old.Type == value.Type && old.Canonical() == value.Canonical()) continue;   // unchanged: nothing written, nothing recorded
-                if (old is not null) DeletePart(connection, transaction, name, itemKey, part);
-                using var insert = database.Command(Module, connection, transaction, InsertPart(part: true));
-                BindKey(insert);
-                insert.Bind(database, "name", name).Bind(database, "item_key", itemKey).Bind(database, "part", part);
-                BindValue(insert, value);
-                insert.ExecuteNonQuery();
-                History(connection, transaction, name, itemKey, part, value.Type, old?.Canonical(), value.Canonical(), version, runId, actor, now);
-            }
-
-            foreach (var (part, old) in before.Where(b => !parts.ContainsKey(b.Key)))
-            {
-                DeletePart(connection, transaction, name, itemKey, part);
-                History(connection, transaction, name, itemKey, part, old.Type, old.Canonical(), null, version, runId, actor, now);
             }
 
             alsoWrite?.Invoke(connection, transaction);
             transaction.Commit();
             return true;
         });
+    }
+
+    /// <summary>
+    /// Checkpoints and state values written together, with the run's outcome, in one transaction (the kit's commit of a run's progress): all move or none does. <paramref name="alsoWrite"/> runs in the same
+    /// transaction, as in <see cref="Advance"/>.
+    /// </summary>
+    /// <returns>False when any of them was moved by another writer first; nothing is written then.</returns>
+    public bool Commit(IReadOnlyList<CheckpointWrite> checkpoints, IReadOnlyList<StateWrite> states, Guid? runId = null, Action<DbConnection, DbTransaction>? alsoWrite = null)
+    {
+        ArgumentNullException.ThrowIfNull(checkpoints);
+        ArgumentNullException.ThrowIfNull(states);
+        foreach (var write in checkpoints)
+            if (write.Parts.Count == 0) throw new ArgumentException($"The checkpoint '{write.Name}' has at least one part.", nameof(checkpoints));
+        return database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var transaction = database.BeginTransaction(connection, Module);
+            foreach (var write in checkpoints)
+                if (!AdvanceCore(connection, transaction, write.Name, write.Parts, write.ExpectedVersion, runId, write.ItemKey, null))
+                {
+                    transaction.Rollback();
+                    return false;
+                }
+
+            foreach (var write in states)
+                if (!SetStateCore(connection, transaction, write.Name, write.Value, write.ItemKey, write.ExpectedVersion))
+                {
+                    transaction.Rollback();
+                    return false;
+                }
+
+            alsoWrite?.Invoke(connection, transaction);
+            transaction.Commit();
+            return true;
+        });
+    }
+
+    private bool AdvanceCore(DbConnection connection, DbTransaction transaction, string name, IReadOnlyDictionary<string, ProgressValue> parts, long expectedVersion, Guid? runId, string itemKey, string? actor)
+    {
+        var now = database.Time.GetUtcNow();
+        var current = ReadCheckpoint(connection, transaction, name, itemKey);
+        if ((current?.Version ?? 0) != expectedVersion) return false;
+
+        var version = expectedVersion + 1;
+        if (current is null)
+        {
+            using var insert = database.Command(Module, connection, transaction,
+                "INSERT INTO {table:checkpoint_head} (package, channel, task, name, item_key, row_version, updated_at, updated_by) VALUES ($package, $channel, $task, $name, $item_key, $version, $at, $by);");
+            BindKey(insert);
+            insert.Bind(database, "name", name).Bind(database, "item_key", itemKey).Bind(database, "version", version).Bind(database, "at", now).Bind(database, "by", runId?.ToString("D") ?? actor, System.Data.DbType.String);
+            insert.ExecuteNonQuery();
+        }
+        else
+        {
+            using var update = database.Command(Module, connection, transaction,
+                $"UPDATE {{table:checkpoint_head}} SET row_version = $version, updated_at = $at, updated_by = $by WHERE {KeyWhere} AND name = $name AND item_key = $item_key AND row_version = $expected;");
+            BindKey(update);
+            update.Bind(database, "name", name).Bind(database, "item_key", itemKey).Bind(database, "version", version).Bind(database, "expected", expectedVersion)
+                .Bind(database, "at", now).Bind(database, "by", runId?.ToString("D") ?? actor, System.Data.DbType.String);
+            if (update.ExecuteNonQuery() != 1) return false;
+        }
+
+        var before = current?.Parts ?? new Dictionary<string, ProgressValue>();
+        foreach (var (part, value) in parts)
+        {
+            before.TryGetValue(part, out var old);
+            if (old is not null && old.Type == value.Type && old.Canonical() == value.Canonical()) continue;   // unchanged: nothing written, nothing recorded
+            if (old is not null) DeletePart(connection, transaction, name, itemKey, part);
+            using var insert = database.Command(Module, connection, transaction, InsertPart(part: true));
+            BindKey(insert);
+            insert.Bind(database, "name", name).Bind(database, "item_key", itemKey).Bind(database, "part", part);
+            BindValue(insert, value);
+            insert.ExecuteNonQuery();
+            History(connection, transaction, name, itemKey, part, value.Type, old?.Canonical(), value.Canonical(), version, runId, actor, now);
+        }
+
+        foreach (var (part, old) in before.Where(b => !parts.ContainsKey(b.Key)))
+        {
+            DeletePart(connection, transaction, name, itemKey, part);
+            History(connection, transaction, name, itemKey, part, old.Type, old.Canonical(), null, version, runId, actor, now);
+        }
+
+        return true;
     }
 
     private void DeletePart(DbConnection connection, DbTransaction transaction, string name, string itemKey, string part)
@@ -372,40 +416,43 @@ public sealed class ProgressStore(StateDatabase database, ProgressKey key)
         {
             using var connection = database.OpenConnection();
             using var transaction = database.BeginTransaction(connection, Module);
-            long? version = null;
-            using (var read = database.Command(Module, connection, transaction, $"SELECT row_version FROM {{table:state_value}} WHERE {KeyWhere} AND name = $name AND item_key = $item_key;"))
-            {
-                BindKey(read);
-                read.Bind(database, "name", name).Bind(database, "item_key", itemKey);
-                if (read.ExecuteScalar() is { } found and not DBNull) version = Convert.ToInt64(found, CultureInfo.InvariantCulture);
-            }
-
-            if (expectedVersion is { } expected && expected != (version ?? 0))
+            if (!SetStateCore(connection, transaction, name, value, itemKey, expectedVersion))
             {
                 transaction.Rollback();
                 return false;
             }
 
-            if (version is not null)
-            {
-                using var delete = database.Command(Module, connection, transaction, $"DELETE FROM {{table:state_value}} WHERE {KeyWhere} AND name = $name AND item_key = $item_key AND row_version = $version;");
-                BindKey(delete);
-                delete.Bind(database, "name", name).Bind(database, "item_key", itemKey).Bind(database, "version", version.Value);
-                if (delete.ExecuteNonQuery() != 1)
-                {
-                    transaction.Rollback();
-                    return false;
-                }
-            }
-
-            using var insert = database.Command(Module, connection, transaction, InsertPart(part: false));
-            BindKey(insert);
-            insert.Bind(database, "name", name).Bind(database, "item_key", itemKey).Bind(database, "row_version", (version ?? 0) + 1).Bind(database, "updated_at", database.Time.GetUtcNow());
-            BindValue(insert, value);
-            insert.ExecuteNonQuery();
             transaction.Commit();
             return true;
         });
+
+    private bool SetStateCore(DbConnection connection, DbTransaction transaction, string name, ProgressValue value, string itemKey, long? expectedVersion)
+    {
+        long? version = null;
+        using (var read = database.Command(Module, connection, transaction, $"SELECT row_version FROM {{table:state_value}} WHERE {KeyWhere} AND name = $name AND item_key = $item_key;"))
+        {
+            BindKey(read);
+            read.Bind(database, "name", name).Bind(database, "item_key", itemKey);
+            if (read.ExecuteScalar() is { } found and not DBNull) version = Convert.ToInt64(found, CultureInfo.InvariantCulture);
+        }
+
+        if (expectedVersion is { } expected && expected != (version ?? 0)) return false;
+
+        if (version is not null)
+        {
+            using var delete = database.Command(Module, connection, transaction, $"DELETE FROM {{table:state_value}} WHERE {KeyWhere} AND name = $name AND item_key = $item_key AND row_version = $version;");
+            BindKey(delete);
+            delete.Bind(database, "name", name).Bind(database, "item_key", itemKey).Bind(database, "version", version.Value);
+            if (delete.ExecuteNonQuery() != 1) return false;
+        }
+
+        using var insert = database.Command(Module, connection, transaction, InsertPart(part: false));
+        BindKey(insert);
+        insert.Bind(database, "name", name).Bind(database, "item_key", itemKey).Bind(database, "row_version", (version ?? 0) + 1).Bind(database, "updated_at", database.Time.GetUtcNow());
+        BindValue(insert, value);
+        insert.ExecuteNonQuery();
+        return true;
+    }
 
     // ---------- the file ledger ----------
 
@@ -599,6 +646,16 @@ public sealed class ProgressStore(StateDatabase database, ProgressKey key)
 
         return null;
     }
+
+    /// <summary>Gives an item taken by <paramref name="runId"/> back, so the next take gets it (the run ended without completing or rejecting it). False when this run does not hold it.</summary>
+    public bool ReleaseInboxItem(Guid id, Guid runId) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, "UPDATE {table:inbox_item} SET taken_by = NULL, taken_at = NULL WHERE id = $id AND taken_by = $run;");
+            cmd.Bind(database, "id", id).Bind(database, "run", runId.ToString("D"));
+            return cmd.ExecuteNonQuery() == 1;
+        });
 
     /// <summary>How many webhooks wait for a run.</summary>
     public int InboxWaiting() =>
