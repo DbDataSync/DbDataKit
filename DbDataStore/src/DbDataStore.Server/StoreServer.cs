@@ -21,16 +21,19 @@ public static class StoreServer
     public static string Version { get; } =
         (typeof(StoreServer).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0").Split('+')[0];
 
-    /// <summary>The server's instance id, made and written to <c>server.yaml</c> the first time and read from it after.</summary>
-    public static string InstanceId(string serverYaml) => ServerIdentity.InstanceId(serverYaml, "store", "dbdatastore server");
+    /// <summary>The server's instance id, made the first time and kept in its state database (<see cref="StoreState"/>) after.</summary>
+    public static string InstanceId(string directory) => InstanceId(new GroupSettings(StoreState.Open(directory)));
+
+    private static string InstanceId(IGroupSettings settings) => GroupIdentity.InstanceId(settings, "store");
 
     public static X509Certificate2 Certificate(string directory) => DirectoryCertificate.Load(directory);
 
     public static WebApplication Build(StoreSettings settings, X509Certificate2 certificate, Action<string> log)
     {
         if (settings.Listen.Scheme != Uri.UriSchemeHttps) throw new ArgumentException("A DbDataStore server listens on HTTPS only.", nameof(settings));
-        var instanceId = InstanceId(settings.ServerYaml);
-        var files = new PairingFiles(settings.ServerYaml);
+        var state = StoreState.Open(settings.Directory);
+        var instanceId = InstanceId(new GroupSettings(state));
+        var files = new PairingFiles(settings.ServerYaml, Group: state);
         var clients = files.Clients();
         var fingerprint = PairingProof.CertificateFingerprint(certificate);
 

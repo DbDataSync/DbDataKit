@@ -33,6 +33,10 @@ public static class GroupIdentity
         return settings.Get(InstanceIdSetting) ?? settings.Put(InstanceIdSetting, ServerIdentity.InstanceId(serverYaml, prefix, pairingCommand));
     }
 
+    /// <summary>The id the group has, made the first time as <c>&lt;prefix&gt;-&lt;guid&gt;</c> and kept in its settings: for a server that has no <c>server.yaml</c> identity to carry over (a DbDataStore server, plan 29a Q18).</summary>
+    public static string InstanceId(IGroupSettings settings, string prefix) =>
+        settings.Get(InstanceIdSetting) ?? settings.Put(InstanceIdSetting, $"{prefix}-{Guid.NewGuid():N}");
+
     /// <summary>The id in <paramref name="serverYaml"/> when it is not the group's (that server was paired as itself before it joined the group); null when it is the same or there is none.</summary>
     public static string? Differs(string groupId, string serverYaml) =>
         File.Exists(serverYaml) && System.Text.RegularExpressions.Regex.Match(File.ReadAllText(serverYaml), @"^instanceId:\s*(\S+)\s*$", System.Text.RegularExpressions.RegexOptions.Multiline) is { Success: true } found
