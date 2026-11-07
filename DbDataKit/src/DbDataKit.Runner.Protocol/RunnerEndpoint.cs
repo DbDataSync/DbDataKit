@@ -28,6 +28,9 @@ public static class RunnerProtocolNames
     /// <summary>The environment variable that holds the root of the package's materialized version: read-only to the task.</summary>
     public const string PackageDirectoryVariable = "DBDATAKIT_PACKAGE_DIR";
 
+    /// <summary>The environment variable that holds the root of the runtime package's materialized version, when the task's package is run by a runtime (<c>launch.runtime</c>, plan 28c E04): read-only to the task. The package's own root stays <see cref="PackageDirectoryVariable"/>.</summary>
+    public const string RuntimeDirectoryVariable = "DBDATAKIT_RUNTIME_DIR";
+
     /// <summary>The largest chunk a stream carries in either direction (plan 28b: streams hold one chunk at a time).</summary>
     public const int MaxChunkBytes = 1024 * 1024;
 }

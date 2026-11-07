@@ -21,6 +21,12 @@ public sealed record TaskRunRequest
     /// <summary>An assembly started through the task host, or an executable.</summary>
     public required PackageLaunch Launch { get; init; }
 
+    /// <summary>
+    /// The root of the runtime package's view when the package is run by a runtime (<c>launch.runtime</c>, plan 28c E04): <see cref="Launch"/> then holds the runtime's command and arguments, the command is a file of this directory, and
+    /// <see cref="PackageDirectory"/> (the definition) is the working directory. Null for a package that runs itself.
+    /// </summary>
+    public string? RuntimeDirectory { get; init; }
+
     /// <summary>What the manifest's task entry says (extra arguments of an executable); null: none.</summary>
     public TaskEntry? Entry { get; init; }
 

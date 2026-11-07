@@ -20,8 +20,12 @@ public static partial class PackageManifestWriter
         w.Append("name: ").Append(Q(manifest.Name)).Append('\n');
         if (manifest.Description is not null) w.Append("description: ").Append(Q(manifest.Description)).Append('\n');
 
+        if (manifest.IsRuntime) w.Append("runtime: true\n");
+        if (manifest.Version is not null) w.Append("version: ").Append(D(manifest.Version)).Append('\n');
+
         w.Append("launch: ").Append(Flow(
-            ("kind", manifest.Launch.Kind == LaunchKind.Assembly ? "assembly" : "executable"),
+            ("kind", manifest.Launch.Runtime is not null && manifest.Launch.Kind == LaunchKind.Executable ? null : manifest.Launch.Kind == LaunchKind.Assembly ? "assembly" : "executable"),
+            ("runtime", manifest.Launch.Runtime is { } r ? Flow(("name", S(r.Name)), ("range", D(r.Range))) : null),
             ("assembly", S(manifest.Launch.Assembly)),
             ("command", S(manifest.Launch.Command)),
             ("args", List(manifest.Launch.ArgList)))).Append('\n');
@@ -30,7 +34,7 @@ public static partial class PackageManifestWriter
         if (built.Dotnet is not null || built.Kit is not null || built.Protocol is not null)
             w.Append("built_against: ").Append(Flow(("dotnet", D(built.Dotnet)), ("kit", D(built.Kit)), ("protocol", S(built.Protocol)))).Append('\n');
 
-        w.Append("tasks:\n");
+        if (manifest.Tasks.Count > 0 || !manifest.IsRuntime) w.Append("tasks:\n");
         foreach (var task in manifest.Tasks) Task(w, task);
         return w.ToString();
     }

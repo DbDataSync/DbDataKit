@@ -32,6 +32,26 @@ tasks:
     counters: [rows]
 ```
 
+**Runtime packages** (plan 28c E04, a newer feature of `package/1`). An engine is published once as a *runtime package* and many *definition packages* name it:
+
+```yaml
+# the runtime package: no tasks of its own, an executable launch, a version
+schema: package/1
+name: dbdatabuild-runtime
+runtime: true
+version: 2.1.0
+launch: { kind: executable, command: bin/dbdatabuild }
+
+# a definition package: `launch.runtime` instead of an assembly or command, and the versions of the runtime it accepts
+schema: package/1
+name: orders-project
+launch: { runtime: { name: dbdatabuild-runtime, range: "2.x" } }       # 2.x, 2.1.x, 2.1.4, ">=2.1 <3"
+tasks:
+  - name: refresh
+```
+
+The runner starts the runtime's executable with the definition's directory as the working directory and `DBDATAKIT_PACKAGE_DIR` pointing at it (`DBDATAKIT_RUNTIME_DIR` is the runtime's own directory). A runner that does not know `launch.runtime` or `runtime` refuses the manifest naming the key. `VersionRange` is the range grammar.
+
 * `PackageManifestReader.Load(text, file)` reads strictly: a key that is not part of the format is an error with the nearest key that is (`Did you mean limits?`), and every problem is a `ConfigDiagnostic` with the file, line, column and key path (`tasks[0].limits.timeout`). `Read` throws a `PackageManifestException` with one line per problem; `LoadFile` reads from disk.
 * `PackageManifestValidator.Problems(manifest)` says what is wrong with a manifest that is well formed (it works on the model, so one built in code is checked the same way): names, the schedule (through `Schedule.Validate()` of `DbDataKit.Scheduling`), a connection slot a trigger uses and the task does not declare, a value declared twice in the progress, a limit of zero, a task an after-run trigger follows that does not exist, a trigger loop (`TriggerGraph.FindCycle`), defaults that do not parse in their type.
 * `PackageManifestWriter.Write(manifest)` writes the text back; reading it gives an equal manifest.

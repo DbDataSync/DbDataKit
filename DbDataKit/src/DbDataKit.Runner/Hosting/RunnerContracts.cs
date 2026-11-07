@@ -15,6 +15,21 @@ public static class RunnerContracts
 
     public static string Protocol => RunnerProtocol.V1;
 
+    /// <summary>
+    /// The keys added to <c>package/1</c> after its first runners (<see cref="PackageManifest.NewerKeys"/>) that this runner reads: <c>launch.runtime</c> and <c>runtime</c> (plan 28c E04). A runner without a key refuses a
+    /// manifest that carries it, naming it: <see cref="CheckKeys"/>.
+    /// </summary>
+    public static IReadOnlyList<string> KnownNewerKeys { get; } = [PackageManifest.LaunchRuntimeKey, PackageManifest.RuntimeKey];
+
+    /// <summary>What is wrong with the manifest for this runner, in words: a newer key it does not read, then the contracts it was built against; null when this runner can serve it.</summary>
+    public static string? Check(PackageManifest manifest) => CheckKeys(manifest, KnownNewerKeys) ?? Check(manifest.BuiltAgainst);
+
+    /// <summary>The refusal of a runner that reads only the newer keys in <paramref name="known"/> (an older runner reads none), naming the first key the manifest uses that is not among them; null when there is none.</summary>
+    public static string? CheckKeys(PackageManifest manifest, IReadOnlyCollection<string> known) =>
+        manifest.NewerKeys.FirstOrDefault(k => !known.Contains(k)) is { } key
+            ? $"the manifest uses `{key}`, which this runner's package/1 does not have; upgrade the runner (or publish the package without `{key}`)."
+            : null;
+
     /// <summary>What is wrong with the contracts a package was built against, in words naming both sides; null when this runner can serve it.</summary>
     public static string? Check(BuiltAgainst built)
     {

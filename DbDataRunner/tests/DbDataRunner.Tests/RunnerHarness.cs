@@ -28,7 +28,7 @@ public sealed class RunnerHarness : IAsyncDisposable
 
     /// <param name="staging">Whether this runner follows staged versions and activates them (R17). Off by default: the older tests drive the manual publish API and expect a staged version to stay staged until they activate it.</param>
     /// <param name="sharedState">The state of another harness: a second runner of the same group (or, on SQLite, a second server on the same file, which needs that harness's <paramref name="directory"/> too).</param>
-    public RunnerHarness(string engine, TimeSpan? tick = null, TimeSpan? grace = null, IReadOnlyList<string>? channels = null, StateSettings? sharedState = null, string? directory = null, long? maxArtifactBytes = null, TimeSpan? lease = null, bool staging = false, Func<BuiltAgainst, string?>? stagingContracts = null, TimeSpan? activationMaxWait = null)
+    public RunnerHarness(string engine, TimeSpan? tick = null, TimeSpan? grace = null, IReadOnlyList<string>? channels = null, StateSettings? sharedState = null, string? directory = null, long? maxArtifactBytes = null, TimeSpan? lease = null, bool staging = false, Func<PackageManifest, string?>? stagingContracts = null, TimeSpan? activationMaxWait = null)
     {
         // a short path: the socket's directory is in it, and a Unix socket's path has a small limit
         Directory = directory ?? System.IO.Directory.CreateTempSubdirectory("dbdr-").FullName;
