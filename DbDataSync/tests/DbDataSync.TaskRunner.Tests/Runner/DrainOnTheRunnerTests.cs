@@ -25,7 +25,7 @@ namespace DbDataSync.TaskRunner.Tests.Runner;
 /// <c>testenv.sh env dbdatakit</c>.
 /// </summary>
 [Trait("Category", "Integration")]
-public sealed class DrainOnTheRunnerTests : IAsyncLifetime
+public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper output) : IAsyncLifetime
 {
     private static readonly GitAuthor Author = new("Test", "test@example.com");
     private static string ServerConnectionString =>
@@ -284,6 +284,7 @@ public sealed class DrainOnTheRunnerTests : IAsyncLifetime
         var traffic = Regex.Match(rig.LogText(result.RunId), @"runner socket traffic: sent (\d+) bytes, received (\d+) bytes");
         Assert.True(traffic.Success, "the engine did not report what crossed the socket. Log:\n" + rig.LogText(result.RunId));
         var bytes = long.Parse(traffic.Groups[1].Value, CultureInfo.InvariantCulture) + long.Parse(traffic.Groups[2].Value, CultureInfo.InvariantCulture);
+        output.WriteLine($"{stateEngine}: {bytes} bytes crossed the runner's socket for {run.Run.Rows} rows ({traffic.Value}).");
         Assert.True(bytes < 1024 * 1024, $"{bytes} bytes crossed the runner's socket for 1,000,000 rows; the bound is 1 MiB.");
     }
 
@@ -327,7 +328,7 @@ public sealed class DrainOnTheRunnerTests : IAsyncLifetime
         var result = await rig.Executor.RunAsync(await rig.DrainRequestAsync(source, "runner-sync"));
 
         Assert.NotEqual(TaskEndState.Succeeded, result.End.State);
-        Assert.Contains("IRunnerState.RequestInitialLoad", rig.LogText(result.RunId));
+        Assert.True(rig.LogText(result.RunId).Contains("IRunnerState.RequestInitialLoad", StringComparison.Ordinal), Describe(rig, result));
         Assert.Null(rig.Watermark(_watermarkKey));
         Assert.Equal(0, (await TargetFingerprintAsync(_runnerTarget)).Count);
     }

@@ -159,13 +159,14 @@ internal sealed class RunnerRig : IDisposable
 
     /// <summary>
     /// A request for the task <c>drain</c> of a package published from <paramref name="source"/> (a directory with <c>engine/</c> and <c>repo/</c>): the files are materialized through the artifact cache into the
-    /// read-only view the task runs from, like a published version.
+    /// read-only view the task runs from, like a published version. The view is made of copies, not links: the .NET host resolves a link to the file it points at and looks for the runtime configuration and the
+    /// dependencies beside <i>that</i>, so <c>dotnet engine.dll</c> does not start from a view of links (what Windows gets anyway; plan 28c E04 and E05 meet it again).
     /// </summary>
     public async Task<TaskRunRequest> DrainRequestAsync(string source, string replication, int degreeOfParallelism = 1, Guid? runId = null, string chain = Chain)
     {
         var cacheRoot = Directory.CreateTempSubdirectory("dbdatasync-e03-cache-").FullName;
         _cleanups.Add(() => Rewritable(cacheRoot));
-        var version = await new ArtifactCache(Path.Combine(cacheRoot, "cache"), new DirectorySource(source)).MaterializeAsync("sync-e03@1");
+        var version = await new ArtifactCache(Path.Combine(cacheRoot, "cache"), new DirectorySource(source), ArtifactLinkMode.Copy).MaterializeAsync("sync-e03@1");
         return new TaskRunRequest
         {
             Task = new TaskRef(Package, Channel, "drain"),
