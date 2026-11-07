@@ -85,6 +85,21 @@ public static partial class PackageManifestWriter
                 ("backoff", l.Backoff is { } backoff ? Duration(backoff) : null),
                 ("max_backoff", l.MaxBackoff is { } max ? Duration(max) : null))).Append('\n');
 
+        if (task.StepList.Count > 0)
+        {
+            w.Append("    steps:\n");
+            foreach (var step in task.StepList)
+                w.Append("      - ").Append(Flow(("name", S(step.Name)), ("kind", step.Kind == StepKind.Stream ? "stream" : null), ("input", S(step.Input)), ("result", S(step.Result)))).Append('\n');
+        }
+
+        if (task.UnitList.Count > 0)
+        {
+            w.Append("    units:\n");
+            foreach (var unit in task.UnitList) w.Append("      - ").Append(Flow(("name", S(unit.Name)), ("item", S(unit.Item)))).Append('\n');
+        }
+
+        if (task.CounterList.Count > 0) w.Append("    counters: ").Append(List(task.CounterList)).Append('\n');
+
         if (task.Requires.Count > 0) w.Append("    requires: ").Append(List(task.Requires)).Append('\n');
         if (task.Capabilities.Count > 0) w.Append("    capabilities: ").Append(List(task.Capabilities)).Append('\n');
     }

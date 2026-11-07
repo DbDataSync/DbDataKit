@@ -1,0 +1,170 @@
+using DbDataKit.State;
+
+namespace DbDataKit.Runner.Kit;
+
+/// <summary>
+/// The run on the real stores, in this process (plan 28b section 12): progress through <see cref="ProgressStore"/> (the checkpoint moves in the transaction that finishes the run record), steps through
+/// <see cref="StepStore"/>, units through <see cref="UnitStore"/>, the file ledger, inbox and dead letters through the progress store, payloads through <see cref="PayloadStore"/>, the run record and its log
+/// through <see cref="RunStore"/>.
+/// </summary>
+internal sealed class InProcessRun : IRunBackend
+{
+    private readonly RunnerEnvironment _env;
+    private readonly StateDatabase _database;
+    private readonly ProgressStore _progress;
+    private readonly StepStore _steps;
+    private readonly UnitStore _units;
+    private readonly RunStore _runs;
+    private readonly PayloadStore _payloads;
+
+    public InProcessRun(RunnerEnvironment env, RunIdentity identity)
+    {
+        _env = env;
+        _database = env.Database;
+        Identity = identity;
+        var key = new ProgressKey(identity.Task.Package, identity.Task.Channel, identity.Task.Task);
+        _progress = new ProgressStore(_database, key);
+        _steps = new StepStore(_database, key, env.Steps);
+        _units = new UnitStore(_database, key);
+        _runs = new RunStore(_database, env.Service);
+        _payloads = new PayloadStore(_database);
+    }
+
+    public RunIdentity Identity { get; }
+
+    private int Attempt => Identity.Attempt;
+
+    private string Chain => Identity.Chain;
+
+    public Task StartAsync(CancellationToken ct)
+    {
+        _runs.Start(Identity.Task.ToString(), Identity.RunId);
+        return Task.CompletedTask;
+    }
+
+    // ---- progress
+
+    public Task<Checkpoint?> ReadCheckpointAsync(string name, string itemKey, CancellationToken ct) => Task.FromResult(_progress.GetCheckpoint(name, itemKey));
+
+    public Task<(ProgressValue Value, long Version)?> ReadStateAsync(string name, string itemKey, CancellationToken ct) => Task.FromResult(_progress.ReadState(name, itemKey));
+
+    public Task<bool> CommitProgressAsync(IReadOnlyList<CheckpointWrite> checkpoints, IReadOnlyList<StateWrite> states, TaskEnd? end, CancellationToken ct)
+    {
+        var finish = end?.ToRunFinish();
+        var ok = _progress.Commit(checkpoints, states, Identity.RunId, finish is null ? null : (connection, transaction) =>
+            _runs.Finish(Identity.RunId, finish.Outcome, finish.Rows, finish.FailedItem, finish.Failure, connection: connection, transaction: transaction));
+        return Task.FromResult(ok);
+    }
+
+    public Task FinishAsync(TaskEnd end, CancellationToken ct)
+    {
+        var finish = end.ToRunFinish();
+        _runs.Finish(Identity.RunId, finish.Outcome, finish.Rows, finish.FailedItem, finish.Failure);
+        return Task.CompletedTask;
+    }
+
+    // ---- steps
+
+    public Task<StepBegin> BeginStepAsync(string name, string key, CancellationToken ct) => Task.FromResult(_steps.Begin(Chain, name, key, Attempt));
+
+    public Task<StepBegin.Run> RetakeStepAsync(string name, string key, CancellationToken ct) => Task.FromResult(_steps.Retake(Chain, name, key, Attempt));
+
+    public Task CompleteValueStepAsync(string name, string key, string resultJson, IReadOnlyDictionary<string, long>? counts, CancellationToken ct)
+    {
+        _steps.CompleteValue(Chain, name, key, Attempt, resultJson, counts);
+        return Task.CompletedTask;
+    }
+
+    public Task CompleteStreamStepAsync(string name, string key, Guid payload, IReadOnlyDictionary<string, long>? counts, CancellationToken ct)
+    {
+        _steps.CompleteStream(Chain, name, key, Attempt, payload, counts);
+        return Task.CompletedTask;
+    }
+
+    public Task FailStepAsync(string name, string key, string error, IReadOnlyDictionary<string, long>? counts, CancellationToken ct)
+    {
+        _steps.Fail(Chain, name, key, Attempt, error, counts);
+        return Task.CompletedTask;
+    }
+
+    public Task<StepStream> OpenStepStreamAsync(StepBegin.Run run, string stepName, string? mediaType, CancellationToken ct)
+    {
+        var writer = _steps.OpenStream(run, stepName, mediaType);
+        return Task.FromResult(new StepStream(writer, writer.Id, writer.Complete));
+    }
+
+    // ---- units
+
+    public Task<UnitBegin> BeginUnitAsync(string name, string key, CancellationToken ct) => Task.FromResult(_units.Begin(Chain, name, key, Attempt));
+
+    public Task CompleteUnitAsync(string name, string key, IReadOnlyDictionary<string, long>? counts, CancellationToken ct)
+    {
+        _units.Complete(Chain, name, key, Attempt, counts);
+        return Task.CompletedTask;
+    }
+
+    public Task FailUnitAsync(string name, string key, string error, IReadOnlyDictionary<string, long>? counts, CancellationToken ct)
+    {
+        _units.Fail(Chain, name, key, Attempt, error, counts);
+        return Task.CompletedTask;
+    }
+
+    public Task SkipUnitAsync(string name, string key, CancellationToken ct)
+    {
+        _units.MarkSkipped(Chain, name, key, Attempt);
+        return Task.CompletedTask;
+    }
+
+    // ---- files, inbox, dead letters
+
+    public Task<bool> ClaimFileAsync(string connection, string path, long size, DateTimeOffset modified, string hash, CancellationToken ct)
+    {
+        if (_progress.FindFile(connection, hash) is { Processed: true }) return Task.FromResult(true);
+        _progress.NoteFile(connection, path, size, modified, hash);
+        return Task.FromResult(false);
+    }
+
+    public Task MarkFileProcessedAsync(string connection, string hash, string outcome, CancellationToken ct)
+    {
+        _progress.MarkFileProcessed(connection, hash, Identity.RunId, outcome);
+        return Task.CompletedTask;
+    }
+
+    public Task<InboxTaken?> TakeInboxAsync(CancellationToken ct)
+    {
+        var item = _progress.TakeNext(Identity.RunId);
+        return Task.FromResult(item is null ? null : new InboxTaken(item.Id, item.Source, item.SignatureOk, item.BodyPayload));
+    }
+
+    public Task ReleaseInboxAsync(Guid id, CancellationToken ct)
+    {
+        _progress.ReleaseInboxItem(id, Identity.RunId);
+        return Task.CompletedTask;
+    }
+
+    public Task AddDeadLetterAsync(string source, string error, byte[] body, Guid id, CancellationToken ct)
+    {
+        Guid payload;
+        using (var writer = _payloads.OpenWrite(new PayloadOptions("application/json", ProgressModule.Name, id.ToString("D"), Label: "a rejected record")))
+        {
+            payload = writer.Id;
+            writer.Write(body);
+            writer.Complete();
+        }
+
+        _progress.AddDeadLetter(source, error, id, payload);
+        return Task.CompletedTask;
+    }
+
+    // ---- payloads, log
+
+    public PayloadRef GetPayload(Guid id)
+    {
+        var info = _payloads.Get(id) ?? throw new InvalidOperationException($"The payload {id} does not exist.");
+        return new PayloadRef(info.Id, info.Size, info.Sha256, info.MediaType, OpenPayload);
+    }
+
+    private Stream OpenPayload(Guid id) => _payloads.OpenRead(id);
+
+    public void Log(string level, string message, string? item = null) => _runs.Log(Identity.RunId, level, message, item);
+}
