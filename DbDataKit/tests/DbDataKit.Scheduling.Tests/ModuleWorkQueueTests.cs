@@ -405,6 +405,81 @@ public sealed class ModuleWorkQueueTests : IDisposable
         Assert.Null(other.Get("sales", "sqlserver/hourly"));
     }
 
+    [Theory, MemberData(nameof(Engines))]
+    public void Only_the_holder_of_the_lease_can_finish_mark_running_release_or_reschedule(string engine)
+    {
+        var queue = Queue(Open(engine));
+        queue.Enqueue("o", "task", "s");
+        var item = queue.TryClaimNext("o", "w1")!;
+        _clock.Advance(TimeSpan.FromMinutes(11));
+        Assert.Equal(1, queue.ReleaseExpired());
+        var taken = queue.TryClaimNext("o", "w2")!;
+
+        Assert.False(queue.TryMarkRunning(item.Id, "w1"));
+        Assert.False(queue.TryFinish(item.Id, "w1", WorkItemStatus.Done));
+        Assert.False(queue.TryRelease(item.Id, "w1"));
+        Assert.Null(queue.Reschedule(item.Id, "w1", _clock.GetUtcNow(), "{}"));
+        Assert.Null(queue.Restart(item.Id, "w1", "{}"));
+        Assert.False(queue.TrySetPayload(item.Id, "w1", "{}"));
+        Assert.True(queue.TryMarkRunning(taken.Id, "w2"));
+        Assert.True(queue.TryFinish(taken.Id, "w2", WorkItemStatus.Done));
+        Assert.False(queue.TryFinish(taken.Id, "w2", WorkItemStatus.Failed));       // finished once
+        Assert.Throws<ArgumentOutOfRangeException>(() => queue.TryFinish(taken.Id, "w2", WorkItemStatus.Pending));
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public void A_rescheduled_item_is_the_same_row_with_a_new_run_id_and_is_not_claimable_before_its_time(string engine)
+    {
+        var queue = Queue(Open(engine));
+        queue.Enqueue("o", "task", "s", payloadJson: "first");
+        var item = queue.TryClaimNext("o", "w1")!;
+        var retryAt = _clock.GetUtcNow().AddSeconds(30);
+
+        var newRun = queue.Reschedule(item.Id, "w1", retryAt, "second");
+
+        Assert.NotNull(newRun);
+        Assert.NotEqual(item.RunId, newRun);
+        var waiting = Assert.Single(queue.ListInFlight("o"));
+        Assert.Equal((item.Id, WorkItemStatus.Pending, newRun!.Value, "second", retryAt, null), (waiting.Item.Id, waiting.Item.Status, waiting.Item.RunId, waiting.Item.PayloadJson, waiting.AvailableAt, waiting.ClaimedBy));
+        Assert.Null(queue.TryClaimNext("o", "w1"));
+        _clock.Advance(TimeSpan.FromSeconds(30));
+        var again = queue.TryClaimNext("o", "w2")!;
+        Assert.Equal((item.Id, newRun.Value), (again.Id, again.RunId));
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public void Restart_changes_the_run_id_and_payload_and_keeps_the_claim_and_release_by_worker_gives_everything_back(string engine)
+    {
+        var queue = Queue(Open(engine));
+        queue.Enqueue("o", "task", "a");
+        queue.Enqueue("o", "task", "b");
+        var first = queue.TryClaimNext("o", "w1")!;
+        var second = queue.TryClaimNext("o", "w1")!;
+
+        var run = queue.Restart(first.Id, "w1", "moved")!.Value;
+
+        Assert.NotEqual(first.RunId, run);
+        var held = queue.ListInFlight("o").Single(w => w.Item.Id == first.Id);
+        Assert.Equal((WorkItemStatus.Claimed, "w1", "moved", run), (held.Item.Status, held.ClaimedBy, held.Item.PayloadJson, held.Item.RunId));
+        Assert.Equal(2, queue.ReleaseClaimsBy("w1"));
+        Assert.All(queue.ListInFlight("o"), w => Assert.Equal(WorkItemStatus.Pending, w.Item.Status));
+        Assert.Equal(0, queue.ReleaseClaimsBy("w1"));
+        Assert.NotEqual(0, second.Id);
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public void The_run_lock_says_who_holds_it(string engine)
+    {
+        var locks = new ModuleRunLockStore(Open(engine), Sync);
+        var run = Guid.NewGuid();
+
+        Assert.Null(locks.Holder("o", "task", "s"));
+        Assert.True(locks.TryAcquire("o", "task", "s", run));
+        Assert.Equal(run, locks.Holder("o", "task", "s"));
+        locks.Release("o", "task", "s");
+        Assert.Null(locks.Holder("o", "task", "s"));
+    }
+
     [Fact]
     public void The_module_follows_the_conventions() => Assert.Empty(StateConventions.Violations(SchedulingModule.Module));
 

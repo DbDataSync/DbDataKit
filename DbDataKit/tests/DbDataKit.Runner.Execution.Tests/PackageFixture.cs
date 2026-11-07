@@ -29,10 +29,18 @@ internal sealed class DirectorySource(string directory) : IArtifactSource
 /// </summary>
 internal static class PackageFixture
 {
-    private static readonly Lazy<Task<MaterializedVersion>> Sample = new(() => MaterializeAsync(Publish()));
+    private static readonly Lazy<string> SampleDirectory = new(Publish);
+    private static readonly Lazy<Task<MaterializedVersion>> Sample = new(() => MaterializeAsync(SampleDirectory.Value));
     private static readonly Lazy<Task<MaterializedVersion>> Scripts = new(() => MaterializeAsync(WriteScripts()));
 
     public static Task<MaterializedVersion> SamplePackage() => Sample.Value;
+
+    /// <summary>The published sample package as a version source would list it: the files of its directory, and a source that opens them.</summary>
+    public static async Task<(IArtifactSource Source, IReadOnlyList<ArtifactFile> Files)> SampleFiles()
+    {
+        var source = new DirectorySource(SampleDirectory.Value);
+        return (source, await source.ListAsync("sample"));
+    }
 
     public static Task<MaterializedVersion> ScriptPackage() => Scripts.Value;
 
