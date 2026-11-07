@@ -30,6 +30,8 @@ public sealed class RunnerEngine(RunnerSettings settings, StateDatabase state, I
     private Task? _beat;
     private Guid? _instance;
     private RunnerControl? _control;
+    private RunnerScheduler? _scheduler;
+    private volatile bool _silent;
     private IReadOnlyDictionary<string, string> _capabilities = new Dictionary<string, string>();
     private readonly string _workerId = $"{Environment.MachineName}-{Environment.ProcessId}-{Guid.NewGuid():N}";
 
@@ -44,6 +46,20 @@ public sealed class RunnerEngine(RunnerSettings settings, StateDatabase state, I
 
     /// <summary>How long an instance may be silent before it is not live to the group.</summary>
     public TimeSpan Lease => settings.InstanceLease;
+
+    /// <summary>
+    /// For a test or a diagnosis: while true this process renews neither its instance row nor the leases of its work items, as a process that was stopped or cut off from the database would. Its tasks keep running; the group takes the items
+    /// once the lease runs out, and a process that is let go again finds out it lost them.
+    /// </summary>
+    public bool SuspendHeartbeats
+    {
+        get => _silent;
+        set
+        {
+            _silent = value;
+            if (_scheduler is not null) _scheduler.SuspendHeartbeats = value;
+        }
+    }
 
     /// <summary>The runner group this instance belongs to.</summary>
     public string Group => settings.Group;
@@ -112,6 +128,8 @@ public sealed class RunnerEngine(RunnerSettings settings, StateDatabase state, I
                 Instance = () => _instance,
                 Logger = _log,
             });
+        _scheduler = scheduler;
+        scheduler.SuspendHeartbeats = _silent;
         _control = new RunnerControl(state, scheduler);
         _loop = Task.Run(() => scheduler.RunAsync(_stopping.Token));
         _beat = Task.Run(() => HeartbeatAsync(instances, _stopping.Token));
@@ -151,7 +169,7 @@ public sealed class RunnerEngine(RunnerSettings settings, StateDatabase state, I
             instances.Remove(dead.Instance.Id);
         }
 
-        inherited.AddRange(instances.RemoveLapsed(RunnerState.ServiceId, Environment.MachineName, id, settings.InstanceLease));
+        inherited.AddRange(instances.RemoveLapsed(RunnerState.ServiceId, Environment.MachineName, id, settings.InstanceLease, anyHost: !RunnerState.IsGroup(state)));
         foreach (var label in inherited.Distinct(StringComparer.Ordinal)) instances.SetLabel(id, label, InstanceLabel.Admin);
         lock (_gate) _instance = id;
     }
@@ -163,6 +181,7 @@ public sealed class RunnerEngine(RunnerSettings settings, StateDatabase state, I
         {
             while (await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
             {
+                if (_silent) continue;
                 try
                 {
                     if (_instance is { } id)

@@ -95,6 +95,7 @@ public sealed class RunnerScheduler
             using var timer = new PeriodicTimer(_options.Tick, _time);
             do
             {
+                if (SuspendHeartbeats) continue;   // a frozen process neither renews nor takes anything
                 try { await TickAsync(ct).ConfigureAwait(false); }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -303,6 +304,14 @@ public sealed class RunnerScheduler
     private void Start(WorkItem item)
     {
         var running = new Running();
+        // this loop's own lease ran out and its own tick took the item back while the earlier attempt still runs here: the earlier attempt is a lost one, whoever holds the item now
+        if (_running.TryGetValue(item.Id, out var earlier))
+        {
+            earlier.LeaseLost = true;
+            earlier.Cancel?.Invoke();
+            Report($"item {item.Id}", $"This runner's lease on {item.Owner}/{item.Subject} ran out and the item was taken again (as a new attempt) while the earlier attempt still ran here; the earlier attempt is cancelled and its result will not be recorded.");
+        }
+
         _running[item.Id] = running;
         _ = Task.Run(async () =>
         {
@@ -316,7 +325,7 @@ public sealed class RunnerScheduler
             }
             finally
             {
-                _running.TryRemove(item.Id, out _);
+                _running.TryRemove(new KeyValuePair<long, Running>(item.Id, running));
                 running.Done.TrySetResult();
             }
         }, CancellationToken.None);
@@ -326,6 +335,7 @@ public sealed class RunnerScheduler
     {
         public TaskCompletionSource Done { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public volatile bool LeaseLost;
+        public volatile Action? Cancel;
         public volatile bool CancelRequested;
     }
 
@@ -422,6 +432,7 @@ public sealed class RunnerScheduler
         }
 
         using var runCts = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
+        running.Cancel = () => { try { runCts.Cancel(); } catch (ObjectDisposedException) { /* the run ended */ } };
         using var beatCts = new CancellationTokenSource();
         Task? beat = null;
         try
@@ -592,28 +603,32 @@ public sealed class RunnerScheduler
             while (await timer.WaitForNextTickAsync(stop).ConfigureAwait(false))
             {
                 if (SuspendHeartbeats) continue;
-                if (!_queue.Heartbeat(item.Id, _options.WorkerId))
+                try
                 {
-                    running.LeaseLost = true;
-                    Report($"item {item.Id}", $"This runner lost the lease on {item.Owner}/{item.Subject} (run {item.RunId}): it did not renew it in time and another runner took the item. The local task is cancelled and its result will not be recorded.");
-                    await runCts.CancelAsync().ConfigureAwait(false);   // the item is someone else's now
-                    return;
-                }
+                    if (!_queue.Heartbeat(item.Id, _options.WorkerId))
+                    {
+                        running.LeaseLost = true;
+                        Report($"item {item.Id}", $"This runner lost the lease on {item.Owner}/{item.Subject} (run {item.RunId}): it did not renew it in time and another runner took the item. The local task is cancelled and its result will not be recorded.");
+                        await runCts.CancelAsync().ConfigureAwait(false);   // the item is someone else's now
+                        return;
+                    }
 
-                if (!running.CancelRequested && _queue.IsCancelRequested(item.RunId))
+                    if (!running.CancelRequested && _queue.IsCancelRequested(item.RunId))
+                    {
+                        running.CancelRequested = true;
+                        await runCts.CancelAsync().ConfigureAwait(false);
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    running.CancelRequested = true;
-                    await runCts.CancelAsync().ConfigureAwait(false);
+                    // a database that is briefly out of reach must not end the renewals for good: the next beat tries again
+                    Report($"item {item.Id}", $"Renewing the lease failed: {ex.GetType().Name}: {ex.Message}");
                 }
             }
         }
         catch (OperationCanceledException)
         {
             // the run ended
-        }
-        catch (Exception ex)
-        {
-            Report($"item {item.Id}", $"Renewing the lease failed: {ex.GetType().Name}: {ex.Message}");
         }
     }
 

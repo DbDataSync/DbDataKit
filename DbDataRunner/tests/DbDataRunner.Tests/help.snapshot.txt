@@ -5,6 +5,7 @@ Commands:
   server   The long-running process
   runs     The run history of the tasks
   tasks    The scheduled tasks of the installed packages
+  label    Labels on the runners of the group: an administrator's labels route tasks that require them; reported capabilities are labels too, read-only
   package  Packages in this runner (a development path: plan 30's publish API replaces it)
   state    The state database: where it is, whether it works, and the rights it needs
   service  Registration of 'server run' with Windows or systemd
@@ -46,6 +47,17 @@ Verbs:
       Stop the task from being queued at its scheduled times (a run going is not touched; run-now still works) [Target writes (data only)]
   tasks resume <package>/<channel>/<task> [--repo <server directory>]
       Let a paused task be queued at its scheduled times again [Target writes (data only)]
+
+$ dbdatarunner label help
+dbdatarunner label: Labels on the runners of the group: an administrator's labels route tasks that require them; reported capabilities are labels too, read-only
+
+Verbs:
+  label add <label> --instance <id|this> [--repo <server directory>] [--group <name>]
+      Give a runner a label (name or name:value); tasks that require it can now run there, within a few seconds [Target writes (data only)]
+  label remove <label> --instance <id|this> [--repo <server directory>] [--group <name>]
+      Take an administrator's label off a runner (a label the runner reports about itself cannot be removed) [Target writes (data only)]
+  label list [--instance <id|this>] [--repo <server directory>] [--group <name>]
+      The labels of the live runners of the group, or of one runner, each with who set it (admin or reported) [Offline only]
 
 $ dbdatarunner package help
 dbdatarunner package: Packages in this runner (a development path: plan 30's publish API replaces it)

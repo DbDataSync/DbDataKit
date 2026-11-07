@@ -162,16 +162,18 @@ public sealed class RunnerInstances(StateDatabase database)
         [.. ListLive(leaseTimeout).Select(i => new LiveInstance(i, LabelSet(i.Id), Capabilities(i.Id).ToDictionary(c => c.Name, c => c.Value, StringComparer.Ordinal)))];
 
     /// <summary>
-    /// Removes the instance rows of <paramref name="runner"/> on <paramref name="host"/> other than <paramref name="except"/> that are gone or whose lease ran out, with their labels and capabilities, and returns the administrator labels
+    /// Removes the instance rows of <paramref name="runner"/> on <paramref name="host"/> (any host when <paramref name="anyHost"/>: a state that only one runner may use) other than <paramref name="except"/> that are gone or whose lease ran out, with their labels and capabilities, and returns the administrator labels
     /// of the most recent of them (an instance that restarts keeps what its administrator set). Rows of other hosts and live rows are left alone.
     /// </summary>
-    public IReadOnlyList<string> RemoveLapsed(string runner, string host, Guid except, TimeSpan leaseTimeout)
+    public IReadOnlyList<string> RemoveLapsed(string runner, string host, Guid except, TimeSpan leaseTimeout, bool anyHost = false)
     {
         var since = database.Time.GetUtcNow() - leaseTimeout;
-        var lapsed = Query("runner = $runner AND host = $host AND id <> $except AND (state <> $running OR heartbeat_at < $since)",
-            c => c.Bind(database, "runner", runner).Bind(database, "host", host).Bind(database, "except", except).Bind(database, "running", RunnerInstance.Running).Bind(database, "since", since));
+        var lapsed = Query("runner = $runner AND id <> $except AND (state <> $running OR heartbeat_at < $since)",
+            c => c.Bind(database, "runner", runner).Bind(database, "except", except).Bind(database, "running", RunnerInstance.Running).Bind(database, "since", since));
+        if (!anyHost) lapsed = [.. lapsed.Where(i => i.Host == host)];
         if (lapsed.Count == 0) return [];
-        var inherited = Labels(lapsed.OrderBy(i => i.HeartbeatAt).Last().Id).Where(l => l.Source == InstanceLabel.Admin).Select(l => l.Label).ToList();
+        var sameHost = lapsed.Where(i => i.Host == host).ToList();
+        var inherited = sameHost.Count == 0 ? [] : Labels(sameHost.OrderBy(i => i.HeartbeatAt).Last().Id).Where(l => l.Source == InstanceLabel.Admin).Select(l => l.Label).ToList();
         foreach (var instance in lapsed) Remove(instance.Id);
         return inherited;
     }
