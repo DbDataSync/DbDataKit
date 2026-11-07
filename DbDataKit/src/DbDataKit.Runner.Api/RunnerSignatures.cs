@@ -1,6 +1,6 @@
 using DbDataKit.State;
 
-namespace DbDataRunner.Server;
+namespace DbDataKit.Runner.Api;
 
 /// <summary>What a signature check found: <see cref="Unsigned"/> (no signature, or none this build can check), <see cref="Verified"/> or <see cref="Invalid"/> (there is one and it does not hold).</summary>
 public enum SignatureState

@@ -1,3 +1,5 @@
+using DbDataKit.Runner;
+using DbDataKit.Runner.Api;
 using DbDataKit.Scheduling;
 using DbDataKit.Secrets;
 using DbDataKit.State;
@@ -17,25 +19,21 @@ public static class RunnerState
     public const string FileName = "state.db";
 
     /// <summary>The service name recorded on what the runner writes to a database it may share (the audit's <c>service_id</c>).</summary>
-    public const string ServiceId = "dbdatarunner";
+    public const string ServiceId = DbDataKit.Runner.RunnerNames.ServiceId;
 
     /// <summary>The service name of the work queue, the run records and the job state: the engine's default, the same for every instance of the group.</summary>
-    public const string EngineService = "runner";
+    public const string EngineService = DbDataKit.Runner.RunnerNames.EngineService;
 
-    public const string DefaultGroup = "main";
+    public const string DefaultGroup = DbDataKit.Runner.RunnerNames.DefaultGroup;
 
     /// <summary>The modules the runner's state is built from.</summary>
-    public static IReadOnlyList<StateModule> Modules { get; } =
-    [
-        RunnerModule.Module, RunsModule.Module, ProgressModule.Module, SchedulingModule.Module, DefinitionsModule.Module,
-        PayloadStore.Module, AuditModule.Module, NotificationsModule.Module, TrustModule.Module,
-    ];
+    public static IReadOnlyList<StateModule> Modules { get; } = [.. DbDataKit.Runner.RunnerNames.EngineModules, TrustModule.Module];
 
     public static StateScope ScopeOf(string? group = null) => new(Group: string.IsNullOrWhiteSpace(group) ? DefaultGroup : group, Service: ServiceId);
 
     public static string PathIn(string directory) => Path.Combine(directory, FileName);
 
-    public static bool IsGroup(StateDatabase state) => !string.Equals(state.Dialect.Engine, StateEngineIds.Sqlite, StringComparison.OrdinalIgnoreCase);
+    public static bool IsGroup(StateDatabase state) => DbDataKit.Runner.RunnerNames.IsGroup(state);
 
     /// <summary>Opens the state (and makes or migrates it). A server engine's connection string may name secrets, looked up in the environment (<c>DBDATA_SECRET_*</c>).</summary>
     public static StateDatabase Open(string directory, StateSettings? settings = null, Func<string, string?>? environment = null, string? group = null, TimeProvider? time = null)

@@ -27,6 +27,7 @@ public static class ConsoleCli
         ServerNoun.Create((args, context) => RunServerAsync(args, context, environment)),
         InstanceNoun(environment),
         UserNoun(environment),
+        RunnerNoun(environment),
         StateNoun(environment, configureMove),
         IdentityCli.Noun(environment),
         ConsoleService.Noun(ConsoleServiceEnvironment.Real()),
@@ -289,7 +290,65 @@ public static class ConsoleCli
         return pending.Count == 0 ? CliExit.Ok : CliExit.Failure;
     }
 
+    // ---- runner ----
+
+    private static Noun RunnerNoun(Func<string, string?>? environment) => new("runner", "The runner embedded in the console (plan 28 section 6a): production packages on it are an administrator's recorded choice",
+    [
+        new Verb("accept-production", "Record the choice to run production packages on the console's embedded runner, which stops their schedules whenever the console stops (needs --yes)", EffectClass.TrackingTablesOnly, "--yes [--note <text>] [--repo <console directory>]",
+            (args, context) => RunnerPostureAsync(args, context, environment, accept: true),
+            DataSchemas.Object([("accepted", DataSchemas.Boolean), ("by", DataSchemas.String), ("warning", DataSchemas.String)], "accepted", "by", "warning")),
+        new Verb("revoke-production", "Take the choice back: the embedded runner serves no production channel again", EffectClass.TrackingTablesOnly, "[--repo <console directory>]",
+            (args, context) => RunnerPostureAsync(args, context, environment, accept: false),
+            DataSchemas.Object([("revoked", DataSchemas.Boolean)], "revoked")),
+    ]);
+
+    private static async Task<int> RunnerPostureAsync(string[] args, CliContext context, Func<string, string?>? environment, bool accept)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string> { "yes" }, new HashSet<string> { "repo", "note" });
+        var usage = accept ? "Usage: runner accept-production --yes [--note <text>] [--repo <console directory>]" : "Usage: runner revoke-production [--repo <console directory>]";
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0) { await context.Error.WriteLineAsync(usage); return CliExit.Usage; }
+        var directory = DirectoryOf(parsed, environment);
+        ConsoleRunnerSettings runner;
+        try { runner = ConsoleRunnerSettings.Load(directory); }
+        catch (InvalidOperationException ex) { await context.Error.WriteLineAsync(ex.Message); return DbDataKit.State.Cli.StateExit.Settings; }
+        if (!runner.Enabled)
+        {
+            await context.Error.WriteLineAsync($"The console's embedded runner is not enabled: set runner.enabled to true in {ConsoleState.SettingsFileIn(directory)} first.");
+            return CliExit.Usage;
+        }
+
+        var guard = new PostureGuard(OpenState(parsed, environment), ConsoleState.ServiceId);
+        var actor = "local:" + Environment.UserName;
+        if (!accept)
+        {
+            var revoked = guard.Revoke(PostureSetting.AcceptProductionOnConsoleRunner, RunnerModule.AllPackages, actor);
+            await context.Out.WriteLineAsync(revoked ? "Production packages are no longer accepted on the console's embedded runner." : "No such choice was recorded; nothing changed.");
+            context.Data["revoked"] = revoked;
+            return CliExit.Ok;
+        }
+
+        if (!parsed.Has("yes"))
+        {
+            await context.Error.WriteLineAsync($"{PostureSetting.AcceptProductionOnConsoleRunner.Effect} Nothing was changed. To accept this, run again with --yes; the choice is recorded with who chose it and when.");
+            return CliExit.Usage;
+        }
+
+        guard.Choose(PostureSetting.AcceptProductionOnConsoleRunner, RunnerModule.AllPackages, actor, parsed.Get("note"), confirmed: true);
+        await context.Out.WriteLineAsync($"Recorded. {ConsoleRunner.ProductionWarning} A console that is running picks the choice up within a second.");
+        context.Data["accepted"] = true;
+        context.Data["by"] = actor;
+        context.Data["warning"] = ConsoleRunner.ProductionWarning;
+        return CliExit.Ok;
+    }
+
     // ---- state ----
+
+    /// <summary>The embedded runner's settings in the console's default directory, which decides the modules the <c>state</c> verbs know (a <c>--repo</c> that names another directory is not seen here: the router is built before the arguments are read).</summary>
+    private static ConsoleRunnerSettings DefaultRunner(Func<string, string?>? environment)
+    {
+        try { return ConsoleRunnerSettings.Load(Path.GetFullPath(ConsoleSettings.DefaultDirectory(environment))); }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException) { return ConsoleRunnerSettings.Disabled; }
+    }
 
     /// <summary>The shared <c>state</c> verbs over the console's state: its settings come from the flags, the environment and <c>settings.yaml</c> in its directory (<see cref="ConsoleState.Resolve"/>; <c>state move</c> and <c>state init</c> write that file), its file is <c>state.db</c> in its directory, and a password that is a secret reference is looked up in its store, then the environment.</summary>
     private static Noun StateNoun(Func<string, string?>? environment, Func<DbDataKit.State.Engines.Snapshots.MoveOptions, DbDataKit.State.Engines.Snapshots.MoveOptions>? configureMove = null) => DbDataKit.State.Cli.StateVerbs.Create(new DbDataKit.State.Cli.StateVerbContext(
@@ -303,7 +362,7 @@ public static class ConsoleCli
                 () => new DbDataKit.Secrets.SecretResolverChain([ConsoleSecrets.Open(directory, environment), new DbDataKit.Secrets.EnvSecretProvider(environment)]),
                 ConsoleState.SettingsFileIn(directory));
         },
-        ConsoleState.Modules, StateScope.Install, ["engine", "repo"], "[--engine mssql|postgres] [--repo <console directory>]") { ConfigureMove = configureMove });
+        ConsoleState.ModulesFor(DefaultRunner(environment)), ConsoleState.ScopeFor(DefaultRunner(environment)), ["engine", "repo"], "[--engine mssql|postgres] [--repo <console directory>]") { ConfigureMove = configureMove });
 
     // ---- user ----
 
