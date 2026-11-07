@@ -100,10 +100,18 @@ public sealed class StagingFollower
                         else failed.Add($"{name}/{head.Channel}@{staged}");
                     }
 
-                    var outcome = await _activator.ActivateAsync(name, head.Channel, new ActivationRequest(ActivationMode.Automatic, $"runner:{id}", liveIds), ct).ConfigureAwait(false);
-                    if (outcome.Activated) activated.Add($"{name}/{head.Channel}@{outcome.Version}");
-                    else if (outcome.State is ActivationState.WaitingForRuns or ActivationState.LossesNotConfirmed)
-                        _options.Logger?.LogDebug("{Message}", outcome.Message);
+                    try
+                    {
+                        var outcome = await _activator.ActivateAsync(name, head.Channel, new ActivationRequest(ActivationMode.Automatic, $"runner:{id}", liveIds), ct).ConfigureAwait(false);
+                        if (outcome.Activated) activated.Add($"{name}/{head.Channel}@{outcome.Version}");
+                        else if (outcome.State is ActivationState.WaitingForRuns or ActivationState.LossesNotConfirmed)
+                            _options.Logger?.LogDebug("{Message}", outcome.Message);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        // one package that cannot be activated (a manifest that does not read, a migration that fails) does not stop the others
+                        _options.Logger?.LogWarning("Version {Version} of {Package} on {Channel} was not activated: {Message}", staged, name, head.Channel, ex.Message);
+                    }
                 }
                 else if (head.Active is { } active && (mine is null || mine.Version != active || mine.State != InstanceStates.Active) && !(mine is { State: InstanceStates.Failed } && mine.Version == active))
                 {

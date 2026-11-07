@@ -142,7 +142,14 @@ public sealed class PackageActivator
             void Migrate(DefinitionChange change) => ApplyMigration(change, previous, next, plans, request.Actor);
             if (request.Mode == ActivationMode.Automatic)
             {
-                var result = await Task.Run(() => _publisher.ActivateIfAllReady(Kind, name, request.Live, request.Actor, channel, Migrate), ct).ConfigureAwait(false);
+                ActivationResult result;
+                try { result = await Task.Run(() => _publisher.ActivateIfAllReady(Kind, name, request.Live, request.Actor, channel, Migrate), ct).ConfigureAwait(false); }
+                catch (DefinitionNotFoundException)
+                {
+                    // another runner activated it between the look above and this call
+                    return new ActivationOutcome(ActivationState.AlreadyDone, _publisher.Head(Kind, name, channel)?.Active, losses, [], $"Another runner activated '{name}' first.");
+                }
+
                 if (result.AlreadyDone) return new ActivationOutcome(ActivationState.AlreadyDone, _publisher.Head(Kind, name, channel)?.Active, losses, [], $"Another runner activated '{name}' first.", result.Progress);
                 if (!result.Activated) return new ActivationOutcome(ActivationState.NotReady, null, losses, [], $"Version {staged} of '{name}' is not ready everywhere: {result.Progress.Describe()}.", result.Progress);
                 return new ActivationOutcome(ActivationState.Activated, result.Version!.Version, losses, [], $"Version {result.Version.Version} of '{name}' is active.", result.Progress);
