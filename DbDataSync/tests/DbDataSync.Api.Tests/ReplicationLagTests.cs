@@ -296,14 +296,14 @@ public sealed class ReplicationLagTests(TestApiFactory factory) : IClassFixture<
         {
             using var connection = db.OpenConnection();
             using var cmd = db.Command(connection, """
-                INSERT INTO ChangeCheckHistory (ConnectionName, SourceDatabase, SourceKind, Value, CheckedAtUtc, SourceTimeUtc)
+                INSERT INTO {table:sync_state.change_check} (connection_name, source_database, source_kind, value_text, checked_at, source_at)
                 VALUES ($connection, $database, $kind, $value, $checkedAt, NULL);
                 """);
             cmd.Bind(db, "connection", "biglag-src");
             cmd.Bind(db, "database", database);
             cmd.Bind(db, "kind", kind);
-            cmd.Bind(db, "value", (object?)value ?? DBNull.Value);
-            cmd.Bind(db, "checkedAt", checkedAt.ToString("O"));
+            cmd.Bind(db, "value", value, System.Data.DbType.String);
+            cmd.Bind(db, "checkedAt", checkedAt);
             cmd.ExecuteNonQuery();
         });
     }

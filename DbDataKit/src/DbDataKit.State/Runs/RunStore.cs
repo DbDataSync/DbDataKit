@@ -55,6 +55,12 @@ public static class RunsModule
             ALTER TABLE {table:run} {{addcolumn}} attempt {{int}} NULL;
             CREATE INDEX {index:run_by_package} ON {table:run}(package, channel, started_at);
             """,
+            """
+            -- Names a log line that came from a journal as '<run>:<sequence>' (a runner's or a worker's state journal, replayed after a crash). A line with a source key is written once: the second write of the
+            -- same key is ignored, so replaying a journal twice is harmless. Null for a line logged live, and null counts as different from null in the index, so two identical live lines are two lines.
+            ALTER TABLE {table:run_log} {{addcolumn}} source_key {{key}} NULL;
+            CREATE UNIQUE INDEX {index:run_log_by_source} ON {table:run_log}(source_key) WHERE source_key IS NOT NULL;
+            """,
         ],
         retention:
         [
@@ -73,6 +79,9 @@ public sealed record StoredRun(Guid Id, string Service, RunRecord Run, string? P
 
 /// <summary>One line of a run's log.</summary>
 public sealed record RunLogLine(long Id, Guid RunId, DateTimeOffset At, string Level, string? Item, string Message);
+
+/// <summary>One line to write with <see cref="RunStore.LogMany"/>. <paramref name="SourceKey"/> is set for a line replayed from a journal: a key already stored is ignored.</summary>
+public sealed record RunLogEntry(Guid RunId, DateTimeOffset At, string Level, string Message, string? Item = null, string? SourceKey = null);
 
 /// <summary>Which runs to read, newest first; every field narrows.</summary>
 /// <param name="StartedBefore">Page by passing the <c>Started</c> of the last run seen.</param>
@@ -163,6 +172,43 @@ public sealed class RunStore(StateDatabase database, string service)
             id = Convert.ToInt64(cmd.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
         });
         return id;
+    }
+
+    /// <summary>
+    /// Records several lines in one transaction (what a buffered log writer flushes). A line with a <see cref="RunLogEntry.SourceKey"/> that is already stored is ignored, so a journal replayed after a
+    /// crash writes each line once; a line with none is always written.
+    /// </summary>
+    public void LogMany(IReadOnlyList<RunLogEntry> entries)
+    {
+        if (entries.Count == 0) return;
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var transaction = database.BeginTransaction(connection, Module);
+            using var cmd = database.Command(Module, connection, transaction, database.Dialect.InsertOrIgnore(
+                "{table:run_log}", "run_id, logged_at, level, item, message, source_key", "$run, $at, $level, $item, $message, $source",
+                "source_key", "source_key IS NOT NULL"));
+            // one command, bound once and run for each line: a batch is what this is for
+            var parameters = new Dictionary<string, System.Data.Common.DbParameter>();
+            foreach (var name in new[] { "run", "at", "level", "item", "message", "source" })
+            {
+                cmd.Bind(database, name, null, name is "item" or "source" ? System.Data.DbType.String : null);
+                parameters[name] = cmd.Parameters[^1];
+            }
+
+            foreach (var entry in entries)
+            {
+                parameters["run"].Value = StateValues.ForParameter(database.Dialect, entry.RunId) ?? DBNull.Value;
+                parameters["at"].Value = StateValues.ForParameter(database.Dialect, entry.At) ?? DBNull.Value;
+                parameters["level"].Value = entry.Level;
+                parameters["item"].Value = (object?)entry.Item ?? DBNull.Value;
+                parameters["message"].Value = entry.Message;
+                parameters["source"].Value = (object?)entry.SourceKey ?? DBNull.Value;
+                cmd.ExecuteNonQuery();
+            }
+
+            transaction.Commit();
+        });
     }
 
     /// <summary>A run's log in order, a page at a time: pass the last id seen as <paramref name="afterId"/>.</summary>

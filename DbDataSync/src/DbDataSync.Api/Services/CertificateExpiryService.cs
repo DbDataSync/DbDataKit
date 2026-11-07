@@ -35,14 +35,14 @@ namespace DbDataSync.Api.Services;
 public sealed class CertificateExpiryService(
     IConfiguration configuration,
     CertificateOptions options,
-    NotificationStore notifications,
+    NotificationFeedStore notifications,
     ILogger<CertificateExpiryService> logger) : BackgroundService
 {
     private static readonly TimeSpan CheckInterval = TimeSpan.FromDays(1);
 
     // In-memory, not persisted — a restart mid-day can produce one extra notification, which
     // the dedup comment in EvaluateExpiry accepts as the same courtesy-cap tradeoff every
-    // other NotificationStore producer already makes rather than a guarantee worth a database cursor.
+    // other NotificationFeedStore producer already makes rather than a guarantee worth a database cursor.
     private DateOnly? _lastRaisedExpiringUtc;
     private DateOnly? _lastRaisedExpiredUtc;
 

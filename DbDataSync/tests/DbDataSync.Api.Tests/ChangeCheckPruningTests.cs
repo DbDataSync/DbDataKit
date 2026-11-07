@@ -63,7 +63,8 @@ public sealed class ChangeCheckPruningTests(UnprunedApiFactory factory) : IClass
     private RunPruningService BuildService() => new(
         factory.Services.GetRequiredService<TaskRunStore>(),
         _checks,
-        factory.Services.GetRequiredService<NotificationStore>(),
+        factory.Services.GetRequiredService<NotificationFeedStore>(),
+        _database,
         factory.Services.GetRequiredService<ApiOptions>(),
         NullLogger<RunPruningService>.Instance);
 
@@ -71,8 +72,8 @@ public sealed class ChangeCheckPruningTests(UnprunedApiFactory factory) : IClass
     {
         using var connection = _database.OpenConnection();
         using var cmd = _database.Command(connection,
-            "UPDATE ChangeCheckHistory SET CheckedAtUtc = $checked WHERE ConnectionName = $connection;");
-        cmd.Bind(_database, "checked", (DateTimeOffset.UtcNow - age).ToString("O"));
+            "UPDATE {table:sync_state.change_check} SET checked_at = $checked WHERE connection_name = $connection;");
+        cmd.Bind(_database, "checked", DateTimeOffset.UtcNow - age);
         cmd.Bind(_database, "connection", connectionName);
         cmd.ExecuteNonQuery();
     }

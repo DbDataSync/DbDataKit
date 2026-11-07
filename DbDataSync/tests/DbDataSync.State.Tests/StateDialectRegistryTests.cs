@@ -94,20 +94,18 @@ public sealed class StateDialectRegistryTests
         Assert.Same(fixture, registry.Get(FixtureStateDialect.EngineId));
     }
 
-    /// <summary>The real point of the fixture: registered into the process-wide default (the same one
-    /// every built-in lives in, and the one <see cref="StateDialect.For"/> itself reads), a
-    /// <see cref="StateDatabase"/> constructed against it runs the whole migration set exactly as it
-    /// would against real SQLite — proof this is a genuine extension point, not just a lookup table.</summary>
+    /// <summary>
+    /// A registered custom dialect can be reached through <see cref="StateDialect.For"/>, but Sync's state is built from modules (plan 28c, E14), and a dialect has to say how a table is found, how an
+    /// old database is recognised and what its UUID, time, JSON, boolean and binary columns are before a database can be built on it. The fixture dialect does not, and the message says what is missing.
+    /// </summary>
     [Fact]
-    public void ARegisteredCustomDialect_RunsTheFullMigrationSet_ThroughStateDatabase()
+    public void ARegisteredCustomDialect_ThatCannotHostModules_IsRefusedWithAMessageSayingWhatIsMissing()
     {
         StateDialectRegistry.Default.Register(new FixtureStateDialect());
         var dbPath = Path.Combine(Directory.CreateTempSubdirectory("dbdatasync-fixture-dialect-").FullName, "state.db");
 
-        var database = new StateDatabase(FixtureStateDialect.EngineId, $"Data Source={dbPath}");
+        var refused = Assert.Throws<NotSupportedException>(() => new StateDatabase(FixtureStateDialect.EngineId, $"Data Source={dbPath}"));
 
-        using var connection = database.OpenConnection();
-        using var cmd = database.Command(connection, "SELECT COUNT(*) FROM Tasks;");
-        Assert.Equal(0, Convert.ToInt32(cmd.ExecuteScalar()));
+        Assert.Contains("does not support databases built from modules", refused.Message);
     }
 }

@@ -58,20 +58,20 @@ public sealed class RunMetricsStoreTests : IDisposable
 
         using var connection = _database.OpenConnection();
         using var cmd = _database.Command(connection, """
-            INSERT INTO TaskRuns (RunId, TaskName, Status, RunKind, MappingName, EnqueuedAtUtc, ClaimedAtUtc, StartedAtUtc, EndedAtUtc, RowsRead, RowsWritten)
+            INSERT INTO {table:sync_state.run_detail} (run_id, task_name, status, run_kind, mapping_name, enqueued_at, claimed_at, began_at, ended_at, rows_read, rows_written)
             VALUES ($runId, $task, $status, $kind, 'orders', $enqueued, $claimed, $started, $ended, $read, $written);
             """);
-        cmd.Bind(_database, "runId", Guid.NewGuid().ToString());
+        cmd.Bind(_database, "runId", Guid.NewGuid());
         cmd.Bind(_database, "task", taskName);
         cmd.Bind(_database, "status", status.ToString());
         cmd.Bind(_database, "kind", kind.ToString());
-        cmd.Bind(_database, "enqueued", enqueuedAt.ToString("O"));
-        cmd.Bind(_database, "claimed", claimed ? claimedAt.ToString("O") : DBNull.Value);
-        cmd.Bind(_database, "started", started ? startedAt.ToString("O") : DBNull.Value);
+        cmd.Bind(_database, "enqueued", enqueuedAt);
+        cmd.Bind(_database, "claimed", claimed ? claimedAt : null, claimed ? null : System.Data.DbType.DateTimeOffset);
+        cmd.Bind(_database, "started", started ? startedAt : null, started ? null : System.Data.DbType.DateTimeOffset);
         cmd.Bind(_database, "ended",
             // Written even for a run with no recorded start — that is exactly the pre-migration row
             // the null-guard exists for: it ended, and nothing says when it began.
-            processing is null ? DBNull.Value : (startedAt + processing.Value).ToString("O"));
+            processing is null ? null : startedAt + processing.Value, processing is null ? System.Data.DbType.DateTimeOffset : null);
         cmd.Bind(_database, "read", rowsRead);
         cmd.Bind(_database, "written", rowsWritten);
         cmd.ExecuteNonQuery();
@@ -308,7 +308,7 @@ public sealed class RunMetricsStoreTests : IDisposable
 
         var plan = _metrics.ExplainTotals(Task, _now.AddHours(-24), _now, RunKind.Primary);
 
-        Assert.Contains(plan, line => line.Contains("IX_TaskRuns_TaskName_EnqueuedAt"));
+        Assert.Contains(plan, line => line.Contains("run_detail_by_task"));
         Assert.DoesNotContain(plan, line => line.StartsWith("SCAN"));
     }
 }

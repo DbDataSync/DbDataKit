@@ -168,7 +168,7 @@ public sealed class SchedulerServiceHoldTests(TestApiFactory factory) : IClassFi
         taskRuns.CompleteRun(runId, RunStatus.Failed, 0, 0, "position gone", RunFailureKinds.PositionExpired);
         watermarks.SetReadHold(task.Name, mapping.Name, key, ReadHold.PositionExpired);
 
-        var notifications = factory.Services.GetRequiredService<NotificationStore>();
+        var notifications = factory.Services.GetRequiredService<NotificationFeedStore>();
         var before = notifications.List().Count(n => n.MappingName == mapping.Name);
         Assert.Equal(1, before);
 

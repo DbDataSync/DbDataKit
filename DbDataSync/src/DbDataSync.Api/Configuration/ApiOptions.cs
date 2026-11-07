@@ -28,7 +28,7 @@ public sealed class ApiOptions
     public const string DefaultUrl = "http://localhost:5080";
     public const string DefaultStateEngine = StateEngineIds.Sqlite;
     public const int DefaultStatePort = 0;
-    public const int DefaultRunRetentionDays = 90;
+    public const int DefaultRunRetentionDays = 30;
     public const int DefaultRunRetentionMaxPerMapping = 1_000;
     public const int DefaultChangeCheckRetentionDays = 7;
     public const int DefaultRunPruningIntervalMinutes = 60;

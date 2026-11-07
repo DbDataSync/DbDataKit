@@ -43,12 +43,12 @@ public sealed record WorkItemKinds(string? ReaderKind = null, string? CacheKind 
 }
 
 /// <summary>
-/// Sync's work queue (architecture/implementation/done/phase-008-work-queue-schema.md): an adapter over <see cref="Queue"/>, the shared queue in
-/// <c>DbDataKit.Scheduling</c> (plan 13, M03), that keeps the names Sync has always used. A replication is the owner, the run kind is the kind, a mapping is the subject
+/// Sync's work queue (architecture/implementation/done/phase-008-work-queue-schema.md): an adapter over the shared queue of
+/// <c>DbDataKit.Scheduling</c>, its module (plan 13, M03; plan 28c, E14), that keeps the names Sync has always used. A replication is the owner, the run kind is the kind, a mapping is the subject
 /// and a segment is the part; what only Sync's worker needs (the segment's definition, the reader, cache and writer kinds, the delete guard) travels in the payload. The API
 /// process (handling bulk load triggers and scheduled due-ness) and the TaskRunner worker process(es) it spawns still communicate only through this table.
 /// <para>
-/// Sync's run record stays Sync's: the <c>TaskRuns</c> row is written in the same transaction as the enqueue, and its claim time in the same transaction as the claim, so a
+/// Sync's run record (<c>runs.run</c> and <c>sync_state.run_detail</c>) is written in the same transaction as the enqueue, and its claim time in the same transaction as the claim, so a
 /// queued backlog is visible in run history at once and a run is never claimed in one table and not the other.
 /// </para>
 /// </summary>
@@ -60,9 +60,9 @@ public sealed class WorkQueueStore(StateDatabase database)
     /// <summary>Sentinel for WorkQueue.SegmentLabel when a unit of work has no segment (every Primary
     /// item, and a BulkLoad's single Full-mode segment) — NOT NULL because this column participates in
     /// a uniqueness constraint, where SQL's every-NULL-is-distinct rule would silently defeat it.</summary>
-    public const string NoSegment = DbDataKit.Scheduling.WorkQueueStore.NoPart;
+    public const string NoSegment = DbDataKit.Scheduling.ModuleWorkQueueStore.NoPart;
 
-    private readonly DbDataKit.Scheduling.WorkQueueStore _queue = new(database, Service);
+    private readonly DbDataKit.Scheduling.ModuleWorkQueueStore _queue = new(database, Service);
 
     /// <summary>What the shared queue holds for Sync besides the keys: everything the worker needs that the queue does not look at.</summary>
     private sealed record Payload(string? SegmentJson, string? ReaderKind, string? CacheKind, string? WriterKind, string? DeleteGuardJson);
@@ -140,26 +140,9 @@ public sealed class WorkQueueStore(StateDatabase database)
         var resource = segments == SegmentOrder.OneAtATime && segmentLabel != NoSegment ? $"{taskName}/{mappingName}/{runKind}" : "";
         var lane = RunLanes.LaneFor(runKind).ToString();
 
-        void WriteRun(DbConnection connection, DbTransaction transaction, Guid runId)
-        {
-            using var cmd = database.Command(connection, transaction, """
-                INSERT INTO TaskRuns (RunId, TaskName, Pid, Status, RunKind, MappingName, SegmentLabel, EnqueuedAtUtc, RowsRead, RowsWritten, BulkLoadBatchId)
-                VALUES ($runId, $taskName, NULL, $status, $runKind, $mapping, $segment, $enqueuedAt, 0, 0, $batchId);
-                """);
-            cmd.Bind(database, "runId", runId.ToString());
-            cmd.Bind(database, "taskName", taskName);
-            cmd.Bind(database, "status", RunStatus.Queued.ToString());
-            cmd.Bind(database, "runKind", runKind.ToString());
-            cmd.Bind(database, "mapping", mappingName);
-            cmd.Bind(database, "segment", segmentLabel == NoSegment ? (object)DBNull.Value : segmentLabel);
-            cmd.Bind(database, "batchId", (object?)bulkLoadBatchId ?? DBNull.Value);
-            // EnqueuedAtUtc, and nothing else: a queued run has not been claimed and has not
-            // started, so ClaimedAtUtc and StartedAtUtc stay null until the moments they name
-            // actually happen (phase 73). Before that, this wrote the enqueue time into
-            // StartedAtUtc, which is how every "duration" in the product came to include the queue.
-            cmd.Bind(database, "enqueuedAt", DateTimeOffset.UtcNow.ToString("O"));
-            cmd.ExecuteNonQuery();
-        }
+        void WriteRun(DbConnection connection, DbTransaction transaction, Guid runId) =>
+            // EnqueuedAt, and nothing else: a queued run has not been claimed and has not started, so claimed_at and began_at stay null until the moments they name actually happen (phase 73).
+            SyncRunRows.Insert(database, connection, transaction, runId, taskName, runKind, mappingName, segmentLabel == NoSegment ? null : segmentLabel, bulkLoadBatchId, database.Time.GetUtcNow());
 
         try
         {
@@ -198,13 +181,10 @@ public sealed class WorkQueueStore(StateDatabase database)
             taskName, workerId, lane?.ToString(), runId: runId,
             alsoWrite: (connection, transaction, item, at) =>
             {
-                // In the same transaction as the claim, and that is the point of the transaction
-                // (phase 73): a run must never be Claimed in WorkQueue with no claim time in
-                // TaskRuns, which is exactly what two independent statements would allow on a crash
-                // between them. One claim moment, written to both tables from one variable.
-                using var cmd = database.Command(connection, transaction, "UPDATE TaskRuns SET ClaimedAtUtc = $now WHERE RunId = $runId;");
-                cmd.Bind(database, "now", at.ToString("O"));
-                cmd.Bind(database, "runId", item.RunId.ToString());
+                // In the same transaction as the claim, and that is the point of the transaction (phase 73): a run must never be Claimed in the queue with no claim time in its run detail, which is exactly
+                // what two independent statements would allow on a crash between them. One claim moment, written to both from one variable.
+                using var cmd = database.Command(SyncStateModule.Name, connection, transaction, "UPDATE {table:run_detail} SET claimed_at = $now WHERE run_id = $run;");
+                cmd.Bind(database, "now", at).Bind(database, "run", item.RunId);
                 cmd.ExecuteNonQuery();
             });
         return claimed is null ? null : ToSyncItem(claimed);

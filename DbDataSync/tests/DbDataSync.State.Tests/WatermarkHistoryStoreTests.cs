@@ -41,9 +41,9 @@ public sealed class WatermarkHistoryStoreTests : IDisposable
     {
         using var connection = _database.OpenConnection();
         using var cmd = _database.Command(
-            connection, "UPDATE TaskRuns SET EnqueuedAtUtc = $enqueued WHERE RunId = $runId;");
-        cmd.Bind(_database, "enqueued", (DateTimeOffset.UtcNow - age).ToString("O"));
-        cmd.Bind(_database, "runId", runId.ToString());
+            connection, "UPDATE {table:sync_state.run_detail} SET enqueued_at = $enqueued WHERE run_id = $runId;");
+        cmd.Bind(_database, "enqueued", DateTimeOffset.UtcNow - age);
+        cmd.Bind(_database, "runId", runId);
         cmd.ExecuteNonQuery();
     }
 
@@ -166,7 +166,7 @@ public sealed class WatermarkHistoryStoreTests : IDisposable
         // Nothing of the pruned run is left behind in the columns — the row went, so they went.
         using var connection = _database.OpenConnection();
         using var cmd = _database.Command(
-            connection, "SELECT COUNT(*) FROM TaskRuns WHERE NewWatermark = $watermark;");
+            connection, "SELECT COUNT(*) FROM {table:sync_state.run_detail} WHERE new_position = $watermark;");
         cmd.Bind(_database, "watermark", "100");
         Assert.Equal(0, Convert.ToInt32(cmd.ExecuteScalar()));
     }

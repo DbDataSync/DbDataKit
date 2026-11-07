@@ -3,8 +3,12 @@ using DbDataKit.State;
 namespace DbDataSync.State;
 
 /// <summary>
+/// <b>No longer used to open a database</b> (plan 28c, slice E14): Sync's state is built from modules (<see cref="SyncState.Modules"/>), and a database that this schema made is refused, not converted
+/// (<see cref="OldStateException"/>). The list stays only so that a test can make a database of the earlier release to be refused; it goes with the rest of the old structure (plan 28c E22, plan 29a Q25).
+/// <para>
 /// The schema, as a numbered list of scripts applied once each, in order, the first time a database is
 /// opened at a lower version. See architecture/detailed-design.md §3.7 for the table rationale.
+/// </para>
 /// <para>
 /// **Written once, in tokens, rather than once per engine.** The three engines disagree about four
 /// things in DDL — how an auto-assigned key is declared, what unbounded text is called, what bounded

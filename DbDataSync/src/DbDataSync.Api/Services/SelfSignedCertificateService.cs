@@ -27,7 +27,7 @@ namespace DbDataSync.Api.Services;
 /// </para>
 /// </summary>
 public sealed class SelfSignedCertificateService(
-    ApiOptions apiOptions, IConfiguration configuration, NotificationStore notifications,
+    ApiOptions apiOptions, IConfiguration configuration, NotificationFeedStore notifications,
     ILogger<SelfSignedCertificateService> logger) : BackgroundService
 {
     private static readonly TimeSpan CheckInterval = TimeSpan.FromDays(1);

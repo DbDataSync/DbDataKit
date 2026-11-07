@@ -89,6 +89,7 @@ public static class SyncCli
             Forward("get", "One setting of server.yaml", EffectClass.OfflineOnly, "<key> [--repo <path>]", a => ConfigCommand.RunAsync(["get", .. a])),
             Forward("set", "Change one setting of server.yaml", EffectClass.RepoFilesOnly, "<key> <value> [--repo <path>]", a => ConfigCommand.RunAsync(["set", .. a])),
         ]),
+        StateNoun(),
         new Noun("health", "Is a running server answering",
         [
             new Verb("check", "Exit 0 when a running DbDataSync answers, 1 when it does not (what the container's health check runs)", EffectClass.OfflineOnly, "[--url <url>] [--repo <path>]",
@@ -103,6 +104,26 @@ public static class SyncCli
         ]),
         UiNoun.Create(self, Program, version, NotForAgents),
     ], version);
+
+    /// <summary>
+    /// The shared <c>state show|test|grants|init|export|import|verify|move</c> verbs over Sync's state, built from <see cref="DbDataSync.State.SyncState.Modules"/> (plan 28c, E14): <c>state show</c> lists the modules
+    /// and the version each is at. Where the state is comes from the same settings the server reads (<c>DbDataSync:State:Engine</c>, <c>ConnectionString</c> and <c>DbPath</c>, with the stored password), the repository
+    /// root from <c>--repo</c> as for every other command.
+    /// </summary>
+    private static Noun StateNoun() => DbDataKit.State.Cli.StateVerbs.Create(new DbDataKit.State.Cli.StateVerbContext(
+        Program, "DbDataSync",
+        args =>
+        {
+            var context = ReadinessChecks.BuildContext(args.Get("repo") is { } repo ? ["--repo", repo] : []);
+            var options = context.ApiOptions;
+            var connection = options.StateConnectionString;
+            if (connection is not null && DbDataSync.Core.Secrets.SecretStore.Open(context.Root).TryResolve(DbDataSync.Core.Secrets.SecretRefs.ForAppSetting("stateConnectionString"), out var password))
+                connection = $"{connection};Password={password}";
+            // the state file is named by DbDataSync:State:DbPath, else it is state.db in the repository root this command was pointed at
+            var file = context.Configuration["DbDataSync:State:DbPath"] ?? Path.Combine(context.Root, "state.db");
+            return new DbDataKit.State.Cli.StateTarget(new DbDataKit.State.StateSettings(options.StateEngine, connection), file);
+        },
+        DbDataSync.State.SyncState.Modules, DbDataSync.State.SyncState.Scope, ["repo"], "[--repo <path>]"));
 
     private static Verb Forward(string name, string summary, EffectClass effect, string usage, Func<string[], Task<int>> run) =>
         new(name, summary, effect, usage, async (args, context) =>

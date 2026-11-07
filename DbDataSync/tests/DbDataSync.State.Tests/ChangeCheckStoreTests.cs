@@ -24,8 +24,8 @@ public sealed class ChangeCheckStoreTests : IDisposable
     private void Backdate(TimeSpan age)
     {
         using var connection = _database.OpenConnection();
-        using var cmd = _database.Command(connection, "UPDATE ChangeCheckHistory SET CheckedAtUtc = $checked;");
-        cmd.Bind(_database, "checked", (DateTimeOffset.UtcNow - age).ToString("O"));
+        using var cmd = _database.Command(connection, "UPDATE {table:sync_state.change_check} SET checked_at = $checked;");
+        cmd.Bind(_database, "checked", DateTimeOffset.UtcNow - age);
         cmd.ExecuteNonQuery();
     }
 

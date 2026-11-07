@@ -162,7 +162,7 @@ public static class DbDataSyncHost
         builder.Services.AddSingleton(sp => new VerificationResultStore(sp.GetRequiredService<StateDatabase>()));
         builder.Services.AddSingleton(sp => new ChangeWatermarkStore(sp.GetRequiredService<StateDatabase>()));
         builder.Services.AddSingleton(sp => new ChangeCheckStore(sp.GetRequiredService<StateDatabase>()));
-        builder.Services.AddSingleton(sp => new NotificationStore(sp.GetRequiredService<StateDatabase>()));
+        builder.Services.AddSingleton(sp => new NotificationFeedStore(sp.GetRequiredService<StateDatabase>(), SyncState.ServiceId));
         builder.Services.AddSingleton(sp => new RunLockStore(sp.GetRequiredService<StateDatabase>()));
         builder.Services.AddSingleton(sp => new WorkQueueStore(sp.GetRequiredService<StateDatabase>()));
         builder.Services.AddSingleton(sp => new LogWriter(sp.GetRequiredService<StateDatabase>()));

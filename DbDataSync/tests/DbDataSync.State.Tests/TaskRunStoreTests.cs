@@ -20,13 +20,13 @@ public sealed class TaskRunStoreTests : IDisposable
     /// A raw write bypassing the store, for the exact timestamp collisions (and the one null) that the
     /// ordinary enqueue path — stamped from the clock — cannot reliably construct on demand.
     /// </summary>
-    private void ForceEnqueuedAt(Guid runId, DateTimeOffset? time) =>
+    private void ForceEnqueuedAt(Guid runId, DateTimeOffset time) =>
         _database.Retry(() =>
         {
             using var connection = _database.OpenConnection();
-            using var cmd = _database.Command(connection, "UPDATE TaskRuns SET EnqueuedAtUtc = $t WHERE RunId = $id;");
-            cmd.Bind(_database, "t", time is { } t ? t.ToString("O") : null);
-            cmd.Bind(_database, "id", runId.ToString());
+            using var cmd = _database.Command(connection, "UPDATE {table:sync_state.run_detail} SET enqueued_at = $t WHERE run_id = $id;");
+            cmd.Bind(_database, "t", time);
+            cmd.Bind(_database, "id", runId);
             cmd.ExecuteNonQuery();
         });
 
@@ -356,26 +356,6 @@ public sealed class TaskRunStoreTests : IDisposable
         // Repeats nothing, drops nothing — the property ties exist to threaten and RunId exists to
         // prevent, even though every row here shares the one column paging orders by.
         Assert.Equal(whole.Select(r => r.RunId), page1.Concat(page2).Select(r => r.RunId));
-    }
-
-    /// <summary>
-    /// A run with no EnqueuedAtUtc cannot be placed on a timeline a cursor walks — phase 73 backfills
-    /// the column so this should not occur in practice, but the three engines disagree about where
-    /// NULL sorts, and the query excludes such a row rather than trusting any one of them to agree with
-    /// the others about where it belongs.
-    /// </summary>
-    [Fact]
-    public void GetRunHistory_ANullEnqueuedAtUtcRow_IsExcludedRatherThanStrandingPaging()
-    {
-        var dated = QueueAndBegin("crm-sync", "orders");
-        var undated = QueueAndBegin("crm-sync", "customers");
-        ForceEnqueuedAt(undated, null);
-
-        var page = _store.GetRunHistory("crm-sync", limit: 10);
-
-        Assert.Single(page);
-        Assert.Equal(dated, page[0].RunId);
-        Assert.Null(page.NextCursor);
     }
 
     [Fact]

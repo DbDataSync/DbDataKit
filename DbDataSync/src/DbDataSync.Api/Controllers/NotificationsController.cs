@@ -21,7 +21,7 @@ namespace DbDataSync.Api.Controllers;
 [ApiController]
 [Route("api/notifications")]
 public sealed class NotificationsController(
-    NotificationStore notifications,
+    NotificationFeedStore notifications,
     CurrentUser currentUser) : ControllerBase
 {
     /// <summary>
@@ -52,7 +52,7 @@ public sealed class NotificationsController(
 
     /// <summary>
     /// Advances this caller's cursor, so everything at or below <see cref="MarkSeenRequest.LastSeenNotificationId"/>
-    /// stops counting as unread. Monotonic — see <see cref="NotificationStore.MarkSeen"/>.
+    /// stops counting as unread. Monotonic — see <see cref="NotificationFeedStore.MarkSeen"/>.
     /// </summary>
     /// <remarks>
     /// **A caller with no id gets a 200 that says nothing was stored.** A console's token always names a person (plan 13a, X06), so this is a defensive path; with no

@@ -20,7 +20,8 @@ namespace DbDataSync.Api.Services;
 public sealed class RunPruningService(
     TaskRunStore taskRunStore,
     ChangeCheckStore changeCheckStore,
-    NotificationStore notificationStore,
+    NotificationFeedStore notificationStore,
+    StateDatabase database,
     ApiOptions options,
     ILogger<RunPruningService> logger) : BackgroundService
 {
@@ -76,6 +77,9 @@ public sealed class RunPruningService(
             await PruneAsync(maxAge, maxPerMapping, checkMaxAge);
     }
 
+    /// <summary>The retention job's figure for a window: its days, or forever for none.</summary>
+    private static double Days(TimeSpan? window) => window is { } w ? w.TotalDays : RetentionSettings.Forever;
+
     /// <summary>
     /// One sweep. Public so a test can prove that all three histories go in the same pass — the
     /// reason none of these tables has a background service of its own, and the thing that would
@@ -96,6 +100,21 @@ public sealed class RunPruningService(
             var prunedNotifications = notificationStore.PruneNotifications(maxAge);
             if (prunedNotifications > 0)
                 logger.LogInformation("Pruned {Count} notification(s) from the feed.", prunedNotifications);
+
+            // The history the modules keep that nothing above sweeps (the history of a position, expired keys, a run's detail) goes by the modules' own rules (plan 29 section 3.3, plan 28c QE9): the shared
+            // retention job, run on this same tick. A run, its log, its detail, the polling trail and the feed keep the windows set above, so the one setting governs one history wherever it is kept.
+            var retention = new RetentionJob(database, new RetentionSettings
+            {
+                Tables = new Dictionary<string, double>
+                {
+                    ["runs.run"] = Days(maxAge),
+                    ["runs.run_log"] = Days(maxAge),
+                    ["sync_state.run_detail"] = Days(maxAge),
+                    ["sync_state.change_check"] = Days(checkMaxAge),
+                    ["notifications.notification"] = Days(maxAge),
+                },
+            });
+            retention.Run();
         }
         catch (Exception ex)
         {

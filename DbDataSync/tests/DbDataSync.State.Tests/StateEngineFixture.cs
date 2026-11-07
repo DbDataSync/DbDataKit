@@ -27,6 +27,10 @@ public sealed class StateEngineFixture : IDisposable
 
     public StateDatabase Database { get; }
 
+    /// <summary>The connection string of the scratch database.</summary>
+    public string ConnectionString { get; }
+
+    /// <param name="openState">False leaves the scratch database empty, for a test that makes a state database of its own (an old one) in it.</param>
     /// <param name="libraries">
     /// Phase 109g: MsSql/PostgresStateDialect resolve their connection through this rather than a
     /// direct package reference, so this fixture — which opens a real MsSql/Postgres connection twice
@@ -34,7 +38,7 @@ public sealed class StateEngineFixture : IDisposable
     /// has to register it against StateDialectRegistry.Default before either happens. See
     /// LibraryInstallFixture, which is what every caller here actually passes.
     /// </param>
-    public StateEngineFixture(string engine, DbDataSync.Libraries.LibraryRegistry libraries)
+    public StateEngineFixture(string engine, DbDataSync.Libraries.LibraryRegistry libraries, bool openState = true)
     {
         _engine = engine;
         _databaseName = $"dbdatasync_state_{Guid.NewGuid():N}";
@@ -44,12 +48,14 @@ public sealed class StateEngineFixture : IDisposable
         {
             case StateEngineIds.MsSql:
                 Execute(MsSqlServer, $"CREATE DATABASE [{_databaseName}];");
-                Database = new StateDatabase(engine, MsSqlConnectionString(_databaseName));
+                ConnectionString = MsSqlConnectionString(_databaseName);
+                Database = openState ? new StateDatabase(engine, ConnectionString) : null!;
                 break;
 
             case StateEngineIds.Postgres:
                 Execute(PostgresServer, $"CREATE DATABASE {_databaseName};");
-                Database = new StateDatabase(engine, PostgresConnectionString(_databaseName));
+                ConnectionString = PostgresConnectionString(_databaseName);
+                Database = openState ? new StateDatabase(engine, ConnectionString) : null!;
                 break;
 
             default:

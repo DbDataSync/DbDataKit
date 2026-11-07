@@ -10,7 +10,7 @@ namespace DbDataSync.State;
 public sealed class RunLockStore(StateDatabase database)
 {
     // The lock itself is the shared one (plan 13, M03); Sync's names map onto it as the work queue's do: the replication owns it, the kind is the run kind, the mapping is the subject.
-    private readonly DbDataKit.Scheduling.RunLockStore _locks = new(database, WorkQueueStore.Service);
+    private readonly DbDataKit.Scheduling.ModuleRunLockStore _locks = new(database, WorkQueueStore.Service);
 
     public bool TryAcquire(string taskName, RunKind runKind, string mappingName, Guid runId) =>
         _locks.TryAcquire(taskName, runKind.ToString(), mappingName, runId);

@@ -1892,6 +1892,374 @@
       "if": {
         "properties": {
           "command": {
+            "const": "state export"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_export"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state export"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_export"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state grants"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_grants"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state grants"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_grants_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state import"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_import"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state import"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_import"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state init"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_init"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state init"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_init_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state move"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_move"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state move"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_move"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state show"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_show"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state show"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_show"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state test"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_test"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state test"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_test"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state verify"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_verify"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state verify"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_verify_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "ui mcp"
           },
           "ok": {
@@ -2251,6 +2619,577 @@
     "data_service_uninstall": {
       "type": "object",
       "additionalProperties": false
+    },
+    "data_state_export": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "modules": {
+          "type": "integer"
+        },
+        "tables": {
+          "type": "integer"
+        },
+        "rows": {
+          "type": "integer"
+        },
+        "payload_files": {
+          "type": "integer"
+        },
+        "payload_bytes": {
+          "type": "integer"
+        },
+        "secrets_checked": {
+          "type": "boolean"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        }
+      }
+    },
+    "data_state_grants": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "statements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "statements"
+      ]
+    },
+    "data_state_grants_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "statements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "data_state_import": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "modules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tables": {
+          "type": "integer"
+        },
+        "rows": {
+          "type": "integer"
+        },
+        "payload_files": {
+          "type": "integer"
+        },
+        "payload_bytes": {
+          "type": "integer"
+        },
+        "migrated": {
+          "type": "boolean"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "summary": {
+          "type": "string"
+        },
+        "next": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        }
+      }
+    },
+    "data_state_init": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "topology": {
+          "type": "string"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "settings_file": {
+          "type": "string"
+        },
+        "applied": {
+          "type": "boolean"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "status",
+              "message"
+            ]
+          }
+        },
+        "statements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "topology",
+        "steps"
+      ]
+    },
+    "data_state_init_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "topology": {
+          "type": "string"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "settings_file": {
+          "type": "string"
+        },
+        "applied": {
+          "type": "boolean"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "status",
+              "message"
+            ]
+          }
+        },
+        "statements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "data_state_move": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "from_engine": {
+          "type": "string"
+        },
+        "to_engine": {
+          "type": "string"
+        },
+        "settings_file": {
+          "type": "string"
+        },
+        "backup_file": {
+          "type": "string"
+        },
+        "snapshot_directory": {
+          "type": "string"
+        },
+        "rows": {
+          "type": "integer"
+        },
+        "tables": {
+          "type": "integer"
+        },
+        "verified_against_snapshot": {
+          "type": "boolean"
+        },
+        "verified_against_source": {
+          "type": "boolean"
+        },
+        "restart": {
+          "type": "string"
+        },
+        "way_back": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "plan": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "error": {
+          "type": "string"
+        }
+      }
+    },
+    "data_state_show": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "product": {
+          "type": "string"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "file_size": {
+          "type": "integer"
+        },
+        "connection": {
+          "type": "string"
+        },
+        "sources": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "engine": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "connection": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "namespaces": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "retention": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            }
+          }
+        },
+        "registry_table": {
+          "type": "string"
+        },
+        "registry_exists": {
+          "type": "boolean"
+        },
+        "modules_listed": {
+          "type": "boolean"
+        },
+        "connected": {
+          "type": "boolean"
+        },
+        "engine_version": {
+          "type": "string"
+        },
+        "login": {
+          "type": "string"
+        },
+        "modules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "module": {
+                "type": "string"
+              },
+              "scope": {
+                "type": "string"
+              },
+              "place": {
+                "type": "string"
+              },
+              "schema": {
+                "type": "string"
+              },
+              "prefix": {
+                "type": "string"
+              },
+              "file": {
+                "type": "string"
+              },
+              "binary_version": {
+                "type": "integer"
+              },
+              "registered_version": {
+                "type": "integer"
+              },
+              "applied_by": {
+                "type": "string"
+              },
+              "pending": {
+                "type": "integer"
+              },
+              "problem": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "module",
+              "place",
+              "binary_version",
+              "status"
+            ]
+          }
+        },
+        "other_registered": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "module": {
+                "type": "string"
+              },
+              "scope": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "module",
+              "scope",
+              "version"
+            ]
+          }
+        },
+        "pending_migrations": {
+          "type": "integer"
+        },
+        "error": {
+          "type": "string"
+        }
+      }
+    },
+    "data_state_test": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "status",
+              "message"
+            ]
+          }
+        },
+        "failed": {
+          "type": "string"
+        }
+      }
+    },
+    "data_state_verify": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "form": {
+          "type": "string"
+        },
+        "equal": {
+          "type": "boolean"
+        },
+        "tables": {
+          "type": "integer"
+        },
+        "rows": {
+          "type": "integer"
+        },
+        "differences": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "elapsed_seconds": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "form",
+        "equal"
+      ]
+    },
+    "data_state_verify_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "form": {
+          "type": "string"
+        },
+        "equal": {
+          "type": "boolean"
+        },
+        "tables": {
+          "type": "integer"
+        },
+        "rows": {
+          "type": "integer"
+        },
+        "differences": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "elapsed_seconds": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        }
+      }
     },
     "data_ui_mcp": {
       "type": "object",

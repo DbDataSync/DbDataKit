@@ -8,59 +8,56 @@ namespace DbDataSync.State;
 /// </summary>
 public sealed class VerificationResultStore(StateDatabase database)
 {
-    /// <summary>
-    /// Idempotent on (run, check), because a run replayed from a state journal applies its outcomes
-    /// again — every recovery operation has to be, and indexing the same file twice would be a
-    /// duplicate row pointing at one result.
-    /// </summary>
+    private const string Module = SyncStateModule.Name;
+
+    private const string Columns = "id, run_id, task_name, mapping_name, check_name, completed_at, source_read_at, target_read_at, groups_compared, differing_groups, result_path";
+
+    /// <summary>Records a result; the same run and check again replaces the earlier row (a journal replayed after a crash writes it a second time).</summary>
     public void Record(VerificationResultRecord result) =>
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, database.Dialect.Upsert(
-                "VerificationResults",
-                "RunId, TaskName, MappingName, CheckName, CompletedAtUtc, SourceReadAtUtc, TargetReadAtUtc, " +
-                    "GroupsCompared, DifferingGroups, ResultPath",
-                "$runId, $task, $mapping, $check, $completed, $sourceRead, $targetRead, " +
-                    "$groups, $differing, $path",
-                "RunId, CheckName",
+            using var cmd = database.Command(Module, connection, database.Dialect.Upsert(
+                "{table:verification_result}",
+                "run_id, task_name, mapping_name, check_name, completed_at, source_read_at, target_read_at, groups_compared, differing_groups, result_path",
+                "$run, $task, $mapping, $check, $completed, $source_read, $target_read, $groups, $differing, $path",
+                "run_id, check_name",
                 """
-                CompletedAtUtc = EXCLUDED.CompletedAtUtc,
-                SourceReadAtUtc = EXCLUDED.SourceReadAtUtc,
-                TargetReadAtUtc = EXCLUDED.TargetReadAtUtc,
-                GroupsCompared = EXCLUDED.GroupsCompared,
-                DifferingGroups = EXCLUDED.DifferingGroups,
-                ResultPath = EXCLUDED.ResultPath
+                completed_at = EXCLUDED.completed_at,
+                source_read_at = EXCLUDED.source_read_at,
+                target_read_at = EXCLUDED.target_read_at,
+                groups_compared = EXCLUDED.groups_compared,
+                differing_groups = EXCLUDED.differing_groups,
+                result_path = EXCLUDED.result_path
                 """));
-            cmd.Bind(database, "runId", result.RunId.ToString());
+            cmd.Bind(database, "run", result.RunId);
             cmd.Bind(database, "task", result.TaskName);
             cmd.Bind(database, "mapping", result.MappingName);
             cmd.Bind(database, "check", result.CheckName);
-            cmd.Bind(database, "completed", result.CompletedAtUtc.ToString("O"));
-            cmd.Bind(database, "sourceRead", result.SourceReadAtUtc.ToString("O"));
-            cmd.Bind(database, "targetRead", result.TargetReadAtUtc.ToString("O"));
-            cmd.Bind(database, "groups", result.GroupsCompared);
-            cmd.Bind(database, "differing", result.DifferingGroups);
+            cmd.Bind(database, "completed", result.CompletedAtUtc);
+            cmd.Bind(database, "source_read", result.SourceReadAtUtc);
+            cmd.Bind(database, "target_read", result.TargetReadAtUtc);
+            cmd.Bind(database, "groups", (long)result.GroupsCompared);
+            cmd.Bind(database, "differing", (long)result.DifferingGroups);
             cmd.Bind(database, "path", result.ResultPath);
             cmd.ExecuteNonQuery();
         });
 
-    /// <summary>Most recent first, which is the order anybody asks in.</summary>
+    /// <summary>The results of a replication, newest first, those of one mapping when <paramref name="mappingName"/> is given.</summary>
     public IReadOnlyList<VerificationResultRecord> List(string taskName, string? mappingName = null, int limit = 50) =>
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, $"""
-                SELECT Id, RunId, TaskName, MappingName, CheckName, CompletedAtUtc, SourceReadAtUtc,
-                       TargetReadAtUtc, GroupsCompared, DifferingGroups, ResultPath
-                FROM VerificationResults
-                WHERE TaskName = $task {(mappingName is null ? "" : "AND MappingName = $mapping")}
-                ORDER BY CompletedAtUtc DESC {database.Limit("limit")};
+            using var cmd = database.Command(Module, connection, $$"""
+                SELECT {{Columns}}
+                FROM {table:verification_result}
+                WHERE task_name = $task {{(mappingName is null ? "" : "AND mapping_name = $mapping")}}
+                ORDER BY completed_at DESC, id DESC {{database.Limit("limit")}};
                 """);
             cmd.Bind(database, "task", taskName);
             if (mappingName is not null)
                 cmd.Bind(database, "mapping", mappingName);
-            cmd.Bind(database, "limit", limit);
+            cmd.Bind(database, "limit", (long)limit);
 
             using var reader = cmd.ExecuteReader();
             var results = new List<VerificationResultRecord>();
@@ -73,41 +70,31 @@ public sealed class VerificationResultStore(StateDatabase database)
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, """
-                SELECT Id, RunId, TaskName, MappingName, CheckName, CompletedAtUtc, SourceReadAtUtc,
-                       TargetReadAtUtc, GroupsCompared, DifferingGroups, ResultPath
-                FROM VerificationResults WHERE Id = $id;
-                """);
+            using var cmd = database.Command(Module, connection, $"SELECT {Columns} FROM {{table:verification_result}} WHERE id = $id;");
             cmd.Bind(database, "id", id);
 
             using var reader = cmd.ExecuteReader();
             return reader.Read() ? Read(reader) : null;
         });
 
-    /// <summary>
-    /// Forgets one result. The caller deletes the file — this store owns the index, not the artifact,
-    /// and a store that reached out to the filesystem would be two responsibilities in one place.
-    /// </summary>
-    /// <returns>False when there was no such row, so a double-delete reads as "already gone" rather
-    /// than as a failure.</returns>
     public bool Delete(long id) =>
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "DELETE FROM VerificationResults WHERE Id = $id;");
+            using var cmd = database.Command(Module, connection, "DELETE FROM {table:verification_result} WHERE id = $id;");
             cmd.Bind(database, "id", id);
             return cmd.ExecuteNonQuery() == 1;
         });
 
     private static VerificationResultRecord Read(DbDataReader reader) => new(
         reader.Int64(0),
-        Guid.Parse(reader.GetString(1)),
+        reader.Uuid(1),
         reader.GetString(2),
         reader.GetString(3),
         reader.GetString(4),
-        DateTimeOffset.Parse(reader.GetString(5), null, System.Globalization.DateTimeStyles.RoundtripKind),
-        DateTimeOffset.Parse(reader.GetString(6), null, System.Globalization.DateTimeStyles.RoundtripKind),
-        DateTimeOffset.Parse(reader.GetString(7), null, System.Globalization.DateTimeStyles.RoundtripKind),
+        reader.Time(5),
+        reader.Time(6),
+        reader.Time(7),
         reader.Int32(8),
         reader.Int32(9),
         reader.GetString(10));

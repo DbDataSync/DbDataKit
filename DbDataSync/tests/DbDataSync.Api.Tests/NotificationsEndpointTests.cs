@@ -97,7 +97,7 @@ public sealed class NotificationsEndpointTests
         [Fact]
         public void AnExpiredPositionDuringARun_ProducesOneNotification_NamingWhatExpired()
         {
-            var notifications = factory.Services.GetRequiredService<NotificationStore>();
+            var notifications = factory.Services.GetRequiredService<NotificationFeedStore>();
             var task = $"crm-{Guid.NewGuid():N}";
             var before = notifications.List().Count;
 
@@ -143,7 +143,7 @@ public sealed class NotificationsEndpointTests
         [Fact]
         public void AMissingCacheDuringARun_ProducesOneNotification_NamingTheMappingAndColumn()
         {
-            var notifications = factory.Services.GetRequiredService<NotificationStore>();
+            var notifications = factory.Services.GetRequiredService<NotificationFeedStore>();
             var task = $"crm-{Guid.NewGuid():N}";
             var before = notifications.List().Count;
 
@@ -186,7 +186,7 @@ public sealed class NotificationsEndpointTests
         public async Task TheExistingSweep_AlsoAgesOutNotifications()
         {
             var database = factory.Services.GetRequiredService<StateDatabase>();
-            var notifications = factory.Services.GetRequiredService<NotificationStore>();
+            var notifications = factory.Services.GetRequiredService<NotificationFeedStore>();
 
             var stale = $"stale-{Guid.NewGuid():N}";
             FailARun(factory.Services, stale, "ancient");
@@ -198,6 +198,7 @@ public sealed class NotificationsEndpointTests
                 factory.Services.GetRequiredService<TaskRunStore>(),
                 factory.Services.GetRequiredService<ChangeCheckStore>(),
                 notifications,
+                database,
                 factory.Services.GetRequiredService<ApiOptions>(),
                 NullLogger<RunPruningService>.Instance);
 
@@ -213,8 +214,8 @@ public sealed class NotificationsEndpointTests
         {
             using var connection = database.OpenConnection();
             using var cmd = database.Command(connection,
-                "UPDATE Notifications SET CreatedAtUtc = $created WHERE TaskName = $taskName;");
-            cmd.Bind(database, "created", (DateTimeOffset.UtcNow - age).ToString("O"));
+                "UPDATE {table:notifications.notification} SET created_at = $created WHERE task_name = $taskName;");
+            cmd.Bind(database, "created", DateTimeOffset.UtcNow - age);
             cmd.Bind(database, "taskName", taskName);
             cmd.ExecuteNonQuery();
         }

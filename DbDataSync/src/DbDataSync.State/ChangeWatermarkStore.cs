@@ -1,4 +1,4 @@
-using System.Data.Common;
+using System.Collections.Concurrent;
 using DbDataSync.Core.Config;
 
 namespace DbDataSync.State;
@@ -31,32 +31,64 @@ public sealed record AppliedPosition(string? Watermark, DateTimeOffset? Watermar
 public sealed record MappingReadState(ReadIntent Intent, ReadHold Hold, string? Watermark, DateTimeOffset? WatermarkTimeUtc);
 
 /// <summary>
-/// Where each table mapping's incremental read got to — one current value per
-/// <c>(TaskName, MappingName, SourceTable)</c>.
+/// Where each table mapping's incremental read got to — one current value per <c>(task, mapping, source table)</c>, kept as a declared checkpoint of the progress store (plan 28c, slices E14 and E15): the
+/// checkpoint <see cref="WatermarkCheckpoint.Name"/> of the <c>runner_progress</c> module, kept per mapping and source table, with the seven parts of <see cref="WatermarkCheckpoint"/>. Every write is an
+/// <c>Advance</c> that names the version it read, so a position that was moved by another writer in between is read again rather than overwritten blindly, and every change is a row of the checkpoint's history
+/// (the console's "rewind a mapping to Monday").
 /// <para>
-/// **The mapping is part of the key, not the table alone.** A replication may have any number of table
-/// mappings pointing at the same physical source table, and nothing requires them to read it the same
-/// way. Two that disagree — one on Change Tracking and one on the generic Watermark reader, or two
-/// generic ones with different <c>watermarkColumn</c> options — were previously one row, each pass
-/// overwriting a position the other could not interpret. The second case is the worse of the two,
-/// because nothing fails: it just tracks the wrong place. A mapping's own identity settles it without
-/// anyone having to reason per-reader about which options change watermark semantics. See phase 74.
-/// </para>
-/// <para>
-/// The table stays in the key beside it. It is not needed to disambiguate mappings, but it is what
-/// makes a mapping repointed at a different source table start from the beginning rather than resume
-/// from a position belonging to a table it no longer reads.
+/// **The mapping is part of the key, not the table alone.** A replication may have any number of table mappings pointing at the same physical source table, and nothing requires them to read it the same way.
+/// Two that disagree — one on Change Tracking and one on the generic Watermark reader, or two generic ones with different <c>watermarkColumn</c> options — were previously one row, each pass overwriting a
+/// position the other could not interpret (phase 74). The table stays in the key beside it: it is what makes a mapping repointed at a different source table start from the beginning rather than resume from a
+/// position belonging to a table it no longer reads.
 /// </para>
 /// </summary>
 public sealed class ChangeWatermarkStore(StateDatabase database)
 {
+    private const int MaxAttempts = 20;
+
+    /// <summary>Who is recorded as having moved a position when the caller names nobody: the engine, a worker or the API.</summary>
+    public const string DefaultActor = "dbdatasync";
+
+    private readonly ConcurrentDictionary<string, ProgressStore> _stores = new(StringComparer.Ordinal);
+
+    private ProgressStore For(string taskName) => _stores.GetOrAdd(taskName, task => new ProgressStore(database, WatermarkCheckpoint.KeyFor(task)));
+
+    private static IReadOnlyDictionary<string, ProgressValue> Without(IReadOnlyDictionary<string, ProgressValue> parts, params string[] names) =>
+        parts.Where(p => !names.Contains(p.Key)).ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
+
+    /// <summary>
+    /// Reads the mapping's checkpoint, lets <paramref name="change"/> say its new parts, and advances it from the version read; when another writer moved it first, reads again and applies the change to
+    /// what is there now (a position is last writer wins, as it always was: the writers are made exclusive by the run lock, and this is the belt for the case where they were not).
+    /// <paramref name="change"/> returns null for "nothing to do".
+    /// </summary>
+    private bool Move(string taskName, string mappingName, string sourceTable, string actor, Func<Dictionary<string, ProgressValue>, bool, Dictionary<string, ProgressValue>?> change)
+    {
+        var store = For(taskName);
+        var item = WatermarkCheckpoint.ItemKey(mappingName, sourceTable);
+        for (var attempt = 0; attempt < MaxAttempts; attempt++)
+        {
+            var current = database.Retry(() => store.GetCheckpoint(WatermarkCheckpoint.Name, item));
+            var parts = current is null ? new Dictionary<string, ProgressValue>(StringComparer.Ordinal) : new Dictionary<string, ProgressValue>(current.Parts, StringComparer.Ordinal);
+            if (current is null)
+            {
+                // a new mapping is read as the defaults say until something else is written
+                parts[WatermarkCheckpoint.Intent] = ProgressValue.OfText(nameof(ReadIntent.Changes));
+                parts[WatermarkCheckpoint.Hold] = ProgressValue.OfText(nameof(ReadHold.None));
+            }
+
+            if (change(parts, current is not null) is not { } next)
+                return false;
+            if (database.Retry(() => store.Advance(WatermarkCheckpoint.Name, next, current?.Version ?? 0, itemKey: item, actor: actor)))
+                return true;
+        }
+
+        throw new InvalidOperationException($"The position of '{mappingName}' ({sourceTable}) of '{taskName}' kept moving while it was being written; it was not changed.");
+    }
+
     /// <param name="watermarkTimeUtc">
-    /// When the source says <paramref name="watermark"/> committed, where the reader that produced it
-    /// could say — see phase 87. **In this call rather than a call of its own**, because a position
-    /// and its commit time are one fact: written separately they could end up describing two
-    /// different passes, and a lag figure computed from a mismatched pair is confidently wrong rather
-    /// than merely absent. Overwritten on every pass including a null one, so a reader that stops
-    /// being able to state a time clears the stale one instead of leaving it to be read as current.
+    /// When the source says <paramref name="watermark"/> committed, where the reader that produced it could say — see phase 87. **In this call rather than a call of its own**, because a position and its
+    /// commit time are one fact: written separately they could end up describing two different passes, and a lag figure computed from a mismatched pair is confidently wrong rather than merely absent.
+    /// Overwritten on every pass including a null one, so a reader that stops being able to state a time clears the stale one instead of leaving it to be read as current.
     /// </param>
     public void SetWatermark(
         string taskName,
@@ -64,327 +96,120 @@ public sealed class ChangeWatermarkStore(StateDatabase database)
         string sourceTable,
         string watermark,
         DateTimeOffset? watermarkTimeUtc = null) =>
-        database.Retry(() =>
+        Move(taskName, mappingName, sourceTable, DefaultActor, (parts, _) =>
         {
-            using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, database.Dialect.Upsert(
-                "ChangeWatermarks",
-                "TaskName, MappingName, SourceTable, Watermark, UpdatedAtUtc, WatermarkTimeUtc",
-                "$task, $mapping, $table, $watermark, $now, $watermarkTime",
-                "TaskName, MappingName, SourceTable",
-                "Watermark = EXCLUDED.Watermark, UpdatedAtUtc = EXCLUDED.UpdatedAtUtc, "
-                    + "WatermarkTimeUtc = EXCLUDED.WatermarkTimeUtc"));
-            cmd.Bind(database, "task", taskName);
-            cmd.Bind(database, "mapping", mappingName);
-            cmd.Bind(database, "table", sourceTable);
-            cmd.Bind(database, "watermark", watermark);
-            cmd.Bind(database, "now", DateTimeOffset.UtcNow.ToString("O"));
-            cmd.Bind(database, "watermarkTime", (object?)watermarkTimeUtc?.ToString("O") ?? DBNull.Value);
-            cmd.ExecuteNonQuery();
+            parts[WatermarkCheckpoint.Position] = ProgressValue.OfText(watermark);
+            if (watermarkTimeUtc is { } time) parts[WatermarkCheckpoint.PositionTime] = ProgressValue.OfTime(time);
+            else parts.Remove(WatermarkCheckpoint.PositionTime);
+            return parts;
         });
 
-    /// <summary>
-    /// The stored position and the source's own time for it, together — what a lag report reads, and
-    /// the reason it needs no connection to the source at all (phase 87).
-    /// <para>
-    /// One row read rather than <see cref="GetWatermark"/> plus a second lookup, for the reason the
-    /// two are written together: a pair fetched in two queries can straddle a pass that ran between
-    /// them, and the mismatched result would be a lag figure that is wrong rather than missing.
-    /// </para>
-    /// </summary>
-    /// <returns>Null when the mapping has never completed a pass. A row with a null
-    /// <c>WatermarkTimeUtc</c> is a different answer: it has a position, and nothing has yet been able
-    /// to say when that position committed.</returns>
+    private Checkpoint? Read(string taskName, string mappingName, string sourceTable) =>
+        database.Retry(() => For(taskName).GetCheckpoint(WatermarkCheckpoint.Name, WatermarkCheckpoint.ItemKey(mappingName, sourceTable)));
+
+    private static string? Text(Checkpoint checkpoint, string part) => checkpoint.Parts.TryGetValue(part, out var v) ? v.AsText : null;
+
+    private static DateTimeOffset? Time(Checkpoint checkpoint, string part) => checkpoint.Parts.TryGetValue(part, out var v) ? v.AsTime : null;
+
+    /// <summary>The position and its commit time, or null for a mapping that has no row at all (a row that has only an intent or a hold has no position: <see cref="AppliedPosition.Watermark"/> is null).</summary>
     public AppliedPosition? GetAppliedPosition(string taskName, string mappingName, string sourceTable) =>
-        database.Retry(() =>
-        {
-            using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection,
-                "SELECT Watermark, WatermarkTimeUtc FROM ChangeWatermarks "
-                    + "WHERE TaskName = $task AND MappingName = $mapping AND SourceTable = $table;");
-            cmd.Bind(database, "task", taskName);
-            cmd.Bind(database, "mapping", mappingName);
-            cmd.Bind(database, "table", sourceTable);
-
-            using var reader = cmd.ExecuteReader();
-            return reader.Read()
-                ? new AppliedPosition(
-                    reader.IsDBNull(0) ? null : reader.GetString(0),
-                    reader.IsDBNull(1) ? null : DateTimeOffset.Parse(reader.GetString(1)))
-                : null;
-        });
+        Read(taskName, mappingName, sourceTable) is { } checkpoint
+            ? new AppliedPosition(Text(checkpoint, WatermarkCheckpoint.Position), Time(checkpoint, WatermarkCheckpoint.PositionTime))
+            : null;
 
     public string? GetWatermark(string taskName, string mappingName, string sourceTable) =>
-        database.Retry(() =>
-        {
-            using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection,
-                "SELECT Watermark FROM ChangeWatermarks WHERE TaskName = $task AND MappingName = $mapping AND SourceTable = $table;");
-            cmd.Bind(database, "task", taskName);
-            cmd.Bind(database, "mapping", mappingName);
-            cmd.Bind(database, "table", sourceTable);
-            return cmd.ExecuteScalar() as string;
-        });
+        Read(taskName, mappingName, sourceTable) is { } checkpoint ? Text(checkpoint, WatermarkCheckpoint.Position) : null;
 
-    /// <summary>
-    /// This mapping's stored intent, hold and position, together — see <see cref="MappingReadState"/>
-    /// for why one read rather than three.
-    /// </summary>
-    /// <returns>Null when the mapping has no row at all: it has never completed a pass and nobody has
-    /// ever set an intent or a hold on it ahead of one. Resolving what that absence means is
-    /// <c>ReadIntentResolution.Default</c>'s job, not this store's — a store that invented a default
-    /// intent for a missing row would have nowhere to record "this default came from config" if a later
-    /// caller needed to know.</returns>
+    /// <summary>A mapping's whole stored state, read together so that three reads cannot straddle a pass that ran between them (phase 100); null for a mapping with no row.</summary>
     public MappingReadState? GetReadState(string taskName, string mappingName, string sourceTable) =>
-        database.Retry(() =>
-        {
-            using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection,
-                "SELECT ReadIntent, ReadHold, Watermark, WatermarkTimeUtc FROM ChangeWatermarks "
-                    + "WHERE TaskName = $task AND MappingName = $mapping AND SourceTable = $table;");
-            cmd.Bind(database, "task", taskName);
-            cmd.Bind(database, "mapping", mappingName);
-            cmd.Bind(database, "table", sourceTable);
+        Read(taskName, mappingName, sourceTable) is { } checkpoint
+            ? new MappingReadState(
+                Enum.Parse<ReadIntent>(Text(checkpoint, WatermarkCheckpoint.Intent) ?? nameof(ReadIntent.Changes)),
+                Enum.Parse<ReadHold>(Text(checkpoint, WatermarkCheckpoint.Hold) ?? nameof(ReadHold.None)),
+                Text(checkpoint, WatermarkCheckpoint.Position),
+                Time(checkpoint, WatermarkCheckpoint.PositionTime))
+            : null;
 
-            using var reader = cmd.ExecuteReader();
-            return reader.Read()
-                ? new MappingReadState(
-                    Enum.Parse<ReadIntent>(reader.GetString(0)),
-                    Enum.Parse<ReadHold>(reader.GetString(1)),
-                    reader.IsDBNull(2) ? null : reader.GetString(2),
-                    reader.IsDBNull(3) ? null : DateTimeOffset.Parse(reader.GetString(3)))
-                : null;
-        });
-
-    /// <summary>
-    /// What the next pass over this mapping is meant to do — set on its own, independent of
-    /// <see cref="SetReadHold"/> and of the watermark itself, so a caller that only knows one of these
-    /// facts never has to restate the other two to change it.
-    /// <para>
-    /// Upserts rather than requiring an existing row: an intent can be set ahead of a mapping's first
-    /// pass (<c>ChangesFromEarliest</c> on a brand-new mapping is exactly this), and the row that
-    /// creates leaves <c>Watermark</c> null and <c>ReadHold</c> at its schema default — neither of
-    /// which this call has any business deciding.
-    /// </para>
-    /// </summary>
     public void SetReadIntent(string taskName, string mappingName, string sourceTable, ReadIntent intent) =>
-        database.Retry(() =>
+        Move(taskName, mappingName, sourceTable, DefaultActor, (parts, _) =>
         {
-            using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, database.Dialect.Upsert(
-                "ChangeWatermarks",
-                "TaskName, MappingName, SourceTable, ReadIntent, UpdatedAtUtc",
-                "$task, $mapping, $table, $intent, $now",
-                "TaskName, MappingName, SourceTable",
-                "ReadIntent = EXCLUDED.ReadIntent, UpdatedAtUtc = EXCLUDED.UpdatedAtUtc"));
-            cmd.Bind(database, "task", taskName);
-            cmd.Bind(database, "mapping", mappingName);
-            cmd.Bind(database, "table", sourceTable);
-            cmd.Bind(database, "intent", intent.ToString());
-            cmd.Bind(database, "now", DateTimeOffset.UtcNow.ToString("O"));
-            cmd.ExecuteNonQuery();
+            parts[WatermarkCheckpoint.Intent] = ProgressValue.OfText(intent.ToString());
+            return parts;
         });
 
-    /// <summary>Why this mapping's next <c>Primary</c> pass is not going to run, set independently of
-    /// <see cref="SetReadIntent"/> for the reason <see cref="ReadHold"/>'s own doc gives: a hold must
-    /// preserve whatever intent sits underneath it. See that method for the upsert shape.</summary>
     public void SetReadHold(string taskName, string mappingName, string sourceTable, ReadHold hold) =>
-        database.Retry(() =>
+        Move(taskName, mappingName, sourceTable, DefaultActor, (parts, _) =>
         {
-            using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, database.Dialect.Upsert(
-                "ChangeWatermarks",
-                "TaskName, MappingName, SourceTable, ReadHold, UpdatedAtUtc",
-                "$task, $mapping, $table, $hold, $now",
-                "TaskName, MappingName, SourceTable",
-                "ReadHold = EXCLUDED.ReadHold, UpdatedAtUtc = EXCLUDED.UpdatedAtUtc"));
-            cmd.Bind(database, "task", taskName);
-            cmd.Bind(database, "mapping", mappingName);
-            cmd.Bind(database, "table", sourceTable);
-            cmd.Bind(database, "hold", hold.ToString());
-            cmd.Bind(database, "now", DateTimeOffset.UtcNow.ToString("O"));
-            cmd.ExecuteNonQuery();
+            parts[WatermarkCheckpoint.Hold] = ProgressValue.OfText(hold.ToString());
+            return parts;
         });
 
-    /// <summary>
-    /// Both in the one statement, for the operator recovering from a hold: setting a fresh intent and
-    /// clearing the hold are one act, and writing them as two separate calls would leave a window where
-    /// the hold has already cleared and the old intent is still what a pass would honour. See phase 100.
-    /// </summary>
-    public void SetReadIntentAndHold(
-        string taskName, string mappingName, string sourceTable, ReadIntent intent, ReadHold hold) =>
-        database.Retry(() =>
+    public void SetReadIntentAndHold(string taskName, string mappingName, string sourceTable, ReadIntent intent, ReadHold hold) =>
+        Move(taskName, mappingName, sourceTable, DefaultActor, (parts, _) =>
         {
-            using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, database.Dialect.Upsert(
-                "ChangeWatermarks",
-                "TaskName, MappingName, SourceTable, ReadIntent, ReadHold, UpdatedAtUtc",
-                "$task, $mapping, $table, $intent, $hold, $now",
-                "TaskName, MappingName, SourceTable",
-                "ReadIntent = EXCLUDED.ReadIntent, ReadHold = EXCLUDED.ReadHold, "
-                    + "UpdatedAtUtc = EXCLUDED.UpdatedAtUtc"));
-            cmd.Bind(database, "task", taskName);
-            cmd.Bind(database, "mapping", mappingName);
-            cmd.Bind(database, "table", sourceTable);
-            cmd.Bind(database, "intent", intent.ToString());
-            cmd.Bind(database, "hold", hold.ToString());
-            cmd.Bind(database, "now", DateTimeOffset.UtcNow.ToString("O"));
-            cmd.ExecuteNonQuery();
+            parts[WatermarkCheckpoint.Intent] = ProgressValue.OfText(intent.ToString());
+            parts[WatermarkCheckpoint.Hold] = ProgressValue.OfText(hold.ToString());
+            return parts;
         });
 
-    /// <summary>
-    /// Phase 134: stashes a captured position as <c>Pending</c> — never onto <c>Watermark</c> itself —
-    /// and sets <see cref="ReadHold.Loading"/>, in one statement, the same "two facts, one write"
-    /// pattern <see cref="SetReadIntentAndHold"/> already uses. Upserts rather than requiring an
-    /// existing row, since a mapping can reach its very first pass with no <c>ChangeWatermarks</c> row
-    /// at all.
-    /// <para>
-    /// <paramref name="bulkLoadBatchId"/> is what a completing <c>BulkLoadBatches</c> row uses to find
-    /// its way back to this exact row — see <see cref="PromotePendingLoad"/>.
-    /// </para>
-    /// </summary>
+    /// <summary>Records a position captured for an initial load that is not yet promoted, and holds the mapping while it loads (<see cref="ReadHold.Loading"/>). The position, intent and hold the mapping had stay as they were.</summary>
     public void SetPendingLoad(
         string taskName, string mappingName, string sourceTable,
         string pendingWatermark, DateTimeOffset? pendingWatermarkTimeUtc, string bulkLoadBatchId) =>
-        database.Retry(() =>
+        Move(taskName, mappingName, sourceTable, DefaultActor, (parts, _) =>
         {
-            using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, database.Dialect.Upsert(
-                "ChangeWatermarks",
-                "TaskName, MappingName, SourceTable, ReadHold, PendingWatermark, PendingWatermarkTimeUtc, " +
-                    "PendingBulkLoadBatchId, UpdatedAtUtc",
-                "$task, $mapping, $table, $hold, $pendingWatermark, $pendingWatermarkTime, $batchId, $now",
-                "TaskName, MappingName, SourceTable",
-                "ReadHold = EXCLUDED.ReadHold, PendingWatermark = EXCLUDED.PendingWatermark, " +
-                    "PendingWatermarkTimeUtc = EXCLUDED.PendingWatermarkTimeUtc, " +
-                    "PendingBulkLoadBatchId = EXCLUDED.PendingBulkLoadBatchId, " +
-                    "UpdatedAtUtc = EXCLUDED.UpdatedAtUtc"));
-            cmd.Bind(database, "task", taskName);
-            cmd.Bind(database, "mapping", mappingName);
-            cmd.Bind(database, "table", sourceTable);
-            cmd.Bind(database, "hold", ReadHold.Loading.ToString());
-            cmd.Bind(database, "pendingWatermark", pendingWatermark);
-            cmd.Bind(database, "pendingWatermarkTime", (object?)pendingWatermarkTimeUtc?.ToString("O") ?? DBNull.Value);
-            cmd.Bind(database, "batchId", bulkLoadBatchId);
-            cmd.Bind(database, "now", DateTimeOffset.UtcNow.ToString("O"));
-            cmd.ExecuteNonQuery();
+            parts[WatermarkCheckpoint.Hold] = ProgressValue.OfText(nameof(ReadHold.Loading));
+            parts[WatermarkCheckpoint.PendingPosition] = ProgressValue.OfText(pendingWatermark);
+            if (pendingWatermarkTimeUtc is { } time) parts[WatermarkCheckpoint.PendingPositionTime] = ProgressValue.OfTime(time);
+            else parts.Remove(WatermarkCheckpoint.PendingPositionTime);
+            parts[WatermarkCheckpoint.PendingBatch] = ProgressValue.OfText(bulkLoadBatchId);
+            return parts;
         });
 
-    /// <summary>
-    /// The same promotion <see cref="PromotePendingLoad"/> makes when a load's batch completes, but found by
-    /// mapping rather than by batch. For an operator who knows the table is loaded although its own batch
-    /// never completed (it failed, and the table was then loaded by hand): the position captured before the
-    /// load becomes the live one, the intent is <see cref="ReadIntent.Changes"/>, and the hold clears.
-    /// </summary>
-    /// <returns>False when the mapping is not <see cref="ReadHold.Loading"/> or holds no pending position.</returns>
+    /// <summary>Moves the pending parts to the position and clears them, in one advance: the intent is <see cref="ReadIntent.Changes"/> and the hold <see cref="ReadHold.None"/> from then on.</summary>
+    private static Dictionary<string, ProgressValue> Promoted(Dictionary<string, ProgressValue> parts)
+    {
+        parts[WatermarkCheckpoint.Position] = parts[WatermarkCheckpoint.PendingPosition];
+        if (parts.TryGetValue(WatermarkCheckpoint.PendingPositionTime, out var time)) parts[WatermarkCheckpoint.PositionTime] = time;
+        else parts.Remove(WatermarkCheckpoint.PositionTime);
+        parts[WatermarkCheckpoint.Intent] = ProgressValue.OfText(nameof(ReadIntent.Changes));
+        parts[WatermarkCheckpoint.Hold] = ProgressValue.OfText(nameof(ReadHold.None));
+        parts.Remove(WatermarkCheckpoint.PendingPosition);
+        parts.Remove(WatermarkCheckpoint.PendingPositionTime);
+        parts.Remove(WatermarkCheckpoint.PendingBatch);
+        return parts;
+    }
+
+    /// <summary>Promotes a mapping's pending initial load when it is still held for loading and has a pending position (one moved the hold elsewhere in the meantime: nothing happens). True when it was promoted.</summary>
     public bool PromotePendingLoadFor(string taskName, string mappingName, string sourceTable) =>
-        database.Retry(() =>
-        {
-            using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, """
-                UPDATE ChangeWatermarks
-                SET Watermark = PendingWatermark,
-                    WatermarkTimeUtc = PendingWatermarkTimeUtc,
-                    ReadIntent = $intent,
-                    ReadHold = $hold,
-                    PendingWatermark = NULL,
-                    PendingWatermarkTimeUtc = NULL,
-                    PendingBulkLoadBatchId = NULL,
-                    UpdatedAtUtc = $now
-                WHERE TaskName = $task AND MappingName = $mapping AND SourceTable = $table
-                  AND ReadHold = $loading AND PendingWatermark IS NOT NULL;
-                """);
-            cmd.Bind(database, "intent", ReadIntent.Changes.ToString());
-            cmd.Bind(database, "hold", ReadHold.None.ToString());
-            cmd.Bind(database, "loading", ReadHold.Loading.ToString());
-            cmd.Bind(database, "now", DateTimeOffset.UtcNow.ToString("O"));
-            cmd.Bind(database, "task", taskName);
-            cmd.Bind(database, "mapping", mappingName);
-            cmd.Bind(database, "table", sourceTable);
-            return cmd.ExecuteNonQuery() == 1;
-        });
+        Move(taskName, mappingName, sourceTable, DefaultActor, (parts, exists) =>
+            exists && parts.TryGetValue(WatermarkCheckpoint.Hold, out var hold) && hold.AsText == nameof(ReadHold.Loading) && parts.ContainsKey(WatermarkCheckpoint.PendingPosition)
+                ? Promoted(parts)
+                : null);
 
-    /// <summary>
-    /// Forgets a pending initial load — the position it captured and the batch it was waiting on — without
-    /// promoting it. For an operator who is leaving <see cref="ReadHold.Loading"/> by hand (the load failed,
-    /// or the table was loaded another way): left in place, the stale batch id would promote the old
-    /// position over whatever the operator chose if that batch ever completed.
-    /// </summary>
     public void ClearPendingLoad(string taskName, string mappingName, string sourceTable) =>
-        database.Retry(() =>
-        {
-            using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, """
-                UPDATE ChangeWatermarks
-                SET PendingWatermark = NULL, PendingWatermarkTimeUtc = NULL, PendingBulkLoadBatchId = NULL,
-                    UpdatedAtUtc = $now
-                WHERE TaskName = $task AND MappingName = $mapping AND SourceTable = $table;
-                """);
-            cmd.Bind(database, "task", taskName);
-            cmd.Bind(database, "mapping", mappingName);
-            cmd.Bind(database, "table", sourceTable);
-            cmd.Bind(database, "now", DateTimeOffset.UtcNow.ToString("O"));
-            cmd.ExecuteNonQuery();
-        });
+        Move(taskName, mappingName, sourceTable, DefaultActor, (parts, exists) =>
+            exists ? new Dictionary<string, ProgressValue>(Without(parts, WatermarkCheckpoint.PendingPosition, WatermarkCheckpoint.PendingPositionTime, WatermarkCheckpoint.PendingBatch), StringComparer.Ordinal) : null);
 
     /// <summary>
-    /// The "one act" phase 134's design calls for, once a Bulk Load batch a mapping was waiting on
-    /// reaches <c>BulkLoadState.Completed</c> (never on <c>CompletedWithFailures</c> — see the caller):
-    /// the pending position becomes the live one, the hold clears, and the intent flips to
-    /// <see cref="ReadIntent.Changes"/> — the same one statement <see cref="SetReadIntentAndHold"/>'s own
-    /// doc reasons a recovery must be, so there is no window where one of the three has happened and the
-    /// others have not.
-    /// <para>
-    /// Matched on <paramref name="bulkLoadBatchId"/> alone, not a full key — a batch id is already
-    /// globally unique (<c>Guid.NewGuid().ToString("N")</c>), and this is what lets the caller promote
-    /// without first resolving which mapping it belongs to.
-    /// </para>
+    /// Promotes the mapping whose pending load is the bulk-load batch <paramref name="bulkLoadBatchId"/>: its pending position becomes its position, in one advance. True when exactly one mapping was waiting on
+    /// the batch (a batch belongs to one mapping).
     /// </summary>
-    /// <returns>False when no row was waiting on this batch — an ordinary operator-triggered reload
-    /// shares <c>RunKind.BulkLoad</c> and the same table without gating anything, and completing one of
-    /// those must promote nothing.</returns>
-    public bool PromotePendingLoad(string bulkLoadBatchId) =>
-        database.Retry(() =>
+    public bool PromotePendingLoad(string bulkLoadBatchId)
+    {
+        var waiting = database.Retry(() => ProgressStore.FindTextPart(database, WatermarkCheckpoint.Package, WatermarkCheckpoint.Channel, WatermarkCheckpoint.Name, WatermarkCheckpoint.PendingBatch, bulkLoadBatchId));
+        var promoted = 0;
+        foreach (var (task, item) in waiting)
         {
-            using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, """
-                UPDATE ChangeWatermarks
-                SET Watermark = PendingWatermark,
-                    WatermarkTimeUtc = PendingWatermarkTimeUtc,
-                    ReadIntent = $intent,
-                    ReadHold = $hold,
-                    PendingWatermark = NULL,
-                    PendingWatermarkTimeUtc = NULL,
-                    PendingBulkLoadBatchId = NULL,
-                    UpdatedAtUtc = $now
-                WHERE PendingBulkLoadBatchId = $batchId;
-                """);
-            cmd.Bind(database, "intent", ReadIntent.Changes.ToString());
-            cmd.Bind(database, "hold", ReadHold.None.ToString());
-            cmd.Bind(database, "now", DateTimeOffset.UtcNow.ToString("O"));
-            cmd.Bind(database, "batchId", bulkLoadBatchId);
-            return cmd.ExecuteNonQuery() == 1;
-        });
+            var (mapping, table) = WatermarkCheckpoint.Split(item);
+            if (Move(task, mapping, table, DefaultActor, (parts, exists) => exists && parts.ContainsKey(WatermarkCheckpoint.PendingPosition) ? Promoted(parts) : null))
+                promoted++;
+        }
 
-    /// <summary>
-    /// Forgets where a table got to, so the next pass reads it from the beginning.
-    /// <para>
-    /// The recovery for a position the source no longer retains — see
-    /// <c>PositionExpiredException</c>. Deleting the row rather than writing a sentinel, because every
-    /// reader already treats "no watermark" as "read everything and start tracking from here", and a
-    /// sentinel would be a second thing meaning the same.
-    /// </para>
-    /// </summary>
-    /// <returns>False when there was nothing stored, so a repeat reads as "already cleared".</returns>
-    public bool ClearWatermark(string taskName, string mappingName, string sourceTable) =>
-        database.Retry(() =>
-        {
-            using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection,
-                "DELETE FROM ChangeWatermarks WHERE TaskName = $task AND MappingName = $mapping AND SourceTable = $source;");
-            cmd.Bind(database, "task", taskName);
-            cmd.Bind(database, "mapping", mappingName);
-            cmd.Bind(database, "source", sourceTable);
-            return cmd.ExecuteNonQuery() == 1;
-        });
+        return promoted == 1;
+    }
+
+    /// <summary>Removes a mapping's position altogether, so its next pass starts as a new mapping would; the history of the checkpoint stays, naming <paramref name="actor"/>. False when it had none.</summary>
+    public bool ClearWatermark(string taskName, string mappingName, string sourceTable, string? actor = null) =>
+        database.Retry(() => For(taskName).DeleteCheckpoint(WatermarkCheckpoint.Name, actor ?? DefaultActor, WatermarkCheckpoint.ItemKey(mappingName, sourceTable)));
 }

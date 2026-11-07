@@ -60,16 +60,16 @@ public sealed class ChangeCheckStore(StateDatabase database)
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, """
-                INSERT INTO ChangeCheckHistory (ConnectionName, SourceDatabase, SourceKind, Value, CheckedAtUtc, SourceTimeUtc)
-                VALUES ($connection, $database, $kind, $value, $now, $sourceTime);
+            using var cmd = database.Command(Module, connection, """
+                INSERT INTO {table:change_check} (connection_name, source_database, source_kind, value_text, checked_at, source_at)
+                VALUES ($connection, $database, $kind, $value, $now, $source_time);
                 """);
             cmd.Bind(database, "connection", connectionName);
             cmd.Bind(database, "database", sourceDatabase);
             cmd.Bind(database, "kind", sourceKind);
-            cmd.Bind(database, "value", (object?)value ?? DBNull.Value);
-            cmd.Bind(database, "now", DateTimeOffset.UtcNow.ToString("O"));
-            cmd.Bind(database, "sourceTime", (object?)sourceTimeUtc?.ToString("O") ?? DBNull.Value);
+            cmd.Bind(database, "value", value, System.Data.DbType.String);
+            cmd.Bind(database, "now", database.Time.GetUtcNow());
+            cmd.Bind(database, "source_time", sourceTimeUtc, sourceTimeUtc is null ? System.Data.DbType.DateTimeOffset : null);
             cmd.ExecuteNonQuery();
         });
 
@@ -89,9 +89,9 @@ public sealed class ChangeCheckStore(StateDatabase database)
                 return 0;
 
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection,
-                "DELETE FROM ChangeCheckHistory WHERE CheckedAtUtc < $cutoff;");
-            cmd.Bind(database, "cutoff", DateTimeOffset.UtcNow.Subtract(maxAge.Value).ToString("O"));
+            using var cmd = database.Command(Module, connection,
+                "DELETE FROM {table:change_check} WHERE checked_at < $cutoff;");
+            cmd.Bind(database, "cutoff", database.Time.GetUtcNow().Subtract(maxAge.Value));
             return cmd.ExecuteNonQuery();
         });
 
@@ -104,10 +104,10 @@ public sealed class ChangeCheckStore(StateDatabase database)
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, $"""
-                SELECT {Columns}
-                FROM ChangeCheckHistory
-                ORDER BY CheckedAtUtc DESC, Id DESC;
+            using var cmd = database.Command(Module, connection, $$"""
+                SELECT {{Columns}}
+                FROM {table:change_check}
+                ORDER BY checked_at DESC, id DESC;
                 """);
 
             var checks = new List<ChangeCheck>();
@@ -140,13 +140,14 @@ public sealed class ChangeCheckStore(StateDatabase database)
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, $"""
-                SELECT {Columns}
-                FROM ChangeCheckHistory
-                WHERE ConnectionName = $connection AND SourceDatabase = $database AND SourceKind = $kind
-                  {(requireSourceTime ? "AND SourceTimeUtc IS NOT NULL" : string.Empty)}
-                ORDER BY CheckedAtUtc DESC, Id DESC;
+            using var cmd = database.Command(Module, connection, $$"""
+                SELECT {{Columns}}
+                FROM {table:change_check}
+                WHERE connection_name = $connection AND source_database = $database AND source_kind = $kind
+                  {{(requireSourceTime ? "AND source_at IS NOT NULL" : string.Empty)}}
+                ORDER BY checked_at DESC, id DESC {{database.Limit("one")}};
                 """);
+            cmd.Bind(database, "one", 1L);
             cmd.Bind(database, "connection", connectionName);
             cmd.Bind(database, "database", sourceDatabase);
             cmd.Bind(database, "kind", sourceKind);
@@ -285,12 +286,12 @@ public sealed class ChangeCheckStore(StateDatabase database)
         string sourceDatabase,
         string sourceKind)
     {
-        var cmd = database.Command(connection, $"""
-            SELECT {Columns}
-            FROM ChangeCheckHistory
-            WHERE ConnectionName = $connection AND SourceDatabase = $database AND SourceKind = $kind
-              AND Value IS NOT NULL
-            ORDER BY CheckedAtUtc, Id;
+        var cmd = database.Command(Module, connection, $$"""
+            SELECT {{Columns}}
+            FROM {table:change_check}
+            WHERE connection_name = $connection AND source_database = $database AND source_kind = $kind
+              AND value_text IS NOT NULL
+            ORDER BY checked_at, id;
             """);
         cmd.Bind(database, "connection", connectionName);
         cmd.Bind(database, "database", sourceDatabase);
@@ -298,14 +299,15 @@ public sealed class ChangeCheckStore(StateDatabase database)
         return cmd;
     }
 
-    private const string Columns =
-        "ConnectionName, SourceDatabase, SourceKind, Value, CheckedAtUtc, SourceTimeUtc";
+    private const string Module = SyncStateModule.Name;
+
+    private const string Columns = "connection_name, source_database, source_kind, value_text, checked_at, source_at";
 
     private static ChangeCheck Read(System.Data.Common.DbDataReader reader) => new(
         reader.GetString(0),
         reader.GetString(1),
         reader.GetString(2),
         reader.IsDBNull(3) ? null : reader.GetString(3),
-        DateTimeOffset.Parse(reader.GetString(4)),
-        reader.IsDBNull(5) ? null : DateTimeOffset.Parse(reader.GetString(5)));
+        reader.Time(4),
+        reader.NullableTime(5));
 }
