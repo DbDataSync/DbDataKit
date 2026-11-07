@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { runsQuery, type StagingInfo, type TaskStatus } from './api'
-import { activationBody, capabilityLines, headText, isGone, outcomeText, taskState } from './model'
+import { activationBody, capabilityLines, connectionsOfTask, headText, isGone, outcomeText, taskState } from './model'
 
 const task = (over: Partial<TaskStatus> = {}): TaskStatus => ({
   package: 'sample', channel: 'dev', task: 'ok', version: 1, next_due: null, last_run: null, running: 0, queued: 0, next_attempt_at: null,
@@ -41,6 +41,21 @@ describe('runsQuery', () => {
   it('sends only the filters that are set', () => {
     expect(runsQuery({})).toBe('?limit=100')
     expect(runsQuery({ package: 'sample', outcome: 'failed' })).toBe('?package=sample&outcome=failed&limit=100')
+  })
+})
+
+describe('connectionsOfTask', () => {
+  const use = (name: string, channel: string) => ({ process: 'task', name, version: '2', group: 'main', instance: null, channel, role: 'run' })
+  const connections = [
+    { name: 'erp', kind: 'sqlserver', secret_ref: null, roles: ['run'], used_by: [use('orders/extract', 'prod'), use('orders/extract', 'dev'), { ...use('orders', 'prod'), process: 'runner', instance: 'i1' }] },
+    { name: 'warehouse', kind: 'postgres', secret_ref: 'env:WH', roles: ['run'], used_by: [use('orders/load', 'prod')] },
+  ]
+
+  it('lists what a task of a channel connects to, and nothing for another channel, task or kind of user', () => {
+    expect(connectionsOfTask(connections, { package: 'orders', channel: 'prod', task: 'extract' })).toEqual([{ name: 'erp', kind: 'sqlserver', role: 'run' }])
+    expect(connectionsOfTask(connections, { package: 'orders', channel: 'prod', task: 'load' })).toEqual([{ name: 'warehouse', kind: 'postgres', role: 'run' }])
+    expect(connectionsOfTask(connections, { package: 'orders', channel: 'test', task: 'extract' })).toEqual([])
+    expect(connectionsOfTask(connections, { package: 'orders', channel: 'prod', task: 'nothing' })).toEqual([])
   })
 })
 

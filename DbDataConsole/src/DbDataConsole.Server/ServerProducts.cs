@@ -34,7 +34,7 @@ public static partial class ServerProducts
         };
     }
 
-    [GeneratedRegex(@"^api/v1/(status|instances|runs|settings|definitions/integration(/[A-Za-z0-9._-]+)?)/?$")]
+    [GeneratedRegex(@"^api/v1/(status|instances|connections|runs|settings|definitions/integration(/[A-Za-z0-9._-]+)?)/?$")]
     private static partial Regex RunnerReads();
 
     [GeneratedRegex(@"^api/v1/(tasks/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/(run|pause|resume)|definitions/integration/[A-Za-z0-9._-]+/(activate|switch|rollback|retire))/?$")]
