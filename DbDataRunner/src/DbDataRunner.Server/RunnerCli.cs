@@ -93,7 +93,7 @@ public static class RunnerCli
         RunnerSettings settings;
         try
         {
-            settings = new RunnerSettings(DirectoryOf(args, environment), listen) { State = RunnerSettings.StateFrom(environment), Channels = RunnerSettings.ChannelsFrom(environment, parsed.Get("channels")) };
+            settings = new RunnerSettings(DirectoryOf(args, environment), listen) { State = RunnerSettings.StateFrom(environment), Channels = RunnerSettings.ChannelsFrom(environment, parsed.Get("channels")), MaxArtifactBytes = RunnerSettings.MaxArtifactBytesFrom(environment) };
         }
         catch (ArgumentException ex)
         {
@@ -307,8 +307,17 @@ public static class RunnerCli
         }
     }
 
-    private static Noun PackageNoun(Func<string, string?>? environment) => new("package", "Packages in this runner (a development path: plan 30's publish API replaces it)",
+    private static Noun PackageNoun(Func<string, string?>? environment) => new("package", "Packages in a runner: publish to a server's API as a paired publisher, or install into this runner's own state (the development path)",
     [
+        new Verb("pair", "Pair this machine with a runner as a publisher, using the single-use code its administrator made with 'server pair --max-role publisher'; the runner's certificate is pinned", EffectClass.RepoFilesOnly,
+            "<https address> --code <code> [--name <label>] [--client-dir <directory>]", (args, context) => PackagePairAsync(args, context, environment),
+            DataSchemas.Object([("name", DataSchemas.String), ("url", DataSchemas.String), ("instance_id", DataSchemas.String), ("fingerprint", DataSchemas.String)], "name", "url", "instance_id", "fingerprint")),
+        new Verb("publish", "Publish a package to a runner's API: uploads only the files the runner does not have, then publishes the version (served at once, or staged with --stage)", EffectClass.TargetDataWrites,
+            "<manifest.yaml> <directory> --server <name or https address> --channel <name> [--code <code>] [--stage] [--expected-version <n>] [--client-dir <directory>]", (args, context) => PackagePublishAsync(args, context, environment),
+            DataSchemas.Object([("package", DataSchemas.String), ("channel", DataSchemas.String), ("version", DataSchemas.Integer), ("changed", DataSchemas.Boolean), ("mode", DataSchemas.String), ("uploaded", DataSchemas.Integer), ("skipped", DataSchemas.Integer), ("signature", DataSchemas.String), ("tasks", DataSchemas.StringList)], "package", "channel", "version", "changed", "mode", "uploaded", "skipped")),
+        new Verb("require-signatures", "Show, or with on or off set, whether this runner refuses a version that is not signed (plan 30 section 6.2; the signature check itself is not built yet, so 'on' refuses every publish)", EffectClass.TargetDataWrites,
+            $"[on|off] {Where}", (args, context) => PackageRequireSignaturesAsync(args, context, environment),
+            DataSchemas.Object([("require_signatures", DataSchemas.Boolean)], "require_signatures")),
         new Verb("install", "Put a package into this runner's own state, served at once: reads a package/1 manifest and a directory of files, stores them, makes them the channel's active version and replaces the channel's task schedule", EffectClass.TargetDataWrites,
             $"<manifest.yaml> <directory> [--channel <name>] {Where}", (args, context) => PackageInstallAsync(args, context, environment),
             DataSchemas.Object([("package", DataSchemas.String), ("channel", DataSchemas.String), ("version", DataSchemas.Integer), ("changed", DataSchemas.Boolean), ("files", DataSchemas.Integer), ("tasks", DataSchemas.StringList)], "package", "channel", "version", "changed")),
@@ -344,5 +353,94 @@ public static class RunnerCli
             await context.Error.WriteLineAsync(ex.Message);
             return CliExit.Failure;
         }
+    }
+
+    private static async Task<int> PackagePairAsync(string[] args, CliContext context, Func<string, string?>? environment)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "code", "name", "client-dir" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count != 1 || parsed.Get("code") is not { } code || !Uri.TryCreate(parsed.Words[0], UriKind.Absolute, out var url))
+        {
+            await context.Error.WriteLineAsync("Usage: package pair <https address> --code <code> [--name <label>] [--client-dir <directory>]");
+            return CliExit.Usage;
+        }
+
+        try
+        {
+            var client = new RunnerPublishClient(new RunnerClientStore(parsed.Get("client-dir") ?? RunnerClientStore.DefaultDirectory(environment)), environment);
+            var runner = await client.PairAsync(url, code, parsed.Get("name"), context.Cancellation);
+            await context.Out.WriteLineAsync($"Paired with {runner.Name} ({runner.InstanceId}) at {runner.Url} with the roles {string.Join(", ", runner.Roles)}. Its certificate is pinned: {runner.Fingerprint}");
+            context.Data["name"] = runner.Name;
+            context.Data["url"] = runner.Url;
+            context.Data["instance_id"] = runner.InstanceId;
+            context.Data["fingerprint"] = runner.Fingerprint;
+            return CliExit.Ok;
+        }
+        catch (RunnerClientException ex)
+        {
+            await context.Error.WriteLineAsync(ex.Message);
+            return CliExit.Failure;
+        }
+    }
+
+    private static async Task<int> PackagePublishAsync(string[] args, CliContext context, Func<string, string?>? environment)
+    {
+        const string usage = "Usage: package publish <manifest.yaml> <directory> --server <name or https address> --channel <name> [--code <code>] [--stage] [--expected-version <n>] [--client-dir <directory>]";
+        var parsed = CliArgs.Parse(args, new HashSet<string> { "stage" }, new HashSet<string> { "server", "channel", "code", "expected-version", "client-dir" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count != 2 || parsed.Get("server") is not { } server || parsed.Get("channel") is not { } channel)
+        {
+            await context.Error.WriteLineAsync(usage);
+            return CliExit.Usage;
+        }
+
+        int? expected = null;
+        if (parsed.Get("expected-version") is { } expectedText)
+        {
+            if (!int.TryParse(expectedText, NumberStyles.None, CultureInfo.InvariantCulture, out var number))
+            {
+                await context.Error.WriteLineAsync("--expected-version is a whole number (0 for a first publish).");
+                return CliExit.Usage;
+            }
+            expected = number;
+        }
+
+        try
+        {
+            var client = new RunnerPublishClient(new RunnerClientStore(parsed.Get("client-dir") ?? RunnerClientStore.DefaultDirectory(environment)), environment);
+            var result = await client.PublishAsync(server, parsed.Get("code"), parsed.Words[0], parsed.Words[1], channel, parsed.Has("stage"), expected, line => context.Out.WriteLine(line), context.Cancellation);
+            await context.Out.WriteLineAsync(
+                $"{(result.Mode == "stage" ? "Staged" : "Published")} {result.Package} on {channel}: version {result.Version}{(result.Changed ? "" : " (the same content as before, nothing changed)")}, {result.Uploaded} file(s) uploaded, {result.Skipped} already there, signature {result.Signature}."
+                + (result.Mode == "stage" ? " It is not run until an administrator activates it." : ""));
+            context.Data["package"] = result.Package;
+            context.Data["channel"] = result.Channel;
+            context.Data["version"] = result.Version;
+            context.Data["changed"] = result.Changed;
+            context.Data["mode"] = result.Mode;
+            context.Data["uploaded"] = result.Uploaded;
+            context.Data["skipped"] = result.Skipped;
+            context.Data["signature"] = result.Signature;
+            context.Data["tasks"] = result.Tasks.ToList();
+            return CliExit.Ok;
+        }
+        catch (RunnerClientException ex)
+        {
+            await context.Error.WriteLineAsync(ex.Message);
+            return CliExit.Failure;
+        }
+    }
+
+    private static async Task<int> PackageRequireSignaturesAsync(string[] args, CliContext context, Func<string, string?>? environment)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 1 || (parsed.Words.Count == 1 && parsed.Words[0] is not ("on" or "off")))
+        {
+            await context.Error.WriteLineAsync($"Usage: package require-signatures [on|off] {Where}");
+            return CliExit.Usage;
+        }
+
+        var publishing = new RunnerPublishing(OpenState(parsed, environment));
+        if (parsed.Words.Count == 1) publishing.SetRequireSignatures(parsed.Words[0] == "on", RunnerActor.Local());
+        await context.Out.WriteLineAsync($"Signatures are {(publishing.RequireSignatures ? "required: a version that is not signed is refused" : "not required: a version is accepted unsigned and recorded as such")}.");
+        context.Data["require_signatures"] = publishing.RequireSignatures;
+        return CliExit.Ok;
     }
 }

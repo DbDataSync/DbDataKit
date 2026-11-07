@@ -142,6 +142,16 @@ public sealed class PayloadStore
             reader.GetString(5) == Done, reader.Time(6), reader.IsDBNull(7) ? null : reader.GetString(7));
     }
 
+    /// <summary>The id of a complete payload with this SHA-256 that <paramref name="ownerModule"/> owns, if there is one (a caller that stores files by hash looks here before it writes a file again).</summary>
+    public Guid? FindComplete(string sha256, string ownerModule)
+    {
+        using var connection = _database.OpenConnection();
+        using var select = _database.Command(ModuleName, connection, "SELECT id FROM {table:payload} WHERE owner_module = $owner AND sha256 = $sha AND state = $state ORDER BY created_at;");
+        select.Bind(_database, "owner", ownerModule).Bind(_database, "sha", sha256.ToLowerInvariant()).Bind(_database, "state", Done);
+        using var reader = select.ExecuteReader();
+        return reader.Read() ? reader.Uuid(0) : null;
+    }
+
     /// <summary>Removes a payload and its chunks; false if there was none.</summary>
     public bool Delete(Guid id)
     {
