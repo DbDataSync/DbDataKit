@@ -151,6 +151,13 @@ public sealed class RunExecutor(
         return ExitCode.Success;
     }
 
+    /// <summary>
+    /// Runs one item that something else planned and claimed (plan 28c E03): the runner's drain plans a pass per mapping itself and runs each as a unit of its run, so there is no queue to claim from and no lane to
+    /// feed. The outcome is recorded through <see cref="IRunnerState"/> exactly as for a claimed item (the state's <c>CompleteRun</c> says how it ended); only the claiming loop above is not used.
+    /// </summary>
+    public Task RunPlannedItemAsync(WorkItem item, CancellationToken cancellationToken) =>
+        ProcessWorkItemAsync(item, cancellationToken);
+
     /// <summary>One lane: its own bounded channel, one producer claiming only that lane's
     /// <see cref="RunKind"/>s, and <paramref name="degreeOfParallelism"/> consumers. Mirrors what
     /// <see cref="ExecuteWorkerAsync"/> used to do for the whole worker — await the producer (capturing

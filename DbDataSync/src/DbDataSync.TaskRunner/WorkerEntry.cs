@@ -38,51 +38,11 @@ public static class WorkerEntry
 
         var secretStore = SecretStore.Open(options!.RepoRoot);
         var configRepository = new ConfigRepository(options!.ConfigRoot, new GitCommitService(options.RepoRoot), secretStore);
-
-        // The cache is what makes scripting affordable here: this process is spawned per run, so without it
-        // every pass would start a compiler before compiling anything of ours.
-        var scriptHost = new ScriptHost(
-            configRepository, new ScriptCompiler(ScriptCacheDirectory.BesideStateDatabase(options.StateDbPath), configRepository.ScriptsDirectory));
-
-        // Loaded before DriverRegistry for the same reason the API loads it first: a descriptor or compiled
-        // driver registered from 109d/109e on resolves its library through this. The worker is a separate
-        // process per the plan doc's "two composition roots" note, so it repeats this rather than sharing the
-        // API's in-memory registry.
-        var libraryRegistry = new LibraryRegistry(options.RepoRoot).LoadAll();
-
-        // A driver's failure is shown as its classified message; the API process hands the details setting down in the environment.
-        var failureMappers = new Dictionary<DbDataKit.Dialect.EngineId, DbDataKit.Connections.IFailureMapper>
-        {
-            [DbDataKit.Dialect.EngineId.SqlServer] = MsSqlDriver.FailureMapper,
-            [DbDataKit.Dialect.EngineId.Postgres] = PostgresDriver.FailureMapper,
-            [DbDataKit.Dialect.EngineId.MySql] = MySqlDriver.FailureMapper,
-            [DbDataKit.Dialect.EngineId.Oracle] = OracleDriver.FailureMapper,
-        };
-        foreach (var id in DriverIds.ArrowFlightSqlVariants)
-            failureMappers[DriverFailures.EngineFor(id)] = new DbDataKit.Connections.FlightSql.FlightSqlFailureMapper();
-        DriverFailures.Configure(
-            failureMappers,
-            string.Equals(Environment.GetEnvironmentVariable("Diagnostics__DriverDetails"), "true", StringComparison.OrdinalIgnoreCase));
-
-        var driverRegistry = new DriverRegistry();
-        // The scripted reader is composed here rather than inside a driver, because it needs the script host
-        // and a driver must not depend on Roslyn.
-        var msSqlDriver = new MsSqlDriver();
-        var postgresDriver = new PostgresDriver();
-        var mySqlDriver = new MySqlDriver();
-        var oracleDriver = new OracleDriver();
-        var duckDbDriver = new DuckDbDriver();
-        driverRegistry.RegisterWithScripting(msSqlDriver, scriptHost);
-        driverRegistry.RegisterWithScripting(postgresDriver, scriptHost);
-        driverRegistry.RegisterWithScripting(mySqlDriver, scriptHost);
-        driverRegistry.RegisterWithScripting(oracleDriver, scriptHost);
-        driverRegistry.RegisterWithScripting(duckDbDriver, scriptHost);
-        // One driver per SQL dialect (phase 197F); like DuckDb they name a dialect but supply no catalog, so
-        // they get no ScriptedQuery reader out of the same call.
-        foreach (var flightSqlDriver in ArrowFlightSqlDriver.CreateAll())
-            driverRegistry.RegisterWithScripting(flightSqlDriver, scriptHost);
-        DriverLoader.LoadDescriptorDrivers(options.RepoRoot, libraryRegistry, driverRegistry);
-        DriverLoader.LoadCompiledDrivers(options.RepoRoot, driverRegistry);
+        var engine = EngineComposition.Compose(
+            configRepository, options.RepoRoot, ScriptCacheDirectory.BesideStateDatabase(options.StateDbPath));
+        var scriptHost = engine.Scripts;
+        var libraryRegistry = engine.Libraries;
+        var driverRegistry = engine.Drivers;
 
         // Phase 39: a runner spawned by the API never opens the state file. It applies its changes over
         // loopback to the process that owns it, and journals to disk if that process goes away mid-run.
