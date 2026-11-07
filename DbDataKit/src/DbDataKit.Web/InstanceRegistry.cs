@@ -3,8 +3,8 @@ using DbDataKit.Config.Yaml;
 
 namespace DbDataKit.Web.Trust;
 
-/// <summary>A server a console manages, as <c>instances.yaml</c> records it. <c>KeyFingerprint</c> is the console key the server has on record, so a console in the middle of a key rotation knows which key to sign for it with. <c>Ceiling</c> is the most the server lets this console grant its users (a token that claims more is refused), as the pairing said; none when the entry predates it.</summary>
-public sealed record RegisteredInstance(string InstanceId, string Name, Uri Url, string CertificateFingerprint, int ApiVersion, DateTimeOffset? PairedAt, string? KeyFingerprint = null, ServerRole Ceiling = ServerRole.None);
+/// <summary>A server a console manages, as <c>instances.yaml</c> records it. <c>KeyFingerprint</c> is the console key the server has on record, so a console in the middle of a key rotation knows which key to sign for it with. <c>Ceiling</c> is the most the server lets this console grant its users (a token that claims more is refused), as the pairing said; none when the entry predates it. <c>Generation</c> is the compatibility generation the server last reported (24a UC04); null when the entry predates it or the server states none.</summary>
+public sealed record RegisteredInstance(string InstanceId, string Name, Uri Url, string CertificateFingerprint, int ApiVersion, DateTimeOffset? PairedAt, string? KeyFingerprint = null, ServerRole Ceiling = ServerRole.None, int? Generation = null);
 
 /// <summary>
 /// The servers a console is paired with: the <c>instances</c> list of the console's <c>instances.yaml</c>, one flow mapping each (plan 13, W12). It holds no secret: the pin is a certificate fingerprint,
@@ -29,7 +29,9 @@ public sealed class InstanceRegistry(string path, TimeProvider? clock = null)
             _ = int.TryParse(Text("apiVersion"), CultureInfo.InvariantCulture, out var version);
             DateTimeOffset? paired = DateTimeOffset.TryParse(Text("paired"), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var when) ? when : null;
             var ceiling = entry.Get("ceiling") is YamlSequence roles && ServerRoles.TryParse(roles.Items.OfType<YamlScalar>().Select(r => r.Value), out var parsed) ? parsed : ServerRole.None;
-            if (all.All(i => i.InstanceId != id)) all.Add(new RegisteredInstance(id, Text("name") ?? id, uri, pin, version, paired, Text("key"), ceiling));
+            // an entry written before the generation has no such key and reads as none, as an older console reads an entry that has it
+            int? generation = int.TryParse(Text("generation"), CultureInfo.InvariantCulture, out var g) && g >= 1 ? g : null;
+            if (all.All(i => i.InstanceId != id)) all.Add(new RegisteredInstance(id, Text("name") ?? id, uri, pin, version, paired, Text("key"), ceiling, generation));
         }
         return all;
     }
@@ -47,17 +49,21 @@ public sealed class InstanceRegistry(string path, TimeProvider? clock = null)
 
     /// <summary>Records a pairing; pairing the same server again replaces its entry (a renewed certificate, a new address).</summary>
     public RegisteredInstance Add(PairedServer server, string? name = null, string? keyFingerprint = null) =>
-        Write(new RegisteredInstance(server.InstanceId, string.IsNullOrWhiteSpace(name) ? server.Name : name, server.Url, server.CertificateFingerprint, server.ApiVersion, _clock.GetUtcNow(), keyFingerprint, server.Ceiling));
+        Write(new RegisteredInstance(server.InstanceId, string.IsNullOrWhiteSpace(name) ? server.Name : name, server.Url, server.CertificateFingerprint, server.ApiVersion, _clock.GetUtcNow(), keyFingerprint, server.Ceiling, server.Generation));
 
     /// <summary>Records that the server now has the console key with this fingerprint.</summary>
     public RegisteredInstance SetKey(string instanceId, string keyFingerprint) =>
         Write((Find(instanceId) ?? throw new InvalidOperationException($"No instance '{instanceId}' is registered.")) with { KeyFingerprint = keyFingerprint });
 
+    /// <summary>Records the compatibility generation the server reported (after an upgrade it reports another); the entry is rewritten only when it changed. Null when the instance is not registered.</summary>
+    public RegisteredInstance? SetGeneration(string instanceId, int generation) =>
+        Find(instanceId) is { } found ? found.Generation == generation ? found : Write(found with { Generation = generation }) : null;
+
     private RegisteredInstance Write(RegisteredInstance instance)
     {
         _file.Upsert(instance.InstanceId,
             $"{{id: {YamlText.FlowScalar(instance.InstanceId)}, name: {YamlText.FlowScalar(instance.Name)}, url: {YamlText.FlowScalar(instance.Url.AbsoluteUri)}, fingerprint: {YamlText.FlowScalar(instance.CertificateFingerprint)}, " +
-            $"apiVersion: {instance.ApiVersion.ToString(CultureInfo.InvariantCulture)}, {(instance.KeyFingerprint is { } key ? $"key: {YamlText.FlowScalar(key)}, " : "")}{(instance.Ceiling != ServerRole.None ? $"ceiling: {YamlText.FlowList(ServerRoles.Names(instance.Ceiling))}, " : "")}paired: {YamlText.FlowScalar(instance.PairedAt!.Value.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture))}}}");
+            $"apiVersion: {instance.ApiVersion.ToString(CultureInfo.InvariantCulture)}, {(instance.KeyFingerprint is { } key ? $"key: {YamlText.FlowScalar(key)}, " : "")}{(instance.Ceiling != ServerRole.None ? $"ceiling: {YamlText.FlowList(ServerRoles.Names(instance.Ceiling))}, " : "")}{(instance.Generation is { } generation ? $"generation: {generation.ToString(CultureInfo.InvariantCulture)}, " : "")}paired: {YamlText.FlowScalar(instance.PairedAt!.Value.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture))}}}");
         return instance;
     }
 
