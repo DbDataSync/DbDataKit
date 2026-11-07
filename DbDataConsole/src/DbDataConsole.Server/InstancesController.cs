@@ -11,7 +11,8 @@ public sealed record LinkRequest(string From, string To, string? Name);
 
 public sealed record PendingSummary(string Id, string Name, string Product, string Url, DateTimeOffset LastSeen);
 
-public sealed record InstanceSummary(string Id, string Name, string Url, string? Product, string? Version, int? ApiVersion, bool Reachable, bool? Ready, string? Problem, DateTimeOffset? PairedAt);
+/// <param name="Embedded">True for the runner built into this console (plan 28a R20): it is listed only when the console runs it, has no pairing and cannot be forgotten.</param>
+public sealed record InstanceSummary(string Id, string Name, string Url, string? Product, string? Version, int? ApiVersion, bool Reachable, bool? Ready, string? Problem, DateTimeOffset? PairedAt, bool Embedded = false);
 
 /// <summary>
 /// The servers this console manages: list them with how each is, pair another, forget one (plan 13, U12). Administrators only, by the fallback policy: pairing gives this console's signing key
@@ -19,7 +20,7 @@ public sealed record InstanceSummary(string Id, string Name, string Url, string?
 /// </summary>
 [ApiController]
 [Route("api/instances")]
-public sealed class InstancesController(ConsoleInstances instances, ConsoleRelay relay, PendingInstances pending) : ControllerBase
+public sealed class InstancesController(ConsoleInstances instances, ConsoleRelay relay, PendingInstances pending, IServiceProvider services) : ControllerBase
 {
     /// <summary>The servers that announced themselves and wait to be confirmed (never their codes).</summary>
     [HttpGet("pending")]
@@ -44,8 +45,15 @@ public sealed class InstancesController(ConsoleInstances instances, ConsoleRelay
     public IActionResult Reject(string id) => pending.Remove(id) ? NoContent() : NotFound(new { error = "No such server is waiting." });
 
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<InstanceSummary>>> List(CancellationToken cancellationToken) =>
-        Ok((await instances.StatusOfAllAsync(cancellationToken)).Select(Summarise).ToList());
+    public async Task<ActionResult<IReadOnlyList<InstanceSummary>>> List(CancellationToken cancellationToken)
+    {
+        var list = (await instances.StatusOfAllAsync(cancellationToken)).Select(Summarise).ToList();
+        // the runner built into this console, when it runs one: first, because it is this console's own
+        if (services.GetService(typeof(ConsoleRunner)) is ConsoleRunner runner)
+            list.Insert(0, new InstanceSummary(ConsoleRunnerSettings.ServerId, "Console runner", $"{Request.Scheme}://{Request.Host}/", ServerProducts.Runner, runner.Version, null,
+                runner.Host is not null, runner.Host is not null, runner.Host is null ? "the embedded runner is not running" : null, null, Embedded: true));
+        return Ok(list);
+    }
 
     [HttpPost]
     public async Task<ActionResult<InstanceSummary>> Pair([FromBody] PairRequest request, CancellationToken cancellationToken)
@@ -99,7 +107,7 @@ public sealed class InstancesController(ConsoleInstances instances, ConsoleRelay
     }
 
     [HttpDelete("{id}")]
-    public IActionResult Forget(string id) => instances.Remove(id) ? NoContent() : NotFound(new { error = "No such server is registered." });
+    public IActionResult Forget(string id) => id == ConsoleRunnerSettings.ServerId ? BadRequest(new { error = "The console's embedded runner is part of the console and cannot be forgotten; turn it off with runner.enabled in settings.yaml." }) : instances.Remove(id) ? NoContent() : NotFound(new { error = "No such server is registered." });
 
     private static InstanceSummary Summarise(InstanceStatus s) => new(
         s.Instance.InstanceId, s.Instance.Name, s.Instance.Url.AbsoluteUri, s.Product, s.Version, s.ApiVersion ?? s.Instance.ApiVersion, s.Reachable, s.Ready, s.Problem, s.Instance.PairedAt);
