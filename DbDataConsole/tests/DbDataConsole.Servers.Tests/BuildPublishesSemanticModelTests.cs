@@ -86,7 +86,7 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
         var instances = console.Services.GetRequiredService<ConsoleInstances>();
         proxyId = (await instances.PairAsync(proxyUrl, proxyCode, "Edge proxy")).InstanceId;
         buildId = (await instances.PairAsync(buildUrl, buildCode, "Retail build")).InstanceId;
-        personId = console.Services.GetRequiredService<UserStore>().CreateUser("Ada Admin", null, UserRole.Admin).Id;
+        personId = console.Services.GetRequiredService<IUserAccounts>().CreateUser("Ada Admin", null, UserRole.Admin).Id;
     }
 
     public async ValueTask DisposeAsync()
@@ -115,7 +115,7 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
     private async Task<(HttpStatusCode Status, JsonNode? Body)> AsPerson(HttpMethod method, string path, object? body = null)
     {
         using var request = new HttpRequestMessage(method, path);
-        request.Headers.Add("Cookie", $"{ConsoleHost.Auth.SessionCookie}={console.Services.GetRequiredService<SessionStore>().Create(personId).Id}");
+        request.Headers.Add("Cookie", $"{ConsoleHost.Auth.SessionCookie}={console.Services.GetRequiredService<ISessionStore>().Create(personId).Id}");
         if (body is not null) request.Content = JsonContent.Create(body);
         using var response = await http.SendAsync(request);
         var text = await response.Content.ReadAsStringAsync();

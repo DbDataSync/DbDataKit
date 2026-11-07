@@ -80,7 +80,7 @@ public sealed class BuildPublishesToProxyTests : IAsyncLifetime
         var instances = console.Services.GetRequiredService<ConsoleInstances>();
         proxyId = (await instances.PairAsync(proxyUrl, proxyCode, "Edge proxy")).InstanceId;
         buildId = (await instances.PairAsync(buildUrl, buildCode, "Sales build")).InstanceId;
-        (person, personId) = ("Ada Admin", console.Services.GetRequiredService<UserStore>().CreateUser("Ada Admin", null, UserRole.Admin).Id);
+        (person, personId) = ("Ada Admin", console.Services.GetRequiredService<IUserAccounts>().CreateUser("Ada Admin", null, UserRole.Admin).Id);
     }
 
     public async ValueTask DisposeAsync()
@@ -91,7 +91,7 @@ public sealed class BuildPublishesToProxyTests : IAsyncLifetime
         try { Directory.Delete(root, true); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 
-    private string SessionFor(string userId) => console.Services.GetRequiredService<SessionStore>().Create(userId).Id;
+    private string SessionFor(string userId) => console.Services.GetRequiredService<ISessionStore>().Create(userId).Id;
 
     private async Task<(HttpStatusCode Status, JsonNode? Body)> AsPerson(HttpMethod method, string path, object? body = null, string? userId = null)
     {
@@ -176,7 +176,7 @@ public sealed class BuildPublishesToProxyTests : IAsyncLifetime
         Assert.Equal(byHand, File.ReadAllText(ProxyConfig("erp")));
 
         // 7. a person who is not an administrator cannot adopt either; an administrator can, and then the Build server manages it
-        var viewer = console.Services.GetRequiredService<UserStore>().CreateUser("Vic Viewer", null, UserRole.Viewer).Id;
+        var viewer = console.Services.GetRequiredService<IUserAccounts>().CreateUser("Vic Viewer", null, UserRole.Viewer).Id;
         var viewerTries = await AsPerson(HttpMethod.Post, $"/relay/{proxyId}/api/v1/data-sources/erp/adopt", new { client = buildClientId }, viewer);
         Assert.Equal(HttpStatusCode.Forbidden, viewerTries.Status);
         Assert.Equal(byHand, File.ReadAllText(ProxyConfig("erp")));

@@ -807,7 +807,7 @@ public sealed class GroupStateTests : IAsyncLifetime
                 || !b.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue.DataSources.ContainsKey("mdm")); i++) await Task.Delay(100);
 
             // the identity home's people: an author, a viewer, and a service account (an agent); their roles are on the group's server id
-            var users = new UserStore(groupState);
+            var users = new IdentityUserStore(groupState);
             var tokens = new AccessTokens(groupState, users);
             var directory = new HomeDirectory(groupState);
             string Person(string name, ServerRole roles)

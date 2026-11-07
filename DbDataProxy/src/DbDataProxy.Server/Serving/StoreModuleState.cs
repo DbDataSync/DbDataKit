@@ -96,7 +96,7 @@ public sealed record StoreCaller(string UserId, string? Name, bool IsAgent, Serv
 /// </summary>
 public sealed class StoreCallers(StateDatabase state, string serverId, OpenIdProvider? provider)
 {
-    private readonly UserStore _users = new(state);
+    private readonly IdentityUserStore _users = new(state);
 
     public StoreCaller? Authenticate(string? authorization)
     {

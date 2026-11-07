@@ -69,7 +69,7 @@ public sealed class ProxyStoreModule(IOptionsMonitor<ProxyOptions> options, Stat
     {
         using var held = await SecretsRuntime.OpenStore(current).TryResolveAsync(SecretRef.Parse("secret:" + ProxyIdentityModule.SigningKeySecret), cancellationToken);
         if (held is null) return null;
-        var users = new UserStore(state);
+        var users = new IdentityUserStore(state);
         var directory = new HomeDirectory(state);
         return new OpenIdProvider(state, users, directory, new OidcClients(state), new SigningKeys(state, KeySigningKeyProtector.FromBase64(held.RevealString())),
             ProxyIdentityModule.PublicUrlOf(current).AbsoluteUri);
