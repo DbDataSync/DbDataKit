@@ -26,32 +26,33 @@ public sealed class ModuleWorkQueueStore(StateDatabase database, string service)
 
     public Guid Enqueue(
         string owner, string kind, string subject, string part = NoPart, string resource = "", string lane = "",
-        string? payloadJson = null, int priority = 0, DateTimeOffset? availableAt = null, Action<DbConnection, DbTransaction, Guid>? alsoWrite = null) =>
-        EnqueueCore(owner, kind, subject, part, resource, lane, payloadJson, priority, availableAt, alsoWrite, throwOnCollision: false);
+        string? payloadJson = null, int priority = 0, DateTimeOffset? availableAt = null, Action<DbConnection, DbTransaction, Guid>? alsoWrite = null, int resourceLimit = 1) =>
+        EnqueueCore(owner, kind, subject, part, resource, lane, payloadJson, priority, availableAt, alsoWrite, throwOnCollision: false, resourceLimit);
 
     public Guid EnqueueOrThrow(
         string owner, string kind, string subject, string part = NoPart, string resource = "", string lane = "",
-        string? payloadJson = null, int priority = 0, DateTimeOffset? availableAt = null, Action<DbConnection, DbTransaction, Guid>? alsoWrite = null) =>
-        EnqueueCore(owner, kind, subject, part, resource, lane, payloadJson, priority, availableAt, alsoWrite, throwOnCollision: true);
+        string? payloadJson = null, int priority = 0, DateTimeOffset? availableAt = null, Action<DbConnection, DbTransaction, Guid>? alsoWrite = null, int resourceLimit = 1) =>
+        EnqueueCore(owner, kind, subject, part, resource, lane, payloadJson, priority, availableAt, alsoWrite, throwOnCollision: true, resourceLimit);
 
     private Guid EnqueueCore(
         string owner, string kind, string subject, string part, string resource, string lane,
-        string? payloadJson, int priority, DateTimeOffset? availableAt, Action<DbConnection, DbTransaction, Guid>? alsoWrite, bool throwOnCollision) =>
+        string? payloadJson, int priority, DateTimeOffset? availableAt, Action<DbConnection, DbTransaction, Guid>? alsoWrite, bool throwOnCollision, int resourceLimit) =>
         database.Retry(() =>
         {
+            ArgumentOutOfRangeException.ThrowIfLessThan(resourceLimit, 1);
             using var connection = database.OpenConnection();
             using var transaction = connection.BeginTransaction();
             var runId = database.NewId();
             var now = Now();
             using (var cmd = database.Command(Module, connection, transaction, database.Dialect.InsertOrIgnore(
                 "{table:work_item}",
-                "service, owner, kind, subject, part, resource, lane, run_id, status, priority, payload, enqueued_at, available_at",
-                "$service, $owner, $kind, $subject, $part, $resource, $lane, $run_id, 'Pending', $priority, $payload, $now, $available",
+                "service, owner, kind, subject, part, resource, resource_limit, lane, run_id, status, priority, payload, enqueued_at, available_at",
+                "$service, $owner, $kind, $subject, $part, $resource, $resource_limit, $lane, $run_id, 'Pending', $priority, $payload, $now, $available",
                 "service, owner, kind, subject, part",
                 InFlight)))
             {
                 cmd.Bind(database, "service", service).Bind(database, "owner", owner).Bind(database, "kind", kind).Bind(database, "subject", subject)
-                    .Bind(database, "part", part).Bind(database, "resource", resource).Bind(database, "lane", lane).Bind(database, "run_id", runId)
+                    .Bind(database, "part", part).Bind(database, "resource", resource).Bind(database, "resource_limit", (long)resourceLimit).Bind(database, "lane", lane).Bind(database, "run_id", runId)
                     .Bind(database, "priority", (long)priority).Bind(database, "payload", payloadJson, System.Data.DbType.String)
                     .Bind(database, "now", now).Bind(database, "available", availableAt ?? now);
                 if (cmd.ExecuteNonQuery() == 1)
@@ -88,7 +89,7 @@ public sealed class ModuleWorkQueueStore(StateDatabase database, string service)
                 var capFilter = maxRunningInLane is null ? "" :
                     "AND (SELECT COUNT(*) FROM {table:work_item} c WHERE c.service = w.service AND c.owner = w.owner AND c.lane = w.lane AND c.status IN ('Claimed','Running')) < $cap";
                 using var cmd = database.Command(Module, connection, $$"""
-                    SELECT w.id, w.service, w.owner, w.kind, w.subject, w.part, w.resource, w.lane, w.run_id, w.status, w.priority, w.payload
+                    SELECT w.id, w.service, w.owner, w.kind, w.subject, w.part, w.resource, w.lane, w.run_id, w.status, w.priority, w.payload, w.resource_limit
                     FROM {table:work_item} w
                     WHERE w.service = $service AND w.owner = $owner AND w.status = 'Pending' AND w.available_at <= $now
                       {{laneFilter}}
@@ -98,9 +99,9 @@ public sealed class ModuleWorkQueueStore(StateDatabase database, string service)
                         WHERE b.service = w.service AND b.owner = w.owner AND b.kind = w.kind AND b.subject = w.subject
                           AND b.status IN ('Claimed','Running') AND b.id <> w.id
                           AND (b.part = '' OR w.part = '' OR b.part = w.part))
-                      AND (w.resource = '' OR NOT EXISTS (
-                        SELECT 1 FROM {table:work_item} r
-                        WHERE r.service = w.service AND r.resource = w.resource AND r.status IN ('Claimed','Running') AND r.id <> w.id))
+                      AND (w.resource = '' OR (
+                        SELECT COUNT(*) FROM {table:work_item} r
+                        WHERE r.service = w.service AND r.resource = w.resource AND r.status IN ('Claimed','Running') AND r.id <> w.id) < w.resource_limit)
                       {{capFilter}}
                     ORDER BY w.priority DESC, w.enqueued_at ASC, w.id ASC {{database.Limit("take")}};
                     """);
@@ -110,11 +111,12 @@ public sealed class ModuleWorkQueueStore(StateDatabase database, string service)
                 if (maxRunningInLane is { } cap) cmd.Bind(database, "cap", (long)cap);
                 cmd.Bind(database, "take", 1L);
                 using var reader = cmd.ExecuteReader();
-                return reader.Read() ? Read(reader) : null;
+                return reader.Read() ? (Item: Read(reader), ResourceLimit: reader.Int32(12)) : ((WorkItem Item, int ResourceLimit)?)null;
             });
 
             if (candidate is null)
                 return null;
+            var (item, resourceLimit) = candidate.Value;
 
             var claimed = database.Retry(() =>
             {
@@ -122,23 +124,27 @@ public sealed class ModuleWorkQueueStore(StateDatabase database, string service)
                 using var transaction = connection.BeginTransaction();
                 using var cmd = database.Command(Module, connection, transaction, """
                     UPDATE {table:work_item} SET status = 'Claimed', claimed_at = $now, claimed_by = $worker, lease_expires_at = $lease
-                    WHERE id = $id AND status = 'Pending';
+                    WHERE id = $id AND status = 'Pending'
+                      AND ($resource = '' OR (
+                        SELECT COUNT(*) FROM {table:work_item} r
+                        WHERE r.service = $service AND r.resource = $resource AND r.status IN ('Claimed','Running') AND r.id <> $id) < $resource_limit);
                     """);
                 var now = Now();
-                cmd.Bind(database, "now", now).Bind(database, "worker", workerId).Bind(database, "lease", now + LeaseDuration).Bind(database, "id", candidate.Id);
+                cmd.Bind(database, "now", now).Bind(database, "worker", workerId).Bind(database, "lease", now + LeaseDuration).Bind(database, "id", item.Id)
+                    .Bind(database, "service", service).Bind(database, "resource", item.Resource).Bind(database, "resource_limit", (long)resourceLimit);
                 if (cmd.ExecuteNonQuery() != 1)
                 {
                     transaction.Rollback();
                     return false;
                 }
 
-                alsoWrite?.Invoke(connection, transaction, candidate with { Status = WorkItemStatus.Claimed }, now);
+                alsoWrite?.Invoke(connection, transaction, item with { Status = WorkItemStatus.Claimed }, now);
                 transaction.Commit();
                 return true;
             });
 
             if (claimed)
-                return candidate with { Status = WorkItemStatus.Claimed };
+                return item with { Status = WorkItemStatus.Claimed };
             // another claimer got it first; pick again
         }
 

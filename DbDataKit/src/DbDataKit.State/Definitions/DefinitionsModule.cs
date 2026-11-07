@@ -54,7 +54,67 @@ public static class DefinitionsModule
                 happened_at  {{time}} NOT NULL
             );
             """,
-        ]);
+            """
+            -- Plan 30 (R15), appended: stage then activate, the files of a version, bindings per channel, what each instance has. Nothing above is changed; a database at migration 1 gains these and
+            -- the old DefinitionStore keeps working on it. A version's manifest is its content column (opaque text, the kind's business); a version published with files hashes its content and file list.
+            ALTER TABLE {table:definition_version} {{addcolumn}} progress {{text}} NULL;
+            ALTER TABLE {table:definition_version} {{addcolumn}} approved_by {{key}} NULL;
+            ALTER TABLE {table:definition_version} {{addcolumn}} approved_at {{time}} NULL;
+
+            -- staged_version is the version prepared but not yet active. version is 0 while a channel has a staged version and nothing active yet (no version is numbered 0).
+            ALTER TABLE {table:definition_serving} {{addcolumn}} staged_version {{int}} NULL;
+            ALTER TABLE {table:definition_serving} {{addcolumn}} staged_at {{time}} NULL;
+            ALTER TABLE {table:definition_serving} {{addcolumn}} staged_by {{key}} NULL;
+
+            -- note carries what an event needs to say beyond its columns: a bound slot's name, an administrator's choice to activate although instances failed.
+            ALTER TABLE {table:definition_event} {{addcolumn}} note {{text}} NULL;
+
+            -- The files of a version: path within the version, SHA-256, size, media type, and the payload that holds the bytes (PayloadStore). A file unchanged between versions is one payload.
+            CREATE TABLE {table:definition_artifact} (
+                kind        {{key}} NOT NULL,
+                name        {{key}} NOT NULL,
+                version     {{int}} NOT NULL,
+                path        {{key}} NOT NULL,
+                sha256      {{key}} NOT NULL,
+                size        {{int}} NOT NULL,
+                media_type  {{key}} NULL,
+                payload_id  {{uuid}} NOT NULL,
+                PRIMARY KEY (kind, name, version, path)
+            );
+            CREATE INDEX {index:definition_artifact_by_sha} ON {table:definition_artifact}(sha256);
+
+            -- What a slot a definition declares is bound to in one channel, and how many times it was changed (revision, the optimistic-concurrency token of a bind).
+            CREATE TABLE {table:definition_binding} (
+                channel     {{key}} NOT NULL,
+                kind        {{key}} NOT NULL,
+                name        {{key}} NOT NULL,
+                slot        {{key}} NOT NULL,
+                bound_to    {{key}} NOT NULL,
+                revision    {{int}} NOT NULL,
+                bound_by    {{key}} NOT NULL,
+                bound_at    {{time}} NOT NULL,
+                PRIMARY KEY (channel, kind, name, slot)
+            );
+
+            -- The version one instance has of a definition in a channel and its state (preparing, ready, active, failed). instance is a runner instance's or a serving instance's id, as text.
+            -- gone_at is set when the instance left the group (its lease expired); retention removes such rows.
+            CREATE TABLE {table:definition_instance_status} (
+                instance     {{key}} NOT NULL,
+                kind         {{key}} NOT NULL,
+                name         {{key}} NOT NULL,
+                channel      {{key}} NOT NULL,
+                version      {{int}} NOT NULL,
+                state        {{key}} NOT NULL,
+                error_text   {{text}} NULL,
+                reported_at  {{time}} NOT NULL,
+                gone_at      {{time}} NULL,
+                PRIMARY KEY (instance, kind, name, channel)
+            );
+            CREATE INDEX {index:definition_instance_status_by_definition} ON {table:definition_instance_status}(kind, name, channel);
+            """,
+        ],
+        // an instance that left the group: its status rows are history after the retention age
+        retention: [new RetentionRule("definition_instance_status", "gone_at")]);
 }
 
 /// <summary>

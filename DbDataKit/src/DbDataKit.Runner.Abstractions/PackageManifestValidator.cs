@@ -138,6 +138,7 @@ public static class PackageManifestValidator
         Inputs(task, at, named, add);
         Triggers(manifest, task, at, named, slots, add);
         Progress(task.Progress, $"{at}.progress", named, add);
+        Declared(task, at, named, add);
         Limits(task.Limits, $"{at}.limits", named, add);
         Labels(task.Requires, $"{at}.requires", named, "required label", add);
         Labels(task.Capabilities, $"{at}.capabilities", named, "capability", add);
@@ -266,6 +267,20 @@ public static class PackageManifestValidator
             Key(state.Per, state.KeyFill, state.RenamedFrom, state.Name, path, named, add);
             Value(state.Type, state.Default, state.Format, state.RenamedFrom, path, $"The state value '{state.Name}' of {named}", add);
         }
+    }
+
+    /// <summary>The steps, units and counters a task lists for the console: each has a name of its own kind (the console groups by it), and a name is listed once.</summary>
+    private static void Declared(PackageTask task, string at, string named, Action<string, string> add)
+    {
+        foreach (var duplicate in Duplicates(task.StepList.Select(s => s.Name)))
+            add($"{at}.steps[{duplicate.Index}].name", $"The step '{duplicate.Name}' is listed twice in {named} (also at steps[{duplicate.First}]); step names are unique per task.");
+        for (var i = 0; i < task.StepList.Count; i++) Name(task.StepList[i].Name, $"{at}.steps[{i}].name", "a step", add);
+        foreach (var duplicate in Duplicates(task.UnitList.Select(u => u.Name)))
+            add($"{at}.units[{duplicate.Index}].name", $"The unit '{duplicate.Name}' is listed twice in {named} (also at units[{duplicate.First}]); unit names are unique per task.");
+        for (var i = 0; i < task.UnitList.Count; i++) Name(task.UnitList[i].Name, $"{at}.units[{i}].name", "a unit", add);
+        foreach (var duplicate in Duplicates(task.CounterList))
+            add($"{at}.counters[{duplicate.Index}]", $"The counter '{duplicate.Name}' is listed twice in {named} (also at counters[{duplicate.First}]).");
+        for (var i = 0; i < task.CounterList.Count; i++) Name(task.CounterList[i], $"{at}.counters[{i}]", "a counter", add);
     }
 
     private static void Key(IReadOnlyList<string>? per, string? fill, string? renamedFrom, string name, string path, string named, Action<string, string> add)

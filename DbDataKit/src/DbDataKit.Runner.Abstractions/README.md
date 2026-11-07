@@ -27,12 +27,16 @@ tasks:
     limits: { timeout: 30m, memory_mb: 512, cpu: 1.5, concurrency: 2, attempts: 3, backoff: 30s, max_backoff: 10m }
     requires: [network:outside]
     capabilities: [network]
+    steps:    [ { name: download, kind: stream, input: DateOnly }, { name: archive, input: DateOnly, result: ArchiveReceipt } ]   # R03a: for the console; kind is value (default) or stream
+    units:    [ { name: customer, item: Customer } ]
+    counters: [rows]
 ```
 
 * `PackageManifestReader.Load(text, file)` reads strictly: a key that is not part of the format is an error with the nearest key that is (`Did you mean limits?`), and every problem is a `ConfigDiagnostic` with the file, line, column and key path (`tasks[0].limits.timeout`). `Read` throws a `PackageManifestException` with one line per problem; `LoadFile` reads from disk.
 * `PackageManifestValidator.Problems(manifest)` says what is wrong with a manifest that is well formed (it works on the model, so one built in code is checked the same way): names, the schedule (through `Schedule.Validate()` of `DbDataKit.Scheduling`), a connection slot a trigger uses and the task does not declare, a value declared twice in the progress, a limit of zero, a task an after-run trigger follows that does not exist, a trigger loop (`TriggerGraph.FindCycle`), defaults that do not parse in their type.
 * `PackageManifestWriter.Write(manifest)` writes the text back; reading it gives an equal manifest.
 * A task's `progress` is read straight into `ProgressDeclaration` of `DbDataKit.State`, the model `ProgressMigration.Plan` takes. Nothing is duplicated.
+* `steps`, `units` and `counters` list what the task declares so the console can show them before a run; none is required. For a .NET job they are generated from the C# declarations by `DbDataKit.Runner.Kit`'s `ManifestGenerator`.
 * Durations are a number and a unit (`500ms`, `30s`, `5m`, `2h`, `1d`).
 
 ## The task and run model (R02)
