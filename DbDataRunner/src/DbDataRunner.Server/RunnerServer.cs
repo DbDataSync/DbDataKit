@@ -1,7 +1,9 @@
+using DbDataKit.Runner;
 using System.Net;
 using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
 using DbDataKit.Hosting;
+using DbDataKit.Runner.Api;
 using DbDataKit.Hosting.Certificates;
 using DbDataKit.State;
 using DbDataKit.Web.Trust;
@@ -76,9 +78,9 @@ public static class RunnerServer
         var tokens = new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache());
         RunnerWebhooks.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), tokens, settings.Secrets ?? RunnerState.Secrets(null));   // before the token check: a signed webhook has no token
         app.UseManagementAuthentication(tokens, refused => log($"A call was refused ({refused.Failure}): {refused.Detail}"));
-        RunnerApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), instanceId);
+        RunnerApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), instanceId, new RunnerApiOptions("/api/v1", RunnerCallers.TokenResolver, RunnerSettings.Product, Version));
         RunnerPublishApi.Map(app, new RunnerPublishing(state, settings.MaxArtifactBytes, settings.SignatureVerifier, settings.InstanceLease, new DbDataKit.Runner.Staging.ActivationOptions { MaxWait = settings.ActivationMaxWait }));
-        RunnerGroupApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>());
+        RunnerGroupApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver);
         return app;
     }
 }

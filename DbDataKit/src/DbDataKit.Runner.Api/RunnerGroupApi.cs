@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 
-namespace DbDataRunner.Server;
+namespace DbDataKit.Runner.Api;
 
 /// <summary>
 /// The runner group as the API shows it (plan 28a R11, R12): the live instances of the group (inside their lease, not marked gone) with host, version, labels (each with who set it), capabilities and how many items each is running.
@@ -14,11 +14,11 @@ namespace DbDataRunner.Server;
 /// </summary>
 public static class RunnerGroupApi
 {
-    public static void Map(IEndpointRouteBuilder app, StateDatabase state, Func<RunnerEngine> engine)
+    public static void Map(IEndpointRouteBuilder app, StateDatabase state, Func<RunnerHost> engine, string prefix, RunnerCallerResolver caller)
     {
-        app.MapGet("/api/v1/instances", (HttpContext context) =>
+        app.MapGet($"{prefix.TrimEnd('/')}/instances", (HttpContext context) =>
         {
-            var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
+            var decision = caller(context).Authorize(ServerRole.Viewer);
             if (!decision.Allowed) return Results.Json(new { error = "This needs the viewer role." }, statusCode: StatusCodes.Status403Forbidden);
             var running = engine();
             // all=true adds the instances that are gone or lapsed (live: false), which the console shows as such
@@ -33,10 +33,10 @@ public static class RunnerGroupApi
     }
 
     /// <summary>The live instances of the group, oldest first; with <paramref name="includeGone"/> also the ones that are gone or lapsed, marked <c>live: false</c> (their <c>state</c> says Gone or Running with a stale heartbeat).</summary>
-    public static JsonArray Instances(StateDatabase state, RunnerEngine engine, bool includeGone = false)
+    public static JsonArray Instances(StateDatabase state, RunnerHost engine, bool includeGone = false)
     {
         var instances = new RunnerInstances(state);
-        var held = new ModuleWorkQueueStore(state, RunnerState.EngineService).HeldCounts();
+        var held = new ModuleWorkQueueStore(state, RunnerNames.EngineService).HeldCounts();
         var list = new JsonArray();
         var liveIds = instances.LiveInstances(engine.Lease);
         var rows = liveIds.Select(l => (Instance: l.Instance, Live: true, Capabilities: (IReadOnlyDictionary<string, string>)l.Capabilities)).ToList();
@@ -63,7 +63,7 @@ public static class RunnerGroupApi
                 ["live"] = isLive,
                 ["state"] = instance.State,
                 ["labels"] = new JsonArray(labels.Select(l => (JsonNode)new JsonObject { ["label"] = l.Label, ["source"] = l.Source }).ToArray()),
-                ["capabilities"] = new JsonObject(capabilities.Where(c => !RunnerEngine.InternalCapabilities.Contains(c.Key)).OrderBy(c => c.Key, StringComparer.Ordinal).Select(c => KeyValuePair.Create(c.Key, (JsonNode?)JsonValue.Create(c.Value)))),
+                ["capabilities"] = new JsonObject(capabilities.Where(c => !RunnerHost.InternalCapabilities.Contains(c.Key)).OrderBy(c => c.Key, StringComparer.Ordinal).Select(c => KeyValuePair.Create(c.Key, (JsonNode?)JsonValue.Create(c.Value)))),
                 ["running"] = worker is not null && held.TryGetValue(worker, out var count) ? count : 0,
             });
         }

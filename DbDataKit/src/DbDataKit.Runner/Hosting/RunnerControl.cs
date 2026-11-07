@@ -5,10 +5,11 @@ using DbDataKit.Runner.Execution;
 using DbDataKit.Runner.Scheduler;
 using DbDataKit.State;
 
-namespace DbDataRunner.Server;
+namespace DbDataKit.Runner;
 
 /// <summary>Who asked for a change to a task, for the audit: <c>person</c> (a user of a console, or the operator on the machine) and what it came through.</summary>
 /// <param name="Id">The subject id of the person (a console user), or <c>local:&lt;os user&gt;</c> for the command line.</param>
+/// <param name="Name">The person's display name, when known.</param>
 /// <param name="ViaKind"><c>console</c>, <c>api</c> or <c>command</c>.</param>
 /// <param name="ViaId">The client that carried the call, when there is one.</param>
 public sealed record RunnerActor(string Id, string? Name, string ViaKind, string? ViaId = null)
@@ -40,11 +41,11 @@ public sealed class RunnerControl
     private readonly RunnerScheduler _scheduler;
     private readonly AuditLog _audit;
 
-    public RunnerControl(StateDatabase state, RunnerScheduler scheduler)
+    public RunnerControl(StateDatabase state, RunnerScheduler scheduler, string serviceId = RunnerNames.ServiceId)
     {
         State = state;
         _scheduler = scheduler;
-        _audit = new AuditLog(state, RunnerState.ServiceId);
+        _audit = new AuditLog(state, serviceId);
     }
 
     public StateDatabase State { get; }
@@ -53,7 +54,7 @@ public sealed class RunnerControl
     public static RunnerControl ForCommands(StateDatabase state, IReadOnlyCollection<string> channels, string cacheDirectory) =>
         new(state, new RunnerScheduler(state, new NoExecutor(), new ArtifactCache(cacheDirectory, new PayloadArtifactSource(new PayloadStore(state))),
             new DefinitionVersionSource(new DefinitionStore(state), new DefinitionPublisher(state, RunnerPackages.Kinds(), new PayloadStore(state), "runner")),
-            new RunnerSchedulerOptions { Channels = channels, Service = RunnerState.EngineService }));
+            new RunnerSchedulerOptions { Channels = channels, Service = RunnerNames.EngineService }));
 
     public SchedulerStatus Status() => _scheduler.Status();
 
