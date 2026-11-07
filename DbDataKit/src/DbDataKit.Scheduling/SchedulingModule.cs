@@ -90,6 +90,10 @@ public static class SchedulingModule
             -- written before this migration has, is the exclusion the queue always had. The item being claimed names the limit.
             ALTER TABLE {table:work_item} {{addcolumn}} resource_limit {{int}} NOT NULL DEFAULT 1;
             """,
+            """
+            -- Why a job was paused, in the words of whoever paused it (Sync's pause note). Null when none was given; an empty note is kept as it was written.
+            ALTER TABLE {table:job_pause} {{addcolumn}} note {{text}} NULL;
+            """,
         ],
         // finished work is history; what is pending, claimed or running is current state and stays
         retention: [new RetentionRule("work_item", "enqueued_at", Where: "status IN ('Done','Failed','Cancelled')")]);

@@ -285,7 +285,7 @@ talks to a loopback bind needs nothing. With nothing trustworthy in front, bind 
 | `State:Engine` | `DbDataSync__State__Engine` | `Sqlite` | which database backs the state store — `Sqlite`, `MsSql` or `Postgres`; see below |
 | `State:ConnectionString` | `DbDataSync__State__ConnectionString` | none | how to reach that engine; required unless `State:Engine` is `Sqlite`; never put a password in it — see "Secrets," below |
 | `State:Port` | `DbDataSync__State__Port` | `0` (ephemeral) | loopback-only runner-state listener; set to a fixed port if you'd rather firewall a known one than trust the loopback binding |
-| `State:Retention:RunDays` | `DbDataSync__State__Retention__RunDays` | `90` | finished runs older than this are pruned hourly; `0` = keep forever |
+| `State:Retention:RunDays` | `DbDataSync__State__Retention__RunDays` | `30` | finished runs older than this are pruned hourly; `0` = keep forever |
 | `State:Retention:RunMaxPerMapping` | `DbDataSync__State__Retention__RunMaxPerMapping` | `1000` | most recent N finished runs kept, *per table mapping* (not global); `0` = no cap |
 | `State:Retention:PruningIntervalMinutes` | `DbDataSync__State__Retention__PruningIntervalMinutes` | `60` | how often the retention sweep runs |
 | `State:Retention:ChangeCheckDays` | `DbDataSync__State__Retention__ChangeCheckDays` | `7` | how long the scheduler's change-check history is kept; `0` = keep forever |
@@ -299,7 +299,8 @@ saying how to reach it. Two separate keys rather than one connection string carr
 so a typo in the engine name fails as "you named an engine that doesn't exist" rather than as a
 driver-level parse error.
 
-The schema is created on first open regardless of engine, and all three are meant to behave
+The schema is created on first open regardless of engine (a state database of an earlier release is refused, not
+converted: see [State database](state-database.md#an-older-state-database)), and all three are meant to behave
 identically — this is API-process-only config; `DbDataSync.TaskRunner` never reads it, since a runner
 always reaches state over the loopback state endpoint rather than opening the store directly.
 
@@ -319,7 +320,7 @@ Two things worth being explicit about:
 
 A run failing *either* retention cap is pruned along with its log lines; a run that hasn't finished is
 never pruned regardless of age. Verification results are **not** covered by this pruning — a
-verification run's `TaskRuns` row is pruned, but its result file and index entry are not (a known gap).
+verification run's run record is pruned, but its result file and index entry are not (a known gap).
 
 #### `DbDataSync:Nuget:Search:*`
 

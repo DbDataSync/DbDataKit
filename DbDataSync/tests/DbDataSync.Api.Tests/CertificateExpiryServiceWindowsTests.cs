@@ -14,9 +14,9 @@ namespace DbDataSync.Api.Tests;
 /// <summary>
 /// End-to-end proof that <see cref="CertificateExpiryService"/>'s wiring — read
 /// <c>Kestrel:Certificates:Default:*</c> off <see cref="IConfiguration"/>, find the certificate in the
-/// store, evaluate it, raise through <see cref="NotificationStore"/> — actually connects, on top of a
+/// store, evaluate it, raise through <see cref="NotificationFeedStore"/> — actually connects, on top of a
 /// real (CurrentUser-store, so no elevation needed) certificate. The individual pieces
-/// (<see cref="DbDataKit.Hosting.Certificates.CertificateExpiry"/>, <see cref="NotificationStore.Raise"/>,
+/// (<see cref="DbDataKit.Hosting.Certificates.CertificateExpiry"/>, <see cref="NotificationFeedStore.Raise"/>,
 /// <see cref="CertificateStore"/>) each have their own focused tests; this is the one that would catch
 /// a wiring mistake between them (a wrong section name, a wrong DI registration) that none of those
 /// would.
@@ -54,7 +54,7 @@ public sealed class CertificateExpiryServiceWindowsTests : IDisposable
         return certificate;
     }
 
-    private (CertificateExpiryService Service, NotificationStore Notifications) BuildService(string subject, int expiryWarningDays)
+    private (CertificateExpiryService Service, NotificationFeedStore Notifications) BuildService(string subject, int expiryWarningDays)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -66,7 +66,7 @@ public sealed class CertificateExpiryServiceWindowsTests : IDisposable
             .Build();
 
         var database = new StateDatabase(Path.Combine(_tempDir, "state.db"));
-        var notifications = new NotificationStore(database);
+        var notifications = new NotificationFeedStore(database, SyncState.ServiceId);
         var options = new CertificateOptions { ExpiryWarningDays = expiryWarningDays };
 
         var service = new CertificateExpiryService(
@@ -110,7 +110,7 @@ public sealed class CertificateExpiryServiceWindowsTests : IDisposable
     {
         var configuration = new ConfigurationBuilder().Build();
         var database = new StateDatabase(Path.Combine(_tempDir, "state.db"));
-        var notifications = new NotificationStore(database);
+        var notifications = new NotificationFeedStore(database, SyncState.ServiceId);
         var service = new CertificateExpiryService(
             configuration, new CertificateOptions(), notifications, NullLogger<CertificateExpiryService>.Instance);
 

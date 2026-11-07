@@ -10,27 +10,34 @@ about what it has done and is about to do.
 
 ## What it stores
 
-One schema, 16 tables, created (and kept current — see "Migrations" below) on first open regardless of
-which engine backs it:
+The state is built from **modules**, each with its own version and its own list of migrations, created (and kept current: see "Migrations" below) on first open regardless of which engine backs it. Sync's own
+module is `sync_state`; the others are the suite's shared ones, the same tables the other products keep.
+`dbdatasync state show` lists them and the version each is at.
 
-| Table | What it's for |
-| --- | --- |
-| `Tasks` | One row per configured replication — an `Enabled`/`Paused` mirror the scheduler checks fast, without opening the config repo |
-| `TaskRuns` | One row per unit of work — a mapping's `Primary` pass, or one `BulkLoad` segment — with status, row counts, timing, and error detail |
-| `ChangeWatermarks` | The current read position per mapping, plus its `ReadIntent`/`ReadHold` (see [Replication concepts](replication-concepts.md)) |
-| `WorkQueue` | The durable, cross-process work queue — the API enqueues, `TaskRunner` workers claim and drain |
-| `RunLocks` | One row per in-flight `(task, kind, mapping)` — the lock a unit of work holds while it runs |
-| `Logs` | Log lines per run |
-| `BulkLoadBatches` | Groups a bulk load's segment runs so progress can be shown as one whole |
-| `VerificationResults` | Indexes a verification run's parquet result file (the comparison itself isn't stored here) |
-| `ChangeCheckHistory` | The polling gate's audit trail — one row per source group per scheduler tick, also backing reader-lag reporting |
-| `Notifications` | The global, append-only notification feed |
-| `NotificationReadState` | One row per user: the highest notification id they've acknowledged |
-| `PauseEvents` | Append-only audit trail of every pause/resume action, at the replication or table-mapping grain |
-| `Users` | Accounts — display name, email (for git commit attribution), role, enabled flag |
-| `UserCredentials` | One row per sign-in method per user (a Windows SID, a passkey) |
-| `Sessions` | Server-side sessions — disabling a user takes effect on their next request, not at token expiry |
-| `Invites` | One-time bearer codes for creating a user or adding a credential to one |
+| Module | Table | What it's for |
+| --- | --- | --- |
+| `sync_state` | `run_detail` | What a run has beyond a run of any service: its kind (a mapping's `Primary` pass, or one `BulkLoad` segment), mapping, status, row counts, timing, the position it started from and left off at, and the error detail. One row for each run, beside its row in `runs.run` |
+| | `change_check` | The polling gate's audit trail — one row per source group per scheduler tick, also backing reader-lag reporting |
+| | `verification_result` | Indexes a verification run's parquet result file (the comparison itself isn't stored here) |
+| | `bulk_load_batch` | Groups a bulk load's segment runs so progress can be shown as one whole |
+| `runs` | `run`, `run_log` | The suite's one run model (the replication is the job) and the log lines of each run |
+| `scheduling` | `work_item`, `run_lock`, `job_pause` | The durable, cross-process work queue (the API enqueues, `TaskRunner` workers claim and drain), the lock a unit of work holds while it runs, and a paused replication with who paused it and the note |
+| `notifications` | `notification`, `reader_position` | The global, append-only notification feed, and the highest id each user has acknowledged |
+| `audit` | `entry` | Who paused or resumed a replication or held a table mapping, and when |
+| `runner_progress` | `checkpoint_head`, `checkpoint_part`, `checkpoint_history` | The read position of each table mapping, with its `ReadIntent`/`ReadHold` (see [Replication concepts](replication-concepts.md)): a declared checkpoint called `watermark`, kept per mapping and source table, whose every change is in the history |
+
+## An older state database
+
+A state database made by an earlier release (one schema version for the whole database: the tables `TaskRuns`, `ChangeWatermarks`, `WorkQueue` and so on) is **not converted**. DbDataSync refuses to start on it with a
+message that names the file (or the database on the server) and the ways forward, and it does not change it:
+
+1. **Replay from the earliest position the source still has.** Start DbDataSync on a new state database (a new `StateDbPath`, or a new database on the server) and set **Default read intent** to `ChangesFromEarliest`
+   on the replications. Each mapping then reads every change its source still keeps (the log or the change-tracking retention) without a full load, and a table whose position is no longer available is reloaded alone.
+2. **Set each mapping's position by hand** on a new state database, with the position the old release showed.
+3. **Stay on the previous release**, which still reads the old database as it is.
+4. **Start with a new state database** and let every mapping begin from its configured initial load.
+
+In every case the old database is left where it is, so going back is always possible.
 
 ## Choosing an engine
 
@@ -58,36 +65,33 @@ starts an empty store — it does not move anything. Choose once, at stand-up.
 
 ## Migrations
 
-Schema changes are a numbered list of DDL scripts, applied incrementally — SQLite tracks the applied
-count in `PRAGMA user_version`; SQL Server and Postgres use a small `SchemaVersion` table, since neither
-has SQLite's built-in counter. **Migrations run on every open, not just once** — a deliberate,
-self-healing choice, not merely an unoptimized one — so there's nothing to run by hand after an upgrade:
-stop the process, update it, start it again.
+Schema changes are numbered lists of DDL scripts, one list for each module, applied incrementally and recorded in a registry table (`dbdatakit_modules`: the module, its scope and how many migrations are applied).
+**Migrations run when the database is opened** — there's nothing to run by hand after an upgrade: stop the process, update it, start it again. A database whose module is newer than the release refuses to start,
+naming the module.
 
-All three engines are meant to behave identically. The DDL is written once, as one script per migration
-with small engine-specific tokens (how an auto-assigned key is declared, what bounded/unbounded text is
-called, what an integer is called) substituted per engine; anything that differs *structurally* — upsert
-syntax, row-limiting, identity handling — lives in a separate per-engine implementation rather than a
-token, on the same principle [Drivers and libraries](drivers-and-libraries.md#descriptor-drivers)
-documents for a descriptor's own dialect.
+All three engines are meant to behave identically. The DDL is written once, as one script per migration with small engine-specific tokens (how an auto-assigned key is declared, what text, time and UUID columns are
+called) substituted per engine; anything that differs *structurally* — upsert syntax, row-limiting, identity handling — lives in a separate per-engine implementation rather than a token, on the same principle
+[Drivers and libraries](drivers-and-libraries.md#descriptor-drivers) documents for a descriptor's own dialect.
 
 ## Retention
 
 | key | default | prunes |
 | --- | --- | --- |
-| `DbDataSync:State:Retention:RunDays` | `90` | finished runs older than this (`0` = keep forever) |
+| `DbDataSync:State:Retention:RunDays` | `30` | runs older than this, with their log lines and their detail (`0` = keep forever) |
 | `DbDataSync:State:Retention:RunMaxPerMapping` | `1000` | most recent N finished runs kept, per table mapping (`0` = no cap) |
 | `DbDataSync:State:Retention:PruningIntervalMinutes` | `60` | how often the sweep runs |
-| `DbDataSync:State:Retention:ChangeCheckDays` | `7` | how long `ChangeCheckHistory` rows live — this table writes constantly (one row per source group per scheduler tick) regardless of replication activity, so it has its own, much shorter window |
+| `DbDataSync:State:Retention:ChangeCheckDays` | `7` | how long `change_check` rows live — this table writes constantly (one row per source group per scheduler tick) regardless of replication activity, so it has its own, much shorter window |
 
 One sweep, run by the API process itself (never `TaskRunner` — see "Single writer" below), prunes
-`TaskRuns` (and its `Logs`), `ChangeCheckHistory`, and `Notifications` together — a notification can't
-outlive the run it's about. It runs once immediately at startup, then on the configured interval, so an
-API that was down for a while doesn't wait an hour to catch up. **A run that hasn't finished is never
-pruned, regardless of age.**
+runs (with their log lines and their `run_detail`), `change_check`, and notifications together — a notification can't
+outlive the run it's about — and then runs the suite's shared retention job over what the modules keep as history
+(the history of a position is kept 30 days, a settled dead letter or an expired key goes by its own rule). The audit of
+who paused what has no age limit. A position itself (the current state of a mapping), a pause, and the queue are never aged out. It runs once immediately at
+startup, then on the configured interval, so an API that was down for a while doesn't wait an hour to catch up.
+**A run that hasn't finished is never pruned by the run caps, regardless of age.**
 
-One known gap: a verification run's `TaskRuns` row is pruned on the same schedule as everything else,
-but its parquet result file and `VerificationResults` index entry are not — nothing currently cleans
+One known gap: a verification run's `run_detail` is pruned on the same schedule as everything else,
+but its parquet result file and `verification_result` index entry are not — nothing currently cleans
 those up.
 
 ## One process owns the store
@@ -114,6 +118,7 @@ deployment, back it up the way you already back up that database; DbDataSync doe
 
 What does exist:
 
+- **`dbdatasync state show`** lists the modules the state is built from, the version this release has of each and the version the database is at, and where the database is.
 - **`dbdatasync config check`** opens the state database as part of its readiness checks (which also
   runs the full migration set) and reports `State store: OK — <engine> — schema current`, or a `FAIL`
   naming the fix — a writable-directory check for SQLite, or a connection-string/secret check for

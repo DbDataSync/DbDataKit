@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Data.Common;
 
 namespace DbDataSync.State;
 
@@ -15,7 +14,7 @@ public sealed class LogWriter : IDisposable
     private const int FlushThreshold = 50;
     private static readonly TimeSpan FlushInterval = TimeSpan.FromSeconds(2);
 
-    private readonly StateDatabase _database;
+    private readonly RunStore _runs;
     private readonly ConcurrentQueue<(Guid RunId, DateTimeOffset TimestampUtc, LogSeverity Level, string Message, string? SourceKey)> _buffer = new();
     private readonly PeriodicTimer _timer;
     private readonly Task _flushLoop;
@@ -25,7 +24,7 @@ public sealed class LogWriter : IDisposable
 
     public LogWriter(StateDatabase database)
     {
-        _database = database;
+        _runs = new RunStore(database, SyncState.ServiceId);
         _timer = new PeriodicTimer(FlushInterval);
         _flushLoop = RunFlushLoopAsync();
     }
@@ -82,83 +81,26 @@ public sealed class LogWriter : IDisposable
             if (batch.Count == 0)
                 return;
 
-            _database.Retry(() =>
-            {
-                using var connection = _database.OpenConnection();
-                using var transaction = connection.BeginTransaction();
-                // Insert-or-ignore against UX_Logs_SourceKey: a replayed journal entry is dropped, and a
-                // live line (SourceKey NULL) never conflicts. The conflicting column is named explicitly
-                // — the untargeted form the other two engines allow has no SQL Server equivalent.
-                using var cmd = _database.Command(connection, transaction, _database.Dialect.InsertOrIgnore(
-                    "Logs",
-                    "RunId, TimestampUtc, Level, Message, SourceKey",
-                    "$runId, $ts, $level, $message, $sourceKey",
-                    "SourceKey",
-                    // UX_Logs_SourceKey is partial — unique only where SourceKey is not null, which is
-                    // what lets two genuinely identical live lines both be stored. The predicate has to
-                    // travel with the target or the index is not the one being matched against.
-                    "SourceKey IS NOT NULL"));
-
-                // One command, bound once and re-executed per line. A batch is the whole point of this
-                // writer, and rebuilding the parameter collection for each of a few hundred lines would
-                // undo it.
-                var runIdParam = Reusable(cmd, "runId");
-                var tsParam = Reusable(cmd, "ts");
-                var levelParam = Reusable(cmd, "level");
-                var messageParam = Reusable(cmd, "message");
-                var sourceKeyParam = Reusable(cmd, "sourceKey");
-
-                foreach (var entry in batch)
-                {
-                    runIdParam.Value = entry.RunId.ToString();
-                    tsParam.Value = entry.TimestampUtc.ToString("O");
-                    levelParam.Value = entry.Level.ToString();
-                    messageParam.Value = entry.Message;
-                    sourceKeyParam.Value = (object?)entry.SourceKey ?? DBNull.Value;
-                    cmd.ExecuteNonQuery();
-                }
-
-                transaction.Commit();
-            });
-        }
-
-        DbParameter Reusable(DbCommand cmd, string name)
-        {
-            var parameter = cmd.CreateParameter();
-            parameter.ParameterName = _database.Dialect.ParameterName(name);
-            cmd.Parameters.Add(parameter);
-            return parameter;
+            // One transaction for the batch, written by the shared run store. A line with a source key is written once: a replayed journal entry is dropped, and a live line (no source key) never conflicts,
+            // so two genuinely identical live lines are both stored.
+            _runs.LogMany([.. batch.Select(e => new RunLogEntry(e.RunId, e.TimestampUtc, e.Level.ToString(), e.Message, SourceKey: e.SourceKey))]);
         }
     }
 
+    /// <summary>A run's lines in order, those after <paramref name="sinceId"/> when given; what has been logged but not yet flushed is flushed first.</summary>
     public IReadOnlyList<LogEntryRecord> GetLogs(Guid runId, long? sinceId = null)
     {
         Flush();
 
-        return _database.Retry(() =>
+        var results = new List<LogEntryRecord>();
+        while (true)
         {
-            using var connection = _database.OpenConnection();
-            using var cmd = _database.Command(connection, sinceId is null
-                ? "SELECT Id, RunId, TimestampUtc, Level, Message FROM Logs WHERE RunId = $runId ORDER BY Id;"
-                : "SELECT Id, RunId, TimestampUtc, Level, Message FROM Logs WHERE RunId = $runId AND Id > $sinceId ORDER BY Id;");
-            cmd.Bind(_database, "runId", runId.ToString());
-            if (sinceId is not null)
-                cmd.Bind(_database, "sinceId", sinceId.Value);
-
-            using var reader = cmd.ExecuteReader();
-            var results = new List<LogEntryRecord>();
-            while (reader.Read())
-            {
-                results.Add(new LogEntryRecord(
-                    reader.Int64(0),
-                    Guid.Parse(reader.GetString(1)),
-                    DateTimeOffset.Parse(reader.GetString(2)),
-                    Enum.Parse<LogSeverity>(reader.GetString(3)),
-                    reader.GetString(4)));
-            }
-
-            return (IReadOnlyList<LogEntryRecord>)results;
-        });
+            var page = _runs.Logs(runId, sinceId, 1000);
+            results.AddRange(page.Select(l => new LogEntryRecord(l.Id, l.RunId, l.At, Enum.Parse<LogSeverity>(l.Level), l.Message)));
+            if (page.Count < 1000)
+                return results;
+            sinceId = page[^1].Id;
+        }
     }
 
     private async Task RunFlushLoopAsync()

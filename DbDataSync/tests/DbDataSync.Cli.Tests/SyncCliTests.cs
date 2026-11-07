@@ -21,7 +21,33 @@ public sealed class SyncCliTests
 
     [Fact]
     public void TheNounsAreTheSuiteGrammar() =>
-        Assert.Equal(["server", "service", "cert", "script", "secret", "library", "driver", "config", "health", "ui"], SyncCli.Router().Nouns.Select(n => n.Name));
+        Assert.Equal(["server", "service", "cert", "script", "secret", "library", "driver", "config", "state", "health", "ui"], SyncCli.Router().Nouns.Select(n => n.Name));
+
+    /// <summary>Plan 28c, E14: <c>state show</c> lists the modules Sync's state is built from, each with the version this build has, and the version a database is at once it exists.</summary>
+    [Fact]
+    public async Task StateShowListsTheSyncModulesAndTheirVersions()
+    {
+        var repo = Directory.CreateTempSubdirectory("dbdatasync-state-show-").FullName;
+        try
+        {
+            var before = new StringWriter();
+            Assert.Equal(0, await SyncCli.Router("1.2.3").RunAsync(["state", "show", "--repo", repo], new CliContext(before, new StringWriter(), TextReader.Null)));
+            foreach (var module in DbDataSync.State.SyncState.Modules)
+                Assert.Matches($@"{module.Name}\S*\s+prefix \S+\s+binary v{module.Version}\s+registered -", before.ToString());
+            Assert.Contains(Path.Combine(repo, "state.db"), before.ToString());
+
+            _ = new DbDataSync.State.StateDatabase(Path.Combine(repo, "state.db"));
+
+            var after = new StringWriter();
+            Assert.Equal(0, await SyncCli.Router("1.2.3").RunAsync(["state", "show", "--repo", repo], new CliContext(after, new StringWriter(), TextReader.Null)));
+            foreach (var module in DbDataSync.State.SyncState.Modules)
+                Assert.Matches($@"{module.Name}\S*\s+prefix \S+\s+binary v{module.Version}\s+registered v{module.Version}\s+current", after.ToString());
+        }
+        finally
+        {
+            Directory.Delete(repo, recursive: true);
+        }
+    }
 
     [Fact]
     public void TheCommandsOutsideTheRouterAreTheOnesThatStayUnchanged() =>

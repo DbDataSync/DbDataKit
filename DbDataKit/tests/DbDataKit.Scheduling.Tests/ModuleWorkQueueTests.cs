@@ -404,6 +404,32 @@ public sealed class ModuleWorkQueueTests : IDisposable
     }
 
     [Theory, MemberData(nameof(Engines))]
+    public void A_pause_with_a_note_is_replaced_by_pausing_again_and_the_note_goes_with_the_pause(string engine)
+    {
+        var database = Open(engine);
+        var pauses = new ModuleJobPauseStore(database, Sync);
+        var at = new DateTimeOffset(2026, 11, 7, 9, 0, 0, TimeSpan.Zero);
+        using var connection = database.OpenConnection();
+
+        Assert.False(pauses.IsPaused("crm", "drain", connection, null));
+        pauses.Pause("crm", "drain", "Ada", at, "waiting on the DBA", connection, null);
+        Assert.True(pauses.IsPaused("crm", "drain", connection, null));
+        Assert.Equal("waiting on the DBA", pauses.Note("crm", "drain"));
+
+        pauses.Pause("crm", "drain", "Bob", at.AddHours(1), "", connection, null);   // pausing again is an act of its own: who, when and the note are replaced, an empty note is kept as written
+        Assert.Equal(("Bob", at.AddHours(1)), pauses.Get("crm", "drain"));
+        Assert.Equal("", pauses.Note("crm", "drain"));
+
+        pauses.Pause("crm", "drain", "Bob", at.AddHours(2), null, connection, null);
+        Assert.Null(pauses.Note("crm", "drain"));
+        Assert.True(pauses.IsPaused("crm", "drain"));
+
+        pauses.Clear("crm", "drain", connection, null);
+        Assert.False(pauses.IsPaused("crm", "drain"));
+        Assert.Null(pauses.Note("crm", "drain"));
+    }
+
+    [Theory, MemberData(nameof(Engines))]
     public void A_schedulers_job_record_is_kept_per_service_owner_and_job(string engine)
     {
         var database = Open(engine);

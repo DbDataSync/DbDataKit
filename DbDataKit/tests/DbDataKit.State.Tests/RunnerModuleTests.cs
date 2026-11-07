@@ -314,6 +314,27 @@ public sealed class RunnerModuleTests : IDisposable
 
         var next = store.Start("orders-sync", package: "orders", packageVersion: "1.0.0", channel: "prod", attempt: 1);
         Assert.Equal("orders", store.Get(next)!.Package);
-        Assert.Equal(2, RunsModule.Module.Version);
+        Assert.Equal(3, RunsModule.Module.Version);
+    }
+
+    /// <summary>Plan 28c, E14: a log line replayed from a journal carries its source key and is written once; a live line has none and is always written.</summary>
+    [Theory]
+    [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
+    public void A_replayed_log_line_is_stored_once_and_two_live_ones_are_two(string engine)
+    {
+        var store = new RunStore(Open(engine), "dbdatasync");
+        var run = store.Start("orders-sync");
+
+        void Write() => store.LogMany(
+        [
+            new RunLogEntry(run, Start, "Info", "from the journal", SourceKey: $"{run}:1"),
+            new RunLogEntry(run, Start, "Info", "live"),
+            new RunLogEntry(run, Start, "Info", "live"),
+        ]);
+        Write();
+        Write();   // the journal is replayed after a crash
+
+        Assert.Equal(["from the journal", "live", "live", "live", "live"], store.Logs(run).Select(l => l.Message));
+        store.LogMany([]);
     }
 }

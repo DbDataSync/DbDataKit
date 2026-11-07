@@ -23,7 +23,7 @@ public sealed class RunRetentionOptionsTests
         // nobody chooses one, and the cost lands months later.
         var options = Read();
 
-        Assert.Equal(90, options.RunRetentionDays);
+        Assert.Equal(30, options.RunRetentionDays);   // plan 28c QE9: a run and its detail are kept 30 days
         Assert.Equal(1_000, options.RunRetentionMaxPerMapping);
     }
 

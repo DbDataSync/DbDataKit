@@ -356,6 +356,21 @@ public sealed class ProgressStore(StateDatabase database, ProgressKey key)
         return Advance(name, parts, current.Version, itemKey: itemKey, actor: actor);
     }
 
+    /// <summary>
+    /// The tasks and item keys, under one package and channel, whose checkpoint <paramref name="name"/> has the text part <paramref name="part"/> equal to <paramref name="value"/>: how a writer finds the checkpoint a
+    /// piece of work refers to by an id it was given (Sync's pending initial load names its bulk-load batch). Reads across every task of the package, which is why it is not a member.
+    /// </summary>
+    public static IReadOnlyList<(string Task, string ItemKey)> FindTextPart(StateDatabase database, string package, string channel, string name, string part, string value)
+    {
+        using var connection = database.OpenConnection();
+        using var cmd = database.Command(Module, connection, "SELECT task, item_key FROM {table:checkpoint_part} WHERE package = $package AND channel = $channel AND name = $name AND part = $part AND value_type = 'Text' AND value_text = $value;");
+        cmd.Bind(database, "package", package).Bind(database, "channel", channel).Bind(database, "name", name).Bind(database, "part", part).Bind(database, "value", value);
+        using var reader = cmd.ExecuteReader();
+        var found = new List<(string, string)>();
+        while (reader.Read()) found.Add((reader.GetString(0), reader.GetString(1)));
+        return found;
+    }
+
     /// <summary>The item keys a checkpoint is kept under (<c>""</c> when it is not kept per key).</summary>
     public IReadOnlyList<string> ItemKeys(string name) => Keys("checkpoint_head", name);
 

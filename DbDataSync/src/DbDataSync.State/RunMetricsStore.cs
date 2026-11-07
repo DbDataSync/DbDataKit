@@ -58,7 +58,7 @@ public sealed class RunMetricsStore(StateDatabase database)
         {
             using var connection = database.OpenConnection();
 
-            var kindClause = runKind is null ? "" : " AND RunKind = $runKind";
+            var kindClause = runKind is null ? "" : " AND run_kind = $runKind";
             var totals = ReadTotals(connection, taskName, fromUtc, toUtc, runKind, kindClause);
             var processing = ReadProcessingTimes(connection, taskName, fromUtc, toUtc, runKind, kindClause);
 
@@ -75,7 +75,7 @@ public sealed class RunMetricsStore(StateDatabase database)
         DbConnection connection, string taskName, DateTimeOffset fromUtc, DateTimeOffset toUtc,
         RunKind? runKind, string kindClause)
     {
-        using var cmd = database.Command(connection, TotalsSql(kindClause));
+        using var cmd = database.Command(SyncStateModule.Name, connection, TotalsSql(kindClause));
         Bind(cmd, taskName, fromUtc, toUtc, runKind);
 
         using var reader = cmd.ExecuteReader();
@@ -95,13 +95,13 @@ public sealed class RunMetricsStore(StateDatabase database)
     /// The aggregate, as one string, so that <see cref="ExplainTotals"/> can ask the planner about the
     /// statement this actually runs rather than about a copy of it that could drift from it.
     /// </summary>
-    private static string TotalsSql(string kindClause) => $"""
+    private static string TotalsSql(string kindClause) => $$"""
         SELECT COUNT(*),
-               SUM(CASE WHEN Status = 'Failed' THEN 1 ELSE 0 END),
-               SUM(RowsRead),
-               SUM(RowsWritten)
-        FROM TaskRuns
-        WHERE TaskName = $taskName AND EnqueuedAtUtc >= $from AND EnqueuedAtUtc < $to{kindClause};
+               SUM(CASE WHEN status = 'Failed' THEN 1 ELSE 0 END),
+               SUM(rows_read),
+               SUM(rows_written)
+        FROM {table:run_detail}
+        WHERE task_name = $taskName AND enqueued_at >= $from AND enqueued_at < $to{{kindClause}};
         """;
 
     /// <summary>
@@ -114,7 +114,7 @@ public sealed class RunMetricsStore(StateDatabase database)
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, "EXPLAIN QUERY PLAN " + TotalsSql(runKind is null ? "" : " AND RunKind = $runKind"));
+            using var cmd = database.Command(SyncStateModule.Name, connection, "EXPLAIN QUERY PLAN " + TotalsSql(runKind is null ? "" : " AND run_kind = $runKind"));
             Bind(cmd, taskName, fromUtc, toUtc, runKind);
 
             using var reader = cmd.ExecuteReader();
@@ -149,47 +149,39 @@ public sealed class RunMetricsStore(StateDatabase database)
         DbConnection connection, string taskName, DateTimeOffset fromUtc, DateTimeOffset toUtc,
         RunKind? runKind, string kindClause)
     {
-        using var cmd = database.Command(connection, $"""
-            SELECT (julianday(EndedAtUtc) - julianday(StartedAtUtc)) * 86400000.0
-            FROM TaskRuns
-            WHERE TaskName = $taskName AND EnqueuedAtUtc >= $from AND EnqueuedAtUtc < $to
-              AND EndedAtUtc IS NOT NULL AND StartedAtUtc IS NOT NULL{kindClause}
-            ORDER BY 1;
+        // The duration is worked out here, not in SQL: date arithmetic is the one thing the three engines spell three ways, and a window's runs are few enough to read.
+        using var cmd = database.Command(SyncStateModule.Name, connection, $$"""
+            SELECT began_at, ended_at
+            FROM {table:run_detail}
+            WHERE task_name = $taskName AND enqueued_at >= $from AND enqueued_at < $to
+              AND ended_at IS NOT NULL AND began_at IS NOT NULL{{kindClause}};
             """);
         Bind(cmd, taskName, fromUtc, toUtc, runKind);
 
         using var reader = cmd.ExecuteReader();
         var processing = new List<double>();
         while (reader.Read())
-        {
-            if (!reader.IsDBNull(0))
-                processing.Add(Math.Max(0, reader.GetDouble(0)));
-        }
+            processing.Add(Math.Max(0, (reader.Time(1) - reader.Time(0)).TotalMilliseconds));
+        processing.Sort();
         return processing;
     }
 
     private DateTimeOffset? ReadLastCompletedPass(
         DbConnection connection, string taskName, RunKind? runKind, string kindClause)
     {
-        using var cmd = connection.CreateCommand();
-        // No window: "nothing has completed in 24 hours" is the answer this is for, and a query that
-        // could only look inside the window could never give it.
-        cmd.CommandText = $"""
-            SELECT MAX(EndedAtUtc) FROM TaskRuns
-            WHERE TaskName = $taskName AND Status = 'Succeeded' AND EndedAtUtc IS NOT NULL{kindClause};
-            """;
+        // No window: "nothing has completed in 24 hours" is the answer this is for, and a query that could only look inside the window could never give it.
+        using var cmd = database.Command(SyncStateModule.Name, connection, $$"""
+            SELECT MAX(ended_at) FROM {table:run_detail}
+            WHERE task_name = $taskName AND status = 'Succeeded' AND ended_at IS NOT NULL{{kindClause}};
+            """);
         cmd.Bind(database, "taskName", taskName);
         if (runKind is not null)
             cmd.Bind(database, "runKind", runKind.Value.ToString());
 
         var result = cmd.ExecuteScalar();
-        return result is null or DBNull ? null : DateTimeOffset.Parse((string)result, null, System.Globalization.DateTimeStyles.RoundtripKind);
+        return result is null or DBNull ? null : DbDataKit.State.StateValues.ToTime(result);
     }
 
-    /// <summary>
-    /// Bucketed by index rather than by a SQL date function, so the boundaries are exactly the ones
-    /// the caller asked for and a bucket cannot land in two places because of rounding.
-    /// </summary>
     private IReadOnlyList<RunMetricsBucket> ReadBuckets(
         DbConnection connection, string taskName, DateTimeOffset fromUtc, DateTimeOffset toUtc,
         RunKind? runKind, string kindClause, int buckets)
@@ -201,22 +193,19 @@ public sealed class RunMetricsStore(StateDatabase database)
         var failures = new int[buckets];
         var written = new long[buckets];
 
-        using (var cmd = connection.CreateCommand())
+        using (var cmd = database.Command(SyncStateModule.Name, connection, $$"""
+            SELECT enqueued_at, status, rows_written FROM {table:run_detail}
+            WHERE task_name = $taskName AND enqueued_at >= $from AND enqueued_at < $to{{kindClause}};
+            """))
         {
-            cmd.CommandText = $"""
-                SELECT EnqueuedAtUtc, Status, RowsWritten FROM TaskRuns
-                WHERE TaskName = $taskName AND EnqueuedAtUtc >= $from AND EnqueuedAtUtc < $to{kindClause};
-                """;
             Bind(cmd, taskName, fromUtc, toUtc, runKind);
 
             using var reader = cmd.ExecuteReader();
             while (reader.Read())
             {
-                var enqueuedAt = DateTimeOffset.Parse(
-                    reader.GetString(0), null, System.Globalization.DateTimeStyles.RoundtripKind);
+                var enqueuedAt = reader.Time(0);
 
-                // The right edge is exclusive in the WHERE above, so this cannot be `buckets`; the
-                // clamp is for a zero-width window, where every run belongs to the only bucket.
+                // The right edge is exclusive in the WHERE above, so this cannot be `buckets`; the clamp is for a zero-width window, where every run belongs to the only bucket.
                 var index = Math.Clamp((int)((enqueuedAt - fromUtc) / width), 0, buckets - 1);
                 counts[index]++;
                 if (reader.GetString(1) == nameof(RunStatus.Failed))
@@ -229,8 +218,6 @@ public sealed class RunMetricsStore(StateDatabase database)
             .Select(i => new RunMetricsBucket(fromUtc + width * i, counts[i], failures[i], written[i]))];
     }
 
-    /// <summary>Nearest-rank, on an already-sorted list. Exact — it names a run that actually took
-    /// that long, rather than interpolating between two that did not.</summary>
     private static double? Percentile(List<double> sorted, double fraction)
     {
         if (sorted.Count == 0)
@@ -243,8 +230,8 @@ public sealed class RunMetricsStore(StateDatabase database)
         DbCommand cmd, string taskName, DateTimeOffset fromUtc, DateTimeOffset toUtc, RunKind? runKind)
     {
         cmd.Bind(database, "taskName", taskName);
-        cmd.Bind(database, "from", fromUtc.ToString("O"));
-        cmd.Bind(database, "to", toUtc.ToString("O"));
+        cmd.Bind(database, "from", fromUtc);
+        cmd.Bind(database, "to", toUtc);
         if (runKind is not null)
             cmd.Bind(database, "runKind", runKind.Value.ToString());
     }

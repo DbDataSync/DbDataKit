@@ -241,6 +241,86 @@
       }
     },
     {
+      "name": "state_verify",
+      "description": "Compare a snapshot with its manifest (--snapshot), the state with a snapshot (--snapshot --db or --against) or with another database (--other-engine, --other-connection with secret references, or --against a settings file); names the table and rows that differ. [Target read-only] Usage: state verify --snapshot <directory> [--db] | --against <snapshot directory or settings file> | --other-engine sqlite|mssql|postgres [--other-connection <string>] [--other-sqlite <file>] [--other-schema <s>] [--other-prefix <p>] [--rehash-payloads] [--repo <path>]",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "state_show",
+      "description": "Show the effective engine, the connection (secrets masked), where each module's tables are, each module's version in the registry and what is pending; read-only, creates and migrates nothing. [Target read-only] Usage: state show [--offline] [--repo <path>]",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "state_test",
+      "description": "Connect, read the registry, check the rights and the engine version, and look for a schema clash and for migrations this login may not apply; stops at the first failure with the fix. [Target read-only] Usage: state test [--repo <path>]",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "state_grants",
+      "description": "Print the GRANT statements a login needs for DbDataSync's modules (the login it runs as, or with --migrate the one that upgrades the database); run them as a database administrator. [Offline only] Usage: state grants --login <database role or user> [--migrate] [--repo <path>]",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
       "name": "health_check",
       "description": "Exit 0 when a running DbDataSync answers, 1 when it does not (what the container's health check runs). [Offline only] Usage: health check [--url <url>] [--repo <path>]",
       "inputSchema": {

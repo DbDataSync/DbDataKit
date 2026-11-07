@@ -55,22 +55,20 @@ public sealed class CrossEngineStateTests : IClassFixture<LibraryInstallFixture>
         // differently on each engine, and "can I select from it" is the question that matters.
         foreach (var table in new[]
         {
-            "Tasks", "TaskRuns", "ChangeWatermarks", "Logs", "RunLocks", "WorkQueue",
-            "VerificationResults", "PauseEvents",
-            "BulkLoadBatches",
+            "sync_state.run_detail", "sync_state.change_check", "sync_state.verification_result", "sync_state.bulk_load_batch",
+            "runs.run", "runs.run_log", "scheduling.work_item", "scheduling.run_lock", "scheduling.job_pause", "notifications.notification", "audit.entry",
+            "runner_progress.checkpoint_head", "runner_progress.checkpoint_part", "runner_progress.checkpoint_history",
         })
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(connection, $"SELECT COUNT(*) FROM {table};");
+            using var cmd = database.Command(connection, $"SELECT COUNT(*) FROM {{table:{table}}};");
             Assert.Equal(0, Convert.ToInt32(cmd.ExecuteScalar()));
         }
     }
 
     /// <summary>
-    /// Phase 133: <c>BulkLoadBatches</c> and <c>TaskRuns.BulkLoadBatchId</c> exist under their renamed
-    /// names on a freshly created database — the migration templates were edited in place rather than
-    /// appended to (see the phase doc's "No migration" section), so this only proves correct for a
-    /// database created after the rename, never for one upgraded from before it.
+    /// Phase 133: the bulk-load batch table, and the column of a run that names its batch, exist on a freshly created database on every engine (E14: <c>sync_state.bulk_load_batch</c> and
+    /// <c>sync_state.run_detail.bulk_load_batch_id</c>).
     /// </summary>
     [Theory]
     [MemberData(nameof(Engines))]
@@ -79,11 +77,11 @@ public sealed class CrossEngineStateTests : IClassFixture<LibraryInstallFixture>
         var database = Open(engine);
 
         using (var connection = database.OpenConnection())
-        using (var cmd = database.Command(connection, "SELECT COUNT(*) FROM BulkLoadBatches;"))
+        using (var cmd = database.Command(connection, "SELECT COUNT(*) FROM {table:sync_state.bulk_load_batch};"))
             Assert.Equal(0, Convert.ToInt32(cmd.ExecuteScalar()));
 
         using (var connection = database.OpenConnection())
-        using (var cmd = database.Command(connection, "SELECT BulkLoadBatchId FROM TaskRuns;"))
+        using (var cmd = database.Command(connection, "SELECT bulk_load_batch_id FROM {table:sync_state.run_detail};"))
             cmd.ExecuteScalar();
     }
 
@@ -415,7 +413,7 @@ public sealed class CrossEngineStateTests : IClassFixture<LibraryInstallFixture>
     }
 
     /// <summary>
-    /// Plan 13a, X06: Sync keeps no sign-in of its own, so the users, credentials, sessions, invitations and passkey challenges of the older schema are dropped by the last migration, on every engine.
+    /// Plan 13a, X06: Sync keeps no sign-in of its own, so the users, credentials, sessions, invitations and passkey challenges of the older schema are not in the state (E14: none of the modules has them), on every engine.
     /// </summary>
     [Theory]
     [MemberData(nameof(Engines))]

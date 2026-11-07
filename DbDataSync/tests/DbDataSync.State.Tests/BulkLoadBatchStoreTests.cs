@@ -25,22 +25,20 @@ public sealed class BulkLoadBatchStoreTests : IDisposable
     {
         using var connection = _database.OpenConnection();
         using var cmd = _database.Command(connection, """
-            INSERT INTO TaskRuns
-                (RunId, TaskName, Status, RunKind, MappingName, EnqueuedAtUtc, StartedAtUtc, EndedAtUtc,
-                 RowsRead, RowsWritten, BulkLoadBatchId)
+            INSERT INTO {table:sync_state.run_detail}
+                (run_id, task_name, status, run_kind, mapping_name, enqueued_at, began_at, ended_at,
+                 rows_read, rows_written, bulk_load_batch_id)
             VALUES ($runId, $task, $status, 'BulkLoad', 'orders', $enqueued, $started, $ended,
                     $read, $written, $batchId);
             """);
-        var started = status is RunStatus.Queued ? (object)DBNull.Value : DateTimeOffset.UtcNow.ToString("O");
-        var ended = status is RunStatus.Succeeded or RunStatus.Failed or RunStatus.Cancelled
-            ? (object)DateTimeOffset.UtcNow.ToString("O")
-            : DBNull.Value;
-        cmd.Bind(_database, "runId", Guid.NewGuid().ToString());
+        object? started = status is RunStatus.Queued ? null : DateTimeOffset.UtcNow;
+        object? ended = status is RunStatus.Succeeded or RunStatus.Failed or RunStatus.Cancelled ? DateTimeOffset.UtcNow : null;
+        cmd.Bind(_database, "runId", Guid.NewGuid());
         cmd.Bind(_database, "task", Task);
         cmd.Bind(_database, "status", status.ToString());
-        cmd.Bind(_database, "enqueued", DateTimeOffset.UtcNow.ToString("O"));
-        cmd.Bind(_database, "started", started);
-        cmd.Bind(_database, "ended", ended);
+        cmd.Bind(_database, "enqueued", DateTimeOffset.UtcNow);
+        cmd.Bind(_database, "started", started, started is null ? System.Data.DbType.DateTimeOffset : null);
+        cmd.Bind(_database, "ended", ended, ended is null ? System.Data.DbType.DateTimeOffset : null);
         cmd.Bind(_database, "read", rowsRead);
         cmd.Bind(_database, "written", rowsWritten);
         cmd.Bind(_database, "batchId", batchId);

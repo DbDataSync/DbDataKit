@@ -63,6 +63,11 @@ public static class Help
               dbdatasync config get <key> | set <key> <value> [--repo <path>]
                   Reads or changes one setting of server.yaml.
 
+              dbdatasync state show|test|grants|init|export|import|verify|move [--repo <path>]
+                  The state database: where it is, the modules it is built from and the version
+                  of each, whether it works, and the rights it needs. An earlier release's state
+                  database is refused at start, not converted; `state show` names the file.
+
               dbdatasync cert use-pem --cert <path> --key <path> | use-pfx --pfx <path>
                   Points Kestrel at a certificate file — unencrypted PEM key or
                   unprotected PFX. Any platform.

@@ -13,7 +13,7 @@ namespace DbDataSync.Api.Tests;
 /// Phase 130, tier 2 — <see cref="SelfSignedCertificateService"/> driven directly through
 /// <see cref="SelfSignedCertificateService.CheckAsync"/>, the same way
 /// <see cref="CertificateExpiryServiceWindowsTests"/> drives <c>CertificateExpiryService</c>: a real
-/// temp <c>tls/</c>, a real (SQLite) <see cref="NotificationStore"/>, no fake clock — the certificate's
+/// temp <c>tls/</c>, a real (SQLite) <see cref="NotificationFeedStore"/>, no fake clock — the certificate's
 /// own <c>NotBefore</c>/<c>NotAfter</c> are what's varied, the same way
 /// <see cref="Certificates.Tests.ManagedSelfSignedCertificateTests"/> varies them for the pure
 /// evaluator this service calls.
@@ -24,7 +24,7 @@ public sealed class SelfSignedCertificateServiceTests : IDisposable
 
     public void Dispose() => Directory.Delete(_root, recursive: true);
 
-    private (SelfSignedCertificateService Service, NotificationStore Notifications) BuildService(string? url = null)
+    private (SelfSignedCertificateService Service, NotificationFeedStore Notifications) BuildService(string? url = null)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(url is null
@@ -33,7 +33,7 @@ public sealed class SelfSignedCertificateServiceTests : IDisposable
             .Build();
 
         var database = new StateDatabase(Path.Combine(_root, "state.db"));
-        var notifications = new NotificationStore(database);
+        var notifications = new NotificationFeedStore(database, SyncState.ServiceId);
         var apiOptions = new ApiOptions
         {
             RepoRoot = _root,

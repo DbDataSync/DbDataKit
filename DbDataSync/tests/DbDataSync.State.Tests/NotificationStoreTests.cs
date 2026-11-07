@@ -12,14 +12,14 @@ public sealed class NotificationStoreTests : IDisposable
 {
     private readonly string _tempDir = Directory.CreateTempSubdirectory("dbdatasync-notify-tests-").FullName;
     private readonly StateDatabase _database;
-    private readonly NotificationStore _store;
+    private readonly NotificationFeedStore _store;
     private readonly TaskRunStore _runs;
     private readonly WorkQueueStore _queue;
 
     public NotificationStoreTests()
     {
         _database = new StateDatabase(Path.Combine(_tempDir, "state.db"));
-        _store = new NotificationStore(_database);
+        _store = new NotificationFeedStore(_database, SyncState.ServiceId);
         _runs = new TaskRunStore(_database);
         _queue = new WorkQueueStore(_database);
     }
@@ -39,8 +39,8 @@ public sealed class NotificationStoreTests : IDisposable
     {
         using var connection = _database.OpenConnection();
         using var cmd = _database.Command(connection,
-            "UPDATE Notifications SET CreatedAtUtc = $created WHERE Id = $id;");
-        cmd.Bind(_database, "created", (DateTimeOffset.UtcNow - age).ToString("O"));
+            "UPDATE {table:notifications.notification} SET created_at = $created WHERE id = $id;");
+        cmd.Bind(_database, "created", DateTimeOffset.UtcNow - age);
         cmd.Bind(_database, "id", id);
         cmd.ExecuteNonQuery();
     }
