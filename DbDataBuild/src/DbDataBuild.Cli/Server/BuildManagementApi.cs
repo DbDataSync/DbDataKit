@@ -51,6 +51,14 @@ internal static class BuildManagementApi
             projects = projects.All().Select(p => new { id = p.Id, name = p.Id, source = p.IsRemote ? "git" : "path", branch = p.Branch }),
         }));
 
+        // the connections of every hosted project and who uses them (plan 28c, E23): names, engines, secret references, never a value
+        app.MapGet("/api/v1/connections", (HttpContext context) =>
+        {
+            var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
+            if (!decision.Allowed) return Results.Json(new { error = "This needs the viewer role." }, statusCode: StatusCodes.Status403Forbidden);
+            return Results.Json(DbDataKit.Connections.Inventory.ConnectionInventoryJson.Write("dbdatabuild", BuildConnectionInventory.Of(projects.All().Select(p => (p.Id, projects.RootOf(p))))));
+        });
+
         if (creator is not null) MapNewProjects(app, creator);
 
         // The schemas of the project's files and which file each describes, for the console's forms (the viewer role may read them: they are the tool's own, not the project's)
