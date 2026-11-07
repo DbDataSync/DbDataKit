@@ -278,7 +278,15 @@ public sealed partial class ManagementTests
         Assert.Contains("secret write", audit);
         Assert.DoesNotContain(password, audit);
         foreach (var file in Directory.EnumerateFiles(dataDirectory, "*", SearchOption.AllDirectories).Where(f => !f.Contains(Path.DirectorySeparatorChar + "secrets" + Path.DirectorySeparatorChar)))
-            Assert.DoesNotContain(password, File.ReadAllText(file));
+            Assert.DoesNotContain(password, ReadShared(file));
+    }
+
+    /// <summary>Reads a file the server may still have open (the SQLite state database on Windows refuses a plain read).</summary>
+    private static string ReadShared(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
     }
 
     [Fact]
