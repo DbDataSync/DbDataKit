@@ -102,18 +102,18 @@ public abstract class StateDialect
     // ---- The convention types (plan 29 section 3.3), one token each in a template ----
 
     /// <summary>A UUID: <c>UNIQUEIDENTIFIER</c>, <c>UUID</c>, and on SQLite lower-case text (<see cref="StateCommandExtensions.Bind"/> writes it that way). Ids are UUID v7.</summary>
-    public abstract string Uuid { get; }
+    public virtual string Uuid => KeyText;
 
     /// <summary>A UTC instant: <c>DATETIMEOFFSET(7)</c>, <c>TIMESTAMPTZ</c>, and on SQLite fixed-width ISO 8601 text, which sorts as time does. Columns of this type are named <c>*_at</c>.</summary>
-    public abstract string Time { get; }
+    public virtual string Time => KeyText;
 
     /// <summary>A JSON document: <c>NVARCHAR(MAX)</c>, <c>JSONB</c>, <c>TEXT</c>. Never part of a key. Written as <c>CAST($doc AS {{json}})</c>, which PostgreSQL needs to take text into a <c>jsonb</c> column.</summary>
-    public abstract string Json { get; }
+    public virtual string Json => Text;
 
-    public abstract string Bool { get; }
+    public virtual string Bool => Integer;
 
     /// <summary>Bytes: <c>VARBINARY(MAX)</c>, <c>BYTEA</c>, <c>BLOB</c>. Large values do not belong in an ordinary table at all (the payloads module, plan 29 section 3.6).</summary>
-    public abstract string Blob { get; }
+    public virtual string Blob => throw NoModules();
 
     /// <summary>An expression that reads a UUID column as the lower-case text the state layer stores references to rows as (<see cref="StateValues"/>).</summary>
     public virtual string UuidAsText(string column) => column;
@@ -167,7 +167,7 @@ public abstract class StateDialect
     public virtual string? CreateSchema(string schema) => null;
 
     /// <summary>Whether a table exists. <paramref name="qualifiedName"/> is the rendered name, schema included where there is one.</summary>
-    public abstract bool TableExists(DbConnection connection, string qualifiedName);
+    public virtual bool TableExists(DbConnection connection, string qualifiedName) => throw NoModules();
 
     /// <summary>
     /// Takes the lock that keeps two services opening one database from migrating it at once, for as long as the result lives; null where the engine needs none (see
@@ -188,5 +188,9 @@ public abstract class StateDialect
     /// What the database says if it was made by the old structure, one schema version for the whole database (plan 29 section 3.1's clean break): a description of the marker
     /// found, or null for a database that was never used that way.
     /// </summary>
-    public abstract string? FindLegacySchemaVersion(DbConnection connection);
+    public virtual string? FindLegacySchemaVersion(DbConnection connection) => throw NoModules();
+
+    /// <summary>What a dialect that does not override the members modules need says when a database is built from modules on it: such a dialect still works with a <see cref="StateSchema"/>.</summary>
+    protected NotSupportedException NoModules() =>
+        new($"The state dialect '{Engine}' does not support databases built from modules (plan 29): it has to say how a table is found, how an old database is recognised and what its UUID, time, JSON, boolean and binary columns are. The built-in engines do.");
 }

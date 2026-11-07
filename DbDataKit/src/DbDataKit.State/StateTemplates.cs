@@ -15,13 +15,17 @@ public static class StateTemplates
             .Replace("{{text}}", dialect.Text)
             .Replace("{{key}}", dialect.KeyText)
             .Replace("{{int}}", dialect.Integer)
-            .Replace("{{uuid}}", dialect.Uuid)
-            .Replace("{{time}}", dialect.Time)
-            .Replace("{{json}}", dialect.Json)
-            .Replace("{{bool}}", dialect.Bool)
-            .Replace("{{blob}}", dialect.Blob)
-            .Replace("{{addcolumn}}", dialect.AddColumn),
+            .Replace("{{addcolumn}}", dialect.AddColumn)
+            .ReplaceWhenUsed("{{uuid}}", () => dialect.Uuid)
+            .ReplaceWhenUsed("{{time}}", () => dialect.Time)
+            .ReplaceWhenUsed("{{json}}", () => dialect.Json)
+            .ReplaceWhenUsed("{{bool}}", () => dialect.Bool)
+            .ReplaceWhenUsed("{{blob}}", () => dialect.Blob),
         match => dialect.DropIndex(match.Groups["index"].Value, match.Groups["table"].Value));
+
+    /// <summary>Replaces a token with the dialect's word for it, asking the dialect only when the template uses the token: a custom dialect that does not know the convention types still renders a template that does not need them.</summary>
+    private static string ReplaceWhenUsed(this string text, string token, Func<string> value) =>
+        text.Contains(token, StringComparison.Ordinal) ? text.Replace(token, value(), StringComparison.Ordinal) : text;
 
     /// <summary><c>{{identity:column}}</c>: an auto-assigned integer key under any column name (the modules write lower-case ones).</summary>
     private static readonly Regex IdentityToken = new(@"\{\{identity:(?<column>\w+)\}\}");
