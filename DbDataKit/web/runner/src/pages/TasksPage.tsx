@@ -86,6 +86,7 @@ export function TasksPage() {
           <span className="page-note" data-testid="runner-group">{status.data ? `Group ${status.data.group}, version ${status.data.version}, state on ${status.data.state_engine}` : ''}</span>
         </div>
         <ErrorBanner error={status.error ?? instances.error ?? act.error} />
+        {status.data?.console_runner?.production_warning && <div className="empty" role="alert" data-testid="runner-production-warning">{status.data.console_runner.production_warning}</div>}
         {problems.map((p) => <div key={`${p.subject}${p.at}`} className="empty" data-testid="runner-problem">{`${p.subject}: ${p.message}`}</div>)}
         <InstancesCard instances={instances.data ?? status.data?.instances ?? []} />
 
