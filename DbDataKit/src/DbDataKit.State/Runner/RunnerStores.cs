@@ -70,6 +70,9 @@ public sealed class RunnerInstances(StateDatabase database)
         return Query("state = $running AND heartbeat_at >= $since", c => c.Bind(database, "running", RunnerInstance.Running).Bind(database, "since", since));
     }
 
+    /// <summary>Every instance row of the group, live or not (gone, or silent for longer than the lease), oldest first: what the console shows to say that a runner is gone.</summary>
+    public IReadOnlyList<RunnerInstance> ListAll() => Query("1 = 1", _ => { });
+
     private IReadOnlyList<RunnerInstance> Query(string where, Action<DbCommand> bind) =>
         database.Retry(() =>
         {
