@@ -26,7 +26,7 @@ export interface SelectableLayout {
 export interface SelectableDocument { layouts: SelectableLayout[] }
 
 export type LayoutChoice = 'named' | 'matched' | 'default'
-export type LayoutSelection = { ok: true; layout: SelectableLayout; choice: LayoutChoice } | { ok: false; refusal: string }
+export type LayoutSelection<L extends SelectableLayout = SelectableLayout> = { ok: true; layout: L; choice: LayoutChoice } | { ok: false; refusal: string }
 
 const inRange = (r: Range, v: number) => (r.min === undefined || v >= r.min) && (r.max === undefined || v <= r.max)
 
@@ -49,7 +49,7 @@ export function matches(when: NonNullable<SelectableLayout['when']>, context: La
   return true
 }
 
-export function selectLayout(document: SelectableDocument, context: LayoutContext = {}): LayoutSelection {
+export function selectLayout<L extends SelectableLayout>(document: { layouts: L[] }, context: LayoutContext = {}): LayoutSelection<L> {
   const layouts = document.layouts
   if (context.layout !== undefined) {
     const named = layouts.find((l) => l.name === context.layout)
@@ -57,7 +57,7 @@ export function selectLayout(document: SelectableDocument, context: LayoutContex
       ? { ok: true, layout: named, choice: 'named' }
       : { ok: false, refusal: `The document has no layout named \`${context.layout}\`; its layouts are ${layouts.map((l) => `\`${l.name}\``).join(', ')}.` }
   }
-  let best: SelectableLayout | undefined
+  let best: L | undefined
   for (const layout of layouts)
     if (layout.when && matches(layout.when, context) && (best === undefined || specificity(layout.when) > specificity(best.when!))) best = layout
   if (best) return { ok: true, layout: best, choice: 'matched' }

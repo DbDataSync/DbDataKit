@@ -1,0 +1,85 @@
+{
+ "1920x1080": {
+  "mode": "grid",
+  "violations": [],
+  "contentHeight": 1080,
+  "tiles": [
+   "regions 0,0 1920x135 l cell 1,1 span 12x1",
+   "net 0,135 480x270 l cell 1,2 span 3x2",
+   "margin 480,135 480x270 l cell 4,2 span 3x2",
+   "note 960,135 960x270 l cell 7,2 span 6x2",
+   "by_region 0,405 1120x675 l cell 1,4 span 7x5",
+   "top_products 1120,405 800x675 l cell 8,4 span 5x5"
+  ]
+ },
+ "1366x768": {
+  "mode": "grid",
+  "violations": [],
+  "contentHeight": 768,
+  "tiles": [
+   "regions 0,0 1366x96 m cell 1,1 span 12x1",
+   "net 0,96 342x192 l cell 1,2 span 3x2",
+   "margin 342,96 341x192 l cell 4,2 span 3x2",
+   "note 683,96 683x192 l cell 7,2 span 6x2",
+   "by_region 0,288 797x480 l cell 1,4 span 7x5",
+   "top_products 797,288 569x480 m cell 8,4 span 5x5"
+  ]
+ },
+ "1280x720": {
+  "mode": "grid",
+  "violations": [],
+  "contentHeight": 720,
+  "tiles": [
+   "regions 0,0 1280x90 s cell 1,1 span 12x1",
+   "net 0,90 320x180 m cell 1,2 span 3x2",
+   "margin 320,90 320x180 m cell 4,2 span 3x2",
+   "note 640,90 640x180 l cell 7,2 span 6x2",
+   "by_region 0,270 747x450 l cell 1,4 span 7x5",
+   "top_products 747,270 533x450 m cell 8,4 span 5x5"
+  ]
+ },
+ "1024x768": {
+  "mode": "grid",
+  "violations": [],
+  "contentHeight": 768,
+  "tiles": [
+   "regions 0,0 1024x96 m cell 1,1 span 12x1",
+   "net 0,96 256x192 m cell 1,2 span 3x2",
+   "margin 256,96 256x192 m cell 4,2 span 3x2",
+   "note 512,96 512x192 l cell 7,2 span 6x2",
+   "by_region 0,288 597x480 l cell 1,4 span 7x5",
+   "top_products 597,288 427x480 s cell 8,4 span 5x5"
+  ]
+ },
+ "800x600": {
+  "mode": "grid",
+  "violations": [],
+  "contentHeight": 600,
+  "tiles": [
+   "regions 0,0 800x75 xs cell 1,1 span 12x1",
+   "net 0,75 200x150 s cell 1,2 span 3x2",
+   "margin 200,75 200x150 s cell 4,2 span 3x2",
+   "note 400,75 400x150 l cell 7,2 span 6x2",
+   "by_region 0,225 467x375 m cell 1,4 span 7x5",
+   "top_products 467,225 333x375 xs cell 8,4 span 5x5"
+  ]
+ },
+ "390x844": {
+  "mode": "stack",
+  "violations": [
+   "net",
+   "margin",
+   "by_region",
+   "top_products"
+  ],
+  "contentHeight": 668,
+  "tiles": [
+   "regions 0,0 390x56 xs",
+   "net 0,56 390x88 xs",
+   "margin 0,144 390x88 xs",
+   "note 0,232 390x56 xs",
+   "by_region 0,288 390x180 xs",
+   "top_products 0,468 390x200 xs"
+  ]
+ }
+}
