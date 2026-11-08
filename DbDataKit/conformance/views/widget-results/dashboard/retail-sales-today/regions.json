@@ -1,0 +1,17 @@
+{
+  "type": "control",
+  "values": [
+    {
+      "value": "West"
+    },
+    {
+      "value": "Central"
+    },
+    {
+      "value": "East"
+    },
+    {
+      "value": "South"
+    }
+  ]
+}

@@ -1,0 +1,304 @@
+{
+  "type": "table",
+  "columns": [
+    {
+      "field": "products.product",
+      "label": "Product"
+    },
+    {
+      "field": "sales.units",
+      "label": "Units",
+      "align": "right"
+    }
+  ],
+  "rows": [
+    {
+      "cells": [
+        {
+          "v": "Trail Jacket",
+          "text": "Trail Jacket"
+        },
+        {
+          "v": 2400,
+          "text": "2,400"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Rain Shell",
+          "text": "Rain Shell"
+        },
+        {
+          "v": 2316,
+          "text": "2,316"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Fleece Pullover",
+          "text": "Fleece Pullover"
+        },
+        {
+          "v": 2230,
+          "text": "2,230"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Hiking Boot",
+          "text": "Hiking Boot"
+        },
+        {
+          "v": 2142,
+          "text": "2,142"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Trail Runner",
+          "text": "Trail Runner"
+        },
+        {
+          "v": 2052,
+          "text": "2,052"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Camp Sandal",
+          "text": "Camp Sandal"
+        },
+        {
+          "v": 1960,
+          "text": "1,960"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Daypack 22L",
+          "text": "Daypack 22L"
+        },
+        {
+          "v": 1866,
+          "text": "1,866"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Duffel 60L",
+          "text": "Duffel 60L"
+        },
+        {
+          "v": 1807,
+          "text": "1,807"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Water Bottle",
+          "text": "Water Bottle"
+        },
+        {
+          "v": 1709,
+          "text": "1,709"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Wool Sock 3-pack",
+          "text": "Wool Sock 3-pack"
+        },
+        {
+          "v": 1646,
+          "text": "1,646"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Beanie",
+          "text": "Beanie"
+        },
+        {
+          "v": 1544,
+          "text": "1,544"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Gloves",
+          "text": "Gloves"
+        },
+        {
+          "v": 1477,
+          "text": "1,477"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Base Layer Top",
+          "text": "Base Layer Top"
+        },
+        {
+          "v": 1371,
+          "text": "1,371"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Base Layer Bottom",
+          "text": "Base Layer Bottom"
+        },
+        {
+          "v": 1300,
+          "text": "1,300"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Tent 2P",
+          "text": "Tent 2P"
+        },
+        {
+          "v": 1227,
+          "text": "1,227"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Sleeping Bag",
+          "text": "Sleeping Bag"
+        },
+        {
+          "v": 1152,
+          "text": "1,152"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Headlamp",
+          "text": "Headlamp"
+        },
+        {
+          "v": 1038,
+          "text": "1,038"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Trekking Poles",
+          "text": "Trekking Poles"
+        },
+        {
+          "v": 959,
+          "text": "959"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Sun Hat",
+          "text": "Sun Hat"
+        },
+        {
+          "v": 878,
+          "text": "878"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Rain Pants",
+          "text": "Rain Pants"
+        },
+        {
+          "v": 795,
+          "text": "795"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Windbreaker",
+          "text": "Windbreaker"
+        },
+        {
+          "v": 710,
+          "text": "710"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Gaiters",
+          "text": "Gaiters"
+        },
+        {
+          "v": 623,
+          "text": "623"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Camp Stove",
+          "text": "Camp Stove"
+        },
+        {
+          "v": 571,
+          "text": "571"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Cooler Bag",
+          "text": "Cooler Bag"
+        },
+        {
+          "v": 480,
+          "text": "480"
+        }
+      ]
+    }
+  ]
+}

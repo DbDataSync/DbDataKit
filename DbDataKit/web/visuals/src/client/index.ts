@@ -1,0 +1,9 @@
+export { ViewsClientError } from './types'
+export type {
+  ClientDiagnostic, DocumentSummary, OpenedDocument, PreviewRequest, ResolveOptions, SaveResult, ValidationResult, ViewsClient, ViewsClientErrorCode,
+} from './types'
+export { FIXTURE_AS_OF, NO_RECORDED_IMAGE, NO_RECORDED_RESULT, fixtureClient, placedWidgets } from './fixtureClient'
+export type { FixtureBundle, FixtureClientOptions } from './fixtureClient'
+export { moduleClient } from './moduleClient'
+export type { ModuleClientOptions } from './moduleClient'
+export { pathSteps, textVersion, validateText } from './text'

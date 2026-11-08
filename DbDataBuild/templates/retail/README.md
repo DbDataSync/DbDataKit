@@ -29,6 +29,11 @@ dbdatabuild project tests run                           # metadata rules and mod
 | `marts.fct_budget_allocation` | **allocating** a regional budget to its shops by floor area, to the cent |
 | `marts.rpt_budget_vs_actual` | the allocated budget against actual net sales per shop and month |
 
+## Dashboards and reports
+
+`dashboards/retail-sales-today.yaml` and `reports/retail-sales-monthly.yaml` are sample documents of plan 32 over the semantic model (`semantic/sales.yml`): one set of widgets, several layouts. The console shows them from recorded
+results (`DbDataKit/conformance/views/widget-results`) until a serving module answers their queries; they are the starting points of the editor's templates.
+
 ## Tests
 
 `tests/metadata/` holds rules over what the project is (every model has a grain, staging reads only mapped models, marts never read sources).

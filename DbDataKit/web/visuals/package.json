@@ -22,7 +22,8 @@
     "vega": "6.4.0",
     "vega-embed": "7.3.0",
     "vega-interpreter": "2.3.2",
-    "vega-lite": "6.5.0"
+    "vega-lite": "6.5.0",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@types/react": "^19.2.18",
