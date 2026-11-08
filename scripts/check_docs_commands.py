@@ -17,7 +17,7 @@ import re
 import sys
 
 SKIP_DIRS = {"node_modules", "bin", "obj", ".git", "__pycache__", "tests", "architecture", "progress", "research", "plans", "review"}
-SKIP_FILES = {"RELEASE-NOTES-PENDING.md", "CHANGELOG.md", "review.md"}
+SKIP_FILES = {"RELEASE-NOTES-PENDING.md", "CHANGELOG.md", "review.md", "security-review.md"}  # the four pre-monorepo reviews (docs/needs-review.md)
 OK_MARK = "retired-name-ok"   # a line that must name the old form on purpose (a transitional step) says so, on itself or the line above
 EXTENSIONS = (".md", ".yml", ".yaml", ".ps1", ".sh", ".service", ".wxs", ".json", ".py", ".txt")
 

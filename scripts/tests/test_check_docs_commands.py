@@ -42,6 +42,12 @@ class CheckDocsCommands(unittest.TestCase):
         root = tree({"docs/plans/13-x.md": "dbdatasync serve\n", "DbDataSync/architecture/implementation/p.md": "dbdatasync setup\n", "docs/RELEASE-NOTES-PENDING.md": "dbdatasync serve\n"})
         self.assertEqual([], check.check(root))
 
+    def test_the_four_pre_monorepo_reviews_are_not_read(self):
+        # docs/needs-review.md: they predate the monorepo, wait for review and cleanup, and are skipped by the scripts
+        for rel in ["docs/security-review.md", "DbDataSync/architecture/review.md", "DbDataProxy/docs/review.md", "DbDataBuild/docs/review.md"]:
+            with self.subTest(rel=rel):
+                self.assertEqual([], check.check(tree({rel: "Run dbdatasync serve --repo x and dbdataproxy install\n"})))
+
     def test_a_line_can_name_the_old_form_on_purpose(self):
         root = tree({"x/README.md": "# retired-name-ok\nmv DbDataProxy.exe dbdataproxy.exe\n"})
         self.assertEqual([], check.check(root))

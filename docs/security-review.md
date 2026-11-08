@@ -1,5 +1,7 @@
 # Security Findings (consolidated)
 
+> **Needs review and cleanup (low priority).** This review, and the products' reviews it consolidates (`DbDataSync/architecture/review.md`, `DbDataProxy/docs/review.md`, `DbDataBuild/docs/review.md`), were written before the repositories became one; paths, names and some findings are out of date. They are excluded from the audit, and the scripts under `scripts/` (`check_docs_commands.py`, `check_plans.py`) skip them. See [needs-review.md](needs-review.md).
+
 Static review only; nothing was built or run, and dependency vulnerability scans were not performed.
 Severities are the reviewers'. Evidence and remediation per finding are in the product's review (`DbDataSync/architecture/review.md`, `DbDataProxy/docs/review.md`, `DbDataBuild/docs/review.md`). Two High
 findings were spot-checked: `DbDataSync/src/DbDataSync.Libraries/LibraryInstaller.cs:199` interpolates
