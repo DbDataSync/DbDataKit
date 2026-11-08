@@ -140,6 +140,11 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
             cx.Error("Views.Port", "The views module has its own port; it is the apps host's here.", $"Choose another port than {o.Apps.Port}.");
         if (ProxyModules.Has(o, ProxyModules.Store) && o.Views.Port == o.Store.Port)
             cx.Error("Views.Port", "The views module has its own port; it is the store module's here.", $"Choose another port than {o.Store.Port}.");
+        var export = o.Views.Export;
+        if (!string.IsNullOrEmpty(export.Mode) && export.Mode is not ("pinned" or "system"))
+            cx.Error("Views.Export.Mode", $"`Mode` is `{export.Mode}`.", "Use `pinned` (the Chromium chromium.pin names) or `system` (an installed Chrome or Edge at `Path`); leave it out to keep export off.");
+        if (export.Mode == "system" && string.IsNullOrWhiteSpace(export.Path))
+            cx.Error("Views.Export.Path", "Mode `system` needs `Path`, the installed Chrome or Edge.", "Set `Path`, or use mode `pinned`.");
     }
 
     private static void ValidateApps(ProxyOptions o, IConfigValidationContext cx)

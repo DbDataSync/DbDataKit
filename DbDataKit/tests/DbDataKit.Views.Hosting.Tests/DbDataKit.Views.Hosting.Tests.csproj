@@ -5,6 +5,7 @@
     <PackageReference Include="Npgsql" />
     <PackageReference Include="DuckDB.NET.Data" />
     <PackageReference Include="Apache.Arrow" />
+    <PackageReference Include="PdfPig" />
     <ProjectReference Include="..\..\src\DbDataKit.Views.Hosting\DbDataKit.Views.Hosting.csproj" />
     <!-- the semantic module over a host that runs SQL: the engine answers a widget's request from the host's data -->
     <ProjectReference Include="..\..\src\DbDataKit.Serving.Semantic\DbDataKit.Serving.Semantic.csproj" />
@@ -12,6 +13,8 @@
     <ProjectReference Include="..\..\src\DbDataKit.State.Engines\DbDataKit.State.Engines.csproj" />
     <Compile Include="..\DbDataKit.State.Tests\StateEngines.cs" Link="StateEngines.cs" />
     <Compile Include="..\DbDataKit.Views.Tests\ManualTimeProvider.cs" Link="ManualTimeProvider.cs" />
+    <!-- where the exporter tests find a browser: the same rule for both projects -->
+    <Compile Include="..\DbDataKit.Views.Export.Tests\TestBrowser.cs" Link="TestBrowser.cs" />
   </ItemGroup>
   <ItemGroup>
     <!-- the conformance model and its data, as the semantic engine's own suite runs on them -->

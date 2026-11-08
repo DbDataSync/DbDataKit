@@ -57,6 +57,9 @@
     <PackageVersion Include="Npgsql" Version="10.0.3" />
     <PackageVersion Include="Oracle.ManagedDataAccess.Core" Version="23.26.301" />
     <PackageVersion Include="Parquet.Net" Version="6.1.0" />
+    <!-- PDF export (plan 32 DBR15): PuppeteerSharp drives the pinned Chromium over the DevTools protocol, no Node (MIT; net10.0 asset); PdfPig reads a PDF back for the page limit and the tests (Apache-2.0) -->
+    <PackageVersion Include="PdfPig" Version="0.1.16" />
+    <PackageVersion Include="PuppeteerSharp" Version="25.15.0" />
     <PackageVersion Include="System.CommandLine" Version="2.0.12" />
     <PackageVersion Include="System.Data.Odbc" Version="10.0.13" />
     <PackageVersion Include="System.Diagnostics.EventLog" Version="10.0.13" />

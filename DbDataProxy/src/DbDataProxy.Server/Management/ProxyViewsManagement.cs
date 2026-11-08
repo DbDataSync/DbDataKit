@@ -57,9 +57,8 @@ public sealed class ProxyViewsManagement(ProxyViewsPublishing publishing, ProxyV
             case ("GET", null, null): answer = api.List(who, kind, trace); break;
             case ("GET", not null, null): answer = api.Open(who, kind, name, trace); break;
             case ("GET", not null, "export"):
-                var q = System.Web.HttpUtility.ParseQueryString(query ?? "");
-                answer = api.Export(who, kind, name, q["format"] is { Length: > 0 } f ? f : null, q["layout"] is { Length: > 0 } l ? l : null, trace);
-                break;
+                // a download is not JSON, which is all the console's relay carries: it is taken from the module's own listener (views.address) with a token of the home
+                return Problem(501, "export_unavailable", $"A download is taken from the views module's own listener with a token of the identity home (GET /api/v1/{(kind == ViewDefinitions.Report ? "reports" : "dashboards")}/{name}/export?format=pdf); the management API and the console's relay carry JSON only.");
             case ("POST", not null, "render"):
                 JsonObject? json;
                 try { json = string.IsNullOrWhiteSpace(body) ? null : JsonNode.Parse(body) as JsonObject ?? throw new JsonException("The body must be a JSON object."); }

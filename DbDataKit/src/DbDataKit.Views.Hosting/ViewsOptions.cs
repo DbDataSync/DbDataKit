@@ -1,6 +1,7 @@
 using System.Security.Cryptography.X509Certificates;
 using DbDataKit.Hosting;
 using DbDataKit.State;
+using DbDataKit.Views.Export;
 
 namespace DbDataKit.Views.Hosting;
 
@@ -40,6 +41,12 @@ public sealed class ViewsOptions
 
     /// <summary>The module's drain: one coordinator shared with the host, so its drain stops this module too. Null makes the module's own.</summary>
     public IDrainCoordinator? Drain { get; init; }
+
+    /// <summary>The exporter (plan 32 DBR15, <c>views.export</c>); null leaves export off, the module says so and keeps serving screens. The module checks it at start and reports it in the health.</summary>
+    public IReportExporter? Exporter { get; init; }
+
+    /// <summary>The folder with <c>print.js</c> and <c>print.css</c>, the visuals' print page (built from <c>web/visuals</c>); the module serves it to the page and to the browser's own print route. Null: the print page is not there and export is unavailable, saying so.</summary>
+    public string? PageAssets { get; init; }
 
     public TimeProvider Time { get; init; } = TimeProvider.System;
 }

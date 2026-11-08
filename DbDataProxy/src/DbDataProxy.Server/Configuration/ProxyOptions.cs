@@ -305,6 +305,58 @@ public sealed class ViewsModuleOptions
     /// <summary>How long, in seconds, the rows of a request are kept for the viewer who asked (their access and the request are the key). 0 turns the cache off.</summary>
     [ConfigKey(Min = 0, Max = 3600)]
     public int CacheSeconds { get; set; } = 30;
+
+    /// <summary>PDF export (plan 32 DBR15, <c>views.export</c>): off unless <c>Mode</c> is set; the module's health says "export unavailable" otherwise and screens keep working.</summary>
+    public ViewsExportOptions Export { get; set; } = new();
+}
+
+/// <summary>The <c>views.export</c> section (plan 32 DBR15, DBR16): which browser draws the PDF and the limits. Set <c>Mode</c> to turn export on.</summary>
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
+public sealed class ViewsExportOptions
+{
+    /// <summary><c>pinned</c> (the Chrome for Testing build <c>chromium.pin</c> names, fetched by <c>scripts/fetch-chromium</c>; a browser of another version is refused) or <c>system</c> (an installed Chrome or Edge at <c>Path</c>, its version recorded). Empty: export is off.</summary>
+    public string? Mode { get; set; }
+
+    /// <summary>The browser's executable. Pinned mode finds <c>.chromium/&lt;rid&gt;</c> next to <c>chromium.pin</c> when it is left out; system mode needs it.</summary>
+    public string? Path { get; set; }
+
+    /// <summary>The <c>chromium.pin</c> a pinned host reads its version from; default: the nearest one above the program.</summary>
+    public string? Pin { get; set; }
+
+    /// <summary>The folder with <c>print.js</c> and <c>print.css</c>, the visuals' print page (<c>npm run build:print -w @dbdatakit/visuals</c>).</summary>
+    public string? PageAssets { get; set; }
+
+    /// <summary>One export, browser start to PDF.</summary>
+    [ConfigKey(Min = 1, Max = 3600)]
+    public int DeadlineSeconds { get; set; } = 60;
+
+    [ConfigKey(Min = 1, Max = 5000)]
+    public int MaxPages { get; set; } = 500;
+
+    /// <summary>Exports at once on this host.</summary>
+    [ConfigKey(Min = 1, Max = 64)]
+    public int MaxConcurrent { get; set; } = 2;
+
+    /// <summary>Starts the browser without its sandbox: only where a container forces it (it is logged).</summary>
+    public bool NoSandbox { get; set; }
+
+    /// <summary>The bundled fonts (<c>.fonts</c> of <c>scripts/fetch-fonts</c>) and the host fonts an administrator lists.</summary>
+    public ViewsExportFontOptions Fonts { get; set; } = new();
+}
+
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
+public sealed class ViewsExportFontOptions
+{
+    /// <summary>The bundled set's folder; default: <c>.fonts</c> next to <c>fonts.pin</c>.</summary>
+    public string? Directory { get; set; }
+
+    public string? Pin { get; set; }
+
+    /// <summary>Host fonts a document may name.</summary>
+    public List<string> Allowed { get; set; } = [];
+
+    /// <summary>Host fonts the host promises: one that is missing stops export, naming it.</summary>
+    public List<string> Required { get; set; } = [];
 }
 
 [ConfigSchema(Naming = KeyNaming.Verbatim)]

@@ -1,0 +1,6 @@
+@import '../styles.css';
+
+/* The print page (plan 32 DBR15): the fonts are the bundled families the module declares in the page (DbDataKit Sans, Serif, Mono), never the system's. */
+html, body { margin: 0; padding: 0; background: #fff; font-family: var(--font-sans, 'DbDataKit Sans', sans-serif) }
+.vz { font-family: var(--font-sans, 'DbDataKit Sans', sans-serif) }
+#root { width: 100% }

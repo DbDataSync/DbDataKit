@@ -25,7 +25,9 @@ namespace DbDataKit.Views.Hosting;
 /// GET  /api/v1/dashboards                 {items: [{name, title, version}]}          (and /api/v1/reports)
 /// GET  /api/v1/dashboards/{name}          {kind, name, title, version, as_of, text, document, layouts: [{name, type, default}]}
 /// POST /api/v1/dashboards/{name}/render   {parameters?, layout?, only?, viewport?: {width, height}, medium?} gives the rendered-widgets document
-/// GET  /api/v1/dashboards/{name}/export   501 export_unavailable until DBR15 to DBR17
+/// GET  /api/v1/dashboards/{name}/export?format=pdf&amp;layout=&amp;p.name=   the PDF (501 export_unavailable naming the setting when the host has no browser)
+/// GET  /api/v1/dashboards/{name}/print?layout=   the print page as HTML (the browser's own print)
+/// GET  /api/v1/views/print/{file}         print.js, print.css and the bundled fonts (no token: code, no data)
 /// GET  /health, /health/ready, /health/live
 /// </code>
 /// A refusal is <c>{code, message}</c> with its status: 400 invalid, 401 unauthenticated, 403 denied (an app's token narrowed past the document's models), 404 not_found, 413 too large, 500, 501 export_unavailable, 503 draining.
@@ -63,6 +65,13 @@ public sealed class ViewsModule(ViewsOptions options, ViewsPublications publishe
             pollLoop = Task.Run(() => PollAsync(polling.Token), CancellationToken.None);
         }
         stopped = false;
+        if (options.Exporter is { } exporter)
+        {
+            // the browser is looked at once now (it starts, is the pinned version, the fonts match); a host that cannot export says why in /health and keeps serving screens
+            try { await exporter.CheckAsync(cancellationToken).ConfigureAwait(false); }
+            catch (Exception e) when (e is not (OperationCanceledException or OutOfMemoryException)) { loggers?.CreateLogger("Views").LogWarning(e, "The export browser could not be checked."); }
+            if (!exporter.Availability.Available) loggers?.CreateLogger("Views").LogWarning("Export is not available: {Reason}", exporter.Availability.Reason);
+        }
         if (options.Listen is { } listen) await ListenAsync(listen, cancellationToken).ConfigureAwait(false);
     }
 
@@ -162,19 +171,39 @@ public sealed class ViewsModule(ViewsOptions options, ViewsPublications publishe
                 return Json(answer, answer.Status == 503 ? new Dictionary<string, string> { ["Retry-After"] = "5" } : null);
             });
 
+        // the files of the print page (the visuals' print bundle and the bundled fonts): code and fonts, no data, so no token
+        routes.MapGet(ViewsApi.PrintAssetRoute + "{**file}", (string file) =>
+            api?.PrintAsset(file) is { } asset ? Results.Bytes(asset.Content, asset.ContentType) : Results.NotFound());
+
         foreach (var kind in ViewDefinitions.Kinds)
         {
             var prefix = "/api/v1/" + ViewsApi.Collection(kind);
             routes.MapGet(prefix, (Func<HttpContext, Task<IResult>>)(c => As(c, (who, trace) => Task.FromResult(api!.List(who, kind, trace)))));
             routes.MapGet(prefix + "/{name}", (Func<string, HttpContext, Task<IResult>>)((name, c) => As(c, (who, trace) => Task.FromResult(api!.Open(who, kind, name, trace)))));
             routes.MapGet(prefix + "/{name}/export", (Func<string, HttpContext, Task<IResult>>)((name, c) =>
-                As(c, (who, trace) => Task.FromResult(api!.Export(who, kind, name, c.Request.Query["format"].ToString() is { Length: > 0 } f ? f : null, c.Request.Query["layout"].ToString() is { Length: > 0 } l ? l : null, trace)))));
+                As(c, (who, trace) => api!.ExportAsync(who, kind, name, Query(c, "format"), Query(c, "layout"), Parameters(c), c.Connection.RemoteIpAddress?.ToString(), trace, c.RequestAborted))));
+            routes.MapGet(prefix + "/{name}/print", (Func<string, HttpContext, Task<IResult>>)((name, c) =>
+                As(c, (who, trace) => api!.PrintPageAsync(who, kind, name, Query(c, "layout"), Parameters(c), c.Connection.RemoteIpAddress?.ToString(), trace, c.RequestAborted))));
             routes.MapPost(prefix + "/{name}/render", (Func<string, HttpContext, Task<IResult>>)((name, c) => As(c, async (who, trace) =>
             {
                 var (body, refusal) = await ReadBodyAsync(c).ConfigureAwait(false);
                 return refusal ?? await api!.RenderAsync(who, kind, name, body, c.Connection.RemoteIpAddress?.ToString(), trace, c.RequestAborted).ConfigureAwait(false);
             })));
         }
+    }
+
+    private static string? Query(HttpContext c, string key) => c.Request.Query[key].ToString() is { Length: > 0 } v ? v : null;
+
+    /// <summary>The document's parameters from the address: <c>p.region=West</c>, repeated for a list (<c>p.region=West&amp;p.region=East</c>).</summary>
+    private static Dictionary<string, JsonNode?> Parameters(HttpContext c)
+    {
+        var values = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
+        foreach (var (key, list) in c.Request.Query)
+        {
+            if (!key.StartsWith("p.", StringComparison.Ordinal) || key.Length == 2) continue;
+            values[key[2..]] = list.Count == 1 ? JsonValue.Create(list[0]) : new JsonArray([.. list.Select(v => (JsonNode?)JsonValue.Create(v))]);
+        }
+        return values;
     }
 
     private async Task<IResult> As(HttpContext context, Func<ViewsPrincipal, string, Task<ViewsAnswer>> call)
@@ -226,10 +255,17 @@ public sealed class ViewsModule(ViewsOptions options, ViewsPublications publishe
         public async Task ExecuteAsync(HttpContext context)
         {
             context.Response.StatusCode = answer.Status;
-            context.Response.ContentType = "application/json; charset=utf-8";
+            context.Response.ContentType = answer.File?.ContentType ?? "application/json; charset=utf-8";
             context.Response.Headers.CacheControl = "no-store";
             context.Response.Headers.XContentTypeOptions = "nosniff";
+            if (answer.File?.FileName is { } fileName) context.Response.Headers.ContentDisposition = new System.Net.Mime.ContentDisposition { FileName = fileName, DispositionType = "attachment" }.ToString();
+            if (answer.File is { } file && file.ContentType.StartsWith("text/html", StringComparison.Ordinal)) context.Response.Headers.ContentSecurityPolicy = "default-src 'self' data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'none'";
             foreach (var (key, value) in (answer.Headers ?? new Dictionary<string, string>()).Concat(extra ?? new Dictionary<string, string>())) context.Response.Headers[key] = value;
+            if (answer.File is { } bytes)
+            {
+                await context.Response.Body.WriteAsync(bytes.Content, context.RequestAborted).ConfigureAwait(false);
+                return;
+            }
             await context.Response.WriteAsync(answer.Body.ToJsonString(), Encoding.UTF8, context.RequestAborted).ConfigureAwait(false);
         }
     }

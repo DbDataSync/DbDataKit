@@ -6,6 +6,7 @@ using DbDataKit.Serving;
 using DbDataKit.Serving.Semantic;
 using DbDataKit.State;
 using DbDataKit.State.Tests;
+using DbDataKit.Views.Export;
 using DbDataKit.Views.Tests;
 
 namespace DbDataKit.Views.Hosting.Tests;
@@ -70,7 +71,7 @@ internal sealed class ViewsHarness : IAsyncDisposable
 
     public static string ModelContent => new JsonObject { ["catalog"] = CatalogText }.ToJsonString();
 
-    public static async Task<ViewsHarness> StartAsync(StateEngines engines, string engine, TimeSpan? cacheTtl = null, IViewsAudit? audit = null, bool publish = true, bool useModuleClock = false, bool follow = true)
+    public static async Task<ViewsHarness> StartAsync(StateEngines engines, string engine, TimeSpan? cacheTtl = null, IViewsAudit? audit = null, bool publish = true, bool useModuleClock = false, bool follow = true, IReportExporter? exporter = null, string? pageAssets = null)
     {
         var h = new ViewsHarness();
         var database = engines.Provision(engine).Open([DefinitionsModule.Module, PayloadStore.Module, AuditModule.Module], new StateScope(Group: "main"), time: h.Clock);
@@ -88,7 +89,7 @@ internal sealed class ViewsHarness : IAsyncDisposable
         var options = new ViewsOptions
         {
             CacheTtl = cacheTtl ?? TimeSpan.Zero, Time = useModuleClock ? h.ModuleClock : TimeProvider.System, Follow = follow, PollInterval = TimeSpan.FromHours(1), DrainTimeout = TimeSpan.FromSeconds(20),
-            Resolver = new ResolverOptions { WidgetTimeout = TimeSpan.FromSeconds(20) },
+            Resolver = new ResolverOptions { WidgetTimeout = TimeSpan.FromSeconds(20) }, Exporter = exporter, PageAssets = pageAssets,
         };
         h.Module = new ViewsModule(options, h.Published, h.Callers, audit ?? new StateViewsAudit(h.Audit));
         await h.Module.StartAsync(services);
@@ -172,6 +173,15 @@ internal sealed class ViewsHarness : IAsyncDisposable
         using var response = await http.SendAsync(request);
         var text = await response.Content.ReadAsStringAsync();
         return new Reply((int)response.StatusCode, text.Length > 0 && text.StartsWith('{') ? JsonNode.Parse(text) : null, response.Headers);
+    }
+
+    /// <summary>A GET whose answer is not JSON (a PDF, a page, a font): the status, the bytes and the headers.</summary>
+    public async Task<(int Status, byte[] Bytes, HttpResponseMessage Response)> GetBytesAsync(string path, string? token)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, Address + path);
+        if (token is not null) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var response = await http.SendAsync(request);
+        return ((int)response.StatusCode, await response.Content.ReadAsByteArrayAsync(), response);
     }
 
     public Task<Reply> GetAsync(string path, string? token) => SendAsync(HttpMethod.Get, path, token);

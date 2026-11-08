@@ -87,6 +87,15 @@ The CI runners are small (two cores, Windows and Linux), run many jobs at once, 
 | --- | --- | --- |
 | `Unable to load shared library 'duckdb'` (or a validator refusing every publish with `The model ... does not load: Object reference not set`) in a test project that is not one of the semantic suites | the engine's catalog loader (`CatalogLoader`, used by the catalog check of a published dashboard or report) needs `libduckdb` beside the test assembly | the project imports `build\DuckDb.Native.targets` (`DbDataKit.Views.Tests`, `DbDataKit.Views.Hosting.Tests`); CI runs `scripts/fetch-duckdb` first, a session runs it once (or copies `.duckdb/<rid>/libduckdb.so`) |
 
+### PDF export (Chromium)
+
+| Signature | Cause | Fix |
+| --- | --- | --- |
+| `Failed to launch browser! ... Multiple targets are not supported in headless mode` | PuppeteerSharp joins `LaunchOptions.Args` into one command line, so an argument with spaces (`--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE print.localhost`) is split and the pieces are read as pages | give such an argument its own quotes (`ChromiumExporter`) |
+| a test that starts the browser hangs and the run never ends, `chrome` processes with `--user-data-dir=.../dbdatakit-export-...` stay | an export given up (deadline, cancel) while the browser was still starting left the browser running, and it holds the test host's output open | `LaunchAsync` closes the browser a given-up launch still starts (`ContinueWith`); never wait for a launch without an owner for its result |
+| `No usable sandbox` or the browser exits at once on a Linux runner or as root | the kernel forbids user namespaces (Ubuntu 24.04 runners) or the user is root | `views.export.no_sandbox: true` (logged); the CI job sets `DBDATA_TEST_NOSANDBOX=true` |
+| exporter tests "skipped" in a job that should run them | no browser found | the pinned job sets `DBDATA_TEST_CHROMIUM` and `DBDATA_REQUIRE_CHROMIUM=true`, which turns the skip into a failure |
+
 ### Merging `main` into a branch
 
 | Signature | Cause | Fix |

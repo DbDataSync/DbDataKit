@@ -271,7 +271,7 @@ public sealed class ViewsModuleTests : IDisposable
         await h.GetAsync("/api/v1/dashboards/missing", "west");
         var export = await h.GetAsync("/api/v1/dashboards/sales/export?format=pdf&layout=desk", "all");
         Assert.Equal((501, "export_unavailable"), (export.Status, export.Object["code"]!.GetValue<string>()));
-        Assert.Contains("DBR15", export.Object["message"]!.GetValue<string>());
+        Assert.Contains("views.export", export.Object["message"]!.GetValue<string>());
 
         var rows = Audited(h).Select(r => r.Entry).ToList();
         Assert.Equal(["view.list", "view.open", "view.render", "view.open", "view.export"], rows.Select(r => r.Verb));
