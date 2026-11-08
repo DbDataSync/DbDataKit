@@ -82,6 +82,13 @@ public sealed class AppEgressTests : IDisposable
     }
 
     [Fact]
+    public void A_trusted_portals_document_may_frame_this_hosts_pages_and_nothing_else_unless_approved()
+    {
+        Assert.Contains("frame-src 'self';", EgressPolicy.Build(AppEgress.None, sandboxed: false, framesSelf: true));
+        Assert.Contains("frame-src 'none';", EgressPolicy.Build(AppEgress.None, sandboxed: false));
+    }
+
+    [Fact]
     public void The_policy_starts_from_self_and_allows_only_what_is_in_force()
     {
         var plain = EgressPolicy.Build(AppEgress.None, sandboxed: false);

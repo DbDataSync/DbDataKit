@@ -28,7 +28,15 @@ public sealed class AppSite(AppInstanceStore instances, Func<string, AppEgress>?
     };
 
     /// <summary>The answer for <paramref name="subpath"/> (what follows <c>/apps/&lt;instance&gt;/_app/</c>, without a query string).</summary>
-    public AppResponse Get(string instanceName, string subpath)
+    public AppResponse Get(string instanceName, string subpath) => Get(instanceName, subpath, hostOrigin: false);
+
+    /// <summary>
+    /// The entry document of an approved trusted portal, served as the page at the portal's own address, on the host's origin (plan 26 section 4a, AP16): no <c>sandbox</c> directive, and its frames may be this host's own pages
+    /// (the apps it mounts). The caller has checked the approval; the document's other files are the ordinary bundle.
+    /// </summary>
+    public AppResponse PortalPage(string instanceName) => Get(instanceName, "", hostOrigin: true);
+
+    private AppResponse Get(string instanceName, string subpath, bool hostOrigin)
     {
         var instance = instances.Resolve(instanceName, channel);
         if (instance is null) return Text(404, "No such app.");
@@ -51,7 +59,7 @@ public sealed class AppSite(AppInstanceStore instances, Func<string, AppEgress>?
         var egress = EgressPolicy.Effective(instance.Manifest.Egress ?? AppEgress.None, approvedEgress?.Invoke(instanceName) ?? AppEgress.None);
         var headers = new Dictionary<string, string>
         {
-            ["Content-Security-Policy"] = EgressPolicy.Build(egress, sandboxed: instance.Manifest.Origin == AppOrigin.Sandbox),
+            ["Content-Security-Policy"] = EgressPolicy.Build(egress, sandboxed: !hostOrigin && instance.Manifest.Origin == AppOrigin.Sandbox, framesSelf: hostOrigin),
             ["X-Content-Type-Options"] = "nosniff",
             ["Referrer-Policy"] = "no-referrer",
             ["Cache-Control"] = "no-cache",

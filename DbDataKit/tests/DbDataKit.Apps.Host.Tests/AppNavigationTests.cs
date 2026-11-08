@@ -105,6 +105,14 @@ public sealed class AppNavigationTests : IDisposable
     }
 
     [Fact]
+    public void A_notice_is_said_on_the_page_encoded()
+    {
+        var page = Encoding.UTF8.GetString(AppShell.Page("alpha", "A", new AppShell.Header("Ada", [], null, "Not <approved>. Showing the default portal instead.")).Body);
+        Assert.Contains("role=\"status\"", page);
+        Assert.Contains("Not &lt;approved&gt;. Showing the default portal instead.", page);
+    }
+
+    [Fact]
     public void Chrome_none_has_no_header_and_the_manifest_says_so()
     {
         Assert.Equal(AppChrome.None, store.Resolve("alpha")!.Manifest.Chrome);

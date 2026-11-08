@@ -26,7 +26,7 @@ public static class AppShell
     public sealed record SlotApp(string Instance, string Title);
 
     /// <summary>The shell's header: who is signed in and the menus of the sets the instance belongs to. Null where the app's manifest says <c>chrome: none</c>. With a <see cref="Portal"/> the portal's menu and look replace the sets.</summary>
-    public sealed record Header(string Person, IReadOnlyList<Menu> Menus, PortalLook? Portal = null);
+    public sealed record Header(string Person, IReadOnlyList<Menu> Menus, PortalLook? Portal = null, string? Notice = null);
 
     /// <summary>The longest route the shell takes from a frame or an address; a longer one is dropped.</summary>
     public const int MaximumRoute = 512;
@@ -125,7 +125,7 @@ public static class AppShell
     private static string Document(string title, Header? header, string content)
     {
         if (header?.Portal is { } look) return PortalDocument(title, header, look, content);
-        var bar = header is null ? "" : HeaderHtml(header);
+        var bar = header is null ? "" : HeaderHtml(header) + NoticeHtml(header);
         return $$"""
             <!doctype html>
             <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -174,7 +174,7 @@ public static class AppShell
             iframe.slot{flex:none;width:auto}iframe.slot-header{height:40px;width:260px}iframe.slot-footer{height:36px;width:100%;display:block}iframe.slot-aside{width:280px;border-left:1px solid #8884}iframe.slot-home{height:320px;width:100%;flex:none}
             footer.portal{padding:8px 16px;border-top:1px solid #8884;opacity:.75}footer.portal a{color:inherit}</style>
             </head><body class="{{(look.SideMenu ? "side" : "top")}}">
-            {{head}}
+            {{head}}{{NoticeHtml(header)}}
             <div class="row">{{(look.SideMenu ? nav : "")}}<main>
             {{content}}
             </main>{{SlotFrame(look, "aside")}}</div>
@@ -224,6 +224,10 @@ public static class AppShell
         }
         html.Append("</ul>");
     }
+
+    /// <summary>Why the page is not what was asked for (a trusted portal without an approval is shown as the default portal), said where the person reads it.</summary>
+    private static string NoticeHtml(Header header) =>
+        header.Notice is { Length: > 0 } notice ? $"<p class=\"notice\" role=\"status\" style=\"margin:0;padding:8px 16px;background:#fd03;border-bottom:1px solid #8884\">{WebUtility.HtmlEncode(notice)}</p>" : "";
 
     private static string HeaderHtml(Header header)
     {

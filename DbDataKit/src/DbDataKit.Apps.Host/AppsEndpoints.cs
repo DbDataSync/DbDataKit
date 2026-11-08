@@ -21,7 +21,13 @@ public static class AppsEndpoints
 
     public static IEndpointRouteBuilder MapApps(this IEndpointRouteBuilder app, AppInstanceStore instances, AppSite site, OpenIdClient client, AppSessions sessions, AppTokenBroker broker, AppDataGateway? data = null, AppStorage? storage = null, AppApprovalStore? approvals = null)
     {
-        app.MapGet("/apps/{instance}/_app/{**path}", async (HttpContext context, string instance, string? path) => await Write(context, site.Get(instance, path ?? "")));
+        app.MapGet("/apps/{instance}/_app/{**path}", async (HttpContext context, string instance, string? path) =>
+        {
+            // The code that would run on the host's origin when opened by its address (a trusted portal's, or an app of origin `own`) is not served without an approval for these exact bytes. A sandboxed document is served as before:
+            // its policy then carries nothing the administrator did not approve, and it has no origin to abuse.
+            if (instances.Resolve(instance) is { Manifest: { Trust: AppTrust.Trusted } and ({ Kind: AppKind.Portal } or { Origin: AppOrigin.Own }) } resolved && Unapproved(approvals, resolved) is { } why) { await Text(context, 403, why); return; }
+            await Write(context, site.Get(instance, path ?? ""));
+        });
 
         // what the app can reach and who approved it; for anyone who may open the app
         app.MapGet("/apps/{instance}/_about", async (HttpContext context, string instance) =>
@@ -130,6 +136,15 @@ public static class AppsEndpoints
                 return;
             }
 
+            // A portal with code of its own runs on this host's origin, so only with an approval for these exact bytes (AP16): then its page is its own document, which holds the session, asks for tokens and frames what it mounts
+            // (its calls carry its approval: the token broker and the data gateway). Without one the person gets the default portal (the suite's own shell) and the reason, never the code.
+            string? notice = null;
+            if (portal is { Manifest: { Trust: AppTrust.Trusted, Entry: not null } })
+            {
+                if (Unapproved(approvals, portal) is not { } notRun) { await Write(context, site.PortalPage(instance)); return; }
+                notice = $"{notRun} Showing the default portal instead.";
+            }
+
             // a portal's home is for anyone signed in; what it offers is filtered by their roles. An app, or a mount, needs a role on the app.
             var shown = mount is null ? resolved : instances.Resolve(mount.App);
             if (shown is null) { await Text(context, 404, "No such app."); return; }
@@ -138,17 +153,19 @@ public static class AppsEndpoints
                 if (session.RolesOn(shown.Instance.Name).Count == 0) { await Text(context, 403, "You are signed in, but the identity home gives you no role on this app."); return; }
             }
 
-            if (Unapproved(approvals, shown) is { } unapproved) { await Text(context, 403, unapproved); return; }
+            // (the unapproved code portal itself is the default portal's home, not something to refuse)
+            if ((notice is null || shown != resolved) && Unapproved(approvals, shown) is { } unapproved) { await Text(context, 403, unapproved); return; }
 
             // ?embed serves the app without the header, for a page that frames it; only the origins the instance names may do that
             var embed = context.Request.Query.ContainsKey("embed");
             var origins = AppInstanceStore.EmbedOrigins(shown.Instance.Settings.GetValueOrDefault(AppInstanceStore.EmbedSetting), out _) ?? [];
 
             // the portal that frames this page: the one being visited, or the one the instance's `portal` setting names
-            var framing = portal ?? (shown.Instance.Settings.GetValueOrDefault(PortalChrome.PortalSetting) is { } named && instances.Resolve(named) is { Manifest.Kind: AppKind.Portal } named2 ? named2 : null);
+            var framing = notice is not null ? null : portal ?? (shown.Instance.Settings.GetValueOrDefault(PortalChrome.PortalSetting) is { } named && instances.Resolve(named) is { Manifest.Kind: AppKind.Portal } named2 ? named2 : null);
             AppShell.Header? header = shown.Manifest.Chrome == AppChrome.None || embed ? null
                 : framing is not null ? new AppShell.Header(PersonOf(session), [], PortalChrome.Look(instances, framing, session, mount?.App))
-                : HeaderOf(instances, session, instance);
+                : HeaderOf(instances, session, mount?.App ?? instance);
+            if (notice is not null) header = (header ?? new AppShell.Header(PersonOf(session), [])) with { Notice = notice };
             if (portal is not null && mount is null)
                 await Write(context, AppShell.PortalHome(TitleOf(resolved), header ?? new AppShell.Header(PersonOf(session), [], PortalChrome.Look(instances, portal, session, null)), PortalChrome.Tiles(instances, portal, session), origins));
             else

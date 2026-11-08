@@ -58,6 +58,7 @@ public sealed class AppDataGatewayTests : IDisposable
         Assert.Equal("{\"ok\":true}", Encoding.UTF8.GetString(response.Body));
         Assert.Equal("*", response.Headers["Access-Control-Allow-Origin"]);   // the route's own CORS, whatever the answer carried
         var call = Assert.Single(data.Seen);
+        Assert.Null(call.Via);   // a sandboxed app has no approval to name
         Assert.Equal((AppDataRoute.Rows, "territories", "territory", "acme-data"), (call.Route, call.Model, call.Entity, call.Copy));   // the instance's binding chose the copy
         Assert.Equal(("user-7", "Ada", "acme"), (call.SubjectId, call.SubjectName, call.App));
         Assert.Equal(["territories/territory:write", "territories/region:read"], call.Scope);
@@ -125,7 +126,9 @@ public sealed class AppDataGatewayTests : IDisposable
         Assert.Equal(200, (await Read()).Status);
         approvals.Revoke(approval.Id, "grace");
         Assert.Equal(403, (await Read()).Status);   // within the token's five minutes
-        Assert.Single(data.Seen);
+        // the call that ran carries the approval for the servers' audit: the app, its version, the approver and the approval's id
+        Assert.Equal(approval.AuditLabel, Assert.Single(data.Seen).Via);
+        Assert.Contains("approved by grace", approval.AuditLabel);
     }
 
     [Fact]
