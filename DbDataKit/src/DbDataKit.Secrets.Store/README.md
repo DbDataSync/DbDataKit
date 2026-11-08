@@ -1,7 +1,17 @@
 # DbDataKit.Secrets.Store
 
-The shared secret store (plan 13, W13): secrets encrypted in a file, with the key kept where the platform keeps keys safe. This package so far holds the **keys**; the encrypted file store
-(`EncryptedFileSecretStore`), rotation, export/import and the `secret` commands are the next slices.
+The shared secret store (plan 13, W13): secrets encrypted in a file, with the key kept where the platform keeps keys safe. It works the same for a service, a command line and a container and needs no operating-system keychain (which is per user and does not suit services).
+
+## The store
+
+`EncryptedFileSecretStore` is `<data>/secrets/secrets.yaml`: `name -> { v: 1, key: <key id>, value: <base64 of a 96-bit nonce, the ciphertext and the 128-bit tag>, updated }`. It is outside the git-tracked configuration directory (or ignored by it), so no secret, even encrypted, is in a history; configuration files hold only references (`secret:dbdata:proxy:datasource:erp:password`).
+
+- **Cipher**: AES-256-GCM, a fresh random nonce per write, the secret's **name as associated data**, so a value copied to another name fails to decrypt.
+- **Writes** are atomic (a restricted temporary file replaces the store) under a lock that holds across processes; the file is restricted before content is written.
+- **Reading**: it is an `ISecretProvider` and answers `secret:` references in the resolver chain ahead of `env:` and `file:`; inline `dpapi:` values resolve too (Windows).
+- **Rotation** (`secret rotate-key`): a new data key, every value encrypted again, the old key deleted after the last value is rewritten; an interrupted rotation is finished by the next run.
+- **Moving a server** (`secret export` and `secret import`): the values are re-encrypted under a passphrase (PBKDF2-SHA256, 600,000 rounds, random salt, name as associated data; an export that says fewer rounds is refused). The key file is never copied by a command.
+- **No command prints a value** (see `DbDataKit.Secrets.Cli`).
 
 ## Where the key lives
 

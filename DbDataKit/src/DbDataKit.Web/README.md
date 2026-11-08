@@ -1,6 +1,20 @@
 # DbDataKit.Web
 
-Trust between a console and the servers it manages (plan 13, W12). So far: the token.
+Trust between a console and the servers it manages (plan 13, W12).
+
+## Rules
+
+* **The client calls the server; a server never calls a console.** A server needs no credentials for any console and keeps running (schedules, replication, queries) when every console is gone; monitoring, notifications and run history are pulled by the console. A server calls *another* server only as that server's paired client, for one purpose (a Build server publishing into a Proxy: see `OwnerScope`), never in a cycle.
+* **A server can be paired with several clients** (a team console and an operations console, a standby, another server). Each pairing has its own key and role ceiling and is revoked on its own; nothing assumes the other end is a console.
+* **The server is the security boundary.** A console hides what a user may not do, but the server checks every call itself and never trusts the UI.
+* **Transport.** The management API is always HTTPS on a listener of its own (on the Proxy never the Flight port, never on the query path). It binds to loopback when the console is on the same machine; a bind address that is not loopback and not covered by TLS gives a start-up warning. Certificates are self-signed by default because the client pins the fingerprint at pairing.
+* **Roles follow the command's effect class** (`ManagementAuthorization.RoleFor`): offline-only and target-read-only commands need Viewer; repo-file writes (a project's files and commits) Author; target data writes (run now, pause, cancel, restart) Operator; tracking-table changes and configuration (connections, data sources, replications, schedules, certificates) Admin; anything that changes a target's structure or data under a plan, Approver. The effective role is the lower of the user's role in the token and the client's ceiling; a long operation is authorised when it starts and runs to its end under that user.
+* **Several clients at once.** Every write carries the version it was based on (`WriteGuard`) and a stale one is refused with the current version, never merged silently. The server audits the client id and the user of every change, and authors its configuration commits as `user name <console name>`.
+* **Secrets.** No console holds database credentials. A secret typed into a console is sent once to the server's management API, which stores it in its own secret store; the console keeps only the reference.
+* **A browser reaches a server only through the console** (the console relays every call; see `DbDataConsole`'s README), so servers stay off the browser's network and pinned self-signed certificates work.
+* **Compatibility.** A console and a server release on their own, so they can differ in version: see "Management API version" below.
+
+## The token
 
 * `ConsoleTokenIssuer` (the console): signs a short-lived (default 5 minutes, at most 10) token with its Ed25519 key. Claims: `iss` (console id), `aud` (the server's instance id), `sub` and `name`, `kind` (`user` or `console`),
   `roles` and per-project `projects`, `jti` (unique), `iat`, `exp`. Format: `base64url(header).base64url(claims).base64url(signature)` with header `{"alg":"EdDSA","typ":"dbdata-console","kid":<key fingerprint>}`.

@@ -1,6 +1,6 @@
 # Plan 13a: the slices of plan 13
 
-Status: **proposed** (2026-10-21). This breaks [plan 13](13-suite-standardization.md) into pull requests. The workstream sections of plan
+Status: **proposed** (2026-10-21). This breaks [plan 13](../architecture.md) into pull requests. The workstream sections of plan
 13 say *why*; this says *in what pieces*.
 
 ## Rules for every slice
