@@ -32,6 +32,11 @@ public static class SchemaStore
             var file = resource[..^".schema.json".Length];
             all[file[(file.LastIndexOf('.') + 1)..]] = schema;
         }
+
+        // the checks of a catalog are check/1 entries (23a FQ01): the catalog schema refers to the check schema by its id
+        var checks = JsonSchema.FromText(DbDataKit.Quality.CheckSchema.Text());
+        SchemaRegistry.Global.Register(checks);
+        all["check"] = checks;
         return all;
     }
 

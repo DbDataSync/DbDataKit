@@ -1,4 +1,5 @@
 using DbDataKit.Config.Yaml;
+using DbDataKit.Quality;
 
 namespace DbDataKit.DataModel.Tests;
 
@@ -44,10 +45,12 @@ public sealed class DataModelFormat2Tests
     [Fact]
     public void A_format_2_file_with_each_key_of_the_cache_section_loads()
     {
-        var result = Load(Model(2, "cache: {enabled: true, ttl: 10m, scope: rules, dataset: region}\nchecks:\n  - {kind: freshness}"));
+        var result = Load(Model(2, "cache: {enabled: true, ttl: 10m, scope: rules, dataset: region}\nchecks:\n  - {id: region_fresh, kind: freshness, dataset: region, max_age: 6h, severity: block}"));
         Assert.True(result.Ok, string.Join("\n", result.Diagnostics));
         Assert.Equal(new CacheSection(true, TimeSpan.FromMinutes(10), CacheScope.Rules, "region"), result.Model!.Cache);
-        Assert.Equal(1, result.Model.Checks);
+        var check = Assert.Single(result.Model.Checks!);
+        Assert.Equal(("region_fresh", CheckKind.Freshness, CheckSeverity.Block), (check.Id, check.Kind, check.Severity));
+        Assert.Equal(TimeSpan.FromHours(6), ((FreshnessParameters)check.Parameters).MaxAge);
     }
 
     [Fact]
@@ -75,6 +78,20 @@ public sealed class DataModelFormat2Tests
         Assert.False(result.Ok);
         var error = Assert.Single(result.Diagnostics);
         Assert.Equal(("sales.model.yaml", 4), (error.Path, error.Line));
+        Assert.Contains(says, error.Message);
+    }
+
+    [Theory]
+    [InlineData("checks:\n  - {id: a, kind: sql, dataset: region}", 5, "is not a kind of check")]
+    [InlineData("checks:\n  - {id: a, kind: range, dataset: region, column: code, min: 5, max: 1}", 5, "is above `max`")]
+    [InlineData("checks:\n  - {id: a, kind: referential, dataset: region, column: code}", 5, "names no target")]
+    [InlineData("checks:\n  - {id: a, kind: not_null, dataset: region, column: code, severity: high}", 5, "`severity` is `high`")]
+    public void Each_bad_check_is_refused_with_file_and_line(string extra, int line, string says)
+    {
+        var result = Load(Model(2, extra));
+        Assert.False(result.Ok);
+        var error = Assert.Single(result.Diagnostics);
+        Assert.Equal(("sales.model.yaml", line), (error.Path, error.Line));
         Assert.Contains(says, error.Message);
     }
 

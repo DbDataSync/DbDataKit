@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Quality</RootNamespace>
+    <PackageId>DbDataKit.Quality</PackageId>
+    <Description>The check/1 data quality check model of the suite: the seven kinds (not null, unique, accepted values, range, referential, freshness, row count change), their attachment to a dataset or a column by lineage identity, severity and on_error, a strict loader with file and line, and its JSON Schema. No evaluation.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <EmbeddedResource Include="schemas\*.schema.json" />
+    <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
+  </ItemGroup>
+</Project>

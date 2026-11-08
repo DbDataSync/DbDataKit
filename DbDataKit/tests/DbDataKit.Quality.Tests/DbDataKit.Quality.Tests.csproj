@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="JsonSchema.Net" />
+    <Using Include="Xunit" />
+    <ProjectReference Include="..\..\src\DbDataKit.Quality\DbDataKit.Quality.csproj" />
+    <!-- the identities a check names are the ones the lineage graph makes (plan 23a D3); the library itself does not depend on it -->
+    <ProjectReference Include="..\..\src\DbDataKit.Lineage\DbDataKit.Lineage.csproj" />
+  </ItemGroup>
+</Project>

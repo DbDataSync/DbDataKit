@@ -11,6 +11,7 @@
     <ProjectReference Include="..\DbDataKit.Config\DbDataKit.Config.csproj" />
     <ProjectReference Include="..\DbDataKit.Secrets.Abstractions\DbDataKit.Secrets.Abstractions.csproj" />
     <ProjectReference Include="..\DbDataKit.Dialect.Abstractions\DbDataKit.Dialect.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Quality\DbDataKit.Quality.csproj" />
     <InternalsVisibleTo Include="DbDataKit.Connections.Abstractions.Tests" />
   </ItemGroup>
 </Project>

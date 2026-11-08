@@ -53,9 +53,9 @@
     },
     "checks": {
       "type": "array",
-      "description": "Format 2 of the semantic package (plan 24a UC03): the place of the model's checks. Plan 23's check model gives the entries their keys (23a FQ01); until then they are objects whose keys are not read.",
+      "description": "Format 2 of the semantic package (plan 24a UC03): the model's data quality checks, check/1 entries (plan 23a FQ01). Each names the table it is about in dataset (a table of this catalog, or a lineage identity). The loader also refuses what a schema cannot say: a range with min above max, a check id used twice, a referential check with another number of columns than its target.",
       "items": {
-        "type": "object"
+        "$ref": "https://example.internal/dbdatakit/check.schema.json#/$defs/check"
       }
     },
     "timezone": {

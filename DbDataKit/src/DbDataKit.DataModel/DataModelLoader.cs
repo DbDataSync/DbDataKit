@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using DbDataKit.Config.Yaml;
 using DbDataKit.Dialect;
+using DbDataKit.Quality;
 
 namespace DbDataKit.DataModel;
 
@@ -83,7 +84,7 @@ public static class DataModelLoader
             CheckReferences(entities);
             var cache = map.Get("cache") is { } cacheNode && _schemaVersion >= 2 ? CacheSection.Read(cacheNode, File, Diagnostics) : null;
             if (cache is { Enabled: true } enabled) CheckCacheable(map.Get("cache")!, enabled, entities);
-            int? checks = map.Get("checks") is { } checksNode && _schemaVersion >= 2 ? ChecksPlace.Read(checksNode, File, Diagnostics) : null;
+            var checks = map.Get("checks") is { } checksNode && _schemaVersion >= 2 ? CheckSection.Read(checksNode, File, Diagnostics) : null;
             if (name is null || connection is null) return null;
             return new DataModel(name, title, connection, approval, entities, instances, AgentWritesOf(map), _schemaVersion, cache, checks);
         }

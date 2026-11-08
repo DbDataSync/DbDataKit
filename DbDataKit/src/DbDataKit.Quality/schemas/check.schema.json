@@ -1,0 +1,559 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.internal/dbdatakit/check.schema.json",
+  "title": "Checks (check/1)",
+  "description": "A check/1 file: the seven kinds of data quality check. The same list is the checks section of format 2 of a definition (the semantic package, DbDataStore's model, the serving data source); $defs.check is one entry of it.",
+  "type": "object",
+  "required": [
+    "schema",
+    "checks"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "check/1"
+    },
+    "dataset": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The dataset the checks that name none are about."
+    },
+    "checks": {
+      "$ref": "#/$defs/checks"
+    }
+  },
+  "$defs": {
+    "checks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/check"
+      }
+    },
+    "check": {
+      "description": "One check of check/1. The loader also refuses what a schema cannot say: a range with min above max, a check id used twice, a dataset left out where no default exists, a referential check with another number of columns than its target.",
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "No value of the columns is null.",
+          "required": [
+            "id",
+            "kind"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$",
+              "description": "Names the check in its results and statuses; unique within a section."
+            },
+            "dataset": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The lineage identity of the dataset or entity the check is about (scheme://server/name), or its name inside the definition that holds the check. A check file may give a default for all its checks."
+            },
+            "severity": {
+              "enum": [
+                "warn",
+                "block"
+              ],
+              "default": "warn",
+              "description": "warn tells the owner; block stops the dependents of the dataset."
+            },
+            "on_error": {
+              "enum": [
+                "alert",
+                "block"
+              ],
+              "default": "alert",
+              "description": "What a check that cannot run does (its result is error): alert, or block all the same."
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "const": "not_null"
+            },
+            "column": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The one column the check is about."
+            },
+            "columns": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "The columns the check is about."
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "column"
+              ]
+            },
+            {
+              "required": [
+                "columns"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "description": "No combination of the columns' values occurs twice.",
+          "required": [
+            "id",
+            "kind"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$",
+              "description": "Names the check in its results and statuses; unique within a section."
+            },
+            "dataset": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The lineage identity of the dataset or entity the check is about (scheme://server/name), or its name inside the definition that holds the check. A check file may give a default for all its checks."
+            },
+            "severity": {
+              "enum": [
+                "warn",
+                "block"
+              ],
+              "default": "warn",
+              "description": "warn tells the owner; block stops the dependents of the dataset."
+            },
+            "on_error": {
+              "enum": [
+                "alert",
+                "block"
+              ],
+              "default": "alert",
+              "description": "What a check that cannot run does (its result is error): alert, or block all the same."
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "const": "unique"
+            },
+            "column": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The one column the check is about."
+            },
+            "columns": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "The columns the check is about."
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "column"
+              ]
+            },
+            {
+              "required": [
+                "columns"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "description": "Every non-null value of the column is one of the values.",
+          "required": [
+            "id",
+            "kind",
+            "column",
+            "values"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$",
+              "description": "Names the check in its results and statuses; unique within a section."
+            },
+            "dataset": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The lineage identity of the dataset or entity the check is about (scheme://server/name), or its name inside the definition that holds the check. A check file may give a default for all its checks."
+            },
+            "severity": {
+              "enum": [
+                "warn",
+                "block"
+              ],
+              "default": "warn",
+              "description": "warn tells the owner; block stops the dependents of the dataset."
+            },
+            "on_error": {
+              "enum": [
+                "alert",
+                "block"
+              ],
+              "default": "alert",
+              "description": "What a check that cannot run does (its result is error): alert, or block all the same."
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "const": "accepted_values"
+            },
+            "column": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The column the check is about."
+            },
+            "values": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "Every non-null value is between min and max (numbers, or dates as 2026-01-31).",
+          "required": [
+            "id",
+            "kind",
+            "column"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$",
+              "description": "Names the check in its results and statuses; unique within a section."
+            },
+            "dataset": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The lineage identity of the dataset or entity the check is about (scheme://server/name), or its name inside the definition that holds the check. A check file may give a default for all its checks."
+            },
+            "severity": {
+              "enum": [
+                "warn",
+                "block"
+              ],
+              "default": "warn",
+              "description": "warn tells the owner; block stops the dependents of the dataset."
+            },
+            "on_error": {
+              "enum": [
+                "alert",
+                "block"
+              ],
+              "default": "alert",
+              "description": "What a check that cannot run does (its result is error): alert, or block all the same."
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "const": "range"
+            },
+            "column": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The column the check is about."
+            },
+            "min": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}:[0-9]{2}Z?)?$"
+                }
+              ]
+            },
+            "max": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}:[0-9]{2}Z?)?$"
+                }
+              ]
+            }
+          },
+          "anyOf": [
+            {
+              "required": [
+                "min"
+              ]
+            },
+            {
+              "required": [
+                "max"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "description": "Every value of the columns has a row in the target dataset.",
+          "required": [
+            "id",
+            "kind",
+            "references"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$",
+              "description": "Names the check in its results and statuses; unique within a section."
+            },
+            "dataset": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The lineage identity of the dataset or entity the check is about (scheme://server/name), or its name inside the definition that holds the check. A check file may give a default for all its checks."
+            },
+            "severity": {
+              "enum": [
+                "warn",
+                "block"
+              ],
+              "default": "warn",
+              "description": "warn tells the owner; block stops the dependents of the dataset."
+            },
+            "on_error": {
+              "enum": [
+                "alert",
+                "block"
+              ],
+              "default": "alert",
+              "description": "What a check that cannot run does (its result is error): alert, or block all the same."
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "const": "referential"
+            },
+            "column": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The one column the check is about."
+            },
+            "columns": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "The columns the check is about."
+            },
+            "references": {
+              "type": "object",
+              "required": [
+                "dataset"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "dataset": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The dataset the values must exist in."
+                },
+                "column": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "columns": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "oneOf": [
+                {
+                  "required": [
+                    "column"
+                  ]
+                },
+                {
+                  "required": [
+                    "columns"
+                  ]
+                }
+              ]
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "column"
+              ]
+            },
+            {
+              "required": [
+                "columns"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The newest data is no older than max_age; by the column, or by the last successful load when no column is named.",
+          "required": [
+            "id",
+            "kind",
+            "max_age"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$",
+              "description": "Names the check in its results and statuses; unique within a section."
+            },
+            "dataset": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The lineage identity of the dataset or entity the check is about (scheme://server/name), or its name inside the definition that holds the check. A check file may give a default for all its checks."
+            },
+            "severity": {
+              "enum": [
+                "warn",
+                "block"
+              ],
+              "default": "warn",
+              "description": "warn tells the owner; block stops the dependents of the dataset."
+            },
+            "on_error": {
+              "enum": [
+                "alert",
+                "block"
+              ],
+              "default": "alert",
+              "description": "What a check that cannot run does (its result is error): alert, or block all the same."
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "const": "freshness"
+            },
+            "column": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The column the check is about."
+            },
+            "max_age": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,5}(s|m|h|d)$",
+              "description": "How old the newest data may be: 90m, 6h, 1d."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "The row count has not changed by more than the limits since the previous successful evaluation.",
+          "required": [
+            "id",
+            "kind"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$",
+              "description": "Names the check in its results and statuses; unique within a section."
+            },
+            "dataset": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The lineage identity of the dataset or entity the check is about (scheme://server/name), or its name inside the definition that holds the check. A check file may give a default for all its checks."
+            },
+            "severity": {
+              "enum": [
+                "warn",
+                "block"
+              ],
+              "default": "warn",
+              "description": "warn tells the owner; block stops the dependents of the dataset."
+            },
+            "on_error": {
+              "enum": [
+                "alert",
+                "block"
+              ],
+              "default": "alert",
+              "description": "What a check that cannot run does (its result is error): alert, or block all the same."
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "const": "row_count_change"
+            },
+            "max_increase_percent": {
+              "type": "number",
+              "minimum": 0,
+              "description": "The row count may grow by at most this many percent since the previous successful evaluation."
+            },
+            "max_decrease_percent": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            }
+          },
+          "anyOf": [
+            {
+              "required": [
+                "max_increase_percent"
+              ]
+            },
+            {
+              "required": [
+                "max_decrease_percent"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
