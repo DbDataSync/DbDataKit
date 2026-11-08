@@ -286,4 +286,42 @@ public class ProjectPublishOnRunnerTests
         Assert.Equal(TaskOwners.Old, DbDataBuild.Cli.Server.BuildScheduleSettings.Read(serverDirectory).OwnerOf("sales", "sqlserver", "hourly"));
         Assert.NotNull(new ModuleJobStateStore(DbDataBuild.Cli.Server.BuildSchedulerSchema.Open(serverDirectory), DbDataBuild.Cli.Server.BuildSchedulerSchema.Service).Get("sales", "sqlserver/hourly")!.HandledUpTo);   // and the position came back
     }
+
+    [Fact]
+    public async Task Pause_resume_and_run_now_of_a_plan_the_runner_owns_are_the_runners_through_the_clients_control()
+    {
+        var project = Project();
+        var client = Path.Combine(project, "client");
+        await using var runner = await Runner.StartAsync();
+        var published = Data(Publish(project, client, "--server", runner.Url, "--code", runner.Code(), "--channel", "dev", "--bind", "sqlserver=wh_dev"));
+        await runner.WaitActiveAsync("sales", "dev", published["version"]!.GetValue<int>());
+        var serverDirectory = Path.Combine(project, "build-server");
+        Directory.CreateDirectory(serverDirectory);
+        new DbDataBuild.Cli.Server.ProjectsFile(serverDirectory).Add(new DbDataBuild.Cli.Server.HostedProject("sales", project, null, null));
+        var link = new DbDataBuild.Cli.Server.ScheduleRunnerLink(runner.Url, "dev", client);
+        var (o, e) = (new StringWriter(), new StringWriter());
+        var exit = await DbDataBuild.Cli.Server.ScheduleVerb.RunAsync(["cutover", "sales/sqlserver/hourly", "--runner", runner.Url, "--channel", "dev", "--client-dir", client, "--repo", serverDirectory], new DbDataKit.Cli.CliContext(o, e, TextReader.Null), null, null, (_, _) => Task.CompletedTask);
+        Assert.True(exit == 0, e.ToString());
+
+        var control = DbDataBuild.Cli.Runner.ClientRunnerTaskControl.For(link, _ => null);
+        var (package, task) = (DbDataBuild.Cli.Runner.RunnerNaming.PackageOf("sales"), DbDataBuild.Cli.Runner.RunnerNaming.TaskOf("sqlserver", "hourly"));
+        var pauses = new ModuleJobPauseStore(runner.State, RunnerNames.EngineService);
+
+        var listed = await control.StatusAsync(package, task, CancellationToken.None);
+        Assert.Equal((TaskOwners.Runner, false), (listed!.Owner, listed.Paused));
+
+        await control.PauseAsync(package, task, CancellationToken.None);
+        Assert.NotNull(pauses.Get("sales/dev", task));
+        Assert.True((await control.StatusAsync(package, task, CancellationToken.None))!.Paused);
+
+        // run now is allowed on a paused plan (the person asked), answers with the run's id, and a second ask while that one is queued or going is refused
+        var runId = await control.RunNowAsync(package, task, CancellationToken.None);
+        Assert.False(string.IsNullOrEmpty(runId));
+        Assert.Null(await control.RunNowAsync(package, task, CancellationToken.None));
+
+        await control.ResumeAsync(package, task, CancellationToken.None);
+        Assert.Null(pauses.Get("sales/dev", task));
+        Assert.False((await control.StatusAsync(package, task, CancellationToken.None))!.Paused);
+        Assert.Null(await control.StatusAsync(package, "no-such-task", CancellationToken.None));
+    }
 }
