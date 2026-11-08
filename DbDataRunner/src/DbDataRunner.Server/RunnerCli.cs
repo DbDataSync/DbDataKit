@@ -1,4 +1,5 @@
 using DbDataKit.Runner.Api;
+using DbDataKit.Runner.Client;
 using System.Globalization;
 using System.Net.Http;
 using DbDataKit.Cli;

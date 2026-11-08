@@ -19,6 +19,17 @@ internal static class RefreshJobs
     /// The scheduled plans of a project, from <c>rendered/&lt;connection&gt;/refresh/*.yml</c> (plan 13, D13: schedules are data in the project, and a change of one is a commit). A plan with an invalid schedule is left out and named in
     /// <paramref name="problem"/>; project compile refuses such a schedule already, so this is a file edited by hand.
     /// </summary>
+    /// <summary>
+    /// What a compiled plan's settings say about when it runs: the schedule (null when it declares none) or why the one it declares is not valid. The one reading the server's scheduler and `project publish` (plan 28c E07, which turns it
+    /// into the manifest's schedule) share, so the two cannot disagree about a plan.
+    /// </summary>
+    public static (Schedule? Schedule, string? Problem) ScheduleOf(RefreshPlanSettingsText settings)
+    {
+        if (settings.Schedule is not { Length: > 0 } cron) return (null, null);
+        var schedule = Schedule.OnCron(cron, settings.TimeZone ?? "UTC");
+        return schedule.Validate() is { } why ? (null, why) : (schedule, null);
+    }
+
     public static IReadOnlyList<ScheduledJob> Discover(string projectRoot, Action<string>? problem = null)
     {
         var rendered = Path.Combine(projectRoot, RenderCommand.RenderedDir);
@@ -31,9 +42,9 @@ internal static class RefreshJobs
                 var path = Path.Combine(rendered, RefreshPlanDocument.PathOf(connection, plan));
                 var diagnostics = new List<Diagnostic>();
                 if (RefreshPlanDocument.Parse(File.ReadAllText(path), path, diagnostics) is not { } file) { problem?.Invoke($"{path}: not a readable refresh plan"); continue; }
-                if (file.Settings.Schedule is not { Length: > 0 } cron) continue;
-                var schedule = Schedule.OnCron(cron, file.Settings.TimeZone ?? "UTC");
-                if (schedule.Validate() is { } why) { problem?.Invoke($"{connection}/{plan}: {why}"); continue; }
+                var (schedule, why) = ScheduleOf(file.Settings);
+                if (why is not null) { problem?.Invoke($"{connection}/{plan}: {why}"); continue; }
+                if (schedule is null) continue;
                 jobs.Add(new ScheduledJob(connection, plan, schedule));
             }
         }

@@ -25,6 +25,7 @@ Generated from the command tree of `dbdatabuild` (`UPDATE_GOLDEN=1 dotnet test t
 | [`project file write`](#project-file-write) | `P⇒P` | Repo files only (no target connection) | Write one text file of the project: --expect-hash names the version the change is based on and a different one is refused, --create is for a file that does not exist yet |
 | [`project file move`](#project-file-move) | `P⇒P` | Repo files only (no target connection) | Move or rename one file of the project; --expect-hash names the version moved, and a destination that exists is refused |
 | [`project file delete`](#project-file-delete) | `P⇒P` | Repo files only (no target connection) | Delete one file of the project; --expect-hash names the version deleted |
+| [`project publish`](#project-publish) | `P→` | Repo files only (no target connection) | Publish the committed files of the project (rendered/, never recompiled) to a runner as a definition package: one task per refresh plan with its schedule, connection slots and limits, files the runner already has are not sent again, the version is staged; --bind fills a channel's connection slots, --promote-from moves the version of one channel to another, --out writes the package and sends nothing |
 | [`project agent-kit`](#project-agent-kit) | `P⇒P` | Repo files only (no target connection) | Install the skill and JSON Schemas an AI coding agent needs to work in a project (lists them unless --write) |
 | [`connection inspect`](#connection-inspect) | `C→` | Target read-only | Can the tool use this connection, and if not, why: whether each login is set, connects and as whom, what it may do, whether the tracking tables are ready, which schema names the models use exist |
 | [`connection init`](#connection-init) | `P⇒T` | Tracking tables only | Create the tracking tables and their schema name (prints the script; --apply runs it) |
@@ -406,6 +407,30 @@ Usage: `dbdatabuild project file delete <path> [options]`
 |---|---|
 | `--expect-hash` `<text>` | The hash of the version being deleted (from project file read or list); required |
 | `--project` `<path>` | Project root |
+
+## project publish
+
+Publish the committed files of the project (rendered/, never recompiled) to a runner as a definition package: one task per refresh plan with its schedule, connection slots and limits, files the runner already has are not sent again, the version is staged; --bind fills a channel's connection slots, --promote-from moves the version of one channel to another, --out writes the package and sends nothing.
+
+Effect: Repo files only (no target connection). Reads and writes: `P→`.
+
+Usage: `dbdatabuild project publish [options]`
+
+| Option | Meaning |
+|---|---|
+| `--bind` `<text ...>` | `slot=connection`: bind a connection slot of the package in the channel (the slots are the project's connection names; repeatable). A channel's bindings are its own |
+| `--channel` `<text>` | The channel the version goes to |
+| `--client-dir` `<text>` | Where this machine's pairings with runners are kept (default: DBDATARUNNER_CLIENT_DIR, else a folder under the user's local application data) |
+| `--code` `<text>` | The single-use pairing code (from `dbdatarunner server pair --max-role publisher`), when this machine is not paired with the runner yet |
+| `--expected-version` `<number>` | The highest version the package has, as you saw it (0 for a first publish); a newer one is refused |
+| `--out` `<text>` | Write the package (package.yaml and files/) to this directory and send nothing |
+| `--package` `<text>` | The package's name on the runner (default: the project folder's name) |
+| `--project` `<path>` | Project root |
+| `--promote-from` `<text>` | Do not publish: promote the version this channel serves to --channel (the same version; the runner's `switch`, which needs an administrator pairing) |
+| `--runtime-range` `<text>` | The engine versions the package accepts, instead of this tool's minor line (`0.4.x`, `>=0.4 <1`) |
+| `--serve` | Make the version active at once instead of staging it (staged is the default: runners prepare it, then it activates) |
+| `--server` `<text>` | The runner: the name it was paired under or its https address |
+| `--to` `<text>` | Where to publish: `runner` (the only place; the default) |
 
 ## project agent-kit
 

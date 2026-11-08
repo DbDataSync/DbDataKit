@@ -25,6 +25,7 @@
     <PackageVersion Include="DbDataKit.Runner.Abstractions" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Runner" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Runner.Api" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Runner.Client" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Runner.Limits" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Runner.Protocol.Server" Version="$(DbDataKitVersion)" />
   </ItemGroup>

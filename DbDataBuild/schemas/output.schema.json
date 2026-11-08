@@ -395,6 +395,25 @@
       "if": {
         "properties": {
           "command": {
+            "const": "project publish"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_project_publish"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "project file list"
           }
         },
@@ -3501,6 +3520,99 @@
             "integer",
             "null"
           ]
+        }
+      }
+    },
+    "data_project_publish": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "package": {
+          "type": "string"
+        },
+        "channel": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "uploaded": {
+          "type": "integer"
+        },
+        "skipped": {
+          "type": "integer"
+        },
+        "signature": {
+          "type": "string"
+        },
+        "files": {
+          "type": "integer"
+        },
+        "written_to": {
+          "type": "string"
+        },
+        "promoted_from": {
+          "type": "string"
+        },
+        "bound": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "connection",
+              "plan",
+              "slots"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "connection": {
+                "type": "string"
+              },
+              "plan": {
+                "type": "string"
+              },
+              "schedule": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "time_zone": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "slots": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "timeout_seconds": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          }
         }
       }
     },

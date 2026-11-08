@@ -66,6 +66,23 @@ public sealed class ConnectionSlotProtocolTests
 
     [Theory]
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
+    public async Task A_run_for_another_task_than_the_jobs_is_refused_unless_the_host_says_one_job_serves_many_tasks(string engine)
+    {
+        // plan 28c E07: a published Build project has one task per refresh plan, named for it, and one job runs them all
+        using var h = new Harness(engine, remote: true);
+        var resolver = new FakeResolver { Answer = Sample };
+        var handles = new Dictionary<string, string> { ["source"] = "sales_db" };
+
+        var refused = await Assert.ThrowsAsync<ArgumentException>(() => RemoteJobHost.RunAsync<GrantReader>(h.Host.Endpoint, Grant(h, resolver, handles, "grant-eu"), CancellationToken.None, new RemoteRunOptions { HeartbeatInterval = TimeSpan.Zero }));
+        Assert.Contains("'grant-eu'", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("'grant'", refused.Message, StringComparison.Ordinal);
+
+        var result = await RemoteJobHost.RunAsync<GrantReader>(h.Host.Endpoint, Grant(h, resolver, handles, "grant-eu"), CancellationToken.None, new RemoteRunOptions { HeartbeatInterval = TimeSpan.Zero, AnyTaskName = true });
+        Assert.Equal(TaskEndState.Succeeded, result.End.State);
+    }
+
+    [Theory]
+    [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task A_slot_typed_for_something_else_needs_a_factory(string engine)
     {
         using var h = new Harness(engine, remote: true);

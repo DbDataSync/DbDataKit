@@ -22,6 +22,12 @@ public sealed class RemoteRunOptions
     /// </summary>
     public Func<ConnectionGrant, Type, object>? SlotFactory { get; init; }
 
+    /// <summary>
+    /// True when one job class serves many tasks of a package, each with a name of its own (plan 28c E07: Build's one task per refresh plan, all run by <c>RefreshJob</c>): the check that the run is for the job's declared task
+    /// is skipped. Default false: a run for another task than the job's is refused.
+    /// </summary>
+    public bool AnyTaskName { get; init; }
+
     /// <summary>How often the task sends a heartbeat (and learns of a cancel it was not pushed). Default 5 seconds.</summary>
     public TimeSpan HeartbeatInterval { get; init; } = TimeSpan.FromSeconds(5);
 
@@ -82,7 +88,7 @@ public static class RemoteJobHost
             throw new RunnerProtocolException(StatusCode.FailedPrecondition, $"The runner speaks protocol '{info.ProtocolVersion}' and this kit speaks '{RunnerProtocol.V1}'; a task and a runner meet on one version.");
 
         var taskName = JobRunner.TaskNameOf(jobType);
-        if (!string.Equals(info.Task, taskName, StringComparison.Ordinal))
+        if (!options.AnyTaskName && !string.Equals(info.Task, taskName, StringComparison.Ordinal))
             throw new ArgumentException($"The run is for the task '{info.Task}' and {jobType.Name} declares the task '{taskName}'; the runner started the wrong job.", nameof(jobType));
 
         var probe = (RunnerJobBase)(Activator.CreateInstance(jobType, nonPublic: true) ?? throw new InvalidOperationException($"{jobType.Name} cannot be created."));
