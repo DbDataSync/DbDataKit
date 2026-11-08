@@ -261,8 +261,8 @@ machine.
 
 | tag | what it is |
 | --- | --- |
-| `latest`, `2026.9.20.2152` | the default image. It includes the .NET SDK, which the server needs to install a library that is not in the bundled catalog |
-| `runtime`, `2026.9.20.2152-runtime` | the smaller image, with no SDK: catalog drivers only, and a library outside the catalog is written down and left "pending restore" until `config library sync` runs somewhere that has an SDK |
+| `latest`, `2026.9.20.2152` | the default image. It includes the .NET SDK, which the server does not need (it resolves libraries from a NuGet feed itself) |
+| `runtime`, `2026.9.20.2152-runtime` | the smaller image, with no SDK: it behaves the same; a catalog library at its pinned version is installed from the image with no network, any other needs the NuGet feed |
 
 `latest` and `runtime` follow the newest **stable** release. A beta gets only its exact version tags (`…-beta`,
 `…-beta-runtime`), so pulling `latest` never gives you a prerelease. To stay put on a version, use its tag.

@@ -80,9 +80,9 @@ dbdatasync library install SomeVendor.Data.Provider --version 3.1.0 \
   --factory-type "SomeVendor.Data.SomeFactory, SomeVendor.Data.Provider"
 ```
 
-Nothing here needs the .NET SDK: packages are resolved in process from a feed. In the runtime-only
-container image, an install of a catalog id at its exact pinned version is copied from an in-image cache
-instead (no network). An install either completes or fails with the reason.
+No .NET SDK is needed. In the runtime-only container image, an install of a catalog id at its exact
+pinned version is copied from an in-image cache instead, with no network. Anything else is resolved from the
+NuGet feed, and an install that cannot complete fails with the reason; nothing is left pending.
 
 ### Other library commands
 

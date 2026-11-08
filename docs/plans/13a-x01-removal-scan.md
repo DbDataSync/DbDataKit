@@ -55,6 +55,6 @@ Result: nothing to delete. X02 stays as A20 left it, plus the three packages pla
 
 ## 3. Noticed, not in X01
 
-- `DbDataSync/Dockerfile` comments (lines 55-100) still describe `LibraryInstaller` running `dotnet publish` and `SdkAvailability`; S10 removed both. A comment-only fix for X03 or S10.
-- `DbDataSync/src/DbDataSync.Cli/LegacyConfigMigration.cs` and `LegacyRootMigration.cs` migrate old installs; plan 13 says nothing is migrated (clean break). They are not in section 6, so left; E04 (`server.yaml`) is where they should go.
+- `DbDataSync/Dockerfile` comments (lines 55-100) still described `LibraryInstaller` running `dotnet publish` and `SdkAvailability`; S10 removed both. **Fixed** (comments, plus the same claim in `DbDataSync/docs/install.md` and `drivers-and-libraries.md`).
+- `DbDataSync/src/DbDataSync.Cli/LegacyConfigMigration.cs` and `LegacyRootMigration.cs` migrate old installs; plan 13 says nothing is migrated (clean break). **Already deleted by E04** (with their tests; an old install is refused with a message, `ServerRunLegacySettingsTests` says so); nothing left to do.
 - Warnings: `dotnet build DbDataSync.slnf` on Linux prints 18 `CA1416` warnings (`EventLogEntryType` in `DbDataSync.Cli` and its tests). They are not new and do not fail the build here; not touched.
