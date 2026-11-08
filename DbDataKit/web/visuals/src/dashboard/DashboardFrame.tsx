@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react'
 import type { Theme } from '../theme'
-import type { Box, LayoutDoc, ParameterDefinition, ParameterValue, ParameterValues, ViewsDoc } from '../views/model'
+import type { Box, LayoutDoc, ParameterValue, ParameterValues, ViewsDoc } from '../views/model'
 import type { RenderedWidget } from '../views/rendered'
-import { WidgetView } from '../widgets/WidgetView'
+import { CanvasFrame } from './CanvasFrame'
+import { tileView } from './tile'
 import { TILE_GUTTER, layoutReflow, type ReflowResult } from './reflow'
 
 export interface DashboardFrameProps {
   document: Pick<ViewsDoc, 'widgets' | 'parameters'>
-  /** The layout chosen by its selector. A reflow layout is drawn here; a canvas or flow layout has its own engine (not built: a note says so). */
+  /** The layout chosen by its selector. A reflow layout is drawn here, a canvas layout by `CanvasFrame`; a flow layout has its own engine (not built: a note says so). */
   layout: LayoutDoc
   /** The container in CSS pixels. */
   box: Box
@@ -20,7 +21,7 @@ export interface DashboardFrameProps {
   /** The tile that fills the whole container now, and the action that sets or clears it. */
   maximized?: string | null
   onMaximize?: (widget: string | null) => void
-  /** Precomputed layout of this layout and box, so a caller that needs it too lays out once. */
+  /** Precomputed reflow layout of this layout and box (reflow only). */
   placed?: ReflowResult
 }
 
@@ -35,29 +36,12 @@ export function DashboardFrame({ document, layout, box, theme, results, loading,
       {children}
     </div>
   )
+  const context = { document, layout, theme, results, loading, parameters, onParameterChange, onMaximize }
+  if (layout.type === 'canvas') return <CanvasFrame {...context} layout={layout} box={box} maximized={maximized} />
   if (layout.type !== 'reflow')
     return root('none', <p className="vz-state vz-dashboard-notice" role="note" data-testid="vz-engine-missing">{`The layout \`${layout.name}\` is a ${layout.type} layout, which this view does not draw yet.`}</p>)
 
-  const widgetView = (id: string, tileBox: Box, isMaximized: boolean) => {
-    const widget = document.widgets[id]
-    if (!widget) return null
-    return (
-      <WidgetView
-        id={id}
-        widget={widget}
-        result={results[id]}
-        loading={loading?.has(id) ?? results[id] === undefined}
-        box={tileBox}
-        theme={theme}
-        options={layout.widget_options?.[id]}
-        parameters={parameters}
-        definitions={document.parameters as ParameterDefinition[] | undefined}
-        onParameterChange={onParameterChange}
-        maximized={isMaximized}
-        onMaximize={onMaximize ? () => onMaximize(isMaximized ? null : id) : undefined}
-      />
-    )
-  }
+  const widgetView = (id: string, tileBox: Box, isMaximized: boolean) => tileView(context, id, tileBox, isMaximized)
 
   if (maximized !== null && layout.tiles.some((t) => t.widget === maximized))
     return root('maximized', <div className="vz-dashboard-maximized" data-testid="vz-maximized">{widgetView(maximized, { width: box.width - TILE_GUTTER, height: box.height - TILE_GUTTER }, true)}</div>)

@@ -96,7 +96,9 @@ describe('DashboardView', () => {
     expect(layoutNow()).toBe('desk')
     await resize(390, 844)
     expect(layoutNow()).toBe('phone')
-    expect(q('vz-engine-missing')).not.toBeNull()
+    expect(q('vz-engine-missing')).toBeNull()
+    expect(q('vz-canvas')).not.toBeNull()
+    expect(q('vz-dashboard')!.getAttribute('data-scale')).toBe('0.9378')
     await resize(1366, 768)
     expect(layoutNow()).toBe('desk')
     // desk, phone and desk again place widgets that were all resolved at the first: nothing is asked twice
@@ -114,6 +116,26 @@ describe('DashboardView', () => {
     expect(calls[1]).toEqual({ layout: 'desk', widgets: ['note'], parameters: { region: [] } })
     expect(q('vz-text')!.textContent).toContain('Showing')
     expect(q('vz-metric')!.textContent).toContain('$3.30M')
+  })
+
+  it('the wall canvas is chosen for a very wide window and scaled to it; across the selector the parameters and the results are kept', async () => {
+    const { calls, client } = counting()
+    size = { width: 2560, height: 1440 }
+    await show({ client })
+    expect(layoutNow()).toBe('wall')
+    expect(q('vz-dashboard')!.getAttribute('data-mode')).toBe('canvas')
+    expect(q('vz-dashboard')!.getAttribute('data-scale')).toBe('1.3333')
+    expect(q('vz-canvas')!.style.width).toBe('1920px')
+    expect(q('vz-metric')!.textContent).toContain('$3.30M')
+    await resize(1280, 720)
+    expect(layoutNow()).toBe('desk')
+    await resize(2000, 1000)
+    expect(layoutNow()).toBe('desk')
+    await resize(2400, 900)
+    expect(layoutNow()).toBe('wall')
+    expect(q('vz-dashboard')!.getAttribute('data-scale')).toBe('0.8333')
+    // wall -> desk -> wall: every widget the layouts place was resolved once, `note` for the desk only
+    expect(calls.map((c) => c.widgets.join(','))).toEqual(['regions,net,margin,note,by_region,top_products'])
   })
 
   it('reports the layout it chose and how: by its selector, by name, by default', async () => {
