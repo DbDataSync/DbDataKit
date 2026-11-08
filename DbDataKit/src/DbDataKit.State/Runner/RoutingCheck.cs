@@ -20,7 +20,12 @@ public static class RunnerLabels
 
     /// <summary>The labels a map of capabilities (<c>network</c> = <c>outside</c>, <c>os</c> = <c>linux</c>, <c>memory_limit</c> = <c>enforced</c> or <c>watched</c>) stands for: <c>network:outside</c>, <c>os:linux</c>, <c>memory_limit:watched</c>.</summary>
     public static IReadOnlyList<string> FromCapabilities(IReadOnlyDictionary<string, string> capabilities) =>
-        [.. CapabilityLabels.Where(capabilities.ContainsKey).Where(n => !string.IsNullOrWhiteSpace(capabilities[n])).Select(n => $"{n}:{capabilities[n].Trim()}")];
+        [.. CapabilityLabels.Where(capabilities.ContainsKey).Where(n => !string.IsNullOrWhiteSpace(capabilities[n])).Select(n => $"{n}:{capabilities[n].Trim()}"),
+            // an installed ODBC driver is the label odbc:<id> (plan 28c QE12): the capability's name is the label, its value the driver's own name
+            .. capabilities.Where(c => c.Key.StartsWith(OdbcLabelPrefix, StringComparison.Ordinal) && c.Key.Length > OdbcLabelPrefix.Length && !string.IsNullOrWhiteSpace(c.Value)).Select(c => c.Key).Order(StringComparer.Ordinal)];
+
+    /// <summary>The prefix of the capabilities (and labels) that name an installed ODBC driver (<c>odbc:sqlserver18</c>).</summary>
+    public const string OdbcLabelPrefix = "odbc:";
 }
 
 /// <summary>
