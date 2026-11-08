@@ -37,6 +37,36 @@ public sealed class AppInstanceTests : IDisposable
     private static IReadOnlyDictionary<string, string> Map(params (string, string)[] pairs) => pairs.ToDictionary(p => p.Item1, p => p.Item2);
 
     [Fact]
+    public void An_app_rolls_back_unpinned_instances_follow_and_removing_needs_the_instances_gone_first()
+    {
+        store.PublishApp(Manifest("1.0.0"), "ada");
+        store.PublishApp(Manifest("2.0.0"), "ada");
+        store.Save(new AppInstance("pinned", "sales-planning", Pin: 2), "ada");
+        store.Save(new AppInstance("follows", "sales-planning"), "ada");
+        Assert.Equal("2.0.0", store.Resolve("follows")!.Manifest.Version);
+
+        Assert.Equal(1, store.MoveApp("sales-planning", "ada").Version);
+        Assert.Equal("1.0.0", store.Resolve("follows")!.Manifest.Version);
+        Assert.Equal("2.0.0", store.Resolve("pinned")!.Manifest.Version);
+        Assert.Equal(2, store.MoveApp("sales-planning", "ada", version: 2).Version);
+        Assert.Equal([1, 2], store.AppVersions("sales-planning").Select(v => v.Version));
+        Assert.Throws<AppInstanceException>(() => store.MoveApp("sales-planning", "ada", version: 9));
+        Assert.Throws<AppInstanceException>(() => store.MoveApp("nothing", "ada"));
+
+        store.SaveNavigation(new NavigationSet("main", "Main", [new NavigationEntry("follows"), new NavigationEntry("pinned")]), "ada");
+        Assert.Throws<AppInstanceException>(() => store.RetireApp("sales-planning", "ada"));
+        Assert.True(store.RetireInstance("follows", "ada"));
+        Assert.Null(store.Resolve("follows"));
+        Assert.True(store.RetireInstance("pinned", "ada"));
+        Assert.True(store.RetireNavigation("main", "ada"));
+        Assert.Empty(store.NavigationSets());
+        Assert.True(store.RetireApp("sales-planning", "ada"));
+        Assert.Empty(store.Apps());
+        Assert.Equal(2, store.AppVersions("sales-planning").Count);   // the record stays
+        Assert.False(store.RetireInstance("follows", "ada"));
+    }
+
+    [Fact]
     public void Two_instances_of_one_app_run_different_versions_and_settings()
     {
         store.PublishApp(Manifest("1.0.0"), "ada");

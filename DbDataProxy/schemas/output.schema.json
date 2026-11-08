@@ -236,6 +236,52 @@
       "if": {
         "properties": {
           "command": {
+            "const": "apps instance-remove"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_apps_instance_remove"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "apps instance-remove"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_apps_instance_remove"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "apps instance-save"
           },
           "ok": {
@@ -282,6 +328,52 @@
       "if": {
         "properties": {
           "command": {
+            "const": "apps list"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_apps_list"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "apps list"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_apps_list_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "apps nav-list"
           },
           "ok": {
@@ -320,6 +412,52 @@
         "properties": {
           "data": {
             "$ref": "#/$defs/data_apps_nav_list_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "apps nav-remove"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_apps_nav_remove"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "apps nav-remove"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_apps_nav_remove"
           }
         }
       }
@@ -412,6 +550,98 @@
         "properties": {
           "data": {
             "$ref": "#/$defs/data_apps_publish_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "apps remove"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_apps_remove"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "apps remove"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_apps_remove"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "apps rollback"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_apps_rollback"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "apps rollback"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_apps_rollback_partial"
           }
         }
       }
@@ -3282,6 +3512,10 @@
         }
       }
     },
+    "data_apps_instance_remove": {
+      "type": "object",
+      "additionalProperties": false
+    },
     "data_apps_instance_save": {
       "type": "object",
       "additionalProperties": false,
@@ -3314,6 +3548,73 @@
         },
         "version": {
           "type": "integer"
+        }
+      }
+    },
+    "data_apps_list": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "apps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              },
+              "versions": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              }
+            },
+            "required": [
+              "name",
+              "version",
+              "versions"
+            ]
+          }
+        }
+      },
+      "required": [
+        "apps"
+      ]
+    },
+    "data_apps_list_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "apps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              },
+              "versions": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              }
+            },
+            "required": [
+              "name",
+              "version",
+              "versions"
+            ]
+          }
         }
       }
     },
@@ -3384,6 +3685,10 @@
         }
       }
     },
+    "data_apps_nav_remove": {
+      "type": "object",
+      "additionalProperties": false
+    },
     "data_apps_nav_save": {
       "type": "object",
       "additionalProperties": false,
@@ -3443,6 +3748,38 @@
           "type": "integer"
         },
         "files": {
+          "type": "integer"
+        }
+      }
+    },
+    "data_apps_remove": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "data_apps_rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "app": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "app",
+        "version"
+      ]
+    },
+    "data_apps_rollback_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "app": {
+          "type": "string"
+        },
+        "version": {
           "type": "integer"
         }
       }
