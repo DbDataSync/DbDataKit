@@ -1356,11 +1356,6 @@ one branch `suite/<id>-<short-name>`, a "Done when" test, as in 13a):
 | [29](29-unified-state.md) | One structure for the suite's state databases (written at high level, 2026-11-04) | |
 | [30](30-publishing.md) | One way to publish, to the serving layer and the runner (direction decided, 2026-11-04) | |
 | [31](31-report-catalogs.md) | Report catalogs, external (SSRS, PBIRS) and our own, in one place (written at high level, 2026-11-06) | |
-| 32 | DbDataKnowledge | |
-| 33 | DbDataAgents | |
-| 34 | DbDataIntegration | |
-| 35 | Actions: the shared script format, callable and elevated actions | |
-| 36 | DbDataBacklog | |
 | later | Sync and Build on the runner (plan 28 section 8), after its state design | |
 
 ## 10. What this changes in other plans (once approved)
