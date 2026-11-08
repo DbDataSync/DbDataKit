@@ -114,6 +114,14 @@ their checks become the kinds' validators. The Build server's `ProxyPublishing` 
 
 Who may publish what is the pairing's Publisher role and its scope (plan 13 W12, `OwnerScope`), as today.
 
+**Formats (plan 24a UC01).** Every version records the format of its manifest, `definition_version.format`, numbered from 1 per kind; every version stored before the column is format 1.
+A kind registers the formats it reads (`DefinitionKind.Formats`: its current format and the one before it) and may say how a manifest states its format (`FormatOf`: the runner's
+`integration` reads `schema: package/<n>`); a publish may also name it (`format` in the body). A program refuses what it does not read, with a message that names the kind, the name and both
+numbers (`DefinitionFormat.Refusal`): a publish in a format the kind does not read; a publish, a switch, a rollback or an activation of a version that a **live instance of the group** cannot
+read (the instance rows say which formats each instance reads, `definition_formats`, and the refusal names the instance and its software version); a serving follower (`DefinitionFollower`) and the
+runner (`StagingFollower`, `DefinitionVersionSource`) handed a version newer than they read, which leaves the version they served before serving. An instance row that records no formats predates
+the column and reads format 1.
+
 ## 6. Artifacts: what is published, how it is trusted, how it is served
 
 Proposed 2026-11-04 from the owner's questions, and **decided by the owner the same day** as written here.

@@ -16,7 +16,12 @@ public static class RunnerPackages
     public const string DevChannel = "dev";
 
     /// <summary>The registry a runner accepts: <c>integration</c>, staged by default (plan 30 section 3.1: runner kinds stage and activate by themselves once every runner is ready; <c>serve</c> stays selectable), checked by <see cref="Check"/>.</summary>
-    public static DefinitionKinds Kinds() => new DefinitionKinds().Register(new DefinitionKind(Kind, ["runner"], PublishMode.Stage) { Validator = candidate => Check(candidate), SlotsOf = SlotsOfManifest });
+    public static DefinitionKinds Kinds() => new DefinitionKinds().Register(new DefinitionKind(Kind, ["runner"], PublishMode.Stage) { Validator = candidate => Check(candidate), SlotsOf = SlotsOfManifest, Formats = DefinitionFormats.Of(PackageManifest.FormatVersion), FormatOf = FormatOfManifest });
+
+    /// <summary>The number of the manifest's <c>schema: package/&lt;n&gt;</c> line (24a UC01: the manifest's format); null when it has none or does not say a number, which the manifest reader then reports.</summary>
+    public static int? FormatOfManifest(string manifest) =>
+        System.Text.RegularExpressions.Regex.Match(manifest, "^schema:\\s*[\"']?package/([0-9]{1,6})", System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.CultureInvariant) is { Success: true } m
+            ? int.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) : null;
 
     /// <summary>The connection slots the manifest's tasks declare: each needs a binding in a channel before the version serves there (plan 30 section 3.2).</summary>
     private static IReadOnlyList<DefinitionSlot> SlotsOfManifest(string manifest) =>

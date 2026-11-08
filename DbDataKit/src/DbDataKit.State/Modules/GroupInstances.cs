@@ -15,7 +15,9 @@ namespace DbDataKit.State;
 /// <param name="Heartbeat">When it last refreshed its row.</param>
 /// <param name="SoftwareVersion">The product's version, or null when the row records none.</param>
 /// <param name="ModuleVersions">Each module of the instance's binary and the version it has; null when the row records none.</param>
-public sealed record GroupInstance(string Kind, string Id, string? Host, int? ProcessId, DateTimeOffset? Started, DateTimeOffset? Heartbeat, string? SoftwareVersion, IReadOnlyDictionary<string, int>? ModuleVersions);
+/// <param name="DefinitionFormats">The formats of each kind of published definition the instance reads (24a UC01); null when the row records none (it predates the column and reads format 1).</param>
+public sealed record GroupInstance(string Kind, string Id, string? Host, int? ProcessId, DateTimeOffset? Started, DateTimeOffset? Heartbeat, string? SoftwareVersion, IReadOnlyDictionary<string, int>? ModuleVersions,
+    IReadOnlyDictionary<string, DefinitionFormats>? DefinitionFormats = null);
 
 /// <summary>What a <see cref="IGroupInstanceSource"/> reads with: the connection (and the migration's transaction, which a read must join), the layout, the time, and the version the registry holds for a module.</summary>
 public sealed record GroupInstanceContext(DbConnection Connection, DbTransaction? Transaction, StateLayout Layout, DateTimeOffset Now, Func<string, int?> RegisteredVersion);
@@ -77,6 +79,10 @@ public sealed class StandardGroupInstanceSource(TimeSpan? runnerLease = null) : 
     private const int ServingVersionColumnsFrom = 3;
     private const int RunnerVersionColumnsFrom = 2;
 
+    /// <summary>The module versions whose migration added <c>definition_formats</c> (24a UC01: the Proxy's fourth, the runner's third).</summary>
+    private const int ServingFormatColumnFrom = 4;
+    private const int RunnerFormatColumnFrom = 3;
+
     private readonly TimeSpan _runnerLease = runnerLease ?? TimeSpan.FromSeconds(90);
 
     public IReadOnlyList<GroupInstance> Live(GroupInstanceContext context)
@@ -90,8 +96,9 @@ public sealed class StandardGroupInstanceSource(TimeSpan? runnerLease = null) : 
     private static List<GroupInstance> ReadServing(GroupInstanceContext c)
     {
         var withVersions = c.RegisteredVersion("serving") >= ServingVersionColumnsFrom;
+        var withFormats = c.RegisteredVersion("serving") >= ServingFormatColumnFrom;
         var rows = new List<GroupInstance>();
-        using var reader = Query(c, "serving", $"SELECT instance_key, host, process_id, started_at, heartbeat_at{(withVersions ? ", software_version, module_versions" : "")} FROM {{table:serving_instance}};");
+        using var reader = Query(c, "serving", $"SELECT instance_key, host, process_id, started_at, heartbeat_at{(withVersions ? ", software_version, module_versions" : "")}{(withFormats ? ", definition_formats" : "")} FROM {{table:serving_instance}};");
         while (reader.Read())
         {
             var host = reader.GetString(1);
@@ -99,7 +106,8 @@ public sealed class StandardGroupInstanceSource(TimeSpan? runnerLease = null) : 
             var heartbeat = reader.Time(4);
             if (c.Now - heartbeat >= ServingLease || (host == Environment.MachineName && !Running(pid))) continue;
             rows.Add(new GroupInstance("serving", reader.GetString(0), host, pid, reader.Time(3), heartbeat,
-                withVersions && !reader.IsDBNull(5) ? reader.GetString(5) : null, withVersions && !reader.IsDBNull(6) ? ModuleVersionText.Parse(reader.GetString(6)) : null));
+                withVersions && !reader.IsDBNull(5) ? reader.GetString(5) : null, withVersions && !reader.IsDBNull(6) ? ModuleVersionText.Parse(reader.GetString(6)) : null,
+                withFormats && !reader.IsDBNull(7) ? DefinitionFormatText.Parse(reader.GetString(7)) : null));
         }
 
         return rows;
@@ -108,15 +116,17 @@ public sealed class StandardGroupInstanceSource(TimeSpan? runnerLease = null) : 
     private List<GroupInstance> ReadRunner(GroupInstanceContext c)
     {
         var withVersions = c.RegisteredVersion("runner") >= RunnerVersionColumnsFrom;
+        var withFormats = c.RegisteredVersion("runner") >= RunnerFormatColumnFrom;
         var rows = new List<GroupInstance>();
-        using var reader = Query(c, "runner", $"SELECT id, host, version, started_at, heartbeat_at, state{(withVersions ? ", software_version, module_versions" : "")} FROM {{table:instance}};");
+        using var reader = Query(c, "runner", $"SELECT id, host, version, started_at, heartbeat_at, state{(withVersions ? ", software_version, module_versions" : "")}{(withFormats ? ", definition_formats" : "")} FROM {{table:instance}};");
         while (reader.Read())
         {
             var heartbeat = reader.Time(4);
             if (reader.GetString(5) != RunnerInstance.Running || c.Now - heartbeat >= _runnerLease) continue;
             var software = withVersions && !reader.IsDBNull(6) ? reader.GetString(6) : reader.GetString(2);
             rows.Add(new GroupInstance("runner", reader.Uuid(0).ToString(), reader.GetString(1), null, reader.Time(3), heartbeat,
-                software, withVersions && !reader.IsDBNull(7) ? ModuleVersionText.Parse(reader.GetString(7)) : null));
+                software, withVersions && !reader.IsDBNull(7) ? ModuleVersionText.Parse(reader.GetString(7)) : null,
+                withFormats && !reader.IsDBNull(8) ? DefinitionFormatText.Parse(reader.GetString(8)) : null));
         }
 
         return rows;

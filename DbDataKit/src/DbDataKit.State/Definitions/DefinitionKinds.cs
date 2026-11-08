@@ -13,7 +13,7 @@ public enum PublishMode
 public sealed record DefinitionSlot(string Name, string? Description = null);
 
 /// <summary>What a validator is shown: the version a publish is about to store.</summary>
-public sealed record DefinitionCandidate(string Kind, string Name, string Manifest, IReadOnlyList<ArtifactRef> Artifacts, IReadOnlyList<string> DependsOn);
+public sealed record DefinitionCandidate(string Kind, string Name, string Manifest, IReadOnlyList<ArtifactRef> Artifacts, IReadOnlyList<string> DependsOn, int Format = DefinitionFormat.First);
 
 /// <summary>
 /// One kind of definition in the registry (plan 30 section 4): what it checks, which slots a version declares, which target types accept it, how it is published by default, and whether it is
@@ -25,6 +25,12 @@ public sealed record DefinitionCandidate(string Kind, string Name, string Manife
 /// <param name="RequiresApproval">Trusted code: only an approved version can be activated, and publishing it with <c>serve</c> is refused.</param>
 public sealed record DefinitionKind(string Name, IReadOnlyList<string> TargetTypes, PublishMode DefaultMode, bool RequiresApproval = false)
 {
+    /// <summary>The formats of the kind this program reads: the current one and the one before it (plan 24a UC01). A publish in another format is refused, and so is the reading of a version in one.</summary>
+    public DefinitionFormats Formats { get; init; } = DefinitionFormats.One;
+
+    /// <summary>The format a manifest is written in, when the manifest says (its <c>schemaVersion</c>); null when it does not, which is the request's format or 1.</summary>
+    public Func<string, int?>? FormatOf { get; init; }
+
     /// <summary>What the kind checks beyond the common rules; returns what is wrong in words, or null. Null here accepts everything.</summary>
     public Func<DefinitionCandidate, string?>? Validator { get; init; }
 
@@ -61,6 +67,9 @@ public sealed partial class DefinitionKinds
     }
 
     public DefinitionKind? Find(string name) => _kinds.GetValueOrDefault(name);
+
+    /// <summary>What each registered kind reads, as an instance row records it (<see cref="DefinitionFormatText"/>).</summary>
+    public string FormatText => DefinitionFormatText.Format(_kinds.Values.Select(k => (k.Name, k.Formats)));
 
     public IReadOnlyList<DefinitionKind> All => [.. _kinds.Values.OrderBy(k => k.Name, StringComparer.Ordinal)];
 

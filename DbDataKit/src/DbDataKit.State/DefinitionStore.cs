@@ -7,7 +7,7 @@ using System.Text.RegularExpressions;
 namespace DbDataKit.State;
 
 /// <summary>One version of a published definition.</summary>
-public sealed record DefinitionVersion(string Kind, string Name, int Version, string Hash, string Content, IReadOnlyList<string> DependsOn, string PublishedBy, DateTimeOffset PublishedAt, string? Note);
+public sealed record DefinitionVersion(string Kind, string Name, int Version, string Hash, string Content, IReadOnlyList<string> DependsOn, string PublishedBy, DateTimeOffset PublishedAt, string? Note, int Format = DefinitionFormat.First);
 
 /// <summary>What happened to a definition: <c>publish</c> (a new version, served at once), <c>switch</c> (a channel moved to another version) or <c>rollback</c>.</summary>
 public sealed record DefinitionEvent(long Id, string Action, string Kind, string Name, string Channel, int Version, string ActorId, DateTimeOffset At);
@@ -29,14 +29,15 @@ public sealed partial class DefinitionStore(StateDatabase database) : IDefinitio
 
     private const string Module = DefinitionsModule.Name;
 
-    private const string VersionColumns = "kind, name, version, hash, content, depends_on, published_by, published_at, note";
+    private const string VersionColumns = "kind, name, version, hash, content, depends_on, published_by, published_at, note, format";
 
     /// <summary>The older API's publish is the life cycle's publish with <see cref="PublishMode.Serve"/>, no registry and no dependency or slot checks (see <see cref="DefinitionPublisher"/>).</summary>
     private DefinitionPublisher Publisher => new(database, kinds: null);
 
     /// <inheritdoc cref="DefinitionPublisher.Publish"/>
-    public DefinitionVersion Publish(string kind, string name, string content, string by, IReadOnlyList<string>? dependsOn = null, string? note = null, string channel = Production, Func<string, string?>? validate = null) =>
-        Publisher.Publish(new PublishRequest(kind, name, content, by, channel, PublishMode.Serve, dependsOn, note), validate).Version;
+    /// <param name="format">The format of the content (24a UC01); 1 when not given. A publish is refused while a live instance of the group cannot read it.</param>
+    public DefinitionVersion Publish(string kind, string name, string content, string by, IReadOnlyList<string>? dependsOn = null, string? note = null, string channel = Production, Func<string, string?>? validate = null, int format = DefinitionFormat.First) =>
+        Publisher.Publish(new PublishRequest(kind, name, content, by, channel, PublishMode.Serve, dependsOn, note, Format: format), validate).Version;
 
     public DefinitionVersion Switch(string kind, string name, int version, string by, string channel = Production) =>
         Publisher.Switch(kind, name, version, by, channel);
@@ -68,7 +69,7 @@ public sealed partial class DefinitionStore(StateDatabase database) : IDefinitio
         {
             using var connection = database.OpenConnection();
             using var command = database.Command(Module, connection, """
-                SELECT v.kind, v.name, v.version, v.hash, v.content, v.depends_on, v.published_by, v.published_at, v.note
+                SELECT v.kind, v.name, v.version, v.hash, v.content, v.depends_on, v.published_by, v.published_at, v.note, v.format
                 FROM {table:definition_serving} s JOIN {table:definition_version} v ON v.kind = s.kind AND v.name = s.name AND v.version = s.version
                 WHERE s.kind = $kind AND s.channel = $channel ORDER BY v.name;
                 """);
@@ -124,7 +125,7 @@ public sealed partial class DefinitionStore(StateDatabase database) : IDefinitio
     }
 
     private static DefinitionVersion Read(DbDataReader reader) =>
-        new(reader.GetString(0), reader.GetString(1), reader.Int32(2), reader.GetString(3), reader.GetString(4), JsonSerializer.Deserialize<string[]>(reader.GetString(5)) ?? [], reader.GetString(6), reader.Time(7), reader.IsDBNull(8) ? null : reader.GetString(8));
+        new(reader.GetString(0), reader.GetString(1), reader.Int32(2), reader.GetString(3), reader.GetString(4), JsonSerializer.Deserialize<string[]>(reader.GetString(5)) ?? [], reader.GetString(6), reader.Time(7), reader.IsDBNull(8) ? null : reader.GetString(8), reader.Int32(9));
 
     internal static void Check(string kind, string name, string channel)
     {

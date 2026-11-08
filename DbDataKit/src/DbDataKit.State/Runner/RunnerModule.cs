@@ -97,8 +97,12 @@ public static class RunnerModule
             ALTER TABLE {table:instance} {{addcolumn}} software_version {{key}} NULL;
             ALTER TABLE {table:instance} {{addcolumn}} module_versions {{text}} NULL;
             """,
+            // plan 24a UC01: which formats of each kind of published definition the instance reads (kind=previous-current;kind=previous-current), so a publish can be refused while a live instance cannot read it
+            """
+            ALTER TABLE {table:instance} {{addcolumn}} definition_formats {{text}} NULL;
+            """,
         ],
-        // version 2 only adds nullable columns, which the code of version 1 never reads or writes: a version 1 instance still works with it
+        // versions 2 and 3 only add nullable columns, which the code of the version before never reads or writes: an instance of the previous version still works with them
         compatibleWithPrevious: 1,
         retention:
         [

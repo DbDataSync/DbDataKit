@@ -80,6 +80,8 @@ public sealed class DefinitionVersionSource(DefinitionStore store, DefinitionPub
             throw new ArtifactException($"'{version}' is not a version number of the package '{package}'; a definition's versions are whole numbers.");
         var definition = store.Get(Kind, package, number);
         if (definition is null) return Task.FromResult<PackageVersionContent?>(null);
+        // a version in a format this runner does not read is refused naming the package, the version and both numbers (24a UC01)
+        if (DefinitionFormat.Refusal(Kind, package, number, definition.Format, publisher.FormatsOf(Kind), "this runner") is { } unreadable) throw new ArtifactException(unreadable);
 
         var manifest = PackageManifestReader.Load(definition.Content, $"{Kind}/{package}@{number}").ThrowIfInvalid();
         IReadOnlyList<ArtifactFile> files = [.. publisher.Artifacts(Kind, package, number).Select(a => new ArtifactFile(a.Path, a.Sha256, a.Size, a.MediaType, a.PayloadId))];

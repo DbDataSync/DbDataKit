@@ -23,8 +23,9 @@ public sealed record PublishFile(string Path, string Sha256, long Size, string? 
 /// <summary>A publish: the manifest text (package/1 YAML) and files of the next version of the <c>integration</c> <paramref name="Name"/>.</summary>
 /// <param name="Mode">Null takes the kind's default (<c>serve</c> until staging activates by itself, R17).</param>
 /// <param name="ExpectedVersion">The highest version number the package has, as the publisher saw it (0 for a first publish); null does not check.</param>
+/// <param name="Format">The format of the manifest (24a UC01): the body's <c>format</c>; null takes the manifest's own <c>schemaVersion</c>, or 1. A format this runner does not read is refused naming both numbers.</param>
 public sealed record PublishInput(string Name, string Manifest, IReadOnlyList<PublishFile> Files, string Channel, PublishMode? Mode = null, IReadOnlyList<string>? DependsOn = null,
-    int? ExpectedVersion = null, string? Note = null, string? Signature = null);
+    int? ExpectedVersion = null, string? Note = null, string? Signature = null, int? Format = null);
 
 /// <summary>What a publish did. <see cref="Signature"/> is what the signature check found (<c>unsigned</c> until the verifier of plan 30 section 6.2 exists).</summary>
 public sealed record PublishOutcome(string Package, string Channel, int Version, bool Changed, PublishMode Mode, string Signature, IReadOnlyList<string> Tasks);
@@ -244,7 +245,7 @@ public sealed partial class RunnerPublishing
             PublishResult result;
             try
             {
-                result = Publisher.Publish(new PublishRequest(Kind, input.Name, input.Manifest, actor.Id, input.Channel, input.Mode, input.DependsOn, input.Note, refs, ExpectedVersion: input.ExpectedVersion));
+                result = Publisher.Publish(new PublishRequest(Kind, input.Name, input.Manifest, actor.Id, input.Channel, input.Mode, input.DependsOn, input.Note, refs, ExpectedVersion: input.ExpectedVersion, Format: input.Format));
             }
             catch (Exception ex) when (Translate(ex) is { } translated) { throw translated; }
 

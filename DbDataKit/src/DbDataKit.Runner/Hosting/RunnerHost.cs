@@ -170,7 +170,8 @@ public class RunnerHost(RunnerHostSettings settings, StateDatabase state, ILogge
     /// </summary>
     private void Register(RunnerInstances instances)
     {
-        var id = instances.Register(settings.ServiceId, Environment.MachineName, settings.Version ?? typeof(RunnerHost).Assembly.GetName().Version?.ToString() ?? "0.0.0");
+        var id = instances.Register(settings.ServiceId, Environment.MachineName, settings.Version ?? typeof(RunnerHost).Assembly.GetName().Version?.ToString() ?? "0.0.0",
+            definitionFormats: (settings.Kinds ?? RunnerPackages.Kinds()).FormatText);
         var all = new Dictionary<string, string>(_capabilities, StringComparer.Ordinal)
         {
             ["process_id"] = Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture),

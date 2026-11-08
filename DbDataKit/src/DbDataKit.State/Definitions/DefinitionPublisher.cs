@@ -22,8 +22,9 @@ public sealed record DefinitionBinding(string Channel, string Kind, string Name,
 /// <param name="Manifest">What the version is, as text (the kind's format); stored as the version's content.</param>
 /// <param name="Mode">Null takes the kind's default.</param>
 /// <param name="ExpectedVersion">The highest version number the definition has, as the caller saw it (0 for a first publish); null does not check.</param>
+/// <param name="Format">The format of the manifest (24a UC01, numbered from 1 per kind); null takes what the kind reads from the manifest (<see cref="DefinitionKind.FormatOf"/>), or 1.</param>
 public sealed record PublishRequest(string Kind, string Name, string Manifest, string By, string Channel = DefinitionStore.Production, PublishMode? Mode = null, IReadOnlyList<string>? DependsOn = null,
-    string? Note = null, IReadOnlyList<ArtifactRef>? Artifacts = null, string? Progress = null, int? ExpectedVersion = null);
+    string? Note = null, IReadOnlyList<ArtifactRef>? Artifacts = null, string? Progress = null, int? ExpectedVersion = null, int? Format = null);
 
 /// <summary>What a publish did: the version, whether anything changed (the same content again changes nothing), and the mode it took.</summary>
 public sealed record PublishResult(DefinitionVersion Version, bool Changed, PublishMode Mode);
@@ -74,6 +75,9 @@ public sealed partial class DefinitionPublisher
         Status = new InstanceStatusStore(database);
     }
 
+    /// <summary>What this publisher's program reads of a kind (24a UC01); format 1 only when it has no registry or the kind is not in it.</summary>
+    public DefinitionFormats FormatsOf(string kind) => _kinds?.Find(kind)?.Formats ?? DefinitionFormats.One;
+
     /// <summary>The per-instance status rows of this group.</summary>
     public InstanceStatusStore Status { get; }
 
@@ -99,14 +103,19 @@ public sealed partial class DefinitionPublisher
                 throw new PublishRefusedException(PublishRefusal.ApprovalRequired, $"The {kind.Name} '{request.Name}' is trusted code: publish it staged, have an administrator approve it, then activate it.");
         }
 
+        var format = request.Format ?? kind?.FormatOf?.Invoke(request.Manifest) ?? DefinitionFormat.First;
+        if (format < DefinitionFormat.First) throw new PublishRefusedException(PublishRefusal.Format, $"The {request.Kind} '{request.Name}' names format {format}; formats are numbered from {DefinitionFormat.First}.");
+        if (kind is not null && DefinitionFormat.Refusal(kind.Name, request.Name, null, format, kind.Formats, "this server") is { } unreadable)
+            throw new PublishRefusedException(PublishRefusal.Format, unreadable);
+
         var depends = request.DependsOn ?? [];
         var artifacts = ResolveArtifacts(request.Artifacts ?? []);
-        var candidate = new DefinitionCandidate(request.Kind, request.Name, request.Manifest, request.Artifacts ?? [], depends);
+        var candidate = new DefinitionCandidate(request.Kind, request.Name, request.Manifest, request.Artifacts ?? [], depends, format);
         if (validate?.Invoke(request.Manifest) is { } refusal) throw new DefinitionRejectedException(refusal);
         if (kind?.Validator?.Invoke(candidate) is { } kindRefusal)
             throw new PublishRefusedException(PublishRefusal.Invalid, $"The {request.Kind} '{request.Name}' failed its validator: {kindRefusal}");
 
-        var hash = HashOf(request.Manifest, artifacts);
+        var hash = HashOf(request.Manifest, artifacts, format);
         var now = _database.Time.GetUtcNow();
         return _database.Retry(() =>
         {
@@ -126,6 +135,8 @@ public sealed partial class DefinitionPublisher
                 return new PublishResult(staged?.Hash == hash ? staged : active!, false, mode);
             }
 
+            // a version some live instance of the group cannot read is never stored (24a D4)
+            CheckInstancesRead(connection, transaction, request.Kind, request.Name, null, format);
             var latest = Latest(connection, transaction, request.Kind, request.Name);
             if (request.ExpectedVersion is { } expected && expected != latest)
                 throw new DefinitionConflictException($"The {request.Kind} '{request.Name}' is at version {latest}, not {expected}: it was published since you looked. Read it again and publish again.", expected, latest);
@@ -138,12 +149,13 @@ public sealed partial class DefinitionPublisher
             else
             {
                 var number = latest + 1;
-                Insert(connection, transaction, request, artifacts, hash, number, now);
+                Insert(connection, transaction, request, artifacts, hash, number, now, format);
                 stored = _store.ReadVersion(connection, transaction, request.Kind, request.Name, number)!;
             }
 
             if (mode == PublishMode.Serve)
             {
+                CheckInstancesRead(connection, transaction, request.Kind, request.Name, stored.Version, stored.Format);
                 if (_kinds is not null) CheckCanBeActive(connection, transaction, request.Kind, request.Name, request.Channel, stored, depends: stored.DependsOn);
                 var after = new Pointer(stored.Version, head is { Active: > 0 } ? head.Active : null, head?.Staged == stored.Version ? null : head?.Staged, head?.StagedAt, head?.StagedBy);
                 Save(connection, transaction, request.Kind, request.Name, request.Channel, after, head is not null, activeChanged: true, request.By, now);
@@ -219,6 +231,7 @@ public sealed partial class DefinitionPublisher
             CheckExpected(kind, name, expectedVersion, head);
             if (_store.ReadVersion(c.Connection, c.Transaction, kind, name, version) is not { } wanted) throw new DefinitionNotFoundException($"'{name}' has no version {version}.");
             if (head is { Active: > 0 } already && already.Active == version) return wanted;
+            CheckInstancesRead(c.Connection, c.Transaction, kind, name, wanted.Version, wanted.Format);
             if (_kinds is not null) CheckCanBeActive(c.Connection, c.Transaction, kind, name, channel, wanted, wanted.DependsOn);
             var after = new Pointer(version, head is { Active: > 0 } ? head.Active : null, head?.Staged == version ? null : head?.Staged, head?.StagedAt, head?.StagedBy);
             if (!Save(c.Connection, c.Transaction, kind, name, channel, after, head is not null, activeChanged: true, by, c.Now, head is null ? null : new Guard(head.Active, null, false)))
@@ -236,6 +249,7 @@ public sealed partial class DefinitionPublisher
             CheckExpected(kind, name, expectedVersion, head);
             var target = head?.Previous ?? throw new DefinitionNotFoundException($"'{name}' on {channel} has no earlier version to return to.");
             var wanted = _store.ReadVersion(c.Connection, c.Transaction, kind, name, target) ?? throw new DefinitionNotFoundException($"'{name}' has no version {target}.");
+            CheckInstancesRead(c.Connection, c.Transaction, kind, name, wanted.Version, wanted.Format);
             var after = new Pointer(target, head.Active > 0 ? head.Active : null, head.Staged, head.StagedAt, head.StagedBy);
             if (!Save(c.Connection, c.Transaction, kind, name, channel, after, true, activeChanged: true, by, c.Now, new Guard(head.Active, null, false)))
                 throw new DefinitionConflictException($"The {kind} '{name}' was changed by someone else while this call rolled it back; read it again.", expectedVersion ?? 0, head.Active);
@@ -409,6 +423,7 @@ public sealed partial class DefinitionPublisher
         CheckExpected(kind, name, expectedVersion, head);
         var staged = head?.Staged ?? throw new DefinitionNotFoundException($"The {kind} '{name}' has nothing staged in channel '{channel}'.");
         var version = _store.ReadVersion(connection, transaction, kind, name, staged) ?? throw new DefinitionNotFoundException($"'{name}' has no version {staged}.");
+        CheckInstancesRead(connection, transaction, kind, name, version.Version, version.Format);
         if (_kinds is not null) CheckCanBeActive(connection, transaction, kind, name, channel, version, version.DependsOn);
         var after = new Pointer(staged, head!.Active > 0 ? head.Active : null, null, null, null);
         if (!Save(connection, transaction, kind, name, channel, after, true, activeChanged: true, by, now, new Guard(head.Active, staged, true))) return null;
@@ -428,6 +443,7 @@ public sealed partial class DefinitionPublisher
     private void CheckCanBeActive(DbConnection connection, DbTransaction transaction, string kind, string name, string channel, DefinitionVersion version, IReadOnlyList<string> depends)
     {
         var definition = _kinds!.Require(kind);
+        if (DefinitionFormat.Refusal(kind, name, version.Version, version.Format, definition.Formats, "this server") is { } unreadable) throw new PublishRefusedException(PublishRefusal.Format, unreadable);
         if (definition.RequiresApproval && !IsApproved(connection, transaction, kind, name, version.Version))
             throw new PublishRefusedException(PublishRefusal.ApprovalRequired, $"The {kind} '{name}' version {version.Version} is trusted code and has not been approved by an administrator, so it cannot become active in channel '{channel}'.");
 
@@ -449,6 +465,34 @@ public sealed partial class DefinitionPublisher
             throw new PublishRefusedException(PublishRefusal.DependencyNotActive, $"The {kind} '{name}' version {version.Version} cannot become active in channel '{channel}': it depends on {string.Join(", ", missing)}.");
 
         CheckSlots(connection, transaction, kind, name, channel, version);
+    }
+
+    /// <summary>The live instances of the group, as its instance rows say (the same source the migration guard asks, 29b U02); none when the layout has no source.</summary>
+    private IReadOnlyList<GroupInstance> LiveInstances(DbConnection connection, DbTransaction? transaction)
+    {
+        if (_database.Layout is not { GroupInstances: { } source } layout) return [];
+        return source.Live(new GroupInstanceContext(connection, transaction, layout, _database.Time.GetUtcNow(),
+            module => layout.Namespaces.Where(n => n.Module.Name == module).Select(n => (int?)n.Module.Version).FirstOrDefault()));
+    }
+
+    /// <summary>
+    /// Refuses a version, naming the first live instance that cannot read its format (24a D4): the group must never hold a version one of its instances cannot serve. An instance whose row records
+    /// no formats predates the column and reads format 1; one that records formats but not this kind does not serve the kind and is not asked. Format 1 is read by every instance, so it asks nobody.
+    /// </summary>
+    private void CheckInstancesRead(DbConnection connection, DbTransaction? transaction, string kind, string name, int? version, int format)
+    {
+        if (format <= DefinitionFormat.First) return;
+        foreach (var instance in LiveInstances(connection, transaction))
+        {
+            DefinitionFormats reads;
+            if (instance.DefinitionFormats is null) reads = DefinitionFormats.One;
+            else if (!instance.DefinitionFormats.TryGetValue(kind, out reads)) continue;
+            if (reads.Reads(format)) continue;
+            var which = version is { } v ? $"version {v} of the {kind} '{name}'" : $"the {kind} '{name}'";
+            throw new PublishRefusedException(PublishRefusal.InstanceFormat,
+                $"{(version is null ? "Cannot publish" : "Cannot serve")} {which} in format {format}: the instance {instance.Id}{(instance.Host is null ? "" : $" on {instance.Host}")}{(instance.SoftwareVersion is null ? "" : $" (software {instance.SoftwareVersion})")} is live and reads " +
+                $"{(instance.DefinitionFormats is null ? "format 1 only (its row records no formats)" : $"{(reads.Previous == reads.Current ? "format" : "formats")} {reads} of {kind}")}. Upgrade that instance first, or stop it, then publish again.");
+        }
     }
 
     private void CheckSlots(DbConnection connection, DbTransaction transaction, string kind, string name, string channel, DefinitionVersion version)
@@ -510,9 +554,11 @@ public sealed partial class DefinitionPublisher
         return null;
     }
 
-    private static string HashOf(string manifest, IReadOnlyList<DefinitionArtifact> artifacts)
+    private static string HashOf(string manifest, IReadOnlyList<DefinitionArtifact> artifacts, int format)
     {
         var text = artifacts.Count == 0 ? manifest : manifest + "\n" + string.Join("\n", artifacts.OrderBy(a => a.Path, StringComparer.Ordinal).Select(a => $"{a.Path}\t{a.Sha256}"));
+        // format 1 hashes as it always did, so a version stored before the format column is the same version when it is published again
+        if (format != DefinitionFormat.First) text = $"format {format.ToString(System.Globalization.CultureInfo.InvariantCulture)}\n{text}";
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
     }
 
@@ -523,11 +569,12 @@ public sealed partial class DefinitionPublisher
         return command.ExecuteScalar() is { } top and not DBNull ? Convert.ToInt32(top, System.Globalization.CultureInfo.InvariantCulture) : 0;
     }
 
-    private void Insert(DbConnection connection, DbTransaction transaction, PublishRequest request, IReadOnlyList<DefinitionArtifact> artifacts, string hash, int number, DateTimeOffset now)
+    private void Insert(DbConnection connection, DbTransaction transaction, PublishRequest request, IReadOnlyList<DefinitionArtifact> artifacts, string hash, int number, DateTimeOffset now, int format)
     {
         var withProgress = request.Progress is not null;
         using var insert = _database.Command(Module, connection, transaction,
-            $"INSERT INTO {{table:definition_version}} (kind, name, version, hash, content, depends_on, published_by, published_at, note, progress) VALUES ($kind, $name, $version, $hash, $content, CAST($depends AS {{{{json}}}}), $by, $now, $note, {(withProgress ? "$progress" : "NULL")});");
+            $"INSERT INTO {{table:definition_version}} (kind, name, version, hash, content, depends_on, published_by, published_at, note, progress, format) VALUES ($kind, $name, $version, $hash, $content, CAST($depends AS {{{{json}}}}), $by, $now, $note, {(withProgress ? "$progress" : "NULL")}, $format);");
+        insert.Bind(_database, "format", (long)format);
         insert.Bind(_database, "kind", request.Kind).Bind(_database, "name", request.Name).Bind(_database, "version", (long)number).Bind(_database, "hash", hash).Bind(_database, "content", request.Manifest)
             .Bind(_database, "depends", JsonSerializer.Serialize(request.DependsOn ?? [])).Bind(_database, "by", request.By).Bind(_database, "now", now).Bind(_database, "note", request.Note, System.Data.DbType.String);
         if (withProgress) insert.Bind(_database, "progress", request.Progress);
