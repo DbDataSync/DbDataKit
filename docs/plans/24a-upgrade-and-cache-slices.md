@@ -118,6 +118,8 @@ The rule is held by this section and, in part, by `scripts/check_formats.py` aga
 | Semantic package (the catalog) | format 2 of the definition (`Catalog.Format`) | 2 / 1 | open: gains `cache`, `checks` |
 | Build model file (a model's `.yml`) | `schemaVersion` (absent is 1; `build-model`) | 2 / 1 | open: gains `checks` (23a FQ02) |
 | Runner package | `package/1` | 1 / 1 | frozen by its release |
+| Dashboard document | `dashboard/1` (`schemaVersion`, `kind: dashboard`) | 1 / 1 | open: new (plan 32 DBR02); **one number with `report/1`** (`ViewsFormat.Current`), the shared core is versioned with both kinds |
+| Report document | `report/1` (`schemaVersion`, `kind: report`) | 1 / 1 | open: new (plan 32 DBR02); `docs/formats.json` is not on this base, so these two rows stand in for its two entries (one `version_source`, the core schema file in each `files`) |
 | Management API / compatibility generation | `ManagementApi.Version` / `SuiteCompatibility.Generation` | own and one before | UC04 |
 
 ## Questions for the owner

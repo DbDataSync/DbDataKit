@@ -1,0 +1,49 @@
+schemaVersion: 1
+kind: dashboard
+title: Sales today
+parameters:
+  - {name: region, type: string, for: customers.region, many: true, default: []}
+refresh: {every: 5m}
+widgets:
+  regions: {type: control, parameter: region, control: multiselect}
+  revenue:
+    type: metric
+    label: Revenue
+    encodings: {value: orders.net_revenue, compare: orders.net_revenue_prev}
+    query:
+      model: sales
+      filters: [{attribute: customers.region, operator: in, values: {param: region}}]
+  by_region:
+    type: chart
+    mark: bar
+    encodings: {x: customers.region, y: orders.net_revenue, color: products.category}
+    query: {model: sales, order: [[orders.net_revenue, desc]], limit: 20}
+    on_select: {set: region, from: customers.region}
+layouts:
+  - name: desk
+    type: reflow
+    default: true
+    grid: {columns: 12, rows: 8}
+    tiles:
+      - {widget: regions, x: 0, y: 0, w: 4, h: 1}
+      - {widget: by_region, x: 0, y: 1, w: 8, h: 4, min: {w: 320, h: 200}}
+      - {widget: revenue, x: 8, y: 1, w: 4, h: 2}
+  - name: wall
+    type: canvas
+    when: {width: {min: 1700}, medium: screen}
+    canvas: {width: 1920, height: 1080}
+    overflow: scale
+    tiles:
+      - {widget: revenue, x: 40, y: 40, w: 400, h: 180}
+      - {widget: by_region, x: 40, y: 260, w: 1200, h: 700}
+  - name: print
+    type: flow
+    when: {medium: [print, export]}
+    page: {size: A4, orientation: portrait, margins: {top: 20, right: 15, bottom: 20, left: 15}}
+    header: {left: "{title}"}
+    footer: {center: "Page {page} of {pages}"}
+    sections:
+      - title: Summary
+        blocks:
+          - {widget: revenue}
+          - {widget: by_region, height: 80}

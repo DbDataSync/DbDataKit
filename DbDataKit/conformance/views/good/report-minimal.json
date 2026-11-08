@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "kind": "report",
+  "title": "Minimal",
+  "widgets": {
+    "note": {
+      "type": "text",
+      "text": "Nothing but words."
+    }
+  },
+  "layouts": [
+    {
+      "name": "print",
+      "type": "flow",
+      "default": true,
+      "sections": [
+        {
+          "blocks": [
+            {
+              "widget": "note"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

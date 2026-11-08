@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dbdatakit.invalid/visuals/dashboard.schema.json",
+  "title": "Dashboard document (dashboard/1)",
+  "description": "A dashboard: the shared core (widgets, parameters, layouts, theme) plus refresh and kiosk. Its default layout is a fit layout (reflow or canvas); it may carry a flow print layout. The loader (DbDataKit.Views) is the authority; a test keeps the two equal.",
+  "type": "object",
+  "required": ["schemaVersion", "kind", "title", "widgets", "layouts"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "kind": { "const": "dashboard" },
+    "title": { "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/title" },
+    "parameters": { "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/parameters" },
+    "theme": { "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/theme" },
+    "refresh": {
+      "type": "object",
+      "required": ["every"],
+      "additionalProperties": false,
+      "properties": { "every": { "description": "A duration: 30s, 5m, 1h. The server's floor applies.", "type": "string", "pattern": "^[1-9][0-9]*[smh]$" } }
+    },
+    "kiosk": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "layout": { "description": "The layout kiosk mode shows when none is named.", "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/name" } }
+    },
+    "widgets": { "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/widgets" },
+    "layouts": { "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/layouts" }
+  }
+}

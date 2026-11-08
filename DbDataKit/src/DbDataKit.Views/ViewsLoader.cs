@@ -5,20 +5,31 @@ using DbDataKit.Config.Yaml;
 namespace DbDataKit.Views;
 
 /// <summary>
-/// The strict reader of the widget vocabulary of <c>dashboard/1</c> and <c>report/1</c> (plan 32 section 2): a widgets map in YAML or JSON goes in, widgets or diagnostics with the file, line and column come out;
-/// nothing throws on a damaged file. The JSON Schemas in <c>web/visuals/schemas</c> (<c>core</c>, with <c>view</c> and <c>vega-lite-subset</c>) are embedded; this loader is the authority and a test keeps the keys,
-/// choices and limits of both equal. The checks that need the catalog (an encoded field the model lacks, an invalid request) are made at publish, not here.
+/// The strict reader of <c>dashboard/1</c> and <c>report/1</c> (plan 32 sections 2 and 3): one core (widgets, parameters, layouts, selectors) and the rules of each kind on top of it. A YAML or JSON file goes in,
+/// a <see cref="ViewDocument"/> or diagnostics with the file, line and column come out; nothing throws on a damaged file. <see cref="DashboardLoader"/> and <see cref="ReportLoader"/> are this loader with the
+/// kind fixed, so a file of the other kind is refused saying what it is. The JSON Schemas in <c>web/visuals/schemas</c> (<c>core</c>, <c>dashboard</c>, <c>report</c>) are embedded; this loader is the
+/// authority and a test keeps the keys, choices and limits of both equal. The checks that need the catalog (an encoded field the model lacks, an invalid request) are made at publish, not here.
 /// </summary>
 public static partial class ViewsLoader
 {
     public const int MaximumWidgets = 100;
+    public const int MaximumLayouts = 20;
+    public const int MaximumTiles = 200;
+    public const int MaximumParameters = 50;
     public const int MaximumQueryLimit = 10_000;
+    public const int MinimumCanvasPixels = 320;
+    public const int MaximumCanvasPixels = 8_000;
+    public const double DefaultMinScale = 0.5;
+    public const double DefaultMaxScale = 4;
 
     /// <summary>The keys each part accepts, by part name. The JSON Schema files have the same keys; a test keeps them equal.</summary>
     public static readonly IReadOnlyDictionary<string, string[]> Keys = new Dictionary<string, string[]>
     {
-                ["parameter"] = ["name", "type", "for", "many", "required", "default", "label"],
-            ["widget.metric"] = ["type", "title", "label", "format", "encodings", "query"],
+        ["dashboard"] = ["schemaVersion", "kind", "title", "parameters", "theme", "refresh", "kiosk", "widgets", "layouts"],
+        ["report"] = ["schemaVersion", "kind", "title", "parameters", "theme", "strict", "limits", "cover", "widgets", "layouts"],
+        ["parameter"] = ["name", "type", "for", "many", "required", "default", "label"],
+        ["theme"] = ["font"],
+        ["widget.metric"] = ["type", "title", "label", "format", "encodings", "query"],
         ["widget.chart"] = ["type", "title", "mark", "encodings", "query", "on_select", "drill"],
         ["widget.matrix"] = ["type", "title", "encodings", "query", "on_select", "drill"],
         ["widget.table"] = ["type", "title", "encodings", "query", "drill"],
@@ -43,12 +54,38 @@ public static partial class ViewsLoader
         ["drill"] = ["to", "with"],
         ["drill.to"] = ["dashboard", "report", "view"],
         ["control.values"] = ["attribute", "limit"],
-                                                                                                    };
+        ["layout.common"] = ["name", "type", "default", "when", "widget_options"],
+        ["layout.reflow"] = ["grid", "tiles"],
+        ["layout.canvas"] = ["canvas", "overflow", "min_scale", "max_scale", "tiles"],
+        ["layout.flow"] = ["page", "header", "footer", "cover", "sections"],
+        ["grid"] = ["columns", "rows"],
+        ["canvas"] = ["width", "height", "unit"],
+        ["tile.reflow"] = ["widget", "x", "y", "w", "h", "min"],
+        ["tile.canvas"] = ["widget", "x", "y", "w", "h", "layer", "min"],
+        ["min"] = ["w", "h"],
+        ["when"] = ["width", "height", "orientation", "aspect", "medium"],
+        ["range"] = ["min", "max"],
+        ["page"] = ["size", "orientation", "margins"],
+        ["margins"] = ["top", "right", "bottom", "left"],
+        ["running_text"] = ["left", "center", "right"],
+        ["section"] = ["title", "break", "blocks"],
+        ["block.widget"] = ["widget", "height", "keep", "repeat_header"],
+        ["block.row"] = ["row", "keep"],
+        ["block.pagebreak"] = ["pagebreak"],
+        ["row_item"] = ["widget", "span"],
+        ["widget_options"] = ["density", "show_title", "legend"],
+        ["refresh"] = ["every"],
+        ["kiosk"] = ["layout"],
+        ["limits"] = ["pages", "rows"],
+        ["cover"] = ["parameters"],
+    };
 
     /// <summary>The values of each choice, by name.</summary>
     public static readonly IReadOnlyDictionary<string, string[]> Choices = new Dictionary<string, string[]>
     {
+        ["kind"] = ["dashboard", "report"],
         ["parameterType"] = ["string", "integer", "number", "boolean"],
+        ["font"] = ["sans", "serif", "mono"],
         ["widgetType"] = ["metric", "chart", "matrix", "table", "text", "image", "control"],
         ["format"] = ["catalog", "full", "compact", "percent"],
         ["align"] = ["left", "right", "center"],
@@ -57,7 +94,28 @@ public static partial class ViewsLoader
         ["control"] = ["select", "multiselect", "date", "daterange", "number", "toggle", "text"],
         ["mediaType"] = ["image/png", "image/jpeg", "image/webp"],
         ["fit"] = ["contain", "cover"],
+        ["layoutType"] = ["reflow", "canvas", "flow"],
+        ["orientation"] = ["portrait", "landscape"],
+        ["medium"] = ["screen", "print", "export"],
+        ["overflow"] = ["scale", "scroll"],
+        ["unit"] = ["px", "mm", "in"],
+        ["pageSize"] = ["A3", "A4", "A5", "Letter", "Legal"],
+        ["break"] = ["before", "after"],
+        ["density"] = ["compact", "comfortable"],
+        ["legend"] = ["show", "hide"],
     };
+
+    /// <summary>The smallest a tile of a widget type may be at scale 1, in CSS pixels (plan 32 section 3.3); a type that is not listed has none.</summary>
+    public static readonly IReadOnlyDictionary<string, (int W, int H)> Minimums = new Dictionary<string, (int, int)>
+    {
+        ["metric"] = (160, 88), ["text"] = (160, 56), ["control"] = (180, 56), ["chart"] = (280, 180), ["table"] = (320, 200), ["matrix"] = (360, 220),
+    };
+
+    /// <summary>The names a header or footer may put in braces, besides <c>params.name</c>.</summary>
+    public static readonly string[] RunningTokens = ["title", "page", "pages", "asof", "viewer"];
+
+    /// <summary>Keys of a widget that a layout may never set: it restyles a widget and never changes what it shows.</summary>
+    internal static readonly string[] WidgetOwnKeys = ["type", "title", "encodings", "query", "format", "formats", "parameter", "parameters", "mark", "columns", "text", "hash", "label", "values", "control"];
 
     /// <summary>Keys that fetch data or compute a value: a chart spec has none of them, wherever they appear. The list of the Vega-Lite subset check of <c>@dbdatakit/visuals</c>, plus the expression carriers.</summary>
     public static readonly string[] ComputingKeys =
@@ -66,13 +124,31 @@ public static partial class ViewsLoader
         "calculate", "expr", "condition", "datum", "value", "filter",
     ];
 
-    /// <summary>The JSON Schema text of a schema file of this format: <c>core</c>, <c>view</c> or <c>vega-lite-subset</c>.</summary>
+    /// <summary>The JSON Schema text of a schema file of this format: <c>core</c>, <c>dashboard</c>, <c>report</c>, <c>view</c> or <c>vega-lite-subset</c>.</summary>
     public static string Schema(string name)
     {
         using var stream = typeof(ViewsLoader).Assembly.GetManifestResourceStream($"DbDataKit.Views.schemas.{name}.schema.json")
             ?? throw new ArgumentException($"'{name}' is not a schema of this format.", nameof(name));
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
+    }
+
+    /// <summary>
+    /// Reads a dashboard or a report.
+    /// </summary>
+    /// <param name="text">The file's text (YAML, or JSON when the file name ends in <c>.json</c>).</param>
+    /// <param name="file">The file's path, which diagnostics name.</param>
+    /// <param name="expected">The kind the caller wants (<see cref="DashboardLoader"/>, <see cref="ReportLoader"/>); null accepts either.</param>
+    /// <param name="targets">The parameters of the documents a drill may lead to, keyed <c>dashboard:name</c>, <c>report:name</c> or <c>view:name</c>; null skips the check of a drill's parameters.</param>
+    public static ViewsLoadResult Load(string text, string file, ViewKind? expected = null, IReadOnlyDictionary<string, IReadOnlyList<ViewParameter>>? targets = null)
+    {
+        var diags = new List<ConfigDiagnostic>();
+        var root = JsonInput.ReadByExtension(text, file, diags);
+        if (root is null && !diags.HasErrors()) diags.Add(DefaultDiagnosticCatalog.Instance.Create(ViewsCodes.InvalidValue, file, 1, 1, "The file is empty.", "Write `schemaVersion: 1`, a `kind`, `title`, `widgets` and `layouts`."));
+        if (root is null || diags.HasErrors()) return new(null, diags);
+        var reader = new Reader(file, diags, targets) { Expected = expected };
+        var document = reader.Read(root);
+        return new(diags.HasErrors() ? null : document, diags);
     }
 
     /// <summary>
@@ -83,7 +159,7 @@ public static partial class ViewsLoader
     /// <param name="text">The file's text.</param>
     /// <param name="file">The file's path, which diagnostics name.</param>
     /// <param name="parameters">The names of the parameters the widgets may use (a document declares them under <c>parameters</c>).</param>
-    /// <param name="targets">The parameters of the documents a drill may lead to, as <c>dashboard/1</c> will give them (keyed <c>report:name</c>); null skips that check.</param>
+    /// <param name="targets">The parameters of the documents a drill may lead to, as for <see cref="Load"/>; null skips that check.</param>
     public static WidgetsLoadResult LoadWidgets(string text, string file, IEnumerable<string>? parameters = null, IReadOnlyDictionary<string, IReadOnlyList<ViewParameter>>? targets = null)
     {
         var diags = new List<ConfigDiagnostic>();
@@ -117,3 +193,14 @@ public static partial class ViewsLoader
     }
 }
 
+/// <summary>The loader of <c>dashboard/1</c>: <see cref="ViewsLoader"/> with the kind fixed, so a report is refused saying it is a report.</summary>
+public static class DashboardLoader
+{
+    public static ViewsLoadResult Load(string text, string file, IReadOnlyDictionary<string, IReadOnlyList<ViewParameter>>? targets = null) => ViewsLoader.Load(text, file, ViewKind.Dashboard, targets);
+}
+
+/// <summary>The loader of <c>report/1</c>: <see cref="ViewsLoader"/> with the kind fixed, so a dashboard is refused saying it is a dashboard.</summary>
+public static class ReportLoader
+{
+    public static ViewsLoadResult Load(string text, string file, IReadOnlyDictionary<string, IReadOnlyList<ViewParameter>>? targets = null) => ViewsLoader.Load(text, file, ViewKind.Report, targets);
+}

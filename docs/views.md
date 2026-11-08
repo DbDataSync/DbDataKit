@@ -54,3 +54,162 @@ shares are part of the **query**, run on the server as the viewer.
 `ViewsLoader.LoadWidgets` (.NET) and `validateWidgets` (TypeScript) check a widgets map alone, as an assistant's answer, a portal block or a pin holds it. The shared documents and the expected code and path of each
 refusal are in `DbDataKit/conformance/views/widgets`; both suites run them.
 
+## A document: the shared core and the two kinds
+
+```yaml
+schemaVersion: 1
+kind: dashboard
+title: Sales today
+parameters:
+  - {name: region, type: string, for: customers.region, many: true, default: []}
+refresh: {every: 5m}
+widgets:
+  regions: {type: control, parameter: region, control: multiselect}
+  revenue:
+    type: metric
+    label: Revenue
+    encodings: {value: orders.net_revenue, compare: orders.net_revenue_prev}
+    query:
+      model: sales
+      filters: [{attribute: customers.region, operator: in, values: {param: region}}]
+  by_region:
+    type: chart
+    mark: bar
+    encodings: {x: customers.region, y: orders.net_revenue, color: products.category}
+    query: {model: sales, order: [[orders.net_revenue, desc]], limit: 20}
+    on_select: {set: region, from: customers.region}
+layouts:
+  - name: desk
+    type: reflow
+    default: true
+    grid: {columns: 12, rows: 8}
+    tiles:
+      - {widget: regions, x: 0, y: 0, w: 4, h: 1}
+      - {widget: by_region, x: 0, y: 1, w: 8, h: 4, min: {w: 320, h: 200}}
+      - {widget: revenue, x: 8, y: 1, w: 4, h: 2}
+  - name: wall
+    type: canvas
+    when: {width: {min: 1700}, medium: screen}
+    canvas: {width: 1920, height: 1080}
+    overflow: scale
+    tiles:
+      - {widget: revenue, x: 40, y: 40, w: 400, h: 180}
+      - {widget: by_region, x: 40, y: 260, w: 1200, h: 700}
+  - name: print
+    type: flow
+    when: {medium: [print, export]}
+    page: {size: A4, orientation: portrait, margins: {top: 20, right: 15, bottom: 20, left: 15}}
+    header: {left: "{title}"}
+    footer: {center: "Page {page} of {pages}"}
+    sections:
+      - title: Summary
+        blocks:
+          - {widget: revenue}
+          - {widget: by_region, height: 80}
+```
+
+* `schemaVersion: 1`, `kind: dashboard | report`, `title`, `parameters` (J25's definitions: `name type for many required default label`; types `string integer number boolean`), `theme: {font: sans | serif | mono}`,
+  `widgets` (a map of id to widget) and `layouts` (a list).
+* **Layouts** place widgets by id and never change one. A layout has a unique `name`, a `type` (`reflow`, `canvas`, `flow`) and the placement data of its type, an optional `when` selector and `default: true`.
+  Exactly one layout is the default and **the default places every widget**; any other layout may omit widgets (an omitted widget is not queried when that layout is shown) except the control of a `required`
+  parameter that has no default. A widget that **no** layout places is refused.
+* A layout restyles a widget only through `widget_options: {widget_id: {density: compact | comfortable, show_title, legend: show | hide}}` and the placement hints of its type. It cannot change a widget's type,
+  encodings, query, formats or parameters (`DBD-VIEW-032`).
+
+| Layout | Placement data |
+| --- | --- |
+| `reflow` | `grid: {columns, rows}` and `tiles: [{widget, x, y, w, h, min: {w, h}}]` in cells; tiles stay inside the grid and do not overlap |
+| `canvas` | `canvas: {width, height, unit: px \| mm \| in}` (320 to 8000 px a side, 96 px per inch), `overflow: scale \| scroll`, `min_scale` (default 0.5), `max_scale` (default 4; neither with `scroll`), `tiles: [{widget, x, y, w, h, layer, min}]` in the canvas's unit; tiles stay inside the canvas, overlap only on different `layer`s, and are at least their type's minimum **at scale 1** (metric 160 x 88, text 160 x 56, control 180 x 56, chart 280 x 180, table 320 x 200, matrix 360 x 220 px; a tile's `min`, in px, raises it) |
+| `flow` | `page: {size: A3 \| A4 \| A5 \| Letter \| Legal \| {w, h}, orientation, margins}` (mm), `header` and `footer: {left, center, right}` with `{title} {page} {pages} {asof} {viewer} {params.name}`, `cover: {parameters}`, `sections: [{title, break: before \| after, blocks}]`; a block is `{widget, height, keep, repeat_header}`, `{row: [{widget, span}]}` (spans add up to at most 12) or `{pagebreak: true}` |
+
+**The two kinds** differ only in these rules (one core, one format number: `ViewsFormat.Current`):
+
+| | `dashboard/1` | `report/1` |
+| --- | --- | --- |
+| default layout | `reflow` or `canvas` | `flow` |
+| other layouts | any type (a dashboard may carry a `flow` print layout) | any type (a report may carry fit layouts for the screen) |
+| own keys | `refresh: {every: 30s \| 5m \| 1h}`, `kiosk: {layout}` | `strict`, `limits: {pages, rows}`, `cover: {parameters}` (defaults for a flow layout with no cover) |
+| the other kind's keys | refused (`DBD-VIEW-035`) | `refresh` is refused: a report is a run |
+
+A report:
+
+```yaml
+schemaVersion: 1
+kind: report
+title: Regional sales
+parameters:
+  - {name: quarter, type: string, for: date.fiscal_quarter, default: FY27-Q1}
+strict: true
+limits: {pages: 50}
+cover: {parameters: true}
+widgets:
+  intro: {type: text, text: "Net revenue for **{{params.quarter}}** by region."}
+  lines:
+    type: table
+    title: Orders
+    encodings:
+      columns:
+        - {field: customers.region, label: Region}
+        - {field: orders.net_revenue, label: Net revenue, format: full, align: right}
+      sort: {by: orders.net_revenue, dir: desc}
+    query:
+      model: sales
+      filters: [{attribute: date.fiscal_quarter, operator: equals, values: [{param: quarter}]}]
+      totals: {grand_total: true}
+      limit: 1000
+layouts:
+  - name: print
+    type: flow
+    default: true
+    page: {size: A4, orientation: landscape}
+    header: {left: "{title}", right: "{params.quarter}"}
+    footer: {center: "Page {page} of {pages}"}
+    sections:
+      - title: Detail
+        blocks:
+          - {widget: intro}
+          - {widget: lines, repeat_header: true}
+  - name: wall
+    type: canvas
+    when: {width: {min: 1700}, medium: screen}
+    canvas: {width: 1920, height: 1080}
+    tiles:
+      - {widget: intro, x: 40, y: 40, w: 600, h: 80}
+      - {widget: lines, x: 40, y: 140, w: 1200, h: 700}
+```
+
+`DashboardLoader.Load` and `ReportLoader.Load` are `ViewsLoader.Load` with the kind fixed: a report read as a dashboard is refused saying it is a report (`DBD-VIEW-001`). A `schemaVersion` this program does not
+read is refused naming the kind, the file and both numbers (`DBD-110`).
+
+### Diagnostics of documents
+
+| Code | Meaning |
+| --- | --- |
+| `DBD-110` / `DBD-111` | a newer format; `schemaVersion` that is not a positive whole number |
+| `DBD-VIEW-001` | the file is of the other kind |
+| `DBD-VIEW-020` | a name used twice (a layout, a parameter, a widget placed twice in a layout) |
+| `DBD-VIEW-021` | not exactly one default layout |
+| `DBD-VIEW-022` | the default layout does not place a widget that another layout places |
+| `DBD-VIEW-023` | a widget no layout places |
+| `DBD-VIEW-024` | a key of another layout type (a `canvas` key in a reflow layout; `layer` in a reflow tile) |
+| `DBD-VIEW-025` | a layout places, or restyles, a widget the document does not define |
+| `DBD-VIEW-026` / `-027` / `-028` | a tile outside its grid or canvas; two tiles that overlap; a canvas tile below its minimum at scale 1 |
+| `DBD-VIEW-029` | a canvas out of range, `min_scale` above `max_scale`, scale limits with `overflow: scroll` |
+| `DBD-VIEW-030` | a page size or `{token}` that does not exist; a row wider than 12 columns |
+| `DBD-VIEW-031` | a layout omits the control of a required parameter that has no default |
+| `DBD-VIEW-032` | a layout option that would change a widget |
+| `DBD-VIEW-033` | a selector value that is not one of its choices |
+| `DBD-VIEW-034` | the default layout is of a type the kind does not allow |
+| `DBD-VIEW-035` | a key of the other kind |
+| `DBD-VIEW-080` / `-081` | **warnings**: two layouts with equal selectors (the later is never reached by selection); a range with its minimum above its maximum |
+
+The documents are in `DbDataKit/conformance/views` (`good`, `bad`, `warnings` and `cases.json`, which says the code, path and line of each refusal); the .NET (`DbDataKit.Views.Tests`) and TypeScript
+(`@dbdatakit/visuals`) suites run the same files. The TypeScript validators report the **path** of a problem (`layouts[1].tiles[0].x`), not a line: `JSON.parse` has no positions. The .NET loaders give both.
+What needs the catalog (an encoded field the model does not have, an invalid request) is checked at publish by the engine's validator, not by the loaders.
+
+### Format and freeze
+
+`dashboard/1` and `report/1` are **open** (unreleased) and share **one number**, `ViewsFormat.Current`: a new widget type, query form, layout type or selector condition is `/2` of both kinds in one change, and a document is
+written in the lowest number that can say it. `schemas/views-format.lock.json` records the number and the hashes of `core`, `dashboard` and `report`; a test fails when a schema changes without the lock (while the format
+is open the lock is edited with the schema; once frozen a change is the next number of both kinds).
+

@@ -1,0 +1,527 @@
+{
+  "good": [
+    {
+      "file": "good/dashboard-layouts.json",
+      "kind": "dashboard"
+    },
+    {
+      "file": "good/dashboard-two-canvases.json",
+      "kind": "dashboard"
+    },
+    {
+      "file": "good/dashboard-explicit-queries.json",
+      "kind": "dashboard"
+    },
+    {
+      "file": "good/report-canvas-summary.json",
+      "kind": "report"
+    },
+    {
+      "file": "good/report-minimal.json",
+      "kind": "report"
+    },
+    {
+      "file": "good/example-dashboard.yaml",
+      "kind": "dashboard"
+    },
+    {
+      "file": "good/example-report.yaml",
+      "kind": "report"
+    }
+  ],
+  "bad": [
+    {
+      "name": "image-by-url",
+      "file": "bad/image-by-url.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-003",
+      "path": "widgets.logo.url",
+      "line": 50,
+      "schema": true
+    },
+    {
+      "name": "text-undeclared-parameter",
+      "file": "bad/text-undeclared-parameter.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-008",
+      "path": "widgets.note.text",
+      "line": 42,
+      "schema": false
+    },
+    {
+      "name": "field-not-in-query",
+      "file": "bad/field-not-in-query.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-005",
+      "path": "widgets.semantic.encodings.y",
+      "line": 23,
+      "schema": false
+    },
+    {
+      "name": "query-undeclared-param",
+      "file": "bad/query-undeclared-param.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-008",
+      "path": "widgets.revenue.query.filters[0].values[0].param",
+      "line": 67,
+      "schema": false
+    },
+    {
+      "name": "control-undeclared-parameter",
+      "file": "bad/control-undeclared-parameter.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-008",
+      "path": "widgets.regions.parameter",
+      "line": 33,
+      "schema": false
+    },
+    {
+      "name": "default-misses-a-widget",
+      "file": "bad/default-misses-a-widget.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-022",
+      "path": "layouts[0]",
+      "line": 187,
+      "schema": false
+    },
+    {
+      "name": "dead-widget",
+      "file": "bad/dead-widget.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-023",
+      "path": "widgets.orphan",
+      "line": 185,
+      "schema": false
+    },
+    {
+      "name": "dead-widget-in-a-report",
+      "file": "bad/dead-widget-in-a-report.json",
+      "as": "report",
+      "code": "DBD-VIEW-023",
+      "path": "widgets.orphan",
+      "line": 135,
+      "schema": false
+    },
+    {
+      "name": "two-defaults",
+      "file": "bad/two-defaults.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-021",
+      "path": "layouts[1]",
+      "line": 257,
+      "schema": false
+    },
+    {
+      "name": "no-default",
+      "file": "bad/no-default.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-021",
+      "path": "layouts",
+      "line": 186,
+      "schema": false
+    },
+    {
+      "name": "duplicate-layout-name",
+      "file": "bad/duplicate-layout-name.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-020",
+      "path": "layouts[2].name",
+      "line": 300,
+      "schema": false
+    },
+    {
+      "name": "dashboard-default-flow",
+      "file": "bad/dashboard-default-flow.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-034",
+      "path": "layouts[3]",
+      "line": 330,
+      "schema": false
+    },
+    {
+      "name": "report-default-not-flow",
+      "file": "bad/report-default-not-flow.json",
+      "as": "report",
+      "code": "DBD-VIEW-034",
+      "path": "layouts[1]",
+      "line": 190,
+      "schema": false
+    },
+    {
+      "name": "report-with-refresh",
+      "file": "bad/report-with-refresh.json",
+      "as": "report",
+      "code": "DBD-VIEW-035",
+      "path": "refresh",
+      "line": 252,
+      "schema": true
+    },
+    {
+      "name": "dashboard-with-strict",
+      "file": "bad/dashboard-with-strict.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-035",
+      "path": "strict",
+      "line": 406,
+      "schema": true
+    },
+    {
+      "name": "canvas-key-in-reflow",
+      "file": "bad/canvas-key-in-reflow.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-024",
+      "path": "layouts[0].canvas",
+      "line": 256,
+      "schema": true
+    },
+    {
+      "name": "reflow-key-in-canvas",
+      "file": "bad/reflow-key-in-canvas.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-024",
+      "path": "layouts[1].grid",
+      "line": 298,
+      "schema": true
+    },
+    {
+      "name": "layer-in-reflow",
+      "file": "bad/layer-in-reflow.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-024",
+      "path": "layouts[0].tiles[0].layer",
+      "line": 202,
+      "schema": true
+    },
+    {
+      "name": "option-changes-a-query",
+      "file": "bad/option-changes-a-query.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-032",
+      "path": "layouts[0].widget_options.by_region.query",
+      "line": 254,
+      "schema": true
+    },
+    {
+      "name": "option-changes-encodings",
+      "file": "bad/option-changes-encodings.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-032",
+      "path": "layouts[3].widget_options.by_region.encodings",
+      "line": 402,
+      "schema": true
+    },
+    {
+      "name": "option-unknown",
+      "file": "bad/option-unknown.json",
+      "as": "dashboard",
+      "code": "DBD-104",
+      "path": "layouts[0].widget_options.by_region.zoom",
+      "line": 254,
+      "schema": true
+    },
+    {
+      "name": "layout-places-unknown-widget",
+      "file": "bad/layout-places-unknown-widget.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-025",
+      "path": "layouts[1].tiles[0].widget",
+      "line": 276,
+      "schema": false
+    },
+    {
+      "name": "reflow-tiles-overlap",
+      "file": "bad/reflow-tiles-overlap.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-027",
+      "path": "layouts[0].tiles[4]",
+      "line": 228,
+      "schema": false
+    },
+    {
+      "name": "reflow-tile-outside-grid",
+      "file": "bad/reflow-tile-outside-grid.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-026",
+      "path": "layouts[0].tiles[4]",
+      "line": 228,
+      "schema": false
+    },
+    {
+      "name": "canvas-tiles-overlap",
+      "file": "bad/canvas-tiles-overlap.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-027",
+      "path": "layouts[1].tiles[2]",
+      "line": 289,
+      "schema": false
+    },
+    {
+      "name": "canvas-tile-outside",
+      "file": "bad/canvas-tile-outside.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-026",
+      "path": "layouts[1].tiles[1]",
+      "line": 282,
+      "schema": false
+    },
+    {
+      "name": "canvas-tile-below-minimum",
+      "file": "bad/canvas-tile-below-minimum.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-028",
+      "path": "layouts[2].tiles[0]",
+      "line": 315,
+      "schema": false
+    },
+    {
+      "name": "canvas-min-scale-above-max",
+      "file": "bad/canvas-min-scale-above-max.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-029",
+      "path": "layouts[1].min_scale",
+      "line": 272,
+      "schema": false
+    },
+    {
+      "name": "canvas-scroll-with-scale-limits",
+      "file": "bad/canvas-scroll-with-scale-limits.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-029",
+      "path": "layouts[1].min_scale",
+      "line": 146,
+      "schema": false
+    },
+    {
+      "name": "canvas-too-small",
+      "file": "bad/canvas-too-small.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-029",
+      "path": "layouts[2].canvas.width",
+      "line": 310,
+      "schema": false
+    },
+    {
+      "name": "flow-unknown-page-size",
+      "file": "bad/flow-unknown-page-size.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-030",
+      "path": "layouts[3].page.size",
+      "line": 341,
+      "schema": true
+    },
+    {
+      "name": "flow-unknown-token",
+      "file": "bad/flow-unknown-token.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-030",
+      "path": "layouts[3].footer.center",
+      "line": 355,
+      "schema": false
+    },
+    {
+      "name": "flow-row-over-twelve",
+      "file": "bad/flow-row-over-twelve.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-030",
+      "path": "layouts[3].sections[0].blocks[0].row",
+      "line": 366,
+      "schema": false
+    },
+    {
+      "name": "flow-header-undeclared-parameter",
+      "file": "bad/flow-header-undeclared-parameter.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-008",
+      "path": "layouts[3].header.right",
+      "line": 352,
+      "schema": false
+    },
+    {
+      "name": "layout-omits-required-control",
+      "file": "bad/layout-omits-required-control.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-031",
+      "path": "layouts[1]",
+      "line": 257,
+      "schema": false
+    },
+    {
+      "name": "selector-bad-medium",
+      "file": "bad/selector-bad-medium.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-033",
+      "path": "layouts[1].when.medium",
+      "line": 264,
+      "schema": true
+    },
+    {
+      "name": "selector-unknown-key",
+      "file": "bad/selector-unknown-key.json",
+      "as": "dashboard",
+      "code": "DBD-104",
+      "path": "layouts[1].when.device",
+      "line": 265,
+      "schema": true
+    },
+    {
+      "name": "kiosk-unknown-layout",
+      "file": "bad/kiosk-unknown-layout.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "kiosk.layout",
+      "line": 28,
+      "schema": false
+    },
+    {
+      "name": "on-select-undeclared-parameter",
+      "file": "bad/on-select-undeclared-parameter.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-008",
+      "path": "widgets.by_region.on_select.set",
+      "line": 105,
+      "schema": false
+    },
+    {
+      "name": "drill-missing-required-parameter",
+      "file": "bad/drill-missing-required-parameter.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-037",
+      "path": "widgets.by_region.drill",
+      "line": 108,
+      "schema": false,
+      "targets": {
+        "report:region_detail": [
+          {
+            "name": "region",
+            "required": true
+          },
+          {
+            "name": "year",
+            "required": true
+          },
+          {
+            "name": "quarter",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "drill-undeclared-parameter",
+      "file": "bad/drill-undeclared-parameter.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-008",
+      "path": "widgets.by_region.drill.with.quarter",
+      "line": 114,
+      "schema": false
+    },
+    {
+      "name": "newer-format",
+      "file": "bad/newer-format.json",
+      "as": "dashboard",
+      "code": "DBD-110",
+      "path": "schemaVersion",
+      "line": 2,
+      "schema": true
+    },
+    {
+      "name": "format-not-a-number",
+      "file": "bad/format-not-a-number.json",
+      "as": "dashboard",
+      "code": "DBD-111",
+      "path": "schemaVersion",
+      "line": 2,
+      "schema": true
+    },
+    {
+      "name": "wrong-kind-a-report-as-dashboard",
+      "file": "bad/wrong-kind-a-report-as-dashboard.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-001",
+      "path": "kind",
+      "line": 3,
+      "schema": false
+    },
+    {
+      "name": "wrong-kind-a-dashboard-as-report",
+      "file": "bad/wrong-kind-a-dashboard-as-report.json",
+      "as": "report",
+      "code": "DBD-VIEW-001",
+      "path": "kind",
+      "line": 3,
+      "schema": false
+    },
+    {
+      "name": "kind-missing",
+      "file": "bad/kind-missing.json",
+      "as": null,
+      "code": "DBD-105",
+      "path": "kind",
+      "line": 1,
+      "schema": true
+    },
+    {
+      "name": "parameter-twice",
+      "file": "bad/parameter-twice.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-020",
+      "path": "parameters[2].name",
+      "line": 21,
+      "schema": false
+    },
+    {
+      "name": "parameter-default-wrong-type",
+      "file": "bad/parameter-default-wrong-type.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "parameters[1].default",
+      "line": 18,
+      "schema": false
+    },
+    {
+      "name": "unknown-top-level-key",
+      "file": "bad/unknown-top-level-key.json",
+      "as": "dashboard",
+      "code": "DBD-104",
+      "path": "color",
+      "line": 406,
+      "schema": true
+    },
+    {
+      "name": "refresh-bad-duration",
+      "file": "bad/refresh-bad-duration.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "refresh.every",
+      "line": 25,
+      "schema": true
+    },
+    {
+      "name": "theme-unknown-font",
+      "file": "bad/theme-unknown-font.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "theme.font",
+      "line": 22,
+      "schema": true
+    }
+  ],
+  "warnings": [
+    {
+      "name": "equal-selectors",
+      "file": "warnings/equal-selectors.json",
+      "kind": "dashboard",
+      "code": "DBD-VIEW-080",
+      "path": "layouts[4]",
+      "line": 405
+    },
+    {
+      "name": "empty-range",
+      "file": "warnings/empty-range.json",
+      "kind": "dashboard",
+      "code": "DBD-VIEW-081",
+      "path": "layouts[1].when.width",
+      "line": 261
+    }
+  ]
+}

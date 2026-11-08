@@ -1,0 +1,406 @@
+{
+  "schemaVersion": 1,
+  "kind": "dashboard",
+  "title": "Sales today",
+  "parameters": [
+    {
+      "name": "region",
+      "type": "string",
+      "for": "customers.region",
+      "many": true,
+      "label": "Region",
+      "required": true
+    },
+    {
+      "name": "quarter",
+      "type": "string",
+      "for": "date.fiscal_quarter",
+      "default": "FY27-Q1"
+    }
+  ],
+  "theme": {
+    "font": "sans"
+  },
+  "refresh": {
+    "every": "5m"
+  },
+  "kiosk": {
+    "layout": "wall"
+  },
+  "widgets": {
+    "regions": {
+      "type": "control",
+      "parameter": "region",
+      "control": "multiselect",
+      "values": {
+        "attribute": "customers.region",
+        "limit": 100
+      }
+    },
+    "note": {
+      "type": "text",
+      "text": "Net revenue for **{{params.quarter}}**. See [the glossary](/docs/glossary) for the terms."
+    },
+    "logo": {
+      "type": "image",
+      "hash": "sha256:abababababababababababababababababababababababababababababababab",
+      "media_type": "image/png",
+      "alt": "Company logo",
+      "fit": "contain"
+    },
+    "revenue": {
+      "type": "metric",
+      "label": "Revenue",
+      "format": "compact",
+      "encodings": {
+        "value": "orders.net_revenue",
+        "compare": "orders.net_revenue_prev"
+      },
+      "query": {
+        "model": "sales",
+        "filters": [
+          {
+            "attribute": "date.fiscal_quarter",
+            "operator": "equals",
+            "values": [
+              {
+                "param": "quarter"
+              }
+            ]
+          },
+          {
+            "attribute": "customers.region",
+            "operator": "in",
+            "values": {
+              "param": "region"
+            }
+          }
+        ]
+      }
+    },
+    "by_region": {
+      "type": "chart",
+      "title": "Revenue by region",
+      "mark": "bar",
+      "encodings": {
+        "x": "customers.region",
+        "y": {
+          "field": "orders.net_revenue",
+          "type": "quantitative",
+          "stack": null
+        },
+        "color": "products.category"
+      },
+      "query": {
+        "model": "sales",
+        "order": [
+          [
+            "orders.net_revenue",
+            "desc"
+          ]
+        ],
+        "limit": 20
+      },
+      "on_select": {
+        "set": "region",
+        "from": "customers.region"
+      },
+      "drill": {
+        "to": {
+          "report": "region_detail"
+        },
+        "with": {
+          "region": "$customers.region",
+          "quarter": "$params.quarter"
+        }
+      }
+    },
+    "pivot": {
+      "type": "matrix",
+      "title": "Revenue by region and quarter",
+      "encodings": {
+        "rows": [
+          "customers.region"
+        ],
+        "columns": [
+          "date.fiscal_quarter"
+        ],
+        "values": [
+          {
+            "field": "orders.net_revenue",
+            "format": "compact"
+          }
+        ],
+        "totals": {
+          "rows": true,
+          "columns": true
+        },
+        "sort": {
+          "rows": {
+            "by": "orders.net_revenue",
+            "dir": "desc"
+          }
+        },
+        "column_limit": {
+          "max": 8,
+          "overflow": "top_n_other"
+        }
+      },
+      "query": {
+        "model": "sales",
+        "limit": 1000
+      }
+    },
+    "orders_table": {
+      "type": "table",
+      "title": "Orders",
+      "encodings": {
+        "columns": [
+          {
+            "field": "orders.order_id",
+            "label": "Order",
+            "width": 120
+          },
+          {
+            "field": "customers.region",
+            "label": "Region"
+          },
+          {
+            "field": "orders.net_revenue",
+            "label": "Net revenue",
+            "format": "full",
+            "align": "right"
+          }
+        ],
+        "sort": {
+          "by": "orders.net_revenue",
+          "dir": "desc"
+        }
+      },
+      "query": {
+        "model": "sales",
+        "limit": 100
+      }
+    }
+  },
+  "layouts": [
+    {
+      "name": "desk",
+      "type": "reflow",
+      "default": true,
+      "grid": {
+        "columns": 12,
+        "rows": 8
+      },
+      "tiles": [
+        {
+          "widget": "regions",
+          "x": 0,
+          "y": 0,
+          "w": 4,
+          "h": 1
+        },
+        {
+          "widget": "note",
+          "x": 4,
+          "y": 0,
+          "w": 6,
+          "h": 1
+        },
+        {
+          "widget": "logo",
+          "x": 10,
+          "y": 0,
+          "w": 2,
+          "h": 1
+        },
+        {
+          "widget": "by_region",
+          "x": 0,
+          "y": 1,
+          "w": 8,
+          "h": 4,
+          "min": {
+            "w": 320,
+            "h": 200
+          }
+        },
+        {
+          "widget": "revenue",
+          "x": 8,
+          "y": 1,
+          "w": 4,
+          "h": 2
+        },
+        {
+          "widget": "pivot",
+          "x": 8,
+          "y": 3,
+          "w": 4,
+          "h": 3
+        },
+        {
+          "widget": "orders_table",
+          "x": 0,
+          "y": 5,
+          "w": 8,
+          "h": 3
+        }
+      ],
+      "widget_options": {
+        "by_region": {
+          "density": "comfortable",
+          "legend": "hide"
+        }
+      }
+    },
+    {
+      "name": "wall",
+      "type": "canvas",
+      "when": {
+        "width": {
+          "min": 1700
+        },
+        "medium": "screen"
+      },
+      "canvas": {
+        "width": 1920,
+        "height": 1080,
+        "unit": "px"
+      },
+      "overflow": "scale",
+      "min_scale": 0.5,
+      "max_scale": 4,
+      "tiles": [
+        {
+          "widget": "revenue",
+          "x": 40,
+          "y": 40,
+          "w": 400,
+          "h": 180
+        },
+        {
+          "widget": "by_region",
+          "x": 40,
+          "y": 260,
+          "w": 1200,
+          "h": 700
+        },
+        {
+          "widget": "logo",
+          "x": 1700,
+          "y": 20,
+          "w": 180,
+          "h": 60,
+          "layer": 1
+        }
+      ]
+    },
+    {
+      "name": "phone",
+      "type": "canvas",
+      "when": {
+        "width": {
+          "max": 600
+        },
+        "orientation": "portrait",
+        "medium": "screen"
+      },
+      "canvas": {
+        "width": 390,
+        "height": 900
+      },
+      "overflow": "scale",
+      "tiles": [
+        {
+          "widget": "revenue",
+          "x": 10,
+          "y": 10,
+          "w": 370,
+          "h": 120
+        },
+        {
+          "widget": "by_region",
+          "x": 10,
+          "y": 140,
+          "w": 370,
+          "h": 400
+        }
+      ]
+    },
+    {
+      "name": "print",
+      "type": "flow",
+      "when": {
+        "medium": [
+          "print",
+          "export"
+        ]
+      },
+      "page": {
+        "size": "A4",
+        "orientation": "portrait",
+        "margins": {
+          "top": 20,
+          "right": 15,
+          "bottom": 20,
+          "left": 15
+        }
+      },
+      "header": {
+        "left": "{title}",
+        "right": "{params.quarter}"
+      },
+      "footer": {
+        "center": "Page {page} of {pages}"
+      },
+      "cover": {
+        "parameters": true
+      },
+      "sections": [
+        {
+          "title": "Summary",
+          "break": "before",
+          "blocks": [
+            {
+              "row": [
+                {
+                  "widget": "revenue",
+                  "span": 6
+                },
+                {
+                  "widget": "note",
+                  "span": 6
+                }
+              ]
+            },
+            {
+              "widget": "by_region",
+              "height": 80
+            }
+          ]
+        },
+        {
+          "title": "Detail",
+          "blocks": [
+            {
+              "widget": "orders_table",
+              "repeat_header": true
+            },
+            {
+              "pagebreak": true
+            },
+            {
+              "widget": "pivot"
+            }
+          ]
+        }
+      ],
+      "widget_options": {
+        "by_region": {
+          "density": "comfortable"
+        }
+      }
+    }
+  ]
+}

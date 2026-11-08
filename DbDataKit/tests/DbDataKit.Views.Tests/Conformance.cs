@@ -32,6 +32,8 @@ internal static class Conformance
 
     public static JsonNode Cases(string relative = "cases.json") => JsonNode.Parse(Read(relative))!;
 
+    public static ViewKind? Kind(string? text) => text switch { "dashboard" => ViewKind.Dashboard, "report" => ViewKind.Report, _ => null };
+
     public static IReadOnlyDictionary<string, IReadOnlyList<ViewParameter>>? Targets(JsonNode? node)
     {
         if (node is not JsonObject o) return null;

@@ -8,6 +8,8 @@
     <None Include="README.md" Pack="true" PackagePath="/" />
     <!-- the schemas live with the shared visuals (web/visuals) and are embedded as they are; a test compares nothing because it is the same file -->
     <EmbeddedResource Include="..\..\web\visuals\schemas\core.schema.json" LogicalName="DbDataKit.Views.schemas.core.schema.json" />
+    <EmbeddedResource Include="..\..\web\visuals\schemas\dashboard.schema.json" LogicalName="DbDataKit.Views.schemas.dashboard.schema.json" />
+    <EmbeddedResource Include="..\..\web\visuals\schemas\report.schema.json" LogicalName="DbDataKit.Views.schemas.report.schema.json" />
     <EmbeddedResource Include="..\..\web\visuals\schemas\view.schema.json" LogicalName="DbDataKit.Views.schemas.view.schema.json" />
     <EmbeddedResource Include="..\..\web\visuals\schemas\vega-lite-subset.schema.json" LogicalName="DbDataKit.Views.schemas.vega-lite-subset.schema.json" />
     <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />

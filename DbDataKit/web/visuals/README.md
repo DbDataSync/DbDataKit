@@ -21,3 +21,7 @@ Headless Chromium would be needed only for a pixel-faithful raster or PDF with r
 encodings are `view.schema.json`'s and the Vega-Lite subset's own definitions, referenced) with the codes and paths of `DbDataKit.Views` in .NET. It refuses an image by URL or an SVG, raw HTML in text, any
 computation in a chart (`transform`, `aggregate`, `bin`, `timeUnit`, an expression), an encoded field that is not an output of an explicit query, an unknown key and the reserved `embed`. The documents and the expected
 refusals are `DbDataKit/conformance/views/widgets`, which the .NET suite runs too. The file format is in [`docs/views.md`](../../../docs/views.md).
+
+`validateDashboard`, `validateReport` and `validateViewsDocument` check a whole document: the same widget checks plus the layouts (one default that places every widget, tiles inside the grid or canvas and not
+overlapping, minimums at scale 1, page sizes and tokens, a declared parameter everywhere) and the rules of the kind. They return issues with a code and a **path** (`layouts[1].tiles[0].x`); the .NET loaders also give
+file, line and column. `VIEWS_FORMAT` is the one number of both kinds.
