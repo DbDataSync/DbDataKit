@@ -28,6 +28,13 @@ public static class AppsCommand
             DataSchemas.Object([("name", DataSchemas.String), ("version", DataSchemas.Integer)], "name", "version")),
         new Verb("nav-list", "The navigation sets and their members", EffectClass.OfflineOnly, Where, NavListAsync,
             DataSchemas.Object([("sets", DataSchemas.ListOf(DataSchemas.Object([("name", DataSchemas.String), ("title", DataSchemas.String), ("instances", DataSchemas.ListOf(DataSchemas.String))], "name", "title", "instances")))], "sets")),
+        new Verb("list", "The published apps with the version each serves, and with --app every version of one (what a rollback or a pin can name)", EffectClass.OfflineOnly, $"[--app <app>] {Where}", ListAsync,
+            DataSchemas.Object([("apps", DataSchemas.ListOf(DataSchemas.Object([("name", DataSchemas.String), ("version", DataSchemas.Integer), ("versions", DataSchemas.ListOf(DataSchemas.Integer))], "name", "version", "versions")))], "apps")),
+        new Verb("rollback", "Move an app's current version back to the one before it, or to --to <version>; instances pinned to a version stay, the others serve it at once", EffectClass.RepoFilesOnly, $"--app <app> [--to <version>] {Where}", RollbackAsync,
+            DataSchemas.Object([("app", DataSchemas.String), ("version", DataSchemas.Integer)], "app", "version")),
+        new Verb("remove", "Stop serving an app (its versions and approvals stay on record); refused while an instance of it exists", EffectClass.RepoFilesOnly, $"--app <app> {Where}", RemoveAppAsync, DataSchemas.None),
+        new Verb("instance-remove", "Stop serving an instance: its address answers 404 (its storage and history stay); refused while a portal mounts it", EffectClass.RepoFilesOnly, $"--name <instance> {Where}", RemoveInstanceAsync, DataSchemas.None),
+        new Verb("nav-remove", "Stop serving a navigation set; its instances are not touched", EffectClass.RepoFilesOnly, $"--name <set> {Where}", RemoveNavAsync, DataSchemas.None),
         new Verb("approve", "Approve the exact bytes of a trusted app, as an identity-home user who holds the Approver role (not the author): the hash of a built folder (--path), a hash as given (--hash), or an already published version's hash (--app --version). Publishing a trusted app needs an approval for its hash", EffectClass.RepoFilesOnly,
             $"(--path <folder> [--manifest <file>] | --hash <hash> --app <app> | --app <app> --version <n>) --by <approver> [--egress <directive>=<origin>[,...]] [--note <text>] {Where}", ApproveAsync,
             DataSchemas.Object([("id", DataSchemas.String), ("app", DataSchemas.String), ("version", DataSchemas.String), ("hash", DataSchemas.String)], "id", "app", "version", "hash")),
@@ -177,6 +184,86 @@ public static class AppsCommand
         context.Data["sets"] = sets.Select(s => new Dictionary<string, object?> { ["name"] = s.Name, ["title"] = s.Title, ["instances"] = s.Entries.Select(e => e.Instance).ToList() }).ToList();
         return CliExit.Ok;
     }
+
+    private static async Task<int> ListAsync(string[] args, CliContext context)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "app", "repo" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0)
+        {
+            await context.Error.WriteLineAsync($"Usage: apps list [--app <app>] {Where}");
+            return CliExit.Usage;
+        }
+        var store = new AppInstanceStore(new DefinitionStore(IdentityCommand.Open(parsed)));
+        var current = store.Apps().Where(a => parsed.Get("app") is not { Length: > 0 } only || a.Name == only).ToList();
+        var rows = new List<Dictionary<string, object?>>();
+        foreach (var app in current)
+        {
+            var versions = store.AppVersions(app.Name);
+            await context.Out.WriteLineAsync($"{app.Name}  serves version {app.Version}  (versions: {string.Join(", ", versions.Select(v => v.Version))})");
+            if (parsed.Get("app") is { Length: > 0 })
+                foreach (var v in versions) await context.Out.WriteLineAsync($"  {v.Version}  {v.PublishedAt:yyyy-MM-dd HH:mm}  by {v.PublishedBy}  {v.Hash[..12]}{(v.Note is null ? "" : "  " + v.Note)}{(v.Version == app.Version ? "  <- serving" : "")}");
+            rows.Add(new Dictionary<string, object?> { ["name"] = app.Name, ["version"] = app.Version, ["versions"] = versions.Select(v => v.Version).ToList() });
+        }
+        if (current.Count == 0) await context.Out.WriteLineAsync("No app is published. Publish one with: apps publish --dir <folder>");
+        context.Data["apps"] = rows;
+        return CliExit.Ok;
+    }
+
+    private static async Task<int> RollbackAsync(string[] args, CliContext context)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "app", "to", "repo" });
+        int? to = null;
+        if (parsed.Get("to") is { Length: > 0 } toText)
+        {
+            if (!int.TryParse(toText, out var n) || n < 1) { await context.Error.WriteLineAsync($"'{toText}' is not a version number."); return CliExit.Usage; }
+            to = n;
+        }
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("app") is not { Length: > 0 } app)
+        {
+            await context.Error.WriteLineAsync($"Usage: apps rollback --app <app> [--to <version>] {Where}");
+            return CliExit.Usage;
+        }
+        try
+        {
+            var moved = new AppInstanceStore(new DefinitionStore(IdentityCommand.Open(parsed))).MoveApp(app, Environment.UserName, to);
+            await context.Out.WriteLineAsync($"{app} now serves version {moved.Version}. Instances pinned to a version are unchanged; a trusted app runs only while an approval stands for these exact files.");
+            context.Data["app"] = app;
+            context.Data["version"] = moved.Version;
+            return CliExit.Ok;
+        }
+        catch (AppInstanceException ex)
+        {
+            await context.Error.WriteLineAsync(ex.Message);
+            return CliExit.Failure;
+        }
+    }
+
+    private static async Task<int> RemoveAsync(string[] args, CliContext context, string noun, string option, string usage, Func<AppInstanceStore, string, string, bool> retire)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { option, "repo" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get(option) is not { Length: > 0 } name)
+        {
+            await context.Error.WriteLineAsync($"Usage: {usage} {Where}");
+            return CliExit.Usage;
+        }
+        try
+        {
+            var removed = retire(new AppInstanceStore(new DefinitionStore(IdentityCommand.Open(parsed))), name, Environment.UserName);
+            await context.Out.WriteLineAsync(removed ? $"The {noun} {name} is no longer served." : $"The {noun} {name} was not being served.");
+            return removed ? CliExit.Ok : CliExit.Failure;
+        }
+        catch (AppInstanceException ex)
+        {
+            await context.Error.WriteLineAsync(ex.Message);
+            return CliExit.Failure;
+        }
+    }
+
+    private static Task<int> RemoveAppAsync(string[] args, CliContext context) => RemoveAsync(args, context, "app", "app", "apps remove --app <app>", (s, n, by) => s.RetireApp(n, by));
+
+    private static Task<int> RemoveInstanceAsync(string[] args, CliContext context) => RemoveAsync(args, context, "instance", "name", "apps instance-remove --name <instance>", (s, n, by) => s.RetireInstance(n, by));
+
+    private static Task<int> RemoveNavAsync(string[] args, CliContext context) => RemoveAsync(args, context, "navigation set", "name", "apps nav-remove --name <set>", (s, n, by) => s.RetireNavigation(n, by));
 
     private static async Task<int> ValidateAsync(string[] args, CliContext context)
     {

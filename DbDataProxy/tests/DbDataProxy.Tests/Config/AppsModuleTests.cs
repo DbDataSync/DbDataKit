@@ -239,6 +239,39 @@ public sealed class AppsModuleTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task An_app_is_listed_rolled_back_and_removed_at_the_command_line()
+    {
+        var app = Path.Combine(dataDirectory, "notes-app");
+        Directory.CreateDirectory(app);
+        File.WriteAllText(Path.Combine(app, "app.yaml"), Manifest);
+        File.WriteAllText(Path.Combine(app, "index.html"), "<html><head></head><body>v1</body></html>");
+        Assert.Equal(0, (await Command("apps", "publish", "--dir", app)).Exit);
+        File.WriteAllText(Path.Combine(app, "index.html"), "<html><head></head><body>v2</body></html>");
+        Assert.Equal(0, (await Command("apps", "publish", "--dir", app)).Exit);
+        Assert.Equal(0, (await Command("apps", "instance-save", "--name", "acme", "--app", "notes")).Exit);
+        Assert.Equal(0, (await Command("apps", "nav-save", "--name", "main", "--title", "Main", "--item", "acme")).Exit);
+
+        Assert.Contains("notes  serves version 2  (versions: 1, 2)", (await Command("apps", "list")).Out);
+        Assert.Contains("1  ", (await Command("apps", "list", "--app", "notes")).Out);
+        var back = await Command("apps", "rollback", "--app", "notes");
+        Assert.Equal(0, back.Exit);
+        Assert.Contains("now serves version 1", back.Out);
+        Assert.Contains("now serves version 2", (await Command("apps", "rollback", "--app", "notes", "--to", "2")).Out);
+        Assert.NotEqual(0, (await Command("apps", "rollback", "--app", "notes", "--to", "7")).Exit);
+        Assert.Equal(2, (await Command("apps", "rollback", "--app", "notes", "--to", "x")).Exit);
+
+        var refused = await Command("apps", "remove", "--app", "notes");   // an instance still runs it
+        Assert.Equal(1, refused.Exit);
+        Assert.Contains("acme", refused.Error);
+        Assert.Equal(0, (await Command("apps", "instance-remove", "--name", "acme")).Exit);
+        Assert.Equal(0, (await Command("apps", "nav-remove", "--name", "main")).Exit);
+        Assert.Equal(0, (await Command("apps", "remove", "--app", "notes")).Exit);
+        Assert.Contains("No app is published", (await Command("apps", "list")).Out);
+        Assert.Contains("No instance is published", (await Command("apps", "instance-list")).Out);
+        Assert.Equal(1, (await Command("apps", "instance-remove", "--name", "acme")).Exit);
+    }
+
+    [Fact]
     public async Task A_declared_portals_home_shows_its_view_and_only_the_tiles_the_person_may_open()
     {
         appsPort = FreePort();

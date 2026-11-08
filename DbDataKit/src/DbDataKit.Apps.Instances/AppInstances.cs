@@ -114,6 +114,56 @@ public sealed class AppInstanceStore(DefinitionStore definitions)
         return new ResolvedInstance(instance, stored.Version, app, AppManifestLoader.Load(package.ManifestYaml).Manifest!, package);
     }
 
+    /// <summary>The apps published to the channel, each with the version it serves.</summary>
+    public IReadOnlyList<DefinitionVersion> Apps(string channel = DefinitionStore.Production) => definitions.CurrentOfKind(AppKind, channel);
+
+    /// <summary>Every stored version of an app, oldest first (a retired or rolled-back version stays).</summary>
+    public IReadOnlyList<DefinitionVersion> AppVersions(string app) => definitions.Versions(AppKind, app);
+
+    /// <summary>
+    /// Moves the channel's current version of an app: to <paramref name="version"/>, or back to the one before the current. Instances that pin a version do not move; the others serve the new current at once
+    /// (a trusted app still needs an approval standing for the version's bytes).
+    /// </summary>
+    public DefinitionVersion MoveApp(string app, string by, int? version = null, string channel = DefinitionStore.Production)
+    {
+        if (definitions.Current(AppKind, app, channel) is null) throw new AppInstanceException($"The app '{app}' is not published to {channel}.");
+        try
+        {
+            if (version is { } wanted)
+            {
+                if (definitions.Get(AppKind, app, wanted) is null) throw new AppInstanceException($"The app '{app}' has no version {wanted}.");
+                return definitions.Switch(AppKind, app, wanted, by, channel);
+            }
+            return definitions.Rollback(AppKind, app, by, channel);
+        }
+        catch (Exception ex) when (ex is DefinitionRejectedException or DefinitionNotFoundException)
+        {
+            throw new AppInstanceException(ex.Message);
+        }
+    }
+
+    /// <summary>Stops serving an app in the channel (its versions and approvals stay). Refused while an instance in the channel is an instance of it: remove or move those first.</summary>
+    public bool RetireApp(string app, string by, string channel = DefinitionStore.Production)
+    {
+        var users = List(channel).Where(i => i.App == app).Select(i => i.Name).ToList();
+        if (users.Count > 0) throw new AppInstanceException($"The app '{app}' still has instances in {channel}: {string.Join(", ", users)}. Remove them first (apps instance-remove).");
+        return definitions.Retire(AppKind, app, by, channel);
+    }
+
+    /// <summary>Stops serving an instance (its address answers 404; its history and its storage stay). Refused while a portal mounts it; navigation sets simply stop showing it.</summary>
+    public bool RetireInstance(string name, string by, string channel = DefinitionStore.Production)
+    {
+        var mounting = definitions.CurrentOfKind(AppKind, channel)
+            .Select(v => (v.Name, Manifest: AppManifestLoader.Load(AppPackage.Parse(v.Content).ManifestYaml).Manifest))
+            .Where(a => a.Manifest?.Portal?.Mounts.Any(m => m.App == name) == true).Select(a => a.Name).ToList();
+        var portals = List(channel).Where(i => mounting.Contains(i.App) && i.Name != name).Select(i => i.Name).ToList();
+        if (portals.Count > 0) throw new AppInstanceException($"The instance '{name}' is mounted by the portal instance(s) {string.Join(", ", portals)}. Remove or change those first.");
+        return definitions.Retire(InstanceKind, name, by, channel);
+    }
+
+    /// <summary>Stops serving a navigation set (instances are not touched).</summary>
+    public bool RetireNavigation(string name, string by, string channel = DefinitionStore.Production) => definitions.Retire(NavigationKind, name, by, channel);
+
     /// <summary>The origins of an <c>embed.allowed_origins</c> value, or null with <paramref name="problem"/> set. Each is a bare http(s) origin: no path, no wildcard, nothing that could add a directive to the header.</summary>
     public static IReadOnlyList<string>? EmbedOrigins(string? value, out string? problem)
     {
