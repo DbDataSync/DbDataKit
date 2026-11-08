@@ -99,7 +99,7 @@ different rule.
 
 ### Two kinds of app
 
-**Amended (owner, 2026-10-27) by [plan 22](22-suite-gaps.md) section 1:** declarative views are components of the one app framework,
+**Amended (owner, 2026-10-27) by [plan 22](22a-gap-slices.md) section 1:** declarative views are components of the one app framework,
 not a separate kind of app. App source, builds and versions belong to an apps back-end server built on shared authoring.
 
 | Kind | What it is | For |

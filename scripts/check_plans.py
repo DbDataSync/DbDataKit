@@ -8,8 +8,8 @@ is gone (CLAUDE.md, "Making changes"). Checks, on docs/plans/*.md:
            or built, is flagged: delete it or cut it to an "as built" note (a row counts as slice row when its first cell is an id such
            as R01, DR1, CI03; a row is done when it says `Status: done` or `Status: built`; a plan with no such row is never flagged)
   index    README.md lists every plan file and links to no plan file that is missing
-           (a row whose link goes to a document that is not a plan, such as `../releases.md`, is a finished plan's pointer: its number
-           stays known, so "plan 9" in a source comment or in the index still resolves)
+           (a row whose link goes to a document that is not that plan's own file, such as `../releases.md` or the merged `22a-gap-slices.md` for
+           plan 22, is a pointer: its number stays known, so "plan 9" in a source comment or in the index still resolves)
 
 Violations that exist today and cannot be fixed yet are recorded in scripts/plan_check_baseline.txt, one `file: rule` per line. They are
 printed as warnings and do not fail the check; the list must only shrink: an entry with no violation behind it fails the check.
@@ -25,7 +25,7 @@ SLICE_ROW = re.compile(r"^\|\s*\**([A-Z]{1,3}\d+[a-z]?)\**\s*\|")
 DONE = re.compile(r"status:?\**:?\s*\**(done|built)\b", re.I)
 OPEN_STATUS = re.compile(r"^\**status:?\**:?\s*\**\s*(proposed|in progress|being worked)\b", re.I)
 PLAN_REF = re.compile(r"\bplans?\s+(\d{1,2}[a-z]?)((?:\s*(?:,|and|to)\s*\d{1,2}[a-z]?\b)*)", re.I)
-INDEX_POINTER = re.compile(r"^\|\s*(\d\d[a-z]?)\s*\|[^|]*\]\((?!\d\d[a-z]?-)[^)]*\.md\)", re.M)
+INDEX_ROW = re.compile(r"^\|\s*(\d\d[a-z]?)\s*\|[^|]*\]\(([^)]*\.md)\)", re.M)
 BASELINE = "scripts/plan_check_baseline.txt"
 
 
@@ -71,8 +71,11 @@ def violations(root):
                 add(name, "finished", f"its status says open but all {len(rows)} slice rows are done: delete the plan or cut it to an as-built note")
 
     readme = read(os.path.join(plans_dir, "README.md"))
-    for m in INDEX_POINTER.finditer(readme):
-        numbers.add(number_of(m.group(1)))
+    for m in INDEX_ROW.finditer(readme):
+        # a row whose link goes to a document that is not that plan's own file (`../releases.md`, a package README, or the merged file
+        # of the plan, `22a-gap-slices.md` for plan 22) is a pointer: its number stays known
+        if not os.path.basename(m.group(2)).startswith(m.group(1) + "-"):
+            numbers.add(number_of(m.group(1)))
     for m in PLAN_REF.finditer(readme):
         for ref in [m.group(1)] + re.findall(r"\d{1,2}[a-z]?\b", m.group(2)):
             if number_of(ref) not in numbers:
