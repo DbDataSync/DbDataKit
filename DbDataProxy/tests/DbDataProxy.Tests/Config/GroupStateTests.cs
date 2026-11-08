@@ -50,13 +50,19 @@ public sealed class GroupStateTests : IAsyncLifetime
         TestFolder.Delete(_root);
     }
 
+    private static readonly HashSet<int> HandedOut = [];
+
+    /// <summary>A free port that this process has not handed out before: a port that was only released is free again, and two ports asked for one after the other must differ.</summary>
     private static int FreePort()
     {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
+        while (true)
+        {
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            listener.Stop();
+            lock (HandedOut) if (HandedOut.Add(port)) return port;
+        }
     }
 
     /// <summary>An instance in a data directory of its own (or a shared one), on the state the arguments name.</summary>
