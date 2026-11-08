@@ -55,7 +55,7 @@ from DuckDB's release page for the machine's platform at the same time, and chec
 file that does not match is refused. It is available for Linux (glibc) on x64 and arm64, Windows x64 and macOS on x64 and arm64.
 On a machine without internet access, download `duckdb-shared-libs-<os>-<arch>.tar.gz` for the platform from the DuckDB 2.0.0 release
 elsewhere, put it in a directory, and set `DBDATASYNC_DUCKDB_ENGINE_SOURCE` to that directory before the first `serve`; the docker
-images already contain it.
+images already contain it. `DUCKDB_RELEASE_BASE` (a `file://` folder or an https address that holds the archives) is read too, after that variable and before the release page; it is what the repository's CI points at its cache.
 
 ### `dbdatasync library install`
 
