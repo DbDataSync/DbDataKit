@@ -214,7 +214,7 @@ export function DashboardEditor({ kind, name, source = FIXTURES, keep = null }: 
 
           {selected && widgets[selected] && (
             <WidgetEditor id={selected} widget={widgets[selected]!} doc={doc} catalog={catalog?.catalog ?? null} catalogNote={catalog?.note ?? null} apply={apply} diagnostics={draft.validation.diagnostics} server={server}
-              preview={(widget) => viewsClient(source).preview({ widget, widgetId: selected, document: draft.name || undefined }) as Promise<RenderedWidget>} />
+              preview={(widget) => viewsClient(source).preview({ widget, widgetId: selected, kind, draft: doc, document: draft.name || undefined }) as Promise<RenderedWidget>} />
           )}
 
           <DocumentSettings doc={doc} diagnostics={draft.validation.diagnostics} apply={apply} />
@@ -249,8 +249,9 @@ export function DashboardEditor({ kind, name, source = FIXTURES, keep = null }: 
                   <Problems diagnostics={own.filter((d) => formTarget(d.path).area === 'layout' && (formTarget(d.path) as { tile?: number }).tile === undefined)} testId={`ed-layout-problems-${layout.name}`} />
                   <SelectorEditor layout={layout} apply={apply} />
                   {layout.type === 'flow' && (
-                    <FlowEditor layout={layout} index={index} doc={doc} diagnostics={draft.validation.diagnostics} apply={apply} name={draft.name}
-                      preview={(widget, widgetId) => viewsClient(source).preview({ widget, widgetId, document: draft.name || undefined })} />
+                    <FlowEditor layout={layout} index={index} doc={doc} diagnostics={draft.validation.diagnostics} apply={apply} name={draft.name} text={draft.text}
+                      preview={(widget, widgetId) => viewsClient(source).preview({ widget, widgetId, kind, draft: doc, document: draft.name || undefined })}
+                      previewDocument={viewsClient(source).previewDocument ? (request) => viewsClient(source).previewDocument!({ kind, ...request }) : undefined} />
                   )}
                   {layout.type !== 'flow' && <LayoutSettings layout={layout} index={index} apply={apply} />}
                   {layout.type !== 'flow' && <GridEditor layout={layout} widgets={widgets} apply={apply} say={say} />}

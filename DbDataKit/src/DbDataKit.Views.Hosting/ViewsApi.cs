@@ -160,6 +160,157 @@ public sealed class ViewsApi(ViewsPublications published, IServingServices servi
         }
     }
 
+    // ---- preview ----
+
+    /// <summary>The name a draft has in the audit and in the checks: it is nobody's document, and it is never stored.</summary>
+    public const string DraftName = "draft";
+
+    private static readonly System.Text.RegularExpressions.Regex WidgetIdPattern = new("^[A-Za-z][A-Za-z0-9_-]*$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// The live preview of an unsaved document or widget (plan 32 DBR28): what the editor holds, resolved **as the caller** with the module's limits, and stored nowhere (the registry, the files and the result cache are not touched).
+    /// <para>
+    /// The body is one of two shapes. <b>A document</b>: <c>document</c> (the document as a JSON object) or <c>text</c> (its YAML or JSON), with <c>layout</c> (omitted: chosen for <c>viewport</c> and <c>medium</c>, else the default),
+    /// <c>only</c> and <c>parameters</c> as a render takes them; the answer is the layout's rendered widgets. <b>A widget</b>: <c>widget</c> (a widget as a JSON object) with an optional <c>widget_id</c> (default <c>preview</c>), an optional <c>document</c>
+    /// whose parameters the widget may use, and <c>parameters</c>; the widget is placed alone on a layout of its own and the answer holds its entry. <c>kind</c> is <c>dashboard</c> (the default) or <c>report</c>.
+    /// </para>
+    /// <para>
+    /// It <b>refuses what a publish would refuse</b>: the draft is checked by the registry's validator for the kind (the loader, then the catalog check over the model versions the channel serves, saved queries, control
+    /// attributes, pictures) and a document with a problem is a 400 <c>invalid</c> in the publish's words with the loader's diagnostics placed in the text. An app's narrowed token is held to its manifest's models as for a render.
+    /// What the caller may not read is not a refusal of the request: that widget is an error entry, as in a render. Every call is audited (<c>view.preview</c>: who, through what, the shape, the layout, the counts; never the text or a value).
+    /// </para>
+    /// </summary>
+    public async Task<ViewsAnswer> PreviewAsync(ViewsPrincipal who, JsonObject? body, string? clientAddress = null, string? traceId = null, CancellationToken cancellationToken = default)
+    {
+        if (Enter() is not { } work) return Draining();
+        using (work)
+        {
+            var kind = ViewDefinitions.Dashboard;
+            string shape = "document", text;
+            string? layout = null, widgetId = null;
+            List<string>? only = null;
+            Dictionary<string, JsonNode?>? parameters = null;
+            LayoutContext viewport = new();
+            try
+            {
+                if (body is null) throw new ArgumentException("A preview request has a `document` (or its `text`), or a `widget`.");
+                foreach (var key in body.Select(p => p.Key))
+                    if (key is not ("kind" or "text" or "document" or "widget" or "widget_id" or "layout" or "only" or "parameters" or "viewport" or "medium"))
+                        throw new ArgumentException($"Unknown key `{key}`: a preview request has `kind`, `document` or `text`, `widget`, `widget_id`, `layout`, `only`, `parameters`, `viewport` and `medium`.");
+                var baseDocument = body["document"] switch
+                {
+                    null => null,
+                    JsonObject o => o,
+                    _ => throw new ArgumentException("`document` must be the document as an object; send its text as `text`."),
+                };
+                if (body["kind"] is { } k) kind = k is JsonValue kv && kv.TryGetValue<string>(out var ks) && ViewDefinitions.Kinds.Contains(ks) ? ks : throw new ArgumentException("`kind` is `dashboard` or `report`.");
+                else if (baseDocument?["kind"] is JsonValue dk && dk.TryGetValue<string>(out var documentKind) && ViewDefinitions.Kinds.Contains(documentKind)) kind = documentKind;
+                if (body["parameters"] is { } p) parameters = (p as JsonObject ?? throw new ArgumentException("`parameters` must be an object of values by parameter name.")).ToDictionary(x => x.Key, x => x.Value?.DeepClone());
+                if (body["only"] is { } o2) only = (o2 as JsonArray ?? throw new ArgumentException("`only` must be a list of widget ids.")).Select(x => x is JsonValue v && v.TryGetValue<string>(out var s) ? s : throw new ArgumentException("`only` must be a list of widget ids.")).ToList();
+                if (body["layout"] is { } l) layout = l is JsonValue lv && lv.TryGetValue<string>(out var ls) ? ls : throw new ArgumentException("`layout` must be a layout's name.");
+                var medium = body["medium"] is JsonValue mv && mv.TryGetValue<string>(out var ms) ? ms : "screen";
+                double? Dimension(string key) => body["viewport"] is JsonObject v && v[key] is JsonValue d && d.TryGetValue<double>(out var n) ? n : null;
+                viewport = new LayoutContext(Dimension("width"), Dimension("height"), medium, layout);
+
+                if (body["widget"] is { } w)
+                {
+                    shape = "widget";
+                    if (body["text"] is not null || body["only"] is not null || body["layout"] is not null) throw new ArgumentException("A `widget` preview takes `widget`, `widget_id`, `document` (for its parameters) and `parameters` only; to preview a document, send `document` or `text` and no `widget`.");
+                    if (w is not JsonObject widget) throw new ArgumentException("`widget` must be a widget as an object.");
+                    widgetId = body["widget_id"] is null ? "preview" : body["widget_id"] is JsonValue wi && wi.TryGetValue<string>(out var wid) ? wid : throw new ArgumentException("`widget_id` must be a name.");
+                    if (!WidgetIdPattern.IsMatch(widgetId)) throw new ArgumentException($"`{widgetId}` is not a name for a widget: use a letter, then letters, digits, `_` or `-`.");
+                    text = Synthetic(kind, widgetId, widget, baseDocument);
+                    only = null;
+                    layout = null;
+                    viewport = new LayoutContext(null, null, kind == ViewDefinitions.Report ? "print" : "screen", null);
+                }
+                else
+                {
+                    if (body["widget_id"] is not null) throw new ArgumentException("`widget_id` goes with a `widget`.");
+                    if (body["text"] is not null && baseDocument is not null) throw new ArgumentException("Send the document as `document` or as `text`, not both.");
+                    text = body["text"] is { } t ? t is JsonValue tv && tv.TryGetValue<string>(out var ts) ? ts : throw new ArgumentException("`text` must be the document's text.")
+                        : baseDocument?.ToJsonString() ?? throw new ArgumentException("A preview request has a `document` (or its `text`), or a `widget`.");
+                }
+            }
+            catch (ArgumentException e)
+            {
+                return RefuseDraft(who, kind, 400, "invalid", e.Message, traceId, ("shape", shape));
+            }
+
+            var draft = published.Draft(kind, DraftName, text, out var refusal, out var diagnostics);
+            if (draft is null)
+            {
+                var answer = new JsonObject { ["code"] = "invalid", ["message"] = refusal, ["diagnostics"] = new JsonArray(diagnostics.Select(Diagnostic).ToArray()) };
+                Record(who, ViewsAuditVerbs.Preview, kind, DraftName, null, AuditEvent.Refused, Detail(traceId, ("code", "invalid"), ("shape", shape), ("problems", diagnostics.Count)));
+                Interlocked.Increment(ref refused);
+                return new ViewsAnswer(400, answer);
+            }
+            if (Narrowing(who, draft) is { } why)
+            {
+                Record(who, ViewsAuditVerbs.Preview, kind, DraftName, null, AuditEvent.Refused, Detail(traceId, ("code", "denied"), ("reason", "app_scope"), ("shape", shape)));
+                Interlocked.Increment(ref refused);
+                return ViewsAnswer.Error(403, "denied", why);
+            }
+
+            var chosen = LayoutSelector.Select(draft.Document, viewport);
+            if (chosen.Layout is not { } picked)
+                return RefuseDraft(who, kind, 400, ResolveCodes.UnknownLayout, chosen.Refusal ?? "No layout fits.", traceId, ("shape", shape));
+
+            var context = ContextOf(who, clientAddress, traceId);
+            try
+            {
+                // never the module's cache: an author editing a query must see rows, not what an earlier draft left, and nothing of a draft is kept
+                var resolver = draft.Resolver(services.Queries, Basis(cached: false), services.Entities);
+                var rendered = await resolver.ResolveAsync(context, draft.Document, picked.Name, parameters, only, cancellationToken).ConfigureAwait(false);
+                var errors = rendered.Widgets.Where(w => rendered.Failed(w.Key)).Select(w => (w.Value["code"]?.GetValue<string>() ?? "error")).ToList();
+                var detail = Detail(traceId, ("shape", shape), ("layout", picked.Name), ("widgets", rendered.Widgets.Count), ("errors", errors.Count), ("error_codes", errors.Distinct().Order(StringComparer.Ordinal).ToList()),
+                    ("parameters", parameters?.Keys.Order(StringComparer.Ordinal).ToList()), ("only", only));
+                return Finish(who, ViewsAuditVerbs.Preview, kind, DraftName, null, AuditEvent.Ok, detail, new ViewsAnswer(200, rendered.ToJson()));
+            }
+            catch (ViewResolutionException e)
+            {
+                return RefuseDraft(who, kind, 400, e.Code, e.Message, traceId, ("shape", shape));
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception e) when (e is not (OutOfMemoryException or StackOverflowException or AuditFailure))
+            {
+                Record(who, ViewsAuditVerbs.Preview, kind, DraftName, null, AuditEvent.Failed, Detail(traceId, ("error", e.GetType().Name), ("shape", shape)));
+                Interlocked.Increment(ref refused);
+                return ViewsAnswer.Error(500, "error", $"The preview failed ({e.GetType().Name}).");
+            }
+        }
+    }
+
+    /// <summary>A document of one widget: the widget on a layout of its own that places it, with the parameters of <paramref name="baseDocument"/> (the document it belongs to) so the widget may use them.</summary>
+    private static string Synthetic(string kind, string id, JsonObject widget, JsonObject? baseDocument)
+    {
+        var document = new JsonObject { ["schemaVersion"] = ViewsFormat.Current, ["kind"] = kind, ["title"] = "Preview" };
+        if (baseDocument?["parameters"] is JsonArray parameters) document["parameters"] = parameters.DeepClone();
+        document["widgets"] = new JsonObject { [id] = widget.DeepClone() };
+        document["layouts"] = new JsonArray(kind == ViewDefinitions.Report
+            ? new JsonObject { ["name"] = "preview", ["type"] = "flow", ["default"] = true, ["sections"] = new JsonArray(new JsonObject { ["blocks"] = new JsonArray(new JsonObject { ["widget"] = id }) }) }
+            : new JsonObject { ["name"] = "preview", ["type"] = "reflow", ["default"] = true, ["grid"] = new JsonObject { ["columns"] = 12 }, ["tiles"] = new JsonArray(new JsonObject { ["widget"] = id, ["x"] = 0, ["y"] = 0, ["w"] = 12, ["h"] = 4 }) });
+        return document.ToJsonString();
+    }
+
+    private static JsonNode Diagnostic(DbDataKit.Config.Yaml.ConfigDiagnostic d)
+    {
+        var o = new JsonObject { ["code"] = d.Code, ["severity"] = "error", ["message"] = d.Message };
+        if (d.KeyPath is not null) o["path"] = d.KeyPath;
+        if (d.Line > 0) { o["line"] = d.Line; o["column"] = d.Column; }
+        return o;
+    }
+
+    private ViewsAnswer RefuseDraft(ViewsPrincipal who, string kind, int status, string code, string message, string? traceId, params (string Key, object? Value)[] more)
+    {
+        Record(who, ViewsAuditVerbs.Preview, kind, DraftName, null, AuditEvent.Refused, Detail(traceId, [("code", code), .. more]));
+        Interlocked.Increment(ref refused);
+        return ViewsAnswer.Error(status, code, message);
+    }
+
     // ---- export ----
 
     /// <summary>The route the page and the browser load the print bundle and the fonts from (no authentication: code and fonts, no data).</summary>
@@ -444,13 +595,13 @@ public sealed class ViewsApi(ViewsPublications published, IServingServices servi
 
     private static ViewsAnswer Draining() => ViewsAnswer.Error(503, "draining", "This instance is draining for an upgrade and takes no new requests; the next one is served by another instance.", new Dictionary<string, string> { ["Retry-After"] = "5" });
 
-    private ResolverOptions Basis()
+    private ResolverOptions Basis(bool cached = true)
     {
         var b = options.Resolver;
         return new ResolverOptions
         {
             MaxWidgets = b.MaxWidgets, MaxRows = b.MaxRows, MaxParallelism = b.MaxParallelism, WidgetTimeout = b.WidgetTimeout, Time = options.Time, MaxImageBytes = b.MaxImageBytes,
-            ModelSourcePrefix = b.ModelSourcePrefix, Cache = cache,
+            ModelSourcePrefix = b.ModelSourcePrefix, Cache = cached ? cache : null,
             OnUnexpected = (id, e) =>
             {
                 b.OnUnexpected?.Invoke(id, e);

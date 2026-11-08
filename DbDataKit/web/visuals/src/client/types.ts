@@ -53,10 +53,24 @@ export interface ResolveOptions {
 export interface PreviewRequest {
   /** One widget as the editor holds it, drawn without saving. */
   widget: WidgetDoc
+  /** The kind of the document the widget is in (default `dashboard`): a report's widget is checked and resolved as a report's. */
+  kind?: ViewKind
+  /** The document the widget belongs to, as the editor holds it: the module takes its parameters (a widget may use them), a fixture ignores it. */
+  draft?: ViewsDoc
   /** The id the widget has (or will have) in its document; a fixture finds its recorded result by it. */
   widgetId?: string
   /** The document the widget belongs to, for its parameters and (in a fixture) its recorded results. */
   document?: string
+  parameters?: ParameterValues
+  signal?: AbortSignal
+}
+
+/** A whole unsaved document, resolved on the server as the caller and stored nowhere (plan 32 DBR28): the text as the editor holds it, and the layout and widgets to resolve (the layout the window selects, every widget, when omitted). */
+export interface DocumentPreviewRequest {
+  kind: ViewKind
+  text: string
+  layout?: string
+  only?: string[]
   parameters?: ParameterValues
   signal?: AbortSignal
 }
@@ -77,6 +91,8 @@ export interface ViewsClient {
   delete?(kind: ViewKind, name: string): Promise<void>
   /** One widget's rendered form, for the editor's live preview. */
   preview(request: PreviewRequest): Promise<RenderedWidget>
+  /** An unsaved document as the caller would see it, in one call (plan 32 DBR28). Optional: a source with no server (the fixture source) leaves the editor to ask `preview` for each widget. A document the server would refuse to publish rejects with `invalid`, its diagnostics placed in the text. */
+  previewDocument?(request: DocumentPreviewRequest): Promise<RenderedWidgets>
   /** The catalog of a semantic model (the Proxy's `GET /api/v1/semantic-models/{name}`, Build's compile): what the editor's field wells offer. Optional: a source without one leaves the wells to typed names. */
   catalog?(model: string): Promise<Catalog>
 }
