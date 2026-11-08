@@ -80,10 +80,18 @@ class FetchDuckDb(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.work, ignore_errors=True)
 
-    def run_script(self, *args):
-        env = dict(os.environ, DUCKDB_PIN=self.pin, DUCKDB_DEST=self.dest)
+    def run_script(self, *args, **extra):
+        env = dict(os.environ, DUCKDB_PIN=self.pin, DUCKDB_DEST=self.dest, DUCKDB_RETRY_DELAY="0", DUCKDB_RETRIES="1")
         env.pop("DUCKDB_RELEASE_BASE", None)
+        env.pop("DUCKDB_RELEASE_BASE_FALLBACK", None)
+        env.update(extra)
         return subprocess.run(["bash", SCRIPT, *args], env=env, capture_output=True, text=True)
+
+    def move_release(self):
+        """The pin's own address stops working (a GitHub outage): its folder moves away, a copy stays for the cache."""
+        gone = os.path.join(self.work, "release-moved")
+        os.rename(self.release, gone)
+        return gone
 
     def test_every_platform_is_fetched_and_verified(self):
         result = self.run_script("all")
@@ -121,6 +129,70 @@ class FetchDuckDb(unittest.TestCase):
         write(installed, b"changed")
         self.assertEqual(0, self.run_script("linux-x64").returncode)
         self.assertEqual(self.libs["linux-x64"], read(installed, "rb"))
+
+    def test_archives_mode_keeps_hash_checked_archives_and_extracts_nothing(self):
+        cache = os.path.join(self.work, "cache")
+        result = self.run_script("--archives", cache, "linux-x64", "win-x64")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(["duckdb-test-linux-x64.tar.gz", "duckdb-test-win-x64.tar.gz"], sorted(os.listdir(cache)))
+        self.assertFalse(os.path.exists(self.dest))
+        again = self.run_script("--archives", cache, "linux-x64")
+        self.assertIn("is current", again.stdout)
+
+    def test_a_cache_folder_is_read_when_the_pins_address_is_gone(self):
+        cache = os.path.join(self.work, "cache")
+        self.assertEqual(0, self.run_script("--archives", cache, "linux-x64").returncode)
+        self.move_release()
+        result = self.run_script("linux-x64", DUCKDB_RELEASE_BASE="file://" + cache)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(self.libs["linux-x64"], read(os.path.join(self.dest, "linux-x64", "libduckdb.so"), "rb"))
+
+    def test_a_cache_with_a_changed_archive_is_not_trusted(self):
+        cache = os.path.join(self.work, "cache")
+        self.assertEqual(0, self.run_script("--archives", cache, "linux-x64").returncode)
+        path = os.path.join(cache, "duckdb-test-linux-x64.tar.gz")
+        data = bytearray(read(path, "rb"))
+        data[len(data) // 2] ^= 0xFF
+        write(path, bytes(data))
+        # the pin's address still has the good one: the changed copy is refused and the next source is used
+        result = self.run_script("linux-x64", DUCKDB_RELEASE_BASE="file://" + cache)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("checksum mismatch", result.stderr)
+        # with nothing else to fall back to, the run fails
+        self.move_release()
+        failed = self.run_script("linux-x64", DUCKDB_RELEASE_BASE="file://" + cache, DUCKDB_DEST=os.path.join(self.work, "dest2"))
+        self.assertNotEqual(0, failed.returncode)
+        self.assertIn("checksum mismatch", failed.stderr)
+
+    def test_a_cache_missing_an_archive_falls_back_to_the_pins_address(self):
+        empty = os.path.join(self.work, "empty")
+        os.makedirs(empty)
+        result = self.run_script("linux-x64", DUCKDB_RELEASE_BASE="file://" + empty)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("no duckdb-test-linux-x64.tar.gz", result.stderr)
+
+    def test_a_failed_download_names_every_url_and_the_cache_key_and_the_fallback_is_used(self):
+        archive = "duckdb-test-linux-x64.tar.gz"
+        dead = "file://" + os.path.join(self.work, "dead")
+        text = read(self.pin).replace(f"BASE=file://{self.release}", f"BASE={dead}")
+        write(self.pin, text)
+        failed = self.run_script("linux-x64", DUCKDB_CACHE_KEY="duckdb-Linux-X64-host-abc")
+        self.assertNotEqual(0, failed.returncode)
+        self.assertIn(f"{dead}/{archive}", failed.stderr)
+        self.assertIn("duckdb-Linux-X64-host-abc", failed.stderr)
+        ok = self.run_script("linux-x64", DUCKDB_RELEASE_BASE_FALLBACK="file://" + self.release)
+        self.assertEqual(0, ok.returncode, ok.stderr)
+        write(self.pin, text + f"BASE_FALLBACK=file://{self.release}\n")
+        ok = self.run_script("linux-x64", DUCKDB_DEST=os.path.join(self.work, "dest3"))
+        self.assertEqual(0, ok.returncode, ok.stderr)
+
+    def test_an_unreachable_https_source_is_retried_then_the_next_source_is_used(self):
+        # port 9 on localhost refuses at once: a transient-looking failure the retries cannot cure
+        text = read(self.pin).replace(f"BASE=file://{self.release}", "BASE=http://127.0.0.1:9/none")
+        write(self.pin, text)
+        result = self.run_script("linux-x64", DUCKDB_RELEASE_BASE_FALLBACK="file://" + self.release)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("attempt 3 of 3", result.stderr)
 
     def test_an_unknown_platform_is_refused(self):
         result = self.run_script("plan9-x64")

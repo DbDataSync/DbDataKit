@@ -92,7 +92,7 @@ public static class DriverLibrariesPart
                 if (DuckDbEngine.Needs(packages))
                 {
                     var pin = DuckDbEngine.ParsePin(DuckDbEngine.ReadEmbeddedPin());
-                    await DuckDbEngine.EnsureAsync(LibraryPaths.LibDir(targetDir), DuckDbEngine.ReadEmbeddedPin(), platform, Environment.GetEnvironmentVariable(DuckDbEngine.SourceVariable), cancellationToken);
+                    await DuckDbEngine.EnsureAsync(LibraryPaths.LibDir(targetDir), DuckDbEngine.ReadEmbeddedPin(), platform, DuckDbEngine.ConfiguredSource(), cancellationToken);
                     duckDb = pin["VERSION"] + " " + platform;
                 }
 

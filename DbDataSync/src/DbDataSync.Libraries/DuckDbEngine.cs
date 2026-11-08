@@ -11,7 +11,9 @@ namespace DbDataSync.Libraries;
 /// Both the downloaded archive and the library inside it are checked against the hashes in the pin, so a changed byte anywhere fails.
 /// <para>
 /// The archive comes from the pin's release address, or, for a machine without internet access, from a directory that holds the
-/// archive (or the bare library) under the pin's file names: <see cref="SourceVariable"/>.
+/// archive (or the bare library) under the pin's file names: <see cref="SourceVariable"/>. The repository's CI sets <see cref="ReleaseBaseVariable"/>
+/// (the variable <c>scripts/fetch-duckdb.sh</c> honours too) to <c>file://</c> its cache of the archives; an archive missing there is downloaded from
+/// the pin's address, and a download is retried with growing waits (GitHub's release downloads fail now and then).
 /// </para>
 /// </summary>
 public static class DuckDbEngine
@@ -21,6 +23,19 @@ public static class DuckDbEngine
 
     /// <summary>Names a directory (or an http(s) address) to take the archive from instead of the pin's release address.</summary>
     public const string SourceVariable = "DBDATASYNC_DUCKDB_ENGINE_SOURCE";
+
+    /// <summary>The variable scripts/fetch-duckdb.sh and .ps1 honour: another download base (<c>file://&lt;folder&gt;</c> or http(s)) tried before the pin's address.</summary>
+    public const string ReleaseBaseVariable = "DUCKDB_RELEASE_BASE";
+
+    /// <summary>What names the source on this machine: <see cref="SourceVariable"/>, else <see cref="ReleaseBaseVariable"/>, else null (the pin's address).</summary>
+    public static string? ConfiguredSource()
+    {
+        var source = Environment.GetEnvironmentVariable(SourceVariable);
+        return string.IsNullOrWhiteSpace(source) ? Environment.GetEnvironmentVariable(ReleaseBaseVariable) : source;
+    }
+
+    /// <summary>The first wait between two download attempts (it doubles each time); tests set it to zero.</summary>
+    public static TimeSpan RetryWait { get; set; } = TimeSpan.FromSeconds(1);
 
     public static bool Needs(IEnumerable<PackageRef> packages) =>
         packages.Any(p => string.Equals(p.Id, PackageId, StringComparison.OrdinalIgnoreCase));
@@ -42,7 +57,7 @@ public static class DuckDbEngine
 
     /// <summary>Puts the engine for this machine into <paramref name="libDir"/>, unless it is already there and matches the pin.</summary>
     public static async Task EnsureAsync(string libDir, CancellationToken cancellationToken = default) =>
-        await EnsureAsync(libDir, ReadEmbeddedPin(), CurrentRid(), Environment.GetEnvironmentVariable(SourceVariable), cancellationToken);
+        await EnsureAsync(libDir, ReadEmbeddedPin(), CurrentRid(), ConfiguredSource(), cancellationToken);
 
     /// <summary>The same with the pin, the platform and the source given (for tests).</summary>
     public static async Task EnsureAsync(
@@ -89,7 +104,18 @@ public static class DuckDbEngine
 
     private static async Task FetchAsync(string releaseBase, string? source, string archive, string destination, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(source) && !source.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(source) && source.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+        {
+            // The CI cache: a folder that may lack this archive, in which case the pin's own address is the next source.
+            var cached = Path.Combine(new Uri(source).LocalPath, archive);
+            if (File.Exists(cached))
+            {
+                File.Copy(cached, destination);
+                return;
+            }
+            source = null;
+        }
+        else if (!string.IsNullOrWhiteSpace(source) && !source.StartsWith("http", StringComparison.OrdinalIgnoreCase))
         {
             var local = Path.Combine(source, archive);
             if (!File.Exists(local))
@@ -100,19 +126,32 @@ public static class DuckDbEngine
 
         var address = $"{(string.IsNullOrWhiteSpace(source) ? releaseBase : source).TrimEnd('/')}/{archive}";
         using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
-        try
+        const int attempts = 6;
+        for (var attempt = 1; ; attempt++)
         {
-            using var response = await http.GetAsync(address, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-            response.EnsureSuccessStatusCode();
-            await using var file = File.Create(destination);
-            await response.Content.CopyToAsync(file, cancellationToken);
-        }
-        catch (HttpRequestException ex)
-        {
-            throw new InvalidOperationException(
-                $"Could not download the DuckDB engine from {address}: {ex.Message}. On a machine without internet access, put {archive} in a directory and set {SourceVariable} to it.", ex);
+            try
+            {
+                using var response = await http.GetAsync(address, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                response.EnsureSuccessStatusCode();
+                await using var file = File.Create(destination);
+                await response.Content.CopyToAsync(file, cancellationToken);
+                return;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or IOException || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested))
+            {
+                var permanent = ex is HttpRequestException { StatusCode: { } code } && !IsTransient(code);
+                if (permanent || attempt == attempts)
+                    throw new InvalidOperationException(
+                        $"Could not download the DuckDB engine from {address}: {ex.Message}. On a machine without internet access, put {archive} in a directory and set {SourceVariable} to it.", ex);
+                // 1, 2, 4, 8, 16 seconds
+                await Task.Delay(RetryWait * (1 << (attempt - 1)), cancellationToken);
+            }
         }
     }
+
+    // GitHub's release downloads answer 502, 503 and 504 now and then; a missing file (404) or a refusal does not get better by asking again.
+    private static bool IsTransient(System.Net.HttpStatusCode code) =>
+        (int)code is 408 or 429 or >= 500;
 
     private static async Task ExtractAsync(string archivePath, string name, string destination, CancellationToken cancellationToken)
     {

@@ -9,7 +9,10 @@ Works in Windows PowerShell 5.1 and PowerShell 7. Hashing and the tar reading us
 .PARAMETER Rid
 linux-x64, linux-arm64, win-x64, osx-arm64, osx-x64 or all. Default: the current platform.
 
-Environment (for tests and offline mirrors): DUCKDB_PIN, DUCKDB_RELEASE_BASE (an http(s) address; fetch-duckdb.sh also takes file://), DUCKDB_DEST.
+Where an archive comes from, first that has it, each hash-checked against the pin: DUCKDB_RELEASE_BASE (file://<folder> or an http(s) address; CI points it at
+its cache), the pin's BASE, then DUCKDB_RELEASE_BASE_FALLBACK or the pin's optional BASE_FALLBACK. A download is retried with growing waits.
+Environment (for tests and offline mirrors): DUCKDB_PIN, DUCKDB_DEST, DUCKDB_RETRY_DELAY (seconds between attempts instead of the growing wait),
+DUCKDB_CACHE_KEY (only named in the failure message).
 #>
 [CmdletBinding()]
 param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Rid)
@@ -80,7 +83,55 @@ function Expand-TarGzEntry([string]$archive, [string]$name, [string]$target) {
 }
 
 $version = Get-Pin 'VERSION'
-$base = if ($env:DUCKDB_RELEASE_BASE) { $env:DUCKDB_RELEASE_BASE } else { Get-Pin 'BASE' }
+$sources = New-Object System.Collections.Generic.List[string]
+$fallback = if ($env:DUCKDB_RELEASE_BASE_FALLBACK) { $env:DUCKDB_RELEASE_BASE_FALLBACK } elseif ($pin.ContainsKey('BASE_FALLBACK')) { $pin['BASE_FALLBACK'] } else { '' }
+foreach ($candidate in @($env:DUCKDB_RELEASE_BASE, (Get-Pin 'BASE'), $fallback)) {
+    if ($candidate) { $trimmed = $candidate.TrimEnd('/'); if (-not $sources.Contains($trimmed)) { $sources.Add($trimmed) } }
+}
+
+# file:///D:/a/x -> D:/a/x ; file:///home/x -> /home/x
+function ConvertFrom-FileUri([string]$uri) {
+    $p = $uri.Substring('file://'.Length)
+    if ($p -match '^/[A-Za-z]:') { $p = $p.Substring(1) }
+    return $p
+}
+
+# The first source whose copy has the pinned hash; a download is tried three times, each with its own growing waits.
+function Get-Archive([string]$archive, [string]$want, [string]$out) {
+    $tried = @()
+    foreach ($src in $sources) {
+        $tried += "$src/$archive"
+        if ($src -like 'file://*') {
+            $from = Join-Path (ConvertFrom-FileUri $src) $archive
+            if (-not (Test-Path -LiteralPath $from)) { [Console]::Error.WriteLine("no $archive in $src"); continue }
+            Copy-Item -LiteralPath $from -Destination $out -Force
+            if ((Get-Sha256 $out) -eq $want) { return }
+            [Console]::Error.WriteLine("checksum mismatch for $archive in $src (expected $want)"); Remove-Item -LiteralPath $out -Force
+            continue
+        }
+        for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+                $wait = if ($env:DUCKDB_RETRY_DELAY) { [int]$env:DUCKDB_RETRY_DELAY } else { 1 }
+                for ($try = 0; $try -le 8; $try++) {
+                    try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 900 -Uri "$src/$archive" -OutFile $out; break }
+                    catch {
+                        if ($try -eq 8) { throw }
+                        [Console]::Error.WriteLine("download of $src/$archive failed ($($_.Exception.Message)); waiting $wait s")
+                        Start-Sleep -Seconds $wait
+                        if (-not $env:DUCKDB_RETRY_DELAY) { $wait = [Math]::Min($wait * 2, 120) }
+                    }
+                }
+                if ((Get-Sha256 $out) -eq $want) { return }
+                [Console]::Error.WriteLine("checksum mismatch for $archive from $src (expected $want), attempt $attempt of 3")
+            }
+            catch { [Console]::Error.WriteLine("could not download $src/${archive}: $($_.Exception.Message), attempt $attempt of 3") }
+            Remove-Item -LiteralPath $out -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds $(if ($env:DUCKDB_RETRY_DELAY) { [int]$env:DUCKDB_RETRY_DELAY } else { 5 })
+        }
+    }
+    $key = if ($env:DUCKDB_CACHE_KEY) { "; the Actions cache key $($env:DUCKDB_CACHE_KEY) had no copy" } else { '' }
+    throw "checksum mismatch or no copy of $archive (expected $want) from any source: $($tried -join ' ')$key"
+}
 
 if (-not $Rid -or $Rid.Count -eq 0) {
     $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
@@ -105,8 +156,7 @@ try {
             Write-Host ".duckdb/$id/$lib is current (DuckDB $version)"; continue
         }
         $archivePath = Join-Path $temp $archive
-        Invoke-WebRequest -UseBasicParsing -Uri "$base/$archive" -OutFile $archivePath
-        if ((Get-Sha256 $archivePath) -ne $archiveSha) { throw "checksum mismatch for $archive (expected $archiveSha)" }
+        Get-Archive $archive $archiveSha $archivePath
         $extracted = Join-Path $temp "$id-$lib"
         Expand-TarGzEntry $archivePath $lib $extracted
         if ((Get-Sha256 $extracted) -ne $libSha) { throw "checksum mismatch for $lib inside $archive (expected $libSha)" }

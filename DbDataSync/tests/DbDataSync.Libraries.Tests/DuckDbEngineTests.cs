@@ -57,6 +57,27 @@ public sealed class DuckDbEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task AFileAddressIsReadLikeTheCacheOfTheCi()
+    {
+        await DuckDbEngine.EnsureAsync(_libDir, _pin, "linux-x64", new Uri(_source).AbsoluteUri);
+        Assert.Equal(_library, await File.ReadAllBytesAsync(Path.Combine(_libDir, "libduckdb.so")));
+    }
+
+    [Fact]
+    public async Task AFolderOfTheCacheWithoutTheArchiveFallsBackToTheAddressOfThePin()
+    {
+        var empty = Directory.CreateDirectory(Path.Combine(_work, "empty-cache")).FullName;
+        var wait = DuckDbEngine.RetryWait;
+        DuckDbEngine.RetryWait = TimeSpan.Zero;
+        try
+        {
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => DuckDbEngine.EnsureAsync(_libDir, _pin, "linux-x64", new Uri(empty).AbsoluteUri));
+            Assert.Contains("https://example.invalid/releases/v9.9.9/engine-linux.tar.gz", ex.Message);
+        }
+        finally { DuckDbEngine.RetryWait = wait; }
+    }
+
+    [Fact]
     public async Task AnEngineThatIsAlreadyThereIsLeftAlone()
     {
         await DuckDbEngine.EnsureAsync(_libDir, _pin, "linux-x64", _source);
