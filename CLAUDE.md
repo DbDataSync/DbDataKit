@@ -37,7 +37,7 @@ project reference in this repository, a package reference otherwise). Do not cop
 ```
 dotnet build DbDataKit.slnx                                   # everything
 python3 -I -m unittest discover -s scripts/tests              # the repository checks
-python3 -I scripts/check_package_versions.py && python3 -I scripts/check_solution.py && python3 -I scripts/check_plans.py && python3 -I scripts/check_formats.py
+python3 -I scripts/check_package_versions.py && python3 -I scripts/check_solution.py && python3 -I scripts/check_plans.py && python3 -I scripts/check_formats.py && python3 -I scripts/check_ui_editors.py
 ```
 
 Per product, from its folder: `dotnet build`, then the suites below. Run the suites a change can affect; CI runs the rest on the pull request.
@@ -106,6 +106,8 @@ The rule is about that, not about branches or merge style.
 - **Formats are listed and frozen** (plan 24a UC02): `docs/formats.json` has each definition and file format with its current and previous version and whether it is open or frozen.
   `scripts/check_formats.py` fails when the code declares another version than the file says (a bump needs its entry) and when a file of a frozen format changed (its sha256 is recorded).
   A frozen format is never edited: the change is the next number, with a new entry and new hashes (`python3 -I scripts/check_formats.py --hash <file>`).
+- **Everything built and published has an editor screen** (owner, 2026-11-08): a stored format, or a thing a person authors or publishes by file or command, is not finished until a screen in the console, the Build or Sync workspace or the Gateway edits it, or `docs/ui-editors.md` says `none (reason)` or names the slice (`UEnn` of plan 33) that will.
+  `scripts/check_ui_editors.py` fails, naming the format, when one registered in `docs/formats.json` has no row there; a slice that adds or widens an editor changes its row in the same commit.
 - Branches: pushing a work-in-progress branch is fine; leaving it behind is not. The workflow `delete-merged-branch.yml` deletes a pull request's branch
   when it merges; a branch that was pushed and then abandoned, or whose work moved into another branch, is deleted by whoever abandoned it, in the same
   session. Sessions cannot delete remote branches themselves: the list `scripts/branches-to-delete.txt` and the workflow `delete-listed-branches.yml`
