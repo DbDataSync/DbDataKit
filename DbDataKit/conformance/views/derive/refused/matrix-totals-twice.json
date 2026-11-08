@@ -1,0 +1,36 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "matrix",
+      "encodings": {
+        "rows": [
+          "customers.region"
+        ],
+        "values": [
+          {
+            "field": "orders.net_revenue"
+          }
+        ],
+        "totals": {
+          "rows": true
+        }
+      },
+      "query": {
+        "model": "sales_catalog",
+        "totals": {
+          "grand_total": true,
+          "subtotal_by": [
+            "customers.region"
+          ]
+        }
+      }
+    }
+  },
+  "refusal": [
+    {
+      "code": "DBD-VIEW-042",
+      "path": "widgets.w.query.totals"
+    }
+  ]
+}

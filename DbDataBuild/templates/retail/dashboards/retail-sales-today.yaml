@@ -21,7 +21,7 @@ widgets:
     encodings: {value: sales.net_amount}
     query:
       model: retail_sales
-      filters: [{attribute: customers.region, operator: in, values: {param: region}}]
+      filters: [{attribute: customers.region, operator: equals, values: {param: region}}]
   margin:
     type: metric
     label: Margin rate
@@ -29,7 +29,7 @@ widgets:
     encodings: {value: sales.margin_rate}
     query:
       model: retail_sales
-      filters: [{attribute: customers.region, operator: in, values: {param: region}}]
+      filters: [{attribute: customers.region, operator: equals, values: {param: region}}]
   note:
     type: text
     text: |
@@ -51,7 +51,7 @@ widgets:
         - {field: sales.units, label: Units, align: right, format: full}
     query:
       model: retail_sales
-      filters: [{attribute: customers.region, operator: in, values: {param: region}}]
+      filters: [{attribute: customers.region, operator: equals, values: {param: region}}]
       order: [[sales.units, desc]]
       limit: 100
 layouts:

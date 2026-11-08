@@ -27,7 +27,7 @@ shares are part of the **query**, run on the server as the viewer.
 ### The query
 
 * **Derived** (the default): `query: {model, filters, segments, order, limit, totals, timezone, params}`. The request is made from the encodings (every encoded measure goes to `measures`, every other field to
-  `attributes`), so what is drawn and what is asked cannot drift. (`DeriveRequest` is DBR03; until then the file only holds the parts a person chooses.)
+  `attributes`), so what is drawn and what is asked cannot drift ([Deriving the request](#deriving-the-request)).
 * **Explicit**: `mode: explicit` and one form: `semantic: {model, request}`, `semantic: {model, sql}`, `saved: name` (`params`), `store: {model, entity, columns, filter, sort, limit}` or `ref: result.name`.
   The encodings then do not drive the request, so **every encoded field must be an output** of the query: a name in `measures` or `attributes` or an `as` alias; for a saved query, a store read and a ref the file
   lists them (`outputs`, `columns`) because it cannot see them. Semantic SQL has no outputs the file can read: that check is the engine's, at publish.
@@ -50,9 +50,53 @@ shares are part of the **query**, run on the server as the viewer.
 | `DBD-VIEW-007` | a query that is not one of the forms, or a mode that does not fit it |
 | `DBD-VIEW-008` | a parameter that is not declared (a marker, a `params` entry, a control, `on_select`, a drill, `{{params.x}}`) |
 | `DBD-VIEW-037` | a drill that does not give a required parameter of its target |
+| `DBD-VIEW-040` to `-043` | the derivation and the catalog check, [below](#deriving-the-request) (`-040` nothing to derive, `-041` no measure, `-042` totals twice or with nothing to roll up, `-043` a model the document does not depend on) |
 
 `ViewsLoader.LoadWidgets` (.NET) and `validateWidgets` (TypeScript) check a widgets map alone, as an assistant's answer, a portal block or a pin holds it. The shared documents and the expected code and path of each
 refusal are in `DbDataKit/conformance/views/widgets`; both suites run them.
+
+## Deriving the request
+
+`DeriveRequest.Derive(widget, roles)` (.NET, `DbDataKit.Views`) and `deriveRequest(widget, roles)` (TypeScript, `@dbdatakit/visuals`, for the editor's field wells) turn a **derived** widget into the semantic request of
+[`docs/semantic/query.md`](semantic/query.md): the envelope `{spec_version: "0.3", kind: "query", query: {...}}`. Both are pure and give the same request, key for key (`DbDataKit/conformance/views/derive`).
+`roles` is all they need of the catalog: which names are measures and which are attributes (a dimension's attribute, a calendar level, a datetime bucket such as `orders.ordered_at_month`, so a grain is just the
+attribute that has it).
+
+| Part of the request | Where it comes from |
+| --- | --- |
+| `measures` | a metric's `value` and `compare`; a matrix's `values`; a chart's channel or a table's column that the catalog says is a measure; a table's `sort` field if the table does not show it |
+| `attributes` | a matrix's `rows` then `columns`; every other chart channel and table column; each field **once**, in a fixed order (chart: `x y color column row tooltip`; the order the file wrote the channels in does not matter) |
+| `filters`, `segments`, `timezone` | the query's, as written; `{param: name}` markers stay markers |
+| `order` | the query's `order` when it has one, else a table's `sort` (`{by, dir}` becomes `[by, dir]`, `asc` by default). A chart channel's `sort` and a matrix's `sort` and `column_limit` are the view's and add nothing |
+| `limit` | the query's, else the type's default: metric 1, chart 500, table 100, matrix 10,000; never above 10,000 |
+| `totals` | a matrix: `totals.rows` is a total row (the row fields rolled up), `totals.columns` a total column, both is `{subtotal_by: rows + columns, grand_total, cube}`; a sort of an axis by a measure asks for the other axis's total too (the view's `sort_needs_totals`). A table or chart with `totals: {grand_total: true}` and no `subtotal_by` rolls up every attribute it shows |
+
+The result also lists the **parameter bindings** the request leaves open (`{request: "q", document: "quarter"}`: the request's marker `q` is supplied by the document's `quarter`, as the query's `params` maps it),
+which the resolution of DBR04 binds with the viewer's values, and **where in the document** each place of the request comes from (`DocumentPath("$.query.measures[1]")` is `widgets.by_region.encodings.y`), so
+a refusal of the engine lands on the field or the filter the person wrote.
+
+**Refusals** (nothing is returned, every one has the file, line and path):
+
+| Code | Meaning |
+| --- | --- |
+| `unknown_member` | an encoded field the catalog has no member of (the engine's code and words: `customers.regon is not a catalog member.`) |
+| `wrong_member_kind` | a dimension in a measure well (`customers.region is a attribute, not a measure.`) or a measure in a matrix axis, in the engine's words |
+| `DBD-VIEW-040` | nothing to derive: a widget with no query (`text`, `image`, `control`) or an explicit query (its encodings do not drive it) |
+| `DBD-VIEW-041` | the encodings name no measure, and a request needs one (a table of attributes only is a `store` read, written out with `mode: explicit`) |
+| `DBD-VIEW-042` | totals asked for twice (the matrix's encodings and the query), or a total row or column with no field to roll up |
+
+## The catalog check
+
+`CatalogCheck.Check(widgets, file, catalogs)` is the **second level** of the binding check, made at publish and by `app validate` against the model version the document depends on (the first, that an explicit
+query outputs every field it encodes, is the loader's `DBD-VIEW-005`). It makes every widget's request (a derived query by `DeriveRequest`, a written `semantic.request` as it is) and sends it through
+**the engine's validator** (`IRequestValidator`; the semantic library's `Validator.ValidateRequest` behind a small adapter, so this library does not carry the engine). What comes back is a diagnostic with
+**the engine's code** (`unknown_member`, `wrong_member_kind`, `order_member_missing`, `invalid_operator`...), the document's file, line and column and the path of the field, filter or order entry
+(`widgets.sales.query.filters[0].attribute`). A model the document does not depend on is `DBD-VIEW-043`. A written semantic SQL, a saved query, a store read and a ref are not looked into: the engine checks them when they run.
+The adapter must resolve the request's parameters before it validates, as the engine does before it runs (the validator checks a literal request; the viewer's values are checked when the widget runs).
+The engine's JSON Schema check reports every branch of every `oneOf` it tried; the check keeps the first `schema_invalid` and says how many more there were.
+
+The **filter operators** are the engine's: `equals`, `not_equals`, `contains`, `not_contains`, `starts_with`, `gt`, `gte`, `lt`, `lte`, `set`, `not_set`, `between` and the relative periods. A list of values is
+`equals` with a list (`values: {param: region}` for a `many` parameter); there is no `in`.
 
 ## A document: the shared core and the two kinds
 
@@ -71,7 +115,7 @@ widgets:
     encodings: {value: orders.net_revenue, compare: orders.net_revenue_prev}
     query:
       model: sales
-      filters: [{attribute: customers.region, operator: in, values: {param: region}}]
+      filters: [{attribute: customers.region, operator: equals, values: {param: region}}]
   by_region:
     type: chart
     mark: bar
@@ -205,7 +249,7 @@ read is refused naming the kind, the file and both numbers (`DBD-110`).
 
 The documents are in `DbDataKit/conformance/views` (`good`, `bad`, `warnings` and `cases.json`, which says the code, path and line of each refusal); the .NET (`DbDataKit.Views.Tests`) and TypeScript
 (`@dbdatakit/visuals`) suites run the same files. The TypeScript validators report the **path** of a problem (`layouts[1].tiles[0].x`), not a line: `JSON.parse` has no positions. The .NET loaders give both.
-What needs the catalog (an encoded field the model does not have, an invalid request) is checked at publish by the engine's validator, not by the loaders.
+What needs the catalog (an encoded field the model does not have, an invalid request) is `CatalogCheck`, at publish, through the engine's validator, not the loaders.
 
 ### Format and freeze
 

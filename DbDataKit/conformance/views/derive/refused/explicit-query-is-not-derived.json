@@ -1,0 +1,29 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "metric",
+      "encodings": {
+        "value": "orders.net_revenue"
+      },
+      "query": {
+        "mode": "explicit",
+        "semantic": {
+          "model": "sales_catalog",
+          "request": {
+            "measures": [
+              "orders.net_revenue"
+            ],
+            "limit": 1
+          }
+        }
+      }
+    }
+  },
+  "refusal": [
+    {
+      "code": "DBD-VIEW-040",
+      "path": "widgets.w.query"
+    }
+  ]
+}

@@ -56,7 +56,7 @@
           },
           {
             "attribute": "customers.region",
-            "operator": "in",
+            "operator": "equals",
             "values": {
               "param": "region"
             }

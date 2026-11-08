@@ -1,0 +1,44 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "chart",
+      "mark": "line",
+      "encodings": {
+        "x": {
+          "field": "orders.ordered_at_month",
+          "type": "temporal"
+        },
+        "y": "orders.net_revenue"
+      },
+      "query": {
+        "model": "sales_catalog",
+        "order": [
+          [
+            "orders.ordered_at_month",
+            "asc"
+          ]
+        ]
+      }
+    }
+  },
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "attributes": [
+        "orders.ordered_at_month"
+      ],
+      "order": [
+        [
+          "orders.ordered_at_month",
+          "asc"
+        ]
+      ],
+      "limit": 500
+    }
+  }
+}

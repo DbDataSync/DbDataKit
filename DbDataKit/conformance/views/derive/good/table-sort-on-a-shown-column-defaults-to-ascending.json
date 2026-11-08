@@ -1,0 +1,44 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "table",
+      "encodings": {
+        "columns": [
+          {
+            "field": "customers.region"
+          },
+          {
+            "field": "orders.net_revenue"
+          }
+        ],
+        "sort": {
+          "by": "customers.region"
+        }
+      },
+      "query": {
+        "model": "sales_catalog",
+        "limit": 10
+      }
+    }
+  },
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "attributes": [
+        "customers.region"
+      ],
+      "order": [
+        [
+          "customers.region",
+          "asc"
+        ]
+      ],
+      "limit": 10
+    }
+  }
+}

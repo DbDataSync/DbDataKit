@@ -1,0 +1,112 @@
+{
+  "parameters": [
+    "region"
+  ],
+  "widgets": {
+    "w": {
+      "type": "chart",
+      "mark": "bar",
+      "encodings": {
+        "color": "products.category",
+        "y": "orders.net_revenue",
+        "x": "customers.region"
+      },
+      "query": {
+        "model": "sales_catalog",
+        "filters": [
+          {
+            "attribute": "customers.region",
+            "operator": "equals",
+            "values": {
+              "param": "region"
+            }
+          }
+        ],
+        "order": [
+          [
+            "orders.net_revenue",
+            "desc"
+          ]
+        ],
+        "limit": 20
+      }
+    }
+  },
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "attributes": [
+        "customers.region",
+        "products.category"
+      ],
+      "filters": [
+        {
+          "attribute": "customers.region",
+          "operator": "equals",
+          "values": {
+            "param": "region"
+          }
+        }
+      ],
+      "order": [
+        [
+          "orders.net_revenue",
+          "desc"
+        ]
+      ],
+      "limit": 20
+    }
+  },
+  "bindings": [
+    {
+      "request": "region",
+      "document": "region"
+    }
+  ],
+  "equivalent": {
+    "w": {
+      "type": "chart",
+      "mark": "bar",
+      "encodings": {
+        "x": "customers.region",
+        "y": "orders.net_revenue",
+        "color": "products.category"
+      },
+      "query": {
+        "mode": "explicit",
+        "semantic": {
+          "model": "sales_catalog",
+          "request": {
+            "measures": [
+              "orders.net_revenue"
+            ],
+            "attributes": [
+              "customers.region",
+              "products.category"
+            ],
+            "filters": [
+              {
+                "attribute": "customers.region",
+                "operator": "equals",
+                "values": {
+                  "param": "region"
+                }
+              }
+            ],
+            "order": [
+              [
+                "orders.net_revenue",
+                "desc"
+              ]
+            ],
+            "limit": 20
+          }
+        }
+      }
+    }
+  }
+}

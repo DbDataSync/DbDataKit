@@ -1,0 +1,39 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "matrix",
+      "encodings": {
+        "rows": [
+          "customers.region"
+        ],
+        "columns": [
+          "date.fiscal_quarter"
+        ],
+        "values": [
+          {
+            "field": "orders.net_revenue",
+            "format": "compact"
+          }
+        ]
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "attributes": [
+        "customers.region",
+        "date.fiscal_quarter"
+      ],
+      "limit": 10000
+    }
+  }
+}

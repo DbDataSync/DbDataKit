@@ -1,0 +1,51 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "matrix",
+      "encodings": {
+        "rows": [
+          "customers.region",
+          "products.category"
+        ],
+        "columns": [
+          "date.fiscal_quarter"
+        ],
+        "values": [
+          {
+            "field": "orders.net_revenue"
+          }
+        ],
+        "totals": {
+          "rows": true
+        }
+      },
+      "query": {
+        "model": "sales_catalog",
+        "limit": 5000
+      }
+    }
+  },
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "attributes": [
+        "customers.region",
+        "products.category",
+        "date.fiscal_quarter"
+      ],
+      "limit": 5000,
+      "totals": {
+        "subtotal_by": [
+          "date.fiscal_quarter",
+          "customers.region",
+          "products.category"
+        ]
+      }
+    }
+  }
+}

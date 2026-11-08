@@ -1,0 +1,28 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "matrix",
+      "encodings": {
+        "rows": [
+          "orders.net_revenue"
+        ],
+        "values": [
+          {
+            "field": "orders.order_count"
+          }
+        ]
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "refusal": [
+    {
+      "code": "wrong_member_kind",
+      "path": "widgets.w.encodings.rows[0]",
+      "message": "orders.net_revenue is a measure, not a attribute."
+    }
+  ]
+}

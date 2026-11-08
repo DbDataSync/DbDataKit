@@ -1,0 +1,23 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "chart",
+      "mark": "bar",
+      "encodings": {
+        "x": "customers.regon",
+        "y": "orders.net_revenue"
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "refusal": [
+    {
+      "code": "unknown_member",
+      "path": "widgets.w.encodings.x",
+      "message": "customers.regon is not a catalog member."
+    }
+  ]
+}
