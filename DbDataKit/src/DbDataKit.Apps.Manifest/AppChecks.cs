@@ -17,6 +17,20 @@ public static class AppChecks
         return found;
     }
 
+    /// <summary>
+    /// The portal's home view files (AP12) read and checked: each problem names the home file and its line (<c>DBD-APP-011</c> to <c>013</c>). <paramref name="read"/> gives a file's text by its path in the app, or null when there is none
+    /// (that is <see cref="Files"/>' finding, not repeated here).
+    /// </summary>
+    public static IReadOnlyList<ConfigDiagnostic> HomeViews(AppManifest manifest, Func<string, string?> read)
+    {
+        var found = new List<ConfigDiagnostic>();
+        if (manifest.Portal is not { } portal) return found;
+        var mounted = portal.Mounts.Select(m => m.App).ToHashSet(StringComparer.Ordinal);
+        foreach (var path in portal.Home)
+            if (read(path) is { } text) found.AddRange(HomeViewLoader.Load(text, path, mounted).Diagnostics);
+        return found;
+    }
+
     // src="/x", href='/x', url(/x), import "/x": a path from the server's root. "//host/x" is another host's and is left to the content security policy.
     private static readonly Regex Attribute = new(@"\b(?:src|href|action|poster)\s*=\s*[""']/(?!/)", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
     private static readonly Regex CssUrl = new(@"url\(\s*[""']?/(?!/)", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);

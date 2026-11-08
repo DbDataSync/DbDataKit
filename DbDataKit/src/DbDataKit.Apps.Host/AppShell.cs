@@ -99,16 +99,16 @@ public static class AppShell
     public sealed record Tile(string Title, string? Description, string Url);
 
     /// <summary>A portal's own page (plan 26, AP11, AP12): its chrome and a tile for each app mounted in it that this person may open.</summary>
-    public static AppResponse PortalHome(string title, Header header, IReadOnlyList<Tile> tiles, IReadOnlyList<string>? embedOrigins = null)
-    {
-        var body = tiles.Count == 0
-            ? "<p class=\"note\">Nothing here is open to you yet.</p>"
-            : "<ul class=\"tiles\" style=\"list-style:none;margin:0;padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px\">"
-              + string.Concat(tiles.Select(t => $"<li style=\"border:1px solid #8884;border-radius:8px;padding:12px\"><a href=\"{WebUtility.HtmlEncode(t.Url)}\" style=\"color:inherit;font-weight:600;text-decoration:none\">{WebUtility.HtmlEncode(t.Title)}</a>"
-                  + (string.IsNullOrWhiteSpace(t.Description) ? "" : $"<p style=\"margin:6px 0 0;opacity:.75\">{WebUtility.HtmlEncode(t.Description)}</p>") + "</li>"))
-              + "</ul>";
-        return Respond(Document(title, header, (header.Portal is { } look ? SlotFrame(look, "home") : "") + body), embedOrigins);
-    }
+    public static AppResponse PortalHome(string title, Header header, IReadOnlyList<Tile> tiles, IReadOnlyList<string>? embedOrigins = null, string? content = null) =>
+        Respond(Document(title, header, (header.Portal is { } look ? SlotFrame(look, "home") : "") + (content ?? TilesHtml(tiles))), embedOrigins);
+
+    /// <summary>The tiles of a home: a grid of titles and descriptions that open the apps, or a note that nothing is open to the person yet. Everything is encoded.</summary>
+    public static string TilesHtml(IReadOnlyList<Tile> tiles) => tiles.Count == 0
+        ? "<p class=\"note\">Nothing here is open to you yet.</p>"
+        : "<ul class=\"tiles\" style=\"list-style:none;margin:0;padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px\">"
+          + string.Concat(tiles.Select(t => $"<li style=\"border:1px solid #8884;border-radius:8px;padding:12px\"><a href=\"{WebUtility.HtmlEncode(t.Url)}\" style=\"color:inherit;font-weight:600;text-decoration:none\">{WebUtility.HtmlEncode(t.Title)}</a>"
+              + (string.IsNullOrWhiteSpace(t.Description) ? "" : $"<p style=\"margin:6px 0 0;opacity:.75\">{WebUtility.HtmlEncode(t.Description)}</p>") + "</li>"))
+          + "</ul>";
 
     private static AppResponse Respond(string html, IReadOnlyList<string>? embedOrigins) =>
         new(200, "text/html; charset=utf-8", new Dictionary<string, string>

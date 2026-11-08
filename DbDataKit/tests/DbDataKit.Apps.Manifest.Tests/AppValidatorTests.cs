@@ -84,7 +84,7 @@ public sealed class AppValidatorTests : IDisposable
         var text = AppValidator.Validate(folder).Render();
         Assert.Contains("`views/home.yaml`", text);
         Assert.Contains("`assets/logo.svg`", text);
-        Write("views/home.yaml", ""); Write("assets/logo.svg", "");
+        Write("views/home.yaml", "schemaVersion: 1\nblocks:\n  - text: Welcome\n"); Write("assets/logo.svg", "");
         Assert.True(AppValidator.Validate(folder).Ok);
     }
 }

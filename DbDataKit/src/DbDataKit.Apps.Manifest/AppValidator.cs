@@ -42,6 +42,7 @@ public static class AppValidator
         if (loaded.Manifest is { } manifest)
         {
             diagnostics.AddRange(AppChecks.Files(manifest, sourceDirectory, manifestFile));
+            diagnostics.AddRange(AppChecks.HomeViews(manifest, home => File.Exists(Path.Combine(sourceDirectory, home)) ? File.ReadAllText(Path.Combine(sourceDirectory, home)) : null));
             if (modelEntities is not null) diagnostics.AddRange(ModelUses(manifest, modelEntities, manifestFile));
             if (bundleDirectory is not null)
             {
