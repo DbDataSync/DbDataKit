@@ -115,10 +115,8 @@ public sealed class ExporterTests
         var (exporter, settings) = await Started();
         await using var _ = exporter;
         var hits = 0;
-        using var listener = new HttpListener();
-        var port = FreePort();
-        listener.Prefixes.Add($"http://127.0.0.1:{port}/");
-        listener.Start();
+        var (listener, port) = StartListener();
+        using var _listener = listener;
         var serving = Task.Run(async () =>
         {
             try { while (true) { var c = await listener.GetContextAsync(); Interlocked.Increment(ref hits); c.Response.Close(); } }
@@ -289,13 +287,27 @@ public sealed class ExporterTests
         Assert.Contains("whole number", Assert.Throws<ExportSettingsException>(() => ExportSettings.Read(JsonNode.Parse("""{"max_pages":0}""")!.AsObject(), "s.yaml")).Message);
     }
 
-    private static int FreePort()
+    /// <summary>A started listener on a free loopback port. The port is picked first and bound after (an <see cref="HttpListener"/> has no port 0), so another process can take it in between: the start is tried again, up to five times.</summary>
+    private static (HttpListener Listener, int Port) StartListener()
     {
-        var l = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
-        l.Start();
-        var port = ((IPEndPoint)l.LocalEndpoint).Port;
-        l.Stop();
-        return port;
+        for (var attempt = 1; ; attempt++)
+        {
+            var probe = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+            probe.Start();
+            var port = ((IPEndPoint)probe.LocalEndpoint).Port;
+            probe.Stop();
+            var listener = new HttpListener();
+            listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+            try
+            {
+                listener.Start();
+                return (listener, port);
+            }
+            catch (HttpListenerException) when (attempt < 5)
+            {
+                listener.Close();
+            }
+        }
     }
 
     /// <summary>The browser processes whose command line carries an export profile folder (Linux; elsewhere zero, which the comparison tolerates).</summary>

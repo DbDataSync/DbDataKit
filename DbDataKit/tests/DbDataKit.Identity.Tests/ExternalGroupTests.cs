@@ -1,6 +1,5 @@
 using System.Buffers.Text;
 using System.Net;
-using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -40,14 +39,8 @@ public sealed class ExternalGroupTests : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        _authority = $"http://127.0.0.1:{port}/tenant-1/v2.0";
-
         var builder = WebApplication.CreateSlimBuilder();
-        builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
+        builder.WebHost.UseUrls("http://127.0.0.1:0");   // the server binds the port itself; the authority is known once it runs (the routes read it per request)
         _entra = builder.Build();
         _entra.MapGet("/tenant-1/v2.0/.well-known/openid-configuration", () => Results.Json(new
         {
@@ -60,6 +53,7 @@ public sealed class ExternalGroupTests : IAsyncLifetime
         });
         _entra.MapPost("/tenant-1/v2.0/token", () => Results.Json(new { id_token = IdToken("entra-key-1", _algorithm, _signingKey), access_token = "not-used", token_type = "Bearer" }));
         await _entra.StartAsync();
+        _authority = $"{_entra.Urls.Single()}/tenant-1/v2.0";
         _http = new HttpClient();
         _signingKey = _rsa;
 

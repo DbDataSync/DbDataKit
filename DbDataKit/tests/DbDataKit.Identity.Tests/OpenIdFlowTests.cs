@@ -30,19 +30,32 @@ public sealed class OpenIdFlowTests : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        _issuer = $"http://127.0.0.1:{port}";
+        // The provider needs its issuer (the address) before the server starts, so the port is picked first; another process can take it before Kestrel binds it,
+        // and then the whole start is tried again on a new port, up to five times.
+        for (var attempt = 1; ; attempt++)
+        {
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            listener.Stop();
+            _issuer = $"http://127.0.0.1:{port}";
 
-        _provider = new OpenIdProvider(_home.Database, _home.Users, _home.Directory, _home.Clients, _home.Keys, _issuer);
-        var builder = WebApplication.CreateSlimBuilder();
-        builder.WebHost.UseUrls(_issuer);
-        _app = builder.Build();
-        // The host's sign-in is a header here; in a console it is the session cookie.
-        _app.MapOpenIdProvider(_provider, _home.Keys, new OpenIdHostOptions(c => c.Request.Headers["X-Signed-In-User"].FirstOrDefault()));
-        await _app.StartAsync();
+            _provider = new OpenIdProvider(_home.Database, _home.Users, _home.Directory, _home.Clients, _home.Keys, _issuer);
+            var builder = WebApplication.CreateSlimBuilder();
+            builder.WebHost.UseUrls(_issuer);
+            _app = builder.Build();
+            // The host's sign-in is a header here; in a console it is the session cookie.
+            _app.MapOpenIdProvider(_provider, _home.Keys, new OpenIdHostOptions(c => c.Request.Headers["X-Signed-In-User"].FirstOrDefault()));
+            try
+            {
+                await _app.StartAsync();
+                break;
+            }
+            catch (IOException) when (attempt < 5)
+            {
+                await _app.DisposeAsync();
+            }
+        }
         _http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { BaseAddress = new Uri(_issuer) };
 
         _ada = _home.Users.CreateUser("Ada Lovelace", "ada@example.invalid", UserRole.Viewer);

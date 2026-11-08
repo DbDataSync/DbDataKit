@@ -73,15 +73,27 @@ public sealed class ViewsModuleTests : IAsyncLifetime
 
     private async Task StartAsync(bool views = true, params string[] more)
     {
-        viewsPort = FreePort();
-        managementPort = FreePort();
-        while (managementPort == viewsPort) managementPort = FreePort();
-        List<string> args = [$"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Listen:Address=127.0.0.1", "--Gateway:Listen:Port=0", "--Gateway:Modules:0=flightsql",
-            "--Gateway:Management:Enabled=true", "--Gateway:Management:Address=127.0.0.1", $"--Gateway:Management:Port={managementPort}", "--Gateway:DefinitionPollSeconds=1"];
-        if (views) args.AddRange(["--Gateway:Modules:1=views", "--Gateway:Views:Address=127.0.0.1", $"--Gateway:Views:Port={viewsPort}"]);
-        args.AddRange(more);
-        app = GatewayHost.Build([.. args]);
-        await app.StartAsync();
+        // Free ports are looked up and released before the server binds them, so another process can take one in between ("address already in use"): the whole start is tried again on new ports, up to five times.
+        for (var attempt = 1; ; attempt++)
+        {
+            viewsPort = FreePort();
+            managementPort = FreePort();
+            while (managementPort == viewsPort) managementPort = FreePort();
+            List<string> args = [$"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Listen:Address=127.0.0.1", "--Gateway:Listen:Port=0", "--Gateway:Modules:0=flightsql",
+                "--Gateway:Management:Enabled=true", "--Gateway:Management:Address=127.0.0.1", $"--Gateway:Management:Port={managementPort}", "--Gateway:DefinitionPollSeconds=1"];
+            if (views) args.AddRange(["--Gateway:Modules:1=views", "--Gateway:Views:Address=127.0.0.1", $"--Gateway:Views:Port={viewsPort}"]);
+            args.AddRange(more);
+            app = GatewayHost.Build([.. args]);
+            try
+            {
+                await app.StartAsync();
+                break;
+            }
+            catch (IOException ex) when (attempt < 5 && ex.Message.Contains("address already in use", StringComparison.OrdinalIgnoreCase))
+            {
+                await app.DisposeAsync();
+            }
+        }
     }
 
     private T Get<T>() where T : notnull => app!.Services.GetRequiredService<T>();

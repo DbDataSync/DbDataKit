@@ -1,6 +1,5 @@
 using System.Buffers.Text;
 using System.Net;
-using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -48,27 +47,18 @@ public sealed class PasskeyChallengeTests : IAsyncLifetime
         try { Directory.Delete(_directory, true); } catch (IOException) { /* released later */ }
     }
 
-    private static int FreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
-
     /// <summary>An instance of the home on the shared state: a browser that talks to it.</summary>
     private async Task<HttpClient> Home()
     {
-        var url = $"http://127.0.0.1:{FreePort()}";
         var builder = WebApplication.CreateSlimBuilder();
-        builder.WebHost.UseUrls(url);
+        builder.WebHost.UseUrls("http://127.0.0.1:0");   // the server binds the port itself: a port picked first and bound later can be taken in between
         builder.Services.AddLogging();
         builder.AddIdentityHome(new IdentityHomeOptions(new Uri(Origin), _directory, _ => _database, _ => new KeySigningKeyProtector(new byte[32]), Product));
         var home = builder.Build();
         home.MapIdentityHome(_ => { });
         await home.StartAsync();
         _homes.Add(home);
+        var url = home.Urls.Single();
         return new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false }) { BaseAddress = new Uri(url) };
     }
 
