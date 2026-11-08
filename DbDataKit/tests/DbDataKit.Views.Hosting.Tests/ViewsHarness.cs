@@ -71,7 +71,7 @@ internal sealed class ViewsHarness : IAsyncDisposable
 
     public static string ModelContent => new JsonObject { ["catalog"] = CatalogText }.ToJsonString();
 
-    public static async Task<ViewsHarness> StartAsync(StateEngines engines, string engine, TimeSpan? cacheTtl = null, IViewsAudit? audit = null, bool publish = true, bool useModuleClock = false, bool follow = true, IReportExporter? exporter = null, string? pageAssets = null)
+    public static async Task<ViewsHarness> StartAsync(StateEngines engines, string engine, TimeSpan? cacheTtl = null, IViewsAudit? audit = null, bool publish = true, bool useModuleClock = false, bool follow = true, IReportExporter? exporter = null, string? pageAssets = null, long? maxExportRows = null)
     {
         var h = new ViewsHarness();
         var database = engines.Provision(engine).Open([DefinitionsModule.Module, PayloadStore.Module, AuditModule.Module], new StateScope(Group: "main"), time: h.Clock);
@@ -89,7 +89,7 @@ internal sealed class ViewsHarness : IAsyncDisposable
         var options = new ViewsOptions
         {
             CacheTtl = cacheTtl ?? TimeSpan.Zero, Time = useModuleClock ? h.ModuleClock : TimeProvider.System, Follow = follow, PollInterval = TimeSpan.FromHours(1), DrainTimeout = TimeSpan.FromSeconds(20),
-            Resolver = new ResolverOptions { WidgetTimeout = TimeSpan.FromSeconds(20) }, Exporter = exporter, PageAssets = pageAssets,
+            Resolver = new ResolverOptions { WidgetTimeout = TimeSpan.FromSeconds(20) }, Exporter = exporter, PageAssets = pageAssets, MaxExportRows = maxExportRows ?? 100_000,
         };
         h.Module = new ViewsModule(options, h.Published, h.Callers, audit ?? new StateViewsAudit(h.Audit));
         await h.Module.StartAsync(services);
@@ -144,6 +144,64 @@ internal sealed class ViewsHarness : IAsyncDisposable
               - {widget: regions, x: 0, y: 0, w: 12, h: 1}
               - {widget: revenue, x: 0, y: 1, w: 12, h: 2}
         """;
+
+    /// <summary>A dashboard of rows to export (DBR17): a metric, a table whose first column's label is a formula, a table that cannot be answered (the test host refuses a request about the category alone), a matrix and a chart; the <c>kpi</c> layout places the metric only.</summary>
+    public static string DataBoard() => $$"""
+        schemaVersion: 1
+        kind: dashboard
+        title: Rows
+        widgets:
+          revenue:
+            type: metric
+            label: Revenue
+            encodings: {value: orders.net_revenue}
+            query: {model: {{Model}}}
+          by_region:
+            type: table
+            encodings:
+              columns:
+                - {field: customers.region, label: "=HYPERLINK(\"http://example.invalid\",\"Region\")"}
+                - {field: orders.net_revenue, label: "Revenue, net"}
+            query: {model: {{Model}}, limit: 100}
+          by_category:
+            type: table
+            encodings:
+              columns: [{field: products.category}, {field: orders.net_revenue}]
+            query: {model: {{Model}}, limit: 100}
+          grid:
+            type: matrix
+            encodings: {rows: [customers.region], columns: [products.category], values: [{field: orders.net_revenue}]}
+            query: {model: {{Model}}}
+          trend:
+            type: chart
+            mark: bar
+            encodings: {x: customers.region, y: orders.net_revenue}
+            query: {model: {{Model}}, limit: 100}
+        layouts:
+          - name: desk
+            type: reflow
+            default: true
+            grid: {columns: 12, rows: 12}
+            tiles:
+              - {widget: revenue, x: 0, y: 0, w: 4, h: 3}
+              - {widget: by_region, x: 4, y: 0, w: 8, h: 6}
+              - {widget: by_category, x: 0, y: 3, w: 4, h: 6}
+              - {widget: grid, x: 4, y: 6, w: 8, h: 6}
+              - {widget: trend, x: 0, y: 9, w: 4, h: 3}
+          - name: kpi
+            type: reflow
+            when: {width: {max: 600} }
+            grid: {columns: 12, rows: 3}
+            tiles:
+              - {widget: revenue, x: 0, y: 0, w: 12, h: 3}
+        """;
+
+    /// <summary>Publishes <see cref="DataBoard"/> as the dashboard <c>rows</c> and has the module serve it.</summary>
+    public void PublishDataBoard()
+    {
+        Publisher.Publish(new PublishRequest("dashboard", "rows", DataBoard(), "ada", "prod", PublishMode.Serve, [$"semantic-model:{Model}@1"]));
+        Module.Refresh();
+    }
 
     public static string Report() => $$"""
         schemaVersion: 1

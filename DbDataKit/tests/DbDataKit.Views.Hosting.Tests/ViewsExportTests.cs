@@ -42,6 +42,26 @@ public sealed class ViewsExportTests : IDisposable
         })();
         """;
 
+    /// <summary>A stand-in print bundle that draws what the real one marks for a chart: <c>data-testid="vz-chart-&lt;id&gt;"</c> holding an SVG (a mark for each row of the chart's data, its text escaped by the DOM).</summary>
+    private const string ChartScript = StandInScript + """
+
+        (function () {
+          var p = JSON.parse(document.getElementById('dbdatakit-print').textContent);
+          var ns = 'http://www.w3.org/2000/svg';
+          Object.keys(p.rendered.widgets).forEach(function (id) {
+            var x = p.rendered.widgets[id];
+            if (x.type !== 'chart') return;
+            var host = document.createElement('div'); host.setAttribute('data-testid', 'vz-chart-' + id);
+            var svg = document.createElementNS(ns, 'svg'); svg.setAttribute('class', 'marks'); svg.setAttribute('width', '300'); svg.setAttribute('height', '120');
+            x.vega_lite.data.values.forEach(function (row, i) {
+              var t = document.createElementNS(ns, 'text'); t.setAttribute('y', String(12 * (i + 1)));
+              t.textContent = row.customers_region + ' ' + row.orders_net_revenue + ' <&>'; svg.appendChild(t);
+            });
+            host.appendChild(svg); document.getElementById('root').appendChild(host);
+          });
+        })();
+        """;
+
     private string PageAssets(string? script = null)
     {
         var folder = Path.Combine(Path.GetTempPath(), "print-" + Guid.NewGuid().ToString("N"));
@@ -171,7 +191,8 @@ public sealed class ViewsExportTests : IDisposable
         Assert.Equal(400, layout.Status);
         Assert.Contains("nope", layout.Object["message"]!.GetValue<string>());
         var svg = await h.GetAsync("/api/v1/dashboards/sales/export?format=svg", "all");
-        Assert.Equal((400, "format_unsupported"), (svg.Status, svg.Object["code"]!.GetValue<string>()));
+        Assert.Equal((400, "invalid"), (svg.Status, svg.Object["code"]!.GetValue<string>()));       // a chart's, so it names the widget
+        Assert.Contains("widget=<id>", svg.Object["message"]!.GetValue<string>());
         Assert.Equal((400, "invalid"), ((await h.GetAsync("/api/v1/dashboards/sales/export?format=docx", "all")).Status, "invalid"));
         Assert.Equal(404, (await h.GetAsync("/api/v1/dashboards/missing/export", "all")).Status);
         Assert.Equal(401, (await h.GetAsync("/api/v1/dashboards/sales/export", null)).Status);
@@ -288,6 +309,56 @@ public sealed class ViewsExportTests : IDisposable
         await using var __2 = exporter2;
         var big = await h2.GetAsync("/api/v1/dashboards/sales/export", "all");
         Assert.Equal((413, "export_too_large"), (big.Status, big.Object["code"]!.GetValue<string>()));
+    }
+
+    [Fact]
+    public async Task A_chart_is_exported_to_svg_as_the_page_draws_it_for_the_caller_and_audited_with_the_browser()
+    {
+        var (h, exporter) = await StartAsync(pageAssets: PageAssets(ChartScript));
+        await using var _ = h;
+        await using var __ = exporter;
+        h.PublishDataBoard();
+
+        var (status, bytes, response) = await h.GetBytesAsync("/api/v1/dashboards/rows/export?format=svg&widget=trend", "west");
+        Assert.True(status == 200, Encoding.UTF8.GetString(bytes));
+        Assert.Equal("image/svg+xml", response.Content.Headers.ContentType!.MediaType);
+        Assert.Equal("rows-trend.svg", response.Content.Headers.ContentDisposition!.FileName);
+        var svg = System.Xml.Linq.XDocument.Parse(Encoding.UTF8.GetString(bytes));           // a standalone document: well-formed, with its namespace
+        Assert.Equal("{http://www.w3.org/2000/svg}svg", svg.Root!.Name.ToString());
+        var labels = svg.Descendants().Where(e => e.Name.LocalName == "text").Select(e => e.Value).ToList();
+        Assert.Equal(["West 900 <&>"], labels);                                              // the caller's rows only, the text escaped
+        var all = System.Xml.Linq.XDocument.Parse(Encoding.UTF8.GetString((await h.GetBytesAsync("/api/v1/dashboards/rows/export?format=svg&widget=trend", "all")).Bytes));
+        Assert.Equal(["East", "West"], all.Descendants().Where(e => e.Name.LocalName == "text").Select(e => e.Value.Split(' ')[0]).Order(StringComparer.Ordinal));
+
+        var row = Audited(h, "view.export")[0].Entry;
+        var detail = JsonNode.Parse(row.Detail!)!;
+        Assert.Equal(("ok", "svg", "trend"), (row.Outcome, detail["format"]!.GetValue<string>(), detail["widget"]!.GetValue<string>()));
+        Assert.Matches(@"Chrome/\d+\.\d+\.\d+\.\d+$", detail["browser"]!.GetValue<string>());
+
+        string Code(Reply r) => r.Object["code"]!.GetValue<string>();
+        var metric = await h.GetAsync("/api/v1/dashboards/rows/export?format=svg&widget=revenue", "all");
+        Assert.Equal((400, "widget_not_chart"), (metric.Status, Code(metric)));
+        var table = await h.GetAsync("/api/v1/dashboards/rows/export?format=svg&widget=by_region", "all");
+        Assert.Equal("widget_not_chart", Code(table));
+        var elsewhere = await h.GetAsync("/api/v1/dashboards/rows/export?format=svg&widget=trend&layout=kpi", "all");
+        Assert.Equal((400, "widget_not_placed"), (elsewhere.Status, Code(elsewhere)));
+        Assert.Equal(404, (await h.GetAsync("/api/v1/dashboards/rows/export?format=svg&widget=missing", "all")).Status);
+        Assert.Equal(400, (await h.GetAsync("/api/v1/dashboards/rows/export?format=svg", "all")).Status);
+    }
+
+    [Fact]
+    public async Task A_chart_the_page_does_not_draw_is_an_export_failure_in_its_words()
+    {
+        var (h, exporter) = await StartAsync();      // the plain stand-in draws no chart
+        await using var _ = h;
+        await using var __ = exporter;
+        h.PublishDataBoard();
+        var missing = await h.GetAsync("/api/v1/dashboards/rows/export?format=svg&widget=trend", "all");
+        Assert.Equal((500, "export_failed"), (missing.Status, missing.Object["code"]!.GetValue<string>()));
+        Assert.Contains("no chart 'trend'", missing.Object["message"]!.GetValue<string>());
+        Assert.Equal("failed", Audited(h, "view.export")[0].Entry.Outcome);
+        // the PDF of the same page is unchanged
+        Assert.Equal(200, (await h.GetBytesAsync("/api/v1/dashboards/rows/export?format=pdf", "all")).Status);
     }
 
     [Fact]

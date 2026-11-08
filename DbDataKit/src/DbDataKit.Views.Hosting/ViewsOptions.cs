@@ -48,5 +48,8 @@ public sealed class ViewsOptions
     /// <summary>The folder with <c>print.js</c> and <c>print.css</c>, the visuals' print page (built from <c>web/visuals</c>); the module serves it to the page and to the browser's own print route. Null: the print page is not there and export is unavailable, saying so.</summary>
     public string? PageAssets { get; init; }
 
+    /// <summary>The most rows a CSV or xlsx export holds in all (the rows of every sheet): a larger one is refused, in words, with 413. Not a browser's limit, so it does not come from <c>views.export</c>'s exporter settings.</summary>
+    public long MaxExportRows { get; init; } = 100_000;
+
     public TimeProvider Time { get; init; } = TimeProvider.System;
 }

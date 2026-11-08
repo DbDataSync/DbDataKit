@@ -26,6 +26,7 @@ namespace DbDataKit.Views.Hosting;
 /// GET  /api/v1/dashboards/{name}          {kind, name, title, version, as_of, text, document, layouts: [{name, type, default}]}
 /// POST /api/v1/dashboards/{name}/render   {parameters?, layout?, only?, viewport?: {width, height}, medium?} gives the rendered-widgets document
 /// GET  /api/v1/dashboards/{name}/export?format=pdf&amp;layout=&amp;p.name=   the PDF (501 export_unavailable naming the setting when the host has no browser)
+/// GET  /api/v1/dashboards/{name}/export?format=csv|xlsx|svg&amp;widget=&amp;layout=&amp;p.name=   a widget's rows (csv, xlsx: no browser), a dashboard's sheets (xlsx without widget), a chart's SVG
 /// GET  /api/v1/dashboards/{name}/print?layout=   the print page as HTML (the browser's own print)
 /// GET  /api/v1/views/print/{file}         print.js, print.css and the bundled fonts (no token: code, no data)
 /// GET  /health, /health/ready, /health/live
@@ -181,7 +182,7 @@ public sealed class ViewsModule(ViewsOptions options, ViewsPublications publishe
             routes.MapGet(prefix, (Func<HttpContext, Task<IResult>>)(c => As(c, (who, trace) => Task.FromResult(api!.List(who, kind, trace)))));
             routes.MapGet(prefix + "/{name}", (Func<string, HttpContext, Task<IResult>>)((name, c) => As(c, (who, trace) => Task.FromResult(api!.Open(who, kind, name, trace)))));
             routes.MapGet(prefix + "/{name}/export", (Func<string, HttpContext, Task<IResult>>)((name, c) =>
-                As(c, (who, trace) => api!.ExportAsync(who, kind, name, Query(c, "format"), Query(c, "layout"), Parameters(c), c.Connection.RemoteIpAddress?.ToString(), trace, c.RequestAborted))));
+                As(c, (who, trace) => api!.ExportAsync(who, kind, name, Query(c, "format"), Query(c, "layout"), Query(c, "widget"), Parameters(c), c.Connection.RemoteIpAddress?.ToString(), trace, c.RequestAborted))));
             routes.MapGet(prefix + "/{name}/print", (Func<string, HttpContext, Task<IResult>>)((name, c) =>
                 As(c, (who, trace) => api!.PrintPageAsync(who, kind, name, Query(c, "layout"), Parameters(c), c.Connection.RemoteIpAddress?.ToString(), trace, c.RequestAborted))));
             routes.MapPost(prefix + "/{name}/render", (Func<string, HttpContext, Task<IResult>>)((name, c) => As(c, async (who, trace) =>

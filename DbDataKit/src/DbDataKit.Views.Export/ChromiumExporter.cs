@@ -100,7 +100,54 @@ public sealed class ChromiumExporter(ExportSettings settings, ILogger? logger = 
         return null;
     }
 
-    public async Task<ExportResult> ExportPdfAsync(PrintJob job, CancellationToken cancellationToken = default)
+    public Task<ExportResult> ExportPdfAsync(PrintJob job, CancellationToken cancellationToken = default) =>
+        GuardedAsync(cancellationToken, ct => RunAsync(job, ct, async drawn =>
+        {
+            var layout = job.Layout;
+            var paper = new PdfOptions
+            {
+                Width = $"{layout.WidthMm.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)}mm",
+                Height = $"{layout.HeightMm.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)}mm",
+                MarginOptions = new MarginOptions { Top = Mm(layout.Margins.Top), Right = Mm(layout.Margins.Right), Bottom = Mm(layout.Margins.Bottom), Left = Mm(layout.Margins.Left) },
+                DisplayHeaderFooter = layout.HeaderHtml is not null || layout.FooterHtml is not null,
+                HeaderTemplate = layout.HeaderHtml ?? "<span></span>",
+                FooterTemplate = layout.FooterHtml ?? "<span></span>",
+                PrintBackground = true,
+                PreferCSSPageSize = layout.PreferCssPage,
+                Outline = true,
+                Tagged = true,
+                Timeout = 0,
+            };
+            var pdf = await Until(drawn.Page.PdfDataAsync(paper), ct).ConfigureAwait(false);
+            var facts = Read(pdf);
+            if (facts.Pages > settings.MaxPages) throw new ExportException("pages", $"the document has {facts.Pages} pages and an export is limited to {settings.MaxPages} (views.export.max_pages).");
+            lock (drawn.Errors) foreach (var e in drawn.Errors.Take(5)) drawn.Warnings.Add("The page reported an error: " + e);
+            return new ExportResult(pdf, facts.Pages, drawn.Version, [.. drawn.Warnings], facts.Fonts);
+        }));
+
+    public Task<SvgResult> ExportSvgAsync(PrintJob job, string chartId, CancellationToken cancellationToken = default) =>
+        GuardedAsync(cancellationToken, ct => RunAsync(job, ct, async drawn =>
+        {
+            // the chart of the print page: the visuals mark each chart `data-testid="vz-chart-<id>"` and draw its SVG inside; a chart that could not be drawn says so in a `role=alert` paragraph
+            var found = await Until(drawn.Page.EvaluateFunctionAsync<string[]?>(
+                """
+                (id) => {
+                  const host = document.querySelector('[data-testid="vz-chart-' + id + '"]');
+                  if (!host) return ['missing', ''];
+                  const svg = host.querySelector('svg.marks') || host.querySelector('svg');
+                  if (svg) return ['svg', new XMLSerializer().serializeToString(svg)];
+                  const alert = host.querySelector('[role="alert"]');
+                  return ['error', alert ? alert.textContent : ''];
+                }
+                """, chartId), ct).ConfigureAwait(false);
+            if (found is not { Length: 2 } || found[0] == "missing") throw new ExportException("page", $"the page has no chart '{chartId}' (the layout in play does not draw it).");
+            if (found[0] == "error") throw new ExportException("page", $"the chart '{chartId}' could not be drawn: {found[1]}");
+            lock (drawn.Errors) foreach (var e in drawn.Errors.Take(5)) drawn.Warnings.Add("The page reported an error: " + e);
+            return new SvgResult(found[1], drawn.Version, [.. drawn.Warnings]);
+        }));
+
+    /// <summary>One export under the deadline and the host's concurrency limit: what <paramref name="work"/> does runs with the linked token.</summary>
+    private async Task<T> GuardedAsync<T>(CancellationToken cancellationToken, Func<CancellationToken, Task<T>> work)
     {
         if (!availability.Available && (checkedAt == DateTimeOffset.MinValue || DateTimeOffset.UtcNow - checkedAt > TimeSpan.FromSeconds(10)))
             await CheckAsync(cancellationToken).ConfigureAwait(false);
@@ -113,14 +160,17 @@ public sealed class ChromiumExporter(ExportSettings settings, ILogger? logger = 
         {
             try { await slots.WaitAsync(ct).ConfigureAwait(false); }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { throw new ExportException("busy", $"export is busy: {settings.MaxConcurrent} at once on this host and the deadline ended while waiting (views.export.max_concurrent)."); }
-            try { return await RunAsync(job, ct).ConfigureAwait(false); }
+            try { return await work(ct).ConfigureAwait(false); }
             finally { slots.Release(); }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw new ExportException("cancelled", "the export was cancelled."); }
         catch (OperationCanceledException) { throw new ExportException("deadline", $"the export took longer than {settings.Deadline.TotalSeconds:0.#} s (views.export.deadline_seconds) and was stopped."); }
     }
 
-    private async Task<ExportResult> RunAsync(PrintJob job, CancellationToken ct)
+    /// <summary>The page once it says it is drawn: the browser's page, its version and what was collected so far.</summary>
+    private sealed record Drawn(IPage Page, string Version, List<string> Warnings, List<string> Errors);
+
+    private async Task<T> RunAsync<T>(PrintJob job, CancellationToken ct, Func<Drawn, Task<T>> use)
     {
         var assets = new Dictionary<string, PrintAsset>(job.Assets, StringComparer.Ordinal);
         if (fonts is not null) foreach (var (k, v) in fonts.Assets) assets.TryAdd(k, v);
@@ -167,27 +217,7 @@ public sealed class ChromiumExporter(ExportSettings settings, ILogger? logger = 
         var failure = await Until(page.EvaluateFunctionAsync<string?>("() => typeof window.__reportError === 'string' ? window.__reportError : null"), ct).ConfigureAwait(false);
         if (failure is not null) throw new ExportException("page", $"the page could not be drawn: {failure}");
 
-        var layout = job.Layout;
-        var paper = new PdfOptions
-        {
-            Width = $"{layout.WidthMm.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)}mm",
-            Height = $"{layout.HeightMm.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)}mm",
-            MarginOptions = new MarginOptions { Top = Mm(layout.Margins.Top), Right = Mm(layout.Margins.Right), Bottom = Mm(layout.Margins.Bottom), Left = Mm(layout.Margins.Left) },
-            DisplayHeaderFooter = layout.HeaderHtml is not null || layout.FooterHtml is not null,
-            HeaderTemplate = layout.HeaderHtml ?? "<span></span>",
-            FooterTemplate = layout.FooterHtml ?? "<span></span>",
-            PrintBackground = true,
-            PreferCSSPageSize = layout.PreferCssPage,
-            Outline = true,
-            Tagged = true,
-            Timeout = 0,
-        };
-        var pdf = await Until(page.PdfDataAsync(paper), ct).ConfigureAwait(false);
-
-        var facts = Read(pdf);
-        if (facts.Pages > settings.MaxPages) throw new ExportException("pages", $"the document has {facts.Pages} pages and an export is limited to {settings.MaxPages} (views.export.max_pages).");
-        lock (errors) foreach (var e in errors.Take(5)) warnings.Add("The page reported an error: " + e);
-        return new ExportResult(pdf, facts.Pages, version, [.. warnings], facts.Fonts);
+        return await use(new Drawn(page, version, warnings, errors)).ConfigureAwait(false);
     }
 
     private static string Mm(double v) => v.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + "mm";

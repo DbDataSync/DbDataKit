@@ -24,7 +24,7 @@ public sealed record ViewsAnswer(int Status, JsonNode Body, IReadOnlyDictionary<
 /// <item><b>list</b> and <b>open</b>: the published document of a kind (<c>text</c> as published, the document as JSON, the layouts, the version) as the channel serves it on this instance, for a document the caller may open;</item>
 /// <item><b>render</b>: the layout in play (named, or chosen for the viewport), resolved by <see cref="WidgetResolver"/> through the serving core's <see cref="IServingQueries"/> <b>as the caller</b> (their roles and attributes, the channel,
 /// a trace id), with the module's result cache under <see cref="WidgetCacheKey"/>;</item>
-/// <item><b>export</b>: a PDF of the layout the print medium selects (or the one named), drawn from the module's print page by <see cref="ViewsOptions.Exporter"/>; without an exporter, or without a browser, <c>export_unavailable</c> in words that name the setting, and the health says it too. <b>print</b>: the same page as HTML, for the browser's own print.</item>
+/// <item><b>export</b>: a PDF of the layout the print medium selects (or the one named), drawn from the module's print page by <see cref="ViewsOptions.Exporter"/>; without an exporter, or without a browser, <c>export_unavailable</c> in words that name the setting, and the health says it too. The same route gives the rows of a widget as CSV or xlsx (no browser) and a chart as SVG (the browser's drawing). <b>print</b>: the same page as HTML, for the browser's own print.</item>
 /// </list>
 /// Every call is audited (<c>view.list</c>, <c>view.open</c>, <c>view.render</c>, <c>view.export</c>: who, through what, which document and version, the outcome, never a parameter's value), and the answer is held back when the entry cannot be written.
 /// While draining, new calls are refused with 503 and the ones in flight finish.
@@ -165,11 +165,20 @@ public sealed class ViewsApi(ViewsPublications published, IServingServices servi
     /// <summary>The route the page and the browser load the print bundle and the fonts from (no authentication: code and fonts, no data).</summary>
     public const string PrintAssetRoute = "/api/v1/views/print/";
 
+    /// <summary>The formats of a download (<c>format=</c>).</summary>
+    public static readonly IReadOnlyList<string> Formats = ["pdf", "csv", "xlsx", "svg"];
+
     /// <summary>
-    /// A download. <c>pdf</c> (the default): the layout named, else the one the print medium selects (the print layout, or the default), resolved as the caller and drawn by the exporter; <c>parameters</c> are the document's by name.
-    /// <c>svg</c> is a chart's export without a browser (DBR17) and is refused for now. The audit row names the format, layout, pages and the browser's version.
+    /// A download (plan 32 DBR15, DBR17); every one is resolved as the caller and audited (<c>view.export</c>, with the format, layout, widget and what came out; a refusal is audited too). <c>parameters</c> are the document's by name; the layout is the one
+    /// named, else the one the print medium selects (the print layout, or the default).
+    /// <list type="bullet">
+    /// <item><c>pdf</c> (the default): the whole layout, drawn from the print page by the exporter (needs the browser).</item>
+    /// <item><c>csv</c>: the rows of the table or matrix <paramref name="widget"/> (or the data of a chart) as the caller was shown them; <c>xlsx</c>: the same for one widget, or with no <paramref name="widget"/> one sheet for each table, matrix and chart the layout places. No browser.
+    /// A widget that failed gives its error block as an xlsx sheet, and for a CSV is refused with its code and words.</item>
+    /// <item><c>svg</c>: the chart <paramref name="widget"/> as the print page draws it (needs the browser: the module has no JavaScript of its own, so the picture is the browser's, the same as the screen and the PDF show).</item>
+    /// </list>
     /// </summary>
-    public async Task<ViewsAnswer> ExportAsync(ViewsPrincipal who, string kind, string name, string? format, string? layout, IReadOnlyDictionary<string, JsonNode?>? parameters = null, string? clientAddress = null, string? traceId = null, CancellationToken cancellationToken = default)
+    public async Task<ViewsAnswer> ExportAsync(ViewsPrincipal who, string kind, string name, string? format, string? layout, string? widget, IReadOnlyDictionary<string, JsonNode?>? parameters = null, string? clientAddress = null, string? traceId = null, CancellationToken cancellationToken = default)
     {
         if (Enter() is not { } work) return Draining();
         using (work)
@@ -177,35 +186,55 @@ public sealed class ViewsApi(ViewsPublications published, IServingServices servi
             var found = Find(who, kind, name, ViewsAuditVerbs.Export, traceId);
             if (found.View is not { } view) return found.Refusal!;
             var chosen = format ?? "pdf";
-            if (chosen != "pdf")
-                return Refuse(who, ViewsAuditVerbs.Export, kind, view, 400, chosen == "svg" ? "format_unsupported" : "invalid",
-                    chosen == "svg" ? "Export as svg is a chart's export without a browser (plan 32 DBR17) and is not built yet; `format=pdf` is." : $"`format` is `pdf` (or `svg`, not built yet), not `{chosen}`.", traceId, ("format", format), ("layout", layout));
-            var exporter = options.Exporter;
-            if (exporter is null)
-                return Refuse(who, ViewsAuditVerbs.Export, kind, view, 501, ExportUnavailable,
-                    $"Export of the {kind} '{view.Name}' is unavailable: export unavailable: it is off on this host (the views.export setting is not set).", traceId, ("format", format), ("layout", layout));
-            if (!exporter.Availability.Available)
-                await exporter.CheckAsync(cancellationToken).ConfigureAwait(false);
-            if (!exporter.Availability.Available)
-                return Refuse(who, ViewsAuditVerbs.Export, kind, view, 501, ExportUnavailable, $"Export of the {kind} '{view.Name}' is unavailable: {exporter.Availability.Reason}", traceId, ("format", format), ("layout", layout));
-            var (pageAssets, missing) = PrintPages.LoadAssets(options.PageAssets);
-            if (pageAssets is null)
-                return Refuse(who, ViewsAuditVerbs.Export, kind, view, 501, ExportUnavailable, $"Export of the {kind} '{view.Name}' is unavailable: export unavailable: {missing}", traceId, ("format", format), ("layout", layout));
+            var more = new (string, object?)[] { ("format", chosen), ("layout", layout), ("widget", widget) };
+            if (!Formats.Contains(chosen, StringComparer.Ordinal))
+                return Refuse(who, ViewsAuditVerbs.Export, kind, view, 400, "invalid", $"`format` is `pdf`, `csv`, `xlsx` or `svg`, not `{chosen}`.", traceId, more);
+            if (chosen is "csv" or "svg" && widget is null)
+                return Refuse(who, ViewsAuditVerbs.Export, kind, view, 400, "invalid", $"`format={chosen}` is one widget's: name it with `widget=<id>` (`xlsx` alone gives every table, matrix and chart of the layout).", traceId, more);
+            if (chosen == "pdf" && widget is not null)
+                return Refuse(who, ViewsAuditVerbs.Export, kind, view, 400, "invalid", "`widget` names one widget for `csv`, `xlsx` and `svg`; a PDF is the whole layout.", traceId, more);
+            if (widget is not null && view.Document.Widget(widget) is null)
+                return Refuse(who, ViewsAuditVerbs.Export, kind, view, 404, "widget_not_found", $"The {kind} '{view.Name}' has no widget '{widget}'.", traceId, more);
 
-            var prepared = await PrepareAsync(who, kind, view, ViewsAuditVerbs.Export, layout, parameters, clientAddress, traceId, cancellationToken).ConfigureAwait(false);
+            if (chosen is "csv" or "xlsx")
+                return await DataAsync(who, kind, view, chosen, layout, widget, parameters, clientAddress, traceId, cancellationToken).ConfigureAwait(false);
+
+            var (exporter, pageAssets, unavailable) = await BrowserAsync(who, kind, view, traceId, more, cancellationToken).ConfigureAwait(false);
+            if (unavailable is not null) return unavailable;
+
+            var prepared = await PrepareAsync(who, kind, view, ViewsAuditVerbs.Export, layout, parameters, null, clientAddress, traceId, cancellationToken).ConfigureAwait(false);
             if (prepared.Refusal is not null) return prepared.Refusal;
             var p = prepared.Page!;
             var asOf = p.Rendered["as_of"]?.GetValue<string>();
-            var page = PrintPages.Html(view, p.Layout, p.Paper, p.Rendered, p.Parameters, who.Caller.Id, exporter.Fonts, "");
-            var job = new PrintJob(view.Document.Title, page, pageAssets,
+            var page = PrintPages.Html(view, p.Layout, p.Paper, p.Rendered, p.Parameters, who.Caller.Id, exporter!.Fonts, "");
+            var job = new PrintJob(view.Document.Title, page, pageAssets!,
                 new PdfLayout(p.Paper.WidthMm, p.Paper.HeightMm, p.Paper.Margins,
                     PrintPages.RunningTemplate(p.Paper.Header, p.Paper, view.Document.Title, asOf, who.Caller.Id, p.Parameters),
                     PrintPages.RunningTemplate(p.Paper.Footer, p.Paper, view.Document.Title, asOf, who.Caller.Id, p.Parameters), PreferCssPage: true));
+            var parameterNames = parameters?.Keys.Order(StringComparer.Ordinal).ToList();
             try
             {
+                if (chosen == "svg")
+                {
+                    var node = (p.Rendered["widgets"] as JsonObject)?[widget!] as JsonObject;
+                    if (node is null)
+                        return Refuse(who, ViewsAuditVerbs.Export, kind, view, 400, "widget_not_placed", NotPlaced(view, p.Layout.Name, widget!), traceId, more);
+                    if (node["type"]?.GetValue<string>() == "error") return WidgetFailed(who, kind, view, widget!, node, traceId, more);
+                    if (node["type"]?.GetValue<string>() != "chart")
+                        return Refuse(who, ViewsAuditVerbs.Export, kind, view, 400, "widget_not_chart", $"The widget '{widget}' is a {node["type"]}, not a chart: `format=svg` is a chart's picture (`csv` and `xlsx` give a table's or matrix's rows).", traceId, more);
+                    var svg = await exporter.ExportSvgAsync(job, widget!, cancellationToken).ConfigureAwait(false);
+                    var bytes = System.Text.Encoding.UTF8.GetBytes(svg.Svg);
+                    var svgDetail = Detail(traceId, ("format", "svg"), ("layout", p.Layout.Name), ("widget", widget), ("bytes", bytes.Length), ("browser", svg.BrowserVersion), ("mode", exporter.Availability.Mode),
+                        ("warnings", svg.Warnings.Count), ("parameters", parameterNames));
+                    var svgHeaders = new Dictionary<string, string>(Definition(view)) { ["X-DbData-Export-Browser"] = svg.BrowserVersion };
+                    if (svg.Warnings.Count > 0) svgHeaders["X-DbData-Export-Warnings"] = svg.Warnings.Count.ToString(CultureInfo.InvariantCulture);
+                    return Finish(who, ViewsAuditVerbs.Export, kind, view.Name, view.Version, AuditEvent.Ok, svgDetail,
+                        new ViewsAnswer(200, new JsonObject(), svgHeaders, new ViewsFile(bytes, "image/svg+xml", $"{view.Name}-{widget}.svg")));
+                }
+
                 var result = await exporter.ExportPdfAsync(job, cancellationToken).ConfigureAwait(false);
                 var detail = Detail(traceId, ("format", "pdf"), ("layout", p.Layout.Name), ("pages", result.Pages), ("bytes", result.Pdf.Length), ("browser", result.BrowserVersion), ("mode", exporter.Availability.Mode),
-                    ("warnings", result.Warnings.Count), ("fonts", result.EmbeddedFonts), ("parameters", parameters?.Keys.Order(StringComparer.Ordinal).ToList()));
+                    ("warnings", result.Warnings.Count), ("fonts", result.EmbeddedFonts), ("parameters", parameterNames));
                 var headers = new Dictionary<string, string>(Definition(view)) { ["X-DbData-Export-Pages"] = result.Pages.ToString(CultureInfo.InvariantCulture), ["X-DbData-Export-Browser"] = result.BrowserVersion };
                 if (result.Warnings.Count > 0) headers["X-DbData-Export-Warnings"] = result.Warnings.Count.ToString(CultureInfo.InvariantCulture);
                 return Finish(who, ViewsAuditVerbs.Export, kind, view.Name, view.Version, AuditEvent.Ok, detail,
@@ -221,13 +250,87 @@ public sealed class ViewsApi(ViewsPublications published, IServingServices servi
                     "busy" => (503, "export_busy"),
                     _ => (500, "export_failed"),
                 };
-                Record(who, ViewsAuditVerbs.Export, kind, view.Name, view.Version, AuditEvent.Failed, Detail(traceId, ("format", "pdf"), ("layout", p.Layout.Name), ("code", code)));
+                Record(who, ViewsAuditVerbs.Export, kind, view.Name, view.Version, AuditEvent.Failed, Detail(traceId, ("format", chosen), ("layout", p.Layout.Name), ("widget", widget), ("code", code)));
                 Interlocked.Increment(ref refused);
                 return ViewsAnswer.Error(status, code, $"Export of the {kind} '{view.Name}' failed: {e.Message}", e.Code == "busy" ? new Dictionary<string, string> { ["Retry-After"] = "5" } : null);
             }
             catch (ExportException) { throw new OperationCanceledException(cancellationToken); }
         }
     }
+
+    /// <summary>The exporter and the print page's files when this host can draw one, else the 501 that says why (the setting is named).</summary>
+    private async Task<(IReportExporter? Exporter, IReadOnlyDictionary<string, PrintAsset>? Assets, ViewsAnswer? Refusal)> BrowserAsync(ViewsPrincipal who, string kind, PublishedView view, string? traceId, (string, object?)[] more, CancellationToken cancellationToken)
+    {
+        var exporter = options.Exporter;
+        if (exporter is null)
+            return (null, null, Refuse(who, ViewsAuditVerbs.Export, kind, view, 501, ExportUnavailable,
+                $"Export of the {kind} '{view.Name}' is unavailable: export unavailable: it is off on this host (the views.export setting is not set).", traceId, more));
+        if (!exporter.Availability.Available)
+            await exporter.CheckAsync(cancellationToken).ConfigureAwait(false);
+        if (!exporter.Availability.Available)
+            return (null, null, Refuse(who, ViewsAuditVerbs.Export, kind, view, 501, ExportUnavailable, $"Export of the {kind} '{view.Name}' is unavailable: {exporter.Availability.Reason}", traceId, more));
+        var (pageAssets, missing) = PrintPages.LoadAssets(options.PageAssets);
+        if (pageAssets is null)
+            return (null, null, Refuse(who, ViewsAuditVerbs.Export, kind, view, 501, ExportUnavailable, $"Export of the {kind} '{view.Name}' is unavailable: export unavailable: {missing}", traceId, more));
+        return (exporter, pageAssets, null);
+    }
+
+    private static string NotPlaced(PublishedView view, string layout, string widget) =>
+        $"The layout '{layout}' of the {view.Kind} '{view.Name}' does not place the widget '{widget}': name a layout that does with `layout=`.";
+
+    /// <summary>A widget that failed has no rows or picture to give: the answer is its error block (code and words), 422.</summary>
+    private ViewsAnswer WidgetFailed(ViewsPrincipal who, string kind, PublishedView view, string widget, JsonObject node, string? traceId, (string, object?)[] more)
+    {
+        var code = node["code"]?.GetValue<string>() ?? "error";
+        Record(who, ViewsAuditVerbs.Export, kind, view.Name, view.Version, AuditEvent.Refused, Detail(traceId, [("code", "widget_failed"), ("widget_code", code), .. more]));
+        Interlocked.Increment(ref refused);
+        return new ViewsAnswer(422, new JsonObject { ["code"] = "widget_failed", ["message"] = $"The widget '{widget}' could not be resolved ({code}): {node["message"]?.GetValue<string>()}", ["widget"] = node.DeepClone() });
+    }
+
+    private async Task<ViewsAnswer> DataAsync(ViewsPrincipal who, string kind, PublishedView view, string format, string? layout, string? widget, IReadOnlyDictionary<string, JsonNode?>? parameters, string? clientAddress, string? traceId, CancellationToken cancellationToken)
+    {
+        var more = new (string, object?)[] { ("format", format), ("layout", layout), ("widget", widget) };
+        var prepared = await PrepareAsync(who, kind, view, ViewsAuditVerbs.Export, layout, parameters, widget is null ? null : [widget], clientAddress, traceId, cancellationToken).ConfigureAwait(false);
+        if (prepared.Refusal is not null) return prepared.Refusal;
+        var p = prepared.Page!;
+        var widgets = p.Rendered["widgets"] as JsonObject ?? [];
+        var sheets = new List<DataSheet>();
+        if (widget is not null)
+        {
+            if (widgets[widget] is not JsonObject node)
+                return Refuse(who, ViewsAuditVerbs.Export, kind, view, 400, "widget_not_placed", NotPlaced(view, p.Layout.Name, widget), traceId, more);
+            if (format == "csv" && node["type"]?.GetValue<string>() == "error") return WidgetFailed(who, kind, view, widget, node, traceId, more);
+            if (DataExports.Sheet(widget, node, AxisNames(view, widget)) is not { } sheet)
+                return Refuse(who, ViewsAuditVerbs.Export, kind, view, 400, "widget_not_tabular", $"The widget '{widget}' is a {node["type"]}: it has no rows (`csv` and `xlsx` are for a table, a matrix or a chart's data).", traceId, more);
+            sheets.Add(sheet);
+        }
+        else
+            foreach (var (id, node) in widgets)
+                if (node is JsonObject o && DataExports.Sheet(id, o, AxisNames(view, id)) is { } sheet) sheets.Add(sheet);
+        if (sheets.Count == 0)
+            return Refuse(who, ViewsAuditVerbs.Export, kind, view, 400, "nothing_tabular", $"The layout '{p.Layout.Name}' of the {kind} '{view.Name}' places no table, matrix or chart: there are no rows to export.", traceId, more);
+
+        var rows = sheets.Sum(x => (long)x.Rows.Count);
+        var most = Math.Min(options.MaxExportRows, format == "xlsx" ? DataExports.XlsxMaxRows : long.MaxValue);
+        if (rows > most)
+            return Refuse(who, ViewsAuditVerbs.Export, kind, view, 413, "export_too_large",
+                $"The export has {rows} rows and a {format} export is limited to {most} (ViewsOptions.MaxExportRows" + (format == "xlsx" ? $" and the {DataExports.XlsxMaxRows} rows of a sheet" : "") + "): narrow it with a parameter, or export a smaller widget.", traceId, [.. more, ("rows", rows)]);
+
+        var content = format == "csv" ? DataExports.Csv(sheets[0]) : DataExports.Xlsx(sheets);
+        var errors = sheets.Count(x => x.Kind == "error");
+        var detail = Detail(traceId, ("format", format), ("layout", p.Layout.Name), ("widget", widget), ("sheets", sheets.Count), ("rows", rows), ("errors", errors), ("bytes", content.Length),
+            ("parameters", parameters?.Keys.Order(StringComparer.Ordinal).ToList()));
+        var headers = new Dictionary<string, string>(Definition(view)) { ["X-DbData-Export-Rows"] = rows.ToString(CultureInfo.InvariantCulture) };
+        var file = $"{view.Name}-{widget ?? p.Layout.Name}.{format}";
+        return Finish(who, ViewsAuditVerbs.Export, kind, view.Name, view.Version, AuditEvent.Ok, detail,
+            new ViewsAnswer(200, new JsonObject(), headers, new ViewsFile(content, format == "csv" ? DataExports.CsvContentType : DataExports.XlsxContentType, file)));
+    }
+
+    /// <summary>The names of a matrix's row-label columns: the fields of its <c>rows</c> encoding.</summary>
+    private static IReadOnlyList<string> AxisNames(PublishedView view, string widget) =>
+        view.Document.Widget(widget)?.Raw["encodings"]?["rows"] is JsonArray rows
+            ? [.. rows.Select(r => r is JsonValue v && v.TryGetValue<string>(out var s) ? s : r?["field"]?.GetValue<string>() ?? "")]
+            : [];
 
     /// <summary>The print page as HTML, for the browser's own print (and for looking at what the exporter draws): the same page, its files loaded from <see cref="PrintAssetRoute"/>.</summary>
     public async Task<ViewsAnswer> PrintPageAsync(ViewsPrincipal who, string kind, string name, string? layout, IReadOnlyDictionary<string, JsonNode?>? parameters = null, string? clientAddress = null, string? traceId = null, CancellationToken cancellationToken = default)
@@ -240,7 +343,7 @@ public sealed class ViewsApi(ViewsPublications published, IServingServices servi
             var (pageAssets, missing) = PrintPages.LoadAssets(options.PageAssets);
             if (pageAssets is null)
                 return Refuse(who, ViewsAuditVerbs.Print, kind, view, 501, ExportUnavailable, $"The print page of the {kind} '{view.Name}' is unavailable: {missing}", traceId, ("layout", layout));
-            var prepared = await PrepareAsync(who, kind, view, ViewsAuditVerbs.Print, layout, parameters, clientAddress, traceId, cancellationToken).ConfigureAwait(false);
+            var prepared = await PrepareAsync(who, kind, view, ViewsAuditVerbs.Print, layout, parameters, null, clientAddress, traceId, cancellationToken).ConfigureAwait(false);
             if (prepared.Refusal is not null) return prepared.Refusal;
             var p = prepared.Page!;
             var html = PrintPages.Html(view, p.Layout, p.Paper, p.Rendered, p.Parameters, who.Caller.Id, options.Exporter?.Fonts, PrintAssetRoute);
@@ -259,7 +362,7 @@ public sealed class ViewsApi(ViewsPublications published, IServingServices servi
 
     private sealed record PreparedPage(ViewLayout Layout, PrintPaper Paper, JsonObject Rendered, JsonObject Parameters);
 
-    private async Task<(PreparedPage? Page, ViewsAnswer? Refusal)> PrepareAsync(ViewsPrincipal who, string kind, PublishedView view, string verb, string? layout, IReadOnlyDictionary<string, JsonNode?>? parameters, string? clientAddress, string? traceId, CancellationToken cancellationToken)
+    private async Task<(PreparedPage? Page, ViewsAnswer? Refusal)> PrepareAsync(ViewsPrincipal who, string kind, PublishedView view, string verb, string? layout, IReadOnlyDictionary<string, JsonNode?>? parameters, IReadOnlyCollection<string>? only, string? clientAddress, string? traceId, CancellationToken cancellationToken)
     {
         var chosen = LayoutSelector.Select(view.Document, new LayoutContext(null, null, "print", layout));
         if (chosen.Layout is not { } picked)
@@ -267,7 +370,7 @@ public sealed class ViewsApi(ViewsPublications published, IServingServices servi
         try
         {
             var resolver = view.Resolver(services.Queries, Basis(), services.Entities);
-            var rendered = await resolver.ResolveAsync(ContextOf(who, clientAddress, traceId), view.Document, picked.Name, parameters is null ? null : new Dictionary<string, JsonNode?>(parameters), null, cancellationToken).ConfigureAwait(false);
+            var rendered = await resolver.ResolveAsync(ContextOf(who, clientAddress, traceId), view.Document, picked.Name, parameters is null ? null : new Dictionary<string, JsonNode?>(parameters), only, cancellationToken).ConfigureAwait(false);
             var values = new JsonObject();
             foreach (var (key, value) in parameters ?? new Dictionary<string, JsonNode?>()) values[key] = value?.DeepClone();
             return (new PreparedPage(picked, PrintPages.Paper(picked), rendered.ToJson(), values), null);
