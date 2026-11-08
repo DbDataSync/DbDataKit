@@ -244,7 +244,7 @@ public class ResolveTests
     [Fact]
     public async Task Text_has_its_parameters_substituted_as_text_and_an_image_its_bytes_as_a_data_uri()
     {
-        var png = new byte[] { 0x89, 0x50, 0x4e, 0x47, 1, 2, 3 };
+        var png = new byte[] { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3 };
         var hash = "sha256:" + new string('a', 64);
         var doc = Doc($$$"""
               note:

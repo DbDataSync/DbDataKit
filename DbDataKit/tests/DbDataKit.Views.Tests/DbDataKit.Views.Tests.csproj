@@ -2,9 +2,14 @@
   <ItemGroup>
     <Using Include="Xunit" />
     <PackageReference Include="JsonSchema.Net" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Npgsql" />
     <ProjectReference Include="..\..\src\DbDataKit.Views\DbDataKit.Views.csproj" />
     <!-- the engine's validator and request hash, which the catalog check and the derivation goldens are run against (the library itself does not carry the engine) -->
     <ProjectReference Include="..\..\src\DbDataKit.Semantic\DbDataKit.Semantic.csproj" />
+    <!-- the published kinds (DBR10) are tested on the state database of every engine: the same throwaway database per engine the State tests use -->
+    <ProjectReference Include="..\..\src\DbDataKit.State.Engines\DbDataKit.State.Engines.csproj" />
+    <Compile Include="..\DbDataKit.State.Tests\StateEngines.cs" Link="StateEngines.cs" />
   </ItemGroup>
   <ItemGroup>
     <!-- the documents and goldens the TypeScript tests of @dbdatakit/visuals read too -->

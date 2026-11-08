@@ -321,6 +321,31 @@ never share one; the cache itself is plan 24's and the host's.
 | `DBD-VIEW-057` | the layout is not one of the document's (the resolution is refused) |
 | `DBD-VIEW-058` | the bytes of an image held by hash were not found |
 
+## Publishing: the kinds `dashboard` and `report`
+
+A document is published as a definition of plan 30's registry: `ViewDefinitions.Register(kinds, ViewPublishingSources.From(store, payloads))` registers **`dashboard`** and **`report`** for `serving` targets (they serve at once;
+a document is read, not code), both in format `ViewsFormat.Current` (the one number; current 1, previous 1). A host runs `DefinitionFollower` over `PublishedViews` to read what a channel serves.
+
+- **Format.** `FormatOf` is the document's `schemaVersion`. A newer one is refused by the publisher (`PublishRefusal.Format`) naming kind, name and both numbers, and by the follower the same way; the version served before keeps serving.
+- **Dependencies.** `depends_on` is `semantic-model:name@version` for each model the widgets query (`ViewDefinitions.DependsOn` writes the list from the document and the versions a channel serves). A model a widget queries
+  and the list does not name, a model with no version, a version the group does not have and a catalog that does not load are refused naming the model (`DBD-VIEW-060`). Activation needs the pinned version active in the channel
+  (the registry's own check), so a dashboard cannot be served against a model version its channel does not serve.
+- **The validator** is the loader, then the catalog check with the production adapter over the engine's validator (`SemanticRequestValidator`, per model version: the roles come from the published catalog), then three checks that
+  need the models and the files: a saved query a widget runs is defined by a model it depends on (`DBD-VIEW-061`), a control's attribute is one of the models its widgets query (`-062`), and an image is a file of the version
+  named by its SHA-256 (`-063`), stored as the media type the widget says, at most 1 MiB, and a png, jpeg or webp **by its first bytes** (`ImageCheck`, the words of `checkImageBytes`; `DBD-VIEW-003`). Nothing is stored for a refused version.
+- **Reading.** `PublishedViews` builds a `PublishedView` from the served version before it replaces the one it served: the document, the pinned model versions' catalogs (`CatalogRoles` by model), the saved queries' models and the
+  pictures' bytes from the version's files. `PublishedView.Resolver(IServingQueries)` is a `WidgetResolver` with all of it filled in; `WidgetResolver` also refuses an image whose bytes are not the raster the widget names.
+- **Listing.** `ViewDefinitions.List(publisher, kind?, channel)` lists the documents of one kind or both with what the channel has active, before and staged.
+- **Promotion and rollback.** `DefinitionPublisher.PromoteWithDependencies` points the pinned dependencies (and theirs) at their pinned versions and then the document, in one transaction (a plain switch still refuses a model that is
+  not active); `RollbackWithDependencies` returns the document and the models it was published against, and refuses, moving nothing, while another active definition pins a model's current version.
+
+| Code | Meaning |
+| --- | --- |
+| `DBD-VIEW-060` | a model the document queries is not a dependency, is not pinned, has no such version or does not load |
+| `DBD-VIEW-061` | a saved query is in none of the models the document depends on |
+| `DBD-VIEW-062` | a control lists an attribute none of the models its widgets query has |
+| `DBD-VIEW-063` | an image's hash is not among the files of the version |
+
 ## Choosing a layout
 
 `LayoutSelector.Select(document, context)` (.NET) and `selectLayout(document, context)` (TypeScript) are pure functions with the same goldens (`conformance/views/select-layout`). The context is the container's
