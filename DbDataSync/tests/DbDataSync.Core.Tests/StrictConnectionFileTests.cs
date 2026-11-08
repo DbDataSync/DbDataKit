@@ -135,7 +135,7 @@ public sealed class StrictConnectionFileTests : IDisposable
         var mapping = Path.Combine(config, "replications", "r1", "table-mappings", "m1.yaml");
         var script = Path.Combine(config, "scripts", "s1.yaml");
         foreach (var file in new[] { task, mapping, script }) Directory.CreateDirectory(Path.GetDirectoryName(file)!);
-        File.WriteAllText(task, "schemaVersion: 1\nname: r1\nscedule: x\n");
+        File.WriteAllText(task, "schemaVersion: 2\nname: r1\nscedule: x\n");
         File.WriteAllText(mapping, "schemaVersion: 1\nname: m1\nsurprise: 1\n");
         File.WriteAllText(script, "schemaVersion: 1\nname: s1\nsurprise: 1\n");
 

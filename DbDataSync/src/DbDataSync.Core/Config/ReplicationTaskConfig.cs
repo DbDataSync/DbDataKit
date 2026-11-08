@@ -9,7 +9,7 @@ namespace DbDataSync.Core.Config;
 public sealed class ReplicationTaskConfig
 {
     /// <summary>The version of this file's format (plan 13, A03). Required: a file without it, or from an older format, is refused with a message rather than read as if it were current.</summary>
-    public int SchemaVersion { get; set; } = ConfigSchema.Current;
+    public int SchemaVersion { get; set; } = ConfigSchema.TaskCurrent;
 
     public required string Name { get; set; }
     /// <summary>
@@ -115,4 +115,15 @@ public sealed class ReplicationTaskConfig
     /// </para>
     /// </summary>
     public string? Notes { get; set; }
+
+    /// <summary>
+    /// The checks stored with this replication (plan 23a FQ04, format 2): the <c>checks:</c> section of <c>task.yaml</c>, each about a dataset the replication writes (its lineage identity, or the target table's name), freshness first.
+    /// Read by <see cref="ConfigRepository.LoadReplicationTask"/> through <c>DbDataKit.Quality.CheckSection</c>; empty when the file has none. Nothing here evaluates them (FQ10).
+    /// <para>
+    /// Not part of what the screens and the API send back and forth, and not written by the YAML serializer: <see cref="ConfigRepository.SaveReplicationTask"/> carries the file's existing section over as written, comments and all
+    /// (<see cref="ReplicationChecks.Carry"/>), so saving a replication from a screen that does not know about checks never drops them.
+    /// </para>
+    /// </summary>
+    [ChecksSection, YamlDotNet.Serialization.YamlIgnore, System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<DbDataKit.Quality.CheckDefinition> Checks { get; set; } = [];
 }

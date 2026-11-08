@@ -285,7 +285,10 @@ public sealed class ConfigRepository
 
         var path = ConfigPaths.TaskFile(_configRoot, task.Name);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        WriteAtomically(path, YamlConfigSerializer.Serialize(task));
+        var yaml = YamlConfigSerializer.Serialize(task);
+        // the checks section is not part of the model a screen edits: what the file has is kept as written (FQ04)
+        if (TryReadAllTextAllowingConcurrentReplace(path) is { } existing) yaml = ReplicationChecks.Carry(existing, yaml);
+        WriteAtomically(path, yaml);
         _git.CommitChanges([path], $"Save replication task '{task.Name}'", author);
 
         return task;
@@ -297,7 +300,9 @@ public sealed class ConfigRepository
         var text = TryReadAllTextAllowingConcurrentReplace(path)
             ?? throw new FileNotFoundException($"Replication task '{replicationName}' was not found.", path);
 
-        return StrictConfigFile.Load(text, path, YamlConfigSerializer.Deserialize<ReplicationTaskConfig>);
+        var task = StrictConfigFile.Load(text, path, YamlConfigSerializer.Deserialize<ReplicationTaskConfig>);
+        task.Checks = ReplicationChecks.Read(text, path);
+        return task;
     }
 
     public IReadOnlyList<string> ListReplications()

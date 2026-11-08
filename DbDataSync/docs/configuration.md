@@ -517,6 +517,36 @@ and an existing `task.yaml` carrying the old `backfillDegreeOfParallelism` key s
 ignored by the deserializer. **Every existing state database, and any config using the old key, must
 be recreated rather than upgraded.**
 
+### Checks stored with a replication (`task.yaml` `checks:`)
+
+A replication can carry the data checks of the datasets it writes, in its own `task.yaml`, so they travel with the replication when it is published and promoted. The section is the shared `check/1` list of `DbDataKit.Quality` (the kinds, their
+parameters, `severity` and `on_error` are described in that library's README); the first one Sync is built for is **freshness**.
+
+```yaml
+schemaVersion: 2
+name: sales
+# ...
+checks:
+  # the orders table must not fall behind its source
+  - id: orders_fresh
+    kind: freshness
+    dataset: dbo.Orders      # a target table of this replication, or a dataset's lineage identity (scheme://server/name)
+    max_age: 6h              # no column: the age of the last successful load; with `column:` the newest value in it
+    severity: block          # warn (the default) tells the owner; block stops what depends on the dataset
+```
+
+- **A replication's `schemaVersion` is 2; table-mapping and script-manifest files stay 1.** Format 2 of `task.yaml` only adds the optional `checks:` section, so only a replication file that wants checks needs editing. A `task.yaml` with
+  `schemaVersion: 1` is refused, naming the file and the line:
+  "The file is format 1, which this version of Sync no longer reads (current: 2). Format 2 only adds the optional checks: section to a replication's task.yaml; nothing else in the files changed. Review the file, then set schemaVersion: 2."
+  A release that reads format 1 refuses a `task.yaml` of format 2 as well ("The file is format 2; this version of Sync reads format 1."), and this one refuses a table mapping or script manifest of format 2 as newer. Nothing converts a file and
+  nothing reads half of one: change the number in each `task.yaml` when you update.
+- **Only the replication has `checks`.** A table mapping or script manifest that has the key is refused as an unknown key. A connection file's own `checks` (the serving data source's) is not this section.
+- **Strict, with the line.** A bad check (an unknown kind, a `range` with `min` above `max`, a freshness check with no `max_age`, a repeated id) is refused with the file, the line and column, and a suggestion for a near key or kind
+  (`chekcs` is answered with "Did you mean `checks`?", `freshnes` with "Did you mean `freshness`?"). Codes `DBD-QLT-001` to `006`.
+- **Saving from a screen keeps them.** The screens and the API do not send `checks` back; saving a replication keeps the file's `checks:` section exactly as written, its comments included. The comments elsewhere in `task.yaml` are not kept by a
+  save from a screen (they never were: the file is written from the model). Edit the section in the file.
+- **Nothing runs them yet.** Sync reads and keeps the section; evaluating it after a run (and from the lag reading) is plan 23a FQ10.
+
 ## Connection files
 
 A connection is `config/connections/<name>.yaml` in the configuration repository, a **`connection/1`** file: the format the Proxy and Build keep their connections in

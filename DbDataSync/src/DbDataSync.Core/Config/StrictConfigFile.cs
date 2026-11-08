@@ -13,6 +13,10 @@ public sealed class ConfigFileException(string file, IReadOnlyList<ConfigDiagnos
     public IReadOnlyList<ConfigDiagnostic> Diagnostics { get; } = diagnostics;
 }
 
+/// <summary>Marks the property that holds a file's <c>checks:</c> section (plan 23a FQ04): not bound by the YAML serializer, read by <c>DbDataKit.Quality.CheckSection</c> in the strict check, so a bad check is reported with file and line like any other fault.</summary>
+[AttributeUsage(AttributeTargets.Property)]
+internal sealed class ChecksSectionAttribute : Attribute;
+
 /// <summary>
 /// The check a configuration file passes before it is bound to its type: read with the shared strict reader (syntax, repeated keys, no anchors or tags), then every mapping compared with the
 /// properties of the type it will bind to, so an unknown key is an error with its path instead of being dropped. Plan 13, A01.
@@ -27,29 +31,30 @@ internal static class StrictConfigFile
         var root = StrictYamlReader.Read(text, file, diagnostics);
         if (root is not null && diagnostics.Count == 0)
         {
-            CheckSchemaVersion(root, file, diagnostics);
+            CheckSchemaVersion(root, typeof(T), file, diagnostics);
             Walk(root, typeof(T), "", file, diagnostics);
         }
         if (diagnostics.Count > 0) throw new ConfigFileException(file, diagnostics);
     }
 
-    private static void CheckSchemaVersion(YamlNode root, string file, List<ConfigDiagnostic> diagnostics)
+    private static void CheckSchemaVersion(YamlNode root, Type type, string file, List<ConfigDiagnostic> diagnostics)
     {
+        var current = ConfigSchema.For(type);
         var catalog = DefaultDiagnosticCatalog.Instance;
         if (root is not YamlMapping map) return;
         if (map.GetEntry("schemaVersion") is not { } entry)
         {
             diagnostics.Add(catalog.Create(SharedCodes.SchemaVersionInvalid, file, 1, 1,
-                $"The file has no `schemaVersion`. Files written before format versions existed are not read; add `schemaVersion: {ConfigSchema.Current}` once the file matches the current format.", keyPath: "schemaVersion"));
+                $"The file has no `schemaVersion`. Files written before format versions existed are not read; add `schemaVersion: {current}` once the file matches the current format.", keyPath: "schemaVersion"));
             return;
         }
         var text = (entry.Value as YamlScalar)?.Value;
         if (!int.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var version) || version < 1)
             diagnostics.Add(catalog.Create(SharedCodes.SchemaVersionInvalid, file, entry.Key.Line, entry.Key.Column, "`schemaVersion` must be a positive whole number.", keyPath: "schemaVersion"));
-        else if (version > ConfigSchema.Current)
-            diagnostics.Add(catalog.Create(SharedCodes.SchemaVersionNewer, file, entry.Key.Line, entry.Key.Column, $"The file is format {version}; this version of Sync reads format {ConfigSchema.Current}.", keyPath: "schemaVersion"));
-        else if (version < ConfigSchema.Current)
-            diagnostics.Add(catalog.Create(SharedCodes.SchemaVersionInvalid, file, entry.Key.Line, entry.Key.Column, $"The file is format {version}, which this version of Sync no longer reads (current: {ConfigSchema.Current}).", keyPath: "schemaVersion"));
+        else if (version > current)
+            diagnostics.Add(catalog.Create(SharedCodes.SchemaVersionNewer, file, entry.Key.Line, entry.Key.Column, $"The file is format {version}, which is newer than this version of Sync reads (format {current}). Update Sync; it does not read part of a newer file.", keyPath: "schemaVersion"));
+        else if (version < current)
+            diagnostics.Add(catalog.Create(SharedCodes.SchemaVersionInvalid, file, entry.Key.Line, entry.Key.Column, $"The file is format {version}, which this version of Sync no longer reads (current: {current}). {ConfigSchema.HowToMove(type, version, current)}", keyPath: "schemaVersion"));
     }
 
     /// <summary>Checks the file, then binds it; a value of the wrong shape (a word where a number goes) is reported the same way, with its position.</summary>
@@ -94,7 +99,8 @@ internal static class StrictConfigFile
         if (node is not YamlMapping map || !type.IsClass) return;
 
         var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.CanWrite && p.GetIndexParameters().Length == 0 && p.GetCustomAttribute<YamlDotNet.Serialization.YamlIgnoreAttribute>() is null)
+            .Where(p => p.GetIndexParameters().Length == 0
+                && (p.GetCustomAttribute<ChecksSectionAttribute>() is not null || p.CanWrite && p.GetCustomAttribute<YamlDotNet.Serialization.YamlIgnoreAttribute>() is null))
             .ToDictionary(p => p.GetCustomAttribute<YamlDotNet.Serialization.YamlMemberAttribute>()?.Alias ?? Naming.Apply(p.Name), p => p, StringComparer.Ordinal);
         foreach (var entry in map.Entries)
         {
@@ -106,7 +112,10 @@ internal static class StrictConfigFile
                     $"`{keyPath}` is not a setting here.{(near is null ? "" : $" Did you mean `{Join(path, near)}`?")}", keyPath: keyPath));
                 continue;
             }
-            Walk(entry.Value, property.PropertyType, keyPath, file, diagnostics);
+            if (property.GetCustomAttribute<ChecksSectionAttribute>() is not null)
+                DbDataKit.Quality.CheckSection.Read(entry.Value, file, diagnostics);
+            else
+                Walk(entry.Value, property.PropertyType, keyPath, file, diagnostics);
         }
     }
 
