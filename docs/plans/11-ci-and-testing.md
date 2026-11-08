@@ -25,8 +25,8 @@ engine, skip visibility and a release gate. Branching and releases are in [09](0
 - **Nightly:** only `dbdatabuild-conformance-full.yml` (daily 05:00, skipped when nothing of Build's or `testenv/` changed; also called by
   `dbdatabuild-release.yml`, which `suite-release.yml` calls).
 - **Playwright:** the console's suite (`DbDataConsole.Web.Tests`, 12 specs, which also walks Build and Proxy through the console) and Sync's
-  (`DbDataSync.Web.Tests`, 24 specs). Build has no browser suite of its own. Specs run one at a time in the order of their file names.
-- **ODBC:** installed by steps in the workflows (`unixodbc`, `msodbcsql18`); there is no shared script for it.
+  (`DbDataSync.Web.Tests`, 24 specs). Build's own suite (`DbDataBuild.Web.Tests`, 4 specs) reaches its page through `dbdatabuild ui mcp`. Specs run one at a time in the order of their file names.
+- **ODBC:** installed by steps in the workflows (`unixodbc`, `msodbcsql18`); `scripts/install-odbc.sh` does the same on a Debian or Ubuntu machine (a cloud session) and the workflows could call it.
 - **`--minimum-expected-tests`:** set in the Proxy, Console, Runner and Store jobs only.
 - **`docs/ci-lessons.md`:** the problems already found, how to recognise them, and the "before you push" list.
 
