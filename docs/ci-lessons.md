@@ -78,6 +78,10 @@ The CI runners are small (two cores, Windows and Linux), run many jobs at once, 
 | --- | --- | --- |
 | `error CS0117: 'RunnerPackages' does not contain a definition for 'Install'` in a project you did not touch | `main` moved or renamed the type (R20 moved the runner hosting into `DbDataKit.Runner` and `DbDataKit.Runner.Api`; the installer is `RunnerPackageInstaller`) | after every merge from `main`, build the test projects of every product that references the runner/state libraries (see "Before you push" item 1) |
 | conflict in `docs/plans/*.md` slice rows | two slices edit neighbouring rows | keep every row's status text; never resolve by taking one side wholesale |
+| `error DBD-140: `platform`: A runtime package says the platform its files are built for` in a test of a runtime package script | a slice built before E04 writes a runtime manifest without `platform: <rid>` (Sync's `runtime-manifest.sh` did) | every runtime manifest says `platform: $RID`, the test's expected `PackageManifest` has `Platform: rid`; Build's `runtime-manifest.sh` is the model |
+| `check_formats.py`: format 'package' is frozen, but `PackageManifestReader.cs` changed | the registry's hash was written before `main` edited the reader (E04); a slice made on an older tree carries the old hash | the hash in `docs/formats.json` is of the file on the tree it is merged onto; when a format is edited by a slice, update the hash in the same commit (and say whether the edit is a new number) |
+| `The_checked_in_output_schema_is_current` fails after a slice added a verb | `DbDataProxy/schemas/output.schema.json` (and the MCP tool list) are goldens of the command set | `UPDATE_GOLDEN=1` the test (`CliGrammarTests`), commit the diff with the verb |
+| `Failed to bind to address http://127.0.0.1:5000: address already in use` in one test of a full Proxy run | two tests in the run use the default Kestrel port | not a change's fault when the class passes alone; re-run the class |
 
 ### Stored formats and shared files
 
