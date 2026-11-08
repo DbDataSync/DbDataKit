@@ -109,7 +109,7 @@ smoke test. A release is cut by dispatching `.github/workflows/dbdataproxy-relea
 commit on it), which needs a green CI run for that exact commit. It builds with `build/package.ps1` and publishes a GitHub release in this
 repository containing `dbdataproxy-v<version>-win-x64.zip`, `SHA256SUMS` and `install.ps1`, tagged `dbdataproxy/v<version>`; it pushes no
 branch. The version is the UTC build time, `YYYY.M.D.HHmm` (for example `2026.10.17.1530`); a `-beta` suffix marks a prerelease. See
-`docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md` at the repository root.
+`docs/releases.md` at the repository root.
 
 Releases of the other products are published in the same repository, so a DbDataProxy release is recognised by its
 `dbdataproxy/v` tag. GitHub's own "latest release" is not used (it is one marker for the whole repository).

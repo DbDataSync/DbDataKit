@@ -1,6 +1,6 @@
 name: DbDataBuild CI
 
-# DbDataBuild is the first product on the trunk model (docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md, "Trunk model"): short feature
+# DbDataBuild is the first product on the trunk model (docs/releases.md): short feature
 # branches, a pull request into `main` that runs this, and a rebase merge. There is no dev/test lane and nothing here moves a branch.
 #
 #   pull request  the unit suite on Linux and Windows and the core conformance groups (SQL Server 2025 and PostgreSQL). The slow engines

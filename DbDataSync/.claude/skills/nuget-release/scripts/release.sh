@@ -26,7 +26,7 @@ while [ $# -gt 0 ]; do
 done
 
 # The workflow builds origin/main (or --sha) and refuses unless that exact commit has a green DbDataSync CI run, so nothing about this
-# checkout matters: not an uncommitted edit, not an unpushed commit. docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md, "Trunk model".
+# checkout matters: not an uncommitted edit, not an unpushed commit. docs/releases.md.
 echo "Dispatching $WORKFLOW_FILE (beta=$BETA${SHA:+, sha=$SHA}) against $REPO, ref main..."
 before=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 gh workflow run "$WORKFLOW_FILE" --repo "$REPO" --ref main -f beta="$BETA" ${SHA:+-f sha="$SHA"}

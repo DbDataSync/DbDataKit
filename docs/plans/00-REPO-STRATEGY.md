@@ -1,6 +1,6 @@
 # Repo Strategy: Hub and Spokes
 
-Status: **superseded by [09-MONOREPO-BRANCHING-AND-RELEASES.md](09-MONOREPO-BRANCHING-AND-RELEASES.md)** — the monorepo option was later chosen; this records the earlier hub-and-spokes decision. Original text: how DbDataSync, DbDataProxy, DbDataBuild and the shared code are organised.
+Status: **superseded by [docs/releases.md](../releases.md) (was plan 09)** — the monorepo option was later chosen; this records the earlier hub-and-spokes decision. Original text: how DbDataSync, DbDataProxy, DbDataBuild and the shared code are organised.
 
 ## Decision
 

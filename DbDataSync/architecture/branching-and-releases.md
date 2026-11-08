@@ -3,7 +3,7 @@
 > **Superseded in the monorepo.** DbDataSync now lives in `DbDataSync/DbDataKit` on a trunk model: short feature branches,
 > pull requests into `main`, rebase merges, CI on the pull request and again on `main`, and a release that is a tag plus a
 > GitHub Release in that repository, with no `dev`/`test` branches and no merge or back-merge. See
-> `docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md` at the repository root. Everything below describes the single-repo
+> `docs/releases.md` at the repository root. Everything below describes the single-repo
 > model and is kept as the record of why it was built that way; its workflow filenames (`ci.yml`, `promote-test.yml`,
 > `release.yml`, `publish-snapshot.yml`) are now `dbdatasync-*.yml` under the root `.github/workflows/`.
 
