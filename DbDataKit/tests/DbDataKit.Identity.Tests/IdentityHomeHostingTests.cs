@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using DbDataKit.Cli;
@@ -70,14 +69,10 @@ public sealed class IdentityHomeHostingTests : IDisposable
     [Fact]
     public async Task The_hosted_home_serves_its_endpoints_and_pages_with_no_web_app_and_keeps_everything_else_closed()
     {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
 
         var database = NewDatabase();
         var builder = WebApplication.CreateSlimBuilder();
-        builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
+        builder.WebHost.UseUrls("http://127.0.0.1:0");   // the server binds the port itself (no pick-then-bind race)
         builder.Services.AddLogging();
         // the issuer is the public address, whatever the listener: a serving layer behind a balancer is reached at a name of its own
         builder.AddIdentityHome(new IdentityHomeOptions(new Uri("https://identity.example.invalid"), _directory, _ => database,
@@ -85,7 +80,7 @@ public sealed class IdentityHomeHostingTests : IDisposable
         await using var app = builder.Build();
         app.MapIdentityHome(_ => { });
         await app.StartAsync();
-        using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { BaseAddress = new Uri($"http://127.0.0.1:{port}") };
+        using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { BaseAddress = new Uri(app.Urls.Single()) };
 
         var discovery = JsonNode.Parse(await http.GetStringAsync("/.well-known/openid-configuration"))!;
         Assert.Equal("https://identity.example.invalid", (string?)discovery["issuer"]);

@@ -11,7 +11,7 @@ namespace DbDataKit.Config.Git.Tests;
 /// </summary>
 public sealed class AuthenticatedGitServer : IDisposable
 {
-    private readonly HttpListener _listener = new();
+    private readonly HttpListener _listener;
     private readonly CancellationTokenSource _stop = new();
     private readonly Task _loop;
     private readonly string _expected;
@@ -26,10 +26,7 @@ public sealed class AuthenticatedGitServer : IDisposable
     {
         (User, Token) = (user, token);
         _expected = "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{token}"));
-        var port = FreePort();
-        BaseAddress = $"http://127.0.0.1:{port}/";
-        _listener.Prefixes.Add(BaseAddress);
-        _listener.Start();
+        (_listener, BaseAddress) = StartListener();
         _loop = Task.Run(Serve);
     }
 
@@ -43,13 +40,31 @@ public sealed class AuthenticatedGitServer : IDisposable
 
     public string PathOf(string name) => Path.Combine(Root, name + ".git");
 
-    private static int FreePort()
+    /// <summary>
+    /// An <see cref="HttpListener"/> needs its address before it starts, so a port picked first can be taken by another process before the listener binds it ("address already in use");
+    /// the whole start is tried again on a new port, up to five times.
+    /// </summary>
+    private static (HttpListener Listener, string BaseAddress) StartListener()
     {
-        var probe = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
-        probe.Start();
-        var port = ((IPEndPoint)probe.LocalEndpoint).Port;
-        probe.Stop();
-        return port;
+        for (var attempt = 1; ; attempt++)
+        {
+            var probe = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+            probe.Start();
+            var port = ((IPEndPoint)probe.LocalEndpoint).Port;
+            probe.Stop();
+            var address = $"http://127.0.0.1:{port}/";
+            var listener = new HttpListener();
+            listener.Prefixes.Add(address);
+            try
+            {
+                listener.Start();
+                return (listener, address);
+            }
+            catch (HttpListenerException) when (attempt < 5)
+            {
+                listener.Close();
+            }
+        }
     }
 
     private async Task Serve()

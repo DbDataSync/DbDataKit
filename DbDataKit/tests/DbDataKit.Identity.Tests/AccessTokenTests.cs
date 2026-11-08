@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -147,12 +146,8 @@ public sealed class AccessTokenTests : IDisposable
         var throughEntra = new ExternalSignIns(_home.Users, _home.Directory).SignIn(new ExternalIdentity(ExternalSources.Entra, "entra-oid-ada", "Ada Lovelace", "ada@example.invalid", true, []));
         Assert.Equal(ada.Id, throughEntra.Id);
 
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
         var builder = WebApplication.CreateSlimBuilder();
-        builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
+        builder.WebHost.UseUrls("http://127.0.0.1:0");   // the server binds the port itself (no pick-then-bind race)
         builder.Services.AddLogging();
         var product = new AuthProduct("DbDataTokenTest", "identity invite");
         var directory = Path.Combine(Path.GetTempPath(), "ddk-tokens-" + Guid.NewGuid().ToString("N")[..8]);
@@ -163,7 +158,7 @@ public sealed class AccessTokenTests : IDisposable
         await app.StartAsync();
         try
         {
-            using var http = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}") };
+            using var http = new HttpClient { BaseAddress = new Uri(app.Urls.Single()) };
             var session = new IdentitySessionStore(_home.Database).Create(ada.Id).Id;
             HttpRequestMessage WithSession(HttpMethod method, string path, object? body = null)
             {

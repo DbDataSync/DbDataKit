@@ -1,6 +1,5 @@
 using System.Buffers.Text;
 using System.Net;
-using System.Net.Sockets;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Security.Principal;
@@ -39,24 +38,13 @@ public sealed class UpstreamSignInTests : IAsyncLifetime
     private string[] _groups = [];
     private RSA? _signWith;
 
-    private static int FreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
-
     public async ValueTask InitializeAsync()
     {
         Directory.CreateDirectory(_directory);
         _database = StateDatabase.OpenModules(Path.Combine(_directory, "state.db"), IdentityHomeState.Modules);
 
-        var port = FreePort();
-        _authority = $"http://127.0.0.1:{port}/tenant-1/v2.0";
         var builder = WebApplication.CreateSlimBuilder();
-        builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
+        builder.WebHost.UseUrls("http://127.0.0.1:0");   // the server binds the port itself; the authority is known once it runs (the routes read it per request)
         _tenant = builder.Build();
         _tenant.MapGet("/tenant-1/v2.0/.well-known/openid-configuration", () => Results.Json(new
         {
@@ -75,6 +63,7 @@ public sealed class UpstreamSignInTests : IAsyncLifetime
             return Results.Json(new { id_token = IdToken(), access_token = "not-used", token_type = "Bearer" });
         });
         await _tenant.StartAsync();
+        _authority = $"{_tenant.Urls.Single()}/tenant-1/v2.0";
     }
 
     private async Task StartHome(EntraUpstream? entra, WindowsUpstream? windows = null)
@@ -85,9 +74,8 @@ public sealed class UpstreamSignInTests : IAsyncLifetime
     /// <summary>An instance of the home on the test's state: the first is <see cref="StartHome"/>'s, any other is a second instance of its group.</summary>
     private async Task<(WebApplication App, string Url)> Instance(EntraUpstream? entra, WindowsUpstream? windows = null)
     {
-        var url = $"http://127.0.0.1:{FreePort()}";
         var builder = WebApplication.CreateSlimBuilder();
-        builder.WebHost.UseUrls(url);
+        builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Services.AddLogging();
         builder.AddIdentityHome(new IdentityHomeOptions(new Uri(Issuer), _directory, _ => _database, _ => _protector,
             Product, Entra: entra, Windows: windows));
@@ -95,7 +83,7 @@ public sealed class UpstreamSignInTests : IAsyncLifetime
         app.MapIdentityHome(_ => { });
         await app.StartAsync();
         _others.Add(app);
-        return (app, url);
+        return (app, app.Urls.Single());
     }
 
     private EntraUpstream Entra(bool trustEmail = false) => new(_authority, "home-app", "tenant-secret", trustEmail);
