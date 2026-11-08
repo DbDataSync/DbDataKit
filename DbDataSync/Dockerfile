@@ -34,11 +34,9 @@ RUN dotnet publish src/DbDataSync.Cli/DbDataSync.Cli.csproj \
 RUN dotnet /app/DbDataSync.Cli.dll internal build-catalog-cache /app/library-cache
 
 # ── The runtime-only image (phase 121) ─────────────────────────────────────────
-# mcr.microsoft.com/dotnet/aspnet:10.0 — no SDK, so LibraryInstaller can never shell out to
-# `dotnet publish`. LibraryInstaller.InstallOrDeferAsync (via SdkAvailability.HasSdk) notices and
-# falls back to copying a catalog id at its pinned version from /app/library-cache above; anything
-# else is written and left "pending restore" until `config library sync` runs somewhere with an SDK —
-# see docs/install.md and the Libraries admin screen's own pending-restore state.
+# mcr.microsoft.com/dotnet/aspnet:10.0 — no SDK. Installing a library needs none (the server resolves it from a NuGet feed
+# itself, LibraryInstaller): a catalog id at its pinned version is copied from /app/library-cache above, so it needs no
+# network; any other library is resolved from the feed and needs the network. See docs/install.md.
 #
 # This stage is deliberately NOT the last one in this file (see the final stage below) — `docker
 # build .` with no --target must keep resolving to the SDK-based image, exactly as phase 120 decided.
@@ -65,13 +63,10 @@ ENTRYPOINT ["dotnet", "/app/DbDataSync.Cli.dll", "server", "run", "--url", "http
 # Debian, not Alpine. LibGit2Sharp, Microsoft.Data.Sqlite and DuckDB.NET all ship glibc natives, and
 # a musl base finds that out as a DllNotFoundException at run time — the worst place to learn it.
 #
-# The SDK, not just the ASP.NET runtime (phase 120) — LibraryInstaller shells out to `dotnet publish`
-# to restore a library an operator installs from the web console, and `publish` (not `restore`) is
-# what produces the flat lib/ with native assets and a .deps.json (phase 109c). Most non-container
-# deployments already have the SDK (the dotnet tool package that required it is gone, but a machine that builds libraries still needs it); the container
-# was the only place a web-triggered install could not run `dotnet publish` at all. Bigger
-# (~250MB → ~750MB uncompressed base) — accepted; the `runtime` stage above is the alternative for a
-# shop that only ever installs catalog drivers and wants the smaller, SDK-less footprint back.
+# The SDK image, kept as the default (phase 120) although nothing in the server shells out to `dotnet publish` any more
+# (installing a library resolves it from a NuGet feed, no SDK). This image stays
+# the same for people who run their own tools in it. Bigger (~250MB → ~750MB
+# uncompressed base); the `runtime` stage above is the smaller image.
 #
 # This is the true last stage in the file on purpose: `docker build -f DbDataSync/Dockerfile .` / `docker compose -f
 # docker-compose.app.yml build` with no --target picks whichever stage is positionally last, and
