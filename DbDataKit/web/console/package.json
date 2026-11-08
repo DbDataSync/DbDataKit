@@ -19,6 +19,7 @@
     "@dbdatakit/store-ui": "*",
     "@dbdatakit/shell": "*",
     "@dbdatakit/sync": "*",
+    "@dbdatakit/views-editor": "*",
     "@dbdatakit/visuals": "*",
     "@tanstack/react-query": "^5.102.4",
     "react": "^19.2.8",

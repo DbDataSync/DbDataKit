@@ -100,7 +100,7 @@ The **filter operators** are the engine's: `equals`, `not_equals`, `contains`, `
 
 ## The widget editor's field wells
 
-The console's editor (`?edit=1` on a dashboard, form view; `DbDataKit/web/console/src/pages/WidgetEditor.tsx`) edits a widget through **wells**, the places of its encodings: a metric's `value` and `compare`; a chart's `x`, `y`, `color`,
+The console's editor (`?edit=1` on a dashboard, form view; `DbDataKit/web/views-editor/src/WidgetEditor.tsx`) edits a widget through **wells**, the places of its encodings: a metric's `value` and `compare`; a chart's `x`, `y`, `color`,
 `column`, `row` and `tooltip`; a matrix's `rows`, `columns` and `values`; a table's `columns`; a control's `values.attribute`. The pure logic is in `@dbdatakit/visuals` (`src/editor/wells.ts`, `src/views/catalog.ts`) and is the same
 `deriveRequest` the server runs, so the panel "The request this asks for" shows what will be asked, each part with the place of the document it comes from (`documentPath`) and the parameter bindings.
 
@@ -118,7 +118,7 @@ The console's editor (`?edit=1` on a dashboard, form view; `DbDataKit/web/consol
 
 ## The report editor
 
-A report opens in the same editor as a dashboard (`?edit=1`, form view). Its **flow layout** has its own form (`DbDataKit/web/console/src/pages/FlowEditor.tsx`, the commands in `@dbdatakit/visuals` `src/editor/flow.ts`); the YAML view
+A report opens in the same editor as a dashboard (`?edit=1`, form view). Its **flow layout** has its own form (`DbDataKit/web/views-editor/src/FlowEditor.tsx`, the commands in `@dbdatakit/visuals` `src/editor/flow.ts`); the YAML view
 is the same text. A new report starts with one flow layout (A4 portrait, 15 mm margins) and one empty section, which the loader does not accept until it has a block.
 
 - **Page**: size (a named one, or a custom width and height in millimetres), orientation and the four margins; the form says the printable area in millimetres and CSS pixels, the same numbers the guides are drawn from. An empty
