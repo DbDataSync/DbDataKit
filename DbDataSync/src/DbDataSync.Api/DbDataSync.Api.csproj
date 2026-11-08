@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <DbDataKitReference Include="Web" />   <!-- the web host's shared parts: the console's signed token, the policies, the management API (plan 13a, X06: no sign-in of Sync's own) -->
+    <DbDataKitReference Include="Quality.Runner" />   <!-- the check evaluator and its run service: the checks stored with a replication are evaluated after its runs; plan 23a, FQ10 -->
     <DbDataKitReference Include="Scheduling" />   <!-- the schedule evaluator (Cronos comes with it); plan 13, M01 -->
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <!-- Lifetime and logging for a process the Windows SCM starts. Cross-platform to reference; the

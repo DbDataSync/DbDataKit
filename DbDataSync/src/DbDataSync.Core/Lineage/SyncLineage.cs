@@ -15,6 +15,17 @@ public sealed record SyncReplication(ReplicationTaskConfig Task, IReadOnlyList<T
 /// </summary>
 public static class SyncLineage
 {
+    /// <summary>The connection as lineage identifies it (its engine and address, with <paramref name="database"/> when an endpoint names another one than the connection's own): what a table of it is a node of, for the graph and for the checks that are stored under the same identity (plan 23a FQ10).</summary>
+    public static ConnectionDefinition DefinitionOf(ConnectionConfig c, string? database)
+    {
+        var (engine, dialect) = SyncConnectionFile.EngineFor(c.DriverType);
+        return new ConnectionDefinition
+        {
+            Name = c.Name, Engine = engine, Dialect = dialect, ConnectionString = c.ConnectionString,
+            Address = string.IsNullOrWhiteSpace(c.Host) ? null : new AddressSpec { Host = c.Host, Port = c.Port, Database = database ?? c.Database },
+        };
+    }
+
     /// <summary>The design lineage of the replications. <paramref name="connections"/> are the configured connections by name; a mapping that names none, or one that is not configured, is left out and said in <paramref name="notes"/>.</summary>
     public static LineageGraph Design(IReadOnlyList<SyncReplication> replications, IReadOnlyDictionary<string, ConnectionConfig> connections, List<string>? notes = null)
     {
@@ -27,12 +38,7 @@ public static class SyncLineage
             if (connection is null || !connections.TryGetValue(connection, out var c)) return null;
             var key = connection + "\0" + database;
             if (definitions.TryGetValue(key, out var known)) return known;
-            var (engine, dialect) = SyncConnectionFile.EngineFor(c.DriverType);
-            return definitions[key] = new ConnectionDefinition
-            {
-                Name = c.Name, Engine = engine, Dialect = dialect, ConnectionString = c.ConnectionString,
-                Address = string.IsNullOrWhiteSpace(c.Host) ? null : new AddressSpec { Host = c.Host, Port = c.Port, Database = database ?? c.Database },
-            };
+            return definitions[key] = DefinitionOf(c, database);
         }
 
         foreach (var replication in replications.OrderBy(r => r.Task.Name, StringComparer.Ordinal))

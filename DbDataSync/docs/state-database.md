@@ -25,6 +25,7 @@ module is `sync_state`; the others are the suite's shared ones, the same tables 
 | `notifications` | `notification`, `reader_position` | The global, append-only notification feed, and the highest id each user has acknowledged |
 | `audit` | `entry` | Who paused or resumed a replication or held a table mapping, and when |
 | `runner_progress` | `checkpoint_head`, `checkpoint_part`, `checkpoint_history` | The read position of each table mapping, with its `ReadIntent`/`ReadHold` (see [Replication concepts](replication-concepts.md)): a declared checkpoint called `watermark`, kept per mapping and source table, whose every change is in the history |
+| `quality` | `check_result`, `check_status` | The results of the checks stored with the replications (`checks:` in `task.yaml`): one row for each evaluation (status, measured value, a few sample keys, the run that set it off), the latest status of each check and any block it sets. Results older than 90 days go; the latest status stays |
 
 ## An older state database
 
