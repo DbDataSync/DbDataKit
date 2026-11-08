@@ -1,0 +1,244 @@
+using System.Collections.Concurrent;
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using DbDataKit.Hosting;
+using DbDataKit.Serving;
+using DbDataKit.State;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+
+namespace DbDataKit.Views.Hosting;
+
+/// <summary>
+/// The serving module <b>views</b> (plan 32 DBR11; name <c>views</c> in <c>server.yaml</c>'s <c>modules:</c>): published dashboards and reports over REST, on a listener of its own (J28's design: off unless enabled, authenticated with the tokens of the
+/// serving layer's identity and apps modules) or as routes a host mounts with <see cref="Map"/>.
+/// <code>
+/// GET  /api/v1/dashboards                 {items: [{name, title, version}]}          (and /api/v1/reports)
+/// GET  /api/v1/dashboards/{name}          {kind, name, title, version, as_of, text, document, layouts: [{name, type, default}]}
+/// POST /api/v1/dashboards/{name}/render   {parameters?, layout?, only?, viewport?: {width, height}, medium?} gives the rendered-widgets document
+/// GET  /api/v1/dashboards/{name}/export   501 export_unavailable until DBR15 to DBR17
+/// GET  /health, /health/ready, /health/live
+/// </code>
+/// A refusal is <c>{code, message}</c> with its status: 400 invalid, 401 unauthenticated, 403 denied (an app's token narrowed past the document's models), 404 not_found, 413 too large, 500, 501 export_unavailable, 503 draining.
+/// The module serves what a <see cref="DefinitionFollower"/> hands <see cref="ViewsPublications"/>; a version it cannot load leaves the one served and shows in <see cref="Health"/>.
+/// </summary>
+public sealed class ViewsModule(ViewsOptions options, ViewsPublications published, IViewsCallers callers, IViewsAudit audit, ILoggerFactory? loggers = null) : IServingModule, IAsyncDisposable
+{
+    public const string ModuleName = "views";
+
+    private readonly IDrainCoordinator drain = options.Drain ?? new DrainCoordinator();
+    private readonly ConcurrentDictionary<string, string> problems = new(StringComparer.Ordinal);
+    private ViewsApi? api;
+    private DefinitionFollower? follower;
+    private WebApplication? app;
+    private CancellationTokenSource? polling;
+    private Task? pollLoop;
+    private volatile bool stopped;
+
+    public string Name => ModuleName;
+
+    /// <summary>What the module answers with; null until it started. The apps host calls it in process with a narrowed principal.</summary>
+    public ViewsApi? Api => api;
+
+    /// <summary>The base address of the module's own listener once it started (<c>http://127.0.0.1:41234</c>), or null when it has none.</summary>
+    public string? Address { get; private set; }
+
+    public async Task StartAsync(IServingServices services, CancellationToken cancellationToken = default)
+    {
+        api = new ViewsApi(published, services, options, audit, drain);
+        if (options.Follow)
+        {
+            follower = published.Follower(OnProblem);
+            follower.Start();
+            polling = new CancellationTokenSource();
+            pollLoop = Task.Run(() => PollAsync(polling.Token), CancellationToken.None);
+        }
+        stopped = false;
+        if (options.Listen is { } listen) await ListenAsync(listen, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Applies what the group published since the last look, now rather than at the next poll (a host that polls itself calls its own follower instead).</summary>
+    public int Refresh() => follower?.Poll() ?? 0;
+
+    /// <summary>A host that runs the follower itself tells the module of a version that could not be used, so the health says why.</summary>
+    public void OnProblem(string kind, string name, int? version, Exception error)
+    {
+        problems[$"{kind}/{name}"] = $"{kind} '{name}' version {version?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "(retired)"}: {error.Message}";
+        loggers?.CreateLogger("Views").LogWarning(error, "The {Kind} {Name} could not be used; the version served before keeps serving.", kind, name);
+    }
+
+    private async Task PollAsync(CancellationToken stop)
+    {
+        using var timer = new PeriodicTimer(options.PollInterval, options.Time);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(stop).ConfigureAwait(false))
+            {
+                try { follower!.Poll(); }
+                catch (Exception e) when (e is not OutOfMemoryException) { OnProblem("definitions", "group", null, e); }
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    // ---- drain, stop, health ----
+
+    public async Task DrainAsync(CancellationToken cancellationToken = default)
+    {
+        if (!await drain.DrainAsync(options.DrainTimeout, cancellationToken).ConfigureAwait(false))
+            loggers?.CreateLogger("Views").LogWarning("The views module was still serving {Count} request(s) when the drain timeout ended.", drain.ActiveWork);
+    }
+
+    /// <summary>Takes the module out of the drain (a cancelled upgrade).</summary>
+    public void Resume() => drain.Resume();
+
+    public async Task StopAsync(CancellationToken cancellationToken = default)
+    {
+        stopped = true;
+        if (polling is not null) { await polling.CancelAsync().ConfigureAwait(false); if (pollLoop is not null) await pollLoop.ConfigureAwait(false); }
+        if (app is not null) { await app.StopAsync(cancellationToken).ConfigureAwait(false); Address = null; }
+    }
+
+    public ServingHealth Health()
+    {
+        if (api is null || stopped) return new ServingHealth(ServingHealthState.Down, api is null ? "The module has not started." : "The module is stopped.");
+        if (drain.IsDraining) return new ServingHealth(ServingHealthState.Degraded, "Draining: new requests are refused and the ones in flight finish.");
+        try
+        {
+            var unserved = published.Unserved();
+            if (unserved.Count > 0)
+                return new ServingHealth(ServingHealthState.Degraded, string.Join(" | ", unserved.Select(u =>
+                    problems.GetValueOrDefault($"{u.Kind}/{u.Name}") ?? $"{u.Kind} '{u.Name}': the group serves version {u.Head} and this instance serves {(u.Served is { } s ? s.ToString(System.Globalization.CultureInfo.InvariantCulture) : "none")}")));
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            return new ServingHealth(ServingHealthState.Degraded, $"The group's definitions could not be read ({e.GetType().Name}); what was loaded keeps serving.");
+        }
+        return ServingHealth.Healthy;
+    }
+
+    // ---- the listener and the routes ----
+
+    private async Task ListenAsync(ViewsListen listen, CancellationToken cancellationToken)
+    {
+        var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = ["--hostBuilder:reloadConfigOnChange=false"], ContentRootPath = AppContext.BaseDirectory });
+        builder.Logging.ClearProviders();
+        builder.WebHost.ConfigureKestrel(kestrel =>
+        {
+            kestrel.AddServerHeader = false;
+            kestrel.Listen(IPAddress.Parse(listen.Address), listen.Port, l =>
+            {
+                l.Protocols = HttpProtocols.Http1AndHttp2;
+                if (listen.Certificate is { } certificate) l.UseHttps(certificate);
+            });
+        });
+        var built = builder.Build();
+        Map(built);
+        await built.StartAsync(cancellationToken).ConfigureAwait(false);
+        app = built;
+        var bound = built.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.First();
+        Address = bound.Replace("[::]", listen.Address, StringComparison.Ordinal).TrimEnd('/');
+    }
+
+    /// <summary>Maps the routes and the health endpoints onto a host's own routing (or the module's listener).</summary>
+    public void Map(IEndpointRouteBuilder routes)
+    {
+        routes.MapGet("/health/live", () => Results.Text("Healthy"));
+        foreach (var path in new[] { "/health", "/health/ready" })
+            routes.MapGet(path, () =>
+            {
+                if (api is null) return Json(new ViewsAnswer(503, new JsonObject { ["module"] = ModuleName, ["state"] = "down", ["detail"] = "The module has not started." }), null);
+                var state = Health();
+                var answer = new ViewsAnswer(state.State == ServingHealthState.Down || drain.IsDraining ? 503 : 200, api.Health(state));
+                return Json(answer, answer.Status == 503 ? new Dictionary<string, string> { ["Retry-After"] = "5" } : null);
+            });
+
+        foreach (var kind in ViewDefinitions.Kinds)
+        {
+            var prefix = "/api/v1/" + ViewsApi.Collection(kind);
+            routes.MapGet(prefix, (Func<HttpContext, Task<IResult>>)(c => As(c, (who, trace) => Task.FromResult(api!.List(who, kind, trace)))));
+            routes.MapGet(prefix + "/{name}", (Func<string, HttpContext, Task<IResult>>)((name, c) => As(c, (who, trace) => Task.FromResult(api!.Open(who, kind, name, trace)))));
+            routes.MapGet(prefix + "/{name}/export", (Func<string, HttpContext, Task<IResult>>)((name, c) =>
+                As(c, (who, trace) => Task.FromResult(api!.Export(who, kind, name, c.Request.Query["format"].ToString() is { Length: > 0 } f ? f : null, c.Request.Query["layout"].ToString() is { Length: > 0 } l ? l : null, trace)))));
+            routes.MapPost(prefix + "/{name}/render", (Func<string, HttpContext, Task<IResult>>)((name, c) => As(c, async (who, trace) =>
+            {
+                var (body, refusal) = await ReadBodyAsync(c).ConfigureAwait(false);
+                return refusal ?? await api!.RenderAsync(who, kind, name, body, c.Connection.RemoteIpAddress?.ToString(), trace, c.RequestAborted).ConfigureAwait(false);
+            })));
+        }
+    }
+
+    private async Task<IResult> As(HttpContext context, Func<ViewsPrincipal, string, Task<ViewsAnswer>> call)
+    {
+        if (api is null || stopped) return Json(ViewsAnswer.Error(503, "unavailable", "The views module is not running."), new Dictionary<string, string> { ["Retry-After"] = "5" });
+        var address = context.Connection.RemoteIpAddress?.ToString();
+        var who = await callers.AuthenticateAsync(context.Request.Headers.Authorization.ToString() is { Length: > 0 } h ? h : null, address, context.RequestAborted).ConfigureAwait(false);
+        if (who is null)
+            return Json(ViewsAnswer.Error(401, "unauthenticated", "A token of the identity home is needed (a personal access token, or an access token it issued)."), new Dictionary<string, string> { ["WWW-Authenticate"] = "Bearer" });
+        var trace = System.Diagnostics.Activity.Current?.TraceId.ToString() ?? context.TraceIdentifier;
+        try
+        {
+            return Json(await call(who, trace).ConfigureAwait(false), null);
+        }
+        catch (Exception e) when (ViewsApi.IsAuditFailure(e))
+        {
+            loggers?.CreateLogger("Views").LogError(e.InnerException, "An audit entry could not be written; the answer was not given.");
+            return Json(ViewsAnswer.Error(500, "audit_unavailable", "The request was not answered because it could not be recorded in the audit."), null);
+        }
+    }
+
+    private async Task<(JsonObject? Body, ViewsAnswer? Refusal)> ReadBodyAsync(HttpContext context)
+    {
+        if (context.Request.ContentLength > options.MaxBodyBytes) return (null, ViewsAnswer.Error(413, "too_large", $"A render request is at most {options.MaxBodyBytes} bytes."));
+        using var buffer = new MemoryStream();
+        var chunk = new byte[8192];
+        int read;
+        while ((read = await context.Request.Body.ReadAsync(chunk, context.RequestAborted).ConfigureAwait(false)) > 0)
+        {
+            buffer.Write(chunk, 0, read);
+            if (buffer.Length > options.MaxBodyBytes) return (null, ViewsAnswer.Error(413, "too_large", $"A render request is at most {options.MaxBodyBytes} bytes."));
+        }
+        if (buffer.Length == 0) return (null, null);
+        try
+        {
+            return JsonNode.Parse(buffer.ToArray()) is JsonObject o ? (o, null) : (null, ViewsAnswer.Error(400, "invalid", "The body must be a JSON object."));
+        }
+        catch (JsonException e)
+        {
+            return (null, ViewsAnswer.Error(400, "invalid", $"The body is not JSON: {e.Message}"));
+        }
+    }
+
+    private static IResult Json(ViewsAnswer answer, IReadOnlyDictionary<string, string>? headers) =>
+        new JsonResult(answer, headers);
+
+    private sealed class JsonResult(ViewsAnswer answer, IReadOnlyDictionary<string, string>? extra) : IResult
+    {
+        public async Task ExecuteAsync(HttpContext context)
+        {
+            context.Response.StatusCode = answer.Status;
+            context.Response.ContentType = "application/json; charset=utf-8";
+            context.Response.Headers.CacheControl = "no-store";
+            context.Response.Headers.XContentTypeOptions = "nosniff";
+            foreach (var (key, value) in (answer.Headers ?? new Dictionary<string, string>()).Concat(extra ?? new Dictionary<string, string>())) context.Response.Headers[key] = value;
+            await context.Response.WriteAsync(answer.Body.ToJsonString(), Encoding.UTF8, context.RequestAborted).ConfigureAwait(false);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        stopped = true;
+        polling?.Cancel();
+        if (app is not null) await app.DisposeAsync().ConfigureAwait(false);
+        polling?.Dispose();
+    }
+}

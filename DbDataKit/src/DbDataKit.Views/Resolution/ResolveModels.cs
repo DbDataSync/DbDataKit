@@ -67,6 +67,12 @@ public sealed class ResolverOptions
 
     /// <summary>The bytes of an image by hash (<c>sha256:...</c>), from the published definition's artifacts; null when it has none.</summary>
     public Func<string, byte[]?>? ImageBytes { get; init; }
+
+    /// <summary>The result cache (opt in: null runs every request). What it holds is the rows of a successful answer, under <see cref="CacheScope"/> and <see cref="WidgetCacheKey"/>, so two viewers whose access differs never share an entry.</summary>
+    public WidgetResultCache? Cache { get; init; }
+
+    /// <summary>What the host adds to the cache key: the definition and what it depends on (<see cref="PublishedView.CacheScope"/>), so a new model version never answers from the rows of the old one.</summary>
+    public string CacheScope { get; init; } = "";
 }
 
 /// <summary>
@@ -98,6 +104,62 @@ public sealed class RenderedWidgets(string layout, DateTimeOffset asOf, IReadOnl
             ["as_of"] = AsOf.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
             ["widgets"] = all,
         };
+    }
+}
+
+/// <summary>
+/// The opt-in cache of widget rows (plan 24's cache, plan 32 section 3.5): the rows a request answered, kept for <c>ttl</c> under <see cref="WidgetCacheKey"/> (channel, who asked with their roles and attributes, the request as it ran) and the definition's scope.
+/// Only an answer that came back whole is kept (a refusal, a timeout or an answer over the row limit is never), and what is handed out is a copy, so a renderer cannot change what the next viewer gets. Memory only: an instance's own, bounded by <c>maxEntries</c>.
+/// </summary>
+public sealed class WidgetResultCache(TimeSpan ttl, int maxEntries = 1000, TimeProvider? time = null)
+{
+    private readonly object gate = new();
+    private readonly Dictionary<string, (AnswerRows Rows, DateTimeOffset Expires)> entries = new(StringComparer.Ordinal);
+    private readonly TimeProvider clock = time ?? TimeProvider.System;
+    private long hits;
+    private long misses;
+
+    public TimeSpan Ttl { get; } = ttl;
+
+    public long Hits => Interlocked.Read(ref hits);
+
+    public long Misses => Interlocked.Read(ref misses);
+
+    public int Count { get { lock (gate) return entries.Count; } }
+
+    public void Clear() { lock (gate) entries.Clear(); }
+
+    internal bool TryGet(string key, out AnswerRows rows)
+    {
+        lock (gate)
+        {
+            if (entries.TryGetValue(key, out var found) && found.Expires > clock.GetUtcNow())
+            {
+                Interlocked.Increment(ref hits);
+                rows = found.Rows.Copy();
+                return true;
+            }
+            if (found.Rows is not null) entries.Remove(key);
+        }
+        Interlocked.Increment(ref misses);
+        rows = null!;
+        return false;
+    }
+
+    internal void Set(string key, AnswerRows rows)
+    {
+        if (Ttl <= TimeSpan.Zero) return;
+        lock (gate)
+        {
+            var now = clock.GetUtcNow();
+            if (entries.Count >= maxEntries)
+            {
+                foreach (var stale in entries.Where(e => e.Value.Expires <= now).Select(e => e.Key).ToList()) entries.Remove(stale);
+                // still full: the entry that would expire first goes
+                if (entries.Count >= maxEntries) entries.Remove(entries.MinBy(e => e.Value.Expires).Key);
+            }
+            entries[key] = (rows.Copy(), now + Ttl);
+        }
     }
 }
 

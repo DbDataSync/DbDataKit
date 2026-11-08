@@ -48,11 +48,11 @@ public sealed class PublishedEntityModels(DefinitionStore store, Action<string>?
     public static Content Parse(DefinitionVersion version) =>
         JsonSerializer.Deserialize<Content>(version.Content, Json) ?? throw new InvalidDataException($"Version {version.Version} of '{version.Name}' is not a published entity model.");
 
-    /// <summary>Stores the next version (or answers the one served, when it is the same) and serves it here at once; the other instances serve it when they next look. The caller has checked it loads.</summary>
+    /// <summary>Stores the next version (or answers the one served, when it is the same) and serves it here at once; the other instances serve it when they next look. The caller has checked it loads. Its <c>depends_on</c> is <c>data-source:name</c>, the registry's <c>kind:name</c> (as <see cref="PublishedSemanticModels"/> writes it, plan 32 DBR11); rows of earlier versions say <c>data-source/name</c> and are never parsed.</summary>
     /// <param name="format">The format of the model file (<c>schemaVersion</c>, 24a UC03: 2 when it has a <c>cache</c> or <c>checks</c> section).</param>
     public DefinitionVersion Publish(string name, string modelText, string dataSource, string? managedBy, string by, int format = 1)
     {
-        var version = store.Publish(DefinitionKind, name, JsonSerializer.Serialize(new Content(modelText, dataSource, managedBy), Json), by, ["data-source/" + dataSource], format: format);
+        var version = store.Publish(DefinitionKind, name, JsonSerializer.Serialize(new Content(modelText, dataSource, managedBy), Json), by, ["data-source:" + dataSource], format: format);
         ServeNow(name);
         return version;
     }

@@ -109,7 +109,7 @@ public sealed class WidgetResolver
             var run = await PrepareAsync(widget, values, linked.Token).ConfigureAwait(false);
             key = WidgetCacheKey.Of(context, run.Source, run.Canonical);
             // a source that ignores its token is not waited for past the widget's time
-            var rows = await run.Run(context, linked.Token).WaitAsync(linked.Token).ConfigureAwait(false);
+            var rows = await RunOrRecallAsync(context, key, run, linked.Token).ConfigureAwait(false);
             var shaped = widget.Type switch
             {
                 "metric" => ResultShaper.Metric(widget, rows),
@@ -133,6 +133,20 @@ public sealed class WidgetResolver
             options.OnUnexpected?.Invoke(widget.Id, e);
             return (new WidgetProblem("error", $"The widget could not be resolved ({e.GetType().Name}).").ToEntry(), key);
         }
+    }
+
+    /// <summary>The rows of a request: from the cache when it holds them for this viewer and this request, else from the core (and kept, when the cache is on).</summary>
+    private Task<AnswerRows> RunOrRecallAsync(ServingContext context, string key, Prepared run, CancellationToken cancellationToken) =>
+        RecallAsync(key, () => run.Run(context, cancellationToken), cancellationToken);
+
+    private async Task<AnswerRows> RecallAsync(string key, Func<Task<AnswerRows>> run, CancellationToken cancellationToken)
+    {
+        var cache = options.Cache;
+        var scoped = options.CacheScope + "\n" + key;
+        if (cache is not null && cache.TryGet(scoped, out var kept)) return kept;
+        var rows = await run().WaitAsync(cancellationToken).ConfigureAwait(false);
+        cache?.Set(scoped, rows);
+        return rows;
     }
 
     /// <summary>The entry for a failure of the serving core, with the core's own code and words. An engine refusal says <c>code: words</c>; the code is kept as the entry's.</summary>
@@ -274,13 +288,17 @@ public sealed class WidgetResolver
         if (list["limit"] is JsonValue lv && lv.TryGetValue<long>(out var limit)) request["limit"] = limit;
         var source = options.ModelSourcePrefix + model;
         var json = request.ToJsonString();
-        await using var answer = await queries.RunAsync(context, new ServingRequest.Semantic(source, json, new ServingLimits(MaxRows: options.MaxRows, Timeout: options.WidgetTimeout)), cancellationToken).ConfigureAwait(false);
-        var rows = await AnswerRows.ReadAsync(answer, options.MaxRows, cancellationToken).ConfigureAwait(false);
+        var key = WidgetCacheKey.Of(context, source, json);
+        var rows = await RecallAsync(key, async () =>
+        {
+            await using var answer = await queries.RunAsync(context, new ServingRequest.Semantic(source, json, new ServingLimits(MaxRows: options.MaxRows, Timeout: options.WidgetTimeout)), cancellationToken).ConfigureAwait(false);
+            return await AnswerRows.ReadAsync(answer, options.MaxRows, cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
         var column = rows.Table.Fields.FirstOrDefault(f => f.Name == "member") ?? rows.Table.Fields.FirstOrDefault()
             ?? throw new WidgetProblem(ResolveCodes.AnswerMismatch, "The members answer has no column.", $"widgets.{widget.Id}.values");
         var values = new JsonArray();
         foreach (var row in rows.Table.Rows)
             if (row[column.Name] is { } member) values.Add(new JsonObject { ["value"] = member.DeepClone() });
-        return (new JsonObject { ["type"] = "control", ["values"] = values }, WidgetCacheKey.Of(context, source, json));
+        return (new JsonObject { ["type"] = "control", ["values"] = values }, key);
     }
 }

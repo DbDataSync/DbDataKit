@@ -62,8 +62,9 @@ public sealed partial class PublishedSemanticModels(DefinitionStore store, Seman
     public PublishedVersion Publish(string name, string catalogText, string? managedBy, string? publishedBy, Dictionary<string, string> sources, Dictionary<string, string> ssas, DateTimeOffset at, int format = 1)
     {
         var content = JsonSerializer.Serialize(new Content(catalogText, managedBy, sources, ssas), Json);
-        // what the model reads, so a dependency check needs no change of format later (plan 21)
-        var dependsOn = sources.Values.Distinct(StringComparer.OrdinalIgnoreCase).Select(s => "data-source/" + s).ToList();
+        // what the model reads, so a dependency check needs no change of format later (plan 21). Written as the registry reads a dependency, kind:name (no version: the model needs the source,
+        // not a version of it), the form a dashboard's depends_on has too (plan 32 DBR11); the form data-source/name of earlier versions is never parsed and stays as stored
+        var dependsOn = sources.Values.Distinct(StringComparer.OrdinalIgnoreCase).Select(s => "data-source:" + s).ToList();
         return Meta(store.Publish(DefinitionKind, Key(name), content, publishedBy ?? "management", dependsOn, format: format));
     }
 

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Views.Hosting</RootNamespace>
+    <Description>The serving module `views` (plan 32 DBR11): published dashboards and reports over REST, rendered as the caller, audited, draining and reporting its health. A module of the serving layer with a listener of its own (or routes a host mounts); the document logic stays in DbDataKit.Views.</Description>
+    <IsPackable>true</IsPackable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\DbDataKit.Views\DbDataKit.Views.csproj" />
+    <!-- IDrainCoordinator: the one drain of the suite -->
+    <ProjectReference Include="..\DbDataKit.Hosting.Abstractions\DbDataKit.Hosting.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

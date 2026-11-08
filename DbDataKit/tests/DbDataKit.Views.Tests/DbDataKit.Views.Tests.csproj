@@ -23,4 +23,6 @@
     <None Include="..\..\web\visuals\schemas\*.schema.json" LinkBase="schemas" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\web\visuals\schemas\views-format.lock.json" LinkBase="schemas" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <!-- the engine's catalog loader (the catalog check of a published document) needs libduckdb beside the test assembly, as in the semantic suites -->
+  <Import Project="..\..\build\DuckDb.Native.targets" />
 </Project>
