@@ -72,10 +72,19 @@ async function makeLaggingReplication(request: APIRequestContext, sync: string) 
   const current = new Date(Date.now() - 3_600_000).toISOString()
   const db = new DatabaseSync(path.join(monitorSync.directory, 'state.db'))
   try {
-    db.prepare('INSERT OR REPLACE INTO ChangeWatermarks (TaskName, MappingName, SourceTable, Watermark, UpdatedAtUtc, WatermarkTimeUtc) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(replication, 'orders', 'lag-source/[AppDb]/[dbo].[orders]', '0x0000002A000000100001', applied, applied)
-    db.prepare('INSERT INTO ChangeCheckHistory (ConnectionName, SourceDatabase, SourceKind, Value, CheckedAtUtc, SourceTimeUtc) VALUES (?, ?, ?, ?, ?, ?)')
-      .run('lag-source', 'AppDb', 'MsSqlCdc', '0x0000002A000000200001', current, current)
+    // The position is a checkpoint of the progress module (plan 28c, E15): a head row and one row per part, under package `dbdatasync`, channel `local`, the replication as the task, and the key `mapping|source table`.
+    // Times are the state store's SQLite text, UTC with seven fractional digits.
+    const at = (iso: string) => iso.replace('Z', '0000Z')
+    const key = ['dbdatasync', 'local', replication, 'watermark', 'orders|lag-source/[AppDb]/[dbo].[orders]']
+    db.prepare('INSERT OR REPLACE INTO dbdatakit_runner_progress_main_checkpoint_head (package, channel, task, name, item_key, row_version, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(...key, 1, at(applied), 'dbdatasync')
+    const part = db.prepare('INSERT OR REPLACE INTO dbdatakit_runner_progress_main_checkpoint_part (package, channel, task, name, item_key, part, value_type, value_text, value_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    part.run(...key, 'position', 'Text', '0x0000002A000000100001', null)
+    part.run(...key, 'position_time', 'Time', null, at(applied))
+    part.run(...key, 'intent', 'Text', 'Changes', null)
+    part.run(...key, 'hold', 'Text', 'None', null)
+    db.prepare('INSERT INTO dbdatakit_sync_state_main_change_check (connection_name, source_database, source_kind, value_text, checked_at, source_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run('lag-source', 'AppDb', 'MsSqlCdc', '0x0000002A000000200001', at(current), at(current))
   } finally { db.close() }
 }
 
