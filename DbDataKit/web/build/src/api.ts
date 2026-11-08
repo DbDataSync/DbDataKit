@@ -1,5 +1,5 @@
 import { request, type SchemaAssociation, type SchemaNode } from '@dbdatakit/shell'
-import type { CommandOffer, DefineResult, DefinitionAnswer, ImportResult, ProjectConnections, ProjectTemplateInfo, TemplateCatalog, AdoptAnswer, PairedProxy, PairedRunner, PublishAnswer, RunnerPublishData, GitChange, GitCommit, RenderedFiles, BuildProject, FileContent, ProjectFile, Workspace, CommandAnswer, CompareResult, CompileSummary, ConnectionStatus, DeployResult, PlanDetail, PlanEntry, ProjectGraph, SampleResult } from './types'
+import type { RefreshPlanEntry, RefreshResult, TestsResult, CommandOffer, DefineResult, DefinitionAnswer, ImportResult, ProjectConnections, ProjectTemplateInfo, TemplateCatalog, AdoptAnswer, PairedProxy, PairedRunner, PublishAnswer, RunnerPublishData, GitChange, GitCommit, RenderedFiles, BuildProject, FileContent, ProjectFile, Workspace, CommandAnswer, CompareResult, CompileSummary, ConnectionStatus, DeployResult, PlanDetail, PlanEntry, ProjectGraph, SampleResult } from './types'
 
 const project = (id: string) => `/api/v1/projects/${encodeURIComponent(id)}`
 
@@ -124,6 +124,12 @@ export const buildApi = {
   checkDraft: (id: string, workspace: string) => run<CompileSummary>(id, 'project_compile', { check: true }, workspace),
   /** Compiles the workspace and writes the rendered files a deploy plans from (the author role). */
   compileDraft: (id: string, workspace: string) => run<CompileSummary>(id, 'project_compile', {}, workspace),
+  /** The refresh plans of the project, offline (plan 33 UE09). */
+  refreshPlans: (id: string) => run<{ plans: RefreshPlanEntry[] }>(id, 'project_show_refresh').then((a) => a.document?.data?.plans ?? []),
+  /** Runs a refresh plan, or chosen members of it (the operator role). The server evaluates the models' checks after the loads and answers when the run has ended. */
+  refresh: (id: string, body: Record<string, unknown>) => run<RefreshResult>(id, 'connection_refresh', body),
+  /** Runs the project's tests (a viewer's: they read). */
+  runTests: (id: string, limit?: number) => run<TestsResult>(id, 'project_tests_run', limit ? { limit } : {}),
   /** Runs the models on generated rows, offline: what they would produce. */
   sample: (id: string, rows?: number) => run<SampleResult>(id, 'project_sample', rows ? { rows } : {}),
   /** The lowered and rendered text of one model file of a workspace (the compiler's own files, not written anywhere). */

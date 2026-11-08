@@ -237,6 +237,43 @@ if (!isWorker) {
   fs.writeFileSync(path.join(scratchDirectory, 'end-to-end-build-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
 
+// Plan 33 UE09: a Build server for the refresh story (`refresh-run.spec.ts`), port 8541 (a port table: 8541 refresh Build; 8542 to 8544 are the published-models story's). The story needs the test PostgreSQL (DBDATA_E2E_PG)
+// and skips without it: the refresh runs loads on it. The server has its own directory, and the project is compiled and committed here (a deploy applies from a clean working tree).
+export const refreshBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-refresh-build'), port: 8541, project: 'refreshing', plan: 'nightly' }
+if (!isWorker) {
+  const settings = (plan: string) => 'defaults: {connections: [postgres]}\ntracking: { connection: postgres }\nstring_semantics:\n  case: sensitive\n  trailing_space: significant\n  collations:\n    default: { duckdb: NFC, postgres: C }\n' + plan
+  const makeProject = (directory: string, name: string, files: Record<string, string>) => {
+    const project = path.join(os.tmpdir(), `dbdatakit-console-e2e-${name}-project`)
+    fs.rmSync(project, { recursive: true, force: true })
+    fs.rmSync(directory, { recursive: true, force: true })
+    fs.mkdirSync(directory, { recursive: true })
+    for (const [relative, text] of Object.entries(files)) { const file = path.join(project, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text) }
+    // the test database has no certificate to verify: a connection file that says so (the same as the deploy test's)
+    fs.mkdirSync(path.join(project, 'connections'), { recursive: true })
+    fs.writeFileSync(path.join(project, 'connections', 'postgres.yaml'), 'schema: connection/1\nname: postgres\nengine: postgres\ntls:\n  encrypt: false\n  trust_server_certificate: true\n')
+    execFileSync('dotnet', ['exec', buildDll, 'project', 'compile', '--project', project], { stdio: 'ignore' })
+    for (const args of [['init', '-q'], ['add', '-A'], ['commit', '-qm', 'The project']])
+      execFileSync('git', ['-c', 'user.name=console-e2e', '-c', 'user.email=e2e@example.invalid', ...args], { cwd: project, stdio: 'ignore' })
+    execFileSync('dotnet', ['exec', buildDll, 'server', 'project', 'add', name, '--path', project, '--repo', directory], { stdio: 'ignore' })
+  }
+  const pairBuild = (directory: string, file: string) => {
+    const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', directory, '--max-role', 'viewer,author,operator,approver,admin'], { encoding: 'utf8' })
+    fs.writeFileSync(path.join(scratchDirectory, file), /Pairing code: (\S+)/.exec(made)![1])
+  }
+  const columns = 'grain: [event_id]\ncolumns:\n  - {name: event_id, type: BIGINT, nullable: false}\n  - {name: event_ts, type: TIMESTAMP, nullable: false}\n  - {name: amount, type: "DECIMAL(14, 2)"}\n'
+  makeProject(refreshBuild.directory, refreshBuild.project, {
+    'dbdatabuild.yml': settings(`refresh:\n  plans:\n    ${refreshBuild.plan}: { schedule: "0 3 * * *", time_zone: UTC }\n`),
+    'models/staging/events.yml': 'name: staging.events\nkind: mapped\n' + columns,
+    // a check that one of the three rows the story inserts breaks (amount 99 is above 50), and one that passes
+    'models/marts/fct_events.yml': 'schemaVersion: 2\nname: marts.fct_events\nkind: {incremental_by_time_range: {time_column: event_ts}}\n' + columns +
+      'loads:\n  incremental:\n    default: true\n    strategy: watermark_append\n    watermark: {column: event_ts, resolver: target_max, on_null: initial, initial: "2000-01-01 00:00:00"}\n' +
+      `refresh: { ${refreshBuild.plan}: incremental }\n` +
+      'checks:\n  - {id: amount_not_negative, kind: range, column: amount, min: 0}\n  - {id: amount_small, kind: range, column: amount, max: 50}\n',
+    'models/marts/fct_events.sql': 'SELECT e.event_id, e.event_ts, e.amount FROM staging.events e\n',
+  })
+  pairBuild(refreshBuild.directory, 'refresh-build-pairing-code.txt')
+}
+
 // A runner for the runner story (plan 28a, R19): a real `dbdatarunner` with the sample package of the runner's tests (`DbDataKit.Runner.TestPackage`, published to a folder here) published on the `dev` channel by the story (as version 1, then 2), two tasks:
 // `ok` (every hour, so it also has a next time) and `tally` (by hand, with a progress value `seen` its runs move). A pairing code lets the console grant admin; a second, for a publisher, is what the story's `package publish` of
 // version 2 (which resets `seen`: a loss) uses. The runner's directory is short: its task socket lives in it and a Unix socket path is limited.
@@ -367,6 +404,16 @@ export default defineConfig({
     {
       command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(endToEndBuild.directory), '--listen', `https://localhost:${endToEndBuild.port}`].join(' '),
       url: `https://localhost:${endToEndBuild.port}/health/live`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
+      env: warehouseConnection ? { DBDATA_BUILD_POSTGRES_READ: warehouseConnection, DBDATA_BUILD_POSTGRES_WRITE: warehouseConnection } : {},
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(refreshBuild.directory), '--listen', `https://localhost:${refreshBuild.port}`].join(' '),
+      url: `https://localhost:${refreshBuild.port}/health/live`,
       ignoreHTTPSErrors: true,
       reuseExistingServer: false,
       timeout: 60_000,

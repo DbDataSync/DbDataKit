@@ -36,6 +36,7 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 | | Model and project files | Yes | Yes (editor) | Yes | Move or rename | `EditTab.tsx`, `NewModelPanel.tsx`, `FileTools.tsx` |
 | | Draft (workspace) | – | – | – | Check, compile, sample, diff, commit, push or merge | `CompilePanel.tsx`, `GitPanel.tsx`, `PreviewPanel.tsx`, `ProjectPage.tsx` |
 | | Deploy plans | Yes | – | – | Dry run, apply (approver) | `DeployTabs.tsx` |
+| | Refresh plans and the project's tests (UE09) | – | – | – | Dry run, then run a refresh plan or chosen members (operator); see each load and the checks evaluated after it; run the project's tests (viewer) | `RefreshPanel.tsx`, `TestsPanel.tsx` |
 | | Tracking tables and seeds | – | – | – | Initialise and seed (admin) | `DeployTabs.tsx` |
 | | Connections of a project | Yes | – | – | – | `NewConnectionPanel.tsx`, `DefinitionPanel.tsx` |
 | | Publish to a Gateway | – | – | – | Yes | `PublishTab.tsx` |
