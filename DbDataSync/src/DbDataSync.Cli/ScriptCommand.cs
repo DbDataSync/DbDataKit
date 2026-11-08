@@ -16,7 +16,7 @@ public static class ScriptCommand
     {
         if (args.Length == 0) return Usage();
         var repoRoot = DbDataSyncRoot.Resolve(args);
-        var repository = new ConfigRepository(Path.Combine(repoRoot, "config"), new GitCommitService(repoRoot), SecretStore.Open(repoRoot));
+        var repository = new ConfigRepository(Path.Combine(repoRoot, "config"), new GitCommitService(repoRoot), SecretStore.OpenInRepository(repoRoot));
         return args[0].ToLowerInvariant() switch
         {
             "list" => List(repository),

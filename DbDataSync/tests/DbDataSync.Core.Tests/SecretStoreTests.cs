@@ -16,7 +16,7 @@ public sealed class SecretStoreTests : IDisposable
 
     public void Dispose() => GitTempDirectory.DeleteRecursively(_root);
 
-    private SecretStore Open() => SecretStore.Open(_root, new Dictionary<string, string?>().GetValueOrDefault);
+    private SecretStore Open() => SecretStore.OpenInRepository(_root, new Dictionary<string, string?>().GetValueOrDefault);
 
     [Fact]
     public void AStoredSecret_IsReadBackByAnotherInstanceOnTheSameRoot()
@@ -62,6 +62,19 @@ public sealed class SecretStoreTests : IDisposable
     }
 
     [Fact]
+    public void ADataDirectory_GetsTheStoreAndItsKey_AndNoGitignore()
+    {
+        // plan 28c ED8: a directory beside a read-only package view is not a repository the store may write into
+        Repository.Init(_root);
+        var store = SecretStore.Open(_root, new Dictionary<string, string?>().GetValueOrDefault);
+
+        store.Store(SecretRefs.ForConnection("erp"), Sentinel);
+
+        Assert.True(Directory.Exists(Path.Combine(_root, "secrets")));
+        Assert.False(File.Exists(Path.Combine(_root, ".gitignore")));
+    }
+
+    [Fact]
     public void ANameInTheOldForm_IsNotAName_AndNothingIsStoredOrRead()
     {
         var store = Open();
@@ -76,7 +89,7 @@ public sealed class SecretStoreTests : IDisposable
     [Fact]
     public void TheEnvironment_AnswersWhatTheStoreDoesNotHave()
     {
-        var store = SecretStore.Open(_root, name => name == SecretStoreName("erp") ? "from-env" : null);
+        var store = SecretStore.OpenInRepository(_root, name => name == SecretStoreName("erp") ? "from-env" : null);
 
         Assert.Equal("from-env", store.Resolve(SecretRefs.ForConnection("erp")));
         Assert.StartsWith("DBDATA_SECRET_DBDATA_SYNC_CONNECTION_ERP", store.EnvName(SecretRefs.ForConnection("erp")));

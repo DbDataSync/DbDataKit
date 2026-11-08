@@ -15,7 +15,7 @@ public sealed class ScriptCommandTests : IDisposable
     private void Write(string name, string kind, string code)
     {
         LibGit2Sharp.Repository.Init(_root);
-        new ConfigRepository(Path.Combine(_root, "config"), new GitCommitService(_root), SecretStore.Open(_root)).SaveScript(
+        new ConfigRepository(Path.Combine(_root, "config"), new GitCommitService(_root), SecretStore.OpenInRepository(_root)).SaveScript(
             new ScriptDefinition { Manifest = new ScriptConfig { Name = name, Kind = kind }, Code = code }, new GitAuthor("test", "test@example.com"));
     }
 

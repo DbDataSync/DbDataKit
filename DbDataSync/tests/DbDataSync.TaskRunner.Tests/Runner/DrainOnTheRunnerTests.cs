@@ -108,7 +108,7 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
     private Task CreateTargetAsync(string table) =>
         ExecuteAsync(_admin, $"CREATE TABLE dbo.[{table}] (Id INT NOT NULL PRIMARY KEY, Name NVARCHAR(50) NOT NULL);");
 
-    private async Task SaveReplicationAsync(string name, string targetTable)
+    private async Task SaveReplicationAsync(string name, string targetTable, bool provision = false)
     {
         _config.SaveReplicationTask(new ReplicationTaskConfig
         {
@@ -133,7 +133,8 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
             ],
         };
         mapping.SourceColumns = await CachedColumnsAsync(_sourceTable);
-        mapping.TargetColumns = await CachedColumnsAsync(targetTable);
+        if (provision) mapping.Provisioning = new ProvisioningConfig { CreateTargetTableIfMissing = true };
+        else mapping.TargetColumns = await CachedColumnsAsync(targetTable);
         _config.SaveTableMapping(name, mapping, Author);
     }
 
@@ -193,18 +194,21 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
     }
 
     /// <summary>A directory like the one a replication set is published from: the engine as the executable package's files, and <c>repo/</c> with the definition (<c>config/</c>) and the libraries the drivers load from.</summary>
-    private async Task<string> PackageSourceAsync()
+    private async Task<string> PackageSourceAsync(bool withEngine = true)
     {
         var source = Directory.CreateTempSubdirectory("dbdatasync-drain-package-").FullName;
         _directories.Add(source);
-        var engine = EngineBuildOutput();
-        try
+        if (withEngine)
         {
-            Directory.CreateSymbolicLink(Path.Combine(source, "engine"), engine);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            CopyDirectory(engine, Path.Combine(source, "engine"));
+            var engine = EngineBuildOutput();
+            try
+            {
+                Directory.CreateSymbolicLink(Path.Combine(source, "engine"), engine);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                CopyDirectory(engine, Path.Combine(source, "engine"));
+            }
         }
 
         var repo = Directory.CreateDirectory(Path.Combine(source, "repo")).FullName;
@@ -331,5 +335,70 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
         Assert.True(rig.LogText(result.RunId).Contains("IRunnerState.RequestInitialLoad", StringComparison.Ordinal), Describe(rig, result));
         Assert.Null(rig.Watermark(_watermarkKey));
         Assert.Equal(0, (await TargetFingerprintAsync(_runnerTarget)).Count);
+    }
+
+    /// <summary>The names and contents of everything under a directory, to say afterwards that nothing in it was written, added or removed.</summary>
+    private static SortedDictionary<string, string> Snapshot(string directory) =>
+        new(Directory.EnumerateFileSystemEntries(directory, "*", SearchOption.AllDirectories).ToDictionary(
+            entry => Path.GetRelativePath(directory, entry),
+            entry => File.Exists(entry) ? Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(entry))) : "<directory>"));
+
+    [Fact]
+    public async Task AProvisioningReport_IsARunOutput_NotAWriteIntoTheView_AndNothingInTheViewChanges()
+    {
+        // plan 28c ED8 and ED9: the target table does not exist and the mapping has no cached target columns, so the pass creates the table and reports its columns; the definition is a read-only view
+        var provisioned = $"Provisioned_{Guid.NewGuid():N}";
+        await SaveReplicationAsync("provision-sync", provisioned, provision: true);
+        var start = await CurrentVersionAsync();
+        await InsertRowsAsync(7);
+        await ExecuteAsync(_admin, $"DROP TABLE IF EXISTS dbo.[{provisioned}];");
+
+        var source = await PackageSourceAsync();
+        using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
+        rig.SeedWatermark(_watermarkKey, start);
+        var request = await rig.DrainRequestAsync(source, "provision-sync");
+        var before = Snapshot(request.PackageDirectory!);
+
+        var result = await rig.Executor.RunAsync(request);
+
+        Assert.True(result.End.State == TaskEndState.Succeeded && result.ExitCode == 0, Describe(rig, result));
+        Assert.Equal(7, (await TargetFingerprintAsync(provisioned)).Count);
+
+        // no file of the view was written, created or removed (the view's modes forbid it for a user that is not root; this holds for root too)
+        Assert.Equal(before, Snapshot(request.PackageDirectory!));
+        Assert.DoesNotContain(before.Keys, k => k.Contains(".git", StringComparison.Ordinal) || k.EndsWith("secrets", StringComparison.Ordinal) || k.EndsWith(".gitignore", StringComparison.Ordinal));
+
+        // the report is a step of the run: its result carries the columns the target was created with
+        var steps = new DbDataKit.State.StepStore(rig.Database, new DbDataKit.State.ProgressKey(RunnerRig.Package, RunnerRig.Channel, "drain")).List(RunnerRig.Chain);
+        var step = Assert.Single(steps, s => s.Name == "provisioned-columns");
+        Assert.Equal(DbDataKit.State.StepState.Completed, step.State);
+        var report = System.Text.Json.JsonSerializer.Deserialize<ProvisionedColumnsReport>(step.ResultJson!, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
+        Assert.Equal(("provision-sync", "main"), (report.Replication, report.Mapping));
+        Assert.Equal(["Id", "Name"], report.Columns.Select(c => c.Name).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task ADefinitionPackage_RunsOnTheRuntimePackage_FromTwoReadOnlyViews_AndWritesIntoNeither()
+    {
+        // plan 28c E06: the engine is the runtime package (files/bin of publish-runtime.sh, here the build output of the same project), the definition holds only config/ and libraries/
+        var start = await CurrentVersionAsync();
+        await InsertRowsAsync(25);
+        var runtimeSource = Directory.CreateTempSubdirectory("dbdatasync-runtime-package-").FullName;
+        _directories.Add(runtimeSource);
+        CopyDirectory(EngineBuildOutput(), Path.Combine(runtimeSource, "bin"));
+        var source = await PackageSourceAsync(withEngine: false);
+        Assert.False(Directory.Exists(Path.Combine(source, "engine")));
+        using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
+        rig.SeedWatermark(_watermarkKey, start);
+        var request = await rig.DrainRequestAsync(source, "runner-sync", runtimeSource: runtimeSource);
+        var definitionBefore = Snapshot(request.PackageDirectory!);
+        var runtimeBefore = Snapshot(request.RuntimeDirectory!);
+
+        var result = await rig.Executor.RunAsync(request);
+
+        Assert.True(result.End.State == TaskEndState.Succeeded && result.ExitCode == 0, Describe(rig, result));
+        Assert.Equal(25, (await TargetFingerprintAsync(_runnerTarget)).Count);
+        Assert.Equal(definitionBefore, Snapshot(request.PackageDirectory!));
+        Assert.Equal(runtimeBefore, Snapshot(request.RuntimeDirectory!));
     }
 }

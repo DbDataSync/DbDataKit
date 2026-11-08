@@ -32,11 +32,11 @@ public static class WorkerEntry
             Console.Error.WriteLine($"Argument error: {parseError}");
             Console.Error.WriteLine(
                 "Usage: DbDataSync.TaskRunner --repo-root <path> --state-db <path> --replication <name> " +
-                "[--degree-of-parallelism <n>] [--bulk-load-parallelism <n>]");
+                "[--data-dir <path>] [--degree-of-parallelism <n>] [--bulk-load-parallelism <n>]");
             return (int)ExitCode.ConfigError;
         }
 
-        var secretStore = SecretStore.Open(options!.RepoRoot);
+        var secretStore = SecretStore.Open(options!.SecretsRoot);
         var configRepository = new ConfigRepository(options!.ConfigRoot, new GitCommitService(options.RepoRoot), secretStore);
         var engine = EngineComposition.Compose(
             configRepository, options.RepoRoot, ScriptCacheDirectory.BesideStateDatabase(options.StateDbPath));

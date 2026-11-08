@@ -38,7 +38,7 @@ internal sealed class ReadinessContext
     {
         try
         {
-            var secrets = SecretStore.Open(Root);
+            var secrets = SecretStore.OpenInRepository(Root);
             var libraryRegistry = new LibraryRegistry(Root).LoadAll();
             var database = StateDatabase.FromOptions(
                 ApiOptions.StateEngine, ApiOptions.StateDbPath, ApiOptions.StateConnectionString, secrets,
@@ -289,7 +289,7 @@ internal sealed class LibrariesAndDriversCheck : IReadinessCheck
         {
             var configRoot = Path.Combine(context.Root, "config");
             var repository = new ConfigRepository(
-                configRoot, new GitCommitService(context.Root), SecretStore.Open(context.Root));
+                configRoot, new GitCommitService(context.Root), SecretStore.OpenInRepository(context.Root));
             foreach (var connection in repository.LoadAllConnections())
             {
                 if (!driverIds.Contains(connection.DriverType))

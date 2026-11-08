@@ -11,6 +11,7 @@
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
+    <PackageReference Include="Xunit.SkippableFact" />   <!-- the runtime package scripts are bash (SyncRuntimePackageTests) -->
     <PackageReference Include="xunit.runner.visualstudio" />
     <!-- Phase 109h: this test project's own scaffolding (RunExecutorIntegrationTests.cs,
          Scd2NaturalKeyIntegrationTests.cs) uses Microsoft.Data.SqlClient directly to set up a scratch

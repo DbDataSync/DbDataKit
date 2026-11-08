@@ -1,4 +1,3 @@
-using DbDataKit.Config.Git;
 using DbDataKit.Runner;
 using DbDataKit.Runner.Kit;
 using DbDataKit.Runner.Protocol;
@@ -45,6 +44,19 @@ public static class DrainCounters
 /// <summary>One pass over one mapping, planned by the drain.</summary>
 public sealed record PlannedPass(string Mapping, WorkItem Item);
 
+/// <summary>What a pass reports of the target it provisioned (plan 28c ED9): the mapping and the columns of the target as the engine found or created it.</summary>
+public sealed record ProvisionedColumnsReport(string Replication, string Mapping, List<CachedColumn> Columns);
+
+public static class DrainSteps
+{
+    /// <summary>
+    /// The provisioning report of a mapping, a run output (the step's result in the run record) rather than a write into the definition: a published definition is immutable. The Sync back end reads it and, as
+    /// an authoring change with its own commit, updates the mapping's column cache; until then the pass reports again on its next run (the report is recurring and loss-tolerant, <see cref="IRunnerConfig"/>).
+    /// </summary>
+    public static readonly ValueStep<ProvisionedColumnsReport, ProvisionedColumnsReport> ProvisionedColumns =
+        Step.Value<ProvisionedColumnsReport, ProvisionedColumnsReport>("provisioned-columns", r => r.Mapping);
+}
+
 public static class DrainUnits
 {
     /// <summary>A mapping's pass; the key is the mapping, so a retry of the attempt chain skips the mappings that finished.</summary>
@@ -57,7 +69,7 @@ public static class DrainUnits
 /// protocol call that follows the target's commit), where the definition is read from (the package's view) and where the engine may write (the run's scratch, never the view).
 /// </summary>
 [RunnerTask("drain")]
-[RunnerDeclarations(typeof(DrainUnits), typeof(DrainCounters))]
+[RunnerDeclarations(typeof(DrainUnits), typeof(DrainCounters), typeof(DrainSteps))]
 public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
 {
     private readonly SemaphoreSlim _save = new(1, 1);
@@ -70,16 +82,16 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
             ?? throw new InvalidOperationException($"{RunnerProtocolNames.ScratchVariable} is not set: the runner tells a task where it may write.");
         var repoRoot = Path.GetFullPath(Path.Combine(package, Input.RepoDir));
 
-        // The definition is read, never written: logins come from the environment the runner set (DBDATA_SECRET_..., ED11), the engine's own caches go to the scratch directory, and the git service the config
-        // repository wants for its writes (which a drain never makes) is given a repository of its own in the scratch directory, since the view is read-only (E06 removes the need).
+        // The definition is read, never written (ED8): logins come from the environment the runner set (DBDATA_SECRET_..., ED11), so no secret store file or key is created; the configuration is the read-only
+        // repository (no git service, no directory created in the view); the engine's own caches go to the scratch directory.
         var secrets = SecretStore.ForProviders();
-        var config = new ConfigRepository(Path.Combine(repoRoot, "config"), new GitCommitService(Path.Combine(scratch, "git")), secrets);
+        var config = ConfigRepository.ReadOnly(Path.Combine(repoRoot, "config"), secrets);
         var engine = EngineComposition.Compose(config, repoRoot, new ScriptCacheDirectory(Path.Combine(scratch, "script-cache")));
 
         var task = config.LoadReplicationTask(Input.Replication);
         var state = new ProtocolRunnerState(new Checkpoints(this), Run.Log);
         var executor = new RunExecutor(
-            config, engine.Drivers, secrets, engine.Libraries, repoRoot, state, new LoggedRunnerConfig(Run.Log), engine.Scripts, Path.Combine(scratch, "state.db"));
+            config, engine.Drivers, secrets, engine.Libraries, repoRoot, state, new RunOutputConfig(this), engine.Scripts, Path.Combine(scratch, "state.db"));
 
         var passes = Plan(config, task.Name);
         Status($"{passes.Count} mapping(s) of '{task.Name}'");
@@ -134,10 +146,13 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
         }
     }
 
-    /// <summary>The one config write a pass can make, its provisioning report, is a log line for now (ED9: a run output, committed by the authoring side later); the pass offers it again next time.</summary>
-    private sealed class LoggedRunnerConfig(ILogger log) : IRunnerConfig
+    /// <summary>The one config write a pass can make, its provisioning report, is a step of the run (ED9): the result is stored with the run, the definition is not touched.</summary>
+    private sealed class RunOutputConfig(DrainJob job) : IRunnerConfig
     {
-        public void ReportProvisionedTargetColumns(string replicationName, string mappingName, IReadOnlyList<CachedColumn> columns) =>
-            log.LogInformation("Provisioned target of '{Mapping}' on '{Replication}' has {Count} column(s); the report is not kept yet (plan 28c ED9).", mappingName, replicationName, columns.Count);
+        public void ReportProvisionedTargetColumns(string replicationName, string mappingName, IReadOnlyList<CachedColumn> columns)
+        {
+            var report = new ProvisionedColumnsReport(replicationName, mappingName, [.. columns]);
+            job.Step(DrainSteps.ProvisionedColumns, report).Repeatable().RunAsync(_ => Task.FromResult(report), CancellationToken.None).GetAwaiter().GetResult();
+        }
     }
 }

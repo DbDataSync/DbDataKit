@@ -50,7 +50,7 @@ internal static class SetupSteps
         DbDataSyncConfigFile.SetValue(root, "DbDataSync:State", "Engine", engine);
         DbDataSyncConfigFile.SetValue(root, "DbDataSync:State", "ConnectionString", connectionString ?? "");
         if (password is not null)
-            SecretStore.Open(root).Store(SecretRefs.ForAppSetting("stateConnectionString"), password);
+            SecretStore.OpenInRepository(root).Store(SecretRefs.ForAppSetting("stateConnectionString"), password);
 
         var libraryRegistry = new LibraryRegistry(root).LoadAll();
         var libraryId = engine == StateEngineIds.MsSql ? MsSqlStateDialect.LibraryId : PostgresStateDialect.LibraryId;
@@ -81,7 +81,7 @@ internal static class SetupSteps
         try
         {
             StateDatabase.FromOptions(
-                engine, Path.Combine(root, "state.db"), connectionString, SecretStore.Open(root),
+                engine, Path.Combine(root, "state.db"), connectionString, SecretStore.OpenInRepository(root),
                 libraryRegistry);
             return new StepResult(false, "Connected — schema is current.");
         }

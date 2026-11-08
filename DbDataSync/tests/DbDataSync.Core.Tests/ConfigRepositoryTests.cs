@@ -28,6 +28,44 @@ public sealed class ConfigRepositoryTests : IDisposable
     public void Dispose() => GitTempDirectory.DeleteRecursively(_repoRoot);
 
     [Fact]
+    public void ReadOnly_ReadsADefinition_CreatesNothing_AndACommitSaysItIsReadOnly()
+    {
+        // plan 28c ED8: the definition view of a published package is read-only and has no git repository
+        _repository.SaveConnection(SqlAuthInput("orders-db"), Author);
+        var view = Directory.CreateTempSubdirectory("dbdatasync-config-view-").FullName;
+        try
+        {
+            CopyTree(_configRoot, Path.Combine(view, "config"));
+            var before = Directory.EnumerateFileSystemEntries(view, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal).ToArray();
+
+            var readOnly = ConfigRepository.ReadOnly(Path.Combine(view, "config"), _secrets);
+
+            Assert.Equal(["orders-db"], readOnly.ListConnections());
+            Assert.Empty(readOnly.ListReplications());
+            Assert.Equal(before, Directory.EnumerateFileSystemEntries(view, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal).ToArray());
+            Assert.False(Directory.Exists(Path.Combine(view, ".git")));
+
+            var ex = Assert.Throws<InvalidOperationException>(() => readOnly.GetReplicationHistory("any"));
+            Assert.Contains("read-only", ex.Message);
+            Assert.Contains(Path.Combine(view, "config"), ex.Message);
+        }
+        finally
+        {
+            GitTempDirectory.DeleteRecursively(view);
+        }
+    }
+
+    private static void CopyTree(string from, string to)
+    {
+        foreach (var file in Directory.EnumerateFiles(from, "*", SearchOption.AllDirectories))
+        {
+            var target = Path.Combine(to, Path.GetRelativePath(from, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target);
+        }
+    }
+
+    [Fact]
     public void SaveConnection_WritesYamlFileMatchingLayout()
     {
         _repository.SaveConnection(SqlAuthInput("orders-db"), Author);

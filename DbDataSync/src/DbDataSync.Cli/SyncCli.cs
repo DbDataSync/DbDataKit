@@ -117,7 +117,7 @@ public static class SyncCli
             var context = ReadinessChecks.BuildContext(args.Get("repo") is { } repo ? ["--repo", repo] : []);
             var options = context.ApiOptions;
             var connection = options.StateConnectionString;
-            if (connection is not null && DbDataSync.Core.Secrets.SecretStore.Open(context.Root).TryResolve(DbDataSync.Core.Secrets.SecretRefs.ForAppSetting("stateConnectionString"), out var password))
+            if (connection is not null && DbDataSync.Core.Secrets.SecretStore.OpenInRepository(context.Root).TryResolve(DbDataSync.Core.Secrets.SecretRefs.ForAppSetting("stateConnectionString"), out var password))
                 connection = $"{connection};Password={password}";
             // the state file is named by DbDataSync:State:DbPath, else it is state.db in the repository root this command was pointed at
             var file = context.Configuration["DbDataSync:State:DbPath"] ?? Path.Combine(context.Root, "state.db");

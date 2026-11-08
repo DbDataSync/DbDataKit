@@ -24,6 +24,20 @@ public sealed class TaskRunnerOptionsTests
     }
 
     [Fact]
+    public void TryParse_DataDirectory_IsWhereTheSecretsGo_AndDefaultsToTheRepositoryRoot()
+    {
+        var base_ = new[] { "--repo-root", "/view/repo", "--state-db", "/data/state.db", "--replication", "crm-sync" };
+
+        Assert.True(TaskRunnerOptions.TryParse(base_, out var plain, out _));
+        Assert.Equal("/view/repo", plain!.SecretsRoot);
+
+        Assert.True(TaskRunnerOptions.TryParse([.. base_, "--data-dir", "/data"], out var split, out _));
+        Assert.Equal("/data", split!.SecretsRoot);
+        Assert.Equal("/view/repo", split.RepoRoot);
+        Assert.Equal(Path.Combine("/view/repo", "config"), split.ConfigRoot);
+    }
+
+    [Fact]
     public void TryParse_WithExplicitBulkLoadParallelism_UsesIt_Independently()
     {
         var args = new[]
