@@ -213,3 +213,14 @@ What needs the catalog (an encoded field the model does not have, an invalid req
 written in the lowest number that can say it. `schemas/views-format.lock.json` records the number and the hashes of `core`, `dashboard` and `report`; a test fails when a schema changes without the lock (while the format
 is open the lock is edited with the schema; once frozen a change is the next number of both kinds).
 
+## Choosing a layout
+
+`LayoutSelector.Select(document, context)` (.NET) and `selectLayout(document, context)` (TypeScript) are pure functions with the same goldens (`conformance/views/select-layout`). The context is the container's
+`width` and `height` in CSS pixels (absent for an export, which has no viewport), the `medium` (`screen`, `print`, `export`; `screen` by default) and, optionally, a layout **named** by a URL (`?layout=print`), an export
+option or a subscription.
+
+1. A **named** layout wins; an unknown name is refused naming the layouts the document has.
+2. Otherwise the layouts whose `when` **matches** are the candidates. The conditions are ANDed and an omitted one matches anything: `width` and `height` (`{min, max}`, inclusive), `orientation` (`portrait` when the height
+   is above the width, else `landscape`), `aspect` (width divided by height) and `medium` (one, or a list: a layout meant for print and for export lists both). A condition on a dimension the context lacks does not match.
+3. The **most specific** candidate wins (the most conditions); a tie goes to **document order**.
+4. With no candidate, the layout with `default: true`. A layout with no `when` is never a candidate, even the default: it is what is left.

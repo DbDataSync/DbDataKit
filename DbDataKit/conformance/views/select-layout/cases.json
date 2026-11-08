@@ -1,0 +1,210 @@
+{
+  "cases": [
+    {
+      "doc": "dashboard.json",
+      "name": "a wide screen picks the wall canvas",
+      "context": {
+        "width": 1920,
+        "height": 1080
+      },
+      "layout": "wall",
+      "choice": "matched"
+    },
+    {
+      "doc": "dashboard.json",
+      "name": "the width range includes its minimum",
+      "context": {
+        "width": 1700,
+        "height": 900
+      },
+      "layout": "wall",
+      "choice": "matched"
+    },
+    {
+      "doc": "dashboard.json",
+      "name": "one pixel below the range takes the default",
+      "context": {
+        "width": 1699,
+        "height": 900
+      },
+      "layout": "desk",
+      "choice": "default"
+    },
+    {
+      "doc": "dashboard.json",
+      "name": "a laptop takes the default",
+      "context": {
+        "width": 1366,
+        "height": 768
+      },
+      "layout": "desk",
+      "choice": "default"
+    },
+    {
+      "doc": "dashboard.json",
+      "name": "a phone in portrait picks the phone canvas",
+      "context": {
+        "width": 390,
+        "height": 844
+      },
+      "layout": "phone",
+      "choice": "matched"
+    },
+    {
+      "doc": "dashboard.json",
+      "name": "a phone in landscape does not",
+      "context": {
+        "width": 600,
+        "height": 390
+      },
+      "layout": "desk",
+      "choice": "default"
+    },
+    {
+      "doc": "dashboard.json",
+      "name": "a square window is landscape (height not above width)",
+      "context": {
+        "width": 500,
+        "height": 500
+      },
+      "layout": "desk",
+      "choice": "default"
+    },
+    {
+      "doc": "dashboard.json",
+      "name": "the browser print of a laptop window picks the print layout",
+      "context": {
+        "width": 1366,
+        "height": 768,
+        "medium": "print"
+      },
+      "layout": "print",
+      "choice": "matched"
+    },
+    {
+      "doc": "dashboard.json",
+      "name": "an export with no size picks the print layout",
+      "context": {
+        "medium": "export"
+      },
+      "layout": "print",
+      "choice": "matched"
+    },
+    {
+      "doc": "dashboard.json",
+      "name": "a condition on a size the export lacks does not match",
+      "context": {
+        "medium": "export"
+      },
+      "layout": "print",
+      "choice": "matched"
+    },
+    {
+      "doc": "dashboard.json",
+      "name": "a named layout wins over the selectors",
+      "context": {
+        "width": 1920,
+        "height": 1080,
+        "layout": "phone"
+      },
+      "layout": "phone",
+      "choice": "named"
+    },
+    {
+      "doc": "dashboard.json",
+      "name": "a named layout wins in an export",
+      "context": {
+        "medium": "export",
+        "layout": "wall"
+      },
+      "layout": "wall",
+      "choice": "named"
+    },
+    {
+      "doc": "dashboard.json",
+      "name": "an unknown name is refused and the known ones are named",
+      "context": {
+        "layout": "nope"
+      },
+      "refused": "The document has no layout named `nope`; its layouts are `desk`, `wall`, `phone`, `print`."
+    },
+    {
+      "doc": "report.json",
+      "name": "a report exports through its default flow layout",
+      "context": {
+        "medium": "export"
+      },
+      "layout": "print",
+      "choice": "default"
+    },
+    {
+      "doc": "report.json",
+      "name": "a report on a wall screen picks its summary canvas",
+      "context": {
+        "width": 1920,
+        "height": 1080
+      },
+      "layout": "summary",
+      "choice": "matched"
+    },
+    {
+      "doc": "report.json",
+      "name": "a report on a phone picks its reflow layout",
+      "context": {
+        "width": 390,
+        "height": 844
+      },
+      "layout": "phone",
+      "choice": "matched"
+    },
+    {
+      "doc": "report.json",
+      "name": "a report on a laptop screen takes the default flow layout",
+      "context": {
+        "width": 1366,
+        "height": 768
+      },
+      "layout": "print",
+      "choice": "default"
+    },
+    {
+      "doc": "ties.json",
+      "name": "equal selectors resolve by document order",
+      "context": {
+        "width": 1100,
+        "height": 800
+      },
+      "layout": "first",
+      "choice": "matched"
+    },
+    {
+      "doc": "ties.json",
+      "name": "the layout with more conditions wins over an earlier one",
+      "context": {
+        "width": 1100,
+        "height": 950
+      },
+      "layout": "narrow",
+      "choice": "matched"
+    },
+    {
+      "doc": "ties.json",
+      "name": "an aspect condition picks the shape",
+      "context": {
+        "width": 900,
+        "height": 400
+      },
+      "layout": "wide",
+      "choice": "matched"
+    },
+    {
+      "doc": "ties.json",
+      "name": "an aspect needs both sizes",
+      "context": {
+        "medium": "export"
+      },
+      "layout": "desk",
+      "choice": "default"
+    }
+  ]
+}
