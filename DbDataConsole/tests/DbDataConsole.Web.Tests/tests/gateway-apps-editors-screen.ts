@@ -421,6 +421,9 @@ export async function publishStory(page: Page) {
   await page.getByTestId('publish-send').click()
   await expect(page.getByTestId('apps-notice')).toContainText('ledger is published as version 1 (1 file) and served at once')
   expect(gateway.apps.get('ledger')!.versions).toHaveLength(1)
+  // an app that was not in the list before is selected once the refetched list has it: its versions are shown (the list the screen held did not name it yet)
+  await expect(page.getByTestId('version-row-1')).toBeVisible()
+  await expect(page.getByTestId('versions-ledger')).toBeVisible()
 
   // the approval of a version that is already published chooses origins too
   await page.getByTestId('app-open-vault').click()

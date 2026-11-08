@@ -449,8 +449,10 @@ export function AppsPage() {
   const publish = useMutation({
     mutationFn: (v: { name: string; body: ReturnType<typeof publishBody> }) => gatewayApi.apps.publish(v.name, v.body),
     onSuccess: async (r) => {
-      setPrepared(null); setPasted(''); setPublishNote(''); setApproveNote(''); setPackageEgress([]); setRefusal(null); setPublishing(false); setSelected(r.name)
+      setPrepared(null); setPasted(''); setPublishNote(''); setApproveNote(''); setPackageEgress([]); setRefusal(null); setPublishing(false)
       await done(`${r.name} is published as version ${r.version} (${r.files} file${r.files === 1 ? '' : 's'}) and served at once; instances that follow it move.`)()
+      // selected only once the refetched list names the app: the effect above drops a selection the list held does not contain (a first publish of a new app)
+      setSelected(r.name)
     },
     onError: (error) => setRefusal(words(error)),
   })
