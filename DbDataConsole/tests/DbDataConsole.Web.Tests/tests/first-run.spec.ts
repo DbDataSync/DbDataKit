@@ -314,7 +314,7 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await page.getByTestId('build-project-starter').getByTestId('build-project-link').click()
   await page.getByTestId('build-tab-publish').click()
   await expect(page.getByTestId('build-publish-button')).toBeDisabled()   // a gateway and a connection first
-  await page.getByTestId('build-publish-gateway').selectOption({ label: 'gateway-one' })
+  await page.getByTestId('build-publish-proxy').selectOption({ label: 'gateway-one' })
   await page.getByTestId('build-publish-connection').fill('sqlserver')
   await page.getByTestId('build-publish-data-source').fill('warehouse')
   await page.getByTestId('build-publish-button').click()
@@ -359,7 +359,7 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await page.getByTestId('instance-row-Build one').getByTestId('instance-open-link').click()
   await page.getByTestId('build-project-starter').getByTestId('build-project-link').click()
   await page.getByTestId('build-tab-publish').click()
-  await page.getByTestId('build-publish-gateway').selectOption({ label: 'gateway-one' })
+  await page.getByTestId('build-publish-proxy').selectOption({ label: 'gateway-one' })
   await page.getByTestId('build-publish-connection').fill('sqlserver')
   await page.getByTestId('build-publish-data-source').fill('legacy')
   await page.getByTestId('build-publish-button').click()
