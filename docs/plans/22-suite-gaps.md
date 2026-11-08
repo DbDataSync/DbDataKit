@@ -1,7 +1,7 @@
 # Plan 22: filling the suite's major gaps
 
-Status: **direction decided by the owner (2026-10-27)**, one question at a time. Not sliced yet; each section becomes slices once the
-plans it depends on (20, 21) have their first slices merged.
+Status: **direction decided by the owner (2026-10-27)**, one question at a time. Sliced in [22a](22a-gap-slices.md) (2026-11-07: 36 slices GP01 to GP36, with what exists in the code, the order and the owner's questions); the plans it
+depended on (20, 21) have their first slices merged.
 
 The gaps came from a review of plans 13 to 21 against the data-flow diagram (`docs/suite-data-flow.md`). The seventh gap,
 environments and promotion, is plan 21.

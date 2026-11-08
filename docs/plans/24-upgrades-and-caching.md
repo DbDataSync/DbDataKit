@@ -1,6 +1,6 @@
 # Plan 24: upgrades, compatibility and caching
 
-Status: **direction decided by the owner (2026-10-27)**, one question at a time. Not sliced yet.
+Status: **direction decided by the owner (2026-10-27)**, one question at a time. Sliced in [24a](24a-upgrade-and-cache-slices.md) (2026-11-07: 16 slices UC01 to UC16).
 
 ## 1. Upgrades
 
