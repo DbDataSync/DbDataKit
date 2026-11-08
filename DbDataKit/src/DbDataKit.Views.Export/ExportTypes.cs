@@ -21,6 +21,9 @@ public sealed record PrintJob(string Title, string Html, IReadOnlyDictionary<str
 /// <summary>What an export gives: the PDF, its page count, the browser that made it and what to tell the person (a blocked request, a missing font).</summary>
 public sealed record ExportResult(byte[] Pdf, int Pages, string BrowserVersion, IReadOnlyList<string> Warnings, IReadOnlyList<string> EmbeddedFonts);
 
+/// <summary>What an SVG export gives: the chart's <c>&lt;svg&gt;</c> as the page drew it (a standalone document: the namespace is declared), the browser that drew it and what to tell the person.</summary>
+public sealed record SvgResult(string Svg, string BrowserVersion, IReadOnlyList<string> Warnings);
+
 /// <summary>Whether this host can export, and if not, the reason in words that name the setting.</summary>
 public sealed record ExportAvailability(bool Available, string Reason, string? BrowserVersion = null, string? Mode = null)
 {
@@ -33,7 +36,7 @@ public sealed class ExportException(string code, string message, Exception? inne
     public string Code { get; } = code;
 }
 
-/// <summary>Draws a print page to a PDF (plan 32 section 4.5). One implementation drives a browser; a module and a runner task use it, a test can replace it.</summary>
+/// <summary>Draws a print page to a PDF, or takes a chart's SVG out of it (plan 32 section 4.5, DBR17). One implementation drives a browser; a module and a runner task use it, a test can replace it.</summary>
 public interface IReportExporter : IAsyncDisposable
 {
     /// <summary>What the last check found (before the first, unavailable and saying so).</summary>
@@ -47,4 +50,7 @@ public interface IReportExporter : IAsyncDisposable
 
     /// <summary>Draws the page. Refused with an <see cref="ExportException"/> when the host cannot, the page cannot be drawn, a limit is past or the deadline ends.</summary>
     Task<ExportResult> ExportPdfAsync(PrintJob job, CancellationToken cancellationToken = default);
+
+    /// <summary>Draws the page and takes the SVG of the chart <paramref name="chartId"/> (a widget id) out of it, as it is drawn there: the same chart the screen and the PDF show, at the size the layout gives it. Refused like <see cref="ExportPdfAsync"/>, and with code <c>page</c> when the page has no such chart or could not draw it.</summary>
+    Task<SvgResult> ExportSvgAsync(PrintJob job, string chartId, CancellationToken cancellationToken = default);
 }

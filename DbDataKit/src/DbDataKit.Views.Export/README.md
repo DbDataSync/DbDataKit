@@ -1,12 +1,13 @@
 # DbDataKit.Views.Export
 
-The PDF exporter of dashboards and reports (plan 32 DBR15): one `IReportExporter` (`ChromiumExporter`) over PuppeteerSharp and one Chromium. **No Node, no download at run time, no network but the page's own files.**
+The exporters of dashboards and reports (plan 32 DBR15, DBR17): `DataExports` writes the CSV and xlsx of a rendered widget's rows (ClosedXML, no browser; see `docs/views.md`), and `IReportExporter.ExportSvgAsync` takes a chart's SVG out of the print page. The PDF exporter: one `IReportExporter` (`ChromiumExporter`) over PuppeteerSharp and one Chromium. **No Node, no download at run time, no network but the page's own files.**
 The `views` module (`DbDataKit.Views.Hosting`) composes the print page and calls it; a runner task for scheduled exports (DBR18) will call the same interface.
 
 ```csharp
 var exporter = new ChromiumExporter(new ExportSettings { Mode = BrowserMode.Pinned });      // or ExportSettings.Read(section, "server.yaml")
 var availability = await exporter.CheckAsync();                                           // browser starts, is the pinned version, fonts match their pin
 var result = await exporter.ExportPdfAsync(new PrintJob("Title", html, assets, PdfLayout.A4));   // PDF bytes, pages, browser version, warnings, embedded fonts
+// var svg = await exporter.ExportSvgAsync(job, "chart-widget-id");   // the chart's <svg> as the page drew it (the visuals mark it data-testid="vz-chart-<id>")
 ```
 
 - **The browser** is launched from a path, never fetched (`BrowserFetcher` is not used and a test checks the assembly does not mention it): `mode: pinned` (the Chrome for Testing build `chromium.pin` names, installed by `scripts/fetch-chromium`

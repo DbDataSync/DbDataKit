@@ -10,6 +10,7 @@ namespace DbDataKit.Views.Export.Tests;
 /// The exporter against a real Chromium (plan 32 DBR15). The fixture page is a small report in the shape the module's print page has: the bundled fonts by <c>@font-face</c> from the page's own origin, a table whose head repeats, sections that start a page,
 /// a ready signal. Tests compare structure (page count, each page's text, the outline, the embedded fonts), never pixels or bytes. Skipped when no browser is found, and the skip says so; they fail in the job that fetched the pin.
 /// </summary>
+[Collection("chromium")]
 public sealed class ExporterTests
 {
     private const string Ready = "document.fonts.ready.then(function(){ window.__reportReady = true })";
