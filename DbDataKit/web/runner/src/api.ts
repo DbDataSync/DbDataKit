@@ -30,6 +30,8 @@ export interface TaskStatus {
   paused_by: string | null
   problem: string | null
   required_labels: string[]
+  /** Who schedules the task: `old` (the product that published it), `observe` (it does, and this runner records what it would have done) or `runner`. Absent from a runner that predates ownership. */
+  owner?: string
   waiting_reason: string | null
 }
 
@@ -102,6 +104,28 @@ export interface RunnerConnection {
   used_by: { process: string; name: string; version: string | null; group: string | null; instance: string | null; channel: string | null; role: string }[]
 }
 
+/** `GET .../tasks/{package}/{channel}/{task}/schedule`: who schedules a task, since when and why, and where its schedule stands. */
+export interface TaskSchedule {
+  task: string
+  owner: string
+  owner_set_by: string | null
+  owner_set_at: string | null
+  reason: string | null
+  handled_up_to: string | null
+  paused: boolean
+  paused_by: string | null
+  paused_at: string | null
+  running: number
+  queued: number
+  version: string | number | null
+}
+
+/** One scheduling decision of an observed task: `runner` is what this runner would have queued, `old` what the product's own scheduler queued. */
+export interface TaskDecision { source: 'runner' | 'old' | string; at: string; missed: number; paused: boolean }
+
+/** What moving a task to another owner sends: the reason is recorded, the position is the time up to which the old scheduler has dealt with (needed to hand a task to this runner). */
+export interface OwnerBody { owner: string; reason: string; handled_up_to?: string }
+
 export interface RunFilters { package?: string; channel?: string; outcome?: string }
 
 export const OUTCOMES = ['running', 'succeeded', 'completedwithfailures', 'failed', 'stopped', 'interrupted'] as const
@@ -138,7 +162,11 @@ export const runnerApi = {
   instances: () => request<{ group: string; this: string | null; instances: RunnerInstance[] }>('/api/v1/instances?all=true').then((r) => r.instances),
   connections: () => request<{ connections: RunnerConnection[] }>('/api/v1/connections').then((r) => r.connections),
   runs: (filters: RunFilters) => request<{ runs: RunRecord[] }>(`/api/v1/runs${runsQuery(filters)}`).then((r) => r.runs),
-  run: (task: TaskKey) => post<{ run_id: string }>(`${taskPath(task)}/run`, {}),
+  /** Starts a run now; the inputs are the task's own (`name=value` of `tasks run`), as text. */
+  run: (task: TaskKey, inputs: Record<string, string> = {}) => post<{ run_id: string }>(`${taskPath(task)}/run`, Object.keys(inputs).length > 0 ? { inputs } : {}),
+  schedule: (task: TaskKey) => request<TaskSchedule>(`${taskPath(task)}/schedule`),
+  decisions: (task: TaskKey) => request<{ task: string; decisions: TaskDecision[] }>(`${taskPath(task)}/decisions`).then((r) => r.decisions),
+  setOwner: (task: TaskKey, body: OwnerBody) => request<{ task: string; owner: string }>(`${taskPath(task)}/owner`, { method: 'PUT', body: JSON.stringify(body) }),
   pause: (task: TaskKey) => post<unknown>(`${taskPath(task)}/pause`),
   resume: (task: TaskKey) => post<unknown>(`${taskPath(task)}/resume`),
   definitions: () => request<{ definitions: DefinitionSummary[] }>('/api/v1/definitions/integration').then((r) => r.definitions),

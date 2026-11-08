@@ -45,7 +45,7 @@ internal static class BuildServer
 
     public static X509Certificate2 Certificate(string directory) => DirectoryCertificate.Load(directory);
 
-    public static WebApplication Build(BuildServerSettings settings, X509Certificate2 certificate, IProjectCommandRunner runner, ProjectsFile projects, IReadOnlyList<DbDataBuild.Tui.Model.CommandInfo> commands, Action<string> log, Func<string, IReadOnlyList<DbDataBuild.Tui.Model.CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, WarmSessionRunner? workspaceRunner = null, ProxyPublisher? proxyPublisher = null, IMaintenanceGate? maintenance = null, DbDataKit.State.Cli.StateTarget? state = null, Func<ScheduleRunnerLink, DbDataBuild.Cli.Runner.IRunnerTaskControl>? runnerControl = null, string? runnerClientDirectory = null)
+    public static WebApplication Build(BuildServerSettings settings, X509Certificate2 certificate, IProjectCommandRunner runner, ProjectsFile projects, IReadOnlyList<DbDataBuild.Tui.Model.CommandInfo> commands, Action<string> log, Func<string, IReadOnlyList<DbDataBuild.Tui.Model.CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, WarmSessionRunner? workspaceRunner = null, ProxyPublisher? proxyPublisher = null, IMaintenanceGate? maintenance = null, DbDataKit.State.Cli.StateTarget? state = null, Func<ScheduleRunnerLink, DbDataBuild.Cli.Runner.IRunnerTaskControl>? runnerControl = null, Func<ScheduleRunnerLink, DbDataBuild.Cli.Runner.IRunnerSchedule>? runnerSchedule = null, string? runnerClientDirectory = null)
     {
         if (settings.Listen.Scheme != Uri.UriSchemeHttps) throw new ArgumentException("A Build server listens on HTTPS only.", nameof(settings));
         var instanceId = InstanceId(settings.ServerYaml);
@@ -84,7 +84,7 @@ internal static class BuildServer
             "dbdatabuild", "dbdatabuild", "the server",
             () => state ?? DbDataKit.State.Cli.StateTarget.From(BuildState.Resolve(settings.Directory), BuildState.SqlitePath(settings.Directory), () => BuildState.Secrets(settings.Directory), BuildState.SettingsFile(settings.Directory)),
             BuildSchedulerSchema.Modules, BuildSchedulerSchema.Scope, maintenance, new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), instanceId, DbDataBuild.Core.ProductInfo.Version, Move: true)));
-        BuildManagementApi.Map(app, projects, commands, runner, surfaceFor, scheduler, new Workspaces(settings.Directory, TimeProvider.System), workspaceRunner, new ProxiesFile(settings.Directory), proxyPublisher, files.Codes(), $"Build server {instanceId}", new ProjectCreator(settings.Directory, projects), settings.Directory, runnerControl, new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), runnerClientDirectory);
+        BuildManagementApi.Map(app, projects, commands, runner, surfaceFor, scheduler, new Workspaces(settings.Directory, TimeProvider.System), workspaceRunner, new ProxiesFile(settings.Directory), proxyPublisher, files.Codes(), $"Build server {instanceId}", new ProjectCreator(settings.Directory, projects), settings.Directory, runnerControl, new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), runnerSchedule, runnerClientDirectory);
         if (workspaceRunner is not null) app.Lifetime.ApplicationStopping.Register(workspaceRunner.Dispose);
         return app;
     }
