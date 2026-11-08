@@ -6,18 +6,18 @@ criteria, risks and acceptance. Plans are proposals; review the "decisions" in e
 
 | # | Plan | Main inputs | Key payoff |
 |---|---|---|---|
-| 00 | [Repo strategy](00-REPO-STRATEGY.md) | hub-and-spokes decision | Cross-cutting changes without a monorepo |
-| 01 | [Config / definitions](01-config-definitions.md) | Build strict YAML, Sync typed YAML, Proxy json | Strict parsing everywhere, `schemaVersion` + migrations, Proxy startup validation |
-| 02 | [Secrets](02-secrets.md) | Sync keyring, Build env logins, Proxy plaintext | One reference syntax, no plaintext, one redactor |
-| 03 | [Windows service / hosting](03-windows-service-hosting.md) | Proxy `ServiceInstaller`, Sync service + certificates | Least-privilege install, ACLs, certs, child hosting |
-| 04 | [ODBC and metadata](04-odbc-metadata.md) | Proxy `DbDataKit.Odbc.Metadata` | Extract and harden; neutral catalog reader |
-| 05 | [SQL dialect and types](05-sql-dialect.md) | Sync dialects, Build `DialectProfile`, Proxy Arrow map | One quoting, lexer, canonical types, conformance suite |
-| 06 | [Connections / providers](06-connections.md) | Sync `IDriver`, Proxy `IDbProvider`, Build logins | One definition, composer, read-only recipes, failure model |
+| 00 | [Repo strategy](../releases.md) | Finished: now a product doc | Hub-and-spokes was superseded by the monorepo; `docs/releases.md` has the branch, CI and release rules |
+| 01 | [Config / definitions](../../DbDataKit/src/DbDataKit.Config/README.md) | Finished: now package docs | `DbDataKit.Config*`: strict reader, layering, schema versions |
+| 02 | [Secrets](../../DbDataKit/src/DbDataKit.Secrets.Store/README.md) | Finished: now package docs | `DbDataKit.Secrets*`: reference syntax, encrypted store, key backup, redactor, `secret` verbs |
+| 03 | [Windows service / hosting](../../DbDataKit/src/DbDataKit.Hosting/README.md) | Finished: now package docs | `DbDataKit.Hosting*`: service install, ACLs, certificates, systemd, child processes |
+| 04 | [ODBC and metadata](../../DbDataKit/src/DbDataKit.Metadata/README.md) | Finished: now package docs | `DbDataKit.Odbc.Metadata`, `DbDataKit.Metadata*`: one catalog reader interface |
+| 05 | [SQL dialect and types](../../DbDataKit/src/DbDataKit.Dialect/README.md) | Finished: now package docs | `DbDataKit.Dialect*`: data-driven dialects, lexer, canonical types, conformance |
+| 06 | [Connections / providers](../../DbDataKit/src/DbDataKit.Connections/README.md) | Finished: now package docs | `DbDataKit.Connections*`: `connection/1`, composers, read-only recipes, failure model |
 | 07 | [Data transfer, staging, loading](07-data-transfer.md) | Sync pipeline, Build copy models | Shared converters, bulk writers, strategies, write gate |
-| 07a | [Sync vs Build strategy semantics](07a-strategy-comparison.md) | The code of both products | Written from the code (read-only): what each strategy means in Sync and in Build |
+| 07a | [Sync vs Build strategy semantics](../../DbDataKit/src/DbDataKit.Transfer/README.md) | Finished: now a section of the Transfer README | "Strategy semantics in Sync and in Build" |
 | 08 | [Install and update](08-update-system.md) | Sync Updates, Proxy install.ps1, Build Scoop | Signed manifest, service swap with rollback |
 | 09 | [Branches, CI and releases](../releases.md) | Finished: now a product doc | `docs/releases.md`: main only, change-based CI, a release is a tag, the suite release flow |
-| 10 | [Proxy adoption](10-proxy-adoption.md) | Plans 01-07 applied to DbDataProxy | Hub CI and publishing, feed and override, per-library adoption order (update system skipped) |
+| 10 | [Proxy adoption](../../DbDataProxy/README.md) | Finished: now the Proxy's own docs | The Proxy uses the shared libraries |
 | 11 | [CI and testing](11-ci-and-testing.md) | Owner's decisions on CI and testing | In progress: the engine catalogue (`testenv/`, N-1 profiles, mapping files) and the per-product CI are built; remaining are CI01 to CI06: a nightly for the products other than Build, a Windows nightly with SQL Server Express, skipped-test summaries and minimum test counts, engine jobs that fail instead of skip, the test-kind vocabulary, and the full matrix inside every release |
 | 12 | [Shared TLS rollout](12-shared-tls-rollout.md) | Sync and Proxy certificates, services, systemd | One certificate, service and unit implementation |
 | 13 | [Suite standardization](../architecture.md) | Finished: now a product doc | `docs/architecture.md`: the suite's shape, the clean-break rule, decisions D1 to D20; the workstreams' conventions are in the READMEs of the packages that own them |
@@ -26,7 +26,7 @@ criteria, risks and acceptance. Plans are proposals; review the "decisions" in e
 | 13b | [Owner review items](13b-owner-review.md) | Owner, 2026-10-28 | Closed: every item decided and built |
 | 13c | [Follow-ups](13c-follow-ups.md) | Work of 2026-10-28 to 2026-10-30 | Open items no plan row owns |
 | 14 | [Semantic layer](14-semantic-layer.md) | The built part is in `docs/semantic/architecture.md` | In progress, what is left: the console's semantic module, semantic state in the Proxy, the products reading the engine registry, MDX and XMLA for Excel PivotTables, and more protocols (Postgres wire first, Quack deferred). Slices are plan 19's J rows |
-| 14 | [Roslyn scripting with NuGet libraries](14-roslyn-nuget-scripting-spike.md) | Spike | Adopted: Roslyn scripting plus NuGet libraries, embedded |
+| 14 | [Roslyn scripting with NuGet libraries](../../DbDataSync/docs/drivers-and-libraries.md) | Finished: now Sync's docs | In-process NuGet resolution, embedded; the spike is deleted |
 | 15 | [DbDataStore: master data and documents](15-master-data-and-documents.md) | The built part is in `DbDataStore/README.md` | In progress, what is left: other engines (SQLite, MariaDB, MySQL, Oracle), the document store and WebDAV, extraction on save, change events and consumers, promotion of ad hoc tables, native temporal tables, and the approval model, kept open |
 | 16 | [Embedded agents and apps](16-embedded-agents-and-custom-front-ends.md) | Owner's backlog, plans 13 to 15 | Backlog (not scheduled): agents in the console on OpenAI, Anthropic and Microsoft Foundry, every action approved by the user; a standalone app host with DbDataStore data, Vega-Lite dashboards, reports and assistants; Windows, OpenID Connect and Entra sign-in. Sign-in decided by the owner on 2026-11-02 (section 2, "Sign-in decisions"), sliced as 13a U19 to U22, P13, X06, plan 20 O15 to O17 and plan 26 AP17, AP18 |
 | 17 | [Report servers on the semantic models](17-report-servers-on-semantic-models.md) | Plans 14 and 16, Power BI Report Server's supported sources | Documented scenarios (not in 13a), decided per route later: published views, result feeds for many tools, ODBC, Postgres wire with a compatibility layer kept apart from semantic SQL, MDX only via the Excel work |

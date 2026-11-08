@@ -15,3 +15,4 @@ Decisions
 - ACLs: one implementation, `DbDataKit.Security.Acl` (shared with `DbDataKit.Secrets.Windows`). This package only owns the layout data and the mapping to `AclSpecification`; the doctor and CLI take a single `IAclService`.
 - The virtual-account SID only resolves after the service exists: create the service first, then apply ACLs (the CLI does).
 - Real-SCM mutating test runs only with `DBDATA_ADMIN_TESTS=1` in an elevated prompt.
+- Limits of the default identity: a virtual account cannot reach network shares or domain resources (use a gMSA for those, for example SQL Server integrated authentication), and user ODBC data sources are invisible to a service identity (use system DSNs; test a 32-bit worker under the service account).

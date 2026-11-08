@@ -31,3 +31,5 @@ The file's owner is asked of the system's `stat` and `id` (.NET has no call for 
 
 Back up the key (the file in `keys/`, or the platform's key) **separately** from `secrets.yaml`: either one alone is useless. A DPAPI key file cannot be copied to another machine; moving a
 server goes through `secret export` and `secret import`.
+
+Machine-scope DPAPI is not a boundary between processes on one host: any process of the machine that has the entropy can decrypt, so the access list on `<data>/secrets` is the control.
