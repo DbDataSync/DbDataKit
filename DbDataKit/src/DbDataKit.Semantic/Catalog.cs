@@ -273,6 +273,24 @@ public sealed class Catalog
 
     public string Name => Source["name"]!.GetValue<string>();
 
+    /// <summary>
+    /// The format of the semantic package this catalog needs (plan 24a UC03): 2 when it carries a <c>cache</c> or <c>checks</c> section, otherwise 1, so a catalog that uses nothing of format 2 is still published in
+    /// format 1 and an instance that reads only format 1 keeps serving it. A published <c>semantic-model</c> definition records this number as its format (24a UC01).
+    /// </summary>
+    public int Format => Source["cache"] is not null || Source["checks"] is not null ? 2 : 1;
+
+    /// <summary>The <c>cache</c> section (format 2), or null when the catalog has none: the cache is off. Values were checked at load.</summary>
+    public DbDataKit.Config.Yaml.CacheSection? Cache => Source["cache"] is JsonObject cache ? CacheOf(cache) : null;
+
+    private static DbDataKit.Config.Yaml.CacheSection CacheOf(JsonObject cache)
+    {
+        var ttl = DbDataKit.Config.Yaml.CacheSection.DefaultTtl;
+        if (cache["ttl"]?.GetValue<string>() is { } text) DbDataKit.Config.Yaml.CacheSection.TryParseTtl(text, out ttl, out _);
+        var scope = DbDataKit.Config.Yaml.CacheScope.Caller;
+        if (cache["scope"]?.GetValue<string>() is { } named) DbDataKit.Config.Yaml.CacheSection.TryParseScope(named, out scope);
+        return new DbDataKit.Config.Yaml.CacheSection(cache["enabled"]?.GetValue<bool>() ?? false, ttl, scope, cache["dataset"]?.GetValue<string>());
+    }
+
     /// <summary>Loads and validates a catalog; throws <see cref="CatalogException"/> with the validation codes if it is invalid.</summary>
     public static Catalog Load(string path) => CatalogLoader.Load(path);
 

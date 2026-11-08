@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using DbDataKit.Secrets;
 using DbDataKit.Semantic;
 using DbDataKit.Serving.Semantic;
+using DbDataKit.State;
 using DbDataKit.Web.Trust;
 using DbDataProxy.Server.Auth;
 using DbDataProxy.Server.Configuration;
@@ -133,7 +134,14 @@ public sealed class ProxySemanticModels(
             if (problem is not null) return Refused(caller, name, problem);
 
             var was = store.Current(name);
-            var version = store.Publish(name, text, Client(caller), Who(caller), new(sources), new(ssas), _clock.GetUtcNow());
+            PublishedVersion version;
+            try { version = store.Publish(name, text, Client(caller), Who(caller), new(sources), new(ssas), _clock.GetUtcNow(), parsed.Format); }
+            catch (PublishRefusedException groupRefused)
+            {
+                // the group cannot take this format (24a UC01): a live instance of it does not read it; the message names the instance
+                Record(caller, "semantic-model publish", name, "refused");
+                return new ManagementResult(409, new JsonObject { ["error"] = groupRefused.Message, ["valid"] = true });
+            }
             // the same catalog and mapping as the version served is no new version (the store's rule, so a retried publish is safe)
             var unchanged = was == version.Number;
             // served here at once; the other instances of the group serve it when they next look

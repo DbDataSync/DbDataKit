@@ -17,6 +17,9 @@ public sealed class PublishedDataSources(DefinitionStore store, StateDatabase st
 
     public string Kind => DefinitionKind;
 
+    /// <summary>Format 1 and format 2 of <c>connection</c> (the sections <c>cache</c> and <c>checks</c>, plan 24a UC03).</summary>
+    public DefinitionFormats Formats => DefinitionFormats.Of(DbDataKit.Connections.ConnectionDefinition.CurrentVersion);
+
     /// <summary>Whether this instance is one of a group (a SQL Server or PostgreSQL state); one alone keeps every data source in its configuration.</summary>
     public bool Enabled => ProxyState.IsGroup(state);
 
@@ -33,7 +36,8 @@ public sealed class PublishedDataSources(DefinitionStore store, StateDatabase st
     /// <summary>Makes <paramref name="text"/> the file the group serves under the name, and serves it here at once; the other instances serve it when they next look.</summary>
     public void Publish(string name, string text, string by)
     {
-        store.Publish(DefinitionKind, name, text, by);
+        // the format is the file's own (`schema: connection/<n>`): 2 when it has a cache or checks section (24a UC03), and a publish is refused while a live instance of the group cannot read it
+        store.Publish(DefinitionKind, name, text, by, format: DbDataKit.Connections.ConnectionDefinitionLoader.FormatOfText(text));
         ServeNow(name);
     }
 

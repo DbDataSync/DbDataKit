@@ -205,6 +205,25 @@ public sealed class DefinitionFormatTests : IDisposable
         Assert.Equal(2, publisher.Activate("integration", "etl", "ada").Format);
     }
 
+    [Theory]
+    [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
+    public void The_store_the_serving_layer_publishes_through_takes_a_format_and_is_refused_by_the_same_rule(string engine)
+    {
+        var (_, database, instances) = Open(engine);
+        var store = new DefinitionStore(database);
+        instances.Instances.Add(Instance("old", "data-source=1-1"));
+
+        var refused = Assert.Throws<PublishRefusedException>(() => store.Publish("data-source", "warehouse", "schema: connection/2", "ada", format: 2));
+        Assert.Equal(PublishRefusal.InstanceFormat, refused.Reason);
+        Assert.Contains("instance old", refused.Message);
+        Assert.Null(store.Current("data-source", "warehouse"));
+
+        instances.Instances.Clear();
+        instances.Instances.Add(Instance("new", "data-source=1-2"));
+        Assert.Equal(2, store.Publish("data-source", "warehouse", "schema: connection/2", "ada", format: 2).Format);
+        Assert.Equal(1, store.Publish("data-source", "other", "schema: connection/1", "ada").Format);
+    }
+
     // ---- reads
 
     private sealed class Subscriber(string kind, DefinitionFormats reads) : IDefinitionSubscriber

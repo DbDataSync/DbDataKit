@@ -469,3 +469,7 @@ import infers one and says what it left out. It is lossy by nature, and what it 
 - Everything else is returned in `Notes` and not imported: metrics that are a `CASE`, a ratio or span datasets, and model-level metrics.
 
 Nothing the import infers has been checked against the data. Hierarchies, calendars, segments, synonyms and member lists are for the catalog's owner to add.
+
+## Format 2 of the semantic package: `cache` and `checks` (plan 24a UC03)
+
+A catalog may carry two optional top-level sections. `cache:` turns on the serving layer's result cache for the model: `enabled` (off unless `true`), `ttl` (a whole number and `s`, `m` or `h`, at most `24h`; default `5m`), `scope` (`caller`, `rules` or `shared`; default `caller`) and `dataset` (a table of the catalog; the whole model when absent). `checks:` is the place of the model's data checks, a list of objects whose keys plan 23's check model will give (23a FQ01); until then they are not read. A catalog that has neither section is **format 1** and is published exactly as before; one that has either is **format 2**, and the published `semantic-model` definition records that number (`Catalog.Format`), so a group whose live instances read only format 1 refuses it naming the instance, and an instance that reads only format 1 never serves it without the section. The cache service itself is a later slice (UC12). The schema (`catalog.schema.json`) and the loader agree on the keys; a bad value is refused naming the file and line.

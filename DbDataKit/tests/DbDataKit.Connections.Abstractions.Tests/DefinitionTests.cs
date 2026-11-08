@@ -59,7 +59,7 @@ public class DefinitionTests
 
     [Theory]
     [InlineData("name: a\nengine: duckdb\naddress: { database: x }\n", "missing")]
-    [InlineData("schema: connection/2\nname: a\nengine: duckdb\naddress: { database: x }\n", "connection/2")]
+    [InlineData("schema: connection/0\nname: a\nengine: duckdb\naddress: { database: x }\n", "connection/0")]
     [InlineData("schema: other/1\nname: a\nengine: duckdb\naddress: { database: x }\n", "other/1")]
     public void Wrong_or_missing_schema_is_one_clear_error(string yaml, string _)
     {

@@ -1,3 +1,4 @@
+using DbDataKit.Config.Yaml;
 using DbDataKit.Dialect;
 
 namespace DbDataKit.DataModel;
@@ -53,10 +54,18 @@ public sealed record ModelEntity(
 /// <summary>How a model's instances are kept apart (plan 26 section 6.2): not at all (one copy), each in a schema of its own on the model's connection, or each on a connection of its own. <c>Column</c> shares one set of tables and splits the rows by an instance id column, stamped and filtered by the writer (Z12b).</summary>
 public enum InstanceMode { None, Schema, Connection, Column }
 
-/// <summary>A model: entities with attributes, keys, references and rules, stored on the named connection.</summary>
-public sealed record DataModel(string Name, string? Title, string Connection, ApprovalLevel Approval, IReadOnlyList<ModelEntity> Entities, InstanceMode Instances = InstanceMode.None, AgentWrites Agents = AgentWrites.Request)
+/// <summary>
+/// A model: entities with attributes, keys, references and rules, stored on the named connection. <c>SchemaVersion</c> is the format the file is written in (<c>schemaVersion</c>): 1, or 2 when it may carry the sections
+/// <c>cache</c> and <c>checks</c> (plan 24a D5 and UC03); the published definition's format is this number. <c>Cache</c> is the <c>cache:</c> section (format 2), null when the file has none: the cache is off.
+/// <c>Checks</c> is how many entries the <c>checks:</c> section (format 2) has, null when the file has none; plan 23's check model gives them their keys (23a FQ01).
+/// </summary>
+public sealed record DataModel(string Name, string? Title, string Connection, ApprovalLevel Approval, IReadOnlyList<ModelEntity> Entities, InstanceMode Instances = InstanceMode.None, AgentWrites Agents = AgentWrites.Request,
+    int SchemaVersion = 1, CacheSection? Cache = null, int? Checks = null)
 {
-    public const string FormatId = "model/1";
+    /// <summary>The format id of the current version of the file; a file of the version before (<see cref="PreviousFormatId"/>) is read as well.</summary>
+    public const string FormatId = "model/2";
+
+    public const string PreviousFormatId = "model/1";
 
     public ModelEntity? Entity(string name) => Entities.FirstOrDefault(e => e.Name == name);
 

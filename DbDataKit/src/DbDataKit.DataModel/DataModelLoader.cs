@@ -22,7 +22,11 @@ public static class DataModelLoader
     public const string BadRule = "DBD-MDL-005";
     public const string BadConstraint = "DBD-MDL-006";
 
-    public const int Version = 1;
+    /// <summary>The newest format this reads (<c>model/2</c>: the sections <c>cache</c> and <c>checks</c>, plan 24a UC03); format 1 is read as well.</summary>
+    public const int Version = 2;
+
+    public const string CacheNotInThisFormat = "DBD-MDL-007";
+    public const string CannotBeCached = "DBD-MDL-008";
 
     public static DataModelLoadResult Load(string yaml, string file = "model.yaml")
     {
@@ -40,7 +44,8 @@ public static class DataModelLoader
 
     private sealed class Reader(string file, List<ConfigDiagnostic> diags) : YamlFieldReader(file, diags)
     {
-        private static readonly string[] RootKeys = ["schemaVersion", "name", "title", "storage", "approval", "entities"];
+        private static readonly string[] RootKeysV2 = ["schemaVersion", "name", "title", "storage", "approval", "entities", "cache", "checks"];
+        private int _schemaVersion = 1;
         private static readonly string[] EntityKeys = ["title", "key", "attributes", "history", "role", "rules"];
         private static readonly string[] AttributeKeys = ["title", "type", "required", "unique", "default", "pattern", "min", "max", "allowed", "references"];
         private static readonly string[] RuleKeys = ["kind", "attribute", "group_by", "value", "tolerance"];
@@ -50,8 +55,13 @@ public static class DataModelLoader
 
         public DataModel? Read(YamlMapping map)
         {
-            CheckKeys(map, RootKeys, "the model");
-            if (!Version(map)) return null;
+            // the version is read first: it decides which keys exist. The keys are checked whatever it says, as they were before format 2
+            var versionOk = Version(map);
+            CheckKeys(map, RootKeysV2, "the model");
+            if (!versionOk) return null;
+            // the sections of format 2 are refused in a format-1 file with the file, the line and what to change
+            foreach (var entry in map.Entries.Where(e => _schemaVersion < 2 && e.Key.Value is "cache" or "checks"))
+                Add(CacheNotInThisFormat, entry.Key, $"`{entry.Key.Value}` is a section of format 2 (model/2), and this file says `schemaVersion: {_schemaVersion}`.", "Set `schemaVersion: 2`. A program that reads only model/1 then refuses the file by its version, which keeps it from serving the model without the section.");
 
             var name = Name(map, "name", "the model");
             var title = map.Get("title") is YamlScalar t ? t.Value : null;
@@ -71,8 +81,26 @@ public static class DataModelLoader
                 }
 
             CheckReferences(entities);
+            var cache = map.Get("cache") is { } cacheNode && _schemaVersion >= 2 ? CacheSection.Read(cacheNode, File, Diagnostics) : null;
+            if (cache is { Enabled: true } enabled) CheckCacheable(map.Get("cache")!, enabled, entities);
+            int? checks = map.Get("checks") is { } checksNode && _schemaVersion >= 2 ? ChecksPlace.Read(checksNode, File, Diagnostics) : null;
             if (name is null || connection is null) return null;
-            return new DataModel(name, title, connection, approval, entities, instances, AgentWritesOf(map));
+            return new DataModel(name, title, connection, approval, entities, instances, AgentWritesOf(map), _schemaVersion, cache, checks);
+        }
+
+        /// <summary>A dataset that cannot be cached is refused when the cache is turned on for it (24a UC03): an entity that keeps effective-dated history is read while writes of future and past versions are in flight, so a cached read could answer for a state that no longer holds.</summary>
+        private void CheckCacheable(YamlNode at, CacheSection cache, List<ModelEntity> entities)
+        {
+            if (cache.Dataset is { } dataset && entities.All(e => e.Name != dataset))
+            {
+                var section = (at as YamlMapping)?.Get("dataset") ?? at;
+                Add(SharedCodes.InvalidValue, section, $"`cache.dataset` names `{dataset}`, which is not an entity of this model.", $"Entities: {string.Join(", ", entities.Select(e => e.Name))}.", "cache.dataset");
+                return;
+            }
+
+            foreach (var entity in entities.Where(e => e.History == HistoryMode.EffectiveDated && (cache.Dataset is null || cache.Dataset == e.Name)))
+                Add(CannotBeCached, (at as YamlMapping)?.Get("enabled") ?? at, $"The cache cannot be turned on for the entity `{entity.Name}`: it keeps effective-dated history, so a read meets writes of other dates in flight and a cached answer could be for a state that no longer holds.",
+                    "Cache another entity (`cache.dataset`), or leave the cache off for this model.", "cache.enabled");
         }
 
         private bool Version(YamlMapping map)
@@ -83,6 +111,7 @@ public static class DataModelLoader
             { Add(SharedCodes.SchemaVersionInvalid, node, "`schemaVersion` must be a positive whole number."); return false; }
             if (version > DataModelLoader.Version)
             { Add(SharedCodes.SchemaVersionNewer, node, $"`schemaVersion` is {version}, but this tool understands up to {DataModelLoader.Version}.", "Upgrade the tool; this file was written by a newer version."); return false; }
+            _schemaVersion = version;
             return true;
         }
 

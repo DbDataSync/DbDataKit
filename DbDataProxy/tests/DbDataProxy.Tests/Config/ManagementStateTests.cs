@@ -58,7 +58,8 @@ public sealed partial class ManagementTests
             // 24a UC01: and the formats of each kind of published definition it reads
             var formats = instance["definition_formats"]!.AsObject();
             Assert.Equal(["data-source", "entity-model", "semantic-model"], formats.Select(f => f.Key).Order(StringComparer.Ordinal));
-            Assert.All(formats, f => Assert.Equal(1, (int)f.Value!["current"]!));
+            // format 2 (24a UC03: the cache and checks sections) is current for all three, and the one before it is still read
+            Assert.All(formats, f => Assert.Equal((1, 2), ((int)f.Value!["previous"]!, (int)f.Value["current"]!)));
 
             // two instances at different versions are listed with their versions: another instance, one version behind, registers its row
             var stateDatabase = app.Services.GetRequiredService<StateDatabase>();
