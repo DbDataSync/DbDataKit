@@ -6,14 +6,14 @@ namespace DbDataBuild.Tests.Conformance;
 /// <summary>
 /// VALUES lists through the tool's own pipeline (lowering from DuckDB's EXPRESSION_GET, the target rule values-chunks, transpile) on both engines against DuckDB: the rows, the column names and the column types
 /// (SQL Server's `sys.dm_exec_describe_first_result_set`, PostgreSQL's `pg_typeof` and `scale`), over NULLs, mixed integer and decimal cells, text with quotes and non-BMP characters, dates, timestamps, booleans,
-/// expressions in cells, one row, 1000 / 1001 / many rows, and a list as a join side, in a CTE, in a subquery and in IN (OPEN-ITEMS W-3, entry 178).
+/// expressions in cells, one row, 1000 / 1001 / many rows, and a list as a join side, in a CTE, in a subquery and in IN (OPEN-ITEMS W-3).
 /// </summary>
 public class ValuesListConformance
 {
     private static string Rows(int count) =>
         string.Join(", ", Enumerable.Range(1, count).Select(i => $"({i}, 's{i}', {(i % 7 == 0 ? "NULL" : $"{i}.25")}, {(i % 3 == 0 ? "NULL" : $"DATE '2024-01-{1 + i % 28:00}'")})"));
 
-    /// <summary>Rows with a date plus an interval of months, a date plus a number of days, and a timestamp plus an interval of hours (OPEN-ITEMS W-10(b), entry 180).</summary>
+    /// <summary>Rows with a date plus an interval of months, a date plus a number of days, and a timestamp plus an interval of hours (OPEN-ITEMS W-10(b)): interval cells in a VALUES list give the rows DuckDB gives.</summary>
     internal static string IntervalRows(int count) =>
         string.Join(", ", Enumerable.Range(1, count).Select(i => $"(DATE '2024-01-31' + INTERVAL {i % 5 + 1} MONTH, {i}, DATE '2024-03-01' + {i % 9}, TIMESTAMP '2024-01-31 10:00:00' + INTERVAL '{i % 3} hours')"));
 

@@ -65,9 +65,9 @@ An overload is one signature of `duckdb_functions()`; most functions have many (
 5. **FLOAT**: DuckDB's 32-bit FLOAT is written as 64-bit `FLOAT`/`DOUBLE PRECISION`. Either map to `REAL` (SQL Server) and `real` (PostgreSQL), or refuse FLOAT and tell the author to use DOUBLE. Recommended: map (both engines have a 32-bit type and the arithmetic then matches).
 6. **`strftime`/`date_part`/`date_trunc` parts** need a table of the parts and formats that translate, and DDB-324 for the rest: today they pass through and give other values. A rule table would be data (`matrix`-style).
 
-### 8. After the rewrites (entry 177)
+### 8. After the rewrites
 
-The matrix was rerun after the work of entry 177 (items 1 to 7 of the owner's list). Counts are those of the tables above, before and after; a function that is now refused with a message at compile (DDB-301 or DDB-324) counts as **refused**, which is the intended outcome for what has no exact translation.
+The matrix was rerun after the function-rule work (items 1 to 7 of the owner's list). Counts are those of the tables above, before and after; a function that is now refused with a message at compile (DDB-301 or DDB-324) counts as **refused**, which is the intended outcome for what has no exact translation.
 
 **Functions by worst outcome of any overload**
 

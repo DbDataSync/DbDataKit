@@ -1,6 +1,6 @@
 # Working on the dbdatabuild code base
 
-dbdatabuild is a .NET 10 CLI that builds analytics tables and views on SQL Server, PostgreSQL and Fabric from DuckDB-dialect SQL. `DESIGN.md` is the design (sections marked "as built" describe what exists); `docs/progress/` is the log (`state-and-apply.md` entries, `REVIEW.md` for the owner, `OPEN-ITEMS.md` for what is unfinished). Read the section of DESIGN.md for the area you touch before changing it. If you are writing models or plans *with* the tool rather than changing the tool, you want the skill instead: `dbdatabuild project agent-kit`.
+dbdatabuild is a .NET 10 CLI that builds analytics tables and views on SQL Server, PostgreSQL and Fabric from DuckDB-dialect SQL. `DESIGN.md` is the design (sections marked "as built" describe what exists); `docs/progress/` holds `REVIEW.md` for the owner and `OPEN-ITEMS.md` for what is unfinished (the history of changes is git's). Read the section of DESIGN.md for the area you touch before changing it. If you are writing models or plans *with* the tool rather than changing the tool, you want the skill instead: `dbdatabuild project agent-kit`.
 
 ## Build and test
 
@@ -34,6 +34,6 @@ scripts/test-windows-wine.sh                  # the unit tests with Windows sema
 
 - Match the surrounding code: comments explain why, not what; names are long and plain. Records for data, static classes for pure logic, no hidden state.
 - Prefer a table or a data file over a switch when the rules will grow (the decision table, the matrix, the hook events).
-- When behavior changes, update in the same commit: the test, `DESIGN.md` ("as built" section), a numbered entry in `docs/progress/state-and-apply.md`, and `OPEN-ITEMS.md` if something is left undone. Say plainly what was verified on a real engine and what was not; Fabric has never been run.
+- When behavior changes, update in the same commit: the test, `DESIGN.md` ("as built" section), and `OPEN-ITEMS.md` if something is left undone. Say plainly what was verified on a real engine and what was not; Fabric has never been run.
 - A rendered file must not change when only the tool does: no version, timestamp or machine name goes into anything under `rendered/` (the version is in plans, JSON documents and the tracking tables). A release bumps `<Version>` in `Directory.Build.props`; `scripts/publish.sh` stamps the executable.
 - `native/` (the polyglot library) is not committed: `scripts/fetch-native.sh` downloads the published release pinned in `scripts/polyglot.pin`, checked against hashes in that file. Changing the release: `docs/native-library.md`.

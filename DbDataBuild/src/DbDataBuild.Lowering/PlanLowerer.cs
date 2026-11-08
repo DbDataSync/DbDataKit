@@ -1047,7 +1047,7 @@ public sealed class PlanLowerer
     /// </summary>
     private Rel ValuesList(JsonElement p)
     {
-        // a lateral list: the child is DuckDB's DELIM_GET, the outer values the cells read (entry 180). Its columns come first in the cells' references; the list's last columns carry them back for the join.
+        // a lateral list: the child is DuckDB's DELIM_GET, the outer values the cells read. Its columns come first in the cells' references; the list's last columns carry them back for the join.
         var children = Arr(p, "children").Where(k => Str(k, "type") != "LOGICAL_DUMMY_SCAN").ToList();     // (a list of constants has DuckDB's dummy scan under it)
         if (children.Any(k => Str(k, "type") != "LOGICAL_DELIM_GET") || children.Count > 1) throw new LoweringException("a VALUES list with a subquery in a cell, or a lateral list with another operator under it (only a list that reads the outer query's columns is lowered)");
         var delim = children.Count == 1 ? Node(children[0]) : null;

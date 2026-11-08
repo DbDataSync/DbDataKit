@@ -44,7 +44,7 @@ public static class TargetSnapshotReader
         var recorded = await TrackingStore.LatestShapeHashesAsync(trackingRead, scope, ct);
 
         // the newest ok row of each object (and of each model): one pass with a window function. The log tables only grow, and a correlated MAX for each row (what this was) read the whole table once per row,
-        // which stopped `plan` with a timeout after a couple of hundred thousand rows (entry 116)
+        // which stopped `plan` with a timeout after a couple of hundred thousand rows
         var ddl = await trackingRead.QueryAsync(
             $"SELECT x.{C("object_name")}, x.{C("statement_hash")} FROM (SELECT d.{C("object_name")}, d.{C("statement_hash")}, ROW_NUMBER() OVER (PARTITION BY d.{C("object_name")} ORDER BY d.{C("executed_utc")} DESC) AS newest " +
             $"FROM {t("ddl_log")} d WHERE d.{C("connection")} = @connection AND d.{C("status")} = 'ok') x WHERE x.newest = 1", byConnection, ct);

@@ -789,7 +789,7 @@ public static partial class TargetRules
 
     /// <summary>
     /// The transpile of the rules' output. polyglot rewrites a function, an operator or an interval for the engine wherever an expression stands except in the cells of a VALUES list that is a table in FROM,
-    /// where it only changes the types (measured on the pinned polyglot, entry 180: `d + INTERVAL 1 MONTH` stays an interval, `ceil`, `ln`, `starts_with`, `||`, `date_diff('day', ...)`, `current_date`
+    /// where it only changes the types (measured on the pinned polyglot: `d + INTERVAL 1 MONTH` stays an interval, `ceil`, `ln`, `starts_with`, `||`, `date_diff('day', ...)`, `current_date`
     /// and `regexp_matches` reach SQL Server or PostgreSQL as DuckDB wrote them). A cell that is more than a constant is therefore replaced by a placeholder, the cells are transpiled together as the select
     /// list of one query (which is where polyglot does its work), and their text goes back where the placeholders are. Everything else is the transpile as it was: a query with no such cell is passed through unchanged.
     /// </summary>

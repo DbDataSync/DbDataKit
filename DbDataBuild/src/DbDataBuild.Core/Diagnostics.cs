@@ -209,11 +209,11 @@ public static class DiagnosticCatalog
         "a load of the model (or `default` when the model declares none) and, under `inputs:`, the names and values the load takes",
         "Use a load name from the model's `loads:`, an input the load takes (`start` and `end` of a range load, `watermark` of a watermark load, or a parameter the load's query uses) and a value of that input's type.",
         "A membership says which load runs in a plan and may give values for its inputs for that plan. A load the model does not declare, an input the load does not take, or a value that does not fit the input's type would fail only when the plan ran; the project refuses it when it is compiled.");
-    /// <summary>Retired (entry 169): never raised. The old form of `kind` is read no more and is an error under <see cref="KindShapeInvalid"/>; the code stays in the catalog so it is never reused.</summary>
+    /// <summary>Retired: never raised. The old form of `kind` is read no more and is an error under <see cref="KindShapeInvalid"/>; the code stays in the catalog so it is never reused.</summary>
     public static readonly DiagnosticDescriptor KindWrittenOldWay = W("247", "Retired: a model kind written in the old form",
         "(retired) `kind` keyed by the kind's name: `kind: {copy: {from: pos.orders}}`, or `kind: view` for a kind with no settings",
         "Nothing raises this code any more. The old form `kind: {type: copy, from: pos.orders}` is an error, DDB-248, that says what to write.",
-        "While the old form still loaded, this warning named the files that wrote it and `project model update` rewrote them. The form was removed in entry 169 (nothing had been released with only the new one), so there is no warning and no rewrite: the old form is DDB-248. The code is kept so that it is never given another meaning.");
+        "While the old form still loaded, this warning named the files that wrote it and `project model update` rewrote them. The form was removed (nothing had been released with only the new one), so there is no warning and no rewrite: the old form is DDB-248. The code is kept so that it is never given another meaning.");
     public static readonly DiagnosticDescriptor KindShapeInvalid = E("248", "A model kind is not written as one kind",
         "`kind` is the name of one kind (`kind: full`), or a mapping with exactly one key, the kind's name, whose value is a mapping of that kind's settings (`kind: {incremental_by_unique_key: {unique_key: [order_id]}}`)",
         "Name one kind: view, full, incremental_by_unique_key, incremental_by_time_range, copy, mapped or native, and put its settings beneath its name.",

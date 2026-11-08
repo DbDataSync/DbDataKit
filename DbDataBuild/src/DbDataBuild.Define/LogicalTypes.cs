@@ -26,7 +26,7 @@ public static partial class LogicalTypes
         ["DATE"] = ProposalCertainty.High,
         ["TIMESTAMP"] = ProposalCertainty.High,
         ["TIME"] = ProposalCertainty.High,
-        // lossy for at least one target: T-SQL TINYINT is unsigned, unsigned integers do not exist, and so on (FLOAT is exact: REAL, 32 bits, on every target; entry 179)
+        // lossy for at least one target: T-SQL TINYINT is unsigned, unsigned integers do not exist, and so on (FLOAT is exact: REAL, 32 bits, on every target)
         ["TINYINT"] = ProposalCertainty.Normal,
         ["FLOAT"] = ProposalCertainty.Normal,
         ["UTINYINT"] = ProposalCertainty.Normal,

@@ -78,7 +78,7 @@ The real-engine suite uses throwaway SQL Server and PostgreSQL containers (`test
 - `docs/keys.md`: surrogate keys: the 64-bit hash, `keys:` in a model, the generated function, history keys, the unknown member.
 - `docs/agents.md`: working with AI agents.
 - `docs/interfaces.md`: the terminal, web page, MCP server and MCP app; connecting a host.
-- `docs/progress/`: the build log (`state-and-apply.md`), the owner's review summary (`REVIEW.md`) and what is unfinished (`OPEN-ITEMS.md`).
+- `docs/progress/`: the owner's review summary (`REVIEW.md`) and what is unfinished (`OPEN-ITEMS.md`).
 - `docs/research/duckdb-plan-lowering/`: how queries are lowered, with the prototype code.
 - `CLAUDE.md`: for anyone (human or agent) changing the code.
 

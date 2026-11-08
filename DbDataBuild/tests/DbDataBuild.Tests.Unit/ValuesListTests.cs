@@ -9,7 +9,7 @@ using DuckDB.NET.Data;
 namespace DbDataBuild.Tests.Unit;
 
 /// <summary>
-/// VALUES lists (DuckDB's constant table, the plan node EXPRESSION_GET; OPEN-ITEMS W-3, entry 178), tested the way CLAUDE.md asks: the text the lowerer and the target step write (here), the lowered query run on
+/// VALUES lists (DuckDB's constant table, the plan node EXPRESSION_GET; OPEN-ITEMS W-3), tested the way CLAUDE.md asks: the text the lowerer and the target step write (here), the lowered query run on
 /// DuckDB against the original (the differential, here), and the engines' rows against DuckDB's (`ValuesListConformance`).
 /// </summary>
 public class ValuesListTests
@@ -343,7 +343,7 @@ public class ValuesListTests
         Assert.Equal(Run(c, source).Rows, Run(c, TargetRules.Apply(lowered, "sqlserver").Sql).Rows);
     }
 
-    // ---- lateral lists (entry 180) ---------------------------------------------------------------------------------------------------------------------------
+    // ---- lateral lists: a list that reads the columns of the outer query ---------------------------------------------------------------------------------------------------------------------------
 
     private static DuckDBConnection OpenWithEmptyTable()
     {
