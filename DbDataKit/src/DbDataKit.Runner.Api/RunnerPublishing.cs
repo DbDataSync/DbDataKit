@@ -401,7 +401,7 @@ public sealed partial class RunnerPublishing
 
     // ---- bindings
 
-    /// <summary>Fills slots for a channel (slot name to what it is bound to); the package must exist. Names, never values, are audited.</summary>
+    /// <summary>Fills slots for a channel (slot name to what it is bound to). The package need not exist yet: a version that declares a slot is refused in a channel where the slot is unbound (plan 30), so the slots of a package's first version are bound before it is published (plan 28c E07). Names, never values, are audited.</summary>
     public IReadOnlyList<DefinitionBinding> Bind(string name, string channel, IReadOnlyDictionary<string, string> slots, int? expectedRevision, RunnerActor actor)
     {
         var target = $"{name}/{channel}";
@@ -409,7 +409,6 @@ public sealed partial class RunnerPublishing
         {
             if (!PackageManifestValidator.NameRule.IsMatch(name)) throw new RunnerPublishException(400, $"'{name}' is not a package name.");
             if (!PackageManifestValidator.NameRule.IsMatch(channel)) throw new RunnerPublishException(400, $"'{channel}' is not a channel name.");
-            if (!Exists(name)) throw new RunnerPublishException(404, $"There is no {Kind} '{name}'; publish it before binding its slots.");
             if (slots.Count == 0) throw new RunnerPublishException(400, "The body names no slot: {\"slots\": {\"<slot>\": \"<what it is bound to>\"}}.");
             foreach (var (slot, to) in slots)
             {

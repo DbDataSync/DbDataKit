@@ -49,7 +49,7 @@ internal sealed class McpServer
         this.input = input;
         this.output = output;
         this.host = host;
-        surface = new ToolSurface(projectRoot, host.Commands.Where(c => c.Name is not ("ui terminal" or "ui mcp") && (allowWrites || c.Impact is Impact.None or Impact.RepoFiles || c.Name == DeployCommandName)), withholdWriteFlagsFor: allowWrites ? null : [DeployCommandName]);
+        surface = new ToolSurface(projectRoot, host.Commands.Where(c => c.Name is not ("ui terminal" or "ui mcp") && (allowWrites || ((c.Impact is Impact.None or Impact.RepoFiles) && c.Name != "project publish") || c.Name == DeployCommandName)), withholdWriteFlagsFor: allowWrites ? null : [DeployCommandName]);
     }
 
     public IReadOnlyCollection<string> ToolNames => tools.Keys.ToList();

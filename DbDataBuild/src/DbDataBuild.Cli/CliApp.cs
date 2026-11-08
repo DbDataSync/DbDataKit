@@ -136,6 +136,25 @@ public static class CliApp
                     cmd.Arguments.Add(fdPath); cmd.Options.Add(fdProject); cmd.Options.Add(fdHash);
                     cmd.SetAction(pr => Reported(pr, spec, (o, e) => ProjectFileCommand.Delete(spec, pr.GetValue(fdProject)!.FullName, pr.GetValue(fdPath)!, pr.GetValue(fdHash), o, e)));
                     break;
+                case "project publish":
+                    var ppProject = new Option<DirectoryInfo>("--project") { Description = "Project root", DefaultValueFactory = _ => new DirectoryInfo(".") };
+                    var ppTo = new Option<string>("--to") { Description = "Where to publish: `runner` (the only place; the default)", DefaultValueFactory = _ => "runner" };
+                    var ppServer = new Option<string?>("--server") { Description = "The runner: the name it was paired under or its https address" };
+                    var ppCode = new Option<string?>("--code") { Description = "The single-use pairing code (from `dbdatarunner server pair --max-role publisher`), when this machine is not paired with the runner yet" };
+                    var ppChannel = new Option<string?>("--channel") { Description = "The channel the version goes to" };
+                    var ppPackage = new Option<string?>("--package") { Description = "The package's name on the runner (default: the project folder's name)" };
+                    var ppServe = new Option<bool>("--serve") { Description = "Make the version active at once instead of staging it (staged is the default: runners prepare it, then it activates)" };
+                    var ppExpected = new Option<int?>("--expected-version") { Description = "The highest version the package has, as you saw it (0 for a first publish); a newer one is refused" };
+                    var ppBind = new Option<string[]>("--bind") { Description = "`slot=connection`: bind a connection slot of the package in the channel (the slots are the project's connection names; repeatable). A channel's bindings are its own", AllowMultipleArgumentsPerToken = false, DefaultValueFactory = _ => [] };
+                    var ppPromote = new Option<string?>("--promote-from") { Description = "Do not publish: promote the version this channel serves to --channel (the same version; the runner's `switch`, which needs an administrator pairing)" };
+                    var ppRange = new Option<string?>("--runtime-range") { Description = "The engine versions the package accepts, instead of this tool's minor line (`0.4.x`, `>=0.4 <1`)" };
+                    var ppClientDir = new Option<string?>("--client-dir") { Description = "Where this machine's pairings with runners are kept (default: DBDATARUNNER_CLIENT_DIR, else a folder under the user's local application data)" };
+                    var ppOut = new Option<string?>("--out") { Description = "Write the package (package.yaml and files/) to this directory and send nothing" };
+                    cmd.Options.Add(ppProject); cmd.Options.Add(ppTo); cmd.Options.Add(ppServer); cmd.Options.Add(ppCode); cmd.Options.Add(ppChannel); cmd.Options.Add(ppPackage); cmd.Options.Add(ppServe); cmd.Options.Add(ppExpected); cmd.Options.Add(ppBind); cmd.Options.Add(ppPromote); cmd.Options.Add(ppRange); cmd.Options.Add(ppClientDir); cmd.Options.Add(ppOut);
+                    cmd.SetAction(pr => Reported(pr, spec, (o, e) => Runner.ProjectPublishCommand.Run(spec, pr.GetValue(ppProject)!.FullName,
+                        new Runner.PublishOptions(pr.GetValue(ppTo)!, pr.GetValue(ppServer), pr.GetValue(ppCode), pr.GetValue(ppChannel), pr.GetValue(ppPackage), pr.GetValue(ppServe), pr.GetValue(ppExpected), pr.GetValue(ppBind) ?? [], pr.GetValue(ppPromote), pr.GetValue(ppRange), pr.GetValue(ppClientDir), pr.GetValue(ppOut)),
+                        o, e, environment ?? Environment.GetEnvironmentVariable)));
+                    break;
                 case "project agent-kit":
                     var kitProject = new Option<DirectoryInfo>("--project") { Description = "Project root", DefaultValueFactory = _ => new DirectoryInfo(".") };
                     var kitDir = new Option<string?>("--dir") { Description = "Where to install the kit, relative to the project (default: .claude/skills/dbdatabuild)" };

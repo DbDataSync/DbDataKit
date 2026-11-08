@@ -17,7 +17,7 @@ public static class RunnerHost
         using var sigterm = PosixSignalRegistration.Create(PosixSignal.SIGTERM, context => { context.Cancel = true; cancel.Cancel(); });
         try
         {
-            await RemoteJobHost.RunAsync<RefreshJob>(cancel.Token, new RemoteRunOptions { Client = "DbDataBuild" }).ConfigureAwait(false);
+            await RemoteJobHost.RunAsync<RefreshJob>(cancel.Token, new RemoteRunOptions { Client = "DbDataBuild", AnyTaskName = true }).ConfigureAwait(false);   // a published project has one task per refresh plan (E07), each named for its plan; every one runs this job
             return 0;
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or ArgumentException or Grpc.Core.RpcException or RunnerProtocolException)

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Runner.Client</RootNamespace>
+    <Description>The publishing client of a runner (plan 28a R16, moved here by plan 28c E07): pairing as a Publisher, the pinned certificate, upload of the files a runner does not have (by hash), publish or stage of a package version, and the bindings of a channel's connection slots. dbdatarunner package publish and dbdatabuild project publish are clients of it.</Description>
+    <IsPackable>true</IsPackable>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\DbDataKit.Runner.Abstractions\DbDataKit.Runner.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Web\DbDataKit.Web.csproj" />
+    <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
+    <ProjectReference Include="..\DbDataKit.Secrets\DbDataKit.Secrets.csproj" />
+    <ProjectReference Include="..\DbDataKit.Secrets.Store\DbDataKit.Secrets.Store.csproj" />
+    <ProjectReference Include="..\DbDataKit.Secrets.Windows\DbDataKit.Secrets.Windows.csproj" />
+  </ItemGroup>
+</Project>

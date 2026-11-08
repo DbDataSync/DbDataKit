@@ -250,14 +250,7 @@ internal static class RefreshCommand
         // ---- the files the loads run, against their hashes ----
         var scripts = new Dictionary<string, string>(StringComparer.Ordinal);
         var changed = new List<Diagnostic>();
-        string? ReadFile(string file, string hash, string what)
-        {
-            var path = Path.GetFullPath(Path.Combine(file.StartsWith("hooks/", StringComparison.Ordinal) || !file.Contains('/') ? root : Path.Combine(root, RenderCommand.RenderedDir), file));
-            if (!File.Exists(path)) { changed.Add(new Diagnostic(DiagnosticCatalog.RefreshFileChanged, new(file, 0, 0), $"The {what} `{file}`, which the compiled refresh files name, does not exist.")); return null; }
-            var text = File.ReadAllText(path);
-            if (Hashing.ScriptHash(text) != hash) { changed.Add(new Diagnostic(DiagnosticCatalog.RefreshFileChanged, new(file, 0, 0), $"The {what} `{file}` is not the one `{LoadsDocument.FileName}` was compiled from (its content has another hash).")); return null; }
-            return text;
-        }
+        string? ReadFile(string file, string hash, string what) => RefreshFiles.Read(root, file, hash, what, changed);
         foreach (var l in items.Select(i => i.Entry).Distinct())
         {
             if (ReadFile(l.File, l.FileHash, "load script") is { } script) scripts[l.File] = script;

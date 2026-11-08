@@ -113,8 +113,16 @@ public static class RunnerPublishApi
             }
 
             if (!Int(body.Json, "expected_revision", out var revision, out var problem)) return Error(400, problem!);
+            // the slots of a package's first version are bound before it exists (a version that declares an unbound slot is refused): the binder then owns the name, as its first publisher would
+            var exists = publishing.Exists(name);
             var owned = new ManagedObject(publishing.Owner(name));
-            if (Authorize(publishing, token, ObjectAction.Change, owned, RunnerPublishing.BindVerb, "package", $"{name}/{channel}") is { } denied) return denied;
+            if (Authorize(publishing, token, exists || owned.ManagedBy is not null ? ObjectAction.Change : ObjectAction.Create, owned, RunnerPublishing.BindVerb, "package", $"{name}/{channel}") is { } denied) return denied;
+            if (!exists && owned.ManagedBy is null && !IsAdmin(token) && !publishing.ClaimOwner(name, OwnerScope.Stamp(token)))
+            {
+                publishing.AuditRefused(RunnerPublishing.BindVerb, ActorOf(token), "package", $"{name}/{channel}", "the package belongs to another client");
+                return Error(403, $"The integration '{name}' belongs to another publisher.");
+            }
+
             try
             {
                 var bindings = publishing.Bind(name, channel, slots, revision, ActorOf(token));

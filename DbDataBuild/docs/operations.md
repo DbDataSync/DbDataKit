@@ -157,3 +157,22 @@ built_against: { dotnet: "10.0", kit: "1", protocol: dbdatakit.runner.v1 }
 - **Logins** are not in the package: Build keeps its read and write logins as before (plan 28c, QE6), and the task gets them as the runner is told to give them.
 
 Tests: `BuildRuntimePackageTests` (no database: the manifest the script prints is the one the runner reads, the size check, a definition run from read-only views with the engine unpacked once into the runtime's directory, three engines starting at once), and `A_refresh_plan_runs_as_a_runner_task...` (SQL Server and PostgreSQL, the same runner and the same two packages, the target's rows equal to those of the command). CI runs the first on Linux and Windows (`runtime package` job of `dbdatabuild-ci.yml`).
+
+## 10. Publishing a project to a runner
+
+`dbdatabuild project publish --to runner` sends the committed files of a project to a `dbdatarunner` as a definition package (plan 28c, E07). It compiles nothing: it reads `rendered/` as committed, so run `project compile` and commit first. The engine is not in the package; the package names the runtime package (section 9) by range, by default the minor line of this tool (`0.4.x`; `--runtime-range` says another).
+
+```
+dbdatabuild project publish --to runner --server <name or https address> --code <pairing code> --channel dev \
+    --bind warehouse=wh_dev          # first time: pairs, pins the runner's certificate, binds the channel's slots, publishes
+dbdatabuild project publish --to runner --server <name> --channel dev       # again: files the runner has are not sent
+dbdatabuild project publish --to runner --server <name> --channel prod --promote-from dev --bind warehouse=wh_prod
+dbdatabuild project publish --to runner --out ./package                     # write package.yaml and files/, send nothing
+```
+
+- **One task per refresh plan**, named `<connection>-<plan>` (lower case, `-` and `_`; two plans that come to one name are refused naming both). A plan's `schedule` and `time_zone` become the task's schedule (a plan with none is started by a person, `RunNow`, or a trigger). `Concurrency` is 1; the command's own lock and `on_busy` stay. Inputs `connection` and `plan` default to the plan's. The task's `timeout` is the sum of its loads' `max_runtime` (a load's own, else the plan's) plus the plan's `max_wait` and five minutes, only when every load has one; otherwise no timeout.
+- **One connection slot per connection the plan needs** (its own, and the origins of a copy), named for the connection, of the connection's engine, with `env: build-login`: the runner puts the bound connection's `DBDATA_BUILD_<CONNECTION>_READ` and `_WRITE` logins into the task's environment. Slot names are lower case, digits and `_`.
+- **Files**: `dbdatabuild.yml`, `dialects.lock.yml`, `connections/`, everything under `rendered/`, and the hook scripts `loads.yml` names. Text files are sent with LF line endings, so one commit is one package on every platform.
+- **Refused before anything is sent**: a plan whose `schedule` is not cron (DDB-106, naming the plan file and `schedule`), a script or resolver or hook that is missing or not the one `loads.yml` names by hash (DDB-448), a plan file that does not read or whose members `loads.yml` does not have, a loads file with no `project_hash`, a connection with no file in `connections/`, a manifest the runner's reader would not read back unchanged. The runner checks formats, hashes and the runtime range again when it stages the version.
+- **Bindings are the channel's own.** A version that declares a slot is refused in a channel where the slot is not bound, and that includes the first version of a package, so `--bind slot=connection` binds first (the runner lets a publisher bind a name that has no version yet, and that publisher then owns it). `--promote-from <channel>` publishes nothing: it points `--channel` at the version the other channel serves (the runner's `switch`, which needs an administrator pairing), after binding the new channel's slots.
+- **What it does not do**: it does not create the connections or their secrets on the runner (E19 sends a login; the connection files are the runner's catalog), does not activate by itself (a staged version activates when every runner of the group has it ready), does not run the plans' owner switch (E09), and has no release of several products (plan 21's releases).

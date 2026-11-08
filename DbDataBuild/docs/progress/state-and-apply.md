@@ -1545,3 +1545,9 @@ Operator decision: correlated subqueries are a hard requirement.
 - **Clean break**: nothing is converted; the target keeps its tables, and the copy starts from zero.
 - **Not done**: the follower on the runner (a `catch-up` task and a step after the runner's refresh need a progress store behind the runner protocol; they come with E19); a state primary and `mode: state` (refused with a message); the project-level `tracking:` keys `mode` and `primary`; the console's divergence screen (E18); the `runs` module reading Build's runs from the copy.
 - **Verified**: unit tests on SQLite; conformance tests on SQL Server 2025 and PostgreSQL 17 (see plan 28c E16). Fabric and Windows were not run.
+
+## 195. `project publish --to runner` (plan 28c E07)
+
+- **What changed**: a command that makes the committed files of a project a definition package on a runner: manifest generated from the compiled refresh plans (one task per plan; schedule and zone from `RefreshJobs.ScheduleOf`, which the server's scheduler uses too; slots with `env: build-login`; limits from `max_runtime`), files uploaded by hash through the shared client (moved from dbdatarunner into the library `DbDataKit.Runner.Client`, with `BindAsync` and `PromoteAsync` added), the checks of section 10 of `docs/operations.md` before anything is sent. `RefreshFiles` is the DDB-448 check `connection refresh` already made, shared.
+- **Shared libraries touched**: the runner lets a publisher bind a package that has no version yet (a first version that declares a slot could not be published at all); the kit's `RemoteRunOptions.AnyTaskName` lets one job serve the many tasks of a project (`RunnerHost` sets it).
+- **Not done**: see plan 28c E07.

@@ -16,7 +16,7 @@ of it too (plan 28 section 6a): keep the engine there and only the host here. Do
 | `RunnerPackages.cs` (the kind: `DbDataKit.Runner`; `RunnerPackageInstaller`: `DbDataKit.Runner.Api`) | the `integration` kind (its validator, slots from the manifest) and `package install`, the development path over `RunnerPublishing` |
 | `RunnerPublishing.cs` (in `DbDataKit.Runner.Api`) | the publish service layer (artifact upload, publish, activate, switch, rollback, retire, bind, reads, the projection rebuild, the audit); the API and `package install` both call it |
 | `RunnerPublishApi.cs` (in `DbDataKit.Runner.Api`: read and life-cycle calls take any caller, the upload, publish, bind and set calls are token-only) | the publish API (`/api/v1/artifacts`, `/definitions/integration`, `/bindings`, `/settings`) and who may call what |
-| `RunnerPublishClient.cs` | the client side: `package pair` and `package publish` (stored pairings, HEAD then upload, then publish) |
+| (moved to the shared library `DbDataKit.Runner.Client`, plan 28c E07) | the client side: `package pair` and `package publish` (stored pairings, HEAD then upload, then publish; `RunnerCli.cs` is a client of it) |
 | `RunnerContracts.cs` (in `DbDataKit.Runner`), `RunnerSignatures.cs` (in `DbDataKit.Runner.Api`) | the .NET, kit and protocol contracts and the newer `package/1` keys (`launch.runtime`, `runtime`) a publish and staging are checked against; the signature seam (`IVersionSignatureVerifier`, not built) |
 | `RunnerState.cs`, `RunnerSettings.cs` | the modules the state is built from and how it is opened; the directory, the listen address, the channels |
 | `RunnerTaskHost.cs` (in `DbDataKit.Runner`) | finds the task host beside the program |

@@ -358,9 +358,10 @@ public sealed class PublishApiTests
         using var publisher = await PublisherClient.PairAsync(h, "builder-a");
         var package = FakePackage.Make("orders");
         await package.UploadAllAsync(publisher);
-        // nothing to bind yet: a publisher owns nothing under that name (403), and for an administrator it is a 404
-        Assert.Equal(HttpStatusCode.Forbidden, (await publisher.JsonAsync(HttpMethod.Put, "/api/v1/bindings/dev/integration/orders", new { slots = new { source = "erp" } })).Status);
-        Assert.Equal(HttpStatusCode.NotFound, (await h.CallAsync(HttpMethod.Put, "/api/v1/bindings/dev/integration/orders", ServerRole.Admin, new { slots = new { source = "erp" } })).Status);
+        // the slots of a first version are bound before it exists (a version that declares an unbound slot is refused, plan 28c E07): the publisher who binds a new name owns it, and nobody else can bind it after that
+        Assert.Equal(HttpStatusCode.OK, (await publisher.JsonAsync(HttpMethod.Put, "/api/v1/bindings/dev/integration/orders", new { slots = new { source = "erp" } })).Status);
+        using var other = await PublisherClient.PairAsync(h, "builder-b");
+        Assert.Equal(HttpStatusCode.Forbidden, (await other.JsonAsync(HttpMethod.Put, "/api/v1/bindings/dev/integration/orders", new { slots = new { source = "erp2" } })).Status);
         await publisher.JsonAsync(HttpMethod.Put, "/api/v1/definitions/integration/orders", package.Body("dev", "stage"));
 
         var (status, body) = await publisher.JsonAsync(HttpMethod.Put, "/api/v1/bindings/dev/integration/orders", new { slots = new { source = "erp", target = "warehouse" } });
@@ -369,8 +370,10 @@ public sealed class PublishApiTests
         Assert.Equal(["source", "target"], body!["bindings"]!.AsArray().Select(b => Text(b, "slot")));
         var (_, detail) = await h.GetAsync("/api/v1/definitions/integration/orders");
         Assert.Contains(detail!["bindings"]!.AsArray(), b => Text(b, "slot") == "source" && Text(b, "bound_to") == "erp" && Text(b, "channel") == "dev");
-        var audit = Audited(h, RunnerPublishing.BindVerb, AuditEvent.Ok).Single();   // the admin's refused attempt is a refusal, not this
-        Assert.DoesNotContain("erp", audit.Entry.Detail);   // slot names are audited, not what they are bound to
+        var audited = Audited(h, RunnerPublishing.BindVerb, AuditEvent.Ok);   // the first bind (before the package existed) and this one; the other publisher's refused attempt is a refusal
+        Assert.Equal(2, audited.Count);
+        Assert.Single(Audited(h, RunnerPublishing.BindVerb, AuditEvent.Refused));
+        Assert.All(audited, audit => Assert.DoesNotContain("erp", audit.Entry.Detail));   // slot names are audited, not what they are bound to
     }
 
     [Fact]
