@@ -133,7 +133,7 @@ internal static class ApplyCommand
     /// <param name="Run">For a refresh: the plan it ran, the selection and the plan's members, which the event records.</param>
     /// <param name="Execution">For a refresh: its loads with the rules of each and how to make each ready (see <see cref="RefreshExecution"/>).</param>
     /// <param name="OnlyFailed">Whether the loads were chosen by `--only-failed` (the hints that follow say so).</param>
-    internal sealed record ApplyMode(bool Refresh = false, string? PlanHash = null, bool RecordShapes = true, bool Header = true, bool Summary = true, RefreshRunInfo? Run = null, RefreshExecution? Execution = null, bool OnlyFailed = false, IReadOnlyList<InputPin>? InputPins = null, Func<IReadOnlyList<MovedInput>, bool>? ApproveMoved = null, IReadOnlyList<string>? Origins = null, int Parallel = 1, SessionLimits? Limits = null, IReadOnlyList<string>? Warnings = null);
+    internal sealed record ApplyMode(bool Refresh = false, string? PlanHash = null, bool RecordShapes = true, bool Header = true, bool Summary = true, RefreshRunInfo? Run = null, RefreshExecution? Execution = null, bool OnlyFailed = false, IReadOnlyList<InputPin>? InputPins = null, Func<IReadOnlyList<MovedInput>, bool>? ApproveMoved = null, IReadOnlyList<string>? Origins = null, int Parallel = 1, SessionLimits? Limits = null, IReadOnlyList<string>? Warnings = null, Func<RefreshSummary, ModelQualityOutcome?>? AfterRefresh = null);
 
     /// <summary>` hourly` when the refresh ran a plan, so the next commands name it; nothing for a load named directly.</summary>
     private static string PlanArgument(ApplyMode mode) => mode.Run?.PlanName is { } name ? " " + name : "";
@@ -313,6 +313,7 @@ internal static class ApplyCommand
         output.WriteLine();
         foreach (var o in result.Outcomes) output.WriteLine($"  step {o.StepId}: {o.Status}{(o.Detail != null && o.Status != "ok" ? " (" + o.Detail + ")" : "")}  {o.Description}");
         var planRelative = planLabel;
+        var checksFailedToRun = false;
         if (result.Refresh is { } summary && !dryRun)
         {
             // one line that says how it ended and names what did not: failed loads, and the loads that were skipped or not run
@@ -323,13 +324,20 @@ internal static class ApplyCommand
                 output.WriteLine($"  {group.Key}: {string.Join("; ", group.Select(l => $"{l.Unit.Display}{(l.Reason != null ? $" ({l.Reason})" : "")}"))}");
             foreach (var note in summary.Loads.Where(l => l.Note != null)) output.WriteLine($"  {note.Unit.Display} ran: {note.Note}");
             foreach (var w in (mode.Warnings ?? []).Concat(summary.Warnings)) output.WriteLine($"  warning: {w}");
+            // the checks stored with the models that loaded (plan 23a FQ09): a finding of their own; they do not change how the loads ended
+            if (mode.AfterRefresh?.Invoke(summary) is { } quality)
+            {
+                foreach (var line in ModelQuality.Lines(quality)) output.WriteLine(line);
+                output.Payload("checks", ModelQuality.Document(quality));
+                if (quality.Error is not null) { error.WriteLine(quality.Error); checksFailedToRun = true; }
+            }
             if (summary.Loads.Any(l => l.Status == LoadStatus.FailedCheck))
                 output.Next("connection deploy", $"connection refresh {plan.Connection}{PlanArgument(mode)} --only-failed");
             else if (summary.Outcome != RefreshSummary.Completed)
                 output.Next($"connection refresh {plan.Connection}{PlanArgument(mode)} --only-failed", $"connection monitor {plan.Connection}{PlanArgument(mode)}");
             else if (summary.Loads.Any(l => l.Status == LoadStatus.SkippedBusy)) output.Next($"connection refresh {plan.Connection}{PlanArgument(mode)} --only-failed", $"connection monitor {plan.Connection}{PlanArgument(mode)}");
             else output.Next($"connection monitor {plan.Connection}{PlanArgument(mode)}");
-            return result.Success ? CliApp.ExitOk : CliApp.ExitFindings;
+            return result.Success && !checksFailedToRun ? CliApp.ExitOk : CliApp.ExitFindings;
         }
         if (result.Success)
         {

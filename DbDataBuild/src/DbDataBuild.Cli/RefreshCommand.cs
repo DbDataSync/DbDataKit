@@ -40,7 +40,7 @@ internal static class RefreshCommand
 
     internal sealed record InputFlag(string? Target, string Name, string Value, string Text);
 
-    public static int Run(CommandSpec spec, string root, string? targetArg, string[] args, string? checkArg, string? onFailArg, bool allowDirty, bool dryRun, string[] inputArgs, bool onlyFailed, int? parallelArg, TextWriter output, TextWriter error, Func<string, string?> env)
+    public static int Run(CommandSpec spec, string root, string? targetArg, string[] args, string? checkArg, string? onFailArg, bool allowDirty, bool dryRun, string[] inputArgs, bool onlyFailed, int? parallelArg, TextWriter output, TextWriter error, Func<string, string?> env, string? checkResults = null)
     {
         var configDiags = new List<Diagnostic>();
         var config = ProjectConfigLoader.LoadFromProject(root, configDiags);
@@ -353,12 +353,21 @@ internal static class RefreshCommand
         var originNames = items.SelectMany(i => i.Entry.Copy?.Origins.Select(o => o.Connection) ?? []).Distinct(StringComparer.Ordinal).ToList();
         var audit = settings.Refresh.Audit;
         var exit = ApplyCommand.RunPlan(spec, executable, audit == AuditLevel.Full ? (planText.Length > 0 ? planText : "direct: " + string.Join(", ", items.Select(i => $"{i.Entry.FullName} {i.Entry.Hash}")) + "\n") : "", planRelative ?? Relative(loadsPath), root, dryRun, allowRisky: false, allowDestructive: [], allowDirty,
-            new ApplyCommand.ApplyMode(Refresh: true, PlanHash: planHash, RecordShapes: check == RefreshCheck.Live, Header: false, Run: run, Execution: execution, OnlyFailed: onlyFailed, Origins: originNames, Parallel: parallel, Limits: limits, Warnings: parallelWarnings), output, error, env);
+            new ApplyCommand.ApplyMode(Refresh: true, PlanHash: planHash, RecordShapes: check == RefreshCheck.Live, Header: false, Run: run, Execution: execution, OnlyFailed: onlyFailed, Origins: originNames, Parallel: parallel, Limits: limits, Warnings: parallelWarnings,
+                AfterRefresh: ChecksAfter(root, connection.Name, read!, id, dryRun, checkResults ?? env(ModelQuality.ResultsVariable), env)), output, error, env);
         // a dry run resolved the inputs (the resolvers ran, read-only): the values it would have used, and where each came from
         if (dryRun)
             output.Payload("resolved_inputs", items.Select(i => new { model = i.Entry.Model, operation = i.Entry.Load, member = i.Membership, inputs = inputs[i].Select(x => new { name = x.Name, type = x.Type, source = x.Source, value = x.Value, resolver_hash = x.ResolverHash }).ToList() }).ToList());
         return exit;
     }
+
+    /// <summary>
+    /// The checks stored with the models that loaded, run when the loads have ended (plan 23a FQ09), when a results directory is given (`--check-results`, else `DBDATABUILD_CHECK_RESULTS`) and the run is not a dry run. Only models whose load ended
+    /// `done` are evaluated: a model that failed, was skipped or did not run was not refreshed, so its data says nothing about this run. The run id is the refresh's tracking id.
+    /// </summary>
+    private static Func<RefreshSummary, ModelQualityOutcome?>? ChecksAfter(string root, string connection, LoginSettings read, string runId, bool dryRun, string? resultsDirectory, Func<string, string?> env) =>
+        dryRun || string.IsNullOrWhiteSpace(resultsDirectory) ? null
+            : summary => ModelQuality.Run(root, connection, read, summary.Loads.GroupBy(l => l.Unit.Model, StringComparer.Ordinal).Where(g => g.All(l => l.Status == LoadStatus.Done)).Select(g => g.Key).ToList(), runId, resultsDirectory, env);
 
     /// <summary>
     /// The scheduler orders loads by the graph `loads.yml` carries. With more than one load at a time asked for and no graph in the file (it was compiled by an older version) the run goes one load at a time, in plan order

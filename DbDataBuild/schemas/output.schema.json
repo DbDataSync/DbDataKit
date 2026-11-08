@@ -2796,6 +2796,126 @@
             "type": "string"
           }
         },
+        "checks": {
+          "description": "With --check-results: the data quality checks of the models that loaded in this run, evaluated after the loads and recorded under the run's id (plan 23a FQ09). A check that fails or cannot run is a finding here; it does not change the outcome of the loads.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "run_id": {
+              "description": "The refresh's tracking id, stored with every result.",
+              "type": "string"
+            },
+            "results_in": {
+              "description": "The server directory whose state database holds the results.",
+              "type": "string"
+            },
+            "evaluated": {
+              "type": "integer"
+            },
+            "passed": {
+              "type": "integer"
+            },
+            "failed": {
+              "type": "integer"
+            },
+            "errors": {
+              "type": "integer"
+            },
+            "blocking": {
+              "description": "Checks that block their dataset's dependents now (a block check that failed).",
+              "type": "integer"
+            },
+            "notes": {
+              "description": "What was not evaluated, and why.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "error": {
+              "description": "Set when the checks could not be run or recorded at all.",
+              "type": "string"
+            },
+            "results": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "check": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "severity": {
+                    "enum": [
+                      "warn",
+                      "block"
+                    ]
+                  },
+                  "status": {
+                    "enum": [
+                      "pass",
+                      "fail",
+                      "error"
+                    ]
+                  },
+                  "measured": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "threshold": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "sample_keys": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "message": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "blocking": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "model",
+                  "check",
+                  "kind",
+                  "severity",
+                  "status",
+                  "sample_keys",
+                  "blocking"
+                ]
+              }
+            }
+          },
+          "required": [
+            "run_id",
+            "results_in",
+            "evaluated",
+            "passed",
+            "failed",
+            "errors",
+            "blocking",
+            "notes",
+            "results"
+          ]
+        },
         "last_run": {
           "description": "With --only-failed: the event whose loads were repeated.",
           "type": "string"
