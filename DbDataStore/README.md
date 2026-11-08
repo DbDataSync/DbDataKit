@@ -3,8 +3,6 @@
 Master data models kept in your own databases: entities, attributes, keys, references and rules written as `model/1` files, validated writes, history and audit, changes to structure by plan and approval (plans 15 and 19, lane Z).
 It is a server with a management API, paired with consoles like the other products; reads and writes of the data itself are served by the serving layer (plan 20).
 
-This is the skeleton (Z01). It starts, pairs and reports who it is; models, storage and writes arrive slice by slice (Z03 and on).
-
 ```
 dbdatastore server run [--repo <server directory>] [--listen https://127.0.0.1:8490]
 dbdatastore server pair --max-role <roles> [--repo <server directory>]
@@ -27,6 +25,80 @@ dbdatastore model publish <model> [--proxy <name>] [--dry-run] [--repo <server d
 dbdatastore model unpublish <model> --proxy <name> [--repo <server directory>]
 dbdatastore health check [--url <url>]
 ```
+
+## What it is for
+
+Data that people and agents own and change, rather than data replicated, built or queried: reference lists, mappings, hierarchies, targets and budgets, territory assignments, the tables that otherwise live in spreadsheets. A model's tables are kept on SQL Server or PostgreSQL (the engines `ModelStorage` plans for; SQLite, MariaDB, MySQL and Oracle are not supported yet). Sync, Build, the serving layer and semantic queries read them as ordinary tables.
+
+Principles:
+
+- **Master data is ordinary tables on an ordinary engine.** Every consumer reads it with what it already has (a connection, a mapped model, a data source). There is no special read protocol.
+- **Writes go through the service; reads do not have to.** Validation, history, approval and audit live in the write path (`DbDataKit.Store`, used by this server and by the serving layer's `store` module, plan 20).
+- **User data is never broken.** A change to a model's structure keeps its rows, or is refused, or is an explicit approved migration.
+- **Agents propose, people approve** where the model says so.
+
+## The model (`model/1`)
+
+A model is a YAML file (`schemaVersion: 1`, strict, read by `DbDataKit.DataModel` through `DbDataKit.Config.Yaml`; a bad file fails naming file, line and column, a newer version is refused with `DBD-110`). A `model/2` file adds the optional `cache:` and `checks:` sections (plan 24a); everything below is the same in both. The server keeps one `models/<name>.yaml` per model in its directory, saved only if valid.
+
+```yaml
+schemaVersion: 1
+name: sales_territories
+title: Sales territories
+storage: {connection: mdm_sql}          # connections/<name>.yaml, a connection/1 definition; optional instances: schema | connection | column
+approval: {changes: steward, agents: request}   # changes: none | steward | owner; agents: request (default) | direct
+entities:
+  territory:
+    key: [territory_code]
+    history: effective_dated            # none | audit | effective_dated
+    role: dimension                     # table | dimension | mapping | calendar, for the semantic layer
+    attributes:
+      territory_code: {type: VARCHAR(10), required: true, pattern: "^[A-Z]{2,4}-[0-9]{2}$"}
+      name:           {type: VARCHAR(100), required: true, unique: true}
+      region:         {type: VARCHAR(40), references: {model: crm_reference, entity: region}}
+      active:         {type: BOOLEAN, default: true}
+  territory_share:
+    key: [territory_code, region]
+    attributes:
+      territory_code: {type: VARCHAR(10), references: {entity: territory}}
+      share:          {type: "DECIMAL(5,4)", min: 0, max: 1}
+    rules:
+      - {kind: sum_equals, attribute: share, group_by: [region], value: 1, tolerance: 0.0001}
+```
+
+- **Types** are SQL names or the canonical text of `DbDataKit.Dialect` (`string(10)`), written as each engine's own type in the tables. In a one-line `{...}` entry a type with a comma is quoted.
+- **Rules of a value**: `required`, `unique`, `default`, `min`, `max`, `pattern`, `allowed`, and `references` (to an entity of this model, or of another model with `model:`). Within a model a reference must name the target's whole key or a unique attribute.
+- **Rules across rows**, a closed set: `sum_equals` (a sum per group, with a tolerance), `no_overlap` (two keys of a `group_by` may not hold for overlapping periods; needs `effective_dated`) and `no_cycle` (a hierarchy through an attribute that points to its parent; needs a single-attribute key). A model whose rule cannot be checked is refused at write time (`StoreNotSupportedException`), never silently unchecked.
+- **History**: `none`; `audit` (the model's `_audit` table, which every entity has: who, when, the row before and after as JSON); `effective_dated` (each version is a row with `_valid_from` and `_valid_to`, an update from a date closes the open version, an update with no date corrects it in place, a delete ends the row and removes nothing; `GetAsync`, `GetAsOfAsync`, `HistoryAsync`). The baseline is **application-managed**, which works on every engine. Native temporal tables (SQL Server system-versioned) are not built, so there is no second implementation to compare in a conformance suite.
+- **Roles for the semantic layer**: an entity can say it is a `dimension`, `mapping` or `calendar`; it is read and validated and nothing consumes it yet (the semantic layer does not read it).
+- **Instances** (plan 26): `storage.instances` keeps one copy per instance, as `schema` (`<model>__<instance>` on the connection), `connection`, or `column` (shared tables, `_instance` first in every key). Routes under `/api/v1/models/{m}/instances/{i}/...`; the old paths are the `default` instance.
+
+## Tables and structure
+
+`ModelStorage.Plan(model, engine)` makes a schema named like the model, a table per entity (types from the shared dialect, NOT NULL for required and key attributes), primary and unique keys, foreign keys for references inside the model (a reference to another model is checked on write), a `_version` column and the `_audit` table. It only creates: a table already there refuses the whole creation. Statements are `DbDataKit.Schema`'s `TableDdl`, the table-structure planner that Build also uses (structure model, drift classification, risk-classed changes).
+
+A newer version of a model is migrated per copy with `POST /api/v1/models/{m}/migrate` (administrator, a dry run unless `?apply=true`): it adds new tables and new columns (nullable) and says what it left. Every saved model text is kept under its SHA-256, so a copy runs the version it was made at (`GET .../migrations`: `current`, `behind`, `unknown`). Making a column NOT NULL, dropping or retyping one, and changes to history or instances are not applied (planned changes of their own).
+
+## Writing data
+
+`ModelWriter` applies a batch of inserts, updates and deletes in one transaction: values are read as the type holds them, every rule above is checked (the cross-row rules once per batch on the touched groups, so a batch can move a total between rows), and **every rule broken is reported at once** (rule, entity, attribute, key, a sentence; HTTP 422), writing nothing. An update or delete **names the version it read**; a changed row is a conflict (409, with the current version). Keys do not change. A delete that leaves a row pointing at it is refused. Each change writes an audit record in the same transaction (UUID v7 id, who, the versions, before and after).
+
+`GET .../entities/{e}/rows?limit=&offset=` lists a page, `.../row?key.<a>=<v>[&as_of=|&history=true]` reads one, `GET .../schema` describes the model for forms and typed clients. Roles: authors and administrators write; the token's user is the audit actor.
+
+## Change requests
+
+A write waits as a change request when it is an agent's (a token whose subject starts with `agent:`) and the model does not say `agents: direct`, or when anyone's and the model has `approval.changes` of `steward` or `owner` (`ChangeApproval`). Approving applies the changes as proposed through the same writer; a request they break stays pending. A steward's approval needs the author role, an owner's an administrator, and an agent never decides. Details are under "Change requests" below.
+
+## Published models
+
+Reads and writes of the data itself are served by the serving layer from the models this server publishes to it, so they continue with this server stopped; see "Publishing to the serving layer" below. Structure changes stay here.
+
+## Decisions
+
+- The name is DbDataStore; the table-structure planner is `DbDataKit.Schema`, shared with Build.
+- History is versioned and effective-dated; application-managed first.
+- Reads and writes are served by the serving layer (plan 20), not by a server of this product; this server keeps models and structure.
+- Instances of a model are separate copies (schema or connection) or shared tables split by an instance id.
 
 ## The state database
 
