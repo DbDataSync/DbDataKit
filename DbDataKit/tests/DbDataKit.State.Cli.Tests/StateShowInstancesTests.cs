@@ -47,6 +47,37 @@ public sealed class StateShowInstancesTests : IDisposable
         Assert.Equal(1, (int)older["module_versions"]!["runner"]!);
     }
 
+    [Theory]
+    [MemberData(nameof(Engines), MemberType = typeof(StateCliHarness))]
+    public async Task Show_lists_each_instances_generation_and_marks_the_one_outside_N_minus_1_of_the_groups_newest(string engine)
+    {
+        var db = _h.Provision(engine);
+        StateOpener.RegisterProviders();
+        var layout = StateLayout.Create(engine, [RunnerModule.Module], StateScope.Standalone);
+        var database = engine == StateEngineIds.Sqlite ? new StateDatabase(db.Target, layout) : new StateDatabase(engine, db.Target, layout);
+        var instances = new RunnerInstances(database);
+        var newest = instances.Register("dbdatarunner", "host-new", "2026.11.7.1200", generation: 3, definitionFormats: "integration=1-2");
+        var behind = instances.Register("dbdatarunner", "host-behind", "2026.9.1.0900", generation: 1);
+        var one = instances.Register("dbdatarunner", "host-one-back", "2026.10.1.0900", generation: 2);
+
+        var shown = await RunAsync(Context(db, [RunnerModule.Module]) with { Scope = StateScope.Standalone }, "show");
+
+        Assert.Equal(0, shown.Exit);
+        var lines = shown.Out.Split('\n').Where(l => l.Contains("host-", StringComparison.Ordinal) && l.Contains("software", StringComparison.Ordinal)).ToList();
+        Assert.Contains(lines, l => l.Contains("host-new", StringComparison.Ordinal) && l.Contains("generation 3", StringComparison.Ordinal) && !l.Contains("outside N-1", StringComparison.Ordinal));
+        Assert.Contains(lines, l => l.Contains("host-one-back", StringComparison.Ordinal) && l.Contains("generation 2", StringComparison.Ordinal) && !l.Contains("outside N-1", StringComparison.Ordinal));
+        Assert.Contains(lines, l => l.Contains("host-behind", StringComparison.Ordinal) && l.Contains("generation 1", StringComparison.Ordinal) && l.Contains("outside N-1", StringComparison.Ordinal));
+
+        var listed = shown.Data["instances"]!.AsArray();
+        Assert.Equal(3, (int)listed.Single(i => (string?)i!["key"] == newest.ToString())!["compatibility_generation"]!);
+        Assert.Equal(2, (int)listed.Single(i => (string?)i!["key"] == one.ToString())!["compatibility_generation"]!);
+        var marked = listed.Single(i => (string?)i!["key"] == behind.ToString())!;
+        Assert.Equal(1, (int)marked["compatibility_generation"]!);
+        Assert.Contains("outside N-1", (string?)marked["outside_n_minus_1"]);
+        Assert.Null(listed.Single(i => (string?)i!["key"] == newest.ToString())!["outside_n_minus_1"]);
+        Assert.Equal(2, (int)listed.Single(i => (string?)i!["key"] == newest.ToString())!["definition_formats"]!["integration"]!["current"]!);
+    }
+
     private static void Insert(StateDatabase database, System.Data.Common.DbConnection connection, Guid id, string host, string software, string modules, DateTimeOffset heartbeat)
     {
         using var insert = database.Command("runner", connection, "INSERT INTO {table:instance} (id, runner, host, version, started_at, heartbeat_at, state, software_version, module_versions) VALUES ($id, 'dbdatarunner', $host, $software, $at, $at, 'Running', $software, $modules);");

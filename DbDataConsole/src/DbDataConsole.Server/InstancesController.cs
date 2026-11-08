@@ -12,7 +12,9 @@ public sealed record LinkRequest(string From, string To, string? Name);
 public sealed record PendingSummary(string Id, string Name, string Product, string Url, DateTimeOffset LastSeen);
 
 /// <param name="Embedded">True for the runner built into this console (plan 28a R20): it is listed only when the console runs it, has no pairing and cannot be forgotten.</param>
-public sealed record InstanceSummary(string Id, string Name, string Url, string? Product, string? Version, int? ApiVersion, bool Reachable, bool? Ready, string? Problem, DateTimeOffset? PairedAt, bool Embedded = false);
+/// <param name="Generation">The compatibility generation the server reported, or the one last recorded for it (24a UC05); null when it states none.</param>
+/// <param name="OutsideSupport">Set when the server is further from this console than N and N-1: the words that say how far apart they are and which side to upgrade.</param>
+public sealed record InstanceSummary(string Id, string Name, string Url, string? Product, string? Version, int? ApiVersion, bool Reachable, bool? Ready, string? Problem, DateTimeOffset? PairedAt, bool Embedded = false, int? Generation = null, string? OutsideSupport = null);
 
 /// <summary>
 /// The servers this console manages: list them with how each is, pair another, forget one (plan 13, U12). Administrators only, by the fallback policy: pairing gives this console's signing key
@@ -110,5 +112,5 @@ public sealed class InstancesController(ConsoleInstances instances, ConsoleRelay
     public IActionResult Forget(string id) => id == ConsoleRunnerSettings.ServerId ? BadRequest(new { error = "The console's embedded runner is part of the console and cannot be forgotten; turn it off with runner.enabled in settings.yaml." }) : instances.Remove(id) ? NoContent() : NotFound(new { error = "No such server is registered." });
 
     private static InstanceSummary Summarise(InstanceStatus s) => new(
-        s.Instance.InstanceId, s.Instance.Name, s.Instance.Url.AbsoluteUri, s.Product, s.Version, s.ApiVersion ?? s.Instance.ApiVersion, s.Reachable, s.Ready, s.Problem, s.Instance.PairedAt);
+        s.Instance.InstanceId, s.Instance.Name, s.Instance.Url.AbsoluteUri, s.Product, s.Version, s.ApiVersion ?? s.Instance.ApiVersion, s.Reachable, s.Ready, s.Problem, s.Instance.PairedAt, Generation: s.KnownGeneration, OutsideSupport: s.OutsideSupport);
 }

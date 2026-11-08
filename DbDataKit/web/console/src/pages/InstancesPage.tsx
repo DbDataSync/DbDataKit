@@ -10,7 +10,9 @@ import { offersState } from '../stateApi'
 const COLUMNS = '1.4fr 1.4fr 1.8fr 2fr 1fr'
 
 /** What the person should read about a server: how it answered, and if it did not, why. */
-function statusOf(instance: InstanceSummary): { text: string; tone: 'ok' | 'warn' | 'bad' } {
+export function statusOf(instance: InstanceSummary): { text: string; tone: 'ok' | 'warn' | 'bad' } {
+  // a server more than one compatibility generation from this console (plan 24a UC05): the message says how far apart they are and which side to upgrade
+  if (instance.outsideSupport) return { text: `Outside N and N-1: ${instance.outsideSupport}`, tone: 'bad' }
   if (!instance.reachable) return { text: `Unreachable: ${instance.problem ?? 'no answer'}`, tone: 'bad' }
   if (instance.ready === false) return { text: 'Not ready', tone: 'warn' }
   return { text: 'Ready', tone: 'ok' }
@@ -84,7 +86,7 @@ export function InstancesPage() {
             return (
               <div key={instance.id} className="grid-row" style={{ gridTemplateColumns: COLUMNS, gap: 14 }} data-testid={`instance-row-${instance.name}`}>
                 <span>{instance.name}</span>
-                <span className="mono">{instance.product ?? '—'} {instance.version ?? ''}</span>
+                <span className="mono">{instance.product ?? '—'} {instance.version ?? ''}{instance.generation ? <span className="hint" data-testid="instance-generation"> generation {instance.generation}</span> : null}</span>
                 <span data-testid="instance-status" data-tone={status.tone}>{status.text}</span>
                 <span className="mono">{instance.url}</span>
                 <span className="row" style={{ gap: 8 }}>

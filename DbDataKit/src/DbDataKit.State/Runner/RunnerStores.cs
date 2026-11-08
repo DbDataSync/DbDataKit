@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace DbDataKit.State;
 
 /// <summary>An instance of a runner as stored.</summary>
-public sealed record RunnerInstance(Guid Id, string Runner, string Host, string Version, DateTimeOffset StartedAt, DateTimeOffset HeartbeatAt, string State, string? SoftwareVersion = null, string? ModuleVersions = null, string? DefinitionFormats = null)
+public sealed record RunnerInstance(Guid Id, string Runner, string Host, string Version, DateTimeOffset StartedAt, DateTimeOffset HeartbeatAt, string State, string? SoftwareVersion = null, string? ModuleVersions = null, string? DefinitionFormats = null, int? Generation = null)
 {
     public const string Running = "Running";
     public const string Gone = "Gone";
@@ -24,18 +24,20 @@ public sealed record InstanceCapability(string Name, string Value, DateTimeOffse
 public sealed class RunnerInstances(StateDatabase database)
 {
     private const string Module = RunnerModule.Name;
-    private const string Columns = "id, runner, host, version, started_at, heartbeat_at, state, software_version, module_versions, definition_formats";
+    private const string Columns = "id, runner, host, version, started_at, heartbeat_at, state, software_version, module_versions, definition_formats, generation";
 
     /// <summary>Records a new instance, live as of now; <paramref name="id"/> is a new id unless the caller keeps one.</summary>
+    /// <param name="generation">The compatibility generation of the instance's binary (24a UC05); null records none.</param>
     /// <param name="definitionFormats">What the instance reads of each kind of published definition (<see cref="DefinitionFormatText"/>, 24a UC01); null records none.</param>
-    public Guid Register(string runner, string host, string version, Guid? id = null, string? moduleVersions = null, string? definitionFormats = null)
+    public Guid Register(string runner, string host, string version, Guid? id = null, string? moduleVersions = null, string? definitionFormats = null, int? generation = null)
     {
         var instanceId = id ?? database.NewId();
         var now = database.Time.GetUtcNow();
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(Module, connection, "INSERT INTO {table:instance} (id, runner, host, version, started_at, heartbeat_at, state, software_version, module_versions, definition_formats) VALUES ($id, $runner, $host, $version, $at, $at, $state, $version, $modules, $formats);");
+            using var cmd = database.Command(Module, connection, "INSERT INTO {table:instance} (id, runner, host, version, started_at, heartbeat_at, state, software_version, module_versions, definition_formats, generation) VALUES ($id, $runner, $host, $version, $at, $at, $state, $version, $modules, $formats, $generation);");
+            cmd.Bind(database, "generation", generation is { } g ? (long)g : null, System.Data.DbType.Int64);
             cmd.Bind(database, "formats", definitionFormats, System.Data.DbType.String);
             cmd.Bind(database, "modules", moduleVersions ?? (database.Layout is { } layout ? ModuleVersionText.Format(layout) : null)).Bind(database, "id", instanceId).Bind(database, "runner", runner).Bind(database, "host", host).Bind(database, "version", version).Bind(database, "at", now).Bind(database, "state", RunnerInstance.Running);
             cmd.ExecuteNonQuery();
@@ -84,7 +86,7 @@ public sealed class RunnerInstances(StateDatabase database)
             using var reader = cmd.ExecuteReader();
             var list = new List<RunnerInstance>();
             while (reader.Read())
-                list.Add(new RunnerInstance(reader.Uuid(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.Time(4), reader.Time(5), reader.GetString(6), reader.IsDBNull(7) ? null : reader.GetString(7), reader.IsDBNull(8) ? null : reader.GetString(8), reader.IsDBNull(9) ? null : reader.GetString(9)));
+                list.Add(new RunnerInstance(reader.Uuid(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.Time(4), reader.Time(5), reader.GetString(6), reader.IsDBNull(7) ? null : reader.GetString(7), reader.IsDBNull(8) ? null : reader.GetString(8), reader.IsDBNull(9) ? null : reader.GetString(9), reader.IsDBNull(10) ? null : reader.Int32(10)));
             return (IReadOnlyList<RunnerInstance>)list;
         });
 

@@ -250,12 +250,14 @@ public static class ConsoleCli
         foreach (var s in all)
         {
             var state = parsed.Has("offline") ? "" : s.Reachable ? (s.Ready == true ? "  ready" : "  not ready") : $"  unreachable: {s.Problem}";
-            await context.Out.WriteLineAsync($"{s.Instance.Name}  {s.Instance.Url}  {s.Product ?? "?"} {s.Version ?? ""}{state}  id {s.Instance.InstanceId}");
+            var generation = s.KnownGeneration is { } g ? $"  generation {g}{(s.OutsideSupport is null ? "" : "  ** outside N-1: " + s.OutsideSupport)}" : "";
+            await context.Out.WriteLineAsync($"{s.Instance.Name}  {s.Instance.Url}  {s.Product ?? "?"} {s.Version ?? ""}{state}{generation}  id {s.Instance.InstanceId}");
         }
         context.Data["instances"] = all.Select(s => new Dictionary<string, object?>
         {
             ["id"] = s.Instance.InstanceId, ["name"] = s.Instance.Name, ["url"] = s.Instance.Url.AbsoluteUri, ["fingerprint"] = s.Instance.CertificateFingerprint,
             ["reachable"] = parsed.Has("offline") ? null : s.Reachable, ["ready"] = s.Ready, ["product"] = s.Product, ["version"] = s.Version, ["problem"] = s.Problem,
+            ["generation"] = s.KnownGeneration, ["outside_n_minus_1"] = s.OutsideSupport,
         }).ToList();
         return CliExit.Ok;
     }

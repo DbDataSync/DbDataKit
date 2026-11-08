@@ -60,6 +60,8 @@ public sealed partial class ManagementTests
             Assert.Equal(["data-source", "entity-model", "semantic-model"], formats.Select(f => f.Key).Order(StringComparer.Ordinal));
             // format 2 (24a UC03: the cache and checks sections) is current for all three, and the one before it is still read
             Assert.All(formats, f => Assert.Equal((1, 2), ((int)f.Value!["previous"]!, (int)f.Value["current"]!)));
+            Assert.Equal(DbDataKit.Web.Trust.SuiteCompatibility.Generation, (int)instance["compatibility_generation"]!);
+            Assert.Null(instance["outside_n_minus_1"]);
 
             // two instances at different versions are listed with their versions: another instance, one version behind, registers its row
             var stateDatabase = app.Services.GetRequiredService<StateDatabase>();
