@@ -35,6 +35,7 @@ public static class Cli
         SecretNoun(),
         IdentityCommand.Noun(),
         AppsCommand.Noun(),
+        ViewsCommand.Noun(),
         ConfigNoun(),
         StateNoun(),
         QueryNoun(),

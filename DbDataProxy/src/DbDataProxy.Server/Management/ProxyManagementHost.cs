@@ -125,6 +125,7 @@ public static class ProxyManagementHost
                 ? new DbDataKit.Identity.IdentityAdminApi(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>(), ProxyIdentityModule.PublicUrlOf(options).AbsoluteUri, new DbDataKit.Identity.AccessTokenPolicy(options.Identity.AccessTokenMaxDays))
                 : null,
             stateApi: stateApi,
+            views: new ProxyViewsManagement(app.Services.GetRequiredService<Serving.ProxyViewsPublishing>(), ProxyModules.Has(options, ProxyModules.Views) ? app.Services.GetRequiredService<Serving.ProxyViews>() : null),
             entityModels: new ProxyEntityModels(app.Services.GetRequiredService<Serving.PublishedEntityModels>(),
                 () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<ProxyOptions>>().CurrentValue,
                 dataSource =>

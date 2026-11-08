@@ -190,9 +190,20 @@ public static class ProxyHost
         // the master data models a DbDataStore server publishes to the group (O10)
         services.AddSingleton(sp => new PublishedEntityModels(sp.GetRequiredService<DbDataKit.State.DefinitionStore>(),
             problem => sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Definitions").LogWarning("{Problem}", problem)));
-        services.AddSingleton(sp => new DbDataKit.State.DefinitionFollower(sp.GetRequiredService<DbDataKit.State.DefinitionStore>(),
-            [sp.GetRequiredService<PublishedDataSources>(), sp.GetRequiredService<PublishedSemanticModels>(), sp.GetRequiredService<PublishedEntityModels>()],
-            (kind, name, version, ex) => sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Definitions").LogWarning("The published {Kind} '{Name}' version {Version} is not served here: {Message}", kind, name, version, ex.Message)));
+        // dashboards and reports (plan 32, DBR11b): published through the same state; the module is told of a version this instance could not use, so its health says so
+        services.AddSingleton(sp => new ProxyViewsPublishing(sp.GetRequiredService<DbDataKit.State.DefinitionStore>(), sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
+        if (ProxyModules.Has(options, ProxyModules.Views)) services.AddSingleton<ProxyViews>();
+        services.AddSingleton(sp =>
+        {
+            var views = ProxyModules.Has(sp.GetRequiredService<IOptionsMonitor<ProxyOptions>>().CurrentValue, ProxyModules.Views) ? sp.GetRequiredService<ProxyViews>() : null;
+            return new DbDataKit.State.DefinitionFollower(sp.GetRequiredService<DbDataKit.State.DefinitionStore>(),
+                [sp.GetRequiredService<PublishedDataSources>(), sp.GetRequiredService<PublishedSemanticModels>(), sp.GetRequiredService<PublishedEntityModels>(), .. views?.Publications.Subscribers ?? []],
+                (kind, name, version, ex) =>
+                {
+                    sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataProxy.Definitions").LogWarning("The published {Kind} '{Name}' version {Version} is not served here: {Message}", kind, name, version, ex.Message);
+                    views?.Module.OnProblem(kind, name, version, ex);
+                });
+        });
         services.AddHostedService<DbDataProxy.Server.State.DefinitionFollowerService>();
         services.AddSingleton<IServingServices>(sp => sp.GetRequiredService<ProxyServing>().WithSemantic(sp.GetRequiredService<SemanticModels>()));
         services.AddSingleton(sp =>
@@ -212,6 +223,12 @@ public static class ProxyHost
         if (ProxyModules.Has(options, ProxyModules.Identity)) services.AddHostedService<ProxyIdentityModule>();
         if (ProxyModules.Has(options, ProxyModules.Apps)) services.AddHostedService<ProxyAppsModule>();
         if (ProxyModules.Has(options, ProxyModules.Store)) services.AddHostedService<ProxyStoreModule>();
+        if (ProxyModules.Has(options, ProxyModules.Views))
+        {
+            services.AddSingleton<ProxyViewsModule>();
+            services.AddHostedService(sp => sp.GetRequiredService<ProxyViewsModule>());
+            services.AddSingleton<IReadinessProbe, ViewsReadinessProbe>();
+        }
 
         // The shared providers: one registry, one composer, one failure model per engine. With Proxy:LogDriverErrors the providers keep the
         // (redacted) driver text of failed connections on the failure, for the local log only.

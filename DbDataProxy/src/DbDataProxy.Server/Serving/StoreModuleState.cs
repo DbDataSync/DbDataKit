@@ -144,6 +144,9 @@ public sealed class StoreCallers(StateDatabase state, Func<string> serverId, Ope
     /// <summary>The home user holding this verified address (a Windows sign-in's UPN, plan 13a U16), or null; an address nobody verified finds nobody.</summary>
     public UserRecord? FindByAddress(string address) => _users.FindByEmail(address) is { Enabled: true } found ? found : null;
 
+    /// <summary>The enabled home user with this id, or null (a console's signed-in person who is not of the home has none).</summary>
+    public UserRecord? UserOf(string userId) => _users.Get(userId) is { Enabled: true } found ? found : null;
+
     /// <summary>The names of the home groups the person is in.</summary>
     public IReadOnlyList<string> GroupsOf(string userId) => [.. new HomeDirectory(state).GroupsOf(userId).Select(g => g.Name)];
 
