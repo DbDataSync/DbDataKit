@@ -80,6 +80,17 @@ export interface InstanceStagingStatus { instance: string; channel: string; vers
 
 export interface DefinitionEvent { id: number; action: string; channel: string | null; version: number | null; actor: string | null; at: string; note: string | null }
 
+/** A connection slot a channel's served or staged version declares (`slots` of the definition detail): its kind, the tasks that use it and the versions that declare it. */
+export interface SlotRequirement { channel: string; slot: string; kind: string; tasks: string[]; versions: number[] }
+
+export interface DefinitionBinding { channel: string; slot: string; bound_to: string; revision: number }
+
+/** `GET /api/v1/settings`: the publishing settings of the runner. */
+export interface PublishSettings { require_signatures: boolean; max_artifact_bytes: number }
+
+/** What `PUT /api/v1/bindings/{channel}/integration/{name}` takes: slot to the name of the connection (or secret reference) it is bound to, never a value. */
+export interface BindRequest { slots: Record<string, string>; expected_revision?: number }
+
 export interface DefinitionDetail {
   name: string
   owner: string | null
@@ -87,7 +98,9 @@ export interface DefinitionDetail {
   versions: VersionInfo[]
   channels: ChannelHead[]
   staging: StagingInfo[]
-  bindings: { channel: string; slot: string; bound_to: string; revision: number }[]
+  bindings: DefinitionBinding[]
+  /** What each channel's manifests declare; absent from a runner that predates it. */
+  slots?: SlotRequirement[]
   instances: InstanceStagingStatus[]
   events: DefinitionEvent[]
 }
@@ -171,6 +184,10 @@ export const runnerApi = {
   resume: (task: TaskKey) => post<unknown>(`${taskPath(task)}/resume`),
   definitions: () => request<{ definitions: DefinitionSummary[] }>('/api/v1/definitions/integration').then((r) => r.definitions),
   definition: (name: string) => request<DefinitionDetail>(`/api/v1/definitions/integration/${enc(name)}`),
+  settings: () => request<PublishSettings>('/api/v1/settings'),
+  setRequireSignatures: (value: boolean) => request<{ require_signatures: boolean }>('/api/v1/settings/require_signatures', { method: 'PUT', body: JSON.stringify({ value }) }),
+  bind: (name: string, channel: string, body: BindRequest) =>
+    request<{ name: string; channel: string; bindings: DefinitionBinding[] }>(`/api/v1/bindings/${enc(channel)}/integration/${enc(name)}`, { method: 'PUT', body: JSON.stringify(body) }),
   activate: (name: string, body: ActivateRequest) => post<ActivationAnswer>(`/api/v1/definitions/integration/${enc(name)}/activate`, body),
   switchTo: (name: string, body: ActivateRequest & { version: number }) => post<ActivationAnswer>(`/api/v1/definitions/integration/${enc(name)}/switch`, body),
   rollback: (name: string, body: ActivateRequest) => post<ActivationAnswer>(`/api/v1/definitions/integration/${enc(name)}/rollback`, body),

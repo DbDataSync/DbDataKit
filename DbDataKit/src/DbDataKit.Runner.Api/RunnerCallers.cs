@@ -6,6 +6,9 @@ namespace DbDataKit.Runner.Api;
 /// <summary>Who is calling and what they may do: the roles the call holds (already limited by whatever ceiling applies) and the actor the audit names.</summary>
 public sealed record RunnerCaller(RunnerActor Actor, ServerRole Roles)
 {
+    /// <summary>The paired client's token, when the call carries one (<c>dbdatarunner</c>): the owner rules of a publisher read the client id from it. A person signed in to a console has none and is an administrator or reads.</summary>
+    public ValidatedToken? Token { get; init; }
+
     /// <summary>Whether the call holds <paramref name="needed"/>, with the reason for the log when it does not.</summary>
     public AuthorizationDecision Authorize(ServerRole needed)
     {
@@ -34,7 +37,7 @@ public static class RunnerCallers
 {
     /// <summary>The caller of a management call that carries a token (<c>dbdatarunner</c>): the roles are the token's, limited by the client's ceiling.</summary>
     public static RunnerCaller FromToken(ValidatedToken token) =>
-        new(new RunnerActor(token.SubjectId, token.SubjectName, token.Client.Kind == ClientKind.Console ? "console" : "api", token.Client.Id), ManagementAuthorization.Effective(token));
+        new(new RunnerActor(token.SubjectId, token.SubjectName, token.Client.Kind == ClientKind.Console ? "console" : "api", token.Client.Id), ManagementAuthorization.Effective(token)) { Token = token };
 
     public static RunnerCallerResolver TokenResolver { get; } = context => FromToken(context.ManagementToken());
 }

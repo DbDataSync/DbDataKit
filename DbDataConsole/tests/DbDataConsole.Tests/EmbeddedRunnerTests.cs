@@ -347,9 +347,47 @@ public sealed class EmbeddedRunnerTests : IDisposable
         Assert.Contains(recorded, r => r.Entry.Verb == RunnerControl.RunVerb && r.Entry.Outcome == AuditEvent.Refused);
 
         // what is not a management call is not relayed: 403 from the console, whoever is signed in
-        Assert.Equal(HttpStatusCode.Forbidden, (await rig.Call(HttpMethod.Put, "/relay/console-runner/api/v1/definitions/integration/etl", rig.Admin, new { manifest = "x" })).Status);
-        Assert.Equal(HttpStatusCode.Forbidden, (await rig.Call(HttpMethod.Put, "/relay/console-runner/api/v1/artifacts/" + new string('a', 64), rig.Admin)).Status);
-        Assert.Equal(HttpStatusCode.Forbidden, (await rig.Call(HttpMethod.Put, "/relay/console-runner/api/v1/settings/require_signatures", rig.Admin, new { value = false })).Status);
+        Assert.Equal(HttpStatusCode.Forbidden, (await rig.Call(HttpMethod.Post, "/relay/console-runner/api/v1/webhooks/etl/dev/shop", rig.Admin, new { })).Status);
+        Assert.Equal(HttpStatusCode.Forbidden, (await rig.Call(HttpMethod.Delete, "/relay/console-runner/api/v1/bindings/dev/integration/etl", rig.Admin)).Status);
+    }
+
+    [Fact]
+    public async Task An_administrator_binds_slots_and_sets_require_signatures_on_the_embedded_runner_a_viewer_is_refused_and_both_are_audited()
+    {
+        var rig = await Start("sqlite");
+        Publish(rig, "etl", "dev", ("one", null));
+        const string bind = "/relay/console-runner/api/v1/bindings/dev/integration/etl";
+
+        var refused = await rig.Call(HttpMethod.Put, bind, rig.Viewer, new { slots = new { source = "erp" } });
+        Assert.Equal(HttpStatusCode.Forbidden, refused.Status);
+        var bound = await rig.Call(HttpMethod.Put, bind, rig.Admin, new { slots = new { source = "erp" } });
+        Assert.Equal(HttpStatusCode.OK, bound.Status);
+        var (_, detail) = await rig.Call(HttpMethod.Get, "/relay/console-runner/api/v1/definitions/integration/etl", rig.Viewer);
+        Assert.Contains(detail!["bindings"]!.AsArray(), b => (string)b!["slot"]! == "source" && (string)b["bound_to"]! == "erp" && (string)b["channel"]! == "dev");
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await rig.Call(HttpMethod.Put, "/relay/console-runner/api/v1/settings/require_signatures", rig.Viewer, new { value = true })).Status);
+        Assert.Equal(HttpStatusCode.OK, (await rig.Call(HttpMethod.Put, "/relay/console-runner/api/v1/settings/require_signatures", rig.Admin, new { value = true })).Status);
+        var (_, settings) = await rig.Call(HttpMethod.Get, "/relay/console-runner/api/v1/settings", rig.Viewer);
+        Assert.True((bool)settings!["require_signatures"]!);
+
+        var audit = new AuditLog(rig.State, "dbdatakit").Read(new AuditQuery(VerbPrefix: "runner."));
+        Assert.Contains(audit, r => r.Entry.Verb == RunnerPublishing.BindVerb && r.Entry.Outcome == AuditEvent.Ok && r.Entry.ViaKind == "console");
+        Assert.Contains(audit, r => r.Entry.Verb == RunnerPublishing.BindVerb && r.Entry.Outcome == AuditEvent.Refused);
+        Assert.Contains(audit, r => r.Entry.Verb == RunnerPublishing.SettingVerb && r.Entry.Outcome == AuditEvent.Ok);
+        Assert.Contains(audit, r => r.Entry.Verb == RunnerPublishing.SettingVerb && r.Entry.Outcome == AuditEvent.Refused);
+        Assert.All(audit.Where(r => r.Entry.Verb == RunnerPublishing.BindVerb), r => Assert.DoesNotContain("erp", r.Entry.Detail));
+    }
+
+    [Fact]
+    public async Task A_file_is_uploaded_by_its_hash_and_a_wrong_hash_or_a_viewer_is_refused_on_the_embedded_runner()
+    {
+        var rig = await Start("sqlite");
+        var bytes = System.Text.Encoding.UTF8.GetBytes("hello");
+        var sha = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes));
+        var path = "/relay/console-runner/api/v1/artifacts/" + sha;
+        Assert.Equal(HttpStatusCode.NotFound, (await rig.Call(HttpMethod.Head, path, rig.Admin)).Status);
+        Assert.Equal(HttpStatusCode.Forbidden, (await rig.Call(HttpMethod.Put, path, rig.Viewer, new { })).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await rig.Call(HttpMethod.Put, "/relay/console-runner/api/v1/artifacts/" + new string('a', 64), rig.Admin, new { })).Status);   // the bytes are not the hash named
     }
 
     // ---- the stop

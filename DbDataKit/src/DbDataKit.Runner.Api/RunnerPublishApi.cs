@@ -29,7 +29,7 @@ public static class RunnerPublishApi
     public static void Map(IEndpointRouteBuilder app, RunnerPublishing publishing)
     {
         MapReadAndLifecycle(app, publishing, "/api/v1", RunnerCallers.TokenResolver);
-        MapWrite(app, publishing);
+        MapWrite(app, publishing, "/api/v1", RunnerCallers.TokenResolver);
     }
 
     private static IResult? Deny(RunnerCaller caller, ServerRole needed, RunnerPublishing? publishing = null, string? verb = null, string? targetKind = null, string? targetId = null)
@@ -40,19 +40,24 @@ public static class RunnerPublishApi
         return Error(403, $"This needs the {decision.Needed.ToString().ToLowerInvariant()} role.");
     }
 
-    private static void MapWrite(IEndpointRouteBuilder app, RunnerPublishing publishing)
+    /// <summary>
+    /// The calls that upload, publish, bind and set (<c>HEAD</c> and <c>PUT artifacts</c>, <c>PUT definitions</c>, <c>PUT bindings</c>, <c>PUT settings/require_signatures</c>) under <paramref name="prefix"/>, for whoever <paramref name="callerOf"/> says is calling.
+    /// A paired client with a token keeps the owner rules of <see cref="OwnerScope"/>; a person signed in to a console (no token) is an administrator, who is not limited by owner, or reads, and a reader publishes nothing.
+    /// </summary>
+    public static void MapWrite(IEndpointRouteBuilder app, RunnerPublishing publishing, string prefix, RunnerCallerResolver callerOf)
     {
-        app.MapMethods("/api/v1/artifacts/{sha256}", ["HEAD"], (string sha256, HttpContext context) =>
+        var root = prefix.TrimEnd('/');
+        app.MapMethods($"{root}/artifacts/{{sha256}}", ["HEAD"], (string sha256, HttpContext context) =>
         {
-            var effective = ManagementAuthorization.Effective(context.ManagementToken());
+            var effective = callerOf(context).Roles;
             if (!effective.HasFlag(ServerRole.Publisher) && !ServerRoles.Allows(effective, ServerRole.Viewer)) return Results.StatusCode(StatusCodes.Status403Forbidden);
             return publishing.HasArtifact(sha256) ? Results.Ok() : Results.NotFound();
         });
 
-        app.MapPut("/api/v1/artifacts/{sha256}", async (string sha256, HttpContext context) =>
+        app.MapPut($"{root}/artifacts/{{sha256}}", async (string sha256, HttpContext context) =>
         {
-            var token = context.ManagementToken();
-            var actor = ActorOf(token);
+            var token = callerOf(context);
+            var actor = token.Actor;
             if (!RunnerPublishing.IsSha256(sha256)) return Error(400, $"'{sha256}' is not a SHA-256: write 64 hexadecimal digits.");
             if (Authorize(publishing, token, ObjectAction.Create, null, RunnerPublishing.UploadVerb, "artifact", sha256.ToLowerInvariant()) is { } denied) return denied;
             if (context.Request.ContentLength is { } length && length > publishing.MaxArtifactBytes)
@@ -68,10 +73,10 @@ public static class RunnerPublishApi
             catch (Microsoft.AspNetCore.Http.BadHttpRequestException ex) when (ex.StatusCode == 413) { return Error(413, $"The file named {sha256} is larger than the cap of {publishing.MaxArtifactBytes} bytes."); }
         }).DisableRequestTimeout();
 
-        app.MapPut("/api/v1/definitions/integration/{name}", async (string name, HttpContext context) =>
+        app.MapPut($"{root}/definitions/integration/{{name}}", async (string name, HttpContext context) =>
         {
-            var token = context.ManagementToken();
-            var actor = ActorOf(token);
+            var token = callerOf(context);
+            var actor = token.Actor;
             var body = await ReadBodyAsync(context);
             if (body.Error is { } bad) return bad;
             var input = ParsePublish(name, body.Json!, out var problem);
@@ -81,7 +86,7 @@ public static class RunnerPublishApi
             var owned = new ManagedObject(publishing.Owner(name));
             if (Authorize(publishing, token, exists ? ObjectAction.Change : ObjectAction.Create, owned, RunnerPublishing.PublishVerb, "package", $"{name}/{input.Channel}") is { } denied) return denied;
             // the first publisher of a package owns it (an administrator who creates one leaves it to administrators)
-            if (!exists && !IsAdmin(token) && !publishing.ClaimOwner(name, OwnerScope.Stamp(token)))
+            if (!exists && !IsAdmin(token) && !publishing.ClaimOwner(name, OwnerScope.Stamp(token.Token!)))
             {
                 publishing.AuditRefused(RunnerPublishing.PublishVerb, actor, "package", $"{name}/{input.Channel}", "the package belongs to another client");
                 return Error(403, $"The integration '{name}' belongs to another publisher.");
@@ -99,9 +104,9 @@ public static class RunnerPublishApi
             catch (RunnerPublishException ex) { return Error(ex.Status, ex.Message); }
         });
 
-        app.MapPut("/api/v1/bindings/{channel}/integration/{name}", async (string channel, string name, HttpContext context) =>
+        app.MapPut($"{root}/bindings/{{channel}}/integration/{{name}}", async (string channel, string name, HttpContext context) =>
         {
-            var token = context.ManagementToken();
+            var token = callerOf(context);
             var body = await ReadBodyAsync(context);
             if (body.Error is { } bad) return bad;
             if (body.Json!["slots"] is not JsonObject slotsNode) return Error(400, "The body is {\"slots\": {\"<slot>\": \"<what it is bound to>\"}}.");
@@ -117,15 +122,15 @@ public static class RunnerPublishApi
             var exists = publishing.Exists(name);
             var owned = new ManagedObject(publishing.Owner(name));
             if (Authorize(publishing, token, exists || owned.ManagedBy is not null ? ObjectAction.Change : ObjectAction.Create, owned, RunnerPublishing.BindVerb, "package", $"{name}/{channel}") is { } denied) return denied;
-            if (!exists && owned.ManagedBy is null && !IsAdmin(token) && !publishing.ClaimOwner(name, OwnerScope.Stamp(token)))
+            if (!exists && owned.ManagedBy is null && !IsAdmin(token) && !publishing.ClaimOwner(name, OwnerScope.Stamp(token.Token!)))
             {
-                publishing.AuditRefused(RunnerPublishing.BindVerb, ActorOf(token), "package", $"{name}/{channel}", "the package belongs to another client");
+                publishing.AuditRefused(RunnerPublishing.BindVerb, token.Actor, "package", $"{name}/{channel}", "the package belongs to another client");
                 return Error(403, $"The integration '{name}' belongs to another publisher.");
             }
 
             try
             {
-                var bindings = publishing.Bind(name, channel, slots, revision, ActorOf(token));
+                var bindings = publishing.Bind(name, channel, slots, revision, token.Actor);
                 return Results.Json(new JsonObject
                 {
                     ["name"] = name, ["channel"] = channel,
@@ -135,13 +140,13 @@ public static class RunnerPublishApi
             catch (RunnerPublishException ex) { return Error(ex.Status, ex.Message); }
         });
 
-        app.MapPut("/api/v1/settings/require_signatures", async (HttpContext context) =>
+        app.MapPut($"{root}/settings/require_signatures", async (HttpContext context) =>
         {
-            if (Deny(context, ServerRole.Admin, publishing, RunnerPublishing.SettingVerb, "setting", RunnerPublishing.RequireSignaturesSetting) is { } denied) return denied;
+            if (Deny(callerOf(context), ServerRole.Admin, publishing, RunnerPublishing.SettingVerb, "setting", RunnerPublishing.RequireSignaturesSetting) is { } denied) return denied;
             var body = await ReadBodyAsync(context);
             if (body.Error is { } bad) return bad;
             if (body.Json!["value"] is not JsonValue v || !v.TryGetValue<bool>(out var value)) return Error(400, "The body is {\"value\": true} or {\"value\": false}.");
-            publishing.SetRequireSignatures(value, ActorOf(context.ManagementToken()));
+            publishing.SetRequireSignatures(value, callerOf(context).Actor);
             return Results.Json(new JsonObject { [RunnerPublishing.RequireSignaturesSetting] = value });
         });
     }
@@ -235,28 +240,19 @@ public static class RunnerPublishApi
 
     // ---- authorization
 
-    private static bool IsAdmin(ValidatedToken token) => ManagementAuthorization.Effective(token).HasFlag(ServerRole.Admin);
+    private static bool IsAdmin(RunnerCaller caller) => caller.Roles.HasFlag(ServerRole.Admin);
 
     /// <summary>The owner rules of a publisher (create; change only what the client created); an administrator is not limited. Null when allowed, the 403 (audited) otherwise.</summary>
-    private static IResult? Authorize(RunnerPublishing publishing, ValidatedToken token, ObjectAction action, ManagedObject? target, string verb, string targetKind, string targetId)
+    private static IResult? Authorize(RunnerPublishing publishing, RunnerCaller caller, ObjectAction action, ManagedObject? target, string verb, string targetKind, string targetId)
     {
-        var decision = OwnerScope.Authorize(token, action, target);
+        // a client's token carries its id, which the owner rules read; a person signed in to a console has none and is an administrator (owner rules do not limit one) or has no right to publish
+        var decision = caller.Token is { } token ? OwnerScope.Authorize(token, action, target)
+            : caller.Roles.HasFlag(ServerRole.Admin) ? AuthorizationDecision.Allow(ServerRole.Admin, caller.Roles)
+            : AuthorizationDecision.Deny(ServerRole.Publisher, caller.Roles, "publishing needs the publisher role (or admin) and the call holds neither");
         if (decision.Allowed) return null;
-        publishing.AuditRefused(verb, ActorOf(token), targetKind, targetId, decision.Reason ?? "the role is not enough");
+        publishing.AuditRefused(verb, caller.Actor, targetKind, targetId, decision.Reason ?? "the role is not enough");
         return Error(403, "This needs the publisher role, and for an existing package it must be one this client created, or the admin role.");
     }
-
-    private static IResult? Deny(HttpContext context, ServerRole needed, RunnerPublishing? publishing = null, string? verb = null, string? targetKind = null, string? targetId = null)
-    {
-        var token = context.ManagementToken();
-        var decision = ManagementAuthorization.Authorize(token, needed);
-        if (decision.Allowed) return null;
-        if (publishing is not null && verb is not null) publishing.AuditRefused(verb, ActorOf(token), targetKind ?? "package", targetId ?? "-", decision.Reason ?? "the role is not enough");
-        return Error(403, $"This needs the {decision.Needed.ToString().ToLowerInvariant()} role.");
-    }
-
-    private static RunnerActor ActorOf(ValidatedToken token) =>
-        new(token.SubjectId, token.SubjectName, token.Client.Kind == ClientKind.Console ? "console" : "api", token.Client.Id);
 
     // ---- bodies
 

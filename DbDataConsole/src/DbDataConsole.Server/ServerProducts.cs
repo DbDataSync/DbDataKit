@@ -20,7 +20,9 @@ public static partial class ServerProducts
 
     /// <summary>
     /// Whether the relay passes a call to a server of this product. Only a runner is limited: its documented management calls are the ones the console's screens make (status, the group's instances, runs, run now, pause and resume a task,
-    /// the packages with their versions, and activate, switch, rollback and retire a package, and who schedules a task: its schedule and decisions and the change of its owner). The roles are the runner's own: the token carries the signed-in person's, and the runner refuses what they may not do.
+    /// who schedules a task and the decisions of an observed one, the packages with their versions, activate, switch, rollback and retire a package, bind a package's connection slots and the require-signatures setting, and
+    /// publish a package from files: the upload of a file by its hash, and the publish). The roles are the runner's own: the token carries the signed-in person's, and the runner refuses what they may not do. What a runner reports back
+    /// to a product (<c>POST .../decisions</c>), a webhook and the service-to-service calls are not here.
     /// </summary>
     public static bool Relayable(string? product, string method, string path)
     {
@@ -28,9 +30,9 @@ public static partial class ServerProducts
         var route = path.Split('?', 2)[0];
         return method.ToUpperInvariant() switch
         {
-            "GET" => RunnerReads().IsMatch(route),
+            "GET" or "HEAD" => RunnerReads().IsMatch(route) || (method.Equals("HEAD", StringComparison.OrdinalIgnoreCase) && RunnerArtifact().IsMatch(route)),
             "POST" => RunnerActs().IsMatch(route),
-            "PUT" => RunnerOwner().IsMatch(route),     // who schedules a task (plan 33 UE06): the runner checks the operator role itself
+            "PUT" => RunnerWrites().IsMatch(route),
             _ => false,
         };
     }
@@ -38,8 +40,11 @@ public static partial class ServerProducts
     [GeneratedRegex(@"^api/v1/(status|instances|connections|runs|settings|lineage|definitions/integration(/[A-Za-z0-9._-]+)?|tasks/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/(schedule|decisions))/?$")]
     private static partial Regex RunnerReads();
 
-    [GeneratedRegex(@"^api/v1/tasks/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/owner/?$")]
-    private static partial Regex RunnerOwner();
+    [GeneratedRegex(@"^api/v1/artifacts/[0-9a-fA-F]{64}/?$")]
+    private static partial Regex RunnerArtifact();
+
+    [GeneratedRegex(@"^api/v1/(artifacts/[0-9a-fA-F]{64}|definitions/integration/[A-Za-z0-9._-]+|bindings/[A-Za-z0-9._-]+/integration/[A-Za-z0-9._-]+|settings/require_signatures|tasks/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/owner)/?$")]
+    private static partial Regex RunnerWrites();
 
     [GeneratedRegex(@"^api/v1/(tasks/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/(run|pause|resume)|definitions/integration/[A-Za-z0-9._-]+/(activate|switch|rollback|retire))/?$")]
     private static partial Regex RunnerActs();

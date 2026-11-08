@@ -465,6 +465,40 @@ public sealed partial class RunnerPublishing
         };
     })]);
 
+    /// <summary>
+    /// The connection slots the manifests declare, for each channel: the slots of the version the channel serves and of the one staged behind it (a staged version that declares an unbound slot is refused at activation, so the person binds
+    /// before activating). One entry per channel and slot name: its kind, the tasks that use it and the versions that declare it. A manifest that cannot be read is left out.
+    /// </summary>
+    private JsonArray Slots(string name, IReadOnlyList<DefinitionHead> heads)
+    {
+        var rows = new JsonArray();
+        foreach (var head in heads)
+        {
+            var found = new SortedDictionary<string, (string Kind, SortedSet<string> Tasks, SortedSet<int> Versions)>(StringComparer.Ordinal);
+            foreach (var version in new[] { head.Active, head.Staged }.OfType<int>().Distinct())
+            {
+                if (_store.Get(Kind, name, version) is not { } stored || PackageManifestReader.Load(stored.Content, $"{name}@{version}") is not { Ok: true, Manifest: { } manifest }) continue;
+                foreach (var task in manifest.Tasks)
+                    foreach (var slot in task.Connections)
+                    {
+                        if (!found.TryGetValue(slot.Name, out var entry)) found[slot.Name] = entry = (slot.Kind, [], []);
+                        entry.Tasks.Add(task.Name);
+                        entry.Versions.Add(version);
+                    }
+            }
+
+            foreach (var (slot, entry) in found)
+                rows.Add(new JsonObject
+                {
+                    ["channel"] = head.Channel, ["slot"] = slot, ["kind"] = entry.Kind,
+                    ["tasks"] = new JsonArray([.. entry.Tasks.Select(t => (JsonNode)JsonValue.Create(t)!)]),
+                    ["versions"] = new JsonArray([.. entry.Versions.Select(v => (JsonNode)JsonValue.Create(v)!)]),
+                });
+        }
+
+        return rows;
+    }
+
     /// <summary>One integration: its versions, what each channel serves (active, previous, staged), the bindings, what each instance reports and the latest events. Null when there is no such package.</summary>
     public JsonObject? Describe(string name)
     {
@@ -485,6 +519,7 @@ public sealed partial class RunnerPublishing
             ["channels"] = Channels(name),
             ["staging"] = Staging(name),
             ["bindings"] = new JsonArray([.. heads.SelectMany(h => Publisher.Bindings(h.Channel, Kind, name)).Select(b => (JsonNode)new JsonObject { ["channel"] = b.Channel, ["slot"] = b.Slot, ["bound_to"] = b.BoundTo, ["revision"] = b.Revision })]),
+            ["slots"] = Slots(name, heads),
             ["instances"] = new JsonArray([.. heads.SelectMany(h => Publisher.Status.List(Kind, name, h.Channel)).Select(s => (JsonNode)new JsonObject
             {
                 ["instance"] = s.Instance, ["channel"] = s.Channel, ["version"] = s.Version, ["state"] = s.State, ["error"] = s.Error, ["note"] = s.Note, ["has_losses"] = s.HasLosses, ["at"] = s.At.UtcDateTime.ToString("O"), ["gone"] = s.Gone,
