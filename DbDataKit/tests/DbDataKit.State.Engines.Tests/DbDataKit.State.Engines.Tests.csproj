@@ -11,4 +11,7 @@
     <ProjectReference Include="..\..\src\DbDataKit.State.Engines\DbDataKit.State.Engines.csproj" />
     <ProjectReference Include="..\..\src\DbDataKit.Secrets\DbDataKit.Secrets.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\DbDataKit.State.Tests\SqliteLockGuard.cs" Link="SqliteLockGuard.cs" />
+  </ItemGroup>
 </Project>

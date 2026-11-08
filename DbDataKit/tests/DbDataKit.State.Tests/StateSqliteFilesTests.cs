@@ -117,6 +117,7 @@ public sealed class StateSqliteFilesTests : IDisposable
     public void A_long_write_to_one_file_does_not_make_a_write_to_another_wait()
     {
         var db = Open(InFile("heavy", "heavy.db"), Heavy(), Light());
+        using var _ = SqliteLockGuard.Allow();   // the point of the test is a connection opened while another holds a lock
 
         // another connection is in the middle of a big write to the heavy module's file: it holds that file's write lock
         using var busy = db.OpenConnection();
@@ -135,6 +136,7 @@ public sealed class StateSqliteFilesTests : IDisposable
     public void An_ordinary_transaction_is_immediate_and_does_lock_every_file_which_is_why_the_stores_of_such_a_module_begin_theirs_through_the_database()
     {
         var db = Open(InFile("heavy", "heavy.db"), Heavy(), Light());
+        using var _ = SqliteLockGuard.Allow();   // the point of the test is a connection opened while another holds a lock
         using var busy = db.OpenConnection();
         using var transaction = busy.BeginTransaction();   // Microsoft.Data.Sqlite: BEGIN IMMEDIATE, on the main file too
         using (var insert = db.Command(busy, transaction, "INSERT INTO " + db.Layout!.Table("heavy", "event") + " (id) VALUES ('long');")) insert.ExecuteNonQuery();
