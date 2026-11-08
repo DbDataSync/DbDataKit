@@ -102,7 +102,11 @@ jobs:
       - run: scripts/fetch-chromium.sh all
       - run: scripts/fetch-chromium.sh all   # the second run finds every browser current
       - name: The pinned browser starts and reports the pinned version
-        run: test "$(.chromium/linux-x64/chrome-linux64/chrome --version)" = "Google Chrome for Testing $(grep '^VERSION=' chromium.pin | cut -d= -f2)"
+        run: |
+          got="$(.chromium/linux-x64/chrome-linux64/chrome --version | sed 's/[[:space:]]*$//')"
+          want="Google Chrome for Testing $(grep '^VERSION=' chromium.pin | cut -d= -f2)"
+          echo "got:  [$got]"; echo "want: [$want]"
+          test "$got" = "$want"
 
   chromium-pin-windows:
     runs-on: windows-latest

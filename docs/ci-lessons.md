@@ -99,6 +99,7 @@ The CI runners are small (two cores, Windows and Linux), run many jobs at once, 
 | tests all pass (`failed: 0`) but the job fails with `rm: cannot remove '/tmp/tmp.XXXX': Directory not empty` | cleanup race of the e2e job; re-run |
 | `429 Too Many Requests` pulling an image | Docker Hub rate limit; pull through `mirror.gcr.io` and re-tag (CLAUDE.md) |
 | a job sits "queued" for a long time | many pull requests run at once; one batch pull request instead of eight is the cure |
+| the `chromium-pin-linux` job downloads and hash-checks the browser, then fails on the `chrome --version` step | the step compared the raw output with `Google Chrome for Testing <VERSION>`; the binary's output does not match byte for byte (trailing whitespace) | the step trims the output and prints both strings (`.github/workflows/repo-checks.yml`); compare version strings trimmed and print them when a check of a tool's output fails |
 
 ## Working in a session (not CI, but it costs the same time)
 
