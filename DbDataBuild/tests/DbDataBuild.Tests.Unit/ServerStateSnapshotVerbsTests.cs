@@ -13,7 +13,7 @@ public sealed class ServerStateSnapshotVerbsTests : IDisposable
     public void Dispose()
     {
         SqliteConnection.ClearAllPools();
-        try { Directory.Delete(root, true); } catch (IOException) { }
+        try { Directory.Delete(root, true); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 
     private string Dir(string name) => Path.Combine(root, name);

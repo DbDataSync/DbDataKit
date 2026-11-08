@@ -180,7 +180,7 @@ public class ConnectionFilesTests
             if (template == "fan_in_fan_out") Assert.Equal(4, files.Length);
             else if (template != "macro_examples") Assert.Single(files);
         }
-        finally { try { Directory.Delete(root, true); } catch (IOException) { } }
+        finally { try { Directory.Delete(root, true); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } }
     }
 
     [Theory]

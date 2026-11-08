@@ -75,7 +75,7 @@ public sealed partial class BuildServerProxyTests : IAsyncLifetime
         http.Dispose();
         await build.StopAsync(); await build.DisposeAsync();
         await proxy.StopAsync(); await proxy.DisposeAsync();
-        try { Directory.Delete(root, true); } catch (IOException) { }
+        try { Directory.Delete(root, true); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 
     private sealed class Idle : IProjectCommandRunner
