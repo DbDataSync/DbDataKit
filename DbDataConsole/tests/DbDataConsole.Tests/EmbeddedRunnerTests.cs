@@ -415,6 +415,27 @@ public sealed class EmbeddedRunnerTests : IDisposable
         Assert.Contains(audit, r => r.Entry.Verb == RunnerPublishing.PublishVerb && r.Entry.Outcome == AuditEvent.Refused);
     }
 
+    [Fact]
+    public async Task An_administrator_labels_the_embedded_runners_instance_through_the_relay_a_viewer_is_refused_and_the_audit_is_the_consoles()
+    {
+        var rig = await Start("sqlite");
+        Assert.True(await rig.Eventually(() => rig.Runner.Host?.InstanceId is not null));
+        var path = $"/relay/console-runner/api/v1/instances/{rig.Runner.Host!.InstanceId}/labels";
+
+        var read = await rig.Call(HttpMethod.Get, path, rig.Viewer);
+        Assert.Equal(HttpStatusCode.OK, read.Status);
+        Assert.Contains(read.Body!["labels"]!.AsArray(), l => (string)l!["source"]! == "reported");
+        Assert.Equal(HttpStatusCode.Forbidden, (await rig.Call(HttpMethod.Put, path, rig.Viewer, new { labels = new[] { "gpu" } })).Status);
+        var set = await rig.Call(HttpMethod.Put, path, rig.Admin, new { labels = new[] { "gpu" } });
+        Assert.Equal(HttpStatusCode.OK, set.Status);
+        Assert.Equal(["gpu"], set.Body!["added"]!.AsArray().Select(l => (string)l!));
+        Assert.Equal(HttpStatusCode.BadRequest, (await rig.Call(HttpMethod.Put, path, rig.Admin, new { labels = new[] { "not a label" } })).Status);
+
+        var audit = new AuditLog(rig.State, "dbdatakit").Read(new AuditQuery(VerbPrefix: "runner.label."));
+        Assert.Contains(audit, r => r.Entry.Verb == "runner.label.add" && r.Entry.Outcome == AuditEvent.Ok && r.Entry.ViaKind == "console");
+        Assert.Contains(audit, r => r.Entry.Verb == "runner.label.set" && r.Entry.Outcome == AuditEvent.Refused);
+    }
+
     // ---- the stop
 
     [Theory]

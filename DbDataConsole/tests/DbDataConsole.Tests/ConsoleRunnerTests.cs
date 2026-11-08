@@ -206,6 +206,8 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
     }
 
     [Theory]
+    [InlineData("GET", "api/v1/instances/6f1c0f1e-1111-4222-8333-444455556666/labels")]
+    [InlineData("PUT", "api/v1/instances/6f1c0f1e-1111-4222-8333-444455556666/labels")]
     [InlineData("GET", "api/v1/tasks/sample/dev/ok/schedule")]
     [InlineData("GET", "api/v1/tasks/sample/dev/ok/decisions")]
     [InlineData("PUT", "api/v1/tasks/sample/dev/ok/owner")]

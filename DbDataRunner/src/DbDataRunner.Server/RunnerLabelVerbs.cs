@@ -1,7 +1,6 @@
 using DbDataKit.Runner;
 using DbDataKit.Runner.Api;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using DbDataKit.Cli;
 using DbDataKit.Monitoring;
 using DbDataKit.State;
@@ -15,10 +14,9 @@ namespace DbDataRunner.Server;
 /// </summary>
 public static class RunnerLabelVerbs
 {
-    private static readonly Regex LabelRule = new(@"^[A-Za-z0-9][A-Za-z0-9_.:=-]{0,63}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private const string Where = "[--repo <server directory>] [--group <name>]";
-    public const string AddVerb = "runner.label.add";
-    public const string RemoveVerb = "runner.label.remove";
+    public const string AddVerb = RunnerGroupApi.LabelAddVerb;
+    public const string RemoveVerb = RunnerGroupApi.LabelRemoveVerb;
 
     public static Noun Create(Func<string, string?>? environment) => new("label", "Labels on the runners of the group: an administrator's labels route tasks that require them; reported capabilities are labels too, read-only",
     [
@@ -50,7 +48,7 @@ public static class RunnerLabelVerbs
         }
 
         var label = RunnerLabels.Normalize(parsed.Words[0]);
-        if (!LabelRule.IsMatch(label))
+        if (!RunnerGroupApi.IsLabel(label))
         {
             await context.Error.WriteLineAsync($"'{parsed.Words[0]}' is not a label: letters, digits and . _ : = - with no spaces, at most 64, such as gpu or network:outside.");
             return CliExit.Usage;
