@@ -14,7 +14,7 @@ async function storedText(page: Page, key: string): Promise<string | null> {
  * The widget editor of the Views page (plan 32 DBR25, M2 step 2): a chart from the palette opens its editor with the retail model's catalog; a field is dragged from the list into a well (and the request it asks for
  * changes in the same step, each part with the place of the document it comes from), picked from a well's list, or typed; a dimension dragged into a measure well is refused in the engine's words and nothing changes; a field the
  * catalog lacks is placed and flagged `unknown_member`; every well change is one undo step; the type chooser turns a table into a chart; a written query shows the binding message when an output misses an encoded field; a
- * filter the browser cannot check (a misspelt attribute typed in the YAML view) is answered by the source through `ViewsClient.validate` the saved file holds all of it.
+ * filter the browser cannot check (a misspelt attribute typed in the YAML view) is answered by the source through `ViewsClient.validate`; a layout's `widget_options` are set; the saved file holds all of it.
  */
 export async function editorWellsStory(page: Page) {
   const outside: string[] = []
@@ -100,7 +100,13 @@ export async function editorWellsStory(page: Page) {
   await by(page, 'ed-derived-back-chart').click()
   await expect(by(page, 'ed-derived-chart')).toHaveAttribute('data-state', 'request')
 
-  // 8. Place the three widgets and save.
+  // 8. widget_options of the layout, set beside the widget: density and a hidden title; the saved file holds them.
+  await by(page, 'ed-opt-desk-chart-density').selectOption('compact')
+  await by(page, 'ed-opt-desk-chart-show_title').selectOption('false')
+  await by(page, 'ed-opt-desk-chart-legend').selectOption('hide')
+  await by(page, 'ed-opt-desk-chart-show_title').selectOption('')
+
+  // 9. Place the three widgets and save.
   for (const id of ['chart', 'metric', 'table']) await by(page, `ed-place-desk-${id}`).click()
   await expect(by(page, 'ed-validity')).toHaveText('Valid')
   await by(page, 'ed-save').click()
@@ -108,11 +114,13 @@ export async function editorWellsStory(page: Page) {
 
   const saved = (await storedText(page, 'dashboard/wells-board'))!
   expect(saved).toContain('type: chart')
+  expect(saved).toContain('widget_options:')
+  expect(saved).toMatch(/chart: \{density: compact, legend: hide\}/)
   expect(saved).toContain('x: customers.region')
   expect(saved).toContain('color: products.category')
   expect(saved).not.toContain('products.colour')
 
-  // 9. The sample dashboard: its filter misspelt in the YAML view is answered by the source, at the filter's path.
+  // 10. The sample dashboard: its filter misspelt in the YAML view is answered by the source, at the filter's path.
   await page.goto('/views/dashboards/retail-sales-today?edit=1')
   await by(page, 'ed-widget-edit-net').click()
   await expect(by(page, 'ed-widget-editor-net')).toBeVisible()

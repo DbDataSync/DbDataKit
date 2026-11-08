@@ -110,7 +110,7 @@ The console's editor (`?edit=1` on a dashboard, form view; `DbDataKit/web/consol
   (`customers.region is a attribute, not a measure.`) and nothing changes. A chart's channels and a table's columns take both.
 - A field the catalog lacks is **placed** and flagged `unknown_member` in the well and in the derivation (the derivation puts it in the request's `attributes`), so a typo can be seen and fixed.
 - Every well change is the edit command `setWell` (one undo step); the type chooser is `changeWidgetType` (the fields go to the wells of the new type that take them, by role: an attribute to a chart's `x`, a measure to its `y`;
-  what no well takes is dropped).
+  what no well takes is dropped); a layout's `widget_options` are `setWidgetOption`.
 - What the browser cannot check (a filter's attribute, an order entry, totals) goes through `ViewsClient.validate`, whose answer is shown on the widget ("the source says ..."). The fixture source stands in for the server with
   `catalogDiagnostics`; a real source answers with the engine's codes at the file, line and path of the entry.
 - **Write the query out** switches the widget to `mode: explicit` with the derived request as its starting text, a raw editor, and the binding check on every keystroke (`DBD-VIEW-005`: an encoded field that is not an output of
