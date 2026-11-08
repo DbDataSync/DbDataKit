@@ -30,6 +30,8 @@ namespace DbDataKit.Views.Hosting;
 /// GET  /api/v1/dashboards/{name}/export?format=csv|xlsx|svg&amp;widget=&amp;layout=&amp;p.name=   a widget's rows (csv, xlsx: no browser), a dashboard's sheets (xlsx without widget), a chart's SVG
 /// GET  /api/v1/dashboards/{name}/print?layout=   the print page as HTML (the browser's own print)
 /// GET  /api/v1/views/print/{file}         print.js, print.css and the bundled fonts (no token: code, no data)
+/// GET  /api/v1/my/views?scope=mine|shared|all   a person's own dashboards and reports, and the ones shared with them (plan 32 DBR12); under /api/v1/my/dashboards/{name} and /reports/{name}:
+///      GET ?owner= (open), PUT {text, expected_version?} (save), DELETE, POST /render?owner=, GET /history[?version=], POST /restore {version, expected_version}, GET|PUT /shares, GET /promote ({path, text}, a file the views loader reads)
 /// GET  /health, /health/ready, /health/live
 /// </code>
 /// A refusal is <c>{code, message}</c> with its status: 400 invalid, 401 unauthenticated, 403 denied (an app's token narrowed past the document's models), 404 not_found, 413 too large, 500, 501 export_unavailable, 503 draining.
@@ -184,6 +186,8 @@ public sealed class ViewsModule(ViewsOptions options, ViewsPublications publishe
             return refusal ?? await api!.PreviewAsync(who, body, c.Connection.RemoteIpAddress?.ToString(), trace, c.RequestAborted).ConfigureAwait(false);
         })));
 
+        MapMine(routes);
+
         foreach (var kind in ViewDefinitions.Kinds)
         {
             var prefix = "/api/v1/" + ViewsApi.Collection(kind);
@@ -198,6 +202,41 @@ public sealed class ViewsModule(ViewsOptions options, ViewsPublications publishe
                 var (body, refusal) = await ReadBodyAsync(c, options.MaxBodyBytes, "A render request").ConfigureAwait(false);
                 return refusal ?? await api!.RenderAsync(who, kind, name, body, c.Connection.RemoteIpAddress?.ToString(), trace, c.RequestAborted).ConfigureAwait(false);
             })));
+        }
+    }
+
+    /// <summary>The routes of a person's own dashboards and reports (plan 32 DBR12; see <see cref="ViewsApi"/>): the same token as every route, and the caller is the owner of what they save.</summary>
+    private void MapMine(IEndpointRouteBuilder routes)
+    {
+        routes.MapGet("/api/v1/my/views", (Func<HttpContext, Task<IResult>>)(c => As(c, (who, trace) => Task.FromResult(api!.MyList(who, Query(c, "scope"), Query(c, "kind"), trace)))));
+        foreach (var kind in ViewDefinitions.Kinds)
+        {
+            var prefix = ViewsApi.MyPrefix + ViewsApi.Collection(kind);
+            routes.MapGet(prefix + "/{name}", (Func<string, HttpContext, Task<IResult>>)((name, c) => As(c, (who, trace) => Task.FromResult(api!.MyOpen(who, kind, name, Query(c, "owner"), trace)))));
+            routes.MapDelete(prefix + "/{name}", (Func<string, HttpContext, Task<IResult>>)((name, c) => As(c, (who, trace) => Task.FromResult(api!.MyDelete(who, kind, name, trace)))));
+            routes.MapPut(prefix + "/{name}", (Func<string, HttpContext, Task<IResult>>)((name, c) => As(c, async (who, trace) =>
+            {
+                var (body, refusal) = await ReadBodyAsync(c, options.MaxPreviewBytes, "A save").ConfigureAwait(false);
+                return refusal ?? api!.MySave(who, kind, name, body, trace);
+            })));
+            routes.MapPost(prefix + "/{name}/render", (Func<string, HttpContext, Task<IResult>>)((name, c) => As(c, async (who, trace) =>
+            {
+                var (body, refusal) = await ReadBodyAsync(c, options.MaxBodyBytes, "A render request").ConfigureAwait(false);
+                return refusal ?? await api!.MyRenderAsync(who, kind, name, Query(c, "owner"), body, c.Connection.RemoteIpAddress?.ToString(), trace, c.RequestAborted).ConfigureAwait(false);
+            })));
+            routes.MapGet(prefix + "/{name}/history", (Func<string, HttpContext, Task<IResult>>)((name, c) => As(c, (who, trace) => Task.FromResult(api!.MyHistory(who, kind, name, Query(c, "version"), trace)))));
+            routes.MapPost(prefix + "/{name}/restore", (Func<string, HttpContext, Task<IResult>>)((name, c) => As(c, async (who, trace) =>
+            {
+                var (body, refusal) = await ReadBodyAsync(c, options.MaxBodyBytes, "A restore").ConfigureAwait(false);
+                return refusal ?? api!.MyRestore(who, kind, name, body, trace);
+            })));
+            routes.MapGet(prefix + "/{name}/shares", (Func<string, HttpContext, Task<IResult>>)((name, c) => As(c, (who, trace) => Task.FromResult(api!.MyShares(who, kind, name, null, write: false, trace)))));
+            routes.MapPut(prefix + "/{name}/shares", (Func<string, HttpContext, Task<IResult>>)((name, c) => As(c, async (who, trace) =>
+            {
+                var (body, refusal) = await ReadBodyAsync(c, options.MaxBodyBytes, "A share list").ConfigureAwait(false);
+                return refusal ?? api!.MyShares(who, kind, name, body, write: true, trace);
+            })));
+            routes.MapGet(prefix + "/{name}/promote", (Func<string, HttpContext, Task<IResult>>)((name, c) => As(c, (who, trace) => Task.FromResult(api!.MyPromote(who, kind, name, trace)))));
         }
     }
 

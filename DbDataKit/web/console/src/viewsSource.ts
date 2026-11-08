@@ -1,5 +1,6 @@
 import { catalogDiagnostics, fixtureClient, moduleClient, retailCatalog, storedDocuments, type FixtureBundle, type RenderedWidgets, type ViewKind, type ViewsClient } from '@dbdatakit/visuals'
 import { consoleApi, type InstanceSummary } from './api'
+import { isPersonal, personalClient, personalId, serverOf, type PersonalClient } from './userViews'
 
 /**
  * The console's sources of dashboards and reports (plan 32 DBR23 and DBR11b). **Fixtures** (plan 32 DBR23, M1): the retail sample's files and recorded results, no server. **A Gateway's published documents**: the Gateway that runs the `views` module
@@ -45,8 +46,10 @@ export const FIXTURES = 'fixtures'
 export interface ViewsSource {
   id: string
   label: string
-  /** True for a server's published documents; false for the fixtures. */
+  /** True for a server's published documents; false for the fixtures and for a person's own documents. */
   published: boolean
+  /** A person's own dashboards and reports on that server (plan 32 DBR12): the server's id, when this is that source. */
+  personal?: { server: string }
 }
 
 export const fixturesSource: ViewsSource = { id: FIXTURES, label: 'Fixtures (recorded results)', published: false }
@@ -69,7 +72,20 @@ export async function discoverSources(deps: { list?: () => Promise<InstanceSumma
   const doFetch = deps.fetch ?? ((input, init) => fetch(input, init))
   const gateways = servers.filter((s) => s.product === 'dbdatagateway' && s.reachable)
   const enabled = await Promise.all(gateways.map((s) => moduleEnabled(s, doFetch)))
-  return [...gateways.filter((_, i) => enabled[i]).map((s): ViewsSource => ({ id: s.id, label: `${s.name} (published)`, published: true })), fixturesSource]
+  const served = gateways.filter((_, i) => enabled[i])
+  // each server that runs the module also keeps a person's own documents (DBR12): a source beside the published ones, after them, so the automatic choice is still the first published source
+  return [
+    ...served.map((s): ViewsSource => ({ id: s.id, label: `${s.name} (published)`, published: true })),
+    ...served.map((s): ViewsSource => ({ id: personalId(s.id), label: `My dashboards on ${s.name}`, published: false, personal: { server: s.id } })),
+    fixturesSource,
+  ]
+}
+
+/** The source of a person's own documents that goes with a source: a server's published documents and the server's own are one pair; the fixtures have the first personal source there is (null when no server runs the module). */
+export function personalFor(sources: ViewsSource[], source: ViewsSource): ViewsSource | null {
+  if (source.personal) return source
+  const pair = sources.find((s) => s.personal && !source.personal && s.personal.server === source.id)
+  return pair ?? (source.published ? null : sources.find((s) => s.personal) ?? null)
 }
 
 /** The source an address asks for (`?source=`): a known id, else the first published source (the automatic choice), else the fixtures; `unknown` is the id asked for that is not a source now. */
@@ -96,10 +112,25 @@ const clients = new Map<string, ViewsClient>()
 /** The client of a source, created on first use: a server's published documents through the relay, or the fixtures. */
 export function viewsClient(source: string = FIXTURES): ViewsClient {
   if (source === FIXTURES) return fixtureViewsClient()
+  if (isPersonal(source)) return personalViewsClient(source)
   let found = clients.get(source)
   if (!found) {
     found = logged(moduleClient({ baseUrl: `/relay/${encodeURIComponent(source)}`, serverCheck: true }))
     clients.set(source, found)
+  }
+  return found
+}
+
+const personal = new Map<string, PersonalClient>()
+
+/** The client of a person's own documents on a server (the source `mine:<server>`): the `ViewsClient` of the board and the editor, and the shares, history, restore and promote the Views page adds. */
+export function personalViewsClient(source: string): PersonalClient {
+  let found = personal.get(source)
+  if (!found) {
+    const made = personalClient({ baseUrl: `/relay/${encodeURIComponent(serverOf(source))}` })
+    // what it was asked is shown on the board as for any source (the spread keeps the extra calls)
+    found = logged(made) as PersonalClient
+    personal.set(source, found)
   }
   return found
 }

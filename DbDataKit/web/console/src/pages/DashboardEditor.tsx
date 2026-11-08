@@ -5,6 +5,7 @@ import { clientStore, type ViewKind } from '@dbdatakit/visuals'
 import { DashboardEditor as Editor, type EditorHost } from '@dbdatakit/views-editor'
 import { viewsClient, FIXTURES } from '../viewsSource'
 import { withSource } from '../viewsUrl'
+import { isPersonal } from '../userViews'
 
 const AREA: Record<ViewKind, string> = { dashboard: '/views/dashboards', report: '/views/reports' }
 
@@ -25,7 +26,7 @@ export function DashboardEditor({ kind, name, source = FIXTURES, keep = null }: 
       viewHref: (k, n) => area(`${AREA[k]}/${encodeURIComponent(n)}`),
       editHref: (k, n) => area(`${AREA[k]}/${encodeURIComponent(n)}?edit=1`),
       go: (href, options) => navigate(href, options),
-      ...(source === FIXTURES ? {} : { deleteQuestion: (_k: ViewKind, n: string) => `Stop serving ${n} to the group? Its versions are kept and publishing it again brings it back (Versions on the board).` }),
+      ...(source === FIXTURES || isPersonal(source) ? {} : { deleteQuestion: (_k: ViewKind, n: string) => `Stop serving ${n} to the group? Its versions are kept and publishing it again brings it back (Versions on the board).` }),
       changed: () => queryClient.invalidateQueries({ queryKey: ['views'] }),
     }
   }, [source, keep, navigate, queryClient])

@@ -14,8 +14,9 @@ public sealed record ViewsAppScope(string Instance, IReadOnlyCollection<string> 
 /// <summary>
 /// Who is calling the module: the serving core's <see cref="ServingCaller"/> (identity, roles, attributes: what every request runs under) and, for an app's token, the narrowing. <see cref="Caller"/> is what the access rules key on;
 /// a narrowed principal's caller carries the claim <c>app</c> (the instance) added by the module, so a cached result is never shared between the person's own session and the same person inside an app.
+/// <see cref="Groups"/> are the groups the person is in when the host's callers have no roles (the Gateway's: the identity home's groups); a person's own documents are shared to a group by them (null: the caller's roles).
 /// </summary>
-public sealed record ViewsPrincipal(ServingCaller Caller, ViewsAppScope? App = null);
+public sealed record ViewsPrincipal(ServingCaller Caller, ViewsAppScope? App = null, IReadOnlyCollection<string>? Groups = null);
 
 /// <summary>
 /// Turns what a request carries into a principal: the same tokens as the rest of the serving layer (a console token, a personal access token, an access token of the identity home, an app's token). The host that mounts the

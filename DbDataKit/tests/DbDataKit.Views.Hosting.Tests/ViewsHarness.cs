@@ -16,11 +16,16 @@ internal sealed class TestCallers : IViewsCallers
 {
     public static readonly ServingCaller All = new("u-all", "alice", new HashSet<string> { "analyst" }, new Dictionary<string, string>());
     public static readonly ServingCaller West = new("u-west", "wendy", new HashSet<string> { "analyst" }, new Dictionary<string, string> { ["region"] = "West" });
+    /// <summary>A person with no role the others share by, and no row narrowing: DBR12's "another person", who sees only what is shared with them by name or by everyone.</summary>
+    public static readonly ServingCaller Bob = new("u-bob", "bob", new HashSet<string> { "clerk" }, new Dictionary<string, string>());
+    public static readonly ServingCaller East = new("u-east", "erin", new HashSet<string> { "analyst" }, new Dictionary<string, string> { ["region"] = "East" });
 
     public Dictionary<string, ViewsPrincipal> Tokens { get; } = new()
     {
         ["all"] = new(All),
         ["west"] = new(West),
+        ["bob"] = new(Bob),
+        ["east"] = new(East),
         // an app's token: the person is Wendy, and the app's manifest names the model the dashboard queries
         ["app-sales"] = new(West, new ViewsAppScope("portal", ["sales_catalog"])),
         ["app-other"] = new(West, new ViewsAppScope("budget", ["other_model"])),
@@ -62,6 +67,7 @@ internal sealed class ViewsHarness : IAsyncDisposable
     public DefinitionStore Store { get; private set; } = null!;
     public PayloadStore Payloads { get; private set; } = null!;
     public AuditLog Audit { get; private set; } = null!;
+    public UserViewStore UserViews { get; private set; } = null!;
     public TestCallers Callers { get; } = new();
     public ViewsPublications Published { get; private set; } = null!;
     public ViewsModule Module { get; private set; } = null!;
@@ -71,13 +77,14 @@ internal sealed class ViewsHarness : IAsyncDisposable
 
     public static string ModelContent => new JsonObject { ["catalog"] = CatalogText }.ToJsonString();
 
-    public static async Task<ViewsHarness> StartAsync(StateEngines engines, string engine, TimeSpan? cacheTtl = null, IViewsAudit? audit = null, bool publish = true, bool useModuleClock = false, bool follow = true, IReportExporter? exporter = null, string? pageAssets = null, long? maxExportRows = null)
+    public static async Task<ViewsHarness> StartAsync(StateEngines engines, string engine, TimeSpan? cacheTtl = null, IViewsAudit? audit = null, bool publish = true, bool useModuleClock = false, bool follow = true, IReportExporter? exporter = null, string? pageAssets = null, long? maxExportRows = null, bool personalDocuments = true)
     {
         var h = new ViewsHarness();
-        var database = engines.Provision(engine).Open([DefinitionsModule.Module, PayloadStore.Module, AuditModule.Module], new StateScope(Group: "main"), time: h.Clock);
+        var database = engines.Provision(engine).Open([DefinitionsModule.Module, PayloadStore.Module, AuditModule.Module, UserViewsModule.Module], new StateScope(Group: "main"), time: h.Clock);
         h.Store = new DefinitionStore(database);
         h.Payloads = new PayloadStore(database);
         h.Audit = new AuditLog(database, "views");
+        h.UserViews = new UserViewStore(database);
         var kinds = new DefinitionKinds().Register(new DefinitionKind("semantic-model", ["serving"], PublishMode.Serve) { Formats = DefinitionFormats.Of(2) });
         ViewsPublications.Register(kinds, h.Store, h.Payloads);
         h.Publisher = new DefinitionPublisher(database, kinds, h.Payloads, "serving");
@@ -90,6 +97,7 @@ internal sealed class ViewsHarness : IAsyncDisposable
         {
             CacheTtl = cacheTtl ?? TimeSpan.Zero, Time = useModuleClock ? h.ModuleClock : TimeProvider.System, Follow = follow, PollInterval = TimeSpan.FromHours(1), DrainTimeout = TimeSpan.FromSeconds(20),
             Resolver = new ResolverOptions { WidgetTimeout = TimeSpan.FromSeconds(20) }, Exporter = exporter, PageAssets = pageAssets, MaxExportRows = maxExportRows ?? 100_000,
+            UserViews = personalDocuments ? h.UserViews : null,
         };
         h.Module = new ViewsModule(options, h.Published, h.Callers, audit ?? new StateViewsAudit(h.Audit));
         await h.Module.StartAsync(services);

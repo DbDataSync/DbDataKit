@@ -32,7 +32,7 @@ public sealed class ViewsPublications
     /// (what the Gateway's publish does), the registry's validator for the kind runs over it (the loader, the catalog check, saved queries, control attributes, images), and what passes is a <see cref="PublishedView"/> a resolver can run.
     /// A document that would be refused is not built: <paramref name="refusal"/> says why in the publish's words and <paramref name="diagnostics"/> places the loader's findings in the text.
     /// </summary>
-    public PublishedView? Draft(string kind, string name, string text, out string? refusal, out IReadOnlyList<ConfigDiagnostic> diagnostics)
+    public PublishedView? Draft(string kind, string name, string text, out string? refusal, out IReadOnlyList<ConfigDiagnostic> diagnostics, int version = 0)
     {
         var file = ViewDefinitions.FileName(kind, name, text);
         var loaded = ViewsLoader.Load(text, file, ViewDefinitions.KindOf(kind));
@@ -46,8 +46,8 @@ public sealed class ViewsPublications
         var candidate = new DefinitionCandidate(kind, name, text, [], dependsOn, ViewDefinitions.FormatOf(text) ?? DefinitionFormat.First);
         refusal = ViewDefinitions.Validate(candidate, ViewPublishingSources.From(store, payloads));
         if (refusal is not null) return null;
-        // version 0: it is nobody's version, and it has no files, so a lookup of its files finds none
-        return For(kind).Build(new DefinitionVersion(kind, name, 0, string.Empty, text, dependsOn, "draft", DateTimeOffset.UtcNow, null));
+        // version 0 unless the caller says (a person's own document passes its saved version): it is nobody's published version, and it has no files, so a lookup of its files finds none
+        return For(kind).Build(new DefinitionVersion(kind, name, version, string.Empty, text, dependsOn, "draft", DateTimeOffset.UtcNow, null));
     }
 
     /// <summary>The subscribers a follower is given (alone, or beside the host's own).</summary>

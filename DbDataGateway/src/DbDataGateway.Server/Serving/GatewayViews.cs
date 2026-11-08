@@ -97,6 +97,7 @@ public sealed class GatewayViews
         {
             Listen = null,
             Follow = false,
+            UserViews = new UserViewStore(state),
             CacheTtl = TimeSpan.FromSeconds(options.CurrentValue.Views.CacheSeconds),
             MaxExportRows = options.CurrentValue.Views.MaxExportRows,
             Exporter = ExporterOf(options.CurrentValue.Views.Export, loggers),
@@ -130,7 +131,7 @@ public sealed class GatewayViews
     {
         if (user is null) return null;
         var home = await homeCallers.GetAsync(cancellationToken).ConfigureAwait(false);
-        return new ViewsPrincipal(new GatewayCaller(HomePrincipals.Create(home, user, method, options.CurrentValue)));
+        return Principal(HomePrincipals.Create(home, user, method, options.CurrentValue));
     }
 
     /// <summary>
@@ -140,9 +141,12 @@ public sealed class GatewayViews
     public async ValueTask<ViewsPrincipal> ConsolePrincipalAsync(ValidatedToken token, CancellationToken cancellationToken)
     {
         var home = await homeCallers.GetAsync(cancellationToken).ConfigureAwait(false);
-        if (home.UserOf(token.SubjectId) is { } user) return new ViewsPrincipal(new GatewayCaller(HomePrincipals.Create(home, user, "console", options.CurrentValue)));
-        return new ViewsPrincipal(new GatewayCaller(new GatewayPrincipal(token.SubjectName ?? token.SubjectId, "console", [])));
+        if (home.UserOf(token.SubjectId) is { } user) return Principal(HomePrincipals.Create(home, user, "console", options.CurrentValue));
+        return Principal(new GatewayPrincipal(token.SubjectName ?? token.SubjectId, "console", []));
     }
+
+    /// <summary>A person as the module knows them: the Gateway's caller, and the identity home's groups (a person's own documents are shared to a group of the home; the caller has no roles).</summary>
+    private static ViewsPrincipal Principal(GatewayPrincipal principal) => new(new GatewayCaller(principal), Groups: principal.HomeGroups);
 
     private sealed class Callers(GatewayViews views) : IViewsCallers
     {
