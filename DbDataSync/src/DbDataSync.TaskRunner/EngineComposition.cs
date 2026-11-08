@@ -69,7 +69,7 @@ internal static class EngineComposition
         foreach (var flightSqlDriver in ArrowFlightSqlDriver.CreateAll())
             driverRegistry.RegisterWithScripting(flightSqlDriver, scriptHost);
         DriverLoader.LoadDescriptorDrivers(repoRoot, libraryRegistry, driverRegistry);
-        DriverLoader.LoadCompiledDrivers(repoRoot, driverRegistry);
+        DriverLoader.LoadCompiledDrivers(repoRoot, driverRegistry, cacheRoot: Path.Combine(scriptCache.Root, "drivers"));
 
         return new EngineServices(configRepository, driverRegistry, libraryRegistry, scriptHost);
     }

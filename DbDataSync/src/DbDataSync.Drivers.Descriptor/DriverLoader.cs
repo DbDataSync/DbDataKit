@@ -55,7 +55,7 @@ public static class DriverLoader
     /// A failed driver script — a missing package, a compile error, a contract-version mismatch, a script that does not end with an <see cref="IDriver"/> — is logged and skipped rather than failing host startup, for
     /// the same reason a failed descriptor is: one driver's problem should not take every other driver down with it. A <c>driver.json</c> (the format before <c>driver.csx</c>) is logged by name and skipped too.
     /// </summary>
-    public static void LoadCompiledDrivers(string repoRoot, DriverRegistry driverRegistry, Action<string, Exception>? onError = null)
+    public static void LoadCompiledDrivers(string repoRoot, DriverRegistry driverRegistry, Action<string, Exception>? onError = null, string? cacheRoot = null)
     {
         onError ??= (message, ex) => Console.Error.WriteLine($"{message}: {ex.Message}");
 
@@ -78,7 +78,7 @@ public static class DriverLoader
 
             try
             {
-                var driver = DriverScriptHost.Load(dir);
+                var driver = DriverScriptHost.Load(dir, cacheRoot);
                 if (!DriverContract.IsSupported(driver.ContractVersion))
                 {
                     throw new NotSupportedException(
