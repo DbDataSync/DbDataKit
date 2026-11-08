@@ -305,15 +305,15 @@ public sealed class PackageActivator
     private IReadOnlyList<string> Affected(string name, string channel)
     {
         var affected = new List<string> { name };
-        var isRuntime = false;
+        string? runtimeName = null;   // a runtime is stored per platform (<name>-<platform>), a definition names it by <name>
         foreach (var version in new[] { _publisher.Head(Kind, name, channel)?.Active, _publisher.Head(Kind, name, channel)?.Staged })
-            if (version is { } v && _store.Get(Kind, name, v)?.Content is { } text && PackageManifestReader.Load(text, $"{Kind}/{name}@{v}") is { Ok: true, Manifest: { IsRuntime: true } })
-                isRuntime = true;
-        if (!isRuntime) return affected;
+            if (version is { } v && _store.Get(Kind, name, v)?.Content is { } text && PackageManifestReader.Load(text, $"{Kind}/{name}@{v}") is { Ok: true, Manifest: { IsRuntime: true } runtimeManifest })
+                runtimeName = runtimeManifest.Name;
+        if (runtimeName is null) return affected;
         foreach (var other in _publisher.Names(Kind))
         {
             if (other == name || _publisher.Head(Kind, other, channel)?.Active is not { } active) continue;
-            if (_store.Get(Kind, other, active)?.Content is { } text && PackageManifestReader.Load(text, $"{Kind}/{other}@{active}") is { Ok: true, Manifest.Launch.Runtime: { } reference } && reference.Name == name)
+            if (_store.Get(Kind, other, active)?.Content is { } text && PackageManifestReader.Load(text, $"{Kind}/{other}@{active}") is { Ok: true, Manifest.Launch.Runtime: { } reference } && reference.Name == runtimeName)
                 affected.Add(other);
         }
 

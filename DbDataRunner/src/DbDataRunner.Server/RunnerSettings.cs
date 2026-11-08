@@ -56,6 +56,9 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
     /// <summary>What staging says of the contracts a package was built against (null: <see cref="RunnerContracts.Check"/>). Lets this instance judge them as an older runner of a mixed group would, which a test uses.</summary>
     public Func<DbDataKit.Runner.PackageManifest, string?>? StagingContracts { get; init; }
 
+    /// <summary>The platform this runner is, as a runtime identifier (null: the process's own, <see cref="DbDataKit.Runner.RuntimePlatforms.Current"/>). It picks the runtime package a definition runs on; a test gives the other platform than the one it runs on.</summary>
+    public string? Platform { get; init; }
+
     /// <summary>The longest an activation waits for the runs of a package in flight (plan 28a R18): ten minutes by default.</summary>
     public TimeSpan ActivationMaxWait { get; init; } = TimeSpan.FromMinutes(10);
 
@@ -106,6 +109,7 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
         TaskHostPath = TaskHostPath,
         Staging = Staging,
         StagingContracts = StagingContracts,
+        Platform = Platform,
         TaskEnvironment = TaskEnvironment,
         ActivationMaxWait = ActivationMaxWait,
     };

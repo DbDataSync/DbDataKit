@@ -56,6 +56,8 @@ public class BuildRuntimePackageTests
         Assert.Null(RunnerContracts.Check(manifest));
         Assert.True(manifest.IsRuntime);
         Assert.Equal("1.2.3", manifest.Version);
+        Assert.Equal(rid, manifest.Platform);                                    // one package per platform: the same name and version, stored as dbdatabuild-runtime-<rid>
+        Assert.Equal("dbdatabuild-runtime-" + rid, manifest.PackageName);
         Assert.Empty(manifest.Tasks);
         Assert.Equal(LaunchKind.Executable, manifest.Launch.Kind);
 

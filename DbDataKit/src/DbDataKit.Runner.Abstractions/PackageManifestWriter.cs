@@ -22,6 +22,7 @@ public static partial class PackageManifestWriter
 
         if (manifest.IsRuntime) w.Append("runtime: true\n");
         if (manifest.Version is not null) w.Append("version: ").Append(D(manifest.Version)).Append('\n');
+        if (manifest.Platform is not null) w.Append("platform: ").Append(Q(manifest.Platform)).Append('\n');
 
         w.Append("launch: ").Append(Flow(
             ("kind", manifest.Launch.Runtime is not null && manifest.Launch.Kind == LaunchKind.Executable ? null : manifest.Launch.Kind == LaunchKind.Assembly ? "assembly" : "executable"),

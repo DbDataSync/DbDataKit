@@ -16,10 +16,10 @@ public static class RunnerContracts
     public static string Protocol => RunnerProtocol.V1;
 
     /// <summary>
-    /// The keys added to <c>package/1</c> after its first runners (<see cref="PackageManifest.NewerKeys"/>) that this runner reads: <c>launch.runtime</c> and <c>runtime</c> (plan 28c E04). A runner without a key refuses a
+    /// The keys added to <c>package/1</c> after its first runners (<see cref="PackageManifest.NewerKeys"/>) that this runner reads: <c>launch.runtime</c>, <c>runtime</c> (plan 28c E04) and <c>platform</c> (a runtime package per platform). A runner without a key refuses a
     /// manifest that carries it, naming it: <see cref="CheckKeys"/>.
     /// </summary>
-    public static IReadOnlyList<string> KnownNewerKeys { get; } = [PackageManifest.LaunchRuntimeKey, PackageManifest.RuntimeKey];
+    public static IReadOnlyList<string> KnownNewerKeys { get; } = [PackageManifest.LaunchRuntimeKey, PackageManifest.RuntimeKey, PackageManifest.PlatformKey];
 
     /// <summary>What is wrong with the manifest for this runner, in words: a newer key it does not read, then the contracts it was built against; null when this runner can serve it.</summary>
     public static string? Check(PackageManifest manifest) => CheckKeys(manifest, KnownNewerKeys) ?? Check(manifest.BuiltAgainst);

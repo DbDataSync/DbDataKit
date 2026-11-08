@@ -34,7 +34,7 @@ internal static class BuildRuntimePackage
             frameworkDependent
                 ? new PackageLaunch(LaunchKind.Executable, Command: "dotnet", Args: ["{runtime}/bin/dbdatabuild.dll", "--runner-task"])
                 : new PackageLaunch(LaunchKind.Executable, Command: "bin/" + (rid == "win-x64" ? "dbdatabuild.exe" : "dbdatabuild"), Args: ["--runner-task"]),
-            new BuiltAgainst("10.0", "1", "dbdatakit.runner.v1"), [], IsRuntime: true, Version: version);
+            new BuiltAgainst("10.0", "1", "dbdatakit.runner.v1"), [], IsRuntime: true, Version: version, Platform: rid);
 
     /// <summary>A directory of the layout `publish-runtime.sh` writes, for this machine's platform.</summary>
     public static string Directory() => Environment.GetEnvironmentVariable("DBDATABUILD_TEST_PUBLISHED") is { Length: > 0 } given ? Checked(given) : Published.Value;
@@ -85,7 +85,7 @@ internal sealed class BuildOnRunner : IAsyncDisposable
     public string DataDirectory => Path.Combine(_root, "run");
 
     /// <summary>Where the runtime's single-file executable unpacks its natives: one directory per runtime version, under the cache and outside every view.</summary>
-    public string ExtractDirectory => Path.Combine(DataDirectory, "cache", "runtimes", BuildRuntimePackage.Name + "@1");
+    public string ExtractDirectory => Path.Combine(DataDirectory, "cache", "runtimes", BuildRuntimePackage.Name + "-" + BuildRuntimePackage.Rid + "@1");
 
     /// <summary>Starts the runner with the project in <paramref name="projectDirectory"/>; the login of <paramref name="connection"/> (read and write) is <paramref name="connectionString"/>, null when the project needs none.</summary>
     public static async Task<BuildOnRunner> StartAsync(string projectDirectory, string connection, string? connectionString, TimeSpan? every)

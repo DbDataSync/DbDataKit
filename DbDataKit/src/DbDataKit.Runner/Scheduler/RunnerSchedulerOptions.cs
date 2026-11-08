@@ -62,6 +62,9 @@ public sealed class RunnerSchedulerOptions
     /// <summary>Where the loop reports what it skipped and why.</summary>
     public ILogger? Logger { get; init; }
 
+    /// <summary>The platform this runner is (<see cref="RuntimePlatforms.Current"/> when null): the runtime package a <c>launch.runtime</c> reference resolves to is the one built for it. Tests give the other platform than the one they run on.</summary>
+    public string? Platform { get; init; }
+
     /// <summary>Turns a task's connection slots into the connections its channel binds them to (plan 28c E02); null: the runner has no connection bindings, and a task starts with no handles.</summary>
     public DbDataKit.Runner.Protocol.Server.ISlotResolver? Slots { get; init; }
 

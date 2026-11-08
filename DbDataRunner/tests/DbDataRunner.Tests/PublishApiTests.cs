@@ -414,6 +414,46 @@ public sealed class PublishApiTests
         Assert.Contains("8.0", ex.Message);
         Assert.Contains(RunnerContracts.Dotnet, ex.Message);
     }
+
+    [Fact]
+    public async Task One_runtime_installs_once_per_platform_side_by_side_without_a_version_clash_and_one_with_no_platform_is_refused_naming_what_to_do()
+    {
+        await using var h = new RunnerHarness(StateEngineIds.Sqlite);
+        var work = Directory.CreateTempSubdirectory("dbdr-runtime-").FullName;
+        try
+        {
+            PackageInstalled Install(string? platform, string content, string version = "2.1.0")
+            {
+                var directory = Directory.CreateDirectory(Path.Combine(work, platform ?? "none", content)).FullName;
+                Directory.CreateDirectory(Path.Combine(directory, "files", "bin"));
+                File.WriteAllText(Path.Combine(directory, "files", "bin", "engine"), content);
+                var manifest = new PackageManifest("engine", null, new PackageLaunch(LaunchKind.Executable, Command: "bin/engine"), new BuiltAgainst(null, null, "dbdatakit.runner.v1"), [], IsRuntime: true, Version: version, Platform: platform);
+                var path = SamplePackage.WriteManifest(manifest, directory);
+                return RunnerPackageInstaller.Install(h.State, path, Path.Combine(directory, "files"), "dev", "test");
+            }
+
+            var linux = Install("linux-x64", "linux 1");
+            var windows = Install("win-x64", "windows 1");
+
+            // the same runtime name and the same engine version, two packages: each is version 1 of its own, both stay active in the channel
+            Assert.Equal(("engine-linux-x64", 1), (linux.Package, linux.Version));
+            Assert.Equal(("engine-win-x64", 1), (windows.Package, windows.Version));
+            var publisher = new DefinitionPublisher(h.State, RunnerPackages.Kinds(), new PayloadStore(h.State), "runner");
+            Assert.Equal(1, publisher.Head(RunnerPackages.Kind, "engine-linux-x64", "dev")!.Active);
+            Assert.Equal(1, publisher.Head(RunnerPackages.Kind, "engine-win-x64", "dev")!.Active);
+
+            // a new Linux build is version 2 of the Linux package and leaves the Windows one alone
+            Assert.Equal(2, Install("linux-x64", "linux 2", "2.2.0").Version);
+            Assert.Equal(2, publisher.Head(RunnerPackages.Kind, "engine-linux-x64", "dev")!.Active);
+            Assert.Equal(1, publisher.Head(RunnerPackages.Kind, "engine-win-x64", "dev")!.Active);
+
+            // a runtime with no platform is refused, naming the key and what to do
+            var ex = Assert.Throws<PackageInstallException>(() => Install(null, "legacy"));
+            Assert.Contains("`platform`", ex.Message);
+            Assert.Contains("published again with one", ex.Message);
+        }
+        finally { try { Directory.Delete(work, recursive: true); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* temp */ } }
+    }
 }
 
 /// <summary>A copy of a directory in the temporary folder, removed when disposed.</summary>

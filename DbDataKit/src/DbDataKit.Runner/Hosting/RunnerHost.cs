@@ -138,6 +138,7 @@ public class RunnerHost(RunnerHostSettings settings, StateDatabase state, ILogge
                 Instance = () => _instance,
                 Logger = _log,
                 Slots = slots,
+                Platform = settings.Platform,
             });
         _scheduler = scheduler;
         scheduler.SuspendHeartbeats = _silent;
@@ -147,7 +148,7 @@ public class RunnerHost(RunnerHostSettings settings, StateDatabase state, ILogge
 
         // staging (plan 28a R17): every staged version of a package is prepared here and reported; whichever instance sees every live one ready activates it (R18: after the runs in flight, with the progress migration)
         var activator = new PackageActivator(state, publisher, new ActivationOptions { MaxWait = settings.ActivationMaxWait, Service = RunnerNames.EngineService, Logger = _log });
-        var follower = new StagingFollower(state, publisher, cache, activator, new StagingOptions { Instance = () => _instance, Lease = settings.InstanceLease, Poll = settings.Tick, Contracts = settings.StagingContracts ?? RunnerContracts.Check, Logger = _log });
+        var follower = new StagingFollower(state, publisher, cache, activator, new StagingOptions { Instance = () => _instance, Lease = settings.InstanceLease, Poll = settings.Tick, Contracts = settings.StagingContracts ?? RunnerContracts.Check, Platform = settings.Platform, Logger = _log });
         if (settings.Staging) _staging = Task.Run(() => follower.RunAsync(_stopping.Token));
         _log.LogInformation("Runner {Instance} serving the channels {Channels} (task host {TaskHost}).", _instance, string.Join(", ", settings.Channels), TaskHostPath);
     }

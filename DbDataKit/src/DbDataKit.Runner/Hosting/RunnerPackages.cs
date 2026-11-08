@@ -35,7 +35,10 @@ public static class RunnerPackages
         var load = PackageManifestReader.Load(candidate.Manifest, $"{candidate.Name}/package.yaml");
         if (!load.Ok) return string.Join(" ", load.Diagnostics.Where(d => d.Severity == ConfigSeverity.Error).Select(d => d.ToString()));
         var manifest = load.Manifest!;
-        if (manifest.Name != candidate.Name) return $"the manifest is for the package '{manifest.Name}', not '{candidate.Name}'.";
+        if (manifest.PackageName != candidate.Name)
+            return manifest.IsRuntime && manifest.Platform is not null
+                ? $"the manifest is for the runtime '{manifest.Name}' built for {manifest.Platform}, which is the package '{manifest.PackageName}', not '{candidate.Name}'."
+                : $"the manifest is for the package '{manifest.Name}', not '{candidate.Name}'.";
         if (manifest.Launch.Kind == LaunchKind.Assembly && manifest.Launch.Assembly is { } assembly && candidate.Artifacts.All(a => a.Path != assembly.Replace('\\', '/')))
             return $"the launch assembly '{assembly}' is not among the package's files.";
         // an executable's command is a path inside the package (it has a directory part and is relative) or a program on the runner; only the first must be among the files

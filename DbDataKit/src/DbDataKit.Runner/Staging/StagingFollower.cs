@@ -23,6 +23,9 @@ public sealed class StagingOptions
     /// <summary>What is wrong with the contracts a package was built against and the newer manifest keys it uses, in words (null: this runner can serve it). Null: nothing is checked here.</summary>
     public Func<PackageManifest, string?>? Contracts { get; init; }
 
+    /// <summary>The platform this runner is (<see cref="RuntimePlatforms.Current"/> when null). A runtime package for another platform is not fetched here; a definition's runtime is the one of this platform.</summary>
+    public string? Platform { get; init; }
+
     public ILogger? Logger { get; init; }
 }
 
@@ -172,11 +175,16 @@ public sealed class StagingFollower
         if (_options.Contracts?.Invoke(manifest) is { } contract)
             throw new StagingFailedException($"Version {version} of '{name}' cannot run on this runner: {contract}");
 
-        // a definition run by a runtime package (plan 28c E04): the runtime has to be active in this channel and in the range, and both views are prepared here
+        // a runtime package built for another platform is ready without being fetched: this runner never extracts it (a runner of that platform does)
+        var platform = _options.Platform ?? RuntimePlatforms.Current;
+        if (manifest.IsRuntime && manifest.Platform != platform)
+            return new Found($"runtime for {manifest.Platform}; this runner is {platform} and does not fetch it", []);
+
+        // a definition run by a runtime package (plan 28c E04): the runtime has to be active in this channel, built for this platform and in the range, and both views are prepared here
         if (manifest.Launch.Runtime is { } reference)
         {
             ResolvedRuntime runtime;
-            try { runtime = RuntimeResolution.Resolve(_store, _publisher, reference, channel, $"{name}@{version}"); }
+            try { runtime = RuntimeResolution.Resolve(_store, _publisher, reference, channel, $"{name}@{version}", platform); }
             catch (RuntimeUnavailableException ex) { throw new StagingFailedException($"Version {version} of '{name}' cannot be staged: {ex.Message}"); }
             try
             {

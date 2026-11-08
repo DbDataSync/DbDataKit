@@ -40,6 +40,7 @@ schema: package/1
 name: dbdatabuild-runtime
 runtime: true
 version: 2.1.0
+platform: linux-x64          # win-x64 or linux-x64: one package per platform, stored as dbdatabuild-runtime-linux-x64 (PackageManifest.PackageName)
 launch: { kind: executable, command: bin/dbdatabuild }
 
 # a definition package: `launch.runtime` instead of an assembly or command, and the versions of the runtime it accepts
