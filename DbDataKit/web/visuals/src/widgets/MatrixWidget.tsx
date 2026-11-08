@@ -1,0 +1,42 @@
+import { MatrixGrid } from '../MatrixGrid'
+import type { RenderedMatrix } from '../types'
+import type { Box } from '../views/model'
+import { MATRIX_COLUMN_WIDTH, MATRIX_LABEL_WIDTH, TABLE_ROW_HEIGHT } from './density'
+import { FitNotice } from './TableWidget'
+
+/**
+ * A matrix widget: the existing `MatrixGrid`, cut to its tile. A matrix **truncates columns first** (a column the grid has no room for goes, a total column is kept), then rows (a total row is kept), and says
+ * "6 of 9 columns, 12 of 40 rows" with the action that maximizes the tile. `maximized` draws it whole and the widget scrolls.
+ */
+export function MatrixWidget({ view, box, maximized = false, onMaximize, title }: { view: RenderedMatrix; box?: Box; maximized?: boolean; onMaximize?: () => void; title?: string }) {
+  let shown = view
+  const told: string[] = []
+  if (box && !maximized) {
+    const labels = Math.max(1, ...view.rows.map((r) => r.labels.length))
+    const levels = Math.max(1, ...view.columns.map((c) => c.labels.length))
+    const keepColumns = Math.max(1, Math.floor((box.width - labels * MATRIX_LABEL_WIDTH) / MATRIX_COLUMN_WIDTH))
+    let columns = view.columns.map((_, i) => i)
+    if (view.columns.length > keepColumns) {
+      const totals = columns.filter((i) => view.columns[i]!.total)
+      const room = Math.max(1, keepColumns - totals.length)
+      columns = [...columns.filter((i) => !view.columns[i]!.total).slice(0, room), ...totals].sort((a, b) => a - b)
+      told.push(`${columns.length} of ${view.columns.length} columns`)
+    }
+    const keepRows = Math.max(1, Math.floor((box.height - (levels + 0) * TABLE_ROW_HEIGHT - 36) / TABLE_ROW_HEIGHT))
+    let rows = view.rows.map((_, i) => i)
+    if (view.rows.length > keepRows) {
+      const totals = rows.filter((i) => view.rows[i]!.total)
+      const room = Math.max(1, keepRows - totals.length)
+      rows = [...rows.filter((i) => !view.rows[i]!.total).slice(0, room), ...totals].sort((a, b) => a - b)
+      told.push(`${rows.length} of ${view.rows.length} rows`)
+    }
+    if (told.length > 0)
+      shown = { ...view, columns: columns.map((i) => view.columns[i]!), rows: rows.map((r) => ({ ...view.rows[r]!, cells: columns.map((c) => view.rows[r]!.cells[c]!) })) }
+  }
+  return (
+    <div className={maximized ? 'vz-matrix-fit vz-maximized' : 'vz-matrix-fit'}>
+      <MatrixGrid view={shown} />
+      {told.length > 0 ? <FitNotice text={told.join(', ')} onMaximize={onMaximize} label={`Show the whole matrix${title ? ` ${title}` : ''}`} /> : null}
+    </div>
+  )
+}

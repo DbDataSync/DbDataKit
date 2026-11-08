@@ -11,6 +11,10 @@
   --vz-edge: #d8dee4;
   --vz-error-ink: #a8402f;
   --vz-error-edge: #e3c9c4;
+  --vz-up: #1a7f37;
+  --vz-down: #cf222e;
+  --vz-accent: #0969da;
+  --vz-tile: #ffffff;
   color: var(--vz-text);
   background: var(--vz-ground);
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -29,6 +33,10 @@
   --vz-edge: #30363d;
   --vz-error-ink: #ff9b85;
   --vz-error-edge: #6b3326;
+  --vz-up: #3fb950;
+  --vz-down: #ff7b72;
+  --vz-accent: #58a6ff;
+  --vz-tile: #151b23;
   color-scheme: dark;
 }
 .vz-view { margin: 0 0 20px; }
@@ -48,6 +56,60 @@
 .vz-problems, .vz-error { border: 1px solid var(--vz-error-edge); color: var(--vz-error-ink); padding: 8px 12px; border-radius: 4px; }
 .vz-problems ul { margin: 6px 0 0; padding-left: 18px; }
 .vz-path { color: var(--vz-muted); }
+
+/* the widgets (plan 32 DBR05): a tile is a box of its own, its body fills what is left, nothing in it scrolls unless it is maximized */
+.vz-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.vz-widget { display: flex; flex-direction: column; box-sizing: border-box; min-width: 0; min-height: 0; overflow: hidden; background: var(--vz-tile); border: 1px solid var(--vz-edge); border-radius: 6px; }
+.vz-widget.vz { padding: 8px; }
+.vz-widget-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 28px; flex: none; }
+.vz-widget-title h2 { margin: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vz-widget-body { flex: 1 1 auto; min-height: 0; min-width: 0; overflow: hidden; }
+.vz-widget.vz-is-maximized .vz-widget-body { overflow: auto; }
+.vz-button { font: inherit; font-size: 12px; color: var(--vz-accent); background: none; border: 1px solid var(--vz-edge); border-radius: 4px; padding: 2px 8px; cursor: pointer; }
+.vz-button:hover { background: var(--vz-head); }
+.vz-button:focus-visible, .vz-input:focus-visible, .vz-choice input:focus-visible { outline: 2px solid var(--vz-accent); outline-offset: 2px; }
+.vz-fit { display: flex; align-items: center; gap: 8px; }
+.vz-table-widget { width: 100%; }
+.vz-table-widget th, .vz-table-widget td { height: 28px; padding: 0 10px; box-sizing: border-box; white-space: nowrap; }
+.vz-table-widget thead th { height: 30px; }
+.vz-table-widget td.vz-right, .vz-table-widget th.vz-right { text-align: right; }
+.vz-table-widget td.vz-center, .vz-table-widget th.vz-center { text-align: center; }
+.vz-metric { display: flex; flex-direction: column; justify-content: center; height: 100%; }
+.vz-metric-label { color: var(--vz-muted); font-size: 12px; }
+.vz-metric-value { font-size: 28px; font-weight: 600; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.vz-d-s .vz-metric-value { font-size: 22px; }
+.vz-d-xs .vz-metric-value { font-size: 18px; }
+.vz-metric-compare { color: var(--vz-muted); font-size: 12px; }
+.vz-change.vz-up { color: var(--vz-up); }
+.vz-change.vz-down { color: var(--vz-down); }
+.vz-text { line-height: 1.4; }
+.vz-text > :first-child { margin-top: 0; }
+.vz-text h2, .vz-text h3, .vz-text h4 { margin: 0.6em 0 0.3em; }
+.vz-text p { margin: 0 0 0.6em; }
+.vz-text a { color: var(--vz-accent); }
+.vz-text code { background: var(--vz-head); padding: 0 4px; border-radius: 3px; }
+.vz-image { display: block; width: 100%; height: 100%; }
+.vz-fit-contain { object-fit: contain; }
+.vz-fit-cover { object-fit: cover; }
+.vz-state { padding: 8px 12px; border-radius: 4px; color: var(--vz-muted); }
+.vz-state.vz-error { border: 1px solid var(--vz-error-edge); color: var(--vz-error-ink); }
+.vz-control { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.vz-control-label { color: var(--vz-muted); font-size: 12px; }
+.vz-choices { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.vz-input { font: inherit; color: var(--vz-text); background: var(--vz-tile); border: 1px solid var(--vz-edge); border-radius: 4px; padding: 2px 6px; }
+.vz-controls { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+.vz-chart { overflow: hidden; }
+
+/* the dashboard (plan 32 DBR06): the root fills its container; the grid has fr tracks; the compact stack is the one place a reflow dashboard scrolls */
+.vz-dashboard { box-sizing: border-box; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; }
+.vz-dashboard[data-mode='stack'] { overflow-y: auto; }
+.vz-dashboard-grid { display: grid; width: 100%; height: 100%; }
+.vz-dashboard-stack { display: flex; flex-direction: column; }
+.vz-dashboard-tile { min-width: 0; min-height: 0; padding: 4px; box-sizing: border-box; display: flex; }
+.vz-dashboard-tile > .vz-widget { flex: 1 1 auto; }
+.vz-dashboard-maximized { display: flex; width: 100%; height: 100%; padding: 4px; box-sizing: border-box; }
+.vz-dashboard-maximized > .vz-widget { flex: 1 1 auto; }
+.vz-dashboard-notice { margin: 0; padding: 8px 12px; }
 
 /* the lineage graph (plan 19 Y04) */
 .lineage-graph { border: 1px solid var(--border, #d0d7de); border-radius: 8px; overflow: hidden; }
