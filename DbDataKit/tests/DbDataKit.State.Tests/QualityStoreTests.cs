@@ -282,6 +282,27 @@ public sealed class QualityStoreTests : IDisposable
         Assert.Empty(store.History(Orders, "old"));
     }
 
+    // ---- the observed reading and the baseline of a row count check (FQ08, in the first migration) ----
+
+    [Theory, MemberData(nameof(Engines))]
+    public void The_observed_reading_is_stored_and_read_back_and_the_baseline_is_the_latest_successful_one(string engine)
+    {
+        var (store, _, _) = Open(engine);
+        Assert.Null(store.Baseline(Orders, "rows"));
+
+        store.Record(Result(CheckOutcome.Pass, Start, "rows", severity: "warn") with { Observed = 1000 });
+        store.Record(Result(CheckOutcome.Fail, Start.AddHours(1), "rows", severity: "warn", measured: 60) with { Observed = 1600 });
+        // an error took no reading and is no baseline; a result of another check or dataset is not this check's
+        store.Record(Result(CheckOutcome.Error, Start.AddHours(2), "rows", severity: "warn", message: "down"));
+        store.Record(Result(CheckOutcome.Pass, Start.AddHours(3), "other", severity: "warn") with { Observed = 5 });
+        store.Record(Result(CheckOutcome.Pass, Start.AddHours(3), "rows", Customers, severity: "warn") with { Observed = 7 });
+
+        Assert.Equal(1600m, store.Baseline(Orders, "rows"));
+        Assert.Equal(1600m, store.History(Orders, "rows").Single(r => r.Outcome == CheckOutcome.Fail).Observed);
+        Assert.Null(store.History(Orders, "rows").Single(r => r.Outcome == CheckOutcome.Error).Observed);
+        Assert.Equal(7m, store.Baseline(Customers, "rows"));
+    }
+
     // ---- a format change ----
 
     [Theory, MemberData(nameof(Engines))]
