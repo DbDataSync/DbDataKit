@@ -39,6 +39,7 @@
     <DbDataKitReference Include="Secrets.Windows" />
     <DbDataKitReference Include="Connections.Abstractions" />
     <DbDataKitReference Include="Runner.Client" />   <!-- the publishing client: project publish to a runner; plan 28c, E07 -->
+    <DbDataKitReference Include="Quality.Runner" />   <!-- the check evaluator, its run service and the quality state module: Build evaluates the checks of its models after a refresh; plan 23a, FQ09 -->
     <DbDataKitReference Include="Runner.Kit" />   <!-- the typed job surface: a refresh plan as a runner task; plan 28c, E01 -->
     <DbDataKitReference Include="Lineage" />   <!-- the lineage graph and the identity of a dataset; plan 18, G05 -->
     <DbDataKitReference Include="Lineage.Cli" />   <!-- the lineage noun on the server command line; plan 18, G05 -->
