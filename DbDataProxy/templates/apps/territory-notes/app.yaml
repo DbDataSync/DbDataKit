@@ -4,7 +4,7 @@ title: Territory notes
 description: A small code app. It lists the territories of a Store model, adds one, and keeps a note per person in the app's own storage.
 version: 1.0.0
 entry: index.html
-roles: [viewer, editor]
+roles: [viewer, author]
 storage: {user: true, instance: true, quota_mb: 5}
 models:
   - model: territories

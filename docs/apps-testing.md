@@ -1,0 +1,73 @@
+# Testing app publishing end to end
+
+How to walk an app through its whole life on one machine: write, validate, publish, approve, run, navigate, update, roll back, revoke, remove. [apps.md](apps.md) is the design as built; [plans/26-app-publishing.md](plans/26-app-publishing.md) holds the work that is left. This page is the audit of what a tester can do **today** (2026-11-08, `main` plus the slices AP20 to AP22), a script to do it, and the gaps.
+
+## Prerequisites
+
+* Docker with Compose, a browser (Chromium, Edge or Chrome) and a checkout of this repository. A passkey is needed to sign in: a platform authenticator, a security key, or Chromium's virtual authenticator (DevTools, WebAuthn).
+* About ten minutes for the first build (the quickstart's five images). Everything is self-signed: accept the browser's certificate warning for `localhost`, on 8817 (the identity home) and 8818 (the apps host).
+* The sample apps in [DbDataProxy/templates/apps](../DbDataProxy/templates/apps/README.md): `territory-notes` (a code app over the Store model `territories`) and `front-portal` (a declared portal).
+* Without Docker: run a Proxy yourself with `modules: [flightsql, identity, apps]` (see the Proxy's README, "Modules") and replace the `DP` and `DS` shorthands below with `dotnet dbdataproxy.dll` and `dotnet dbdatastore.dll`. The Store's half (steps 1 and 2) needs a PostgreSQL for the model's tables.
+
+## Manual script
+
+Run from the repository root. Two shorthands:
+
+```
+DC="docker compose -f dist/compose/quickstart.yml -f dist/compose/quickstart-apps.yml"
+DP="$DC exec -T proxy dotnet /app/dbdataproxy.dll"        # the Proxy's command line, on its own data directory (/data)
+```
+
+| # | Step | Command or screen | Expected |
+| --- | --- | --- | --- |
+| 1 | Start the suite with the apps host | `$DC up -d --build --wait` | five services healthy; the Proxy also listens on 8817 (identity home) and 8818 (apps host). `curl -k https://localhost:8818/health/live` answers 200 |
+| 2 | Publish the sample model and apps | `dist/compose/quickstart/apps-bootstrap.sh` | the Store is paired with the Proxy as a publisher, the model `territories` is published to the group (its tables made in the `mdm` database), and the script prints `apps validate` and `apps publish` lines for both samples and `instance-list` showing `front` and `notes` |
+| 3 | Make yourself a person at the identity home | `$DC exec proxy cat /data/identity/FIRST-RUN.txt`, open `https://localhost:8817/invite#<code>`, register a passkey | "Signed in as ..." (the home has its own first administrator, not the console's) |
+| 4 | Give yourself roles | `$DP identity user-list` (note your id), then `$DP identity assign --user <id> --app notes --roles author`, `... --app front --roles viewer`, and `... --server <server id> --roles approver` (the server id is the `instanceId:` line of `/data/config/server.yaml`, written when the server first pairs, so after step 2; `$DC exec proxy cat /data/config/server.yaml`) | the assignments are listed. The app's roles are the home's role names (`viewer` reads, `author` writes); a person with no role on an instance gets 403 |
+| 5 | Validate an app folder | `$DP apps validate --dir /samples/apps/territory-notes` | `territory-notes 1.0.0: the manifest is valid and the files reach no other host.` A folder with `fetch('https://example.com')` in its script lists file, line and origin |
+| 6 | Run the code app | open `https://localhost:8818/apps/notes/` | sent to the home (already signed in, so straight back); the page has the host's header and a frame; add a territory (`NA`, `North America`, `10`): the table lists it; save a note. In DevTools the frame element has `sandbox="allow-scripts allow-forms allow-popups"` and the app's files (`/apps/notes/_app/app.js`) carry a `Content-Security-Policy` with `default-src 'self'` and `sandbox` |
+| 7 | See what the app may do | `https://localhost:8818/apps/notes/_about` | lists the model `territories`, entity `territory` read and write, the storage it keeps, no outside origins, who published it |
+| 8 | Navigate | `$DP apps nav-list`; open `https://localhost:8818/apps/front/` (the declared portal: home text, link, a tile for `notes`), then `/apps/front/notes/` (the app in the portal's chrome); `curl` of `/apps/catalog` with the session cookie, or open it in the browser | the tile and the menu appear only for apps you hold a role on (remove the role with `identity assign ... --roles none` and reload: the tile is gone and `/apps/front/notes/` is 403); `catalog` lists `notes` and `front` with their launch addresses; nobody signed in gets 401 |
+| 9 | Update to a new version | `cp -r DbDataProxy/templates/apps/territory-notes /tmp/notes2`, edit its `app.yaml` (`version: 1.1.0`) and `index.html` (change the heading), `$DC cp /tmp/notes2 proxy:/tmp/notes2`, `$DP apps publish --dir /tmp/notes2 --note "second build"`, `$DP apps list --app territory-notes` | `Published territory-notes version 2`; the list marks 2 as serving; reload `/apps/notes/` within a few seconds: the new heading (the instance is unpinned, so it follows) |
+| 10 | Pin and roll back | `$DP apps instance-save --name notes --app territory-notes --pin 1 --bind territories=default`, then `$DP apps rollback --app territory-notes` | the pin keeps `notes` on version 1 whatever the app serves; `rollback` says `territory-notes now serves version 1`, and an unpinned instance follows it (`--to 2` moves forward again) |
+| 11 | A trusted app needs an approval | `sed -i 's/^version: 1.1.0/version: 1.2.0\ntrust: trusted/' /tmp/notes2/app.yaml`, copy it in again, `$DP apps publish --dir /tmp/notes2` | refused: it asks to be trusted and has no approval for these exact files, and the message gives the hash. The author recorded is the container's user (`root`) |
+| 12 | Approve by content hash | `$DP apps approve --path /tmp/notes2 --by <your name or id> --note "reviewed"`, then publish again | `Approved territory-notes 1.2.0 (apr_...)`; refused if the approver does not hold the Approver role (step 4) or is the author; the publish now succeeds. Any changed byte needs a new approval. `$DP apps approval-list` shows it standing |
+| 13 | Revoke | `$DP apps approval-revoke --id <apr_...> --by <your name or id>` | `Revoked`; the trusted version stops being served as trusted at once (the data gateway checks on every call; a token lives five minutes); `approval-list` shows it revoked. `rollback` to the sandboxed version |
+| 14 | Remove | `$DP apps instance-remove --name notes` is refused while the portal `front` mounts it; `$DP apps instance-remove --name front`, `... --name notes`, `$DP apps nav-remove --name main`, `$DP apps remove --app territory-notes`, `$DP apps remove --app front-portal` | each says `... is no longer served`; `/apps/notes/` answers 404; `apps list` says no app is published; versions and approvals stay on record (`approval-list`) |
+| 15 | See it in the console | `https://localhost:8480` (confirm the servers, see [quickstart.md](quickstart.md)): Servers lists `dbdataproxy` ready; its **Identity home** screens show the people, role assignments and the registered clients (the "Apps host" client) | **there is no Apps screen**: instances, versions and approvals are not visible in the console (AP24) |
+| 16 | Stop | `$DC down -v` | everything removed |
+
+## The audit
+
+The question for each step: what does a tester use today, does it work, what is missing.
+
+| Step | Today's path | Works end to end? | Gap / what blocks a tester |
+| --- | --- | --- | --- |
+| Write an app, code | an app folder with `app.yaml` (`app/1`) and the files the host serves; `DbDataProxy/templates/apps/territory-notes` is one; plain JS speaks `postMessage {dbdata:"app/1"}` to the shell | yes (run by `AppsModuleTests`, `apps-host.spec.ts`) | no scaffolding command, no documented SDK of the message protocol beyond the sample and `apps.md` (AP23) |
+| Write an app, build step | `DbDataKit.Apps.Bundling` (`BunAppBundler`: `bun install --ignore-scripts`, `bun build`) | library and tests only | **no command line calls it**: a source tree cannot be built by a tester (AP23); the sample needs no build on purpose. It also fetches from the package registry (plan 22: offline mode is open) |
+| Write an app, declarative | on `main`: a **portal** of `kind: portal` with `views/home.yaml` (text, links, tiles), `front-portal` is one. `view-spec/1` (grid, form, detail, dashboard) is on branch `work/gp06-view-spec` (b8d55c79): the loader and `AppChecks.ViewSpecs` validate it against the manifest and the model, and `AppValidator`/`PublishApp` call them | portal: yes. view-spec: **validates only, nothing renders it** | an app of views only cannot be run until the host renders the spec (AP25). When GP06 merges, `apps validate` and `apps publish` check its views with no change to the commands, and a sample of views belongs in `templates/apps` |
+| Validate | `dbdataproxy apps validate --dir` (manifest, files it names, root-relative paths, addresses of other hosts with file and line) | yes | advice only: the host's policy is what enforces |
+| Publish a version | `dbdataproxy apps publish --dir [--note]` writes `app/<name>` into the Proxy's state; the serving host reads it within `definitionPollSeconds` | yes | runs only where the Proxy's data directory is: **no remote publish** (AP26); the author recorded is the OS user name |
+| Create the instance | `apps instance-save --name --app [--pin] [--bind] [--setting]` | yes | roles are not set here: `identity assign --user --app <instance> --roles ...`, a second tool and an id lookup (`identity user-list`) |
+| Approve (AP15) | `apps approve --path` (before publishing), `--hash --app`, or `--app --version`; approver is a home user with the Approver role on the server | yes (Proxy tests; the Playwright story, not run here) | the approver must exist at the identity home with a role on the **server id**, which is easy to miss (step 4); no screen |
+| Run: address, sandbox | `https://<host>:8818/apps/<instance>/`; shell page plus sandboxed frame; policy from the manifest's egress | yes | subdomain and custom domain are not built (AP08, not blocking: the subpath is the address) |
+| Run: token, storage, data | shell hands a 300 s token and storage over `postMessage`; data route `/apps/<instance>/_data/api/v1/models/...` answered in process from the group's published models | yes with a published model (the Store must publish it; step 2) | the quickstart had no way to run any of this: AP22 (compose override) closes it. The host still uses its own broker's tokens, not the home's (AP19, not blocking) |
+| Run: semantic data | the manifest's `semantic: [name]` is accepted and scoped | not exercised here | no sample and no Playwright case for a semantic call from an app; not checked end to end |
+| Navigate | `apps nav-save`, `nav-list`; the shell header lists a set's members the person may open; portals; `/apps/catalog`; `?launch`, `?embed` | yes (Proxy and Playwright tests) | home dashboard blocks and the portal's switcher and search are open (plan 26 leftovers AP12, AP13) |
+| Update | `apps publish` again; unpinned instances follow, pinned ones stay | yes | the apps host's sessions are per instance and in memory (AP05 leftover): a restart signs people in again |
+| Roll back | AP20: `apps list --app`, `apps rollback --app [--to n]`; `instance-save --pin` per instance | yes (unit, Proxy test, and the Playwright story, not run here) | an instance's own settings roll back only by saving again |
+| Revoke | `apps approval-revoke --id --by` | yes | revoking needs the approval id from `approval-list`; no screen |
+| Remove | AP20: `apps remove`, `instance-remove`, `nav-remove` (the record and the storage stay) | yes | a retired instance's app storage is not deleted (no verb); that is deliberate here |
+| See it in the console | Servers (Proxy ready), the Proxy's Identity home screens (people, roles, clients) | partly | **no screen lists apps, instances, versions or approvals** (AP24) |
+| Start the host in the quickstart | AP22: `dist/compose/quickstart-apps.yml`, `quickstart/apps-bootstrap.sh` | configuration run locally; containers not built here | before AP22 the quickstart's Proxy ran Flight SQL only |
+| A sample app | AP21: `DbDataProxy/templates/apps` | yes, validated and published by a Proxy test | no sample of views only (AP25) or of a built app (AP23) |
+
+## Automating it
+
+`DbDataConsole/tests/DbDataConsole.Web.Tests/tests/apps-host.spec.ts` is the Playwright story: it starts a Proxy (`identity` and `apps`) and publishes a model from the Store's command line, enrols Ada with a passkey (virtual authenticator), runs the sandboxed app in the frame (token, rows, storage, the page that cannot read cookies or reach another host), navigation, the catalog, embedding, two portals, then a trusted portal that is refused without an approval, approved by a second person, run, audited and revoked. AP20 adds the end of the lifecycle to it: a second version the unpinned instance follows, a rollback, the refusal to remove a mounted instance and the 404 of a removed one. Needs `DBDATA_E2E_PG` (a PostgreSQL), the built Proxy and Store, and `npm ci`; the ports 8511 to 8515 are its own. The story was **not run in the session that wrote AP20** (no browser job, PostgreSQL or Store build there); its syntax was checked. It does not use the quickstart's compose files or the sample apps, which the Proxy test `The_sample_apps_validate_publish_and_run_as_instances` covers up to publishing.
+
+## Known gaps
+
+Blocking a tester today: none that the script above does not get around. Left, in plan 26: AP23 (`apps build` and `apps init`), AP24 (an Apps screen in the console), AP25 (rendering `view-spec/1`, after GP06 merges), AP26 (publishing to a remote Proxy). Not started, and not blocking: AP08 (subdomain and custom-domain bindings), AP17 (embedded report servers), AP19 (the host on the home's app tokens), Z13b (the migration contract step).
+
+What was not checked: the compose files were not built or started (the container image build is long and the disk of the session small); the same configuration (environment variables, the client registration) was run on a built Proxy directly and the home and the apps host answered, the samples were published and served under the sandbox policy. The Store pairing and model publication in `apps-bootstrap.sh` follow the commands of the Playwright story and were not run. The ServerId lookup in step 4 and the exact text of some messages in steps 11 to 13 follow the code and the tests, not a run.
