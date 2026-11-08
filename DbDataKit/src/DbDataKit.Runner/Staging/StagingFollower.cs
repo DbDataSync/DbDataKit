@@ -154,6 +154,9 @@ public sealed class StagingFollower
     {
         var definition = _store.Get(Kind, name, version) ?? throw new StagingFailedException($"'{name}' has no version {version}.");
 
+        // a version in a format this runner does not read is refused naming the kind, the name and both numbers (24a UC01)
+        if (DefinitionFormat.Refusal(Kind, name, version, definition.Format, _publisher.FormatsOf(Kind), "this runner") is { } unreadable) throw new StagingFailedException(unreadable);
+
         // the manifest again, as this runner reads it (R01's reader and validator)
         var load = PackageManifestReader.Load(definition.Content, $"{Kind}/{name}@{version}");
         if (!load.Ok) throw new StagingFailedException($"The manifest of version {version} does not validate on this runner: {string.Join(" ", load.Diagnostics.Where(d => d.Severity == DbDataKit.Config.Yaml.ConfigSeverity.Error).Select(d => d.ToString()))}");

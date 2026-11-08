@@ -132,7 +132,8 @@ public sealed class MixedVersionGroupTests : IDisposable
     /// <summary>The runner module cut to its first migration, the table as an older binary made it (no version columns).</summary>
     private static StateModule RunnerV1(int compatible) => new("runner", StateScopeKind.Group, [RunnerModule.Module.Migrations[0]], compatibleWithPrevious: compatible);
 
-    private static StateModule RunnerCurrent(int compatible) => new("runner", StateScopeKind.Group, RunnerModule.Module.Migrations, compatibleWithPrevious: compatible, retention: RunnerModule.Module.Retention);
+    /// <summary>The runner module as the release that added the version columns made it (its first two migrations); later migrations have their own tests (definition formats: <see cref="DefinitionFormatTests"/>).</summary>
+    private static StateModule RunnerCurrent(int compatible) => new("runner", StateScopeKind.Group, RunnerModule.Module.Migrations.Take(2).ToList(), compatibleWithPrevious: compatible, retention: RunnerModule.Module.Retention);
 
     private void InsertOldRunner(StateDatabase old)
     {

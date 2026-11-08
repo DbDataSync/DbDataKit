@@ -329,6 +329,7 @@ public static class RunnerPublishApi
         }
 
         if (!Int(json, "expected_version", out var expected, out problem)) return null;
-        return new PublishInput(name, manifest, files, Text(json, "channel") ?? DefinitionStore.Production, mode, depends, expected, Text(json, "note"), Text(json, "signature"));
+        if (!Int(json, "format", out var format, out problem)) return null;
+        return new PublishInput(name, manifest, files, Text(json, "channel") ?? DefinitionStore.Production, mode, depends, expected, Text(json, "note"), Text(json, "signature"), format);
     }
 }

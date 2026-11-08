@@ -130,9 +130,16 @@ public static class DefinitionsModule
                 PRIMARY KEY (kind, name, channel)
             );
             """,
+            """
+            -- Plan 24a UC01: the format of a version's content (24 section 2.4). Formats are numbered from 1 per kind; every version stored before this column is format 1. A serving or runner
+            -- instance reads the current format of a kind and the one before it and refuses a newer one with a message; a publish is refused when a live instance of the group cannot read it.
+            ALTER TABLE {table:definition_version} {{addcolumn}} format {{int}} NOT NULL DEFAULT 1;
+            """,
         ],
         // an instance that left the group: its status rows are history after the retention age
-        retention: [new RetentionRule("definition_instance_status", "gone_at")]);
+        retention: [new RetentionRule("definition_instance_status", "gone_at")],
+        // the fourth migration only adds a column with a default, which the code of version 3 never reads and whose inserts it leaves to the default (format 1): an instance of the previous version still works with it
+        compatibleWithPrevious: 1);
 }
 
 /// <summary>

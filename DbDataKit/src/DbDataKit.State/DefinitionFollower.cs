@@ -10,6 +10,9 @@ public interface IDefinitionSubscriber
     string Kind { get; }
 
     void Apply(string name, DefinitionVersion? current);
+
+    /// <summary>The formats of the kind this subscriber reads (24a UC01): the current one and the one before it. A version in another format is never handed to <see cref="Apply"/>; the follower reports it and the version served before keeps serving.</summary>
+    DefinitionFormats Formats => DefinitionFormats.One;
 }
 
 /// <summary>What a <see cref="DefinitionFollower"/> reads: the definitions a channel serves and the log of what moved. Both <see cref="DefinitionStore"/> and the module's <see cref="DefinitionStore"/> are one.</summary>
@@ -37,6 +40,9 @@ public sealed class DefinitionFollower(IDefinitionSource store, IEnumerable<IDef
     private readonly Dictionary<string, IDefinitionSubscriber> _byKind = subscribers.ToDictionary(s => s.Kind, StringComparer.Ordinal);
     private readonly object _gate = new();
     private long _since = -1;
+
+    /// <summary>What this instance reads of each kind it follows (what its instance row records, <see cref="DefinitionFormatText"/>).</summary>
+    public string FormatText => DefinitionFormatText.Format(_byKind.Values.Select(s => (s.Kind, s.Formats)));
 
     /// <summary>The last change this instance has applied.</summary>
     public long Since { get { lock (_gate) return _since; } }
@@ -78,6 +84,13 @@ public sealed class DefinitionFollower(IDefinitionSource store, IEnumerable<IDef
 
     private void Apply(IDefinitionSubscriber subscriber, string name, DefinitionVersion? current)
     {
+        // a version in a format this instance does not read is refused with the message, naming kind, name and both numbers; what it served before keeps serving
+        if (current is not null && DefinitionFormat.Refusal(subscriber.Kind, name, current.Version, current.Format, subscriber.Formats, "this instance") is { } refusal)
+        {
+            problem(subscriber.Kind, name, current.Version, new DefinitionFormatException(refusal, subscriber.Kind, name, current.Format, subscriber.Formats));
+            return;
+        }
+
         try { subscriber.Apply(name, current); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { problem(subscriber.Kind, name, current?.Version, ex); }
     }

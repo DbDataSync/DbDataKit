@@ -12,7 +12,7 @@ public sealed class SecondInstanceException(string message) : InvalidOperationEx
 /// Each running instance's row in the state (plan 20 O02), refreshed while it runs and removed when it stops. A group of instances shares a SQL Server or PostgreSQL state; SQLite is one instance's, so an instance that finds
 /// another live one on a SQLite state refuses to start, saying so. A row is live while it was refreshed in the last <see cref="Stale"/> and, on this machine, its process is still running; a crashed instance's row is not.
 /// </summary>
-public sealed class ServingInstanceLease(StateDatabase state, ILogger<ServingInstanceLease> log, TimeProvider? clock = null) : IHostedLifecycleService, IDisposable, DbDataKit.State.Api.IInstanceDirectory
+public sealed class ServingInstanceLease(StateDatabase state, ILogger<ServingInstanceLease> log, TimeProvider? clock = null, DefinitionFollower? follower = null) : IHostedLifecycleService, IDisposable, DbDataKit.State.Api.IInstanceDirectory
 {
     public static readonly TimeSpan Stale = StandardGroupInstanceSource.ServingLease;
     private static readonly TimeSpan Every = TimeSpan.FromSeconds(10);
@@ -56,21 +56,22 @@ public sealed class ServingInstanceLease(StateDatabase state, ILogger<ServingIns
 
     /// <summary>The live instances of this state, this one marked (<c>GET /api/v1/state</c>): read-only, each with the software and module versions its row records (null for a row of an older binary).</summary>
     public IReadOnlyList<DbDataKit.State.Api.StateInstance> Live() =>
-        [.. Live(_clock.GetUtcNow()).Select(r => new DbDataKit.State.Api.StateInstance(r.Key, r.Key == _key, r.Host, r.ProcessId, r.Started, r.Heartbeat, r.Software, r.Modules))];
+        [.. Live(_clock.GetUtcNow()).Select(r => new DbDataKit.State.Api.StateInstance(r.Key, r.Key == _key, r.Host, r.ProcessId, r.Started, r.Heartbeat, r.Software, r.Modules, r.Formats))];
 
-    private sealed record Row(string Key, string Host, int ProcessId, DateTimeOffset Started, DateTimeOffset Heartbeat, string? Software = null, IReadOnlyDictionary<string, int>? Modules = null);
+    private sealed record Row(string Key, string Host, int ProcessId, DateTimeOffset Started, DateTimeOffset Heartbeat, string? Software = null, IReadOnlyDictionary<string, int>? Modules = null, IReadOnlyDictionary<string, DefinitionFormats>? Formats = null);
 
     private List<Row> Live(DateTimeOffset now)
     {
         var rows = state.Retry(() =>
         {
             using var connection = state.OpenConnection();
-            using var cmd = state.Command("serving", connection, "SELECT instance_key, host, process_id, started_at, heartbeat_at, software_version, module_versions FROM {table:serving_instance};");
+            using var cmd = state.Command("serving", connection, "SELECT instance_key, host, process_id, started_at, heartbeat_at, software_version, module_versions, definition_formats FROM {table:serving_instance};");
             using var reader = cmd.ExecuteReader();
             var list = new List<Row>();
             while (reader.Read())
                 list.Add(new Row(reader.GetString(0), reader.GetString(1), Convert.ToInt32(reader.GetValue(2), CultureInfo.InvariantCulture), reader.Time(3), reader.Time(4),
-                    reader.IsDBNull(5) ? null : reader.GetString(5), reader.IsDBNull(6) ? null : ModuleVersionText.Parse(reader.GetString(6))));
+                    reader.IsDBNull(5) ? null : reader.GetString(5), reader.IsDBNull(6) ? null : ModuleVersionText.Parse(reader.GetString(6)),
+                    reader.IsDBNull(7) ? null : DefinitionFormatText.Parse(reader.GetString(7))));
             return list;
         });
         return [.. rows.Where(r => now - r.Heartbeat < Stale && (r.Host != Environment.MachineName || Running(r.ProcessId)))];
@@ -88,7 +89,9 @@ public sealed class ServingInstanceLease(StateDatabase state, ILogger<ServingIns
         using var connection = state.OpenConnection();
         if (insert)
         {
-            using var cmd = state.Command("serving", connection, "INSERT INTO {table:serving_instance} (instance_key, host, process_id, started_at, heartbeat_at, software_version, module_versions) VALUES ($key, $host, $pid, $at, $at, $software, $modules);");
+            using var cmd = state.Command("serving", connection, "INSERT INTO {table:serving_instance} (instance_key, host, process_id, started_at, heartbeat_at, software_version, module_versions, definition_formats) VALUES ($key, $host, $pid, $at, $at, $software, $modules, $formats);");
+            // what this binary reads of each kind of published definition (24a UC01), so a publish in a format it cannot read is refused while this instance is live
+            cmd.Bind(state, "formats", follower?.FormatText, System.Data.DbType.String);
             cmd.Bind(state, "key", _key);
             cmd.Bind(state, "host", Environment.MachineName);
             cmd.Bind(state, "pid", Environment.ProcessId);

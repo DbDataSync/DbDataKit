@@ -9,7 +9,9 @@ namespace DbDataKit.State.Api;
 /// <param name="Heartbeat">When it last refreshed its row, when known.</param>
 /// <param name="Version">The software version the instance runs, when the product records it; null when it does not.</param>
 /// <param name="Modules">The module versions the instance's binary has, when the product records them; null when it does not.</param>
-public sealed record StateInstance(string Key, bool IsSelf, string? Host = null, int? ProcessId = null, DateTimeOffset? Started = null, DateTimeOffset? Heartbeat = null, string? Version = null, IReadOnlyDictionary<string, int>? Modules = null);
+/// <param name="DefinitionFormats">The formats of each kind of published definition the instance reads (24a UC01), when its row records them; null when it does not.</param>
+public sealed record StateInstance(string Key, bool IsSelf, string? Host = null, int? ProcessId = null, DateTimeOffset? Started = null, DateTimeOffset? Heartbeat = null, string? Version = null, IReadOnlyDictionary<string, int>? Modules = null,
+    IReadOnlyDictionary<string, DefinitionFormats>? DefinitionFormats = null);
 
 /// <summary>
 /// The live instances that share a server's state, for the products that keep an instance table (the Proxy's <c>serving_instance</c>). The default, <see cref="Empty"/>, is for the products that have none: one process owns its state and the answer

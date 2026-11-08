@@ -55,6 +55,10 @@ public sealed partial class ManagementTests
             var serving = DbDataProxy.Server.State.ServingModule.Module;
             Assert.Equal(serving.Version, (int)instance["module_versions"]!["serving"]!);
             Assert.All(DbDataProxy.Server.State.ProxyState.Modules, m => Assert.Equal(m.Version, (int)instance["module_versions"]![m.Name]!));
+            // 24a UC01: and the formats of each kind of published definition it reads
+            var formats = instance["definition_formats"]!.AsObject();
+            Assert.Equal(["data-source", "entity-model", "semantic-model"], formats.Select(f => f.Key).Order(StringComparer.Ordinal));
+            Assert.All(formats, f => Assert.Equal(1, (int)f.Value!["current"]!));
 
             // two instances at different versions are listed with their versions: another instance, one version behind, registers its row
             var stateDatabase = app.Services.GetRequiredService<StateDatabase>();
