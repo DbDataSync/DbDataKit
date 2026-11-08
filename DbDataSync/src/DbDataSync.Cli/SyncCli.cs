@@ -83,6 +83,12 @@ public static class SyncCli
             Forward("list", "The installed drivers", EffectClass.OfflineOnly, "", a => DriverCommand.RunAsync(["list", .. a])),
             Forward("uninstall", "Remove a driver", EffectClass.RepoFilesOnly, "<id>", a => DriverCommand.RunAsync(["uninstall", .. a])),
         ]),
+        new Noun("package", "The repository as a definition package for a runner",
+        [
+            Forward("publish", "Publish the replications of the repository as a package on a runner (plan 28c E08); nothing is compiled and no secret goes", EffectClass.RepoFilesOnly,
+                "--to runner (--server <name or https address> --channel <name> [--code <pairing code>] [--bind <slot>=<connection> ...] [--serve] [--expected-version <n>] | --out <directory>) [--package <name>] [--platform linux-x64|win-x64] [--source <feed>] [--runtime-range <range>] [--client-dir <path>] [--repo <path>]",
+                a => PackageCommand.RunAsync(["publish", .. a])),
+        ]),
         new Noun("config", "The server's own configuration",
         [
             Forward("check", "Readiness check: repository, state store, libraries and drivers, auth, binding, first admin", EffectClass.OfflineOnly, "[--repo <path>]", a => ConfigCommand.RunAsync(["check", .. a])),

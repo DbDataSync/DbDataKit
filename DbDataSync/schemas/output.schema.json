@@ -1110,6 +1110,52 @@
       "if": {
         "properties": {
           "command": {
+            "const": "package publish"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_package_publish"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "package publish"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_package_publish"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "script list"
           },
           "ok": {
@@ -2410,6 +2456,10 @@
       "additionalProperties": false
     },
     "data_library_validate": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "data_package_publish": {
       "type": "object",
       "additionalProperties": false
     },

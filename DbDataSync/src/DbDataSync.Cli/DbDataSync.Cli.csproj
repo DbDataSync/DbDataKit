@@ -83,6 +83,7 @@
     <DbDataKitReference Include="Cli" />   <!-- the shared noun-verb grammar and the JSON document; plan 13, C07 -->
     <DbDataKitReference Include="State.Cli" />   <!-- state show, test, grants, init, export, import: the shared verbs over Sync's modules; plan 28c, E14 -->
     <DbDataKitReference Include="Hosting.Cli" />
+    <DbDataKitReference Include="Runner.Client" />   <!-- the shared publishing client: package publish; plan 28c, E08 -->
     <DbDataKitReference Include="Hosting.Systemd" />
   </ItemGroup>
 
