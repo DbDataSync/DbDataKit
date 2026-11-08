@@ -13,3 +13,6 @@ Canonical type to Apache Arrow mapping (Apache.Arrow 23.0.0), ported from Proxy'
 - Unsigned integers keep unsigned Arrow types. Guid, json and xml travel as text (Widened). Length bounds on string/binary are not carried (Widened).
 - List is Unmappable to Arrow (opaque); an Arrow list reads back as canonical `list` (Lossy).
 - Arrow types have no value equality: compare `Name`/properties, not `Equals`.
+
+## Consumers
+- `DbDataKit.Transfer.Abstractions` uses this mapping. The Proxy does **not**: it keeps its own `ArrowColumnWriter`, because Arrow is written on its hot query path. Move the Proxy onto this package only with a benchmark that shows no regression (owner review 13b, A20).
