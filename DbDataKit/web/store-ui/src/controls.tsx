@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { StoreClientProvider, useLoad, useStoreClient } from './context'
 import { draftChange, keyOf, toInput } from './fields'
 import { ErrorNote, FormView, GridView, HistoryView, InstancePickerView } from './views'
-import { StoreError, type EntitySchema, type ModelSchema, type RowValues, type StoredRow, type Violation } from './types'
+import { StoreError, type ApplyResult, type EntitySchema, type ModelSchema, type RowValues, type StoredRow, type Violation } from './types'
 
 /** The controls: each reads and writes through the nearest StoreClientProvider, and nothing else of the host. */
 
@@ -44,7 +44,8 @@ export interface RowFormProps {
   /** The row to edit; null for a new one. */
   row: StoredRow | null
   readOnly?: boolean
-  onSaved?: () => void
+  /** Called when the write has gone through; `result.waiting` when it was kept for approval instead of applied. */
+  onSaved?: (result?: ApplyResult) => void
   onCancel?: () => void
   /** Offers Delete on an existing row. */
   allowDelete?: boolean
@@ -77,7 +78,7 @@ export function RowForm({ model, entity: entityName, row, readOnly, onSaved, onC
 
   const send = async (change: Parameters<typeof client.apply>[1][number]) => {
     setBusy(true); setError(null); setViolations([])
-    try { await client.apply(model, [change]); onSaved?.() }
+    try { onSaved?.(await client.apply(model, [change])) }
     catch (e) {
       const failure = e instanceof Error ? e : new Error(String(e))
       setError(failure)
@@ -136,30 +137,33 @@ export interface EntityEditorProps {
   canWrite?: boolean
   pageSize?: number
   columns?: string[]
+  /** Where to send a person whose write is waiting for approval: shown beside the notice (a link to the host's change requests). */
+  waitingLink?: (requestId: string) => ReactNode
 }
 
 /** The grid and the form together: pick a row to edit it or its history, or start a new one. The one control most hosts want. */
-export function EntityEditor({ model, entity: entityName, instance = null, onInstance, canWrite = true, pageSize, columns }: EntityEditorProps) {
+export function EntityEditor({ model, entity: entityName, instance = null, onInstance, canWrite = true, pageSize, columns, waitingLink }: EntityEditorProps) {
   const picker = onInstance ? <InstancePicker model={model} value={instance} onChange={onInstance} /> : null
   return (
     <>
       {picker}
       <InstanceScope instance={instance}>
-        <EditorBody key={instance ?? 'default'} model={model} entity={entityName} canWrite={canWrite} pageSize={pageSize} columns={columns} />
+        <EditorBody key={instance ?? 'default'} model={model} entity={entityName} canWrite={canWrite} pageSize={pageSize} columns={columns} waitingLink={waitingLink} />
       </InstanceScope>
     </>
   )
 }
 
-function EditorBody({ model, entity: entityName, canWrite, pageSize, columns }: Pick<EntityEditorProps, 'model' | 'entity' | 'pageSize' | 'columns'> & { canWrite: boolean }) {
+function EditorBody({ model, entity: entityName, canWrite, pageSize, columns, waitingLink }: Pick<EntityEditorProps, 'model' | 'entity' | 'pageSize' | 'columns' | 'waitingLink'> & { canWrite: boolean }) {
   const schema = useSchema(model)
   const entity = entityOf(schema.data, entityName)
   const [selected, setSelected] = useState<StoredRow | null>(null)
   const [creating, setCreating] = useState(false)
   const [refresh, setRefresh] = useState(0)
+  const [waiting, setWaiting] = useState<string | null>(null)
   if (schema.error) return <ErrorNote error={schema.error} />
   if (!entity) return <div className="sui-loading" aria-busy="true">Loading…</div>
-  const done = () => { setSelected(null); setCreating(false); setRefresh((r) => r + 1) }
+  const done = (result?: ApplyResult) => { setSelected(null); setCreating(false); setRefresh((r) => r + 1); setWaiting(result?.waiting ? result.waiting.id : null) }
   return (
     <div className="sui-editor">
       <div className="sui-main">
@@ -168,6 +172,11 @@ function EditorBody({ model, entity: entityName, canWrite, pageSize, columns }: 
           <button type="button" data-testid="sui-new" disabled={!canWrite} title={canWrite ? undefined : 'Changing rows needs the author or administrator role.'} onClick={() => { setSelected(null); setCreating(true) }}>New</button>
           {!canWrite && <span className="sui-hint" data-testid="sui-readonly">Changing rows needs the author or administrator role.</span>}
         </div>
+        {waiting !== null && (
+          <div className="sui-notice" role="status" data-testid="sui-waiting">
+            Not applied yet: your change was sent for approval{waiting ? ` as request ${waiting.slice(0, 8)}` : ''}. The rows change when someone approves it. {waitingLink?.(waiting)}
+          </div>
+        )}
         <EntityGrid model={model} entity={entityName} pageSize={pageSize} columns={columns} refresh={refresh} selected={selected ? keyOf(entity, selected.values) : null} onSelect={(r) => { setCreating(false); setSelected(r) }} />
       </div>
       {(selected || creating) && (

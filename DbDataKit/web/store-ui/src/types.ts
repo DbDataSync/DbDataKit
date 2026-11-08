@@ -82,6 +82,9 @@ export type RowChange =
   | { action: 'update'; entity: string; key: RowValues; expected_version: number; values: RowValues; effective_from?: string }
   | { action: 'delete'; entity: string; key: RowValues; expected_version: number; effective_from?: string }
 
+/** What a write answered: applied at once (`{}`), or kept as a change request that waits for a person (the model asks for approval, or the caller is an agent). */
+export interface ApplyResult { waiting?: { id: string } }
+
 /** A failed call: its HTTP status, the server's sentence, and what it said was broken (422) or the row's current version (409). */
 export class StoreError extends Error {
   readonly status: number

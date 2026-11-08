@@ -4,4 +4,4 @@ export { EntityEditor, EntityGrid, InstancePicker, InstanceScope, RowForm, RowHi
 export { draftChange, editable, formatCell, inputKind, keyOf, parseInput, titleOf, toInput, type InputKind } from './fields'
 export { ErrorNote, FieldView, FormView, GridView, HistoryView, InstancePickerView, ViolationList, sameKey } from './views'
 export { StoreError } from './types'
-export type { InstanceInfo, InstanceList, InstanceMode, AttributeKind, AttributeSchema, EntitySchema, ModelSchema, RowChange, RowPage, RowValues, StoredRow, Violation } from './types'
+export type { ApplyResult, InstanceInfo, InstanceList, InstanceMode, AttributeKind, AttributeSchema, EntitySchema, ModelSchema, RowChange, RowPage, RowValues, StoredRow, Violation } from './types'

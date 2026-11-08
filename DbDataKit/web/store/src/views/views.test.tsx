@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import type { CopyState, MigrationPlan, StoragePlan } from '../api'
+import type { ChangeRequestRow, CopyState, MigrationPlan, RequestList, StoragePlan } from '../api'
+import { ChangeView, DecisionView, RequestRows } from './ChangesView'
 import { DiagnosticList, ModelEditorView, type EditorViewProps } from './ModelEditorView'
 import { CopyView, type CopyViewProps } from './StorageView'
 
@@ -91,3 +92,54 @@ describe('the storage view', () => {
   })
 })
 
+const row = (over: Partial<ChangeRequestRow> = {}): ChangeRequestRow => ({
+  id: 'a'.repeat(32), model: 'm', instance: 'default', state: 'pending', proposed_by: 'agent:bot', proposed_by_name: 'Bot', by_agent: true, proposed_at: '2026-11-08T10:00:00Z',
+  description: 'Add Asia', change_count: 2, decided_by: null, decided_at: null, note: null, ...over,
+})
+const decide = (over: Partial<RequestList> = {}): RequestList => ({ requests: [], can_decide: true, decision_needs: 'author', approval: 'steward', ...over })
+
+describe('the change request views', () => {
+  it('lists requests with who proposed them, marks an agent, and says when none are waiting', () => {
+    const html = renderToStaticMarkup(<RequestRows rows={[row(), row({ id: 'b'.repeat(32), state: 'approved', by_agent: false, proposed_by_name: 'Ada' })]} selected={null} onSelect={none} filter="" onFilter={none} />)
+    expect(html).toContain('Bot (agent)')
+    expect(html).toContain('Ada')
+    expect(html).toContain('Add Asia')
+    expect(html.match(/data-testid="change-row"/g)).toHaveLength(2)
+    expect(renderToStaticMarkup(<RequestRows rows={[]} selected={null} onSelect={none} filter="pending" onFilter={none} />)).toContain('Nothing is waiting for a decision.')
+  })
+  it('shows each attribute with what the row holds now and what it would hold, marking the ones that change', () => {
+    const html = renderToStaticMarkup(<ChangeView index={0} change={{ action: 'update', entity: 'territory', key: { code: 'EU' }, expected_version: 1, values: { name: 'Europe West' } }} current={{ code: 'EU', name: 'Europe' }} loading={false} />)
+    expect(html).toContain('Change <span class="mono">territory</span>')
+    expect(html).toMatch(/data-changed="true"[^>]*>.*Europe West/)
+    expect(html).toContain('Quotes version 1')
+  })
+  it('Approve and Reject are off with the Store\'s reason for a caller who may not decide', () => {
+    const html = renderToStaticMarkup(<DecisionView list={decide({ can_decide: false, decision_needs: 'admin', approval: 'owner' })} request={row()} note="" onNote={none} busy={false} me="ada" onApprove={none} onReject={none} refusal={null} />)
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*data-testid="change-approve"/)
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*data-testid="change-reject"/)
+    expect(html).toContain('needs the admin role')
+  })
+  it('Reject needs a note, Approve does not', () => {
+    const empty = renderToStaticMarkup(<DecisionView list={decide()} request={row()} note="" onNote={none} busy={false} me="ada" onApprove={none} onReject={none} refusal={null} />)
+    expect(empty).not.toMatch(/<button[^>]*disabled=""[^>]*data-testid="change-approve"/)
+    expect(empty).toMatch(/<button[^>]*disabled=""[^>]*data-testid="change-reject"/)
+    expect(empty).toContain('Say why in the note')
+    const noted = renderToStaticMarkup(<DecisionView list={decide()} request={row()} note="not this quarter" onNote={none} busy={false} me="ada" onApprove={none} onReject={none} refusal={null} />)
+    expect(noted).not.toMatch(/<button[^>]*disabled=""[^>]*data-testid="change-reject"/)
+  })
+  it('says when the request is the viewer\'s own, and shows a decided request without buttons', () => {
+    const own = renderToStaticMarkup(<DecisionView list={decide()} request={row({ proposed_by: 'ada', by_agent: false })} note="" onNote={none} busy={false} me="ada" onApprove={none} onReject={none} refusal={null} />)
+    expect(own).toContain('data-testid="change-own"')
+    const decided = renderToStaticMarkup(<DecisionView list={decide()} request={row({ state: 'rejected', decided_by: 'ada', note: 'no' })} note="" onNote={none} busy={false} me="ada" onApprove={none} onReject={none} refusal={null} />)
+    expect(decided).toContain('Rejected by ada')
+    expect(decided).not.toContain('change-approve')
+  })
+  it('shows the Store\'s refusal of a decision, each broken rule, and that the request stays waiting', () => {
+    const violations = [{ rule: 'min', entity: 'territory', attribute: 'quota', message: '`territory.quota` is -1, below the minimum 0.' }]
+    const html = renderToStaticMarkup(<DecisionView list={decide()} request={row()} note="" onNote={none} busy={false} me="ada" onApprove={none} onReject={none} refusal="The change breaks the model's rules, so nothing was written." violations={violations} />)
+    expect(html).toContain('so nothing was written')
+    expect(html).toContain('below the minimum 0')
+    expect(html).toContain('data-rule="min"')
+    expect(html).toContain('The request stays waiting')
+  })
+})

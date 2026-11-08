@@ -160,6 +160,26 @@ public sealed class StoreModelsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_requests_list_says_whether_this_caller_may_decide_and_which_role_would()
+    {
+        var send = await Client();
+        await send(HttpMethod.Put, "/api/v1/models/territories", Territories.Replace("storage: {connection: mdm_sql}", "storage: {connection: mdm_sql}\napproval: {changes: owner}"), ServerRole.Author);
+        await send(HttpMethod.Put, "/api/v1/models/stewarded", Territories.Replace("name: territories", "name: stewarded").Replace("storage: {connection: mdm_sql}", "storage: {connection: mdm_sql}\napproval: {changes: steward}"), ServerRole.Author);
+
+        var owner = await Json(await send(HttpMethod.Get, "/api/v1/models/territories/requests", null, ServerRole.Author));
+        Assert.False((bool)owner["can_decide"]!);
+        Assert.Equal("admin", (string)owner["decision_needs"]!);
+        Assert.Equal("owner", (string)owner["approval"]!);
+        Assert.Empty(owner["requests"]!.AsArray());
+        Assert.True((bool)(await Json(await send(HttpMethod.Get, "/api/v1/models/territories/requests", null, ServerRole.Admin)))["can_decide"]!);
+
+        var steward = await Json(await send(HttpMethod.Get, "/api/v1/models/stewarded/requests", null, ServerRole.Author));
+        Assert.True((bool)steward["can_decide"]!);
+        Assert.Equal("author", (string)steward["decision_needs"]!);
+        Assert.False((bool)(await Json(await send(HttpMethod.Get, "/api/v1/models/stewarded/requests", null, ServerRole.Viewer)))["can_decide"]!);
+    }
+
+    [Fact]
     public async Task The_schema_is_the_model_as_data_for_a_form_a_grid_or_a_typed_client()
     {
         var send = await Client();
