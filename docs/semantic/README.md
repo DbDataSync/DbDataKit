@@ -5,8 +5,8 @@ and the rules for combining several data sources, including ad hoc tables and en
 tables, into one result.
 
 They restate the "Query Intent Specifications" design document (Overview, Core, Native query, Ad hoc mapping,
-Mashup and the Concepts draft) with the changes agreed so far, and record what is still open. The engine in
-`../dotnet` is the straw man implementation; where this folder and the engine disagree, the status tag says which
+Mashup and the Concepts draft) with the changes agreed so far, and record what is still open. The engine is part of this repository
+(`DbDataKit/src/DbDataKit.Semantic*` and `DbDataBuild/src/DbDataBuild.Semantic`); where this folder and the engine disagree, the status tag says which
 is ahead.
 
 ## Reading order
