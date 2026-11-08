@@ -95,25 +95,24 @@ public sealed class CliGrammarTests
     }
 
     [Fact]
-    public async Task The_server_noun_has_run_and_the_secret_noun_has_hash_and_protect()
+    public async Task The_server_noun_has_run_and_the_secret_noun_has_protect_and_no_password_hash()
     {
         var router = Cli.Router();
 
         Assert.Equal(["run", "pair", "clients", "unpair"], router.Nouns.Single(n => n.Name == "server").Verbs.Select(v => v.Name));
-        Assert.Contains("hash", router.Nouns.Single(n => n.Name == "secret").Verbs.Select(v => v.Name));
+        Assert.DoesNotContain("hash", router.Nouns.Single(n => n.Name == "secret").Verbs.Select(v => v.Name));   // Proxy has no users of its own to hash a password for (P13)
         Assert.Contains("protect", router.Nouns.Single(n => n.Name == "secret").Verbs.Select(v => v.Name));
         Assert.Equal(["run"], router.Nouns.Single(n => n.Name == "query").Verbs.Select(v => v.Name));
         await Task.CompletedTask;
     }
 
     [Fact]
-    public async Task Secret_hash_refuses_the_password_as_an_argument()
+    public async Task Secret_hash_is_gone_with_the_users_it_made_hashes_for_and_a_password_given_to_it_is_not_echoed()
     {
         var result = await Run("secret", "hash", "hunter2");
 
-        Assert.Equal(CliExit.Usage, result.Exit);
+        Assert.NotEqual(CliExit.Ok, result.Exit);
         Assert.DoesNotContain("hunter2", result.Error + result.Out);
-        Assert.Contains("never an argument", result.Error);
     }
 
     [Fact]
@@ -172,7 +171,7 @@ public sealed class CliGrammarTests
 
     [Theory]
     [InlineData("health", "check", "--url", "ftp://x")]
-    [InlineData("secret", "hash", "hunter2")]
+    [InlineData("identity", "token-create")]
     [InlineData("bogus")]
     [InlineData("query", "run")]
     public async Task A_command_that_fails_still_writes_one_document_that_satisfies_the_schema(params string[] args)

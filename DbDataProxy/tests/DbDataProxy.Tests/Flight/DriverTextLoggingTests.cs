@@ -27,10 +27,8 @@ public class DriverTextLoggingTests
             ["Proxy:DataSources:duck:Provider"] = "duckdb",
             ["Proxy:DataSources:duck:ConnectionString"] = "Data Source=:memory:",
             ["Proxy:DataSources:duck:Classifier"] = "off",
-            ["Proxy:Users:0:Name"] = "alice",
-            ["Proxy:Users:0:PasswordHash"] = PasswordHasher.Hash("pw", 1000),
-            ["Proxy:Users:0:DataSources:0"] = "duck",
         };
+        HomeSeed.Open(settings, ["duck"]);
         await using var app = ProxyHost.Build([], b =>
         {
             b.Configuration.AddInMemoryCollection(settings);
@@ -38,10 +36,11 @@ public class DriverTextLoggingTests
             b.Logging.AddProvider(logs);
         });
         await app.StartAsync();
+        var aliceToken = HomeSeed.ServiceAccount(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>(), "alice");
         string address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.First().Replace("0.0.0.0", "127.0.0.1");
 
         using var client = new ProxyFlightClient(address);
-        await client.AuthenticateAsync("alice", "pw");
+        await client.AuthenticateAsync("alice", aliceToken);
         var ex = await Rpc.ExpectAsync(async () => await client.QueryAsync("SELECT * FROM salaries_of_the_board", new QueryOptions { DataSource = "duck" }));
         try { Directory.Delete(dir, true); } catch (IOException) { }
         return (ex.Status.Detail, logs.Lines);

@@ -11,7 +11,7 @@ public class CompressionTests(ProxyFixture proxy) : IClassFixture<ProxyFixture>
     private async Task<(long Bytes, List<RecordBatch> Batches)> MeasureAsync(string? compression)
     {
         using var client = proxy.Connect();
-        await client.AuthenticateAsync("alice", ProxyFixture.AlicePassword);
+        await client.AuthenticateAsync("alice", proxy.AliceToken);
         client.Counter.Reset();
         var (_, batches) = await client.QueryAsync(Sql, compression: compression);
         return (client.Counter.ResponseBytes, batches);
@@ -45,7 +45,7 @@ public class CompressionTests(ProxyFixture proxy) : IClassFixture<ProxyFixture>
     public async Task Unknown_compression_codec_is_rejected()
     {
         using var client = proxy.Connect();
-        await client.AuthenticateAsync("alice", ProxyFixture.AlicePassword);
+        await client.AuthenticateAsync("alice", proxy.AliceToken);
         var ex = await Rpc.ExpectAsync(() => client.QueryAsync(Sql, compression: "brotli"));
         Assert.Equal(StatusCode.InvalidArgument, ex.StatusCode);
     }

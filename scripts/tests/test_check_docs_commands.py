@@ -30,12 +30,12 @@ class CheckDocsCommands(unittest.TestCase):
         self.assertIn("dbdatasync server run", problems[0])
 
     def test_each_retired_proxy_form_is_found(self):
-        for text in ["dbdataproxy hash-password", "dbdataproxy install", "dbdataproxy query select 1", "dbdataproxy --healthcheck", "DbDataProxy.exe"]:
+        for text in ["dbdataproxy hash-password", "dbdataproxy secret hash", "dbdataproxy install", "dbdataproxy query select 1", "dbdataproxy --healthcheck", "DbDataProxy.exe"]:
             with self.subTest(text=text):
                 self.assertEqual(1, len(check.check(tree({"DbDataProxy/README.md": text + "\n"}))))
 
     def test_the_new_proxy_forms_pass(self):
-        root = tree({"DbDataProxy/README.md": "dbdataproxy query run \"select 1\"\ndbdataproxy secret hash\ndbdataproxy.exe server run\n"})
+        root = tree({"DbDataProxy/README.md": "dbdataproxy query run \"select 1\"\ndbdataproxy secret protect\ndbdataproxy.exe server run\n"})
         self.assertEqual([], check.check(root))
 
     def test_history_is_not_checked(self):

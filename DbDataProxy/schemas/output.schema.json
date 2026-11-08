@@ -1708,52 +1708,6 @@
       "if": {
         "properties": {
           "command": {
-            "const": "secret hash"
-          },
-          "ok": {
-            "const": true
-          }
-        },
-        "required": [
-          "command",
-          "ok"
-        ]
-      },
-      "then": {
-        "properties": {
-          "data": {
-            "$ref": "#/$defs/data_secret_hash"
-          }
-        }
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "command": {
-            "const": "secret hash"
-          },
-          "ok": {
-            "const": false
-          }
-        },
-        "required": [
-          "command",
-          "ok"
-        ]
-      },
-      "then": {
-        "properties": {
-          "data": {
-            "$ref": "#/$defs/data_secret_hash"
-          }
-        }
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "command": {
             "const": "secret import"
           },
           "ok": {
@@ -4279,10 +4233,6 @@
       "additionalProperties": false
     },
     "data_secret_export": {
-      "type": "object",
-      "additionalProperties": false
-    },
-    "data_secret_hash": {
       "type": "object",
       "additionalProperties": false
     },

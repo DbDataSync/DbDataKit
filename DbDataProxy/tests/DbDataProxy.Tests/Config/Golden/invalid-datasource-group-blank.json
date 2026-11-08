@@ -1,0 +1,1 @@
+{ "Proxy": { "DataSources": { "erp": { "Provider": "sqlserver", "ConnectionString": "Server=a", "Groups": [ "finance", " " ] } } } }

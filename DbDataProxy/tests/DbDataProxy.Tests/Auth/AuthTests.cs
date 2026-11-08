@@ -46,27 +46,7 @@ public class ValidatorTests
     private static ProxyOptions Config() => new()
     {
         DataSources = { ["a"] = new DataSourceOptions(), ["pt"] = new DataSourceOptions { PassThrough = true } },
-        Users = [new UserOptions { Name = "alice", PasswordHash = PasswordHasher.Hash("pw", 1000), DataSources = ["a"], DefaultDataSource = "a" }],
     };
-
-    [Fact]
-    public async Task Local_user_with_correct_password_is_accepted()
-    {
-        var v = new LocalUserValidator(Options(Config()));
-        var p = (await v.ValidateAsync("ALICE", "pw", default)).Principal;
-        Assert.NotNull(p);
-        Assert.Equal("a", p.DefaultDataSource);
-        Assert.True(p.CanUse("a"));
-        Assert.False(p.CanUse("pt"));
-    }
-
-    [Fact]
-    public async Task Local_user_with_wrong_password_or_unknown_user_is_rejected()
-    {
-        var v = new LocalUserValidator(Options(Config()));
-        Assert.Equal(CredentialResult.Rejected, await v.ValidateAsync("alice", "nope", default));
-        Assert.Equal(CredentialResult.NotMine, await v.ValidateAsync("mallory", "pw", default));
-    }
 
     [Fact]
     public async Task Passthrough_carries_credentials_and_is_limited_to_passthrough_sources()
@@ -86,17 +66,6 @@ public class ValidatorTests
         var cfg = Config();
         cfg.Auth.AllowPassThrough = false;
         Assert.Equal(CredentialResult.NotMine, await new PassThroughValidator(Options(cfg)).ValidateAsync("u", "p", default));
-    }
-
-    [Fact]
-    public async Task Chain_prefers_local_users_over_passthrough()
-    {
-        var o = Options(Config());
-        var chain = new ChainedCredentialValidator([new LocalUserValidator(o), new PassThroughValidator(o)]);
-        Assert.Equal("password", (await chain.ValidateAsync("alice", "pw", default))!.Method);
-        // A known local user with a wrong password must not fall through to pass-through.
-        Assert.Null(await chain.ValidateAsync("alice", "wrong", default));
-        Assert.Equal("passthrough", (await chain.ValidateAsync("bob", "x", default))!.Method);
     }
 }
 

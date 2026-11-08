@@ -6,7 +6,7 @@ namespace DbDataProxy.Server.Configuration;
 
 /// <summary>
 /// Cross-reference and semantic checks that a type-and-range binder cannot express. Paths are relative to the Proxy section
-/// (<c>DataSources.erp.Provider</c>, <c>Users[0].Name</c>); the loader prints them as <c>Proxy:DataSources:erp:Provider</c>.
+/// (<c>DataSources.erp.Provider</c>, <c>Auth.Jwt.Mappings[0].Claim</c>); the loader prints them as <c>Proxy:DataSources:erp:Provider</c>.
 /// Warnings are reported but do not stop startup.
 /// </summary>
 public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutClassifier = null) : IConfigValidator<ProxyOptions>
@@ -29,7 +29,6 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
         ValidateStore(o, cx);
         ValidateCompression(o.Compression, "Compression", cx);
         ValidateDataSources(o, cx);
-        ValidateUsers(o, cx);
         ValidateJwt(o, cx);
         ValidateSemantic(o, cx);
         ValidateState(o, cx);
@@ -270,33 +269,30 @@ public sealed class ProxyConfigValidator(IReadOnlyList<string>? sourcesWithoutCl
             if (source.MaxConcurrentQueries > 0 && source.MaxConcurrentQueriesPerUser > source.MaxConcurrentQueries)
                 cx.Warning($"{at}.MaxConcurrentQueriesPerUser", "The per-user cap is above the data source cap, so it can never be reached.", "Lower it or raise `MaxConcurrentQueries`.");
 
+            ValidateAccess(o, name, source, at, cx);
+
             if (source.Compression is { } own) ValidateCompression(own, $"{at}.Compression", cx);
         }
     }
 
-    private static void ValidateUsers(ProxyOptions o, IConfigValidationContext cx)
+    /// <summary>Which home users may use a data source: its <c>groups</c> (home group names) or <c>everyone</c>; a source naming neither is used by no home user.</summary>
+    private static void ValidateAccess(ProxyOptions o, string name, DataSourceOptions source, string at, IConfigValidationContext cx)
     {
-        var seen = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        for (int i = 0; i < o.Users.Count; i++)
+        for (int i = 0; i < source.Groups.Count; i++)
         {
-            var user = o.Users[i];
-            string at = $"Users[{i}]";
-            if (string.IsNullOrWhiteSpace(user.Name))
-                cx.Error($"{at}.Name", "`Name` is empty.", "Every user needs a name.");
-            else if (seen.TryGetValue(user.Name, out int first))
-                cx.Error($"{at}.Name", $"The user `{user.Name}` is defined twice (also Users[{first}]); names are not case sensitive.", "Merge the entries or rename one.");
-            else
-                seen[user.Name] = i;
-
-            if (user.AuthType == UserAuthType.Password && string.IsNullOrWhiteSpace(user.PasswordHash))
-                cx.Error($"{at}.PasswordHash", "A password user needs a `PasswordHash`; the user could never sign in.", "Create one with: dbdataproxy secret hash");
-            if (user.AuthType == UserAuthType.Windows && !string.IsNullOrWhiteSpace(user.PasswordHash))
-                cx.Warning($"{at}.PasswordHash", "A Windows user is checked by the operating system; `PasswordHash` is ignored.");
-
-            CheckReferences(o, user.DataSources, user.DefaultDataSource, at, cx);
-            if (user.DataSources.Count == 0)
-                cx.Warning($"{at}.DataSources", "The user may not use any data source.", "List data source names, or \"*\" for all.");
+            var group = source.Groups[i];
+            if (string.IsNullOrWhiteSpace(group) || group != group.Trim() || group.Any(char.IsControl))
+                cx.Error($"{at}.Groups[{i}]", "A group name is empty, has leading or trailing spaces, or has control characters.", "Name a group of the identity home exactly as the home shows it.");
         }
+        if (source.Everyone && source.Groups.Count > 0)
+            cx.Error($"{at}.Everyone", "The data source is open to everyone and also names groups; the groups would mean nothing.", "Remove `everyone`, or remove `groups`.");
+        if (source.Default && o.DataSources.Where(d => d.Value.Default).Select(d => d.Key).Order(StringComparer.OrdinalIgnoreCase).First() is { } firstDefault && !string.Equals(firstDefault, name, StringComparison.OrdinalIgnoreCase))
+            cx.Error($"{at}.Default", $"`{name}` and `{firstDefault}` are both the default data source; only one can be.", "Keep `default: true` on one of them.");
+        // a pass-through source is decided by the database; the JWT mappings are the other way in, so a source only they reach is not forgotten
+        if (!source.Everyone && source.Groups.Count == 0 && !source.PassThrough
+            && !o.Auth.Jwt.Mappings.Any(m => m.DataSources.Contains("*") || m.DataSources.Contains(name, StringComparer.OrdinalIgnoreCase)))
+            cx.Warning($"{at}.Groups", $"The data source `{name}` names no home group and is not open to everyone, so no user of the identity home may use it.",
+                "List the home groups allowed to use it under `extensions.proxy.groups`, or set `extensions.proxy.everyone: true`.");
     }
 
     private static void ValidateJwt(ProxyOptions o, IConfigValidationContext cx)

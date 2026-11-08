@@ -113,7 +113,10 @@ public sealed class ShippedFilesTests
         Assert.Equal(20, o.DataSources["erp"].MaxConcurrentQueries);
         Assert.Equal([@"C:\data\parquet"], o.DataSources["lake"].AllowedDirectories);
         Assert.Equal(@"Data Source=C:\data\scratch.duckdb", o.DataSources["scratch"].ConnectionString);
-        Assert.Equal("reporting", Assert.Single(o.Users).Name);
+        Assert.Equal(["finance-reporting"], o.DataSources["erp"].Groups);
+        Assert.True(o.DataSources["erp"].Default);
+        Assert.True(o.DataSources["scratch"].Everyone);
+        Assert.Empty(o.DataSources["warehouse"].Groups);   // pass-through: the database decides
         Assert.Equal(30, o.Auth.SessionIdleMinutes);
     }
 
@@ -125,7 +128,8 @@ public sealed class ShippedFilesTests
         Assert.All(load.Diagnostics.Where(d => d.Severity == ConfigSeverity.Error), d => Assert.EndsWith("lake.yaml", d.Path));
         Assert.NotNull(load.Value);
         Assert.Equal(["erp", "lake", "legacy", "scratch", "warehouse"], load.Value!.DataSources.Keys.Order(StringComparer.Ordinal));
-        Assert.Equal("reporting", Assert.Single(load.Value.Users).Name);
+        Assert.Equal(["finance-reporting"], load.Value.DataSources["erp"].Groups);
+        Assert.True(load.Value.DataSources["scratch"].Everyone);
         Assert.Equal(30, load.Value.Auth.SessionIdleMinutes);
         Assert.Equal(@"Data Source=C:\data\scratch.duckdb", load.Value.DataSources["scratch"].ConnectionString);
         Assert.Equal([@"C:\data\parquet"], load.Value.DataSources["lake"].AllowedDirectories);
@@ -142,8 +146,7 @@ public sealed class ShippedFilesTests
                 "Tls": { "Mode": "SelfSigned", "Hostnames": [ "a.example.com" ] },
                 "Compression": { "Mode": "Arrow", "Codec": "zstd", "Level": 3, "AllowClientOverride": true },
                 "Auth": { "SessionIdleMinutes": 30, "SessionMaxHours": 12, "AllowPassThrough": true },
-                "DataSources": { "erp": { "Provider": "sqlserver", "ConnectionString": "Server=a;Password=env:P", "CommandTimeoutSeconds": 300 } },
-                "Users": [ { "Name": "reporting", "PasswordHash": "PBKDF2-SHA256$1$a$b", "DataSources": [ "erp" ], "DefaultDataSource": "erp" } ]
+                "DataSources": { "erp": { "Provider": "sqlserver", "ConnectionString": "Server=a;Password=env:P", "CommandTimeoutSeconds": 300, "Groups": [ "finance-reporting" ] } }
             } }
             """);
         Assert.True(load.Ok, ConfigTestSupport.Format(load));
@@ -198,9 +201,9 @@ public sealed class SchemaVersionTests
 {
     private const string Sources = """
         "DataSources": {
-          "ro": { "Provider": "duckdb", "ConnectionString": "x" },
-          "ro_warn": { "Provider": "duckdb", "ConnectionString": "x", "Classifier": "warn" },
-          "rw": { "Provider": "duckdb", "ConnectionString": "x", "AllowWrites": true }
+          "ro": { "Provider": "duckdb", "ConnectionString": "x", "Everyone": true },
+          "ro_warn": { "Provider": "duckdb", "ConnectionString": "x", "Classifier": "warn", "Everyone": true },
+          "rw": { "Provider": "duckdb", "ConnectionString": "x", "AllowWrites": true, "Everyone": true }
         }
         """;
 

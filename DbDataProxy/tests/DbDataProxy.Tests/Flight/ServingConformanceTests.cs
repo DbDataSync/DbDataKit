@@ -9,7 +9,7 @@ public class ServingConformanceTests(ProxyFixture proxy) : ServingServicesConfor
 {
     protected override Task<ServingTarget> CreateAsync()
     {
-        var alice = new ServingCredentials.Password("alice", ProxyFixture.AlicePassword);
+        var alice = new ServingCredentials.Password("alice", proxy.AliceToken);
         return Task.FromResult(new ServingTarget
         {
             Services = proxy.Services.GetRequiredService<IServingServices>(),

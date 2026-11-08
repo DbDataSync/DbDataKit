@@ -20,7 +20,7 @@ namespace DbDataProxy.Server.Hosting;
 /// which the apps host answers an app's data calls with too (O08c).
 /// </summary>
 public sealed class ProxyStoreModule(IOptionsMonitor<ProxyOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, PublishedEntityModels models, ILoggerFactory loggers,
-    GroupCertificate? group = null) : IHostedService, IAsyncDisposable
+    HomeCallers homeCallers, GroupCertificate? group = null) : IHostedService, IAsyncDisposable
 {
     private WebApplication? _app;
 
@@ -46,9 +46,8 @@ public sealed class ProxyStoreModule(IOptionsMonitor<ProxyOptions> options, Stat
             });
         });
         var app = builder.Build();
-        var callers = new StoreCallers(state, ServerIdOf(current, state), await HomeTokensAsync(current, cancellationToken));
         app.MapGet("/health/live", () => Results.Text("Healthy"));
-        Map(app, callers, ApiOf(options, state, secrets, models));
+        Map(app, ApiOf(options, state, secrets, models));
         await app.StartAsync(cancellationToken);
         _app = app;
     }
@@ -64,24 +63,14 @@ public sealed class ProxyStoreModule(IOptionsMonitor<ProxyOptions> options, Stat
         return new PairingFiles(ProxyConfigFile.PathIn(dataDirectory), Path.Combine(dataDirectory, "pairing-codes.json"), State.ProxyState.IsGroup(state) ? state : null).InstanceId("proxy", "dbdataproxy server");
     }
 
-    /// <summary>The home's access tokens are checked against its signing keys when this instance holds their key (the identity module's secret); without it, personal access tokens only. Nothing is made here.</summary>
-    private async Task<OpenIdProvider?> HomeTokensAsync(ProxyOptions current, CancellationToken cancellationToken)
-    {
-        using var held = await SecretsRuntime.OpenStore(current).TryResolveAsync(SecretRef.Parse("secret:" + ProxyIdentityModule.SigningKeySecret), cancellationToken);
-        if (held is null) return null;
-        var users = new IdentityUserStore(state);
-        var directory = new HomeDirectory(state);
-        return new OpenIdProvider(state, users, directory, new OidcClients(state), new SigningKeys(state, KeySigningKeyProtector.FromBase64(held.RevealString())),
-            ProxyIdentityModule.PublicUrlOf(current).AbsoluteUri);
-    }
-
-    private void Map(WebApplication app, StoreCallers callers, GroupStoreApi api)
+    private void Map(WebApplication app, GroupStoreApi api)
     {
         const string prefix = "/api/v1/models";
 
         // who is calling; what they may do is the API's to say, the same for the apps host's calls
         async Task<IResult> As(HttpContext context, Func<StoreCaller, Task<StoreAnswer>> call)
         {
+            var callers = await homeCallers.GetAsync(context.RequestAborted);
             if (callers.Authenticate(context.Request.Headers.Authorization.ToString()) is not { } caller)
                 return Results.Json(new { error = "A token of the identity home is needed (a personal access token, or an access token it issued)." }, statusCode: StatusCodes.Status401Unauthorized);
             var answer = await call(caller);

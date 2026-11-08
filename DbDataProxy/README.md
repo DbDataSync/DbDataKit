@@ -20,11 +20,11 @@ Flight SQL client ──gRPC/TLS──▶ DbDataProxy (x64) ──▶ SQL Server
 ```powershell
 ./build/publish.ps1                 # -> artifacts/publish/win-x64 (dbdataproxy.exe + worker\)
 cd artifacts/publish/win-x64
-./dbdataproxy.exe secret hash       # prompts (or reads standard input); paste the hash into the settings file
+./dbdataproxy.exe identity service-account-add --name me && ./dbdataproxy.exe identity token-create --account me --name laptop   # a home user and its personal access token (shown once)
 # edit %ProgramData%\DbDataProxy\config\server.yaml (see config.example\), then:
 ./dbdataproxy.exe server run         # run in a console (there is no default command)
 ./dbdataproxy.exe service install   # or register the Windows service (elevated prompt), then: dbdataproxy service start
-./dbdataproxy.exe query run --insecure --user me --password ... --datasource erp --sql "SELECT 1"
+./dbdataproxy.exe query run --insecure --user me --password ddk_... --datasource erp --sql "SELECT 1"
 ```
 
 On first start the proxy writes `dbdataproxy-selfsigned.pfx` and `.cer` to its data directory
@@ -142,8 +142,7 @@ Settings are YAML files in the `config` folder of the data directory: `%ProgramD
 ```
 config/
   server.yaml            listen, tls, secrets, compression, hosting, worker, logging switches, schemaVersion
-  proxy/auth.yaml        sessions, lockout, pass-through, JWT and its mappings
-  proxy/users.yaml       the local client users (a `users:` list)
+  proxy/auth.yaml        sessions, lockout, pass-through, Windows sign-in, JWT and its mappings
   connections/<name>.yaml  one data source per file, in the shared connection format (connection/1); the file name is the data source name
 ```
 
@@ -152,12 +151,12 @@ A data source is the same file a Sync or Build connection is (`schema: connectio
 `service install` creates `server.yaml` with only `schemaVersion: 2` if there is none. Defaults are in the code, not in a shipped file, and
 `config.example/` beside the executable has one example of each file with every option. Keys are camelCase in the files (matched ignoring case).
 Layers, lowest first: the files, `DBPROXY_` environment variables (`DBPROXY_Proxy__Listen__Port=9000`), the command line (`--Proxy:Listen:Port=9000`).
-`DataDirectory` itself comes from the command line, the environment or the default, never from a file, since the files live in it. Users, data sources,
+`DataDirectory` itself comes from the command line, the environment or the default, never from a file, since the files live in it. Data sources,
 compression and auth settings reload without a restart; the listener and certificate need one.
 
 **An `appsettings.json` from an earlier release is refused**, not read and not converted: the server stops with exit code 2 and a message that names the file
 (in the data directory, its `config` folder, or beside the executable) and where its settings go now. Move the `Proxy` section's keys into the files above
-(`DataSources` entries into `connections/`, `Users` into `proxy/users.yaml`, `Auth` into `proxy/auth.yaml`, the rest into `server.yaml`), then delete the old file.
+(`DataSources` entries into `connections/`, `Auth` into `proxy/auth.yaml`, the rest into `server.yaml`), then delete the old file.
 
 ### The management API
 
@@ -168,7 +167,7 @@ The two are kept apart by the connection they arrive on, not by number: a manage
 * **Calls** carry the console's short-lived signed token (`X-DbData-Token`), and each call needs a role: `GET /api/v1/about` (viewer), `GET /api/v1/config` (admin: every effective setting with the file and line, environment variable or default it came from, secrets masked, and what the validator says) and `GET /api/v1/state` (viewer: the engine, the connection with secrets masked, the modules' versions in the registry against this binary, the migrations pending, where each setting came from and the other live instances) and `GET`/`POST /api/v1/state/maintenance` (viewer reads, admin sets `{"enabled": true, "reason": "..."}`: the server answers 503 with `Retry-After` and the reason to everything but these calls, the health endpoints and an administrator, and reports `idle` when what was in flight has finished; audited as `state.maintenance`, refusals too; nothing is persisted, a restart leaves maintenance). See `DbDataKit/src/DbDataKit.State.Api/README.md`. `POST /api/v1/config/validate` (admin: `{"files": {"connections/erp.yaml": "..."}}` says whether the configuration would be valid with those files in place of the current ones; nothing is written). No answer contains a secret: a test writes a marker into every place a secret can be set and looks for it in every answer.
 * **Data sources** (admin): `GET /api/v1/data-sources` lists the files of `connections/` with their version (a hash of the text), `GET .../{name}` reads one, `PUT .../{name}` with `{"text": "schema: connection/1 ...", "expected_version": "<hash>" or null to create}` writes one, `DELETE .../{name}?expected_version=<hash>` removes one, `POST .../{name}/test` connects and runs `SELECT 1`. A write is validated with the rest of the configuration as it would be once written, and refused with the diagnostics (nothing is written) if that would make it invalid; a write based on a version that is not the current one is a 409 with the current version; a write is applied at once (no restart: the next query uses it), committed to the configuration folder's git history as the person who made it, and noted in the management audit (who, which console, what, the outcome; never content), which is in the state database. A failed test answers with the failure kind and code, never the driver's text.
 * **Adopting a data source** (a person with the admin role): a data source made by hand, or by another client, is handed to a paired server client (a Build server) with `POST /api/v1/data-sources/{name}/adopt` (`{"client": "<client id>"}`), after which that client changes and removes it like one it made; `GET /api/v1/clients` (admin) lists the server clients that can take one over (id and name); a server client cannot adopt, and a source with `extensions.proxy` is refused (409). On this machine the same call is `dbdataproxy datasource adopt <name> <client id or name> [--repo <path>]`, made over the local channel (so `management.localChannel: true` and a running proxy); the client is named as `server clients` lists it, and the audit line names the operating-system user. The console's Data sources page and Build's Publish tab have a button for it.
-* **Client identities** (admin): `GET /api/v1/identities` shows the Flight users, the Windows accounts, the JWT settings and mappings and whether pass-through is on, as in effect, with `has_password` and `has_signing_key` and never a hash, a password or a key. `PUT /api/v1/users/{name}` (`{"auth_type": "password" or "windows", "password": "...", "data_sources": [...], "default_data_source": ..., "expected_version": ...}`) creates or changes one entry of `proxy/users.yaml` without touching the rest of the file: the password is hashed here (PBKDF2) and only the hash is written, a change without a password keeps the hash, and a Windows account takes none. `DELETE /api/v1/users/{name}?expected_version=` removes one; `PUT /api/v1/auth` (`{"allow_pass_through": false, "expected_version": ...}`) switches pass-through in `proxy/auth.yaml`. Writes are checked, committed, audited and applied like a data source's. The JWT mappings are changed in `proxy/auth.yaml` for now.
+* **Client identities** (admin): `GET /api/v1/identities` shows whether pass-through and Windows sign-in are on and the JWT settings and mappings, as in effect, with `has_signing_key` and never a key. Proxy's own users are retired (plan 13a P13): `users` and `windows_accounts` stay in the answer, empty, and `PUT`/`DELETE /api/v1/users/{name}` answer `410 Gone` (people are the identity home's: see "Authentication"). `PUT /api/v1/auth` (`{"allow_pass_through": false, "expected_version": ...}`) switches pass-through in `proxy/auth.yaml`. Writes are checked, committed, audited and applied like a data source's. The JWT mappings are changed in `proxy/auth.yaml` for now.
 * **What it is doing** (admin): `GET /api/v1/sessions` (who is signed in, how, with which data sources; a session is named by the front of its token's hash, which is not a token) and `DELETE /api/v1/sessions/{id}` end one; `GET /api/v1/queries` lists the running statements (user, data source, kind, how long, and the text when `Proxy:LogSql` is on, cut to 500 characters) and `POST /api/v1/queries/{id}/cancel` cancels one, which ends it for its client as `Cancelled`; `GET /api/v1/limits` reports each data source's limits with the slots in use, waiting and refused, the login throttle's settings and who it is holding against, and `DELETE /api/v1/throttle?client=&user=` lets a locked-out client try again. Each of those that changes something is noted in the management audit.
 * **The certificate and the failures** (admin): `GET /api/v1/certificate` describes the certificate in use (mode, subject, thumbprint, validity, days left, the names it is good for, whether it is due for renewal; never its key). `POST /api/v1/certificate/renew` with `{"confirm": true}` renews a self-signed certificate now, the way `cert renew` does, and puts the new one in use at once; the certificate every paired console pinned is then gone, so each has to be paired again, which is why it asks first. `GET /api/v1/failures` lists the last 200 database failures the proxy classified, newest first: the kind, the engine's code and the fixed sentence a client was told, never the driver's text.
 * **State database:** `state.db` in the data directory (SQLite) unless the `state:` section of `server.yaml` names an engine. It is the section every DbData product reads (plan 29b C07): `state: {engine: postgres, connection: "Host=db;Database=dbdataproxy_state;Username=proxy;Password=secret:state-db", namespaces: {default: {schema: dbdataproxy}}, retention: {days: 30}}` (`engine` is `sqlite`, `mssql` or `postgres`; the password is a secret reference, resolved when the server starts; `registry`, `namespaces` and `retention` are optional). A setting that is not one is refused with the file and line and the nearest setting that is. The proxy's other layers still apply, in the order they always did: the file, then `DBPROXY_Proxy__State__Engine` and `DBPROXY_Proxy__State__Connection` (or the plain `Proxy__State__...` variables), then `--Proxy:State:Engine=` on the command line. **A file with the keys of the earlier release** (`state.connectionString`, or `state.definitionPollSeconds`, which is now `definitionPollSeconds` at the top level) **stops the start naming the file and the key** and showing the new shape; nothing is converted. The proxy needs a database of its own; a console on the same server uses another. A change needs a restart, and changing the engine starts an empty store. `dbdataproxy state init --topology service|group|install` (the shared verb, see `DbDataKit.State.Cli`) writes the `state:` section of `server.yaml` (in the `config` folder of the data directory) and prints or, with `--admin-connection` and `--apply`, runs the schemas and the login's rights for a group or install database. `dbdataproxy state show` prints the engine, the connection (the password masked), **where each value came from** (a flag, an environment variable, the file, or the default; `--json` has it as `sources`), where each module's tables are, each module's version in the registry and what is pending, and creates nothing; `dbdataproxy state test` connects and checks the registry, the rights, the engine version and a schema clash, and stops at the first failure with one sentence naming the fix (exit codes 10 to 18, one per kind); `dbdataproxy state grants --login <role>` prints the `GRANT` statements for the login the proxy runs as (`--migrate` for the one that upgrades the database). To change the engine and keep the state (the group's sessions, pairings, published definitions, notifications), stop every instance and run `dbdataproxy state move --to-engine <engine> --to-connection <string>` (it exports, imports into the empty target, verifies and then writes the `state:` section of `server.yaml`), or in steps `dbdataproxy state export --to <directory> [--include-secrets-check] [--repo <data directory>]`, set the new engine, and `dbdataproxy state import --from <directory>` against the empty new database; `dbdataproxy state verify --snapshot <directory> [--db]` checks a snapshot against itself or the database against it (`--other-engine`/`--other-connection` compare two databases, the connection with secret references only). The group's secrets stay encrypted in the snapshot; the key (`dbdata:proxy:state:session-key`) is in each instance's secret store and is not part of it.
@@ -427,23 +426,39 @@ Literals still work, but the proxy logs a one-time warning naming the config key
 Every resolved secret is registered with a redactor that scrubs all log output (messages and exception text) and the
 text of errors returned to clients; `Password=...`-style fragments are scrubbed even when the value is unknown.
 
-Password hashes (`Proxy:Users:*:PasswordHash`) use the shared PBKDF2 hasher in the format `PBKDF2-SHA256$iterations$salt$hash`,
-the same format `secret hash` (formerly `hash-password`) has always written, so existing hashes verify unchanged.
-
 ### Authentication
 
 Everything arrives as a Flight call; the proxy denies any call without valid credentials (except the handshake).
 
-1. **Local users with hashed passwords** (`Proxy:Users`, PBKDF2-HMAC-SHA256, 210k iterations). Standard Flight
-   handshake: Basic credentials in, opaque bearer token out (`authorization: Bearer ...` response header). Each user
-   lists the data sources they may use; the data source's connection string carries the database credentials
-   ("mapped" accounts). Failed logins are throttled per user and client address.
-2. **Windows accounts** (`"AuthType": "Windows"`, Windows only): same handshake, but the password is checked
-   against the local/domain account (`DOMAIN\user`, `user@domain`, or a bare local name) and the user maps to
-   data sources like any other.
+1. **The identity home's people** (plan 13a P13; plan 16, "Sign-in decisions" item 2). Proxy has **no users of its own**: a client signs in as a person or service account of the identity home, one of three ways. Failed logins are throttled per user and client address.
+   * **A home user name with a personal access token as the password**, in the standard Flight handshake (Basic credentials in, opaque bearer token out). The user name is the person's address, a service account's name or the home's user id; the token is
+     `ddk_...`, made by the person at the identity home, or for a service account with `dbdataproxy identity token-create --account <name> --name <label>`. A password that has the shape of a token and is not the right one for that user is refused
+     for good (it never falls through to pass-through); a password that is no token is the database's, for pass-through.
+   * **A home token** as `authorization: Bearer <token>` on every call, with no handshake: a personal access token, or an access token the home issued (checked against the home's signing keys when this instance holds their key, as for the `store` module).
+     A revoked token stops working at once.
+   * **Windows, resolved by UPN** (`Auth: { windows: true }`, off by default; Windows only for the operating system's check): the user name is the person's UPN (`ada@corp.example`), the password is checked by the operating system, and the account is the
+     home user who holds that address as a verified one (an address an administrator entered at the home). A UPN no home user holds is left to pass-through; `DOMAIN\user` and bare names are not resolved. No database login of its own is needed.
+
+   **Which data sources a home user may use is decided by home groups named in the data source files** (owner decision of 2026-11-07): `extensions.proxy.groups` lists the home groups whose members may use the data source, and the home's groups of the person
+   decide (names match ignoring case). `extensions.proxy.everyone: true` opens a data source to every user of the home, deliberately. **A data source that names no group and is not open to everyone is used by no home user** (the safe default; the
+   configuration check warns about it, and a refusal says how to open it); a pass-through data source needs neither, the database decides there. Both at once is an error. `extensions.proxy.default: true` (at most one data source) is the one a person gets when
+   their client names none, if they may use it; it opens nothing by itself (it replaces the `DefaultDataSource` of the retired users). Groups are made and filled at the home (the console's people screens, or `POST /api/v1/identity/groups` and `.../members` of its admin API).
+   A session keeps the groups the person had when they signed in (at most `SessionMaxHours`), and the groups of the files are read again at every use. The log, the session list and the running-query list name the home user (the name the home shows, e.g. `Query by Ada Lovelace on erp`), never the token.
+
+   ```yaml
+   # connections/erp.yaml
+   extensions:
+     proxy:
+       groups: [finance-reporting, auditors]   # members of these home groups may use erp
+       default: true
+   ```
+
+   **A configuration that still lists Proxy users** (`users:` in `proxy/users.yaml` or `server.yaml`, `Proxy:Users` anywhere, a Windows `AuthType` entry) is **refused** with exit code 2 and a message naming the file and line (or the environment variables or command line) and the key: a clean break. Remove the users,
+   make the people home users, and name their groups in the data source files. `secret hash` is gone with them.
+2. (retired: Proxy's own Windows accounts. Windows is now the third way above.)
 3. **Pass-through database credentials** (`"PassThrough": true` on a data source): the username/password the
    client authenticates with are injected into that connection and the database is the authority, so a wrong
-   password fails at query time. Local users always win over pass-through for the same name. A rejected database
+   password fails at query time. A home token or a home user name with its token always wins over pass-through. A rejected database
    login (failure kind `Login`) is answered `Unauthenticated` and counts in the login throttle for that user and client
    address like a wrong password at the handshake does; once locked out (`Auth:MaxFailedLogins` within `Auth:LockoutMinutes`)
    the user is refused before any database connection is made, and a pass-through handshake does not reset the count.
@@ -508,7 +523,7 @@ C# (`DbDataProxy.Client`, in `DbDataProxy.Core`):
 
 ```csharp
 using var client = new ProxyFlightClient("https://proxy:8815");
-await client.AuthenticateAsync("me", "password");
+await client.AuthenticateAsync("me", "ddk_...");   // a home user name and its personal access token
 var result = await client.QueryAsync("SELECT * FROM sales",
     new QueryOptions { DataSource = "erp", Compression = "zstd" });
 await foreach (var batch in result) { /* Apache.Arrow.RecordBatch */ }

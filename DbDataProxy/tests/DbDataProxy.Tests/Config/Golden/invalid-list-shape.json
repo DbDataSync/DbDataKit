@@ -1,1 +1,1 @@
-{ "Proxy": { "Users": { "a": { "Name": "x" } } } }
+{ "Proxy": { "DataSources": { "erp": { "Provider": "sqlserver", "ConnectionString": "Server=a", "Groups": { "a": "x" } } } } }

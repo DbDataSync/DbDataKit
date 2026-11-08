@@ -7,4 +7,5 @@ engine: duckdb
 connection_string: "Data Source=C:\\data\\lake.duckdb"
 extensions:
   proxy:
+    groups: [analysts]
     allowed_directories: ['C:\data\parquet']

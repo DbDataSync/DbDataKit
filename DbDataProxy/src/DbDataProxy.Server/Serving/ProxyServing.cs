@@ -20,7 +20,8 @@ public sealed partial class ProxyServing(
     IOptionsMonitor<ProxyOptions> options,
     ILogger<ProxyServing> log,
     TimeProvider time,
-    ProxyEvents? events = null) : IServingServices, IServingIdentity, IServingSessions
+    ProxyEvents? events = null,
+    HomeCallers? homeCallers = null) : IServingServices, IServingIdentity, IServingSessions
 {
     public IServingIdentity Identity => this;
 
@@ -46,6 +47,13 @@ public sealed partial class ProxyServing(
                 return principal is null ? null : new ProxyCaller(principal);
             case ServingCredentials.Bearer(var token):
                 if (sessions.TryGet(token) is { } session) return new ProxyCaller(session);
+                // a token of the identity home: a personal access token, or an access token the home issued (plan 13a P13)
+                if (homeCallers is not null && (HomePrincipals.LooksLikeToken(token) || token.Count(c => c == '.') == 2))
+                {
+                    var home = await homeCallers.GetAsync(cancellationToken).ConfigureAwait(false);
+                    if (home.IdentifyBearer(token) is { } person) return new ProxyCaller(HomePrincipals.Create(home, person, "home-token", options.CurrentValue));
+                    if (HomePrincipals.LooksLikeToken(token)) return null;
+                }
                 // not one of our session tokens: a JWT from an external identity provider, if that is enabled
                 return jwt is { Enabled: true } && token.Count(c => c == '.') == 2 && await jwt.ValidateAsync(token, cancellationToken).ConfigureAwait(false) is { } external
                     ? new ProxyCaller(external)
@@ -64,7 +72,7 @@ public sealed partial class ProxyServing(
     }
 
     public Task<ServingSession?> GetAsync(ServingCaller caller, string id, CancellationToken cancellationToken = default) =>
-        Task.FromResult<ServingSession?>(sessions.TryGet(id) is { } p && p.Name == caller.Name
+        Task.FromResult<ServingSession?>(sessions.TryGet(id) is { } p && (p.HomeUserId ?? p.Name) == caller.Id
             ? new ServingSession(id, "flightsql", caller.Id, [], time.GetUtcNow().AddHours(options.CurrentValue.Auth.SessionMaxHours))
             : null);
 

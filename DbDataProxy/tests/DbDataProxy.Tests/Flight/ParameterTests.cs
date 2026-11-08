@@ -11,7 +11,7 @@ public class ParameterTests(ProxyFixture proxy) : IClassFixture<ProxyFixture>
     private async Task<ProxyClient> LoginAsync()
     {
         var client = proxy.Connect();
-        await client.AuthenticateAsync("alice", ProxyFixture.AlicePassword);
+        await client.AuthenticateAsync("alice", proxy.AliceToken);
         return client;
     }
 
@@ -197,7 +197,7 @@ public class ParameterSchemaTests(ProxyFixture proxy) : IClassFixture<ProxyFixtu
     public async Task Prepared_statements_report_one_parameter_field_per_marker(string sql, int expected)
     {
         using var client = proxy.Connect();
-        await client.AuthenticateAsync("alice", ProxyFixture.AlicePassword);
+        await client.AuthenticateAsync("alice", proxy.AliceToken);
 
         var schema = await client.Raw.DescribeParametersAsync(sql);
         Assert.Equal(expected, schema.FieldsList.Count);

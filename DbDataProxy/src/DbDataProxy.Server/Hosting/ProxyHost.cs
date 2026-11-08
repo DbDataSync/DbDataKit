@@ -156,7 +156,8 @@ public static class ProxyHost
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<SessionStore>();
         services.AddSingleton<LoginThrottle>();
-        services.AddSingleton<IBasicCredentialValidator, LocalUserValidator>();
+        services.AddSingleton<HomeCallers>();
+        services.AddSingleton<IBasicCredentialValidator, HomeCredentialValidator>();
         services.AddSingleton<IWindowsLogon, NativeWindowsLogon>();
         services.AddSingleton<IBasicCredentialValidator, WindowsAccountValidator>();
         services.AddSingleton<IBasicCredentialValidator, PassThroughValidator>();

@@ -7,4 +7,5 @@ engine: odbc
 connection_string: "Driver={ODBC Driver 18 for SQL Server};Server=SQL02;Database=Dw"
 extensions:
   proxy:
+    # no groups: the database decides, with the caller's own credentials
     pass_through: true

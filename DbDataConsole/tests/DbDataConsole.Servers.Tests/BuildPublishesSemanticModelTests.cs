@@ -32,6 +32,7 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
     private string personId = null!;
     private string proxyDirectory = null!;
     private int flightPort;
+    private string aliceToken = "";
 
     public async ValueTask InitializeAsync()
     {
@@ -62,7 +63,10 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
         // the Proxy: a management listener, a certificate of its own, and one person who may read the data source the publish will make
         File.WriteAllText(Path.Combine(proxyDirectory, "config", "server.yaml"), "schemaVersion: 2\ntls: { mode: selfSigned }\n");
         File.WriteAllText(Path.Combine(proxyDirectory, "config", "proxy", "auth.yaml"), "jwt:\n  signingKey: servers-e2e-signing-key-0123456789abcdef\n  audience: api://servers-e2e\n");
-        File.WriteAllText(Path.Combine(proxyDirectory, "config", "proxy", "users.yaml"), $"users:\n  - name: alice\n    passwordHash: '{PasswordHasher.Hash("pw", 1000)}'\n    dataSources: ['*']\n");
+        // the person is a service account of the Proxy's identity home (P13: Proxy has no users of its own) with a personal access token, made as an operator does
+        await RealProcess.RunAsync(proxy, "identity", "service-account-add", "--name", "alice", "--repo", proxyDirectory);
+        aliceToken = System.Text.RegularExpressions.Regex.Match(await RealProcess.RunAsync(proxy, "identity", "token-create", "--account", "alice", "--name", "e2e", "--repo", proxyDirectory), @"ddk_[A-Za-z0-9_-]+").Value;
+        Assert.NotEmpty(aliceToken);
         (flightPort, var management) = (Programs.FreePort(), Programs.FreePort());
         var proxyCode = Programs.CodeIn(await RealProcess.RunAsync(proxy, "server", "pair", "--repo", proxyDirectory, "--max-role", "admin"));
         var proxyProcess = RealProcess.Start(proxy, ["server", "run", $"--Proxy:DataDirectory={proxyDirectory}", "--Proxy:Listen:Address=127.0.0.1", $"--Proxy:Listen:Port={flightPort}",
@@ -127,12 +131,31 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
         // the Proxy's Flight listener has a certificate of its own, which this client has no reason to distrust here
         var handler = new SocketsHttpHandler { SslOptions = new System.Net.Security.SslClientAuthenticationOptions { RemoteCertificateValidationCallback = (_, _, _, _) => true } };
         using var client = new ProxyFlightClient($"https://127.0.0.1:{flightPort}", new Grpc.Net.Client.GrpcChannelOptions { HttpHandler = handler });
-        await client.AuthenticateAsync("alice", "pw");
+        await client.AuthenticateAsync("alice", aliceToken);
         var result = await client.QueryAsync($"{{\"kind\": \"members\", \"attribute\": \"{attribute}\"}}", new QueryOptions { DataSource = "semantic:retail_sales" });
         var members = new List<string>();
         await foreach (var batch in result)
             for (int r = 0; r < batch.Length; r++) members.Add(((StringArray)batch.Column(0)).GetString(r));
         return members;
+    }
+
+    /// <summary>A data source a client published names no home group, so no home user may use it: the Proxy's administrator opens it by editing its file (the serving policy, <c>extensions.proxy</c>, is theirs, not the publisher's).</summary>
+    private async Task OpenToEveryoneAsync(string connectionFile)
+    {
+        var text = File.ReadAllText(connectionFile);
+        Assert.DoesNotContain("extensions:", text);
+        File.WriteAllText(connectionFile, text.TrimEnd() + "\nextensions:\n  proxy:\n    everyone: true\n");
+        await ServedAsync();
+    }
+
+    /// <summary>The Proxy reads its configuration folder again a moment after a file changes; waits, up to a limit, until the person can use the data source.</summary>
+    private async Task ServedAsync()
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try { await MembersAsync("customers.region"); return; }
+            catch (Exception ex) when (attempt < 40 && ex.ToString().Contains("PermissionDenied", StringComparison.Ordinal)) { await Task.Delay(250); }
+        }
     }
 
     [Fact]
@@ -154,7 +177,10 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
         Assert.True(held.Status == HttpStatusCode.OK, $"read: {held.Status} {held.Body}");
         Assert.Equal(1, (int)held.Body!["current_version"]!);
         Assert.Contains("retail_sales", (string)held.Body["catalog"]!);
-        Assert.Contains("engine: sqlserver", File.ReadAllText(Path.Combine(proxyDirectory, "config", "connections", "sqlserver.yaml")));
+        var connectionFile = Path.Combine(proxyDirectory, "config", "connections", "sqlserver.yaml");
+        Assert.Contains("engine: sqlserver", File.ReadAllText(connectionFile));
+
+        await OpenToEveryoneAsync(connectionFile);
 
         // 4. and serves it: a person with an account on the Proxy asks for the members of an attribute and reads the database behind the model
         Assert.Equal(["East", "West"], (await MembersAsync("customers.region")).Order().ToArray());
@@ -164,6 +190,9 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
         Assert.True(again.Status == HttpStatusCode.OK, $"publish again: {again.Status} {again.Body}");
         Assert.Equal(1, (int)again.Body!["version"]!);
         Assert.False((bool)again.Body["created"]!);
+        // a publish writes the whole connection file again, so the serving policy the administrator added is gone (a publishing client cannot set it): the data source is closed until they open it again
+        Assert.DoesNotContain("everyone", File.ReadAllText(connectionFile));
+        await OpenToEveryoneAsync(connectionFile);
         Assert.Equal(2, (await MembersAsync("customers.region")).Count);
 
         // 6. the Proxy's audit says who: the person, and the Build server that acted for them

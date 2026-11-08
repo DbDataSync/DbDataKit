@@ -18,7 +18,8 @@ namespace DbDataProxy.Tests.Support;
 /// <summary>Runs the real proxy host in-process on a random loopback port, backed by a temporary DuckDB database.</summary>
 public sealed class ProxyFixture : IAsyncLifetime
 {
-    public const string AlicePassword = "alice-pw";
+    /// <summary>The personal access token of alice, a service account of the identity home in the home group the data sources name (made when the host starts); her user name is <c>alice</c>.</summary>
+    public string AliceToken { get; private set; } = "";
 
     private WebApplication? _app;
     private string _dir = "";
@@ -70,18 +71,12 @@ public sealed class ProxyFixture : IAsyncLifetime
             ["Proxy:DataSources:duck_lake:AllowedDirectories:0"] = LakeDirectory,
             ["Proxy:DataSources:other:Provider"] = "duckdb",
             ["Proxy:DataSources:other:ConnectionString"] = "Data Source=:memory:",
-            ["Proxy:Users:0:Name"] = "alice",
-            ["Proxy:Users:0:PasswordHash"] = PasswordHasher.Hash(AlicePassword, 1000),
-            ["Proxy:Users:0:DataSources:0"] = "duck",
-            ["Proxy:Users:0:DataSources:1"] = "duck_ro",
-            ["Proxy:Users:0:DataSources:2"] = "duck_strict",
-            ["Proxy:Users:0:DataSources:3"] = "duck_off",
-            ["Proxy:Users:0:DataSources:4"] = "duck_lake",
-            ["Proxy:Users:0:DefaultDataSource"] = "duck",
         };
+        HomeSeed.Open(settings, ["duck", "duck_ro", "duck_strict", "duck_off", "duck_lake"], defaultSource: "duck");
 
         _app = ProxyHost.Build([], b => b.Configuration.AddInMemoryCollection(settings));
         await _app.StartAsync();
+        AliceToken = HomeSeed.ServiceAccount(_app.Services.GetRequiredService<DbDataKit.State.StateDatabase>(), "alice");
         var feature = _app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!;
         Address = feature.Addresses.First().Replace("0.0.0.0", "127.0.0.1");
     }

@@ -5,6 +5,7 @@ using DbDataProxy.Server.Auth;
 using DbDataProxy.Server.Configuration;
 using DbDataProxy.Server.Hosting;
 using DbDataProxy.Server.Tls;
+using DbDataProxy.Tests.Support;
 using Grpc.Net.Client;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
@@ -88,11 +89,10 @@ public sealed class TlsTests : IDisposable
             ["Proxy:Listen:Port"] = "0",
             ["Proxy:DataDirectory"] = _dir,
             ["Proxy:Tls:Mode"] = "SelfSigned",
-            ["Proxy:Users:0:Name"] = "alice",
-            ["Proxy:Users:0:PasswordHash"] = PasswordHasher.Hash("pw", 1000),
         };
         await using var app = ProxyHost.Build([], b => b.Configuration.AddInMemoryCollection(settings));
         await app.StartAsync(TestContext.Current.CancellationToken);
+        var aliceToken = HomeSeed.ServiceAccount(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>(), "alice");
 
         string address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.First()
             .Replace("0.0.0.0", "127.0.0.1");
@@ -109,7 +109,7 @@ public sealed class TlsTests : IDisposable
             },
         };
         using var client = new ProxyFlightClient(address, new GrpcChannelOptions { HttpHandler = handler });
-        await client.AuthenticateAsync("alice", "pw", TestContext.Current.CancellationToken);
+        await client.AuthenticateAsync("alice", aliceToken, TestContext.Current.CancellationToken);
         Assert.StartsWith("Bearer ", client.Authorization);
     }
 

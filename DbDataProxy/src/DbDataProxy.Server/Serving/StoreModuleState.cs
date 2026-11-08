@@ -107,32 +107,51 @@ public sealed record StoreCaller(string UserId, string? Name, bool IsAgent, Serv
 /// <c>Authorization: Bearer ddk_...</c> or as the password of Basic), or an access token the home issued (<c>Bearer</c>, ES256, checked against the home's signing keys when this instance holds their key). What they may do
 /// is what the home gives them on this group's server id: viewer reads, author writes, and the approval of a change request as the model says. A service account is an agent.
 /// </summary>
-public sealed class StoreCallers(StateDatabase state, string serverId, OpenIdProvider? provider)
+public sealed class StoreCallers(StateDatabase state, Func<string> serverId, OpenIdProvider? provider)
 {
     private readonly IdentityUserStore _users = new(state);
 
-    public StoreCaller? Authenticate(string? authorization)
+    public StoreCallers(StateDatabase state, string serverId, OpenIdProvider? provider) : this(state, () => serverId, provider) { }
+
+    /// <summary>The home user a request signs in as (the same rules for every product of the Proxy: the store module, and Flight SQL's data clients, plan 16 "Sign-in decisions" item 2), or null.</summary>
+    public UserRecord? Identify(string? authorization)
     {
         if (string.IsNullOrWhiteSpace(authorization)) return null;
-        var tokens = new AccessTokens(state, _users);
-        UserRecord? user = null;
-        if (authorization.StartsWith("Bearer ", StringComparison.Ordinal))
-        {
-            var token = authorization[7..].Trim();
-            if (token.StartsWith("ddk_", StringComparison.Ordinal)) user = tokens.VerifyBearer(token);
-            else if (provider?.Verify(token, "at+jwt") is { } claims && claims.GetValueOrDefault("aud") as string == provider.Issuer && claims.GetValueOrDefault("sub") is string sub)
-                user = _users.Get(sub) is { Enabled: true } found ? found : null;
-        }
-        else if (authorization.StartsWith("Basic ", StringComparison.Ordinal))
+        if (authorization.StartsWith("Bearer ", StringComparison.Ordinal)) return IdentifyBearer(authorization[7..].Trim());
+        if (authorization.StartsWith("Basic ", StringComparison.Ordinal))
         {
             string decoded;
             try { decoded = Encoding.UTF8.GetString(Convert.FromBase64String(authorization[6..].Trim())); }
             catch (FormatException) { return null; }
             var colon = decoded.IndexOf(':');
-            if (colon > 0) user = tokens.Verify(decoded[..colon], decoded[(colon + 1)..]);
+            return colon > 0 ? IdentifyPassword(decoded[..colon], decoded[(colon + 1)..]) : null;
         }
-        if (user is null) return null;
-        var roles = new HomeDirectory(state).RolesOn(user.Id, serverId).Roles;
-        return new StoreCaller(user.Id, user.DisplayName, tokens.ServiceAccountOf(user.Id) is not null, roles);
+        return null;
+    }
+
+    /// <summary>A bearer token: a personal access token (a person's or a service account's), or an access token the home issued (ES256, checked against the home's signing keys when this instance holds their key).</summary>
+    public UserRecord? IdentifyBearer(string token)
+    {
+        if (token.StartsWith("ddk_", StringComparison.Ordinal)) return new AccessTokens(state, _users).VerifyBearer(token);
+        if (provider?.Verify(token, "at+jwt") is { } claims && claims.GetValueOrDefault("aud") as string == provider.Issuer && claims.GetValueOrDefault("sub") is string sub)
+            return _users.Get(sub) is { Enabled: true } found ? found : null;
+        return null;
+    }
+
+    /// <summary>A user name with a personal access token as the password: the person's address, a service account's name or the user id with its token.</summary>
+    public UserRecord? IdentifyPassword(string userName, string token) => new AccessTokens(state, _users).Verify(userName, token);
+
+    /// <summary>The home user holding this verified address (a Windows sign-in's UPN, plan 13a U16), or null; an address nobody verified finds nobody.</summary>
+    public UserRecord? FindByAddress(string address) => _users.FindByEmail(address) is { Enabled: true } found ? found : null;
+
+    /// <summary>The names of the home groups the person is in.</summary>
+    public IReadOnlyList<string> GroupsOf(string userId) => [.. new HomeDirectory(state).GroupsOf(userId).Select(g => g.Name)];
+
+    public StoreCaller? Authenticate(string? authorization) => Identify(authorization) is { } user ? CallerOf(user) : null;
+
+    private StoreCaller CallerOf(UserRecord user)
+    {
+        var roles = new HomeDirectory(state).RolesOn(user.Id, serverId()).Roles;
+        return new StoreCaller(user.Id, user.DisplayName, new AccessTokens(state, _users).ServiceAccountOf(user.Id) is not null, roles);
     }
 }

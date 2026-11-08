@@ -58,7 +58,13 @@ public sealed class DataSourceCatalog(
 
         if (!configured.TryGetValue(name, out var source))
             throw new RpcException(new Status(StatusCode.NotFound, $"Unknown data source '{name}'."));
-        if (!principal.CanUse(name))
+        if (principal.HomeUserId is not null)
+        {
+            // a home user: the home groups the data source file names decide, checked against the configuration in force now
+            if (!DataSourceAccess.HomeMayUse(source, principal.HomeGroups))
+                throw new RpcException(new Status(StatusCode.PermissionDenied, DataSourceAccess.Refusal(name, source, principal.Name)));
+        }
+        else if (!principal.CanUse(name))
             throw new RpcException(new Status(StatusCode.PermissionDenied, $"Not authorized for data source '{name}'."));
 
         if (!providers.TryGet(source.Provider, out var registered))
@@ -133,8 +139,10 @@ public sealed class DataSourceCatalog(
     {
         if (!string.IsNullOrWhiteSpace(requested)) return requested.Trim();
         if (principal.DefaultDataSource is { Length: > 0 } d) return d;
+        // a home user: the data source the files call the default, when the person may use it
+        if (principal.HomeUserId is not null && configured.FirstOrDefault(c => c.Value.Default && DataSourceAccess.HomeMayUse(c.Value, principal.HomeGroups)) is { Key: { } defaultName }) return defaultName;
 
-        var allowed = configured.Keys.Where(principal.CanUse).ToList();
+        var allowed = configured.Where(c => principal.HomeUserId is not null ? DataSourceAccess.HomeMayUse(c.Value, principal.HomeGroups) : principal.CanUse(c.Key)).Select(c => c.Key).ToList();
         if (allowed.Count == 1) return allowed[0];
         throw new RpcException(new Status(StatusCode.InvalidArgument,
             "No data source selected. Send the 'x-datasource' header" +
