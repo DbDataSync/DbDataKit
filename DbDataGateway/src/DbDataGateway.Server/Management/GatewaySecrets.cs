@@ -8,7 +8,8 @@ namespace DbDataGateway.Server.Management;
 
 /// <summary>
 /// Secrets through the management API, for a server client that publishes data sources (plan 13, T10): a Build server that creates a data source sends the password of its read login once, over the pinned, signed channel, and the gateway keeps
-/// it in its own encrypted store. <c>PUT /api/v1/secrets/{name}</c> (<c>{"value"}</c>) answers the reference to write in the data source's file; <c>DELETE</c> removes it; <c>GET /api/v1/secrets</c> lists names.
+/// it in its own encrypted store. <c>PUT /api/v1/secrets/{name}</c> (<c>{"value"}</c>) answers the reference to write in the data source's file and whether it replaced one; <c>DELETE</c> removes it; <c>GET /api/v1/secrets</c> lists names
+/// (<c>{"secrets": [name], "items": [{"name", "reference"}]}</c>: the reference is what a data source's file says, never the value). The Secrets screen (plan 33, UE16) is these calls, for an administrator.
 /// <para>
 /// <b>A value is accepted and never returned</b>, not in this answer nor any other. A client's secrets live under a name of its own (<c>dbdata:gateway:managed-&lt;client id&gt;:&lt;name&gt;</c>), so a Publisher cannot overwrite, delete or even list another client's, and
 /// cannot reach the secrets an administrator keeps. An administrator uses the same calls, under their own client id (or <c>local</c> on the local channel).
@@ -30,8 +31,13 @@ public sealed partial class GatewaySecrets(ISecretStore store, IAuditLog audit, 
         if (rest.Length == 1 && method == "GET")
         {
             var names = new JsonArray();
-            await foreach (var name in store.ListAsync($"dbdata:gateway:{kind}:", cancellationToken)) names.Add(name.Name);
-            return ManagementResult.Ok(new JsonObject { ["secrets"] = names });
+            var items = new JsonArray();
+            await foreach (var name in store.ListAsync($"dbdata:gateway:{kind}:", cancellationToken))
+            {
+                names.Add(name.Name);
+                items.Add(new JsonObject { ["name"] = name.Name, ["reference"] = name.ToRef().ToString() });
+            }
+            return ManagementResult.Ok(new JsonObject { ["secrets"] = names, ["items"] = items });
         }
         if (rest.Length != 2) return ManagementResult.Problem(404, "There is no such call.");
         var given = Uri.UnescapeDataString(rest[1]);
@@ -45,9 +51,11 @@ public sealed partial class GatewaySecrets(ISecretStore store, IAuditLog audit, 
                 try { request = string.IsNullOrWhiteSpace(body) ? null : JsonSerializer.Deserialize<WriteRequest>(body, Json); }
                 catch (JsonException) { request = null; }
                 if (string.IsNullOrEmpty(request?.Value)) return ManagementResult.Problem(400, "The body is a JSON object with the secret's value: {\"value\": \"...\"}.");
+                var replaced = false;
+                await foreach (var existing in store.ListAsync($"dbdata:gateway:{kind}:", cancellationToken)) if (existing.Name == given) replaced = true;
                 using (var value = SecretValue.From(request.Value)) await store.SetAsync(secret, value, cancellationToken);
-                Record(caller, "secret write", given, "stored");
-                return ManagementResult.Ok(new JsonObject { ["name"] = given, ["reference"] = secret.ToRef().ToString() });
+                Record(caller, "secret write", given, replaced ? "replaced" : "stored");
+                return ManagementResult.Ok(new JsonObject { ["name"] = given, ["reference"] = secret.ToRef().ToString(), ["replaced"] = replaced });
             case "DELETE":
                 await store.DeleteAsync(secret, cancellationToken);
                 Record(caller, "secret delete", given, "removed");

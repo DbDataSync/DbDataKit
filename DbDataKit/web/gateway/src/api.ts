@@ -1,7 +1,7 @@
 import { put, request } from '@dbdatakit/shell'
 import type { InstanceRequest, NavigationRequest, PublishBody } from './appEditors'
 import type {
-  AdoptAnswer, EntityModelDetail, EntityModelRow, SemanticModelDetail, SemanticModelRow, AppApprovals, AppCheck, AppDetail, AppInstances, AppsList, NavigationSetRow, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SessionRow, TestResult, WriteDataSourceResult,
+  AdoptAnswer, EntityModelDetail, EntityModelRow, SemanticModelDetail, SemanticModelRow, AppApprovals, AppCheck, AppDetail, AppInstances, AppsList, NavigationSetRow, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SecretWritten, SecretsList, SessionRow, TestResult, WriteDataSourceResult,
 } from './types'
 
 const v1 = '/api/v1'
@@ -85,6 +85,12 @@ export const gatewayApi = {
     saveNavigation: (name: string, body: NavigationRequest) => put<{ name: string; version: number; entries: number; renamed_from: string | null }>(`${v1}/app-navigation/${enc(name)}`, body),
     removeNavigation: (name: string) => request<{ name: string; removed: boolean }>(`${v1}/app-navigation/${enc(name)}`, { method: 'DELETE' }),
     revoke: (id: string, by: string) => request<{ id: string }>(`${v1}/app-approvals/${enc(id)}/revoke`, { method: 'POST', body: JSON.stringify({ by }) }),
+  },
+  /** Secrets (plan 33, UE16): names and references are listed; a value is only ever sent, with the one `PUT`, and never comes back. */
+  secrets: {
+    list: () => request<SecretsList>(`${v1}/secrets`).then((r) => r.items ?? r.secrets.map((name) => ({ name, reference: '' }))),
+    set: (name: string, value: string) => put<SecretWritten>(`${v1}/secrets/${enc(name)}`, { value }),
+    remove: (name: string) => request<{ name: string; removed: boolean }>(`${v1}/secrets/${enc(name)}`, { method: 'DELETE' }),
   },
   history: {
     list: () => request<{ commits: CommitRow[] }>(`${v1}/config/history`).then((r) => r.commits),

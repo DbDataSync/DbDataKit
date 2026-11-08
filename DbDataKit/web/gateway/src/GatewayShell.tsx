@@ -10,6 +10,7 @@ const rail: RailItem[] = [
   { to: '/data-sources', title: 'Data sources', testId: 'rail-data-sources', icon: icon(<><ellipse cx="12" cy="6" rx="8" ry="3" /><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6" /><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" /></>) },
   { to: '/identities', title: 'Users and sign-in', testId: 'rail-identities', icon: icon(<><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5" /><path d="M16 4.5a3.5 3.5 0 010 7" /></>) },
   { to: '/identity-home', title: 'Identity home', testId: 'rail-identity-home', icon: icon(<><circle cx="12" cy="8" r="3.5" /><path d="M5 20c.7-3.8 3.5-6 7-6s6.3 2.2 7 6" /></>) },
+  { to: '/secrets', title: 'Secrets', testId: 'rail-secrets', icon: icon(<><circle cx="8" cy="15" r="3.5" /><path d="M10.5 12.5L20 3M16 7l3 3M13 10l2 2" /></>) },
   { to: '/apps', title: 'Apps', testId: 'rail-apps', icon: icon(<><rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="4" width="7" height="7" rx="1.5" /><rect x="4" y="13" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" /></>) },
   { to: '/models', title: 'Models', testId: 'rail-models', icon: icon(<><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z" /><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5" /></>) },
   { to: '/tls', title: 'Certificate', testId: 'rail-tls', icon: icon(<><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 018 0v3" /></>) },

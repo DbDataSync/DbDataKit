@@ -281,6 +281,74 @@ public sealed partial class ManagementTests
             Assert.DoesNotContain(password, ReadShared(file));
     }
 
+    [Fact]
+    public async Task An_administrators_secrets_screen_lists_names_with_the_reference_to_write_sets_replaces_and_removes_and_no_value_is_ever_returned_or_audited_and_no_other_role_may()
+    {
+        // plan 33 UE16: the console's own secrets (under the console's client id): the names and the reference a data source's file says, a value written once
+        const string first = "SENTINEL-erp-pw-91ac";
+        const string second = "SENTINEL-erp-pw-2b7f";
+        await StartAsync();
+        var admin = await PairAsync(ServerRole.Admin | ServerRole.Author | ServerRole.Approver);
+        string Names(string body) => string.Join(",", JsonNode.Parse(body)!["secrets"]!.AsArray().Select(n => (string)n!));
+
+        // no role below administrator reads, writes or removes (an author, an operator or an approver has none of the publisher's standing either), and nothing is stored or audited for them
+        foreach (var held in new[] { ServerRole.Viewer, ServerRole.Operator, ServerRole.Author, ServerRole.Approver })
+        {
+            var roles = ServerRoles.Close(held);   // a token holds the roles its holder's closure gives
+            Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(admin, HttpMethod.Get, "/api/v1/secrets", roles)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(admin, HttpMethod.Put, "/api/v1/secrets/erp", roles, SecretBody(first))).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(admin, HttpMethod.Delete, "/api/v1/secrets/erp", roles)).StatusCode);
+        }
+        var none = await CallAsync(admin, HttpMethod.Get, "/api/v1/secrets", ServerRole.Admin);
+        Assert.Equal("", Names(await none.Content.ReadAsStringAsync()));
+        Assert.DoesNotContain(ConfigTestSupport.AuditEntries(dataDirectory), e => e.ToJsonString().Contains("secret ", StringComparison.Ordinal));
+
+        // set: the answer says it stored a new one and gives the reference to write in a data source's file
+        var stored = await CallAsync(admin, HttpMethod.Put, "/api/v1/secrets/erp-login", ServerRole.Admin, SecretBody(first));
+        Assert.Equal(HttpStatusCode.OK, stored.StatusCode);
+        var answer = await stored.Content.ReadAsStringAsync();
+        Assert.False((bool)JsonNode.Parse(answer)!["replaced"]!);
+        var reference = (string)JsonNode.Parse(answer)!["reference"]!;
+        Assert.StartsWith("secret:dbdata:gateway:managed-", reference);
+        Assert.EndsWith(":erp-login", reference);
+        Assert.DoesNotContain(first, answer);
+
+        // the list: names and references, never a value; replacing says so and keeps the reference
+        var listed = await (await CallAsync(admin, HttpMethod.Get, "/api/v1/secrets", ServerRole.Admin)).Content.ReadAsStringAsync();
+        Assert.Equal("erp-login", Names(listed));
+        Assert.Equal(reference, (string)JsonNode.Parse(listed)!["items"]![0]!["reference"]!);
+        Assert.DoesNotContain(first, listed);
+        var replaced = await (await CallAsync(admin, HttpMethod.Put, "/api/v1/secrets/erp-login", ServerRole.Admin, SecretBody(second))).Content.ReadAsStringAsync();
+        Assert.True((bool)JsonNode.Parse(replaced)!["replaced"]!);
+        Assert.Equal(reference, (string)JsonNode.Parse(replaced)!["reference"]!);
+        Assert.DoesNotContain(second, replaced);
+        Assert.Equal("erp-login", Names(await (await CallAsync(admin, HttpMethod.Get, "/api/v1/secrets", ServerRole.Admin)).Content.ReadAsStringAsync()));
+
+        // a bad name and an empty value are refused in words, and a read of one secret is not a call
+        var badName = await CallAsync(admin, HttpMethod.Put, "/api/v1/secrets/9lives", ServerRole.Admin, SecretBody("x"));
+        Assert.Equal(HttpStatusCode.BadRequest, badName.StatusCode);
+        Assert.Contains("A secret name is a letter", await badName.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(admin, HttpMethod.Put, "/api/v1/secrets/empty", ServerRole.Admin, SecretBody(""))).StatusCode);
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, (await CallAsync(admin, HttpMethod.Get, "/api/v1/secrets/erp-login", ServerRole.Admin)).StatusCode);
+
+        // remove
+        Assert.Equal(HttpStatusCode.OK, (await CallAsync(admin, HttpMethod.Delete, "/api/v1/secrets/erp-login", ServerRole.Admin)).StatusCode);
+        Assert.Equal("", Names(await (await CallAsync(admin, HttpMethod.Get, "/api/v1/secrets", ServerRole.Admin)).Content.ReadAsStringAsync()));
+
+        // the audit says who stored, replaced and removed which name, and carries no value; no file written in clear has one either
+        var audit = ConfigTestSupport.AuditEntries(dataDirectory).Select(e => e.ToJsonString()).ToList();
+        Assert.Contains(audit, e => e.Contains("secret write", StringComparison.Ordinal) && e.Contains("erp-login", StringComparison.Ordinal) && e.Contains("\"stored\"", StringComparison.Ordinal));
+        Assert.Contains(audit, e => e.Contains("secret write", StringComparison.Ordinal) && e.Contains("\"replaced\"", StringComparison.Ordinal));
+        Assert.Contains(audit, e => e.Contains("secret delete", StringComparison.Ordinal) && e.Contains("erp-login", StringComparison.Ordinal));
+        Assert.DoesNotContain(first, string.Join("\n", audit));
+        Assert.DoesNotContain(second, string.Join("\n", audit));
+        foreach (var file in Directory.EnumerateFiles(dataDirectory, "*", SearchOption.AllDirectories).Where(f => !f.Contains(Path.DirectorySeparatorChar + "secrets" + Path.DirectorySeparatorChar)))
+        {
+            Assert.DoesNotContain(first, ReadShared(file));
+            Assert.DoesNotContain(second, ReadShared(file));
+        }
+    }
+
     /// <summary>Reads a file the server may still have open (the SQLite state database on Windows refuses a plain read).</summary>
     private static string ReadShared(string path)
     {
