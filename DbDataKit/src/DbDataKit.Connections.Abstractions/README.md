@@ -1,6 +1,6 @@
 # DbDataKit.Connections.Abstractions
 
-Contracts for Plan 06 (`docs/plans/06-connections.md`): the shared connection definition, provider interfaces, credential policy and the failure model. No client libraries.
+Contracts (plan 06) for the shared connection definition, provider interfaces, credential policy and the failure model. No client libraries.
 
 ## Contract
 

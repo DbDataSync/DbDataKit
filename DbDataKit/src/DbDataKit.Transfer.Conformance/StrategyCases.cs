@@ -2,7 +2,7 @@ using DbDataKit.Dialect;
 
 namespace DbDataKit.Transfer.Conformance;
 
-/// <summary>The shared scenarios. Each is derived from the strategy semantics in docs/plans/07a-strategy-comparison.md.</summary>
+/// <summary>The shared scenarios. Each is derived from the strategy semantics in the "Strategy semantics in Sync and in Build" section of DbDataKit.Transfer/README.md.</summary>
 public static class StrategyCases
 {
     private static readonly TransferSchema Items = new(

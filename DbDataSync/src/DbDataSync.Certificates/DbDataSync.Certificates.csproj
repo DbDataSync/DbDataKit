@@ -20,7 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Shared server-certificate code (self-signed generation, expiry, plain-HTTP guard); see docs/plans/03-windows-service-hosting.md 3.4. -->
+    <!-- Shared server-certificate code (self-signed generation, expiry, plain-HTTP guard); see DbDataKit/src/DbDataKit.Hosting.Certificates/README.md. -->
     <DbDataKitReference Include="Hosting.Certificates" />
     <DbDataKitReference Include="Hosting.Certificates.Windows" />
   </ItemGroup>
