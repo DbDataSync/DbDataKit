@@ -74,6 +74,8 @@ test('a task is moved between its publishing product, observation and the runner
   // ---- back to the runner: it takes the position the old scheduler had reached, which the button asks for
   await expect(panel.getByTestId('runner-task-owner-select')).toHaveValue('runner')
   await panel.getByTestId('runner-task-owner-reason').fill('cut over')
+  // the form opens with the position the runner already has (when its schedule answer has arrived: the panel polls), so the story empties the field and asks the rule itself
+  await panel.getByTestId('runner-task-owner-position').fill('')
   await expect(panel.getByTestId('runner-task-owner-move')).toBeDisabled()
   await expect(panel.getByTestId('runner-task-owner-why')).toContainText('Give the time')
   await panel.getByTestId('runner-task-owner-position').fill('not a time')
