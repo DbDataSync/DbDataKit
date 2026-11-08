@@ -1,0 +1,10 @@
+# DbDataKit.Monitoring
+
+A neutral run model and the health rules over it, shared by every product that schedules work (Sync's replications, Build's refresh plans, the runner's tasks). It holds no product logic and no storage.
+
+- **Run model** (`RunModel.cs`): `RunRecord` (job, run, start, finish, `RunOutcome`: running, succeeded, completed with failures, failed, stopped, interrupted; rows; the item that failed; a classified `RunFailure` whose message never holds a secret), `LagReading` (how far behind its source a job is), `JobExpectation` (`ExpectedEvery`, `MaxRuntime`, `MaxLag`, each optional: a job with no limits has nothing to be late at).
+- **History is the product's**: `IRunHistory` gives the last run and the lag of a job. Sync answers from its state database, Build from its tracking tables, which stay where they are (Build's run history travels with the data and is not copied into a console's database).
+- **Health rules** (`HealthEvaluator`, pure: its arguments and the clock only, so a scheduler can call it on every tick and a view when someone looks, with the same answer): `Overdue` (the last run began longer ago than `ExpectedEvery`, or the job never ran), `Slow` (the last run took longer than `ExpectedEvery`), `RunningTooLong` (past `MaxRuntime`), `Failed` (failed, interrupted, stopped or completed with failures), `Lagging`. A finding has a severity (warning or error) and a sentence a person can act on.
+- **Notifications** (`INotificationFeed`): one append-only feed per server and a read position per reader (a signed-in user or a console), so two consoles reading one server read independently. A server keeps its notifications until a console reads them; a console polls with the highest id it holds. `NotificationKinds` is an open set stored as text. Retention prunes by age and leaves cursors alone.
+
+Each server evaluates its own rules and keeps its own notifications, so monitoring does not depend on a console being up; the console only shows them.

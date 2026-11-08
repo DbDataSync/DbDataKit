@@ -8,14 +8,15 @@ lists rules its tests enforce.
 | `DbDataKit/` | the shared libraries (`DbDataKit.*`, packages under `src/`, tests under `tests/`) | what two or more products need: config, connections, dialects, metadata, secrets, hosting, transfer |
 | `DbDataSync/` | replication tool: ASP.NET API (no web app of its own), its screens (`DbDataKit/web/sync`, an npm workspace, shown by the console), per-run TaskRunner | the replication engine, its drivers, its UI |
 | `DbDataProxy/` | Arrow Flight SQL proxy for relational databases | the Flight SQL server, its authentication, the 32-bit ODBC worker |
-| `DbDataConsole/` | the `dbdatakit` console host: the web app (`DbDataKit/web/console`): sign-in, users, invitations, the servers it manages and their screens, every module's docs (more arrive slice by slice, plan 13 section U) | the console's host and its command line |
-| `DbDataStore/` | master data models in your own databases (`model/1`, validated writes, history, audit; plan 15 and plan 19 lane Z): a server on plan 13's shape, the skeleton so far | the store's server and its command line |
-| `DbDataRunner/` | scheduled and batch work: the runner host (`dbdatarunner`; the engine is the library `DbDataKit.Runner`; plan 28 and 28a): a server on plan 13's shape that runs the tasks of published packages, each in a process of its own | the host and its command line |
+| `DbDataConsole/` | the `dbdatakit` console host: the web app (`DbDataKit/web/console`): sign-in, users, invitations, the servers it manages and their screens, every module's docs (more arrive slice by slice, the open slices in `docs/plans/13a-suite-slices.md`) | the console's host and its command line |
+| `DbDataStore/` | master data models in your own databases (`model/1`, validated writes, history, audit; plan 15 and plan 19 lane Z): a server of the suite's shape (`docs/architecture.md`), the skeleton so far | the store's server and its command line |
+| `DbDataRunner/` | scheduled and batch work: the runner host (`dbdatarunner`; the engine is the library `DbDataKit.Runner`; plan 28 and 28a): a server of the suite's shape (`docs/architecture.md`) that runs the tasks of published packages, each in a process of its own | the host and its command line |
 | `DbDataBuild/` | CLI that builds tables and views from DuckDB-dialect SQL models | the model language, lowering, targets, plans |
 | `dist/` | install scripts, MSI and Scoop generation for every product | packaging |
 | `testenv/` | SQL Server and PostgreSQL containers shared by the suites | test engines |
 | `scripts/` | repository-wide checks (Python, standard library only) | rules about the repository as a whole |
-| `docs/plans/` | the plans; `13-suite-standardization.md` and `13a-suite-slices.md` are the current one | |
+| `docs/` | cross-product documentation: `architecture.md` (the suite's shape and decisions), `releases.md`, `suite-*.md` | |
+| `docs/plans/` | the open plans; `README.md` is the index (a finished plan's row points at the document that replaced it); `13a-suite-slices.md` lists the open suite slices | |
 
 A product references a shared library as `<DbDataKitReference Include="Hosting.Cli" />` (its `Directory.Build.targets` turns it into a
 project reference in this repository, a package reference otherwise). Do not copy shared code into a product.
