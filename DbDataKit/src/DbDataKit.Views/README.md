@@ -28,6 +28,15 @@ One core (widgets, parameters, layouts, selectors) and the rules of each kind on
 dashboard's, `strict`, `limits` and `cover` a report's. Every problem is a `ConfigDiagnostic` with the file, line, column, a code (`ViewsCodes`) and the key path; warnings do not stop a load. `ViewsFormat.Current`
 is the one number of both kinds; the JSON Schemas (`ViewsLoader.Schema("core")`, `"dashboard"`, `"report"`) are the files of `DbDataKit/web/visuals/schemas`, embedded.
 
+## Choosing a layout
+
+```csharp
+var selection = LayoutSelector.Select(doc, new LayoutContext(Width: 390, Height: 844, Medium: "screen"));
+// selection.Layout, selection.Choice (Named, Matched, Default) or selection.Refusal for an unknown name
+```
+
+A pure function: a named layout wins; otherwise the layouts whose `when` matches, the most specific first, ties by document order; otherwise the default. The goldens are shared with the TypeScript twin.
+
 ## Tests
 
 `DbDataKit.Views.Tests` runs the shared documents in `DbDataKit/conformance/views` (the `@dbdatakit/visuals` suite runs the same files) and keeps the loader and the JSON Schemas equal.

@@ -25,3 +25,5 @@ refusals are `DbDataKit/conformance/views/widgets`, which the .NET suite runs to
 `validateDashboard`, `validateReport` and `validateViewsDocument` check a whole document: the same widget checks plus the layouts (one default that places every widget, tiles inside the grid or canvas and not
 overlapping, minimums at scale 1, page sizes and tokens, a declared parameter everywhere) and the rules of the kind. They return issues with a code and a **path** (`layouts[1].tiles[0].x`); the .NET loaders also give
 file, line and column. `VIEWS_FORMAT` is the one number of both kinds.
+
+`selectLayout(document, context)` picks the layout to show: a named layout, else the most specific `when` that matches (ties by order), else the default; the same pure function as `LayoutSelector` in .NET, with the same goldens.
