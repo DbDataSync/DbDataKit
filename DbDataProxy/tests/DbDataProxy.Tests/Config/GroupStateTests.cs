@@ -981,6 +981,13 @@ public sealed class GroupStateTests : IAsyncLifetime
             Assert.Equal(HttpStatusCode.Forbidden, (await Data(HttpMethod.Get, Territories + "/entities/district/rows", author)).Status);
             Assert.Equal(HttpStatusCode.Forbidden, (await Data(HttpMethod.Get, "api/v1/models/elsewhere/entities/x/rows", author)).Status);   // the scope is asked before the group, so nothing says what else is published
 
+            // the schema (the shared controls read it): the entities the manifest lists with their keys and attributes, never the others, and nothing for a model it does not list (AP25)
+            var schema = await Data(HttpMethod.Get, Territories + "/schema", viewer);
+            Assert.Equal(HttpStatusCode.OK, schema.Status);
+            Assert.Equal(["territory", "region"], schema.Body!["entities"]!.AsArray().Select(e => (string)e!["name"]!).OrderByDescending(n => n).ToArray());
+            Assert.Equal(["code"], schema.Body["entities"]!.AsArray().First(e => (string)e!["name"]! == "territory")!["key"]!.AsArray().Select(k => (string)k!).ToArray());
+            Assert.Equal(HttpStatusCode.Forbidden, (await Data(HttpMethod.Get, "api/v1/models/elsewhere/schema", author)).Status);
+
             // an instance bound to a copy the group does not serve, and the path apps used with a paired store, are refused with the reason
             var bound = await Data(HttpMethod.Get, Territories + "/entities/territory/rows", Token("globex", "author"), instance: "globex");
             Assert.Equal(HttpStatusCode.NotFound, bound.Status);

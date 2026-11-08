@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Publishes the two sample apps and makes their instances and a navigation set, on the Proxy whose data directory this machine can reach.
+# Publishes the three sample apps and makes their instances and a navigation set, on the Proxy whose data directory this machine can reach.
 #   DBDATAPROXY="dotnet dbdataproxy.dll"  ./publish-samples.sh [<samples folder, default: this script's folder>] [-- <extra args for every command, e.g. --repo /data>]
 # In the quickstart (docs/apps-testing.md): docker compose -f dist/compose/quickstart.yml -f dist/compose/quickstart-apps.yml exec proxy /samples/apps/publish-samples.sh
 set -euo pipefail
@@ -18,5 +18,8 @@ apps instance-save --name notes --app territory-notes --title "Territory notes" 
 apps validate --dir "$samples/front-portal"
 apps publish --dir "$samples/front-portal" --note "sample: a declared portal"
 apps instance-save --name front --app front-portal --title "Front door"
-apps nav-save --name main --title Main --item notes="Territory notes"
+apps validate --dir "$samples/territory-views"
+apps publish --dir "$samples/territory-views" --note "sample: an app of views only"
+apps instance-save --name views --app territory-views --title "Territory views" --bind territories=default
+apps nav-save --name main --title Main --item "notes=Territory notes,views=Territory views"
 apps instance-list

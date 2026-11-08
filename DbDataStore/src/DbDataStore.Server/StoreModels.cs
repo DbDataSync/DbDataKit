@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using DbDataKit.Config.Yaml;
 using DbDataKit.DataModel;
+using DbDataKit.Store;
 using DbDataKit.Web.Trust;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -86,40 +87,7 @@ public static partial class StoreModels
     private static IResult Denied(AuthorizationDecision decision) =>
         Results.Json(new { error = $"This needs the {decision.Needed.ToString().ToLowerInvariant()} role." }, statusCode: StatusCodes.Status403Forbidden);
 
-    internal static JsonObject Schema(DataModel model) => new()
-    {
-        ["name"] = model.Name,
-        ["title"] = model.Title,
-        ["approval"] = model.Approval.ToString().ToLowerInvariant(),
-        ["instances"] = model.Instances.ToString().ToLowerInvariant(),
-        ["entities"] = new JsonArray(model.Entities.Select(e => (JsonNode)new JsonObject
-        {
-            ["name"] = e.Name,
-            ["title"] = e.Title,
-            ["key"] = new JsonArray(e.Key.Select(k => (JsonNode)JsonValue.Create(k)!).ToArray()),
-            ["history"] = e.History.ToString().ToLowerInvariant(),
-            ["role"] = e.Role.ToString().ToLowerInvariant(),
-            ["attributes"] = new JsonArray(e.Attributes.Select(a => (JsonNode)new JsonObject
-            {
-                ["name"] = a.Name,
-                ["title"] = a.Title,
-                ["type"] = a.Type,
-                ["kind"] = a.Canonical.Kind.ToString().ToLowerInvariant(),
-                ["length"] = a.Canonical.Length,
-                ["precision"] = a.Canonical.Precision,
-                ["scale"] = a.Canonical.Scale,
-                ["required"] = a.Required,
-                ["unique"] = a.Unique,
-                ["default"] = a.Default,
-                ["pattern"] = a.Pattern,
-                ["min"] = a.Min,
-                ["max"] = a.Max,
-                ["allowed"] = a.Allowed is null ? null : new JsonArray(a.Allowed.Select(v => (JsonNode)JsonValue.Create(v)!).ToArray()),
-                ["references"] = a.References is null ? null : new JsonObject { ["model"] = a.References.Model, ["entity"] = a.References.Entity, ["attribute"] = a.References.Attribute },
-            }).ToArray()),
-            ["rules"] = new JsonArray((e.Rules ?? []).Select(r => (JsonNode)new JsonObject { ["kind"] = r.Kind.ToString(), ["attribute"] = r.Attribute, ["group_by"] = new JsonArray(r.GroupBy.Select(g => (JsonNode)JsonValue.Create(g)!).ToArray()) }).ToArray()),
-        }).ToArray()),
-    };
+    internal static JsonObject Schema(DataModel model) => ModelSchemaJson.Of(model);
 
     public static void Map(IEndpointRouteBuilder app, string directory)
     {

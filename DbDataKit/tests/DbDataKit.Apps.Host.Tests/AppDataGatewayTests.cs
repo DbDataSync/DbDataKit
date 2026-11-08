@@ -81,13 +81,25 @@ public sealed class AppDataGatewayTests : IDisposable
         Assert.Equal((AppDataRoute.Row, "NA"), (data.Seen[^1].Route, data.Seen[^1].Query["key.code"]));
     }
 
+    [Fact]
+    public async Task The_schema_of_a_model_is_a_read_the_data_route_answers_for_the_apps_scope()
+    {
+        var response = await Call("api/v1/models/territories/schema", AppToken());
+        Assert.Equal(200, response.Status);
+        var call = Assert.Single(data.Seen);
+        Assert.Equal((AppDataRoute.Schema, "territories", null), (call.Route, call.Model, call.Entity));
+        Assert.Equal(["territories/territory:write", "territories/region:read"], call.Scope);   // the answerer keeps the entities this lists
+        Assert.Equal(405, (await Call("api/v1/models/territories/schema", AppToken(), "POST")).Status);
+        Assert.Equal(401, (await Call("api/v1/models/territories/schema", null)).Status);
+    }
+
     [Theory]
     [InlineData("api/v1/models")]
     [InlineData("api/v1/models/territories/storage/create")]
     [InlineData("api/v1/models/territories/requests/1/approve")]
     [InlineData("api/v1/info")]
     [InlineData("api/v1/models/territories/entities/territory/../../storage")]
-    public async Task Only_row_reads_and_changes_are_answered(string path)
+    public async Task Only_row_reads_the_schema_and_changes_are_answered(string path)
     {
         Assert.Equal(403, (await Call(path, AppToken())).Status);
         Assert.Empty(data.Seen);

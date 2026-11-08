@@ -1,0 +1,16 @@
+schemaVersion: 1
+kind: detail
+title: Territory
+model: territories
+entity: territory
+key: code
+params:
+  - {name: code, type: string, required: true}
+sections:
+  - title: About
+    attributes: [code, name]
+  - title: Targets
+    attributes: [quota]
+links:
+  - {label: Edit, to: views/edit.yaml, with: {code: $params.code}}
+  - {label: Back to the list, to: views/territories.yaml}

@@ -1,0 +1,89 @@
+/** `views.json`: the app's `view-spec/1` files as the apps host reads them (`ViewsApp.Json`). Nothing here depends on a browser. */
+
+export type ParamType = 'string' | 'int' | 'bool' | 'date'
+export interface SpecParam { name: string; type: ParamType; required: boolean; default: string | null }
+export type ValueKind = 'literal' | 'attribute' | 'param'
+export interface LinkSpec { label: string; to: string; row: boolean; with: Record<string, { kind: ValueKind; text: string }> }
+export interface AttrRef { name: string; label: string | null }
+
+interface Base { title: string; model: string; params: SpecParam[]; links: LinkSpec[] }
+export interface GridSpec extends Base {
+  kind: 'grid'; entity: string
+  columns: { attribute: string; label: string | null; sortable: boolean }[]
+  filters: AttrRef[]; sort: { attribute: string; direction: 'asc' | 'desc' }[]; pageSize: number
+}
+export interface FormSpec extends Base {
+  kind: 'form'; entity: string; mode: 'create' | 'edit'; key: string | null; submit: string | null
+  fields: { attribute: string; label: string | null; readOnly: boolean; required: boolean; help: string | null }[]
+}
+export interface DetailSpec extends Base { kind: 'detail'; entity: string; key: string; sections: { title: string; attributes: AttrRef[] }[] }
+export interface WidgetSpec {
+  kind: 'metric' | 'bar' | 'line' | 'table'; title: string; entity: string; aggregate: 'count' | 'sum' | 'avg' | 'min' | 'max'
+  measure: AttrRef | null; by: AttrRef | null; columns: AttrRef[]; limit: number
+}
+export interface DashboardSpec extends Base { kind: 'dashboard'; widgets: WidgetSpec[] }
+export type ViewSpec = GridSpec | FormSpec | DetailSpec | DashboardSpec
+
+export interface ViewsDoc {
+  format: string
+  app: string
+  instance: string
+  title: string
+  home: string | null
+  files: string[]
+  views: Record<string, ViewSpec>
+  /** Files that did not read, each with the loader's file:line:column message. */
+  problems: string[]
+}
+
+export const SUPPORTED_FORMAT = 'view-spec/1'
+
+/** A route is what the shell keeps in the address after `#`: `/<view file>` and, after `?`, the view's parameters. `/` is the home view. */
+export interface Route { file: string | null; query: Record<string, string> }
+
+export function parseRoute(route: string): Route {
+  const [path, qs = ''] = route.split('?', 2)
+  const file = path.replace(/^\/+/, '')
+  const query: Record<string, string> = {}
+  new URLSearchParams(qs).forEach((v, k) => { query[k] = v })
+  return { file: file === '' ? null : file, query }
+}
+
+export function routeOf(file: string, query: Record<string, string | number | boolean> = {}): string {
+  const qs = new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)])).toString()
+  return `/${file}${qs ? `?${qs}` : ''}`
+}
+
+export interface ResolvedParams { values: Record<string, string>; errors: string[] }
+
+/** The parameters a view declared, from the route's query: defaults applied, required ones present, each of its type. Undeclared names are dropped. */
+export function resolveParams(params: SpecParam[], query: Record<string, string>): ResolvedParams {
+  const values: Record<string, string> = {}
+  const errors: string[] = []
+  for (const p of params) {
+    const raw = query[p.name] ?? p.default ?? undefined
+    if (raw === undefined || raw === '') {
+      if (p.required) errors.push(`This view needs the parameter '${p.name}'.`)
+      continue
+    }
+    const ok = p.type === 'int' ? /^-?\d+$/.test(raw) : p.type === 'bool' ? raw === 'true' || raw === 'false' : p.type === 'date' ? /^\d{4}-\d{2}-\d{2}$/.test(raw) : true
+    if (ok) values[p.name] = raw
+    else errors.push(`The parameter '${p.name}' is ${p.type === 'int' ? 'a whole number' : p.type === 'bool' ? 'true or false' : 'a date (yyyy-mm-dd)'}, not '${raw}'.`)
+  }
+  return { values, errors }
+}
+
+/**
+ * Where a link goes. A `with` value is a literal, an attribute of the row the link belongs to, or a parameter of the view it is in. A link whose value cannot be had (a null attribute, an unset parameter) is not drawn:
+ * null says so, rather than a link to a view that would refuse it.
+ */
+export function linkRoute(link: LinkSpec, row: Record<string, unknown> | null, params: Record<string, string>): string | null {
+  const query: Record<string, string> = {}
+  for (const [name, value] of Object.entries(link.with)) {
+    // for an attribute or a parameter the loader keeps the bare name (`$id` is `id`, `$params.region` is `region`)
+    const got = value.kind === 'literal' ? value.text : value.kind === 'param' ? params[value.text] : row?.[value.text]
+    if (got === null || got === undefined || got === '') return null
+    query[name] = String(got)
+  }
+  return routeOf(link.to, query)
+}

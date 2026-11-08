@@ -11,8 +11,8 @@ internal sealed class ReusableTokens : IReplayCache
     public bool TryAdd(string consoleId, string tokenId, DateTimeOffset forgetAfter) => true;
 }
 
-/// <summary>Which of the data calls an app may make: one row, a page of rows, or a batch of changes.</summary>
-public enum AppDataRoute { Row, Rows, Changes }
+/// <summary>Which of the data calls an app may make: one row, a page of rows, a batch of changes, or a model's schema (the entities its manifest lists; AP25).</summary>
+public enum AppDataRoute { Row, Rows, Changes, Schema }
 
 /// <summary>
 /// One data call of an app, checked by the host: the person (the subject of the app's token, with the roles the identity home gave them on the app's instance), the app's instance, the scope of its manifest's <c>models</c>
@@ -41,7 +41,7 @@ public interface IAppData
 /// </summary>
 public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, ConsoleIdentity self, TimeProvider? clock = null, AppApprovalStore? approvals = null)
 {
-    private static readonly Regex DataPath = new(@"^api/v1/models/(?<model>[^/]+)(/instances/(?<copy>[^/]+))?/(entities/(?<entity>[^/]+)/(?<kind>rows?)|(?<kind>changes))$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex DataPath = new(@"^api/v1/models/(?<model>[^/]+)(/instances/(?<copy>[^/]+))?/(entities/(?<entity>[^/]+)/(?<kind>rows?)|(?<kind>changes)|(?<kind>schema))$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     // the path of a call as apps made it before the group served their data: a paired store's id first
     private static readonly Regex StorePath = new(@"^[^/]+/api/v1/", RegexOptions.CultureInvariant | RegexOptions.Compiled);
@@ -74,10 +74,10 @@ public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, Co
         if (!match.Success)
             return StorePath.IsMatch(trimmed)
                 ? Refuse(410, $"An app's data is the group's now, not a paired store's: call /apps/{instance}/_data/api/v1/models/<model>/... (the path without the store's id).")
-                : Refuse(403, "Apps reach row reads and changes only.");
-        var route = match.Groups["kind"].Value switch { "row" => AppDataRoute.Row, "rows" => AppDataRoute.Rows, _ => AppDataRoute.Changes };
+                : Refuse(403, "Apps reach row reads, the schema and changes only.");
+        var route = match.Groups["kind"].Value switch { "row" => AppDataRoute.Row, "rows" => AppDataRoute.Rows, "schema" => AppDataRoute.Schema, _ => AppDataRoute.Changes };
         if (route == AppDataRoute.Changes ? !HttpMethods.IsPost(method) : !HttpMethods.IsGet(method))
-            return Refuse(405, route == AppDataRoute.Changes ? "Changes are sent with POST." : "Rows are read with GET.");
+            return Refuse(405, route == AppDataRoute.Changes ? "Changes are sent with POST." : "Rows and the schema are read with GET.");
 
         // the instance's binding says which copy of the model's data this app uses, unless the path names one
         var model = Uri.UnescapeDataString(match.Groups["model"].Value);

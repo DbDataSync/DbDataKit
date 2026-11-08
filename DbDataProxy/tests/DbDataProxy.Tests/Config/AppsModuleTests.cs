@@ -278,7 +278,7 @@ public sealed class AppsModuleTests : IAsyncLifetime
         var folder = AppContext.BaseDirectory;
         while (folder is not null && !Directory.Exists(Path.Combine(folder, "DbDataProxy", "templates", "apps"))) folder = Path.GetDirectoryName(folder);
         var samples = Path.Combine(folder ?? throw new DirectoryNotFoundException("DbDataProxy/templates/apps"), "DbDataProxy", "templates", "apps");
-        foreach (var sample in new[] { "territory-notes", "front-portal" })
+        foreach (var sample in new[] { "territory-notes", "front-portal", "territory-views" })
         {
             var checkedIt = await Command("apps", "validate", "--dir", Path.Combine(samples, sample));
             Assert.Equal(0, checkedIt.Exit);
@@ -287,8 +287,47 @@ public sealed class AppsModuleTests : IAsyncLifetime
         }
         Assert.Equal(0, (await Command("apps", "instance-save", "--name", "notes", "--app", "territory-notes", "--bind", "territories=default")).Exit);
         Assert.Equal(0, (await Command("apps", "instance-save", "--name", "front", "--app", "front-portal")).Exit);
-        Assert.Equal(0, (await Command("apps", "nav-save", "--name", "main", "--title", "Main", "--item", "notes=Territory notes")).Exit);
+        Assert.Equal(0, (await Command("apps", "instance-save", "--name", "views", "--app", "territory-views", "--bind", "territories=default")).Exit);
+        Assert.Equal(0, (await Command("apps", "nav-save", "--name", "main", "--title", "Main", "--item", "notes=Territory notes,views=Territory views")).Exit);
         Assert.Contains("front  front-portal", (await Command("apps", "instance-list")).Out);
+        Assert.Contains("views  territory-views", (await Command("apps", "instance-list")).Out);
+    }
+
+    [Fact]
+    public async Task An_app_of_views_only_is_served_its_generated_page_its_specs_and_the_runtime_the_build_put_next_to_the_program()
+    {
+        // the build copies the web build of DbDataKit/web/view-app to `apps-views` beside the program; a developer who has not built it gets a stand-in for the test, removed again
+        var runtime = Path.Combine(AppContext.BaseDirectory, ProxyAppsModule.ViewsRuntimeFolder);
+        var standIn = !Directory.Exists(runtime);
+        if (standIn)
+        {
+            Directory.CreateDirectory(runtime);
+            File.WriteAllText(Path.Combine(runtime, ViewsRuntime.ScriptName), "/* stand-in runtime */");
+        }
+        try
+        {
+            appsPort = FreePort();
+            var (clientId, _, _, database) = Prepare();
+            var store = new AppInstanceStore(new DefinitionStore(database));
+            store.PublishApp(new AppPackage("schemaVersion: 1\nname: territory-views\nversion: 1.0.0\nviews: [views/list.yaml]\nroles: [viewer]\nmodels:\n  - model: territories\n    entities: {territory: [read, write]}\n",
+                new Dictionary<string, byte[]> { ["views/list.yaml"] = "schemaVersion: 1\nkind: grid\ntitle: Territories\nmodel: territories\nentity: territory\ncolumns: [code, name]\n"u8.ToArray() }), "ada");
+            store.Save(new AppInstance("tv", "territory-views"), "ada");
+            var (apps, _) = await StartAsync(clientId);
+
+            var page = await GetAsync(apps, "/apps/tv/_app/");
+            Assert.Equal(HttpStatusCode.OK, page.StatusCode);
+            Assert.Contains("<script src=\"views-app.js\">", await page.Content.ReadAsStringAsync());
+            Assert.Contains("sandbox", string.Join(' ', page.Headers.GetValues("Content-Security-Policy")));
+            var specs = await GetAsync(apps, "/apps/tv/_app/views.json");
+            Assert.Equal("application/json", specs.Content.Headers.ContentType?.MediaType);
+            var json = JsonNode.Parse(await specs.Content.ReadAsStringAsync())!;
+            Assert.Equal(("view-spec/1", "grid"), ((string)json["format"]!, (string)json["views"]!["views/list.yaml"]!["kind"]!));
+            Assert.Equal(HttpStatusCode.OK, (await GetAsync(apps, "/apps/tv/_app/views-app.js")).StatusCode);
+        }
+        finally
+        {
+            if (standIn) Directory.Delete(runtime, true);
+        }
     }
 
     [Fact]

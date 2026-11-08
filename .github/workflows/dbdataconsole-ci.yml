@@ -125,6 +125,13 @@ jobs:
         run: |
           npm run typecheck -w @dbdatakit/store-ui
           npm test -w @dbdatakit/store-ui
+      # The runtime that draws an app of views only (plan 26, AP25): its logic and parts in plain Node, and the one-script build the Proxy ships (`apps-views`).
+      - name: Test and build the views runtime
+        working-directory: DbDataKit/web
+        run: |
+          npm run typecheck -w @dbdatakit/view-app
+          npm test -w @dbdatakit/view-app
+          npm run build -w @dbdatakit/view-app
       - run: dotnet build DbDataConsole.slnf -c Debug
       # A real Build server for the console to pair with (the pairing, the version and the health the console shows are its own).
       - name: Build a Build server

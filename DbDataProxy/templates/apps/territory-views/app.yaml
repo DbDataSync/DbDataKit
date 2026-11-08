@@ -1,0 +1,10 @@
+schemaVersion: 1
+name: territory-views
+title: Territory views
+description: An app of views only (view-spec/1, no script of its own). The host draws a grid, a form, a detail page and a dashboard of the Store model `territories` with its own controls.
+version: 1.0.0
+views: [views/territories.yaml, views/dashboard.yaml, views/new.yaml, views/edit.yaml, views/detail.yaml]
+roles: [viewer, author]
+models:
+  - model: territories
+    entities: {territory: [read, write]}

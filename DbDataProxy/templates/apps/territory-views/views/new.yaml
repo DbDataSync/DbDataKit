@@ -1,0 +1,13 @@
+schemaVersion: 1
+kind: form
+title: Add a territory
+model: territories
+entity: territory
+mode: create
+submit: Add territory
+fields:
+  - {attribute: code, required: true, help: Up to 10 characters; it cannot be changed later}
+  - {attribute: name, required: true}
+  - quota
+links:
+  - {label: Back to the list, to: views/territories.yaml}
