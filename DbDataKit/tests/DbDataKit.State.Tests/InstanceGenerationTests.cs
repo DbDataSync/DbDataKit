@@ -59,6 +59,7 @@ public sealed class InstanceGenerationTests : IDisposable
         Assert.Equal(4, RunnerModule.Module.Version);
         Assert.Equal(1, RunnerModule.Module.CompatibleWithPrevious);
         Assert.Contains("generation", RunnerModule.Module.Migrations[3], StringComparison.Ordinal);
+        Assert.Contains("task_owner", RunnerModule.Module.Migrations[3], StringComparison.Ordinal);   // plan 28c E09: part of the newest migration, no release holds the module yet
     }
 
     [Theory]

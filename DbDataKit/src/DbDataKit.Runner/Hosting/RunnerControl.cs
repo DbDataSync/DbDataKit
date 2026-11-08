@@ -36,6 +36,7 @@ public sealed class RunnerControl
     public const string RunVerb = "runner.task.run";
     public const string PauseVerb = "runner.task.pause";
     public const string ResumeVerb = "runner.task.resume";
+    public const string OwnerVerb = "runner.task.owner";
     public const string TargetKind = "task";
 
     private readonly RunnerScheduler _scheduler;
@@ -80,6 +81,29 @@ public sealed class RunnerControl
         Translate(() => { _scheduler.Resume(task); return 0; });
         Record(ResumeVerb, task, actor, null);
     }
+
+    /// <summary>
+    /// Sets who schedules the task (plan 28c E09: <c>old</c>, <c>observe</c> or <c>runner</c>), with the position the product's scheduler had reached (<paramref name="seed"/>), and writes who, from what, to what and why to the audit
+    /// (<c>runner.task.owner</c>). The task need not have a version yet. Throws <see cref="UnknownTaskException"/> for a channel or package this runner does not serve.
+    /// </summary>
+    public void SetOwner(TaskRef task, string owner, string? reason, ScheduleSeed? seed, RunnerActor actor)
+    {
+        var before = Translate(() => _scheduler.OwnerOfTask(task).Owner);
+        Translate(() => { _scheduler.SetOwner(task, owner, actor.Display, reason, seed); return 0; });
+        Record(OwnerVerb, task, actor, new { from = before, to = owner, reason, handled_up_to = seed?.HandledUpTo.UtcDateTime.ToString("O"), paused_by = seed?.PausedBy });
+    }
+
+    /// <summary>Who schedules the task, and who set that and why (null: nobody set it, the runner schedules it).</summary>
+    public (string Owner, TaskOwner? Record) Owner(TaskRef task) => Translate(() => _scheduler.OwnerOfTask(task));
+
+    /// <summary>The task's position, pause, owner and in-flight items: what a product reads to take the task back.</summary>
+    public TaskScheduleState ScheduleState(TaskRef task) => Translate(() => _scheduler.ScheduleStateOf(task));
+
+    /// <summary>The decisions recorded for an observed task, both the runner's and the product's own, oldest first.</summary>
+    public IReadOnlyList<TaskDecision> Decisions(TaskRef task, DateTimeOffset? since = null) => Translate(() => _scheduler.DecisionsOf(task, since));
+
+    /// <summary>The product's own scheduler reports a run it queued for an observed task, for the comparison with what this runner would have done. Not audited: it is data about the observation, not a change of the runner.</summary>
+    public void RecordOldDecision(TaskRef task, DateTimeOffset at, int missed, bool paused) => Translate(() => { _scheduler.RecordOldDecision(task, at, missed, paused); return 0; });
 
     /// <summary>Notes that an actor was refused (the role was not enough): the call changed nothing.</summary>
     public void Refused(string verb, TaskRef task, RunnerActor actor, string reason) =>

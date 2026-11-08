@@ -68,6 +68,13 @@ internal static class BuildSchedulerSchema
     public static StateDatabase Open(string serverDirectory, TimeProvider? time = null, StateSettings? settings = null) => BuildState.Open(serverDirectory, time, settings);
 }
 
+/// <summary>Where a scheduler reports what it queued for a plan whose owner is <c>observe</c> (plan 28c E09, ED7): the runner records it beside what it would have queued, so the two can be compared.</summary>
+internal interface IObservedDecisions
+{
+    /// <summary>The scheduler, at <paramref name="at"/>, queued the plan (<paramref name="paused"/> false) or passed its time over because the plan is paused (true). <paramref name="missed"/> is how many times it stood for beyond one.</summary>
+    void Report(string project, ScheduledJob job, DateTimeOffset at, int missed, bool paused);
+}
+
 /// <summary>
 /// Runs the refresh plans that declare a schedule (plan 13, M08), from the projects a server hosts. Every tick it asks the shared <see cref="ScheduleEvaluator"/> whether each scheduled plan is due and, if so, puts it on the shared work
 /// queue; a worker takes it off and runs <c>connection refresh &lt;connection&gt; &lt;plan&gt;</c> in a child process, like any command. The queue holds one item of a plan at a time, so a plan whose run is still going is not started again, and a
@@ -76,8 +83,14 @@ internal static class BuildSchedulerSchema
 /// A job seen for the first time is not run: the scheduler records the moment and waits for its next scheduled time, so adding a schedule to a project never starts a run by itself. After a restart, scheduled times that passed while the server was
 /// down run once (<see cref="MisfirePolicy.RunOnce"/>, as Sync does).
 /// </para>
+/// <para>
+/// A plan has one scheduling owner at a time (plan 28c E09, ED6), read from <paramref name="schedule"/> at every tick: <c>old</c> (this scheduler, the default), <c>observe</c> (this scheduler, and what it queues is also reported to
+/// <paramref name="observed"/> for the comparison with the runner) or <c>runner</c>, for which this scheduler does nothing at all: it neither queues the plan nor moves its position, so the position a cutover copied is the one a rollback finds.
+/// The owner is read again just before a run is queued, so a cutover that was written between the two reads is honoured.
+/// </para>
 /// </summary>
-internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunner runner, StateDatabase database, TimeProvider clock, Action<string> log, TimeSpan? lease = null, Func<bool>? paused = null, BuildTrackingHost? tracking = null)
+internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunner runner, StateDatabase database, TimeProvider clock, Action<string> log, TimeSpan? lease = null, Func<bool>? paused = null, BuildTrackingHost? tracking = null,
+    Func<BuildScheduleSettings>? schedule = null, IObservedDecisions? observed = null)
 {
     /// <summary>How long a claimed run stays claimed without a heartbeat; a run beats three times in it, so only a worker that died loses its run.</summary>
     public static readonly TimeSpan DefaultLease = TimeSpan.FromMinutes(10);
@@ -93,12 +106,15 @@ internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunne
         _queue.ReleaseExpired();
         var queued = new List<(string, ScheduledJob)>();
         var now = clock.GetUtcNow();
+        var owners = schedule?.Invoke() ?? BuildScheduleSettings.Default;
         foreach (var project in projects.All())
         {
             var root = projects.RootOf(project);
             if (!Directory.Exists(root)) continue;
             foreach (var job in RefreshJobs.Discover(root, p => log($"Project '{project.Id}': {p}")))
             {
+                var owner = owners.OwnerOf(project.Id, job.Subject);
+                if (owner == TaskOwners.Runner) continue;      // the runner schedules it (E09): this scheduler does not even look
                 var state = _jobs.Get(project.Id, job.Subject);
                 if (state?.HandledUpTo is null)
                 {
@@ -109,9 +125,22 @@ internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunne
                 var decision = ScheduleEvaluator.Evaluate(job.Schedule, state.HandledUpTo, now);
                 if (decision.HandledUpTo != state.HandledUpTo) _jobs.SaveHandled(project.Id, job.Subject, decision.HandledUpTo ?? now);
                 if (!decision.Due) continue;
-                if (_pauses.IsPaused(project.Id, job.Subject)) continue;     // the time is handled (above) and not run: resuming does not start the plan for the times it was paused through
+                if (_pauses.IsPaused(project.Id, job.Subject))     // the time is handled (above) and not run: resuming does not start the plan for the times it was paused through
+                {
+                    if (owner == TaskOwners.Observe) observed?.Report(project.Id, job, now, decision.Missed, paused: true);
+                    continue;
+                }
+
+                // a cutover may have been written since the owners were read; the last look is the one that counts
+                if (schedule is not null && schedule().OwnerOf(project.Id, job.Subject) == TaskOwners.Runner)
+                {
+                    _jobs.SaveHandled(project.Id, job.Subject, state.HandledUpTo.Value);    // the time was not run here, so it is not handled here: the runner finds the position as it was
+                    continue;
+                }
+
                 _queue.Enqueue(project.Id, Kind, job.Subject, lane: Kind);
                 queued.Add((project.Id, job));
+                if (owner == TaskOwners.Observe) observed?.Report(project.Id, job, now, decision.Missed, paused: false);
             }
         }
         return queued;
@@ -249,7 +278,7 @@ internal sealed class BuildSchedulerService(BuildScheduler scheduler, Action<str
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     // a tick that fails (a locked state file, a project folder that vanished) is tried again on the next one
-                    log($"The scheduler's tick failed ({ex.GetType().Name}); it will try again.");
+                    log($"The scheduler's tick failed ({ex.GetType().Name}{(ex is InvalidOperationException ? ": " + ex.Message : "")}); it will try again.");
                 }
             }
             while (await timer.WaitForNextTickAsync(stoppingToken));

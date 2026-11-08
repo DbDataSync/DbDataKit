@@ -70,6 +70,15 @@ public sealed class RunnerClientStore(string directory)
 /// <summary>What <see cref="RunnerPublishClient.PromoteAsync"/> did: the version <see cref="To"/> serves now and the state the runner answered with (<c>activated</c>, or <c>waitingforruns</c> while runs of the package in flight finish).</summary>
 public sealed record ClientPromoted(string Package, string From, string To, int Version, string State, string Message);
 
+/// <summary>A task's scheduling state as a runner reports it (plan 28c E09): who schedules it, since when and why, its position and pause, the items of it running and waiting, and the version its channel serves (null: no projection has it yet).</summary>
+public sealed record ClientTaskSchedule(string Task, string Owner, string? OwnerSetBy, DateTimeOffset? OwnerSetAt, string? Reason, DateTimeOffset? HandledUpTo, bool Paused, string? PausedBy, DateTimeOffset? PausedAt, int Running, int Queued, string? Version);
+
+/// <summary>The position a product's scheduler hands to the runner with a task: scheduled times up to <paramref name="HandledUpTo"/> are dealt with, and its pause if it had one.</summary>
+public sealed record ClientSeed(DateTimeOffset HandledUpTo, string? PausedBy, DateTimeOffset? PausedAt);
+
+/// <summary>One scheduling decision of an observed task: <paramref name="Source"/> is <c>runner</c> (would have queued) or <c>old</c> (the product queued).</summary>
+public sealed record ClientDecision(string Source, DateTimeOffset At, int Missed, bool Paused);
+
 /// <summary>
 /// Publishes a package to a runner over its management API as a paired server client with the role Publisher: pairs once (the single-use code from <c>dbdatarunner server pair --max-role publisher</c>), pins the
 /// runner's certificate, asks <c>HEAD /api/v1/artifacts/{sha256}</c> for every file and uploads only those the runner does not have, then publishes the version in one call (<c>PUT /api/v1/definitions/integration/{name}</c>).
@@ -232,5 +241,58 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
         if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to promote {package} version {version} from {from} to {to}", ct);
         var answer = JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!;
         return new ClientPromoted(package, from, to, version, (string?)answer["state"] ?? "unknown", (string?)answer["message"] ?? "");
+    }
+
+    // ---- who schedules a task (plan 28c E09); these need the Operator role of the pairing, except reading
+
+    private static string TaskPath(string package, string channel, string task) => $"api/v1/tasks/{Uri.EscapeDataString(package)}/{Uri.EscapeDataString(channel)}/{Uri.EscapeDataString(task)}";
+
+    private static DateTimeOffset? Time(JsonNode? node) => node is JsonValue v && v.TryGetValue<string>(out var text) ? DateTimeOffset.Parse(text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal) : null;
+
+    /// <summary>Who schedules the task on the runner, its position and pause, and whether anything of it is running or waiting there: <c>GET .../tasks/{package}/{channel}/{task}/schedule</c>.</summary>
+    public async Task<ClientTaskSchedule> ScheduleOfAsync(string server, string? code, string package, string channel, string task, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        using var response = await link.SendAsync(HttpMethod.Get, TaskPath(package, channel, task) + "/schedule", null, ct);
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to say who schedules {package}/{channel}/{task}", ct);
+        var a = JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!;
+        return new ClientTaskSchedule((string)a["task"]!, (string)a["owner"]!, (string?)a["owner_set_by"], Time(a["owner_set_at"]), (string?)a["reason"], Time(a["handled_up_to"]), (bool)a["paused"]!, (string?)a["paused_by"], Time(a["paused_at"]),
+            (int)a["running"]!, (int)a["queued"]!, (string?)a["version"]);
+    }
+
+    /// <summary>Sets who schedules the task on the runner (<c>old</c>, <c>observe</c> or <c>runner</c>) with the position the product's scheduler had reached: <c>PUT .../owner</c>, audited by the runner with the caller as the actor.</summary>
+    public async Task SetOwnerAsync(string server, string? code, string package, string channel, string task, string owner, string? reason, ClientSeed? seed, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        var body = new JsonObject { ["owner"] = owner };
+        if (reason is not null) body["reason"] = reason;
+        if (seed is not null)
+        {
+            body["handled_up_to"] = seed.HandledUpTo.UtcDateTime.ToString("O");
+            if (seed.PausedBy is not null) body["paused_by"] = seed.PausedBy;
+            if (seed.PausedAt is { } at) body["paused_at"] = at.UtcDateTime.ToString("O");
+        }
+
+        using var response = await link.SendAsync(HttpMethod.Put, TaskPath(package, channel, task) + "/owner", JsonContent.Create(body, options: Json), ct);
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to make {owner} the owner of {package}/{channel}/{task}", ct);
+    }
+
+    /// <summary>The decisions the runner recorded for an observed task, its own and the product's, oldest first: <c>GET .../decisions</c>.</summary>
+    public async Task<IReadOnlyList<ClientDecision>> DecisionsAsync(string server, string? code, string package, string channel, string task, DateTimeOffset? since = null, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        using var response = await link.SendAsync(HttpMethod.Get, TaskPath(package, channel, task) + "/decisions" + (since is { } from ? "?since=" + Uri.EscapeDataString(from.UtcDateTime.ToString("O")) : ""), null, ct);
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"for the decisions of {package}/{channel}/{task}", ct);
+        var a = JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!;
+        return [.. a["decisions"]!.AsArray().Select(d => new ClientDecision((string)d!["source"]!, Time(d["at"])!.Value, (int)d["missed"]!, (bool)d["paused"]!))];
+    }
+
+    /// <summary>Tells the runner that the product's own scheduler queued a run of an observed task at <paramref name="at"/>, to be compared with what the runner would have done: <c>POST .../decisions</c>.</summary>
+    public async Task ReportDecisionAsync(string server, string? code, string package, string channel, string task, DateTimeOffset at, int missed, bool paused, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        var body = new JsonObject { ["at"] = at.UtcDateTime.ToString("O"), ["missed"] = missed, ["paused"] = paused };
+        using var response = await link.SendAsync(HttpMethod.Post, TaskPath(package, channel, task) + "/decisions", JsonContent.Create(body, options: Json), ct);
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"the decision for {package}/{channel}/{task}", ct);
     }
 }

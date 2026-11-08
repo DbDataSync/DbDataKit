@@ -459,3 +459,135 @@ public sealed class TriggerStates(StateDatabase database)
             cmd.ExecuteNonQuery();
         });
 }
+
+/// <summary>Who schedules a task while a product's own scheduler is still in the picture (plan 28c E09, ED6). The words are the ones the product's setting uses.</summary>
+public static class TaskOwners
+{
+    /// <summary>The product's own scheduler schedules the task; the runner leaves its schedule alone.</summary>
+    public const string Old = "old";
+
+    /// <summary>The product's own scheduler schedules the task; the runner evaluates the schedule against a copy and records what it would have queued (ED7). Nothing runs on the runner.</summary>
+    public const string Observe = "observe";
+
+    /// <summary>The runner schedules the task. A task with no <see cref="TaskOwner"/> row is the runner's too.</summary>
+    public const string Runner = "runner";
+
+    public static IReadOnlyList<string> All { get; } = [Old, Observe, Runner];
+
+    public static bool IsOwner(string? text) => text is not null && All.Contains(text, StringComparer.Ordinal);
+}
+
+/// <summary>One task's recorded owner, and who set it, when and why.</summary>
+public sealed record TaskOwner(string Package, string Channel, string Task, string Owner, string ChangedBy, DateTimeOffset ChangedAt, string? Reason);
+
+/// <summary>The recorded owners of tasks (<see cref="RunnerModule"/>'s <c>task_owner</c>). A task is named here before its package has a version, so a product can say <c>old</c> before it publishes.</summary>
+public sealed class TaskOwnerStore(StateDatabase database)
+{
+    private const string Module = RunnerModule.Name;
+    private const string Columns = "package, channel, task, owner, changed_by, changed_at, reason";
+
+    public TaskOwner? Get(string package, string channel, string task) =>
+        Query("package = $package AND channel = $channel AND task = $task", c => c.Bind(database, "package", package).Bind(database, "channel", channel).Bind(database, "task", task)).FirstOrDefault();
+
+    /// <summary>The owner of a task as the scheduler judges it: the recorded one, else <see cref="TaskOwners.Runner"/>.</summary>
+    public string OwnerOf(string package, string channel, string task) => Get(package, channel, task)?.Owner ?? TaskOwners.Runner;
+
+    /// <summary>Records the owner (the one recorded before is replaced).</summary>
+    public void Set(string package, string channel, string task, string owner, string changedBy, string? reason) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            Set(connection, null, package, channel, task, owner, changedBy, reason);
+        });
+
+    public IReadOnlyList<TaskOwner> List(string? package = null, string? channel = null) =>
+        Query((package is null ? "1 = 1" : "package = $package") + (channel is null ? "" : " AND channel = $channel"), c =>
+        {
+            if (package is not null) c.Bind(database, "package", package);
+            if (channel is not null) c.Bind(database, "channel", channel);
+        });
+
+    /// <summary>Records the owner on a connection and transaction the caller owns (the switch writes the copied position in the same one).</summary>
+    public void Set(DbConnection connection, DbTransaction? transaction, string package, string channel, string task, string owner, string changedBy, string? reason)
+    {
+        if (!TaskOwners.IsOwner(owner)) throw new ArgumentException($"'{owner}' is not an owner ({string.Join(", ", TaskOwners.All)}).", nameof(owner));
+        using var cmd = database.Command(Module, connection, transaction, database.Dialect.Upsert("{table:task_owner}", "package, channel, task, owner, changed_by, changed_at, reason", "$package, $channel, $task, $owner, $by, $at, $reason",
+            "package, channel, task", "owner = EXCLUDED.owner, changed_by = EXCLUDED.changed_by, changed_at = EXCLUDED.changed_at, reason = EXCLUDED.reason"));
+        cmd.Bind(database, "package", package).Bind(database, "channel", channel).Bind(database, "task", task).Bind(database, "owner", owner).Bind(database, "by", changedBy)
+            .Bind(database, "at", database.Time.GetUtcNow()).Bind(database, "reason", reason, System.Data.DbType.String);
+        cmd.ExecuteNonQuery();
+    }
+
+    private IReadOnlyList<TaskOwner> Query(string where, Action<DbCommand> bind) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, $"SELECT {Columns} FROM {{table:task_owner}} WHERE {where} ORDER BY package, channel, task;");
+            bind(cmd);
+            using var reader = cmd.ExecuteReader();
+            var list = new List<TaskOwner>();
+            while (reader.Read()) list.Add(new TaskOwner(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.Time(5), reader.IsDBNull(6) ? null : reader.GetString(6)));
+            return (IReadOnlyList<TaskOwner>)list;
+        });
+}
+
+/// <summary>One recorded scheduling decision of an observed task.</summary>
+/// <param name="Source"><see cref="TaskDecisions.Runner"/>: what the runner would have queued; <see cref="TaskDecisions.Old"/>: what the product's scheduler reported queuing.</param>
+/// <param name="DecidedAt">The moment of the tick that decided (on the clock of whoever decided).</param>
+/// <param name="Missed">Scheduled times that passed without a run, not counting the one the decision stands for.</param>
+/// <param name="Paused">The time was due and passed over because the task was paused (no run would have been queued).</param>
+public sealed record TaskDecision(string Package, string Channel, string Task, string Source, DateTimeOffset DecidedAt, int Missed, bool Paused);
+
+/// <summary>The decisions of observed tasks (<c>task_decision</c>, ED7): written by the runner's scheduler in observe mode and by the product's scheduler for what it did, read by the comparison.</summary>
+public sealed class TaskDecisions(StateDatabase database)
+{
+    public const string Runner = "runner";
+    public const string Old = "old";
+
+    /// <summary>How long a decision is kept: the comparison is made within days of observing, and an every-minute schedule would otherwise grow the table for as long as a task is observed.</summary>
+    public static readonly TimeSpan Retention = TimeSpan.FromDays(30);
+
+    private const string Module = RunnerModule.Name;
+
+    /// <summary>Records the decision (a decision at the same moment from the same source is recorded once) and drops this task's decisions older than <see cref="Retention"/>.</summary>
+    public void Record(TaskDecision decision) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var transaction = database.BeginTransaction(connection, Module);
+            using (var insert = database.Command(Module, connection, transaction, database.Dialect.InsertOrIgnore("{table:task_decision}", "package, channel, task, source, decided_at, missed, paused",
+                "$package, $channel, $task, $source, $at, $missed, $paused", "package, channel, task, source, decided_at")))
+            {
+                Bind(insert, decision.Package, decision.Channel, decision.Task).Bind(database, "source", decision.Source).Bind(database, "at", decision.DecidedAt)
+                    .Bind(database, "missed", (long)decision.Missed).Bind(database, "paused", decision.Paused ? 1L : 0L);
+                insert.ExecuteNonQuery();
+            }
+
+            using (var prune = database.Command(Module, connection, transaction, "DELETE FROM {table:task_decision} WHERE package = $package AND channel = $channel AND task = $task AND decided_at < $before;"))
+            {
+                Bind(prune, decision.Package, decision.Channel, decision.Task).Bind(database, "before", database.Time.GetUtcNow() - Retention);
+                prune.ExecuteNonQuery();
+            }
+
+            transaction.Commit();
+        });
+
+    /// <summary>The decisions of a task at or after <paramref name="since"/>, oldest first; <paramref name="source"/> narrows to one side.</summary>
+    public IReadOnlyList<TaskDecision> List(string package, string channel, string task, DateTimeOffset? since = null, string? source = null) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection,
+                "SELECT package, channel, task, source, decided_at, missed, paused FROM {table:task_decision} WHERE package = $package AND channel = $channel AND task = $task"
+                + (since is null ? "" : " AND decided_at >= $since") + (source is null ? "" : " AND source = $source") + " ORDER BY decided_at, source;");
+            Bind(cmd, package, channel, task);
+            if (since is { } from) cmd.Bind(database, "since", from);
+            if (source is not null) cmd.Bind(database, "source", source);
+            using var reader = cmd.ExecuteReader();
+            var list = new List<TaskDecision>();
+            while (reader.Read()) list.Add(new TaskDecision(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.Time(4), Convert.ToInt32(reader.GetValue(5)), Convert.ToInt64(reader.GetValue(6)) != 0));
+            return (IReadOnlyList<TaskDecision>)list;
+        });
+
+    private DbCommand Bind(DbCommand cmd, string package, string channel, string task) => cmd.Bind(database, "package", package).Bind(database, "channel", channel).Bind(database, "task", task);
+}

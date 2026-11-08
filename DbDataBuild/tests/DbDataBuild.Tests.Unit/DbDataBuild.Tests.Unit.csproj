@@ -12,6 +12,7 @@
   <ItemGroup>
     <!-- a shared DbDataKit library, through the mechanism in Directory.Build.targets (plan 13, F08) -->
     <DbDataKitReference Include="Dialect.Abstractions" />
+    <DbDataKitReference Include="Runner" />   <!-- the runner's own scheduler, run beside Build's in the ownership tests; plan 28c, E09 -->
   </ItemGroup>
 
   <ItemGroup>

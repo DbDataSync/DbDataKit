@@ -10,6 +10,9 @@ namespace DbDataKit.State;
 /// <item><c>posture_choice</c>: every loosened default is a recorded choice (who, when, why), for a package or for the whole install (<c>*</c>).</item>
 /// <item><c>task_projection</c>: one row per package, channel and task, rebuilt from the active manifest at activation; the scheduler loop reads only this.</item>
 /// <item><c>trigger_state</c>: when a trigger last fired and its cursor.</item>
+/// <item><c>task_owner</c>: who schedules a task during a move from a product's own scheduler (plan 28c E09, ED6): <c>old</c> (the product does; the runner leaves the task alone), <c>observe</c> (the product does; the runner only records what it would
+/// have queued) or <c>runner</c>. A task with no row is the runner's, as every task was before the move existed.</item>
+/// <item><c>task_decision</c>: what an <c>observe</c> task would have queued and when, beside what the old owner did (<c>source</c> <c>runner</c> or <c>old</c>, ED7); the product compares them.</item>
 /// </list>
 /// Documents a task or a trigger carries (schedule, triggers, limits) are kept as the text they were written as (<c>{{text}}</c>, not <c>{{json}}</c>): PostgreSQL's jsonb would reformat them.
 /// History: an instance that has not heartbeat for the retention age is removed with its labels and capabilities; the rest is current state.
@@ -102,11 +105,36 @@ public static class RunnerModule
             ALTER TABLE {table:instance} {{addcolumn}} definition_formats {{text}} NULL;
             """,
             // plan 24a UC05: the compatibility generation the instance's binary was built with (plan 24 section 2), so a console and the group's tools can tell which instances are further apart than N and N-1
+            // plan 24a UC05 (the generation column) and plan 28c E09 (who schedules a task, what the runner would have queued): no release holds the runner module yet, so the E09 tables are part of this newest migration
             """
             ALTER TABLE {table:instance} {{addcolumn}} generation {{int}} NULL;
+
+            -- owner is old, observe or runner. A task with no row is scheduled by the runner. changed_by and reason are the audit's words, kept beside the setting so a console can show them.
+            CREATE TABLE {table:task_owner} (
+                package     {{key}} NOT NULL,
+                channel     {{key}} NOT NULL,
+                task        {{key}} NOT NULL,
+                owner       {{key}} NOT NULL,
+                changed_by  {{key}} NOT NULL,
+                changed_at  {{time}} NOT NULL,
+                reason      {{text}} NULL,
+                PRIMARY KEY (package, channel, task)
+            );
+
+            -- One scheduling decision of an observed task: source runner is what the runner would have queued at decided_at (paused: it would have passed the time over), source old is what the product's own scheduler reported queuing.
+            CREATE TABLE {table:task_decision} (
+                package     {{key}} NOT NULL,
+                channel     {{key}} NOT NULL,
+                task        {{key}} NOT NULL,
+                source      {{key}} NOT NULL,
+                decided_at  {{time}} NOT NULL,
+                missed      {{int}} NOT NULL,
+                paused      {{int}} NOT NULL,
+                PRIMARY KEY (package, channel, task, source, decided_at)
+            );
             """,
         ],
-        // versions 2 to 4 only add nullable columns, which the code of the version before never reads or writes: an instance of the previous version still works with them
+        // versions 2 to 4 only add nullable columns and new tables, which the code of the version before never reads or writes: an instance of the previous version still works with them
         compatibleWithPrevious: 1,
         retention:
         [

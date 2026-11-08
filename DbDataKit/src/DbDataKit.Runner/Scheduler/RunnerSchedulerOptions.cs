@@ -97,9 +97,10 @@ public sealed record SchedulerProblem(string Subject, string Message, DateTimeOf
 /// <param name="Problem">Why its projection row is skipped, or null.</param>
 /// <param name="RequiredLabels">The labels the task requires of a runner (R12).</param>
 /// <param name="WaitingReason">Why the task cannot run on any live runner: which required label none has (R12); null when some live runner can take it.</param>
+/// <param name="Owner">Who schedules the task (plan 28c E09): <c>runner</c>, or <c>old</c> / <c>observe</c> while the product's own scheduler still does; <see cref="NextDue"/> is the schedule's, whoever acts on it.</param>
 public sealed record ScheduledTaskStatus(
     TaskRef Task, string Version, DateTimeOffset? NextDue, StoredRun? LastRun, int Running, int Queued, DateTimeOffset? NextAttemptAt, bool Paused, string? PausedBy, string? Problem,
-    IReadOnlyList<string>? RequiredLabels = null, string? WaitingReason = null);
+    IReadOnlyList<string>? RequiredLabels = null, string? WaitingReason = null, string Owner = TaskOwners.Runner);
 
 /// <summary>A snapshot of the loop.</summary>
 /// <param name="WorkerId">This loop's claim name.</param>
@@ -117,4 +118,12 @@ public sealed record SchedulerStatus(string WorkerId, DateTimeOffset At, IReadOn
 /// <param name="Claimed">Items this loop took and started.</param>
 /// <param name="SkippedRows">Projection rows that could not be read; they are in <see cref="RunnerScheduler.Status"/>.</param>
 /// <param name="ExpiredLeases">Items whose lease ran out and went back to the queue.</param>
-public sealed record TickReport(IReadOnlyList<TaskRef> Enqueued, int OverlapRefused, int Paused, int Claimed, int SkippedRows, int ExpiredLeases);
+/// <param name="Observed">Tasks of owner <c>observe</c> whose schedule was evaluated against the copy (decisions are recorded for those that were due); nothing of them was queued.</param>
+/// <param name="LeftToOldOwner">Tasks of owner <c>old</c> or <c>observe</c>: the product's own scheduler schedules them, this loop did not look at their schedule (observed ones are in <paramref name="Observed"/>).</param>
+public sealed record TickReport(IReadOnlyList<TaskRef> Enqueued, int OverlapRefused, int Paused, int Claimed, int SkippedRows, int ExpiredLeases, int Observed = 0, int LeftToOldOwner = 0);
+
+/// <summary>The position of the product's scheduler for one task, handed over with its owner (plan 28c E09): scheduled times up to <paramref name="HandledUpTo"/> are dealt with, and the pause (who and when) it had, if any.</summary>
+public sealed record ScheduleSeed(DateTimeOffset HandledUpTo, string? PausedBy, DateTimeOffset? PausedAt);
+
+/// <summary>A task's scheduling position as a product reads it: who schedules it, up to when its times are dealt with, its pause, and the items of it that are running and waiting; <c>Version</c> is the version its channel serves, null when the task is in no projection (nothing active has it).</summary>
+public sealed record TaskScheduleState(string Owner, DateTimeOffset? HandledUpTo, string? PausedBy, DateTimeOffset? PausedAt, int Running, int Queued, string? Version = null);
