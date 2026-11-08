@@ -19,9 +19,15 @@ tmp="$(mktemp -d)"
 gateway_pid=""
 cleanup() {
   status=$?
-  [ -n "$gateway_pid" ] && kill "$gateway_pid" 2>/dev/null || true
+  if [ -n "$gateway_pid" ]; then
+    kill "$gateway_pid" 2>/dev/null || true
+    # the gateway writes its state and log while it shuts down: remove the directory only after it has gone (bounded wait, then a hard stop)
+    for _ in $(seq 1 20); do kill -0 "$gateway_pid" 2>/dev/null || break; sleep 0.5; done
+    kill -9 "$gateway_pid" 2>/dev/null || true
+    wait "$gateway_pid" 2>/dev/null || true
+  fi
   if [ "$status" -ne 0 ] && [ -f "$tmp/gateway.log" ]; then echo "---- gateway log ----"; tail -n "${DBGATEWAY_E2E_LOG_LINES:-60}" "$tmp/gateway.log"; fi
-  rm -rf "$tmp"
+  rm -rf "$tmp" || { sleep 2; rm -rf "$tmp" || true; }   # a leftover temp directory is not a failure of the test
   exit "$status"
 }
 trap cleanup EXIT
