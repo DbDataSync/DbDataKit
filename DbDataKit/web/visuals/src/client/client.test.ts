@@ -227,6 +227,30 @@ describe('moduleClient', () => {
     expect(opened.document!.title).toBe('Retail sales today')
   })
 
+  it('the lifecycle calls (UE04) read the versions as camel case and send the version the caller saw', async () => {
+    const versions = { kind: 'dashboard', name: 'sales', active: 2, previous: 1, versions: [
+      { version: 2, published_by: 'Ada', published_at: '2026-11-08T10:00:00Z', note: 'second', active: true, depends_on: ['semantic-model:retail@1'] },
+      { version: 1, published_by: 'Bob', published_at: '2026-11-07T10:00:00Z', note: null, active: false },
+    ] }
+    const { calls, client } = fake([{ body: versions }, { body: { version: 1, moved: [] } }, { body: { version: 2, moved: ['semantic-model:retail@1'] } }, { body: { retired: true } }, { status: 409, body: { code: 'version_conflict', message: 'it changed since you looked', current_version: 3 } }, { body: { retired: true } }])
+    const listed = await client.versions!('dashboard', 'sales')
+    expect(calls[0]).toMatchObject({ method: 'GET', url: 'https://views.example/api/v1/dashboards/sales/versions' })
+    expect(listed.active).toBe(2)
+    expect(listed.versions[0]).toEqual({ version: 2, publishedBy: 'Ada', publishedAt: '2026-11-08T10:00:00Z', note: 'second', active: true, dependsOn: ['semantic-model:retail@1'] })
+    expect(listed.versions[1]).toMatchObject({ publishedBy: 'Bob', note: null, dependsOn: [] })
+    await client.switchTo!('dashboard', 'sales', 1, 2)
+    expect(calls[1]).toMatchObject({ method: 'POST', url: 'https://views.example/api/v1/dashboards/sales/switch', body: { version: 1, expected_version: 2 } })
+    expect((await client.rollback!('report', 'monthly', 1)).moved).toEqual(['semantic-model:retail@1'])
+    expect(calls[2]).toMatchObject({ method: 'POST', url: 'https://views.example/api/v1/reports/monthly/rollback', body: { expected_version: 1 } })
+    await client.retire!('dashboard', 'sales', 2)
+    expect(calls[3]).toMatchObject({ method: 'DELETE', url: 'https://views.example/api/v1/dashboards/sales?expected_version=2' })
+    // a stale call is refused in the server's words, as a conflict
+    await expect(client.retire!('dashboard', 'sales', 1)).rejects.toMatchObject({ code: 'version_conflict', message: 'it changed since you looked' })
+    // the editor's Delete on a published source is a retire
+    await client.delete!('dashboard', 'sales')
+    expect(calls[5]).toMatchObject({ method: 'DELETE', url: 'https://views.example/api/v1/dashboards/sales' })
+  })
+
   it('resolve posts parameters, the layout and the narrowed widgets (`only`) to .../render of the kind', async () => {
     const { calls, client } = fake([{ body: rendered }, { body: rendered }])
     expect(await client.resolve(dashboard, 'desk', { region: ['West'] }, { only: ['net'] })).toEqual(rendered)

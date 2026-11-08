@@ -2,7 +2,7 @@ import type { ViewKind } from '../views/document'
 import type { RenderedWidgets } from '../views/rendered'
 import { validateText } from './text'
 import { ViewsClientError } from './types'
-import type { ClientDiagnostic, DocumentSummary, OpenedDocument, ViewsClient, ViewsClientErrorCode } from './types'
+import type { ClientDiagnostic, DocumentSummary, DocumentVersions, LifecycleResult, OpenedDocument, ViewsClient, ViewsClientErrorCode } from './types'
 import { diagnosticsFromRefusal } from './refusal'
 
 /**
@@ -17,6 +17,9 @@ import { diagnosticsFromRefusal } from './refusal'
  * | `list` | `GET /api/v1/dashboards`, `GET /api/v1/reports` giving `{items: [{name, title, version}]}` | DBR11 |
  * | `save` | `PUT /api/v1/dashboards/{name}`, `PUT /api/v1/reports/{name}` with `{text, expected_version?}` giving `{name, version}` | PROVISIONAL (DBR10 and DBR12 own what is behind it; the module does not take it yet) |
  * | `validate` | local: the TypeScript validator (the loaders' checks); with `serverCheck` a text that passes it is also posted to the preview route with `only: []` (nothing is resolved), so the module's own publish checks (the catalog binding) answer as diagnostics; the server's loader runs again on save | decided here, DBR28 |
+ * | `versions` | `GET /api/v1/dashboards/{name}/versions` (and reports) giving `{kind, name, active, previous, versions: [{version, published_by, published_at, note, active, depends_on}]}`, newest first (UE04) | plan 33 UE04 |
+ * | `switchTo`, `rollback` | `POST .../switch` with `{version, expected_version?}`, `POST .../rollback` with `{expected_version?}` giving `{version, moved}` | plan 33 UE04 |
+ * | `retire`, `delete` | `DELETE .../{name}?expected_version=n` giving `{retired: true}`: the document is no longer served, its versions stay | plan 33 UE04 |
  *
  * Errors come as `{code, message, diagnostics?}` with the status: 404 `not_found`, 409 `version_conflict`, 400 and 422 `invalid`, 401 and 403 `denied`; anything else, and a network failure, is `unavailable` (the module's 503 while it drains, and its 501 `export_unavailable`, are among them).
  */
@@ -102,6 +105,32 @@ export function moduleClient(options: ModuleClientOptions): ViewsClient {
 
     async save(kind, name, text, expectedVersion) {
       return call<{ name: string; version: string }>('PUT', `/api/v1/${collection(kind)}/${segment(name)}`, { text, ...(expectedVersion !== undefined ? { expected_version: expectedVersion } : {}) })
+    },
+
+    async versions(kind, name): Promise<DocumentVersions> {
+      const body = await call<{ kind: ViewKind; name: string; active: number | null; previous: number | null; versions: Array<{ version: number; published_by: string; published_at: string; note: string | null; active: boolean; depends_on?: string[] }> }>('GET', `/api/v1/${collection(kind)}/${segment(name)}/versions`)
+      return {
+        kind, name, active: body.active ?? null, previous: body.previous ?? null,
+        versions: body.versions.map((v) => ({ version: v.version, publishedBy: v.published_by, publishedAt: v.published_at, note: v.note ?? null, active: v.active, dependsOn: v.depends_on ?? [] })),
+      }
+    },
+
+    async switchTo(kind, name, version, expectedVersion): Promise<LifecycleResult> {
+      const body = await call<{ version: number; moved?: string[] }>('POST', `/api/v1/${collection(kind)}/${segment(name)}/switch`, { version, ...(expectedVersion ? { expected_version: expectedVersion } : {}) })
+      return { version: body.version, moved: body.moved ?? [] }
+    },
+
+    async rollback(kind, name, expectedVersion): Promise<LifecycleResult> {
+      const body = await call<{ version: number; moved?: string[] }>('POST', `/api/v1/${collection(kind)}/${segment(name)}/rollback`, expectedVersion ? { expected_version: expectedVersion } : {})
+      return { version: body.version, moved: body.moved ?? [] }
+    },
+
+    async retire(kind, name, expectedVersion) {
+      await call<{ retired: boolean }>('DELETE', `/api/v1/${collection(kind)}/${segment(name)}${expectedVersion ? `?expected_version=${expectedVersion}` : ''}`)
+    },
+
+    async delete(kind, name) {
+      await call<{ retired: boolean }>('DELETE', `/api/v1/${collection(kind)}/${segment(name)}`)
     },
 
     async preview(request) {

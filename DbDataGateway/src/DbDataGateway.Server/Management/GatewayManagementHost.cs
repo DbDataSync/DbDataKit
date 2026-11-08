@@ -125,7 +125,7 @@ public static class GatewayManagementHost
                 ? new DbDataKit.Identity.IdentityAdminApi(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>(), GatewayIdentityModule.PublicUrlOf(options).AbsoluteUri, new DbDataKit.Identity.AccessTokenPolicy(options.Identity.AccessTokenMaxDays))
                 : null,
             stateApi: stateApi,
-            views: new GatewayViewsManagement(app.Services.GetRequiredService<Serving.GatewayViewsPublishing>(), GatewayModules.Has(options, GatewayModules.Views) ? app.Services.GetRequiredService<Serving.GatewayViews>() : null),
+            views: new GatewayViewsManagement(app.Services.GetRequiredService<Serving.GatewayViewsPublishing>(), GatewayModules.Has(options, GatewayModules.Views) ? app.Services.GetRequiredService<Serving.GatewayViews>() : null, audit),
             entityModels: new GatewayEntityModels(app.Services.GetRequiredService<Serving.PublishedEntityModels>(),
                 () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue,
                 dataSource =>

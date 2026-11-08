@@ -353,6 +353,70 @@ public sealed class ViewsModuleTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task An_author_lists_the_versions_of_a_document_serves_an_earlier_one_and_retires_it_and_each_step_is_audited_without_the_document()
+    {
+        await StartAsync();
+        var (ada, _) = HomeSeed.Person(Get<StateDatabase>(), "Ada", "ada@example.invalid", Analysts);
+        PublishModel();
+        const string path = "/api/v1/dashboards/sales";
+        Assert.Equal(HttpStatusCode.OK, (await ManagementAsync(HttpMethod.Put, path, ada.Id, ServerRole.Author, new JsonObject { ["text"] = Dashboard("Sales"), ["note"] = "first" })).Status);
+        Assert.Equal(HttpStatusCode.OK, (await ManagementAsync(HttpMethod.Put, path, ada.Id, ServerRole.Author, new JsonObject { ["text"] = Dashboard("Sales, second"), ["expected_version"] = "1", ["note"] = "second" })).Status);
+
+        // the versions, newest first, with who, when and why, and which one is served; never the text of a document
+        var versions = await ManagementAsync(HttpMethod.Get, path + "/versions", ada.Id, ServerRole.Author);
+        Assert.Equal(HttpStatusCode.OK, versions.Status);
+        Assert.Equal(2, (int)versions.Body!["active"]!);
+        Assert.Equal([2, 1], versions.Body["versions"]!.AsArray().Select(v => (int)v!["version"]!).ToArray());
+        Assert.Equal("first", (string)versions.Body["versions"]![1]!["note"]!);
+        Assert.True((bool)versions.Body["versions"]![0]!["active"]!);
+        Assert.DoesNotContain("kind: dashboard", versions.Body.ToJsonString());
+        Assert.Equal(HttpStatusCode.NotFound, (await ManagementAsync(HttpMethod.Get, "/api/v1/reports/sales/versions", ada.Id, ServerRole.Author)).Status);
+
+        // a viewer may read documents but changes none of this, whichever call
+        foreach (var (method, suffix, body) in new (HttpMethod, string, JsonNode?)[] { (HttpMethod.Get, "/versions", null), (HttpMethod.Post, "/switch", new JsonObject { ["version"] = 1 }), (HttpMethod.Post, "/rollback", new JsonObject()), (HttpMethod.Delete, "", null) })
+            Assert.Equal(HttpStatusCode.Forbidden, (await ManagementAsync(method, path + suffix, ada.Id, ServerRole.Viewer, body)).Status);
+        Assert.Equal(2, Get<DefinitionStore>().Current("dashboard", "sales")!.Version);
+
+        // switch to the earlier version; a caller who saw another version served is refused with the current one; a version that is not stored is refused in words
+        var stale = await ManagementAsync(HttpMethod.Post, path + "/switch", ada.Id, ServerRole.Author, new JsonObject { ["version"] = 1, ["expected_version"] = 7 });
+        Assert.Equal(HttpStatusCode.Conflict, stale.Status);
+        Assert.Equal(2, (int)stale.Body!["current_version"]!);
+        Assert.Equal(HttpStatusCode.NotFound, (await ManagementAsync(HttpMethod.Post, path + "/switch", ada.Id, ServerRole.Author, new JsonObject { ["version"] = 99 })).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await ManagementAsync(HttpMethod.Post, path + "/switch", ada.Id, ServerRole.Author, new JsonObject())).Status);
+        var switched = await ManagementAsync(HttpMethod.Post, path + "/switch", ada.Id, ServerRole.Author, new JsonObject { ["version"] = 1, ["expected_version"] = 2 });
+        Assert.Equal(HttpStatusCode.OK, switched.Status);
+        Assert.Equal(1, Get<DefinitionStore>().Current("dashboard", "sales")!.Version);
+        Poll();
+        Assert.Equal("Sales", (string)(await ManagementAsync(HttpMethod.Get, path, ada.Id, ServerRole.Viewer)).Body!["title"]!);
+
+        // rollback returns to the version before (2 again)
+        var back = await ManagementAsync(HttpMethod.Post, path + "/rollback", ada.Id, ServerRole.Author, new JsonObject { ["expected_version"] = 1 });
+        Assert.Equal(HttpStatusCode.OK, back.Status);
+        Assert.Equal(2, (int)back.Body!["version"]!);
+
+        // retire: stale is refused, then the document is no longer listed, its versions stay, and a second retire says so
+        Assert.Equal(HttpStatusCode.Conflict, (await ManagementAsync(HttpMethod.Delete, path + "?expected_version=1", ada.Id, ServerRole.Author)).Status);
+        var retired = await ManagementAsync(HttpMethod.Delete, path + "?expected_version=2", ada.Id, ServerRole.Author);
+        Assert.Equal(HttpStatusCode.OK, retired.Status);
+        Assert.True((bool)retired.Body!["retired"]!);
+        Poll();
+        Assert.Empty((await ManagementAsync(HttpMethod.Get, "/api/v1/dashboards", ada.Id, ServerRole.Viewer)).Body!["items"]!.AsArray());
+        var after = await ManagementAsync(HttpMethod.Get, path + "/versions", ada.Id, ServerRole.Author);
+        Assert.Equal(2, after.Body!["versions"]!.AsArray().Count);
+        Assert.Null(after.Body["active"]);
+        Assert.Equal(HttpStatusCode.NotFound, (await ManagementAsync(HttpMethod.Delete, path, ada.Id, ServerRole.Author)).Status);
+        // a publish brings it back as the next version
+        Assert.Equal("3", (string)(await ManagementAsync(HttpMethod.Put, path, ada.Id, ServerRole.Author, new JsonObject { ["text"] = Dashboard("Sales, third") })).Body!["version"]!);
+
+        // every step is in the audit with the person and the version, and no document text
+        var audit = ConfigTestSupport.AuditEntries(dataDirectory).Select(e => e.ToJsonString()).ToList();
+        foreach (var command in new[] { "dashboard publish", "dashboard switch", "dashboard rollback", "dashboard retire" })
+            Assert.Contains(audit, e => e.Contains(command, StringComparison.Ordinal));
+        Assert.Contains(audit, e => e.Contains("dashboard retire", StringComparison.Ordinal) && e.Contains("stale", StringComparison.Ordinal));
+        Assert.DoesNotContain(audit, e => e.Contains("kind: dashboard", StringComparison.Ordinal) || e.Contains("widgets", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task A_gateway_without_the_views_module_says_so_and_still_takes_a_publish()
     {
         await StartAsync(views: false);
