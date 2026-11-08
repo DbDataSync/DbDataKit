@@ -13,7 +13,17 @@ namespace DbDataConsole.Server;
 /// <param name="ApiVersion">The management API version it reported.</param>
 /// <param name="Problem">Why it could not be reached or is not usable, in words for the person.</param>
 /// <param name="Generation">The compatibility generation it reported (24a UC04); null when it did not answer or states none.</param>
-public sealed record InstanceStatus(RegisteredInstance Instance, bool Reachable, bool? Ready, string? Product, string? Version, int? ApiVersion, string? Problem, int? Generation = null);
+public sealed record InstanceStatus(RegisteredInstance Instance, bool Reachable, bool? Ready, string? Product, string? Version, int? ApiVersion, string? Problem, int? Generation = null)
+{
+    /// <summary>The generation it reported now, or the one the registry recorded when it was last seen (24a UC05).</summary>
+    public int? KnownGeneration => Generation ?? Instance.Generation;
+
+    /// <summary>Null when the server is within N and N-1 of this console (or states no generation); otherwise the words that say how far apart they are and which side to upgrade (<see cref="SuiteCompatibility"/>).</summary>
+    public string? OutsideSupport =>
+        KnownGeneration is not { } known || SuiteCompatibility.Supports(known) ? null
+            // a server that refused the call already has the message, with both program versions
+            : Generation is not null && !Reachable && Problem is not null ? Problem : SuiteCompatibility.Incompatibility(known, Version);
+}
 
 /// <summary>
 /// The servers this console manages (plan 13, U12 and T04): pairing one with the code its administrator made, asking each how it is, and forgetting one. The pin of each server's certificate is in

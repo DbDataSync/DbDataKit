@@ -101,8 +101,12 @@ public static class RunnerModule
             """
             ALTER TABLE {table:instance} {{addcolumn}} definition_formats {{text}} NULL;
             """,
+            // plan 24a UC05: the compatibility generation the instance's binary was built with (plan 24 section 2), so a console and the group's tools can tell which instances are further apart than N and N-1
+            """
+            ALTER TABLE {table:instance} {{addcolumn}} generation {{int}} NULL;
+            """,
         ],
-        // versions 2 and 3 only add nullable columns, which the code of the version before never reads or writes: an instance of the previous version still works with them
+        // versions 2 to 4 only add nullable columns, which the code of the version before never reads or writes: an instance of the previous version still works with them
         compatibleWithPrevious: 1,
         retention:
         [

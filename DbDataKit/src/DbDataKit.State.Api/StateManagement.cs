@@ -191,7 +191,8 @@ public sealed class StateManagement(StateManagementOptions options)
 
         answer["instance"] = Self(shown: answer);
         var live = (options.Instances ?? IInstanceDirectory.Empty).Live();
-        answer["instances"] = new JsonArray([.. live.Select(Instance)]);
+        var newest = GroupGenerations.Newest(live.Select(i => i.Generation));
+        answer["instances"] = new JsonArray([.. live.Select(i => Instance(i, newest))]);
         answer["maintenance"] = options.Gate.Status().ToJson();
         return StateResult.Ok(Scrub(answer));
     }
@@ -213,7 +214,7 @@ public sealed class StateManagement(StateManagementOptions options)
         return new JsonObject { ["instance_id"] = options.InstanceId, ["software_version"] = options.Version, ["modules"] = modules };
     }
 
-    private static JsonNode Instance(StateInstance instance)
+    private static JsonNode Instance(StateInstance instance, int? newest)
     {
         var node = new JsonObject { ["key"] = instance.Key, ["self"] = instance.IsSelf };
         if (instance.Host is not null) node["host"] = instance.Host;
@@ -222,6 +223,13 @@ public sealed class StateManagement(StateManagementOptions options)
         if (instance.Heartbeat is { } heartbeat) node["heartbeat"] = heartbeat.ToString("O", CultureInfo.InvariantCulture);
         if (instance.Version is not null) node["software_version"] = instance.Version;
         if (instance.Modules is { } modules) node["module_versions"] = new JsonObject(modules.OrderBy(m => m.Key, StringComparer.Ordinal).Select(m => KeyValuePair.Create(m.Key, (JsonNode?)JsonValue.Create(m.Value))));
+        if (instance.Generation is { } generation)
+        {
+            node["compatibility_generation"] = generation;
+            // 24a UC05: an instance more than one generation behind the group's newest is marked, with the words to say
+            if (GroupGenerations.Outside(generation, newest) is { } outside) node["outside_n_minus_1"] = outside;
+        }
+
         if (instance.DefinitionFormats is { } formats)
             node["definition_formats"] = new JsonObject(formats.OrderBy(f => f.Key, StringComparer.Ordinal).Select(f => KeyValuePair.Create(f.Key, (JsonNode?)new JsonObject { ["previous"] = f.Value.Previous, ["current"] = f.Value.Current })));
         return node;

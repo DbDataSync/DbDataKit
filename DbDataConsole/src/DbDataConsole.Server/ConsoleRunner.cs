@@ -146,6 +146,7 @@ public sealed class ConsoleRunner : IHostedService, IAsyncDisposable
             Group = ConsoleRunnerSettings.Group,
             ServiceId = ConsoleState.ServiceId,
             Version = Version,
+            Generation = DbDataKit.Web.Trust.SuiteCompatibility.Generation,
             MaxConcurrentRuns = _settings.MaxConcurrent,
             Tick = _settings.Tick,
             CancellationGrace = _settings.CancellationGrace,

@@ -13,6 +13,10 @@ export interface InstanceSummary {
   ready: boolean | null
   problem: string | null
   pairedAt: string | null
+  /** The compatibility generation the server reported, or the one last recorded for it (plan 24a UC05); null when it states none. */
+  generation?: number | null
+  /** Set when the server is further from this console than N and N-1: how far apart they are and which side to upgrade. */
+  outsideSupport?: string | null
 }
 
 /** A server that announced itself and waits for an administrator to confirm it (plan 13a, L03). The code it announced is never sent here. */

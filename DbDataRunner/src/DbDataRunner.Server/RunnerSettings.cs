@@ -98,6 +98,7 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
         Channels = Channels,
         Group = Group,
         Version = typeof(RunnerSettings).Assembly.GetName().Version?.ToString(),
+        Generation = DbDataKit.Web.Trust.SuiteCompatibility.Generation,
         Tick = Tick,
         CancellationGrace = CancellationGrace,
         InstanceHeartbeat = InstanceHeartbeat,

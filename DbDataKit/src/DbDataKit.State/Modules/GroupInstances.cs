@@ -16,8 +16,30 @@ namespace DbDataKit.State;
 /// <param name="SoftwareVersion">The product's version, or null when the row records none.</param>
 /// <param name="ModuleVersions">Each module of the instance's binary and the version it has; null when the row records none.</param>
 /// <param name="DefinitionFormats">The formats of each kind of published definition the instance reads (24a UC01); null when the row records none (it predates the column and reads format 1).</param>
+/// <param name="Generation">The compatibility generation the instance's binary was built with (24a UC05); null when the row records none.</param>
 public sealed record GroupInstance(string Kind, string Id, string? Host, int? ProcessId, DateTimeOffset? Started, DateTimeOffset? Heartbeat, string? SoftwareVersion, IReadOnlyDictionary<string, int>? ModuleVersions,
-    IReadOnlyDictionary<string, DefinitionFormats>? DefinitionFormats = null);
+    IReadOnlyDictionary<string, DefinitionFormats>? DefinitionFormats = null, int? Generation = null);
+
+/// <summary>
+/// The instances of a group that are further from the group's newest than N and N-1 (plan 24 section 2, 24a UC05): an instance whose compatibility generation is more than one below the highest the live
+/// instances record. A row that records none is not marked (it predates the column). The group's newest is the standard to hold the others to because the newest is what the next publish and the next
+/// migration are made for.
+/// </summary>
+public static class GroupGenerations
+{
+    /// <summary>The highest of the generations, or null when there is none.</summary>
+    public static int? Newest(IEnumerable<int?> generations) => generations.Where(g => g is not null).Select(g => g!.Value).DefaultIfEmpty().Max() is var top and > 0 ? top : null;
+
+    public static int? Newest(IEnumerable<GroupInstance> instances) => Newest(instances.Select(i => i.Generation));
+
+    /// <summary>What to say about an instance of this generation, or null when it is within N and N-1 of <paramref name="newest"/> (or records no generation).</summary>
+    public static string? Outside(int? generation, int? newest) =>
+        generation is { } own && newest is { } top && top - own > 1
+            ? $"outside N-1: generation {own.ToString(CultureInfo.InvariantCulture)} where the group's newest is {top.ToString(CultureInfo.InvariantCulture)}; upgrade this instance"
+            : null;
+
+    public static string? Outside(GroupInstance instance, int? newest) => Outside(instance.Generation, newest);
+}
 
 /// <summary>What a <see cref="IGroupInstanceSource"/> reads with: the connection (and the migration's transaction, which a read must join), the layout, the time, and the version the registry holds for a module.</summary>
 public sealed record GroupInstanceContext(DbConnection Connection, DbTransaction? Transaction, StateLayout Layout, DateTimeOffset Now, Func<string, int?> RegisteredVersion);
@@ -83,6 +105,10 @@ public sealed class StandardGroupInstanceSource(TimeSpan? runnerLease = null) : 
     private const int ServingFormatColumnFrom = 4;
     private const int RunnerFormatColumnFrom = 3;
 
+    /// <summary>The module versions whose migration added <c>generation</c> (24a UC05: the Proxy's fifth, the runner's fourth).</summary>
+    private const int ServingGenerationColumnFrom = 5;
+    private const int RunnerGenerationColumnFrom = 4;
+
     private readonly TimeSpan _runnerLease = runnerLease ?? TimeSpan.FromSeconds(90);
 
     public IReadOnlyList<GroupInstance> Live(GroupInstanceContext context)
@@ -97,8 +123,9 @@ public sealed class StandardGroupInstanceSource(TimeSpan? runnerLease = null) : 
     {
         var withVersions = c.RegisteredVersion("serving") >= ServingVersionColumnsFrom;
         var withFormats = c.RegisteredVersion("serving") >= ServingFormatColumnFrom;
+        var withGeneration = c.RegisteredVersion("serving") >= ServingGenerationColumnFrom;
         var rows = new List<GroupInstance>();
-        using var reader = Query(c, "serving", $"SELECT instance_key, host, process_id, started_at, heartbeat_at{(withVersions ? ", software_version, module_versions" : "")}{(withFormats ? ", definition_formats" : "")} FROM {{table:serving_instance}};");
+        using var reader = Query(c, "serving", $"SELECT instance_key, host, process_id, started_at, heartbeat_at{(withVersions ? ", software_version, module_versions" : "")}{(withFormats ? ", definition_formats" : "")}{(withGeneration ? ", generation" : "")} FROM {{table:serving_instance}};");
         while (reader.Read())
         {
             var host = reader.GetString(1);
@@ -107,7 +134,8 @@ public sealed class StandardGroupInstanceSource(TimeSpan? runnerLease = null) : 
             if (c.Now - heartbeat >= ServingLease || (host == Environment.MachineName && !Running(pid))) continue;
             rows.Add(new GroupInstance("serving", reader.GetString(0), host, pid, reader.Time(3), heartbeat,
                 withVersions && !reader.IsDBNull(5) ? reader.GetString(5) : null, withVersions && !reader.IsDBNull(6) ? ModuleVersionText.Parse(reader.GetString(6)) : null,
-                withFormats && !reader.IsDBNull(7) ? DefinitionFormatText.Parse(reader.GetString(7)) : null));
+                withFormats && !reader.IsDBNull(7) ? DefinitionFormatText.Parse(reader.GetString(7)) : null,
+                withGeneration && !reader.IsDBNull(8) ? Convert.ToInt32(reader.GetValue(8), CultureInfo.InvariantCulture) : null));
         }
 
         return rows;
@@ -117,8 +145,9 @@ public sealed class StandardGroupInstanceSource(TimeSpan? runnerLease = null) : 
     {
         var withVersions = c.RegisteredVersion("runner") >= RunnerVersionColumnsFrom;
         var withFormats = c.RegisteredVersion("runner") >= RunnerFormatColumnFrom;
+        var withGeneration = c.RegisteredVersion("runner") >= RunnerGenerationColumnFrom;
         var rows = new List<GroupInstance>();
-        using var reader = Query(c, "runner", $"SELECT id, host, version, started_at, heartbeat_at, state{(withVersions ? ", software_version, module_versions" : "")}{(withFormats ? ", definition_formats" : "")} FROM {{table:instance}};");
+        using var reader = Query(c, "runner", $"SELECT id, host, version, started_at, heartbeat_at, state{(withVersions ? ", software_version, module_versions" : "")}{(withFormats ? ", definition_formats" : "")}{(withGeneration ? ", generation" : "")} FROM {{table:instance}};");
         while (reader.Read())
         {
             var heartbeat = reader.Time(4);
@@ -126,7 +155,8 @@ public sealed class StandardGroupInstanceSource(TimeSpan? runnerLease = null) : 
             var software = withVersions && !reader.IsDBNull(6) ? reader.GetString(6) : reader.GetString(2);
             rows.Add(new GroupInstance("runner", reader.Uuid(0).ToString(), reader.GetString(1), null, reader.Time(3), heartbeat,
                 software, withVersions && !reader.IsDBNull(7) ? ModuleVersionText.Parse(reader.GetString(7)) : null,
-                withFormats && !reader.IsDBNull(8) ? DefinitionFormatText.Parse(reader.GetString(8)) : null));
+                withFormats && !reader.IsDBNull(8) ? DefinitionFormatText.Parse(reader.GetString(8)) : null,
+                withGeneration && !reader.IsDBNull(9) ? Convert.ToInt32(reader.GetValue(9), CultureInfo.InvariantCulture) : null));
         }
 
         return rows;

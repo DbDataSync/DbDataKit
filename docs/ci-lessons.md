@@ -70,6 +70,14 @@ The CI runners are small (two cores, Windows and Linux), run many jobs at once, 
 | `error CS0117: 'RunnerPackages' does not contain a definition for 'Install'` in a project you did not touch | `main` moved or renamed the type (R20 moved the runner hosting into `DbDataKit.Runner` and `DbDataKit.Runner.Api`; the installer is `RunnerPackageInstaller`) | after every merge from `main`, build the test projects of every product that references the runner/state libraries (see "Before you push" item 1) |
 | conflict in `docs/plans/*.md` slice rows | two slices edit neighbouring rows | keep every row's status text; never resolve by taking one side wholesale |
 
+### Stored formats and shared files
+
+| Signature | Cause | Fix |
+| --- | --- | --- |
+| a Proxy test fails with `Unknown key 'generation' in 'PairedClients[0]'` (`DBP-104`, naming `server.yaml`) after a pairing, in tests that did not touch pairing | a key was added to the `pairedClients` entries that `PairedClientsFile` writes into `server.yaml`; the Proxy reads that list with its own strict schema (`PairedClientOptions`), and so would the release before it after a rollback | do not write a new key into a file that a product reads strictly: keep it in the group's state (`trust` module) or in a file only one reader owns (`instances.yaml` is the console's), or add the key to every strict reader and accept that the previous release cannot read the file (plan 24a UC04) |
+| a test that expected a `schemaVersion: 2` or `schema: connection/2` file to be "newer than this tool" now loads it | the format became current (`model/2`, `connection/2`: plan 24a UC03), so the old "newer" example is valid | use the version after the current one in such a test (`3`), and test the new format on its own |
+| a migration test of a module cut to its first migrations fails with `column ... does not exist` on a store call | the store's SQL always writes the newest columns; a table cut at an older migration has not got them | insert the old rows with SQL against the cut module, and read them back through the current module (see `InstanceGenerationTests`, `A_pairing_record_keeps_the_generation...`) |
+
 ### Infrastructure (not your change; re-run once, then look closer)
 
 | Signature | What it is |

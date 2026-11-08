@@ -26,6 +26,9 @@ public sealed record RunnerHostSettings(string Directory)
     /// <summary>The version the instance reports; null: the library's.</summary>
     public string? Version { get; init; }
 
+    /// <summary>The compatibility generation of this program (24a UC05, <c>SuiteCompatibility.Generation</c> in <c>DbDataKit.Web</c>); recorded in the instance row. Null records none.</summary>
+    public int? Generation { get; init; }
+
     /// <summary>How many tasks this runner runs at once (the cap that keeps a heavy run from starving the host).</summary>
     public int MaxConcurrentRuns { get; init; } = 4;
 

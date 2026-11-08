@@ -34,6 +34,29 @@ public sealed class ConsoleInstancesTests : IAsyncLifetime
         try { Directory.Delete(directory, true); } catch (IOException) { }
     }
 
+    [Fact]
+    public void A_server_outside_N_and_N_minus_1_of_the_console_is_marked_with_the_words_and_one_inside_is_not()
+    {
+        // plan 24a UC05: what the Servers page and `instance list` say about a pair (the console is generation SuiteCompatibility.Generation)
+        var entry = new RegisteredInstance("srv-1", "build", new Uri("https://build.example:8470/"), "abc", 1, null);
+        var inside = new DbDataConsole.Server.InstanceStatus(entry, true, true, "dbdatabuild", "2026.11.7.1200", 1, null, SuiteCompatibility.Generation);
+        Assert.Null(inside.OutsideSupport);
+        Assert.Equal(SuiteCompatibility.Generation, inside.KnownGeneration);
+
+        var far = SuiteCompatibility.Generation + 3;
+        var behind = new DbDataConsole.Server.InstanceStatus(entry with { Generation = far }, false, null, null, null, 1, "refused", null);
+        Assert.Equal(far, behind.KnownGeneration);      // the registry remembers the generation last reported
+        Assert.Contains("generation " + far, behind.OutsideSupport);
+        Assert.EndsWith("Upgrade this console.", behind.OutsideSupport);
+
+        var refused = new DbDataConsole.Server.InstanceStatus(entry, false, null, null, null, 1, "The server (version 2030.1.1.0900, compatibility generation 9) and this console (...) are far apart. Upgrade this console.", far);
+        Assert.StartsWith("The server (version 2030.1.1.0900", refused.OutsideSupport);
+
+        var unknown = new DbDataConsole.Server.InstanceStatus(entry, true, true, "dbdatabuild", "2026.1.1.0900", 1, null);
+        Assert.Null(unknown.OutsideSupport);
+        Assert.Null(unknown.KnownGeneration);
+    }
+
     private string SessionFor(UserRole role) =>
         app.Services.GetRequiredService<ISessionStore>().Create(app.Services.GetRequiredService<IUserAccounts>().CreateUser(role + " person", null, role).Id).Id;
 

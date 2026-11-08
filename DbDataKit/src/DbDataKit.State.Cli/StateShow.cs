@@ -94,12 +94,13 @@ internal static class StateShow
                 {
                     var registered = inspection.Modules.Where(m => m.Registered is not null).GroupBy(m => m.Namespace.Module.Name).ToDictionary(g => g.Key, g => g.First().Registered!.Version);
                     var live = new StandardGroupInstanceSource().Live(new GroupInstanceContext(instanceConnection, null, session.Layout, DateTimeOffset.UtcNow, name => registered.TryGetValue(name, out var v) ? v : null));
-                    data["instances"] = live.Select(i => (object?)InstanceData(i)).ToList();
+                    var newest = GroupGenerations.Newest(live);
+                    data["instances"] = live.Select(i => (object?)InstanceData(i, newest)).ToList();
                     if (live.Count > 0)
                     {
                         await write.WriteLineAsync("  instances    live, with the versions their rows record");
                         foreach (var i in live)
-                            await write.WriteLineAsync($"    {i.Id}  {i.Host}{(i.ProcessId is { } pid ? $" (process {pid})" : "")}  software {i.SoftwareVersion ?? "not recorded"}  modules {(i.ModuleVersions is null ? "not recorded" : string.Join(' ', i.ModuleVersions.OrderBy(m => m.Key, StringComparer.Ordinal).Select(m => $"{m.Key}=v{m.Value}")))}");
+                            await write.WriteLineAsync($"    {i.Id}  {i.Host}{(i.ProcessId is { } pid ? $" (process {pid})" : "")}  software {i.SoftwareVersion ?? "not recorded"}  modules {(i.ModuleVersions is null ? "not recorded" : string.Join(' ', i.ModuleVersions.OrderBy(m => m.Key, StringComparer.Ordinal).Select(m => $"{m.Key}=v{m.Value}")))}  generation {(i.Generation is { } g ? g.ToString(CultureInfo.InvariantCulture) : "not recorded")}{(GroupGenerations.Outside(i, newest) is { } outside ? $"  ** {outside}" : "")}");
                     }
                 }
             }
@@ -187,7 +188,7 @@ internal static class StateShow
         return exit;
     }
 
-    private static Dictionary<string, object?> InstanceData(GroupInstance i)
+    private static Dictionary<string, object?> InstanceData(GroupInstance i, int? newest)
     {
         var item = new Dictionary<string, object?> { ["kind"] = i.Kind, ["key"] = i.Id, ["host"] = i.Host };
         if (i.ProcessId is { } pid) item["process_id"] = pid;
@@ -195,6 +196,10 @@ internal static class StateShow
         if (i.Heartbeat is { } beat) item["heartbeat"] = beat.ToString("O", CultureInfo.InvariantCulture);
         item["software_version"] = i.SoftwareVersion;
         item["module_versions"] = i.ModuleVersions?.OrderBy(m => m.Key, StringComparer.Ordinal).ToDictionary(m => m.Key, m => (object?)m.Value);
+        // 24a UC01 and UC05: what the instance reads of each kind of published definition, and the generation of its binary, with the mark when it is outside N-1 of the group's newest
+        if (i.DefinitionFormats is { } formats) item["definition_formats"] = formats.OrderBy(f => f.Key, StringComparer.Ordinal).ToDictionary(f => f.Key, f => (object?)new Dictionary<string, object?> { ["previous"] = f.Value.Previous, ["current"] = f.Value.Current });
+        if (i.Generation is { } generation) item["compatibility_generation"] = generation;
+        if (GroupGenerations.Outside(i, newest) is { } outside) item["outside_n_minus_1"] = outside;
         return item;
     }
 

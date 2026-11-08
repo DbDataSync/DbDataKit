@@ -58,6 +58,8 @@ test.describe.serial('servers waiting for confirmation', () => {
     await expect(page.getByTestId(`pending-row-${toConfirm.name}`)).toHaveCount(0)
     const paired = page.getByTestId(`instance-row-${toConfirm.name}`)
     await expect(paired.getByTestId('instance-status')).toHaveText('Ready', { timeout: 30_000 })
+    // plan 24a UC05: the row says the compatibility generation the server reported, and a server within N and N-1 of the console carries no warning
+    await expect(paired.getByTestId('instance-generation')).toContainText(/generation \d+/)
     await expect(paired).toContainText('dbdatabuild')
     await expect(paired).toContainText(`https://localhost:${toConfirm.port}`)
     // It stays paired (and does not come back as waiting) when the page is read again.
