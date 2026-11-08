@@ -304,6 +304,10 @@ public static class DbDataSyncHost
         // resolution, for the same reason — see phase 88.
         builder.Services.AddSingleton<RunWatermarkTimeService>();
         builder.Services.AddHostedService<SchedulerService>();
+        // The checks stored with the replications (plan 23a FQ10): evaluated when a run of the replication ends and on a clock, results in the state database's quality module.
+        builder.Services.AddSingleton<ReplicationQuality>();
+        builder.Services.AddSingleton<ReplicationChecksService>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<ReplicationChecksService>());
         builder.Services.AddHostedService<RunMonitorService>();
         builder.Services.AddHostedService<RunPruningService>();
 
