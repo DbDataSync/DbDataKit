@@ -74,8 +74,19 @@ internal static class SqliteLockGuard
         lock (open) others = [.. open];
         foreach (var (outer, opened) in others)
         {
-            if (t_allowed > 0 || outer.State != System.Data.ConnectionState.Open || !string.Equals(outer.DataSource, sqlite.DataSource, StringComparison.Ordinal)) continue;
-            var state = TxnState(outer);
+            if (t_allowed > 0 || outer.State != System.Data.ConnectionState.Open) continue;
+            int state;
+            try
+            {
+                if (!string.Equals(outer.DataSource, sqlite.DataSource, StringComparison.Ordinal)) continue;
+                state = TxnState(outer);
+            }
+            catch (ObjectDisposedException)
+            {
+                // the connection's handle was disposed under it (a pool cleared while a database file was replaced, as a state move does): it holds no lock and is no longer open
+                lock (open) open.RemoveAll(x => ReferenceEquals(x.Connection, outer));
+                continue;
+            }
             if (state == 0) continue;
             var message = $"A state connection was opened on '{sqlite.DataSource}' while an earlier connection of this thread holds a {(state == 2 ? "write" : "read")} lock on it (an open reader or transaction). On SQLite that deadlocks with a writer waiting to commit until the busy timeout (docs/ci-lessons.md, FindPayload). "
                 + $"Materialize and close the reader (or commit) before calling another store.{Environment.NewLine}--- opened now at:{Environment.NewLine}{Trace(new StackTrace(1, true))}{Environment.NewLine}--- the earlier connection was opened at:{Environment.NewLine}{Trace(opened)}";
