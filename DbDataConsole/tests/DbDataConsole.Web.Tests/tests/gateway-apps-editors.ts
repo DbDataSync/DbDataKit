@@ -145,7 +145,7 @@ export async function publishStory(screen: Page) {
   await expect(screen.getByTestId('version-row-1')).toContainText('first build, from the screen')
   run(['apps', 'instance-save', '--name', 'views', '--app', 'territory-views'])
   await expect.poll(() => statusOf(`${appsUrl}/apps/views/`), { timeout: 20_000 }).not.toBe(404)
-  await expect(screen.getByTestId('instance-row-views').getByTestId('instance-runs')).toHaveText('follows the app: version 1')
+  await expect(screen.getByTestId('instance-row-views').getByTestId('instance-runs')).toHaveText('follows the app: version 1', { timeout: 20_000 })   // made at the command line: the screen reads the instances every ten seconds
 
   // a change to the folder is the next version, and the instance that follows moves
   const changed = writeFolder('territory-views', {})
@@ -188,7 +188,7 @@ export async function publishStory(screen: Page) {
   await expect(screen.locator('[data-testid^="approval-row-"]').filter({ hasText: 'vault' }).getByTestId('approval-for')).toHaveText('for connect https://api.example.com')
   run(['apps', 'instance-save', '--name', 'safe', '--app', 'vault'])
   await expect.poll(() => statusOf(`${appsUrl}/apps/safe/`), { timeout: 20_000 }).not.toBe(404)
-  await expect(screen.getByTestId('instance-row-safe').getByTestId('instance-trust')).toContainText('trusted, approved')
+  await expect(screen.getByTestId('instance-row-safe').getByTestId('instance-trust')).toContainText('trusted, approved', { timeout: 20_000 })   // made at the command line, as above
 }
 
 /**
