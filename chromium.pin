@@ -1,0 +1,22 @@
+# The Chromium every PDF export uses (plan 32, DBR15a): a build of Chrome for Testing, https://googlechromelabs.github.io/chrome-for-testing/ (Google's own
+# builds for automation, kept downloadable by version, which a browser's auto-updating stable channel is not).
+# Read by scripts/fetch-chromium.sh and scripts/fetch-chromium.ps1 (KEY=value lines, nothing else is evaluated). Each archive is checked against the SHA-256
+# recorded here, and so is the executable inside it; the whole archive is installed under .chromium/<rid>/ (the browser needs its sibling files).
+# The hashes were computed from the downloaded files (the download layout is BASE/<platform>/<archive>; the bucket's own md5 matched the download). Chrome for Testing
+# publishes no SHA-256, so this pin is what is trusted. To move to a new version: set VERSION and BASE, then for each platform the archive's SHA-256 and the
+# executable's, run scripts/fetch-chromium.sh all, and regenerate the exporter's goldens in the same change (a break moving on a bump is the review's job).
+# VERSION is the Chrome version Puppeteer 25.16.0 (2026-10-22) pins as its stable Chrome; both platforms' archives exist for it.
+VERSION=156.0.8078.47
+BASE=https://storage.googleapis.com/chrome-for-testing-public/156.0.8078.47
+
+# rid:  the .NET runtime identifier the browser is installed under (.chromium/<rid>/)
+# ARCHIVE_: the path under BASE.  BIN_: the executable's path inside the archive (so .chromium/<rid>/<BIN_>).
+ARCHIVE_linux_x64=linux64/chrome-linux64.zip
+ARCHIVE_SHA256_linux_x64=e6c94490f0b6b337225aeb2d2a5034858516b7017356980ba94f5176d8774a50
+BIN_linux_x64=chrome-linux64/chrome
+BIN_SHA256_linux_x64=230f0db8c5086182f46c59c867c0d461eb525d6552dfad226ea6b4d9ec249db2
+
+ARCHIVE_win_x64=win64/chrome-win64.zip
+ARCHIVE_SHA256_win_x64=a4e0d57245e167e98a9d465af1e3774d2b4ec9f04e483d19bcd97a6f63cf46dd
+BIN_win_x64=chrome-win64/chrome.exe
+BIN_SHA256_win_x64=5af44a250a2139d4e0864c07227bf0687a6d12655bab9682a5be784b41bc82e1

@@ -10,6 +10,7 @@ on:
       - '**/*.slnx'
       - '**/*.slnf'
       - 'duckdb.pin'
+      - 'chromium.pin'
       - '**/*.props'
       - '**/*.targets'
       - 'scripts/**'
@@ -24,6 +25,7 @@ on:
       - '**/*.slnx'
       - '**/*.slnf'
       - 'duckdb.pin'
+      - 'chromium.pin'
       - '**/*.props'
       - '**/*.targets'
       - 'scripts/**'
@@ -85,3 +87,27 @@ jobs:
       - name: PowerShell 7 (a second run finds every library current)
         shell: pwsh
         run: ./scripts/fetch-duckdb.ps1 all
+
+  # The Chromium pin (chromium.pin, plan 32 DBR15a): both platforms' archives and executables download from Chrome for Testing and match their recorded
+  # hashes, and the PowerShell script does the same on Windows, in Windows PowerShell 5.1 and in PowerShell 7.
+  chromium-pin-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - run: scripts/fetch-chromium.sh all
+      - run: scripts/fetch-chromium.sh all   # the second run finds every browser current
+      - name: The pinned browser starts and reports the pinned version
+        run: test "$(.chromium/linux-x64/chrome-linux64/chrome --version)" = "Google Chrome for Testing $(grep '^VERSION=' chromium.pin | cut -d= -f2)"
+
+  chromium-pin-windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Windows PowerShell 5.1
+        shell: powershell
+        run: ./scripts/fetch-chromium.ps1 all
+      - name: PowerShell 7 (a second run finds every browser current)
+        shell: pwsh
+        run: ./scripts/fetch-chromium.ps1 all
