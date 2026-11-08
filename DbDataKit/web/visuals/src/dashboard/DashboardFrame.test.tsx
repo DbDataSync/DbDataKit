@@ -59,7 +59,7 @@ describe('DashboardFrame, the reflow layout as markup', () => {
     const markup = frame({ width: 1366, height: 768 }, { results: { ...results, by_region: { type: 'error', code: 'denied', message: 'You may not read retail_sales.' } } })
     expect(markup.match(/role="alert"/g)!.length).toBe(1)
     expect(text(markup)).toContain('denied : You may not read retail_sales.')
-    expect(text(markup)).toContain('$3.30M')
+    expect(text(markup)).toContain('5.2M')
   })
 
   it('a widget with no result is loading, the document-only ones still draw, and the parameters reach text and controls', () => {

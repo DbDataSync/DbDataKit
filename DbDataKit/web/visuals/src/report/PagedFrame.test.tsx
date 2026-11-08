@@ -17,7 +17,13 @@ import { ReportView } from './ReportView'
 const bundle = sampleBundle()
 const report = validateText(bundle.documents['report/retail-sales-monthly']!).document as ViewsDoc
 const dashboard = validateText(bundle.documents['dashboard/retail-sales-today']!).document as ViewsDoc
-const results = bundle.results!['report/retail-sales-monthly'] as Record<string, RenderedWidget>
+const recorded = bundle.results!['report/retail-sales-monthly'] as Record<string, RenderedWidget>
+// the resolver's sample result has no total row (the document asks for none): the report's totals-as-last-row rule is tested on the same rows with one appended
+const products = recorded.products as Extract<RenderedWidget, { type: 'table' }>
+const results: Record<string, RenderedWidget> = {
+  ...recorded,
+  products: { ...products, rows: [...products.rows, { total: true, cells: [{ v: 'Total', text: 'Total' }, { v: '', text: '' }, { v: 99999, text: '99,999' }, { v: 999999, text: '999,999' }] }] },
+}
 const paged = report.layouts.find((l) => l.name === 'paged') as FlowLayoutDoc
 const box = { width: 1000, height: 700 }
 const ASOF = '2026-11-08T09:30:00Z'
@@ -40,14 +46,14 @@ describe('PagedFrame', () => {
     const table = q('[data-testid="vz-table-products"]')!
     expect(table.querySelectorAll('thead').length).toBe(1)
     expect(table.querySelectorAll('tfoot').length).toBe(0)
-    expect(table.querySelectorAll('tbody tr').length).toBe(61)
+    expect(table.querySelectorAll('tbody tr').length).toBe(25)
     expect(table.querySelectorAll('tr.vz-total').length).toBe(1)
     expect(table.querySelector('tbody tr:last-child')!.classList.contains('vz-total')).toBe(true)
     expect(q('[data-testid="vz-flow-header"]')!.textContent).toBe('Retail sales by month2026-11-08 09:30 UTC')
     expect(q('[data-testid="vz-flow-footer"]')!.textContent).toBe(`Page ${q('[data-testid="vz-flow"]')!.getAttribute('data-pages')} of ${q('[data-testid="vz-flow"]')!.getAttribute('data-pages')}`)
     expect(q('style')!.textContent).toContain('@page { size: A4 portrait')
-    // the guides are the estimate: the table runs over two more pages
-    expect([...dom.querySelectorAll('[data-testid="vz-flow-guide"]')].map((g) => g.getAttribute('data-page'))).toEqual(['2', '3'])
+    // the guides are the estimate: the table runs over one more page
+    expect([...dom.querySelectorAll('[data-testid="vz-flow-guide"]')].map((g) => g.getAttribute('data-page'))).toEqual(['2'])
     expect(q('[data-testid="vz-flow-note"]')!.textContent).toContain('the PDF is exact')
   })
 
@@ -97,7 +103,7 @@ describe('in a view', () => {
     expect(asked).toEqual([['intro', 'net', 'margin', 'units', 'by_month', 'products']])
     expect(q('vz-flow-header')!.textContent).toContain('Retail sales by month')
     expect(q('vz-flow-header')!.textContent).toContain('2026-')
-    expect(q('vz-table-products')!.querySelectorAll('tbody tr').length).toBe(61)
+    expect(q('vz-table-products')!.querySelectorAll('tbody tr').length).toBe(24)
     expect(q('vz-dashboard')).toBeNull()
   })
 

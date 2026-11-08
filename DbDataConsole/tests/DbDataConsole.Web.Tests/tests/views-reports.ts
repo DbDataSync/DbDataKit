@@ -45,15 +45,14 @@ export async function reportsStory(page: Page) {
   await expect(page.getByTestId('vz-loading')).toHaveCount(0)
   await expect(page.getByTestId('vz-widget-error')).toHaveCount(0)
 
-  // The table: one head, the 60 rows and the total once, as the last row (never a footer group).
+  // The table: one head and the 24 rows the resolver gave (the sample report asks for no total row; a total as the last row, once, is the unit test's of `PagedFrame`), never a footer group.
   const table = page.getByTestId('vz-table-products')
   await expect(table.locator('thead')).toHaveCount(1)
   await expect(table.locator('tfoot')).toHaveCount(0)
-  await expect(table.locator('tbody tr')).toHaveCount(61)
-  await expect(table.locator('tr.vz-total')).toHaveCount(1)
-  expect(await table.locator('tbody tr').last().evaluate((tr) => tr.classList.contains('vz-total'))).toBe(true)
+  await expect(table.locator('tbody tr')).toHaveCount(24)
+  await expect(table.locator('tr.vz-total')).toHaveCount(0)
 
-  // Page-break guides: the content is about 1,660 pixels and a page holds 971 (A4, 20 mm margins), so there are two pages and one guide, where the second starts: inside the table, between two of its rows, at most a page down.
+  // Page-break guides: the content is about 1,500 pixels and a page holds 971 (A4, 20 mm margins), so there are two pages and one guide, where the second starts: inside the table, between two of its rows, at most a page down.
   await expect(flow).toHaveAttribute('data-pages', '2')
   await expect(page.getByTestId('vz-flow-guide')).toHaveCount(1)
   const ys = await guides(page)
@@ -110,7 +109,7 @@ export async function reportsStory(page: Page) {
     const heads = pages.map((p) => (p.match(/Category\s+Product\s+Units\s+Net sales/g) ?? []).length)
     expect(heads).toEqual([1, 1]) // the table's head is on both pages: repeated on the second
     expect(heads.every((n) => n <= 1)).toBe(true)
-    expect(text.match(/\bTotal\b/g)?.length).toBe(1) // totals appear once
+    expect(text.match(/\bTotal\b/g)?.length ?? 0).toBe(0) // the sample report has no total row
     expect(pages[0]).toContain('Net sales by month') // the chart is not split off its title
   }
   await page.emulateMedia({ media: 'screen' })

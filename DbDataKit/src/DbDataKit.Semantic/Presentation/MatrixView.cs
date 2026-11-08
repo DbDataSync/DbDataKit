@@ -237,7 +237,7 @@ public static class MatrixView
     /// A view can't write its own format. <c>percent</c> reads a fraction as a percentage whatever the catalog says; a measure whose catalog style
     /// is percent reads that way under any preset.
     /// </summary>
-    internal static string Format(double v, string preset, JsonObject? catalog = null)
+    public static string Format(double v, string preset, JsonObject? catalog = null)
     {
         var inv = CultureInfo.InvariantCulture;
         var style = catalog?["style"]?.GetValue<string>() ?? "number";

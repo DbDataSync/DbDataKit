@@ -2,18 +2,11 @@
   "id": "by_region",
   "type": "chart",
   "vega_lite": {
-    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
     "mark": "bar",
     "encoding": {
       "x": {
         "field": "customers_region",
-        "type": "nominal",
-        "sort": [
-          "West",
-          "Central",
-          "East",
-          "South"
-        ]
+        "type": "nominal"
       },
       "y": {
         "field": "sales_net_amount",
@@ -24,87 +17,88 @@
         "type": "nominal"
       }
     },
+    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
     "data": {
       "values": [
         {
-          "customers_region": "West",
-          "products_category": "Apparel",
-          "sales_net_amount": 412000
-        },
-        {
-          "customers_region": "West",
-          "products_category": "Footwear",
-          "sales_net_amount": 288000
-        },
-        {
-          "customers_region": "West",
-          "products_category": "Outdoor",
-          "sales_net_amount": 251000
-        },
-        {
-          "customers_region": "West",
-          "products_category": "Accessories",
-          "sales_net_amount": 96000
-        },
-        {
           "customers_region": "Central",
           "products_category": "Apparel",
-          "sales_net_amount": 301000
-        },
-        {
-          "customers_region": "Central",
-          "products_category": "Footwear",
-          "sales_net_amount": 214000
-        },
-        {
-          "customers_region": "Central",
-          "products_category": "Outdoor",
-          "sales_net_amount": 187000
-        },
-        {
-          "customers_region": "Central",
-          "products_category": "Accessories",
-          "sales_net_amount": 71000
-        },
-        {
-          "customers_region": "East",
-          "products_category": "Apparel",
-          "sales_net_amount": 355000
-        },
-        {
-          "customers_region": "East",
-          "products_category": "Footwear",
-          "sales_net_amount": 251000
-        },
-        {
-          "customers_region": "East",
-          "products_category": "Outdoor",
-          "sales_net_amount": 176000
-        },
-        {
-          "customers_region": "East",
-          "products_category": "Accessories",
-          "sales_net_amount": 88000
+          "sales_net_amount": 471184
         },
         {
           "customers_region": "South",
           "products_category": "Apparel",
-          "sales_net_amount": 243000
+          "sales_net_amount": 469445.1
         },
         {
-          "customers_region": "South",
-          "products_category": "Footwear",
-          "sales_net_amount": 172000
+          "customers_region": "East",
+          "products_category": "Apparel",
+          "sales_net_amount": 465576.9
+        },
+        {
+          "customers_region": "West",
+          "products_category": "Apparel",
+          "sales_net_amount": 465271.6
+        },
+        {
+          "customers_region": "Central",
+          "products_category": "Outdoor",
+          "sales_net_amount": 426398
+        },
+        {
+          "customers_region": "West",
+          "products_category": "Outdoor",
+          "sales_net_amount": 424813.2
+        },
+        {
+          "customers_region": "East",
+          "products_category": "Outdoor",
+          "sales_net_amount": 424305.3
         },
         {
           "customers_region": "South",
           "products_category": "Outdoor",
-          "sales_net_amount": 139000
+          "sales_net_amount": 419657.7
+        },
+        {
+          "customers_region": "West",
+          "products_category": "Footwear",
+          "sales_net_amount": 312128.7
+        },
+        {
+          "customers_region": "East",
+          "products_category": "Footwear",
+          "sales_net_amount": 310563.9
+        },
+        {
+          "customers_region": "South",
+          "products_category": "Footwear",
+          "sales_net_amount": 309722.8
+        },
+        {
+          "customers_region": "Central",
+          "products_category": "Footwear",
+          "sales_net_amount": 305221
         },
         {
           "customers_region": "South",
           "products_category": "Accessories",
-          "sales_net_amount": 57000
+          "sales_net_amount": 110671.4
+        },
+        {
+          "customers_region": "West",
+          "products_category": "Accessories",
+          "sales_net_amount": 110200.04
+        },
+        {
+          "customers_region": "Central",
+          "products_category": "Accessories",
+          "sales_net_amount": 109838.4
+        },
+        {
+          "customers_region": "East",
+          "products_category": "Accessories",
+          "sales_net_amount": 109135.02
         }
       ]
     }

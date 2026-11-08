@@ -71,7 +71,7 @@ describe('DashboardView', () => {
     expect(q('vz-dashboard')!.getAttribute('data-mode')).toBe('grid')
     expect(q('vz-dashboard')!.style.width).toBe('1366px')
     expect(calls).toEqual([{ layout: 'desk', widgets: ['regions', 'net', 'margin', 'note', 'by_region', 'top_products'], parameters: { region: [] } }])
-    expect(q('vz-metric')!.textContent).toContain('$3.30M')
+    expect(q('vz-metric')!.textContent).toContain('5.2M')
     expect(q('vz-table-top_products')).not.toBeNull()
     expect(host.querySelectorAll('[role="status"]').length).toBe(0)
     expect(host.querySelectorAll('[role="alert"]').length).toBe(0)
@@ -115,7 +115,7 @@ describe('DashboardView', () => {
     expect(layoutNow()).toBe('desk')
     expect(calls[1]).toEqual({ layout: 'desk', widgets: ['note'], parameters: { region: [] } })
     expect(q('vz-text')!.textContent).toContain('Showing')
-    expect(q('vz-metric')!.textContent).toContain('$3.30M')
+    expect(q('vz-metric')!.textContent).toContain('5.2M')
   })
 
   it('the wall canvas is chosen for a very wide window and scaled to it; across the selector the parameters and the results are kept', async () => {
@@ -126,7 +126,7 @@ describe('DashboardView', () => {
     expect(q('vz-dashboard')!.getAttribute('data-mode')).toBe('canvas')
     expect(q('vz-dashboard')!.getAttribute('data-scale')).toBe('1.3333')
     expect(q('vz-canvas')!.style.width).toBe('1920px')
-    expect(q('vz-metric')!.textContent).toContain('$3.30M')
+    expect(q('vz-metric')!.textContent).toContain('5.2M')
     await resize(1280, 720)
     expect(layoutNow()).toBe('desk')
     await resize(2000, 1000)
@@ -202,7 +202,7 @@ describe('DashboardView', () => {
     const alerts = [...host.querySelectorAll('[role="alert"]')]
     expect(alerts.length).toBe(1)
     expect(alerts[0]!.textContent).toContain('no_recorded_result')
-    expect(q('vz-metric')!.textContent).toContain('$3.30M')
+    expect(q('vz-metric')!.textContent).toContain('5.2M')
   })
 
   it('a failure of the call itself is shown once, for the page, and the tiles wait', async () => {

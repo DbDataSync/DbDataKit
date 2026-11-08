@@ -3,7 +3,8 @@
   "columns": [
     {
       "field": "products.product",
-      "label": "Product"
+      "label": "Product",
+      "align": "left"
     },
     {
       "field": "sales.units",
@@ -19,8 +20,8 @@
           "text": "Trail Jacket"
         },
         {
-          "v": 2400,
-          "text": "2,400"
+          "v": 4870,
+          "text": "4,870"
         }
       ]
     },
@@ -31,8 +32,8 @@
           "text": "Rain Shell"
         },
         {
-          "v": 2316,
-          "text": "2,316"
+          "v": 4660,
+          "text": "4,660"
         }
       ]
     },
@@ -43,8 +44,8 @@
           "text": "Fleece Pullover"
         },
         {
-          "v": 2230,
-          "text": "2,230"
+          "v": 4500,
+          "text": "4,500"
         }
       ]
     },
@@ -55,8 +56,8 @@
           "text": "Hiking Boot"
         },
         {
-          "v": 2142,
-          "text": "2,142"
+          "v": 4290,
+          "text": "4,290"
         }
       ]
     },
@@ -67,8 +68,8 @@
           "text": "Trail Runner"
         },
         {
-          "v": 2052,
-          "text": "2,052"
+          "v": 4080,
+          "text": "4,080"
         }
       ]
     },
@@ -79,8 +80,8 @@
           "text": "Camp Sandal"
         },
         {
-          "v": 1960,
-          "text": "1,960"
+          "v": 3870,
+          "text": "3,870"
         }
       ]
     },
@@ -91,8 +92,8 @@
           "text": "Daypack 22L"
         },
         {
-          "v": 1866,
-          "text": "1,866"
+          "v": 3660,
+          "text": "3,660"
         }
       ]
     },
@@ -103,8 +104,8 @@
           "text": "Duffel 60L"
         },
         {
-          "v": 1807,
-          "text": "1,807"
+          "v": 3500,
+          "text": "3,500"
         }
       ]
     },
@@ -115,8 +116,8 @@
           "text": "Water Bottle"
         },
         {
-          "v": 1709,
-          "text": "1,709"
+          "v": 3290,
+          "text": "3,290"
         }
       ]
     },
@@ -127,8 +128,8 @@
           "text": "Wool Sock 3-pack"
         },
         {
-          "v": 1646,
-          "text": "1,646"
+          "v": 3080,
+          "text": "3,080"
         }
       ]
     },
@@ -139,8 +140,8 @@
           "text": "Beanie"
         },
         {
-          "v": 1544,
-          "text": "1,544"
+          "v": 2870,
+          "text": "2,870"
         }
       ]
     },
@@ -151,8 +152,8 @@
           "text": "Gloves"
         },
         {
-          "v": 1477,
-          "text": "1,477"
+          "v": 2660,
+          "text": "2,660"
         }
       ]
     },
@@ -163,8 +164,8 @@
           "text": "Base Layer Top"
         },
         {
-          "v": 1371,
-          "text": "1,371"
+          "v": 2500,
+          "text": "2,500"
         }
       ]
     },
@@ -175,8 +176,8 @@
           "text": "Base Layer Bottom"
         },
         {
-          "v": 1300,
-          "text": "1,300"
+          "v": 2290,
+          "text": "2,290"
         }
       ]
     },
@@ -187,8 +188,8 @@
           "text": "Tent 2P"
         },
         {
-          "v": 1227,
-          "text": "1,227"
+          "v": 2080,
+          "text": "2,080"
         }
       ]
     },
@@ -199,8 +200,8 @@
           "text": "Sleeping Bag"
         },
         {
-          "v": 1152,
-          "text": "1,152"
+          "v": 1870,
+          "text": "1,870"
         }
       ]
     },
@@ -211,8 +212,8 @@
           "text": "Headlamp"
         },
         {
-          "v": 1038,
-          "text": "1,038"
+          "v": 1660,
+          "text": "1,660"
         }
       ]
     },
@@ -223,8 +224,8 @@
           "text": "Trekking Poles"
         },
         {
-          "v": 959,
-          "text": "959"
+          "v": 1500,
+          "text": "1,500"
         }
       ]
     },
@@ -235,8 +236,8 @@
           "text": "Sun Hat"
         },
         {
-          "v": 878,
-          "text": "878"
+          "v": 1290,
+          "text": "1,290"
         }
       ]
     },
@@ -247,8 +248,8 @@
           "text": "Rain Pants"
         },
         {
-          "v": 795,
-          "text": "795"
+          "v": 1080,
+          "text": "1,080"
         }
       ]
     },
@@ -259,20 +260,8 @@
           "text": "Windbreaker"
         },
         {
-          "v": 710,
-          "text": "710"
-        }
-      ]
-    },
-    {
-      "cells": [
-        {
-          "v": "Gaiters",
-          "text": "Gaiters"
-        },
-        {
-          "v": 623,
-          "text": "623"
+          "v": 870,
+          "text": "870"
         }
       ]
     },
@@ -283,20 +272,32 @@
           "text": "Camp Stove"
         },
         {
-          "v": 571,
-          "text": "571"
+          "v": 660,
+          "text": "660"
         }
       ]
     },
     {
       "cells": [
         {
-          "v": "Cooler Bag",
-          "text": "Cooler Bag"
+          "v": "Insulated Jacket",
+          "text": "Insulated Jacket"
         },
         {
-          "v": 480,
-          "text": "480"
+          "v": 500,
+          "text": "500"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Trail Shorts",
+          "text": "Trail Shorts"
+        },
+        {
+          "v": 290,
+          "text": "290"
         }
       ]
     }

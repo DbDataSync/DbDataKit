@@ -86,7 +86,9 @@ describe('TableWidget', () => {
   const widget = dashboard.widgets.top_products as TableDoc
   const result = dash.top_products as RenderedTable
   const longWidget = report.widgets.products as TableDoc
-  const long = rep.products as RenderedTable
+  // the resolver gives a total row when the query asks for totals; the sample's table does not, so the renderer's total row is exercised with one a server would add
+  const recorded = rep.products as RenderedTable
+  const long: RenderedTable = { ...recorded, rows: [...recorded.rows, { total: true, cells: [{ text: 'Total' }, { text: '' }, { v: 61920, text: '61,920' }, { v: 5244133.06, text: '5,244,133.06' }] }] }
 
   it('shows the rows that fit its box, says "n of m rows" and offers the whole', () => {
     const markup = html(<TableWidget id="top_products" widget={widget} result={result} box={{ width: 500, height: 30 + 28 * 8 + 36 }} onMaximize={() => {}} />)
@@ -106,7 +108,7 @@ describe('TableWidget', () => {
 
   it('keeps the total row, which is a row of the result, when it cuts the rest', () => {
     const markup = html(<TableWidget id="p" widget={longWidget} result={long} box={{ width: 700, height: 30 + 28 * 6 + 36 }} />)
-    expect(text(markup)).toContain('5 of 60 rows')
+    expect(text(markup)).toContain('5 of 24 rows')
     expect(markup).toMatch(/<tr class="vz-total"><td[^>]*>Total<\/td>/)
     expect(markup.match(/<tr[ >]/g)!.length - 1).toBe(6)
   })
@@ -121,7 +123,7 @@ describe('TableWidget', () => {
     expect(markup).toContain('<caption class="vz-sr">Best-selling products</caption>')
     expect(markup).toContain('<th scope="col">Product</th>')
     expect(markup).toContain('<th scope="col" class="vz-right">Units</th>')
-    expect(markup).toContain('<td class="vz-right">2,400</td>')
+    expect(markup).toContain('<td class="vz-right">4,870</td>')
   })
 
   it('snapshot', async () => {
@@ -387,7 +389,7 @@ describe('the three states', () => {
     const failed = html(<WidgetView id="by_region" widget={w.by_region!} result={{ type: 'error', code: 'unknown_field', message: '`customers.regoin` is not in the model.', suggestions: ['customers.region'] }} />)
     expect(failed).toContain('role="alert"')
     expect(text(failed)).toContain('unknown_field : `customers.regoin` is not in the model. Did you mean customers.region?')
-    expect(html(<WidgetView id="net" widget={w.net!} result={dash.net} />)).toContain('$3.30M')
+    expect(html(<WidgetView id="net" widget={w.net!} result={dash.net} />)).toContain('5.2M')
   })
 
   it('a result of another type than the widget is refused in words', () => {

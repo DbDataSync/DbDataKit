@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>Dashboards and reports (plan 32): the shared core of the dashboard/1 and report/1 documents (widgets, parameters, layouts, selectors), their strict loaders with file and line diagnostics, and the pure selection of a layout.</Description>
+    <Description>Dashboards and reports (plan 32): the shared core of the dashboard/1 and report/1 documents (widgets, parameters, layouts, selectors), their strict loaders with file and line diagnostics, the pure selection of a layout, and the resolution of a layout into rendered widgets as the viewer.</Description>
     <IsPackable>true</IsPackable>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
@@ -13,5 +13,8 @@
     <EmbeddedResource Include="..\..\web\visuals\schemas\view.schema.json" LogicalName="DbDataKit.Views.schemas.view.schema.json" />
     <EmbeddedResource Include="..\..\web\visuals\schemas\vega-lite-subset.schema.json" LogicalName="DbDataKit.Views.schemas.vega-lite-subset.schema.json" />
     <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
+    <!-- the resolution of a layout (DBR04): requests run through the serving core's IServingQueries as the viewer, and a matrix or chart becomes data in the engine's ViewRenderer -->
+    <ProjectReference Include="..\DbDataKit.Serving.Abstractions\DbDataKit.Serving.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Semantic\DbDataKit.Semantic.csproj" />
   </ItemGroup>
 </Project>
