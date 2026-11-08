@@ -60,10 +60,13 @@ test('a Build project is published to a paired runner from the Publish tab, and 
   await expect(button).toBeEnabled()
   await expect(page.getByTestId('build-publish-runner-why')).toHaveCount(0)
 
-  // ---- the runner refuses a package whose connection slot has no binding in the channel, in its own words (found against a real runner: a channel's bindings are its own)
+  // ---- the runner refuses a package whose connection slot has no binding in the channel, in its own words (found against a real runner: a channel's bindings are its own).
+  // Another package name, because a publish records the Build server as the scheduler of its tasks before it uploads, even when it is then refused: `orders` must be untouched for the publish below.
+  await page.getByTestId('build-publish-runner-package').fill('orders-unbound')
   await button.click()
-  await expect(page.getByTestId('build-publish-runner-failed')).toContainText("needs the slot 'sqlserver' bound in channel 'dev'", { timeout: 60_000 })
+  await expect(page.getByTestId('build-publish-runner-failed')).toContainText("integration 'orders-unbound' version 1 needs the slot 'sqlserver' bound in channel 'dev'", { timeout: 60_000 })
   await expect(page.getByTestId('build-publish-runner-done')).toHaveCount(0)
+  await page.getByTestId('build-publish-runner-package').fill(publishBuild.project)
 
   // ---- bind the slot and publish: staged, with the task of the plan, its schedule and its connection slot
   await page.getByTestId('build-publish-runner-bind').fill('sqlserver=erp')
@@ -75,7 +78,7 @@ test('a Build project is published to a paired runner from the Publish tab, and 
   await expect(task).toHaveCount(1)
   await expect(task).toContainText('15 * * * *')
   await expect(task).toContainText('sqlserver')
-  // the plan stays with the Build server's scheduler until it is cut over, and the runner has been told so
+  // the plan stays with the Build server's scheduler until it is cut over, and the runner has been told so by this first publish of the package
   await expect(page.getByTestId('build-publish-runner-old')).toContainText('Still scheduled by this server until cut over')
 
   // ---- publishing the same project again changes nothing and sends no file
@@ -86,6 +89,6 @@ test('a Build project is published to a paired runner from the Publish tab, and 
   // ---- the Runner screens list the package, staged on the channel the Build screen named
   const runnerId = await idOf(request, runnerName)
   await page.goto(`/servers/${runnerId}/packages`)
-  await page.getByTestId('runner-package-link').first().click()
+  await page.getByTestId('runner-package-link').filter({ hasText: publishBuild.project }).first().click()
   await expect(page.getByTestId('runner-channel-heads')).toContainText('v1 staged', { timeout: 30_000 })
 })
