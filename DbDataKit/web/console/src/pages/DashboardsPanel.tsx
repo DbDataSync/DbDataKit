@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { DashboardView, type ClientDiagnostic, type ViewKind, type ViewsDoc } from '@dbdatakit/visuals'
 import { describeValue, readLayout, readParameters, writeLayout, writeParameters } from '../viewsUrl'
 import { resolveLog, viewsClient } from '../viewsSource'
+import { DashboardEditor } from './DashboardEditor'
 
 const AREA: Record<ViewKind, { path: string; plural: string; singular: string }> = {
   dashboard: { path: '/views/dashboards', plural: 'Dashboards', singular: 'dashboard' },
@@ -66,6 +67,7 @@ function Listing({ kind }: { kind: ViewKind }) {
               })
             }}
           />
+          <Link className="btn btn-primary" to={`${area.path}?new=1`} data-testid="views-new">New {area.singular}</Link>
           <span className="hint">A {area.singular} file (YAML or JSON). Its results come from the recorded fixtures; nothing is sent anywhere.</span>
         </div>
         {problems && (
@@ -112,6 +114,7 @@ function Board({ kind, name, document }: { kind: ViewKind; name: string; documen
       <div className="row" style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap' }} data-testid="views-toolbar">
         <Link to={AREA[kind].path} data-testid="views-back">All {AREA[kind].plural.toLowerCase()}</Link>
         <strong data-testid="views-title">{document.title}</strong>
+        <Link to="?edit=1" className="btn btn-sm" data-testid="views-edit">Edit</Link>
         <label htmlFor="views-layout-select">Layout</label>
         <select id="views-layout-select" data-testid="views-layout-select" value={layout ?? ''} onChange={(e) => setSearch(writeLayout(search, e.target.value === '' ? null : e.target.value), { replace: true })}>
           <option value="">Automatic (by window size)</option>
@@ -181,5 +184,8 @@ function Opened({ kind, name }: { kind: ViewKind; name: string }) {
  */
 export function DashboardsPanel({ kind }: { kind: ViewKind }) {
   const { name } = useParams()
+  const [search] = useSearchParams()
+  if (!name && search.get('new')) return <DashboardEditor key="new" kind={kind} name={null} />
+  if (name && search.get('edit')) return <DashboardEditor key={name} kind={kind} name={decodeURIComponent(name)} />
   return name ? <Opened kind={kind} name={decodeURIComponent(name)} /> : <Listing kind={kind} />
 }

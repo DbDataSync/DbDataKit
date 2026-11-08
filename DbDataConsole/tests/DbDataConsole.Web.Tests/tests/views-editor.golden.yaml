@@ -1,0 +1,36 @@
+schemaVersion: 1
+kind: dashboard
+title: Editor board
+widgets:
+  metric:
+    type: metric
+    label: New metric
+    encodings: {value: sales.net_amount}
+    query: {model: retail_sales}
+  chart:
+    type: chart
+    title: New chart
+    mark: bar
+    encodings: {x: customers.region, y: sales.net_amount}
+    query: {model: retail_sales}
+  table:
+    type: table
+    title: New table
+    encodings:
+      columns:
+        - {field: products.product, label: Product}
+        - {field: sales.units, label: Units, align: right}
+    query: {model: retail_sales}
+  text:
+    type: text
+    text: Write a note.
+layouts:
+  - name: desk
+    type: reflow
+    default: true
+    grid: {columns: 12}
+    tiles:
+      - {widget: metric, x: 0, y: 0, w: 4, h: 4}
+      - {widget: chart, x: 4, y: 0, w: 8, h: 4}
+      - {widget: table, x: 0, y: 4, w: 12, h: 2}
+      - {widget: text, x: 0, y: 6, w: 12, h: 1}

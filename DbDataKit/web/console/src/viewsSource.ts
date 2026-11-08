@@ -1,4 +1,4 @@
-import { fixtureClient, type FixtureBundle, type ViewKind, type ViewsClient } from '@dbdatakit/visuals'
+import { fixtureClient, storedDocuments, type FixtureBundle, type ViewKind, type ViewsClient } from '@dbdatakit/visuals'
 
 /**
  * The console's source of dashboards and reports until a serving module answers (plan 32 DBR23, M1): the fixture source. The documents are the retail template's sample bundle and the recorded results of each
@@ -40,6 +40,10 @@ let client: ViewsClient | null = null
 
 /** The one client of the page: created on first use, so a page that is never opened reads nothing. */
 export function viewsClient(): ViewsClient {
-  client ??= fixtureClient(bundleFrom(documents, recorded), { onResolve: (c) => resolveLog.record({ kind: c.kind, name: c.name, layout: c.layout, widgets: c.widgets }) })
+  const bundle = bundleFrom(documents, recorded)
+  // what the editor saves stays in the browser's storage (this viewer's convenience, until a real store answers): a reload opens the saved file, and a second tab sees it
+  let storage: Storage | null = null
+  try { storage = window.localStorage } catch { /* blocked: this visit's memory */ }
+  client ??= fixtureClient(bundle, { documents: storedDocuments(bundle.documents, storage), onResolve: (c) => resolveLog.record({ kind: c.kind, name: c.name, layout: c.layout, widgets: c.widgets }) })
   return client
 }

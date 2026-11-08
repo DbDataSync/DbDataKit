@@ -1,0 +1,31 @@
+import type { LayoutDoc, TileDoc, ViewsDoc, WidgetDoc, WidgetType } from '@dbdatakit/visuals'
+
+/** The model the document's widgets already query (the first), or the retail sample's: what a new widget asks of until the field wells (DBR25) fill the catalog. */
+export function modelOf(doc: ViewsDoc): string {
+  for (const w of Object.values(doc.widgets ?? {})) {
+    const model = (w as { query?: { model?: unknown } }).query?.model
+    if (typeof model === 'string') return model
+  }
+  return 'retail_sales'
+}
+
+/** A new widget of a type, valid and plain: a starting point to edit (the palette of DBR24; the wells of DBR25 choose the fields from the model's catalog). */
+export function newWidget(type: WidgetType, doc: ViewsDoc): WidgetDoc {
+  const query = { model: modelOf(doc) }
+  switch (type) {
+    case 'metric': return { type, label: 'New metric', encodings: { value: 'sales.net_amount' }, query }
+    case 'chart': return { type, title: 'New chart', mark: 'bar', encodings: { x: 'customers.region', y: 'sales.net_amount' }, query }
+    case 'table': return { type, title: 'New table', encodings: { columns: [{ field: 'products.product', label: 'Product' }, { field: 'sales.units', label: 'Units', align: 'right' }] }, query }
+    case 'text': return { type, text: 'Write a note.' }
+    default: throw new Error(`The palette has no ${type} widget yet.`)
+  }
+}
+
+/** Where a newly placed widget goes: under everything in a reflow grid (full width up to six columns, two rows), below the lowest tile of a canvas. */
+export function nextTile(layout: LayoutDoc, widget: WidgetDoc, id: string): TileDoc {
+  const tiles = (layout as { tiles?: TileDoc[] }).tiles ?? []
+  const bottom = tiles.reduce((m, t) => Math.max(m, t.y + t.h), 0)
+  if (layout.type === 'canvas') return { widget: id, x: 10, y: bottom + 10, w: Math.min(300, layout.canvas.width - 20), h: widget.type === 'text' ? 80 : 200 }
+  if (layout.type === 'reflow') return { widget: id, x: 0, y: bottom, w: Math.min(6, layout.grid.columns), h: widget.type === 'text' ? 1 : 2 }
+  throw new Error('A flow layout places widgets in blocks, not tiles.')
+}
