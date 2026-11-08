@@ -1,10 +1,10 @@
 import { isValidElement, type ReactElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { InstanceEditorView, instanceSaveBlock, PublishView, type InstanceEditorProps, type PublishViewProps } from './AppEditors'
-import { emptyInstanceForm, formFromRow, prepareManifest } from '../appEditors'
-import { ApprovalsView, AppsView, AboutView, InstancesView, NavigationView, VersionsView, type ApprovalsViewProps, type InstancesViewProps, type VersionsViewProps } from './AppsPage'
-import type { AppAbout, AppApprovalRow, AppCheck, AppDetail, AppInstanceRow, AppsCaller, AppSummary, AppVersionRow } from '../types'
+import { InstanceEditorView, instanceSaveBlock, NavigationEditorView, navSaveBlock, PublishView, type InstanceEditorProps, type NavigationEditorProps, type PublishViewProps } from './AppEditors'
+import { emptyInstanceForm, emptyNavForm, formFromRow, navFormFromSet, prepareManifest } from '../appEditors'
+import { ApprovalsView, AppsView, AboutView, InstancesView, NavigationView, VersionsView, type ApprovalsViewProps, type InstancesViewProps, type NavigationViewProps, type VersionsViewProps } from './AppsPage'
+import type { AppAbout, AppApprovalRow, AppCheck, NavigationSetRow, AppDetail, AppInstanceRow, AppsCaller, AppSummary, AppVersionRow } from '../types'
 
 const viewer: AppsCaller = { can_publish: false, can_approve: false, you: 'Ada' }
 const admin: AppsCaller = { can_publish: true, can_approve: false, you: 'Ada' }
@@ -179,11 +179,95 @@ describe('the approvals', () => {
   })
 })
 
+const mainSet: NavigationSetRow = { name: 'main', title: 'Main menu', entries: [{ instance: 'acme', label: 'Acme', icon: null }, { instance: 'pinned', label: null, icon: null }] }
+
+function navigationProps(over: Partial<NavigationViewProps> = {}): NavigationViewProps {
+  return { sets: [mainSet], caller: admin, confirming: null, busy: false, onNew: () => {}, onEdit: () => {}, onAskRemove: () => {}, onRemove: () => {}, ...over }
+}
+
 describe('the navigation sets', () => {
   it('lists each set with its members in order, and the empty state', () => {
-    const text = html(NavigationView({ sets: [{ name: 'main', title: 'Main menu', entries: [{ instance: 'acme', label: 'Acme', icon: null }, { instance: 'pinned', label: null, icon: null }] }] }))
+    const text = html(NavigationView(navigationProps()))
     expect(text).toContain('acme (Acme) → pinned')
-    expect(html(NavigationView({ sets: [] }))).toContain('data-testid="navigation-empty"')
+    expect(html(NavigationView(navigationProps({ sets: [] })))).toContain('data-testid="navigation-empty"')
+  })
+
+  it('has New, Edit and Remove (after a second click), off with the reason for a person without the role', () => {
+    const onNew = vi.fn(); const onEdit = vi.fn(); const onAskRemove = vi.fn(); const onRemove = vi.fn()
+    expect(find(NavigationView(navigationProps()), 'nav-new')!.props.disabled).toBe(false)
+    ;(find(NavigationView(navigationProps({ onNew })), 'nav-new')!.props.onClick as () => void)()
+    ;(find(NavigationView(navigationProps({ onEdit })), 'nav-edit-main')!.props.onClick as () => void)()
+    ;(find(NavigationView(navigationProps({ onAskRemove })), 'nav-remove-main')!.props.onClick as () => void)()
+    ;(find(NavigationView(navigationProps({ confirming: 'main', onRemove })), 'nav-remove-confirm-main')!.props.onClick as () => void)()
+    expect(onNew).toHaveBeenCalled()
+    expect(onEdit).toHaveBeenCalledWith(mainSet)
+    expect(onAskRemove).toHaveBeenCalledWith('main')
+    expect(onRemove).toHaveBeenCalledWith('main')
+    const off = NavigationView(navigationProps({ caller: viewer }))
+    for (const id of ['nav-new', 'nav-edit-main', 'nav-remove-main']) expect(find(off, id)!.props.disabled).toBe(true)
+    expect(html(off)).toContain('data-testid="nav-new-why"')
+    expect(html(off)).toContain('needs the publisher or administrator role')
+  })
+})
+
+// ---- UE03: the navigation set editor ----
+
+const instanceNames = [{ name: 'acme', title: 'Acme notes' }, { name: 'pinned', title: null }, { name: 'sales', title: 'Sales' }]
+
+function navEditorProps(over: Partial<NavigationEditorProps> = {}): NavigationEditorProps {
+  return { form: navFormFromSet(mainSet), existing: ['main', 'other'], instances: instanceNames, caller: admin, busy: false, onChange: () => {}, onSave: () => {}, onCancel: () => {}, ...over }
+}
+
+describe('the navigation set editor', () => {
+  it('lists the members in order with their labels, and offers only the instances that are not listed yet', () => {
+    const view = NavigationEditorView(navEditorProps())
+    const text = html(view)
+    expect(text.indexOf('nav-editor-member-acme')).toBeLessThan(text.indexOf('nav-editor-member-pinned'))
+    expect(find(view, 'nav-editor-label-acme')!.props.value).toBe('Acme')
+    expect(text).toContain('data-mode="edit"')
+    const add = find(view, 'nav-editor-add')!
+    const options = (add.props.children as ReactElement<{ value: string }>[][]).flat().map((o) => o.props.value)
+    expect(options).toEqual(['', 'sales'])
+    expect(html(NavigationEditorView(navEditorProps({ form: { ...navFormFromSet(mainSet), entries: [{ instance: 'acme', label: '', icon: '' }, { instance: 'pinned', label: '', icon: '' }, { instance: 'sales', label: '', icon: '' }] } })))).toContain('Every instance is already listed')
+    expect(html(NavigationEditorView(navEditorProps({ instances: [] })))).toContain('No instance exists yet')
+  })
+
+  it('adds a member at the end, moves one up or down (an end cannot move further) and removes one', () => {
+    const onChange = vi.fn()
+    const view = NavigationEditorView(navEditorProps({ onChange }))
+    ;(find(view, 'nav-editor-add')!.props.onChange as (e: { target: { value: string } }) => void)({ target: { value: 'sales' } })
+    expect(onChange.mock.calls[0]![0].entries.map((e: { instance: string }) => e.instance)).toEqual(['acme', 'pinned', 'sales'])
+    ;(find(view, 'nav-editor-down-acme')!.props.onClick as () => void)()
+    expect(onChange.mock.calls[1]![0].entries.map((e: { instance: string }) => e.instance)).toEqual(['pinned', 'acme'])
+    ;(find(view, 'nav-editor-remove-acme')!.props.onClick as () => void)()
+    expect(onChange.mock.calls[2]![0].entries.map((e: { instance: string }) => e.instance)).toEqual(['pinned'])
+    expect(find(view, 'nav-editor-up-acme')!.props.disabled).toBe(true)
+    expect(find(view, 'nav-editor-down-pinned')!.props.disabled).toBe(true)
+    expect(find(view, 'nav-editor-up-pinned')!.props.disabled).toBe(false)
+  })
+
+  it('says why Save is off: no role, no name, a name that is taken, no title, no member', () => {
+    const why = (over: Partial<NavigationEditorProps>) => navSaveBlock({ ...navEditorProps(), ...over })
+    expect(why({ caller: viewer })).toContain('publisher or administrator role')
+    expect(why({ form: { ...emptyNavForm(), title: 'T', entries: navFormFromSet(mainSet).entries } })).toContain('Name the set')
+    expect(why({ form: { ...emptyNavForm(), name: 'other', title: 'T', entries: navFormFromSet(mainSet).entries } })).toContain('already a navigation set named other')
+    expect(why({ form: { ...navFormFromSet(mainSet), title: ' ' } })).toContain('Give the set a title')
+    expect(why({ form: { ...navFormFromSet(mainSet), entries: [] } })).toContain('at least one instance')
+    expect(why({})).toBeNull()
+    const off = NavigationEditorView(navEditorProps({ form: { ...navFormFromSet(mainSet), entries: [] } }))
+    expect(find(off, 'nav-editor-save')!.props.disabled).toBe(true)
+    expect(html(off)).toContain('data-testid="nav-editor-why"')
+  })
+
+  it('renames a set that exists by saving it under a new name, and says so; a new set may not take a name that is used', () => {
+    const renamed = { ...navFormFromSet(mainSet), name: 'crew' }
+    const view = NavigationEditorView(navEditorProps({ form: renamed }))
+    expect(html(view)).toContain('Saving makes the set under the name crew and stops serving main')
+    expect(html(view)).toContain('Save under the new name')
+    expect(navSaveBlock({ ...navEditorProps(), form: renamed })).toBeNull()
+    expect(navSaveBlock({ ...navEditorProps(), form: { ...renamed, name: 'other' } })).toContain('already a navigation set named other')   // a rename may not take another set's name
+    expect(html(NavigationEditorView(navEditorProps()))).not.toContain('data-testid="nav-editor-rename"')
+    expect(html(NavigationEditorView(navEditorProps({ form: { ...emptyNavForm(), name: 'x', title: 'X' } })))).toContain('data-mode="new"')
   })
 })
 

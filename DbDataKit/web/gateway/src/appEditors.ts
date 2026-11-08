@@ -1,5 +1,5 @@
 import { NEEDS_PUBLISHER, NEEDS_APPROVER } from './apps'
-import type { AppAbout, AppCheck, AppDetail, AppInstanceRow, AppsCaller } from './types'
+import type { AppAbout, AppCheck, AppDetail, AppInstanceRow, AppsCaller, NavigationSetRow } from './types'
 
 // The logic of the Apps screen's editors (plan 33, UE01 to UE03), apart from the screens so it can be tested: the instance form, the package a folder becomes, the navigation set's member list. Nothing here is a second
 // validator. The Gateway reads every name, setting, binding and manifest again and its refusal is what the screen shows; these functions only say why a button is off before a call that could not mean anything, and build
@@ -204,3 +204,70 @@ export function packageApproveBlock(caller: AppsCaller, check: AppCheck | null, 
   if (by.trim().toLowerCase() === caller.you.trim().toLowerCase()) return `${caller.you} is signed in here and would publish these files, so cannot approve them: the author and the approver are two people. Name another approver.`
   return null
 }
+
+// ---- UE03: a navigation set ----
+
+export interface NavEntryForm { instance: string; label: string; icon: string }
+
+/** What the navigation set form holds: the set's name (editable; changing the name of a set that exists renames it), its title and its members in the order the menu shows them. */
+export interface NavForm {
+  name: string
+  title: string
+  entries: NavEntryForm[]
+  /** The name the set had when it was opened, or null for a new set. */
+  original: string | null
+}
+
+/** The body of `PUT /api/v1/app-navigation/{name}`. */
+export interface NavigationRequest {
+  title: string
+  entries: { instance: string; label: string | null; icon: string | null }[]
+  rename_from?: string
+}
+
+export const emptyNavForm = (): NavForm => ({ name: '', title: '', entries: [], original: null })
+
+export const navFormFromSet = (set: NavigationSetRow): NavForm => ({
+  name: set.name,
+  title: set.title,
+  entries: set.entries.map((e) => ({ instance: e.instance, label: e.label ?? '', icon: e.icon ?? '' })),
+  original: set.name,
+})
+
+/** The members one position up (`-1`) or down (`+1`); an end of the list stays where it is. */
+export function moveEntry(entries: NavEntryForm[], index: number, delta: -1 | 1): NavEntryForm[] {
+  const to = index + delta
+  if (index < 0 || index >= entries.length || to < 0 || to >= entries.length) return entries
+  const next = [...entries]
+  next[index] = entries[to]!
+  next[to] = entries[index]!
+  return next
+}
+
+/** The instances that can still be added: those that exist and are not listed yet, by name. A member twice is not offered, and the store refuses it too. */
+export const availableMembers = (instances: string[], entries: NavEntryForm[]): string[] =>
+  instances.filter((i) => !entries.some((e) => e.instance === i)).sort((a, b) => a.localeCompare(b))
+
+/** Whether saving renames a set that exists (the old name stops being served in the same call). */
+export const isRename = (form: NavForm) => form.original !== null && form.original !== form.name.trim()
+
+/** Why the set cannot be saved yet, or null. Members, names and the rest are the Gateway's to read and refuse; this is only what makes the call mean nothing, and the one case the Gateway would answer by quietly replacing another set. */
+export function navFormProblem(form: NavForm, existing: string[]): string | null {
+  const name = form.name.trim()
+  if (name === '') return 'Name the set: lower-case letters, digits, - and _.'
+  if (existing.includes(name) && name !== form.original) return `There is already a navigation set named ${name}; choose another name, or change that one.`
+  if (form.title.trim() === '') return "Give the set a title: it is the menu's heading."
+  if (form.entries.length === 0) return 'List at least one instance: a menu with no member shows nothing.'
+  return null
+}
+
+export function navRequest(form: NavForm): NavigationRequest {
+  return {
+    title: form.title.trim(),
+    entries: form.entries.map((e) => ({ instance: e.instance, label: e.label.trim() === '' ? null : e.label.trim(), icon: e.icon.trim() === '' ? null : e.icon.trim() })),
+    ...(isRename(form) ? { rename_from: form.original! } : {}),
+  }
+}
+
+/** The members of a set as the list shows them: `acme (Acme) → pinned`. */
+export const entriesLabel = (set: Pick<NavigationSetRow, 'entries'>) => set.entries.map((e) => e.label ? `${e.instance} (${e.label})` : e.instance).join(' → ')

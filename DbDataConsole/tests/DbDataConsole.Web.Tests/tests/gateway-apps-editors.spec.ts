@@ -1,5 +1,5 @@
 import { test, type Page } from '@playwright/test'
-import { instanceStory, pairAndOpenApps, publishStory, startGateway, stopGateway } from './gateway-apps-editors'
+import { instanceStory, navigationStory, pairAndOpenApps, publishStory, startGateway, stopGateway } from './gateway-apps-editors'
 import { signInNewAdmin } from './people'
 
 // Plan 33, UE01 to UE03: the editors of the Gateway's Apps screen against a real Gateway (the fixture is `gateway-apps-editors.ts`: its own directory and ports 8520 to 8523), through the console's relay, the way
@@ -26,4 +26,8 @@ test('UE01: an instance is made in a form, served by the apps host, changed, and
 
 test('UE02: a version is published from a folder, published again with a change, and a trusted app is approved with one of its origins before it is published and served', async () => {
   await publishStory(screen)
+})
+
+test('UE03: a navigation set of two instances is made, renamed, refused by the store when a member is gone, changed and removed', async () => {
+  await navigationStory(screen)
 })

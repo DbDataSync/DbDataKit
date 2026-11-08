@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { bindingRows, egressChoices, instanceFormProblem, KNOWN_SETTINGS, packageApproveBlock, publishBlock, sizeLabel, type InstanceForm, type Prepared } from '../appEditors'
+import { availableMembers, bindingRows, egressChoices, instanceFormProblem, isRename, KNOWN_SETTINGS, moveEntry, navFormProblem, packageApproveBlock, publishBlock, sizeLabel, type InstanceForm, type NavForm, type Prepared } from '../appEditors'
 import { NEEDS_PUBLISHER, shortHash } from '../apps'
 import type { AppCheck, AppsCaller, AppSummary } from '../types'
 
@@ -244,6 +244,84 @@ export function PublishView(p: PublishViewProps) {
             <Why reason={approveReason} testId="publish-approve-why" />
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ---- UE03: the navigation set editor ----
+
+export interface NavigationEditorProps {
+  form: NavForm
+  /** The names of the sets that exist (a new set may not take one of them). */
+  existing: string[]
+  /** The instances that exist, the members a set can list. */
+  instances: { name: string; title: string | null }[]
+  caller: AppsCaller
+  busy: boolean
+  onChange: (form: NavForm) => void
+  onSave: () => void
+  onCancel: () => void
+}
+
+/** Why the set cannot be saved, or null when the call may be tried (the Gateway still decides). */
+export const navSaveBlock = (p: Pick<NavigationEditorProps, 'form' | 'existing' | 'caller'>): string | null =>
+  !p.caller.can_publish ? NEEDS_PUBLISHER : navFormProblem(p.form, p.existing)
+
+/** Make, reorder, rename and change a navigation set: a titled, ordered list of instances, each with the label the menu shows. A person sees only the members they hold a role on, so a member is never a promise. */
+export function NavigationEditorView(p: NavigationEditorProps) {
+  const { form } = p
+  const set = (patch: Partial<NavForm>) => p.onChange({ ...form, ...patch })
+  const reason = navSaveBlock(p)
+  const addable = availableMembers(p.instances.map((i) => i.name), form.entries)
+  const titleOf = (name: string) => p.instances.find((i) => i.name === name)?.title ?? null
+  const off = !p.caller.can_publish
+  return (
+    <div className="card" data-testid="nav-editor" data-mode={form.original === null ? 'new' : 'edit'}>
+      <div className="card-head"><span className="card-title">{form.original === null ? 'New navigation set' : `Navigation set ${form.original}`}</span></div>
+      <div className="card-body">
+        <div className="row" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <label style={{ display: 'grid', gap: 2 }}>
+            <span className="hint">Name</span>
+            <input className="input sm" value={form.name} disabled={off} onChange={(e) => set({ name: e.target.value })} data-testid="nav-editor-name" aria-label="Set name" />
+          </label>
+          <label style={{ display: 'grid', gap: 2 }}>
+            <span className="hint">Title (the menu's heading)</span>
+            <input className="input sm" value={form.title} disabled={off} onChange={(e) => set({ title: e.target.value })} data-testid="nav-editor-title" aria-label="Set title" />
+          </label>
+        </div>
+        {isRename(form) && <div className="hint" style={{ ...wrap, marginTop: 6 }} data-testid="nav-editor-rename">Saving makes the set under the name {form.name.trim() || '…'} and stops serving {form.original}, in one step.</div>}
+
+        <h3 className="hint" style={{ margin: '16px 0 4px' }}>Members, in the order the menu shows them</h3>
+        {form.entries.length === 0 && <div className="hint" data-testid="nav-editor-members-none">No member yet. Add an instance below.</div>}
+        {form.entries.map((e, i) => (
+          <div key={e.instance} className="row" style={{ gap: 6, marginBottom: 4, alignItems: 'center', flexWrap: 'wrap' }} data-testid={`nav-editor-member-${e.instance}`}>
+            <span className="mono" style={{ width: 160, flex: 'none' }}>{e.instance}{titleOf(e.instance) && <div className="hint">{titleOf(e.instance)}</div>}</span>
+            <input className="input sm" style={{ width: 180, flex: 'none' }} placeholder={`label (default: ${titleOf(e.instance) ?? e.instance})`} value={e.label} disabled={off}
+              onChange={(ev) => set({ entries: form.entries.map((x, j) => j === i ? { ...x, label: ev.target.value } : x) })} data-testid={`nav-editor-label-${e.instance}`} aria-label={`Label of ${e.instance}`} />
+            <input className="input sm" style={{ width: 120, flex: 'none' }} placeholder="icon" value={e.icon} disabled={off}
+              onChange={(ev) => set({ entries: form.entries.map((x, j) => j === i ? { ...x, icon: ev.target.value } : x) })} data-testid={`nav-editor-icon-${e.instance}`} aria-label={`Icon of ${e.instance}`} />
+            <button type="button" className="btn sm" disabled={off || i === 0} onClick={() => set({ entries: moveEntry(form.entries, i, -1) })} data-testid={`nav-editor-up-${e.instance}`} aria-label={`Move ${e.instance} up`}>Up</button>
+            <button type="button" className="btn sm" disabled={off || i === form.entries.length - 1} onClick={() => set({ entries: moveEntry(form.entries, i, 1) })} data-testid={`nav-editor-down-${e.instance}`} aria-label={`Move ${e.instance} down`}>Down</button>
+            <button type="button" className="btn sm" disabled={off} onClick={() => set({ entries: form.entries.filter((_, j) => j !== i) })} data-testid={`nav-editor-remove-${e.instance}`}>Remove</button>
+          </div>
+        ))}
+        {p.instances.length === 0
+          ? <div className="hint" data-testid="nav-editor-add-none">No instance exists yet: make one under Instances above, then list it here.</div>
+          : addable.length === 0
+            ? <div className="hint" data-testid="nav-editor-add-none">Every instance is already listed.</div>
+            : (
+              <select className="input sm" style={{ width: 240, marginTop: 6 }} value="" disabled={off} onChange={(e) => e.target.value !== '' && set({ entries: [...form.entries, { instance: e.target.value, label: '', icon: '' }] })} data-testid="nav-editor-add" aria-label="Add an instance">
+                <option value="">Add an instance…</option>
+                {addable.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
+            )}
+
+        <div className="row" style={{ gap: 8, marginTop: 14 }}>
+          <button type="button" className="btn btn-primary" disabled={reason !== null || p.busy} onClick={p.onSave} data-testid="nav-editor-save">{form.original === null ? 'Make the set' : isRename(form) ? 'Save under the new name' : 'Save the set'}</button>
+          <button type="button" className="btn" onClick={p.onCancel} data-testid="nav-editor-cancel">Cancel</button>
+        </div>
+        <Why reason={reason} testId="nav-editor-why" />
       </div>
     </div>
   )

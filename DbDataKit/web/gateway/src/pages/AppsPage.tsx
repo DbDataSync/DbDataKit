@@ -5,9 +5,9 @@ import { gatewayApi } from '../api'
 import {
   approveBlock, NEEDS_PUBLISHER, removeAppBlock, removeInstanceBlock, revokeBlock, runsLabel, safeAddress, serveBlock, shortHash, sortApprovals, sortApps, sortInstances, trustLabel,
 } from '../apps'
-import { configurationLabel, egressChoices, egressParam, emptyInstanceForm, formFromRow, instanceRequest, modelsOf, pinRequest, prepareFolder, prepareManifest, publishBody, toggled, type InstanceForm, type PickedFile, type Prepared } from '../appEditors'
+import { configurationLabel, egressChoices, emptyNavForm, entriesLabel, navFormFromSet, navRequest, isRename, type NavForm, egressParam, emptyInstanceForm, formFromRow, instanceRequest, modelsOf, pinRequest, prepareFolder, prepareManifest, publishBody, toggled, type InstanceForm, type PickedFile, type Prepared } from '../appEditors'
 import { GatewayShell } from '../GatewayShell'
-import { InstanceEditorView, PublishView, Why, wrap } from './AppEditors'
+import { InstanceEditorView, NavigationEditorView, PublishView, Why, wrap } from './AppEditors'
 import type { AppAbout, AppApprovalRow, AppDetail, AppInstanceRow, AppsCaller, AppSummary, AppVersionRow, NavigationSetRow } from '../types'
 
 const when = (iso: string) => new Date(iso).toLocaleString()
@@ -272,17 +272,47 @@ export function VersionsView(p: VersionsViewProps) {
 
 // ---- navigation sets ----
 
-/** The navigation sets: the menus the shell shows in each member instance, with their members in order. */
-export function NavigationView({ sets }: { sets: NavigationSetRow[] }) {
+export interface NavigationViewProps {
+  sets: NavigationSetRow[]
+  caller: AppsCaller
+  /** The set whose removal waits for a second click. */
+  confirming: string | null
+  busy: boolean
+  onNew: () => void
+  onEdit: (set: NavigationSetRow) => void
+  onAskRemove: (name: string | null) => void
+  onRemove: (name: string) => void
+}
+
+/** The navigation sets: the menus the shell shows in each member instance, with their members in order, and the actions on them (UE03). */
+export function NavigationView(p: NavigationViewProps) {
+  const reason = p.caller.can_publish ? null : NEEDS_PUBLISHER
   return (
-    <div className="card flush" data-testid="navigation-table">
-      {sets.length === 0 && <div className="empty" data-testid="navigation-empty">No navigation set yet. One is made with <span className="mono">apps nav-save</span>.</div>}
-      {sets.map((s) => (
-        <div key={s.name} className="grid-row auto" style={{ gridTemplateColumns: '1.3fr 1.5fr 4fr', gap: 14 }} data-testid={`nav-row-${s.name}`}>
-          <span className="mono">{s.name}</span><span>{s.title}</span>
-          <span className="mono" data-testid="nav-entries">{s.entries.map((e) => e.label ? `${e.instance} (${e.label})` : e.instance).join(' → ')}</span>
-        </div>
-      ))}
+    <div>
+      <div className="row" style={{ gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button type="button" className="btn sm btn-primary" disabled={reason !== null || p.busy} onClick={p.onNew} data-testid="nav-new">New navigation set</button>
+        <Why reason={reason} testId="nav-new-why" />
+      </div>
+      <div className="card flush" data-testid="navigation-table">
+        {p.sets.length === 0 && <div className="empty" data-testid="navigation-empty">No navigation set yet. Make one with New navigation set above, or at the command line with <span className="mono">apps nav-save</span>.</div>}
+        {p.sets.map((s) => (
+          <div key={s.name} className="grid-row auto" style={{ gridTemplateColumns: '1.3fr 1.5fr 4fr 2fr', gap: 14, alignItems: 'start' }} data-testid={`nav-row-${s.name}`}>
+            <span className="mono">{s.name}</span><span>{s.title}</span>
+            <span className="mono" style={wrap} data-testid="nav-entries">{entriesLabel(s)}</span>
+            <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+              <button type="button" className="btn sm" disabled={reason !== null || p.busy} title={reason ?? undefined} onClick={() => p.onEdit(s)} data-testid={`nav-edit-${s.name}`}>Edit…</button>
+              {p.confirming === s.name
+                ? (
+                  <>
+                    <button type="button" className="btn sm btn-primary" disabled={p.busy} onClick={() => p.onRemove(s.name)} data-testid={`nav-remove-confirm-${s.name}`}>Stop serving {s.name}</button>
+                    <button type="button" className="btn sm" onClick={() => p.onAskRemove(null)}>Not now</button>
+                  </>
+                )
+                : <button type="button" className="btn sm" disabled={reason !== null || p.busy} title={reason ?? undefined} onClick={() => p.onAskRemove(s.name)} data-testid={`nav-remove-${s.name}`}>Remove</button>}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -365,6 +395,8 @@ export function AppsPage() {
   const [editing, setEditing] = useState<{ form: InstanceForm; isNew: boolean } | null>(null)
   const editDetail = useQuery({ queryKey: ['gateway', 'apps', editing?.form.app], queryFn: () => gatewayApi.apps.detail(editing!.form.app), enabled: editing !== null && editing.form.app !== '' })
 
+  // the navigation set editor (UE03)
+  const [navEditing, setNavEditing] = useState<NavForm | null>(null)
   // the approval form of a published version: the origins ticked (UE02)
   const [versionEgress, setVersionEgress] = useState<string[]>([])
   // the publish panel (UE02): what was chosen, what the Gateway said of it, and the refusal of the last call
@@ -399,6 +431,12 @@ export function AppsPage() {
     onSuccess: async (r, v) => { setEditing(null); await done(`${v.form.name.trim()} is saved as instance version ${r.version}; the host serves it at once.`)() },
     onError: failed,
   })
+  const saveNavigation = useMutation({
+    mutationFn: (form: NavForm) => gatewayApi.apps.saveNavigation(form.name.trim(), navRequest(form)),
+    onSuccess: async (r, form) => { setNavEditing(null); await done(`Navigation set ${r.name} is saved (version ${r.version}${isRename(form) ? `, renamed from ${form.original}` : ''}); the shell shows it in each member instance.`)() },
+    onError: failed,
+  })
+  const removeNavigation = useMutation({ mutationFn: gatewayApi.apps.removeNavigation, onSuccess: (r) => done(`Navigation set ${r.name} is no longer served; its instances are untouched.`)(), onError: failed })
   const removeInstance = useMutation({ mutationFn: gatewayApi.apps.removeInstance, onSuccess: (r) => done(`${r.name} is no longer served.`)(), onError: failed })
   const removeApp = useMutation({ mutationFn: gatewayApi.apps.removeApp, onSuccess: (r) => done(`${r.name} is no longer served; its versions and approvals stay on record.`)(), onError: failed })
   const approve = useMutation({
@@ -426,7 +464,7 @@ export function AppsPage() {
     const files: PickedFile[] = await Promise.all([...(list ?? [])].map(async (f) => ({ path: f.webkitRelativePath || f.name, bytes: new Uint8Array(await f.arrayBuffer()) })))
     pick(files.length === 0 ? null : prepareFolder(files))
   }
-  const busy = publish.isPending || approvePackage.isPending || serve.isPending || pin.isPending || saveInstance.isPending || removeInstance.isPending || removeApp.isPending || approve.isPending || revoke.isPending
+  const busy = saveNavigation.isPending || removeNavigation.isPending || publish.isPending || approvePackage.isPending || serve.isPending || pin.isPending || saveInstance.isPending || removeInstance.isPending || removeApp.isPending || approve.isPending || revoke.isPending
 
   const appList = sortApps(apps.data?.apps ?? [])
   const rows = sortInstances(instances.data?.instances ?? [])
@@ -508,7 +546,19 @@ export function AppsPage() {
         </Section>
 
         <Section title="Navigation sets and portals" note="A navigation set is a menu the shell shows in each of its instances. A portal is an app of kind portal: its mounts are shown on its instance above." testId="apps-navigation">
-          <NavigationView sets={navigation.data ?? []} />
+          <NavigationView
+            sets={navigation.data ?? []} caller={caller} confirming={confirming?.startsWith('nav:') ? confirming.slice(4) : null} busy={busy}
+            onNew={() => { setFailure(null); setNotice(null); setNavEditing(emptyNavForm()) }} onEdit={(set) => { setFailure(null); setNotice(null); setNavEditing(navFormFromSet(set)) }}
+            onAskRemove={(name) => setConfirming(name === null ? null : `nav:${name}`)} onRemove={(name) => removeNavigation.mutate(name)}
+          />
+          {navEditing && (
+            <div style={{ marginTop: 12 }}>
+              <NavigationEditorView
+                form={navEditing} existing={(navigation.data ?? []).map((n) => n.name)} instances={rows.map((r) => ({ name: r.name, title: r.title }))} caller={caller} busy={busy}
+                onChange={setNavEditing} onCancel={() => setNavEditing(null)} onSave={() => saveNavigation.mutate(navEditing)}
+              />
+            </div>
+          )}
         </Section>
 
         <Section title="Approvals" note="An approval is for the exact files of one version, by content hash. Revoking it stops that version running as trusted at once." testId="apps-approvals">
@@ -521,7 +571,7 @@ export function AppsPage() {
             onAskRevoke={(id) => setConfirming(id === null ? null : `revoke:${id}`)} onRevoke={(id) => revoke.mutate(id)}
           />
         </Section>
-        <p className="hint" style={{ marginTop: 16 }}>The navigation sets are still made with the command line (<span className="mono">dbdatagateway apps</span>, also <span className="mono">--to</span> this server from another machine).</p>
+        <p className="hint" style={{ marginTop: 16 }}>Everything on this page can also be done with the command line (<span className="mono">dbdatagateway apps</span>, also <span className="mono">--to</span> this server from another machine).</p>
       </div>
     </GatewayShell>
   )

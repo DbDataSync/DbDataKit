@@ -519,6 +519,112 @@ public sealed class AppsScreenTests : IAsyncLifetime
         Assert.Contains(entries, a => a.Command == "app publish" && a.Target == "ledger" && a.Outcome == "version 1");
     }
 
+    private async Task<JsonArray> SetsAsync() => (await CallAsync(ServerRole.Viewer, HttpMethod.Get, "/api/v1/app-navigation")).Body["navigation"]!.AsArray();
+
+    private static string[] Members(JsonNode set) => set["entries"]!.AsArray().Select(e => (string)e!["instance"]!).ToArray();
+
+    [Fact]
+    public async Task A_navigation_set_is_made_reordered_renamed_and_removed_from_the_screen_and_each_refusal_of_the_store_is_a_message()
+    {
+        Seed();
+        var audit = new StateAuditLog(State);
+
+        // made: a titled, ordered list of instances, with the label a menu shows; the instances know which sets list them
+        var made = await CallAsync(ServerRole.Publisher, HttpMethod.Put, "/api/v1/app-navigation/team", "{\"title\": \"Team menu\", \"entries\": [{\"instance\": \"pinned\", \"label\": \"Pinned notes\"}, {\"instance\": \"acme\"}]}");
+        Assert.Equal(HttpStatusCode.OK, made.Status);
+        Assert.Equal(1, (int)made.Body["version"]!);
+        Assert.Equal(2, (int)made.Body["entries"]!);
+        var team = (await SetsAsync()).Single(x => (string?)x!["name"] == "team")!;
+        Assert.Equal("Team menu", (string?)team["title"]);
+        Assert.Equal(["pinned", "acme"], Members(team));
+        Assert.Equal("Pinned notes", (string?)team["entries"]![0]!["label"]);
+        Assert.Null(team["entries"]![1]!["label"]);
+        var rows = (await CallAsync(ServerRole.Viewer, HttpMethod.Get, "/api/v1/app-instances")).Body["instances"]!.AsArray().ToDictionary(i => (string)i!["name"]!);
+        Assert.Contains("team", rows["acme"]!["navigation"]!.AsArray().Select(v => (string)v!));
+
+        // reordered: the same name is the next version, in the new order
+        var reordered = await CallAsync(ServerRole.Admin, HttpMethod.Put, "/api/v1/app-navigation/team", "{\"title\": \"Team menu\", \"entries\": [{\"instance\": \"acme\"}, {\"instance\": \"pinned\", \"label\": \"Pinned notes\"}]}");
+        Assert.Equal(HttpStatusCode.OK, reordered.Status);
+        Assert.Equal(2, (int)reordered.Body["version"]!);
+        Assert.Equal(["acme", "pinned"], Members((await SetsAsync()).Single(x => (string?)x!["name"] == "team")!));
+
+        // refused in the store's words, and nothing changes: an unknown member, a repeated one, none at all, no title, a name that is not a name, a body that is not a set
+        async Task<string> Refused(string name, string body)
+        {
+            var refused = await CallAsync(ServerRole.Publisher, HttpMethod.Put, $"/api/v1/app-navigation/{name}", body);
+            Assert.Equal(HttpStatusCode.BadRequest, refused.Status);
+            return (string)refused.Body["error"]!;
+        }
+        Assert.Contains($"'ghost' is not an instance published to {DefinitionStore.Production}", await Refused("team", "{\"title\": \"T\", \"entries\": [{\"instance\": \"acme\"}, {\"instance\": \"ghost\"}]}"));
+        Assert.Contains("'acme' is listed twice in the set 'team'", await Refused("team", "{\"title\": \"T\", \"entries\": [{\"instance\": \"acme\"}, {\"instance\": \"acme\"}]}"));
+        Assert.Contains("at least one instance", await Refused("team", "{\"title\": \"T\", \"entries\": []}"));
+        Assert.Contains("needs a title", await Refused("team", "{\"title\": \" \", \"entries\": [{\"instance\": \"acme\"}]}"));
+        Assert.Contains("A navigation set's name is lower-case", await Refused("Not A Name", "{\"title\": \"T\", \"entries\": [{\"instance\": \"acme\"}]}"));
+        Assert.Contains("The body is a JSON object", await Refused("team", "{\"title\": \"T\"}"));
+        Assert.Equal(["acme", "pinned"], Members((await SetsAsync()).Single(x => (string?)x!["name"] == "team")!));
+        Assert.Equal(2, (await SetsAsync()).Count);                                                  // main and team
+
+        // renamed: the new name is saved and the old one retired in one call; a set that is not served, and a name that is taken, are refused with nothing changed
+        var renamed = await CallAsync(ServerRole.Publisher, HttpMethod.Put, "/api/v1/app-navigation/crew", "{\"title\": \"Crew menu\", \"rename_from\": \"team\", \"entries\": [{\"instance\": \"pinned\"}, {\"instance\": \"acme\"}]}");
+        Assert.Equal(HttpStatusCode.OK, renamed.Status);
+        Assert.Equal("team", (string?)renamed.Body["renamed_from"]);
+        Assert.Equal(["crew", "main"], (await SetsAsync()).Select(x => (string)x!["name"]!).Order().ToArray());
+        Assert.Equal(["pinned", "acme"], Members((await SetsAsync()).Single(x => (string?)x!["name"] == "crew")!));
+        Assert.Contains("'team' is not served", await Refused("other", "{\"title\": \"T\", \"rename_from\": \"team\", \"entries\": [{\"instance\": \"acme\"}]}"));
+        Assert.Contains("already a navigation set named 'main'", await Refused("main", "{\"title\": \"T\", \"rename_from\": \"crew\", \"entries\": [{\"instance\": \"acme\"}]}"));
+        Assert.Equal(["crew", "main"], (await SetsAsync()).Select(x => (string)x!["name"]!).Order().ToArray());
+        // a rename to itself is a plain change
+        Assert.Equal(HttpStatusCode.OK, (await CallAsync(ServerRole.Publisher, HttpMethod.Put, "/api/v1/app-navigation/crew", "{\"title\": \"Crew\", \"rename_from\": \"crew\", \"entries\": [{\"instance\": \"acme\"}]}")).Status);
+        Assert.Equal(["crew", "main"], (await SetsAsync()).Select(x => (string)x!["name"]!).Order().ToArray());
+
+        // removed: the instances are not touched; a set that is not served is a 404
+        var removed = await CallAsync(ServerRole.Publisher, HttpMethod.Delete, "/api/v1/app-navigation/crew");
+        Assert.Equal(HttpStatusCode.OK, removed.Status);
+        Assert.True((bool)removed.Body["removed"]!);
+        Assert.Equal(["main"], (await SetsAsync()).Select(x => (string)x!["name"]!).ToArray());
+        Assert.NotNull(Store.Get("acme"));
+        Assert.NotNull(Store.Get("pinned"));
+        var gone = await CallAsync(ServerRole.Admin, HttpMethod.Delete, "/api/v1/app-navigation/crew");
+        Assert.Equal(HttpStatusCode.NotFound, gone.Status);
+        Assert.Contains("'crew' is not served", (string)gone.Body["error"]!);
+
+        // audited under the person: each save, rename, removal and refusal
+        var entries = audit.Read(200);
+        Assert.Contains(entries, a => a.Command == "app nav-save" && a.Target == "team" && a.Outcome == "version 1" && a.UserName == "Ada");
+        Assert.Contains(entries, a => a.Command == "app nav-save" && a.Target == "team" && a.Outcome == "version 2" && a.UserName == "Ada");
+        Assert.Contains(entries, a => a.Command == "app nav-save" && a.Target == "team" && a.Outcome == "refused" && a.UserName == "Ada");
+        Assert.Contains(entries, a => a.Command == "app nav-save" && a.Target == "crew" && a.Outcome.EndsWith("renamed from team", StringComparison.Ordinal));
+        Assert.Contains(entries, a => a.Command == "app nav-remove" && a.Target == "team" && a.Outcome == "retired, renamed to crew");
+        Assert.Contains(entries, a => a.Command == "app nav-remove" && a.Target == "crew" && a.Outcome == "retired" && a.UserName == "Ada");
+        Assert.Contains(entries, a => a.Command == "app nav-remove" && a.Target == "crew" && a.Outcome == "refused");
+    }
+
+    [Fact]
+    public async Task Writing_or_removing_a_navigation_set_needs_the_publisher_or_administrator_role_and_a_refusal_changes_nothing()
+    {
+        Seed();
+        const string body = "{\"title\": \"Changed\", \"entries\": [{\"instance\": \"acme\"}]}";
+        foreach (var role in new[] { ServerRole.Viewer, ServerRole.Approver, ServerRole.Operator, ServerRole.None })
+        {
+            var put = await CallAsync(role, HttpMethod.Put, "/api/v1/app-navigation/main", body);
+            Assert.Equal(HttpStatusCode.Forbidden, put.Status);
+            Assert.Contains("publisher", (string)put.Body["error"]!);
+            Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(role, HttpMethod.Delete, "/api/v1/app-navigation/main")).Status);
+            Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(role, HttpMethod.Put, "/api/v1/app-navigation/another", body)).Status);
+        }
+        var main = (await SetsAsync()).Single()!;
+        Assert.Equal("Main menu", (string?)main["title"]);
+        Assert.Equal(["acme", "pinned"], Members(main));
+
+        // the screen's answer says what the caller may do, so the buttons follow; a publisher and an administrator may
+        Assert.False((bool)(await CallAsync(ServerRole.Viewer, HttpMethod.Get, "/api/v1/app-navigation")).Body["caller"]!["can_publish"]!);
+        Assert.True((bool)(await CallAsync(ServerRole.Publisher, HttpMethod.Get, "/api/v1/app-navigation")).Body["caller"]!["can_publish"]!);
+        Assert.Equal(HttpStatusCode.OK, (await CallAsync(ServerRole.Publisher, HttpMethod.Put, "/api/v1/app-navigation/main", body)).Status);
+        Assert.Equal(["acme"], Members((await SetsAsync()).Single()!));
+        Assert.Equal(HttpStatusCode.OK, (await CallAsync(ServerRole.Admin, HttpMethod.Delete, "/api/v1/app-navigation/main")).Status);
+        Assert.Empty(await SetsAsync());
+    }
+
     [Fact]
     public async Task An_approval_is_revoked_by_an_approver_who_is_an_approver_at_the_identity_home_and_the_instance_stops_running_as_trusted()
     {

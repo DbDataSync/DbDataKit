@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   bindingRows, configurationLabel, egressChoices, egressParam, emptyInstanceForm, formFromRow, instanceFormProblem, instanceRequest, MAX_PACKAGE_BYTES, modelsOf, packageApproveBlock, pinRequest, prepareFolder, prepareManifest, publishBlock, publishBody, sizeLabel, toBase64, toggled,
+  availableMembers, emptyNavForm, entriesLabel, isRename, moveEntry, navFormFromSet, navFormProblem, navRequest,
   type PickedFile,
 } from './appEditors'
-import type { AppAbout, AppCheck, AppDetail, AppInstanceRow, AppsCaller, AppVersionRow } from './types'
+import type { AppAbout, AppCheck, AppDetail, AppInstanceRow, AppsCaller, AppVersionRow, NavigationSetRow } from './types'
 
 const row = { name: 'acme', app: 'notes', pin: null, title: 'Acme notes', settings: { portal: 'front' }, bindings: { territories: 'default' } } satisfies Pick<AppInstanceRow, 'name' | 'app' | 'pin' | 'title' | 'settings' | 'bindings'>
 
@@ -219,5 +220,59 @@ describe('the outside origins an approver chooses', () => {
     expect(egressParam(['connect=https://api.example.com', 'img=https://cdn.example.com'])).toBe('connect=https://api.example.com,img=https://cdn.example.com')
     expect(toggled([], 'a')).toEqual(['a'])
     expect(toggled(['a', 'b'], 'a')).toEqual(['b'])
+  })
+})
+
+// ---- UE03 ----
+
+const set: NavigationSetRow = { name: 'main', title: 'Main menu', entries: [{ instance: 'acme', label: 'Acme', icon: null }, { instance: 'pinned', label: null, icon: 'star' }] }
+const entry = (instance: string) => ({ instance, label: '', icon: '' })
+
+describe('the navigation set form', () => {
+  it('starts empty for a new set and from the set for one that exists, blank labels and icons for none', () => {
+    expect(emptyNavForm()).toEqual({ name: '', title: '', entries: [], original: null })
+    expect(navFormFromSet(set)).toEqual({ name: 'main', title: 'Main menu', entries: [{ instance: 'acme', label: 'Acme', icon: '' }, { instance: 'pinned', label: '', icon: 'star' }], original: 'main' })
+  })
+
+  it('moves a member one place, and leaves the ends where they are', () => {
+    const three = ['a', 'b', 'c'].map(entry)
+    expect(moveEntry(three, 0, 1).map((e) => e.instance)).toEqual(['b', 'a', 'c'])
+    expect(moveEntry(three, 2, -1).map((e) => e.instance)).toEqual(['a', 'c', 'b'])
+    expect(moveEntry(three, 0, -1)).toBe(three)
+    expect(moveEntry(three, 2, 1)).toBe(three)
+    expect(moveEntry(three, 5, 1)).toBe(three)
+    expect(three.map((e) => e.instance)).toEqual(['a', 'b', 'c'])             // the list given is never changed
+  })
+
+  it('offers each instance that exists and is not listed, once, by name', () => {
+    expect(availableMembers(['sales', 'acme', 'pinned'], [entry('acme')])).toEqual(['pinned', 'sales'])
+    expect(availableMembers([], [entry('acme')])).toEqual([])
+    expect(availableMembers(['acme'], [entry('acme')])).toEqual([])
+  })
+
+  it('has a problem only where saving means nothing, or would replace another set unasked', () => {
+    const form = { ...navFormFromSet(set), name: ' crew ' }
+    expect(navFormProblem(form, ['main'])).toBeNull()
+    expect(navFormProblem({ ...form, name: '  ' }, [])).toContain('Name the set')
+    expect(navFormProblem({ ...emptyNavForm(), name: 'main', title: 'T', entries: [entry('a')] }, ['main'])).toContain('already a navigation set named main')
+    expect(navFormProblem(navFormFromSet(set), ['main'])).toBeNull()                       // changing the set that exists
+    expect(navFormProblem({ ...form, name: 'main' }, ['main', 'crew'])).toBeNull()           // renamed back to its own name
+    expect(navFormProblem({ ...form, name: 'other' }, ['main', 'other'])).toContain('already a navigation set named other')
+    expect(navFormProblem({ ...form, title: ' ' }, [])).toContain('Give the set a title')
+    expect(navFormProblem({ ...form, entries: [] }, [])).toContain('at least one instance')
+  })
+
+  it('sends the title, the members in order with the label and icon or null, and rename_from only when the name changed', () => {
+    const form = navFormFromSet(set)
+    expect(navRequest(form)).toEqual({ title: 'Main menu', entries: [{ instance: 'acme', label: 'Acme', icon: null }, { instance: 'pinned', label: null, icon: 'star' }] })
+    expect(isRename(form)).toBe(false)
+    const renamed = { ...form, name: ' crew ', title: ' Crew ', entries: [{ instance: 'pinned', label: '  ', icon: ' ' }, entry('acme')] }
+    expect(isRename(renamed)).toBe(true)
+    expect(navRequest(renamed)).toEqual({ title: 'Crew', entries: [{ instance: 'pinned', label: null, icon: null }, { instance: 'acme', label: null, icon: null }], rename_from: 'main' })
+    expect(navRequest({ ...emptyNavForm(), name: 'x', title: 'X', entries: [entry('a')] })).not.toHaveProperty('rename_from')
+  })
+
+  it('says the members as the list shows them', () => {
+    expect(entriesLabel(set)).toBe('acme (Acme) → pinned')
   })
 })
