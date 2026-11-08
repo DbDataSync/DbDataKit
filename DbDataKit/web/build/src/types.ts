@@ -308,3 +308,40 @@ export interface ImportResult {
 export interface ProjectConnections {
   project: { config: { connections: Record<string, { engine: string }> } }
 }
+
+/** A runner this Build server is paired with as a publisher (`GET /api/v1/runners`): the name `project publish --server` takes, and what the pairing allows (never a key or a code). */
+export interface PairedRunner {
+  name: string
+  url: string
+  instance_id: string
+  roles: string[]
+  paired_at: string
+}
+
+/** One task of a project's package on a runner: a refresh plan with its schedule and the connection slots it needs. */
+export interface RunnerPublishTask {
+  name: string
+  connection: string
+  plan: string
+  schedule: string | null
+  time_zone: string | null
+  slots: string[]
+  timeout_seconds: number | null
+}
+
+/** What `project publish` answered: the version the runner has now (staged until every runner of the group has it ready, or served at once), and the tasks the package carries. */
+export interface RunnerPublishData {
+  package: string
+  channel: string
+  mode: string
+  version: number
+  changed: boolean
+  uploaded: number
+  skipped: number
+  signature: string
+  files: number
+  tasks: RunnerPublishTask[]
+  owner_old: string[]
+  bound: string[]
+  promoted_from?: string
+}

@@ -3,6 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import { ApiError, ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { buildApi } from '../api'
+import { RunnerPublish } from './RunnerPublish'
 import type { AdoptAnswer, AdoptHint, PairedProxy, PublishAnswer } from '../types'
 
 /** What the person reads when a publish failed: the server's own words (they name the rule or the proxy that refused), or a plain sentence for what it did not say. */
@@ -127,13 +128,18 @@ export function PublishTab() {
   })
   const forget = () => { publish.reset(); adopt.reset() }
   return (
-    <PublishView
-      proxies={proxies.data} loading={proxies.isLoading} listError={proxies.error}
-      proxy={proxy} connection={connection} dataSource={dataSource}
-      busy={publish.isPending} done={publish.data ?? null} failure={publish.error}
-      canAdopt={isAdmin} adopting={adopt.isPending} adopted={adopt.data ?? null} adoptFailure={adopt.error} onAdopt={(hint) => adopt.mutate(hint)}
-      onProxy={(v) => { setProxy(v); forget() }} onConnection={(v) => { setConnection(v); forget() }} onDataSource={(v) => { setDataSource(v); forget() }}
-      onPublish={() => { adopt.reset(); publish.mutate() }}
-    />
+    <div>
+      <h3 className="page-title" style={{ fontSize: 15, margin: '0 0 8px' }} data-testid="build-publish-gateway-heading">To a proxy</h3>
+      <PublishView
+        proxies={proxies.data} loading={proxies.isLoading} listError={proxies.error}
+        proxy={proxy} connection={connection} dataSource={dataSource}
+        busy={publish.isPending} done={publish.data ?? null} failure={publish.error}
+        canAdopt={isAdmin} adopting={adopt.isPending} adopted={adopt.data ?? null} adoptFailure={adopt.error} onAdopt={(hint) => adopt.mutate(hint)}
+        onProxy={(v) => { setProxy(v); forget() }} onConnection={(v) => { setConnection(v); forget() }} onDataSource={(v) => { setDataSource(v); forget() }}
+        onPublish={() => { adopt.reset(); publish.mutate() }}
+      />
+      <h3 className="page-title" style={{ fontSize: 15, margin: '24px 0 8px' }} data-testid="build-publish-runner-heading">To a runner</h3>
+      <RunnerPublish />
+    </div>
   )
 }

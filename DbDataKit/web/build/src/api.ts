@@ -1,5 +1,5 @@
 import { request, type SchemaAssociation, type SchemaNode } from '@dbdatakit/shell'
-import type { CommandOffer, DefineResult, DefinitionAnswer, ImportResult, ProjectConnections, ProjectTemplateInfo, TemplateCatalog, AdoptAnswer, PairedProxy, PublishAnswer, GitChange, GitCommit, RenderedFiles, BuildProject, FileContent, ProjectFile, Workspace, CommandAnswer, CompareResult, CompileSummary, ConnectionStatus, DeployResult, PlanDetail, PlanEntry, ProjectGraph, SampleResult } from './types'
+import type { CommandOffer, DefineResult, DefinitionAnswer, ImportResult, ProjectConnections, ProjectTemplateInfo, TemplateCatalog, AdoptAnswer, PairedProxy, PairedRunner, PublishAnswer, RunnerPublishData, GitChange, GitCommit, RenderedFiles, BuildProject, FileContent, ProjectFile, Workspace, CommandAnswer, CompareResult, CompileSummary, ConnectionStatus, DeployResult, PlanDetail, PlanEntry, ProjectGraph, SampleResult } from './types'
 
 const project = (id: string) => `/api/v1/projects/${encodeURIComponent(id)}`
 
@@ -88,6 +88,19 @@ export const buildApi = {
    */
   adoptOnProxy: (proxyInstance: string, dataSource: string, client: string) =>
     request<AdoptAnswer>(`/relay/${encodeURIComponent(proxyInstance)}/api/v1/data-sources/${encodeURIComponent(dataSource)}/adopt`, { method: 'POST', body: JSON.stringify({ client }) }),
+  /** The runners this server is paired with as a publisher (UE05): the choices for publishing a project to a runner, each with the roles its pairing allows. */
+  runners: () => request<{ runners: PairedRunner[] }>('/api/v1/runners').then((r) => r.runners),
+  /** Publishes the committed files of the project to a runner as a package (`project publish`, through the command route: the author role here, a publisher pairing there), or promotes the version one channel serves to another. */
+  publishToRunner: (id: string, o: { server: string; channel: string; packageName?: string; serve?: boolean; bind?: string[]; promoteFrom?: string; expectedVersion?: number; runnerSchedules?: boolean }) =>
+    run<RunnerPublishData>(id, 'project_publish', {
+      server: o.server, channel: o.channel,
+      ...(o.packageName ? { package: o.packageName } : {}),
+      ...(o.serve ? { serve: true } : {}),
+      ...(o.bind && o.bind.length > 0 ? { bind: o.bind } : {}),
+      ...(o.promoteFrom ? { promote_from: o.promoteFrom } : {}),
+      ...(o.expectedVersion !== undefined ? { expected_version: o.expectedVersion } : {}),
+      ...(o.runnerSchedules ? { runner_schedules: true } : {}),
+    }),
   /** The drafts of a project (W02): a git worktree per person and name, where editing happens. */
   workspaces: (id: string) => request<{ workspaces: Workspace[] }>(`${project(id)}/workspaces`).then((r) => r.workspaces),
   makeWorkspace: (id: string, name: string) => request<Workspace>(`${project(id)}/workspaces`, { method: 'POST', body: JSON.stringify({ name }) }),

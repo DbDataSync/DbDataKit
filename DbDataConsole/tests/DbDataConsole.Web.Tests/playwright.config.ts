@@ -261,6 +261,46 @@ if (!isWorker) {
   fs.writeFileSync(path.join(scratchDirectory, 'runner-publisher-code.txt'), /Pairing code: (\S+)/.exec(madePublisher)![1])
 }
 
+// A runner and a Build server for the runner-publishing stories (plan 33, UE05 and UE06): `runner-publish.spec.ts` publishes the Build project `orders` (one plan, scheduled every hour) from the Build screens to the runner, `runner-schedule.spec.ts` moves a task of the sample package between schedulers
+// on the runner's screens. The runner has three pairing codes: the console's (admin), the Build server's as a publisher that may also set an owner and promote, and the story's own publisher for the sample package. The Build server finds its pairings in `clientDirectory` (the variable it is started with);
+// the story pairs it by the runner's own command, because a pairing needs the runner to be running, which it is not when this file is read. The runtime package a Build package needs (`dbdatabuild-runtime`) is not published to this runner: the story stops at the staged version.
+export const publishRunner = {
+  directory: path.join(os.tmpdir(), 'ddk-e2e-pubrunner'),
+  port: 8503,
+  url: 'https://localhost:8503',
+  clientDirectory: path.join(os.tmpdir(), 'ddk-e2e-pubrunner-sample-client'),
+  dll: path.join(repoRoot, 'DbDataRunner/src/DbDataRunner.Server/bin/Debug/net10.0/dbdatarunner.dll'),
+}
+export const publishBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-publish-build'), port: 8504, project: 'orders', clientDirectory: path.join(os.tmpdir(), 'ddk-e2e-pubbuild-client') }
+if (!isWorker) {
+  for (const directory of [publishRunner.directory, publishRunner.clientDirectory, publishBuild.directory, publishBuild.clientDirectory]) {
+    fs.rmSync(directory, { recursive: true, force: true })
+    fs.mkdirSync(directory, { recursive: true })
+  }
+  const code = (file: string, output: string) => fs.writeFileSync(path.join(scratchDirectory, file), /Pairing code: (\S+)/.exec(output)![1])
+  const pairRunner = (roles: string) => execFileSync('dotnet', ['exec', publishRunner.dll, 'server', 'pair', '--repo', publishRunner.directory, '--max-role', roles], { encoding: 'utf8' })
+  code('publish-runner-console-code.txt', pairRunner('viewer,operator,admin'))
+  code('publish-runner-build-code.txt', pairRunner('viewer,operator,publisher,admin'))
+  code('publish-runner-sample-code.txt', pairRunner('publisher'))
+  const project = path.join(os.tmpdir(), 'dbdatakit-console-e2e-publish-project')
+  fs.rmSync(project, { recursive: true, force: true })
+  const write = (relative: string, text: string) => { const file = path.join(project, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text) }
+  const columns = 'grain: [event_id]\ncolumns:\n  - {name: event_id, type: BIGINT, nullable: false}\n  - {name: event_ts, type: TIMESTAMP, nullable: false}\n  - {name: amount, type: "DECIMAL(14, 2)"}\n'
+  write('dbdatabuild.yml', 'defaults: {connections: [sqlserver]}\nstring_semantics:\n  case: sensitive\n  trailing_space: ignored\n  collations:\n    default: { duckdb: NFC, sqlserver: Latin1_General_100_CS_AS }\n' +
+    'refresh:\n  plans:\n    hourly: { schedule: "15 * * * *", time_zone: UTC }\n')
+  write('models/staging/events.yml', 'name: staging.events\nkind: mapped\n' + columns)
+  write('models/marts/fct_events.yml', 'name: marts.fct_events\nkind: {incremental_by_time_range: {time_column: event_ts}}\n' + columns +
+    'loads:\n  incremental:\n    default: true\n    strategy: watermark_append\n    watermark: {column: event_ts, resolver: target_max, on_null: initial, initial: "2000-01-01 00:00:00"}\n' +
+    'refresh: { hourly: incremental }\n')
+  write('models/marts/fct_events.sql', 'SELECT e.event_id, e.event_ts, e.amount FROM staging.events e\n')
+  write('connections/sqlserver.yaml', 'schema: connection/1\nname: sqlserver\nengine: sqlserver\n')
+  execFileSync('dotnet', ['exec', buildDll, 'project', 'compile', '--project', project], { stdio: 'ignore' })
+  for (const args of [['init', '-q'], ['add', '-A'], ['commit', '-qm', 'The orders project']])
+    execFileSync('git', ['-c', 'user.name=console-e2e', '-c', 'user.email=e2e@example.invalid', ...args], { cwd: project, stdio: 'ignore' })
+  execFileSync('dotnet', ['exec', buildDll, 'server', 'project', 'add', publishBuild.project, '--path', project, '--repo', publishBuild.directory], { stdio: 'ignore' })
+  code('publish-build-code.txt', execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', publishBuild.directory, '--max-role', 'viewer,author,operator,approver,admin'], { encoding: 'utf8' }))
+}
+
 // A passkey is bound to the host name and the port it was made on, and the server builds its list of allowed origins from the address it is told to listen on,
 // so the address is fixed here and the test opens exactly that.
 const port = 8481
@@ -332,6 +372,25 @@ export default defineConfig({
       timeout: 60_000,
       stdout: 'pipe' as const,
       stderr: 'pipe' as const,
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(publishRunner.dll), 'server', 'run', '--repo', JSON.stringify(publishRunner.directory), '--listen', publishRunner.url].join(' '),
+      url: `${publishRunner.url}/health/live`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(publishBuild.directory), '--listen', `https://localhost:${publishBuild.port}`].join(' '),
+      url: `https://localhost:${publishBuild.port}/health/live`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
+      env: { DBDATARUNNER_CLIENT_DIR: publishBuild.clientDirectory },
     },
     ...announcers.map((announcer) => ({
       command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(announcer.directory), '--listen', `https://localhost:${announcer.port}`].join(' '),
