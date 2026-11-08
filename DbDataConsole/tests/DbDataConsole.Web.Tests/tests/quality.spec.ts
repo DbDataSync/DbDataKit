@@ -46,7 +46,9 @@ async function seed() {
   } finally { db.close() }
 }
 
-test('the Quality page shows a blocked dataset with its history and sample keys, and an evaluation that cannot run leaves the block standing', async ({ page, context, baseURL, request }) => {
+test('the Quality page shows a blocked dataset with its history and sample keys, and an evaluation that cannot run leaves the block standing', async ({ page, context, baseURL }) => {
+  // the test fixture `request` is a context of its own with no session; the page's browser context holds the signed-in cookie (as runner.spec.ts and monitoring.spec.ts use it)
+  const request = context.request
   await signInNewAdmin(page, context, baseURL!, 'Quality Tester', `quality-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`)
   await page.goto('/instances')
   await page.getByTestId('pair-url-input').fill(`https://localhost:${qualitySync.port}`)
@@ -77,15 +79,18 @@ test('the Quality page shows a blocked dataset with its history and sample keys,
   await row.click()
   const check = page.getByTestId(`quality-check-${checkId}`)
   await expect(check).toHaveAttribute('data-blocking', 'true')
-  await expect(check).toContainText('measured 1, allowed 0')
+  await expect(check).toContainText('measured 1, allowed 0')   // (still the seeded `fail`: the server's tick has not evaluated yet, it waits a minute after first seeing a replication)
 
   // the history: both results, the newest first, and the keys of the row that failed
   await page.getByTestId(`quality-history-${checkId}`).click()
   await expect(page.getByTestId(`quality-block-${checkId}`)).toContainText('clears when the check passes')
   const results = page.getByTestId(`quality-results-${checkId}`).getByTestId('quality-result')
-  await expect(results).toHaveCount(2)
-  await expect(results.nth(0)).toHaveAttribute('data-status', 'fail')
-  await expect(results.nth(0).getByTestId('quality-sample-keys')).toHaveText('Id=2')
+  await expect(results.first()).toBeVisible()
+  // the two seeded results; the server's own tick may add one of its own (an `error`, the target is down) at any moment, so the count is only ever "at least"
+  const before = await results.count()
+  expect(before).toBeGreaterThanOrEqual(2)
+  await expect(results.filter({ hasText: 'Id=2' })).toHaveCount(1)
+  await expect(results.filter({ hasText: 'Id=2' }).getByTestId('quality-sample-keys')).toHaveText('Id=2')
 
   // evaluating on the server: the target cannot be reached, so the check is in error, which is recorded and does not lift the block
   const runButton = page.locator('[data-testid^="quality-run-"]').filter({ hasText: 'Evaluate on Quality sync' })
@@ -95,5 +100,5 @@ test('the Quality page shows a blocked dataset with its history and sample keys,
   await expect(page.getByTestId(`quality-status-${checkId}`)).toContainText('error')
   await expect(check).toHaveAttribute('data-blocking', 'true')
   // the open history is read again after an evaluation
-  await expect(page.getByTestId(`quality-results-${checkId}`).getByTestId('quality-result')).toHaveCount(3)
+  await expect.poll(() => results.count()).toBeGreaterThan(before)
 })
