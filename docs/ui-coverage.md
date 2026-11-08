@@ -16,7 +16,7 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 | | Lineage, Deployments (where a package is deployed and what a runner holds, from the runners' lineage), Views (rendered views; **Dashboards** and **Reports** tabs over a **source**: the recorded fixtures, or the documents **published to a Gateway that runs the `views` module** through the console's relay, each widget read as the signed-in person (the source is chosen in the page and kept as `?source=`; with no choice the first such Gateway is used, else the fixtures); a dashboard is opened, laid out to the window, its layout switched and its parameters kept in the address; saving from the editor on a published source publishes a new version; a report is listed and checked, not drawn yet), Monitoring, Docs | – | – | – | Read-only | `LineagePage.tsx`, `DeploymentsPage.tsx`, `ViewsPage.tsx`, `DashboardsPanel.tsx`, `MonitoringPage.tsx`, `DocsPages.tsx`, `HomePage.tsx` |
 | **Sync** | Connections | Yes | Yes | Yes | Test | `ConnectionsPage.tsx`, `ConnectionEditPage.tsx` |
 | | Replications | Yes | Yes | Yes | Enable, pause and resume | `ReplicationsPage.tsx`, `ReplicationDetailPage.tsx` |
-| | Table mappings | Yes | Yes (columns, transforms, segmenting, provisioning, pipeline) | – | Verify, preview, diagnostics, history diff | `ReplicationDetailPage.tsx` |
+| | Table mappings | Yes | Yes (columns, transforms, segmenting, provisioning, pipeline) | Yes (`delete-mapping-<name>`) | Verify, preview, diagnostics, history diff | `ReplicationDetailPage.tsx` |
 | | Runs | – | – | – | Start, cancel, resync, bulk load, reconcile | `ReplicationDetailPage.tsx` |
 | | Target provisioning | – | – | – | Plan and apply | `ReplicationDetailPage.tsx` |
 | | Scripts | Yes | Yes | Yes | Compile, test | `ScriptsPage.tsx`, `ScriptEditPage.tsx` |
@@ -41,6 +41,9 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 | | Rows of an entity | Yes | Yes | Yes | Page through rows, history of a row (an entity that keeps one), pick an instance of a model that has them | `EntityPage.tsx` |
 | | Model definition, storage (create tables) | – | – | – | **No UI** (API only: Z08, Z09) | |
 | | Change requests (an agent's write, or a model that asks for approval) | – (made by `POST changes`, answered 202) | – | – | List and read by state, approve, reject: **API only** (Z07; the console's review screen is not built) | |
+| **Runner** | Tasks and instances | – | – | – | Run now, pause, resume (operator); instances with labels and capabilities (read-only) | `TasksPage.tsx` |
+| | Runs | – | – | – | List and filter | `RunsPage.tsx` |
+| | Packages (published definitions) | – (published by `package publish` or Build's `project publish`; see docs/ui-editors.md) | – | Retire | Activate (with confirmed losses, or anyway with a reason), switch, roll back, see staging per runner and the history | `PackagesPage.tsx` |
 | **Apps** | App packages and instances | – | – | – | **No UI, no host yet.** Libraries only: the manifest and bundling (AP01-AP03), the published-definition store with channels and rollback (O03), and instances that resolve to a package and an audience (AP04, PR open). Serving, the shell page and the sandbox are AP05; the Store's controls (`@dbdatakit/store-ui`) are written to be mounted by an app. | |
 
 ## Notes and gaps
@@ -52,4 +55,6 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 
 ## Keeping it current
 
-Run `python3 -I scripts/check_ui_coverage.py`. It reads `DbDataKit/web/{console,sync,gateway,build,admin,store}/src/pages`, and fails for any page or tab file (`*Page.tsx`, `*Tab.tsx`, `*Panel.tsx`, `*Pages.tsx`) that this file does not name, and for any `.tsx` file named here that does not exist. It cannot tell whether a cell is right: when a screen gains an action, change the cell too.
+Run `python3 -I scripts/check_ui_coverage.py`. It reads `DbDataKit/web/{console,sync,gateway,build,admin,store,runner}/src/pages`, and fails for any page or tab file (`*Page.tsx`, `*Tab.tsx`, `*Panel.tsx`, `*Pages.tsx`) that this file does not name, and for any `.tsx` file named here that does not exist. It cannot tell whether a cell is right: when a screen gains an action, change the cell too.
+
+Whether a screen is an *editor* for what a person authors or publishes (and what has none) is [ui-editors.md](ui-editors.md), checked by `scripts/check_ui_editors.py`.

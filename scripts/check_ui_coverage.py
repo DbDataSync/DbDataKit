@@ -10,7 +10,7 @@ import os
 import re
 import sys
 
-MODULES = ["console", "sync", "gateway", "build", "admin", "store"]
+MODULES = ["console", "sync", "gateway", "build", "admin", "store", "runner"]
 SCREEN = re.compile(r"(Page|Pages|Tab|Panel)\.tsx$|^PendingServers\.tsx$|^ServerModule\.tsx$|^FileTools\.tsx$")
 
 

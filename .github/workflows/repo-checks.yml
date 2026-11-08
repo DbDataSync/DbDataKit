@@ -1,7 +1,7 @@
 name: Repository checks
 
 # Rules about the repository as a whole rather than one product: one version of each NuGet package (scripts/check_package_versions.py),
-# every job that needs the DuckDB engine reads it from the cache (scripts/check_duckdb_cache.py), one solution that lists every project and builds (DbDataKit.slnx, scripts/check_solution.py), no document or script that uses a retired command name or one that does not exist (scripts/check_docs_commands.py), and a UI coverage matrix (docs/ui-coverage.md) that names every screen file (scripts/check_ui_coverage.py), and plans that are not left open after their work is done or linked after they are gone (scripts/check_plans.py), and formats that keep the freeze rule: a frozen format is not edited and a bumped version has its entry in docs/formats.json (scripts/check_formats.py).
+# every job that needs the DuckDB engine reads it from the cache (scripts/check_duckdb_cache.py), one solution that lists every project and builds (DbDataKit.slnx, scripts/check_solution.py), no document or script that uses a retired command name or one that does not exist (scripts/check_docs_commands.py), and a UI coverage matrix (docs/ui-coverage.md) that names every screen file (scripts/check_ui_coverage.py), an editors table (docs/ui-editors.md) with a row for every registered stored format (scripts/check_ui_editors.py), and plans that are not left open after their work is done or linked after they are gone (scripts/check_plans.py), and formats that keep the freeze rule: a frozen format is not edited and a bumped version has its entry in docs/formats.json (scripts/check_formats.py).
 
 on:
   pull_request:
@@ -17,6 +17,8 @@ on:
       - '**/*.targets'
       - 'scripts/**'
       - 'docs/ui-coverage.md'
+      - 'docs/ui-editors.md'
+      - 'docs/formats.json'
       - 'docs/plans/**'
       - 'DbDataKit/web/*/src/pages/**'
       - '.github/workflows/**'
@@ -58,6 +60,7 @@ jobs:
       - run: python3 -I scripts/check_package_versions.py
       - run: python3 -I scripts/check_docs_commands.py
       - run: python3 -I scripts/check_ui_coverage.py
+      - run: python3 -I scripts/check_ui_editors.py
       - run: python3 -I scripts/check_plans.py
       - run: python3 -I scripts/check_formats.py
       - run: python3 -I scripts/check_duckdb_cache.py
