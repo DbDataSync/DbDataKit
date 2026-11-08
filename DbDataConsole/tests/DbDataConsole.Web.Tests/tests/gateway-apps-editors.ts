@@ -126,3 +126,67 @@ export async function instanceStory(screen: Page) {
   await expect(screen.getByTestId('instance-row-sales').getByTestId('instance-runs')).toHaveText('pinned to version 1 (the app serves 2)')
   await expect(screen.getByTestId('instance-config-sales')).toHaveText('embed.allowed_origins=https://portal.example.com:8443, territories → default')
 }
+
+/**
+ * UE02 against the real Gateway: the `territory-views` sample is published from its folder (version 1, served by an instance), published again with a change (version 2, which the instance follows); a trusted app is not
+ * publishable until an approver of the identity home (a service account that holds the Approver role on this server) approves exactly its files, with one of the two origins it asks for; then it is published and served.
+ */
+export async function publishStory(screen: Page) {
+  const sample = path.join(repoRoot, 'DbDataGateway/templates/apps/territory-views')
+  await screen.getByTestId('publish-open').click()
+  await screen.getByTestId('publish-folder').setInputFiles(sample)
+  await expect(screen.getByTestId('publish-would')).toContainText('territory-views 1.0.0 would be version 1, sandboxed')
+  await expect(screen.getByTestId('publish-diagnostics-none')).toBeVisible()
+  await screen.getByTestId('publish-note').fill('first build, from the screen')
+  await screen.getByTestId('publish-send').click()
+  await expect(screen.getByTestId('apps-notice')).toContainText('territory-views is published as version 1')
+  await expect(screen.getByTestId('app-row-territory-views').getByTestId('app-serves')).toContainText('version 1 (1.0.0)')
+  // what was sent is the folder: the hash the command line prints for it is the hash of the version the screen shows
+  await expect(screen.getByTestId('version-row-1')).toContainText('first build, from the screen')
+  run(['apps', 'instance-save', '--name', 'views', '--app', 'territory-views'])
+  await expect.poll(() => statusOf(`${appsUrl}/apps/views/`), { timeout: 20_000 }).not.toBe(404)
+  await expect(screen.getByTestId('instance-row-views').getByTestId('instance-runs')).toHaveText('follows the app: version 1')
+
+  // a change to the folder is the next version, and the instance that follows moves
+  const changed = writeFolder('territory-views', {})
+  fs.cpSync(sample, path.join(changed, 'territory-views'), { recursive: true })
+  const manifestPath = path.join(changed, 'territory-views', 'app.yaml')
+  fs.writeFileSync(manifestPath, fs.readFileSync(manifestPath, 'utf8').replace('version: 1.0.0', 'version: 1.1.0'))
+  await screen.getByTestId('publish-open').click()
+  await screen.getByTestId('publish-folder').setInputFiles(path.join(changed, 'territory-views'))
+  await expect(screen.getByTestId('publish-would')).toContainText('territory-views 1.1.0 would be version 2')
+  await screen.getByTestId('publish-send').click()
+  await expect(screen.getByTestId('apps-notice')).toContainText('territory-views is published as version 2')
+  await expect(screen.getByTestId('instance-row-views').getByTestId('instance-runs')).toHaveText('follows the app: version 2')
+  expect(run(['apps', 'list', '--app', 'territory-views']).apps.find((a: any) => a.name === 'territory-views').version).toBe(2)
+
+  // a trusted app: grace is a person of the identity home with the Approver role on this server (its id is written when the server first pairs)
+  const serverId = /instanceId: (\S+)/.exec(fs.readFileSync(path.join(gatewayDirectory, 'config', 'server.yaml'), 'utf8'))![1]
+  const grace = run(['identity', 'service-account-add', '--name', 'grace'])
+  run(['identity', 'assign', '--user', grace.id, '--server', serverId, '--roles', 'approver'])
+  const vault = writeFolder('vault', {
+    'app.yaml': ['schemaVersion: 1', 'name: vault', 'title: Vault', 'version: 1.0.0', 'entry: index.html', 'trust: trusted', 'roles: [viewer]', 'egress:', '  connect: [https://api.example.com]', '  img: [https://cdn.example.com]', ''].join('\n'),
+    'index.html': page('vault'),
+  })
+  expect(() => run(['apps', 'publish', '--dir', vault])).toThrow()                      // the command line is refused the same way
+  await screen.getByTestId('publish-open').click()
+  await screen.getByTestId('publish-folder').setInputFiles(vault)
+  await expect(screen.getByTestId('publish-would')).toContainText('vault 1.0.0 would be version 1, asking to be trusted')
+  await expect(screen.getByTestId('publish-send')).toBeDisabled()
+  await expect(screen.getByTestId('publish-why')).toContainText('asks to be trusted and no approval stands for these exact files')
+  await screen.getByTestId('publish-approve-by').fill('grace')
+  await screen.getByTestId('publish-egress-connect=https://api.example.com').check()
+  await screen.getByTestId('publish-approve-note').fill('reviewed the origin')
+  await screen.getByTestId('publish-approve-send').click()
+  await expect(screen.getByTestId('apps-notice')).toContainText('Approved vault')
+  await expect(screen.getByTestId('publish-send')).toBeEnabled()
+  expect(run(['apps', 'approval-list']).approvals.length).toBeGreaterThan(0)
+  await screen.getByTestId('publish-send').click()
+  await expect(screen.getByTestId('apps-notice')).toContainText('vault is published as version 1')
+  await expect(screen.getByTestId('app-row-vault')).toContainText('trusted')
+  // the approval names the one origin that was chosen, not the other the manifest asked for
+  await expect(screen.locator('[data-testid^="approval-row-"]').filter({ hasText: 'vault' }).getByTestId('approval-for')).toHaveText('for connect https://api.example.com')
+  run(['apps', 'instance-save', '--name', 'safe', '--app', 'vault'])
+  await expect.poll(() => statusOf(`${appsUrl}/apps/safe/`), { timeout: 20_000 }).not.toBe(404)
+  await expect(screen.getByTestId('instance-row-safe').getByTestId('instance-trust')).toContainText('trusted, approved')
+}

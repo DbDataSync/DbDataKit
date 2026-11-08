@@ -1,4 +1,5 @@
-import type { AppDetail, AppInstanceRow } from './types'
+import { NEEDS_PUBLISHER, NEEDS_APPROVER } from './apps'
+import type { AppAbout, AppCheck, AppDetail, AppInstanceRow, AppsCaller } from './types'
 
 // The logic of the Apps screen's editors (plan 33, UE01 to UE03), apart from the screens so it can be tested: the instance form, the package a folder becomes, the navigation set's member list. Nothing here is a second
 // validator. The Gateway reads every name, setting, binding and manifest again and its refusal is what the screen shows; these functions only say why a button is off before a call that could not mean anything, and build
@@ -99,4 +100,107 @@ export function configurationLabel(row: Pick<AppInstanceRow, 'settings' | 'bindi
   const settings = Object.entries(row.settings ?? {}).map(([k, v]) => `${k}=${v}`)
   const bindings = Object.entries(row.bindings).map(([m, i]) => `${m} → ${i}`)
   return [...settings, ...bindings].join(', ')
+}
+
+// ---- UE02: publishing a version from a folder ----
+
+/** A file the browser read from the folder a person chose: its path as `webkitRelativePath` gives it (the folder's own name first) and its bytes. */
+export interface PickedFile { path: string; bytes: Uint8Array }
+
+/** The body of `PUT /api/v1/apps/{name}` and, without the note, of `POST /api/v1/apps/check` and of an approval of exact files. */
+export interface PublishBody { manifest: string; files: Record<string, string>; note?: string }
+
+export interface PreparedPackage {
+  /** Where it came from: the folder's name, or 'the pasted manifest'. */
+  source: string
+  manifest: string
+  files: Record<string, string>
+  fileCount: number
+  /** What the files add up to (the manifest not counted: the Gateway counts the files). */
+  bytes: number
+}
+
+export type Prepared = { ok: true; package: PreparedPackage } | { ok: false; problem: string }
+
+/** The most the files of one version add up to; the Gateway refuses more (AppPackage.MaximumBytes), the screen says so before sending 16 MB. */
+export const MAX_PACKAGE_BYTES = 16 * 1024 * 1024
+
+export function toBase64(bytes: Uint8Array): string {
+  let text = ''
+  for (let i = 0; i < bytes.length; i += 0x8000) text += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  return btoa(text)
+}
+
+const utf8 = (bytes: Uint8Array) => new TextDecoder('utf-8').decode(bytes)
+
+/**
+ * What a folder becomes: the same package `apps publish --dir` makes (the manifest is the `app.yaml` at the top, read as text; every other file is sent under its path inside the folder, as base64), so the hash of the files is the
+ * hash the command line shows and an approval made with either stands for both. A folder with no `app.yaml` at its top is refused here, naming what to choose instead; everything else is the Gateway's to read and refuse.
+ */
+export function prepareFolder(picked: PickedFile[], decode: (bytes: Uint8Array) => string = utf8): Prepared {
+  if (picked.length === 0) return { ok: false, problem: "Choose the folder of the built app: the one that holds app.yaml beside the files it serves." }
+  const first = picked[0]!.path.split('/')[0]!
+  const inside = picked.every((f) => f.path.includes('/') && f.path.split('/')[0] === first)
+  const rooted = picked.map((f) => ({ path: inside ? f.path.slice(first.length + 1) : f.path, bytes: f.bytes }))
+  const folder = inside ? first : 'the chosen files'
+  const manifest = rooted.find((f) => f.path === 'app.yaml')
+  if (!manifest) {
+    const deeper = rooted.find((f) => f.path.endsWith('/app.yaml'))
+    return { ok: false, problem: deeper
+      ? `There is no app.yaml at the top of ${folder}. There is one in ${folder}/${deeper.path.slice(0, -'/app.yaml'.length)}: choose that folder instead.`
+      : `There is no app.yaml in ${folder}: an app's folder holds its manifest at the top, beside the files it serves.` }
+  }
+  const files: Record<string, string> = {}
+  let bytes = 0
+  for (const f of rooted) {
+    if (f === manifest) continue
+    files[f.path] = toBase64(f.bytes)
+    bytes += f.bytes.length
+  }
+  if (bytes > MAX_PACKAGE_BYTES) return { ok: false, problem: `The files of ${folder} add up to ${Math.ceil(bytes / (1024 * 1024))} MB; an app is at most ${MAX_PACKAGE_BYTES / (1024 * 1024)} MB. Build without source maps and sample data, or choose the build's output folder.` }
+  return { ok: true, package: { source: folder, manifest: decode(manifest.bytes), files, fileCount: Object.keys(files).length, bytes } }
+}
+
+/** A manifest typed or pasted, with no files (a portal of its own mounts and home views needs none; an app that serves a page does). */
+export function prepareManifest(text: string): Prepared {
+  if (text.trim() === '') return { ok: false, problem: 'Paste the manifest (the text of app.yaml).' }
+  return { ok: true, package: { source: 'the pasted manifest', manifest: text, files: {}, fileCount: 0, bytes: 0 } }
+}
+
+export const publishBody = (p: PreparedPackage, note: string): PublishBody => ({ manifest: p.manifest, files: p.files, ...(note.trim() === '' ? {} : { note: note.trim() }) })
+
+/** The size as the screen says it. */
+export const sizeLabel = (bytes: number) => bytes < 1024 ? `${bytes} bytes` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+
+/** The outside origins a manifest asks for, each one a choice the approver makes: an `id` of the form `connect=https://api.example.com`, which is also what the approval's `egress` list is made of. */
+export function egressChoices(about: Pick<AppAbout, 'egress'> | null | undefined): { id: string; directive: string; origin: string }[] {
+  return (about?.egress ?? []).flatMap((e) => e.origins.map((origin) => ({ id: `${e.directive}=${origin}`, directive: e.directive, origin })))
+}
+
+/** The `egress` of an approval for the origins chosen, or undefined for none (an approval with no origin allows none). */
+export const egressParam = (chosen: string[]): string | undefined => chosen.length === 0 ? undefined : chosen.join(',')
+
+/** The same text with a choice turned on or off. */
+export const toggled = (chosen: string[], id: string): string[] => chosen.includes(id) ? chosen.filter((c) => c !== id) : [...chosen, id]
+
+/** Why the files cannot be published yet, or null when the call may be tried. The Gateway checks again and its refusal is shown as it says it. */
+export function publishBlock(caller: AppsCaller, prepared: Prepared | null, check: AppCheck | null, checking: boolean): string | null {
+  if (!caller.can_publish) return NEEDS_PUBLISHER
+  if (prepared === null) return 'Choose the folder of the built app first.'
+  if (!prepared.ok) return prepared.problem
+  if (checking || check === null) return 'Checking these files with the Gateway…'
+  if (!check.ok) return 'The Gateway found errors in these files (listed above): fix them, then choose the folder again. These are the checks of apps validate.'
+  if (check.trust === 'trusted' && !check.approval_id) return `${check.name} ${check.manifest_version} asks to be trusted and no approval stands for these exact files: an approver approves them below (hash ${check.hash?.slice(0, 12)}), then they can be published.`
+  return null
+}
+
+/** Why exact files cannot be approved from here, or null. The Gateway decides: the approver must hold the Approver role at the identity home and not be the author (the person signed in here). */
+export function packageApproveBlock(caller: AppsCaller, check: AppCheck | null, by: string): string | null {
+  if (!caller.can_approve) return NEEDS_APPROVER
+  if (check === null) return 'Check the files first.'
+  if (check.trust !== 'trusted') return 'Only an app that asks to be trusted needs an approval; these files are sandboxed.'
+  if (check.approval_id) return `An approval already stands for these exact files (${check.approval_id}).`
+  if (by.trim() === '') return 'Name the approver: a person of the identity home who holds the Approver role.'
+  if (by.trim().toLowerCase() === caller.you.trim().toLowerCase()) return `${caller.you} is signed in here and would publish these files, so cannot approve them: the author and the approver are two people. Name another approver.`
+  return null
 }

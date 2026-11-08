@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
-import { bindingRows, instanceFormProblem, KNOWN_SETTINGS, type InstanceForm } from '../appEditors'
-import { NEEDS_PUBLISHER } from '../apps'
-import type { AppsCaller, AppSummary } from '../types'
+import { bindingRows, egressChoices, instanceFormProblem, KNOWN_SETTINGS, packageApproveBlock, publishBlock, sizeLabel, type InstanceForm, type Prepared } from '../appEditors'
+import { NEEDS_PUBLISHER, shortHash } from '../apps'
+import type { AppCheck, AppsCaller, AppSummary } from '../types'
 
 // The editors of the Apps screen (plan 33): the instance form (UE01), the publish panel (UE02) and the navigation set editor (UE03). Each is a view over its props, as the lists in AppsPage are, so it is tested without its calls.
 // The roles are the Gateway's: a button that is off says why, and the Gateway refuses the call again if the screen is wrong.
@@ -113,6 +113,137 @@ export function InstanceEditorView(p: InstanceEditorProps) {
           <button type="button" className="btn" onClick={p.onCancel} data-testid="instance-editor-cancel">Cancel</button>
         </div>
         <Why reason={reason} testId="instance-editor-why" />
+      </div>
+    </div>
+  )
+}
+
+// ---- UE02: publish a version, and approve exact files with the origins chosen ----
+
+export interface PublishViewProps {
+  caller: AppsCaller
+  mode: 'folder' | 'manifest'
+  /** What the chosen folder (or the pasted text) became, or why it cannot be sent; null before anything is chosen. */
+  prepared: Prepared | null
+  pasted: string
+  note: string
+  /** The Gateway's answer about these files, null until it has one. */
+  check: AppCheck | null
+  checking: boolean
+  /** Why the check call itself was refused, in the Gateway's words. */
+  checkFailure: string | null
+  /** The Gateway's refusal of the last publish or approval, in its words. */
+  refusal: string | null
+  busy: boolean
+  by: string
+  approveNote: string
+  /** The origins ticked, as `directive=origin`. */
+  chosenEgress: string[]
+  onMode: (mode: 'folder' | 'manifest') => void
+  onPickFiles: (files: FileList | null) => void
+  onPaste: (text: string) => void
+  onNote: (text: string) => void
+  onPublish: () => void
+  onBy: (text: string) => void
+  onApproveNote: (text: string) => void
+  onToggleEgress: (id: string) => void
+  onApprove: () => void
+  onClear: () => void
+}
+
+/** The Gateway's findings about files, one line each as the command line prints them. */
+function Findings({ check }: { check: AppCheck }) {
+  if (check.diagnostics.length === 0) return <div className="hint" data-testid="publish-diagnostics-none">The Gateway found nothing to fix.</div>
+  return (
+    <ul data-testid="publish-diagnostics" style={{ margin: '4px 0', paddingLeft: 18 }}>
+      {check.diagnostics.map((d, i) => (
+        <li key={i} className="mono" style={wrap} data-severity={d.severity} data-testid="publish-diagnostic">
+          {d.file ? `${d.file}${d.line > 0 ? `:${d.line}` : ''}: ` : ''}{d.severity} {d.code}: {d.message}{d.fix ? ` (${d.fix})` : ''}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/**
+ * Publish a version of an app: the built folder (a directory input; every file is sent as base64 with the manifest as text, the package `apps publish --dir` makes), or a manifest alone. The Gateway checks the files first and says
+ * what a publish would do (the version it would be, the trust, the hash); a refusal of the publish is shown as the Gateway says it. A trusted app is published only with an approval of exactly these files, which an approver makes
+ * here, choosing which of the outside origins the manifest asks for are allowed; the approver is a person of the identity home with the Approver role, not the person publishing.
+ */
+export function PublishView(p: PublishViewProps) {
+  const { check } = p
+  const reason = publishBlock(p.caller, p.prepared, check, p.checking)
+  const approveReason = packageApproveBlock(p.caller, check, p.by)
+  const needsApproval = check !== null && check.trust === 'trusted' && !check.approval_id
+  const choices = egressChoices(check?.about)
+  return (
+    <div className="card" data-testid="publish-panel">
+      <div className="card-body">
+        <div className="row" style={{ gap: 6, marginBottom: 8 }}>
+          <button type="button" className={p.mode === 'folder' ? 'btn sm btn-primary' : 'btn sm'} onClick={() => p.onMode('folder')} data-testid="publish-mode-folder">A built folder</button>
+          <button type="button" className={p.mode === 'manifest' ? 'btn sm btn-primary' : 'btn sm'} onClick={() => p.onMode('manifest')} data-testid="publish-mode-manifest">A manifest only</button>
+        </div>
+        {p.mode === 'folder'
+          ? (
+            <label style={{ display: 'grid', gap: 2 }}>
+              <span className="hint">The folder that holds app.yaml and the files it serves (its build output; every file in it is sent, as <span className="mono">apps publish --dir</span> sends them)</span>
+              {/* a directory input: the browser gives every file with its path inside the folder */}
+              <input type="file" multiple {...{ webkitdirectory: '' }} disabled={!p.caller.can_publish} onChange={(e) => p.onPickFiles(e.target.files)} data-testid="publish-folder" aria-label="App folder" />
+            </label>
+          )
+          : (
+            <label style={{ display: 'grid', gap: 2 }}>
+              <span className="hint">The text of app.yaml. For an app that serves pages, choose its folder instead; a manifest alone suits a portal of mounts and home views.</span>
+              <textarea className="input" rows={8} value={p.pasted} disabled={!p.caller.can_publish} onChange={(e) => p.onPaste(e.target.value)} data-testid="publish-manifest" aria-label="Manifest" style={{ fontFamily: 'var(--mono, monospace)' }} />
+            </label>
+          )}
+        {p.prepared?.ok === false && <div className="hint" role="alert" style={wrap} data-testid="publish-problem">{p.prepared.problem}</div>}
+        {p.prepared?.ok === true && (
+          <div style={{ marginTop: 8 }} data-testid="publish-summary">
+            <span className="mono">{p.prepared.package.source}</span>: app.yaml and {p.prepared.package.fileCount} file{p.prepared.package.fileCount === 1 ? '' : 's'}, {sizeLabel(p.prepared.package.bytes)}
+            {' '}<button type="button" className="btn sm" onClick={p.onClear} data-testid="publish-clear">Choose again</button>
+          </div>
+        )}
+        {p.checking && <div className="hint" data-testid="publish-checking">Checking these files with the Gateway…</div>}
+        {p.checkFailure && <div className="banner error" role="alert" data-testid="publish-check-failure"><span className="mark">!</span><span>{p.checkFailure}</span></div>}
+        {check && (
+          <div style={{ marginTop: 8 }} data-testid="publish-check" data-ok={check.ok ? 'true' : 'false'}>
+            {check.name && <div data-testid="publish-would"><b>{check.name} {check.manifest_version}</b> would be version {check.next_version}, {check.trust === 'trusted' ? 'asking to be trusted' : 'sandboxed'}; hash <span className="mono" title={check.hash ?? undefined}>{shortHash(check.hash ?? '')}</span>.</div>}
+            <Findings check={check} />
+          </div>
+        )}
+
+        <div className="row" style={{ gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+          <input className="input" style={{ maxWidth: 360 }} placeholder="note for this version (optional)" value={p.note} disabled={!p.caller.can_publish} onChange={(e) => p.onNote(e.target.value)} data-testid="publish-note" aria-label="Note" />
+          <button type="button" className="btn btn-primary" disabled={reason !== null || p.busy} onClick={p.onPublish} data-testid="publish-send">{check?.name ? `Publish ${check.name} as version ${check.next_version}` : 'Publish'}</button>
+        </div>
+        <Why reason={reason} testId="publish-why" />
+        {p.refusal && <div className="banner error" role="alert" style={{ marginTop: 8 }} data-testid="publish-refusal"><span className="mark">!</span><span style={wrap}>{p.refusal}</span></div>}
+
+        {needsApproval && (
+          <div style={{ marginTop: 14, borderTop: '1px solid var(--line, #ddd)', paddingTop: 10 }} data-testid="publish-approve">
+            <h3 className="hint" style={{ margin: '0 0 4px' }}>Approve these exact files</h3>
+            <p className="hint" style={{ margin: '0 0 6px', ...wrap }}>An approval is for the hash above: a changed byte needs a new one. The approver is named in the audit; the Gateway checks that they hold the Approver role and are not {p.caller.you || 'the person publishing'}.</p>
+            {choices.length === 0
+              ? <div className="hint" data-testid="publish-egress-none">The manifest asks for no outside address, so the approval allows none.</div>
+              : (
+                <fieldset style={{ border: 0, padding: 0, margin: '0 0 6px' }} data-testid="publish-egress">
+                  <legend className="hint">Outside addresses the manifest asks for: tick the ones the app may use (none ticked, none allowed)</legend>
+                  {choices.map((c) => (
+                    <label key={c.id} style={{ display: 'block' }}>
+                      <input type="checkbox" checked={p.chosenEgress.includes(c.id)} onChange={() => p.onToggleEgress(c.id)} data-testid={`publish-egress-${c.id}`} /> <span className="mono">{c.directive} {c.origin}</span>
+                    </label>
+                  ))}
+                </fieldset>
+              )}
+            <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <input className="input sm" style={{ width: 220, flex: 'none' }} placeholder="approver" value={p.by} onChange={(e) => p.onBy(e.target.value)} data-testid="publish-approve-by" aria-label="Approver" />
+              <input className="input" style={{ maxWidth: 320 }} placeholder="note (a link to the review, for example)" value={p.approveNote} onChange={(e) => p.onApproveNote(e.target.value)} data-testid="publish-approve-note" aria-label="Approval note" />
+              <button type="button" className="btn btn-primary" disabled={approveReason !== null || p.busy} onClick={p.onApprove} data-testid="publish-approve-send">Approve these files</button>
+            </div>
+            <Why reason={approveReason} testId="publish-approve-why" />
+          </div>
+        )}
       </div>
     </div>
   )

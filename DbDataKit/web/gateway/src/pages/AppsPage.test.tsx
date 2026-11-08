@@ -1,10 +1,10 @@
 import { isValidElement, type ReactElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { InstanceEditorView, instanceSaveBlock, type InstanceEditorProps } from './AppEditors'
-import { emptyInstanceForm, formFromRow } from '../appEditors'
+import { InstanceEditorView, instanceSaveBlock, PublishView, type InstanceEditorProps, type PublishViewProps } from './AppEditors'
+import { emptyInstanceForm, formFromRow, prepareManifest } from '../appEditors'
 import { ApprovalsView, AppsView, AboutView, InstancesView, NavigationView, VersionsView, type ApprovalsViewProps, type InstancesViewProps, type VersionsViewProps } from './AppsPage'
-import type { AppAbout, AppApprovalRow, AppDetail, AppInstanceRow, AppsCaller, AppSummary, AppVersionRow } from '../types'
+import type { AppAbout, AppApprovalRow, AppCheck, AppDetail, AppInstanceRow, AppsCaller, AppSummary, AppVersionRow } from '../types'
 
 const viewer: AppsCaller = { can_publish: false, can_approve: false, you: 'Ada' }
 const admin: AppsCaller = { can_publish: true, can_approve: false, you: 'Ada' }
@@ -96,7 +96,7 @@ const version = (n: number, over: Partial<AppVersionRow> = {}): AppVersionRow =>
 const detail = (caller: AppsCaller): AppDetail => ({ name: 'notes', serving: 2, versions: [version(2), version(1, { trust: 'sandbox', approval_id: null })], caller })
 
 function versionsProps(over: Partial<VersionsViewProps> = {}): VersionsViewProps {
-  return { detail: detail(approver), by: 'Grace', note: '', approving: null, showing: null, busy: false, onServe: () => {}, onShow: () => {}, onAskApprove: () => {}, onNote: () => {}, onApprove: () => {}, ...over }
+  return { detail: detail(approver), by: 'Grace', note: '', approving: null, showing: null, busy: false, onServe: () => {}, onShow: () => {}, onAskApprove: () => {}, onNote: () => {}, onApprove: () => {}, egress: [], onToggleEgress: () => {}, ...over }
 }
 
 describe('the versions of an app', () => {
@@ -274,5 +274,115 @@ describe('the new instance form', () => {
   it('shows an instance\'s settings and bindings in its row', () => {
     const text = html(InstancesView(instancesProps({ rows: [{ ...acme, settings: { portal: 'front' }, bindings: { territories: 'default' } }] })))
     expect(text).toContain('portal=front, territories → default')
+  })
+})
+
+// ---- UE02: the publish panel ----
+
+const manifestOnly = prepareManifest('schemaVersion: 1\nname: notes\nversion: 1.0.0\n')
+const sandboxCheck: AppCheck = { ok: true, diagnostics: [], files: 0, name: 'notes', manifest_version: '1.0.0', trust: 'sandbox', hash: 'ab'.repeat(32), approval_id: null, next_version: 3, about: null }
+const trustedCheck: AppCheck = { ...sandboxCheck, trust: 'trusted', about: { ...about, egress: [{ directive: 'connect', origins: ['https://api.example.com'] }, { directive: 'img', origins: ['https://cdn.example.com'] }] } }
+
+function publishProps(over: Partial<PublishViewProps> = {}): PublishViewProps {
+  return {
+    caller: { can_publish: true, can_approve: true, you: 'Ada' }, mode: 'folder', prepared: manifestOnly, pasted: '', note: '', check: sandboxCheck, checking: false, checkFailure: null, refusal: null, busy: false,
+    by: 'Grace', approveNote: '', chosenEgress: [], onMode: () => {}, onPickFiles: () => {}, onPaste: () => {}, onNote: () => {}, onPublish: () => {}, onBy: () => {}, onApproveNote: () => {}, onToggleEgress: () => {}, onApprove: () => {}, onClear: () => {},
+    ...over,
+  }
+}
+
+describe('the publish panel', () => {
+  it('takes a folder through a directory input, or a manifest in a text area', () => {
+    const folder = html(PublishView(publishProps({ prepared: null, check: null })))
+    expect(folder).toContain('data-testid="publish-folder"')
+    expect(folder).toContain('webkitdirectory')
+    expect(folder).not.toContain('data-testid="publish-manifest"')
+    const manifest = html(PublishView(publishProps({ mode: 'manifest', prepared: null, check: null })))
+    expect(manifest).toContain('data-testid="publish-manifest"')
+    const onMode = vi.fn()
+    ;(find(PublishView(publishProps({ onMode })), 'publish-mode-manifest')!.props.onClick as () => void)()
+    expect(onMode).toHaveBeenCalledWith('manifest')
+  })
+
+  it('says what was chosen, what the Gateway makes of it (the version it would be, the trust, the hash) and each finding, then publishes', () => {
+    const onPublish = vi.fn()
+    const view = PublishView(publishProps({ onPublish, check: { ...sandboxCheck, diagnostics: [{ code: 'DBD-APP-010', severity: 'warning', file: 'app.yaml', line: 4, column: 1, message: 'The bundle refers to https://x.example.', fix: 'Remove it.' }] } }))
+    const text = html(view)
+    expect(text).toContain('the pasted manifest')
+    expect(text).toContain('notes 1.0.0')
+    expect(text).toContain('would be version 3, sandboxed')
+    expect(text).toContain('abababababab')
+    expect(text).toContain('app.yaml:4: warning DBD-APP-010: The bundle refers to https://x.example. (Remove it.)')
+    expect(find(view, 'publish-send')!.props.disabled).toBe(false)
+    expect(html(view)).toContain('Publish notes as version 3')
+    ;(find(view, 'publish-send')!.props.onClick as () => void)()
+    expect(onPublish).toHaveBeenCalled()
+    expect(text).not.toContain('data-testid="publish-why"')
+    expect(text).not.toContain('data-testid="publish-approve"')           // a sandboxed app has nothing to approve
+  })
+
+  it('shows why a folder cannot be sent, and says when nothing was found to fix', () => {
+    const problem = html(PublishView(publishProps({ prepared: { ok: false, problem: 'There is no app.yaml in notes: an app\'s folder holds its manifest at the top.' }, check: null })))
+    expect(problem).toContain('data-testid="publish-problem"')
+    expect(problem).toContain('There is no app.yaml in notes')
+    expect(html(PublishView(publishProps()))).toContain('data-testid="publish-diagnostics-none"')
+  })
+
+  it('keeps Publish off with the reason: no role, checking, errors, a trusted app with no approval', () => {
+    const off = (over: Partial<PublishViewProps>) => PublishView(publishProps(over))
+    expect(find(off({ caller: { can_publish: false, can_approve: false, you: 'Bob' } }), 'publish-send')!.props.disabled).toBe(true)
+    expect(html(off({ caller: { can_publish: false, can_approve: false, you: 'Bob' } }))).toContain('publisher or administrator role')
+    expect(find(off({ check: null, checking: true }), 'publish-send')!.props.disabled).toBe(true)
+    expect(html(off({ check: null, checking: true }))).toContain('data-testid="publish-checking"')
+    const errors = off({ check: { ...sandboxCheck, ok: false, diagnostics: [{ code: 'DBD-APP-006', severity: 'error', file: 'app.yaml', line: 1, column: 1, message: 'The manifest names `app.html`, which is not in the app\'s folder.', fix: null }] } })
+    expect(find(errors, 'publish-send')!.props.disabled).toBe(true)
+    expect(html(errors)).toContain('which is not in the app&#x27;s folder')
+    expect(find(off({ check: trustedCheck }), 'publish-send')!.props.disabled).toBe(true)
+    expect(html(off({ check: trustedCheck }))).toContain('asks to be trusted and no approval stands')
+  })
+
+  it('shows the Gateway\'s refusal and the failure of the check in its words', () => {
+    expect(html(PublishView(publishProps({ refusal: "'notes' 1.0.0 asks to be trusted and has no approval for these exact files and manifest (hash abc)." })))).toContain('data-testid="publish-refusal"')
+    expect(html(PublishView(publishProps({ check: null, checkFailure: "The file 'index.html' is not base64." })))).toContain('The file &#x27;index.html&#x27; is not base64.')
+  })
+
+  it('offers the approval of a trusted app\'s exact files with a choice of each origin the manifest asks for, none ticked until chosen', () => {
+    const view = PublishView(publishProps({ check: trustedCheck }))
+    const text = html(view)
+    expect(text).toContain('data-testid="publish-approve"')
+    expect(text).toContain('data-testid="publish-egress-connect=https://api.example.com"')
+    expect(text).toContain('data-testid="publish-egress-img=https://cdn.example.com"')
+    expect(text).not.toContain('checked=""')
+    const onToggle = vi.fn()
+    ;(find(PublishView(publishProps({ check: trustedCheck, onToggleEgress: onToggle })), 'publish-egress-img=https://cdn.example.com')!.props.onChange as () => void)()
+    expect(onToggle).toHaveBeenCalledWith('img=https://cdn.example.com')
+    expect(html(PublishView(publishProps({ check: trustedCheck, chosenEgress: ['connect=https://api.example.com'] })))).toContain('checked=""')
+    expect(html(PublishView(publishProps({ check: { ...trustedCheck, about: { ...about, egress: [] } } })))).toContain('data-testid="publish-egress-none"')
+  })
+
+  it('approves as the named approver, off with the reason when that is the person publishing or the role is missing', () => {
+    const onApprove = vi.fn()
+    const view = PublishView(publishProps({ check: trustedCheck, onApprove }))
+    expect(find(view, 'publish-approve-send')!.props.disabled).toBe(false)
+    ;(find(view, 'publish-approve-send')!.props.onClick as () => void)()
+    expect(onApprove).toHaveBeenCalled()
+    const own = PublishView(publishProps({ check: trustedCheck, by: 'ada' }))
+    expect(find(own, 'publish-approve-send')!.props.disabled).toBe(true)
+    expect(html(own)).toContain('two people')
+    const noRole = PublishView(publishProps({ check: trustedCheck, caller: { can_publish: true, can_approve: false, you: 'Ada' } }))
+    expect(find(noRole, 'publish-approve-send')!.props.disabled).toBe(true)
+    expect(html(noRole)).toContain('Approver role on this server')
+    expect(html(PublishView(publishProps({ check: { ...trustedCheck, approval_id: 'apr_4' } })))).not.toContain('data-testid="publish-approve"')
+    expect(find(PublishView(publishProps({ check: { ...trustedCheck, approval_id: 'apr_4' } })), 'publish-send')!.props.disabled).toBe(false)
+  })
+
+  it('offers the origins in the approval of a published version too, for the version\'s own manifest', () => {
+    const v = version(2, { about: { ...about, egress: [{ directive: 'connect', origins: ['https://api.example.com'] }] } })
+    const props = versionsProps({ detail: { name: 'notes', serving: 2, versions: [v], caller: approver }, approving: 2, egress: ['connect=https://api.example.com'] })
+    const text = html(VersionsView(props))
+    expect(text).toContain('data-testid="approve-egress-connect=https://api.example.com"')
+    expect(text).toContain('checked=""')
+    const none = version(2, { about: { ...about, egress: [] } })
+    expect(html(VersionsView(versionsProps({ detail: { name: 'notes', serving: 2, versions: [none], caller: approver }, approving: 2 })))).toContain('data-testid="approve-egress-none"')
   })
 })

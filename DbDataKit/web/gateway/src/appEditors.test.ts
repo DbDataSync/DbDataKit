@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { bindingRows, configurationLabel, emptyInstanceForm, formFromRow, instanceFormProblem, instanceRequest, modelsOf, pinRequest } from './appEditors'
-import type { AppAbout, AppDetail, AppInstanceRow, AppVersionRow } from './types'
+import {
+  bindingRows, configurationLabel, egressChoices, egressParam, emptyInstanceForm, formFromRow, instanceFormProblem, instanceRequest, MAX_PACKAGE_BYTES, modelsOf, packageApproveBlock, pinRequest, prepareFolder, prepareManifest, publishBlock, publishBody, sizeLabel, toBase64, toggled,
+  type PickedFile,
+} from './appEditors'
+import type { AppAbout, AppCheck, AppDetail, AppInstanceRow, AppsCaller, AppVersionRow } from './types'
 
 const row = { name: 'acme', app: 'notes', pin: null, title: 'Acme notes', settings: { portal: 'front' }, bindings: { territories: 'default' } } satisfies Pick<AppInstanceRow, 'name' | 'app' | 'pin' | 'title' | 'settings' | 'bindings'>
 
@@ -82,5 +85,139 @@ describe('the configuration line of the list', () => {
   it('names the settings, then the bindings, and nothing for an instance with neither', () => {
     expect(configurationLabel(row)).toBe('portal=front, territories → default')
     expect(configurationLabel({ settings: {}, bindings: {} })).toBe('')
+  })
+})
+
+// ---- UE02 ----
+
+const bytesOf = (text: string) => new TextEncoder().encode(text)
+const fromBase64 = (text: string) => Uint8Array.from(atob(text), (c) => c.charCodeAt(0))
+const textOf = (text: string) => new TextDecoder().decode(fromBase64(text))
+const file = (path: string, text: string | Uint8Array): PickedFile => ({ path, bytes: typeof text === 'string' ? bytesOf(text) : text })
+const manifestText = 'schemaVersion: 1\nname: notes\nversion: 1.0.0\nentry: index.html\n'
+
+describe('base64', () => {
+  it('is the same as the platform\'s for bytes of every value, across the chunk the encoder works in', () => {
+    const bytes = Uint8Array.from({ length: 0x8000 * 2 + 17 }, (_, i) => (i * 7) % 256)
+    expect([...fromBase64(toBase64(bytes))]).toEqual([...bytes])
+    expect(toBase64(bytesOf('Many hands make light work.'))).toBe('TWFueSBoYW5kcyBtYWtlIGxpZ2h0IHdvcmsu')
+    expect(toBase64(new Uint8Array(0))).toBe('')
+  })
+})
+
+describe('the package a folder becomes', () => {
+  it('is the manifest as text and every other file under its path inside the folder as base64, as apps publish --dir sends them', () => {
+    const prepared = prepareFolder([
+      file('notes/app.yaml', manifestText), file('notes/index.html', '<html>one</html>'), file('notes/src/main.js', 'run()'), file('notes/views/home.yaml', 'a: 1'),
+    ])
+    expect(prepared.ok).toBe(true)
+    if (!prepared.ok) return
+    expect(prepared.package.source).toBe('notes')
+    expect(prepared.package.manifest).toBe(manifestText)
+    expect(Object.keys(prepared.package.files).sort()).toEqual(['index.html', 'src/main.js', 'views/home.yaml'])           // no app.yaml among the files; folders kept
+    expect(textOf(prepared.package.files['index.html']!)).toBe('<html>one</html>')
+    expect(prepared.package.fileCount).toBe(3)
+    expect(prepared.package.bytes).toBe('<html>one</html>'.length + 'run()'.length + 'a: 1'.length)
+  })
+
+  it('keeps binary files byte for byte and drops a byte order mark from the manifest, as reading the file as text does', () => {
+    const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0xff, 0xfe, 0x80])
+    const withBom = Uint8Array.from([0xef, 0xbb, 0xbf, ...bytesOf(manifestText)])
+    const prepared = prepareFolder([file('n/app.yaml', withBom), file('n/logo.png', png)])
+    expect(prepared.ok && prepared.package.manifest).toBe(manifestText)
+    expect(prepared.ok && [...fromBase64(prepared.package.files['logo.png']!)]).toEqual([...png])
+  })
+
+  it('names the folder when it has no app.yaml at its top, and the one to choose when the manifest is a level down', () => {
+    const none = prepareFolder([file('notes/index.html', 'x')])
+    expect(none).toEqual({ ok: false, problem: expect.stringContaining('There is no app.yaml in notes') })
+    const deeper = prepareFolder([file('projects/notes/app.yaml', manifestText), file('projects/notes/index.html', 'x')])
+    expect(deeper.ok).toBe(false)
+    expect(!deeper.ok && deeper.problem).toContain('There is no app.yaml at the top of projects')
+    expect(!deeper.ok && deeper.problem).toContain('choose that folder instead')
+    expect(!deeper.ok && deeper.problem).toContain('projects/notes')
+    expect(prepareFolder([])).toEqual({ ok: false, problem: expect.stringContaining('Choose the folder') })
+  })
+
+  it('refuses more than the Gateway accepts, naming the size, before anything is sent', () => {
+    const big = prepareFolder([file('n/app.yaml', manifestText), file('n/data.bin', new Uint8Array(MAX_PACKAGE_BYTES + 1))])
+    expect(big.ok).toBe(false)
+    expect(!big.ok && big.problem).toContain('17 MB')
+    expect(!big.ok && big.problem).toContain('at most 16 MB')
+    expect(prepareFolder([file('n/app.yaml', manifestText), file('n/data.bin', new Uint8Array(MAX_PACKAGE_BYTES))]).ok).toBe(true)
+  })
+
+  it('takes files that are not in a folder as they are (a single file picked, the manifest among them)', () => {
+    const prepared = prepareFolder([file('app.yaml', manifestText), file('index.html', 'x')])
+    expect(prepared.ok && Object.keys(prepared.package.files)).toEqual(['index.html'])
+    expect(prepared.ok && prepared.package.source).toBe('the chosen files')
+  })
+
+  it('makes a package of a pasted manifest alone, and says when nothing is pasted', () => {
+    expect(prepareManifest('  ')).toEqual({ ok: false, problem: expect.stringContaining('Paste the manifest') })
+    const pasted = prepareManifest(manifestText)
+    expect(pasted.ok && pasted.package).toMatchObject({ manifest: manifestText, files: {}, fileCount: 0 })
+  })
+
+  it('sends the note only when there is one', () => {
+    const prepared = prepareManifest(manifestText)
+    if (!prepared.ok) throw new Error('unreachable')
+    expect(publishBody(prepared.package, '  ')).toEqual({ manifest: manifestText, files: {} })
+    expect(publishBody(prepared.package, ' second build ')).toEqual({ manifest: manifestText, files: {}, note: 'second build' })
+  })
+
+  it('says sizes in words', () => {
+    expect([sizeLabel(12), sizeLabel(2048), sizeLabel(5 * 1024 * 1024)]).toEqual(['12 bytes', '2.0 KB', '5.0 MB'])
+  })
+})
+
+const caller = (over: Partial<AppsCaller> = {}): AppsCaller => ({ can_publish: true, can_approve: true, you: 'Ada', ...over })
+const okPrepared = prepareManifest(manifestText)
+const aboutOf = (egress: AppAbout['egress']): AppAbout => ({ ...about(['territories']), trust: 'trusted', egress })
+const check = (over: Partial<AppCheck> = {}): AppCheck => ({
+  ok: true, diagnostics: [], files: 1, name: 'notes', manifest_version: '1.0.0', trust: 'sandbox', hash: 'cd'.repeat(32), approval_id: null, next_version: 3, about: null, ...over,
+})
+
+describe('why Publish is off', () => {
+  it('needs the role, a chosen folder that is a package, the Gateway\'s check, no errors, and for a trusted app an approval of these exact files', () => {
+    expect(publishBlock(caller({ can_publish: false }), okPrepared, check(), false)).toContain('publisher or administrator role')
+    expect(publishBlock(caller(), null, null, false)).toContain('Choose the folder')
+    expect(publishBlock(caller(), { ok: false, problem: 'There is no app.yaml in notes.' }, null, false)).toBe('There is no app.yaml in notes.')
+    expect(publishBlock(caller(), okPrepared, null, true)).toContain('Checking')
+    expect(publishBlock(caller(), okPrepared, null, false)).toContain('Checking')
+    expect(publishBlock(caller(), okPrepared, check({ ok: false }), false)).toContain('errors in these files')
+    expect(publishBlock(caller(), okPrepared, check({ trust: 'trusted' }), false)).toContain('asks to be trusted and no approval stands')
+    expect(publishBlock(caller(), okPrepared, check({ trust: 'trusted' }), false)).toContain('cdcdcdcdcdcd')
+    expect(publishBlock(caller(), okPrepared, check({ trust: 'trusted', approval_id: 'apr_1' }), false)).toBeNull()
+    expect(publishBlock(caller(), okPrepared, check(), false)).toBeNull()
+  })
+})
+
+describe('approving exact files', () => {
+  const trusted = check({ trust: 'trusted' })
+  it('needs the Approver role, a trusted app with no approval, a named approver, and one who is not the person publishing', () => {
+    expect(packageApproveBlock(caller({ can_approve: false }), trusted, 'Grace')).toContain('Approver role')
+    expect(packageApproveBlock(caller(), null, 'Grace')).toContain('Check the files first')
+    expect(packageApproveBlock(caller(), check(), 'Grace')).toContain('sandboxed')
+    expect(packageApproveBlock(caller(), check({ trust: 'trusted', approval_id: 'apr_9' }), 'Grace')).toContain('apr_9')
+    expect(packageApproveBlock(caller(), trusted, ' ')).toContain('Name the approver')
+    expect(packageApproveBlock(caller(), trusted, 'ada')).toContain('two people')
+    expect(packageApproveBlock(caller(), trusted, 'Grace Hopper')).toBeNull()
+  })
+})
+
+describe('the outside origins an approver chooses', () => {
+  const egress = [{ directive: 'connect', origins: ['https://api.example.com', 'wss://live.example.com'] }, { directive: 'img', origins: ['https://cdn.example.com'] }]
+  it('are the origins the manifest asks for, each one a choice, and none when it asks for none', () => {
+    expect(egressChoices(aboutOf(egress)).map((c) => c.id)).toEqual(['connect=https://api.example.com', 'connect=wss://live.example.com', 'img=https://cdn.example.com'])
+    expect(egressChoices(aboutOf([]))).toEqual([])
+    expect(egressChoices(null)).toEqual([])
+  })
+
+  it('make the approval\'s egress list, which is empty (allows none) until one is ticked', () => {
+    expect(egressParam([])).toBeUndefined()
+    expect(egressParam(['connect=https://api.example.com', 'img=https://cdn.example.com'])).toBe('connect=https://api.example.com,img=https://cdn.example.com')
+    expect(toggled([], 'a')).toEqual(['a'])
+    expect(toggled(['a', 'b'], 'a')).toEqual(['b'])
   })
 })

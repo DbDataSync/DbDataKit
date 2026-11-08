@@ -99,5 +99,11 @@ export interface AppApprovalRow {
   id: string; app: string; version: string; hash: string; approved_by: string; approved_at: string; note: string | null; published_version: number | null; revoked: boolean; revoked_at: string | null
   operations: AppAccess[]; egress: AppEgressRow[]
 }
+/** What the Gateway's `POST /api/v1/apps/check` says of files before they are published: the manifest's own diagnostics, what the version would be, and whether an approval already stands for these exact files. */
+export interface AppCheckDiagnostic { code: string; severity: string; file: string; line: number; column: number; message: string; fix: string | null }
+export interface AppCheck {
+  ok: boolean; diagnostics: AppCheckDiagnostic[]; files: number
+  name: string | null; manifest_version: string | null; trust: 'sandbox' | 'trusted' | null; hash: string | null; approval_id: string | null; next_version: number | null; about: AppAbout | null
+}
 export interface AppApprovals { approvals: AppApprovalRow[]; caller: AppsCaller }
 export interface AppsList { apps: AppSummary[]; caller: AppsCaller }
