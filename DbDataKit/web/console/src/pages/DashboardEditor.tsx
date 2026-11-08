@@ -12,6 +12,7 @@ import { withSource } from '../viewsUrl'
 import { newWidget, nextTile } from '../viewsEditing'
 import { GridEditor, LayoutSettings, SelectorEditor, SelectorTester } from './LayoutEditors'
 import { DocumentSettings } from './DocumentSettings'
+import { FlowEditor } from './FlowEditor'
 import { WidgetEditor } from './WidgetEditor'
 
 const AREA: Record<ViewKind, string> = { dashboard: '/views/dashboards', report: '/views/reports' }
@@ -32,7 +33,7 @@ type Message = { tone: 'ok' | 'error'; text: string } | null
 /**
  * The editor of the Views page (plan 32 DBR24): one dashboard or report as a draft (text and document kept in step, undo and redo), the validator's answer on every change shown beside the part it is about (the widget,
  * the layout, the tile) and in the YAML view as markers, save with the version the file was opened at (a stale save is a conflict that offers a reload), duplicate and delete. A form change and a YAML change are the same text.
- * What it does not do yet: field wells and the derived request (DBR25), dragging on the grid and the canvas, selectors and parameters (DBR26), the report's sections (DBR27), a live preview of the unsaved draft (DBR28).
+ * The report's sections, blocks and page setup are `FlowEditor` (DBR27). Not yet: a live preview of the unsaved draft on the server (DBR28).
  */
 export function DashboardEditor({ kind, name, source = FIXTURES, keep = null }: { kind: ViewKind; name: string | null; source?: string; keep?: string | null }) {
   const navigate = useNavigate()
@@ -223,6 +224,7 @@ export function DashboardEditor({ kind, name, source = FIXTURES, keep = null }: 
             <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap', margin: '6px 0' }} data-testid="ed-layout-add">
               <input aria-label="New layout name" data-testid="ed-layout-new-name" placeholder="phone" value={layoutName} onChange={(e) => setLayoutName(e.target.value)} />
               <button type="button" className="btn btn-sm" data-testid="ed-layout-add-reflow" disabled={!NAME_PATTERN.test(layoutName)} onClick={() => { apply({ type: 'addLayout', layout: { name: layoutName, type: 'reflow', grid: { columns: 12 }, tiles: [] } }); setLayoutName('') }}>Add reflow layout</button>
+              <button type="button" className="btn btn-sm" data-testid="ed-layout-add-flow" disabled={!NAME_PATTERN.test(layoutName)} onClick={() => { apply({ type: 'addLayout', layout: { name: layoutName, type: 'flow', page: { size: 'A4', orientation: 'portrait' }, sections: [{ blocks: [] }] } as LayoutDoc }); setLayoutName('') }}>Add flow layout</button>
               <button type="button" className="btn btn-sm" data-testid="ed-layout-add-canvas" disabled={!NAME_PATTERN.test(layoutName)} onClick={() => { apply({ type: 'addLayout', layout: { name: layoutName, type: 'canvas', canvas: { width: 390, height: 900 }, tiles: [] } }); setLayoutName('') }}>Add canvas layout</button>
             </div>
             <SelectorTester doc={doc} />
@@ -245,8 +247,11 @@ export function DashboardEditor({ kind, name, source = FIXTURES, keep = null }: 
                     <button type="button" className="btn btn-sm" data-testid={`ed-layout-delete-${layout.name}`} onClick={() => apply({ type: 'deleteLayout', name: layout.name })}>Delete</button>
                   </div>
                   <Problems diagnostics={own.filter((d) => formTarget(d.path).area === 'layout' && (formTarget(d.path) as { tile?: number }).tile === undefined)} testId={`ed-layout-problems-${layout.name}`} />
-                  {layout.type === 'flow' && <div className="hint">A flow layout places widgets in sections and blocks: edit it in the YAML view (the report editor is the next slice).</div>}
                   <SelectorEditor layout={layout} apply={apply} />
+                  {layout.type === 'flow' && (
+                    <FlowEditor layout={layout} index={index} doc={doc} diagnostics={draft.validation.diagnostics} apply={apply} name={draft.name}
+                      preview={(widget, widgetId) => viewsClient(source).preview({ widget, widgetId, document: draft.name || undefined })} />
+                  )}
                   {layout.type !== 'flow' && <LayoutSettings layout={layout} index={index} apply={apply} />}
                   {layout.type !== 'flow' && <GridEditor layout={layout} widgets={widgets} apply={apply} say={say} />}
                   {tiles && (

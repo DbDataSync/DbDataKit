@@ -3,6 +3,8 @@ import type { CatalogRoles } from '../views/derive'
 import type { Op, Path } from './yamlEdit'
 import { WellError, convertWidget, wellOps, wellsOf } from './wells'
 import type { WellChange } from './wells'
+import { EditError } from './errors'
+import { FLOW_COMMANDS, flowOps, type FlowCommand } from './flow'
 
 /**
  * The edit commands of the editor (plan 32 DBR24): what a form, a drag or a menu asks of the document, each a small named change with its checks. `commandOps` turns one into the changes of the text
@@ -35,18 +37,11 @@ export type EditCommand =
   | { type: 'changeWidgetType'; id: string; to: WidgetType; roles?: CatalogRoles }
   /** One of a layout's `widget_options` for one widget; undefined removes it (and the entry, and `widget_options`, when they are left empty). */
   | { type: 'setWidgetOption'; layout: string; widget: string; key: keyof WidgetOptionsDoc; value: WidgetOptionsDoc[keyof WidgetOptionsDoc] | undefined }
+  /** The report editor's commands (DBR27): the page, running text, cover, sections, blocks and cells of a flow layout, and the report's own options. */
+  | FlowCommand
 
-export type EditErrorCode = 'unknown_widget' | 'unknown_layout' | 'unknown_parameter' | 'name_taken' | 'bad_name' | 'last_layout' | 'not_placeable' | 'already_placed' | 'unknown_well' | 'wrong_member_kind' | 'bad_field' | 'bad_position' | 'bad_option'
-
-/** What a command refuses with: a code a form can act on and a sentence a person can read. */
-export class EditError extends Error {
-  readonly code: EditErrorCode
-  constructor(code: EditErrorCode, message: string) {
-    super(message)
-    this.name = 'EditError'
-    this.code = code
-  }
-}
+export { EditError } from './errors'
+export type { EditErrorCode } from './errors'
 
 /** A widget id and a layout name: what the documents' keys allow (a letter, then letters, digits, `_` and `-`). */
 export const NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_-]*$/
@@ -78,13 +73,16 @@ function tileIndex(layout: LayoutDoc, widget: string): number {
 }
 
 /** Every place a flow layout names a widget (a block, or a cell of a row), as the path of the block or the cell and the path of the list that holds it. */
-function flowUses(layout: LayoutDoc, li: number, id: string): Array<{ list: Path; index: number }> {
+function flowUses(layout: LayoutDoc, li: number, id: string, wholeRows = false): Array<{ list: Path; index: number }> {
   const uses: Array<{ list: Path; index: number }> = []
   if (layout.type !== 'flow') return uses
   ;(layout.sections as Array<{ blocks?: Array<{ widget?: string; row?: Array<{ widget?: string }> }> }>).forEach((section, si) =>
     (section.blocks ?? []).forEach((block, bi) => {
       if (block.widget === id) uses.push({ list: ['layouts', li, 'sections', si, 'blocks'], index: bi })
-      ;(block.row ?? []).forEach((cell, ci) => { if (cell.widget === id) uses.push({ list: ['layouts', li, 'sections', si, 'blocks', bi, 'row'], index: ci }) })
+      const cells = block.row ?? []
+      // a row whose every cell is this widget goes whole: a row of no cells is not a document
+      if (wholeRows && cells.length > 0 && cells.every((c) => c.widget === id)) { uses.push({ list: ['layouts', li, 'sections', si, 'blocks'], index: bi }); return }
+      cells.forEach((cell, ci) => { if (cell.widget === id) uses.push({ list: ['layouts', li, 'sections', si, 'blocks', bi, 'row'], index: ci }) })
     }))
   return uses
 }
@@ -96,7 +94,10 @@ function removals(uses: Array<{ list: Path; index: number }>): Op[] {
     .map((u) => ({ op: 'remove', path: [...u.list, u.index] }))
 }
 
+const isFlowCommand = (command: EditCommand): command is FlowCommand => FLOW_COMMANDS.has(command.type)
+
 export function commandOps(doc: ViewsDoc, command: EditCommand): Op[] {
+  if (isFlowCommand(command)) return flowOps(doc, command)
   switch (command.type) {
     case 'setTitle': return [{ op: 'set', path: ['title'], value: command.title }]
     case 'setPath': return [{ op: 'set', path: command.path, value: command.value }]
@@ -114,7 +115,7 @@ export function commandOps(doc: ViewsDoc, command: EditCommand): Op[] {
         const tiles = (layout as { tiles?: TileDoc[] }).tiles
         const uses = [
           ...(tiles ?? []).flatMap((t, i) => (t.widget === command.id ? [{ list: ['layouts', li, 'tiles'] as Path, index: i }] : [])),
-          ...flowUses(layout, li, command.id),
+          ...flowUses(layout, li, command.id, true),
         ]
         ops.push(...removals(uses))
         if (layout.widget_options && command.id in layout.widget_options) ops.push({ op: 'remove', path: ['layouts', li, 'widget_options', command.id] })

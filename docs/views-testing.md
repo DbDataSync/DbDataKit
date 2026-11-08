@@ -49,6 +49,7 @@ What is real today and what is not: the **model** is published by Build (it has 
 1. **Edit** on the board. Change the title or move a tile, **Save**. On a published source, saving publishes a new version through the Proxy (the author role; a viewer's console gets a refusal in words). `dbdatagateway views list` shows version 2; the board shows the change within the poll.
 2. Open the editor in two browser tabs, save in one, save in the other: the second is a **conflict** (`expected_version` is stale) and offers a reload.
 3. Break it: name an unknown measure (`sales.no_such_measure`) in a widget and Save: the editor shows the registry's refusal with the position, and version 2 is still what is served.
+4. A report: **Reports**, **New report**. Add a text, two metrics and a table; place them (a row of two metrics with spans 6 and 6; the table in a second section that breaks before and repeats its head); set the page (Letter, landscape), a header with `{title}` and a footer with `Page {page} of {pages}`. Type `{nope}` in a header field: the loader refuses it at that field. The **Preview** below the form shows the draft with guides where pages start, before anything is saved; choosing a smaller page gives more guides.
 
 ## 6. Get a PDF (plan 32 DBR15)
 

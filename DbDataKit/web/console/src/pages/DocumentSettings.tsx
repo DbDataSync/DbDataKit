@@ -32,17 +32,19 @@ export function DocumentSettings({ doc, diagnostics, apply }: { doc: ViewsDoc; d
   }
   return (
     <>
+      {doc.kind === 'report' ? <ReportSettings doc={doc} diagnostics={diagnostics} apply={apply} /> : (
       <div className="card" style={{ marginBottom: 12 }} data-testid="ed-document-settings">
-        <strong>Refresh</strong>{' '}
-        <label className="hint">every{' '}
-          <input data-testid="ed-refresh" style={{ width: 80 }} placeholder="5m" value={doc.refresh?.every ?? ''} onChange={(e) => {
-            const text = e.target.value
-            if (text === '' && doc.refresh === undefined) return
-            apply(text === '' ? { type: 'removePath', path: ['refresh'] } : { type: 'setPath', path: ['refresh', 'every'], value: text }, 'refresh')
-          }} />
-        </label>
-        <Problems diagnostics={diagnosticsFor(diagnostics, { area: 'document' }).filter((d) => d.path.startsWith('refresh'))} testId="ed-refresh-problems" />
-      </div>
+          <strong>Refresh</strong>{' '}
+          <label className="hint">every{' '}
+            <input data-testid="ed-refresh" style={{ width: 80 }} placeholder="5m" value={doc.refresh?.every ?? ''} onChange={(e) => {
+              const text = e.target.value
+              if (text === '' && doc.refresh === undefined) return
+              apply(text === '' ? { type: 'removePath', path: ['refresh'] } : { type: 'setPath', path: ['refresh', 'every'], value: text }, 'refresh')
+            }} />
+          </label>
+          <Problems diagnostics={diagnosticsFor(diagnostics, { area: 'document' }).filter((d) => d.path.startsWith('refresh'))} testId="ed-refresh-problems" />
+        </div>
+      )}
 
       <div className="card" style={{ marginBottom: 12 }} data-testid="ed-parameters">
         <strong>Parameters</strong>
@@ -98,5 +100,26 @@ export function DocumentSettings({ doc, diagnostics, apply }: { doc: ViewsDoc; d
         })}
       </div>
     </>
+  )
+}
+
+/** A report's own options (plan 32 DBR27): `strict` (an over-width block refuses the export), `limits` (pages, rows) and the cover default. A report is a run, so it has no refresh. */
+function ReportSettings({ doc, diagnostics, apply }: { doc: ViewsDoc; diagnostics: ClientDiagnostic[]; apply: Apply }) {
+  const own = diagnosticsFor(diagnostics, { area: 'document' }).filter((d) => /^(strict|limits|cover|refresh)/.test(d.path))
+  const limits = (doc.limits ?? {}) as { pages?: number; rows?: number }
+  const limit = (key: 'pages' | 'rows', text: string) => {
+    if (text === '' && limits[key] === undefined) return
+    if (text !== '' && !Number.isFinite(Number(text))) return
+    apply({ type: 'setReportOption', key: `limits.${key}`, value: text === '' ? undefined : Number(text) }, `report:limits.${key}`)
+  }
+  return (
+    <div className="card" style={{ marginBottom: 12 }} data-testid="ed-report-settings">
+      <strong>Report options</strong>{' '}
+      <label className="hint"><input type="checkbox" data-testid="ed-report-strict" checked={doc.strict === true} onChange={(e) => apply({ type: 'setReportOption', key: 'strict', value: e.target.checked ? true : undefined })} /> strict: a block wider than the page refuses the export</label>{' '}
+      <label className="hint">page limit <input type="number" data-testid="ed-report-limit-pages" style={{ width: 70 }} value={limits.pages ?? ''} onChange={(e) => limit('pages', e.target.value)} /></label>{' '}
+      <label className="hint">row limit <input type="number" data-testid="ed-report-limit-rows" style={{ width: 80 }} value={limits.rows ?? ''} onChange={(e) => limit('rows', e.target.value)} /></label>{' '}
+      <label className="hint"><input type="checkbox" data-testid="ed-report-cover" checked={(doc.cover as { parameters?: boolean } | undefined)?.parameters === true} onChange={(e) => apply({ type: 'setReportOption', key: 'cover.parameters', value: e.target.checked ? true : undefined })} /> cover page with the parameters, unless a layout says otherwise</label>
+      <Problems diagnostics={own} testId="ed-report-problems" />
+    </div>
   )
 }

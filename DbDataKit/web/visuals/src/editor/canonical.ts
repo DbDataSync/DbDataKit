@@ -6,20 +6,30 @@ import { Document, isMap, isScalar, isSeq, YAMLMap, YAMLSeq, type Node } from 'y
  * differ only in order and style. Formatting a file drops its comments; an edit through a command keeps them (`applyOps`).
  */
 
-const ROOT = ['schemaVersion', 'kind', 'title', 'description', 'parameters', 'refresh', 'kiosk', 'widgets', 'layouts']
+const ROOT = ['schemaVersion', 'kind', 'title', 'description', 'parameters', 'refresh', 'kiosk', 'theme', 'strict', 'limits', 'cover', 'widgets', 'layouts']
 const WIDGET = ['type', 'title', 'label', 'format', 'parameter', 'control', 'values', 'mark', 'encodings', 'query', 'on_select', 'drill', 'text', 'hash', 'media_type', 'alt', 'fit']
 const LAYOUT = ['name', 'type', 'default', 'when', 'grid', 'canvas', 'overflow', 'min_scale', 'max_scale', 'page', 'header', 'footer', 'cover', 'widget_options', 'tiles', 'sections']
 const TILE = ['widget', 'x', 'y', 'w', 'h', 'min', 'layer']
+const PAGE = ['size', 'orientation', 'margins']
+const MARGINS = ['top', 'right', 'bottom', 'left']
+const SIDES = ['left', 'center', 'right']
+const SECTION = ['title', 'break', 'blocks']
+const BLOCK = ['widget', 'row', 'height', 'keep', 'repeat_header', 'pagebreak']
+const CELL = ['widget', 'span']
 const PARAMETER = ['name', 'type', 'for', 'many', 'required', 'default', 'label']
 
 /** The canonical key order of the mapping at a path of the document (the document, a widget, a layout, a tile, a parameter), or none for a mapping whose order is its own. */
 export function keyOrderAt(path: ReadonlyArray<string | number>): string[] | undefined {
   if (path.length === 0) return ROOT
-  const [a, , c, , e] = path
+  const [a, b, c, d] = path
   if (a === 'widgets' && path.length === 2) return WIDGET
   if (a === 'parameters' && path.length === 2) return PARAMETER
-  if (a === 'layouts' && path.length === 2) return LAYOUT
-  if (a === 'layouts' && c === 'tiles' && path.length === 4 && e === undefined) return TILE
+  if (a !== 'layouts' || typeof b !== 'number') return undefined
+  if (path.length === 2) return LAYOUT
+  if (c === 'tiles' && path.length === 4) return TILE
+  if (c === 'page') return path.length === 3 ? PAGE : path.length === 4 && d === 'margins' ? MARGINS : undefined
+  if ((c === 'header' || c === 'footer') && path.length === 3) return SIDES
+  if (c === 'sections') return path.length === 4 ? SECTION : path.length === 6 && path[4] === 'blocks' ? BLOCK : path.length === 8 && path[6] === 'row' ? CELL : undefined
   return undefined
 }
 
@@ -43,6 +53,25 @@ export function canonicalValue(value: unknown): unknown {
       if (!isObject(l)) return l
       const layout = ordered(l, LAYOUT)
       if (Array.isArray(layout.tiles)) layout.tiles = layout.tiles.map((t) => (isObject(t) ? ordered(t, TILE) : t))
+      if (isObject(layout.page)) {
+        const page = ordered(layout.page, PAGE)
+        if (isObject(page.margins)) page.margins = ordered(page.margins, MARGINS)
+        layout.page = page
+      }
+      for (const part of ['header', 'footer'] as const) if (isObject(layout[part])) layout[part] = ordered(layout[part] as Record<string, unknown>, SIDES)
+      if (Array.isArray(layout.sections))
+        layout.sections = layout.sections.map((section) => {
+          if (!isObject(section)) return section
+          const out = ordered(section, SECTION)
+          if (Array.isArray(out.blocks))
+            out.blocks = out.blocks.map((block) => {
+              if (!isObject(block)) return block
+              const b = ordered(block, BLOCK)
+              if (Array.isArray(b.row)) b.row = b.row.map((cell) => (isObject(cell) ? ordered(cell, CELL) : cell))
+              return b
+            })
+          return out
+        })
       return layout
     })
   return root
