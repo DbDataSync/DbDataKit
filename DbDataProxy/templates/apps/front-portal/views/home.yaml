@@ -1,0 +1,9 @@
+schemaVersion: 1
+blocks:
+  - text: |
+      # Welcome
+      This page is **declared**: the host draws it from this file. You see a tile only for the apps you hold a role on.
+  - links:
+      - label: The apps guide
+        href: https://example.com/apps-guide
+  - tiles: all

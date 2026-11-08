@@ -1,0 +1,12 @@
+schemaVersion: 1
+name: front-portal
+title: Front door
+description: A declared portal (data the host renders, no script of its own). Its home shows a text, a link and a tile for every mounted app the person may open; the menu is the mounts.
+version: 1.0.0
+kind: portal
+portal:
+  identity: {title: Front door, footer: DbDataKit sample portal}
+  layout: {menu: side, footer: true, header: [person]}
+  mounts: [{app: notes, path: /notes/}]
+  navigation: [{app: notes, label: Territory notes}]
+  home: [views/home.yaml]

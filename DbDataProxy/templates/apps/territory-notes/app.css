@@ -1,0 +1,5 @@
+body { font-family: system-ui, sans-serif; margin: 1rem; max-width: 40rem; }
+table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+th, td { border-bottom: 1px solid #8884; padding: .3rem .5rem; text-align: left; }
+input, textarea { margin: .2rem .2rem .2rem 0; }
+textarea { width: 100%; box-sizing: border-box; }
