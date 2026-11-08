@@ -1,6 +1,6 @@
 import { put, request } from '@dbdatakit/shell'
 import type {
-  AdoptAnswer, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SessionRow, TestResult, WriteDataSourceResult,
+  AdoptAnswer, AppApprovals, AppDetail, AppInstances, AppsList, NavigationSetRow, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SessionRow, TestResult, WriteDataSourceResult,
 } from './types'
 
 const v1 = '/api/v1'
@@ -41,6 +41,24 @@ export const proxyApi = {
     liftLockout: (client: string, user: string) => request<void>(`${v1}/throttle?client=${enc(client)}&user=${enc(user)}`, { method: 'DELETE' }),
     failures: () => request<{ failures: FailureRow[] }>(`${v1}/failures`).then((r) => r.failures),
     notifications: () => request<{ notifications: NotificationRow[] }>(`${v1}/notifications`).then((r) => r.notifications),
+  },
+  /** Apps (plan 26, AP24): reads are for a viewer; what changes something needs the role the Proxy names in its refusal, which the screen shows. */
+  apps: {
+    list: () => request<AppsList>(`${v1}/apps`),
+    detail: (name: string) => request<AppDetail>(`${v1}/apps/${enc(name)}`),
+    instances: () => request<AppInstances>(`${v1}/app-instances`),
+    navigation: () => request<{ navigation: NavigationSetRow[] }>(`${v1}/app-navigation`).then((r) => r.navigation),
+    approvals: () => request<AppApprovals>(`${v1}/app-approvals`),
+    /** Moves what an app serves (an unpinned instance follows); no version means the one before. */
+    rollback: (app: string, to?: number) => request<{ name: string; version: number }>(`${v1}/apps/${enc(app)}/rollback`, { method: 'POST', body: JSON.stringify(to === undefined ? {} : { to }) }),
+    /** Pins an instance to a version, or lets it follow again (`pin: null`). The Proxy replaces the whole instance, so what it has is sent back unchanged. */
+    savePin: (i: { name: string; app: string; title: string | null; bindings: Record<string, string> }, pin: number | null) =>
+      put<{ name: string; app: string; version: number }>(`${v1}/app-instances/${enc(i.name)}`, { app: i.app, pin, title: i.title, bindings: i.bindings }),
+    removeInstance: (name: string) => request<{ name: string; removed: boolean }>(`${v1}/app-instances/${enc(name)}`, { method: 'DELETE' }),
+    removeApp: (name: string) => request<{ name: string; removed: boolean }>(`${v1}/apps/${enc(name)}`, { method: 'DELETE' }),
+    approve: (app: string, version: number, by: string, note: string) =>
+      request<{ id: string }>(`${v1}/app-approvals`, { method: 'POST', body: JSON.stringify({ app, version, by, note: note || undefined }) }),
+    revoke: (id: string, by: string) => request<{ id: string }>(`${v1}/app-approvals/${enc(id)}/revoke`, { method: 'POST', body: JSON.stringify({ by }) }),
   },
   history: {
     list: () => request<{ commits: CommitRow[] }>(`${v1}/config/history`).then((r) => r.commits),

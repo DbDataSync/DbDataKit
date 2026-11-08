@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { ActivityPage } from './pages/ActivityPage'
+import { AppsPage } from './pages/AppsPage'
 import { ConfigCommitPage, ConfigHistoryPage } from './pages/ConfigPage'
 import { DataSourceEditPage, DataSourcesPage } from './pages/DataSourcesPage'
 import { IdentitiesPage } from './pages/IdentitiesPage'
@@ -14,7 +15,7 @@ function EditRoute() {
   return <DataSourceEditPage key={name} name={name} isNew={isNew} />
 }
 
-/** The Proxy screens as a module of a host (plan 13, P08/P09): overview, data sources, users and sign-in, the identity home it serves, certificate, activity and the history of the configuration. */
+/** The Proxy screens as a module of a host (plan 13, P08/P09): overview, data sources, users and sign-in, the identity home it serves, the apps it publishes (AP24), certificate, activity and the history of the configuration. */
 export function ProxyModule() {
   return (
     <Routes>
@@ -23,6 +24,7 @@ export function ProxyModule() {
       <Route path="/data-sources/:name" element={<EditRoute />} />
       <Route path="/identities" element={<IdentitiesPage />} />
       <Route path="/identity-home" element={<IdentityAdminPage Frame={ProxyShell} />} />
+      <Route path="/apps" element={<AppsPage />} />
       <Route path="/tls" element={<TlsPage />} />
       <Route path="/activity" element={<ActivityPage />} />
       <Route path="/config" element={<ConfigHistoryPage />} />
