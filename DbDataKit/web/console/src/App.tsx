@@ -38,6 +38,10 @@ export default function App() {
       <Route path="/lineage" element={<LineagePage />} />
       <Route path="/deployments" element={<DeploymentsPage />} />
       <Route path="/views" element={<ViewsPage />} />
+      <Route path="/views/dashboards" element={<ViewsPage area="dashboards" />} />
+      <Route path="/views/dashboards/:name" element={<ViewsPage area="dashboards" />} />
+      <Route path="/views/reports" element={<ViewsPage area="reports" />} />
+      <Route path="/views/reports/:name" element={<ViewsPage area="reports" />} />
       <Route path="/monitoring" element={<MonitoringPage />} />
       <Route path="/users" element={<UsersPage />} />
       <Route path="*" element={<HomePage />} />

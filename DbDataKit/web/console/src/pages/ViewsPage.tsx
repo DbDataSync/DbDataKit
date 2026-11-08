@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { SubTabs, type SubTab } from '@dbdatakit/shell'
 import { RenderedViews, validateViewDocument, type ThemeChoice } from '@dbdatakit/visuals'
 import { ConsoleShell } from '../ConsoleShell'
+import { DashboardsPanel } from './DashboardsPanel'
 
 type Opened =
   | { kind: 'none' }
@@ -26,21 +28,16 @@ export function open(text: string): Opened {
 }
 
 /**
- * The shared visuals in the console (plan 19, Y03): open a rendered view document, from a file or pasted, and see it. The same renderer an app or an assistant's chat uses
+ * The rendered-view tab (plan 19, Y03): open a rendered view document, from a file or pasted, and see it. The same renderer an app or an assistant's chat uses
  * draws it; nothing here draws or checks anything of its own. The semantic module (J14) will fetch these from a query instead of a file.
  */
-export function ViewsPage() {
+function RenderedPanel() {
   const [text, setText] = useState('')
   const [opened, setOpened] = useState<Opened>({ kind: 'none' })
   const [theme, setTheme] = useState<ThemeChoice>('light')
 
   return (
-    <ConsoleShell crumbs={[{ label: 'Views', heading: true }]}>
-      <div className="pane" data-testid="views-page">
-        <div className="page-head">
-          <h1 className="page-title">Views</h1>
-          <span className="page-note">Open a rendered view document and see it as a table or a chart.</span>
-        </div>
+    <>
         <div className="card" style={{ marginBottom: 16 }}>
           <label htmlFor="views-input">View document (JSON)</label>
           <textarea id="views-input" data-testid="views-input" value={text} rows={8} spellCheck={false} style={{ width: '100%', fontFamily: 'var(--mono)', fontSize: 12 }} onChange={(e) => setText(e.target.value)} />
@@ -75,6 +72,36 @@ export function ViewsPage() {
           </div>
         )}
         {opened.kind === 'rendered' && <RenderedViews document={opened.document} theme={theme} showData />}
+    </>
+  )
+}
+
+const TABS: SubTab[] = [
+  { label: 'Rendered views', path: null, testId: 'views-tab-rendered' },
+  { label: 'Dashboards', path: 'dashboards', testId: 'views-tab-dashboards' },
+  { label: 'Reports', path: 'reports', testId: 'views-tab-reports' },
+]
+
+const NOTES = {
+  rendered: 'Open a rendered view document and see it as a table or a chart.',
+  dashboards: 'Open a dashboard and see it fit the window. Shown from recorded results until a serving module answers.',
+  reports: 'Reports are listed and checked; drawing them is not built yet.',
+}
+
+/**
+ * The Views area of the console (plan 19 Y03, plan 32 DBR23): three tabs, the rendered-view opener that was here first, **Dashboards** and **Reports** over the fixture source. The same shared visuals draw all of it;
+ * nothing here draws or checks anything of its own.
+ */
+export function ViewsPage({ area = 'rendered' }: { area?: 'rendered' | 'dashboards' | 'reports' }) {
+  return (
+    <ConsoleShell crumbs={[{ label: 'Views', heading: true }]}>
+      <div className="pane" data-testid="views-page" data-area={area}>
+        <div className="page-head">
+          <h1 className="page-title">Views</h1>
+          <span className="page-note">{NOTES[area]}</span>
+        </div>
+        <SubTabs base="/views" tabs={TABS} testId="views-tabs" />
+        {area === 'rendered' ? <RenderedPanel /> : <DashboardsPanel kind={area === 'dashboards' ? 'dashboard' : 'report'} />}
       </div>
     </ConsoleShell>
   )

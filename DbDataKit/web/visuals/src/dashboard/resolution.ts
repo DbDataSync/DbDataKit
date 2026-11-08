@@ -7,6 +7,8 @@ import type { ViewsClient } from '../client/types'
 export interface Resolution {
   /** The parameters the results are for, as a stable string. */
   key: string
+  /** The parameters the results are for (the partial re-resolution compares them with the next). */
+  parameters: ParameterValues
   results: Record<string, RenderedWidget>
   asOf: string | null
 }
@@ -21,9 +23,32 @@ export function defaultParameters(document: Pick<ViewsDoc, 'parameters'>): Param
   return values
 }
 
+/** The parameter names a widget uses: `{param: name}` in its query and `params.name` in its text or titles. A control's own `parameter` is not a use (what it lists does not depend on its value). */
+export function widgetParameters(widget: unknown): Set<string> {
+  const json = JSON.stringify(widget ?? null)
+  const names = new Set<string>()
+  for (const m of json.matchAll(/"param":"([^"]+)"/g)) names.add(m[1]!)
+  for (const m of json.matchAll(/params\.([A-Za-z_][A-Za-z0-9_]*)/g)) names.add(m[1]!)
+  return names
+}
+
+/** The ids of the widgets that use any of the named parameters, in document order: the ones a change of those parameters resolves again (plan 32 section 3.5). */
+export function dependentWidgets(document: Pick<ViewsDoc, 'widgets'>, changed: Iterable<string>): string[] {
+  const wanted = new Set(changed)
+  if (wanted.size === 0) return []
+  return Object.entries(document.widgets).filter(([, w]) => [...widgetParameters(w)].some((n) => wanted.has(n))).map(([id]) => id)
+}
+
+/** The names whose value differs between two parameter sets. */
+export function changedParameters(before: ParameterValues, after: ParameterValues): string[] {
+  const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+  return [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((n) => !same(before[n], after[n])).sort()
+}
+
 /**
- * Resolves the widgets a layout places (plan 32 section 2 item 6 (c), section 3.2): through the client, as the viewer. **Switching** keeps the results of widgets both layouts place and asks only for the
- * newly placed ones (with the same parameters); a change of parameters asks for every placed widget again. Results of a widget the new layout does not place are kept, for the way back. The client is
+ * Resolves the widgets a layout places (plan 32 section 2 item 6 (c), section 3.2, 3.5): through the client, as the viewer. **Switching** keeps the results of widgets both layouts place and asks only for the
+ * newly placed ones (with the same parameters). **A change of parameters** asks again only for the placed widgets that use a changed parameter (`dependentWidgets`) and the ones with no result yet; every other
+ * result is kept, and the results of dependent widgets the layout does not place are forgotten (they are stale). Results of other widgets the layout does not place are kept, for the way back. The client is
  * not asked at all when nothing is missing.
  */
 export async function resolveLayout(args: {
@@ -33,14 +58,21 @@ export async function resolveLayout(args: {
   placed: string[]
   parameters: ParameterValues
   previous: Resolution | null
+  /** The document, to know which widgets use which parameter; without it a change of parameters asks for every placed widget again. */
+  document?: Pick<ViewsDoc, 'widgets'>
   signal?: AbortSignal
 }): Promise<Resolution> {
-  const { client, ref, layout, placed, parameters, previous, signal } = args
+  const { client, ref, layout, placed, parameters, previous, document, signal } = args
   const key = parametersKey(parameters)
-  const keep = previous !== null && previous.key === key
-  const have = keep ? previous.results : {}
+  const same = previous !== null && previous.key === key
+  let have: Record<string, RenderedWidget> = {}
+  if (same) have = previous.results
+  else if (previous !== null && document) {
+    const stale = new Set(dependentWidgets(document, changedParameters(previous.parameters, parameters)))
+    have = Object.fromEntries(Object.entries(previous.results).filter(([id]) => !stale.has(id)))
+  }
   const needed = placed.filter((id) => !(id in have))
-  if (needed.length === 0 && keep) return previous
-  const fresh = await client.resolve(ref, layout, parameters, { only: needed.length === placed.length ? undefined : needed, signal })
-  return { key, results: { ...have, ...fresh.widgets }, asOf: fresh.as_of }
+  if (needed.length === 0 && same) return previous
+  const fresh = needed.length === 0 ? null : await client.resolve(ref, layout, parameters, { only: needed.length === placed.length ? undefined : needed, signal })
+  return { key, parameters, results: { ...have, ...fresh?.widgets }, asOf: fresh?.as_of ?? previous?.asOf ?? null }
 }

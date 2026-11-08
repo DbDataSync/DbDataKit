@@ -13,7 +13,7 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 | | Connections (Sync and Proxy, one list) | – | – | – | Copy between servers | `ConnectionsPage.tsx` |
 | | State databases (connections of kind `state`) | Yes | Yes | Yes | Test | `StateConnections.tsx` |
 | | Server state: panel, maintenance and the Move wizard | – | – | – | Maintenance on and off, check and run a move | `ServerStatePage.tsx` |
-| | Lineage, Deployments (where a package is deployed and what a runner holds, from the runners' lineage), Views, Monitoring, Docs | – | – | – | Read-only | `LineagePage.tsx`, `DeploymentsPage.tsx`, `ViewsPage.tsx`, `MonitoringPage.tsx`, `DocsPages.tsx`, `HomePage.tsx` |
+| | Lineage, Deployments (where a package is deployed and what a runner holds, from the runners' lineage), Views (rendered views; **Dashboards** and **Reports** tabs over recorded fixtures: a dashboard is opened, laid out to the window, its layout switched and its parameters kept in the address; a report is listed and checked, not drawn yet; no server route), Monitoring, Docs | – | – | – | Read-only | `LineagePage.tsx`, `DeploymentsPage.tsx`, `ViewsPage.tsx`, `DashboardsPanel.tsx`, `MonitoringPage.tsx`, `DocsPages.tsx`, `HomePage.tsx` |
 | **Sync** | Connections | Yes | Yes | Yes | Test | `ConnectionsPage.tsx`, `ConnectionEditPage.tsx` |
 | | Replications | Yes | Yes | Yes | Enable, pause and resume | `ReplicationsPage.tsx`, `ReplicationDetailPage.tsx` |
 | | Table mappings | Yes | Yes (columns, transforms, segmenting, provisioning, pipeline) | – | Verify, preview, diagnostics, history diff | `ReplicationDetailPage.tsx` |
@@ -47,7 +47,7 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 
 * **Console connections** lists and copies; a connection is created and edited in the product's own screens (Sync, or the Proxy's data sources).
 * **Build**: the connections row is from reading `NewConnectionPanel` and `DefinitionPanel`, not from using them; confirm what they edit before relying on the Edit cell.
-* **Semantic models and saved queries** (plan 19, lane J): no screen was found; the Views page renders view documents only.
+* **Semantic models and saved queries** (plan 19, lane J): no screen was found; the Views page renders view documents, and opens dashboards from recorded fixtures (plan 32 DBR23); it reaches no data server.
 * **Sync** hides most of its screens in `ReplicationDetailPage` and its tab components; the matrix names the page, not each tab.
 
 ## Keeping it current

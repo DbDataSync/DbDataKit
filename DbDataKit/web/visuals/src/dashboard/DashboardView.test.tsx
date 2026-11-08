@@ -137,12 +137,12 @@ describe('DashboardView', () => {
     expect(q('vz-dashboard')).toBeNull()
   })
 
-  it('resolves everything again when the parameters change, and the control shows the value', async () => {
+  it('resolves only the widgets that use a changed parameter, and the control shows the value', async () => {
     const { calls, client } = counting()
     await show({ client, parameters: { region: [] } })
     await show({ client, parameters: { region: ['West'] } })
     expect(calls.map((c) => c.parameters)).toEqual([{ region: [] }, { region: ['West'] }])
-    expect(calls[1]!.widgets.length).toBe(6)
+    expect(calls[1]!.widgets).toEqual(['net', 'margin', 'note', 'top_products'])
     expect(q('vz-text')!.textContent).toContain('Showing West')
     const west = [...host.querySelectorAll('input[type="checkbox"]')].find((i) => i.parentElement!.textContent!.includes('West')) as HTMLInputElement
     expect(west.checked).toBe(true)
