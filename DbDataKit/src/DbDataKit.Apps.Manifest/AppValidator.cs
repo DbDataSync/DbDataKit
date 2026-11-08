@@ -21,7 +21,7 @@ public sealed record AppValidation(AppManifest? Manifest, IReadOnlyList<ConfigDi
 }
 
 /// <summary>
-/// Everything <c>app validate</c> checks (plan 26 section 3), as one call a command line or the apps host can make: the manifest text, the files it names, the models it uses against the Store's schemas,
+/// Everything <c>app validate</c> checks (plan 26 section 3), as one call a command line or the apps host can make: the manifest text, the files it names, the view specs (`view-spec/1`) it lists, the models it uses against the Store's schemas,
 /// and, when a built bundle is given, paths from the server's root and addresses of other hosts the manifest did not ask for (warnings: the browser enforces the policy, this is advice for the author).
 /// </summary>
 public static class AppValidator
@@ -32,7 +32,9 @@ public static class AppValidator
     /// <param name="bundleDirectory">The built bundle, when there is one.</param>
     /// <param name="manifestFile">The manifest's file name in the folder.</param>
     /// <param name="modelEntities">The entities of each Store model the app can use, by model name (from the Store's schema); null skips the check, because no Store was asked.</param>
-    public static AppValidation Validate(string sourceDirectory, string? bundleDirectory = null, IReadOnlyDictionary<string, IReadOnlySet<string>>? modelEntities = null, string manifestFile = "app.yaml")
+    /// <param name="modelAttributes">The attributes of each entity of each Store model (model, entity, attributes), to check the attributes the view specs name; null skips that check (the specs' own shape and links, and the models and entities the manifest lists, are still checked).</param>
+    public static AppValidation Validate(string sourceDirectory, string? bundleDirectory = null, IReadOnlyDictionary<string, IReadOnlySet<string>>? modelEntities = null, string manifestFile = "app.yaml",
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, IReadOnlySet<string>>>? modelAttributes = null)
     {
         var path = Path.Combine(sourceDirectory, manifestFile);
         if (!File.Exists(path))
@@ -43,6 +45,7 @@ public static class AppValidator
         {
             diagnostics.AddRange(AppChecks.Files(manifest, sourceDirectory, manifestFile));
             diagnostics.AddRange(AppChecks.HomeViews(manifest, home => File.Exists(Path.Combine(sourceDirectory, home)) ? File.ReadAllText(Path.Combine(sourceDirectory, home)) : null));
+            diagnostics.AddRange(AppChecks.ViewSpecs(manifest, view => File.Exists(Path.Combine(sourceDirectory, view)) ? File.ReadAllText(Path.Combine(sourceDirectory, view)) : null, modelAttributes));
             if (modelEntities is not null) diagnostics.AddRange(ModelUses(manifest, modelEntities, manifestFile));
             if (bundleDirectory is not null)
             {

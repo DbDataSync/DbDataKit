@@ -22,6 +22,16 @@
       "files": [ { "path": "DbDataKit/src/DbDataKit.Connections.Abstractions/ConnectionDefinitionLoader.cs", "sha256": null } ]
     },
     {
+      "id": "view-spec",
+      "title": "App view spec (a file under views, schemaVersion)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "new with GP06; a newer one is refused naming kind, file, app and both numbers",
+      "version_source": { "file": "DbDataKit/src/DbDataKit.Apps.Manifest/ViewSpecLoader.cs", "pattern": "public const int Version = (\\d+);" },
+      "files": [ { "path": "DbDataKit/src/DbDataKit.Apps.Manifest/schemas/view-spec.schema.json", "sha256": null } ]
+    },
+    {
       "id": "semantic-package",
       "title": "Semantic package (the catalog, format of the semantic-model definition)",
       "current": 2,

@@ -114,6 +114,7 @@ The rule is held by this section and, in part, by `scripts/check_formats.py` aga
 | Published definition (any kind) | `definition_version.format` | per kind, below | UC01 |
 | DbDataStore entity model | `model/2` (`schemaVersion`) | 2 / 1 | open: gains `cache`, `checks` |
 | Serving data source (a connection file) | `connection/2` (`schema`) | 2 / 1 | open: gains `cache`, `checks` |
+| App view spec (a file under `views`) | `view-spec/1` (`schemaVersion`) | 1 / 1 | open (GP06): a newer one is refused naming kind, file, app and both numbers |
 | Semantic package (the catalog) | format 2 of the definition (`Catalog.Format`) | 2 / 1 | open: gains `cache`, `checks` |
 | Build model file (a model's `.yml`) | `schemaVersion` (absent is 1; `build-model`) | 2 / 1 | open: gains `checks` (23a FQ02) |
 | Runner package | `package/1` | 1 / 1 | frozen by its release |

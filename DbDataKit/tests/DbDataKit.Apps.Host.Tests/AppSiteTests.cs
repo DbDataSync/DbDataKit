@@ -106,8 +106,8 @@ public sealed class AppSiteTests : IDisposable
     [Fact]
     public void A_declarative_app_has_no_page_of_its_own()
     {
-        var manifest = "schemaVersion: 1\nname: views-only\nversion: 1.0.0\nviews: [views/home.yaml]\nroles: [viewer]\n";
-        store.PublishApp(new AppPackage(manifest, new Dictionary<string, byte[]> { ["views/home.yaml"] = Bytes("kind: view") }), "ada");
+        var manifest = "schemaVersion: 1\nname: views-only\nversion: 1.0.0\nviews: [views/home.yaml]\nroles: [viewer]\nmodels:\n  - model: m\n    entities: {e: [read]}\n";
+        store.PublishApp(new AppPackage(manifest, new Dictionary<string, byte[]> { ["views/home.yaml"] = Bytes("schemaVersion: 1\nkind: dashboard\ntitle: Home\nmodel: m\nwidgets: [{kind: metric, title: Rows, entity: e, measure: count}]\n") }), "ada");
         store.Save(new AppInstance("v", "views-only"), "ada");
         Assert.Equal(404, new AppSite(store).Get("v", "").Status);
     }

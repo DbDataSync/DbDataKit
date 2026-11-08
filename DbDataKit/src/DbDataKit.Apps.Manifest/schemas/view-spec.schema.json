@@ -1,0 +1,599 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.internal/dbdatakit/view-spec.schema.json",
+  "title": "view-spec/1",
+  "description": "A declarative view of an app (plan 22a GP06): a grid, a form, a detail page or a dashboard over the entities of a Store model the app uses. A file named under `views` in the app's manifest. The loader (DbDataKit.Apps.ViewSpecLoader) is the authority; a test keeps this file and the loader's keys and choices equal. What a schema cannot say is checked by `app validate`: the model and entity are listed in the manifest, attributes exist in the model, links lead to views of the app and give their required parameters, a key is a declared required parameter.",
+  "oneOf": [
+    {
+      "type": "object",
+      "title": "grid view",
+      "required": [
+        "schemaVersion",
+        "kind",
+        "title",
+        "model",
+        "entity",
+        "columns"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "kind": {
+          "const": "grid"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+        },
+        "model": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+        },
+        "params": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/param"
+          }
+        },
+        "links": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/link"
+          }
+        },
+        "entity": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+              },
+              {
+                "$ref": "#/$defs/column"
+              }
+            ]
+          }
+        },
+        "filters": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 100,
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+              },
+              {
+                "$ref": "#/$defs/attribute"
+              }
+            ]
+          }
+        },
+        "sort": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 100,
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+              },
+              {
+                "$ref": "#/$defs/sort"
+              }
+            ]
+          }
+        },
+        "pageSize": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500,
+          "default": 50
+        }
+      }
+    },
+    {
+      "type": "object",
+      "title": "form view",
+      "required": [
+        "schemaVersion",
+        "kind",
+        "title",
+        "model",
+        "entity",
+        "fields"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "kind": {
+          "const": "form"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+        },
+        "model": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+        },
+        "params": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/param"
+          }
+        },
+        "links": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/link"
+          }
+        },
+        "entity": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "mode": {
+          "enum": [
+            "create",
+            "edit"
+          ],
+          "default": "create"
+        },
+        "key": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+          "description": "Edit forms only: a declared, required parameter that carries the row's key."
+        },
+        "fields": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+              },
+              {
+                "$ref": "#/$defs/field"
+              }
+            ]
+          }
+        },
+        "submit": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "title": "detail view",
+      "required": [
+        "schemaVersion",
+        "kind",
+        "title",
+        "model",
+        "entity",
+        "key",
+        "sections"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "kind": {
+          "const": "detail"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+        },
+        "model": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+        },
+        "params": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/param"
+          }
+        },
+        "links": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/link"
+          }
+        },
+        "entity": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "key": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+          "description": "A declared, required parameter that carries the row's key."
+        },
+        "sections": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/section"
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "title": "dashboard view",
+      "required": [
+        "schemaVersion",
+        "kind",
+        "title",
+        "model",
+        "widgets"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "kind": {
+          "const": "dashboard"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+        },
+        "model": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+        },
+        "params": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/param"
+          }
+        },
+        "links": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/link"
+          }
+        },
+        "widgets": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 24,
+          "items": {
+            "$ref": "#/$defs/widget"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+    },
+    "param": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "type": {
+          "enum": [
+            "string",
+            "int",
+            "bool",
+            "date"
+          ],
+          "default": "string"
+        },
+        "required": {
+          "type": "boolean",
+          "default": false
+        },
+        "default": {
+          "type": [
+            "string",
+            "integer",
+            "boolean"
+          ],
+          "description": "A value of the parameter's type; not with required: true. A date is yyyy-MM-dd."
+        }
+      }
+    },
+    "link": {
+      "type": "object",
+      "required": [
+        "label",
+        "to"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+        },
+        "to": {
+          "type": "string",
+          "pattern": "^(?!/)(?!.*(^|/)\\.{1,2}(/|$))(?!.*//)[^\\\\:]+\\.ya?ml$",
+          "maxLength": 300,
+          "description": "A view file of the app, listed under views in the manifest."
+        },
+        "row": {
+          "type": "boolean",
+          "default": false,
+          "description": "On every row of a grid; only a grid has rows."
+        },
+        "with": {
+          "type": "object",
+          "description": "Parameters of the target view: text, $attribute (of the row) or $params.name (of this view).",
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "additionalProperties": {
+            "type": [
+              "string",
+              "integer",
+              "boolean"
+            ]
+          }
+        }
+      }
+    },
+    "attribute": {
+      "type": "object",
+      "required": [
+        "attribute"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "attribute": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+        }
+      }
+    },
+    "column": {
+      "type": "object",
+      "required": [
+        "attribute"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "attribute": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+        },
+        "sortable": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "field": {
+      "type": "object",
+      "required": [
+        "attribute"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "attribute": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+        },
+        "readonly": {
+          "type": "boolean",
+          "default": false
+        },
+        "required": {
+          "type": "boolean",
+          "default": false
+        },
+        "help": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+        }
+      }
+    },
+    "sort": {
+      "type": "object",
+      "required": [
+        "attribute"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "attribute": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "direction": {
+          "enum": [
+            "asc",
+            "desc"
+          ],
+          "default": "asc"
+        }
+      }
+    },
+    "section": {
+      "type": "object",
+      "required": [
+        "title",
+        "attributes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+        },
+        "attributes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+              },
+              {
+                "$ref": "#/$defs/attribute"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "widget": {
+      "type": "object",
+      "required": [
+        "kind",
+        "title",
+        "entity"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "metric",
+            "bar",
+            "line",
+            "table"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+        },
+        "entity": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "measure": {
+          "oneOf": [
+            {
+              "const": "count"
+            },
+            {
+              "type": "object",
+              "minProperties": 1,
+              "maxProperties": 1,
+              "propertyNames": {
+                "enum": [
+                  "sum",
+                  "avg",
+                  "min",
+                  "max"
+                ]
+              },
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+              }
+            }
+          ],
+          "description": "For a metric, a bar or a line."
+        },
+        "by": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+          "description": "For a bar or a line."
+        },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+              },
+              {
+                "$ref": "#/$defs/attribute"
+              }
+            ]
+          },
+          "description": "For a table."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 10
+        }
+      }
+    }
+  }
+}

@@ -140,6 +140,22 @@ public sealed class AppInstanceTests : IDisposable
         Assert.Equal(TokenFailure.WrongAudience, globex.Validate(token).Failure);
     }
 
+    [Fact]
+    public void A_publish_refuses_a_view_spec_that_does_not_read_or_is_in_a_newer_format_naming_the_app_the_file_and_both_numbers()
+    {
+        const string good = "schemaVersion: 1\nkind: grid\ntitle: Territories\nmodel: territories\nentity: territory\ncolumns: [name]\n";
+        Assert.Equal(1, store.PublishApp(new AppPackage(Manifest("1.0.0"), new Dictionary<string, byte[]> { ["views/home.yaml"] = System.Text.Encoding.UTF8.GetBytes(good) }), "ada").Version);
+
+        var newer = Assert.Throws<AppInstanceException>(() => store.PublishApp(new AppPackage(Manifest("1.0.1"), new Dictionary<string, byte[]> { ["views/home.yaml"] = System.Text.Encoding.UTF8.GetBytes(good.Replace("schemaVersion: 1", "schemaVersion: 2")) }), "ada"));
+        Assert.Contains("the app 'sales-planning' holds the view-spec 'views/home.yaml', which is in format 2, and this program reads format 1 of view-spec", newer.Message);
+        Assert.Contains("views/home.yaml:1:", newer.Message);
+
+        var damaged = Assert.Throws<AppInstanceException>(() => store.PublishApp(new AppPackage(Manifest("1.0.1"), new Dictionary<string, byte[]> { ["views/home.yaml"] = System.Text.Encoding.UTF8.GetBytes(good + "colour: red\n") }), "ada"));
+        Assert.Contains("views/home.yaml:7:1", damaged.Message);
+        // the refused publishes left no version behind
+        Assert.Equal(2, store.PublishApp(new AppPackage(Manifest("1.0.2"), new Dictionary<string, byte[]> { ["views/home.yaml"] = System.Text.Encoding.UTF8.GetBytes(good) }), "ada").Version);
+    }
+
     private sealed class Clients(params PairedClient[] list) : IPairedClients
     {
         public PairedClient? Find(string id) => list.FirstOrDefault(c => c.Id == id);
