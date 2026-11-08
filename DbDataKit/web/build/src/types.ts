@@ -403,3 +403,20 @@ export interface TestsResult {
   counts: { total: number; passed: number; failed: number; warned: number; errored: number }
   tests: { name: string; kind: 'metadata' | 'model'; file: string; model?: string | null; severity: 'error' | 'warning'; status: 'pass' | 'fail' | 'warn' | 'error'; violations: number; columns: string[]; rows: Record<string, unknown>[]; error?: string | null }[]
 }
+
+/** A semantic model of the project (`project show semantic`): the connections it reads are published with it. */
+export interface SemanticModelEntry {
+  name: string
+  file: string
+  description?: string
+  sources: { source: string; connection: string; engine: string }[]
+}
+
+/** What publishing a semantic model to a Gateway answers. */
+export interface PublishModelAnswer {
+  proxy: string
+  model: string
+  version: number | null
+  created: boolean
+  data_sources: (string | null)[]
+}

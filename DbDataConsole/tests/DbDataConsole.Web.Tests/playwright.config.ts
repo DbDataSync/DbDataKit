@@ -237,9 +237,12 @@ if (!isWorker) {
   fs.writeFileSync(path.join(scratchDirectory, 'end-to-end-build-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
 
-// Plan 33 UE09: a Build server for the refresh story (`refresh-run.spec.ts`), port 8541 (a port table: 8541 refresh Build; 8542 to 8544 are the published-models story's). The story needs the test PostgreSQL (DBDATA_E2E_PG)
-// and skips without it: the refresh runs loads on it. The server has its own directory, and the project is compiled and committed here (a deploy applies from a clean working tree).
+// Plan 33 UE09 and UE12: two Build servers and a Gateway for the refresh story (`refresh-run.spec.ts`) and the published-models story (`semantic-models.spec.ts`). Ports 8541 to 8544 (a port table: 8541 refresh Build,
+// 8542 and 8543 the Gateway's Flight SQL and management listeners, 8544 models Build). Both stories need the test PostgreSQL (DBDATA_E2E_PG) and skip without it: the refresh runs loads on it, and a Gateway publishes a
+// model only when its data source answers. Each server has its own directory, and each project is compiled and committed here (a deploy applies from a clean working tree).
 export const refreshBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-refresh-build'), port: 8541, project: 'refreshing', plan: 'nightly' }
+export const modelsGateway = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-models-gateway'), flightPort: 8542, managementPort: 8543 }
+export const modelsBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-models-build'), port: 8544, project: 'shop', model: 'shop_sales', projectDirectory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-shop-project') }
 if (!isWorker) {
   const settings = (plan: string) => 'defaults: {connections: [postgres]}\ntracking: { connection: postgres }\nstring_semantics:\n  case: sensitive\n  trailing_space: significant\n  collations:\n    default: { duckdb: NFC, postgres: C }\n' + plan
   const makeProject = (directory: string, name: string, files: Record<string, string>) => {
@@ -272,6 +275,23 @@ if (!isWorker) {
     'models/marts/fct_events.sql': 'SELECT e.event_id, e.event_ts, e.amount FROM staging.events e\n',
   })
   pairBuild(refreshBuild.directory, 'refresh-build-pairing-code.txt')
+
+  makeProject(modelsBuild.directory, modelsBuild.project, {
+    'dbdatabuild.yml': settings(''),
+    'models/sales/facts.yml': 'name: sales.facts\nkind: mapped\ngrain: [sale_id]\ncolumns:\n  - {name: sale_id, type: BIGINT, nullable: false}\n  - {name: region, type: "VARCHAR(20)"}\n  - {name: amount, type: "DECIMAL(14, 2)"}\n',
+    'semantic/shop_sales.yml': `version: "0.3"\nname: ${modelsBuild.model}\ndescription: Sales by region.\n` +
+      'dimensions:\n  sales:\n    attributes:\n      region:\n        type: string\n        bindings:\n          default: {table: sales.facts, column: region}\n' +
+      'measures:\n  sales.amount:\n    type: number\n    source: default\n    agg: sum\n    of: {table: sales.facts, column: amount}\n    semantics: {rollup: {default: sum}, spread: blank, status: governed}\n',
+  })
+  pairBuild(modelsBuild.directory, 'models-build-pairing-code.txt')
+
+  fs.rmSync(modelsGateway.directory, { recursive: true, force: true })
+  fs.mkdirSync(path.join(modelsGateway.directory, 'config', 'gateway'), { recursive: true })
+  fs.mkdirSync(path.join(modelsGateway.directory, 'config', 'connections'), { recursive: true })
+  fs.writeFileSync(path.join(modelsGateway.directory, 'config', 'server.yaml'), 'schemaVersion: 2\ntls: { mode: selfSigned }\n')
+  fs.writeFileSync(path.join(modelsGateway.directory, 'config', 'gateway', 'auth.yaml'), 'jwt:\n  signingKey: console-e2e-signing-key-0123456789abcdef\n  audience: api://console-e2e\n')
+  const madeModelsGateway = execFileSync('dotnet', ['exec', gatewayDll, 'server', 'pair', '--repo', modelsGateway.directory, '--max-role', 'admin'], { encoding: 'utf8' })
+  fs.writeFileSync(path.join(scratchDirectory, 'models-gateway-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeModelsGateway)![1])
 }
 
 // A runner for the runner story (plan 28a, R19): a real `dbdatarunner` with the sample package of the runner's tests (`DbDataKit.Runner.TestPackage`, published to a folder here) published on the `dev` channel by the story (as version 1, then 2), two tasks:
@@ -420,6 +440,27 @@ export default defineConfig({
       stdout: 'pipe' as const,
       stderr: 'pipe' as const,
       env: warehouseConnection ? { DBDATA_BUILD_POSTGRES_READ: warehouseConnection, DBDATA_BUILD_POSTGRES_WRITE: warehouseConnection } : {},
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(modelsBuild.directory), '--listen', `https://localhost:${modelsBuild.port}`].join(' '),
+      url: `https://localhost:${modelsBuild.port}/health/live`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
+      env: warehouseConnection ? { DBDATA_BUILD_POSTGRES_READ: warehouseConnection, DBDATA_BUILD_POSTGRES_WRITE: warehouseConnection } : {},
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(gatewayDll), 'server', 'run',
+        `--Gateway:DataDirectory=${JSON.stringify(modelsGateway.directory)}`, '--Gateway:Listen:Address=127.0.0.1', `--Gateway:Listen:Port=${modelsGateway.flightPort}`,
+        '--Gateway:Management:Enabled=true', '--Gateway:Management:Address=127.0.0.1', `--Gateway:Management:Port=${modelsGateway.managementPort}`].join(' '),
+      url: `https://localhost:${modelsGateway.managementPort}/health/live`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
     },
     {
       command: ['dotnet', 'exec', JSON.stringify(runnerServer.dll), 'server', 'run', '--repo', JSON.stringify(runnerServer.directory), '--listen', runnerServer.url].join(' '),

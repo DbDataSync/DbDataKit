@@ -1,5 +1,5 @@
 import { request, type SchemaAssociation, type SchemaNode } from '@dbdatakit/shell'
-import type { RefreshPlanEntry, RefreshResult, TestsResult, CommandOffer, DefineResult, DefinitionAnswer, ImportResult, ProjectConnections, ProjectTemplateInfo, TemplateCatalog, AdoptAnswer, PairedProxy, PairedRunner, PublishAnswer, RunnerPublishData, GitChange, GitCommit, RenderedFiles, BuildProject, FileContent, ProjectFile, Workspace, CommandAnswer, CompareResult, CompileSummary, ConnectionStatus, DeployResult, PlanDetail, PlanEntry, ProjectGraph, SampleResult } from './types'
+import type { PublishModelAnswer, SemanticModelEntry, RefreshPlanEntry, RefreshResult, TestsResult, CommandOffer, DefineResult, DefinitionAnswer, ImportResult, ProjectConnections, ProjectTemplateInfo, TemplateCatalog, AdoptAnswer, PairedProxy, PairedRunner, PublishAnswer, RunnerPublishData, GitChange, GitCommit, RenderedFiles, BuildProject, FileContent, ProjectFile, Workspace, CommandAnswer, CompareResult, CompileSummary, ConnectionStatus, DeployResult, PlanDetail, PlanEntry, ProjectGraph, SampleResult } from './types'
 
 const project = (id: string) => `/api/v1/projects/${encodeURIComponent(id)}`
 
@@ -101,6 +101,11 @@ export const buildApi = {
       ...(o.expectedVersion !== undefined ? { expected_version: o.expectedVersion } : {}),
       ...(o.runnerSchedules ? { runner_schedules: true } : {}),
     }),
+  /** The semantic models of the project, offline. */
+  semanticModels: (id: string) => run<{ models: SemanticModelEntry[] }>(id, 'project_show_semantic').then((a) => a.document?.data?.models ?? []),
+  /** Publishes a semantic model of a project to a paired Gateway, with the data sources it reads (their read logins go too). The server needs the approver role; the Gateway's refusal comes back in its own words. */
+  publishModel: (id: string, proxy: string, model: string) =>
+    request<PublishModelAnswer>(`${project(id)}/proxies/${encodeURIComponent(proxy)}/publish-model`, { method: 'POST', body: JSON.stringify({ model }) }),
   /** The drafts of a project (W02): a git worktree per person and name, where editing happens. */
   workspaces: (id: string) => request<{ workspaces: Workspace[] }>(`${project(id)}/workspaces`).then((r) => r.workspaces),
   makeWorkspace: (id: string, name: string) => request<Workspace>(`${project(id)}/workspaces`, { method: 'POST', body: JSON.stringify({ name }) }),

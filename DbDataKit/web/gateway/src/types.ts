@@ -107,3 +107,41 @@ export interface AppCheck {
 }
 export interface AppApprovals { approvals: AppApprovalRow[]; caller: AppsCaller }
 export interface AppsList { apps: AppSummary[]; caller: AppsCaller }
+
+/** A semantic model the group serves (`GET /api/v1/semantic-models`, plan 33 UE12). `served_version` is what this instance serves now; it lags the group's by a poll at most. */
+export interface SemanticModelRow {
+  name: string
+  current_version: number | null
+  versions: number
+  managed_by: string | null
+  served: boolean
+  served_version: number | null
+  failed_version: number | null
+  failure: string | null
+}
+
+export interface ModelVersionRow { version: number; published_by: string | null; managed_by?: string | null; published_at: string | null }
+
+/** One semantic model read in full (`GET /api/v1/semantic-models/{name}`): its sources and every version. */
+export interface SemanticModelDetail {
+  name: string
+  current_version: number
+  catalog: string
+  sources: Record<string, string>
+  ssas: string[]
+  versions: ModelVersionRow[]
+}
+
+/** An entity model the group serves (`GET /api/v1/entity-models`): a DbDataStore model published to this Gateway. */
+export interface EntityModelRow {
+  name: string
+  current_version: number
+  data_source: string
+  managed_by: string | null
+  served_version: number | null
+  failed_version: number | null
+  failure: string | null
+  entities: string[] | null
+}
+
+export interface EntityModelDetail { name: string; current_version: number; data_source: string; managed_by: string | null; versions: ModelVersionRow[] }

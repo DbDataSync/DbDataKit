@@ -1,7 +1,7 @@
 import { put, request } from '@dbdatakit/shell'
 import type { InstanceRequest, NavigationRequest, PublishBody } from './appEditors'
 import type {
-  AdoptAnswer, AppApprovals, AppCheck, AppDetail, AppInstances, AppsList, NavigationSetRow, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SessionRow, TestResult, WriteDataSourceResult,
+  AdoptAnswer, EntityModelDetail, EntityModelRow, SemanticModelDetail, SemanticModelRow, AppApprovals, AppCheck, AppDetail, AppInstances, AppsList, NavigationSetRow, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SessionRow, TestResult, WriteDataSourceResult,
 } from './types'
 
 const v1 = '/api/v1'
@@ -21,6 +21,21 @@ export const gatewayApi = {
   },
   /** The paired server clients a data source can be handed to. */
   clients: () => request<{ clients: ServerClient[] }>(`${v1}/clients`).then((r) => r.clients),
+  /** The models the group serves (plan 33 UE12): semantic models (versions, serve an earlier one, remove) and the entity models a DbDataStore publishes (versions, remove). The calls are an administrator's or a publisher's. */
+  models: {
+    semantic: {
+      list: () => request<{ models: SemanticModelRow[] }>(`${v1}/semantic-models`).then((r) => r.models),
+      read: (name: string) => request<SemanticModelDetail>(`${v1}/semantic-models/${enc(name)}`),
+      /** Serves an earlier version again (every version is kept); no version means the one before the current. */
+      rollback: (name: string, to?: number) => request<{ name: string; version: number; from_version: number }>(`${v1}/semantic-models/${enc(name)}/rollback`, { method: 'POST', body: JSON.stringify(to === undefined ? {} : { to_version: to }) }),
+      remove: (name: string) => request<{ name: string; removed: boolean }>(`${v1}/semantic-models/${enc(name)}`, { method: 'DELETE' }),
+    },
+    entity: {
+      list: () => request<{ models: EntityModelRow[] }>(`${v1}/entity-models`).then((r) => r.models),
+      read: (name: string) => request<EntityModelDetail>(`${v1}/entity-models/${enc(name)}`),
+      remove: (name: string) => request<{ name: string; removed?: boolean }>(`${v1}/entity-models/${enc(name)}`, { method: 'DELETE' }),
+    },
+  },
   identities: {
     get: () => request<Identities>(`${v1}/identities`),
     writeUser: (name: string, body: { auth_type: string; password?: string; data_sources: string[]; default_data_source?: string | null; expected_version?: string | null }) =>

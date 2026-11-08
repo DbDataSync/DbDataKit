@@ -6,6 +6,7 @@ import { DataSourceEditPage, DataSourcesPage } from './pages/DataSourcesPage'
 import { IdentitiesPage } from './pages/IdentitiesPage'
 import { IdentityAdminPage } from './identity/IdentityAdminPage'
 import { GatewayShell } from './GatewayShell'
+import { ModelsPage } from './pages/ModelsPage'
 import { OverviewPage } from './pages/OverviewPage'
 import { TlsPage } from './pages/TlsPage'
 
@@ -25,6 +26,7 @@ export function GatewayModule() {
       <Route path="/identities" element={<IdentitiesPage />} />
       <Route path="/identity-home" element={<IdentityAdminPage Frame={GatewayShell} />} />
       <Route path="/apps" element={<AppsPage />} />
+      <Route path="/models" element={<ModelsPage />} />
       <Route path="/tls" element={<TlsPage />} />
       <Route path="/activity" element={<ActivityPage />} />
       <Route path="/config" element={<ConfigHistoryPage />} />
