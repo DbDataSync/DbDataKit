@@ -1,6 +1,6 @@
 import { test } from '@playwright/test'
 import { signInNewAdmin } from './people'
-import { instanceEditorStory, publishStory } from './gateway-apps-editors-screen'
+import { instanceEditorStory, navigationStory, publishStory } from './gateway-apps-editors-screen'
 
 // Plan 33, UE01 to UE03: the editors of the Gateway's Apps screen (an instance, a published version, a navigation set), with the Gateway's management routes mocked in the page, so the story needs the signed-in console only
 // and takes no port (the Gateway side is DbDataGateway.Tests' AppsScreenTests; the real Gateway is `gateway-apps-editors.spec.ts`). Each test signs in a new administrator, so the file sorts after `identity-home` and `first-run`.
@@ -12,4 +12,9 @@ test('an instance is made and changed from the Apps screen: the form offers the 
 test('a version is published from a folder: checked first, sent as files, a trusted app approved by someone else with the origins chosen, and the Gateway\'s refusals shown', async ({ page, context, baseURL }) => {
   await signInNewAdmin(page, context, baseURL!, 'Publish Tester', `gateway-apps-publish-${Date.now()}@example.com`)
   await publishStory(page)
+})
+
+test('a navigation set is made from instances, reordered, renamed and removed, and the Gateway\'s refusal is shown in its words', async ({ page, context, baseURL }) => {
+  await signInNewAdmin(page, context, baseURL!, 'Navigation Tester', `gateway-apps-navigation-${Date.now()}@example.com`)
+  await navigationStory(page)
 })

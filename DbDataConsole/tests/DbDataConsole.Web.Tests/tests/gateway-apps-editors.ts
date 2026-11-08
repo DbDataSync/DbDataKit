@@ -190,3 +190,55 @@ export async function publishStory(screen: Page) {
   await expect.poll(() => statusOf(`${appsUrl}/apps/safe/`), { timeout: 20_000 }).not.toBe(404)
   await expect(screen.getByTestId('instance-row-safe').getByTestId('instance-trust')).toContainText('trusted, approved')
 }
+
+/**
+ * UE03 against the real Gateway: a navigation set of two instances is made in the editor (members added from a list, one moved up), renamed (the old name stops being served in the same call), refused by the store in its own
+ * words when a member was removed meanwhile (at the command line), changed again and removed. The command line reads each result from the Gateway's state, so the screen and the verbs agree.
+ */
+export async function navigationStory(screen: Page) {
+  run(['apps', 'instance-save', '--name', 'nav-a', '--app', 'notes', '--title', 'First'])
+  run(['apps', 'instance-save', '--name', 'nav-b', '--app', 'notes', '--title', 'Second'])
+  // the screen reads the instances every ten seconds
+  await expect(screen.getByTestId('instance-row-nav-b')).toBeVisible({ timeout: 20_000 })
+  const sets = () => run(['apps', 'nav-list']).sets as { name: string; title: string; instances: string[] }[]
+
+  await screen.getByTestId('nav-new').click()
+  await screen.getByTestId('nav-editor-name').fill('menu')
+  await screen.getByTestId('nav-editor-title').fill('Menu')
+  await screen.getByTestId('nav-editor-add').selectOption('nav-b')
+  await screen.getByTestId('nav-editor-add').selectOption('nav-a')
+  await screen.getByTestId('nav-editor-label-nav-b').fill('Second one')
+  await screen.getByTestId('nav-editor-up-nav-a').click()
+  await screen.getByTestId('nav-editor-save').click()
+  await expect(screen.getByTestId('apps-notice')).toContainText('Navigation set menu is saved (version 1)')
+  await expect(screen.getByTestId('nav-row-menu').getByTestId('nav-entries')).toHaveText('nav-a → nav-b (Second one)')
+  expect(sets().find((s) => s.name === 'menu')).toMatchObject({ title: 'Menu', instances: ['nav-a', 'nav-b'] })
+  await expect(screen.getByTestId('instance-row-nav-a')).toContainText('in the menu menu')
+
+  // renamed: the new name is served and the old one is not
+  await screen.getByTestId('nav-edit-menu').click()
+  await screen.getByTestId('nav-editor-name').fill('menu2')
+  await screen.getByTestId('nav-editor-save').click()
+  await expect(screen.getByTestId('apps-notice')).toContainText('Navigation set menu2 is saved (version 1, renamed from menu)')
+  await expect(screen.getByTestId('nav-row-menu')).toHaveCount(0)
+  expect(sets().map((s) => s.name)).toContain('menu2')
+  expect(sets().map((s) => s.name)).not.toContain('menu')
+
+  // a member removed at the command line while the editor is open: the store refuses the set, in its words, and the editor stays
+  await screen.getByTestId('nav-edit-menu2').click()
+  run(['apps', 'instance-remove', '--name', 'nav-b'])
+  await screen.getByTestId('nav-editor-save').click()
+  await expect(screen.getByTestId('error-banner')).toContainText("'nav-b' is not an instance published to production")
+  await expect(screen.getByTestId('nav-editor')).toBeVisible()
+  await screen.getByTestId('nav-editor-remove-nav-b').click()
+  await screen.getByTestId('nav-editor-save').click()
+  await expect(screen.getByTestId('apps-notice')).toContainText('Navigation set menu2 is saved')
+  expect(sets().find((s) => s.name === 'menu2')!.instances).toEqual(['nav-a'])
+
+  // removed after a second click; the instance it listed is still served
+  await screen.getByTestId('nav-remove-menu2').click()
+  await screen.getByTestId('nav-remove-confirm-menu2').click()
+  await expect(screen.getByTestId('apps-notice')).toContainText('Navigation set menu2 is no longer served')
+  expect(sets().map((s) => s.name)).not.toContain('menu2')
+  expect(run(['apps', 'instance-list']).instances.map((i: any) => i.name)).toContain('nav-a')
+}

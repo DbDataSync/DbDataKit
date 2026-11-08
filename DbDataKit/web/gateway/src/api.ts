@@ -1,5 +1,5 @@
 import { put, request } from '@dbdatakit/shell'
-import type { InstanceRequest, PublishBody } from './appEditors'
+import type { InstanceRequest, NavigationRequest, PublishBody } from './appEditors'
 import type {
   AdoptAnswer, AppApprovals, AppCheck, AppDetail, AppInstances, AppsList, NavigationSetRow, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SessionRow, TestResult, WriteDataSourceResult,
 } from './types'
@@ -66,6 +66,9 @@ export const gatewayApi = {
     check: (body: PublishBody) => request<AppCheck>(`${v1}/apps/check`, { method: 'POST', body: JSON.stringify({ manifest: body.manifest, files: body.files }) }),
     /** Publishes a version: the manifest as text, every other file as base64 (what `apps publish --to` sends). */
     publish: (name: string, body: PublishBody) => put<{ name: string; version: number; files: number; published_by: string }>(`${v1}/apps/${enc(name)}`, body),
+    /** Makes, changes or (with `rename_from`) renames a navigation set; the store refuses an unknown or repeated member in its words. */
+    saveNavigation: (name: string, body: NavigationRequest) => put<{ name: string; version: number; entries: number; renamed_from: string | null }>(`${v1}/app-navigation/${enc(name)}`, body),
+    removeNavigation: (name: string) => request<{ name: string; removed: boolean }>(`${v1}/app-navigation/${enc(name)}`, { method: 'DELETE' }),
     revoke: (id: string, by: string) => request<{ id: string }>(`${v1}/app-approvals/${enc(id)}/revoke`, { method: 'POST', body: JSON.stringify({ by }) }),
   },
   history: {

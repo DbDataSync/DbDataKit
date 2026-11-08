@@ -18,6 +18,7 @@ interface MockVersion {
   published_by: string; note: string | null; hash: string
 }
 interface MockApproval { id: string; app: string; hash: string; approved_by: string; note: string | null; egress: Record<string, string[]>; revoked: boolean }
+interface MockNavigationSet { name: string; title: string; entries: { instance: string; label: string | null; icon: string | null }[] }
 interface MockInstance { name: string; app: string; pin: number | null; title: string | null; settings: Record<string, string>; bindings: Record<string, string>; version: number }
 
 export interface MockGateway {
@@ -27,6 +28,7 @@ export interface MockGateway {
   instances: Map<string, MockInstance>
   apps: Map<string, { versions: MockVersion[]; serving: number }>
   approvals: MockApproval[]
+  navigation: Map<string, MockNavigationSet>
   lastBody: (key: string) => unknown | undefined
 }
 
@@ -56,10 +58,14 @@ export async function mockGateway(page: Page, caller: MockCaller = { can_publish
     ] }],
     ['vault', { serving: 1, versions: [version({ version: 1, manifest: 'schemaVersion: 1\nname: vault\nversion: 1.0.0\nentry: index.html\ntrust: trusted\negress:\n  connect: [https://vault.example.com]\n  img: [https://cdn.example.com]\n' })] }],
   ])
-  const instances = new Map<string, MockInstance>([['acme', { name: 'acme', app: 'notes', pin: null, title: 'Acme notes', settings: {}, bindings: {}, version: 1 }]])
+  const instances = new Map<string, MockInstance>([
+    ['acme', { name: 'acme', app: 'notes', pin: null, title: 'Acme notes', settings: {}, bindings: {}, version: 1 }],
+    ['pinned', { name: 'pinned', app: 'notes', pin: 1, title: null, settings: {}, bindings: {}, version: 1 }],
+  ])
+  const navigation = new Map<string, MockNavigationSet>([['main', { name: 'main', title: 'Main menu', entries: [{ instance: 'acme', label: 'Acme', icon: null }, { instance: 'pinned', label: null, icon: null }] }]])
   const approvals: MockApproval[] = []
   const sent: Record<string, unknown[]> = {}
-  const gateway: MockGateway = { caller, sent, instances, apps, approvals, lastBody: (key) => sent[key]?.at(-1) }
+  const gateway: MockGateway = { caller, sent, instances, apps, approvals, navigation, lastBody: (key) => sent[key]?.at(-1) }
 
   const standing = (app: string, hash: string) => approvals.find((a) => a.app === app && a.hash === hash && !a.revoked)
   const asked = (egress: Record<string, string[]>) => Object.entries(egress).filter(([, o]) => o.length > 0).map(([directive, origins]) => ({ directive, origins }))
@@ -73,7 +79,7 @@ export async function mockGateway(page: Page, caller: MockCaller = { can_publish
     const v = app.versions.find((x) => x.version === running)!
     return {
       name: i.name, app: i.app, title: i.title, pin: i.pin, follows: i.pin === null, instance_version: i.version, published_by: 'Ada', published_at: '2026-11-08T10:00:00Z', path: `/apps/${i.name}/`, address: null,
-      bindings: i.bindings, settings: i.settings, navigation: [], mounted_by: [], app_version: running, serving_version: app.serving, manifest_version: v.manifest_version, kind: 'app', trust: v.trust, runs_as_asked: v.trust === 'sandbox' || !!standing(i.app, v.hash), approval_id: null,
+      bindings: i.bindings, settings: i.settings, navigation: [...navigation.values()].filter((n) => n.entries.some((e) => e.instance === i.name)).map((n) => n.name), mounted_by: [], app_version: running, serving_version: app.serving, manifest_version: v.manifest_version, kind: 'app', trust: v.trust, runs_as_asked: v.trust === 'sandbox' || !!standing(i.app, v.hash), approval_id: null,
     }
   }
   const refusalForTrust = (name: string, v: string, hash: string) =>
@@ -111,7 +117,7 @@ export async function mockGateway(page: Page, caller: MockCaller = { can_publish
       })
     }
     if (method === 'GET' && tail === 'app-instances') return json(route, { instances: [...instances.values()].map(instanceRow), apps_address: null, caller })
-    if (method === 'GET' && tail === 'app-navigation') return json(route, { navigation: [], caller })
+    if (method === 'GET' && tail === 'app-navigation') return json(route, { navigation: [...navigation.values()], caller })
     if (method === 'GET' && tail === 'app-approvals') {
       return json(route, { approvals: approvals.map((a) => ({ id: a.id, app: a.app, version: '1.0.0', hash: a.hash, approved_by: a.approved_by, approved_at: '2026-11-08T11:00:00Z', note: a.note, published_version: null, revoked: a.revoked, revoked_at: null, operations: [], egress: asked(a.egress) })), caller })
     }
@@ -188,6 +194,31 @@ export async function mockGateway(page: Page, caller: MockCaller = { can_publish
       const instanceVersion = (instances.get(name)?.version ?? 0) + 1
       instances.set(name, { name, app: body!.app, pin: body!.pin ?? null, title: body!.title ?? null, settings: body!.settings ?? {}, bindings: body!.bindings ?? {}, version: instanceVersion })
       return json(route, { name, app: body!.app, version: instanceVersion })
+    }
+    if (method === 'PUT' && parts[0] === 'app-navigation' && parts.length === 2) {
+      if (!caller.can_publish) return needsPublisher()
+      const name = parts[1]!
+      if (body?.title == null || body.entries == null) return refuse(400, 'The body is a JSON object: {"title": "<text>", "entries": [{"instance": "<instance>", "label": "<text>", "icon": "<name>"}]}, and "rename_from": "<set>" to take the name from another set.')
+      const from: string | null = body.rename_from && body.rename_from !== name ? body.rename_from : null
+      if (from !== null && !navigation.has(from)) return refuse(400, `The navigation set '${from}' is not served, so it cannot be renamed to '${name}'.`)
+      if (from !== null && navigation.has(name)) return refuse(400, `There is already a navigation set named '${name}'; rename to another name, or change that one.`)
+      if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(name)) return refuse(400, `A navigation set's name is lower-case letters, digits, '-' and '_', starting with a letter or digit; '${name}' is not.`)
+      if (String(body.title).trim() === '') return refuse(400, 'A navigation set needs a title.')
+      if (body.entries.length === 0) return refuse(400, 'A navigation set lists at least one instance.')
+      const seen = new Set<string>()
+      for (const entry of body.entries) {
+        if (seen.has(entry.instance)) return refuse(400, `'${entry.instance}' is listed twice in the set '${name}'.`)
+        seen.add(entry.instance)
+        if (!instances.has(entry.instance)) return refuse(400, `'${entry.instance}' is not an instance published to production; save it before listing it in a set.`)
+      }
+      navigation.set(name, { name, title: body.title, entries: body.entries })
+      if (from !== null) navigation.delete(from)
+      return json(route, { name, version: 1, entries: body.entries.length, renamed_from: from })
+    }
+    if (method === 'DELETE' && parts[0] === 'app-navigation' && parts.length === 2) {
+      if (!caller.can_publish) return needsPublisher()
+      if (!navigation.delete(parts[1]!)) return refuse(404, `The navigation set '${parts[1]}' is not served.`)
+      return json(route, { name: parts[1], removed: true })
     }
     return refuse(404, 'There is no such call.')
   })
@@ -407,5 +438,92 @@ export async function publishStory(page: Page) {
   await expect(page.getByTestId('instance-row-acme')).toBeVisible()
   await expect(page.getByTestId('publish-open')).toBeDisabled()
   await expect(page.getByTestId('publish-open-why')).toContainText('publisher or administrator role')
+  expect(outside).toEqual([])
+}
+
+/**
+ * UE03: a navigation set is made from the instances that exist (a member is added from a list of the ones not listed yet, so none is listed twice), reordered, labelled, renamed (saved under the new name with the old one retired in
+ * the same call) and removed; the Gateway's refusal (a member removed meanwhile) is shown in its words and keeps the editor open; the instances are untouched by the set's removal; a person without the role sees why every button is off.
+ */
+export async function navigationStory(page: Page) {
+  const outside: string[] = []
+  const origin = new URL(page.url()).origin
+  page.on('request', (request) => { if (/^https?:/.test(request.url()) && !request.url().startsWith(origin)) outside.push(request.url()) })
+  await page.setViewportSize({ width: 1440, height: 1600 })
+  const gateway = await mockGateway(page)
+  await openApps(page)
+  await expect(page.getByTestId('nav-row-main').getByTestId('nav-entries')).toHaveText('acme (Acme) → pinned')
+  await expect(page.getByTestId('instance-row-acme')).toContainText('in the menu main')
+
+  // a new set says what is missing
+  await page.getByTestId('nav-new').click()
+  await expect(page.getByTestId('nav-editor')).toHaveAttribute('data-mode', 'new')
+  await expect(page.getByTestId('nav-editor-save')).toBeDisabled()
+  await expect(page.getByTestId('nav-editor-why')).toContainText('Name the set')
+  await page.getByTestId('nav-editor-name').fill('main')
+  await expect(page.getByTestId('nav-editor-why')).toContainText('already a navigation set named main')
+  await page.getByTestId('nav-editor-name').fill('team')
+  await expect(page.getByTestId('nav-editor-why')).toContainText('Give the set a title')
+  await page.getByTestId('nav-editor-title').fill('Team menu')
+  await expect(page.getByTestId('nav-editor-why')).toContainText('at least one instance')
+
+  // members are added from the instances not listed yet; one cannot be listed twice
+  await page.getByTestId('nav-editor-add').selectOption('pinned')
+  await page.getByTestId('nav-editor-add').selectOption('acme')
+  await expect(page.getByTestId('nav-editor-add-none')).toContainText('Every instance is already listed')
+  await expect(page.locator('[data-testid^="nav-editor-member-"]')).toHaveText([/pinned/, /acme/])
+  await page.getByTestId('nav-editor-label-pinned').fill('Pinned notes')
+  await page.getByTestId('nav-editor-up-acme').click()
+  await expect(page.locator('[data-testid^="nav-editor-member-"]')).toHaveText([/acme/, /pinned/])
+  await expect(page.getByTestId('nav-editor-up-acme')).toBeDisabled()
+  await expect(page.getByTestId('nav-editor-down-pinned')).toBeDisabled()
+  await page.getByTestId('nav-editor-save').click()
+  await expect(page.getByTestId('apps-notice')).toContainText('Navigation set team is saved (version 1)')
+  expect(gateway.lastBody('PUT app-navigation/team')).toEqual({ title: 'Team menu', entries: [{ instance: 'acme', label: null, icon: null }, { instance: 'pinned', label: 'Pinned notes', icon: null }] })
+  await expect(page.getByTestId('nav-row-team').getByTestId('nav-entries')).toHaveText('acme → pinned (Pinned notes)')
+  await expect(page.getByTestId('instance-row-acme')).toContainText('in the menu main, team')
+
+  // a member that was removed meanwhile: the Gateway's refusal is shown in its words and the editor stays open with what was typed
+  await page.getByTestId('nav-edit-team').click()
+  await expect(page.getByTestId('nav-editor-label-pinned')).toHaveValue('Pinned notes')
+  const pinned = gateway.instances.get('pinned')!
+  gateway.instances.delete('pinned')
+  await page.getByTestId('nav-editor-save').click()
+  await expect(page.getByTestId('error-banner')).toContainText("'pinned' is not an instance published to production")
+  await expect(page.getByTestId('nav-editor')).toBeVisible()
+  expect(gateway.navigation.get('team')!.entries).toHaveLength(2)
+  gateway.instances.set('pinned', pinned)
+
+  // renamed: saved under the new name and the old one retired in one call; a name that another set has is refused before a call is made
+  await page.getByTestId('nav-editor-name').fill('main')
+  await expect(page.getByTestId('nav-editor-why')).toContainText('already a navigation set named main')
+  await expect(page.getByTestId('nav-editor-save')).toBeDisabled()
+  await page.getByTestId('nav-editor-name').fill('crew')
+  await expect(page.getByTestId('nav-editor-rename')).toContainText('Saving makes the set under the name crew and stops serving team')
+  await expect(page.getByTestId('nav-editor-save')).toHaveText('Save under the new name')
+  await page.getByTestId('nav-editor-remove-pinned').click()
+  await page.getByTestId('nav-editor-save').click()
+  await expect(page.getByTestId('apps-notice')).toContainText('Navigation set crew is saved (version 1, renamed from team)')
+  expect(gateway.lastBody('PUT app-navigation/crew')).toEqual({ title: 'Team menu', entries: [{ instance: 'acme', label: null, icon: null }], rename_from: 'team' })
+  await expect(page.getByTestId('nav-row-team')).toHaveCount(0)
+  await expect(page.getByTestId('nav-row-crew').getByTestId('nav-entries')).toHaveText('acme')
+
+  // removed after a second click; the instances are not touched
+  await page.getByTestId('nav-remove-crew').click()
+  await page.getByTestId('nav-remove-confirm-crew').click()
+  await expect(page.getByTestId('apps-notice')).toContainText('Navigation set crew is no longer served; its instances are untouched')
+  await expect(page.getByTestId('nav-row-crew')).toHaveCount(0)
+  await expect(page.getByTestId('nav-row-main')).toBeVisible()
+  await expect(page.getByTestId('instance-row-acme')).toBeVisible()
+  await expect(page.getByTestId('instance-row-pinned')).toBeVisible()
+
+  // a person who may only look sees why the buttons are off
+  await mockGateway(page, { can_publish: false, can_approve: false, you: 'Bob' })
+  await page.reload()
+  await expect(page.getByTestId('nav-row-main')).toBeVisible()
+  await expect(page.getByTestId('nav-new')).toBeDisabled()
+  await expect(page.getByTestId('nav-new-why')).toContainText('publisher or administrator role')
+  await expect(page.getByTestId('nav-edit-main')).toBeDisabled()
+  await expect(page.getByTestId('nav-remove-main')).toBeDisabled()
   expect(outside).toEqual([])
 }

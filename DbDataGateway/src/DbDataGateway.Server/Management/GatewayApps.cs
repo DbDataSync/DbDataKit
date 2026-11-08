@@ -21,6 +21,7 @@ namespace DbDataGateway.Server.Management;
 /// <item><c>PUT /api/v1/apps/{name}</c> (<c>{"manifest": "&lt;app.yaml&gt;", "files": {"path": "&lt;base64&gt;"}, "note": "..."}</c>): publish a version (publisher or admin).</item>
 /// <item><c>POST /api/v1/apps/check</c> (<c>{"manifest", "files"}</c>, the body of a publish): what publishing these files would do, without doing it: the manifest's own diagnostics (and those of the portal's home views, the view specs and the files it names), the version it would be, its trust, the content hash, whether an approval stands for these exact files and what the manifest declares (publisher or admin; nothing is stored or audited).</item>
 /// <item><c>POST /api/v1/apps/{name}/rollback</c> (<c>{"to": n}</c>, or empty for the version before): move the version an app serves (publisher or admin).</item>
+/// <item><c>PUT /api/v1/app-navigation/{name}</c> (<c>{"title", "entries": [{"instance", "label", "icon"}], "rename_from"}</c>): make or change a navigation set, the ordered list of instances a menu shows; the store refuses an unknown or repeated member, a set with none and a name that is not a name, in its own words (400). <c>rename_from</c> names a set to take the new name from: it is saved under the new name and the old one is retired in one step (publisher or admin). <c>DELETE /api/v1/app-navigation/{name}</c>: stop serving a set, its instances are not touched (404 when it is not served; publisher or admin).</item>
 /// <item><c>PUT /api/v1/app-instances/{name}</c> (<c>{"app", "pin", "title", "settings", "bindings"}</c>): make or change an instance (publisher or admin).</item>
 /// <item><c>POST /api/v1/app-approvals</c> (<c>{"manifest", "files"}</c> or <c>{"app", "hash"}</c> or <c>{"app", "version"}</c>, and <c>"by"</c>, <c>"note"</c>, <c>"egress"</c>): approve exact bytes of a trusted app (the approver role, which a publisher pairing never has).</item>
 /// </list>
@@ -36,6 +37,10 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
     private sealed record PublishRequest(string? Manifest, Dictionary<string, string>? Files, string? Note);
 
     private sealed record InstanceRequest(string? App, int? Pin, string? Title, Dictionary<string, string>? Settings, Dictionary<string, string>? Bindings);
+
+    private sealed record NavigationEntryRequest(string? Instance, string? Label, string? Icon);
+
+    private sealed record NavigationRequest(string? Title, List<NavigationEntryRequest>? Entries, [property: System.Text.Json.Serialization.JsonPropertyName("rename_from")] string? RenameFrom);
 
     private sealed record RollbackRequest(int? To);
 
@@ -80,6 +85,8 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
             case ("apps", "PUT", 1): return await WriteAsync(() => Publish(Uri.UnescapeDataString(rest[0]), body, caller));
             case ("apps", "POST", 2) when rest[1] == "rollback": return await WriteAsync(() => Rollback(Uri.UnescapeDataString(rest[0]), body, caller));
             case ("app-instances", "PUT", 1): return await WriteAsync(() => SaveInstance(Uri.UnescapeDataString(rest[0]), body, caller));
+            case ("app-navigation", "PUT", 1): return await WriteAsync(() => SaveNavigationSet(Uri.UnescapeDataString(rest[0]), body, caller));
+            case ("app-navigation", "DELETE", 1): return await WriteAsync(() => RemoveNavigationSet(Uri.UnescapeDataString(rest[0]), caller));
             default: return ManagementResult.Problem(404, "There is no such call.");
         }
     }
@@ -356,6 +363,49 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
         {
             return Refused(caller, "app instance-save", name, 400, ex.Message);
         }
+    }
+
+    private ManagementResult SaveNavigationSet(string name, string? body, ManagementCaller caller)
+    {
+        var request = Read<NavigationRequest>(body);
+        if (request?.Title is null || request.Entries is null)
+            return ManagementResult.Problem(400, "The body is a JSON object: {\"title\": \"<text>\", \"entries\": [{\"instance\": \"<instance>\", \"label\": \"<text>\", \"icon\": \"<name>\"}]}, and \"rename_from\": \"<set>\" to take the name from another set.");
+        var store = new AppInstanceStore(definitions);
+        var from = string.IsNullOrWhiteSpace(request.RenameFrom) || request.RenameFrom == name ? null : request.RenameFrom;
+        try
+        {
+            if (from is not null)
+            {
+                var sets = store.NavigationSets();
+                if (sets.All(s => s.Name != from)) throw new AppInstanceException($"The navigation set '{from}' is not served, so it cannot be renamed to '{name}'.");
+                if (sets.Any(s => s.Name == name)) throw new AppInstanceException($"There is already a navigation set named '{name}'; rename to another name, or change that one.");
+            }
+            var entries = request.Entries.Select(e => new NavigationEntry(e.Instance ?? "", string.IsNullOrWhiteSpace(e.Label) ? null : e.Label, string.IsNullOrWhiteSpace(e.Icon) ? null : e.Icon)).ToList();
+            var by = Who(caller);
+            var saved = store.SaveNavigation(new NavigationSet(name, request.Title, entries), by);
+            Record(caller, "app nav-save", name, from is null ? $"version {saved.Version}" : $"version {saved.Version}, renamed from {from}");
+            if (from is not null)
+            {
+                store.RetireNavigation(from, by);
+                Record(caller, "app nav-remove", from, $"retired, renamed to {name}");
+            }
+            return ManagementResult.Ok(new JsonObject { ["name"] = name, ["version"] = saved.Version, ["entries"] = entries.Count, ["renamed_from"] = from });
+        }
+        catch (AppInstanceException ex)
+        {
+            return Refused(caller, "app nav-save", name, 400, ex.Message);
+        }
+    }
+
+    private ManagementResult RemoveNavigationSet(string name, ManagementCaller caller)
+    {
+        try
+        {
+            if (!new AppInstanceStore(definitions).RetireNavigation(name, Who(caller))) return Refused(caller, "app nav-remove", name, 404, $"The navigation set '{name}' is not served.");
+            Record(caller, "app nav-remove", name, "retired");
+            return ManagementResult.Ok(new JsonObject { ["name"] = name, ["removed"] = true });
+        }
+        catch (AppInstanceException ex) { return Refused(caller, "app nav-remove", name, 409, ex.Message); }
     }
 
     private ManagementResult Approve(string? body, ManagementCaller caller)
