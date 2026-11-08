@@ -15,7 +15,7 @@ public class ServerLineageTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(root, true); } catch (IOException) { }
+        try { Directory.Delete(root, true); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 
     private string Starter(string name)

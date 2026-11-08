@@ -21,7 +21,7 @@ public sealed class BuildServerWarmSessionTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(root, true); } catch (IOException) { }
+        try { Directory.Delete(root, true); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 
     private static string[] Check(string path) => ["project", "compile", "--check", "--project", path];

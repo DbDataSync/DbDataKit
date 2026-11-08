@@ -162,6 +162,7 @@ How it works now, and what to keep true when you add a job:
 | --- | --- |
 | `testenv.sh up ...` ends with `container dbkit-test-mssql exited (1)` before any test | the SQL Server container failed to start on that runner; re-run the job |
 | tests all pass (`failed: 0`) but the job fails with `rm: cannot remove '/tmp/tmp.XXXX': Directory not empty` | cleanup race of the e2e job; re-run |
+| one Windows unit test fails in `DisposeAsync` with `UnauthorizedAccessException : Access to the path ... is denied` at `Directory.Delete` (all assertions passed) | Windows refuses to delete a folder whose file a stopping server still holds, and says "access denied" rather than IOException; test cleanup catches `IOException or UnauthorizedAccessException` (a cleanup that fails is not a test that failed) |
 | `429 Too Many Requests` pulling an image | Docker Hub rate limit; pull through `mirror.gcr.io` and re-tag (CLAUDE.md) |
 | a job sits "queued" for a long time | many pull requests run at once; one batch pull request instead of eight is the cure |
 | the `chromium-pin-linux` job downloads and hash-checks the browser, then fails on the `chrome --version` step | the step compared the raw output with `Google Chrome for Testing <VERSION>`; the binary's output does not match byte for byte (trailing whitespace) | the step trims the output and prints both strings (`.github/workflows/repo-checks.yml`); compare version strings trimmed and print them when a check of a tool's output fails |

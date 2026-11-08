@@ -33,7 +33,7 @@ public class StructureDecisionGoldenTests
     {
         var root = Path.Combine(Path.GetTempPath(), "ddb-structure-" + Guid.NewGuid().ToString("N")[..8]);
         try { Run(template, engine, root); }
-        finally { try { Directory.Delete(root, true); } catch (IOException) { } }
+        finally { try { Directory.Delete(root, true); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } }
     }
 
     /// <summary>The PostgreSQL profile of the template conformance suite replaces the file; what the template declares apart from the engine (the parameters of <c>macro_examples</c>) is kept.</summary>
