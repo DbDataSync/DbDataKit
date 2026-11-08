@@ -98,6 +98,8 @@ The rule is about that, not about branches or merge style.
   proposed or in progress while all its rows are done, and never link to a plan that does not exist. `scripts/check_plans.py` checks this (links between
   plans, the numbers the index names, the index itself, open status with every row done); what it tolerates today is in `scripts/plan_check_baseline.txt`,
   which only shrinks.
+- **Done means its test passes:** a slice's "Done when" is a test run in CI, or it says what is checked by hand and why.
+- **Adapter first, delete second:** a slice that replaces code keeps the old tests passing unchanged; deleting the old code is its own slice, or the last step when the tests already pass.
 - A clean break is allowed, but never a silent one: a changed file format fails with a message naming the file, and a test says so.
 - Branches: pushing a work-in-progress branch is fine; leaving it behind is not. The workflow `delete-merged-branch.yml` deletes a pull request's branch
   when it merges; a branch that was pushed and then abandoned, or whose work moved into another branch, is deleted by whoever abandoned it, in the same

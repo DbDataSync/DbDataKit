@@ -20,4 +20,4 @@ The identity home (plan 13a U13): who people are and what they may do, for every
 
 A group of homes on one SQL Server or PostgreSQL state (plan 20 O02b) works behind any balancer: an Entra sign-in in progress, a passkey ceremony's challenge and the management tokens used are in the state (`OneTimeValues`), each used once.
 
-Not here yet: Entra's group overage, the serving layer forwarding a home that runs on its own (O07).
+Entra's group overage (more than 200 groups: the token has no `groups` claim) is left to the tenant: its administrator limits what the app registration sends with `groupMembershipClaims`, and the home calls no Microsoft Graph (13c D25). Not here yet: the serving layer forwarding a home that runs on its own (O07).

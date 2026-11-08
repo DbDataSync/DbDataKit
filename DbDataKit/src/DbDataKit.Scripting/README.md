@@ -18,3 +18,19 @@ Our own scripting (plan 14; decision D9): `.csx` scripts and libraries that ask 
 Nothing here runs package code: no install scripts exist, no MSBuild runs, analyzers are not loaded. Loading a package into a process is code execution in that process; the controls are the allow-list, the pinned lock file and who may edit the configuration.
 
 The cache belongs under the product's data directory (`PackageStore.DefaultRoot`), never `%TEMP%` or a user profile, which a service account may not have. **Not yet verified on Windows** (long paths, the service account): the plan asks for that pass before S02 is relied on there.
+
+## The lock file (`scripting-lock/1`)
+
+Every script, library and driver that asks for packages is pinned by a lock file beside it in the configuration repository, committed with it: `libraries/<id>/library.lock`, `drivers/<id>/driver.lock`, `scripts/<name>.lock`. The first resolution writes it; every later download or stored package must match.
+
+```json
+{ "schema": "scripting-lock/1", "packages": { "Npgsql/9.0.3": "<base64 SHA-512 of the .nupkg>", ... } }
+```
+
+The key is `<id>/<normalized version>`; the file holds exactly the closure's packages and is rewritten only when it changes (a version change replaces the old pin; a script with no packages writes none). The reader is strict: a key other than `schema` and `packages`, a `packages` that is not an object or a hash that is not text is an error naming the file and the key's path (`$.packges`). A package whose bytes differ from its pin is refused with `PackageIntegrityException` naming the package, the version and the lock file, and nothing of it is stored (a script reports it as a compile diagnostic). An offline load works when the stored hashes match the pins; a repository with no lock file keeps working and the next resolution creates it.
+
+Limits: the key is `schema`, not `schemaVersion` (this is a JSON file, not one of the YAML config files); a compiler built with no scripts folder has nowhere to keep a lock file and trusts the first download (the API, the CLI and the TaskRunner all pass the folder); a script that is validated and never saved leaves an untracked `<name>.lock` in the working tree; only a script's own `#r` lines are pinned (a `#load`ed script's are not resolved by the compiler).
+
+## Running loaded code
+
+Loading a package into a process is code execution in that process, and unloading is best effort (see `ClosureLoader`): a native library stays loaded for the life of the process, and a managed context is collected only when every reference to its types is gone. So a custom driver that Sync or the Proxy adopts runs **isolated**: in a child process, or in a collectible load context where its limits are accepted. The TaskRunner already runs each run in a process of its own, so unloading never matters there. What the API loads and runs itself today (library, driver and script loading, connection tests, schema discovery, previews, scripted queries) is not isolated and nothing is unloaded; the owner chose not to retrofit isolation or unloading into the existing paths, only to add it as those paths are refactored or when a real problem shows up. The Proxy has no loader and gets none without isolation.

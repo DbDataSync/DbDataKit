@@ -1127,7 +1127,7 @@ certificates, SSH keys, Windows (SMB with Kerberos). **Owner question 10.**
 - written by people with the Author role, in a workspace, reviewed and merged;
 - a published version is approved by an administrator, with an audit, as plan 26 does for trusted apps;
 - run in a separate process with time and memory limits;
-- packages only from the allow-listed sources, pinned in a lock file (13a S12).
+- packages only from the allow-listed sources, pinned in a lock file (`DbDataKit.Scripting`, `scripting-lock/1`).
 
 Outside network access is the administrator's to configure, in the environment and on the runners (plan 28 section 5): the runner reports
 what a runner can reach, and the console shows it. Actions in the serving layer have no outside access by default.
