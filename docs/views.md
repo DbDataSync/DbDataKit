@@ -374,6 +374,16 @@ A refusal is `{code, message}`: 400 `invalid` (or the resolver's own code, `DBD-
 - **Following.** `ViewsPublications` holds the two `PublishedViews`; the module follows the group's definitions itself (`ViewsOptions.Follow`, every `PollInterval`, or `Refresh()`), or a host that runs one follower adds `Subscribers` to it.
   `ViewsPublications.Register(kinds, store, payloads)` registers `dashboard` and `report` in the registry of the publisher that validates a publish.
 
+### In the Proxy (plan 32 DBR11b)
+
+The Proxy host runs the module when `views` is in its `modules:` (`DbDataProxy/README.md`, "The `views` module"): `ProxyViewsModule` mounts `ViewsModule.Map` on an https listener of its own (`views: {address, port}`, 8820), `ProxyViews` supplies the callers (`IViewsCallers` over `HomeCallers`: a
+personal access token or an access token of the identity home becomes a `ProxyCaller`, so the serving core, the data source groups and the audit see the same person as for Flight SQL), the publications and the audit; the Proxy's one `DefinitionFollower` carries the two `PublishedViews`
+(`ViewsOptions.Follow` is off); the readiness component `views` reports `Degraded` for a version this instance does not serve. The console's relay reaches the same routes on the **management API**
+(`ProxyViewsManagement`: `GET|POST /api/v1/dashboards...` and `/reports...`, `GET /api/v1/views/status`, and `PUT /api/v1/dashboards/{name}` which publishes), as the person the console vouches for. **Publishing** is `ProxyViewsPublishing`:
+`ViewDefinitions.DependsOn` pins each model a document queries to the version of the published `semantic-model` the production channel serves, and the registry's validator refuses what the models cannot carry; the management route and `dbdataproxy views publish` call it.
+Not there: row-level access rules (plan 22; today a person's data source groups decide, and a refusal is a `denied` widget entry), an app's narrowed token over REST (the apps host calls `ViewsApi` in process with a `ViewsAppScope`; not wired), export, and removing a published document.
+A tester's script is [`views-testing.md`](views-testing.md).
+
 ## Choosing a layout
 
 `LayoutSelector.Select(document, context)` (.NET) and `selectLayout(document, context)` (TypeScript) are pure functions with the same goldens (`conformance/views/select-layout`). The context is the container's
@@ -390,7 +400,7 @@ option or a subscription.
 
 The renderers are in `@dbdatakit/visuals` (`DbDataKit/web/visuals`, its README has the calls). A document's widgets are resolved **through a `ViewsClient`** (`open`, `resolve`, `validate`, `save`, `preview`): the console runs
 on `fixtureClient` (the sample documents of the retail template, `DbDataBuild/templates/retail/dashboards` and `reports`, with recorded results in `DbDataKit/conformance/views/widget-results`) until the `views` module
-answers, and `moduleClient` is the same interface over its REST (the routes above; `save` and `preview` are not in the module yet).
+answers, and `moduleClient` is the same interface over its REST (the routes above; `save` is the Proxy's `PUT` on the management API, which the console's relay reaches; `preview` is not in the module yet). The console's Views page uses both: `?source=` names the fixtures or a Proxy that runs the module, and with no choice the first such Proxy is used.
 
 **The reflow layout fills its container.** `layoutReflow` lays the grid out in whole pixels so the cells fill the box with no gap and no overlap; a tile is never drawn below the smallest box of its type
 (`metric` 160 x 88, `text` 160 x 56, `control` 180 x 56, `chart` 280 x 180, `table` 320 x 200, `matrix` 360 x 220; a tile's `min` may raise it). If any tile would be below its minimum the layout is the **compact stack**

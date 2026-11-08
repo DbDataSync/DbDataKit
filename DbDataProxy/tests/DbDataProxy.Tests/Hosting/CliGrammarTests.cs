@@ -31,6 +31,7 @@ public sealed class CliGrammarTests
               secret      The encrypted secret store, secret references and protected values
               identity    The identity home this proxy serves: register consoles and apps, invite people, give them roles
               apps        The apps host this proxy serves: its apps, instances and navigation sets
+              views       The dashboards and reports this proxy's group serves: publish a document, list what is served
               config      The server's own configuration
               state       The state database: where it is, whether it works, and the rights it needs
               query       A client for smoke-testing a running proxy

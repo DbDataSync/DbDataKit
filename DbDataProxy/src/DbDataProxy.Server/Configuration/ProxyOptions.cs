@@ -70,6 +70,8 @@ public sealed class ProxyOptions
 
     public StoreModuleOptions Store { get; set; } = new();
 
+    public ViewsModuleOptions Views { get; set; } = new();
+
     public ListenOptions Listen { get; set; } = new();
     public TlsOptions Tls { get; set; } = new();
 
@@ -288,6 +290,21 @@ public sealed class StoreModuleOptions
 
     [ConfigKey(Min = 1, Max = 65535)]
     public int Port { get; set; } = 8819;
+}
+
+/// <summary>The <c>views</c> module (plan 32, DBR11b): where it listens. Published dashboards and reports are read and rendered here, as the identity home's people, through the models published to the group.</summary>
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
+public sealed class ViewsModuleOptions
+{
+    /// <summary>Where it listens: every address by default, since people, apps and agents call it.</summary>
+    public string Address { get; set; } = "0.0.0.0";
+
+    [ConfigKey(Min = 1, Max = 65535)]
+    public int Port { get; set; } = 8820;
+
+    /// <summary>How long, in seconds, the rows of a request are kept for the viewer who asked (their access and the request are the key). 0 turns the cache off.</summary>
+    [ConfigKey(Min = 0, Max = 3600)]
+    public int CacheSeconds { get; set; } = 30;
 }
 
 [ConfigSchema(Naming = KeyNaming.Verbatim)]
