@@ -33,7 +33,7 @@ name: DbDataSync image
 # A prerelease (-beta) gets only its exact tags, so `latest` never moves to something a plain install would not pick either.
 #
 # The first push of a new package is private until someone makes it public in the package's settings (once); see
-# docs/install.md and architecture/implementation/todo/phase-163K-container-image-on-ghcr.md.
+# docs/install.md and architecture/implementation/done/phase-163K-container-image-on-ghcr.md.
 
 on:
   workflow_call:
