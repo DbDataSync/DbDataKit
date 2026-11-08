@@ -237,6 +237,9 @@ public class SemanticFilesTests : IDisposable
     {
         var dir = Retail();
         Directory.Delete(Path.Combine(dir, "semantic"), recursive: true);
+        // the template's dashboards and reports query the model that was just removed, which the project check says (plan 32 DBR29); a project without models has none
+        Directory.Delete(Path.Combine(dir, "dashboards"), recursive: true);
+        Directory.Delete(Path.Combine(dir, "reports"), recursive: true);
         Assert.Empty(ProjectContext.Load(dir).Semantic.Models);
         Assert.Equal(0, Run("project", "compile", "--project", dir).Exit);
     }

@@ -243,6 +243,32 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
         }
     }
 
+    /// <summary>
+    /// Publishes a dashboard or report to a paired Proxy's registry (plan 32 DBR29): <c>PUT /api/v1/dashboards/{name}</c> (or <c>reports</c>) with the file's text, over the version the caller last saw when it says (a different current version
+    /// is the Gateway's own 409 <c>version_conflict</c>, naming the current one). The call carries the Publisher role and the person who asked, as the other publishes do. The Gateway checks the document against the model versions it serves
+    /// and answers in its own words; Build does not read the registry first, because a Gateway that does not run the views module cannot be asked what it holds and still takes the publish.
+    /// </summary>
+    public async Task<PublishResult> PublishViewAsync(string proxyName, string kind, string name, string text, int? expectedVersion, string? note, ValidatedToken person, CancellationToken ct)
+    {
+        if (proxies.Find(proxyName) is not { } proxy) return Fail(404, $"This server is not paired with a proxy called '{proxyName}'.");
+        var self = await identity.GetOrCreateAsync(ct);
+        using var http = new HttpClient(PairingClient.Pinned(proxy.Fingerprint)) { BaseAddress = new Uri(proxy.Url), Timeout = TimeSpan.FromSeconds(60) };
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/{(kind == "report" ? "reports" : "dashboards")}/{Uri.EscapeDataString(name)}");
+            request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, self.Issuer().Issue(new ConsoleTokenRequest(proxy.InstanceId, person.SubjectId, person.SubjectName, ServerRole.Publisher)));
+            request.Content = JsonContent.Create(new { text, expected_version = expectedVersion, note }, options: Json);
+            using var written = await http.SendAsync(request, ct);
+            if (!written.IsSuccessStatusCode) return await Refused(written, $"publishing the {kind}");
+            var answer = JsonNode.Parse(await written.Content.ReadAsStringAsync(ct))!;
+            return new PublishResult(200, new JsonObject { ["proxy"] = proxyName, ["kind"] = kind, ["name"] = name, ["version"] = (string?)answer["version"], ["created"] = (bool?)answer["created"], ["unchanged"] = (bool?)answer["unchanged"], ["depends_on"] = answer["depends_on"]?.DeepClone() });
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IncompatibleServerException)
+        {
+            return Fail(502, $"The proxy '{proxyName}' did not answer ({ex.GetType().Name}).");
+        }
+    }
+
     private static PublishResult Fail(int status, string message) => new(status, new JsonObject { ["error"] = message });
 
     /// <summary>

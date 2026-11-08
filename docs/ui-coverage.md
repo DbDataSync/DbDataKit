@@ -38,6 +38,7 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 | | Serving modules (`flightsql`, `identity`; `apps` and `rest` planned) | – | – | – | **No UI**: the `Modules` setting in `server.yaml` (O01) | |
 | **Build** | Projects | Yes (from a template, or import) | – | – | – | `ProjectsPage.tsx`, `NewProjectPanel.tsx`, `ImportPanel.tsx` |
 | | Model and project files | Yes | Yes (editor) | Yes | Move or rename | `EditTab.tsx`, `NewModelPanel.tsx`, `FileTools.tsx` |
+| | Dashboards and reports of a project (plan 32 DBR29: the files of `dashboards/` and `reports/`) | Yes (new, in a workspace) | Yes (the shared editor of `@dbdatakit/views-editor`, with the project's own model as the catalog; the Edit tab links to it) | Yes | Check with the project's models, publish to a paired Gateway (approver) | `ViewsTab.tsx` |
 | | Draft (workspace) | – | – | – | Check, compile, sample, diff, commit, push or merge | `CompilePanel.tsx`, `GitPanel.tsx`, `PreviewPanel.tsx`, `ProjectPage.tsx` |
 | | Deploy plans | Yes | – | – | Dry run, apply (approver) | `DeployTabs.tsx` |
 | | Refresh plans and the project's tests (UE09) | – | – | – | Dry run, then run a refresh plan or chosen members (operator); see each load and the checks evaluated after it; run the project's tests (viewer) | `RefreshPanel.tsx`, `TestsPanel.tsx` |

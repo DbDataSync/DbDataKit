@@ -294,6 +294,22 @@ if (!isWorker) {
   fs.writeFileSync(path.join(scratchDirectory, 'models-gateway-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeModelsGateway)![1])
 }
 
+// Plan 32 DBR29: a Build server for the dashboards-and-reports story (`views-build.spec.ts`), port 8551 (a port table: 8551 views Build). The project is the retail template (its semantic model, sample dashboard and report) in a git
+// repository, which is what a workspace is made from. No Gateway is paired with it: publishing is shown off with the reason, and tested by the server's own tests.
+export const viewsBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-views-build'), port: 8551, project: 'retail' }
+if (!isWorker) {
+  fs.rmSync(viewsBuild.directory, { recursive: true, force: true })
+  fs.mkdirSync(viewsBuild.directory, { recursive: true })
+  const project = path.join(os.tmpdir(), 'dbdatakit-console-e2e-views-project')
+  fs.rmSync(project, { recursive: true, force: true })
+  execFileSync('dotnet', ['exec', buildDll, 'project', 'create', 'retail', project], { stdio: 'ignore' })
+  for (const args of [['init', '-q'], ['add', '-A'], ['commit', '-qm', 'The retail project']])
+    execFileSync('git', ['-c', 'user.name=console-e2e', '-c', 'user.email=e2e@example.invalid', ...args], { cwd: project, stdio: 'ignore' })
+  execFileSync('dotnet', ['exec', buildDll, 'server', 'project', 'add', viewsBuild.project, '--path', project, '--repo', viewsBuild.directory], { stdio: 'ignore' })
+  const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', viewsBuild.directory, '--max-role', 'viewer,author,operator,approver,admin'], { encoding: 'utf8' })
+  fs.writeFileSync(path.join(scratchDirectory, 'views-build-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
+}
+
 // A runner for the runner story (plan 28a, R19): a real `dbdatarunner` with the sample package of the runner's tests (`DbDataKit.Runner.TestPackage`, published to a folder here) published on the `dev` channel by the story (as version 1, then 2), two tasks:
 // `ok` (every hour, so it also has a next time) and `tally` (by hand, with a progress value `seen` its runs move). A pairing code lets the console grant admin; a second, for a publisher, is what the story's `package publish` of
 // version 2 (which resets `seen`: a loss) uses. The runner's directory is short: its task socket lives in it and a Unix socket path is limited.
@@ -514,6 +530,15 @@ export default defineConfig({
     {
       command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(monitorBuild.directory), '--listen', `https://localhost:${monitorBuild.port}`, '--scheduler'].join(' '),
       url: `https://localhost:${monitorBuild.port}/health/live`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(viewsBuild.directory), '--listen', `https://localhost:${viewsBuild.port}`].join(' '),
+      url: `https://localhost:${viewsBuild.port}/health/live`,
       ignoreHTTPSErrors: true,
       reuseExistingServer: false,
       timeout: 60_000,
