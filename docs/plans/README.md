@@ -21,7 +21,7 @@ criteria, risks and acceptance. Plans are proposals; review the "decisions" in e
 | 11 | [CI and testing](11-ci-and-testing.md) | Owner's decisions on CI and testing | In progress: the engine catalogue (`testenv/`, N-1 profiles, mapping files) and the per-product CI are built; remaining are CI01 to CI06: a nightly for the products other than Build, a Windows nightly with SQL Server Express, skipped-test summaries and minimum test counts, engine jobs that fail instead of skip, the test-kind vocabulary, and the full matrix inside every release |
 | 12 | [Shared TLS rollout](12-shared-tls-rollout.md) | Sync and Proxy certificates, services, systemd | One certificate, service and unit implementation |
 | 13 | [Suite standardization](../architecture.md) | Finished: now a product doc | `docs/architecture.md`: the suite's shape, the clean-break rule, decisions D1 to D20; the workstreams' conventions are in the READMEs of the packages that own them |
-| 13a | [Suite slices](13a-suite-slices.md) | Plan 13 | About 150 small pull requests with a test each, grouped into milestones, each naming the decision it waits on |
+| 13a | [Suite slices](13a-suite-slices.md) | Plan 13 (now `docs/architecture.md`) | The open slices only (A21, U16, U18, M12, P12, P13, L06); finished rows are removed |
 | 13a-x01 | [Removal scan](13a-x01-removal-scan.md) | Slices X01 and X02 | The evidence for what the removal slices deleted |
 | 13b | [Owner review items](13b-owner-review.md) | Owner, 2026-10-28 | Closed: every item decided and built |
 | 13c | [Follow-ups](13c-follow-ups.md) | Work of 2026-10-28 to 2026-10-30 | Open items no plan row owns |

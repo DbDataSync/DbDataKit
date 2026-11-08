@@ -169,7 +169,7 @@ signature and the review in a workspace are for.
 **Proposed: yes.** A version carries the **`.nupkg` files of its whole package closure** as artifacts, by hash:
 
 - the runner needs **no access to a package feed** (air-gapped installs work) and does **no resolution** at activation;
-- the bytes that run are the bytes that were reviewed and approved; the lock file's hashes (13a S12) and NuGet's own hash match them;
+- the bytes that run are the bytes that were reviewed and approved; the lock file's hashes (`DbDataKit.Scripting`, `scripting-lock/1`) and NuGet's own hash match them;
 - a package shared by many versions or many integrations is **stored once** (content addressing).
 
 Whole packages rather than the extracted files for one platform, so one version serves a group with Windows and Linux runners: each
