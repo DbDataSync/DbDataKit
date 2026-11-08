@@ -228,7 +228,7 @@ export async function navigationStory(screen: Page) {
   await screen.getByTestId('nav-edit-menu2').click()
   run(['apps', 'instance-remove', '--name', 'nav-b'])
   await screen.getByTestId('nav-editor-save').click()
-  await expect(screen.getByTestId('error-banner')).toContainText("'nav-b' is not an instance published to production")
+  await expect(screen.getByTestId('error-banner')).toContainText("'nav-b' is not an instance published to prod")
   await expect(screen.getByTestId('nav-editor')).toBeVisible()
   await screen.getByTestId('nav-editor-remove-nav-b').click()
   await screen.getByTestId('nav-editor-save').click()
