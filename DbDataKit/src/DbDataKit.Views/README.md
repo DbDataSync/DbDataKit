@@ -1,7 +1,6 @@
 # DbDataKit.Views
 
-Dashboards and reports (plan 32): one set of **widgets**, several **layouts** over them. This library holds the vocabulary, the strict loaders and the pure selection of a layout. It renders nothing and runs no
-query: the renderers (`@dbdatakit/visuals`), the layout engines and the module that serves documents are later slices. The file format is in [`docs/views.md`](../../../docs/views.md).
+Dashboards and reports (plan 32): one set of **widgets**, several **layouts** over them. This library holds the vocabulary, the strict loaders, the pure selection of a layout and the resolution of a layout into rendered widgets (it opens no connection: the requests go through the serving core). It draws nothing: the renderers (`@dbdatakit/visuals`), the layout engines and the module that serves documents are other slices. The file format is in [`docs/views.md`](../../../docs/views.md).
 
 ## Widgets
 
@@ -27,6 +26,19 @@ var diagnostics = CatalogCheck.Check(document.Widgets, "views/sales.yaml", new D
 
 `DeriveRequest` is pure (the TypeScript twin in `@dbdatakit/visuals` gives the same request from the same goldens, `DbDataKit/conformance/views/derive`). `CatalogCheck` sends every widget's request through the engine's
 validator (`IRequestValidator`, an adapter over the semantic library's `Validator`) and reports the engine's codes at the document's file, line and path. See `docs/views.md`.
+
+## Resolving a layout as the viewer
+
+```csharp
+var resolver = new WidgetResolver(servingQueries, model => roles.For(model), new ResolverOptions { MaxRows = 100_000, WidgetTimeout = TimeSpan.FromSeconds(30) }, servingEntities);
+RenderedWidgets rendered = await resolver.ResolveAsync(context, document, "desk", parameters: values, only: ["net"]);   // context: the viewer's ServingContext
+JsonObject json = rendered.ToJson();        // {"kind":"rendered_widgets","layout","as_of","widgets":{id: metric | table | matrix | chart | text | image | control | error}}
+```
+
+For the widgets a layout places (and the ones `only` names) it binds the viewer's parameter values, makes each widget's request (`DeriveRequest`, or the form that was written), runs it through the serving core's
+`IServingQueries` **under the viewer's `ServingContext`** and shapes the answer: server cell text, alignment and total rows for a table, a metric with its comparison's change, a matrix or chart through the engine's
+`ViewRenderer`, a text with its placeholders substituted, an image as a `data:` URI, the values a control lists. A widget that is denied, over a limit, refused by the engine or not drawable is an **error entry** with the
+core's code and words; the others render. Nothing here applies an access rule. See [`docs/views.md`](../../../docs/views.md#resolving-a-layout) for the rules (unset parameters, limits, what each query form does).
 
 ## Documents
 

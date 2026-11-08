@@ -2,7 +2,7 @@
 
 Plan 32. A document defines its **widgets once** and carries **layouts** over them. Two kinds share one core: a **dashboard** (`dashboard/1`) fits one page, a **report** (`report/1`) scrolls and splits into pages.
 A file is YAML or JSON, strict (an unknown key is an error), and every problem is reported with the file, line and column. This page is what a file looks like; the plan has the reasons
-([32](plans/32-dashboards-and-reports.md)). Nothing here renders: the renderers, the layout engines and the module that serves documents are later slices.
+([32](plans/32-dashboards-and-reports.md)). The resolver (below) turns a layout into rendered widgets; the renderers, the layout engines and the module that serves documents are other slices.
 
 Where the files live: in an app's source under `views/` (the apps validator dispatches on `kind`) and in a Build project under `dashboards/` and `reports/` (both come with the slices that wire them in).
 The loaders are in `DbDataKit.Views` (.NET) and `@dbdatakit/visuals` (TypeScript); the JSON Schemas for editors are in `DbDataKit/web/visuals/schemas`.
@@ -256,6 +256,52 @@ What needs the catalog (an encoded field the model does not have, an invalid req
 `dashboard/1` and `report/1` are **open** (unreleased) and share **one number**, `ViewsFormat.Current`: a new widget type, query form, layout type or selector condition is `/2` of both kinds in one change, and a document is
 written in the lowest number that can say it. `schemas/views-format.lock.json` records the number and the hashes of `core`, `dashboard` and `report`; a test fails when a schema changes without the lock (while the format
 is open the lock is edited with the schema; once frozen a change is the next number of both kinds).
+
+## Resolving a layout
+
+`WidgetResolver.ResolveAsync(context, document, layout, parameters, only)` (`DbDataKit.Views`) is steps b to d of plan 32 section 2.6: for a document, the layout in play, the viewer's parameter values and optionally the widget ids to
+resolve again (`only`, when a parameter changed: `WidgetResolver.UsedParameters(widget)` says which widgets read it), it gives the **rendered widgets**. Only the widgets the layout places are run, a few at a time
+(`MaxParallelism`), each **as the viewer**: every request goes through the serving core's `IServingQueries` with the viewer's `ServingContext` (identity, roles, attributes, channel, trace), so access rules, limits and audit are the
+host's and the resolver knows no rule. The result is `{kind: "rendered_widgets", layout, as_of, widgets: {id: ...}}`, the shape of `schemas/rendered-widgets.schema.json` (typed in `@dbdatakit/visuals`, `src/views/rendered.ts`).
+
+| Widget | What it becomes |
+| --- | --- |
+| `metric` | `{value: {v, text}, compare: {v, text, change: {text, direction}}}`: the text is the number preset's (`catalog`, `full`, `compact`, `percent`, shaped by the catalog's format of the measure); the change is `(value - compare) / abs(compare)` of the two numbers the server gave, in percent |
+| `table` | `columns` (field, label, `align`: right for a measure, left otherwise) and `rows` of `{v, text}`; a total row of the result (a rolled-up row) is `total: true`, the rolled-up cells read "Total", and total rows come after the rows they total |
+| `matrix`, `chart` | the engine's `ViewRenderer` over the answer (the one place they become data); its refusal (`stack_not_additive`, `totals_missing`...) is the widget's error, at the document's encoding path |
+| `text` | `{text}` with `{{params.x}}` substituted as text (a list joined by commas, nothing as empty); the renderer substitutes again and never makes markup from a value |
+| `image` | a `data:` URI of the bytes the host holds under the hash (`ImageBytes`), at most 1 MiB |
+| `control` | the values it lists, as the viewer may see them (`{"kind": "members", "attribute": ...}` on the model), `{value}` each; a control with no list has nothing to resolve |
+| error | `{type: "error", code, message, path?, suggestions?}`: the core's own code and words (`denied`, `unknown_member`, `limit_rows`, `timeout`...), or a `DBD-VIEW-05x` of the resolver; an unexpected exception shows only its kind (the host's `OnUnexpected` has the rest) |
+
+**Parameters.** The viewer's values are read as each parameter's type (a URL carries text), a `many` parameter is a list, a missing value is the default. They travel **beside the request** as its `parameters`, with the document's
+definitions as `parameter_definitions` (type, `for`, `many`); the request keeps its `{"param": name}` markers (the ones `DeriveRequest` lists as bindings), so the request hash and the cache key are the literal form's.
+**A filter on a parameter the viewer left unset (no value, or an empty list) is dropped** from the request ("no region chosen means all regions"): the engine refuses an empty list (`param_empty_list`), and the sample
+documents say so in their text. A parameter that is `required` with no value and no default is the error `DBD-VIEW-050` of the widgets that use it (its control still draws); a value that does not fit its type, or names a
+parameter the document does not declare, refuses the resolution (`DBD-VIEW-051`).
+
+**Query forms.** *Derived* and *semantic request*: `ServingRequest.Semantic` on `semantic:<model>`. *Semantic SQL*: `ServingRequest.SemanticSql` with its markers (`:name`) bound by name. *Saved query*:
+`SELECT * FROM name(arg := :arg)` on the saved query's model, which the host supplies (`SavedQueryModel`; a saved query's widget does not say). *Store read*: `IServingEntities.ReadAsync`, with the read's `limit`
+applied. **Not run here, with `DBD-VIEW-052` as the widget's entry:** a saved query with no model, a store `filter` or `sort` (the entity read gives the rows whole), a `ref` (a held result belongs to the session that made it),
+a store read when the host offers no Store. These wait for the host that has them (DBR11) and the Store's filtered read.
+
+**Limits.** `MaxRows` (an answer over it is the error `DBD-VIEW-054`, never a silently cut table; it is also asked of the core as the request's own limit), `WidgetTimeout` (counted on an injected `TimeProvider`; a source that
+ignores its token is not waited for past it; the entry is `timeout`), `MaxWidgets` (the rest get `DBD-VIEW-055`), `MaxParallelism`. A cancelled call stops the whole resolution.
+
+**The cache key.** `RenderedWidgets.CacheKeys[widget]` is `WidgetCacheKey.Of(context, source, request)`: channel, preview, the caller's id, roles and attributes, the source and the request as it ran. Two viewers whose access differs
+never share one; the cache itself is plan 24's and the host's.
+
+| Code | Meaning |
+| --- | --- |
+| `DBD-VIEW-050` | a required parameter the widget uses has no value and no default |
+| `DBD-VIEW-051` | a parameter value of the wrong type, a list for a single value, or a parameter the document does not declare (the resolution is refused) |
+| `DBD-VIEW-052` | a query form (or part of one) the resolver does not run here |
+| `DBD-VIEW-053` | no catalog of the widget's model, so its request cannot be derived |
+| `DBD-VIEW-054` | an answer over `MaxRows`, or an image over 1 MiB |
+| `DBD-VIEW-055` | the layout places more widgets than `MaxWidgets`; this one was not run |
+| `DBD-VIEW-056` | the answer does not hold a field the widget draws, or a column type it cannot |
+| `DBD-VIEW-057` | the layout is not one of the document's (the resolution is refused) |
+| `DBD-VIEW-058` | the bytes of an image held by hash were not found |
 
 ## Choosing a layout
 

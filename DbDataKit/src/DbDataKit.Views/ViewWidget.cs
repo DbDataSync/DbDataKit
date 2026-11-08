@@ -3,8 +3,8 @@ using DbDataKit.Config.Yaml;
 
 namespace DbDataKit.Views;
 
-/// <summary>A document's parameter, as J25 defines one.</summary>
-public sealed record ViewParameter(string Name, string Type, string? For, bool Many, bool Required, bool HasDefault, string? Label, int Line);
+/// <summary>A document's parameter, as J25 defines one. <see cref="Default"/> is the default as JSON (a list for <c>many</c>), null when there is none.</summary>
+public sealed record ViewParameter(string Name, string Type, string? For, bool Many, bool Required, bool HasDefault, string? Label, int Line, System.Text.Json.Nodes.JsonNode? Default = null);
 
 /// <summary>A field a widget encodes (<c>x</c> of a chart, a matrix's <c>rows</c>, a metric's <c>value</c>...), by channel, in encoding order, with its path in the document (<c>widgets.by_region.encodings.x</c>) and its position.</summary>
 public sealed record EncodedField(string Channel, string Field, string Path, int Line, int Column);

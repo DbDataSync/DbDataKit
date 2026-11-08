@@ -143,7 +143,7 @@ public static partial class ViewsLoader
                 if (m.Get("default") is { } d && type is not null) CheckDefault(d, many, type, J(path, "default"));
                 if (name is null || type is null) continue;
                 if (!declared.Add(name)) { Bad(ViewsCodes.DuplicateName, nameNode!, J(path, "name"), $"The parameter `{name}` is declared twice."); continue; }
-                parameters.Add(new ViewParameter(name, type, @for, many, required, m.Get("default") is not null, label, m.Line));
+                parameters.Add(new ViewParameter(name, type, @for, many, required, m.Get("default") is not null, label, m.Line, m.Get("default") is { } dflt ? ViewsLoader.ToJson(dflt) : null));
             }
         }
 

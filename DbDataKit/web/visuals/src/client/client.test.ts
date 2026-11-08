@@ -71,7 +71,7 @@ describe('fixtureClient.resolve', () => {
     const { widgets } = await fixtureClient(bundle).resolve(dashboard, 'desk', {})
     expect(widgets.note).toEqual({ type: 'text' })
     expect(widgets.regions).toMatchObject({ type: 'control', values: [{ value: 'West' }, { value: 'Central' }, { value: 'East' }, { value: 'South' }] })
-    expect(widgets.net).toMatchObject({ type: 'metric', value: { text: '$3.30M' } })
+    expect(widgets.net).toMatchObject({ type: 'metric', value: { text: '5.2M' } })
   })
 
   it('a widget with no recorded result gets its own error entry and the others are still given', async () => {

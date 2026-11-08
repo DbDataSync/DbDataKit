@@ -37,7 +37,7 @@ const { document } = await client.open('dashboard', 'retail-sales-today')
 ```
 
 * `ViewsClient` is the one path for boards: `list`, `open`, `resolve(ref, layout, parameters, {only})` (the rendered widgets of a layout, as the viewer), `validate`, `save`, `preview`. `fixtureClient` serves documents and
-  **recorded results** (`DbDataKit/conformance/views/widget-results/<kind>/<document>/<widget id>.json`, for the two sample documents of the retail template) with no server; a widget with no recorded result gets its own
+  **recorded results** (`DbDataKit/conformance/views/widget-results/<kind>/<document>/<widget id>.json`, for the two sample documents of the retail template; they are what the .NET `WidgetResolver` gave over a small retail sample, and `schemas/rendered-widgets.schema.json` is their shape) with no server; a widget with no recorded result gets its own
   error entry. `moduleClient` is the same over the `views` module's REST (provisional routes are marked in its header). `validateText` reads YAML or JSON and places each diagnostic at its line and column.
 * `WidgetView` draws one widget in its tile from its resolved result: `MetricTile`, `TableWidget`, `MatrixWidget`, `ChartWidget`, `TextBlock`, `ImageBlock`, `ControlWidget`, with loading, empty and error states.
   The tile's **density class** (`xs`, `s`, `m`, `l`) is chosen from its box (`densityClass`); a chart is drawn at the box (`fitChartSpec`: SVG, `autosize: fit`, legend, axis titles and ticks dropped as it shrinks), a table or

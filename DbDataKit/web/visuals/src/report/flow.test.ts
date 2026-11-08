@@ -137,7 +137,7 @@ describe('paginate', () => {
 describe('the sample report on a page', () => {
   const plan = layoutFlow(flow, report.widgets)
   const items = planItems(plan, report.widgets, results)
-  it('is estimated from its results: the summary, the chart and the first rows of the table of 61 (the total last) fill page one, the table runs on over two more', () => {
+  it('is estimated from its results: the summary, the chart and the first rows of the table of 24 fill page one, the table runs on over one more', () => {
     expect(items.map((i) => [i.key, Math.round(i.height), i.keep ?? false, i.table ? i.table.rowHeights.length : 0])).toEqual([
       ['s0t', 40, true, 0],
       ['s0b0', 142, false, 0],
@@ -145,19 +145,19 @@ describe('the sample report on a page', () => {
       ['s1t', 40, true, 0],
       ['s1b0', 314, true, 0],
       ['s2t', 40, true, 0],
-      ['s2b0', 1796, false, 61],
+      ['s2b0', 760, false, 24],
     ])
     const pagination = paginate(items, plan.page.contentHeightPx)
     const label = (x: { key: string; rowFrom?: number; rowTo?: number }) => (x.rowFrom === undefined ? x.key : `${x.key}[${x.rowFrom}-${x.rowTo}]`)
-    expect(pagination.pages.map((p) => p.map(label))).toEqual([['s0t', 's0b0', 's0b1', 's1t', 's1b0', 's2t', 's2b0[0-6]'], ['s2b0[6-39]'], ['s2b0[39-61]']])
-    expect(pagination.starts).toEqual([{ page: 2, key: 's2b0', row: 6 }, { page: 3, key: 's2b0', row: 39 }])
+    expect(pagination.pages.map((p) => p.map(label))).toEqual([['s0t', 's0b0', 's0b1', 's1t', 's1b0', 's2t', 's2b0[0-6]'], ['s2b0[6-24]']])
+    expect(pagination.starts).toEqual([{ page: 2, key: 's2b0', row: 6 }])
   })
   it('puts the guides where the pages start: measured where the browser measured, estimated where it did not', () => {
     const pagination = paginate(items, plan.page.contentHeightPx)
     const tops = estimatedTops(items)
     expect(tops.s0t).toBe(0)
     expect(startY(pagination.starts[0]!, items)).toBeGreaterThan(tops.s2b0!)
-    const measured = { s2b0: { top: 700, height: 1800, header: 30, rows: Array.from({ length: 61 }, (_, i) => ({ top: 760 + i * 28, height: 28 })) } }
+    const measured = { s2b0: { top: 700, height: 1800, header: 30, rows: Array.from({ length: 24 }, (_, i) => ({ top: 760 + i * 28, height: 28 })) } }
     expect(startY({ page: 2, key: 's2b0', row: 3 }, items, measured)).toBe(760 + 3 * 28)
     expect(startY({ page: 2, key: 's2b0', offset: 100 }, items, measured)).toBe(800)
   })
