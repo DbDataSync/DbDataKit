@@ -1,7 +1,7 @@
 # Staging value types: what the readers return, what staging does with it (A14a)
 
 Sync stages a change set through the shared bulk writers (A14: `SqlServerBulkWriter`, A15: `PostgresBulkWriter`). The cells it hands them are
-whatever .NET type the *source* driver's reader produced. `13b-owner-review.md` section 1 said nobody had listed those types; this is the list, and
+whatever .NET type the *source* driver's reader produced. The owner review of 2026-10-27 (plan 13b, now deleted), section 1 said nobody had listed those types; this is the list, and
 what the two staging paths do with each of them. Sections 1 and 2 are the measurements from before the gate (A14a); section 3 says what the gate refuses now (A14a, A14b). Where the layer
 changes what a value becomes, that is a behaviour change and goes in the release notes.
 

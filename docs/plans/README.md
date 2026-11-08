@@ -23,7 +23,7 @@ criteria, risks and acceptance. Plans are proposals; review the "decisions" in e
 | 13 | [Suite standardization](../architecture.md) | Finished: now a product doc | `docs/architecture.md`: the suite's shape, the clean-break rule, decisions D1 to D20; the workstreams' conventions are in the READMEs of the packages that own them |
 | 13a | [Suite slices](13a-suite-slices.md) | Plan 13 (now `docs/architecture.md`) | The open slices only (A21, U16, U18, M12, P12, P13, L06); finished rows are removed |
 | 13a-x01 | [Removal scan](13a-x01-removal-scan.md) | Slices X01 and X02 | The evidence for what the removal slices deleted |
-| 13b | [Owner review items](13b-owner-review.md) | Owner, 2026-10-28 | Closed: every item decided and built |
+| 13b | [Owner review items](../../DbDataKit/src/DbDataKit.Transfer/README.md) | Finished: every item decided and built | The outcomes are in the Transfer README, `DbDataSync/architecture/staging-value-types.md`, Build's `DESIGN.md` ("As built") and the pending release notes |
 | 13c | [Follow-ups](13c-follow-ups.md) | Work of 2026-10-28 to 2026-10-30 | Open items no plan row owns |
 | 14 | [Semantic layer](14-semantic-layer.md) | The built part is in `docs/semantic/architecture.md` | In progress, what is left: the console's semantic module, semantic state in the Proxy, the products reading the engine registry, MDX and XMLA for Excel PivotTables, and more protocols (Postgres wire first, Quack deferred). Slices are plan 19's J rows |
 | 14 | [Roslyn scripting with NuGet libraries](../../DbDataSync/docs/drivers-and-libraries.md) | Finished: now Sync's docs | In-process NuGet resolution, embedded; the spike is deleted |
