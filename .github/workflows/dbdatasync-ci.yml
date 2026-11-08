@@ -55,7 +55,7 @@ jobs:
       - name: Test
         # Category=Integration tests need real database instances (SQL Server, Postgres, MySQL,
         # MariaDB, Oracle) — see the dotnet-integration job below, which brings up the shared engines
-        # from testenv/ (architecture/implementation/phase-7-e2e-validation.md, extended by phases
+        # from testenv/ (architecture/implementation/done/phase-007-e2e-validation.md, extended by phases
         # 153/154).
         run: dotnet test DbDataSync.slnf --no-build --configuration Release --filter "Category!=Integration"
 
