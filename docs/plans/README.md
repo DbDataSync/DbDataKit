@@ -13,7 +13,7 @@ criteria, risks and acceptance. Plans are proposals; review the "decisions" in e
 | 04 | [ODBC and metadata](../../DbDataKit/src/DbDataKit.Metadata/README.md) | Finished: now package docs | `DbDataKit.Odbc.Metadata`, `DbDataKit.Metadata*`: one catalog reader interface |
 | 05 | [SQL dialect and types](../../DbDataKit/src/DbDataKit.Dialect/README.md) | Finished: now package docs | `DbDataKit.Dialect*`: data-driven dialects, lexer, canonical types, conformance |
 | 06 | [Connections / providers](../../DbDataKit/src/DbDataKit.Connections/README.md) | Finished: now package docs | `DbDataKit.Connections*`: `connection/1`, composers, read-only recipes, failure model |
-| 07 | [Data transfer, staging, loading](07-data-transfer.md) | Sync pipeline, Build copy models | Shared converters, bulk writers, strategies, write gate |
+| 07 | [Data transfer, staging, loading](07-data-transfer.md) | The built part is in the `DbDataKit.Transfer*` READMEs | In progress, what is left: Arrow-first and Parquet staging, the shared transfer verifier, segmenting, the MySQL and Oracle writers and SCD2 in the shared packages (they exist in Sync's drivers), and the write-gate rules |
 | 07a | [Sync vs Build strategy semantics](../../DbDataKit/src/DbDataKit.Transfer/README.md) | Finished: now a section of the Transfer README | "Strategy semantics in Sync and in Build" |
 | 08 | [Install and update](08-update-system.md) | Sync Updates, Proxy install.ps1, Build Scoop | Signed manifest, service swap with rollback |
 | 09 | [Branches, CI and releases](../releases.md) | Finished: now a product doc | `docs/releases.md`: main only, change-based CI, a release is a tag, the suite release flow |
