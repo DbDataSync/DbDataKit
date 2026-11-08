@@ -24,7 +24,7 @@ public sealed class StateTableDefinitionsTests
     [Fact]
     public void Every_shared_module_is_understood_and_has_a_key_in_every_table()
     {
-        foreach (var module in new[] { IdentityModule.Module, NotificationsModule.Module, AuditModule.Module, DefinitionsModule.Module, AppStorageModule.Module, RunsModule.Module, ProgressModule.Module, PayloadStore.Module })
+        foreach (var module in new[] { IdentityModule.Module, NotificationsModule.Module, AuditModule.Module, DefinitionsModule.Module, AppStorageModule.Module, RunsModule.Module, ProgressModule.Module, PayloadStore.Module, QualityModule.Module })
         {
             var tables = StateTableDefinitions.Read(module);
             Assert.NotEmpty(tables);
