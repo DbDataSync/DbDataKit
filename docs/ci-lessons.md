@@ -81,6 +81,12 @@ The CI runners are small (two cores, Windows and Linux), run many jobs at once, 
 | a sandboxed page cannot read its own data file (`fetch('views.json')` fails with a CORS error) | a document under `sandbox` has an opaque origin: even a same-address `fetch` is a cross-origin read, and the host sends no CORS headers for the bundle | give the page its data inline (`<script type="application/json">`, which the policy does not run), as `ViewsApp.Document` does |
 | the Proxy answers an app of views with `503 ... no runtime for apps of views` | `apps-views` (the web build of `DbDataKit/web/view-app`) is not beside the program: a plain `dotnet publish` does not build it | publish with `-p:BuildViewsRuntime=true` (the Windows script and the Dockerfile's node stage do) |
 
+### Test projects that load a catalog
+
+| Signature | Cause | Fix |
+| --- | --- | --- |
+| `Unable to load shared library 'duckdb'` (or a validator refusing every publish with `The model ... does not load: Object reference not set`) in a test project that is not one of the semantic suites | the engine's catalog loader (`CatalogLoader`, used by the catalog check of a published dashboard or report) needs `libduckdb` beside the test assembly | the project imports `build\DuckDb.Native.targets` (`DbDataKit.Views.Tests`, `DbDataKit.Views.Hosting.Tests`); CI runs `scripts/fetch-duckdb` first, a session runs it once (or copies `.duckdb/<rid>/libduckdb.so`) |
+
 ### Merging `main` into a branch
 
 | Signature | Cause | Fix |

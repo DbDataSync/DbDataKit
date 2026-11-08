@@ -36,13 +36,14 @@ A console calls servers and a server never calls a console. The serving layer is
 | `store` | DbDataStore entities over HTTP: reads now, as of a date, with history; validated writes; change requests in the group's state | built over HTTP (`ProxyStoreModule`, its own listener, the paths of a DbDataStore server); reads over Flight SQL not built |
 | `apps` | app front ends and their API: subpath instances, shell page, token broker, app storage, portals, data calls answered in process | built (`ProxyAppsModule`, `DbDataKit.Apps.*`, default port 8818); app code does not run in child processes |
 | `identity` | sign-in, the OpenID Connect provider (authorize, token, discovery, signing keys), passkeys, Entra and Windows upstream sign-in | built (`ProxyIdentityModule`, `DbDataKit.Identity`, default port 8817); a hosted web application rather than an `IServingModule` |
+| `views` | published dashboards and reports over REST, rendered as the caller, audited, with drain and health (plan 32 DBR11) | built as a library with its own listener: `DbDataKit.Views.Hosting` (`ViewsModule`); **not yet a name in `modules:`**, the Proxy host does not load it (it needs a listener setting and an `IViewsCallers` over the identity home's tokens), see `docs/views.md` |
 | `pgwire` | Postgres wire for semantic SQL | not built |
 | `xmla` | XMLA and MDX for Excel PivotTables | not built (only the recording forwarder, `DbDataKit.Tools.XmlaForwarder`) |
 | `feeds` | result feeds for report servers and tools | not built |
 | `webdav` | DbDataStore documents, with extraction on save | not built |
 | `mcp` | the agents' MCP endpoint, acting as the signed-in user with approvals | not built as a module (the Proxy's `ui mcp` offers the `semantic` noun to agents) |
 
-Health per module is not wired: `IServingModule.Health()` exists and `/health` is the host's.
+Health per module is not wired into the host's `/health`: `IServingModule.Health()` exists; the `views` module reports its own at its listener's `/health`.
 
 ## What keeps working when a back-end is down
 

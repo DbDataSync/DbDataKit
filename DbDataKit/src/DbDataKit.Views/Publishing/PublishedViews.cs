@@ -18,6 +18,8 @@ public sealed class PublishedView
         Kind = kind;
         Name = name;
         Version = version.Version;
+        PublishedAt = version.PublishedAt;
+        Text = version.Content;
         Document = document;
         DependsOn = version.DependsOn;
         _models = models;
@@ -30,7 +32,24 @@ public sealed class PublishedView
 
     public int Version { get; }
 
+    /// <summary>When the served version was published (the time a reader of the document can say it stands as of).</summary>
+    public DateTimeOffset PublishedAt { get; }
+
+    /// <summary>The document's text as it was published (YAML, or JSON), which an editor keeps and a save sends back.</summary>
+    public string Text { get; }
+
     public ViewDocument Document { get; }
+
+    /// <summary>What a result cache must add to <see cref="WidgetCacheKey"/>: the same request means the same rows only while the dependencies (the model versions) are the same ones.</summary>
+    public string CacheScope => $"{Kind}/{Name}\n{string.Join(',', DependsOn.Order(StringComparer.Ordinal))}";
+
+    /// <summary>The document as JSON (what a client reads: the loader's reading of the text, with no key added or taken), or null when the text does not read.</summary>
+    public System.Text.Json.Nodes.JsonNode? DocumentJson()
+    {
+        var diagnostics = new List<ConfigDiagnostic>();
+        var root = JsonInput.ReadByExtension(Text, ViewDefinitions.FileName(Kind, Name, Text), diagnostics);
+        return root is null || diagnostics.HasErrors() ? null : ViewsLoader.ToJson(root);
+    }
 
     public IReadOnlyList<string> DependsOn { get; }
 
@@ -53,6 +72,7 @@ public sealed class PublishedView
         {
             MaxWidgets = basis.MaxWidgets, MaxRows = basis.MaxRows, MaxParallelism = basis.MaxParallelism, WidgetTimeout = basis.WidgetTimeout, Time = basis.Time,
             MaxImageBytes = basis.MaxImageBytes, ModelSourcePrefix = basis.ModelSourcePrefix, OnUnexpected = basis.OnUnexpected,
+            Cache = basis.Cache, CacheScope = CacheScope,
             SavedQueryModel = SavedQueryModel, ImageBytes = ImageBytes,
         };
     }

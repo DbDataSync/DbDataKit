@@ -5,19 +5,19 @@ import { ViewsClientError } from './types'
 import type { ClientDiagnostic, DocumentSummary, OpenedDocument, ViewsClient, ViewsClientErrorCode } from './types'
 
 /**
- * The typed client of the `views` serving module (plan 32 DBR11, M4): the same `ViewsClient` as the fixture, over the module's REST. **Not wired until DBR11 exists.** Of the routes, the plan fixes three and DBR28 one;
- * the rest are this file's proposal, marked PROVISIONAL, and DBR11 settles them (the done-when there says the types are checked against its schema):
+ * The typed client of the `views` serving module (plan 32 DBR11, M4): the same `ViewsClient` as the fixture, over the module's REST (`DbDataKit.Views.Hosting`, `ViewsModule`). The routes of `open`, `resolve` and `list` are the
+ * module's own, **settled by DBR11**; `save` and `preview` are PROVISIONAL (nothing behind them yet: DBR28 owns `preview`, and a save waits on the editor's publish path), and a call to them reaches a module that answers 404.
  *
  * | Call | Route | Source |
  * | --- | --- | --- |
- * | `open` | `GET /api/v1/dashboards/{name}`, `GET /api/v1/reports/{name}` | plan 32 DBR11 (the body, `{name, kind, version, text}`, is PROVISIONAL) |
- * | `resolve` | `POST /api/v1/dashboards/{name}/render`, `POST /api/v1/reports/{name}/render` with `{parameters, layout, widgets?}` | plan 32 DBR11 (`widgets` narrows the request to the dependent widgets: PROVISIONAL) |
- * | `preview` | `POST /api/v1/views/preview` with `{widget, widget_id?, document?, parameters}` | plan 32 DBR28 |
- * | `list` | `GET /api/v1/dashboards`, `GET /api/v1/reports` giving `{items: [{name, title}]}` | PROVISIONAL |
- * | `save` | `PUT /api/v1/dashboards/{name}`, `PUT /api/v1/reports/{name}` with `{text, expected_version?}` giving `{name, version}` | PROVISIONAL (DBR10 and DBR12 own what is behind it) |
+ * | `open` | `GET /api/v1/dashboards/{name}`, `GET /api/v1/reports/{name}` giving `{kind, name, title, version, as_of, text, document, layouts: [{name, type, default}]}` (`version` is the registry's number as text, `text` the file as published) | DBR11 |
+ * | `resolve` | `POST /api/v1/dashboards/{name}/render`, `POST /api/v1/reports/{name}/render` with `{parameters, layout, only?}` giving `rendered-widgets` (`only` narrows the request to the dependent widgets; a body key the module does not know is refused) | DBR11 |
+ * | `preview` | `POST /api/v1/views/preview` with `{widget, widget_id?, document?, parameters}` | plan 32 DBR28 (PROVISIONAL: not in the module yet) |
+ * | `list` | `GET /api/v1/dashboards`, `GET /api/v1/reports` giving `{items: [{name, title, version}]}` | DBR11 |
+ * | `save` | `PUT /api/v1/dashboards/{name}`, `PUT /api/v1/reports/{name}` with `{text, expected_version?}` giving `{name, version}` | PROVISIONAL (DBR10 and DBR12 own what is behind it; the module does not take it yet) |
  * | `validate` | local: the TypeScript validator (the loaders' checks); the server's loader runs again on save | decided here |
  *
- * Errors come as `{code, message, diagnostics?}` with the status: 404 `not_found`, 409 `version_conflict`, 400 and 422 `invalid`, 401 and 403 `denied`; anything else, and a network failure, is `unavailable`.
+ * Errors come as `{code, message, diagnostics?}` with the status: 404 `not_found`, 409 `version_conflict`, 400 and 422 `invalid`, 401 and 403 `denied`; anything else, and a network failure, is `unavailable` (the module's 503 while it drains, and its 501 `export_unavailable`, are among them).
  */
 
 export interface ModuleClientOptions {
@@ -81,7 +81,7 @@ export function moduleClient(options: ModuleClientOptions): ViewsClient {
     },
 
     resolve(ref, layout, parameters, resolveOptions = {}) {
-      return call<RenderedWidgets>('POST', `/api/v1/${collection(ref.kind)}/${segment(ref.name)}/render`, { parameters, layout, ...(resolveOptions.only ? { widgets: resolveOptions.only } : {}) }, resolveOptions.signal)
+      return call<RenderedWidgets>('POST', `/api/v1/${collection(ref.kind)}/${segment(ref.name)}/render`, { parameters, layout, ...(resolveOptions.only ? { only: resolveOptions.only } : {}) }, resolveOptions.signal)
     },
 
     async validate(text, validateOptions) {

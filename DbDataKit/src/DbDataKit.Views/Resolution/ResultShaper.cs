@@ -29,6 +29,13 @@ internal sealed class AnswerRows(JsonObject result, ResultTable table)
     public JsonObject Result { get; } = result;
     public ResultTable Table { get; } = table;
 
+    /// <summary>A copy that shares nothing with this one (JSON nodes have one parent), for a cache to hand out.</summary>
+    public AnswerRows Copy()
+    {
+        var result = (JsonObject)Result.DeepClone();
+        return new AnswerRows(result, new ResultTable(result));
+    }
+
     /// <summary>
     /// Reads the batches of an answer (at most <paramref name="maxRows"/> rows: over it is an error, never a silently cut table, unless <paramref name="truncate"/> is set for a read that asked for that many). The descriptor is the engine's own when the answer carries it (<c>qis.descriptor</c> in
     /// the schema's metadata: measures and attributes, formats, additivity, the rows that are totals); an answer without one (a store read, a saved query the engine did not describe) is described from its Arrow schema,

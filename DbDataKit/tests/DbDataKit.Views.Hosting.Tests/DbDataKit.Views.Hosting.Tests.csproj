@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="DuckDB.NET.Data" />
+    <PackageReference Include="Apache.Arrow" />
+    <ProjectReference Include="..\..\src\DbDataKit.Views.Hosting\DbDataKit.Views.Hosting.csproj" />
+    <!-- the semantic module over a host that runs SQL: the engine answers a widget's request from the host's data -->
+    <ProjectReference Include="..\..\src\DbDataKit.Serving.Semantic\DbDataKit.Serving.Semantic.csproj" />
+    <!-- the state database of every engine: the same throwaway database per engine the State tests use -->
+    <ProjectReference Include="..\..\src\DbDataKit.State.Engines\DbDataKit.State.Engines.csproj" />
+    <Compile Include="..\DbDataKit.State.Tests\StateEngines.cs" Link="StateEngines.cs" />
+    <Compile Include="..\DbDataKit.Views.Tests\ManualTimeProvider.cs" Link="ManualTimeProvider.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- the conformance model and its data, as the semantic engine's own suite runs on them -->
+    <None Include="..\DbDataKit.Semantic.Tests\conformance\catalog\**;..\DbDataKit.Semantic.Tests\conformance\data\**" Link="conformance\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Import Project="..\..\build\DuckDb.Native.targets" />
+</Project>

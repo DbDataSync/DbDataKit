@@ -226,11 +226,11 @@ describe('moduleClient', () => {
     expect(opened.document!.title).toBe('Retail sales today')
   })
 
-  it('resolve posts parameters, the layout and the narrowed widgets to .../render of the kind', async () => {
+  it('resolve posts parameters, the layout and the narrowed widgets (`only`) to .../render of the kind', async () => {
     const { calls, client } = fake([{ body: rendered }, { body: rendered }])
     expect(await client.resolve(dashboard, 'desk', { region: ['West'] }, { only: ['net'] })).toEqual(rendered)
     await client.resolve(report, 'paged', {})
-    expect(calls[0]).toMatchObject({ method: 'POST', url: 'https://views.example/api/v1/dashboards/retail-sales-today/render', body: { parameters: { region: ['West'] }, layout: 'desk', widgets: ['net'] } })
+    expect(calls[0]).toMatchObject({ method: 'POST', url: 'https://views.example/api/v1/dashboards/retail-sales-today/render', body: { parameters: { region: ['West'] }, layout: 'desk', only: ['net'] } })
     expect(calls[1]).toMatchObject({ url: 'https://views.example/api/v1/reports/retail-sales-monthly/render', body: { parameters: {}, layout: 'paged' } })
     expect(calls[1]!.headers['content-type']).toBe('application/json')
   })

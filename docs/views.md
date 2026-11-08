@@ -346,6 +346,34 @@ a document is read, not code), both in format `ViewsFormat.Current` (the one num
 | `DBD-VIEW-062` | a control lists an attribute none of the models its widgets query has |
 | `DBD-VIEW-063` | an image's hash is not among the files of the version |
 
+## Serving: the module `views`
+
+`DbDataKit.Views.Hosting` (`ViewsModule`, an `IServingModule` named `views`) serves the published kinds over REST, as the caller. It has **a listener of its own** (`ViewsOptions.Listen`: address, port, certificate; J28's decision that REST is its own
+listener, off unless enabled) or its routes can be mounted by a host (`ViewsModule.Map`). The host supplies three things: the serving core (`IServingServices`, whose `Queries` run every widget), `IViewsCallers` (a request's token to a
+`ViewsPrincipal`: the identity home's tokens) and `IViewsAudit` (`StateViewsAudit` over the install's audit).
+
+| Route | Gives |
+| --- | --- |
+| `GET /api/v1/dashboards`, `GET /api/v1/reports` | `{items: [{name, title, version}]}` of what the caller may open |
+| `GET /api/v1/{dashboards,reports}/{name}` | `{kind, name, title, version, as_of, text, document, layouts: [{name, type, default}]}`: the file as published, the document as JSON, the version as text (the registry's number) and `as_of` (when that version was published) |
+| `POST /api/v1/{dashboards,reports}/{name}/render` | the `rendered-widgets` document of the layout in play; body `{parameters?, layout?, only?, viewport?: {width, height}, medium?}`; with no `layout`, `LayoutSelector` chooses for the viewport (the default layout without one); an unknown key is refused |
+| `GET .../{name}/export?format=&layout=` | **501 `export_unavailable`** until DBR15 to DBR17, naming the document; the attempt is audited |
+| `GET /health`, `/health/ready`, `/health/live` | `{module, state, detail, draining, in_flight, served, not_served, cache, export: {available: false, reason}, requests, refused}`; 503 while draining or down |
+
+A refusal is `{code, message}`: 400 `invalid` (or the resolver's own code, `DBD-VIEW-057` an unknown layout, `-051` a parameter), 401 `unauthenticated`, 403 `denied`, 404 `not_found`, 413 `too_large`, 500 `error` and `audit_unavailable`, 503 `draining`.
+
+- **As the caller.** `WidgetResolver.ResolveAsync` runs each widget through `IServingQueries` with the caller's `ServingContext` (their roles and claims, the channel, a trace id, the client address). Nothing in the module knows a row rule; a caller whose rows differ gets other rows.
+- **An app's token narrows.** A `ViewsPrincipal` for an app's token carries `ViewsAppScope` (the instance and the semantic models its approved manifest names). A document that queries a model outside the list is refused 403 for `open` and `render` and left out of
+  the list; the context carries the claim `app` (the instance), so the person's own session and the same person inside an app never share a cached result.
+- **Audited.** `view.list`, `view.open`, `view.render` and `view.export`: actor (the person), `via` (`api`, or `app` and the instance), target (`kind`, `name@version`), outcome (`ok`, `refused`, `failed`) and a detail of the layout, the number of widgets
+  and errors, the error codes, the **names** of the parameters (never a value) and the trace id. An entry that cannot be written stops the answer (500 `audit_unavailable`, no data in it). A call without a valid token is not audited here (the host's throttle counts it).
+- **Result cache.** `WidgetResultCache` (`ViewsOptions.CacheTtl`, 30 seconds by default, 0 off): the rows of a successful answer, kept under `WidgetCacheKey` (channel, preview, who, roles, claims, source, the request as it ran) plus the definition's scope
+  (`PublishedView.CacheScope`: kind, name and what it depends on). A refusal, a timeout and an answer over the row limit are never kept; what is handed out is a copy. Control member lists are cached the same way.
+- **Draining and health.** `DrainAsync` stops taking requests (503 `draining`, `Retry-After`) and waits for the ones in flight (the suite's `IDrainCoordinator`); `Health()` is `Ok`, `Degraded` (draining, or the channel serves a version this instance does not: a
+  model version it does not have, a newer format) or `Down` (not started, stopped).
+- **Following.** `ViewsPublications` holds the two `PublishedViews`; the module follows the group's definitions itself (`ViewsOptions.Follow`, every `PollInterval`, or `Refresh()`), or a host that runs one follower adds `Subscribers` to it.
+  `ViewsPublications.Register(kinds, store, payloads)` registers `dashboard` and `report` in the registry of the publisher that validates a publish.
+
 ## Choosing a layout
 
 `LayoutSelector.Select(document, context)` (.NET) and `selectLayout(document, context)` (TypeScript) are pure functions with the same goldens (`conformance/views/select-layout`). The context is the container's
@@ -362,7 +390,7 @@ option or a subscription.
 
 The renderers are in `@dbdatakit/visuals` (`DbDataKit/web/visuals`, its README has the calls). A document's widgets are resolved **through a `ViewsClient`** (`open`, `resolve`, `validate`, `save`, `preview`): the console runs
 on `fixtureClient` (the sample documents of the retail template, `DbDataBuild/templates/retail/dashboards` and `reports`, with recorded results in `DbDataKit/conformance/views/widget-results`) until the `views` module
-answers, and `moduleClient` is the same interface over its REST.
+answers, and `moduleClient` is the same interface over its REST (the routes above; `save` and `preview` are not in the module yet).
 
 **The reflow layout fills its container.** `layoutReflow` lays the grid out in whole pixels so the cells fill the box with no gap and no overlap; a tile is never drawn below the smallest box of its type
 (`metric` 160 x 88, `text` 160 x 56, `control` 180 x 56, `chart` 280 x 180, `table` 320 x 200, `matrix` 360 x 220; a tile's `min` may raise it). If any tile would be below its minimum the layout is the **compact stack**
