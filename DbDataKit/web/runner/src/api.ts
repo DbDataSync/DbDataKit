@@ -190,6 +190,9 @@ export const runnerApi = {
   putFile: (sha256: string, body: Blob) => request<{ sha256: string; size: number; already_stored: boolean }>(`/api/v1/artifacts/${sha256}`, { method: 'PUT', body, headers: { 'Content-Type': 'application/octet-stream' } }),
   publishPackage: (name: string, body: unknown) =>
     request<{ kind: string; name: string; channel: string; version: number; changed: boolean; mode: string; signature: string; tasks: string[] }>(`/api/v1/definitions/integration/${enc(name)}`, { method: 'PUT', body: JSON.stringify(body) }),
+  /** Sets the administrator's labels of a running instance to exactly this list; the answer says what was added and removed. */
+  setLabels: (id: string, labels: string[]) =>
+    request<{ instance: string; host: string; labels: InstanceLabel[]; added: string[]; removed: string[] }>(`/api/v1/instances/${enc(id)}/labels`, { method: 'PUT', body: JSON.stringify({ labels }) }),
   settings: () => request<PublishSettings>('/api/v1/settings'),
   setRequireSignatures: (value: boolean) => request<{ require_signatures: boolean }>('/api/v1/settings/require_signatures', { method: 'PUT', body: JSON.stringify({ value }) }),
   bind: (name: string, channel: string, body: BindRequest) =>

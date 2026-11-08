@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { runnerApi, type RunnerInstance, type TaskStatus } from '../api'
 import { capabilityLines, connectionsOfTask, isBad, isGone, outcomeText, taskKey, taskState, type TaskState } from '../model'
+import { missingLabels } from '../labels'
+import { InstanceLabels } from './InstanceLabels'
 import { TaskPanel } from './TaskPanel'
 import { effectiveOwner, ownerLabel } from '../ownership'
 import { RunnerShell } from '../RunnerShell'
@@ -11,30 +13,33 @@ import { when } from './format'
 const stateText: Record<TaskState, string> = { running: 'Running', queued: 'Queued', paused: 'Paused', waiting: 'Waiting', problem: 'Problem', idle: 'Idle' }
 
 /** The group's instances as one line each: gone ones too, marked, since a runner that left is something to see. */
-function InstancesCard({ instances }: { instances: RunnerInstance[] }) {
+function InstancesCard({ instances, canEdit }: { instances: RunnerInstance[]; canEdit: boolean }) {
+  const [editing, setEditing] = useState<string | null>(null)
   return (
     <div className="card flush" data-testid="runner-instances">
       <div className="grid-head" style={{ gridTemplateColumns: '0.7fr 1.2fr 0.8fr 2fr 2fr 0.6fr 1.3fr', gap: 14 }}>
         <span>State</span><span>Host</span><span>Version</span><span>Labels</span><span>Capabilities</span><span>Running</span><span>Last heartbeat</span>
       </div>
       {instances.map((i) => (
-        <div key={i.id} className="grid-row" style={{ gridTemplateColumns: '0.7fr 1.2fr 0.8fr 2fr 2fr 0.6fr 1.3fr', gap: 14 }} data-testid="runner-instance" data-state={isGone(i) ? 'gone' : 'live'} data-instance={i.id}>
+        <div key={i.id} className="grid-row auto" style={{ gridTemplateColumns: '0.7fr 1.2fr 0.8fr 2fr 2fr 0.6fr 1.3fr', gap: 14 }} data-testid="runner-instance" data-state={isGone(i) ? 'gone' : 'live'} data-instance={i.id}>
           <span data-testid="runner-instance-state"><span className={`dot ${isGone(i) ? 'dot-bad' : 'dot-ok'}`} /> {isGone(i) ? 'Gone' : 'Live'}</span>
           <span className="mono" title={i.id}>{i.host}{i.this ? ' (answering)' : ''}</span>
           <span>{i.version}</span>
           <span className="row" style={{ gap: 6, flexWrap: 'wrap' }} data-testid="runner-instance-labels">
             {i.labels.map((l) => <span key={l.label} className="chip" data-source={l.source} title={l.source === 'admin' ? 'set by an administrator' : 'reported by the machine'}>{l.label}{l.source === 'admin' ? ' *' : ''}</span>)}
+            <button type="button" className="btn btn-sm" aria-expanded={editing === i.id} onClick={() => setEditing(editing === i.id ? null : i.id)} data-testid="runner-labels-edit">{canEdit ? 'Edit labels' : 'Labels'}</button>
           </span>
           <span data-testid="runner-instance-capabilities">{capabilityLines(i.capabilities).join(', ')}</span>
           <span>{i.running}</span>
           <span>{when(i.heartbeat)}</span>
+          {editing === i.id && <InstanceLabels key={i.id} instance={i} canEdit={canEdit} onClose={() => setEditing(null)} />}
         </div>
       ))}
     </div>
   )
 }
 
-function TaskRow({ task, canAct, busy, act, connections, open, onToggle }: { task: TaskStatus; canAct: boolean; busy: boolean; connections: { name: string; kind: string; role: string }[]; act: (what: 'run' | 'pause' | 'resume', task: TaskStatus) => void; open: boolean; onToggle: () => void }) {
+function TaskRow({ task, canAct, busy, act, connections, missing, open, onToggle }: { task: TaskStatus; canAct: boolean; busy: boolean; missing: string[]; connections: { name: string; kind: string; role: string }[]; act: (what: 'run' | 'pause' | 'resume', task: TaskStatus) => void; open: boolean; onToggle: () => void }) {
   const state = taskState(task)
   const last = task.last_run
   return (
@@ -61,6 +66,11 @@ function TaskRow({ task, canAct, busy, act, connections, open, onToggle }: { tas
       {connections.length > 0 && (
         <span style={{ gridColumn: '1 / -1' }} className="hint" data-testid="runner-task-connections">
           Connects to {connections.map((c, i) => <span key={c.name} data-testid="runner-task-connection" data-connection={c.name}>{i > 0 ? ', ' : ''}<span className="mono">{c.name}</span> ({c.kind}, {c.role} login)</span>)}
+        </span>
+      )}
+      {missing.length > 0 && (
+        <span style={{ gridColumn: '1 / -1' }} className="hint" data-testid="runner-task-needs-label">
+          Requires {missing.map((l, i) => <span key={l} className="mono" data-testid="runner-task-needs-label-name">{i > 0 ? ', ' : ''}{l}</span>)}: no live runner has {missing.length === 1 ? 'that label' : 'those labels'}. Add {missing.length === 1 ? 'it' : 'them'} to a runner in the list above (Edit labels).
         </span>
       )}
       {open && <TaskPanel task={task} canAct={canAct} />}
@@ -104,7 +114,7 @@ export function TasksPage() {
         <ErrorBanner error={status.error ?? instances.error ?? act.error} />
         {status.data?.console_runner?.production_warning && <div className="empty" role="alert" data-testid="runner-production-warning">{status.data.console_runner.production_warning}</div>}
         {problems.map((p) => <div key={`${p.subject}${p.at}`} className="empty" data-testid="runner-problem">{`${p.subject}: ${p.message}`}</div>)}
-        <InstancesCard instances={instances.data ?? status.data?.instances ?? []} />
+        <InstancesCard instances={instances.data ?? status.data?.instances ?? []} canEdit={canAct} />
 
         <div className="page-head" style={{ marginTop: 24 }}><h2 className="page-title">Tasks</h2></div>
         {status.isSuccess && tasks.length === 0 && <div className="empty" data-testid="runner-no-tasks">No package is served yet. Publish one to this runner.</div>}
@@ -113,7 +123,7 @@ export function TasksPage() {
             <div className="grid-head" style={{ gridTemplateColumns: '1.3fr 0.6fr 1fr 0.6fr 1.3fr 1.6fr 0.8fr 1.6fr', gap: 14 }}>
               <span>Package</span><span>Channel</span><span>Task</span><span>Version</span><span>Next due</span><span>Last run</span><span>State</span><span />
             </div>
-            {tasks.map((t) => <TaskRow key={taskKey(t)} task={t} connections={connectionsOfTask(connections.data ?? [], t)} canAct={canAct} busy={act.isPending} act={(what, task) => act.mutate({ what, task })} open={openTask === taskKey(t)} onToggle={() => setOpenTask(openTask === taskKey(t) ? null : taskKey(t))} />)}
+            {tasks.map((t) => <TaskRow key={taskKey(t)} task={t} connections={connectionsOfTask(connections.data ?? [], t)} missing={missingLabels(t.required_labels ?? [], instances.data ?? status.data?.instances ?? [])} canAct={canAct} busy={act.isPending} act={(what, task) => act.mutate({ what, task })} open={openTask === taskKey(t)} onToggle={() => setOpenTask(openTask === taskKey(t) ? null : taskKey(t))} />)}
           </div>
         )}
       </div>

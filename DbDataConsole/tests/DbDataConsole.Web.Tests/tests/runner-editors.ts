@@ -25,6 +25,8 @@ export interface MockRunner {
   /** The hashes of the files the runner holds, and the order of the calls that asked for or sent them. */
   artifacts: Set<string>
   fileCalls: string[]
+  /** The instances of the group: their labels (`source` is who set each) and whether they are live. */
+  instances: { id: string; host: string; live: boolean; labels: { label: string; source: 'admin' | 'reported' }[] }[]
   /** What was published from files, by package name: the versions in the order they were made. */
   published: Map<string, { version: number; channel: string; mode: string; manifest: string; content: string }[]>
   lastBody: (key: string) => unknown | undefined
@@ -40,6 +42,10 @@ const SLOTS = [
 export async function mockRunner(page: Page): Promise<MockRunner> {
   const mock: MockRunner = {
     sent: {}, requireSignatures: false, conflictNext: false, deny: false, artifacts: new Set(), fileCalls: [], published: new Map(),
+    instances: [
+      { id: 'a1111111-1111-4111-8111-111111111111', host: 'orders-1', live: true, labels: [{ label: 'os:linux', source: 'reported' }, { label: 'ssd', source: 'admin' }] },
+      { id: 'b2222222-2222-4222-8222-222222222222', host: 'orders-2', live: false, labels: [{ label: 'os:linux', source: 'reported' }] },
+    ],
     bindings: [{ channel: 'prod', slot: 'source', bound_to: 'erp', revision: 1 }, { channel: 'test', slot: 'source', bound_to: 'erp-test', revision: 1 }],
     lastBody: (key) => mock.sent[key]?.at(-1),
   }
@@ -65,7 +71,30 @@ export async function mockRunner(page: Page): Promise<MockRunner> {
     const refuse = (status: number, message: string) => json(route, { error: message }, status)
     const needsAdmin = () => refuse(403, 'This needs the admin role.')
 
-    if (method === 'GET' && tail === 'status') return json(route, { product: 'dbdatarunner', version: '1', group: 'main', running: true, state_engine: 'sqlite', channels: ['prod', 'test'], capabilities: {}, tasks: [], instances: [], problems: [] })
+    const instanceRow = (i: MockRunner['instances'][number]) => ({ id: i.id, host: i.host, version: '1.0.0', started: '2026-11-08T08:00:00Z', heartbeat: '2026-11-08T10:00:00Z', this: i.live, live: i.live, state: i.live ? 'Running' : 'Gone', labels: i.labels, capabilities: { os: 'linux' }, running: 0 })
+    // the task that requires the label `gpu` waits while no live runner has it, as the scheduler's own reason says
+    const gpu = mock.instances.some((i) => i.live && i.labels.some((l) => l.label === 'gpu'))
+    const task = { package: 'orders', channel: 'prod', task: 'load', version: 1, next_due: null, last_run: null, running: 0, queued: gpu ? 0 : 1, next_attempt_at: null, paused: false, paused_by: null, problem: null, required_labels: ['gpu'], owner: 'runner',
+      waiting_reason: gpu ? null : "No live runner has the label 'gpu' that the task requires." }
+    if (method === 'GET' && tail === 'status') {
+      return json(route, { product: 'dbdatarunner', version: '1', group: 'main', running: true, state_engine: 'sqlite', channels: ['prod', 'test'], capabilities: {}, tasks: [task], instances: mock.instances.filter((i) => i.live).map(instanceRow), problems: [] })
+    }
+    if (method === 'GET' && tail === 'instances') return json(route, { group: 'main', this: mock.instances[0]!.id, instances: mock.instances.map(instanceRow) })
+    if (method === 'PUT' && parts[0] === 'instances' && parts[2] === 'labels') {
+      if (mock.deny) return needsAdmin()
+      const instance = mock.instances.find((i) => i.id === parts[1] && i.live)
+      if (!instance) return refuse(404, `There is no running instance '${parts[1]}' in this group.`)
+      const wanted = (body!.labels as string[]).map((l) => l.trim().replace(/\s*:\s*/, ':'))
+      for (const label of wanted) {
+        if (!/^[A-Za-z0-9][A-Za-z0-9_.:=-]{0,63}$/.test(label)) return refuse(400, `'${label}' is not a label: letters, digits and . _ : = - with no spaces, at most 64, such as gpu or network:outside.`)
+        if (instance.labels.some((l) => l.source === 'reported' && l.label === label)) return refuse(400, `'${label}' is reported by the runner itself (its capabilities) and cannot be set by hand; leave it out.`)
+      }
+      const have = instance.labels.filter((l) => l.source === 'admin').map((l) => l.label)
+      const added = wanted.filter((l) => !have.includes(l)).sort()
+      const removed = have.filter((l) => !wanted.includes(l)).sort()
+      instance.labels = [...instance.labels.filter((l) => l.source === 'reported'), ...[...new Set(wanted)].sort().map((label) => ({ label, source: 'admin' as const }))]
+      return json(route, { instance: instance.id, host: instance.host, labels: instance.labels, added, removed })
+    }
     if (method === 'GET' && tail === 'connections') {
       return json(route, { connections: ['erp', 'erp-test', 'warehouse'].map((name) => ({ name, kind: 'sqlserver', secret_ref: null, roles: ['run'], used_by: [] })) })
     }
@@ -325,4 +354,88 @@ export async function publishFilesStory(page: Page) {
   expect(outside).toEqual([])
   fs.rmSync(pkg.directory, { recursive: true, force: true })
   fs.rmSync(wrong, { force: true })
+}
+
+const FIRST = 'a1111111-1111-4111-8111-111111111111'
+const GONE = 'b2222222-2222-4222-8222-222222222222'
+const instanceRow = (page: Page, id: string) => page.locator(`[data-testid="runner-instance"][data-instance="${id}"]`)
+
+/** UE11: the labels of an instance as a list, saved as a whole, with the task that requires a label leaving `waiting` when a runner gets it. */
+export async function labelsStory(page: Page) {
+  const outside: string[] = []
+  const origin = new URL(page.url()).origin
+  page.on('request', (request) => { if (/^https?:/.test(request.url()) && !request.url().startsWith(origin)) outside.push(request.url()) })
+  const runner = await mockRunner(page)
+  const task = page.locator('[data-testid="runner-task"][data-task="orders/prod/load"]')
+
+  // ---- the instances: a live one (its own labels reported, one set by an administrator) and a gone one; the task that requires gpu waits and says what to do
+  await page.goto(`/servers/${RUNNER}`)
+  await expect(page.getByTestId('runner-instance')).toHaveCount(2)
+  await expect(instanceRow(page, GONE)).toHaveAttribute('data-state', 'gone')
+  await expect(instanceRow(page, FIRST).getByTestId('runner-instance-labels')).toContainText('ssd')
+  await expect(task).toHaveAttribute('data-state', 'waiting')
+  await expect(task.getByTestId('runner-task-needs-label')).toContainText('Requires gpu')
+
+  // ---- the editor: the machine's labels cannot be removed; Save waits for a change and says so
+  await instanceRow(page, FIRST).getByTestId('runner-labels-edit').click()
+  const editor = instanceRow(page, FIRST).getByTestId('runner-labels-editor')
+  await expect(editor.getByTestId('runner-label-reported')).toHaveText(['os:linux'])
+  await expect(editor.getByTestId('runner-label-admin')).toHaveText(['ssdx'])
+  await expect(editor.getByTestId('runner-label-remove')).toHaveCount(1)
+  await expect(editor.getByTestId('runner-labels-save')).toBeDisabled()
+  await expect(editor.getByTestId('runner-labels-why')).toContainText('Add or remove a label first.')
+
+  // ---- what cannot be added is named before anything is sent
+  await editor.getByTestId('runner-label-input').fill('has space')
+  await expect(editor.getByTestId('runner-label-problem')).toContainText('is not a label')
+  await expect(editor.getByTestId('runner-label-add')).toBeDisabled()
+  await editor.getByTestId('runner-label-input').fill('os:linux')
+  await expect(editor.getByTestId('runner-label-problem')).toContainText('reported by the runner itself')
+  await editor.getByTestId('runner-label-input').fill('ssd')
+  await expect(editor.getByTestId('runner-label-problem')).toContainText('in this list already')
+  await editor.getByTestId('runner-label-input').fill('gpu')
+  await expect(editor.getByTestId('runner-labels-why')).toContainText('Add the label you typed')
+  await editor.getByTestId('runner-label-add').click()
+  await expect(editor.getByTestId('runner-label-admin')).toHaveText(['gpux', 'ssdx'])
+  await expect(editor.getByTestId('runner-labels-save')).toBeEnabled()
+  expect(runner.sent['PUT instances/' + FIRST + '/labels']).toBeUndefined()
+
+  // ---- Save sends the whole list; the instance shows the label and the task that required it leaves waiting
+  await editor.getByTestId('runner-labels-save').click()
+  await expect(editor.getByTestId('runner-labels-saved')).toContainText('Added gpu.')
+  expect(runner.lastBody(`PUT instances/${FIRST}/labels`)).toEqual({ labels: ['gpu', 'ssd'] })
+  await expect(instanceRow(page, FIRST).getByTestId('runner-instance-labels')).toContainText('gpu')
+  await expect(task).not.toHaveAttribute('data-state', 'waiting', { timeout: 30_000 })
+  await expect(task.getByTestId('runner-task-needs-label')).toHaveCount(0)
+
+  // ---- removing labels: the list is sent without them, and the task waits again when the last runner loses the label
+  await editor.getByTestId('runner-label-admin').filter({ hasText: 'ssd' }).getByTestId('runner-label-remove').click()
+  await expect(editor.getByTestId('runner-labels-save')).toBeEnabled()
+  await editor.getByTestId('runner-labels-save').click()
+  await expect(editor.getByTestId('runner-labels-saved')).toContainText('Removed ssd.')
+  expect(runner.lastBody(`PUT instances/${FIRST}/labels`)).toEqual({ labels: ['gpu'] })
+  await editor.getByTestId('runner-label-remove').click()
+  await editor.getByTestId('runner-labels-save').click()
+  await expect(editor.getByTestId('runner-labels-none')).toBeVisible()
+  expect(runner.lastBody(`PUT instances/${FIRST}/labels`)).toEqual({ labels: [] })
+  await expect(task).toHaveAttribute('data-state', 'waiting', { timeout: 30_000 })
+  await expect(task.getByTestId('runner-task-waiting')).toContainText("No live runner has the label 'gpu'")
+
+  // ---- a runner that is gone has no labels to change
+  await editor.getByTestId('runner-labels-close').click()
+  await instanceRow(page, GONE).getByTestId('runner-labels-edit').click()
+  const gone = instanceRow(page, GONE).getByTestId('runner-labels-editor')
+  await expect(gone.getByTestId('runner-label-input')).toHaveCount(0)
+  await expect(gone.getByTestId('runner-labels-why')).toContainText('This runner is gone')
+  await expect(gone.getByTestId('runner-labels-save')).toBeDisabled()
+  await gone.getByTestId('runner-labels-close').click()
+
+  // ---- a refusal by role is shown in the runner's words
+  runner.deny = true
+  await instanceRow(page, FIRST).getByTestId('runner-labels-edit').click()
+  await editor.getByTestId('runner-label-input').fill('site:oslo')
+  await editor.getByTestId('runner-label-input').press('Enter')
+  await editor.getByTestId('runner-labels-save').click()
+  await expect(editor).toContainText('This needs the admin role.')
+  expect(outside).toEqual([])
 }
