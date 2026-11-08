@@ -3154,6 +3154,9 @@
               "approved_by": {
                 "type": "string"
               },
+              "hash": {
+                "type": "string"
+              },
               "revoked": {
                 "type": "boolean"
               }
@@ -3163,6 +3166,7 @@
               "app",
               "version",
               "approved_by",
+              "hash",
               "revoked"
             ]
           }
@@ -3194,6 +3198,9 @@
               "approved_by": {
                 "type": "string"
               },
+              "hash": {
+                "type": "string"
+              },
               "revoked": {
                 "type": "boolean"
               }
@@ -3203,6 +3210,7 @@
               "app",
               "version",
               "approved_by",
+              "hash",
               "revoked"
             ]
           }
@@ -3225,12 +3233,16 @@
         },
         "version": {
           "type": "string"
+        },
+        "hash": {
+          "type": "string"
         }
       },
       "required": [
         "id",
         "app",
-        "version"
+        "version",
+        "hash"
       ]
     },
     "data_apps_approve_partial": {
@@ -3244,6 +3256,9 @@
           "type": "string"
         },
         "version": {
+          "type": "string"
+        },
+        "hash": {
           "type": "string"
         }
       }

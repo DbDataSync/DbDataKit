@@ -28,11 +28,11 @@ public static class AppsCommand
             DataSchemas.Object([("name", DataSchemas.String), ("version", DataSchemas.Integer)], "name", "version")),
         new Verb("nav-list", "The navigation sets and their members", EffectClass.OfflineOnly, Where, NavListAsync,
             DataSchemas.Object([("sets", DataSchemas.ListOf(DataSchemas.Object([("name", DataSchemas.String), ("title", DataSchemas.String), ("instances", DataSchemas.ListOf(DataSchemas.String))], "name", "title", "instances")))], "sets")),
-        new Verb("approve", "Approve one version of a trusted app, as the person who reviewed it (not its author); the approval is for that version's exact bytes and ends when a new version is published", EffectClass.RepoFilesOnly,
-            $"--app <app> --version <n> --by <approver> [--egress <directive>=<origin>[,...]] [--note <text>] {Where}", ApproveAsync,
-            DataSchemas.Object([("id", DataSchemas.String), ("app", DataSchemas.String), ("version", DataSchemas.String)], "id", "app", "version")),
+        new Verb("approve", "Approve the exact bytes of a trusted app, as an identity-home user who holds the Approver role (not the author): the hash of a built folder (--path), a hash as given (--hash), or an already published version's hash (--app --version). Publishing a trusted app needs an approval for its hash", EffectClass.RepoFilesOnly,
+            $"(--path <folder> [--manifest <file>] | --hash <hash> --app <app> | --app <app> --version <n>) --by <approver> [--egress <directive>=<origin>[,...]] [--note <text>] {Where}", ApproveAsync,
+            DataSchemas.Object([("id", DataSchemas.String), ("app", DataSchemas.String), ("version", DataSchemas.String), ("hash", DataSchemas.String)], "id", "app", "version", "hash")),
         new Verb("approval-list", "The approvals on record, with who gave them and whether they still stand", EffectClass.OfflineOnly, Where, ApprovalListAsync,
-            DataSchemas.Object([("approvals", DataSchemas.ListOf(DataSchemas.Object([("id", DataSchemas.String), ("app", DataSchemas.String), ("version", DataSchemas.String), ("approved_by", DataSchemas.String), ("revoked", DataSchemas.Boolean)], "id", "app", "version", "approved_by", "revoked")))], "approvals")),
+            DataSchemas.Object([("approvals", DataSchemas.ListOf(DataSchemas.Object([("id", DataSchemas.String), ("app", DataSchemas.String), ("version", DataSchemas.String), ("approved_by", DataSchemas.String), ("hash", DataSchemas.String), ("revoked", DataSchemas.Boolean)], "id", "app", "version", "approved_by", "hash", "revoked")))], "approvals")),
         new Verb("approval-revoke", "End an approval; the app stops running as trusted. The record stays", EffectClass.RepoFilesOnly, $"--id <approval id> --by <name> {Where}", ApprovalRevokeAsync, DataSchemas.None),
         new Verb("validate", "Check an app folder before publishing: its manifest, its files, and the addresses of other hosts in its built files that the manifest does not ask for (advice; the host's policy is what enforces)", EffectClass.OfflineOnly,
             "--dir <folder> [--manifest <file, default <folder>/app.yaml>]", ValidateAsync,
@@ -81,15 +81,14 @@ public static class AppsCommand
         }
         try
         {
-            // the manifest is read from where it is; the files are the folder's without it
-            var package = AppPackage.FromDirectory(File.ReadAllText(manifestPath), folder);
-            var files = package.Files.Where(f => Path.GetFullPath(Path.Combine(folder, f.Key)) != manifestPath).ToDictionary(f => f.Key, f => f.Value, StringComparer.Ordinal);
-            package = new AppPackage(package.ManifestYaml, files);
-            var version = new AppInstanceStore(new DefinitionStore(IdentityCommand.Open(parsed))).PublishApp(package, Environment.UserName, note: parsed.Get("note"));
-            await context.Out.WriteLineAsync($"Published {version.Name} version {version.Version} ({files.Count} files).");
+            // the manifest is read from where it is; the files are the folder's without it (the same package `apps approve --path` hashes)
+            var package = AppPackage.FromFolder(folder, manifestPath);
+            var definitions = new DefinitionStore(IdentityCommand.Open(parsed));
+            var version = new AppInstanceStore(definitions).PublishApp(package, Environment.UserName, note: parsed.Get("note"), approvals: new AppApprovalStore(definitions));
+            await context.Out.WriteLineAsync($"Published {version.Name} version {version.Version} ({package.Files.Count} files).");
             context.Data["app"] = version.Name;
             context.Data["version"] = version.Version;
-            context.Data["files"] = files.Count;
+            context.Data["files"] = package.Files.Count;
             return CliExit.Ok;
         }
         catch (Exception ex) when (ex is AppInstanceException or AppPackageException)
@@ -210,22 +209,53 @@ public static class AppsCommand
 
     private static async Task<int> ApproveAsync(string[] args, CliContext context)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "app", "version", "by", "note", "egress", "repo" });
-        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("app") is not { Length: > 0 } app || !int.TryParse(parsed.Get("version"), out var version) || parsed.Get("by") is not { Length: > 0 } by)
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "path", "manifest", "hash", "app", "version", "by", "note", "egress", "repo" });
+        const string usage = $"Usage: apps approve (--path <folder> [--manifest <file>] | --hash <hash> --app <app> | --app <app> --version <n>) --by <approver> [--egress <directive>=<origin>[,...]] [--note <text>] {Where}";
+        var path = parsed.Get("path");
+        var hash = parsed.Get("hash");
+        var app = parsed.Get("app");
+        var versionText = parsed.Get("version");
+        var modes = (path is { Length: > 0 } ? 1 : 0) + (hash is { Length: > 0 } ? 1 : 0) + (versionText is { Length: > 0 } ? 1 : 0);
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("by") is not { Length: > 0 } by || modes != 1
+            || (hash is { Length: > 0 } && app is not { Length: > 0 }) || (versionText is { Length: > 0 } && app is not { Length: > 0 }) || (parsed.Get("manifest") is { Length: > 0 } && path is not { Length: > 0 }))
         {
-            await context.Error.WriteLineAsync($"Usage: apps approve --app <app> --version <n> --by <approver> [--egress <directive>=<origin>[,...]] [--note <text>] {Where}");
+            await context.Error.WriteLineAsync(usage);
             return CliExit.Usage;
         }
         try
         {
-            var approval = new AppApprovalStore(new DefinitionStore(IdentityCommand.Open(parsed))).Approve(app, version, by, parsed.Get("note"), egress: AppApprovalStore.ParseEgress(parsed.Get("egress")));
-            await context.Out.WriteLineAsync($"Approved {app} {approval.Version} ({approval.Id}) as {by}.");
+            var options = OptionsOf(parsed);
+            var state = IdentityCommand.OpenState(options);
+            var approvals = new AppApprovalStore(new DefinitionStore(state), approvers: HomeApprovers.Open(state, options));
+            var egress = AppApprovalStore.ParseEgress(parsed.Get("egress"));
+            AppApproval approval;
+            if (path is { Length: > 0 })
+            {
+                var folder = Path.GetFullPath(path);
+                var manifestPath = parsed.Get("manifest") is { Length: > 0 } m ? Path.GetFullPath(m) : Path.Combine(folder, "app.yaml");
+                if (!Directory.Exists(folder) || !File.Exists(manifestPath))
+                {
+                    await context.Error.WriteLineAsync(!Directory.Exists(folder) ? $"{folder} is not a folder." : $"{manifestPath} does not exist: an app's manifest is app.yaml in its folder, or name it with --manifest.");
+                    return CliExit.Failure;
+                }
+                // the author is whoever publishes from this machine: the same name `apps publish` records, so one person cannot do both
+                approval = approvals.Approve(AppPackage.FromFolder(folder, manifestPath), Environment.UserName, by, parsed.Get("note"), egress: egress);
+            }
+            else if (hash is { Length: > 0 })
+                approval = approvals.Approve(app!, hash, Environment.UserName, by, parsed.Get("note"), egress);
+            else
+            {
+                if (!int.TryParse(versionText, out var version) || version < 1) { await context.Error.WriteLineAsync($"'{versionText}' is not a version number."); return CliExit.Usage; }
+                approval = approvals.Approve(app!, version, by, parsed.Get("note"), egress: egress);
+            }
+            await context.Out.WriteLineAsync($"Approved {approval.App} {approval.Version} ({approval.Id}) as {approval.ApprovedBy}. It stands for hash {approval.ContentHash}; publishing exactly those files and manifest needs no other approval.");
             context.Data["id"] = approval.Id;
             context.Data["app"] = approval.App;
             context.Data["version"] = approval.Version;
+            context.Data["hash"] = approval.ContentHash;
             return CliExit.Ok;
         }
-        catch (AppInstanceException ex)
+        catch (Exception ex) when (ex is AppInstanceException or AppPackageException)
         {
             await context.Error.WriteLineAsync(ex.Message);
             return CliExit.Failure;
@@ -236,9 +266,9 @@ public static class AppsCommand
     {
         var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo" });
         var all = new AppApprovalStore(new DefinitionStore(IdentityCommand.Open(parsed))).All();
-        foreach (var a in all) await context.Out.WriteLineAsync($"{a.Id}  {a.App} {a.Version}  approved by {a.ApprovedBy} on {a.ApprovedAt:yyyy-MM-dd}{(a.RevokedAt is null ? "" : "  revoked")}");
-        if (all.Count == 0) await context.Out.WriteLineAsync("No approval is on record. Approve a trusted app's version with: apps approve --app <app> --version <n> --by <approver>");
-        context.Data["approvals"] = all.Select(a => new Dictionary<string, object?> { ["id"] = a.Id, ["app"] = a.App, ["version"] = a.Version, ["approved_by"] = a.ApprovedBy, ["revoked"] = a.RevokedAt is not null }).ToList();
+        foreach (var a in all) await context.Out.WriteLineAsync($"{a.Id}  {a.App} {a.Version}  approved by {a.ApprovedBy} on {a.ApprovedAt:yyyy-MM-dd}  hash {a.ContentHash[..12]}{(a.PublishedVersion is { } pv ? $"  published as version {pv}" : "")}{(a.RevokedAt is null ? "" : "  revoked")}");
+        if (all.Count == 0) await context.Out.WriteLineAsync("No approval is on record. Approve a trusted app's built folder with: apps approve --path <folder> --by <approver>");
+        context.Data["approvals"] = all.Select(a => new Dictionary<string, object?> { ["id"] = a.Id, ["app"] = a.App, ["version"] = a.Version, ["approved_by"] = a.ApprovedBy, ["hash"] = a.ContentHash, ["revoked"] = a.RevokedAt is not null }).ToList();
         return CliExit.Ok;
     }
 
@@ -252,7 +282,9 @@ public static class AppsCommand
         }
         try
         {
-            new AppApprovalStore(new DefinitionStore(IdentityCommand.Open(parsed))).Revoke(id, by);
+            var options = OptionsOf(parsed);
+            var state = IdentityCommand.OpenState(options);
+            new AppApprovalStore(new DefinitionStore(state), approvers: HomeApprovers.Open(state, options)).Revoke(id, by);
             await context.Out.WriteLineAsync($"Revoked {id}.");
             return CliExit.Ok;
         }

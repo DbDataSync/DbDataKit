@@ -55,12 +55,15 @@ public sealed class AppInstanceStore(DefinitionStore definitions)
     public DefinitionVersion PublishApp(string manifestYaml, string by, string channel = DefinitionStore.Production, string? note = null) =>
         PublishApp(new AppPackage(manifestYaml), by, channel, note);
 
-    /// <summary>Publishes an app's manifest and files as its next version. The manifest is read strictly first; what it does not pass is refused with its diagnostics.</summary>
-    public DefinitionVersion PublishApp(AppPackage package, string by, string channel = DefinitionStore.Production, string? note = null)
+    /// <summary>Publishes an app's manifest and files as its next version. The manifest is read strictly first; what it does not pass is refused with its diagnostics. When <c>approvals</c> is given, a manifest that asks <c>trust: trusted</c> is published only if an approval stands for the hash of exactly these files and manifest (AP15) and the version number is noted on that approval afterwards; a sandboxed app is never affected.</summary>
+    public DefinitionVersion PublishApp(AppPackage package, string by, string channel = DefinitionStore.Production, string? note = null, AppApprovalStore? approvals = null)
     {
         var load = AppManifestLoader.Load(package.ManifestYaml);
         if (!load.Ok) throw new AppInstanceException("The manifest is not valid: " + string.Join(" ", load.Diagnostics.Select(d => d.Message)));
-        return definitions.Publish(AppKind, load.Manifest!.Name, package.Serialize(), by, note: note, channel: channel);
+        var approval = approvals is not null && load.Manifest!.Trust == AppTrust.Trusted ? approvals.RequireForPublish(package, by) : null;
+        var version = definitions.Publish(AppKind, load.Manifest!.Name, package.Serialize(), by, note: note, channel: channel);
+        if (approval is not null) approvals!.RecordPublished(approval, version.Version);
+        return version;
     }
 
     /// <summary>Publishes an instance (a new version of it when it exists). The app must exist, a pin must be a version of it, and a binding must name a model the app uses.</summary>
