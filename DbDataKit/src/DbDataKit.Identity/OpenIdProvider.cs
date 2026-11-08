@@ -71,7 +71,7 @@ public sealed class OpenIdProvider(StateDatabase database, IUserAccounts users, 
         scopes_supported = KnownScopes,
         token_endpoint_auth_methods_supported = new[] { "client_secret_post", "none" },
         code_challenge_methods_supported = new[] { "S256" },
-        claims_supported = new[] { "sub", "name", "email", "groups", "dbdata_roles", "nonce" },
+        claims_supported = new[] { "sub", "name", "email", "groups", "dbdata_roles", "attrs", "nonce" },
     };
 
     /// <summary>Checks the request and, for the user who is signed in, makes a code and the URI that carries it back to the client.</summary>
@@ -149,6 +149,7 @@ public sealed class OpenIdProvider(StateDatabase database, IUserAccounts users, 
         }
         claims["groups"] = directory.GroupsOf(user.Id).Select(g => g.Name).ToList();
         claims["dbdata_roles"] = directory.AllRoles(user.Id);
+        if (DirectoryAttributes.ToClaim(directory.AttributesOf(user.Id)) is { } attrs) claims[DirectoryAttributes.Claim] = attrs;
         var access = new Dictionary<string, object?> { ["iss"] = Issuer, ["sub"] = user.Id, ["aud"] = Issuer, ["client_id"] = clientId, ["scope"] = scope, ["iat"] = now, ["exp"] = now + (long)TokenLifetime.TotalSeconds };
         if (clients.Find(clientId)?.App is { } app)
         {
@@ -280,6 +281,7 @@ public sealed class OpenIdProvider(StateDatabase database, IUserAccounts users, 
         }
         info["groups"] = directory.GroupsOf(user.Id).Select(g => g.Name).ToList();
         info["dbdata_roles"] = directory.AllRoles(user.Id);
+        if (DirectoryAttributes.ToClaim(directory.AttributesOf(user.Id)) is { } attrs) info[DirectoryAttributes.Claim] = attrs;
         return info;
     }
 

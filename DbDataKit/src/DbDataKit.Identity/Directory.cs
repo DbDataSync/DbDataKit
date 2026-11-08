@@ -242,6 +242,86 @@ public sealed class HomeDirectory(StateDatabase database)
         return (IReadOnlyList<(string, string)>)list;
     });
 
+    // ---- directory attributes (plan 22a GP04, D4) ----
+
+    /// <summary>
+    /// Maps an external group (an Entra group id, a Windows group) to an attribute and a value: everyone whose last sign-in through <paramref name="source"/> carried the group holds <paramref name="attribute"/> = <paramref name="value"/>, in
+    /// addition to the other values they get from other groups (a person in two groups of one attribute holds two values). Mapping the same four again changes nothing. The rows are the ones <see cref="SetExternalGroups"/> keeps, so a
+    /// person's attributes follow their last sign-in as their roles do.
+    /// </summary>
+    public AttributeMapping MapExternalGroupToAttribute(string source, string group, string attribute, string value)
+    {
+        var key = ExternalSources.Key(source, group);
+        attribute = attribute?.Trim() ?? "";
+        if (!DirectoryAttributes.IsName(attribute)) throw new ArgumentException($"An attribute name is lower case letters, digits and underscores, starting with a letter, at most 64 characters; '{attribute}' is not.", nameof(attribute));
+        value = value?.Trim() ?? "";
+        if (value.Length is 0 or > DirectoryAttributes.MaxValueLength) throw new ArgumentException($"An attribute value is non-blank text of at most {DirectoryAttributes.MaxValueLength} characters.", nameof(value));
+        var slot = SlotOf(source, key, attribute, value);
+        return database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using (var find = database.Command(Module, connection, "SELECT id, external_group FROM {table:attribute_mapping} WHERE slot = $slot;"))
+            {
+                find.Bind(database, "slot", slot);
+                using var reader = find.ExecuteReader();
+                if (reader.Read()) return new AttributeMapping(reader.GetString(0), source, reader.GetString(1), attribute, value);
+            }
+            var id = database.NewId().ToString("N");
+            using var cmd = database.Command(Module, connection, """
+                INSERT INTO {table:attribute_mapping} (id, slot, source, external_group, external_key, attribute, attr_value, created_at)
+                VALUES ($id, $slot, $source, $group, $key, $attribute, $value, $at);
+                """);
+            cmd.Bind(database, "id", id);
+            cmd.Bind(database, "slot", slot);
+            cmd.Bind(database, "source", source);
+            cmd.Bind(database, "group", group.Trim());
+            cmd.Bind(database, "key", key);
+            cmd.Bind(database, "attribute", attribute);
+            cmd.Bind(database, "value", value);
+            cmd.Bind(database, "at", database.Time.GetUtcNow());
+            cmd.ExecuteNonQuery();
+            return new AttributeMapping(id, source, group.Trim(), attribute, value);
+        });
+    }
+
+    /// <summary>Removes an attribute mapping by its id; the people it gave the value lose it at once. False when there is no such mapping.</summary>
+    public bool RemoveAttributeMapping(string id) => database.Retry(() =>
+    {
+        using var connection = database.OpenConnection();
+        using var cmd = database.Command(Module, connection, "DELETE FROM {table:attribute_mapping} WHERE id = $id;");
+        cmd.Bind(database, "id", id);
+        return cmd.ExecuteNonQuery() == 1;
+    });
+
+    public IReadOnlyList<AttributeMapping> AttributeMappings() => database.Retry(() =>
+    {
+        using var connection = database.OpenConnection();
+        using var cmd = database.Command(Module, connection, "SELECT id, source, external_group, attribute, attr_value FROM {table:attribute_mapping} ORDER BY source, external_key, attribute, attr_value;");
+        using var reader = cmd.ExecuteReader();
+        var list = new List<AttributeMapping>();
+        while (reader.Read()) list.Add(new AttributeMapping(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4)));
+        return (IReadOnlyList<AttributeMapping>)list;
+    });
+
+    /// <summary>The directory attributes the user holds: every value of every mapping whose group the user's last sign-ins carried, each value once, in order (the claim <c>attrs</c>). Empty for a user with none.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> AttributesOf(string userId) => database.Retry(() =>
+    {
+        using var connection = database.OpenConnection();
+        using var cmd = database.Command(Module, connection, """
+            SELECT DISTINCT m.attribute, m.attr_value FROM {table:attribute_mapping} m
+            WHERE EXISTS (SELECT 1 FROM {table:external_membership} e WHERE e.account_id = $u AND e.source = m.source AND e.external_key = m.external_key);
+            """);
+        cmd.Bind(database, "u", userId);
+        using var reader = cmd.ExecuteReader();
+        var held = new SortedDictionary<string, SortedSet<string>>(StringComparer.Ordinal);
+        while (reader.Read())
+        {
+            if (!held.TryGetValue(reader.GetString(0), out var values)) held[reader.GetString(0)] = values = new SortedSet<string>(StringComparer.Ordinal);
+            values.Add(reader.GetString(1));
+        }
+        return (IReadOnlyDictionary<string, IReadOnlyList<string>>)held.ToDictionary(p => p.Key, p => (IReadOnlyList<string>)[.. p.Value]);
+    });
+
     private void Write(AssignmentSubject subject, string scope, string target, string? project, ServerRole roles)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(target);
@@ -365,6 +445,14 @@ public sealed record RoleAssignment(string Id, AssignmentSubject Subject, string
 /// <param name="Project">The Build project when <paramref name="Scope"/> is project; otherwise null.</param>
 /// <param name="Roles">The roles the group gives there.</param>
 public sealed record ExternalGroupMapping(string Id, string Source, string Group, string Scope, string Target, string? Project, ServerRole Roles);
+
+/// <summary>One mapping of an external group to a directory attribute and a value (plan 22a GP04).</summary>
+/// <param name="Id">The mapping's id (to remove it).</param>
+/// <param name="Source">One of <see cref="ExternalSources"/>.</param>
+/// <param name="Group">The group value as it was written.</param>
+/// <param name="Attribute">The attribute's name.</param>
+/// <param name="Value">The value the group gives it.</param>
+public sealed record AttributeMapping(string Id, string Source, string Group, string Attribute, string Value);
 
 /// <summary>Where a person's external groups come from. Each is a way of signing in whose groups the home does not manage.</summary>
 public static class ExternalSources

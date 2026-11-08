@@ -34,6 +34,7 @@ public sealed class ExternalGroupTests : IAsyncLifetime
     private string _subject = "entra-oid-ada", _email = "ada@clearwater.example.invalid";
     private string[] _groups = [];
     private string _nonce = "", _algorithm = "RS256";
+    private object? _attrs;      // the claim attrs of the next token, when a test wants one (the home sends it; Entra does not)
     private RSA _signingKey = null!;
     private HttpClient _http = null!;
 
@@ -82,6 +83,7 @@ public sealed class ExternalGroupTests : IAsyncLifetime
         {
             ["iss"] = _authority, ["aud"] = "home-app", ["exp"] = DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeSeconds(), ["sub"] = _subject, ["name"] = "Ada Lovelace", ["email"] = _email, ["nonce"] = _nonce, ["groups"] = _groups,
         };
+        if (_attrs is not null) claims["attrs"] = _attrs;
         var signingInput = B(new { alg, kid, typ = "JWT" }) + "." + B(claims);
         return signingInput + "." + Base64Url.EncodeToString(key.SignData(Encoding.ASCII.GetBytes(signingInput), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1));
     }
@@ -129,6 +131,27 @@ public sealed class ExternalGroupTests : IAsyncLifetime
         Assert.True(held.Roles.HasFlag(ServerRole.Operator));
         Assert.True(held.Projects["retail"].HasFlag(ServerRole.Author));
         Assert.Equal(ada.Id, HomeTokens.For(_home.Users, _home.Directory, ada.Id, Server)!.SubjectId);
+    }
+
+    [Fact]
+    public async Task The_client_reads_the_attrs_claim_of_an_id_token_and_refuses_one_that_is_not_lists_of_strings()
+    {
+        _attrs = new Dictionary<string, string[]> { ["region"] = ["east", "west"] };
+        var client = new OpenIdClient(new OpenIdClientOptions(_authority, "home-app", "secret", Redirect), _http);
+        var query = System.Web.HttpUtility.ParseQueryString((await client.BeginAsync(null, default)).Query);
+        _nonce = query["nonce"]!;
+        var signedIn = await client.CompleteAsync(query["state"], "code-1", null, default);
+        Assert.Equal(["east", "west"], signedIn.Identity.Attributes["region"]);
+
+        _attrs = new Dictionary<string, string> { ["region"] = "east" };
+        query = System.Web.HttpUtility.ParseQueryString((await client.BeginAsync(null, default)).Query);
+        _nonce = query["nonce"]!;
+        await Assert.ThrowsAsync<OpenIdClientException>(() => client.CompleteAsync(query["state"], "code-2", null, default));
+
+        _attrs = null;
+        query = System.Web.HttpUtility.ParseQueryString((await client.BeginAsync(null, default)).Query);
+        _nonce = query["nonce"]!;
+        Assert.Empty((await client.CompleteAsync(query["state"], "code-3", null, default)).Identity.Attributes);
     }
 
     [Fact]

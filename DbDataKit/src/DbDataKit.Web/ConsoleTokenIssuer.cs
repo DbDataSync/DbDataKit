@@ -6,7 +6,7 @@ namespace DbDataKit.Web.Trust;
 
 /// <summary>
 /// Signs the short-lived token a console sends with every call to a server: <c>base64url(header).base64url(claims).base64url(signature)</c>, the header <c>{"alg":"EdDSA","typ":"dbdata-console","kid":&lt;fingerprint&gt;}</c>.
-/// Claims: <c>iss</c> the console, <c>aud</c> the server, <c>sub</c> and <c>name</c>, <c>kind</c> (user or console), <c>roles</c>, <c>projects</c>, <c>jti</c> (unique), <c>iat</c> and <c>exp</c> (seconds).
+/// Claims: <c>iss</c> the console, <c>aud</c> the server, <c>sub</c> and <c>name</c>, <c>kind</c> (user or console), <c>roles</c>, <c>projects</c>, <c>attrs</c> (the directory attributes, only when the user has some: <see cref="DirectoryAttributes"/>), <c>jti</c> (unique), <c>iat</c> and <c>exp</c> (seconds).
 /// It travels in a header, not a cookie, so it works through reverse proxies.
 /// </summary>
 public sealed class ConsoleTokenIssuer(string consoleId, ConsoleSigningKey key, TimeProvider? clock = null)
@@ -39,6 +39,7 @@ public sealed class ConsoleTokenIssuer(string consoleId, ConsoleSigningKey key, 
         };
         if (request.App is not null) claims["app"] = request.App;
         if (request.Scope is not null) claims["scope"] = request.Scope;
+        if (DirectoryAttributes.ToClaim(request.Attributes) is { } attrs) claims[DirectoryAttributes.Claim] = attrs;
         var header = new Dictionary<string, object?> { ["alg"] = "EdDSA", ["typ"] = "dbdata-console", ["kid"] = key.Fingerprint };
         var signingInput = Base64Url.Encode(JsonSerializer.SerializeToUtf8Bytes(header)) + "." + Base64Url.Encode(JsonSerializer.SerializeToUtf8Bytes(claims));
         return signingInput + "." + Base64Url.Encode(key.Sign(Encoding.ASCII.GetBytes(signingInput)));
