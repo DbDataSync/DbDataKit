@@ -411,4 +411,27 @@ test('a person signs in and the sandboxed app reads and writes the published mod
   await page.goto(`${appsUrl}/apps/trusted/`)
   await expect(page.locator('p.notice')).toContainText('Showing the default portal instead.')
   await expect(page.locator('#portal-out')).toHaveCount(0)
+
+  // AP20: the rest of the lifecycle at the command line. An update is a new version the unpinned instance follows, a rollback returns to the one before, and a removed instance answers 404 (the hosts read the group's definitions every second)
+  const versionsOf = () => run(proxyDll, proxyDirectory, ['apps', 'list']).apps.find((a: any) => a.name === 'territory-notes').versions
+  expect(versionsOf()).toEqual([1])
+  fs.writeFileSync(path.join(appDirectory, 'index.html'), index.replace('<button id="go">go</button>', '<button id="go">go</button><pre id="build">second build</pre>'))
+  expect(run(proxyDll, proxyDirectory, ['apps', 'publish', '--dir', appDirectory, '--note', 'second build']).version).toBe(2)
+  expect(versionsOf()).toEqual([1, 2])
+  await expect(async () => {
+    await page.goto(`${appsUrl}/apps/acme/`)
+    await expect(page.frameLocator('#app-frame').locator('#build')).toHaveText('second build', { timeout: 1000 })
+  }).toPass()
+  expect(run(proxyDll, proxyDirectory, ['apps', 'rollback', '--app', 'territory-notes']).version).toBe(1)
+  await expect(async () => {
+    await page.goto(`${appsUrl}/apps/acme/`)
+    await expect(page.frameLocator('#app-frame').locator('#rows')).toHaveText(/rows /, { timeout: 1000 })
+    await expect(page.frameLocator('#app-frame').locator('#build')).toHaveCount(0, { timeout: 1000 })
+  }).toPass()
+  // an instance a portal mounts cannot be removed; one nobody mounts can, and then its address is gone (Ada has no role on it: 403 before, 404 after)
+  expect(() => run(proxyDll, proxyDirectory, ['apps', 'instance-remove', '--name', 'acme'])).toThrow()
+  run(proxyDll, proxyDirectory, ['apps', 'instance-save', '--name', 'scratch', '--app', 'territory-notes', '--bind', 'territories=default'])
+  await expect(async () => { expect((await page.goto(`${appsUrl}/apps/scratch/`))!.status()).toBe(403) }).toPass()
+  run(proxyDll, proxyDirectory, ['apps', 'instance-remove', '--name', 'scratch'])
+  await expect(async () => { expect((await page.goto(`${appsUrl}/apps/scratch/`))!.status()).toBe(404) }).toPass()
 })
