@@ -1,0 +1,2 @@
+# Violations of scripts/check_plans.py that exist today and are tolerated (printed as warnings). One `file: rule` per line, rules:
+# links, numbers, finished, index. The list only shrinks: a line whose violation is gone fails the check, so delete it.

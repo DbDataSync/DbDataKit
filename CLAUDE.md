@@ -36,7 +36,7 @@ project reference in this repository, a package reference otherwise). Do not cop
 ```
 dotnet build DbDataKit.slnx                                   # everything
 python3 -I -m unittest discover -s scripts/tests              # the repository checks
-python3 -I scripts/check_package_versions.py && python3 -I scripts/check_solution.py
+python3 -I scripts/check_package_versions.py && python3 -I scripts/check_solution.py && python3 -I scripts/check_plans.py
 ```
 
 Per product, from its folder: `dotnet build`, then the suites below. Run the suites a change can affect; CI runs the rest on the pull request.
@@ -85,6 +85,11 @@ welcome is a branch and a pull request per task, each running into the same CI p
 - `main` stays linear: the batch pull request is merged with "Rebase and merge" (or squashed when it is a single slice), never with a merge commit.
 - Before anything is pushed, read `docs/ci-lessons.md` and run its "before you push" list: the CI problems already found and fixed are written there with
   how to recognise them. A new CI problem and its fix are added to that file in the same commit that fixes it.
+- **Finished plans are deleted or cut down.** When the last slice of a plan lands, the same commit deletes the plan, or cuts it to a short "as built"
+  note beside the product's docs; open decisions and unbuilt work move to the plan that owns them. Never leave a plan whose status says proposed or
+  in progress while all its rows are done, and never link to a plan that does not exist. `scripts/check_plans.py` checks this (links between plans,
+  the numbers the index names, the index itself, open status with every row done); what it tolerates today is in `scripts/plan_check_baseline.txt`,
+  which only shrinks.
 - A clean break is allowed, but never a silent one: a changed file format fails with a message naming the file, and a test says so.
 - Branches: do not push experiments, scratch copies, "draft" or "wip" branches, or one branch per task. The workflow `delete-merged-branch.yml` deletes a
   pull request's branch when it merges; a branch whose work is abandoned is deleted by whoever abandoned it, in the same session. Sessions cannot delete
