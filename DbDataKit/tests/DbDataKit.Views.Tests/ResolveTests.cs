@@ -87,12 +87,15 @@ public class ResolveTests
         {
             Directory.CreateDirectory(folder);
             foreach (var stale in Directory.GetFiles(folder, "*.json")) File.Delete(stale);
-            foreach (var (id, widget) in results) File.WriteAllText(Path.Combine(folder, id + ".json"), widget.ToJsonString(Pretty) + "\n");
+            foreach (var (id, widget) in results) File.WriteAllText(Path.Combine(folder, id + ".json"), Lf(widget.ToJsonString(Pretty)) + "\n");
         }
         Assert.Equal(results.Select(r => r.Key).Order(), Directory.GetFiles(folder, "*.json").Select(f => Path.GetFileNameWithoutExtension(f)).Order());
         foreach (var (id, widget) in results)
-            Assert.Equal(File.ReadAllText(Path.Combine(folder, id + ".json")).Replace("\r\n", "\n").TrimEnd(), widget.ToJsonString(Pretty).TrimEnd());
+            Assert.Equal(File.ReadAllText(Path.Combine(folder, id + ".json")).Replace("\r\n", "\n").TrimEnd(), Lf(widget.ToJsonString(Pretty)).TrimEnd());
     }
+
+    // indented JSON uses the platform newline (CRLF on Windows); the recorded files are LF
+    private static string Lf(string text) => text.Replace("\r\n", "\n");
 
     private static readonly Lazy<JsonSchema> RenderedSchema = new(() => JsonSchema.FromText(File.ReadAllText(Path.Combine(Conformance.SchemaRoot, "rendered-widgets.schema.json"))));
 
