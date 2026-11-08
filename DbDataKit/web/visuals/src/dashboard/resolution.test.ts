@@ -3,7 +3,7 @@ import { fixtureClient, placedWidgets } from '../client/fixtureClient'
 import { validateText } from '../client/text'
 import { sampleBundle } from '../testing/sampleBundle'
 import type { ViewsDoc } from '../views/model'
-import { defaultParameters, parametersKey, resolveLayout } from './resolution'
+import { changedParameters, defaultParameters, dependentWidgets, parametersKey, resolveLayout, widgetParameters } from './resolution'
 
 const bundle = sampleBundle()
 const document = validateText(bundle.documents['dashboard/retail-sales-today']!).document as ViewsDoc
@@ -49,5 +49,40 @@ describe('resolveLayout', () => {
     expect(Object.keys(next.results)).toEqual(placed('phone'))
     expect(next.key).toBe(parametersKey({ region: ['West'] }))
     expect(next.asOf).toBe('2026-11-08T09:00:00Z')
+  })
+})
+
+describe('dependent widgets', () => {
+  it('are the ones whose query or text uses the parameter, and not the control that sets it', () => {
+    expect(dependentWidgets(document, ['region'])).toEqual(['net', 'margin', 'note', 'top_products'])
+    expect(dependentWidgets(document, [])).toEqual([])
+    expect(dependentWidgets(document, ['nothing'])).toEqual([])
+    expect([...widgetParameters(document.widgets.net)]).toEqual(['region'])
+    expect([...widgetParameters(document.widgets.by_region)]).toEqual([])
+  })
+
+  it('a change is the names whose value differs', () => {
+    expect(changedParameters({ a: 1, b: ['x'] }, { a: 1, b: ['x', 'y'], c: null })).toEqual(['b'])
+    expect(changedParameters({ a: null }, {})).toEqual([])
+  })
+
+  it('a change of parameters asks only for the dependent widgets and keeps the other results as they were', async () => {
+    const calls: string[][] = []
+    const c = fixtureClient(bundle, { onResolve: (call) => calls.push(call.widgets) })
+    const first = await resolveLayout({ client: c, ref, layout: 'desk', placed: placedWidgets(document, 'desk'), parameters: { region: [] }, previous: null, document })
+    const next = await resolveLayout({ client: c, ref, layout: 'desk', placed: placedWidgets(document, 'desk'), parameters: { region: ['West'] }, previous: first, document })
+    expect(calls).toEqual([placedWidgets(document, 'desk'), ['net', 'margin', 'note', 'top_products']])
+    expect(next.results.by_region).toBe(first.results.by_region)
+    expect(next.results.regions).toBe(first.results.regions)
+    expect(next.parameters).toEqual({ region: ['West'] })
+  })
+
+  it('a layout switch with a changed parameter forgets stale dependents the layout does not place', async () => {
+    const calls: string[][] = []
+    const c = fixtureClient(bundle, { onResolve: (call) => calls.push(call.widgets) })
+    const first = await resolveLayout({ client: c, ref, layout: 'desk', placed: placedWidgets(document, 'desk'), parameters: { region: [] }, previous: null, document })
+    const next = await resolveLayout({ client: c, ref, layout: 'phone', placed: placedWidgets(document, 'phone'), parameters: { region: ['West'] }, previous: first, document })
+    expect(calls[1]).toEqual(['net', 'margin', 'top_products'])
+    expect(Object.keys(next.results).sort()).toEqual(['by_region', 'margin', 'net', 'regions', 'top_products'])
   })
 })

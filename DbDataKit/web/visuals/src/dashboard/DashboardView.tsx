@@ -8,7 +8,7 @@ import type { RenderedWidget } from '../views/rendered'
 import { selectLayout, type LayoutSelection, type Medium } from '../views/selectLayout'
 import { ErrorTile } from '../widgets/states'
 import { DashboardFrame } from './DashboardFrame'
-import { defaultParameters, parametersKey, resolveLayout, type Resolution } from './resolution'
+import { changedParameters, defaultParameters, dependentWidgets, parametersKey, resolveLayout, type Resolution } from './resolution'
 
 export interface DashboardViewProps {
   /** The document's kind and name: what the client resolves it by. */
@@ -90,7 +90,7 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
     const controller = new AbortController()
     let current = true
     setFailure(null)
-    resolveLayout({ client, ref: { kind, name }, layout: chosenName, placed, parameters: values, previous: latest.current, signal: controller.signal }).then(
+    resolveLayout({ client, ref: { kind, name }, layout: chosenName, placed, parameters: values, previous: latest.current, document, signal: controller.signal }).then(
       (next) => {
         if (!current) return
         latest.current = next
@@ -105,14 +105,18 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
       controller.abort()
     }
     // `values` is read through its key: the same values are the same request
-  }, [client, kind, name, chosenName, placed, valuesKey])
+  }, [client, kind, name, document, chosenName, placed, valuesKey])
 
   const [maximized, setMaximized] = useState<string | null>(null)
   useEffect(() => setMaximized(null), [chosenName])
 
   const fresh = resolution !== null && resolution.key === valuesKey
   const results: Record<string, RenderedWidget> = resolution?.results ?? {}
-  const loading = useMemo(() => new Set(placed.filter((id) => !fresh || !(id in results))), [placed, fresh, results])
+  // while an answer is awaited only the widgets that use a changed parameter (or have no result) show as loading
+  const loading = useMemo(() => {
+    const stale = new Set(fresh || !resolution ? [] : dependentWidgets(document, changedParameters(resolution.parameters, values)))
+    return new Set(placed.filter((id) => !(id in results) || stale.has(id)))
+  }, [document, placed, fresh, resolution, results, values])
 
   let body
   if (!box) body = null
