@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using DbDataKit.State;
+using DbDataKit.Web.Trust;
 
 namespace DbDataKit.Identity;
 
@@ -35,8 +36,9 @@ public sealed class OAuthException(string error, string description, int status 
 /// The OpenID Connect provider of the identity home: the authorization code flow with PKCE (S256 only), id tokens and access tokens signed ES256, discovery and userinfo. Signing a person in is the host's (it hands the
 /// signed-in user id to <see cref="Authorize"/>); this issues the code and trades it for tokens that carry the home's user id as <c>sub</c>, the groups, and the roles held on every server and app (<c>dbdata_roles</c>).
 /// </summary>
-public sealed class OpenIdProvider(StateDatabase database, IUserAccounts users, HomeDirectory directory, OidcClients clients, SigningKeys keys, string issuer, TimeProvider? clock = null)
-{    private const string Module = IdentityModule.Name;
+public sealed class OpenIdProvider(StateDatabase database, IUserAccounts users, HomeDirectory directory, OidcClients clients, SigningKeys keys, string issuer, TimeProvider? clock = null, IAppGrants? apps = null)
+{
+    private const string Module = IdentityModule.Name;
 
 
     public static readonly TimeSpan CodeLifetime = TimeSpan.FromSeconds(60);
@@ -84,6 +86,7 @@ public sealed class OpenIdProvider(StateDatabase database, IUserAccounts users, 
         if (string.IsNullOrEmpty(request.CodeChallenge) || request.CodeChallengeMethod != "S256") return new(Back("invalid_request", "PKCE is required: a code_challenge with code_challenge_method=S256."), null);
         if (request.CodeChallenge.Length is < 43 or > 128) return new(Back("invalid_request", "The code_challenge is not a SHA-256 hash in base64url."), null);
         if (users.Get(signedInUserId) is not { Enabled: true }) return new(Back("access_denied", "The user cannot sign in."), null);
+        if (client.App is { } app && apps?.ScopeOf(app) is null) return new(Back("access_denied", "The app has no approved version, so it gets no token."), null);
 
         var code = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).Replace('+', '-').Replace('/', '_').TrimEnd('=');
         database.Retry(() =>
@@ -144,6 +147,16 @@ public sealed class OpenIdProvider(StateDatabase database, IUserAccounts users, 
         claims["groups"] = directory.GroupsOf(user.Id).Select(g => g.Name).ToList();
         claims["dbdata_roles"] = directory.AllRoles(user.Id);
         var access = new Dictionary<string, object?> { ["iss"] = Issuer, ["sub"] = user.Id, ["aud"] = Issuer, ["client_id"] = clientId, ["scope"] = scope, ["iat"] = now, ["exp"] = now + (long)TokenLifetime.TotalSeconds };
+        if (clients.Find(clientId)?.App is { } app)
+        {
+            // An app's access token is for the instance, not the home (plan 13a U19): the audience is the instance, the roles are the ones the person holds on it, and the scope is the approved manifest's narrowed by
+            // those roles, so the token is never wider than the person. Read again at every refresh. An instance with no approved version gets nothing.
+            var manifest = apps?.ScopeOf(app) ?? throw new OAuthException("invalid_grant", "The app has no approved version, so it gets no token.");
+            var held = directory.RolesIn(user.Id, app);
+            access["aud"] = AppAudience.Of(app);
+            access["dbdata_roles"] = ServerRoles.Names(ServerRoles.Close(held));
+            access["dbdata_scope"] = AppScope.Narrow(manifest, held);
+        }
         return new(Sign(access, "at+jwt"), Sign(claims, "JWT"), (int)TokenLifetime.TotalSeconds, scope, refreshToken);
     }
 

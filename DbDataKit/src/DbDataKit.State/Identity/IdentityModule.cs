@@ -230,6 +230,15 @@ public static class IdentityModule
             );
             CREATE UNIQUE INDEX {index:service_account_by_name} ON {table:service_account}(name);
             """,
+            """
+            -- A client that is an app instance (plan 13a U19): the home issues it access tokens whose audience is the instance (app:<instance>) and whose scope is the approved manifest's,
+            -- narrowed by what the person may do. A client with no row here is not an app; its tokens are the home's own, as before.
+            CREATE TABLE {table:oidc_client_app} (
+                client_id {{key}} PRIMARY KEY,
+                instance  {{key}} NOT NULL
+            );
+            CREATE UNIQUE INDEX {index:oidc_client_app_by_instance} ON {table:oidc_client_app}(instance);
+            """,
         ],
         retention:
         [
