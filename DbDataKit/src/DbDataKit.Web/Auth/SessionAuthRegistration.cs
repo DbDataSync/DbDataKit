@@ -33,7 +33,7 @@ public static class SessionAuthRegistration
         services.AddSingleton(sp => new InviteStore(state(sp)));
         services.AddSingleton(sp => new OneTimeValues(state(sp), sp.GetService<TimeProvider>()));
         services.AddSingleton<IUserAccounts>(sp => state(sp).Layout is null ? sp.GetRequiredService<UserStore>() : new IdentityUserStore(state(sp)));
-        services.AddSingleton<ISessionStore>(sp => state(sp).Layout is null ? sp.GetRequiredService<SessionStore>() : new IdentitySessionStore(state(sp)));
+        services.AddSingleton<ISessionStore>(sp => state(sp).Layout is null ? sp.GetRequiredService<SessionStore>() : new IdentitySessionStore(state(sp), sp.GetService<SessionSettings>()));
         services.AddSingleton<IInviteStore>(sp => state(sp).Layout is null ? sp.GetRequiredService<InviteStore>() : new IdentityInviteStore(state(sp)));
         services.AddSingleton<IOneTimeValues>(sp => state(sp).Layout is null ? sp.GetRequiredService<OneTimeValues>() : new IdentityOneTimeValues(state(sp)));
         services.AddSingleton(sp => new BootstrapInviteLocation(firstRunDirectory(sp)));

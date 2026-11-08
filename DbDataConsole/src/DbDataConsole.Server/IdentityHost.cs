@@ -113,6 +113,7 @@ public static class IdentityHost
 
         builder.Services.AddDataProtection().SetApplicationName("dbdatakit-identity").PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(settings.Directory, "dataprotection")));
         builder.Services.AddSingleton(_ => IdentityHostState.Open(settings.Directory, settings.State));
+        builder.Services.AddSingleton(SessionSettingsFile.Load(serverYaml));   // the session: section of server.yaml (plan 13a U22)
         builder.AddIdentityHome(new IdentityHomeOptions(settings.Public, settings.Directory,
             sp => sp.GetRequiredService<StateDatabase>(),
             sp => new DataProtectionSigningKeyProtector(sp.GetRequiredService<IDataProtectionProvider>().CreateProtector("dbdatakit-identity.signing-key")),

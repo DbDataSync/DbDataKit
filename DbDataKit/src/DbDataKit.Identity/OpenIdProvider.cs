@@ -36,7 +36,7 @@ public sealed class OAuthException(string error, string description, int status 
 /// The OpenID Connect provider of the identity home: the authorization code flow with PKCE (S256 only), id tokens and access tokens signed ES256, discovery and userinfo. Signing a person in is the host's (it hands the
 /// signed-in user id to <see cref="Authorize"/>); this issues the code and trades it for tokens that carry the home's user id as <c>sub</c>, the groups, and the roles held on every server and app (<c>dbdata_roles</c>).
 /// </summary>
-public sealed class OpenIdProvider(StateDatabase database, IUserAccounts users, HomeDirectory directory, OidcClients clients, SigningKeys keys, string issuer, TimeProvider? clock = null, IAppGrants? apps = null)
+public sealed class OpenIdProvider(StateDatabase database, IUserAccounts users, HomeDirectory directory, OidcClients clients, SigningKeys keys, string issuer, TimeProvider? clock = null, IAppGrants? apps = null, TimeSpan? refreshLifetime = null)
 {
     private const string Module = IdentityModule.Name;
 
@@ -50,6 +50,9 @@ public sealed class OpenIdProvider(StateDatabase database, IUserAccounts users, 
     private static readonly string[] KnownScopes = ["openid", "profile", "email", "offline_access"];
 
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
+
+    /// <summary>How long a person's refresh tokens last from the sign-in: the host's session length (plan 13a U22), <see cref="RefreshLifetime"/> (12 hours) by default.</summary>
+    private readonly TimeSpan _refreshLifetime = refreshLifetime ?? RefreshLifetime;
 
     public string Issuer { get; } = issuer.TrimEnd('/');
 
@@ -126,7 +129,7 @@ public sealed class OpenIdProvider(StateDatabase database, IUserAccounts users, 
         if (user is not { Enabled: true }) throw new OAuthException("invalid_grant", "The user cannot sign in.");
 
         string? refresh = grant.Scope.Split(' ').Contains("offline_access")
-            ? NewRefreshToken(Guid.NewGuid().ToString("N"), request.ClientId, user.Id, grant.Scope, _clock.GetUtcNow() + RefreshLifetime)
+            ? NewRefreshToken(Guid.NewGuid().ToString("N"), request.ClientId, user.Id, grant.Scope, _clock.GetUtcNow() + _refreshLifetime)
             : null;
         return Issue(user, request.ClientId, grant.Scope, grant.Nonce, refresh);
     }

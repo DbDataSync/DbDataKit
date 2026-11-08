@@ -5,40 +5,68 @@ using System.Data.Common;
 
 namespace DbDataKit.State;
 
-/// <summary>Server-side sessions on the <c>identity</c> module: the same behaviour and methods as <see cref="SessionStore"/>. The session id is the bearer credential, 32 random bytes in hex.</summary>
-public sealed class IdentitySessionStore(StateDatabase database) : ISessionStore
+/// <summary>
+/// Server-side sessions on the <c>identity</c> module: the same behaviour and methods as <see cref="SessionStore"/>. The session id is the bearer credential, 32 random bytes in hex. A session lasts
+/// <see cref="SessionSettings.Length"/> from sign-in (use does not extend it); with an <see cref="SessionSettings.IdleTimeout"/>, one that was not used for that long is refused and removed (plan 13a U22).
+/// </summary>
+public sealed class IdentitySessionStore(StateDatabase database, SessionSettings? settings = null) : ISessionStore
 {
     private const string Module = IdentityModule.Name;
+
+    private readonly SessionSettings _settings = settings ?? SessionSettings.Default;
 
     public static TimeSpan Lifetime => SessionStore.Lifetime;
 
     public SessionRecord Create(string userId)
     {
         var now = database.Time.GetUtcNow();
-        var session = new SessionRecord(Convert.ToHexString(RandomNumberGenerator.GetBytes(32)), userId, now + Lifetime);
+        var session = new SessionRecord(Convert.ToHexString(RandomNumberGenerator.GetBytes(32)), userId, now + _settings.Length);
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(Module, connection, "INSERT INTO {table:session} (id, account_id, created_at, expires_at) VALUES ($id, $account, $created, $expires);");
+            using var cmd = database.Command(Module, connection, "INSERT INTO {table:session} (id, account_id, created_at, expires_at, seen_at) VALUES ($id, $account, $created, $expires, $created);");
             cmd.Bind(database, "id", session.Id).Bind(database, "account", userId).Bind(database, "created", now).Bind(database, "expires", session.ExpiresAtUtc);
             cmd.ExecuteNonQuery();
         });
         return session;
     }
 
-    /// <summary>The user a session belongs to, or null for an unknown or expired one or a disabled user. The user is read fresh each time, so disabling somebody or changing their role takes effect on their next request.</summary>
+    /// <summary>
+    /// The user a session belongs to, or null for an unknown or expired one, one that was idle for longer than the idle timeout, or a disabled user. The user is read fresh each time, so disabling somebody or changing
+    /// their role takes effect on their next request. With an idle timeout, a use is recorded (at most once in a while: a tenth of the timeout, and not more often than a minute).
+    /// </summary>
     public UserRecord? Resolve(string sessionId, IUserAccounts users)
     {
-        var userId = database.Retry(() =>
+        var now = database.Time.GetUtcNow();
+        var found = database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            using var cmd = database.Command(Module, connection, "SELECT account_id, expires_at FROM {table:session} WHERE id = $id;");
+            using var cmd = database.Command(Module, connection, "SELECT account_id, expires_at, seen_at FROM {table:session} WHERE id = $id;");
             cmd.Bind(database, "id", sessionId);
             using var reader = cmd.ExecuteReader();
-            if (!reader.Read()) return null;
-            return reader.Time(1) > database.Time.GetUtcNow() ? reader.GetString(0) : null;
+            return reader.Read() ? (UserId: reader.GetString(0), Expires: reader.Time(1), Seen: reader.NullableTime(2)) : default((string UserId, DateTimeOffset Expires, DateTimeOffset? Seen)?);
         });
-        return userId is not null && users.Get(userId) is { Enabled: true } user ? user : null;
+        if (found is not var (userId, expires, seen) || expires <= now) return null;
+
+        if (_settings.IdleTimeout is { } idle)
+        {
+            // a session made before the column existed has no use recorded: its sign-in is its last use
+            var last = seen ?? expires - _settings.Length;
+            if (now - last > idle)
+            {
+                Delete(sessionId);
+                return null;
+            }
+            if (now - last > TimeSpan.FromTicks(Math.Min(idle.Ticks / 10, TimeSpan.FromMinutes(1).Ticks)))
+                database.Retry(() =>
+                {
+                    using var connection = database.OpenConnection();
+                    using var cmd = database.Command(Module, connection, "UPDATE {table:session} SET seen_at = $seen WHERE id = $id;");
+                    cmd.Bind(database, "seen", now).Bind(database, "id", sessionId);
+                    cmd.ExecuteNonQuery();
+                });
+        }
+        return users.Get(userId) is { Enabled: true } user ? user : null;
     }
 
     public void Delete(string sessionId) => Run("DELETE FROM {table:session} WHERE id = $key;", sessionId);
