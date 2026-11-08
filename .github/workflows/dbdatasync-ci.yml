@@ -184,11 +184,6 @@ jobs:
           npm test -w @dbdatakit/shell
           npm test -w @dbdatakit/admin
           npm test -w @dbdatakit/sync
-      # Phase 162: the script that makes the package README's links absolute (tools/docs/nuget-readme.mjs), tested with
-      # node's own runner — plain Node, nothing to install. Run from the product root (DbDataSync/), not this job's working directory.
-      - name: Test the NuGet README rewriter
-        working-directory: DbDataSync
-        run: node --test tools/docs/*.test.mjs
       - name: Build
         run: npm run build -w @dbdatakit/sync
 

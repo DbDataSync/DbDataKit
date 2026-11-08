@@ -1,7 +1,7 @@
 # Standard distribution
 
 Every product is distributed the same way, so there is one baseline to maintain and one thing to learn. A product may add routes of its
-own (DbDataSync is also a .NET tool package), but these always exist.
+own, but these always exist. There is no .NET tool package for any product (DbDataSync's was dropped on 2026-11-08), and NuGet publishing is paused.
 
 | | |
 |---|---|
@@ -138,5 +138,5 @@ stopped, so it can be configured first). Stable releases also keep the newest on
 
 ## Not covered
 
-* Zip installs of DbDataSync cannot `dbdatasync update` in place (only the tool package can); re-run the installer to upgrade.
+* DbDataSync's `dbdatasync update` cannot update any of these installs, and releases carry no `.nupkg` for it to read; upgrade by installing the newer release (MSI over the old one, the installer script again, `scoop update`, or a newer image tag).
 * No macOS packages are built yet; `install.sh` already knows `osx-*` and `linux-arm64` and uses them once a product lists them.

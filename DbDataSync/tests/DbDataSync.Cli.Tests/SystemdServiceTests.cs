@@ -212,7 +212,7 @@ public sealed class SystemdServiceTests : IDisposable
 
         Assert.Equal(1, exitCode);
         Assert.Contains("ProtectHome=yes", output);
-        Assert.Contains("tool install", output);
+        Assert.Contains("install.sh --system", output);
         Assert.Null(env.WrittenUnit);
         Assert.Empty(env.CreatedUsers);
     }

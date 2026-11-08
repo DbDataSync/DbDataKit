@@ -6,53 +6,28 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
 
-    <!-- The command surface, not the web host: asking this tool for help should print text rather than starting Kestrel. -->
-    <PackAsTool>true</PackAsTool>
-    <ToolCommandName>dbdatasync</ToolCommandName>
-    <PackageId>DbDataSync</PackageId>
+    <!-- The command surface, not the web host: asking this tool for help should print text rather than starting Kestrel.
+         Not packed: there is no dotnet tool package (owner decision 2026-11-08). Sync ships as zips, an MSI, install scripts, Scoop
+         and a container image (dist/README.md), built by .github/workflows/dbdatasync-release.yml with `dotnet publish`. -->
     <!--
-      Every build not explicitly versioned gets a fresh alpha, dated and timed at evaluation — nobody
-      has to remember to pass one just to `dotnet pack`/`dotnet tool update` this project, which is the
-      whole point of tools/install-local-tool's dev loop. -p:Version=X on the command line still wins
-      outright: MSBuild treats a command-line property as global, and a global property cannot be
-      overwritten by a plain assignment in the project file, conditioned or not — which is exactly what
-      lets .github/workflows/release.yml pass -p:Version=YYYY.MM.DD.HHmm and get a real release version
-      with no alpha label and no change needed here.
+      Every build not explicitly versioned gets a fresh alpha, dated and timed at evaluation, so a local build never reports a
+      release version. -p:Version=X on the command line still wins outright: MSBuild treats a command-line property as global, and a
+      global property cannot be overwritten by a plain assignment in the project file, conditioned or not — which is exactly what
+      lets .github/workflows/dbdatasync-release.yml pass -p:Version=YYYY.M.D.HHmm and get a real release version with no alpha label
+      and no change needed here.
 
-      The seconds component exists for this project alone, not for release.yml: a release is one build
-      for one pushed tag, but a dev-loop rerun can happen several times inside the same minute, and
-      `dotnet tool update` needs every one of those to look like a genuinely new version. Unpadded ("s",
-      not "ss") on purpose: a prerelease identifier is SemVer2-numeric and MUST NOT carry a leading
-      zero, unlike the four-part core above it — "-alpha.05" is a hard NETSDK1018 error where "2026.09"
-      is merely normalised away, and this is the one part of the string actually built from a two-digit
-      clock field often small enough to have one.
+      The seconds component keeps two builds inside one minute from reporting the same version. Unpadded ("s", not "ss") on purpose:
+      a prerelease identifier is SemVer2-numeric and MUST NOT carry a leading zero, unlike the four-part core above it —
+      "-alpha.05" is a hard NETSDK1018 error where "2026.09" is merely normalised away, and this is the one part of the string
+      actually built from a two-digit clock field often small enough to have one.
     -->
     <Version>$([System.DateTime]::UtcNow.ToString("yyyy.MM.dd.HHmm'-alpha.'s"))</Version>
     <Description>Cross-database replication — a git-tracked config repo and a scheduler, managed from the dbdatakit console.</Description>
     <Authors>Dan Shryock</Authors>
-    <PackageTags>database;replication;sync;etl;sql-server;mssql;postgresql;cli;dotnet-tool</PackageTags>
-
-    <!--
-      Feeds the "Source repository" link and the README tab on the nuget.org listing — both were
-      previously blank because nothing here set them, which is a distinct gap from Description above
-      (that one already showed up; a listing can render a summary with no link back to the repo and no
-      rendered docs at all). RepositoryUrl/RepositoryType is the pair NuGet actually reads for the
-      source link; PackageProjectUrl is the separate "Project site" link nuget.org shows alongside it —
-      both point at the same GitHub repo here, so set both rather than lean on one implying the other.
-    -->
-    <RepositoryUrl>https://github.com/DbDataSync/DbDataSync</RepositoryUrl>
-    <RepositoryType>git</RepositoryType>
-    <PackageProjectUrl>https://github.com/DbDataSync/DbDataSync</PackageProjectUrl>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <!-- Packed from the ItemGroup below — the repo root README, not a copy kept here. It's the same
-         page GitHub shows on the repo's front page, so there is exactly one end-user-facing README to
-         keep in sync, not two that quietly drift; anything specific to building from source lives in
-         docs/development.md instead, linked from it rather than folded into the package listing. -->
-    <PackageReadmeFile>README.md</PackageReadmeFile>
 
     <!--
       Framework-dependent and RID-agnostic. LibGit2Sharp, SQLite and DuckDB.NET all ship their native
-      assets under runtimes/(rid)/ and resolve at run time, so one package serves every platform.
+      assets under runtimes/(rid)/ and resolve at run time, so one build serves every platform.
       Self-contained is ruled out anyway: ProcessSupervisor spawns `dotnet exec`, which needs the
       muxer on PATH.
     -->
@@ -72,7 +47,7 @@
   <ItemGroup>
     <!-- The `setup` command's TUI (phase 128) — this project's first real package dependency.
          Managed-only (no runtimes/ native assets), net10.0-targeted like this project itself, so it
-         adds nothing to worry about for `dotnet tool install -g` or the container image. Pinned
+         adds nothing to worry about for the zips or the container image. Pinned
          exact, not a floating range, matching how this repo pins everywhere else. -->
     <PackageReference Include="Terminal.Gui" />
     <!-- Phase 136: WindowsServiceEventLog writes/registers directly against the Windows Event Log —
@@ -115,45 +90,14 @@
     <InternalsVisibleTo Include="DbDataSync.Cli.Tests" />
   </ItemGroup>
 
-  <ItemGroup>
-    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
-  </ItemGroup>
-
   <!--
-    Phase 162: the README that ships in the package is a rewritten copy, not the repository's file. The repository's README
-    (and every doc) is written with relative links, which GitHub renders and an offline checkout follows; nuget.org shows the
-    README away from the repository, where those go nowhere. tools/docs/nuget-readme.mjs makes each one absolute and pins it to
-    the commit being packed (see its header for why not `main`, and why not the release tag). It fails the pack on a link to a
-    file that is not there. Without node — a plain local `dotnet pack` — the repository's own README is packed with a warning;
-    the release and snapshot workflows assert that a shipped README has no relative link left, so that fallback cannot ship.
-    Pass -p:ReadmeRef=<commit> to pin something other than the checked-out HEAD.
-  -->
-  <PropertyGroup>
-    <ReadmeSource>$(MSBuildProjectDirectory)/../../README.md</ReadmeSource>
-    <ReadmeForNuGet>$(MSBuildProjectDirectory)/obj/nuget-readme/README.md</ReadmeForNuGet>
-    <ReadmeScript>$(MSBuildProjectDirectory)/../../tools/docs/nuget-readme.mjs</ReadmeScript>
-  </PropertyGroup>
-
-  <Target Name="PrepareNuGetReadme" BeforeTargets="_GetPackageFiles" Condition="Exists('$(ReadmeScript)')">
-    <Delete Files="$(ReadmeForNuGet)" />
-    <Exec Command="node &quot;$(ReadmeScript)&quot; --in &quot;$(ReadmeSource)&quot; --out &quot;$(ReadmeForNuGet)&quot;" Condition="'$(ReadmeRef)' == ''" ContinueOnError="true" />
-    <Exec Command="node &quot;$(ReadmeScript)&quot; --in &quot;$(ReadmeSource)&quot; --out &quot;$(ReadmeForNuGet)&quot; --ref $(ReadmeRef)" Condition="'$(ReadmeRef)' != ''" ContinueOnError="true" />
-    <Warning Condition="!Exists('$(ReadmeForNuGet)')"
-             Text="The package README was not rewritten (is node installed?): it will carry the repository's relative links. Fine for a local pack; a release checks for this." />
-    <ItemGroup Condition="Exists('$(ReadmeForNuGet)')">
-      <None Remove="..\..\README.md" />
-      <None Include="$(ReadmeForNuGet)" Pack="true" PackagePath="\" />
-    </ItemGroup>
-  </Target>
-
-  <!--
-    Phase 196L: every package carries the launcher, so any installed version can put it in place or repair it
+    Phase 196L: every publish carries the launcher, so any installed version can put it in place or repair it
     (`service install`, `launcher repair`, and the automatic conversion of a pre-196L install). An apphost is a
     native per-platform binary and this package is RID-agnostic, so it carries one complete launcher per RID under
     launcher/<rid>/, and the installer picks by SlotPaths.PortableRuntimeIdentifier().
 
-    Publish (which pack runs) builds every RID in LauncherRuntimeIdentifiers — this needs the apphost packs, so
-    network on first use; set it to `none` where no launcher is wanted (the container image: not a tool install).
+    Publish builds every RID in LauncherRuntimeIdentifiers — this needs the apphost packs, so
+    network on first use; set it to `none` where no launcher is wanted (the container image).
     An ordinary build copies only this machine's launcher, built without a RID, so the inner loop and the tests
     need nothing new. Its directory is named by the portable RID the installer will look for — not by the SDK's
     own, which a distribution's source-built SDK reports as e.g. ubuntu.24.04-x64.

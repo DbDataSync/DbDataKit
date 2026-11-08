@@ -20,7 +20,7 @@ COPY DbDataSync/tools/ ./tools/
 # development default applies, which is what an image built by hand should say. Set, it is the version `dbdatasync version`
 # prints and the one `dbdatasync update` compares against, so a published image must always be given it: without it an image
 # reports a build timestamp with `-alpha` on it, whatever release it really is.
-# LauncherRuntimeIdentifiers=none (phase 196L): the per-platform launchers are for converting a `dotnet tool` install to
+# LauncherRuntimeIdentifiers=none (phase 196L): the per-platform launchers are for converting a tool-style install to
 # slots; an image is never one, and building them would fetch eight apphost packs for nothing.
 ARG VERSION=""
 RUN dotnet publish src/DbDataSync.Cli/DbDataSync.Cli.csproj \
@@ -67,8 +67,8 @@ ENTRYPOINT ["dotnet", "/app/DbDataSync.Cli.dll", "server", "run", "--url", "http
 #
 # The SDK, not just the ASP.NET runtime (phase 120) — LibraryInstaller shells out to `dotnet publish`
 # to restore a library an operator installs from the web console, and `publish` (not `restore`) is
-# what produces the flat lib/ with native assets and a .deps.json (phase 109c). Every non-container
-# deployment already has the SDK (`dbdatasync` is a `dotnet tool`, which requires it); the container
+# what produces the flat lib/ with native assets and a .deps.json (phase 109c). Most non-container
+# deployments already have the SDK (the dotnet tool package that required it is gone, but a machine that builds libraries still needs it); the container
 # was the only place a web-triggered install could not run `dotnet publish` at all. Bigger
 # (~250MB → ~750MB uncompressed base) — accepted; the `runtime` stage above is the alternative for a
 # shop that only ever installs catalog drivers and wants the smaller, SDK-less footprint back.

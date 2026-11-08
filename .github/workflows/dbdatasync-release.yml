@@ -6,9 +6,10 @@ name: DbDataSync release
 #   gh workflow run dbdatasync-release.yml --ref main -f sha=<an older commit on main>
 #
 # It releases the newest commit on main, or `sha` (which must be on main), and only if that exact commit has a green "DbDataSync CI" run.
-# It packs and checks the package, tags the commit dbdatasync/v<version> and publishes a GitHub Release in THIS repository with the package
-# attached, plus the standard zip packages, the Windows installer (.msi) and install scripts (dist/README.md). No branch is pushed or merged: a release is a tag and its assets. Everything runs on the built-in GITHUB_TOKEN; there is no
-# NuGet push (paused), no container image (dispatch dbdatasync-publish-image.yml by hand) and no GitHub App.
+# It builds the standard zip packages, the Windows installer (.msi) and the install scripts (dist/README.md), checks them, tags the commit
+# dbdatasync/v<version> and publishes a GitHub Release in THIS repository with them attached. There is no dotnet tool package (owner decision
+# 2026-11-08). No branch is pushed or merged: a release is a tag and its assets. Everything runs on the built-in GITHUB_TOKEN; there is no
+# container image (dispatch dbdatasync-publish-image.yml by hand) and no GitHub App.
 
 on:
   workflow_dispatch:
@@ -134,25 +135,13 @@ jobs:
         with:
           node-version: "24"
       # The shipped version is computed here, from the clock — not typed by a human anywhere.
-      # YYYY.MM.DD.HHmm in UTC, which is a valid four-part assembly version (every part is well under
-      # the 65534 ceiling) and sorts as a NuGet version in the same order it was released in.
+      # YYYY.M.D.HHmm in UTC, which is a valid four-part assembly version (every part is well under
+      # the 65534 ceiling). Every part is normalized with `$((10#$part))` (no leading zero; 10# forces base 10 rather than
+      # bash's octal reading of "09"), so the string is the same everywhere it is used: the tag, the file names and what
+      # `dbdatasync version` reports.
       #
-      # Whether this is a prerelease is the one thing the operator *does* still choose, via the
-      # `beta` checkbox on the manual run (the dispatch UI, or `gh workflow run release.yml -f
-      # beta=true`) — appends a `-beta` SemVer 2 prerelease label, which nuget.org then correctly
-      # hides from a plain `dotnet tool install` (only `--prerelease`, or an exact `--version`, finds
-      # it). That matters the moment a real public feed is on the other end of this workflow rather
-      # than only a GitHub Release asset.
-      #
-      # Normalized here, before it ever reaches MSBuild — not left zero-padded and reconciled later.
-      # `date`'s own %m/%d/%H%M are always zero-padded (2026.09.11.0421), but NuGet strips a leading
-      # zero from every dot-separated numeric component of a version core (2026.9.11.421 — the pack
-      # step's own comment already documents this). AssemblyInformationalVersionAttribute, unlike the
-      # package version, is just a raw echo of whatever -p:Version was actually given — it does *not*
-      # go through NuGet's normalization, so a zero-padded input here means the assembly's own
-      # reported version and the nupkg's version disagree downstream, in string form, forever
-      # (`$((10#$part))` forces base-10 rather than bash's own octal interpretation of a leading zero,
-      # which would otherwise reject "09" outright as an invalid octal digit).
+      # Whether this is a prerelease is the one thing the operator *does* still choose, via the `beta` checkbox on the manual run
+      # (or `-f beta=true`): it appends a `-beta` SemVer 2 prerelease label and sets the prerelease flag on the GitHub Release.
       - name: Compute the version
         id: version
         env:
@@ -185,120 +174,13 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
 
-      # -p:Version is a global MSBuild property, so it overrides the csproj's development default
-      # rather than colliding with it.
-      # NuGet normalizes the version it is handed — leading zeros are stripped, so a 2026.09.01.1805
-      # asked for on the command line ships as 2026.9.1.1805, and that shorter string is what the
-      # package, the filename and `dbdatasync version` all report. Rather than reimplement those
-      # normalization rules here and risk drifting from them, the shipped version is read back off
-      # the filename NuGet chose. That is what the title, the notes and the check below then use.
-      - name: Pack the global tool
-        id: pack
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          dotnet pack src/DbDataSync.Cli/DbDataSync.Cli.csproj \
-            -c Release -o artifacts \
-            -p:Version="$VERSION"
-
-          # DbDataSync.Cli references DbDataSync.Drivers.Abstractions, which has had its own
-          # GeneratePackageOnBuild=true since phase 109e (for a future third-party compiled IDriver
-          # plugin to reference) — and -o/-p:Version on the command line become global MSBuild
-          # properties applying to the *whole* build graph, not just the top-level project, so packing
-          # the Cli quietly packs Abstractions too, into the same -o directory. A bare
-          # `DbDataSync.*.nupkg` glob matches both filenames (<PackageId>.<Version>.nupkg, and both ids
-          # start with "DbDataSync."), which is exactly how this was caught: the first real tag push
-          # this repo ever made picked the wrong one. Anchored to a digit right after the id — a
-          # version always starts with one, "Drivers" never does — the narrowest fix that leaves
-          # Abstractions' own packing (deliberate, not this phase's to touch) alone. The exact resolved
-          # path is captured once here and reused by every later step, rather than re-globbing and
-          # risking the same ambiguity a second time.
-          nupkg=$(ls artifacts/DbDataSync.[0-9]*.nupkg)
-          shipped=$(basename "$nupkg" .nupkg)
-          shipped=${shipped#DbDataSync.}
-          echo "asked for $VERSION, NuGet shipped $shipped ($nupkg)"
-          echo "shipped=$shipped" >> "$GITHUB_OUTPUT"
-          echo "nupkg=$nupkg" >> "$GITHUB_OUTPUT"
-
-      # The same smoke test ci.yml's package job runs, repeated here deliberately: a release is
-      # public and awkward to withdraw, so the package proves it installs and runs before it is
-      # published rather than after. It also confirms the computed version actually reached the
-      # assembly — `dbdatasync version` reflects the assembly's own version, so a silently ignored
-      # -p:Version would still print 0.1.0 and fail this step.
-      #
-      # --version "$SHIPPED", not left to float: --add-source only *adds* to the default sources
-      # (nuget.org included, confirmed by `dotnet nuget list source`), and an unversioned
-      # `dotnet tool install` considers only stable versions by design — which hides a -beta package
-      # in the local artifacts feed exactly as it would on nuget.org itself, so a beta tag's smoke
-      # test found nothing in either source without this. An explicit version bypasses that
-      # restriction and is the stronger assertion anyway: it proves *this exact* computed version
-      # installs, not merely that installing found something whose reported string happens to
-      # contain it.
-      # Phase 160: a release is public and awkward to withdraw, so the package proves it carries the web console and
-      # every page of docs/ before it is published. (ci.yml's own package job, which asserts the same, only runs on a
-      # `release/v*` tag push, which this workflow no longer makes — so this is where the check actually runs.)
-      - name: Check that it contains the launchers, and no web app
-        env:
-          NUPKG: ${{ steps.pack.outputs.nupkg }}
-        run: |
-          rm -rf /tmp/nupkg-contents
-          mkdir -p /tmp/nupkg-contents
-          unzip -q "$NUPKG" -d /tmp/nupkg-contents
-          # The tool root: the folder with the launchers. Sync serves no web app any more (plan 13, U11): the screens are the console's.
-          toolroot=$(dirname "$(find /tmp/nupkg-contents/tools -type d -name launcher | head -n1)")
-          if [ -z "$toolroot" ] || [ "$toolroot" = "." ]; then
-            echo "::error::the packed nupkg has no tools/<tfm>/any/launcher/"
-            exit 1
-          fi
-          if [ -n "$(find /tmp/nupkg-contents/tools -type d -name wwwroot -print -quit)" ]; then
-            echo "::error::the packed nupkg carries a wwwroot: Sync no longer serves a web app"
-            exit 1
-          fi
-
-          # Phase 196L: a launcher for every platform a slot install can convert on. Without them `service install`
-          # and `update --apply` on a pre-196L install refuse to convert, and nothing else notices.
-          for launcher in win-x64/dbdatasync.exe win-arm64/dbdatasync.exe linux-x64/dbdatasync linux-arm64/dbdatasync \
-                          linux-musl-x64/dbdatasync linux-musl-arm64/dbdatasync osx-x64/dbdatasync osx-arm64/dbdatasync; do
-            if [ ! -s "$toolroot/launcher/$launcher" ]; then
-              echo "::error::the packed nupkg is missing launcher/$launcher"
-              exit 1
-            fi
-          done
-          # Phase 162: the README that shipped is the rewritten copy — no relative link left, and every doc link pinned to the
-          # commit that was packed (HEAD of this checkout, which is the released commit).
-          unzip -p "$NUPKG" README.md > /tmp/packed-readme.md
-          relative=$(grep -oE '\]\([^)]+\)' /tmp/packed-readme.md | grep -vE '^\]\((https?:|mailto:|#)' || true)
-          if [ -n "$relative" ]; then
-            echo "::error::the packed README still has relative links, which nuget.org cannot follow:"
-            echo "$relative"
-            exit 1
-          fi
-          if ! grep -q "blob/$(git rev-parse HEAD)/docs/" /tmp/packed-readme.md; then
-            echo "::error::the packed README's doc links are not pinned to this commit ($(git rev-parse HEAD))"
-            exit 1
-          fi
-
-      - name: Install it into a clean tool root and check it reports the computed version
-        env:
-          SHIPPED: ${{ steps.pack.outputs.shipped }}
-        run: |
-          dotnet tool install --tool-path /tmp/dbdatasync-tool --add-source artifacts DbDataSync --version "$SHIPPED"
-          reported=$(/tmp/dbdatasync-tool/dbdatasync version)
-          echo "dbdatasync version said: $reported"
-          case "$reported" in
-            *"$SHIPPED"*) ;;
-            *)
-              echo "expected the packed version $SHIPPED in that output"
-              exit 1
-              ;;
-          esac
-
-      # The standard zip packages (dist/README.md), beside the tool package: framework-dependent publishes (they need the .NET 10 runtime;
-      # self-contained is ruled out, see DbDataSync.Cli.csproj) with the apphost renamed to what dist.json promises. Built after the
-      # tool package's checks and before the tag, like everything that must exist for the version to count as shipped.
+      # The standard zip packages (dist/README.md): framework-dependent publishes (they need the .NET 10 runtime;
+      # self-contained is ruled out, see DbDataSync.Cli.csproj) with the apphost renamed to what dist.json promises. Built before
+      # the tag, like everything that must exist for the version to count as shipped. -p:Version is a global MSBuild property, so it
+      # overrides the csproj's development default.
       - name: Build the zip packages
         env:
-          SHIPPED: ${{ steps.pack.outputs.shipped }}
+          SHIPPED: ${{ steps.version.outputs.version }}
         run: |
           mkdir -p artifacts/dist
           for rid in win-x64 linux-x64; do
@@ -318,8 +200,8 @@ jobs:
         with:
           product: dbdatasync
           meta: DbDataSync/dist.json
-          version: ${{ steps.pack.outputs.shipped }}
-          zip: DbDataSync/artifacts/dist/dbdatasync-v${{ steps.pack.outputs.shipped }}-win-x64.zip
+          version: ${{ steps.version.outputs.version }}
+          zip: DbDataSync/artifacts/dist/dbdatasync-v${{ steps.version.outputs.version }}-win-x64.zip
           out: DbDataSync/artifacts/dist
 
       - name: Checksums
@@ -327,7 +209,7 @@ jobs:
 
       - name: Smoke test the linux-x64 zip
         env:
-          SHIPPED: ${{ steps.pack.outputs.shipped }}
+          SHIPPED: ${{ steps.version.outputs.version }}
         run: |
           mkdir /tmp/zip-smoke
           unzip -q "artifacts/dist/dbdatasync-v$SHIPPED-linux-x64.zip" -d /tmp/zip-smoke
@@ -357,43 +239,30 @@ jobs:
       - name: Tag this commit with the released version
         if: ${{ !inputs.dry_run }}
         env:
-          VERSION: ${{ steps.pack.outputs.shipped }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           git tag "dbdatasync/v$VERSION"
           git push origin "refs/tags/dbdatasync/v$VERSION"
 
-      # The nupkg alone. ci.yml's package job builds a container image but only ever tags it
-      # dbdatasync:ci locally and never pushes it to a registry, so there is no published image
-      # reference a release could point at — attaching one would mean first deciding to publish
-      # images somewhere, which is a separate call this phase does not make.
-      # Created in this repository against the tag pushed above. `dbdatasync update` reads this repository's releases and keeps
-      # the ones whose tag starts with `dbdatasync/` (v<version> for every channel: stable, v<version>-beta, v<version>-snapshot.g<sha>), so
-      # the release has to carry exactly the two assets it looks for: DbDataSync.<version>.nupkg and its .sha512 checksum.
+      # Created in this repository against the tag pushed above. The assets are the zips, the MSI and SHA256SUMS (artifacts/dist); the
+      # install scripts and the Scoop manifest are attached by publish-dist below. ci.yml's package job builds a container image but only
+      # ever tags it dbdatasync:ci locally, so no image is attached here (dispatch dbdatasync-publish-image.yml for that).
       # --latest=false because "latest" is one marker for the whole repository, not one per product.
       - name: Publish the GitHub Release
         if: ${{ !inputs.dry_run }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.pack.outputs.shipped }}
+          VERSION: ${{ steps.version.outputs.version }}
           PRERELEASE: ${{ steps.version.outputs.prerelease }}
-          NUPKG: ${{ steps.pack.outputs.nupkg }}
         run: |
           {
-            echo "The \`dbdatasync\` .NET global tool, packed from $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$SHA."
+            echo "\`dbdatasync\`, built from $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$SHA."
             echo
             echo "The version is the UTC date and time this release was built."
             [ "$PRERELEASE" = "true" ] && echo "**This is a prerelease.**"
             echo
-            echo "Install it with \`dbdatasync update --to $VERSION\`, or by hand from the attached package:"
-            echo
-            echo '```'
-            echo "dotnet tool install --global --add-source . DbDataSync --version $VERSION"
-            echo '```'
-            echo
-            echo "The zip packages (win-x64, linux-x64; they need the .NET 10 runtime) are installed with the install scripts attached to this release, or with Scoop on Windows; on Windows the .msi installs it (and registers the service) with a double-click. See \`dist/README.md\` in the repository."
+            echo "The zip packages (win-x64, linux-x64; they need the .NET 10 runtime) are installed with the install scripts attached to this release, or with Scoop on Windows; on Windows the .msi installs it (and registers the service) with a double-click. A container image is published by a separate workflow. There is no .NET tool package. See \`dist/README.md\` in the repository."
           } > /tmp/release-notes.md
-          # The checksum `dbdatasync update` verifies the download against: base64 of the package's SHA-512, no newline.
-          openssl dgst -sha512 -binary "$NUPKG" | base64 -w0 > "$NUPKG.sha512"
           prerelease_flag=()
           [ "$PRERELEASE" = "true" ] && prerelease_flag=(--prerelease)
           gh release create "dbdatasync/v$VERSION" \
@@ -402,7 +271,7 @@ jobs:
             --title "DbDataSync $VERSION" \
             --notes-file /tmp/release-notes.md \
             "${prerelease_flag[@]}" \
-            "$NUPKG" "$NUPKG.sha512" artifacts/dist/*
+            artifacts/dist/*
 
       - uses: ./.github/actions/publish-dist
         if: ${{ !inputs.dry_run }}
@@ -411,8 +280,8 @@ jobs:
         with:
           product: dbdatasync
           meta: DbDataSync/dist.json
-          version: ${{ steps.pack.outputs.shipped }}
+          version: ${{ steps.version.outputs.version }}
           prerelease: ${{ steps.version.outputs.prerelease }}
           sums: DbDataSync/artifacts/dist/SHA256SUMS
           sha: ${{ env.SHA }}
-          msi: DbDataSync/artifacts/dist/dbdatasync-v${{ steps.pack.outputs.shipped }}-win-x64.msi
+          msi: DbDataSync/artifacts/dist/dbdatasync-v${{ steps.version.outputs.version }}-win-x64.msi

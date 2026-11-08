@@ -164,8 +164,8 @@ public static class ServiceCommand
                 $"Warning: '{executable}' is installed in a user profile — a service pointing here " +
                 "breaks if that profile is removed, or you re-register from another account. Install " +
                 "machine-wide first:");
-            Console.WriteLine($"    dotnet tool install --tool-path \"{CliOptions.DefaultToolDir}\" DbDataSync");
-            Console.WriteLine($"    \"{CliOptions.DefaultToolDir}\\dbdatasync.exe\" tool install");
+            Console.WriteLine("    the Windows installer (MSI), or install.ps1 -Machine from an elevated prompt");
+            Console.WriteLine("    (see docs/install.md; it installs into " + CliOptions.DefaultToolDir + ")");
             Console.WriteLine();
         }
 

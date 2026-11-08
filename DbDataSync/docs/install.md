@@ -2,102 +2,71 @@
 
 [DbDataSync](../README.md) · **Install** · [Configuration](configuration.md) · [Getting started](getting-started.md) · [Replication concepts](replication-concepts.md) · [Drivers and libraries](drivers-and-libraries.md) · [State database](state-database.md) · [Building from source](development.md)
 
-`dbdatasync` ships as a .NET global tool. Pick the install below that matches how you plan to run it.
+`dbdatasync` ships as zips, a Windows installer (MSI), install scripts, a Scoop manifest and a container image; there is no .NET tool package (`dotnet tool install` is gone). Pick the install below that matches how you plan to run it. The routes are the suite's standard ones, described in full in [`dist/README.md`](https://github.com/DbDataSync/DbDataKit/blob/main/dist/README.md).
 
 ## Prerequisites
 
-- **.NET SDK** — needed to install or update `dbdatasync`
-- **.NET runtime** — enough to run `dbdatasync` afterward
+- **.NET 10 runtime** — needed to run `dbdatasync` from a zip, the MSI or Scoop (the container image has it)
+- **.NET SDK** — only to install drivers and libraries from the Drivers screens, which restore them with `dotnet publish`
 
 ## User-local install
 
 Use this to try DbDataSync out, or for a single-user setup.
 
-```sh
-dotnet tool install -g DbDataSync
+```powershell
+irm https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/install.ps1 | iex
 dbdatasync server setup
 ```
 
-This installs into your own profile (`~/.dotnet/tools`, `%USERPROFILE%\.dotnet\tools`). It's not
-suitable for a Windows or systemd service, or for a machine shared by more than one person — see the
-sections below for those.
+```bash
+curl -fsSL https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/install.sh | bash
+dbdatasync server setup
+```
+
+This installs into your own profile (`%LOCALAPPDATA%\Programs\DbDataSync`, `~/.local/share/dbdatasync` with a link in `~/.local/bin`) and puts it on your
+`PATH` (open a new terminal). It's not suitable for a Windows or systemd service, or for a machine shared by more than one person — see the sections below for those.
 
 ## Windows machine-wide install
 
-Use this to register DbDataSync as a Windows service, or to make `dbdatasync` available to every user
-on a shared machine.
+Use this to register DbDataSync as a Windows service, or to make `dbdatasync` available to every user on a shared machine. Either run the
+[MSI](#windows-installer-msi), or run the install script from an elevated prompt:
 
 ```powershell
-dotnet tool install --tool-path "$env:ProgramFiles\DbDataSync" DbDataSync
-& "$env:ProgramFiles\DbDataSync\dbdatasync.exe" tool install
-```
-
-`tool install` adds the directory to the Machine `Path`. Open a new terminal for it to take effect.
-
-To register the service:
-
-```powershell
-dbdatasync service install
+irm https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/install.ps1 -OutFile install.ps1
+.\install.ps1 -Machine -InstallService
 dbdatasync config check
 ```
 
-`--account` sets the service account. A connection using integrated authentication connects as that
-account.
-
-`service install` also sets up versioned slots in that directory (see [Updating](#updating)), and says so. To
-update, from an elevated prompt:
+`-Machine` installs into `$env:ProgramFiles\DbDataSync` and the machine `PATH`; `-InstallService` also registers the `DbDataSync` service (it runs
+`dbdatasync service install`), stopped. To register it yourself, or to set the service account (`--account`; a connection using integrated
+authentication connects as that account):
 
 ```powershell
-dbdatasync update --to <version> --apply
+dbdatasync service install
 ```
 
-Once the slots exist, don't run `dotnet tool update --tool-path` on this directory.
-
-To remove:
-
-```powershell
-dbdatasync tool uninstall
-Remove-Item -Recurse "$env:ProgramFiles\DbDataSync"
-```
+To remove: Add/Remove Programs for the MSI, or `dbdatasync service uninstall` and delete the folder for a script install; or `scoop uninstall dbdatasync`.
 
 ## Linux machine-wide install
 
-Use this to register DbDataSync as a systemd service, or to make `dbdatasync` available to every user
-on a shared machine. The same steps work on macOS; there, `tool install` adds a `/etc/paths.d` entry
-instead of a symlink.
+Use this to register DbDataSync as a systemd service, or to make `dbdatasync` available to every user on a shared machine. The same steps work on macOS
+for the program itself (there is no service on macOS).
 
 ```sh
-sudo dotnet tool install --tool-path /opt/dbdatasync DbDataSync
-sudo /opt/dbdatasync/dbdatasync tool install
+curl -fsSL https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/install.sh | sudo bash -s -- --system
 ```
 
-`tool install` links `/opt/dbdatasync/dbdatasync` from `/usr/local/bin/dbdatasync`.
-
-To register the service:
+`--system` installs into `/opt/dbdatasync` and links `dbdatasync` from `/usr/local/bin`. To register the service:
 
 ```sh
 sudo dbdatasync service install
 dbdatasync config check
 ```
 
-This runs as a dedicated `dbdatasync` system user by default (`--user` to override). It's enabled but
-not started — start it with `sudo systemctl start dbdatasync`.
+This runs as a dedicated `dbdatasync` system user by default (`--user` to override). It's enabled but not started — start it with
+`sudo systemctl start dbdatasync`.
 
-`service install` also sets up versioned slots in that directory (see [Updating](#updating)), and says so. To
-update:
-
-```sh
-sudo dbdatasync update --to <version> --apply
-```
-
-Once the slots exist, don't run `dotnet tool update --tool-path` on this directory.
-
-To remove:
-
-```sh
-sudo dbdatasync tool uninstall
-sudo rm -r /opt/dbdatasync
-```
+To remove: `sudo dbdatasync service uninstall`, then delete the install folder and the link.
 
 ## Windows installer (MSI)
 
@@ -105,13 +74,12 @@ Each release has `dbdatasync-v<version>-win-x64.msi` (the newest at
 <https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/dbdatasync.msi>): copy it to the machine and double-click, or
 `msiexec /i dbdatasync-v<version>-win-x64.msi /qn`. It installs to `C:\Program Files\DbDataSync`, puts that folder on the machine PATH and registers
 the `DbDataSync` service, stopped (`INSTALLSERVICE=0` skips that). It needs the .NET 10 runtime and says so before changing anything
-(`SKIPDOTNETCHECK=1` skips the check). Install a newer MSI over it to upgrade; Add/Remove Programs removes it, and your data stays. Like the zip, it
-cannot `dbdatasync update` itself or run the versioned slots; use the tool package for those. It is not signed yet, so Windows shows "Unknown publisher".
+(`SKIPDOTNETCHECK=1` skips the check). Install a newer MSI over it to upgrade; Add/Remove Programs removes it, and your data stays. It is not signed yet, so Windows shows "Unknown publisher".
 
 ## Zip install (install script or Scoop)
 
 Every release also carries `dbdatasync-v<version>-<win-x64|linux-x64>.zip` and the repository's standard install scripts
-([`dist/README.md`](https://github.com/DbDataSync/DbDataKit/blob/main/dist/README.md)). The zip is the program without a tool wrapper, so it needs the .NET 10 runtime on the machine
+([`dist/README.md`](https://github.com/DbDataSync/DbDataKit/blob/main/dist/README.md)). The zip needs the .NET 10 runtime on the machine
 (and the SDK, to install drivers from the Drivers screens):
 
 ```powershell
@@ -123,12 +91,17 @@ scoop install https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasy
 curl -fsSL https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/install.sh | bash
 ```
 
-A zip install cannot `dbdatasync update` itself or run the versioned slots above (only the tool package can); upgrade by running the
-installer again. Run it from an elevated prompt with `-Machine` (Program Files) when DbDataSync runs as a service: it stops the `DbDataSync`
-service, replaces the files and starts it again, and `-InstallService` also registers the service (`dbdatasync service install`). The tool
-package is the better fit for a service that needs rollback.
+Upgrade by running the installer again (`-Version` / `--version` picks a release other than the newest stable one; a beta or snapshot is installed with its
+version or with Scoop's `dist-beta` / `dist-snapshot` manifest, see `dist/README.md`). Run it from an elevated prompt with `-Machine` (Program Files) when DbDataSync runs as a
+service: it stops the `DbDataSync` service, replaces the files and starts it again, and `-InstallService` also registers the service (`dbdatasync service install`).
+Every installer checks the zip against the release's `SHA256SUMS`.
 
 ## Updating
+
+**To update, install the newer release the same way you installed this one:** a newer MSI over the old one, the install script again (or with `-Version`),
+`scoop update`, an unpacked zip over the old files, or `docker pull` of a newer tag. Releases no longer carry a `DbDataSync.<version>.nupkg` or its `.sha512`
+(the dotnet tool package is gone), so **`dbdatasync update` finds no release to install from the first release without them**. The rest of this section describes
+that command and the versioned slots; it is being removed.
 
 `dbdatasync update` lists what can be installed and lets you choose. With `--apply` it installs the version you
 choose and switches to it ([below](#applying-it)). Without `--apply` it only prints what to do:
@@ -163,7 +136,7 @@ to narrow it, `--json` for scripts, and `--to <version>` to skip the prompt.
 | `snapshot` | the newest build that has passed CI, before any release is cut | a GitHub prerelease for every commit that passes CI on `main` (not published at present), tag `dbdatasync/v<version>-snapshot.g<sha>`; the newest 20 are kept |
 
 DbDataSync is built in a repository shared with other products, so a release is recognised as DbDataSync's by its
-tag prefix (`dbdatasync/`) and by carrying a `DbDataSync.<version>.nupkg` and its checksum; releases of other products in
+tag prefix (`dbdatasync/`) and by carrying a `DbDataSync.<version>.nupkg` and its checksum (releases made before the tool package was dropped); releases of other products in
 the same repository are never listed. Snapshot publishing is not switched on yet, so that channel is empty for now.
 
 A release is downloaded for you into a per-user staging folder (`~/.local/share/DbDataSync/updates`,
@@ -172,7 +145,7 @@ beside it, and installed from that folder — no token or private feed is involv
 That checksum catches a corrupted or truncated download, **not** a tampered release; trust rests on TLS to
 `github.com` and who can publish to the repository. nuget.org is not used by `update` while NuGet publishing is paused.
 
-If this copy was not installed as a dotnet tool (a development build) or is a container image, there is nothing to
+If this copy was not installed as a dotnet tool (a development build, a zip, the MSI) or is a container image, there is nothing to
 update in place and it says so. For a container, pull a newer image tag.
 
 The release list is read from public APIs, anonymously; GitHub limits that to 60 requests an hour per
