@@ -36,7 +36,7 @@ public sealed class PackageManifestException(IReadOnlyList<ConfigDiagnostic> dia
 /// launch: { kind: assembly, assembly: bin/Orders.dll }          # or { kind: executable, command: bin/orders, args: [--quiet] }
 /// built_against: { dotnet: "10.0", kit: "1", protocol: dbdatakit.runner.v1 }
 /// # a definition package is run by a runtime package: launch: { runtime: { name: dbdatabuild-runtime, range: "2.x" } }
-/// # a runtime package: runtime: true, version: 2.1.0, an executable launch and no tasks
+/// # a runtime package: runtime: true, version: 2.1.0, platform: linux-x64 (one package per platform), an executable launch and no tasks
 /// tasks:
 ///   - name: extract
 ///     entry: { type: Orders.Tasks.Extract, method: Run }
@@ -257,16 +257,17 @@ public static class PackageManifestReader
 
             if (!Format(map)) return null;
 
-            Keys(map, "", "schema", "name", "description", "launch", "built_against", "tasks", PackageManifest.RuntimeKey, "version");
+            Keys(map, "", "schema", "name", "description", "launch", "built_against", "tasks", PackageManifest.RuntimeKey, "version", PackageManifest.PlatformKey);
             var name = Text(map, "name", "", required: true);
             var description = Text(map, "description", "", required: false);
             var isRuntime = Flag(map, PackageManifest.RuntimeKey, "") ?? false;
             var version = Text(map, "version", "", required: false);
+            var platform = Text(map, PackageManifest.PlatformKey, "", required: false);
             var launch = Launch(map);
             var built = BuiltAgainst(map);
             var tasks = isRuntime && map.Get("tasks") is null ? [] : Tasks(map);
             if (name is null) return null;
-            return new PackageManifest(name, description, launch ?? new PackageLaunch(LaunchKind.Assembly), built, tasks, isRuntime, version);
+            return new PackageManifest(name, description, launch ?? new PackageLaunch(LaunchKind.Assembly), built, tasks, isRuntime, version, platform);
         }
 
         /// <summary>The first key has to be <c>schema: package/1</c>; anything else is refused naming the file and what was found.</summary>

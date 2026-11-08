@@ -12,6 +12,7 @@ public sealed class RuntimeManifestTests
         name: dbdatabuild-runtime
         runtime: true
         version: 2.1.0
+        platform: linux-x64
         launch: { kind: executable, command: bin/dbdatabuild, args: [--runner] }
         built_against: { protocol: dbdatakit.runner.v1 }
         """;
@@ -37,7 +38,12 @@ public sealed class RuntimeManifestTests
         Assert.True(manifest.IsRuntime);
         Assert.Equal("2.1.0", manifest.Version);
         Assert.Empty(manifest.Tasks);
-        Assert.Equal(["runtime"], manifest.NewerKeys);
+        Assert.Equal(["runtime", "platform"], manifest.NewerKeys);
+        Assert.Equal("linux-x64", manifest.Platform);
+        Assert.Equal("dbdatabuild-runtime-linux-x64", manifest.PackageName);           // the registry name: one package per platform
+        Assert.Equal("dbdatabuild-runtime", manifest.Name);
+        Assert.Equal("linux-x64", PackageManifestReader.Load(PackageManifestWriter.Write(manifest), File).Manifest!.Platform);
+        Assert.Contains("\nplatform: linux-x64\n", PackageManifestWriter.Write(manifest), StringComparison.Ordinal);
         Assert.Equal(manifest.Version, PackageManifestReader.Load(PackageManifestWriter.Write(manifest), File).Manifest!.Version);
         Assert.Equal(PackageManifestWriter.Write(manifest), PackageManifestWriter.Write(PackageManifestReader.Load(PackageManifestWriter.Write(manifest), File).Manifest!));
     }
@@ -58,6 +64,34 @@ public sealed class RuntimeManifestTests
     }
 
     [Fact]
+    public void Two_platforms_of_one_runtime_are_two_packages_with_the_same_name_and_version()
+    {
+        var linux = PackageManifestReader.Load(Runtime, File).Manifest!;
+        var windows = PackageManifestReader.Load(Runtime.Replace("linux-x64", "win-x64", StringComparison.Ordinal), File).Manifest!;
+
+        Assert.Equal(linux.Name, windows.Name);
+        Assert.Equal(linux.Version, windows.Version);
+        Assert.NotEqual(linux.PackageName, windows.PackageName);
+        Assert.Equal("dbdatabuild-runtime-win-x64", windows.PackageName);
+        Assert.Equal(RuntimePlatforms.PackageName("dbdatabuild-runtime", "win-x64"), windows.PackageName);
+    }
+
+    [Fact]
+    public void A_runtime_whose_name_and_platform_are_too_long_for_a_package_name_is_refused()
+    {
+        var yaml = Runtime.Replace("name: dbdatabuild-runtime", "name: " + new string('a', 60), StringComparison.Ordinal);
+
+        Assert.Contains("too long for a package name", Errors(yaml));
+    }
+
+    [Fact]
+    public void The_current_platform_is_the_operating_system_and_the_architecture()
+    {
+        Assert.Matches("^(win|linux|osx)-[a-z0-9]+$", RuntimePlatforms.Current);
+        Assert.True(RuntimePlatforms.IsSupported("win-x64") && RuntimePlatforms.IsSupported("linux-x64") && !RuntimePlatforms.IsSupported("osx-arm64"));
+    }
+
+    [Fact]
     public void A_package_without_the_newer_keys_has_none()
     {
         var manifest = new PackageManifest("p", null, new PackageLaunch(LaunchKind.Assembly, "a.dll"), new BuiltAgainst("10.0", null, "dbdatakit.runner.v1"), [new PackageTask("t", new TaskEntry("T"))]);
@@ -66,7 +100,11 @@ public sealed class RuntimeManifestTests
     }
 
     [Theory]
-    [InlineData("runtime: true\nversion: 2.1.0\nlaunch: { kind: executable, command: bin/x }\ntasks:\n  - name: t", "no tasks of its own")]
+    [InlineData("runtime: true\nversion: 2.1.0\nplatform: linux-x64\nlaunch: { kind: executable, command: bin/x }\ntasks:\n  - name: t", "no tasks of its own")]
+    [InlineData("runtime: true\nversion: 2.1.0\nlaunch: { kind: executable, command: bin/x }", "says the platform its files are built for")]
+    [InlineData("runtime: true\nversion: 2.1.0\nplatform: osx-arm64\nlaunch: { kind: executable, command: bin/x }", "is not a platform runtime packages are published for: win-x64, linux-x64")]
+    [InlineData("version: 2.1.0\nplatform: linux-x64\nlaunch: { kind: executable, command: bin/x }\ntasks:\n  - name: t", "Only a runtime package")]
+    [InlineData("platform: linux-x64\nlaunch: { kind: executable, command: bin/x }\ntasks:\n  - name: t", "Only a runtime package (`runtime: true`) has a `platform`")]
     [InlineData("runtime: true\nlaunch: { kind: executable, command: bin/x }", "says its version")]
     [InlineData("runtime: true\nversion: two\nlaunch: { kind: executable, command: bin/x }", "is not a version")]
     [InlineData("runtime: true\nversion: 2.1.0\nlaunch: { kind: assembly, assembly: bin/x.dll }", "starts as an executable")]

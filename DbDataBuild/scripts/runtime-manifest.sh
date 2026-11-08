@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # The manifest (package/1) of the Build runtime package (plan 28c E05, section 4.1 of the plan): text on stdout.
 #   scripts/runtime-manifest.sh <rid> <version> [--framework-dependent]
+# One package per platform: the manifest says `platform: <rid>` and the runner stores the package as dbdatabuild-runtime-<rid> (PackageManifest.PackageName), so both platforms publish side by side with the same version.
 # The text is what PackageManifestWriter writes (a test holds the two equal). <version> is the Build release as three numbers (1.2.3; a suffix such as -beta.4 is cut off: a range reads numbers only). The layout is documented in docs/operations.md, "The runtime package".
 set -euo pipefail
 RID="${1:?usage: runtime-manifest.sh <rid> <version> [--framework-dependent]}"
@@ -24,6 +25,7 @@ name: dbdatabuild-runtime
 description: "The dbdatabuild engine $VERSION for $RID, run by definition packages that name it"
 runtime: true
 version: "$VERSION"
+platform: $RID
 launch: $LAUNCH
 built_against: { dotnet: "10.0", kit: "1", protocol: dbdatakit.runner.v1 }
 YAML

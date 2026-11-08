@@ -22,8 +22,14 @@ public sealed class RuntimeTests
 
     private static readonly BuiltAgainst Built = new(null, null, "dbdatakit.runner.v1");
 
-    private static PackageManifest Runtime(string version) =>
-        new(Engine, null, new PackageLaunch(LaunchKind.Executable, Command: "bin/engine", Args: ["--serve"]), Built, [], IsRuntime: true, Version: version);
+    private const string Linux = RuntimePlatforms.LinuxX64;
+    private const string Windows = RuntimePlatforms.WindowsX64;
+
+    /// <summary>The registry name of the runtime built for a platform, as a publish stores it.</summary>
+    private static string Stored(string platform = Linux) => RuntimePlatforms.PackageName(Engine, platform);
+
+    private static PackageManifest Runtime(string version, string platform = Linux) =>
+        new(Engine, null, new PackageLaunch(LaunchKind.Executable, Command: "bin/engine", Args: ["--serve"]), Built, [], IsRuntime: true, Version: version, Platform: platform);
 
     private static PackageManifest Defined(string range, string name = Definition) =>
         new(name, null, new PackageLaunch(LaunchKind.Executable, Args: ["--definition"], Runtime: new RuntimeReference(Engine, range)), Built,
@@ -60,17 +66,17 @@ public sealed class RuntimeTests
 
         public ModuleWorkQueueStore Queue => new(Database, "runner");
 
-        public (Guid Id, StagingFollower Follower) Instance(Func<PackageManifest, string?>? contracts = null)
+        public (Guid Id, StagingFollower Follower) Instance(Func<PackageManifest, string?>? contracts = null, string platform = Linux)
         {
             var id = Instances.Register("dbdatarunner", "host-" + Guid.NewGuid().ToString("N")[..4], "1.0");
-            return (id, new StagingFollower(Database, Publisher, Cache, Activator, new StagingOptions { Instance = () => id, Contracts = contracts }));
+            return (id, new StagingFollower(Database, Publisher, Cache, Activator, new StagingOptions { Instance = () => id, Contracts = contracts, Platform = platform }));
         }
 
         public int Publish(PackageManifest manifest, PublishMode mode, params (string Path, string Content)[] files)
         {
             var artifacts = new PublishArtifacts(Payloads, Publisher, "ada");
             var refs = files.Select(f => artifacts.Add(f.Path, System.Text.Encoding.UTF8.GetBytes(f.Content))).ToList();
-            return Publisher.Publish(new PublishRequest(PackageActivator.Kind, manifest.Name, PackageManifestWriter.Write(manifest), "ada", Prod, mode, Artifacts: refs)).Version.Version;
+            return Publisher.Publish(new PublishRequest(PackageActivator.Kind, manifest.PackageName, PackageManifestWriter.Write(manifest), "ada", Prod, mode, Artifacts: refs)).Version.Version;
         }
 
         public InstanceStatus StatusOf(Guid instance, string package) => Publisher.Status.List(PackageActivator.Kind, package, Prod).Single(s => s.Instance == instance.ToString("D"));
@@ -131,7 +137,7 @@ public sealed class RuntimeTests
 
         var status = rig.StatusOf(id, Definition);
         Assert.Equal(InstanceStates.Failed, status.State);
-        Assert.Contains("no active version of 'engine'", status.Error);
+        Assert.Contains("has no active version for linux-x64: it has no active version of it for any platform", status.Error);
     }
 
     [Theory, MemberData(nameof(Engines))]
@@ -170,21 +176,21 @@ public sealed class RuntimeTests
 
         // while the run is in flight: still runtime 2.1 active, the definition held, the activation waiting
         Assert.False(passing.IsCompleted);
-        Assert.Equal(one, rig.Publisher.Head(PackageActivator.Kind, Engine, Prod)!.Active);
+        Assert.Equal(one, rig.Publisher.Head(PackageActivator.Kind, Stored(), Prod)!.Active);
 
         Assert.True(rig.Queue.TryFinish(claimed.Id, "loop-a", WorkItemStatus.Done));
         var result = await passing;
 
-        Assert.Equal([$"{Engine}/{Prod}@{three}"], result.Activated);
-        Assert.Equal(three, rig.Publisher.Head(PackageActivator.Kind, Engine, Prod)!.Active);
+        Assert.Equal([$"{Stored()}/{Prod}@{three}"], result.Activated);
+        Assert.Equal(three, rig.Publisher.Head(PackageActivator.Kind, Stored(), Prod)!.Active);
         Assert.False(holds.IsHeld(PackageActivator.Kind, Definition, Prod));
-        Assert.False(holds.IsHeld(PackageActivator.Kind, Engine, Prod));
+        Assert.False(holds.IsHeld(PackageActivator.Kind, Stored(), Prod));
 
         var live = rig.Instances.LiveInstances(TimeSpan.FromMinutes(5)).Select(l => l.Instance.Id.ToString("D")).ToList();
-        var back = await rig.Activator.RollbackAsync(Engine, Prod, new ActivationRequest(ActivationMode.Administrator, "ada", live));
+        var back = await rig.Activator.RollbackAsync(Stored(), Prod, new ActivationRequest(ActivationMode.Administrator, "ada", live));
         Assert.True(back.Activated);
-        Assert.Equal(one, rig.Publisher.Head(PackageActivator.Kind, Engine, Prod)!.Active);
-        Assert.Equal(three, rig.Publisher.Head(PackageActivator.Kind, Engine, Prod)!.Previous);
+        Assert.Equal(one, rig.Publisher.Head(PackageActivator.Kind, Stored(), Prod)!.Active);
+        Assert.Equal(three, rig.Publisher.Head(PackageActivator.Kind, Stored(), Prod)!.Previous);
     }
 
     // ---- the scheduler
@@ -194,7 +200,7 @@ public sealed class RuntimeTests
     {
         using var h = new SchedulerHarness(engine);
         var definition = Defined("2.x", SchedulerHarness.Package);
-        h.Versions.Add(Engine, "1", Runtime("2.1.0")).ActivateRuntime(Engine, "1", Channel);
+        h.Versions.Add(Stored(), "1", Runtime("2.1.0")).ActivateRuntime(Stored(), "1", Channel);
         h.Activate(definition, "1");
         var runner = new FakeRunner(h.Database);
         var scheduler = h.NewScheduler(runner, worker: "loop-a");
@@ -211,15 +217,132 @@ public sealed class RuntimeTests
         Assert.NotEqual(first.PackageDirectory, first.RuntimeDirectory);
 
         // runtime 2.2 is activated: the next run is on it, and 2.x still holds
-        h.Versions.Add(Engine, "2", Runtime("2.2.0")).ActivateRuntime(Engine, "2", Channel);
+        h.Versions.Add(Stored(), "2", Runtime("2.2.0")).ActivateRuntime(Stored(), "2", Channel);
         Enqueue();
         await Tick(scheduler);
         Assert.Equal(2, runner.Requests.Count);
 
         // runtime 3.0: the definition's 2.x no longer holds, the run does not start
-        h.Versions.Add(Engine, "3", Runtime("3.0.0")).ActivateRuntime(Engine, "3", Channel);
+        h.Versions.Add(Stored(), "3", Runtime("3.0.0")).ActivateRuntime(Stored(), "3", Channel);
         Enqueue();
         await Tick(scheduler);
+        Assert.Equal(2, runner.Requests.Count);
+    }
+
+    // ---- platforms
+
+    [Theory, MemberData(nameof(Engines))]
+    public async Task A_runtime_published_for_both_platforms_side_by_side_resolves_to_the_runners_own_platform_on_either_runner(string engine)
+    {
+        using var rig = new Rig(engine);
+        // the same runtime name and the same engine version, once per platform: no clash, each platform has its own version numbers and its own active version
+        var linux = rig.Publish(Runtime("2.1.0", Linux), PublishMode.Serve, ("bin/engine", "linux engine"));
+        var windows = rig.Publish(Runtime("2.1.0", Windows), PublishMode.Serve, ("bin/engine.exe", "windows engine"));
+        Assert.Equal(1, linux);
+        Assert.Equal(1, windows);
+        Assert.Equal(1, rig.Publisher.Head(PackageActivator.Kind, Stored(Linux), Prod)!.Active);
+        Assert.Equal(1, rig.Publisher.Head(PackageActivator.Kind, Stored(Windows), Prod)!.Active);
+        rig.Publish(Runtime("2.2.0", Linux), PublishMode.Serve, ("bin/engine", "linux engine 2.2"));    // a new Linux build moves only the Linux head
+        Assert.Equal(2, rig.Publisher.Head(PackageActivator.Kind, Stored(Linux), Prod)!.Active);
+        Assert.Equal(1, rig.Publisher.Head(PackageActivator.Kind, Stored(Windows), Prod)!.Active);
+
+        var store = new DefinitionStore(rig.Database);
+        var reference = new RuntimeReference(Engine, "2.x");
+        var onLinux = RuntimeResolution.Resolve(store, rig.Publisher, reference, Prod, Definition, Linux);
+        var onWindows = RuntimeResolution.Resolve(store, rig.Publisher, reference, Prod, Definition, Windows);
+
+        Assert.Equal((Stored(Linux), "2", "2.2.0", "linux-x64"), (onLinux.Package, onLinux.Version, onLinux.RuntimeVersion, onLinux.Content.Manifest.Platform));
+        Assert.Equal((Stored(Windows), "1", "2.1.0", "win-x64"), (onWindows.Package, onWindows.Version, onWindows.RuntimeVersion, onWindows.Content.Manifest.Platform));
+        Assert.Equal(["bin/engine.exe"], onWindows.Content.Files.Select(f => f.Path));
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public async Task A_definition_stages_ready_on_a_runner_whose_platform_has_the_runtime_and_fails_naming_runtime_platform_and_the_platforms_available_on_the_other(string engine)
+    {
+        using var rig = new Rig(engine);
+        var (_, linuxRunner) = rig.Instance(platform: Linux);
+        rig.Publish(Runtime("2.1.0", Linux), PublishMode.Serve, ("bin/engine", "linux engine"));
+        rig.Publish(Defined("2.x"), PublishMode.Stage, ("data/a.yml", "a"));
+
+        var onLinux = await linuxRunner.PassAsync();
+        Assert.Equal([$"{Definition}/{Prod}@1"], onLinux.Prepared);
+
+        // a runner of the other platform: the Linux runtime is all the channel has
+        var (windowsId, windowsRunner) = rig.Instance(platform: Windows);
+        rig.Publish(Defined("2.x", "second-set"), PublishMode.Stage);
+        var onWindows = await windowsRunner.PassAsync();
+
+        Assert.Contains("second-set/prod@1", onWindows.Failed);
+        var status = rig.StatusOf(windowsId, "second-set");
+        Assert.Equal(InstanceStates.Failed, status.State);
+        Assert.Equal(
+            "Version 1 of 'second-set' cannot be staged: 'second-set@1' needs the runtime 'engine' in the range '2.x' for the platform win-x64, and channel 'prod' has no active version for win-x64: it has it for linux-x64 (version 2.1.0) only; publish and activate the runtime built for win-x64 there first.",
+            status.Error);
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public async Task A_runner_never_materializes_the_runtime_of_another_platform(string engine)
+    {
+        using var rig = new Rig(engine);
+        var (id, windowsRunner) = rig.Instance(platform: Windows);
+        rig.Publish(Runtime("2.1.0", Linux), PublishMode.Stage, ("bin/engine", "linux engine"));
+
+        var pass = await windowsRunner.PassAsync();
+
+        Assert.Equal([$"{Stored(Linux)}/{Prod}@1"], pass.Prepared);       // ready, so the group can activate it for the runners that use it
+        var status = rig.StatusOf(id, Stored(Linux));
+        Assert.Equal(InstanceStates.Ready, status.State);
+        Assert.Contains("this runner is win-x64 and does not fetch it", status.Note);
+        Assert.Empty(rig.Cache.CachedHashes());                           // nothing of the Linux runtime was stored here
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public async Task A_runtime_published_without_a_platform_is_refused_and_one_already_active_is_named_in_the_refusal(string engine)
+    {
+        using var rig = new Rig(engine);
+        var (id, follower) = rig.Instance();
+        var legacy = Runtime("2.1.0") with { Platform = null };
+        Assert.Contains("says the platform its files are built for", Assert.Throws<PackageManifestException>(() => PackageManifestReader.Load(PackageManifestWriter.Write(legacy), "legacy").ThrowIfInvalid()).Message);
+        var refused = RunnerPackages.Check(new DefinitionCandidate(PackageActivator.Kind, Engine, PackageManifestWriter.Write(legacy), [], []));
+        Assert.Contains("platform", refused);
+
+        // one that an older runner stored (written to the registry directly, as a runner of the earlier build did) is named when a definition needs it
+        var artifacts = new PublishArtifacts(rig.Payloads, rig.Publisher, "ada");
+        rig.Publisher.Publish(new PublishRequest(PackageActivator.Kind, Engine, PackageManifestWriter.Write(legacy), "ada", Prod, PublishMode.Serve, Artifacts: [artifacts.Add("bin/engine", "x"u8.ToArray())]));
+        rig.Publish(Defined("2.x"), PublishMode.Stage);
+
+        await follower.PassAsync();
+
+        var status = rig.StatusOf(id, Definition);
+        Assert.Equal(InstanceStates.Failed, status.State);
+        Assert.Contains("a runtime package with no `platform:`", status.Error);
+        Assert.Contains("publish it again once per platform", status.Error);
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public async Task A_run_resolves_the_runtime_of_the_schedulers_platform_and_fails_without_starting_when_the_channel_has_only_the_other(string engine)
+    {
+        using var h = new SchedulerHarness(engine);
+        h.Versions.Add(Stored(Linux), "1", Runtime("2.1.0", Linux)).ActivateRuntime(Stored(Linux), "1", Channel);
+        h.Versions.Add(Stored(Windows), "1", Runtime("2.1.0", Windows) with { Launch = new PackageLaunch(LaunchKind.Executable, Command: "bin/engine.exe") }).ActivateRuntime(Stored(Windows), "1", Channel);
+        h.Activate(Defined("2.x", SchedulerHarness.Package), "1");
+        var runner = new FakeRunner(h.Database);
+
+        void Enqueue() => h.Queue.Enqueue($"{SchedulerHarness.Package}/{Channel}", RunnerScheduler.Kind, "refresh",
+            payloadJson: new WorkPayload { Task = new TaskRef(SchedulerHarness.Package, Channel, "refresh").ToString(), Version = "1", Chain = Guid.NewGuid().ToString("D") }.ToJson());
+
+        Enqueue();
+        await Tick(h.NewScheduler(runner, worker: "loop-a", platform: Windows));
+        Assert.Equal("bin/engine.exe", Assert.Single(runner.Requests).Launch.Command);
+
+        Enqueue();
+        await Tick(h.NewScheduler(runner, worker: "loop-b", platform: Linux));
+        Assert.Equal("bin/engine", runner.Requests.Last().Launch.Command);
+        Assert.Equal(2, runner.Requests.Count);
+
+        // a platform the channel has no runtime for: the run does not start, and the message says so
+        Enqueue();
+        await Tick(h.NewScheduler(runner, worker: "loop-c", platform: "osx-arm64"));
         Assert.Equal(2, runner.Requests.Count);
     }
 
@@ -258,12 +381,12 @@ public sealed class RuntimeTests
         var v1 = rig.Publish(Runtime("1.0.0"), PublishMode.Serve, ("lib/native.so", "shared native"), ("bin/engine", "engine 1"));
         var v2 = rig.Publish(Runtime("2.0.0"), PublishMode.Serve, ("lib/native.so", "shared native"), ("bin/engine", "engine 2"));
         var v3 = rig.Publish(Runtime("3.0.0"), PublishMode.Serve, ("lib/native.so", "shared native"), ("bin/engine", "engine 3"));
-        Assert.Equal(3, rig.Publisher.Head(PackageActivator.Kind, Engine, Prod)!.Active);
-        Assert.Equal(2, rig.Publisher.Head(PackageActivator.Kind, Engine, Prod)!.Previous);
+        Assert.Equal(3, rig.Publisher.Head(PackageActivator.Kind, Stored(), Prod)!.Active);
+        Assert.Equal(2, rig.Publisher.Head(PackageActivator.Kind, Stored(), Prod)!.Previous);
 
         foreach (var version in new[] { v1, v2, v3 })
         {
-            var files = rig.Publisher.Artifacts(PackageActivator.Kind, Engine, version).Select(a => new ArtifactFile(a.Path, a.Sha256, a.Size, a.MediaType, a.PayloadId)).ToList();
+            var files = rig.Publisher.Artifacts(PackageActivator.Kind, Stored(), version).Select(a => new ArtifactFile(a.Path, a.Sha256, a.Size, a.MediaType, a.PayloadId)).ToList();
             using var view = await rig.Cache.MaterializeAsync($"{Engine}@{version}", files);
         }
 

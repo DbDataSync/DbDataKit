@@ -464,7 +464,7 @@ public sealed partial class RunnerScheduler
         {
             try
             {
-                runtime = await _versions.ResolveRuntimeAsync(reference, taskRef.Channel, taskRef.Package, _stop.Token).ConfigureAwait(false);
+                runtime = await _versions.ResolveRuntimeAsync(reference, taskRef.Channel, taskRef.Package, _options.Platform ?? RuntimePlatforms.Current, _stop.Token).ConfigureAwait(false);
             }
             catch (RuntimeUnavailableException ex)
             {

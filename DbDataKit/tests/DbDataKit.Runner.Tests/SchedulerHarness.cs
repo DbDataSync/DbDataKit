@@ -119,7 +119,7 @@ internal sealed class SchedulerHarness : IDisposable
     public void SeedHandled(string task, string package = Package, string channel = Channel) => Jobs.SaveHandled($"{package}/{channel}", task, Clock.GetUtcNow());
 
     public RunnerScheduler NewScheduler(
-        ITaskRunner runner, string? worker = null, StateDatabase? database = null, TimeSpan? heartbeat = null, int maxRuns = 4, double jitter = 0.5, TimeSpan? tick = null, string[]? channels = null, Func<Guid?>? instance = null) =>
+        ITaskRunner runner, string? worker = null, StateDatabase? database = null, TimeSpan? heartbeat = null, int maxRuns = 4, double jitter = 0.5, TimeSpan? tick = null, string[]? channels = null, Func<Guid?>? instance = null, string? platform = null) =>
         new(database ?? Database, runner, Cache, Versions, new RunnerSchedulerOptions
         {
             Channels = channels ?? [Channel],
@@ -129,6 +129,7 @@ internal sealed class SchedulerHarness : IDisposable
             MaxConcurrentRuns = maxRuns,
             Jitter = () => jitter,
             Instance = instance,
+            Platform = platform,
         });
 
     public static async Task<TickReport> Tick(RunnerScheduler scheduler)

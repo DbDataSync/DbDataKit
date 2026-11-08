@@ -60,8 +60,8 @@ public static class RunnerPackageInstaller
                 bytes += size;
             }
 
-            var published = service.Publish(new PublishInput(manifest.Name, text, files, channel, PublishMode.Serve, Note: "dbdatarunner package install (development)"), actor, RunnerPublishing.InstallVerb);
-            return new PackageInstalled(manifest.Name, channel, published.Version, published.Changed, files.Count, bytes, published.Tasks);
+            var published = service.Publish(new PublishInput(manifest.PackageName, text, files, channel, PublishMode.Serve, Note: "dbdatarunner package install (development)"), actor, RunnerPublishing.InstallVerb);
+            return new PackageInstalled(manifest.PackageName, channel, published.Version, published.Changed, files.Count, bytes, published.Tasks);
         }
         catch (RunnerPublishException ex)
         {

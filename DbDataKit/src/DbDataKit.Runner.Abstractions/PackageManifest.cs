@@ -168,19 +168,56 @@ public sealed record PackageTask(
 }
 
 /// <summary>A package manifest, <c>package/1</c>: what the package is, how it starts, what it was built against and the tasks it holds.</summary>
-public sealed record PackageManifest(string Name, string? Description, PackageLaunch Launch, BuiltAgainst BuiltAgainst, IReadOnlyList<PackageTask> Tasks, bool IsRuntime = false, string? Version = null)
+public sealed record PackageManifest(string Name, string? Description, PackageLaunch Launch, BuiltAgainst BuiltAgainst, IReadOnlyList<PackageTask> Tasks, bool IsRuntime = false, string? Version = null, string? Platform = null)
 {
     /// <summary>The key (<c>runtime: true</c>) of a runtime package: no tasks of its own, a <see cref="Version"/>, and a launch that is an executable (plan 28c E04).</summary>
     public const string RuntimeKey = "runtime";
+
+    /// <summary>The key (<c>platform: linux-x64</c>) that says which platform a runtime package's files are built for (plan 28c E04/E05 follow-up: runtimes are published per platform).</summary>
+    public const string PlatformKey = "platform";
+
+    /// <summary>
+    /// The name the package has in the runner's registry. An ordinary package: <see cref="Name"/>. A runtime package: <c>&lt;name&gt;-&lt;platform&gt;</c> (<c>dbdatabuild-runtime-linux-x64</c>), so the same runtime can be published once
+    /// per platform, each with its own versions and its own active version per channel; a definition still names the runtime by <see cref="Name"/>, and the runner adds its own platform (<see cref="RuntimePlatforms.PackageName"/>).
+    /// </summary>
+    public string PackageName => IsRuntime && Platform is { } platform ? RuntimePlatforms.PackageName(Name, platform) : Name;
 
     /// <summary>The key of a definition package's reference to its runtime, <c>launch.runtime</c>.</summary>
     public const string LaunchRuntimeKey = "launch.runtime";
 
     /// <summary>The keys of <c>package/1</c> added after the first runners that this manifest uses; a runner that does not know one refuses the manifest naming it.</summary>
-    public IReadOnlyList<string> NewerKeys => [.. (Launch.Runtime is null ? [] : new[] { LaunchRuntimeKey }), .. (IsRuntime ? new[] { RuntimeKey } : [])];
+    public IReadOnlyList<string> NewerKeys => [.. (Launch.Runtime is null ? [] : new[] { LaunchRuntimeKey }), .. (IsRuntime ? new[] { RuntimeKey } : []), .. (Platform is null ? [] : new[] { PlatformKey })];
 
     /// <summary>The format id every manifest starts with, as <c>schema: package/1</c>.</summary>
     public const string FormatId = "package/1";
 
     public const int FormatVersion = 1;
+}
+
+/// <summary>
+/// The platforms runtime packages are published for (plan 28c QE8: <c>win-x64</c> and <c>linux-x64</c>; macOS is a development platform only) and the platform of this process. A runner takes the runtime package of its own platform and
+/// never fetches another's; tests give the runner another platform than the one they run on.
+/// </summary>
+public static class RuntimePlatforms
+{
+    public const string WindowsX64 = "win-x64";
+
+    public const string LinuxX64 = "linux-x64";
+
+    public static IReadOnlyList<string> Supported { get; } = [WindowsX64, LinuxX64];
+
+    public static bool IsSupported(string? platform) => platform is not null && Supported.Contains(platform, StringComparer.Ordinal);
+
+    /// <summary>This process's platform as a runtime identifier (<c>win-x64</c>, <c>linux-arm64</c>, <c>osx-arm64</c>): the operating system and the processor architecture, without the distribution part of <c>RuntimeInformation.RuntimeIdentifier</c>.</summary>
+    public static string Current { get; } = Detect();
+
+    /// <summary>The registry name of the runtime <paramref name="name"/> built for <paramref name="platform"/>.</summary>
+    public static string PackageName(string name, string platform) => $"{name}-{platform}";
+
+    private static string Detect()
+    {
+        var os = OperatingSystem.IsWindows() ? "win" : OperatingSystem.IsMacOS() ? "osx" : OperatingSystem.IsLinux() ? "linux" : "unknown";
+        var arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant();
+        return $"{os}-{arch}";
+    }
 }

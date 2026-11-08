@@ -143,10 +143,10 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
             ["artifacts"] = new JsonArray([.. files.Select(f => (JsonNode)new JsonObject { ["path"] = f.Path, ["sha256"] = f.Sha, ["size"] = f.Size })]),
         };
         if (expectedVersion is { } expected) body["expected_version"] = expected;
-        using var publish = await Send(HttpMethod.Put, $"api/v1/definitions/integration/{Uri.EscapeDataString(manifest.Name)}", JsonContent.Create(body, options: Json));
-        if (!publish.IsSuccessStatusCode) throw await Refused(publish, $"the package {manifest.Name}");
+        using var publish = await Send(HttpMethod.Put, $"api/v1/definitions/integration/{Uri.EscapeDataString(manifest.PackageName)}", JsonContent.Create(body, options: Json));
+        if (!publish.IsSuccessStatusCode) throw await Refused(publish, $"the package {manifest.PackageName}");
         var answer = JsonNode.Parse(await publish.Content.ReadAsStringAsync(ct))!;
-        return new ClientPublished(manifest.Name, channel, (int)answer["version"]!, (bool)answer["changed"]!, (string)answer["mode"]!, (string)answer["signature"]!, uploaded, skipped,
+        return new ClientPublished(manifest.PackageName, channel, (int)answer["version"]!, (bool)answer["changed"]!, (string)answer["mode"]!, (string)answer["signature"]!, uploaded, skipped,
             [.. answer["tasks"]!.AsArray().Select(t => (string)t!)]);
     }
 

@@ -98,8 +98,13 @@ public static class PackageManifestValidator
             if (manifest.Launch.Kind != LaunchKind.Executable) add("launch.kind", "A runtime package starts as an executable: `kind: executable` with the engine's `command`.");
             if (manifest.Launch.Runtime is not null) add(PackageManifest.LaunchRuntimeKey, "A runtime package is not itself run by another runtime: remove `launch.runtime`.");
             if (manifest.Version is null) add("version", "A runtime package says its version, for example `version: 2.1.0`, so definitions can name the versions they accept.");
+            if (manifest.Platform is null) add(PackageManifest.PlatformKey, $"A runtime package says the platform its files are built for, `platform: {string.Join("` or `platform: ", RuntimePlatforms.Supported)}`, and is published once per platform (a runtime package published before platforms existed has to be published again with one).");
+            else if (!RuntimePlatforms.IsSupported(manifest.Platform)) add(PackageManifest.PlatformKey, $"'{manifest.Platform}' is not a platform runtime packages are published for: {string.Join(", ", RuntimePlatforms.Supported)}.");
+            else if (!NameRule.IsMatch(manifest.PackageName)) add("name", $"The runtime package is stored as '{manifest.PackageName}' (name and platform), which is too long for a package name: shorten '{manifest.Name}'.");
         }
         else if (manifest.Version is not null) add("version", "Only a runtime package (`runtime: true`) has a `version`; a package's versions are numbered by the runner.");
+
+        if (!manifest.IsRuntime && manifest.Platform is not null) add(PackageManifest.PlatformKey, "Only a runtime package (`runtime: true`) has a `platform`; a package that a runtime runs is the same on every platform.");
 
         if (manifest.Version is not null && VersionRange.ParseVersion(manifest.Version) is null) add("version", $"'{manifest.Version}' is not a version: write one to three numbers, such as 2.1.0.");
 
