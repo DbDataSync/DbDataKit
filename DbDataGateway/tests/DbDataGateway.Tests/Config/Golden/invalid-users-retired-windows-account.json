@@ -1,0 +1,1 @@
+{ "Gateway": { "Users": [ { "Name": "CORP\\bob", "AuthType": "Windows", "DataSources": [ "erp" ] } ] } }

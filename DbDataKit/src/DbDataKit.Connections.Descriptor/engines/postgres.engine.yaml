@@ -12,6 +12,6 @@ roles:
   sync_target: { status: supported, note: "native binary COPY staging" }
   build_target: { status: supported, note: "PostgreSQL 17 in Build's real-engine suite" }
   build_origin: { status: supported, note: "project import reads the live catalog" }
-  proxy_source: { status: no, note: "only through ODBC; the proxy has no PostgreSQL provider of its own" }
+  gateway_source: { status: no, note: "only through ODBC; the gateway has no PostgreSQL provider of its own" }
   semantic_emitter: { status: planned, note: "plan 19 J05; until then the DuckDB-dialect twin runs on it and 9 fixtures need the emitter" }
   master_data_store: { status: planned, note: "plan 15" }

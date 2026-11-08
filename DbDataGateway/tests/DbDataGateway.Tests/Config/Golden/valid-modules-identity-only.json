@@ -1,0 +1,1 @@
+{ "Gateway": { "Modules": ["identity"], "Tls": { "Mode": "SelfSigned" } } }

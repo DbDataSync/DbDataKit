@@ -16,19 +16,19 @@ public sealed record CopyPlan(string? Text, string? Problem, IReadOnlyList<strin
 /// <list type="bullet">
 /// <item><c>name</c> is the new name (the file name on the target is the name).</item>
 /// <item><c>managed_by</c> is dropped: it names a client of the source's server, which means nothing on the target (the person who copies is its administrator).</item>
-/// <item><c>extensions.&lt;product&gt;</c> of another product is dropped, since the target does not read it; the target's own (a copy between two Sync servers, or two Proxies) is kept.</item>
-/// <item>A password is a reference, never a value, and is not copied. Sync keeps a connection's password under <c>secret:dbdata:sync:connection:&lt;name&gt;</c> only, so a copy to Sync names that for the new name (and a Proxy's copy of a Sync connection names
-/// <c>secret:dbdata:proxy:connection:&lt;name&gt;</c>, not Sync's store); every other reference is kept as written. The copy says which references the target must hold.</item>
+/// <item><c>extensions.&lt;product&gt;</c> of another product is dropped, since the target does not read it; the target's own (a copy between two Sync servers, or two Gateways) is kept.</item>
+/// <item>A password is a reference, never a value, and is not copied. Sync keeps a connection's password under <c>secret:dbdata:sync:connection:&lt;name&gt;</c> only, so a copy to Sync names that for the new name (and a Gateway's copy of a Sync connection names
+/// <c>secret:dbdata:gateway:connection:&lt;name&gt;</c>, not Sync's store); every other reference is kept as written. The copy says which references the target must hold.</item>
 /// </list>
 /// The text is edited in place (<see cref="YamlEditor"/>), so the source's comments, key order and quoting stay.
 /// </summary>
 public static partial class ConnectionCopy
 {
     public const string Sync = "dbdatasync";
-    public const string Proxy = "dbdataproxy";
+    public const string Gateway = "dbdatagateway";
 
     /// <summary>The products the Connections view lists and copies between, and the key each reads under <c>extensions</c>.</summary>
-    public static string? ExtensionKey(string? product) => product switch { Sync => "sync", Proxy => "proxy", _ => null };
+    public static string? ExtensionKey(string? product) => product switch { Sync => "sync", Gateway => "gateway", _ => null };
 
     [GeneratedRegex("^[A-Za-z][A-Za-z0-9_.-]{0,63}$")]
     private static partial Regex NamePattern();
@@ -74,7 +74,7 @@ public static partial class ConnectionCopy
             notes.Add($"The settings under extensions.{string.Join(", extensions.", foreign)} were left out: the target does not read them.");
         }
 
-        // Sync's loader refuses the settings only a Proxy reads; they go, and the copy says which
+        // Sync's loader refuses the settings only a Gateway reads; they go, and the copy says which
         var dropped = new List<string>();
         if (targetProduct == Sync)
         {
@@ -88,7 +88,7 @@ public static partial class ConnectionCopy
             if (dropped.Count > 0) notes.Add($"{string.Join(", ", dropped)} {(dropped.Count == 1 ? "was" : "were")} left out: Sync does not use {(dropped.Count == 1 ? "it" : "them")}.");
         }
 
-        // a password is named by reference; Sync reads one name only, and a Sync reference means nothing in a Proxy's store
+        // a password is named by reference; Sync reads one name only, and a Sync reference means nothing in a Gateway's store
         var logins = new[] { ("auth", source.Auth), ("read_login", dropped.Contains("read_login") ? null : source.ReadLogin), ("write_login", dropped.Contains("write_login") ? null : source.WriteLogin) };
         var secrets = new List<string>();
         foreach (var (path, login) in logins)
@@ -98,7 +98,7 @@ public static partial class ConnectionCopy
             {
                 var named = reference;
                 if (targetProduct == Sync && path == "auth") named = $"secret:dbdata:sync:connection:{newName}";
-                else if (targetProduct == Proxy && reference.StartsWith("secret:dbdata:sync:", StringComparison.OrdinalIgnoreCase)) named = $"secret:dbdata:proxy:connection:{newName}";
+                else if (targetProduct == Gateway && reference.StartsWith("secret:dbdata:sync:", StringComparison.OrdinalIgnoreCase)) named = $"secret:dbdata:gateway:connection:{newName}";
                 if (named != reference && problem is null) problem = Edit(t => YamlEditor.Set(t, path + ".password_secret", named));
                 secrets.Add(named);
             }
@@ -124,5 +124,5 @@ public static partial class ConnectionCopy
         return new CopyPlan(text, null, notes, [.. secrets.Distinct()]);
     }
 
-    private static string SourceName(string product) => product == Sync ? "a Sync server" : product == Proxy ? "a Proxy" : "its server";
+    private static string SourceName(string product) => product == Sync ? "a Sync server" : product == Gateway ? "a Gateway" : "its server";
 }

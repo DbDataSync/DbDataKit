@@ -6,7 +6,7 @@ Generated from the engine registry (`DbDataKit/src/DbDataKit.Connections.Descrip
 
 ## By role
 
-| Engine | Sync source | Sync target | Build target | Build origin | Proxy source | Semantic emitter | Master data store |
+| Engine | Sync source | Sync target | Build target | Build origin | Gateway source | Semantic emitter | Master data store |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Arrow Flight SQL | yes | no | no | yes | no | no | no |
 | DuckDB | yes | no | no | yes | yes | yes | no |
@@ -23,7 +23,7 @@ Generated from the engine registry (`DbDataKit/src/DbDataKit.Connections.Descrip
 
 `flightsql`; dialect `ansi`; catalog reader `information_schema`
 
-- Sync source: yes. A source only: a reload of a table or query from any server that speaks the protocol (usually a proxy)
+- Sync source: yes. A source only: a reload of a table or query from any server that speaks the protocol (usually a gateway)
 - Build origin: yes. Flight SQL metadata calls, information_schema as the fallback
 
 ### DuckDB
@@ -32,7 +32,7 @@ Generated from the engine registry (`DbDataKit/src/DbDataKit.Connections.Descrip
 
 - Sync source: yes. Query only: Parquet, CSV, an S3 glob or an attached database
 - Build origin: yes. Project import reads a DuckDB database's catalog
-- Proxy source: yes. Opened READ_ONLY in the sandbox (no external access, locked configuration)
+- Gateway source: yes. Opened READ_ONLY in the sandbox (no external access, locked configuration)
 - Semantic emitter: yes. The DuckDB twin of each query, on a read-only file (plan 19 J03)
 
 ### Microsoft Fabric warehouse
@@ -50,7 +50,7 @@ Generated from the engine registry (`DbDataKit/src/DbDataKit.Connections.Descrip
 - Sync target: yes. Native bulk staging (SqlBulkCopy)
 - Build target: yes. SQL Server 2022 in Build's real-engine suite
 - Build origin: yes. Project import reads keys, foreign keys and indexes from the live catalog
-- Proxy source: yes. Address, connection string or secret reference; pass-through identity
+- Gateway source: yes. Address, connection string or secret reference; pass-through identity
 - Semantic emitter: yes. T-SQL; every conformance fixture passes on SQL Server 2022 (plan 19 J02, J03)
 - Master data store: planned. Plan 15
 
@@ -66,7 +66,7 @@ Generated from the engine registry (`DbDataKit/src/DbDataKit.Connections.Descrip
 `odbc`; dialect `ansi`; provider `odbc`; catalog reader `odbc`
 
 - Build origin: yes. The driver's catalog functions, or information_schema when the dialect says so
-- Proxy source: yes. Through the 32-bit worker where the driver is 32-bit
+- Gateway source: yes. Through the 32-bit worker where the driver is 32-bit
 
 ### Oracle Database
 
@@ -83,6 +83,6 @@ Generated from the engine registry (`DbDataKit/src/DbDataKit.Connections.Descrip
 - Sync target: yes. Native binary COPY staging
 - Build target: yes. PostgreSQL 17 in Build's real-engine suite
 - Build origin: yes. Project import reads the live catalog
-- Proxy source: no. Only through ODBC; the proxy has no PostgreSQL provider of its own
+- Gateway source: no. Only through ODBC; the gateway has no PostgreSQL provider of its own
 - Semantic emitter: planned. Plan 19 J05; until then the DuckDB-dialect twin runs on it and 9 fixtures need the emitter
 - Master data store: planned. Plan 15

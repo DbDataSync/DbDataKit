@@ -7,7 +7,7 @@ public sealed record AppApprover(string Id, string Name);
 public sealed record AppApproverLookup(AppApprover? Approver, string? Refusal);
 
 /// <summary>
-/// Who may approve a trusted app (plan 26 section 2a, AP15): a user of the identity home who holds the Approver role. The commands use this interface; the Proxy implements it on the home's roles and tests use <see cref="InMemoryApprovers"/>.
+/// Who may approve a trusted app (plan 26 section 2a, AP15): a user of the identity home who holds the Approver role. The commands use this interface; the Gateway implements it on the home's roles and tests use <see cref="InMemoryApprovers"/>.
 /// </summary>
 public interface IAppApprovers
 {

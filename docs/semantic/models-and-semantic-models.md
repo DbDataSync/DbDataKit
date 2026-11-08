@@ -11,7 +11,7 @@ Written for the D12 decision (decided: `foreign_keys:` on built models, built as
 | Written in | `models/**/<name>.yml` beside a DuckDB-dialect `.sql` file | `semantic/**/*.yml` (the catalog format, written without its physical layer) |
 | Named by | `schema.object` (`marts.dim_customer`), the same on every connection | Logical names people use (`customers.region`, `sales.net_amount`), plus synonyms |
 | Lives on | One or more connections (SQL Server, PostgreSQL, Fabric, plus read-only origins) | Sources, and a source *is* a connection of the project |
-| Consumed by | Build: plan, apply, check, sample, publish | The query engine (Proxy, Console, agents): translates a request into SQL or DAX on a source |
+| Consumed by | Build: plan, apply, check, sample, publish | The query engine (Gateway, Console, agents): translates a request into SQL or DAX on a source |
 | Changes when | The table changes | The business definition changes |
 
 One sentence: a model is a physical table, a semantic model is a vocabulary over physical tables.

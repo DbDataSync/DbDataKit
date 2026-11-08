@@ -74,7 +74,7 @@ public sealed class ModelCatalog
     public bool HasAttribute(string name) => Catalog.IsAttribute(name);
 
     /// <summary>
-    /// A model from the content of a published <c>semantic-model</c> version (a JSON object whose <c>catalog</c> is the catalog's text, as the Proxy stores it); throws what the catalog loader throws.
+    /// A model from the content of a published <c>semantic-model</c> version (a JSON object whose <c>catalog</c> is the catalog's text, as the Gateway stores it); throws what the catalog loader throws.
     /// </summary>
     public static ModelCatalog FromPublished(string name, int version, string content)
     {

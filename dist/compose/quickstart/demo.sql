@@ -1,4 +1,4 @@
--- The demo database the QuickStart starts with: a small sales schema to point Sync, Proxy, Build and Store at.
+-- The demo database the QuickStart starts with: a small sales schema to point Sync, Gateway, Build and Store at.
 CREATE TABLE customers (id serial PRIMARY KEY, name text NOT NULL, country text NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
 CREATE TABLE orders (id serial PRIMARY KEY, customer_id int NOT NULL REFERENCES customers (id), total numeric(10,2) NOT NULL, placed_at timestamptz NOT NULL DEFAULT now());
 INSERT INTO customers (name, country) VALUES ('Ada', 'UK'), ('Grace', 'US'), ('Linus', 'FI'), ('Margaret', 'US');

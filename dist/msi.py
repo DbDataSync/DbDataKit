@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Builds a product's Windows installer (.msi) from its release package, with wixl (msitools), not the WiX toolset.
 
-    msi.py build --meta DbDataProxy/dist.json --version 2026.10.19.509 --payload <unzipped win-x64 package> --out dbdataproxy-v2026.10.19.509-win-x64.msi
+    msi.py build --meta DbDataGateway/dist.json --version 2026.10.19.509 --payload <unzipped win-x64 package> --out dbdatagateway-v2026.10.19.509-win-x64.msi
     msi.py wxs   (same arguments, no --out: prints the WiX-schema source)
 
 The MSI copies the package to %ProgramFiles%\\<DisplayName>. For a product with a Windows service (`service` in dist.json) it also runs the

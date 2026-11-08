@@ -9,7 +9,7 @@ public sealed class CatalogNameException(string name, string reason) : ArgumentE
 }
 
 /// <summary>
-/// Name validation (Proxy S-9). Names that come back from a catalog are data, not trusted SQL: they are always quoted through the dialect,
+/// Name validation (Gateway S-9). Names that come back from a catalog are data, not trusted SQL: they are always quoted through the dialect,
 /// and when the driver reports no quote character (so quoting cannot protect anything) names with control characters or an
 /// unterminated quote sequence are refused outright.
 /// </summary>

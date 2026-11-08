@@ -17,7 +17,7 @@ def tree(notes):
     return root
 
 
-GOOD = {"DbDataConsole": "see dbdatakit state init", "DbDataProxy": "dbdataproxy state init", "DbDataBuild": "run dbdatabuild state init"}
+GOOD = {"DbDataConsole": "see dbdatakit state init", "DbDataGateway": "dbdatagateway state init", "DbDataBuild": "run dbdatabuild state init"}
 
 
 class CheckDistState(unittest.TestCase):
@@ -25,9 +25,9 @@ class CheckDistState(unittest.TestCase):
         self.assertEqual([], check.problems(tree(GOOD)))
 
     def test_a_missing_note_is_named(self):
-        found = check.problems(tree({**GOOD, "DbDataProxy": "nothing"}))
+        found = check.problems(tree({**GOOD, "DbDataGateway": "nothing"}))
         self.assertEqual(1, len(found))
-        self.assertIn("dbdataproxy state init", found[0])
+        self.assertIn("dbdatagateway state init", found[0])
 
     def test_the_repository_itself_passes(self):
         root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

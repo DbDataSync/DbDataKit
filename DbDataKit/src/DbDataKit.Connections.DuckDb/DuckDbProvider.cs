@@ -151,7 +151,7 @@ internal sealed class DuckDbSandboxSession(
 public sealed class DuckDbProvider : DbProviderBase
 {
     /// <summary>
-    /// The sandbox (Build's set, closes Proxy S-1 for DuckDB): the file is opened <c>READ_ONLY</c>; then, in this order,
+    /// The sandbox (Build's set, closes Gateway S-1 for DuckDB): the file is opened <c>READ_ONLY</c>; then, in this order,
     /// external access is off (no <c>read_csv</c>, <c>COPY</c>, <c>ATTACH</c>, httpfs), extension install and autoload are off, and the
     /// configuration is locked last so none of it can be set back. Nothing may follow the lock.
     /// </summary>

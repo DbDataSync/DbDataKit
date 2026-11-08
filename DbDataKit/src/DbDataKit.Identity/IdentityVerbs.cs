@@ -14,7 +14,7 @@ public sealed record IdentityAdminLocation(string Usage, Func<CliArgs, StateData
 
 /// <summary>
 /// The verbs of the <c>identity</c> noun that administer a home at the command line (plan 13a U15, 13c D30: commands only for now), the same in every host of the home: <c>dbdatakit identity</c> for a home that
-/// runs on its own, <c>dbdataproxy identity</c> for the serving layer's (plan 20 O06). They work on the home's state database directly, so they need no running server.
+/// runs on its own, <c>dbdatagateway identity</c> for the serving layer's (plan 20 O06). They work on the home's state database directly, so they need no running server.
 /// </summary>
 public static class IdentityVerbs
 {

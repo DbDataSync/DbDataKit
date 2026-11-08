@@ -4,7 +4,7 @@ namespace DbDataKit.Secrets;
 
 /// <summary>
 /// PBKDF2-HMAC-SHA256 password hashing. Stored form: <c>PBKDF2-SHA256$iterations$salt$hash</c> (base64 parts),
-/// identical to DbDataProxy's format so existing stored hashes verify unchanged. The iteration count is
+/// identical to DbDataGateway's format so existing stored hashes verify unchanged. The iteration count is
 /// stored with each hash so it can be raised later without invalidating existing users.
 /// </summary>
 public static class PasswordHasher

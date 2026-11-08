@@ -6,7 +6,7 @@
     "admin",
     "sync",
     "build",
-    "proxy",
+    "gateway",
     "visuals",
     "store-ui",
     "view-app",

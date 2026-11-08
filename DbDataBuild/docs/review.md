@@ -122,7 +122,7 @@ Repo: `C:\Projects\DbDataKit\DbDataBuild` (submodule, read-only). `Version` 0.4.
 
 ## 7. Candidate components for a shared library
 
-"Coupling" = what the component drags in. Overlap with DbDataSync/DbDataProxy should be confirmed against their own reviews.
+"Coupling" = what the component drags in. Overlap with DbDataSync/DbDataGateway should be confirmed against their own reviews.
 
 | Component | Files | Coupling / notes |
 |---|---|---|

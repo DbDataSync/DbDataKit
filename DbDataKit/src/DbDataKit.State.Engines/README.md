@@ -35,7 +35,7 @@ state:
 
 ## One order for every product
 
-`StateSettingsResolver.Resolve(new StateSettingsInputs(settingsFile, engineFlag, ..., engineVariable, connectionVariable, environment))` is the order every product reads its state settings in (plan 29b C07): the flag, then the environment variable, then the `state:` section of the product's settings file (read strictly through `StateSettingsReader`; an error names the file and, for a misspelt key, the one that was meant), then the default (SQLite). The engine and the connection each come from the first place that names them; `registry`, `namespaces` and `retention` come from the file. The result (`ResolvedState`) says where each part came from (`StateSources`), which is what `state show` prints. The file is never created. The Proxy keeps its own layering of file, environment and command line and reports through the same types (`ProxyStateConfig`).
+`StateSettingsResolver.Resolve(new StateSettingsInputs(settingsFile, engineFlag, ..., engineVariable, connectionVariable, environment))` is the order every product reads its state settings in (plan 29b C07): the flag, then the environment variable, then the `state:` section of the product's settings file (read strictly through `StateSettingsReader`; an error names the file and, for a misspelt key, the one that was meant), then the default (SQLite). The engine and the connection each come from the first place that names them; `registry`, `namespaces` and `retention` come from the file. The result (`ResolvedState`) says where each part came from (`StateSources`), which is what `state show` prints. The file is never created. The Gateway keeps its own layering of file, environment and command line and reports through the same types (`GatewayStateConfig`).
 
 ## Writing the section
 
@@ -69,12 +69,12 @@ On PostgreSQL the fix is to install the pgvector extension on the server (the pa
 
 ## Rolling upgrade of a group (plan 29b, U02)
 
-A group's instances (the Proxy's `serving_instance`, the runner's `instance` table) record their software version and their module versions (`name=version;name=version`) in their row. `state show` and `GET /api/v1/state` list the live instances with them; a row of a binary older than this feature has none (shown as not recorded).
+A group's instances (the Gateway's `serving_instance`, the runner's `instance` table) record their software version and their module versions (`name=version;name=version`) in their row. `state show` and `GET /api/v1/state` list the live instances with them; a row of a binary older than this feature has none (shown as not recorded).
 
 Before `StateMigrator` applies a migration of a module to a group's database it asks the live instances (`IGroupInstanceSource`, supplied by the product when it opens the state: `StateOpener.Open(..., groupInstances: new StandardGroupInstanceSource())`; the default is none), under the same migration lock, and refuses with a `MigrationRefusedException` naming the instance (id, host, process, software and module version) when one cannot work with the new schema:
 
 * a module declares how far back its instances may be with `StateModule.CompatibleWithPrevious` (default 0: the previous version is not compatible; 1: it is, because the migration only adds what the older code ignores, such as a nullable column). An instance works when its module version is at least the new version minus that number; an older one blocks.
 * an instance whose row records no versions is taken to run the version the database is at.
-* an instance that is not live (its heartbeat lapsed: 30 seconds for the Proxy, the lease for a runner; or a runner row marked gone) never blocks. An instance that starts later finds the newer module version and refuses to start, naming itself.
+* an instance that is not live (its heartbeat lapsed: 30 seconds for the Gateway, the lease for a runner; or a runner row marked gone) never blocks. An instance that starts later finds the newer module version and refuses to start, naming itself.
 
 The upgrade order follows from that: when the module declares the previous version compatible, start the new instances while the old ones run (the first one migrates), then stop the old ones; when it does not, stop the old instances first, or stop the one the refusal names, then start the new ones. The author of a migration states the choice (`CompatibleWithPrevious`) for every migration they append; a destructive one (a dropped or renamed column, a changed meaning) keeps the default.

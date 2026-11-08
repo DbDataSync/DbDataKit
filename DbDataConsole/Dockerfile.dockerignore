@@ -6,7 +6,7 @@ DbDataSync/
 # except what the console's web build reads: the docs of Sync's module and the pictures they show
 !DbDataSync/docs/
 !DbDataSync/screenshots/
-DbDataProxy/
+DbDataGateway/
 DbDataBuild/
 **/node_modules/
 **/dist/

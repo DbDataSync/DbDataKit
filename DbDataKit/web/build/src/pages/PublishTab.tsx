@@ -8,7 +8,7 @@ import type { AdoptAnswer, AdoptHint, PairedProxy, PublishAnswer } from '../type
 /** What the person reads when a publish failed: the server's own words (they name the rule or the proxy that refused), or a plain sentence for what it did not say. */
 export function publishFailure(error: unknown): string {
   if (error instanceof ApiError) {
-    if (error.status === 403 && !/proxy/i.test(error.message)) return 'Publishing needs the approver role on this server.'
+    if (error.status === 403 && !/proxy|gateway/i.test(error.message)) return 'Publishing needs the approver role on this server.'
     return error.message
   }
   return 'The server did not answer. Try again.'

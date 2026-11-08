@@ -15,9 +15,9 @@ public sealed record StateResult(int Status, JsonNode Body)
 }
 
 /// <summary>What a product tells the shared state endpoints.</summary>
-/// <param name="Product">The product's id as it reports itself (<c>dbdataproxy</c>).</param>
-/// <param name="Program">The command's name, for the sentences that name a fix (<c>dbdataproxy</c>).</param>
-/// <param name="Description">What the state belongs to, for the sentences (<c>the proxy</c>).</param>
+/// <param name="Product">The product's id as it reports itself (<c>dbdatagateway</c>).</param>
+/// <param name="Program">The command's name, for the sentences that name a fix (<c>dbdatagateway</c>).</param>
+/// <param name="Description">What the state belongs to, for the sentences (<c>the gateway</c>).</param>
 /// <param name="Target">Where the state is, as the running server has it: the settings it opened with and where each came from (<see cref="StateTarget"/>). Called for every read, so it follows the settings; it may throw <see cref="InvalidOperationException"/> naming what is wrong.</param>
 /// <param name="Modules">The modules the product's state is built from.</param>
 /// <param name="Scope">The group and service this process is.</param>

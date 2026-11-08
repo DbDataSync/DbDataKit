@@ -7,7 +7,7 @@ import { actions, loadRows, type MonitorRow } from '../monitoring'
 const label: Record<MonitorRow['state'], string> = { failed: 'Failed', gone: 'Gone', lagging: 'Lagging', event: 'Notice', paused: 'Paused', running: 'Running', ok: 'OK' }
 
 /**
- * One view of the replications and scheduled plans of every server the console manages (plan 13, M11): what failed or is behind is at the top, whichever server it is on, and a row can be held, released or run now. A Proxy's notices (a login locked out, a statement refused, a limit reached; the last day's, newest first) are listed with them. The figures are asked of each
+ * One view of the replications and scheduled plans of every server the console manages (plan 13, M11): what failed or is behind is at the top, whichever server it is on, and a row can be held, released or run now. A Gateway's notices (a login locked out, a statement refused, a limit reached; the last day's, newest first) are listed with them. The figures are asked of each
  * server through the relay every thirty seconds; a server that does not answer is named above the list, and the others still show.
  */
 export function MonitoringPage() {
@@ -31,7 +31,7 @@ export function MonitoringPage() {
       <div className="pane" data-testid="monitoring-page">
         <div className="page-head">
           <h1 className="page-title">Monitoring</h1>
-          <span className="page-note">Replications, scheduled plans, runner tasks and Proxy notices across your servers.</span>
+          <span className="page-note">Replications, scheduled plans, runner tasks and Gateway notices across your servers.</span>
         </div>
         <ErrorBanner error={instances.error ?? view.error ?? act.error} />
         {(view.data?.problems ?? []).map((p) => (

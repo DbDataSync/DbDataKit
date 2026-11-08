@@ -8,7 +8,7 @@ public enum CatalogRole { Unknown, Measure, Attribute }
 
 /// <summary>
 /// The roles of a semantic model's members (plan 32 section 2, DBR03): the only thing <see cref="DeriveRequest"/> needs from the catalog. It is built from a loaded catalog (the host, the console's
-/// copy of the Proxy's <c>GET /api/v1/semantic-models/{name}</c>, Build's <c>project compile</c>) or from two lists, so the function stays pure and the editor's TypeScript twin can use the same data.
+/// copy of the Gateway's <c>GET /api/v1/semantic-models/{name}</c>, Build's <c>project compile</c>) or from two lists, so the function stays pure and the editor's TypeScript twin can use the same data.
 /// </summary>
 public sealed class CatalogRoles
 {

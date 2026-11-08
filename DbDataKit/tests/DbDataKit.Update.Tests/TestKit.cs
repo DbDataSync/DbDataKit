@@ -37,7 +37,7 @@ public static class TestKit
 
     /// <summary>Writes a signed release into <c>root/&lt;version&gt;/</c> (folder-source layout). Returns manifest and artifact file path.</summary>
     public static (ReleaseManifest Manifest, string Dir) WriteRelease(string root, KeyPair key, string version, byte[] artifact, Action<ManifestBuildOptions>? _ = null,
-        Func<ReleaseManifest, ReleaseManifest>? mutate = null, string product = "dbdataproxy", string? channel = null)
+        Func<ReleaseManifest, ReleaseManifest>? mutate = null, string product = "dbdatagateway", string? channel = null)
     {
         var dir = System.IO.Path.Combine(root, version);
         Directory.CreateDirectory(dir);

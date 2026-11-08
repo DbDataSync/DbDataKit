@@ -1,0 +1,151 @@
+using System.Collections.Concurrent;
+using DbDataKit.Connections;
+using DbDataKit.Connections.DuckDb;
+using DbDataKit.Secrets;
+using DbDataGateway.Data;
+using DbDataGateway.Server.Auth;
+using DbDataGateway.Server.Configuration;
+using DbDataGateway.Server.Secrets;
+using Grpc.Core;
+using Microsoft.Extensions.Options;
+
+namespace DbDataGateway.Server.Data;
+
+public sealed record ResolvedDataSource(string Name, DataSourceOptions Options, IQueryExecutor Executor);
+
+/// <summary>Builds executors for the 32-bit ODBC worker; absent when the platform cannot host one.</summary>
+public interface IWorkerExecutorFactory
+{
+    IQueryExecutor Create(string connectionString, bool readOnly = false, string? metadataMode = null);
+}
+
+/// <summary>
+/// Maps (caller, requested data source name) to an executor: enforces per-user access, injects pass-through
+/// credentials, and routes 32-bit ODBC sources through the worker process.
+/// </summary>
+public sealed class DataSourceCatalog(
+    IOptionsMonitor<GatewayOptions> options,
+    ProviderRegistry providers,
+    IWorkerExecutorFactory? worker = null,
+    SecretsRuntime? secrets = null,
+    QueryLimits? limits = null,
+    ILoggerFactory? loggerFactory = null,
+    IRedactor? redactor = null,
+    ActiveQueries? activeQueries = null,
+    RecentFailures? recentFailures = null,
+    GatewayEvents? events = null)
+{
+    private readonly ConcurrentDictionary<string, IDbProvider> _sandboxProviders = new(StringComparer.Ordinal);
+    private readonly IFailureSink? _sink = loggerFactory is null && recentFailures is null ? null
+        : new FailureSinks(loggerFactory is null ? null : new LoggingFailureSink(loggerFactory.CreateLogger("DbDataGateway.Data")), recentFailures);
+
+    /// <summary>
+    /// The provider for a data source. A DuckDB source with <c>AllowedDirectories</c> gets its own provider whose sandbox lets queries read those
+    /// directories; every other source uses the registry's provider (the full sandbox for a source without <c>AllowWrites</c>).
+    /// </summary>
+    private IDbProvider ProviderFor(DataSourceOptions source, IDbProvider provider)
+    {
+        if (provider.Engine.Value != "duckdb" || source.AllowedDirectories.Count == 0) return provider;
+        bool raw = options.CurrentValue.LogDriverErrors;
+        return _sandboxProviders.GetOrAdd(raw + "\n" + string.Join('\n', source.AllowedDirectories), _ =>
+            new DuckDbProvider(new DuckDbSandboxOptions { AllowedDirectories = [.. source.AllowedDirectories] }, redactor: redactor, includeRawFailures: raw));
+    }
+
+    public ResolvedDataSource Resolve(GatewayPrincipal principal, string? requested)
+    {
+        var configured = options.CurrentValue.DataSources;
+        string name = ChooseName(principal, requested, configured);
+
+        if (!configured.TryGetValue(name, out var source))
+            throw new RpcException(new Status(StatusCode.NotFound, $"Unknown data source '{name}'."));
+        if (principal.HomeUserId is not null)
+        {
+            // a home user: the home groups the data source file names decide, checked against the configuration in force now
+            if (!DataSourceAccess.HomeMayUse(source, principal.HomeGroups))
+                throw new RpcException(new Status(StatusCode.PermissionDenied, DataSourceAccess.Refusal(name, source, principal.Name)));
+        }
+        else if (!principal.CanUse(name))
+            throw new RpcException(new Status(StatusCode.PermissionDenied, $"Not authorized for data source '{name}'."));
+
+        if (!providers.TryGet(source.Provider, out var registered))
+            throw new RpcException(new Status(StatusCode.Internal, $"Data source '{name}' uses unknown provider '{source.Provider}'."));
+        var provider = ProviderFor(source, registered);
+
+        // Resolved per call from the current options snapshot: nothing secret outlives the snapshot, and a rotated secret is picked up.
+        string connectionString;
+        try
+        {
+            connectionString = secrets?.ResolveConnectionString($"Gateway:DataSources:{name}:ConnectionString", source.ConnectionString, source.Provider) ?? source.ConnectionString;
+        }
+        catch (SecretConfigurationException ex)
+        {
+            throw new RpcException(new Status(StatusCode.Internal, $"Data source '{name}' has an unusable secret reference ({ex.ConfigKey}); see the server log."));
+        }
+
+        if (source.PassThrough)
+        {
+            if (principal.Credentials is null)
+                throw new RpcException(new Status(StatusCode.PermissionDenied,
+                    $"Data source '{name}' requires database credentials; authenticate with your database username and password."));
+            try
+            {
+                // The shared composer strips every integrated-security style key, writes the caller's login through the engine's own quoting,
+                // refuses control characters and over-long values, and asserts nothing integrated remains.
+                connectionString = provider.Composer.ApplyPassThroughCredentials(
+                    connectionString, principal.Credentials.User, SecretValue.From(principal.Credentials.Password));
+            }
+            catch (ConnectionPolicyException)
+            {
+                throw new RpcException(new Status(StatusCode.Unauthenticated, "The database credentials were not accepted."));
+            }
+        }
+
+        var connection = SourceConnection.Create(provider, DataSourceDefinitions.Build(name, source, connectionString), connectionString);
+        try
+        {
+            // Validates the configuration (malformed string, ODBC policy) once, before a worker or a driver sees it.
+            _ = connection.Compose();
+        }
+        catch (ConnectionPolicyException ex)
+        {
+            throw new RpcException(new Status(StatusCode.Internal, $"Data source '{name}' has an invalid connection configuration ({ex.Rule}); see the server log."));
+        }
+
+        var executor = CreateExecutor(name, source, connection, connectionString);
+        if (limits?.For(name, source) is { } gate) executor = new LimitedExecutor(executor, gate, principal.Name, name,
+            (source, user) => events?.Raise(DbDataKit.Monitoring.NotificationKinds.LimitReached, source, $"Data source '{source}' turned a caller away ('{user}'): every slot is in use."));
+        // outermost: a query that is cancelled by an administrator also stops waiting for a slot
+        if (activeQueries is not null) executor = new TrackedExecutor(executor, activeQueries, principal.Name, name, options.CurrentValue.LogSql);
+        return new ResolvedDataSource(name, source, executor);
+    }
+
+    private IQueryExecutor CreateExecutor(string name, DataSourceOptions source, SourceConnection connection, string connectionString)
+    {
+        // A 32-bit gateway process can load 32-bit drivers itself; a 64-bit one hands them to the worker.
+        if (source.Bitness.Equals("x86", StringComparison.OrdinalIgnoreCase) && Environment.Is64BitProcess)
+        {
+            if (connection.Engine != "odbc")
+                throw new RpcException(new Status(StatusCode.Internal, $"Data source '{name}': only ODBC sources can use bitness x86."));
+            if (worker is null)
+                throw new RpcException(new Status(StatusCode.Unavailable, "The 32-bit worker is not available on this platform."));
+            return worker.Create(connectionString, connection.ReadOnly, connection.MetadataMode);
+        }
+        // Failures leave as kind + code; the redacted driver text goes only to the local log (Gateway:LogDriverErrors).
+        return new DbQueryExecutor(connection, new FailureTranslator(
+            connection.Provider.FailureMapper, connection.Provider.Engine, name, redactor, options.CurrentValue.LogDriverErrors, _sink));
+    }
+
+    private static string ChooseName(GatewayPrincipal principal, string? requested, Dictionary<string, DataSourceOptions> configured)
+    {
+        if (!string.IsNullOrWhiteSpace(requested)) return requested.Trim();
+        if (principal.DefaultDataSource is { Length: > 0 } d) return d;
+        // a home user: the data source the files call the default, when the person may use it
+        if (principal.HomeUserId is not null && configured.FirstOrDefault(c => c.Value.Default && DataSourceAccess.HomeMayUse(c.Value, principal.HomeGroups)) is { Key: { } defaultName }) return defaultName;
+
+        var allowed = configured.Where(c => principal.HomeUserId is not null ? DataSourceAccess.HomeMayUse(c.Value, principal.HomeGroups) : principal.CanUse(c.Key)).Select(c => c.Key).ToList();
+        if (allowed.Count == 1) return allowed[0];
+        throw new RpcException(new Status(StatusCode.InvalidArgument,
+            "No data source selected. Send the 'x-datasource' header" +
+            (allowed.Count > 0 ? $" (available: {string.Join(", ", allowed)})." : ".")));
+    }
+}

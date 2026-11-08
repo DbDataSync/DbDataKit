@@ -7,7 +7,7 @@ public sealed record ServingRefusal(ServingCredentials Who, ServingRequest.Sql R
 public sealed record ServingLimited(ServingCredentials Who, ServingRequest.Sql Request, long MaxRows);
 
 /// <summary>
-/// What the conformance suite needs to know about a host: its services, who can sign in, and a few requests whose answers every host gives the same way. The host's own test project builds one (a fake host, Proxy over DuckDB) and the suite checks the promises
+/// What the conformance suite needs to know about a host: its services, who can sign in, and a few requests whose answers every host gives the same way. The host's own test project builds one (a fake host, Gateway over DuckDB) and the suite checks the promises
 /// a protocol module relies on; what is host specific (the data) is in this record, not in the suite.
 /// </summary>
 public sealed class ServingTarget : IAsyncDisposable

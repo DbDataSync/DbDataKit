@@ -1,7 +1,7 @@
 namespace DbDataKit.Connections;
 
 /// <summary>
-/// A global and optional per-user concurrency cap with an acquire timeout (Proxy S-6), on its own: no connections involved. It is what
+/// A global and optional per-user concurrency cap with an acquire timeout (Gateway S-6), on its own: no connections involved. It is what
 /// <see cref="ConnectionPool"/> uses for its limits, and what a consumer uses when the thing to limit is not a pooled <c>DbConnection</c>
 /// (a streaming result, work handed to another process).
 /// </summary>

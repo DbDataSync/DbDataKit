@@ -1,25 +1,25 @@
 # Security Findings (consolidated)
 
-> **Needs review and cleanup (low priority).** This review, and the products' reviews it consolidates (`DbDataSync/architecture/review.md`, `DbDataProxy/docs/review.md`, `DbDataBuild/docs/review.md`), were written before the repositories became one; paths, names and some findings are out of date. They are excluded from the audit, and the scripts under `scripts/` (`check_docs_commands.py`, `check_plans.py`) skip them. See [needs-review.md](needs-review.md).
+> **Needs review and cleanup (low priority).** This review, and the products' reviews it consolidates (`DbDataSync/architecture/review.md`, `DbDataGateway/docs/review.md`, `DbDataBuild/docs/review.md`), were written before the repositories became one; paths, names and some findings are out of date. They are excluded from the audit, and the scripts under `scripts/` (`check_docs_commands.py`, `check_plans.py`) skip them. See [needs-review.md](needs-review.md).
 
 Static review only; nothing was built or run, and dependency vulnerability scans were not performed.
-Severities are the reviewers'. Evidence and remediation per finding are in the product's review (`DbDataSync/architecture/review.md`, `DbDataProxy/docs/review.md`, `DbDataBuild/docs/review.md`). Two High
+Severities are the reviewers'. Evidence and remediation per finding are in the product's review (`DbDataSync/architecture/review.md`, `DbDataGateway/docs/review.md`, `DbDataBuild/docs/review.md`). Two High
 findings were spot-checked: `DbDataSync/src/DbDataSync.Libraries/LibraryInstaller.cs:199` interpolates
-`p.Id`/`p.Version` directly into a generated `<PackageReference>`; `DbDataProxy` gates `AllowWrites` in
-`ProxyFlightServer.cs:179`.
+`p.Id`/`p.Version` directly into a generated `<PackageReference>`; `DbDataGateway` gates `AllowWrites` in
+`GatewayFlightServer.cs:179`.
 
 ## High
 
 | # | Repo | Finding | Remediation |
 |---|---|---|---|
 | H1 | Sync | Unvalidated `PackageId`/`Version` in library install: MSBuild injection (csproj generation) and path traversal (`Directory.Delete`) | Validate id against NuGet id regex and version against SemVer; resolve paths and assert they stay under the library root; XML-escape or use the NuGet API instead of string templates |
-| H2 | Proxy | Query path is unrestricted; `AllowWrites` only gates update commands, so "read-only" isn't enforced. DuckDB sources give authenticated users host file read/write | Enforce read-only at the connection (read-only login / `access_mode=READ_ONLY`, `enable_external_access=false` for DuckDB as Build does) and add a parser-based statement guard |
-| H3 | Proxy | Pass-through auth accepts any credentials, unthrottled; proxy relays password guessing to the DB | Per-client/IP lockout and rate limit, audit log of failures, option to require proxy-level auth |
-| H4 | Proxy | Self-signed TLS private key written with an empty password and default ACLs | Restrict ACL to the service account, protect with DPAPI/keyring, prefer supplied certs |
+| H2 | Gateway | Query path is unrestricted; `AllowWrites` only gates update commands, so "read-only" isn't enforced. DuckDB sources give authenticated users host file read/write | Enforce read-only at the connection (read-only login / `access_mode=READ_ONLY`, `enable_external_access=false` for DuckDB as Build does) and add a parser-based statement guard |
+| H3 | Gateway | Pass-through auth accepts any credentials, unthrottled; gateway relays password guessing to the DB | Per-client/IP lockout and rate limit, audit log of failures, option to require gateway-level auth |
+| H4 | Gateway | Self-signed TLS private key written with an empty password and default ACLs | Restrict ACL to the service account, protect with DPAPI/keyring, prefer supplied certs |
 
 ## Medium
 
-- **Proxy:** service installs as LocalSystem; Docker image runs as root; no limits on concurrency, rows or
+- **Gateway:** service installs as LocalSystem; Docker image runs as root; no limits on concurrency, rows or
   bytes; command timeout defaults to none; raw DB error text returned to clients; installer/CI weaknesses
   (see detail doc). Backend credentials stored plaintext in connection strings with no startup validation.
 - **Sync:** unvalidated driver ids and file names in paths (`DriversController`, `FilesController`);
@@ -36,7 +36,7 @@ findings were spot-checked: `DbDataSync/src/DbDataSync.Libraries/LibraryInstalle
 - Sync: session ids stored unhashed; `ci.yml` has no `permissions:` block; Actions not SHA-pinned; container root.
 - Build: plan hash unkeyed; statement log retains parameter values; no central package versions, no
   vulnerability scan, mixed test package versions.
-- Proxy: credential injection uses connection-string builders (smuggling via user/password looks blocked)
+- Gateway: credential injection uses connection-string builders (smuggling via user/password looks blocked)
   but `Authentication=`-style keys aren't stripped.
 - All: no dependency vulnerability scanning in CI.
 
@@ -45,14 +45,14 @@ findings were spot-checked: `DbDataSync/src/DbDataSync.Libraries/LibraryInstalle
 Sync: auth closed by default, typed YAML deserialization, `ArgumentList` for processes, identifier escaping.
 Build: strict YAML reader, identifier quoting, DuckDB sandboxing, hook path-traversal checks, localhost
 web/MCP hardening, no read→write credential fallback, driver-message scrubbing.
-Proxy: package versions current. No hardcoded production credentials in any repo; only throwaway test-container
+Gateway: package versions current. No hardcoded production credentials in any repo; only throwaway test-container
 passwords (Sync test SQL Server, Build `scripts/test-engines.sh`).
 
 ## Cross-cutting recommendations
 
 1. One connection-string builder with an attribute allow-list (ODBC `DRIVER=`, `DSN=`, `FILEDSN=`, `SAVEFILE=`,
    `Authentication=`) used by all three.
-2. One secrets resolver; no plaintext credentials in config; shared redactor on all error/log paths (Proxy first).
+2. One secrets resolver; no plaintext credentials in config; shared redactor on all error/log paths (Gateway first).
 3. One read-only guard based on a SQL parser, tested against a shared corpus including dialect quirks (`E''`).
 4. Shared path-safety helper (resolve + assert-under-root) for driver ids, file names and library paths.
 5. CI baseline: `permissions:` least privilege, SHA-pinned Actions, `dotnet list package --vulnerable` and

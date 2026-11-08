@@ -6,5 +6,5 @@ DbDataBuild/artifacts/
 .git/
 .vs/
 DbDataSync/
-DbDataProxy/
+DbDataGateway/
 **/node_modules/

@@ -36,10 +36,10 @@ if (!isWorker) {
   // the console may grant every role there, which is what its administrators will hold
   const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', buildDirectory, '--max-role', 'viewer,author,operator,approver'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'build-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
-  // a second code for the same server: the story forgets the first pairing (testing that), and pairs the server again for the publishing steps, which link it to a Proxy (the admin role on the Build server)
+  // a second code for the same server: the story forgets the first pairing (testing that), and pairs the server again for the publishing steps, which link it to a Gateway (the admin role on the Build server)
   const madeAgain = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', buildDirectory, '--max-role', 'viewer,author,operator,approver,admin'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'build-pairing-code-again.txt'), /Pairing code: (\S+)/.exec(madeAgain)![1])
-  // the read login of the starter's SQL Server connection, in the server's own store (what publishing it to a Proxy sends; nothing connects to it)
+  // the read login of the starter's SQL Server connection, in the server's own store (what publishing it to a Gateway sends; nothing connects to it)
   execFileSync('dotnet', ['exec', buildDll, 'secret', 'set', 'dbdata:build:connection:sqlserver:read', '--stdin', '--repo', buildDirectory],
     { input: 'Server=db.example;User Id=reader;Password=console-e2e-read;Encrypt=True\n', stdio: ['pipe', 'ignore', 'inherit'] })
 }
@@ -89,31 +89,31 @@ if (!isWorker) {
   fs.writeFileSync(path.join(scratchDirectory, 'sync-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
 
-// A Proxy too: a real one, with its management listener on, a self-signed certificate of its own, one data source (nothing needs to answer behind it) and a pairing code that lets the console grant admin.
-export const proxyDirectory = path.join(os.tmpdir(), 'dbdatakit-console-e2e-proxy')
-export const proxyPort = 8484
-export const proxyManagementPort = 8485
-export const proxyUrl = `https://localhost:${proxyManagementPort}`
-const proxyDll = path.join(repoRoot, 'DbDataProxy/src/DbDataProxy.Server/bin/Debug/net10.0/dbdataproxy.dll')
+// A Gateway too: a real one, with its management listener on, a self-signed certificate of its own, one data source (nothing needs to answer behind it) and a pairing code that lets the console grant admin.
+export const gatewayDirectory = path.join(os.tmpdir(), 'dbdatakit-console-e2e-gateway')
+export const gatewayPort = 8484
+export const gatewayManagementPort = 8485
+export const gatewayUrl = `https://localhost:${gatewayManagementPort}`
+const gatewayDll = path.join(repoRoot, 'DbDataGateway/src/DbDataGateway.Server/bin/Debug/net10.0/dbdatagateway.dll')
 if (!isWorker) {
-  fs.rmSync(proxyDirectory, { recursive: true, force: true })
-  fs.mkdirSync(path.join(proxyDirectory, 'config', 'connections'), { recursive: true })
-  fs.writeFileSync(path.join(proxyDirectory, 'config', 'server.yaml'), 'schemaVersion: 2\ntls: { mode: selfSigned }\n')
-  fs.mkdirSync(path.join(proxyDirectory, 'config', 'proxy'), { recursive: true })
-  fs.writeFileSync(path.join(proxyDirectory, 'config', 'proxy', 'auth.yaml'), 'jwt:\n  signingKey: console-e2e-signing-key-0123456789abcdef\n  audience: api://console-e2e\n')
-  fs.writeFileSync(path.join(proxyDirectory, 'config', 'connections', 'erp.yaml'), [
+  fs.rmSync(gatewayDirectory, { recursive: true, force: true })
+  fs.mkdirSync(path.join(gatewayDirectory, 'config', 'connections'), { recursive: true })
+  fs.writeFileSync(path.join(gatewayDirectory, 'config', 'server.yaml'), 'schemaVersion: 2\ntls: { mode: selfSigned }\n')
+  fs.mkdirSync(path.join(gatewayDirectory, 'config', 'gateway'), { recursive: true })
+  fs.writeFileSync(path.join(gatewayDirectory, 'config', 'gateway', 'auth.yaml'), 'jwt:\n  signingKey: console-e2e-signing-key-0123456789abcdef\n  audience: api://console-e2e\n')
+  fs.writeFileSync(path.join(gatewayDirectory, 'config', 'connections', 'erp.yaml'), [
     'schema: connection/1', 'name: erp', 'engine: sqlserver', 'address: { host: localhost, database: Erp }',
     "auth: { mode: sql, user: reader, password_secret: 'env:ERP_DB_PASSWORD' }", ''].join('\n'))
-  // a second data source made by hand: the story hands `erp` over from the Build screen and this one from the Proxy's own page (plan 13a, T13)
-  fs.writeFileSync(path.join(proxyDirectory, 'config', 'connections', 'legacy.yaml'), [
+  // a second data source made by hand: the story hands `erp` over from the Build screen and this one from the Gateway's own page (plan 13a, T13)
+  fs.writeFileSync(path.join(gatewayDirectory, 'config', 'connections', 'legacy.yaml'), [
     'schema: connection/1', 'name: legacy', 'engine: sqlserver', 'address: { host: localhost, database: Legacy }',
     "auth: { mode: sql, user: reader, password_secret: 'env:LEGACY_DB_PASSWORD' }", ''].join('\n'))
   // one nothing hands over, for the Connections story to copy to a Sync server (a handed-over one is republished by Build with its connection string in a secret, which Sync cannot read)
-  fs.writeFileSync(path.join(proxyDirectory, 'config', 'connections', 'ledger.yaml'), [
+  fs.writeFileSync(path.join(gatewayDirectory, 'config', 'connections', 'ledger.yaml'), [
     'schema: connection/1', 'name: ledger', 'engine: sqlserver', 'address: { host: localhost, database: Ledger }',
     "auth: { mode: sql, user: reader, password_secret: 'env:LEDGER_DB_PASSWORD' }", ''].join('\n'))
-  const made = execFileSync('dotnet', ['exec', proxyDll, 'server', 'pair', '--repo', proxyDirectory, '--max-role', 'admin'], { encoding: 'utf8' })
-  fs.writeFileSync(path.join(scratchDirectory, 'proxy-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
+  const made = execFileSync('dotnet', ['exec', gatewayDll, 'server', 'pair', '--repo', gatewayDirectory, '--max-role', 'admin'], { encoding: 'utf8' })
+  fs.writeFileSync(path.join(scratchDirectory, 'gateway-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
 
 // Two more Build servers that announce themselves to the console instead of being paired with a code (plan 13a, L03): each is told where the console takes announcements and which address to give,
@@ -131,10 +131,10 @@ if (!isWorker) {
 }
 
 // Servers for the monitoring story (plan 13a, M12): a Build server that runs schedules and hosts a project whose one refresh plan runs every minute and fails (no login is set for its connection, so a run ends
-// with an exit code), a Sync server for a replication made in the story, and a Proxy the story sends failed logins to. They are separate from the servers above, whose pairing codes the first-run story spends.
+// with an exit code), a Sync server for a replication made in the story, and a Gateway the story sends failed logins to. They are separate from the servers above, whose pairing codes the first-run story spends.
 export const monitorBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-monitor-build'), port: 8489, project: 'scheduled', plan: 'minutely', connection: 'sqlserver' }
 export const monitorSync = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-monitor-sync'), port: 8490 }
-export const monitorProxy = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-monitor-proxy'), flightPort: 8491, managementPort: 8492 }
+export const monitorGateway = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-monitor-gateway'), flightPort: 8491, managementPort: 8492 }
 if (!isWorker) {
   // the Build project: two models, one with a refresh plan that is scheduled every minute; compiled, so the server finds the plan in rendered/
   fs.rmSync(monitorBuild.directory, { recursive: true, force: true })
@@ -160,14 +160,14 @@ if (!isWorker) {
   const madeSync = execFileSync('dotnet', ['exec', syncDll, 'server', 'pair', '--repo', monitorSync.directory, '--max-role', 'admin'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'monitor-sync-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeSync)![1])
 
-  fs.rmSync(monitorProxy.directory, { recursive: true, force: true })
-  fs.mkdirSync(path.join(monitorProxy.directory, 'config', 'proxy'), { recursive: true })
-  fs.mkdirSync(path.join(monitorProxy.directory, 'config', 'connections'), { recursive: true })
-  fs.writeFileSync(path.join(monitorProxy.directory, 'config', 'server.yaml'), 'schemaVersion: 2\ntls: { mode: selfSigned }\n')
-  fs.writeFileSync(path.join(monitorProxy.directory, 'config', 'proxy', 'auth.yaml'), 'jwt:\n  signingKey: console-e2e-signing-key-0123456789abcdef\n  audience: api://console-e2e\n')
-  fs.copyFileSync(path.join(proxyDirectory, 'config', 'connections', 'erp.yaml'), path.join(monitorProxy.directory, 'config', 'connections', 'erp.yaml'))
-  const madeProxy = execFileSync('dotnet', ['exec', proxyDll, 'server', 'pair', '--repo', monitorProxy.directory, '--max-role', 'admin'], { encoding: 'utf8' })
-  fs.writeFileSync(path.join(scratchDirectory, 'monitor-proxy-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeProxy)![1])
+  fs.rmSync(monitorGateway.directory, { recursive: true, force: true })
+  fs.mkdirSync(path.join(monitorGateway.directory, 'config', 'gateway'), { recursive: true })
+  fs.mkdirSync(path.join(monitorGateway.directory, 'config', 'connections'), { recursive: true })
+  fs.writeFileSync(path.join(monitorGateway.directory, 'config', 'server.yaml'), 'schemaVersion: 2\ntls: { mode: selfSigned }\n')
+  fs.writeFileSync(path.join(monitorGateway.directory, 'config', 'gateway', 'auth.yaml'), 'jwt:\n  signingKey: console-e2e-signing-key-0123456789abcdef\n  audience: api://console-e2e\n')
+  fs.copyFileSync(path.join(gatewayDirectory, 'config', 'connections', 'erp.yaml'), path.join(monitorGateway.directory, 'config', 'connections', 'erp.yaml'))
+  const madeGateway = execFileSync('dotnet', ['exec', gatewayDll, 'server', 'pair', '--repo', monitorGateway.directory, '--max-role', 'admin'], { encoding: 'utf8' })
+  fs.writeFileSync(path.join(scratchDirectory, 'monitor-gateway-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeGateway)![1])
 }
 
 // The connection inventory story (plan 28c, E23): a Build server hosting a project with a connection file (`connections/sqlserver.yaml`) and a plan scheduled once a day, and a Sync server the story gives a connection and a replication that uses it. Neither runs anything:
@@ -344,10 +344,10 @@ export default defineConfig({
       env: { DBDATAKIT_CONSOLE_ANNOUNCE_URL: announceListen, DBDATAKIT_ADVERTISE_URL: `https://localhost:${announcer.port}`, DBDATAKIT_INSTANCE_NAME: announcer.name },
     })),
     {
-      command: ['dotnet', 'exec', JSON.stringify(proxyDll), 'server', 'run',
-        `--Proxy:DataDirectory=${JSON.stringify(proxyDirectory)}`, '--Proxy:Listen:Address=127.0.0.1', `--Proxy:Listen:Port=${proxyPort}`,
-        '--Proxy:Management:Enabled=true', '--Proxy:Management:Address=127.0.0.1', `--Proxy:Management:Port=${proxyManagementPort}`].join(' '),
-      url: `${proxyUrl}/health/live`,
+      command: ['dotnet', 'exec', JSON.stringify(gatewayDll), 'server', 'run',
+        `--Gateway:DataDirectory=${JSON.stringify(gatewayDirectory)}`, '--Gateway:Listen:Address=127.0.0.1', `--Gateway:Listen:Port=${gatewayPort}`,
+        '--Gateway:Management:Enabled=true', '--Gateway:Management:Address=127.0.0.1', `--Gateway:Management:Port=${gatewayManagementPort}`].join(' '),
+      url: `${gatewayUrl}/health/live`,
       ignoreHTTPSErrors: true,
       reuseExistingServer: false,
       timeout: 60_000,
@@ -383,10 +383,10 @@ export default defineConfig({
       env: { Kestrel__Certificates__Default__Path: syncCertificate, Kestrel__Certificates__Default__Password: syncCertificatePassword },
     },
     {
-      command: ['dotnet', 'exec', JSON.stringify(proxyDll), 'server', 'run',
-        `--Proxy:DataDirectory=${JSON.stringify(monitorProxy.directory)}`, '--Proxy:Listen:Address=127.0.0.1', `--Proxy:Listen:Port=${monitorProxy.flightPort}`,
-        '--Proxy:Management:Enabled=true', '--Proxy:Management:Address=127.0.0.1', `--Proxy:Management:Port=${monitorProxy.managementPort}`].join(' '),
-      url: `https://localhost:${monitorProxy.managementPort}/health/live`,
+      command: ['dotnet', 'exec', JSON.stringify(gatewayDll), 'server', 'run',
+        `--Gateway:DataDirectory=${JSON.stringify(monitorGateway.directory)}`, '--Gateway:Listen:Address=127.0.0.1', `--Gateway:Listen:Port=${monitorGateway.flightPort}`,
+        '--Gateway:Management:Enabled=true', '--Gateway:Management:Address=127.0.0.1', `--Gateway:Management:Port=${monitorGateway.managementPort}`].join(' '),
+      url: `https://localhost:${monitorGateway.managementPort}/health/live`,
       ignoreHTTPSErrors: true,
       reuseExistingServer: false,
       timeout: 60_000,

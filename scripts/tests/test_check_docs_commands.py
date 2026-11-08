@@ -29,13 +29,13 @@ class CheckDocsCommands(unittest.TestCase):
         self.assertIn("DbDataSync/README.md:2", problems[0])
         self.assertIn("dbdatasync server run", problems[0])
 
-    def test_each_retired_proxy_form_is_found(self):
-        for text in ["dbdataproxy hash-password", "dbdataproxy secret hash", "dbdataproxy install", "dbdataproxy query select 1", "dbdataproxy --healthcheck", "DbDataProxy.exe"]:
+    def test_each_retired_gateway_form_is_found(self):
+        for text in ["dbdatagateway hash-password", "dbdatagateway secret hash", "dbdatagateway install", "dbdatagateway query select 1", "dbdatagateway --healthcheck", "DbDataGateway.exe"]:
             with self.subTest(text=text):
-                self.assertEqual(1, len(check.check(tree({"DbDataProxy/README.md": text + "\n"}))))
+                self.assertEqual(1, len(check.check(tree({"DbDataGateway/README.md": text + "\n"}))))
 
-    def test_the_new_proxy_forms_pass(self):
-        root = tree({"DbDataProxy/README.md": "dbdataproxy query run \"select 1\"\ndbdataproxy secret protect\ndbdataproxy.exe server run\n"})
+    def test_the_new_gateway_forms_pass(self):
+        root = tree({"DbDataGateway/README.md": "dbdatagateway query run \"select 1\"\ndbdatagateway secret protect\ndbdatagateway.exe server run\n"})
         self.assertEqual([], check.check(root))
 
     def test_history_is_not_checked(self):
@@ -44,12 +44,12 @@ class CheckDocsCommands(unittest.TestCase):
 
     def test_the_four_pre_monorepo_reviews_are_not_read(self):
         # docs/needs-review.md: they predate the monorepo, wait for review and cleanup, and are skipped by the scripts
-        for rel in ["docs/security-review.md", "DbDataSync/architecture/review.md", "DbDataProxy/docs/review.md", "DbDataBuild/docs/review.md"]:
+        for rel in ["docs/security-review.md", "DbDataSync/architecture/review.md", "DbDataGateway/docs/review.md", "DbDataBuild/docs/review.md"]:
             with self.subTest(rel=rel):
-                self.assertEqual([], check.check(tree({rel: "Run dbdatasync serve --repo x and dbdataproxy install\n"})))
+                self.assertEqual([], check.check(tree({rel: "Run dbdatasync serve --repo x and dbdatagateway install\n"})))
 
     def test_a_line_can_name_the_old_form_on_purpose(self):
-        root = tree({"x/README.md": "# retired-name-ok\nmv DbDataProxy.exe dbdataproxy.exe\n"})
+        root = tree({"x/README.md": "# retired-name-ok\nmv DbDataGateway.exe dbdatagateway.exe\n"})
         self.assertEqual([], check.check(root))
 
 
@@ -139,13 +139,13 @@ public static class IdentityVerbs {
     ];
 }
 """,
-            "DbDataProxy/src/DbDataProxy.Server/Hosting/IdentityCommand.cs": """
+            "DbDataGateway/src/DbDataGateway.Server/Hosting/IdentityCommand.cs": """
 public static class IdentityCommand {
-    public static Noun Noun() => new("identity", "The identity home this proxy serves", [.. IdentityVerbs.Admin(new IdentityAdminLocation("", Open, Url))]);
+    public static Noun Noun() => new("identity", "The identity home this gateway serves", [.. IdentityVerbs.Admin(new IdentityAdminLocation("", Open, Url))]);
 }
 """,
         })
-        self.assertEqual({("identity", "invite"), ("identity", "assign")}, check.commands_of(root, "dbdataproxy"))
+        self.assertEqual({("identity", "invite"), ("identity", "assign")}, check.commands_of(root, "dbdatagateway"))
 
     def test_a_command_that_exists_passes(self):
         text = "```\ndbdatakit server run --listen https://x\ndbdatakit instance add https://b --code c\n```\nOr `dbdatakit user invite`, `dbdatakit instance` and `dbdatakit.exe server pair`.\n"
@@ -178,7 +178,7 @@ public static class IdentityCommand {
         self.assertEqual([], check.check_exist(self.tree(files)))
 
     def test_a_product_without_sources_is_not_audited(self):
-        self.assertEqual([], check.check_exist(tree({"DbDataProxy/README.md": "`dbdataproxy nothing here`\n"})))
+        self.assertEqual([], check.check_exist(tree({"DbDataGateway/README.md": "`dbdatagateway nothing here`\n"})))
 
     def test_a_product_whose_commands_cannot_be_read_is_reported(self):
         problems = check.check_exist(tree({"DbDataStore/src/x.cs": "class X {}\n"}))

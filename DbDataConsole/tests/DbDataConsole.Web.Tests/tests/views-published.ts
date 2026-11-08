@@ -9,20 +9,20 @@ const sample = fs.readFileSync(path.join(root, 'DbDataBuild/templates/retail/das
 const results = path.join(root, 'DbDataKit/conformance/views/widget-results/dashboard/retail-sales-today')
 const recorded = (id: string) => JSON.parse(fs.readFileSync(path.join(results, `${id}.json`), 'utf8')) as unknown
 
-const SERVER = 'proxy-1'
+const SERVER = 'gateway-1'
 const NAME = 'retail-sales-today'
 const json = (route: Route, body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
 
 export interface ModuleCalls { render: Array<{ layout?: string; only?: string[]; parameters?: Record<string, unknown> }>; other: string[] }
 
 /**
- * A Proxy that runs the views module, as the console's relay shows it (the relay is the console's own route, mocked here so no Proxy is needed; the Proxy's side is `ViewsModuleTests`, through the real host): the console lists it, its status says the
+ * A Gateway that runs the views module, as the console's relay shows it (the relay is the console's own route, mocked here so no Gateway is needed; the Gateway's side is `ViewsModuleTests`, through the real host): the console lists it, its status says the
  * module is on, it lists the retail dashboard as published (version 2) and renders it. `denied` makes every widget an error entry, as a person with no access to the data source gets.
  */
 export async function mockViews(page: Page, options: { module?: boolean; denied?: boolean } = {}): Promise<ModuleCalls> {
   const calls: ModuleCalls = { render: [], other: [] }
   await page.route('**/api/instances', (route) => route.request().method() === 'GET'
-    ? json(route, [{ id: SERVER, name: 'Retail proxy', url: 'https://proxy.invalid', product: 'dbdataproxy', version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null }])
+    ? json(route, [{ id: SERVER, name: 'Retail gateway', url: 'https://gateway.invalid', product: 'dbdatagateway', version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null }])
     : route.fallback())
   await page.route(`**/relay/${SERVER}/api/v1/**`, async (route) => {
     const request = route.request()
@@ -53,20 +53,20 @@ export async function mockViews(page: Page, options: { module?: boolean; denied?
 }
 
 /**
- * The Views page over a Proxy's published documents (plan 32 DBR11b): with a Proxy that runs the module the page lists and opens the PUBLISHED dashboard (not the fixtures) through the relay, says so, resolves only what a parameter change touches,
- * draws a person's refusals as widget errors, keeps the choice of source in the address, and goes back to the fixtures by a choice; a Proxy without the module is not a source and the page shows the fixtures.
+ * The Views page over a Gateway's published documents (plan 32 DBR11b): with a Gateway that runs the module the page lists and opens the PUBLISHED dashboard (not the fixtures) through the relay, says so, resolves only what a parameter change touches,
+ * draws a person's refusals as widget errors, keeps the choice of source in the address, and goes back to the fixtures by a choice; a Gateway without the module is not a source and the page shows the fixtures.
  */
 export async function publishedStory(page: Page) {
   const outside: string[] = []
   const origin = new URL(page.url()).origin
   page.on('request', (request) => { if (/^https?:/.test(request.url()) && !request.url().startsWith(origin)) outside.push(request.url()) })
 
-  // a Proxy without the module (or one that answers 404, as before this slice) is not a source: the fixtures, said so
+  // a Gateway without the module (or one that answers 404, as before this slice) is not a source: the fixtures, said so
   const without = await mockViews(page, { module: false })
   await page.goto('/views/dashboards')
   await expect(page.getByTestId('views-source-current')).toHaveAttribute('data-source', 'fixtures')
   await expect(page.getByTestId('views-source')).toContainText('Fixtures')
-  await expect(page.getByTestId('views-source')).not.toContainText('Retail proxy')
+  await expect(page.getByTestId('views-source')).not.toContainText('Retail gateway')
   expect(without.render).toEqual([])
   await page.unroute('**/api/instances')
   await page.unroute(`**/relay/${SERVER}/api/v1/**`)

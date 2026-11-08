@@ -19,7 +19,7 @@ public sealed record ViewsPrincipal(ServingCaller Caller, ViewsAppScope? App = n
 
 /// <summary>
 /// Turns what a request carries into a principal: the same tokens as the rest of the serving layer (a console token, a personal access token, an access token of the identity home, an app's token). The host that mounts the
-/// module supplies it (the Proxy's <c>HomeCallers</c> is the one for the identity home); the module checks nothing itself and trusts nothing but what this returns.
+/// module supplies it (the Gateway's <c>HomeCallers</c> is the one for the identity home); the module checks nothing itself and trusts nothing but what this returns.
 /// </summary>
 public interface IViewsCallers
 {

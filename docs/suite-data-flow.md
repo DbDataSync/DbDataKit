@@ -25,7 +25,7 @@ flowchart LR
         ENT[("DbDataStore database<br/>entities with history, documents")]
     end
 
-    subgraph EDGE["Serving layer (DbDataProxy code base), one or more instances"]
+    subgraph EDGE["Serving layer (DbDataGateway code base), one or more instances"]
         DS["flightsql<br/>read-only data sources"]
         SEM["semantic<br/>semantic models, joins across sources"]
         STOREMOD["store and webdav<br/>entity reads and writes, documents"]

@@ -299,7 +299,7 @@ No production secrets found. `DbDataSync_Test_Pw1` (SA password) appears in ~35 
 ### 9.14 Dependencies - Info (scanner NOT run)
 Reading csproj/package.json: nothing obviously pinned to a famous-critical-CVE version, but no scan was possible without a restore into the read-only repo. Add `dotnet list package --vulnerable` and `npm audit` to CI. Watch: `Npgsql 9.0.3`, `Microsoft.Data.SqlClient 7.0.2`,
 `Oracle.ManagedDataAccess.Core 23.9.1`, `MySqlConnector 2.4.0`, `LibGit2Sharp 0.32.0` (tracks libgit2 advisories), `Mono.Cecil 0.11.6` (parses untrusted DLLs from installed libraries), `IKVM 8.16.1` plus operator jars, `System.DirectoryServices 9.0.0` on net10, `Parquet.Net 6.1.0`, `DuckDB.NET 1.5.5`.
-SPA: react-markdown without `rehype-raw`, so notes Markdown does not render raw HTML. No Central Package Management (`Directory.Packages.props` absent; the sibling DbDataProxy has one): YamlDotNet and DuckDB.NET versions are repeated across csprojs. The team does track upstream advisories (CVE-2026-6471 note in `docker-compose.yml`).
+SPA: react-markdown without `rehype-raw`, so notes Markdown does not render raw HTML. No Central Package Management (`Directory.Packages.props` absent; the sibling DbDataGateway has one): YamlDotNet and DuckDB.NET versions are repeated across csprojs. The team does track upstream advisories (CVE-2026-6471 note in `docker-compose.yml`).
 
 ### 9.15 SQL injection and dynamic SQL - Low
 Identifiers go through `QuoteIdentifier`, which doubles the closing delimiter (`MsSqlDialect.cs:13`, `PostgresDialect.cs:20`, `MySqlDialect.cs:32`, `OracleDialect.cs:36`); values are bound as parameters; DDL literals use `Literal(...)` (`MsSqlDialect.cs:77`, `MsSqlProvisioner.cs:171`); Postgres slot names are validated

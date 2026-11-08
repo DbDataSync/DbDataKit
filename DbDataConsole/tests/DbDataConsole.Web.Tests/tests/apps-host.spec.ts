@@ -10,16 +10,16 @@ import pg from 'pg'
 
 // Plan 26, AP05, and plan 20 O08c: a sandboxed code app in a real browser. A person signs in at the identity home, opens the app on the apps host, and the app (a document with an opaque origin) reads and writes rows of a
 // master data model through the host: the shell hands it a token, the host checks it and answers from the model the Store published to the group, within the scope of the app's manifest. The app cannot read the host's
-// page or its cookies. The Proxy (modules `identity` and `apps`, with its management API for the Store to publish to) is started here; the Store's server is never started: its command line publishes the model.
+// page or its cookies. The Gateway (modules `identity` and `apps`, with its management API for the Store to publish to) is started here; the Store's server is never started: its command line publishes the model.
 // Needs a PostgreSQL (`DBDATA_E2E_PG`, an Npgsql connection string) for the model's tables.
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '../../../..')
-const proxyDll = path.join(repoRoot, 'DbDataProxy/src/DbDataProxy.Server/bin/Debug/net10.0/dbdataproxy.dll')
+const gatewayDll = path.join(repoRoot, 'DbDataGateway/src/DbDataGateway.Server/bin/Debug/net10.0/dbdatagateway.dll')
 const storeDll = path.join(repoRoot, 'DbDataStore/src/DbDataStore.Server/bin/Debug/net10.0/dbdatastore.dll')
 const warehouse = process.env.DBDATA_E2E_PG
 
-const proxyDirectory = path.join(os.tmpdir(), 'dbdatakit-e2e-apps-proxy')
+const gatewayDirectory = path.join(os.tmpdir(), 'dbdatakit-e2e-apps-gateway')
 const storeDirectory = path.join(os.tmpdir(), 'dbdatakit-e2e-apps-store')
 const appDirectory = path.join(os.tmpdir(), 'dbdatakit-e2e-apps-app')
 const homePort = 8511
@@ -163,12 +163,12 @@ test.describe.configure({ mode: 'serial' })
 
 test.beforeAll(async () => {
   test.skip(!warehouse, 'set DBDATA_E2E_PG to run the apps host story')
-  for (const directory of [proxyDirectory, storeDirectory, appDirectory]) {
+  for (const directory of [gatewayDirectory, storeDirectory, appDirectory]) {
     fs.rmSync(directory, { recursive: true, force: true })
     fs.mkdirSync(directory, { recursive: true })
   }
 
-  // the Store: a model on the PostgreSQL, published to the Proxy's group below
+  // the Store: a model on the PostgreSQL, published to the Gateway's group below
   const client = new pg.Client({ connectionString: toPg(warehouse!) })
   await client.connect()
   await client.query('DROP SCHEMA IF EXISTS territories CASCADE')
@@ -183,24 +183,24 @@ test.beforeAll(async () => {
   const env = { [connectionVariable]: warehouse! }
   run(storeDll, storeDirectory, ['model', 'put', '--file', modelFile])
 
-  // the Proxy: the identity home and the apps host, with the apps host's client registered at the home before it starts
-  fs.mkdirSync(path.join(proxyDirectory, 'config'), { recursive: true })
-  fs.writeFileSync(path.join(proxyDirectory, 'config', 'server.yaml'), [
+  // the Gateway: the identity home and the apps host, with the apps host's client registered at the home before it starts
+  fs.mkdirSync(path.join(gatewayDirectory, 'config'), { recursive: true })
+  fs.writeFileSync(path.join(gatewayDirectory, 'config', 'server.yaml'), [
     'schemaVersion: 2', 'tls: { mode: selfSigned, hostnames: [localhost] }', 'modules: [identity, apps]', 'definitionPollSeconds: 1',
     `management: { enabled: true, address: 127.0.0.1, port: ${managementPort} }`,
     `identity: { address: 127.0.0.1, port: ${homePort}, publicUrl: '${homeUrl}' }`,
     `apps: { address: 127.0.0.1, port: ${appsPort}, home: { clientId: '__CLIENT__' } }`, '',
   ].join('\n'))
-  const registered = run(proxyDll, proxyDirectory, ['identity', 'client-add', '--name', 'Apps host', '--public', '--redirect', `${appsUrl}/apps/-/callback`])
-  const file = path.join(proxyDirectory, 'config', 'server.yaml')
+  const registered = run(gatewayDll, gatewayDirectory, ['identity', 'client-add', '--name', 'Apps host', '--public', '--redirect', `${appsUrl}/apps/-/callback`])
+  const file = path.join(gatewayDirectory, 'config', 'server.yaml')
   fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('__CLIENT__', registered.client_id))
 
   // the app, published and served as the instance `acme`, whose data is the Store's default copy of the model
   fs.writeFileSync(path.join(appDirectory, 'app.yaml'), manifest)
   fs.writeFileSync(path.join(appDirectory, 'index.html'), index)
   fs.writeFileSync(path.join(appDirectory, 'app.js'), script)
-  run(proxyDll, proxyDirectory, ['apps', 'publish', '--dir', appDirectory])
-  run(proxyDll, proxyDirectory, ['apps', 'instance-save', '--name', 'acme', '--app', 'territory-notes', '--bind', 'territories=default', '--setting', `embed.allowed_origins=${portalOrigin}`])
+  run(gatewayDll, gatewayDirectory, ['apps', 'publish', '--dir', appDirectory])
+  run(gatewayDll, gatewayDirectory, ['apps', 'instance-save', '--name', 'acme', '--app', 'territory-notes', '--bind', 'territories=default', '--setting', `embed.allowed_origins=${portalOrigin}`])
   // two portals over the same instances; `hidden` is mounted in the first and Ada has no role on it
   for (const [name, text] of [
     ['portal-alpha', portalYaml('portal-alpha', 'Alpha Co', '#ff0000', 'side', true, '  mounts: [{app: acme, path: /sales/}, {app: beta, path: /beta/}, {app: hidden, path: /hidden/}]\n  navigation: [{app: acme, label: Sales}, {app: beta, label: Beta}, {app: hidden, label: Hidden}]\n  slots: {aside: beta}')],
@@ -210,19 +210,19 @@ test.beforeAll(async () => {
     fs.rmSync(directory, { recursive: true, force: true })
     fs.mkdirSync(directory, { recursive: true })
     fs.writeFileSync(path.join(directory, 'app.yaml'), text)
-    run(proxyDll, proxyDirectory, ['apps', 'publish', '--dir', directory])
-    run(proxyDll, proxyDirectory, ['apps', 'instance-save', '--name', name.replace('portal-', ''), '--app', name])
+    run(gatewayDll, gatewayDirectory, ['apps', 'publish', '--dir', directory])
+    run(gatewayDll, gatewayDirectory, ['apps', 'instance-save', '--name', name.replace('portal-', ''), '--app', name])
   }
   // two more instances and a menu of three: Ada is given a role on beta but not on hidden
-  for (const name of ['beta', 'hidden']) run(proxyDll, proxyDirectory, ['apps', 'instance-save', '--name', name, '--app', 'territory-notes', '--bind', 'territories=default'])
-  run(proxyDll, proxyDirectory, ['apps', 'nav-save', '--name', 'main', '--title', 'Main', '--item', 'acme=Acme,beta=Beta,hidden=Hidden'])
-  const proxy = start([proxyDll, 'server', 'run', `--Proxy:DataDirectory=${proxyDirectory}`])
-  await waitFor(`${homeUrl}/health/live`, proxy.output)
-  await waitFor(`${appsUrl}/health/live`, proxy.output)
+  for (const name of ['beta', 'hidden']) run(gatewayDll, gatewayDirectory, ['apps', 'instance-save', '--name', name, '--app', 'territory-notes', '--bind', 'territories=default'])
+  run(gatewayDll, gatewayDirectory, ['apps', 'nav-save', '--name', 'main', '--title', 'Main', '--item', 'acme=Acme,beta=Beta,hidden=Hidden'])
+  const gateway = start([gatewayDll, 'server', 'run', `--Gateway:DataDirectory=${gatewayDirectory}`])
+  await waitFor(`${homeUrl}/health/live`, gateway.output)
+  await waitFor(`${appsUrl}/health/live`, gateway.output)
 
   // the Store publishes the model to the group: its tables first, then the login, the data source and the model, which every instance of the group serves from then on
-  const code = /Pairing code: (\S+)/.exec(execFileSync('dotnet', ['exec', proxyDll, 'server', 'pair', '--repo', proxyDirectory, '--max-role', 'publisher'], { encoding: 'utf8' }))![1]
-  run(storeDll, storeDirectory, ['proxy', 'add', 'edge', '--url', managementUrl, '--code', code])
+  const code = /Pairing code: (\S+)/.exec(execFileSync('dotnet', ['exec', gatewayDll, 'server', 'pair', '--repo', gatewayDirectory, '--max-role', 'publisher'], { encoding: 'utf8' }))![1]
+  run(storeDll, storeDirectory, ['gateway', 'add', 'edge', '--url', managementUrl, '--code', code])
   run(storeDll, storeDirectory, ['model', 'publish', 'territories', '--proxy', 'edge'], env)
   await new Promise((resolve) => setTimeout(resolve, 3000))   // the instance reads the group's definitions every second
 })
@@ -241,7 +241,7 @@ test('a person signs in and the sandboxed app reads and writes the published mod
   await addAuthenticator(context, page)
 
   // Ada enrols at the home with the first-run invitation, and is given a role on the app
-  const firstRun = fs.readFileSync(path.join(proxyDirectory, 'identity', 'FIRST-RUN.txt'), 'utf8')
+  const firstRun = fs.readFileSync(path.join(gatewayDirectory, 'identity', 'FIRST-RUN.txt'), 'utf8')
   await page.goto(`${homeUrl}/invite#${firstRun.split('/invite#')[1].split(/\s/)[0]}`)
   await page.getByTestId('identity-invite-name').fill('Ada Lovelace')
   await page.getByTestId('identity-invite-email').fill('ada@example.com')
@@ -252,9 +252,9 @@ test('a person signs in and the sandboxed app reads and writes the published mod
   await page.goto(`${appsUrl}/apps/acme/`)
   await expect(page.locator('body')).toContainText('gives you no role on this app')
 
-  const ada = run(proxyDll, proxyDirectory, ['identity', 'user-list']).users.find((u: any) => u.name === 'Ada Lovelace')
-  run(proxyDll, proxyDirectory, ['identity', 'assign', '--user', ada.id, '--app', 'acme', '--roles', 'author'])
-  run(proxyDll, proxyDirectory, ['identity', 'assign', '--user', ada.id, '--app', 'beta', '--roles', 'author'])
+  const ada = run(gatewayDll, gatewayDirectory, ['identity', 'user-list']).users.find((u: any) => u.name === 'Ada Lovelace')
+  run(gatewayDll, gatewayDirectory, ['identity', 'assign', '--user', ada.id, '--app', 'acme', '--roles', 'author'])
+  run(gatewayDll, gatewayDirectory, ['identity', 'assign', '--user', ada.id, '--app', 'beta', '--roles', 'author'])
 
   // a new sign-in at the apps host (the host reads her roles when she arrives); the home already knows her
   await context.clearCookies({ domain: 'localhost' })
@@ -368,15 +368,15 @@ test('a person signs in and the sandboxed app reads and writes the published mod
   fs.writeFileSync(path.join(trustedDirectory, 'portal.js'), trustedScript)
   // AP15: publishing a trusted portal needs an approval for these exact files, by a user of the identity home who holds the Approver role on the server (a service account is a home user): grace is made
   // one, approves the files before the publish and revokes at once, so the portal is published and not run until the story approves that version (AP16)
-  expect(() => run(proxyDll, proxyDirectory, ['apps', 'publish', '--dir', trustedDirectory])).toThrow()   // refused: no approval yet
-  expect(() => run(proxyDll, proxyDirectory, ['apps', 'approve', '--path', trustedDirectory, '--by', 'grace'])).toThrow()   // refused: grace is no one yet (the attempt makes the server's own id, which the role names)
-  const serverId = /instanceId: (\S+)/.exec(fs.readFileSync(path.join(proxyDirectory, 'config', 'server.yaml'), 'utf8'))![1]
-  const graceAccount = run(proxyDll, proxyDirectory, ['identity', 'service-account-add', '--name', 'grace'])
-  run(proxyDll, proxyDirectory, ['identity', 'assign', '--user', graceAccount.id, '--server', serverId, '--roles', 'approver'])
-  const first = run(proxyDll, proxyDirectory, ['apps', 'approve', '--path', trustedDirectory, '--by', 'grace', '--note', 'so that it can be published'])
-  run(proxyDll, proxyDirectory, ['apps', 'publish', '--dir', trustedDirectory])
-  run(proxyDll, proxyDirectory, ['apps', 'approval-revoke', '--id', first.id, '--by', 'grace'])
-  run(proxyDll, proxyDirectory, ['apps', 'instance-save', '--name', 'trusted', '--app', 'portal-trusted'])
+  expect(() => run(gatewayDll, gatewayDirectory, ['apps', 'publish', '--dir', trustedDirectory])).toThrow()   // refused: no approval yet
+  expect(() => run(gatewayDll, gatewayDirectory, ['apps', 'approve', '--path', trustedDirectory, '--by', 'grace'])).toThrow()   // refused: grace is no one yet (the attempt makes the server's own id, which the role names)
+  const serverId = /instanceId: (\S+)/.exec(fs.readFileSync(path.join(gatewayDirectory, 'config', 'server.yaml'), 'utf8'))![1]
+  const graceAccount = run(gatewayDll, gatewayDirectory, ['identity', 'service-account-add', '--name', 'grace'])
+  run(gatewayDll, gatewayDirectory, ['identity', 'assign', '--user', graceAccount.id, '--server', serverId, '--roles', 'approver'])
+  const first = run(gatewayDll, gatewayDirectory, ['apps', 'approve', '--path', trustedDirectory, '--by', 'grace', '--note', 'so that it can be published'])
+  run(gatewayDll, gatewayDirectory, ['apps', 'publish', '--dir', trustedDirectory])
+  run(gatewayDll, gatewayDirectory, ['apps', 'approval-revoke', '--id', first.id, '--by', 'grace'])
+  run(gatewayDll, gatewayDirectory, ['apps', 'instance-save', '--name', 'trusted', '--app', 'portal-trusted'])
   await page.waitForTimeout(3000)   // the instance reads the group's definitions every second
   // AP16: the trusted portal is not run without an approval: the person gets the default portal, and the reason
   await page.goto(`${appsUrl}/apps/trusted/`)
@@ -386,9 +386,9 @@ test('a person signs in and the sandboxed app reads and writes the published mod
   expect((await page.goto(`${appsUrl}/apps/trusted/_app/`))!.status()).toBe(403)
 
   // an approval by someone else (not its author) for that exact version; Ada is given a role on the portal and signs in again
-  const approval = run(proxyDll, proxyDirectory, ['apps', 'approve', '--app', 'portal-trusted', '--version', '1', '--by', 'grace', '--note', 'reviewed'])
-  const user = run(proxyDll, proxyDirectory, ['identity', 'user-list']).users.find((u: any) => u.name === 'Ada Lovelace')
-  run(proxyDll, proxyDirectory, ['identity', 'assign', '--user', user.id, '--app', 'trusted', '--roles', 'author'])
+  const approval = run(gatewayDll, gatewayDirectory, ['apps', 'approve', '--app', 'portal-trusted', '--version', '1', '--by', 'grace', '--note', 'reviewed'])
+  const user = run(gatewayDll, gatewayDirectory, ['identity', 'user-list']).users.find((u: any) => u.name === 'Ada Lovelace')
+  run(gatewayDll, gatewayDirectory, ['identity', 'assign', '--user', user.id, '--app', 'trusted', '--roles', 'author'])
   await context.clearCookies({ domain: 'localhost' })
   await page.goto(`${homeUrl}/identity/sign-in`)
   await page.getByTestId('identity-sign-in-passkey').click()
@@ -407,31 +407,31 @@ test('a person signs in and the sandboxed app reads and writes the published mod
   expect(trail.rows.map((r) => r.actor_name)).toEqual([`Ada Lovelace, through portal-trusted 1.0.0, approved by grace (${approval.id})`])
 
   // revoked: the portal is not run again
-  run(proxyDll, proxyDirectory, ['apps', 'approval-revoke', '--id', approval.id, '--by', 'grace'])
+  run(gatewayDll, gatewayDirectory, ['apps', 'approval-revoke', '--id', approval.id, '--by', 'grace'])
   await page.goto(`${appsUrl}/apps/trusted/`)
   await expect(page.locator('p.notice')).toContainText('Showing the default portal instead.')
   await expect(page.locator('#portal-out')).toHaveCount(0)
 
   // AP20: the rest of the lifecycle at the command line. An update is a new version the unpinned instance follows, a rollback returns to the one before, and a removed instance answers 404 (the hosts read the group's definitions every second)
-  const versionsOf = () => run(proxyDll, proxyDirectory, ['apps', 'list']).apps.find((a: any) => a.name === 'territory-notes').versions
+  const versionsOf = () => run(gatewayDll, gatewayDirectory, ['apps', 'list']).apps.find((a: any) => a.name === 'territory-notes').versions
   expect(versionsOf()).toEqual([1])
   fs.writeFileSync(path.join(appDirectory, 'index.html'), index.replace('<button id="go">go</button>', '<button id="go">go</button><pre id="build">second build</pre>'))
-  expect(run(proxyDll, proxyDirectory, ['apps', 'publish', '--dir', appDirectory, '--note', 'second build']).version).toBe(2)
+  expect(run(gatewayDll, gatewayDirectory, ['apps', 'publish', '--dir', appDirectory, '--note', 'second build']).version).toBe(2)
   expect(versionsOf()).toEqual([1, 2])
   await expect(async () => {
     await page.goto(`${appsUrl}/apps/acme/`)
     await expect(page.frameLocator('#app-frame').locator('#build')).toHaveText('second build', { timeout: 1000 })
   }).toPass()
-  expect(run(proxyDll, proxyDirectory, ['apps', 'rollback', '--app', 'territory-notes']).version).toBe(1)
+  expect(run(gatewayDll, gatewayDirectory, ['apps', 'rollback', '--app', 'territory-notes']).version).toBe(1)
   await expect(async () => {
     await page.goto(`${appsUrl}/apps/acme/`)
     await expect(page.frameLocator('#app-frame').locator('#rows')).toHaveText(/rows /, { timeout: 1000 })
     await expect(page.frameLocator('#app-frame').locator('#build')).toHaveCount(0, { timeout: 1000 })
   }).toPass()
   // an instance a portal mounts cannot be removed; one nobody mounts can, and then its address is gone (Ada has no role on it: 403 before, 404 after)
-  expect(() => run(proxyDll, proxyDirectory, ['apps', 'instance-remove', '--name', 'acme'])).toThrow()
-  run(proxyDll, proxyDirectory, ['apps', 'instance-save', '--name', 'scratch', '--app', 'territory-notes', '--bind', 'territories=default'])
+  expect(() => run(gatewayDll, gatewayDirectory, ['apps', 'instance-remove', '--name', 'acme'])).toThrow()
+  run(gatewayDll, gatewayDirectory, ['apps', 'instance-save', '--name', 'scratch', '--app', 'territory-notes', '--bind', 'territories=default'])
   await expect(async () => { expect((await page.goto(`${appsUrl}/apps/scratch/`))!.status()).toBe(403) }).toPass()
-  run(proxyDll, proxyDirectory, ['apps', 'instance-remove', '--name', 'scratch'])
+  run(gatewayDll, gatewayDirectory, ['apps', 'instance-remove', '--name', 'scratch'])
   await expect(async () => { expect((await page.goto(`${appsUrl}/apps/scratch/`))!.status()).toBe(404) }).toPass()
 })

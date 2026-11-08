@@ -6,5 +6,5 @@ DbDataStore/artifacts/
 DbDataSync/
 DbDataBuild/
 DbDataConsole/
-DbDataProxy/
+DbDataGateway/
 **/node_modules/

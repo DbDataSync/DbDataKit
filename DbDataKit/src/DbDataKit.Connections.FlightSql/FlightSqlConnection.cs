@@ -131,7 +131,7 @@ public sealed class FlightSqlConnection : DbConnection
         if (_settings.SkipCertificateValidation)
         {
             // An explicit, per-connection opt-out the operator chose (and was warned about on the form) —
-            // for a proxy with a self-signed or private-CA certificate. Not a global switch.
+            // for a gateway with a self-signed or private-CA certificate. Not a global switch.
             handler.SslOptions = new SslClientAuthenticationOptions
             {
                 RemoteCertificateValidationCallback = static (_, _, _, _) => true,
@@ -176,7 +176,7 @@ public sealed class FlightSqlConnection : DbConnection
     /// <summary>
     /// Basic authentication: the Flight handshake, with the credentials as a Basic header on that one
     /// call. A server that issues sessions answers with a bearer token (header, or trailer on some),
-    /// which replaces the password on every later call. A server that issues none — a proxy that checks
+    /// which replaces the password on every later call. A server that issues none — a gateway that checks
     /// Basic credentials on each request — leaves nothing to swap in, so the Basic header itself is kept.
     /// </summary>
     private async Task<string> HandshakeAsync(FlightClient flight, CancellationToken cancellationToken)

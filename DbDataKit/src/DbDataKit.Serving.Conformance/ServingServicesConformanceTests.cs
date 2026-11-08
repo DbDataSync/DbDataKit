@@ -5,7 +5,7 @@ namespace DbDataKit.Serving.Conformance;
 
 /// <summary>
 /// What any host promises a protocol module (plan 19, N03): who a caller is, that a session stands for its caller, what the catalog shows, how a query answers and where it stops, which refusals come as which exception, and that a write needs a write path.
-/// Derive one class per host and implement <see cref="CreateAsync"/>; the Flight SQL module and every module after it can then rely on the same behavior from the fake host and from Proxy.
+/// Derive one class per host and implement <see cref="CreateAsync"/>; the Flight SQL module and every module after it can then rely on the same behavior from the fake host and from Gateway.
 /// </summary>
 public abstract class ServingServicesConformanceTests
 {

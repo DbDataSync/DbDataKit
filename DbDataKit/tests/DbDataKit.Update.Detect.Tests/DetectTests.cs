@@ -45,7 +45,7 @@ public class DetectorTests
     [InlineData("DOTNET_RUNNING_IN_CONTAINER", "true")]
     [InlineData("KUBERNETES_SERVICE_HOST", "10.0.0.1")]
     public void Container_ByEnv(string k, string v)
-        => Assert.Equal(InstallMethod.Container, InstallMethodDetector.Detect(E("/app/dbdataproxy", env: new() { [k] = v })).Method);
+        => Assert.Equal(InstallMethod.Container, InstallMethodDetector.Detect(E("/app/dbdatagateway", env: new() { [k] = v })).Method);
 
     [Fact] public void Container_ByDockerEnvFile() => Assert.Equal(InstallMethod.Container, InstallMethodDetector.Detect(E("/app/x", dockerEnv: true)).Method);
 
@@ -58,8 +58,8 @@ public class DetectorTests
         => Assert.Equal(InstallMethod.Archive, InstallMethodDetector.Detect(E(@"C:\apps\x\x.exe", env: new() { ["DOTNET_RUNNING_IN_CONTAINER"] = "false" })).Method);
 
     [Theory]
-    [InlineData(@"C:\Program Files\DbDataProxy\versions\1.4.0\dbdataproxy.exe")]
-    [InlineData("/opt/dbdataproxy/versions/1.4.0-beta.1/dbdataproxy")]
+    [InlineData(@"C:\Program Files\DbDataGateway\versions\1.4.0\dbdatagateway.exe")]
+    [InlineData("/opt/dbdatagateway/versions/1.4.0-beta.1/dbdatagateway")]
     public void ServiceSwap(string p) => Assert.Equal(InstallMethod.ServiceSwap, InstallMethodDetector.Detect(E(p)).Method);
 
     [Theory]
@@ -123,10 +123,10 @@ public class ApplierTests
     [Fact]
     public void Container_NeverOffersInPlace()
     {
-        var r = new ContainerNotice().Plan(R(image: "ghcr.io/org/dbdataproxy:1.4.0"));
+        var r = new ContainerNotice().Plan(R(image: "ghcr.io/org/dbdatagateway:1.4.0"));
         Assert.Equal(ApplyOutcome.NotSupported, r.Outcome);
         Assert.Null(r.Command);
-        Assert.Contains("ghcr.io/org/dbdataproxy:1.5.0", r.Message);
+        Assert.Contains("ghcr.io/org/dbdatagateway:1.5.0", r.Message);
         Assert.Throws<ArgumentException>(() => new ContainerNotice().Plan(R(image: "x; rm -rf /")));
     }
 

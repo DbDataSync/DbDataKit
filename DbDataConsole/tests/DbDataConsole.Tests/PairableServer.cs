@@ -13,7 +13,7 @@ namespace DbDataConsole.Tests;
 
 /// <summary>
 /// A server a console can pair with, as small as one can be and still be the real thing at the edges: Kestrel over HTTPS with a certificate of its own, the shared pairing and key-rotation endpoints, the
-/// management API version header, and the shared host's <c>/health</c> and <c>/version</c>. What the console does with it is what it would do with a Build, Sync or Proxy server.
+/// management API version header, and the shared host's <c>/health</c> and <c>/version</c>. What the console does with it is what it would do with a Build, Sync or Gateway server.
 /// </summary>
 internal sealed class PairableServer : IAsyncDisposable
 {

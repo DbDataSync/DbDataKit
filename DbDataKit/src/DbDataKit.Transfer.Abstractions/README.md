@@ -19,6 +19,6 @@ Contracts for moving rows between engines (Plan 07). No SQL, no drivers; depends
 
 ## Decisions
 
-- **Reader-shaped interchange first, Arrow as adapter.** Both products already feed bulk routes from readers; `AsArrow()` is for Proxy-style consumers. Arrow-first is a later decision that needs a measured benchmark (see `shared/benchmarks`).
+- **Reader-shaped interchange first, Arrow as adapter.** Both products already feed bulk routes from readers; `AsArrow()` is for Gateway-style consumers. Arrow-first is a later decision that needs a measured benchmark (see `shared/benchmarks`).
 - `AsArrow()` on a row batch uses the Plan 05 canonical-to-Arrow table (microsecond timestamps, Decimal128 up to 38 digits, guid as text). A guid column therefore comes back as `string` from `ArrowDataBatch`.
 - Not done: Arrow-first / Parquet staging, list types (opaque in the canonical model).

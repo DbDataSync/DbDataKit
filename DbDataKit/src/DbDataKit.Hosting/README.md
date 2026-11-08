@@ -3,7 +3,7 @@
 ASP.NET Core glue over `DbDataKit.Hosting.Abstractions`. Depends on the shared framework plus `Microsoft.Extensions.Hosting.WindowsServices` and `.Systemd`.
 
 ```csharp
-var mode = builder.UseDbDataHost(o => { o.Product = "DbDataProxy"; o.Version = v; o.Commit = c; o.SchemaVersions["config"] = "3"; });
+var mode = builder.UseDbDataHost(o => { o.Product = "DbDataGateway"; o.Version = v; o.Commit = c; o.SchemaVersions["config"] = "3"; });
 var app = builder.Build();
 app.UseDbDataPipeline();   // forwarded headers (only if configured), timeouts, concurrency cap, drain
 app.MapDbDataEndpoints();  // /health, /health/live, /health/ready, /version

@@ -1,12 +1,12 @@
 [Unit]
-Description=DbDataProxy
+Description=DbDataGateway
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=notify
-ExecStart=/opt/dbdataproxy/current/DbDataProxy.Server --urls https://0.0.0.0:8443
-WorkingDirectory=/opt/dbdataproxy/current
+ExecStart=/opt/dbdatagateway/current/DbDataGateway.Server --urls https://0.0.0.0:8443
+WorkingDirectory=/opt/dbdatagateway/current
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=45
@@ -14,11 +14,11 @@ WatchdogSec=30
 
 # Identity
 DynamicUser=yes
-StateDirectory=dbdataproxy
-ConfigurationDirectory=dbdataproxy
-LogsDirectory=dbdataproxy
-LoadCredential=api-key:/etc/dbdataproxy/secrets/api-key
-LoadCredential=pfx-password:/etc/dbdataproxy/secrets/pfx-password
+StateDirectory=dbdatagateway
+ConfigurationDirectory=dbdatagateway
+LogsDirectory=dbdatagateway
+LoadCredential=api-key:/etc/dbdatagateway/secrets/api-key
+LoadCredential=pfx-password:/etc/dbdatagateway/secrets/pfx-password
 Environment="DOTNET_ENVIRONMENT=Production"
 
 # Hardening

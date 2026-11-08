@@ -107,7 +107,7 @@ public class CheckerPolicyTests
 
 public class SourceAndCheckTests
 {
-    private static UpdateChecker Checker(KeyPair k) => new("dbdataproxy", new CompositeContentFetcher(null, new FileContentFetcher()), k.Trust());
+    private static UpdateChecker Checker(KeyPair k) => new("dbdatagateway", new CompositeContentFetcher(null, new FileContentFetcher()), k.Trust());
 
     [Fact]
     public async Task FolderSource_PicksHighestAllowedVersion()
@@ -187,7 +187,7 @@ public class SourceAndCheckTests
     public async Task GitHubSource_EndToEndThroughHttpFetcher()
     {
         var k = new KeyPair("k1");
-        var m = new ReleaseManifest { Product = "dbdataproxy", Version = "1.4.0", Channel = "stable" };
+        var m = new ReleaseManifest { Product = "dbdatagateway", Version = "1.4.0", Channel = "stable" };
         var bytes = ManifestBuilder.ToBytes(m);
         var sig = ManifestSigner.Sign(bytes, k.Seed, k.Id);
         var h = new StubHandler(req => req.RequestUri!.AbsolutePath switch
@@ -202,7 +202,7 @@ public class SourceAndCheckTests
             _ => new HttpResponseMessage(HttpStatusCode.NotFound),
         });
         var http = new HttpClient(h);
-        var checker = new UpdateChecker("dbdataproxy", new HttpContentFetcher(http), k.Trust());
+        var checker = new UpdateChecker("dbdatagateway", new HttpContentFetcher(http), k.Trust());
         var d = await checker.CheckAsync(new GitHubReleaseSource("o", "r", http), ReleaseVersion.Parse("1.3.0"), new());
         Assert.Equal(UpdateDecisionKind.UpdateAvailable, d.Kind);
     }

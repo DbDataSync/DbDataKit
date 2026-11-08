@@ -1,16 +1,16 @@
 import { request } from '@dbdatakit/shell'
 import type { InstanceSummary } from './api'
 
-/** A replication, a scheduled plan or a notice of a Proxy, as one line of the view across servers. */
+/** A replication, a scheduled plan or a notice of a Gateway, as one line of the view across servers. */
 export interface MonitorRow {
   server: string
   serverName: string
   /** Unique among the rows: the server and what the row is about (for a notice, its number). */
   key: string
-  product: 'dbdatasync' | 'dbdatabuild' | 'dbdataproxy' | 'dbdatarunner'
+  product: 'dbdatasync' | 'dbdatabuild' | 'dbdatagateway' | 'dbdatarunner'
   kind: 'replication' | 'plan' | 'event' | 'task' | 'instance'
   subject: string
-  /** What to look at first: a failed last run, a lag past the limit, a notice from a Proxy, a hold, a run going, or nothing. */
+  /** What to look at first: a failed last run, a lag past the limit, a notice from a Gateway, a hold, a run going, or nothing. */
   state: 'failed' | 'gone' | 'lagging' | 'event' | 'paused' | 'running' | 'ok'
   detail: string
   /** Whether the person (or the server) holds it: a failed row can be held too, and then it is the hold that is released. */
@@ -24,7 +24,7 @@ export const LAG_LIMIT_MS = 15 * 60 * 1000
 
 const ORDER: Record<MonitorRow['state'], number> = { failed: 0, gone: 1, lagging: 2, event: 3, paused: 4, running: 5, ok: 6 }
 
-/** Failures first, then a runner that is gone, then lag, then a Proxy's notices, then holds; within a state, by server and name (a Proxy's notices keep the order they came in, newest first). */
+/** Failures first, then a runner that is gone, then lag, then a Gateway's notices, then holds; within a state, by server and name (a Gateway's notices keep the order they came in, newest first). */
 export const sortRows = (rows: MonitorRow[]) =>
   [...rows].sort((a, b) => ORDER[a.state] - ORDER[b.state] || a.serverName.localeCompare(b.serverName) || (a.state === 'event' ? 0 : a.subject.localeCompare(b.subject)))
 
@@ -65,18 +65,18 @@ export function buildRow(server: InstanceSummary, project: string, job: BuildJob
   return { key: `${server.id}/${project}/${job.connection}/${job.plan}`, server: server.id, serverName: server.name, product: 'dbdatabuild', kind: 'plan', subject: `${project}: ${job.connection}/${job.plan}`, state, detail, held: job.paused === true, target: { project, connection: job.connection, plan: job.plan } }
 }
 
-/** What a Proxy's notification feed says: `GET /api/v1/notifications` (a failed-login lockout, a refused statement, a limit reached). */
-export interface ProxyNotification { id: number; kind: string; created: string; message: string }
+/** What a Gateway's notification feed says: `GET /api/v1/notifications` (a failed-login lockout, a refused statement, a limit reached). */
+export interface GatewayNotification { id: number; kind: string; created: string; message: string }
 
 /** Notices older than this are history, not something to look at now. */
 export const NOTICE_WINDOW_MS = 24 * 60 * 60 * 1000
 
-/** The Proxy's own words for its notification kinds. A kind this view does not know is shown as it came. */
+/** The Gateway's own words for its notification kinds. A kind this view does not know is shown as it came. */
 const noticeTitle: Record<string, string> = { LoginLockedOut: 'Login locked out', StatementRefused: 'Statement refused', LimitReached: 'Limit reached' }
 
-/** One notice of a Proxy as a row. It has no buttons: a notice is something that happened, not something that runs. */
-export function proxyRow(server: InstanceSummary, notice: ProxyNotification): MonitorRow {
-  return { key: `${server.id}/notice/${notice.id}`, server: server.id, serverName: server.name, product: 'dbdataproxy', kind: 'event', subject: noticeTitle[notice.kind] ?? notice.kind, state: 'event', detail: notice.message, held: false, target: null }
+/** One notice of a Gateway as a row. It has no buttons: a notice is something that happened, not something that runs. */
+export function gatewayRow(server: InstanceSummary, notice: GatewayNotification): MonitorRow {
+  return { key: `${server.id}/notice/${notice.id}`, server: server.id, serverName: server.name, product: 'dbdatagateway', kind: 'event', subject: noticeTitle[notice.kind] ?? notice.kind, state: 'event', detail: notice.message, held: false, target: null }
 }
 
 /** What a runner says in `GET /api/v1/status` about a task, and in `GET /api/v1/instances?all=true` about an instance. */
@@ -133,10 +133,10 @@ export async function loadRows(servers: InstanceSummary[], now: number = Date.no
           const { jobs } = await request<{ jobs: BuildJob[] }>(relay(server, `/api/v1/projects/${enc(project.id)}/schedule`))
           rows.push(...jobs.map((job) => buildRow(server, project.id, job)))
         }
-      } else if (server.product === 'dbdataproxy') {
-        const { notifications } = await request<{ notifications: ProxyNotification[] }>(relay(server, '/api/v1/notifications'))
+      } else if (server.product === 'dbdatagateway') {
+        const { notifications } = await request<{ notifications: GatewayNotification[] }>(relay(server, '/api/v1/notifications'))
         // the feed lists the oldest first; the newest are what matters here
-        rows.push(...notifications.filter((n) => now - Date.parse(n.created) <= NOTICE_WINDOW_MS).reverse().slice(0, 20).map((n) => proxyRow(server, n)))
+        rows.push(...notifications.filter((n) => now - Date.parse(n.created) <= NOTICE_WINDOW_MS).reverse().slice(0, 20).map((n) => gatewayRow(server, n)))
       } else if (server.product === 'dbdatarunner') {
         const [status, group] = await Promise.all([
           request<{ tasks: RunnerTask[] }>(relay(server, '/api/v1/status')),

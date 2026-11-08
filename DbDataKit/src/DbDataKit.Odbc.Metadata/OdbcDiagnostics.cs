@@ -81,7 +81,7 @@ public static class OdbcDiagnostics
             if (found.Count == 0)
                 return new(state, headline, $"Driver '{driver}' is not installed under that name. Installed: {Names(inventory.Drivers.Select(d => d.Name))}.");
             if (!found.Contains(process) && !found.Contains(OdbcBitness.Unknown))
-                return new(state, headline, $"Driver '{driver}' is installed for {Describe(found)} only, but this process is {bits}. Install the {bits} driver or run the work in a {Describe(found)} process (for DbDataProxy, the 32-bit worker).");
+                return new(state, headline, $"Driver '{driver}' is installed for {Describe(found)} only, but this process is {bits}. Install the {bits} driver or run the work in a {Describe(found)} process (for DbDataGateway, the 32-bit worker).");
             return new(state, headline, $"Driver '{driver}' is installed for this process's word size; check its library and its dependencies.");
         }
         if (!string.IsNullOrEmpty(dsn))

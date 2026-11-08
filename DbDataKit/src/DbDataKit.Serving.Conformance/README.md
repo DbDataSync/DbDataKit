@@ -16,4 +16,4 @@ Derive one class per host from `ServingServicesConformanceTests` and build a `Se
 | a source says what it is and whether it takes writes | `A_source_says_what_it_is…` |
 | a write needs a write path, and a refused write is `ServingDeniedException` | `A_write_needs_a_write_path…` |
 
-Run today against the fake host (`DbDataKit.Serving.Abstractions.Tests`, with and without a write path) and against Proxy over DuckDB (`DbDataProxy.Tests`). Two flags on the target record what a host cannot say: the adapter over the small host interface lists no sources and knows no dialect, so it cannot refuse the facts of an unknown source or a statement at prepare time. Proxy holds no row limits, so its limit test is skipped.
+Run today against the fake host (`DbDataKit.Serving.Abstractions.Tests`, with and without a write path) and against Gateway over DuckDB (`DbDataGateway.Tests`). Two flags on the target record what a host cannot say: the adapter over the small host interface lists no sources and knows no dialect, so it cannot refuse the facts of an unknown source or a statement at prepare time. Gateway holds no row limits, so its limit test is skipped.

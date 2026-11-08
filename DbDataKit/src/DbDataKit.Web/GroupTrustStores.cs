@@ -9,7 +9,7 @@ namespace DbDataKit.Web.Trust;
 /// The <c>trust</c> module (plan 29 section 3.4): what makes a group of instances one server to the clients paired with it (plan 20 O04). Kept per group: the group's settings (its
 /// instance id, the wrong pairing attempts since the last good one, the certificate a self-signed group presents), the clients paired with it, the pairing codes waiting, and the group's
 /// key check and the secrets its clients keep on it (a published data source's login, encrypted with the group's key, never in the clear). Replaced the older
-/// trust tables and Proxy's group tables when the serving layer moved (plan 29a Q16); DbDataStore's pairings follow in Q18.
+/// trust tables and Gateway's group tables when the serving layer moved (plan 29a Q16); DbDataStore's pairings follow in Q18.
 /// </summary>
 public static class TrustModule
 {
@@ -52,7 +52,7 @@ public static class TrustModule
                 check_value  {{text}} NOT NULL
             );
 
-            -- A secret a client of the group keeps on it, by its full name (dbdata:proxy:managed-<client>:<name>); the value encrypted with the group's key, never in the clear.
+            -- A secret a client of the group keeps on it, by its full name (dbdata:gateway:managed-<client>:<name>); the value encrypted with the group's key, never in the clear.
             CREATE TABLE {table:group_secret} (
                 name   {{key}} PRIMARY KEY,
                 value  {{text}} NOT NULL

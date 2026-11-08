@@ -1,0 +1,22 @@
+{
+  "product": "dbdatagateway",
+  "displayName": "DbDataGateway",
+  "description": "An Apache Arrow Flight SQL gateway for relational databases: clients speak Flight SQL, the gateway runs their queries through ODBC or an ADO.NET provider and streams the results back compressed. Runs as a Windows service.",
+  "homepage": "https://github.com/DbDataSync/DbDataKit/tree/main/DbDataGateway",
+  "license": "MIT",
+  "platforms": {
+    "win-x64": {
+      "exe": "dbdatagateway.exe"
+    }
+  },
+  "windowsScope": "machine",
+  "service": {
+    "name": "dbdatagateway",
+    "register": "service install --name {name}",
+    "unregister": "service uninstall --name {name}"
+  },
+  "notes": "Settings live in %ProgramData%\\DbDataGateway\\config (server.yaml, gateway/, connections/). The state database is a SQLite file in the data directory (the 'service' topology, no setup); for a group or install database see: dbdatagateway state init. Registering the Windows service needs an elevated prompt: dbdatagateway service install",
+  "msi": {
+    "upgradeCode": "B47E1D90-2A6C-4F83-8D15-C3E9A5B07F26"
+  }
+}

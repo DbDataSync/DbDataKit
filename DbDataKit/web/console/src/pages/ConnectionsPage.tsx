@@ -8,10 +8,10 @@ import { ConnectionInventory } from './ConnectionInventory'
 import { StateConnections } from './StateConnections'
 
 const columns = '1.2fr 1.6fr 1fr 2.2fr 1fr'
-const product: Record<ConnectionRow['product'], string> = { dbdatasync: 'Sync', dbdataproxy: 'Proxy' }
+const product: Record<ConnectionRow['product'], string> = { dbdatasync: 'Sync', dbdatagateway: 'Gateway' }
 
 /**
- * The connections of every server that keeps them, in one list (plan 13a, E05): a Sync server's connections and a Proxy's data sources are the same `connection/1` file, so a connection on one can be copied to another. The copy is made by the console as the signed-in person:
+ * The connections of every server that keeps them, in one list (plan 13a, E05): a Sync server's connections and a Gateway's data sources are the same `connection/1` file, so a connection on one can be copied to another. The copy is made by the console as the signed-in person:
  * it reads the file from the first server, leaves out what belongs to that server (its owner, another product's settings), points a password at the target's own secret reference and writes it to the second. The target reads the file with its own strict loader, and what it
  * refuses comes back here with the line of each fault; nothing is written then. A password is never copied: it is a reference, and the target must hold it (a Sync target is given a typed one, once, to store).
  */
@@ -33,7 +33,7 @@ export function ConnectionsPage() {
       <div className="pane" data-testid="connections-page">
         <div className="page-head">
           <h1 className="page-title">Connections</h1>
-          <span className="page-note">The connections of your Sync servers and the data sources of your Proxies. Copy one to another server.</span>
+          <span className="page-note">The connections of your Sync servers and the data sources of your Gateways. Copy one to another server.</span>
         </div>
         <ErrorBanner error={instances.error ?? view.error} />
         {(view.data?.problems ?? []).map((p) => (
@@ -90,7 +90,7 @@ function CopyPanel({ row, targets, onCopied, onClose }: { row: ConnectionRow; ta
         <Field label="To server">
           <select className="input" value={target} onChange={(e) => { setTarget(e.target.value); copy.reset() }} data-testid="copy-target">
             <option value="">Choose a server</option>
-            {targets.map((t) => <option key={t.id} value={t.id}>{`${t.name} (${t.product === 'dbdatasync' ? 'Sync' : 'Proxy'})`}</option>)}
+            {targets.map((t) => <option key={t.id} value={t.id}>{`${t.name} (${t.product === 'dbdatasync' ? 'Sync' : 'Gateway'})`}</option>)}
           </select>
         </Field>
         <Field label="Called">

@@ -1,0 +1,361 @@
+using DbDataKit.Config;
+using DbDataKit.Config.Testing;
+using DbDataKit.Config.Yaml;
+using DbDataGateway.Data;
+using DbDataGateway.Server.Configuration;
+using DbDataGateway.Server.Data;
+
+namespace DbDataGateway.Tests.Config;
+
+/// <summary>The golden configuration corpus: every valid shape validates, every invalid class fails with the key path and a precise message.</summary>
+public sealed class GoldenCorpusTests
+{
+    public static IEnumerable<object[]> Valid() => ConfigTestSupport.GoldenCases("valid-");
+    public static IEnumerable<object[]> Invalid() => ConfigTestSupport.GoldenCases("invalid-");
+
+    [Fact]
+    public void Corpus_is_present() => Assert.True(ConfigTestSupport.GoldenCases("").Count() >= 30);
+
+    [Theory]
+    [MemberData(nameof(Valid))]
+    public void Valid_files_validate(string name)
+    {
+        var load = ConfigTestSupport.LoadFile(Path.Combine(ConfigTestSupport.GoldenDirectory, name + ".json"));
+        Assert.True(load.Ok, ConfigTestSupport.Format(load));
+    }
+
+    [Theory]
+    [MemberData(nameof(Invalid))]
+    public void Invalid_files_fail_with_the_expected_messages(string name)
+    {
+        var load = ConfigTestSupport.LoadFile(Path.Combine(ConfigTestSupport.GoldenDirectory, name + ".json"));
+        string text = ConfigTestSupport.Format(load);
+        Assert.False(load.Ok, "expected errors, got:\n" + text);
+        foreach (var line in File.ReadAllLines(Path.Combine(ConfigTestSupport.GoldenDirectory, name + ".expected")).Where(l => l.Length > 0))
+            Assert.True(text.Contains(line, StringComparison.Ordinal), $"'{line}' not found in:\n{text}");
+        Assert.Throws<GatewayConfigException>(() => load.ValueOrThrow());
+    }
+
+    [Fact]
+    public void Unknown_keys_name_the_file_and_line()
+    {
+        var load = ConfigTestSupport.LoadFile(Path.Combine(ConfigTestSupport.GoldenDirectory, "invalid-unknown-key.json"));
+        var d = Assert.Single(load.Diagnostics, x => x.Code == "DBP-104");
+        Assert.EndsWith("invalid-unknown-key.json", d.Path);
+        Assert.Equal(3, d.Line);
+        Assert.Equal("Listen.Prot", d.KeyPath);
+    }
+
+    [Fact]
+    public void Every_problem_is_reported_in_one_pass()
+    {
+        var load = ConfigTestSupport.LoadFile(Path.Combine(ConfigTestSupport.GoldenDirectory, "invalid-multiple-errors-reported-together.json"));
+        Assert.True(load.Diagnostics.Count(d => d.Severity == ConfigSeverity.Error) >= 2);
+    }
+
+    [Fact]
+    public void Unknown_keys_are_tolerated_only_when_asked_for()
+    {
+        const string json = """{ "Gateway": { "Listen": { "Prot": 1, "Port": 9100 }, "FromTheFuture": true } }""";
+        Assert.False(ConfigTestSupport.LoadJson(json).Ok);
+
+        foreach (var load in new[]
+        {
+            ConfigTestSupport.LoadJson(json, new GatewayConfigLoadOptions { AllowUnknownKeys = true }),
+            ConfigTestSupport.LoadJson("""{ "Gateway": { "AllowUnknownKeys": true, "FromTheFuture": 1, "Listen": { "Prot": 1 } } }"""),
+        })
+        {
+            Assert.True(load.Ok, ConfigTestSupport.Format(load));
+            Assert.Contains(load.Diagnostics, d => d.Code == "DBP-104" && d.Severity == ConfigSeverity.Warning);
+        }
+    }
+
+    [Fact]
+    public void Errors_never_print_secret_values()
+    {
+        const string secret = "TOPSECRET-VALUE-91c";
+        var load = ConfigTestSupport.LoadJson($$"""{ "Gateway": { "Tls": { "Mode": "File", "CertificatePassword": "{{secret}}" }, "Auth": { "Jwt": { "SigningKey": "{{secret}}" } }, "Bogus": "{{secret}}" } }""");
+        Assert.False(load.Ok);
+        Assert.DoesNotContain(secret, ConfigTestSupport.Format(load));
+    }
+}
+
+public sealed class ShippedFilesTests
+{
+    private static string Shipped(string name) => Path.Combine(AppContext.BaseDirectory, name);
+
+    [Fact]
+    public void The_starter_settings_file_install_writes_validates_with_schema_2()
+    {
+        using var config = TempConfig.Create(("server.yaml", GatewayConfigFile.Starter));
+        var load = LoadDirectory(config.Directory);
+        Assert.True(load.Ok, ConfigTestSupport.Format(load));
+        Assert.Equal(2, load.Value!.SchemaVersion);
+        Assert.Empty(load.Diagnostics);
+    }
+
+    private static GatewayConfigLoad LoadDirectory(string directory) =>
+        ConfigTestSupport.LoadDirectory(directory);
+
+    [Fact]
+    public void Shipped_example_directory_validates_file_by_file()
+    {
+        // The example is written for the Windows service (C:\data\parquet, ...), and the shared absolute-path check rejects a
+        // Windows path elsewhere. Windows validates it; the starter settings file is validated on every platform above.
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The shipped example uses Windows paths");
+        var load = LoadDirectory(Shipped("config.example"));
+        Assert.True(load.Ok, ConfigTestSupport.Format(load));
+        var o = load.Value!;
+        Assert.Equal(2, o.SchemaVersion);
+        Assert.Equal(["erp", "lake", "legacy", "scratch", "warehouse"], o.DataSources.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal("x86", o.DataSources["legacy"].Bitness);
+        Assert.Equal(ClassifierMode.Strict, o.DataSources["erp"].Classifier);
+        Assert.Equal(20, o.DataSources["erp"].MaxConcurrentQueries);
+        Assert.Equal([@"C:\data\parquet"], o.DataSources["lake"].AllowedDirectories);
+        Assert.Equal(@"Data Source=C:\data\scratch.duckdb", o.DataSources["scratch"].ConnectionString);
+        Assert.Equal(["finance-reporting"], o.DataSources["erp"].Groups);
+        Assert.True(o.DataSources["erp"].Default);
+        Assert.True(o.DataSources["scratch"].Everyone);
+        Assert.Empty(o.DataSources["warehouse"].Groups);   // pass-through: the database decides
+        Assert.Equal(30, o.Auth.SessionIdleMinutes);
+    }
+
+    [Fact]
+    public void Shipped_example_directory_reads_on_every_platform_and_names_its_files()
+    {
+        // Off Windows the path check rejects the example's Windows paths; those are the only errors it may have.
+        var load = LoadDirectory(Shipped("config.example"));
+        Assert.All(load.Diagnostics.Where(d => d.Severity == ConfigSeverity.Error), d => Assert.EndsWith("lake.yaml", d.Path));
+        Assert.NotNull(load.Value);
+        Assert.Equal(["erp", "lake", "legacy", "scratch", "warehouse"], load.Value!.DataSources.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(["finance-reporting"], load.Value.DataSources["erp"].Groups);
+        Assert.True(load.Value.DataSources["scratch"].Everyone);
+        Assert.Equal(30, load.Value.Auth.SessionIdleMinutes);
+        Assert.Equal(@"Data Source=C:\data\scratch.duckdb", load.Value.DataSources["scratch"].ConnectionString);
+        Assert.Equal([@"C:\data\parquet"], load.Value.DataSources["lake"].AllowedDirectories);
+        Assert.Equal(["gateway.example.com"], load.Value.Tls.Hostnames);
+    }
+
+    [Fact]
+    public void Existing_pascal_case_files_without_a_version_keep_working_unchanged()
+    {
+        // A file as written by any earlier release: PascalCase keys, no SchemaVersion.
+        var load = ConfigTestSupport.LoadJson("""
+            { "Gateway": {
+                "Listen": { "Address": "0.0.0.0", "Port": 8815 },
+                "Tls": { "Mode": "SelfSigned", "Hostnames": [ "a.example.com" ] },
+                "Compression": { "Mode": "Arrow", "Codec": "zstd", "Level": 3, "AllowClientOverride": true },
+                "Auth": { "SessionIdleMinutes": 30, "SessionMaxHours": 12, "AllowPassThrough": true },
+                "DataSources": { "erp": { "Provider": "sqlserver", "ConnectionString": "Server=a;Password=env:P", "CommandTimeoutSeconds": 300, "Groups": [ "finance-reporting" ] } }
+            } }
+            """);
+        Assert.True(load.Ok, ConfigTestSupport.Format(load));
+        Assert.Equal(1, load.Value!.SchemaVersion);
+        Assert.Equal(ClassifierMode.Warn, load.Value.DataSources["erp"].Classifier);
+        Assert.Equal(3, load.Value.Compression.Level);
+        Assert.Equal(TlsMode.SelfSigned, load.Value.Tls.Mode);
+    }
+}
+
+public sealed class CaseInsensitiveBindingTests
+{
+    [Fact]
+    public void Keys_and_values_match_ignoring_case_and_booleans_may_be_capitalised()
+    {
+        var root = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["gateway:LISTEN:port"] = "9100",
+            ["GATEWAY:auth:allowpassthrough"] = "False",   // the stock provider spelled booleans like this
+            ["Gateway:LogSql"] = "TRUE",
+            ["Gateway:DataSources:Erp:PROVIDER"] = "DuckDb",
+            ["Gateway:DataSources:Erp:ConnectionString"] = "Data Source=:memory:",
+        }).Build();
+        var load = GatewayConfig.Load(root);
+        Assert.True(load.Ok, ConfigTestSupport.Format(load));
+        Assert.Equal(9100, load.Value!.Listen.Port);
+        Assert.False(load.Value.Auth.AllowPassThrough);
+        Assert.True(load.Value.LogSql);
+        Assert.True(load.Value.DataSources.ContainsKey("erp"));   // lookups stay case-insensitive
+        Assert.Equal("memory", load.Detail.Merged.Origins().First(o => o.Path == "Listen.Port").File);
+    }
+
+    [Fact]
+    public void Later_sources_win_and_the_origin_says_which()
+    {
+        using var file = TempFile.Create("""{ "Gateway": { "Listen": { "Port": 9001, "Address": "127.0.0.1" } } }""");
+        var root = new ConfigurationBuilder()
+            .AddJsonFile(file.Path, false, false)
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Gateway:Listen:Port"] = "9002" })
+            .Build();
+        var load = GatewayConfig.Load(root);
+        Assert.Equal(9002, load.Value!.Listen.Port);
+        Assert.Equal("127.0.0.1", load.Value.Listen.Address);
+        var origins = GatewayConfig.Show(load).ToDictionary(e => e.Path);
+        Assert.Equal("memory", origins["Listen.Port"].Source);
+        Assert.Equal(file.Path, origins["Listen.Address"].Source);
+        Assert.Equal(1, origins["Listen.Address"].Line);
+    }
+}
+
+public sealed class SchemaVersionTests
+{
+    private const string Sources = """
+        "DataSources": {
+          "ro": { "Provider": "duckdb", "ConnectionString": "x", "Everyone": true },
+          "ro_warn": { "Provider": "duckdb", "ConnectionString": "x", "Classifier": "warn", "Everyone": true },
+          "rw": { "Provider": "duckdb", "ConnectionString": "x", "AllowWrites": true, "Everyone": true }
+        }
+        """;
+
+    [Fact]
+    public void No_version_means_1_and_keeps_the_warn_default_with_a_hint()
+    {
+        var load = ConfigTestSupport.LoadJson("{ \"Gateway\": { " + Sources + " } }");
+        Assert.True(load.Ok);
+        Assert.Equal(1, load.Value!.SchemaVersion);
+        Assert.Equal(ClassifierMode.Warn, load.Value.DataSources["ro"].Classifier);
+        var hint = Assert.Single(load.Diagnostics, d => d.Severity == ConfigSeverity.Warning);
+        Assert.Contains("ro", hint.Message);
+        Assert.DoesNotContain("ro_warn", hint.Message);   // explicit settings are not nagged
+        Assert.DoesNotContain("rw", hint.Message);        // writable sources are not classified
+    }
+
+    [Fact]
+    public void Version_2_defaults_the_classifier_to_strict_but_honours_explicit_values()
+    {
+        var load = ConfigTestSupport.LoadJson("{ \"Gateway\": { \"SchemaVersion\": 2, " + Sources + " } }");
+        Assert.True(load.Ok, ConfigTestSupport.Format(load));
+        Assert.Equal(ClassifierMode.Strict, load.Value!.DataSources["ro"].Classifier);
+        Assert.Equal(ClassifierMode.Warn, load.Value.DataSources["ro_warn"].Classifier);
+        Assert.Empty(load.Diagnostics);
+    }
+
+    [Fact]
+    public void Explicit_version_1_is_the_same_as_absent_and_the_key_is_case_insensitive()
+    {
+        var root = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Gateway:schemaversion"] = "1",
+            ["Gateway:DataSources:ro:Provider"] = "duckdb",
+            ["Gateway:DataSources:ro:ConnectionString"] = "x",
+        }).Build();
+        var load = GatewayConfig.Load(root);
+        Assert.Equal(ClassifierMode.Warn, load.Value!.DataSources["ro"].Classifier);
+
+        root = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Gateway:SCHEMAVERSION"] = "2",
+            ["Gateway:DataSources:ro:Provider"] = "duckdb",
+            ["Gateway:DataSources:ro:ConnectionString"] = "x",
+        }).Build();
+        Assert.Equal(ClassifierMode.Strict, GatewayConfig.Load(root).Value!.DataSources["ro"].Classifier);
+    }
+
+    [Fact]
+    public void A_newer_version_is_refused_with_an_upgrade_message_and_nothing_else()
+    {
+        var load = ConfigTestSupport.LoadJson("""{ "Gateway": { "SchemaVersion": 99, "Nonsense": 1 } }""");
+        Assert.False(load.Ok);
+        var d = Assert.Single(load.Diagnostics);
+        Assert.Equal("DBP-110", d.Code);
+        Assert.Contains("Upgrade DbDataGateway", d.Fix);
+    }
+}
+
+public sealed class MigrationTests
+{
+    private const string V1 = """
+        # gateway settings
+        Listen:
+          Address: 127.0.0.1
+          Port: 9000
+        Users: []
+        """;
+
+    [Fact]
+    public void Versions_agree_between_the_schema_the_engine_and_the_constant()
+    {
+        Assert.Equal(GatewayConfig.LatestSchemaVersion, SchemaModel.ForObject<GatewayOptions>().Version);
+        Assert.Equal(GatewayConfig.LatestSchemaVersion, GatewayConfig.Migrations.LatestVersion(GatewayConfig.Kind));
+        Assert.Equal(GatewayConfig.Kind, SchemaModel.ForObject<GatewayOptions>().Kind);
+    }
+
+    [Fact]
+    public void V1_to_v2_is_a_documented_no_op_that_only_records_the_version()
+    {
+        var plan = GatewayConfig.Migrations.Plan(GatewayConfig.Kind, V1, "gateway.yaml");
+        Assert.Equal(MigrationStatus.Migrated, plan.Status);
+        Assert.Equal(1, plan.FromVersion);
+        Assert.Equal(2, plan.ToVersion);
+        var v1 = V1.Replace("\r\n", "\n"); // the checkout may have CRLF line endings
+        Assert.Equal(v1.Replace("# gateway settings\n", "# gateway settings\nschemaVersion: 2\n"), plan.NewText.Replace("\r\n", "\n"));
+        Assert.Contains(plan.Log, l => l.Contains("No keys change"));
+        Assert.Equal(MigrationStatus.UpToDate, GatewayConfig.Migrations.Plan(GatewayConfig.Kind, plan.NewText, "gateway.yaml").Status);
+    }
+
+    /// <summary>How a future rename ships: one more IConfigMigration (here test-only: Listen.Address becomes Listen.Host in schema 3).</summary>
+    private sealed class RenameListenAddress : IConfigMigration
+    {
+        public string Kind => GatewayConfig.Kind;
+        public int From => 2;
+        public int To => 3;
+        public void Apply(YamlDocument doc, IMigrationLog log)
+        {
+            if (doc.Has("Listen.Address")) doc.RenameKey("Listen.Address", "Host");
+            log.Info("Listen.Address is now Listen.Host");
+        }
+    }
+
+    [Fact]
+    public void A_future_rename_migrates_a_v1_file_through_the_no_op_step_and_keeps_comments()
+    {
+        var engine = GatewayConfigMigrations.CreateEngine(new RenameListenAddress());
+        Assert.Equal(3, engine.LatestVersion(GatewayConfig.Kind));
+
+        var plan = engine.Plan(GatewayConfig.Kind, V1, "gateway.yaml");
+        Assert.Equal(MigrationStatus.Migrated, plan.Status);
+        Assert.Equal(3, plan.ToVersion);
+        string text = plan.NewText.Replace("\r\n", "\n");
+        Assert.Contains("# gateway settings", text);
+        Assert.Contains("schemaVersion: 3", text);
+        Assert.Contains("  Host: 127.0.0.1", text);
+        Assert.DoesNotContain("Address:", text);
+        Assert.Equal(["Gateway: 1 -> 2".Replace("Gateway", GatewayConfig.Kind), $"{GatewayConfig.Kind}: 2 -> 3"], plan.Log.Where(l => l.Contains("->")));
+        Assert.Contains("Listen.Address is now Listen.Host", plan.Log);
+
+        // already migrated files are left alone
+        Assert.Equal(MigrationStatus.UpToDate, engine.Plan(GatewayConfig.Kind, plan.NewText, "gateway.yaml").Status);
+    }
+
+    [Fact]
+    public void The_shipped_engine_refuses_a_file_from_a_newer_schema()
+    {
+        var plan = GatewayConfig.Migrations.Plan(GatewayConfig.Kind, "schemaVersion: 3\nListen:\n  Port: 1\n", "gateway.yaml");
+        Assert.Equal(MigrationStatus.Refused, plan.Status);
+        Assert.Contains(plan.Diagnostics, d => d.Code == "DBD-110");
+    }
+
+    [Fact]
+    public void The_binder_schema_and_the_json_schema_agree()
+    {
+        SchemaAgreement.Assert<GatewayOptions>();
+        Assert.Contains("SchemaVersion", JsonSchemaGenerator.ToJson(typeof(GatewayOptions)), StringComparison.OrdinalIgnoreCase);
+    }
+}
+
+public sealed class ProviderTableTests
+{
+    [Fact]
+    public void Known_and_pass_through_provider_lists_match_the_registered_providers()
+    {
+        var registry = Support.TestSources.Registry();
+        Assert.Equal(GatewayConfigValidator.KnownProviders.Order(), registry.Engines.Order());
+
+        var passThrough = GatewayConfigValidator.KnownProviders.Where(name =>
+        {
+            try { registry.Get(name).Composer.ApplyPassThroughCredentials(name == "odbc" ? "Driver={X};Server=a" : "Server=a;Database=b", "u", DbDataKit.Secrets.SecretValue.From("p")); return true; }
+            catch (DbDataKit.Connections.ConnectionPolicyException) { return false; }
+        });
+        Assert.Equal(GatewayConfigValidator.PassThroughProviders.Order(), passThrough.Order());
+    }
+}

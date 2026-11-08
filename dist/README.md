@@ -12,7 +12,7 @@ own, but these always exist. There is no .NET tool package for any product (DbDa
 | **PowerShell** | `install.ps1`: Windows PowerShell 5.1 and PowerShell 7 |
 | **bash** | `install.sh`: Linux and macOS |
 
-The products are `dbdatabuild`, `dbdatasync`, `dbdataproxy` and the console, `dbdatakit` (`DbDataConsole/dist.json`: the zip needs the .NET 10 runtime, the MSI registers the `DbDataKitConsole` service stopped, and its program folder is `DbDataKit`). The runner, `dbdatarunner`, is described the same way (`DbDataRunner/dist.json`: the .NET 10 runtime, the `DbDataRunner` service, the task host in a `taskhost` folder beside the program); wiring it into the release workflows is the runner's packaging slice. Each has its own MSI: a product's MSI does not embed the console. To pair them after installing both, make a code on the product (`<program> server pair`) and run `dbdatakit instance add <https address> --code <code>`; `dist-msi-ci.yml` does that on a Windows runner (`dist/tests/msi-pairing-e2e.ps1`: the console's MSI installed, a Build server built from the same commit paired with it).
+The products are `dbdatabuild`, `dbdatasync`, `dbdatagateway` and the console, `dbdatakit` (`DbDataConsole/dist.json`: the zip needs the .NET 10 runtime, the MSI registers the `DbDataKitConsole` service stopped, and its program folder is `DbDataKit`). The runner, `dbdatarunner`, is described the same way (`DbDataRunner/dist.json`: the .NET 10 runtime, the `DbDataRunner` service, the task host in a `taskhost` folder beside the program); wiring it into the release workflows is the runner's packaging slice. Each has its own MSI: a product's MSI does not embed the console. To pair them after installing both, make a code on the product (`<program> server pair`) and run `dbdatakit instance add <https address> --code <code>`; `dist-msi-ci.yml` does that on a Windows runner (`dist/tests/msi-pairing-e2e.ps1`: the console's MSI installed, a Build server built from the same commit paired with it).
 
 Releases are tagged `<product>/v<version>` in this repository (`<version>` is CalVer `YYYY.M.D.HHmm`; `-beta` is a beta and `-snapshot.g<sha>` a snapshot, both prereleases).
 
@@ -66,7 +66,7 @@ To pass options through a pipe:
 
 Both find the newest **stable** release whose tag starts with `<product>/v` (GitHub's own "latest" is one marker for the whole repository
 and is not used), download that platform's zip and `SHA256SUMS`, refuse to continue on a mismatch, replace the program files, and keep any
-file the product lists as `preserve` (none today: DbDataProxy keeps its settings in `%ProgramData%`, away from the program files). Installing again is how you upgrade.
+file the product lists as `preserve` (none today: DbDataGateway keeps its settings in `%ProgramData%`, away from the program files). Installing again is how you upgrade.
 
 | | `install.ps1` | `install.sh` |
 |---|---|---|
@@ -79,7 +79,7 @@ file the product lists as `preserve` (none today: DbDataProxy keeps its settings
 | register the Windows service | `-InstallService` | n/a |
 | a fork or mirror | `-Repo`, `-ApiBase` | `--repo`, `--api-base` |
 
-A product with a Windows service (`service` in `dist.json`: DbDataSync's `DbDataSync`, DbDataProxy's `DbDataProxy`) is handled for you: a running
+A product with a Windows service (`service` in `dist.json`: DbDataSync's `DbDataSync`, DbDataGateway's `DbDataGateway`) is handled for you: a running
 service is stopped before the files are replaced and started again afterwards, including when the copy fails, and `-InstallService` registers
 it (and implies `-Machine`, since a service belongs in Program Files). A service that was stopped stays stopped.
 
@@ -105,16 +105,16 @@ Edit `<Product>/dist.json`:
 | `notes` | printed after install and shown by Scoop |
 | `globalEnv` | `[ { "name": "<VARIABLE>", "programData": "<folder under %ProgramData%>" } ]`: the Scoop manifest sets these **machine** variables after `scoop install -g` and removes them (only while they still hold that value) on uninstall; a per-user install sets nothing. The folder must be the one the product defaults to for a service (`dist/tests` checks it against the source) |
 
-**State settings.** No installer writes state settings: every product's default, a SQLite file in its own directory, is the `service` topology of plan 29 section 5 and needs none, so a fresh install of any package works as it is (the install tests of this folder start the product with no `state` section). An administrator who wants one database for a group or for the whole install runs the product's own verb after installing: `<program> state init --topology group|install --engine mssql|postgres --connection "<connection with Password=secret:NAME>" --login <role> [--admin-connection <reference> --apply]` (`<program> state init --topology service` returns to the default and writes nothing when it already is). `<program>` is `dbdatakit`, `dbdataproxy`, `dbdatabuild` or `dbdatastore`; DbDataSync has no `state` noun yet. Each package's `notes` say so, and `scripts/check_dist_state.py` fails when a product that has the verb has no such note. Neither the MSI nor Scoop runs the verb: they would need a database, an administrator's credentials and a secret, none of which an installer has.
+**State settings.** No installer writes state settings: every product's default, a SQLite file in its own directory, is the `service` topology of plan 29 section 5 and needs none, so a fresh install of any package works as it is (the install tests of this folder start the product with no `state` section). An administrator who wants one database for a group or for the whole install runs the product's own verb after installing: `<program> state init --topology group|install --engine mssql|postgres --connection "<connection with Password=secret:NAME>" --login <role> [--admin-connection <reference> --apply]` (`<program> state init --topology service` returns to the default and writes nothing when it already is). `<program>` is `dbdatakit`, `dbdatagateway`, `dbdatabuild` or `dbdatastore`; DbDataSync has no `state` noun yet. Each package's `notes` say so, and `scripts/check_dist_state.py` fails when a product that has the verb has no such note. Neither the MSI nor Scoop runs the verb: they would need a database, an administrator's credentials and a secret, none of which an installer has.
 
 The release workflow builds the zips and `SHA256SUMS`, then calls `.github/actions/publish-dist`, which runs `dist/dist.py bind` to bake
 `dist.json` into copies of the templates here (the installers refuse to run unbound) and uploads them. Tests are in `dist/tests`: they run
 both installers against a local fake of the GitHub releases API (`dist-ci.yml`).
 
-`suite-release.yml` is the one release of everything from one commit: it builds the console's zips, MSI and image, calls the three product release workflows, and builds and pushes the images (`ghcr.io/<owner>/dbdatakit|dbdatabuild|dbdataproxy`; DbDataSync's image keeps `dbdatasync-publish-image.yml`). `-f dry_run=true` builds all of it, keeps each product's files as the run's `release-<product>` artifacts, checks every one has its zips, MSI and a verifying `SHA256SUMS`, and tags and pushes nothing. Every product of one suite release gets the same version string (the product workflows take it as their `version` input). Each product workflow still releases on its own.
+`suite-release.yml` is the one release of everything from one commit: it builds the console's zips, MSI and image, calls the three product release workflows, and builds and pushes the images (`ghcr.io/<owner>/dbdatakit|dbdatabuild|dbdatagateway`; DbDataSync's image keeps `dbdatasync-publish-image.yml`). `-f dry_run=true` builds all of it, keeps each product's files as the run's `release-<product>` artifacts, checks every one has its zips, MSI and a verifying `SHA256SUMS`, and tags and pushes nothing. Every product of one suite release gets the same version string (the product workflows take it as their `version` input). Each product workflow still releases on its own.
 
 If a `<product>/dist` release is deleted or loses its files, run the `dist-republish.yml` workflow for that product
-(`gh workflow run dist-republish.yml --ref main -f product=dbdataproxy`): it re-binds the files for the newest stable release and uploads them.
+(`gh workflow run dist-republish.yml --ref main -f product=dbdatagateway`): it re-binds the files for the newest stable release and uploads them.
 
 ## The Windows installer (MSI)
 

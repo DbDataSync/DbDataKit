@@ -264,7 +264,7 @@ public sealed class InvitesController(
     /// <summary>
     /// The code goes in the **fragment**, which browsers do not send to a server and access logs
     /// therefore never record. It is a bearer credential; putting it in the path would write it into
-    /// every proxy log between the inviter and the invitee.
+    /// every gateway log between the inviter and the invitee.
     /// </summary>
     private string UrlFor(string code) =>
         $"{Request.Scheme}://{Request.Host}/invite#{code}";

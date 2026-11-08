@@ -31,7 +31,7 @@ public sealed class ViewsPublications
 
     /// <summary>
     /// Registers the kinds <c>dashboard</c> and <c>report</c> with the validator over the group's models and files, in the registry of the publisher a host builds (<c>new DefinitionPublisher(state, kinds, payloads, "serving")</c>).
-    /// The publisher a host publishes the Proxy's <c>semantic-model</c> through needs no change: a dashboard's <c>depends_on</c> is <c>semantic-model:name@version</c>, and a model's own (<c>data-source:name</c>) reads the same way.
+    /// The publisher a host publishes the Gateway's <c>semantic-model</c> through needs no change: a dashboard's <c>depends_on</c> is <c>semantic-model:name@version</c>, and a model's own (<c>data-source:name</c>) reads the same way.
     /// </summary>
     public static DefinitionKinds Register(DefinitionKinds kinds, DefinitionStore store, PayloadStore? payloads = null) =>
         ViewDefinitions.Register(kinds, ViewPublishingSources.From(store, payloads));

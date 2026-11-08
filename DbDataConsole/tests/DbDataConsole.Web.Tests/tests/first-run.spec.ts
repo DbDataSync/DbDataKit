@@ -1,7 +1,7 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
-import { buildUrl, proxyUrl, scratchDirectory, syncUrl, warehouseConnection } from '../playwright.config'
+import { buildUrl, gatewayUrl, scratchDirectory, syncUrl, warehouseConnection } from '../playwright.config'
 import { viewsStory } from './views'
 
 /** A browser-side authenticator that holds the passkeys, so the test can register one and sign in with it the way a person's device would. */
@@ -255,25 +255,25 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await page.getByTestId('rail-home-link').click()
   await expect(page.getByTestId('instances-page')).toBeVisible()
 
-  // A Proxy: its screens open inside the console too. The overview, the data source it was started with, a JWT claim mapping made here, the certificate and the history of its configuration.
-  await page.getByTestId('pair-url-input').fill(proxyUrl)
-  await page.getByTestId('pair-code-input').fill(fs.readFileSync(path.join(scratchDirectory, 'proxy-pairing-code.txt'), 'utf8').trim())
-  await page.getByTestId('pair-name-input').fill('Proxy one')
+  // A Gateway: its screens open inside the console too. The overview, the data source it was started with, a JWT claim mapping made here, the certificate and the history of its configuration.
+  await page.getByTestId('pair-url-input').fill(gatewayUrl)
+  await page.getByTestId('pair-code-input').fill(fs.readFileSync(path.join(scratchDirectory, 'gateway-pairing-code.txt'), 'utf8').trim())
+  await page.getByTestId('pair-name-input').fill('Gateway one')
   await page.getByTestId('pair-button').click()
-  const proxy = page.getByTestId('instance-row-Proxy one')
-  await expect(proxy.getByTestId('instance-status')).toHaveText('Ready')
-  await expect(proxy).toContainText('dbdataproxy')
-  await proxy.getByTestId('instance-open-link').click()
-  await expect(page.getByTestId('proxy-overview')).toBeVisible()
+  const gateway = page.getByTestId('instance-row-Gateway one')
+  await expect(gateway.getByTestId('instance-status')).toHaveText('Ready')
+  await expect(gateway).toContainText('dbdatagateway')
+  await gateway.getByTestId('instance-open-link').click()
+  await expect(page.getByTestId('gateway-overview')).toBeVisible()
 
   await page.getByTestId('rail-data-sources').click()
-  await expect(page).toHaveURL(/\/servers\/proxy-[0-9a-f]+\/data-sources$/)
+  await expect(page).toHaveURL(/\/servers\/gateway-[0-9a-f]+\/data-sources$/)
   await expect(page.getByTestId('data-source-erp')).toBeVisible()
 
   await page.getByTestId('rail-identities').click()
-  // Proxy users are retired (plan 13a, P13): people reach a data source as home users, in the groups its file names, so there is no user to make on this screen.
+  // Gateway users are retired (plan 13a, P13): people reach a data source as home users, in the groups its file names, so there is no user to make on this screen.
 
-  // a JWT claim mapping, saved as a list into proxy/auth.yaml and shown again from the server
+  // a JWT claim mapping, saved as a list into gateway/auth.yaml and shown again from the server
   await page.getByTestId('jwt-mapping-add').click()
   await page.getByTestId('jwt-claim-input').fill('group')
   await page.getByTestId('jwt-value-input').fill('analysts')
@@ -290,14 +290,14 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await expect(page.getByTestId('tls-details')).toBeVisible()
 
   await page.getByTestId('rail-activity').click()
-  await expect(page.getByTestId('proxy-activity')).toBeVisible()
+  await expect(page.getByTestId('gateway-activity')).toBeVisible()
   await expect(page.getByTestId('lockouts-table')).toContainText('Nobody is locked out.')
 
   // The mapping made above is a commit by the person who made it.
   await page.getByTestId('rail-config').click()
   await expect(page.getByTestId('commits-table').locator('[data-testid^="commit-"]').first()).toBeVisible()
 
-  // Publishing (plan 13a, T11 and T12): the console links the Build server to the Proxy (no code typed), the Build screen publishes the starter's connection, and the Proxy lists the data source it made.
+  // Publishing (plan 13a, T11 and T12): the console links the Build server to the Gateway (no code typed), the Build screen publishes the starter's connection, and the Gateway lists the data source it made.
   // The first Build pairing was forgotten above, so the server is paired again, with the second code made for it.
   await page.getByTestId('rail-home-link').click()
   await page.getByTestId('pair-url-input').fill(buildUrl)
@@ -307,14 +307,14 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await expect(page.getByTestId('instance-row-Build one').getByTestId('instance-status')).toHaveText('Ready')
   await expect(page.getByTestId('link-card')).toBeVisible()
   await page.getByTestId('link-from-select').selectOption({ label: 'Build one' })
-  await page.getByTestId('link-to-select').selectOption({ label: 'Proxy one' })
+  await page.getByTestId('link-to-select').selectOption({ label: 'Gateway one' })
   await page.getByTestId('link-button').click()
   await expect(page.getByTestId('link-done')).toBeVisible()
   await page.getByTestId('instance-row-Build one').getByTestId('instance-open-link').click()
   await page.getByTestId('build-project-starter').getByTestId('build-project-link').click()
   await page.getByTestId('build-tab-publish').click()
-  await expect(page.getByTestId('build-publish-button')).toBeDisabled()   // a proxy and a connection first
-  await page.getByTestId('build-publish-proxy').selectOption({ label: 'proxy-one' })
+  await expect(page.getByTestId('build-publish-button')).toBeDisabled()   // a gateway and a connection first
+  await page.getByTestId('build-publish-gateway').selectOption({ label: 'gateway-one' })
   await page.getByTestId('build-publish-connection').fill('sqlserver')
   await page.getByTestId('build-publish-data-source').fill('warehouse')
   await page.getByTestId('build-publish-button').click()
@@ -324,26 +324,26 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await page.getByTestId('build-publish-button').click()
   await expect(page.getByTestId('build-publish-done')).toContainText('updated')
   await expect(page.getByTestId('build-publish-done')).not.toContainText('(new)')
-  // a data source made by hand on the Proxy (erp) is refused, in the Proxy's words, with the way an administrator settles it
+  // a data source made by hand on the Gateway (erp) is refused, in the Gateway's words, with the way an administrator settles it
   await page.getByTestId('build-publish-data-source').fill('erp')
   await page.getByTestId('build-publish-button').click()
   await expect(page.getByTestId('build-publish-failed')).toContainText('not made by a publisher')
   await expect(page.getByTestId('build-publish-adopt')).toBeVisible()
-  // T13: the administrator hands it over from the offer (the call goes to the Proxy through the console's relay), and the next publish is a change to a data source that is the Build server's now
+  // T13: the administrator hands it over from the offer (the call goes to the Gateway through the console's relay), and the next publish is a change to a data source that is the Build server's now
   await page.getByTestId('build-publish-adopt-button').click()
   await expect(page.getByTestId('build-publish-adopted')).toContainText('erp')
   await expect(page.getByTestId('build-publish-failed')).toHaveCount(0)
   await page.getByTestId('build-publish-button').click()
   await expect(page.getByTestId('build-publish-done')).toContainText('erp')
   await expect(page.getByTestId('build-publish-done')).toContainText('updated')
-  // the other hand-made data source is refused the same way, and handed over from the Proxy's own page instead
+  // the other hand-made data source is refused the same way, and handed over from the Gateway's own page instead
   await page.getByTestId('build-publish-data-source').fill('legacy')
   await page.getByTestId('build-publish-button').click()
   await expect(page.getByTestId('build-publish-failed')).toContainText('not made by a publisher')
   await expect(page.getByTestId('build-publish-adopt')).toBeVisible()
-  // the Proxy shows what was made, and who manages each data source
+  // the Gateway shows what was made, and who manages each data source
   await page.getByTestId('rail-home-link').click()
-  await page.getByTestId('instance-row-Proxy one').getByTestId('instance-open-link').click()
+  await page.getByTestId('instance-row-Gateway one').getByTestId('instance-open-link').click()
   await page.getByTestId('rail-data-sources').click()
   await expect(page.getByTestId('data-source-warehouse')).toBeVisible()
   await expect(page.getByTestId('data-source-erp').getByTestId('data-source-owner')).not.toHaveText('by hand')
@@ -359,27 +359,27 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await page.getByTestId('instance-row-Build one').getByTestId('instance-open-link').click()
   await page.getByTestId('build-project-starter').getByTestId('build-project-link').click()
   await page.getByTestId('build-tab-publish').click()
-  await page.getByTestId('build-publish-proxy').selectOption({ label: 'proxy-one' })
+  await page.getByTestId('build-publish-gateway').selectOption({ label: 'gateway-one' })
   await page.getByTestId('build-publish-connection').fill('sqlserver')
   await page.getByTestId('build-publish-data-source').fill('legacy')
   await page.getByTestId('build-publish-button').click()
   await expect(page.getByTestId('build-publish-done')).toContainText('legacy')
   await expect(page.getByTestId('build-publish-done')).toContainText('updated')
 
-  // E05, the Connections view across servers: the Proxy's data sources are listed (the Sync server has none yet), one is copied to the Sync server and then back to the Proxy under another name. Each target reads the file with its own strict loader.
+  // E05, the Connections view across servers: the Gateway's data sources are listed (the Sync server has none yet), one is copied to the Sync server and then back to the Gateway under another name. Each target reads the file with its own strict loader.
   await page.goto('/connections')
   await expect(page.getByTestId('connections-page')).toBeVisible()
   const connection = (server: string, name: string) => page.locator(`[data-testid=connection-row][data-server="${server}"][data-name="${name}"]`)
-  await expect(connection('Proxy one', 'ledger')).toBeVisible()
+  await expect(connection('Gateway one', 'ledger')).toBeVisible()
   await expect(page.locator('[data-testid=connection-row][data-server="Sync one"]')).toHaveCount(0)
   // a data source Build republished holds its whole connection string in a secret; Sync cannot read that, and the copy says so
-  await expect(connection('Proxy one', 'legacy')).toBeVisible()
-  await connection('Proxy one', 'legacy').getByTestId('connection-copy-button').click()
+  await expect(connection('Gateway one', 'legacy')).toBeVisible()
+  await connection('Gateway one', 'legacy').getByTestId('connection-copy-button').click()
   await page.getByTestId('copy-target').selectOption({ label: 'Sync one (Sync)' })
   await page.getByTestId('copy-submit').click()
   await expect(page.getByTestId('copy-failed')).toContainText('whole connection string in a secret')
   await page.goto('/connections')
-  await connection('Proxy one', 'ledger').getByTestId('connection-copy-button').click()
+  await connection('Gateway one', 'ledger').getByTestId('connection-copy-button').click()
   await expect(page.getByTestId('copy-submit')).toBeDisabled()   // a server first
   await page.getByTestId('copy-target').selectOption({ label: 'Sync one (Sync)' })
   await expect(page.getByTestId('copy-name')).toHaveValue('ledger')
@@ -394,18 +394,18 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await expect(page.getByTestId('copy-done')).toContainText('never copied')
   await expect(connection('Sync one', 'ledger')).toBeVisible()
   await expect(connection('Sync one', 'ledger').getByTestId('connection-detail')).toContainText('localhost')
-  // and from Sync to the Proxy, under another name; the Proxy has validated it when it is listed
+  // and from Sync to the Gateway, under another name; the Gateway has validated it when it is listed
   await connection('Sync one', 'ledger').getByTestId('connection-copy-button').click()
-  await page.getByTestId('copy-target').selectOption({ label: 'Proxy one (Proxy)' })
+  await page.getByTestId('copy-target').selectOption({ label: 'Gateway one (Gateway)' })
   await page.getByTestId('copy-name').fill('ledger-from-sync')
   await page.getByTestId('copy-submit').click()
-  await expect(page.getByTestId('copy-done')).toContainText('Copied to Proxy one as ledger-from-sync')
-  await expect(connection('Proxy one', 'ledger-from-sync')).toBeVisible()
+  await expect(page.getByTestId('copy-done')).toContainText('Copied to Gateway one as ledger-from-sync')
+  await expect(connection('Gateway one', 'ledger-from-sync')).toBeVisible()
   // a name the target already has is a conflict, and the file there is left alone
   await page.getByTestId('copy-submit').click()
   await expect(page.getByTestId('copy-failed')).toContainText('did not accept the copy')
 
-  // One view across the servers: the Build, Sync and Proxy servers all answer, and none has a replication or a scheduled plan yet (a failed run and a lagging replication need real runs, so the rows themselves are tested on what the servers return)
+  // One view across the servers: the Build, Sync and Gateway servers all answer, and none has a replication or a scheduled plan yet (a failed run and a lagging replication need real runs, so the rows themselves are tested on what the servers return)
   await page.goto('/monitoring')   // the rail inside a server's screens is that product's own
   await expect(page.getByTestId('monitoring-none')).toBeVisible()
   await expect(page.getByTestId('monitoring-problem')).toHaveCount(0)

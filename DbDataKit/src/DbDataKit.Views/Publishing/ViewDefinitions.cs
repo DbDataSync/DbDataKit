@@ -6,7 +6,7 @@ using DbDataKit.State;
 namespace DbDataKit.Views;
 
 /// <summary>What the validator of a view kind reads besides the document: the published model versions it depends on and the bytes of the files of the version.</summary>
-/// <param name="Model">The content of a published <c>semantic-model</c> version by name and number (the Proxy's JSON with the catalog text), or null when there is no such version.</param>
+/// <param name="Model">The content of a published <c>semantic-model</c> version by name and number (the Gateway's JSON with the catalog text), or null when there is no such version.</param>
 /// <param name="Bytes">The bytes of a file of the version being published; null when the host cannot read them (the size and the type are still checked, the first bytes are not).</param>
 public sealed record ViewPublishingSources(Func<string, int, string?> Model, Func<ArtifactRef, byte[]?>? Bytes = null)
 {
@@ -47,7 +47,7 @@ public static partial class ViewDefinitions
     public const string Dashboard = "dashboard";
     public const string Report = "report";
 
-    /// <summary>The kind of the model versions a document depends on (the Proxy's published models).</summary>
+    /// <summary>The kind of the model versions a document depends on (the Gateway's published models).</summary>
     public const string ModelKind = "semantic-model";
 
     public static IReadOnlyList<string> Kinds { get; } = [Dashboard, Report];

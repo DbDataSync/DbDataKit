@@ -15,7 +15,7 @@ public sealed record StateInstance(string Key, bool IsSelf, string? Host = null,
     IReadOnlyDictionary<string, DefinitionFormats>? DefinitionFormats = null, int? Generation = null);
 
 /// <summary>
-/// The live instances that share a server's state, for the products that keep an instance table (the Proxy's <c>serving_instance</c>). The default, <see cref="Empty"/>, is for the products that have none: one process owns its state and the answer
+/// The live instances that share a server's state, for the products that keep an instance table (the Gateway's <c>serving_instance</c>). The default, <see cref="Empty"/>, is for the products that have none: one process owns its state and the answer
 /// has no <c>instances</c> beyond the one that answered.
 /// </summary>
 public interface IInstanceDirectory

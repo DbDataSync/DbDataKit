@@ -27,7 +27,7 @@ Today a column is described twice: once in `models/**/<name>.yml` (physical name
 
 * **U1: nothing.** Additive.
 * **U2: additive too.** `semantic:` is optional, so every existing model and semantic file stays valid. Cost is the schema, loaders, JSON Schema, goldens and the semantic compiler reading models; the retail template could then move one dimension over as the worked example. A clean break only if the old binding form is later removed (every `bindings:` entry in the templates and in users' files), which this proposal does not ask for.
-* **U3: a clean break.** Every template's `semantic/*.yml`, every user's semantic files, DDB-610 to 617, `ProjectPhysicalLayer`, the catalog loader's input, the Proxy's semantic data source, and the docs. A changed file format must fail with a message naming the file (repository rule), so a migration command would also be needed.
+* **U3: a clean break.** Every template's `semantic/*.yml`, every user's semantic files, DDB-610 to 617, `ProjectPhysicalLayer`, the catalog loader's input, the Gateway's semantic data source, and the docs. A changed file format must fail with a message naming the file (repository rule), so a migration command would also be needed.
 
 ## 5. Recommendation
 

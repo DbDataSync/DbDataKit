@@ -5,9 +5,9 @@ namespace DbDataKit.State;
 
 /// <summary>
 /// One live instance of a group as its instance row says (plan 29b U02): who it is, and the software and module versions its binary has. The versions are null for a row written before the
-/// product recorded them (the Proxy's and the runner's rows gained the columns in their second migration).
+/// product recorded them (the Gateway's and the runner's rows gained the columns in their second migration).
 /// </summary>
-/// <param name="Kind">The module that owns the row: <c>serving</c> (the Proxy's) or <c>runner</c>.</param>
+/// <param name="Kind">The module that owns the row: <c>serving</c> (the Gateway's) or <c>runner</c>.</param>
 /// <param name="Id">The row's key (an instance key or an instance id).</param>
 /// <param name="Host">The machine, when known.</param>
 /// <param name="ProcessId">The process id on that machine, when the row has one.</param>
@@ -88,24 +88,24 @@ public static class ModuleVersionText
 }
 
 /// <summary>
-/// Reads the two instance tables the suite has, the Proxy's <c>serving_instance</c> (module <c>serving</c>) and the runner's <c>instance</c> (module <c>runner</c>), for whichever of the modules the layout has. The
+/// Reads the two instance tables the suite has, the Gateway's <c>serving_instance</c> (module <c>serving</c>) and the runner's <c>instance</c> (module <c>runner</c>), for whichever of the modules the layout has. The
 /// versions are read when the module's registry version is at least the one of the migration that added the columns (3 for serving, 2 for runner); before that the rows are returned without versions. Used by the products as their
 /// <see cref="IGroupInstanceSource"/>, by the status API and by <c>state show</c>.
 /// </summary>
 public sealed class StandardGroupInstanceSource(TimeSpan? runnerLease = null) : IGroupInstanceSource
 {
-    /// <summary>A serving instance's row is live for this long after its last heartbeat (the Proxy's lease).</summary>
+    /// <summary>A serving instance's row is live for this long after its last heartbeat (the Gateway's lease).</summary>
     public static readonly TimeSpan ServingLease = TimeSpan.FromSeconds(30);
 
-    /// <summary>The module versions whose migration added <c>software_version</c> and <c>module_versions</c> (the Proxy's third, the runner's second).</summary>
+    /// <summary>The module versions whose migration added <c>software_version</c> and <c>module_versions</c> (the Gateway's third, the runner's second).</summary>
     private const int ServingVersionColumnsFrom = 3;
     private const int RunnerVersionColumnsFrom = 2;
 
-    /// <summary>The module versions whose migration added <c>definition_formats</c> (24a UC01: the Proxy's fourth, the runner's third).</summary>
+    /// <summary>The module versions whose migration added <c>definition_formats</c> (24a UC01: the Gateway's fourth, the runner's third).</summary>
     private const int ServingFormatColumnFrom = 4;
     private const int RunnerFormatColumnFrom = 3;
 
-    /// <summary>The module versions whose migration added <c>generation</c> (24a UC05: the Proxy's fifth, the runner's fourth).</summary>
+    /// <summary>The module versions whose migration added <c>generation</c> (24a UC05: the Gateway's fifth, the runner's fourth).</summary>
     private const int ServingGenerationColumnFrom = 5;
     private const int RunnerGenerationColumnFrom = 4;
 

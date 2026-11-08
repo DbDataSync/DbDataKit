@@ -20,7 +20,7 @@ public enum FlightSqlParameterMode
     Prepared,
 
     /// <summary>Values rendered into the SQL text as literals by the connection's dialect. For a server
-    /// or proxy that does not implement prepared statements.</summary>
+    /// or gateway that does not implement prepared statements.</summary>
     Inline,
 }
 
@@ -49,10 +49,10 @@ public sealed record FlightSqlSettings(
     public const string DataSourceKey = "dataSource";
     public const string CompressionKey = "compression";
 
-    /// <summary>Call header a proxy reads to choose which of its data sources runs the statement.</summary>
+    /// <summary>Call header a gateway reads to choose which of its data sources runs the statement.</summary>
     public const string DataSourceHeader = "x-datasource";
 
-    /// <summary>Call header a proxy reads to choose the codec for this call's results.</summary>
+    /// <summary>Call header a gateway reads to choose the codec for this call's results.</summary>
     public const string CompressionHeader = "x-compression";
 
     /// <summary>

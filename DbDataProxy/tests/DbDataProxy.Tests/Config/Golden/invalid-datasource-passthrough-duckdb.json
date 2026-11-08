@@ -1,1 +1,0 @@
-{ "Proxy": { "DataSources": { "x": { "Provider": "duckdb", "PassThrough": true, "ConnectionString": "a" } } } }

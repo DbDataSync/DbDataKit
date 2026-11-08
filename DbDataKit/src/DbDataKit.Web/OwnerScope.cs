@@ -10,7 +10,7 @@ public enum ObjectAction
 
 /// <summary>The part of an object the owner rules look at.</summary>
 /// <param name="ManagedBy">The id of the client that created it (<c>managed_by</c>); null or empty for one made by hand, by an administrator or by the server itself.</param>
-/// <param name="IsServerPolicy">True for what governs the whole server and is never a Publisher's to change, such as the Proxy's serving policy (<c>extensions.proxy</c>).</param>
+/// <param name="IsServerPolicy">True for what governs the whole server and is never a Publisher's to change, such as the Gateway's serving policy (<c>extensions.gateway</c>).</param>
 public sealed record ManagedObject(string? ManagedBy, bool IsServerPolicy = false);
 
 /// <summary>

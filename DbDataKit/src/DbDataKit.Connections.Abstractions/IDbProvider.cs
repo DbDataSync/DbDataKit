@@ -13,7 +13,7 @@ public interface IConnectionStringComposer
     /// <summary>The same string with credential values masked, for logs and previews.</summary>
     string Describe(ConnectionContext context);
     /// <summary>
-    /// Pass-through (Proxy): takes an administrator connection string, removes every integrated-security style key, sets the client's
+    /// Pass-through (Gateway): takes an administrator connection string, removes every integrated-security style key, sets the client's
     /// user and password through the engine's quoting, and asserts that no integrated key remains.
     /// </summary>
     string ApplyPassThroughCredentials(string baseConnectionString, string user, SecretValue password, ConnectionPolicy? policy = null);

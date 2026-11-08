@@ -35,11 +35,11 @@ public sealed class GroupTrustTests : IDisposable
     public void The_group_has_one_instance_id_the_first_instance_s_own(string engine)
     {
         var settings = new GroupSettings(Open(engine));
-        var first = ServerIdentity.InstanceId(ServerYaml("a"), "proxy", "dbdataproxy server");
+        var first = ServerIdentity.InstanceId(ServerYaml("a"), "proxy", "dbdatagateway server");
 
-        Assert.Equal(first, GroupIdentity.InstanceId(settings, ServerYaml("a"), "proxy", "dbdataproxy server"));   // a server that becomes a group keeps its id, so its pairings hold
-        ServerIdentity.InstanceId(ServerYaml("b"), "proxy", "dbdataproxy server");                                 // b had an id of its own before it joined
-        Assert.Equal(first, GroupIdentity.InstanceId(settings, ServerYaml("b"), "proxy", "dbdataproxy server"));
+        Assert.Equal(first, GroupIdentity.InstanceId(settings, ServerYaml("a"), "proxy", "dbdatagateway server"));   // a server that becomes a group keeps its id, so its pairings hold
+        ServerIdentity.InstanceId(ServerYaml("b"), "proxy", "dbdatagateway server");                                 // b had an id of its own before it joined
+        Assert.Equal(first, GroupIdentity.InstanceId(settings, ServerYaml("b"), "proxy", "dbdatagateway server"));
         Assert.NotNull(GroupIdentity.Differs(first, ServerYaml("b")));
         Assert.Null(GroupIdentity.Differs(first, ServerYaml("a")));
     }

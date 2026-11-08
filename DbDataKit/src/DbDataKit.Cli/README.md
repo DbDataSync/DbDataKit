@@ -4,7 +4,7 @@ The one command grammar and command contract of every command line in the suite.
 
 ## Grammar
 
-`<program> <noun> <verb> [options]`. Executables are lower case (`dbdatasync`, `dbdataproxy`, `dbdatabuild`, `dbdatakit`, `dbdatastore`, `dbdatarunner`). A product keeps its own command line; `dbdatakit` manages the console and does not forward to the others.
+`<program> <noun> <verb> [options]`. Executables are lower case (`dbdatasync`, `dbdatagateway`, `dbdatabuild`, `dbdatakit`, `dbdatastore`, `dbdatarunner`). A product keeps its own command line; `dbdatakit` manages the console and does not forward to the others.
 Old command forms are removed, not aliased. `NounRouter` dispatches (`help` and `--help` work at every level; an unknown noun or verb is exit 2) and prints the help, the same way everywhere.
 
 A noun that exists in several command lines is built once and means the same thing in each; a product adds verbs of its own with `Noun.With`:

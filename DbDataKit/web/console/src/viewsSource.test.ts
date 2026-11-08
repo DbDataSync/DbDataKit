@@ -22,12 +22,12 @@ describe('the fixture source of the Views page', () => {
 })
 
 const server = (id: string, extra: Partial<InstanceSummary> = {}): InstanceSummary =>
-  ({ id, name: `Proxy ${id}`, url: `https://${id}.example`, product: 'dbdataproxy', version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null, ...extra })
+  ({ id, name: `Gateway ${id}`, url: `https://${id}.example`, product: 'dbdatagateway', version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null, ...extra })
 
 const answer = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }))
 
 describe('the sources of the Views page', () => {
-  it('lists each reachable Proxy that runs the views module, then the fixtures; a Proxy without the module, an unreachable one and another product are not sources', async () => {
+  it('lists each reachable Gateway that runs the views module, then the fixtures; a Gateway without the module, an unreachable one and another product are not sources', async () => {
     const asked: string[] = []
     const sources = await discoverSources({
       list: async () => [server('a'), server('b'), server('c', { reachable: false }), server('d', { product: 'dbdatasync' }), server('e'), server('f')],
@@ -35,14 +35,14 @@ describe('the sources of the Views page', () => {
         const url = String(input)
         asked.push(url)
         if (url.includes('/a/')) return answer({ enabled: true, state: 'ok' })
-        if (url.includes('/b/')) return answer({ error: 'There is no such call.' }, 404)   // a Proxy before DBR11b
+        if (url.includes('/b/')) return answer({ error: 'There is no such call.' }, 404)   // a Gateway before DBR11b
         if (url.includes('/e/')) return answer({ enabled: false })                       // the management API answers, the module is off
         throw new TypeError('network')                                                   // f does not answer
       }) as typeof fetch,
     })
     expect(sources.map((s) => s.id)).toEqual(['a', 'fixtures'])
-    expect(sources[0]).toEqual({ id: 'a', label: 'Proxy a (published)', published: true })
-    // only the reachable Proxies were asked, through the relay and at the module's status route
+    expect(sources[0]).toEqual({ id: 'a', label: 'Gateway a (published)', published: true })
+    // only the reachable Gateways were asked, through the relay and at the module's status route
     expect(asked.sort()).toEqual(['/relay/a/api/v1/views/status', '/relay/b/api/v1/views/status', '/relay/e/api/v1/views/status', '/relay/f/api/v1/views/status'])
   })
 
@@ -51,8 +51,8 @@ describe('the sources of the Views page', () => {
   })
 
   it('chooses the source an address names, else the first published one, else the fixtures, and says which name it could not use', () => {
-    const published: ViewsSource = { id: 'a', label: 'Proxy a (published)', published: true }
-    const other: ViewsSource = { id: 'b', label: 'Proxy b (published)', published: true }
+    const published: ViewsSource = { id: 'a', label: 'Gateway a (published)', published: true }
+    const other: ViewsSource = { id: 'b', label: 'Gateway b (published)', published: true }
     const both = [published, other, fixturesSource]
     expect(pickSource(both, null)).toEqual({ source: published, unknown: null })
     expect(pickSource(both, 'b')).toEqual({ source: other, unknown: null })
@@ -62,7 +62,7 @@ describe('the sources of the Views page', () => {
     expect(pickSource([fixturesSource], 'a')).toEqual({ source: fixturesSource, unknown: 'a' })
   })
 
-  it('opens, lists, resolves and saves a Proxy\'s documents through the relay with the module\'s routes, and the page can see what was asked', async () => {
+  it('opens, lists, resolves and saves a Gateway\'s documents through the relay with the module\'s routes, and the page can see what was asked', async () => {
     const calls: Array<{ method: string; url: string; body?: unknown }> = []
     const realFetch = globalThis.fetch
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -74,7 +74,7 @@ describe('the sources of the Views page', () => {
       return answer({ error: 'no' }, 404)
     }) as typeof fetch
     try {
-      const client = viewsClient('proxy 1')
+      const client = viewsClient('gateway 1')
       expect(await client.list('dashboard')).toEqual([{ name: 'sales', title: 'Sales', kind: 'dashboard' }])
       resolveLog.clear()
       await client.resolve({ kind: 'dashboard', name: 'sales' }, 'desk', {})
@@ -83,10 +83,10 @@ describe('the sources of the Views page', () => {
       expect(resolveLog.snapshot().at(-1)?.widgets).toEqual(['net'])
       expect(await client.save('dashboard', 'sales', 'kind: dashboard', '3')).toEqual({ name: 'sales', version: '4' })
       expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual([
-        'GET /relay/proxy%201/api/v1/dashboards',
-        'POST /relay/proxy%201/api/v1/dashboards/sales/render',
-        'POST /relay/proxy%201/api/v1/dashboards/sales/render',
-        'PUT /relay/proxy%201/api/v1/dashboards/sales',
+        'GET /relay/gateway%201/api/v1/dashboards',
+        'POST /relay/gateway%201/api/v1/dashboards/sales/render',
+        'POST /relay/gateway%201/api/v1/dashboards/sales/render',
+        'PUT /relay/gateway%201/api/v1/dashboards/sales',
       ])
       expect(calls[3]!.body).toEqual({ text: 'kind: dashboard', expected_version: '3' })
       await expect(client.open('dashboard', 'missing')).rejects.toMatchObject({ code: 'not_found' })

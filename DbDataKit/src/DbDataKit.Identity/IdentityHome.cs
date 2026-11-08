@@ -42,7 +42,7 @@ public sealed record IdentityHomeOptions(
 
 /// <summary>
 /// The identity home in a web application (plan 13a U13, U15; plan 20 O06): the OpenID Connect provider, the passkey sign-in, invitations and the shared sign-in controllers, over one state database.
-/// The same code runs in the serving layer (Proxy's <c>identity</c> listener) and on its own (<c>dbdatakit identity run</c>); the host adds its own listener, certificate, health endpoints and anything else it serves.
+/// The same code runs in the serving layer (Gateway's <c>identity</c> listener) and on its own (<c>dbdatakit identity run</c>); the host adds its own listener, certificate, health endpoints and anything else it serves.
 /// </summary>
 public static class IdentityHome
 {

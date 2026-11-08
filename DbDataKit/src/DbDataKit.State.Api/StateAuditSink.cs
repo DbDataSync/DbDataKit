@@ -4,7 +4,7 @@ using DbDataKit.Web.Trust;
 namespace DbDataKit.State.Api;
 
 /// <summary>
-/// The management audit of a product whose state has the shared <c>audit</c> module (the console, the Proxy): an entry of the state endpoints goes into it as <c>state.maintenance</c> with the person as actor, the console it came through,
+/// The management audit of a product whose state has the shared <c>audit</c> module (the console, the Gateway): an entry of the state endpoints goes into it as <c>state.maintenance</c> with the person as actor, the console it came through,
 /// the outcome and the whole <see cref="AuditEntry"/> as detail (who, what, the reason; never a secret). Read through <see cref="AuditLog"/> like the rest of the audit.
 /// </summary>
 public sealed class StateAuditSink(StateDatabase state, string serviceId) : IAuditLog

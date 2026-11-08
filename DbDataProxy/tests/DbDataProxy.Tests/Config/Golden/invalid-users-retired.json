@@ -1,4 +1,0 @@
-{ "Proxy": {
-  "DataSources": { "erp": { "Provider": "sqlserver", "ConnectionString": "Server=a", "Groups": [ "finance" ] } },
-  "Users": [ { "Name": "reporting", "PasswordHash": "PBKDF2-SHA256$1$a$b", "DataSources": [ "erp" ], "DefaultDataSource": "erp" } ]
-} }

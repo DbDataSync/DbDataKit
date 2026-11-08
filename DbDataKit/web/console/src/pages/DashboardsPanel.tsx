@@ -36,7 +36,7 @@ async function openFile(file: File): Promise<{ kind: ViewKind; name: string } | 
   return { kind, name }
 }
 
-/** Where the documents come from: the fixtures, or a Proxy's published ones; a change of source is a different list, so it goes back to the list. */
+/** Where the documents come from: the fixtures, or a Gateway's published ones; a change of source is a different list, so it goes back to the list. */
 function SourcePicker({ sources, source, unknown, kind }: { sources: ViewsSource[]; source: ViewsSource; unknown: string | null; kind: ViewKind }) {
   const navigate = useNavigate()
   return (
@@ -46,7 +46,7 @@ function SourcePicker({ sources, source, unknown, kind }: { sources: ViewsSource
         {sources.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
       </select>
       <span className="hint" data-testid="views-source-current" data-source={source.id} data-published={source.published ? 'true' : 'false'}>
-        {source.published ? 'Published to the group: every widget is read as you.' : sources.some((s) => s.published) ? 'The sample files and their recorded results; nothing is sent anywhere.' : 'No Proxy runs the views module, so these are the sample files and their recorded results.'}
+        {source.published ? 'Published to the group: every widget is read as you.' : sources.some((s) => s.published) ? 'The sample files and their recorded results; nothing is sent anywhere.' : 'No Gateway runs the views module, so these are the sample files and their recorded results.'}
       </span>
       {unknown && <span className="hint" role="note" data-testid="views-source-unknown">`{unknown}` is not a source now (it has no views module, or it did not answer); showing {source.label}.</span>}
     </div>
@@ -104,7 +104,7 @@ function Listing({ kind, source, sources, unknown, keep }: { kind: ViewKind; sou
       {list.data && list.data.length === 0 && (
         <div className="empty" data-testid="views-empty">
           {source.published
-            ? `No ${area.plural.toLowerCase()} are published to this group yet, or none you may open. Publish one with \`dbdataproxy views publish --file <document>\`, or with New ${area.singular} here.`
+            ? `No ${area.plural.toLowerCase()} are published to this group yet, or none you may open. Publish one with \`dbdatagateway views publish --file <document>\`, or with New ${area.singular} here.`
             : `No ${area.plural.toLowerCase()} in the fixture source. Open a file to see one.`}
         </div>
       )}
@@ -275,8 +275,8 @@ function Opened({ kind, name, source, keep }: { kind: ViewKind; name: string; so
  * The Dashboards and Reports tabs of the Views page (plan 32 DBR23, M1): the documents of the fixture source (and any file opened), and one document drawn with `DashboardView` from the shared visuals:
  * the layout the window selects or the one picked (`?layout=`), parameters kept in the address (`?p.region=West`) so a link opens the same board, only the widgets that use a changed parameter resolved again.
  * A report is the same board over its `flow` layout (DBR14): a scrolling paged sheet with page-break guides, Print, and a Print preview that stays disabled until the exporter is wired (DBR15); a dashboard's
- * `print` layout is the same view (`?layout=print`). Canvas layouts are drawn (DBR07). The source is the fixtures' recorded results, or the documents published to a Proxy that runs the `views` module (DBR11, DBR11b): `?source=` names it, and with none named
- * the first such Proxy is used, else the fixtures.
+ * `print` layout is the same view (`?layout=print`). Canvas layouts are drawn (DBR07). The source is the fixtures' recorded results, or the documents published to a Gateway that runs the `views` module (DBR11, DBR11b): `?source=` names it, and with none named
+ * the first such Gateway is used, else the fixtures.
  */
 export function DashboardsPanel({ kind }: { kind: ViewKind }) {
   const { name } = useParams()

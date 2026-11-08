@@ -3,7 +3,7 @@
 
 Three checks over the same files:
   1. the retired forms, listed in RETIRED with what replaced them;
-  2. every `dbdatasync|dbdataproxy|dbdatakit|dbdatastore|dbdatarunner|dbdatabuild <words>` that is typed must be a command that exists. The commands are read from the
+  2. every `dbdatasync|dbdatagateway|dbdatakit|dbdatastore|dbdatarunner|dbdatabuild <words>` that is typed must be a command that exists. The commands are read from the
      sources, not listed by hand: the nouns and verbs of each product's command line (the shared ones in DbDataKit/src, the product's own under its src) and,
      for Build, its generated command reference (DbDataBuild/docs/commands.md, which a test keeps current);
   3. no DbDataSync document says its server serves a web app at its own address (SYNC_WEB_APP): since U11 the screens are the dbdatakit console's.
@@ -26,12 +26,12 @@ RETIRED = [
     (r"\bdbdatasync(?:\.exe)?\s+serve\b", "dbdatasync server run"),
     (r"\bdbdatasync(?:\.exe)?\s+setup\b", "dbdatasync server setup"),
     (r"\bdbdatasync(?:\.exe)?\s+config\s+(cert|secret|library|driver)\b", "dbdatasync <cert|secret|library|driver> ... (no longer under config)"),
-    (r"\bdbdataproxy(?:\.exe)?\s+(?:hash-password|secret\s+hash)\b", "a home token: dbdataproxy identity service-account-add / token-create (Proxy has no users of its own to hash a password for)"),
-    (r"\bdbdataproxy(?:\.exe)?\s+protect-secret\b", "dbdataproxy secret protect"),
-    (r"\bdbdataproxy(?:\.exe)?\s+(install|uninstall)\b", "dbdataproxy service install|uninstall"),
-    (r"\bdbdataproxy(?:\.exe)?\s+query(?!\s+run)\b", "dbdataproxy query run"),
-    (r"\bdbdataproxy(?:\.exe)?\s+--healthcheck\b", "dbdataproxy health check"),
-    (r"\bDbDataProxy(?:\.Worker)?\.exe\b", "dbdataproxy.exe / dbdataproxy-worker.exe (lower case)"),
+    (r"\bdbdatagateway(?:\.exe)?\s+(?:hash-password|secret\s+hash)\b", "a home token: dbdatagateway identity service-account-add / token-create (Gateway has no users of its own to hash a password for)"),
+    (r"\bdbdatagateway(?:\.exe)?\s+protect-secret\b", "dbdatagateway secret protect"),
+    (r"\bdbdatagateway(?:\.exe)?\s+(install|uninstall)\b", "dbdatagateway service install|uninstall"),
+    (r"\bdbdatagateway(?:\.exe)?\s+query(?!\s+run)\b", "dbdatagateway query run"),
+    (r"\bdbdatagateway(?:\.exe)?\s+--healthcheck\b", "dbdatagateway health check"),
+    (r"\bDbDataGateway(?:\.Worker)?\.exe\b", "dbdatagateway.exe / dbdatagateway-worker.exe (lower case)"),
 ]
 
 # What a Sync document may no longer say (slice U11, X03): the server serves no web app, its screens are the dbdatakit console's. Each pattern is a way the old claim was written,
@@ -46,7 +46,7 @@ SYNC_WEB_APP = [
 # The program each product's command line is called by, and the folder whose sources define it (the console is `dbdatakit`).
 PRODUCTS = {
     "dbdatasync": "DbDataSync",
-    "dbdataproxy": "DbDataProxy",
+    "dbdatagateway": "DbDataGateway",
     "dbdatakit": "DbDataConsole",
     "dbdatastore": "DbDataStore",
     "dbdatarunner": "DbDataRunner",

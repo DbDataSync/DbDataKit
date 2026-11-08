@@ -37,7 +37,7 @@ public sealed class ConsoleLineage(ConsoleInstances instances, ConsoleRelay rela
     {
         var instance = status.Instance;
         if (!status.Reachable) return new(instance.Name, instance.InstanceId, status.Product, null, [], status.Problem ?? "It did not answer.", _clock.GetUtcNow());
-        if (PathOf(status.Product) is not { } path) return null;                      // a Proxy or a Store has no lineage of its own yet: not part of this
+        if (PathOf(status.Product) is not { } path) return null;                      // a Gateway or a Store has no lineage of its own yet: not part of this
         if (!refresh && _answers.TryGetValue(instance.InstanceId, out var known) && _clock.GetUtcNow() - known.At < Lifetime) return known;
 
         var (code, body) = await relay.CallAsync(instance, HttpMethod.Get, path, null, ct);

@@ -39,7 +39,7 @@ public interface ICatalogReader
     Task<TableShape> GetShapeAsync(TableRef table, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Only the columns of one table, for callers that need names, nullability and types and not keys, indexes or row estimates (Proxy overlays them on the
+    /// Only the columns of one table, for callers that need names, nullability and types and not keys, indexes or row estimates (Gateway overlays them on the
     /// schema of a zero-row query). The default asks for the whole shape; readers that can read columns alone override it.
     /// </summary>
     async Task<IReadOnlyList<ColumnInfo>> GetColumnsAsync(TableRef table, CancellationToken cancellationToken = default) =>

@@ -10,7 +10,7 @@ public sealed class OdbcPolicyViolationException(string reason)
 /// <summary>
 /// What a connection string may ask the driver manager to do, checked before SQLDriverConnect. <c>DRIVER=</c> (a name or a
 /// path), <c>FILEDSN=</c> and <c>SAVEFILE=</c> can make the driver manager load an arbitrary library or write a file, so a string a
-/// user can influence must not reach it unchecked (Proxy review S-10).
+/// user can influence must not reach it unchecked (Gateway review S-10).
 /// </summary>
 /// <remarks>
 /// Every occurrence of a key is checked, not only the first (drivers manager differ on which duplicate wins). When either allow-list

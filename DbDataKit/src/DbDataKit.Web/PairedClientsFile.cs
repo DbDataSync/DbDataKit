@@ -30,7 +30,7 @@ public sealed class PairedClientsFile(string path, TimeProvider? clock = null) :
     /// <summary>Removes the client with this id; false when there was none.</summary>
     public bool Remove(string clientId) => _file.Remove(clientId);
 
-    // The client's generation (24a UC04) is not written here: the Proxy reads these entries with a strict schema, so a server.yaml with the key would stop the release before this one (a rollback, plan 24) from loading its own
+    // The client's generation (24a UC04) is not written here: the Gateway reads these entries with a strict schema, so a server.yaml with the key would stop the release before this one (a rollback, plan 24) from loading its own
     // file. A group keeps the generation in its state (the trust module's paired_client); a file entry that a person gave a `generation` is still read.
     private static string Render(PairedClient c) =>
         $"{{id: {YamlText.FlowScalar(c.Id)}, name: {YamlText.FlowScalar(c.Name)}, kind: {c.Kind.ToString().ToLowerInvariant()}, publicKey: {YamlText.FlowScalar(Base64Url.Encode(c.PublicKey))}, " +

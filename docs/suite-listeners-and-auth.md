@@ -12,11 +12,11 @@ What each service listens on and how each way of proving who you are is used. It
 | | same listener, `/relay/<server>/api/...` and `/relay/<server>/hubs/...` | HTTPS in, then HTTPS out to the managed server with its certificate pinned; SignalR (WebSocket) for the hubs | in and out | The console calls a managed server as the signed-in person (a signed token) and relays the answer |
 | | `--announce-listen` (off unless set; plain `http`, a port of its own, for example 8481) | HTTP, one `POST /announce` (body capped at 4 KB) | none, by design | Servers that are not paired yet announce their name, address and pairing code; the console lists them as waiting |
 | **Identity home on its own** (`dbdatakit identity run`, in the console's project) | `https://localhost:8490` (`--listen`) | HTTPS: OpenID Connect provider (discovery, JWKS, `authorize`, `token`, `userinfo`, `end-session`), the shared sign-in (passkeys, invitations), the Users screens when `wwwroot` is installed | its own certificate | People and the OpenID clients (consoles) |
-| **DbDataProxy** (the Flight listener) | `Listen.Address` (default `0.0.0.0`) : `Listen.Port` (default 8815) | gRPC over HTTP/2: Arrow Flight SQL (`Handshake`, `GetFlightInfo`, `DoGet`, prepared statements, and `DoAction` for the standard Flight SQL actions only) | `Tls.Mode`: `SelfSigned`, `File`, `Store`, or `None` (credentials then travel as Basic) | Database clients (ADBC, JDBC, ODBC bridges, Sync, Build) |
+| **DbDataGateway** (the Flight listener) | `Listen.Address` (default `0.0.0.0`) : `Listen.Port` (default 8815) | gRPC over HTTP/2: Arrow Flight SQL (`Handshake`, `GetFlightInfo`, `DoGet`, prepared statements, and `DoAction` for the standard Flight SQL actions only) | `Tls.Mode`: `SelfSigned`, `File`, `Store`, or `None` (credentials then travel as Basic) | Database clients (ADBC, JDBC, ODBC bridges, Sync, Build) |
 | | same listener, source `semantic:<model>` | Flight SQL carrying a semantic request (query, explain, members, describe) or semantic SQL | as above | the same clients |
-| **DbDataProxy** (management listener) | `Management.Address` (loopback) : 8816, off unless `management.enabled` and TLS is on | HTTPS (HTTP/1.1 and 2): `/api/v1/...` (with `/api/v1/state` and the maintenance mode), pairing, key rotation, `/health*`, `/version`. A management path on the Flight port is a 404 and the reverse | the same certificate | A console (a signed token) or a paired Build server (a publishing client) |
+| **DbDataGateway** (management listener) | `Management.Address` (loopback) : 8816, off unless `management.enabled` and TLS is on | HTTPS (HTTP/1.1 and 2): `/api/v1/...` (with `/api/v1/state` and the maintenance mode), pairing, key rotation, `/health*`, `/version`. A management path on the Flight port is a 404 and the reverse | the same certificate | A console (a signed token) or a paired Build server (a publishing client) |
 | | local channel (`management.localChannel: true`) | one request per message on a named pipe (Windows) or a Unix socket (`channel.sock`) | none; the operating system's access list or file mode decides | The command line on the same machine, as an administrator |
-| **DbDataProxy 32-bit worker** (`dbdataproxy-worker`) | `127.0.0.1:<random port>` | gRPC (Flight) over HTTP/2 | none (loopback) | Only the Proxy that started it, with a per-launch secret |
+| **DbDataGateway 32-bit worker** (`dbdatagateway-worker`) | `127.0.0.1:<random port>` | gRPC (Flight) over HTTP/2 | none (loopback) | Only the Gateway that started it, with a per-launch secret |
 | **DbDataSync API** | `Url` (default `http://localhost:5080`; the compose image serves `https://...:8443`); on Windows HTTP.sys can replace Kestrel to share a port | HTTP(S): the web API behind the screens, SignalR hubs, pairing, key rotation, `/version`, `/health*` | optional (a certificate in `Kestrel:Certificates:Default` or the server's own) | The console's relay (a signed token); people on the screens; on loopback, the network-trust fallback |
 | | runner state endpoint, `127.0.0.1:<State.Port>` (0 picks a free port) | HTTP: the work queue and config the per-run TaskRunner children poll | none; IPv4 loopback only | Only the children this process started (the runner token) |
 | **DbDataSync TaskRunner** (per run) | none; it is a client of the runner state endpoint | | | |
@@ -39,7 +39,7 @@ Every server that a console manages also answers the same four things on its man
 
 "Direct" means the service itself checks it on the listener named. A console calling a server through the relay is not a second method: the server sees the signed token.
 
-Columns: **Con** console; **Home** identity home on its own; **Px-F** Proxy Flight listener; **Px-M** Proxy management listener; **Sync**; **Build**; **Store**; **Wkr** Proxy worker; **Local** local-only listeners (Build `web`, MCP, Sync runner state, Proxy local channel).
+Columns: **Con** console; **Home** identity home on its own; **Px-F** Gateway Flight listener; **Px-M** Gateway management listener; **Sync**; **Build**; **Store**; **Wkr** Gateway worker; **Local** local-only listeners (Build `web`, MCP, Sync runner state, Gateway local channel).
 
 | Method | What it is | Con | Home | Px-F | Px-M | Sync | Build | Store | Wkr | Local |
 | --- | --- | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
@@ -52,27 +52,27 @@ Columns: **Con** console; **Home** identity home on its own; **Px-F** Proxy Flig
 | **Pairing code** | A single-use, 100-bit code (10 minutes; five wrong codes cancel all); the code never crosses the wire, both ends prove they hold it, and the client pins the server's certificate | yes (client) | | | yes | yes | yes | yes | | |
 | **Key rotation proof** | A new public key signed by the old key and by itself over the server's instance id, a time and a nonce | yes (client) | | | yes | yes | yes | yes | | |
 | **Announcement with a code** | A server not yet paired POSTs its name, address and a pairing code to the console's private port; a person confirms in the console, which then pairs normally | yes (receives) | | | announces | announces | announces | announces | | |
-| **Flight handshake, identity home users** | Basic credentials in (a home user name and a personal access token), an opaque bearer token out; a home token alone as `Bearer` works without the handshake; the data sources a person may use are the ones whose files name their home groups (P13; Proxy has no users of its own); throttled per user and client address | | | yes | | | | | | |
+| **Flight handshake, identity home users** | Basic credentials in (a home user name and a personal access token), an opaque bearer token out; a home token alone as `Bearer` works without the handshake; the data sources a person may use are the ones whose files name their home groups (P13; Gateway has no users of its own); throttled per user and client address | | | yes | | | | | | |
 | **Flight handshake, Windows (UPN)** | The same handshake with the person's UPN as the user name, the password checked by the operating system, resolved to the home user who holds that verified address (`Auth: windows: true`) | | | yes (Windows) | | | | | | |
 | **Pass-through database credentials** | The client's user and password are written into the data source's connection and the database is the authority; a rejected login counts in the throttle | | | yes (per data source) | | | | | | |
 | **JWT bearer / OIDC token** | `authorization: Bearer <jwt>` on each call, validated against an authority's keys or a shared HMAC key; `Mappings` turn claims into data-source access | | | yes | | | | | | |
 | **Network trust fallback** | With no cookie, a request from loopback is an administrator and one from the network a viewer, only when the network-trust settings (`Admin`, `Viewer`; both off by default) say so | | | | | yes (the shared session handler; both off by default) | | | | |
 | **Runner token + loopback** | A random token this process made for its children, and a loopback-only check, on `/runner-state` | | | | | yes | | | | yes |
-| **Per-launch worker secret** | A random secret handed to the 32-bit worker in `DBPROXY_WORKER_SECRET` | | | | | | | | yes | |
+| **Per-launch worker secret** | A random secret handed to the 32-bit worker in `DBGATEWAY_WORKER_SECRET` | | | | | | | | yes | |
 | **Page token + loopback** | A random token in the page `web` serves | | | | | | | | | yes (Build `web`) |
 | **Operating-system access** | File mode or pipe access list on the local channel, a pipe or socket to a child, standard input of an MCP server, the terminal | | | | | | | | | yes |
 
 ### Roles
 
-Servers a console manages use one set of five roles, carried in the console token: **Viewer, Operator, Author, Approver, Admin** (`ServerRole`). A paired client's **ceiling** caps what a token may claim; a token that claims more is refused, not trimmed. Admin does not approve plans, and Author does not either. The Proxy's Flight clients have no roles: a client may use the data sources its user, its Windows account, its token mappings or its pass-through setting name, and a Proxy publisher adds the publishing role on management.
+Servers a console manages use one set of five roles, carried in the console token: **Viewer, Operator, Author, Approver, Admin** (`ServerRole`). A paired client's **ceiling** caps what a token may claim; a token that claims more is refused, not trimmed. Admin does not approve plans, and Author does not either. The Gateway's Flight clients have no roles: a client may use the data sources its user, its Windows account, its token mappings or its pass-through setting name, and a Gateway publisher adds the publishing role on management.
 
 ### Credentials the services use outward
 
 | Service | To | How |
 | --- | --- | --- |
-| Proxy | the databases | the data source's connection (mapped account, pass-through, integrated, token) with secrets resolved through `secret:` references |
-| Sync | the databases, and a Proxy | the connection's own login; a Proxy as an Arrow Flight SQL source with the Flight handshake |
-| Build | the databases, and a Proxy | the `DBDATA_BUILD_<TARGET>_<READ|WRITE>` logins; publishing to a Proxy as a paired client |
+| Gateway | the databases | the data source's connection (mapped account, pass-through, integrated, token) with secrets resolved through `secret:` references |
+| Sync | the databases, and a Gateway | the connection's own login; a Gateway as an Arrow Flight SQL source with the Flight handshake |
+| Build | the databases, and a Gateway | the `DBDATA_BUILD_<TARGET>_<READ|WRITE>` logins; publishing to a Gateway as a paired client |
 | Console | every paired server | its signing key (kept in the secret store) and the server's pinned certificate |
 | Console | an identity home | the client id and secret of its OpenID client, over the home's HTTPS |
 
@@ -81,7 +81,7 @@ Servers a console manages use one set of five roles, carried in the console toke
 These are in the plans and are not in the matrices above:
 
 * **A REST listener for semantic queries and a REST API generally** (J28): waits for one design that holds REST, authentication and apps together. Flight keeps its own endpoints.
-* **The serving layer as a host** that mounts the identity home, semantic models, saved queries and apps (plans 20 and 19): the pieces exist as libraries and are mounted in the Proxy.
+* **The serving layer as a host** that mounts the identity home, semantic models, saved queries and apps (plans 20 and 19): the pieces exist as libraries and are mounted in the Gateway.
 * **Postgres wire protocol listener** for semantic and saved queries: asked for, not built.
 * **Entra and Windows group feeds in a home** (U18's host side), and the serving layer forwarding a home that runs on its own (O07).
 * **Passkeys on Sync**: Sync takes its people from the console (the token or the home), not its own passkeys.

@@ -1,0 +1,74 @@
+# Copy this folder to <data directory>/config (%ProgramData%\DbDataGateway\config by default) and keep the parts you need.
+# Settings can also come from environment variables (DBGATEWAY_Gateway__Listen__Port=9000) or the command line (--Gateway:Listen:Port=9000).
+#
+# Configuration schema version (optional; absent means 1). 2 makes each data source's classifier default to "strict" instead of "warn".
+# Keys are case-insensitive. A misspelt or unknown key stops the service at startup with exit code 2
+# (check a folder with: dbdatagateway config check --file <this folder>).
+schemaVersion: 2
+
+# Secrets are references, not literals: env:NAME, file:PATH, secret:dbdata:gateway:..., dpapi:<base64> (see README, "Secrets").
+# A literal still works but logs a warning naming the key; true refuses to start with literal secrets.
+requireReferencedSecrets: false
+
+# Clients never see the database driver's own error text (it can name tables, servers and paths): they get the failure kind, the engine's
+# error number or SQLSTATE and a fixed sentence, e.g. "The login was rejected. [sqlserver 18456]". With true (default) the server log also
+# gets the driver text (secrets scrubbed); false logs only kind and code.
+logDriverErrors: true
+
+listen: { address: 0.0.0.0, port: 8815 }
+
+# selfSigned: a certificate is generated on first start (and renewed near expiry or when names change) in the data directory;
+# import the .cer written beside it into clients that need to trust it.
+# file: use your own PFX.  store: use a certificate from the certificate store.  none: plain HTTP/2 (local testing only - credentials travel in clear text).
+tls:
+  mode: selfSigned
+  hostnames: [gateway.example.com]
+  # mode: store, certificateThumbprint: <thumbprint>  (or certificateSubject: gateway.example.com; storeLocation: localMachine or currentUser)
+  # mode: file, certificatePath: C:\certs\gateway.pfx, certificatePassword: env:DBGATEWAY_PFX_PASSWORD
+  # The generated PFX gets a random password kept in a protected file beside it; leave certificatePassword unset.
+
+# hosting: { maxConcurrentRequests: 1000, drainSeconds: 30 }
+
+# mode: none | grpc (gRPC compression, gzip) | arrow (Arrow data compression: zstd or lz4 inside the Arrow stream; best ratio).
+# Clients can override per call with the "x-compression" header (none, gzip, zstd, lz4) unless disabled here.
+compression: { mode: arrow, codec: zstd, level: 3, allowClientOverride: true }
+
+# The management API a console uses (off unless asked for): https on a port of its own, never the Flight port, with the pairing every DbData server has.
+# Pair a console with:  dbdatagateway server pair   (it prints a single-use code); list and remove pairings with  server clients  and  server unpair.
+# The localChannel is for the command line on this machine only: a named pipe (Windows) or a Unix socket reachable by the service's account and administrators.
+# management: { enabled: true, address: 127.0.0.1, port: 8816, localChannel: false }
+
+# The identity home (off unless asked for): the OpenID Connect provider every console and app signs people in through, with passkeys and invitations, on an https port of its own.
+# publicUrl is the address people reach it at (the token issuer; it must not change once people have signed in). The first administrator redeems identity/FIRST-RUN.txt in the data directory.
+# Administer it with:  dbdatagateway identity invite | user-list | client-add | client-list | assign | map-group
+# modules: [flightsql, identity, apps]   # what this instance serves; flightsql is the default
+# apps:                                 # the apps host (module "apps"): published apps at https://<host>:8818/apps/<instance>/; https only
+#   address: 0.0.0.0
+#   port: 8818
+#   rolesRefreshSeconds: 300           # how old the home's answer about a person may be before the host asks again (a role taken away stops working within this)
+#   home: { clientId: <id from identity client-add> }   # signs people in through the identity home (this instance's, or home.authority); redirect URI <public url>/apps/-/callback
+# identity: { enabled: true, address: 0.0.0.0, port: 8817, publicUrl: https://identity.example.com }
+# People may also sign in at the home through an Entra ID tenant (an app registered there with the redirect URI <publicUrl>/identity/upstream/entra/callback and the groups claim), and with Windows (Negotiate):
+#   entra: { authority: https://login.microsoftonline.com/<tenant id>/v2.0, clientId: <app id>, clientSecret: secret:dbdata:gateway:identity:entra }
+#   windows: { enabled: true }
+# A person's personal access tokens last at most accessTokenMaxDays (1 to 365; 365 unless lowered here):
+#   accessTokenMaxDays: 90
+
+# The state database: the same section every DbData product reads (plan 29b). SQLite in the data directory (state.db) unless an engine is named.
+# 'dbdatagateway state init --topology service|group|install' writes it; 'dbdatagateway state show' says where each value came from.
+# state:
+#   engine: postgres                     # sqlite (the default), mssql or postgres
+#   connection: Host=db;Database=dbdatagateway_state;Username=gateway;Password=secret:state-db
+#   namespaces: { default: { schema: dbdatagateway } }
+#   retention: { days: 30 }
+# How often an instance looks for definitions published to its group, in seconds (1 to 300; 5 unless set here):
+#   definitionPollSeconds: 5
+
+# Semantic models served as sources named semantic:<model> (the catalog's name); a client sends a JSON request or semantic SQL as a statement with x-datasource: semantic:<model>.
+# Each catalog source is mapped to the data source that holds its tables; clients need access to those data sources. Catalogs are read at start.
+# semantic:
+#   level: 5
+#   models:
+#     - catalog: semantic/sales.yaml
+#       sources: { sqlserver_sales: warehouse }
+#       ssas: { ssas_finance: "Data Source=ssas01;Catalog=Finance;Password=env:SSAS_PASSWORD" }   # Windows only; this connection is the server's, not the caller's

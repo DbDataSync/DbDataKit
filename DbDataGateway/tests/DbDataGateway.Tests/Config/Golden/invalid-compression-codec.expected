@@ -1,0 +1,2 @@
+Gateway:Compression:Codec
+zstd or lz4

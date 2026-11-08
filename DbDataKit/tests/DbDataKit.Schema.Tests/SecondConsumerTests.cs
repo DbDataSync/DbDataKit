@@ -70,13 +70,13 @@ public class SecondConsumerTests
         var project = File.ReadAllText(Path.Combine(root, "DbDataKit.Schema.csproj"));
         Assert.DoesNotContain("DbDataBuild", project);
         Assert.DoesNotContain("DbDataSync", project);
-        Assert.DoesNotContain("DbDataProxy", project);
+        Assert.DoesNotContain("DbDataGateway", project);
         Assert.DoesNotContain("DbDataConsole", project);
 
         foreach (var file in Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories).Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")))
         {
             var text = File.ReadAllText(file);
-            Assert.False(text.Contains("DbDataBuild") || text.Contains("DbDataSync") || text.Contains("DbDataProxy") || text.Contains("DbDataConsole"), $"{Path.GetFileName(file)} names a product");
+            Assert.False(text.Contains("DbDataBuild") || text.Contains("DbDataSync") || text.Contains("DbDataGateway") || text.Contains("DbDataConsole"), $"{Path.GetFileName(file)} names a product");
         }
     }
 }

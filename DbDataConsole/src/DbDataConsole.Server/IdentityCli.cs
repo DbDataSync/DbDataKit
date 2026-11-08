@@ -20,7 +20,7 @@ public static class IdentityCli
             (args, context) => RunAsync(args, context, environment), DataSchemas.None),
         // a console pairs with the home like any server and administers it through its screens (13a U21): pair, clients, unpair
         .. PairingVerbs.Create(args => new PairingFiles(Path.Combine(DirectoryOf(CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo" }), environment), "server.yaml"))),
-        // the rest are the shared administration verbs (the serving layer's home has the same ones, as dbdataproxy identity)
+        // the rest are the shared administration verbs (the serving layer's home has the same ones, as dbdatagateway identity)
         .. IdentityVerbs.Admin(new IdentityAdminLocation("[--repo <identity directory>]", parsed => OpenState(parsed, environment), _ => IdentityHostSettings.DefaultListen)),
     ]);
 

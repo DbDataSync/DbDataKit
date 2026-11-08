@@ -64,7 +64,7 @@ public sealed class Env : IDisposable
     public FakeService Service = new();
     public FakeHealth Health = new();
     public FakeMigration Migration = new();
-    public const string Product = "dbdataproxy";
+    public const string Product = "dbdatagateway";
 
     public Env(string installed = "1.0.0")
     {

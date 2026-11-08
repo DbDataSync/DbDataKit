@@ -29,7 +29,7 @@ jobs:
   changes:
     uses: ./.github/workflows/_changes.yml
     with:
-      paths: '^(DbDataConsole/|DbDataKit/|DbDataBuild/|DbDataSync/|DbDataProxy/|DbDataStore/|dist/compose/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdataconsole-|_)|actions/setup-product))'
+      paths: '^(DbDataConsole/|DbDataKit/|DbDataBuild/|DbDataSync/|DbDataGateway/|DbDataStore/|dist/compose/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdataconsole-|_)|actions/setup-product))'
 
   # The host, its sign-in and its command line run on both systems; the Windows service registration is only exercised here against fakes.
   test:
@@ -50,8 +50,8 @@ jobs:
       - run: dotnet build DbDataConsole.slnf -c Release
       - run: dotnet test --project tests/DbDataConsole.Tests -c Release --no-build --minimum-expected-tests 10
 
-  # The real programs in one run (plan 13a, T12; E05 adds a Sync server): a Build server and a Proxy started from their built output, a console in the test between them. A Build server publishes and updates its own data source on the Proxy, is refused on
-  # one made by hand and on extensions.proxy, cannot adopt for itself, and the Proxy's audit names the person and the Build server. The second test (J12) publishes a project's semantic model and queries it, so a SQL Server from testenv/ is up for that job.
+  # The real programs in one run (plan 13a, T12; E05 adds a Sync server): a Build server and a Gateway started from their built output, a console in the test between them. A Build server publishes and updates its own data source on the Gateway, is refused on
+  # one made by hand and on extensions.gateway, cannot adopt for itself, and the Gateway's audit names the person and the Build server. The second test (J12) publishes a project's semantic model and queries it, so a SQL Server from testenv/ is up for that job.
   servers:
     needs: changes
     if: ${{ needs.changes.outputs.build == 'true' }}
@@ -68,9 +68,9 @@ jobs:
         run: |
           scripts/fetch-native.sh
           dotnet build src/DbDataBuild.Cli -c Debug
-      - name: Build a Proxy
-        working-directory: DbDataProxy
-        run: dotnet build src/DbDataProxy.Server -c Debug
+      - name: Build a Gateway
+        working-directory: DbDataGateway
+        run: dotnet build src/DbDataGateway.Server -c Debug
       - name: Build a Sync server
         working-directory: DbDataSync
         run: dotnet build src/DbDataSync.Cli -c Debug
@@ -83,7 +83,7 @@ jobs:
       - run: dotnet test --project tests/DbDataConsole.Servers.Tests -c Debug --no-build --minimum-expected-tests 3
 
   # The web app in a real browser against a real console: the first-run invitation, a passkey made in a virtual authenticator, signing out and back in with it, the users list,
-  # pairing a real Build server, and (M12) the Monitoring page across a Build server that runs a failing schedule, a Sync replication that lags and a Proxy that locked a user out.
+  # pairing a real Build server, and (M12) the Monitoring page across a Build server that runs a failing schedule, a Sync replication that lags and a Gateway that locked a user out.
   playwright:
     needs: changes
     if: ${{ needs.changes.outputs.build == 'true' }}
@@ -125,7 +125,7 @@ jobs:
         run: |
           npm run typecheck -w @dbdatakit/store-ui
           npm test -w @dbdatakit/store-ui
-      # The runtime that draws an app of views only (plan 26, AP25): its logic and parts in plain Node, and the one-script build the Proxy ships (`apps-views`).
+      # The runtime that draws an app of views only (plan 26, AP25): its logic and parts in plain Node, and the one-script build the Gateway ships (`apps-views`).
       - name: Test and build the views runtime
         working-directory: DbDataKit/web
         run: |
@@ -143,10 +143,10 @@ jobs:
       - name: Build a Sync server
         working-directory: DbDataSync
         run: dotnet build src/DbDataSync.Cli -c Debug
-      # A real Proxy, with its management listener on.
-      - name: Build a Proxy
-        working-directory: DbDataProxy
-        run: dotnet build src/DbDataProxy.Server -c Debug
+      # A real Gateway, with its management listener on.
+      - name: Build a Gateway
+        working-directory: DbDataGateway
+        run: dotnet build src/DbDataGateway.Server -c Debug
       # A real Store, for the apps host story (plan 26, AP05): a sandboxed app reads and writes its tables through the host.
       - name: Build a Store
         working-directory: DbDataStore
@@ -212,9 +212,9 @@ jobs:
         run: dist/compose/check.sh dist/compose/build.yml dbdatabuild
       - name: Store server and console
         run: dist/compose/check.sh dist/compose/store.yml dbdatastore
-      - name: Proxy and console
-        run: dist/compose/check.sh dist/compose/proxy.yml dbdataproxy
+      - name: Gateway and console
+        run: dist/compose/check.sh dist/compose/gateway.yml dbdatagateway
       - name: Sync server and console
         run: dist/compose/check.sh dist/compose/sync.yml dbdatasync
       - name: The whole suite (docs/quickstart.md)
-        run: dist/compose/check.sh dist/compose/quickstart.yml dbdataproxy dbdatasync dbdatabuild dbdatastore
+        run: dist/compose/check.sh dist/compose/quickstart.yml dbdatagateway dbdatasync dbdatabuild dbdatastore

@@ -3,7 +3,7 @@ using System.Net;
 namespace DbDataKit.Hosting.Certificates;
 
 /// <summary>
-/// Refuse plain HTTP (TlsMode.None) on any non-loopback bind unless explicitly overridden (Proxy S-5, Sync 9.6).
+/// Refuse plain HTTP (TlsMode.None) on any non-loopback bind unless explicitly overridden (Gateway S-5, Sync 9.6).
 /// Wildcards (<c>+</c>, <c>*</c>, <c>0.0.0.0</c>, <c>[::]</c>) count as non-loopback.
 /// </summary>
 public static class PlainHttpGuard
@@ -34,7 +34,7 @@ public static class PlainHttpGuard
 
     /// <summary>
     /// The request-time half of the guard, for a server that may be bound to plain HTTP behind a TLS-terminating
-    /// proxy: a request is acceptable when it arrived over TLS, or from a loopback client (local tools, a proxy on the
+    /// gateway: a request is acceptable when it arrived over TLS, or from a loopback client (local tools, a gateway on the
     /// same host). Call it after forwarded headers from trusted proxies have been applied, so <paramref name="isHttps"/>
     /// reflects <c>X-Forwarded-Proto</c> and <paramref name="clientAddress"/> the forwarded client. A null address (a unix
     /// socket, an in-memory test server) counts as local.

@@ -11,8 +11,8 @@
 # `env` prints the canonical DBKIT_TEST_* variables (below). With a product name it also prints that product's own variable names,
 # translated by testenv/env/<product>.map, so each suite keeps reading the names it always has:
 #
-#   eval "$(testenv/testenv.sh env dbdataproxy)"                         in a shell
-#   testenv/testenv.sh env dbdataproxy --dotenv >> "$GITHUB_ENV"         in a GitHub Actions job, for the steps after it
+#   eval "$(testenv/testenv.sh env dbdatagateway)"                         in a shell
+#   testenv/testenv.sh env dbdatagateway --dotenv >> "$GITHUB_ENV"         in a GitHub Actions job, for the steps after it
 #
 # Canonical variables, each only when its engine is running:
 #   mssql     DBKIT_TEST_MSSQL            ADO.NET connection string (SqlClient)

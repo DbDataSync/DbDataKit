@@ -1,6 +1,6 @@
 # The serving layer
 
-Every endpoint that an end user, their tool or their app connects to is served by **one layer**, built in the DbDataProxy code base: **the serving layer (DbDataProxy today, DbDataGateway after the rename)**. The rename is decided and will be a scripted clean break after batch 12 (product, commands, packages; the old names refused with a message). This page says DbDataProxy where the code does.
+Every endpoint that an end user, their tool or their app connects to is served by **one layer**, built in the DbDataGateway code base: **the serving layer (DbDataGateway; it was DbDataProxy until batch 17)**. The rename (plan 20 O14) was a scripted clean break: product, commands, packages, settings, secret names and screens, with the old names refused by a message (`docs/release-notes/dbdatagateway-rename.md`). Build's and Store's own words for "a server I publish to" (`server proxy`, `proxies.json`) follow in O14b.
 
 Why one layer, in the owner's words:
 
@@ -33,15 +33,15 @@ A console calls servers and a server never calls a console. The serving layer is
 | --- | --- | --- |
 | `flightsql` | read-only data sources over Flight SQL | built: `DbDataKit.Serving.FlightSql`, the only `IServingModule` implementation |
 | semantic | semantic queries and semantic SQL on the source `semantic:<model>` | built, not a listed module: `DbDataKit.Serving.Semantic` wraps the host's core services, configured by `semantic:` in `server.yaml` (see `docs/semantic/architecture.md`) |
-| `store` | DbDataStore entities over HTTP: reads now, as of a date, with history; validated writes; change requests in the group's state | built over HTTP (`ProxyStoreModule`, its own listener, the paths of a DbDataStore server); reads over Flight SQL not built |
-| `apps` | app front ends and their API: subpath instances, shell page, token broker, app storage, portals, data calls answered in process | built (`ProxyAppsModule`, `DbDataKit.Apps.*`, default port 8818); app code does not run in child processes |
-| `identity` | sign-in, the OpenID Connect provider (authorize, token, discovery, signing keys), passkeys, Entra and Windows upstream sign-in | built (`ProxyIdentityModule`, `DbDataKit.Identity`, default port 8817); a hosted web application rather than an `IServingModule` |
-| `views` | published dashboards and reports over REST, rendered as the caller, audited, with drain and health (plan 32 DBR11) | built as a library with its own listener: `DbDataKit.Views.Hosting` (`ViewsModule`); **not yet a name in `modules:`**, the Proxy host does not load it (it needs a listener setting and an `IViewsCallers` over the identity home's tokens), see `docs/views.md` |
+| `store` | DbDataStore entities over HTTP: reads now, as of a date, with history; validated writes; change requests in the group's state | built over HTTP (`GatewayStoreModule`, its own listener, the paths of a DbDataStore server); reads over Flight SQL not built |
+| `apps` | app front ends and their API: subpath instances, shell page, token broker, app storage, portals, data calls answered in process | built (`GatewayAppsModule`, `DbDataKit.Apps.*`, default port 8818); app code does not run in child processes |
+| `identity` | sign-in, the OpenID Connect provider (authorize, token, discovery, signing keys), passkeys, Entra and Windows upstream sign-in | built (`GatewayIdentityModule`, `DbDataKit.Identity`, default port 8817); a hosted web application rather than an `IServingModule` |
+| `views` | published dashboards and reports over REST, rendered as the caller, audited, with drain and health (plan 32 DBR11) | built as a library with its own listener: `DbDataKit.Views.Hosting` (`ViewsModule`); **not yet a name in `modules:`**, the Gateway host does not load it (it needs a listener setting and an `IViewsCallers` over the identity home's tokens), see `docs/views.md` |
 | `pgwire` | Postgres wire for semantic SQL | not built |
 | `xmla` | XMLA and MDX for Excel PivotTables | not built (only the recording forwarder, `DbDataKit.Tools.XmlaForwarder`) |
 | `feeds` | result feeds for report servers and tools | not built |
 | `webdav` | DbDataStore documents, with extraction on save | not built |
-| `mcp` | the agents' MCP endpoint, acting as the signed-in user with approvals | not built as a module (the Proxy's `ui mcp` offers the `semantic` noun to agents) |
+| `mcp` | the agents' MCP endpoint, acting as the signed-in user with approvals | not built as a module (the Gateway's `ui mcp` offers the `semantic` noun to agents) |
 
 Health per module is not wired into the host's `/health`: `IServingModule.Health()` exists; the `views` module reports its own at its listener's `/health`.
 
@@ -59,9 +59,9 @@ Tests for each row with the back-end stopped are in plan 20 (O13); several of th
 
 ## High availability, groups and identity
 
-- **Shared state.** Instances of a group share their state on SQL Server or PostgreSQL through `DbDataKit.State`. It holds sessions (a pass-through session's credentials encrypted with the group key, the secret `dbdata:proxy:state:session-key`, which every instance must hold), the identity home's tables, one-time values (passkey challenges, Entra attempts, used management tokens), audit, change requests, app storage, the published definitions and each instance's lease. SQLite is for a single instance, and a second instance against SQLite is refused with a message.
+- **Shared state.** Instances of a group share their state on SQL Server or PostgreSQL through `DbDataKit.State`. It holds sessions (a pass-through session's credentials encrypted with the group key, the secret `dbdata:gateway:state:session-key`, which every instance must hold), the identity home's tables, one-time values (passkey challenges, Entra attempts, used management tokens), audit, change requests, app storage, the published definitions and each instance's lease. SQLite is for a single instance, and a second instance against SQLite is refused with a message.
 - **A serving group is one server.** Its instance id, paired clients and pairing codes are in the state, so a console pairs once through any instance with a code made on any other, and every instance presents the same server id and (when self-signed) one certificate kept in the state. Build and DbDataStore pair with a group as a publishing client; the data sources a client publishes are the group's, served by every instance beside the hand-made ones, a hand-made name winning.
-- **Identity is a module of the serving layer by default**, so end users can sign in without reaching the private console. Managing users, groups and roles stays an administrator's job through the management API. Every console becomes an OpenID Connect client of the home. The signing keys are shared by the group's instances (`dbdata:proxy:identity:signing-keys`; an instance with another key refuses to start). The home can instead run on its own behind the firewall (`dbdatakit identity run`), which keeps the keys and the user store off the edge.
+- **Identity is a module of the serving layer by default**, so end users can sign in without reaching the private console. Managing users, groups and roles stays an administrator's job through the management API. Every console becomes an OpenID Connect client of the home. The signing keys are shared by the group's instances (`dbdata:gateway:identity:signing-keys`; an instance with another key refuses to start). The home can instead run on its own behind the firewall (`dbdatakit identity run`), which keeps the keys and the user store off the edge.
 - **Load balancing is external.** Instances are interchangeable, and Flight SQL tickets and sessions are valid on any instance of the group. NTLM needs a balancer that keeps a connection on one instance.
 - **Lineage and monitoring**: each instance records its runs into the group's state; the console pulls them per group.
 
@@ -70,7 +70,7 @@ Tests for each row with the back-end stopped are in plan 20 (O13); several of th
 1. The `apps` and `mcp` modules are part of the serving layer.
 2. Extraction on save runs in the serving layer, where the document arrives; the extraction definitions come from DbDataStore's server.
 3. Approving a data change request is a runtime action in the serving layer, like the write; approving a structure change stays in DbDataStore's server.
-4. **The rename is decided: DbDataGateway**, done by a script after batch 12 as a clean break.
+4. **The rename is DbDataGateway**, done by `scripts/rename_proxy_to_gateway.py` in batch 17 (plan 20 O14) as a clean break.
 5. Publishing is the one act that makes a model available (plan 20 O10b): a model being worked on reaches no group until it is published.
 
 ## The contract
@@ -79,7 +79,7 @@ Tests for each row with the back-end stopped are in plan 20 (O13); several of th
 
 ### Decisions
 
-1. **Libraries plus a thin host.** Each module's protocol code is a `DbDataKit.Serving.*` library with no reference to Proxy. The Proxy host loads modules, configures them from `server.yaml` and supplies the core services.
+1. **Libraries plus a thin host.** Each module's protocol code is a `DbDataKit.Serving.*` library with no reference to Gateway. The Gateway host loads modules, configures them from `server.yaml` and supplies the core services.
 2. **The core owns the duties; adapters are thin.** An adapter reads credentials and speaks its wire format. The core authenticates, holds sessions, applies access rules and limits, audits, caches and traces. A module is never handed a raw executor.
 3. **Services per capability, not one request union.** A module takes only the services it needs.
 4. **Sessions are core sessions in shared state**, valid on any instance. Protocol-specific state (a Postgres prepared statement, an XMLA session) is an opaque blob the adapter owns, with a time-to-live.

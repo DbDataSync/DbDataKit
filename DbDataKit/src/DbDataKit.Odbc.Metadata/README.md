@@ -1,10 +1,10 @@
 # DbDataKit.Odbc.Metadata
 
 Catalog metadata for ODBC data sources, read through the driver manager's own catalog functions instead of
-`INFORMATION_SCHEMA` or `System.Data.Odbc.GetSchema` (which has no primary or foreign keys). Shared by DbDataProxy,
+`INFORMATION_SCHEMA` or `System.Data.Odbc.GetSchema` (which has no primary or foreign keys). Shared by DbDataGateway,
 DbDataSync and DbDataBuild. No dependencies beyond .NET (net10.0).
 
-Origin: copied from `DbDataProxy/src/DbDataKit.Odbc.Metadata` at commit `c08355f` (a history-preserving subtree split was not
+Origin: copied from `DbDataGateway/src/DbDataKit.Odbc.Metadata` at commit `c08355f` (a history-preserving subtree split was not
 possible from a worktree of the hub), then hardened per Plan 04 section 2.2/2.3.
 
 ```csharp
@@ -43,7 +43,7 @@ on Unix, bitness from the library path when it says). Registry and file access g
   SQLProcedures, SQLProcedureColumns, the cap and sessions. Not verified on Linux/macOS (unixODBC naming, UTF-32 detection) or
   with drivers that reject `SQL_ATTR_QUERY_TIMEOUT`; those paths are covered by fakes only.
 * Integration tests skip when no server is reachable: `DBDATA_TEST_SQLSERVER` (default `.\SQLEXPRESS`), `_USER`, `_PASSWORD`,
-  `DBDATA_REQUIRE_SQLSERVER=true` to fail instead of skip (the `DBPROXY_` names also work).
+  `DBDATA_REQUIRE_SQLSERVER=true` to fail instead of skip (the `DBGATEWAY_` names also work).
 
 Public API is tracked with `Microsoft.CodeAnalysis.PublicApiAnalyzers` (`PublicAPI.Shipped.txt`).
 
