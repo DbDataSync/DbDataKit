@@ -20,7 +20,9 @@ public static class DriverScriptHost
         "DbDataSync.Core.Config", "DbDataSync.Drivers.Abstractions",
     ];
 
-    public static IDriver Load(string driverDir)
+    /// <param name="driverDir">The driver's folder.</param>
+    /// <param name="cacheRoot">Where the compiled script is kept. Absent, <c>lib/.csx-cache</c> in the driver's own folder; a definition that is a read-only view gives a folder the process may write (plan 28c E06c).</param>
+    public static IDriver Load(string driverDir, string? cacheRoot = null)
     {
         var manifest = CompiledDriverManifest.Read(Path.Combine(driverDir, CompiledDriverManifest.FileName));
         var libDir = LibraryPaths.LibDir(driverDir);
@@ -38,7 +40,7 @@ public static class DriverScriptHost
         var (_, source) = ScriptDirectives.Extract(manifest.Source, exactOnly: true);
         var compiler = new CsxCompiler(new CsxCompilerOptions
         {
-            CacheDirectory = Path.Combine(libDir, ".csx-cache"),
+            CacheDirectory = cacheRoot is null ? Path.Combine(libDir, ".csx-cache") : Path.Combine(cacheRoot, manifest.Id),
             LoadRoot = driverDir,
             HostReferences = [typeof(IDriver).Assembly.Location, typeof(ConnectionConfig).Assembly.Location],
             Imports = DefaultImports,
