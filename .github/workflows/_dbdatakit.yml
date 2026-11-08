@@ -66,6 +66,7 @@ jobs:
         working-directory: .
         run: testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
 
+      - uses: ./.github/actions/duckdb-cache
       - name: Fetch the pinned DuckDB engine
         if: runner.os != 'Windows'
         working-directory: .

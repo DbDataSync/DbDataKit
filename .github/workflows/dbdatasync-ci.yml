@@ -142,6 +142,7 @@ jobs:
       - name: Point the suites at them
         working-directory: .
         run: testenv/testenv.sh env dbdatasync --dotenv >> "$GITHUB_ENV"
+      - uses: ./.github/actions/duckdb-cache
       - name: Fetch the pinned DuckDB engine
         working-directory: .
         run: scripts/fetch-duckdb.sh
@@ -208,6 +209,8 @@ jobs:
         with:
           product: DbDataSync
           duckdb: 'false'
+      # no engine is installed here, but the specs install libraries through the server, and DuckDB's engine is downloaded then (DuckDbEngine reads DUCKDB_RELEASE_BASE)
+      - uses: ./.github/actions/duckdb-cache
       - uses: actions/setup-node@v7
         with:
           node-version: "24"

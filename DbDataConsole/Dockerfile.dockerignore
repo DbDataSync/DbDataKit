@@ -11,3 +11,4 @@ DbDataBuild/
 **/node_modules/
 **/dist/
 DbDataConsole/tests/
+.duckdb-archives/

@@ -31,7 +31,10 @@ RUN dotnet publish src/DbDataSync.Cli/DbDataSync.Cli.csproj \
 # InternalCommand.cs). Shipped into *both* final images below: a few megabytes per entry (Oracle ~6MB) except
 # DuckDB, which carries its engine (about 100MB: DuckDbEngine downloads it from duckdb.pin, hash-checked, here at build time), so the
 # runtime-only image needs no network for it and the default (SDK) image gets the same no-network fast path.
-RUN dotnet /app/DbDataSync.Cli.dll internal build-catalog-cache /app/library-cache
+# CI's cache of the DuckDB archives (.duckdb-archives/, filled by .github/actions/duckdb-cache) is inside the build context; a local build has none and
+# DuckDbEngine downloads from the pin's address (the pattern matches nothing then, and duckdb.pin alone is copied). DUCKDB_RELEASE_BASE is the variable it reads.
+COPY duckdb.pin .duckdb-archive[s] /duckdb-archives/
+RUN DUCKDB_RELEASE_BASE=file:///duckdb-archives dotnet /app/DbDataSync.Cli.dll internal build-catalog-cache /app/library-cache
 
 # ── The runtime-only image (phase 121) ─────────────────────────────────────────
 # mcr.microsoft.com/dotnet/aspnet:10.0 — no SDK. Installing a library needs none (the server resolves it from a NuGet feed

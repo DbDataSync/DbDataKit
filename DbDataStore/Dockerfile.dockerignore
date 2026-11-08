@@ -8,3 +8,4 @@ DbDataBuild/
 DbDataConsole/
 DbDataGateway/
 **/node_modules/
+.duckdb-archives/
