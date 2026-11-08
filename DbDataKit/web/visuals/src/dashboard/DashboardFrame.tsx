@@ -1,0 +1,84 @@
+import type { ReactNode } from 'react'
+import type { Theme } from '../theme'
+import type { Box, LayoutDoc, ParameterDefinition, ParameterValue, ParameterValues, ViewsDoc } from '../views/model'
+import type { RenderedWidget } from '../views/rendered'
+import { WidgetView } from '../widgets/WidgetView'
+import { TILE_GUTTER, layoutReflow, type ReflowResult } from './reflow'
+
+export interface DashboardFrameProps {
+  document: Pick<ViewsDoc, 'widgets' | 'parameters'>
+  /** The layout chosen by its selector. A reflow layout is drawn here; a canvas or flow layout has its own engine (not built: a note says so). */
+  layout: LayoutDoc
+  /** The container in CSS pixels. */
+  box: Box
+  theme: Theme
+  results: Record<string, RenderedWidget>
+  /** Widgets whose rows are still on their way (they draw as loading). */
+  loading?: ReadonlySet<string>
+  parameters?: ParameterValues
+  onParameterChange?: (parameter: string, value: ParameterValue) => void
+  /** The tile that fills the whole container now, and the action that sets or clears it. */
+  maximized?: string | null
+  onMaximize?: (widget: string | null) => void
+  /** Precomputed layout of this layout and box, so a caller that needs it too lays out once. */
+  placed?: ReflowResult
+}
+
+/**
+ * The reflow dashboard as markup, from the layout, the box and the results (plan 32 section 3.3): CSS grid with `minmax(0, 1fr)` tracks, so the tiles fill the container with **no page scroll and no tile
+ * scroll**; a tile below its minimum puts the whole layout on the **compact stack** (one column, minimum heights, the page scrolls: the only scrolling a reflow dashboard does). A table or matrix that does
+ * not fit its tile says "12 of 40 rows" and can be **maximized** to the whole container, where it scrolls. No state and no effects: the box and the results are given, so a test draws any size.
+ */
+export function DashboardFrame({ document, layout, box, theme, results, loading, parameters = {}, onParameterChange, maximized = null, onMaximize, placed }: DashboardFrameProps) {
+  const root = (mode: string, children: ReactNode) => (
+    <div className="vz vz-dashboard" data-vz-theme={theme} data-testid="vz-dashboard" data-layout={layout.name} data-layout-type={layout.type} data-mode={mode} style={{ width: box.width, height: box.height }}>
+      {children}
+    </div>
+  )
+  if (layout.type !== 'reflow')
+    return root('none', <p className="vz-state vz-dashboard-notice" role="note" data-testid="vz-engine-missing">{`The layout \`${layout.name}\` is a ${layout.type} layout, which this view does not draw yet.`}</p>)
+
+  const widgetView = (id: string, tileBox: Box, isMaximized: boolean) => {
+    const widget = document.widgets[id]
+    if (!widget) return null
+    return (
+      <WidgetView
+        id={id}
+        widget={widget}
+        result={results[id]}
+        loading={loading?.has(id) ?? results[id] === undefined}
+        box={tileBox}
+        theme={theme}
+        options={layout.widget_options?.[id]}
+        parameters={parameters}
+        definitions={document.parameters as ParameterDefinition[] | undefined}
+        onParameterChange={onParameterChange}
+        maximized={isMaximized}
+        onMaximize={onMaximize ? () => onMaximize(isMaximized ? null : id) : undefined}
+      />
+    )
+  }
+
+  if (maximized !== null && layout.tiles.some((t) => t.widget === maximized))
+    return root('maximized', <div className="vz-dashboard-maximized" data-testid="vz-maximized">{widgetView(maximized, { width: box.width - TILE_GUTTER, height: box.height - TILE_GUTTER }, true)}</div>)
+
+  const laid = placed ?? layoutReflow(layout, document.widgets, box)
+  const tileBox = (t: { width: number; height: number }): Box => ({ width: t.width - TILE_GUTTER, height: t.height - TILE_GUTTER })
+  if (laid.mode === 'stack')
+    return root('stack', (
+      <div className="vz-dashboard-stack" style={{ height: laid.contentHeight }}>
+        {laid.tiles.map((t) => (
+          <div key={t.widget} className="vz-dashboard-tile" data-testid={`vz-tile-${t.widget}`} style={{ height: t.height, flex: 'none' }}>{widgetView(t.widget, tileBox(t), false)}</div>
+        ))}
+      </div>
+    ))
+  return root('grid', (
+    <div className="vz-dashboard-grid" style={{ gridTemplateColumns: `repeat(${laid.columns}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${laid.rows}, minmax(0, 1fr))` }}>
+      {laid.tiles.map((t) => (
+        <div key={t.widget} className="vz-dashboard-tile" data-testid={`vz-tile-${t.widget}`} style={{ gridColumn: `${t.cell!.column} / span ${t.cell!.columns}`, gridRow: `${t.cell!.row} / span ${t.cell!.rows}` }}>
+          {widgetView(t.widget, tileBox(t), false)}
+        </div>
+      ))}
+    </div>
+  ))
+}

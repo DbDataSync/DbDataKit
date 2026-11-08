@@ -27,3 +27,22 @@ overlapping, minimums at scale 1, page sizes and tokens, a declared parameter ev
 file, line and column. `VIEWS_FORMAT` is the one number of both kinds.
 
 `selectLayout(document, context)` picks the layout to show: a named layout, else the most specific `when` that matches (ties by order), else the default; the same pure function as `LayoutSelector` in .NET, with the same goldens.
+
+### Showing a document (plan 32 DBR05, DBR06, DBR22)
+
+```tsx
+const client = fixtureClient(bundle)                         // or moduleClient({ baseUrl }) once the views module exists
+const { document } = await client.open('dashboard', 'retail-sales-today')
+<DashboardView name="retail-sales-today" document={document!} client={client} />   // fills its parent, follows its size
+```
+
+* `ViewsClient` is the one path for boards: `list`, `open`, `resolve(ref, layout, parameters, {only})` (the rendered widgets of a layout, as the viewer), `validate`, `save`, `preview`. `fixtureClient` serves documents and
+  **recorded results** (`DbDataKit/conformance/views/widget-results/<kind>/<document>/<widget id>.json`, for the two sample documents of the retail template) with no server; a widget with no recorded result gets its own
+  error entry. `moduleClient` is the same over the `views` module's REST (provisional routes are marked in its header). `validateText` reads YAML or JSON and places each diagnostic at its line and column.
+* `WidgetView` draws one widget in its tile from its resolved result: `MetricTile`, `TableWidget`, `MatrixWidget`, `ChartWidget`, `TextBlock`, `ImageBlock`, `ControlWidget`, with loading, empty and error states.
+  The tile's **density class** (`xs`, `s`, `m`, `l`) is chosen from its box (`densityClass`); a chart is drawn at the box (`fitChartSpec`: SVG, `autosize: fit`, legend, axis titles and ticks dropped as it shrinks), a table or
+  matrix shows what fits and says "12 of 40 rows" with an action that maximizes the tile. Text is the safe markdown subset (no HTML, no image, links only to a path on the host); an image is drawn only from the `data:`
+  URI of its raster (`checkImageBytes` caps it at 1 MiB where it enters the definition).
+* `layoutReflow(layout, widgets, box)` is pure: a grid of fr tracks filling the box in whole pixels, each tile held to its type's minimum, the **compact stack** when one is below it. `DashboardFrame` draws that as
+  markup (no state, any size can be tested); `DashboardView` adds the container's size (`ResizeObserver`), `selectLayout`, resolution through the client (switching layouts keeps the results both place) and maximize.
+  `checkReflowSizes(document)` is the validator's size check as warnings (not part of `validateViewsDocument` until the .NET loader gives the same). The canvas and flow layouts are DBR07 and DBR14: until then a note says so.

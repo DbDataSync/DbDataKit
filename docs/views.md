@@ -224,3 +224,16 @@ option or a subscription.
    is above the width, else `landscape`), `aspect` (width divided by height) and `medium` (one, or a list: a layout meant for print and for export lists both). A condition on a dimension the context lacks does not match.
 3. The **most specific** candidate wins (the most conditions); a tie goes to **document order**.
 4. With no candidate, the layout with `default: true`. A layout with no `when` is never a candidate, even the default: it is what is left.
+
+## Showing a document
+
+The renderers are in `@dbdatakit/visuals` (`DbDataKit/web/visuals`, its README has the calls). A document's widgets are resolved **through a `ViewsClient`** (`open`, `resolve`, `validate`, `save`, `preview`): the console runs
+on `fixtureClient` (the sample documents of the retail template, `DbDataBuild/templates/retail/dashboards` and `reports`, with recorded results in `DbDataKit/conformance/views/widget-results`) until the `views` module
+answers, and `moduleClient` is the same interface over its REST.
+
+**The reflow layout fills its container.** `layoutReflow` lays the grid out in whole pixels so the cells fill the box with no gap and no overlap; a tile is never drawn below the smallest box of its type
+(`metric` 160 x 88, `text` 160 x 56, `control` 180 x 56, `chart` 280 x 180, `table` 320 x 200, `matrix` 360 x 220; a tile's `min` may raise it). If any tile would be below its minimum the layout is the **compact stack**
+(one column in document order, the page scrolls: the one place a reflow dashboard scrolls). Each tile picks a **density** (`xs`, `s`, `m`, `l`) from its box: a metric drops its label, then its comparison; a chart its
+legend, then its axis titles, then thins its ticks; a table and a matrix show the rows that fit and say "12 of 40 rows" with an action that maximizes the tile (where the widget scrolls). `widget_options: {density}` pins it.
+
+**Text and images.** Text is markdown without raw HTML, images or links off the host, `{{params.name}}` substituted as text; an image is drawn only from the `data:` URI of its raster, at most 1 MiB, never an SVG.
