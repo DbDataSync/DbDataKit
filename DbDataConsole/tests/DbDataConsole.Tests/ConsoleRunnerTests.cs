@@ -193,6 +193,15 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         Assert.True(ServerProducts.Relayable("dbdatarunner", "POST", "api/v1/tasks/orders-sync/prod/extract/run"));
         Assert.False(ServerProducts.Relayable("dbdatarunner", "GET", "api/v1/tasks/orders-sync/prod/extract/run"));
         Assert.False(ServerProducts.Relayable("dbdatarunner", "POST", "api/v1/runs"));
+        // who schedules a task (plan 33 UE06): exactly these three, and nothing beside them
+        Assert.True(ServerProducts.Relayable("dbdatarunner", "GET", "api/v1/tasks/orders/prod/extract/schedule"));
+        Assert.True(ServerProducts.Relayable("dbdatarunner", "GET", "api/v1/tasks/orders/prod/extract/decisions"));
+        Assert.True(ServerProducts.Relayable("dbdatarunner", "PUT", "api/v1/tasks/orders/prod/extract/owner"));
+        Assert.False(ServerProducts.Relayable("dbdatarunner", "POST", "api/v1/tasks/orders/prod/extract/decisions"));   // the product reports decisions, not a console
+        Assert.False(ServerProducts.Relayable("dbdatarunner", "PUT", "api/v1/tasks/orders/prod/extract/schedule"));
+        Assert.False(ServerProducts.Relayable("dbdatarunner", "PUT", "api/v1/bindings/prod/integration/orders"));
+        Assert.False(ServerProducts.Relayable("dbdatarunner", "PUT", "api/v1/definitions/integration/orders"));
+        Assert.False(ServerProducts.Relayable("dbdatarunner", "PUT", "api/v1/artifacts/abc"));
         Assert.False(ServerProducts.Relayable("dbdatarunner", "GET", "api/v1/runs/../artifacts/x"));
     }
 }

@@ -20,7 +20,7 @@ public static partial class ServerProducts
 
     /// <summary>
     /// Whether the relay passes a call to a server of this product. Only a runner is limited: its documented management calls are the ones the console's screens make (status, the group's instances, runs, run now, pause and resume a task,
-    /// the packages with their versions, and activate, switch, rollback and retire a package). The roles are the runner's own: the token carries the signed-in person's, and the runner refuses what they may not do.
+    /// the packages with their versions, and activate, switch, rollback and retire a package, and who schedules a task: its schedule and decisions and the change of its owner). The roles are the runner's own: the token carries the signed-in person's, and the runner refuses what they may not do.
     /// </summary>
     public static bool Relayable(string? product, string method, string path)
     {
@@ -30,12 +30,16 @@ public static partial class ServerProducts
         {
             "GET" => RunnerReads().IsMatch(route),
             "POST" => RunnerActs().IsMatch(route),
+            "PUT" => RunnerOwner().IsMatch(route),     // who schedules a task (plan 33 UE06): the runner checks the operator role itself
             _ => false,
         };
     }
 
-    [GeneratedRegex(@"^api/v1/(status|instances|connections|runs|settings|lineage|definitions/integration(/[A-Za-z0-9._-]+)?)/?$")]
+    [GeneratedRegex(@"^api/v1/(status|instances|connections|runs|settings|lineage|definitions/integration(/[A-Za-z0-9._-]+)?|tasks/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/(schedule|decisions))/?$")]
     private static partial Regex RunnerReads();
+
+    [GeneratedRegex(@"^api/v1/tasks/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/owner/?$")]
+    private static partial Regex RunnerOwner();
 
     [GeneratedRegex(@"^api/v1/(tasks/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/(run|pause|resume)|definitions/integration/[A-Za-z0-9._-]+/(activate|switch|rollback|retire))/?$")]
     private static partial Regex RunnerActs();
