@@ -1,0 +1,22 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "chart",
+      "mark": "bar",
+      "encodings": {
+        "x": "customers.region",
+        "color": "products.category"
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "refusal": [
+    {
+      "code": "DBD-VIEW-041",
+      "path": "widgets.w.encodings"
+    }
+  ]
+}

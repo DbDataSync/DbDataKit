@@ -12,7 +12,7 @@ widgets:
     encodings: {value: orders.net_revenue, compare: orders.net_revenue_prev}
     query:
       model: sales
-      filters: [{attribute: customers.region, operator: in, values: {param: region}}]
+      filters: [{attribute: customers.region, operator: equals, values: {param: region}}]
   by_region:
     type: chart
     mark: bar

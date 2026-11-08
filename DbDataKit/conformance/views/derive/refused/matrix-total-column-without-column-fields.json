@@ -1,0 +1,30 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "matrix",
+      "encodings": {
+        "rows": [
+          "customers.region"
+        ],
+        "values": [
+          {
+            "field": "orders.net_revenue"
+          }
+        ],
+        "totals": {
+          "columns": true
+        }
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "refusal": [
+    {
+      "code": "DBD-VIEW-042",
+      "path": "widgets.w.encodings.totals.columns"
+    }
+  ]
+}

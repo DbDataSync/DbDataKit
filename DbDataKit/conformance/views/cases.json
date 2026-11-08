@@ -27,6 +27,14 @@
     {
       "file": "good/example-report.yaml",
       "kind": "report"
+    },
+    {
+      "file": "samples/dashboards/retail-sales-today.yaml",
+      "kind": "dashboard"
+    },
+    {
+      "file": "samples/reports/retail-sales-monthly.yaml",
+      "kind": "report"
     }
   ],
   "bad": [

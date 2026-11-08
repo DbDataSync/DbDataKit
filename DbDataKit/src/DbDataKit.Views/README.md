@@ -15,6 +15,19 @@ A widget is a type, its encodings and a query. The loader checks the closed Vega
 mode, the parameters a marker, control, cross-filter or drill names, and the **binding**: an explicit query must output every field the widget encodes (a derived query is made from the encodings).
 `ViewWidget.Fields` lists the encoded fields in the order written, each with its path and position, for the code that derives the request (DBR03).
 
+## Deriving the request, and the catalog check
+
+```csharp
+var roles = new CatalogRoles("sales", measures: ["orders.net_revenue"], attributes: ["customers.region"]);   // or CatalogRoles(model, name => role)
+var derived = DeriveRequest.Derive(widget, roles, "views/sales.yaml");
+if (derived.Request is { } request) { /* {spec_version, kind: "query", query: {measures, attributes, filters, order, limit, totals...}} */ }
+// derived.Bindings: the {param} markers left to bind; derived.DocumentPath("$.query.measures[0]") -> "widgets.by_region.encodings.y"
+var diagnostics = CatalogCheck.Check(document.Widgets, "views/sales.yaml", new Dictionary<string, CatalogBinding> { ["sales"] = new(roles, validatorOverTheEngine) });
+```
+
+`DeriveRequest` is pure (the TypeScript twin in `@dbdatakit/visuals` gives the same request from the same goldens, `DbDataKit/conformance/views/derive`). `CatalogCheck` sends every widget's request through the engine's
+validator (`IRequestValidator`, an adapter over the semantic library's `Validator`) and reports the engine's codes at the document's file, line and path. See `docs/views.md`.
+
 ## Documents
 
 ```csharp

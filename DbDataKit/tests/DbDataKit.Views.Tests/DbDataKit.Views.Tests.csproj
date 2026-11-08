@@ -3,10 +3,17 @@
     <Using Include="Xunit" />
     <PackageReference Include="JsonSchema.Net" />
     <ProjectReference Include="..\..\src\DbDataKit.Views\DbDataKit.Views.csproj" />
+    <!-- the engine's validator and request hash, which the catalog check and the derivation goldens are run against (the library itself does not carry the engine) -->
+    <ProjectReference Include="..\..\src\DbDataKit.Semantic\DbDataKit.Semantic.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- the documents and goldens the TypeScript tests of @dbdatakit/visuals read too -->
     <None Include="..\..\conformance\views\**\*" LinkBase="conformance\views" CopyToOutputDirectory="PreserveNewest" />
+    <!-- the two sample documents of the retail template (plan 32 section 9a): loaded as good documents, and derived against their model's roles -->
+    <None Include="..\..\..\DbDataBuild\templates\retail\dashboards\*.yaml" LinkBase="conformance\views\samples\dashboards" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\..\DbDataBuild\templates\retail\reports\*.yaml" LinkBase="conformance\views\samples\reports" CopyToOutputDirectory="PreserveNewest" />
+    <!-- the conformance catalog of the semantic engine: the model the derived requests of conformance/views/derive must validate against -->
+    <None Include="..\DbDataKit.Semantic.Tests\conformance\catalog\catalog.yaml" Link="conformance\catalog\catalog.yaml" CopyToOutputDirectory="PreserveNewest" />
     <!-- the schemas, which live with the shared visuals -->
     <None Include="..\..\web\visuals\schemas\*.schema.json" LinkBase="schemas" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\web\visuals\schemas\views-format.lock.json" LinkBase="schemas" CopyToOutputDirectory="PreserveNewest" />

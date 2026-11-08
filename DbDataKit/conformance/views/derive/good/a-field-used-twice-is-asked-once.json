@@ -1,0 +1,31 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "chart",
+      "mark": "bar",
+      "encodings": {
+        "x": "products.category",
+        "y": "orders.net_revenue",
+        "color": "products.category",
+        "tooltip": "orders.net_revenue"
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "attributes": [
+        "products.category"
+      ],
+      "limit": 500
+    }
+  }
+}

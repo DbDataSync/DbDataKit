@@ -1,0 +1,25 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "metric",
+      "label": "Net revenue",
+      "encodings": {
+        "value": "orders.net_revenue"
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "limit": 1
+    }
+  }
+}

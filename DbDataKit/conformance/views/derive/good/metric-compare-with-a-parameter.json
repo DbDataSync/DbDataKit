@@ -1,0 +1,59 @@
+{
+  "parameters": [
+    "quarter"
+  ],
+  "widgets": {
+    "w": {
+      "type": "metric",
+      "encodings": {
+        "value": "orders.net_revenue",
+        "compare": "orders.net_after_returns"
+      },
+      "query": {
+        "model": "sales_catalog",
+        "filters": [
+          {
+            "attribute": "date.fiscal_quarter",
+            "operator": "equals",
+            "values": [
+              {
+                "param": "q"
+              }
+            ]
+          }
+        ],
+        "params": {
+          "q": "quarter"
+        }
+      }
+    }
+  },
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        "orders.net_after_returns"
+      ],
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            {
+              "param": "q"
+            }
+          ]
+        }
+      ],
+      "limit": 1
+    }
+  },
+  "bindings": [
+    {
+      "request": "q",
+      "document": "quarter"
+    }
+  ]
+}

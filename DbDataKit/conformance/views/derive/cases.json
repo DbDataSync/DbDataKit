@@ -1,0 +1,158 @@
+{
+  "catalogs": {
+    "sales_catalog": {
+      "model": "sales_catalog",
+      "measures": [
+        "orders.net_revenue",
+        "orders.shipped_revenue",
+        "orders.completed_revenue",
+        "orders.order_count",
+        "orders.customer_count",
+        "returns.return_amount",
+        "budget.budget_amount",
+        "budget.budget_lines",
+        "orders.avg_order_value",
+        "finance.pct_to_budget",
+        "orders.net_after_returns"
+      ],
+      "attributes": [
+        "customers.region",
+        "customers.customer",
+        "products.product",
+        "products.category",
+        "products.category_group",
+        "orders.ordered_at",
+        "orders.status",
+        "orders.ordered_at_hour",
+        "orders.ordered_at_day",
+        "orders.ordered_at_week",
+        "orders.ordered_at_month",
+        "orders.ordered_at_quarter",
+        "orders.ordered_at_year",
+        "date.calendar_date",
+        "date.calendar_date_prior_year",
+        "date.fiscal_month",
+        "date.fiscal_quarter",
+        "date.fiscal_year",
+        "date.fiscal_month_prior_year",
+        "date.fiscal_quarter_prior_year"
+      ]
+    }
+  },
+  "good": [
+    {
+      "name": "metric-value",
+      "file": "good/metric-value.json"
+    },
+    {
+      "name": "metric-compare-with-a-parameter",
+      "file": "good/metric-compare-with-a-parameter.json"
+    },
+    {
+      "name": "chart-dimension-measure-color",
+      "file": "good/chart-dimension-measure-color.json"
+    },
+    {
+      "name": "chart-two-measures",
+      "file": "good/chart-two-measures.json"
+    },
+    {
+      "name": "chart-time-attribute-with-a-grain",
+      "file": "good/chart-time-attribute-with-a-grain.json"
+    },
+    {
+      "name": "chart-stacked-with-a-facet",
+      "file": "good/chart-stacked-with-a-facet.json"
+    },
+    {
+      "name": "chart-segments-and-timezone",
+      "file": "good/chart-segments-and-timezone.json"
+    },
+    {
+      "name": "matrix-basic",
+      "file": "good/matrix-basic.json"
+    },
+    {
+      "name": "matrix-totals-and-column-limit",
+      "file": "good/matrix-totals-and-column-limit.json"
+    },
+    {
+      "name": "matrix-total-row-only",
+      "file": "good/matrix-total-row-only.json"
+    },
+    {
+      "name": "matrix-total-column-only",
+      "file": "good/matrix-total-column-only.json"
+    },
+    {
+      "name": "matrix-sort-by-a-measure-asks-for-the-total",
+      "file": "good/matrix-sort-by-a-measure-asks-for-the-total.json"
+    },
+    {
+      "name": "table-columns-and-a-query-order",
+      "file": "good/table-columns-and-a-query-order.json"
+    },
+    {
+      "name": "table-sort-on-a-measure-it-does-not-show",
+      "file": "good/table-sort-on-a-measure-it-does-not-show.json"
+    },
+    {
+      "name": "table-sort-on-a-shown-column-defaults-to-ascending",
+      "file": "good/table-sort-on-a-shown-column-defaults-to-ascending.json"
+    },
+    {
+      "name": "table-grand-total",
+      "file": "good/table-grand-total.json"
+    },
+    {
+      "name": "a-field-used-twice-is-asked-once",
+      "file": "good/a-field-used-twice-is-asked-once.json"
+    }
+  ],
+  "refused": [
+    {
+      "name": "text-widget-has-nothing-to-derive",
+      "file": "refused/text-widget-has-nothing-to-derive.json"
+    },
+    {
+      "name": "explicit-query-is-not-derived",
+      "file": "refused/explicit-query-is-not-derived.json"
+    },
+    {
+      "name": "unknown-field",
+      "file": "refused/unknown-field.json"
+    },
+    {
+      "name": "dimension-in-a-measure-well",
+      "file": "refused/dimension-in-a-measure-well.json"
+    },
+    {
+      "name": "measure-in-a-matrix-axis",
+      "file": "refused/measure-in-a-matrix-axis.json"
+    },
+    {
+      "name": "unknown-field-in-a-matrix-value",
+      "file": "refused/unknown-field-in-a-matrix-value.json"
+    },
+    {
+      "name": "chart-with-no-measure",
+      "file": "refused/chart-with-no-measure.json"
+    },
+    {
+      "name": "table-with-no-measure",
+      "file": "refused/table-with-no-measure.json"
+    },
+    {
+      "name": "matrix-totals-twice",
+      "file": "refused/matrix-totals-twice.json"
+    },
+    {
+      "name": "matrix-total-column-without-column-fields",
+      "file": "refused/matrix-total-column-without-column-fields.json"
+    },
+    {
+      "name": "two-wrong-fields-are-both-reported",
+      "file": "refused/two-wrong-fields-are-both-reported.json"
+    }
+  ]
+}

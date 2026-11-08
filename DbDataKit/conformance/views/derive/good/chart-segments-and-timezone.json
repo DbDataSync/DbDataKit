@@ -1,0 +1,37 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "chart",
+      "mark": "area",
+      "encodings": {
+        "x": "orders.ordered_at_day",
+        "y": "orders.net_revenue"
+      },
+      "query": {
+        "model": "sales_catalog",
+        "segments": [
+          "orders.completed"
+        ],
+        "timezone": "America/Chicago"
+      }
+    }
+  },
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "attributes": [
+        "orders.ordered_at_day"
+      ],
+      "segments": [
+        "orders.completed"
+      ],
+      "limit": 500,
+      "timezone": "America/Chicago"
+    }
+  }
+}

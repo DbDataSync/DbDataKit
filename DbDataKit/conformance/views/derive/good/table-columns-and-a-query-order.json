@@ -1,0 +1,85 @@
+{
+  "parameters": [
+    "region"
+  ],
+  "widgets": {
+    "w": {
+      "type": "table",
+      "title": "Orders",
+      "encodings": {
+        "columns": [
+          {
+            "field": "products.category",
+            "label": "Category"
+          },
+          {
+            "field": "products.product"
+          },
+          {
+            "field": "orders.order_count",
+            "align": "right"
+          },
+          {
+            "field": "orders.net_revenue",
+            "format": "full"
+          }
+        ]
+      },
+      "query": {
+        "model": "sales_catalog",
+        "filters": [
+          {
+            "attribute": "customers.region",
+            "operator": "equals",
+            "values": {
+              "param": "region"
+            }
+          }
+        ],
+        "order": [
+          [
+            "orders.net_revenue",
+            "desc"
+          ]
+        ],
+        "limit": 500
+      }
+    }
+  },
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.order_count",
+        "orders.net_revenue"
+      ],
+      "attributes": [
+        "products.category",
+        "products.product"
+      ],
+      "filters": [
+        {
+          "attribute": "customers.region",
+          "operator": "equals",
+          "values": {
+            "param": "region"
+          }
+        }
+      ],
+      "order": [
+        [
+          "orders.net_revenue",
+          "desc"
+        ]
+      ],
+      "limit": 500
+    }
+  },
+  "bindings": [
+    {
+      "request": "region",
+      "document": "region"
+    }
+  ]
+}

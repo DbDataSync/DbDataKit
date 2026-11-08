@@ -1,0 +1,44 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "table",
+      "encodings": {
+        "columns": [
+          {
+            "field": "products.category"
+          },
+          {
+            "field": "orders.net_revenue"
+          }
+        ]
+      },
+      "query": {
+        "model": "sales_catalog",
+        "totals": {
+          "grand_total": true
+        },
+        "limit": 1000
+      }
+    }
+  },
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "attributes": [
+        "products.category"
+      ],
+      "limit": 1000,
+      "totals": {
+        "subtotal_by": [
+          "products.category"
+        ],
+        "grand_total": true
+      }
+    }
+  }
+}

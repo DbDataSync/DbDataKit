@@ -1,0 +1,21 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "metric",
+      "encodings": {
+        "value": "customers.region"
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "refusal": [
+    {
+      "code": "wrong_member_kind",
+      "path": "widgets.w.encodings.value",
+      "message": "customers.region is a attribute, not a measure."
+    }
+  ]
+}

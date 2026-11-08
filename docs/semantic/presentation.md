@@ -3,7 +3,8 @@
 **Implemented** (`Qis.Engine.Presentation`, schema `../spec/schemas/view.schema.json`, fixtures in `../view-fixtures`). A view document says how a
 result is displayed, as a matrix or a chart. Results arrive long and tidy, one row per attribute combination, and a view only arranges them.
 **A view never computes a measure value, including totals**, so the same result shown two ways shows the same numbers. (The one exception is
-the Other column of `top_n_other`, a sum, allowed only for measures that add up.)
+the Other column of `top_n_other`, a sum, allowed only for measures that add up.) A view arranges a result; a **widget** of a dashboard or report ([`views.md`](../views.md), plan 32) adds the query that produces it,
+and for a derived widget that query is made from its encodings: the request is the one of [`query.md`](query.md) (`DeriveRequest`), so the fields a view draws and the fields the request asks for cannot drift.
 
 ```json
 {"spec_version": "0.3", "kind": "view", "result": {"ref": "result.9f2c"},

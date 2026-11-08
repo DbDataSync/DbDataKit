@@ -1,0 +1,15 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "text",
+      "text": "Hello"
+    }
+  },
+  "refusal": [
+    {
+      "code": "DBD-VIEW-040",
+      "path": "widgets.w"
+    }
+  ]
+}

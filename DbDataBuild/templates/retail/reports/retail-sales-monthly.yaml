@@ -19,7 +19,7 @@ widgets:
     encodings: {value: sales.net_amount}
     query:
       model: retail_sales
-      filters: [{attribute: customers.region, operator: in, values: {param: region}}]
+      filters: [{attribute: customers.region, operator: equals, values: {param: region}}]
   margin:
     type: metric
     label: Margin rate
@@ -27,7 +27,7 @@ widgets:
     encodings: {value: sales.margin_rate}
     query:
       model: retail_sales
-      filters: [{attribute: customers.region, operator: in, values: {param: region}}]
+      filters: [{attribute: customers.region, operator: equals, values: {param: region}}]
   units:
     type: metric
     label: Units sold
@@ -35,7 +35,7 @@ widgets:
     encodings: {value: sales.units}
     query:
       model: retail_sales
-      filters: [{attribute: customers.region, operator: in, values: {param: region}}]
+      filters: [{attribute: customers.region, operator: equals, values: {param: region}}]
   by_month:
     type: chart
     title: Net sales by month
@@ -43,7 +43,7 @@ widgets:
     encodings: {x: date.year_month, y: sales.net_amount}
     query:
       model: retail_sales
-      filters: [{attribute: customers.region, operator: in, values: {param: region}}]
+      filters: [{attribute: customers.region, operator: equals, values: {param: region}}]
       order: [[date.year_month, asc]]
       limit: 24
   products:
@@ -57,7 +57,7 @@ widgets:
         - {field: sales.net_amount, label: Net sales, align: right, format: full}
     query:
       model: retail_sales
-      filters: [{attribute: customers.region, operator: in, values: {param: region}}]
+      filters: [{attribute: customers.region, operator: equals, values: {param: region}}]
       order: [[sales.net_amount, desc]]
       limit: 500
 layouts:

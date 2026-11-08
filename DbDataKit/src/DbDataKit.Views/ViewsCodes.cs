@@ -63,6 +63,14 @@ public static class ViewsCodes
     public const string KeyOfOtherKind = "DBD-VIEW-035";
     /// <summary>A drill that does not give a required parameter of its target.</summary>
     public const string DrillMissingParameter = "DBD-VIEW-037";
+    /// <summary>A widget with no request to derive: a type without a query (text, image, control) or a query that is explicit (its encodings do not drive it).</summary>
+    public const string NothingToDerive = "DBD-VIEW-040";
+    /// <summary>A derived query that asks for no measure: a request needs at least one.</summary>
+    public const string NoMeasure = "DBD-VIEW-041";
+    /// <summary>Totals asked for twice (the matrix's encodings and the query), or on an axis that has no field.</summary>
+    public const string TotalsConflict = "DBD-VIEW-042";
+    /// <summary>The catalog check has no catalog for the model a widget's query names.</summary>
+    public const string ModelNotBound = "DBD-VIEW-043";
     /// <summary>Warning: two layouts have equal selectors, so the later one is never reached.</summary>
     public const string EqualSelectors = "DBD-VIEW-080";
     /// <summary>Warning: a range with its minimum above its maximum matches nothing.</summary>

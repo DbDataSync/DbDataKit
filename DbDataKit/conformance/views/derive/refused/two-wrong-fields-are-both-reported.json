@@ -1,0 +1,27 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "metric",
+      "encodings": {
+        "value": "customers.region",
+        "compare": "orders.nothing"
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "refusal": [
+    {
+      "code": "wrong_member_kind",
+      "path": "widgets.w.encodings.value",
+      "message": "customers.region is a attribute, not a measure."
+    },
+    {
+      "code": "unknown_member",
+      "path": "widgets.w.encodings.compare",
+      "message": "orders.nothing is not a catalog member."
+    }
+  ]
+}

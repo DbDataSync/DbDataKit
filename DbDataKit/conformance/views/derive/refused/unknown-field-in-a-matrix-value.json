@@ -1,0 +1,28 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "matrix",
+      "encodings": {
+        "rows": [
+          "customers.region"
+        ],
+        "values": [
+          {
+            "field": "orders.net_revenu"
+          }
+        ]
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "refusal": [
+    {
+      "code": "unknown_member",
+      "path": "widgets.w.encodings.values[0].field",
+      "message": "orders.net_revenu is not a catalog member."
+    }
+  ]
+}
