@@ -110,7 +110,7 @@ public class ConnectionFilesTests
         { "a timeout", "warehouse.yaml", Warehouse.Replace("engine: sqlserver\n", "engine: sqlserver\ntimeouts: { command_s: 10 }\n") },
         { "the old keywords in engine", "warehouse.yaml", Warehouse.Replace("engine: sqlserver", "engine: readonly sqlserver") },
         { "an unknown key", "warehouse.yaml", Warehouse.Replace("engine: sqlserver\n", "engine: sqlserver\nbogus: 1\n") },
-        { "the old schema", "warehouse.yaml", Warehouse.Replace("connection/1", "connection/2") },
+        { "a schema this program does not read", "warehouse.yaml", Warehouse.Replace("connection/1", "connection/3") },
         { "no schema", "warehouse.yaml", Warehouse.Replace("schema: connection/1\n", "") },
         { "a plaintext credential", "warehouse.yaml", Warehouse.Replace("engine: sqlserver\n", "engine: sqlserver\nconnection_string: \"Server=x;Password=hunter2\"\n") },
         { "an engine key inside extensions.build", "warehouse.yaml", Warehouse.Replace("build: {", "build: { engine: postgres,") },
@@ -194,7 +194,7 @@ public class ConnectionFilesTests
     [InlineData("schema: connection/1\nname: a\nengine: postgres\naccess: sometimes\n", false)]
     [InlineData("schema: connection/1\nname: a\nengine: postgres\nextensions:\n  build: { max_parallel: 400 }\n", false)]
     [InlineData("schema: connection/1\nname: a\nengine: postgres\nextensions:\n  build: { nope: 1 }\n", false)]
-    [InlineData("schema: connection/2\nname: a\nengine: postgres\n", false)]
+    [InlineData("schema: connection/3\nname: a\nengine: postgres\n", false)]
     public void The_schema_and_the_loader_agree(string yaml, bool valid)
     {
         Assert.Equal(valid, SchemaConformanceTests.SchemaAccepts(SchemaConformanceTests.LoadSchema("connection"), yaml));
