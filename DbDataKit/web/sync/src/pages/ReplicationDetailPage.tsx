@@ -20,6 +20,7 @@ const TABS: { path: string; label: string; testId: string }[] = [
   { path: 'overview', label: 'Overview', testId: 'tab-overview' },
   { path: 'mappings', label: 'Table Mappings', testId: 'tab-mappings' },
   { path: 'monitoring', label: 'Monitoring', testId: 'tab-monitoring' },
+  { path: 'checks', label: 'Quality Checks', testId: 'tab-checks' },
   { path: 'history', label: 'Version Control', testId: 'tab-history' },
 ]
 

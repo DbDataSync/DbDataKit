@@ -5,6 +5,7 @@ import { api } from './client'
 // Who the caller is and the notification feed are the shell's hooks, used by every product's console the same way.
 export { useAuthStatus, useMarkNotificationsSeen, useNotifications, useSignInWithWindows, useSignOut } from '@dbdatakit/shell'
 import type {
+  CheckForm,
   BulkCreateRequest,
   BulkLoadHistoryFilters,
   DriverType,
@@ -62,6 +63,7 @@ const keys = {
   replications: ['replications'] as const,
   replication: (name: string) => ['replications', name] as const,
   replicationHistory: (name: string) => ['replications', name, 'history'] as const,
+  replicationChecks: (name: string) => ['replications', name, 'checks'] as const,
   replicationCommitDiff: (name: string, sha: string) =>
     ['replications', name, 'history', sha, 'diff'] as const,
   replicationRestorePreview: (name: string, sha: string) =>
@@ -371,6 +373,28 @@ export function useUpsertReplication() {
     onSuccess: (_data, { name }) => {
       queryClient.invalidateQueries({ queryKey: keys.replications })
       queryClient.invalidateQueries({ queryKey: keys.replication(name) })
+      queryClient.invalidateQueries({ queryKey: keys.replicationHistory(name) })
+    },
+  })
+}
+
+/** The quality checks of a replication (plan 33 UE07). A section that does not read is a 422 and is not retried: the answer is the faults. */
+export function useReplicationChecks(name: string | undefined) {
+  return useQuery({
+    queryKey: keys.replicationChecks(name ?? ''),
+    queryFn: () => api.replications.checks(name!),
+    enabled: !!name,
+    retry: false,
+  })
+}
+
+/** Replaces the checks of a replication and commits. The replication's own query is left alone: the checks are not part of what it sends. */
+export function useSaveReplicationChecks(name: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ checks, version }: { checks: CheckForm[]; version: string }) => api.replications.saveChecks(name, checks, version),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(keys.replicationChecks(name), saved)
       queryClient.invalidateQueries({ queryKey: keys.replicationHistory(name) })
     },
   })

@@ -4,6 +4,7 @@ import { OverviewPanel } from './OverviewPanel'
 import { TableMappingsPanel } from './TableMappingsPanel'
 import { HistoryPanel } from './HistoryPanel'
 import { MonitoringSection } from './MonitoringPanel'
+import { ReplicationChecksPanel } from './ReplicationChecksPanel'
 
 /**
  * The four routed tabs, each a thin adapter that takes the replication name from the layout route's
@@ -29,6 +30,11 @@ export function MappingsTab() {
 export function MonitoringTab() {
   const { replicationName, command } = useOutletContext<ReplicationOutletContext>()
   return <MonitoringSection replicationName={replicationName} command={command} />
+}
+
+/** The quality checks stored with the replication (plan 33 UE07); beside Monitoring, whose verification checks compare source and target. */
+export function ChecksTab() {
+  return <ReplicationChecksPanel replicationName={useReplicationName()} />
 }
 
 export function HistoryTab() {

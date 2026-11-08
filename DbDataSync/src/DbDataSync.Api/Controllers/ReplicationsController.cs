@@ -36,6 +36,39 @@ public sealed class ReplicationsController(
     }
 
     /// <summary>
+    /// The quality checks stored with the replication (<c>checks:</c> of its <c>task.yaml</c>, plan 33 UE07): each check as a form (<c>CheckForm</c>: the keys of the file), the section as the file has it, the version a save must quote, and whether
+    /// the section has comments (a save rewrites the section and does not carry them). A section that does not read is a 422 with each fault's file, line, message and suggestion.
+    /// </summary>
+    [Authorize(Policies.Viewer)]
+    [HttpGet("{name}/checks")]
+    public IActionResult GetChecks(string name)
+    {
+        try { return Ok(ChecksBody(configRepository.LoadReplicationChecks(name))); }
+        catch (FileNotFoundException) { return NotFound(); }
+        catch (ConfigFileException ex) { return UnprocessableEntity(Faults(ex)); }
+    }
+
+    /// <summary>
+    /// Replaces the replication's checks (admin, like the rest of the replication) and commits. The checks are written as the section and the whole file is checked again by the strict reader, so a bad kind, a missing column or a repeated id is a
+    /// 400 with the reader's diagnostics (file, line, suggestion) and nothing is written; a section changed since <c>version</c> was read is a 409 with the current one.
+    /// </summary>
+    [HttpPut("{name}/checks")]
+    public IActionResult PutChecks(string name, [FromBody] SaveChecksRequest request)
+    {
+        if (string.IsNullOrEmpty(request.Version)) return BadRequest(new { error = "Send the version of the checks you read (`version`); a save is refused when the section changed since." });
+        try { return Ok(ChecksBody(configRepository.SaveReplicationChecks(name, request.Checks ?? [], request.Version, currentUser.Author))); }
+        catch (FileNotFoundException) { return NotFound(); }
+        catch (ReplicationChecksConflictException ex) { return Conflict(new { error = ex.Message, current = ChecksBody(ex.Current) }); }
+        catch (ConfigFileException ex) { return BadRequest(Faults(ex)); }
+    }
+
+    private static object ChecksBody(ReplicationChecksDocument document) =>
+        new { checks = document.Checks, version = document.Version, text = document.Text, hasComments = document.Text.Contains('#') };
+
+    private static object Faults(ConfigFileException ex) =>
+        new { error = ex.Message, diagnostics = ex.Diagnostics.Select(d => new { code = d.Code, file = Path.GetFileName(d.Path), line = d.Line, column = d.Column, message = d.Message, fix = d.Fix, keyPath = d.KeyPath }) };
+
+    /// <summary>
     /// What this replication's worker process is doing, right now.
     /// <para>
     /// Pulled rather than pushed, on <c>run-metrics.md</c>'s call: a status card is not something
@@ -246,3 +279,5 @@ public sealed record SetEnabledRequest(bool Enabled);
 /// </summary>
 /// <param name="Note">Sent on every action, including a resume. Null clears it.</param>
 public sealed record SetPausedRequest(bool Paused, string? Note);
+
+public sealed record SaveChecksRequest(IReadOnlyList<DbDataKit.Quality.CheckForm>? Checks, string? Version);

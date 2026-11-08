@@ -1,3 +1,4 @@
+using DbDataKit.Quality;
 using DbDataKit.Config.Git;
 using DbDataSync.Core.Secrets;
 
@@ -317,6 +318,41 @@ public sealed class ConfigRepository
         var task = StrictConfigFile.Load(text, path, YamlConfigSerializer.Deserialize<ReplicationTaskConfig>);
         task.Checks = ReplicationChecks.Read(text, path);
         return task;
+    }
+
+    /// <summary>
+    /// The <c>checks:</c> of a replication as a screen edits them (plan 33 UE07): each check as a <see cref="CheckForm"/>, the section as the file has it (<see cref="ReplicationChecksDocument.Text"/>, comments included) and its version.
+    /// A section that does not read is a <see cref="ConfigFileException"/> naming the file and line, as everywhere a task is loaded.
+    /// </summary>
+    /// <exception cref="FileNotFoundException">There is no such replication.</exception>
+    public ReplicationChecksDocument LoadReplicationChecks(string replicationName)
+    {
+        var path = ConfigPaths.TaskFile(_configRoot, replicationName);
+        var text = TryReadAllTextAllowingConcurrentReplace(path)
+            ?? throw new FileNotFoundException($"Replication task '{replicationName}' was not found.", path);
+        return ReplicationChecksDocument.Of(text, path);
+    }
+
+    /// <summary>
+    /// Replaces the <c>checks:</c> section of a replication with <paramref name="checks"/> and commits. The section is written from the forms, then the whole file is read again with the strict reader, so what is saved is what a load will accept
+    /// and a fault is a <see cref="ConfigFileException"/> with file, line and a suggestion, with nothing written. <paramref name="version"/> is the one <see cref="LoadReplicationChecks"/> gave: a section changed since is refused with
+    /// <see cref="ReplicationChecksConflictException"/> carrying the current one. The rest of the file, its comments included, stays as written; comments inside the old section are not carried.
+    /// </summary>
+    public ReplicationChecksDocument SaveReplicationChecks(string replicationName, IReadOnlyList<CheckForm> checks, string version, GitAuthor author)
+    {
+        var path = ConfigPaths.TaskFile(_configRoot, replicationName);
+        var previous = TryReadAllTextAllowingConcurrentReplace(path)
+            ?? throw new FileNotFoundException($"Replication task '{replicationName}' was not found.", path);
+        if (!string.Equals(ReplicationChecks.Version(previous), version, StringComparison.Ordinal))
+            throw new ReplicationChecksConflictException(ReplicationChecksDocument.Of(previous, path));
+
+        var text = ReplicationChecks.Replace(previous, CheckForms.ToYaml(checks));
+        // the strict check of the whole file: a bad check, a task that no longer reads
+        StrictConfigFile.Load(text, path, YamlConfigSerializer.Deserialize<ReplicationTaskConfig>);
+        var saved = ReplicationChecksDocument.Of(text, path);
+        WriteAtomically(path, text);
+        Git.CommitChanges([path], $"Save the checks of replication '{replicationName}'", author);
+        return saved;
     }
 
     public IReadOnlyList<string> ListReplications()
