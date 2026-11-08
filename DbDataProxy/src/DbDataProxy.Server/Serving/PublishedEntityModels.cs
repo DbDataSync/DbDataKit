@@ -27,6 +27,9 @@ public sealed class PublishedEntityModels(DefinitionStore store, Action<string>?
 
     public string Kind => DefinitionKind;
 
+    /// <summary>Format 1 and format 2 of <c>model</c> (the sections <c>cache</c> and <c>checks</c>, plan 24a UC03): what <see cref="DataModelLoader"/> reads.</summary>
+    public DefinitionFormats Formats => DefinitionFormats.Of(DataModelLoader.Version);
+
     /// <summary>The model this instance serves under the name; null when it serves none.</summary>
     public ServedEntityModel? Find(string name) => _served.TryGetValue(name, out var served) ? served : null;
 
@@ -46,9 +49,10 @@ public sealed class PublishedEntityModels(DefinitionStore store, Action<string>?
         JsonSerializer.Deserialize<Content>(version.Content, Json) ?? throw new InvalidDataException($"Version {version.Version} of '{version.Name}' is not a published entity model.");
 
     /// <summary>Stores the next version (or answers the one served, when it is the same) and serves it here at once; the other instances serve it when they next look. The caller has checked it loads.</summary>
-    public DefinitionVersion Publish(string name, string modelText, string dataSource, string? managedBy, string by)
+    /// <param name="format">The format of the model file (<c>schemaVersion</c>, 24a UC03: 2 when it has a <c>cache</c> or <c>checks</c> section).</param>
+    public DefinitionVersion Publish(string name, string modelText, string dataSource, string? managedBy, string by, int format = 1)
     {
-        var version = store.Publish(DefinitionKind, name, JsonSerializer.Serialize(new Content(modelText, dataSource, managedBy), Json), by, ["data-source/" + dataSource]);
+        var version = store.Publish(DefinitionKind, name, JsonSerializer.Serialize(new Content(modelText, dataSource, managedBy), Json), by, ["data-source/" + dataSource], format: format);
         ServeNow(name);
         return version;
     }

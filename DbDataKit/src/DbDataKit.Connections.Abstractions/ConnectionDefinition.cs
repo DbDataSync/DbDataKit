@@ -65,11 +65,45 @@ public sealed class ExtensionBag
     public Dictionary<string, YamlNode> Items { get; set; } = [];
 }
 
-/// <summary>The shared connection definition, schema <c>connection/1</c>. Load it with <see cref="ConnectionDefinitionLoader"/>, which also enforces the rules a binder cannot.</summary>
-[ConfigSchema("connection", Naming = KeyNaming.SnakeCase, VersionKey = "schema", Description = "A database connection (connection/1).")]
+/// <summary>
+/// The <c>cache:</c> section of a connection definition used as a serving data source (plan 24a UC03; <c>connection/2</c>): whether results of this data source are cached in the serving layer, at most for how long, who may
+/// share an entry and which dataset it is about. Off unless <see cref="Enabled"/>. The values are checked by <see cref="ConnectionDefinitionLoader"/> with <see cref="CacheSection"/>'s rules.
+/// </summary>
+[ConfigSchema(Naming = KeyNaming.SnakeCase, Description = "The cache setting of a serving data source (connection/2).")]
+public sealed class CacheSpec
+{
+    public bool Enabled { get; set; }
+
+    /// <summary>A whole number and a unit (<c>90s</c>, <c>5m</c>, <c>2h</c>), at most <c>24h</c>.</summary>
+    [ConfigKey(Pattern = CacheSection.TtlPattern)]
+    public string Ttl { get; set; } = "5m";
+
+    /// <summary>caller | rules | shared.</summary>
+    [ConfigKey(Pattern = "caller|rules|shared")]
+    public string Scope { get; set; } = "caller";
+
+    public string? Dataset { get; set; }
+}
+
+/// <summary>
+/// The shared connection definition, schema <c>connection/2</c> (and <c>connection/1</c>, which is read as before). Load it with <see cref="ConnectionDefinitionLoader"/>, which also enforces the rules a binder cannot.
+/// Format 2 adds the optional sections <c>cache</c> and <c>checks</c> (plan 24a D5 and UC03); a file that says <c>connection/1</c> and has either is refused naming the file and line.
+/// </summary>
+[ConfigSchema("connection", Naming = KeyNaming.SnakeCase, VersionKey = "schema", Version = 2, Description = "A database connection (connection/2; connection/1 is read as well).")]
 public sealed class ConnectionDefinition
 {
+    /// <summary>The format every program reads and writes by default: files are written as <c>connection/1</c> until they use a section of the next format.</summary>
     public const string SchemaId = "connection/1";
+
+    /// <summary>The next format: <see cref="SchemaId"/> plus the optional sections <c>cache</c> and <c>checks</c>.</summary>
+    public const string SchemaIdV2 = "connection/2";
+
+    /// <summary>The newest format this reads.</summary>
+    public const int CurrentVersion = 2;
+
+    /// <summary>The format the file was read in (1 or 2); set by the loader. Its sections <c>cache</c> and <c>checks</c> need 2.</summary>
+    [ConfigIgnore]
+    public int SchemaVersion { get; set; } = CurrentVersion;
 
     [ConfigKey(Required = true, Pattern = "[A-Za-z][A-Za-z0-9_.-]{0,63}")]
     public string Name { get; set; } = "";
@@ -94,6 +128,14 @@ public sealed class ConnectionDefinition
     /// <summary>Extra connection-string properties. Credential, host and identity keys are refused (see <see cref="CredentialPolicy"/>).</summary>
     public Dictionary<string, string> Properties { get; set; } = [];
     public ExtensionBag Extensions { get; set; } = new();
+
+    /// <summary>The cache setting of a serving data source (format 2); null: the cache is off.</summary>
+    public CacheSpec? Cache { get; set; }
+
+    /// <summary>
+    /// The place of the checks of this data source (format 2): a list of mappings whose keys are not read until plan 23's check model gives them their shape (23a FQ01). Null when the file has none.
+    /// </summary>
+    public List<ExtensionBag>? Checks { get; set; }
 
     /// <summary>The login spec for <paramref name="role"/>. Read never returns the write login.</summary>
     public LoginSpec? LoginFor(LoginRole role) => role switch

@@ -16,7 +16,7 @@ public sealed class ConnectionLoadResult(ConnectionDefinition? definition, IRead
 }
 
 /// <summary>
-/// Strict loader for <c>schema: connection/1</c>: unknown keys are errors (with a suggestion), then the rules a binder cannot express are
+/// Strict loader for <c>schema: connection/1</c> and <c>connection/2</c> (the second adds the sections <c>cache</c> and <c>checks</c>, plan 24a UC03): unknown keys are errors (with a suggestion), then the rules a binder cannot express are
 /// checked: address XOR connection string, no write login on a read-only connection, no plaintext credentials, no credential
 /// properties, valid secret references, login completeness. TLS opt-outs are reported as warnings.
 /// </summary>
@@ -30,6 +30,9 @@ public static class ConnectionDefinitionLoader
     public const string BadSecretRef = "DBD-CONN-006";
     public const string BadLogin = "DBD-CONN-007";
     public const string TlsOptOut = "DBD-CONN-008";
+    public const string SectionNotInThisFormat = "DBD-CONN-009";
+    public const string CannotBeCached = "DBD-CONN-010";
+    public const string BadCache = "DBD-CONN-011";
 
     /// <summary>JSON Schema for editor aids, generated from the type.</summary>
     public static string JsonSchema() => JsonSchemaGenerator.ToJson(typeof(ConnectionDefinition), "https://dbdata.dev/schema/connection/1.json");
@@ -42,25 +45,43 @@ public static class ConnectionDefinitionLoader
         var diags = new List<ConfigDiagnostic>();
         var root = StrictYamlReader.Read(yaml, file, diags);
         if (diags.HasErrors() || root is null) return new(null, diags);
+        var declared = 1;
 
         // the schema key is checked first so a wrong kind is one clear error, not a cascade of unknown keys
         if (root is YamlMapping map)
         {
             var schema = map.Get("schema");
-            if (schema is not YamlScalar { Value: ConnectionDefinition.SchemaId })
+            if (schema is not YamlScalar { Value: var schemaText } || FormatOf(schemaText) is not { } format)
             {
                 var at = schema ?? map;
                 diags.Add(Diag(BadSchema, file, at, schema is null ? "`schema` is missing." : $"`schema` is `{(schema as YamlScalar)?.Value}`.", $"Use `schema: {ConnectionDefinition.SchemaId}`."));
                 return new(null, diags);
             }
+            if (format > ConnectionDefinition.CurrentVersion)
+            {
+                diags.Add(DefaultDiagnosticCatalog.Instance.Create(SharedCodes.SchemaVersionNewer, file, schema.Line, schema.Column,
+                    $"`schema` is `{schemaText}`, but this tool understands `connection` files up to version {ConnectionDefinition.CurrentVersion}.", "Upgrade the tool; this file was written by a newer version."));
+                return new(null, diags);
+            }
+            declared = format;
         }
 
         var bound = new ConfigBinder().Bind<ConnectionDefinition>(root, file);
         diags.AddRange(bound.Diagnostics);
         if (bound.Value is null || diags.HasErrors()) return new(null, diags);
+        bound.Value.SchemaVersion = declared;
         Validate(bound.Value, file, bound.Sources, diags, addressRequired);
         return new(bound.Value, diags);
     }
+
+    /// <summary>The number of a <c>connection/&lt;n&gt;</c> id; null for anything else (another kind, no number, zero).</summary>
+    public static int? FormatOf(string? schema) =>
+        schema is not null && schema.StartsWith("connection/", StringComparison.Ordinal) && int.TryParse(schema["connection/".Length..], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var n) && n >= 1 ? n : null;
+
+    /// <summary>The format a file's text says it is in (its <c>schema:</c> line), 1 when it does not say; used to record the format of a published data source (24a UC01).</summary>
+    public static int FormatOfText(string text) =>
+        System.Text.RegularExpressions.Regex.Match(text, "^schema:\\s*[\"']?(connection/[0-9]+)", System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.CultureInvariant) is { Success: true } m
+            ? FormatOf(m.Groups[1].Value) ?? 1 : 1;
 
     /// <summary>The semantic rules on their own, for definitions built in code.</summary>
     public static IReadOnlyList<ConfigDiagnostic> Validate(ConnectionDefinition d)
@@ -107,6 +128,22 @@ public static class ConnectionDefinitionLoader
             if (spec.ConnectionStringSecret is not null) CheckRef(spec.ConnectionStringSecret, path + ".connection_string_secret");
             if (spec.TokenSecret is not null) CheckRef(spec.TokenSecret, path + ".token_secret");
             CheckLogin(path, spec);
+        }
+
+        // the sections of format 2 (24a UC03): refused in a format-1 file, checked in a format-2 one
+        if (d.SchemaVersion < 2)
+        {
+            if (d.Cache is not null) Err(SectionNotInThisFormat, "cache", "`cache` is a section of format 2 (connection/2), and this file says `schema: connection/1`.", "Set `schema: connection/2`. A program that reads only connection/1 then refuses the file by its version, which keeps it from serving the data source without the section.");
+            if (d.Checks is not null) Err(SectionNotInThisFormat, "checks", "`checks` is a section of format 2 (connection/2), and this file says `schema: connection/1`.", "Set `schema: connection/2`.");
+        }
+        else if (d.Cache is { } cache)
+        {
+            if (!CacheSection.TryParseTtl(cache.Ttl, out _, out var ttlProblem)) Err(BadCache, "cache.ttl", ttlProblem!.Replace("`ttl`", "`cache.ttl`", StringComparison.Ordinal), "Write a whole number and `s`, `m` or `h`, at most `24h`.");
+            if (!CacheSection.TryParseScope(cache.Scope, out _)) Err(BadCache, "cache.scope", $"`cache.scope` is `{cache.Scope}`; it is one of {string.Join(", ", CacheSection.ScopeNames.Select(n => $"`{n}`"))}.");
+            // a data source with no identity of its own (no server, no database, no connection string to read them from) has no lineage identity, which the cache's expiry on a data change is keyed by
+            if (cache.Enabled && d.Address is not { Host.Length: > 0 } and not { Database.Length: > 0 } && d.ConnectionString is not { Length: > 0 })
+                Err(CannotBeCached, "cache.enabled", "The cache cannot be turned on for this data source: it names no server and no database (`address`, or a `connection_string`), so it has no lineage identity to expire entries by when its data changes.",
+                    "Give it an `address` (host or database) or a `connection_string`, or leave the cache off.");
         }
 
         if (!d.Tls.Verify) Warn(TlsOptOut, "tls.verify", "Certificate verification is off for this connection.");

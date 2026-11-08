@@ -70,7 +70,7 @@ public class DataModelLoaderTests
     [Fact]
     public void A_newer_version_is_refused_naming_the_file_and_a_missing_one_is_refused_too()
     {
-        var newer = Single(Load("schemaVersion: 2\nname: m\nstorage: {connection: c}\nentities: {}\n"));
+        var newer = Single(Load("schemaVersion: 3\nname: m\nstorage: {connection: c}\nentities: {}\n"));
         Assert.Equal((SharedCodes.SchemaVersionNewer, "sales.model.yaml", 1), (newer.Code, newer.Path, newer.Line));
 
         var missing = Single(Load("name: m\nstorage: {connection: c}\n"));

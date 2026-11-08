@@ -1,0 +1,107 @@
+using DbDataKit.Config.Yaml;
+
+namespace DbDataKit.DataModel.Tests;
+
+/// <summary>
+/// Plan 24a UC03: format 2 of DbDataStore's <c>model</c> (<c>schemaVersion: 2</c>) adds the sections <c>cache</c> and <c>checks</c>. Each key is valid, each bad value is refused with file and line, a format-1 file
+/// that has a section is refused, a dataset that cannot be cached refuses the cache, and a program that reads only format 1 refuses a format-2 file by its version (the clean break).
+/// </summary>
+public sealed class DataModelFormat2Tests
+{
+    private static string Model(int version, string extra = "", string history = "audit") => $$"""
+        schemaVersion: {{version}}
+        name: sales
+        storage: {connection: mdm_sql}
+        {{extra}}
+        entities:
+          territory:
+            key: [code]
+            attributes:
+              code: {type: VARCHAR(10)}
+            history: {{history}}
+          region:
+            key: [code]
+            attributes:
+              code: {type: VARCHAR(10)}
+        """;
+
+    private static DataModelLoadResult Load(string yaml) => DataModelLoader.Load(yaml, "sales.model.yaml");
+
+    [Fact]
+    public void Format_1_is_still_read_and_format_2_is_current()
+    {
+        Assert.Equal(2, DataModelLoader.Version);
+        Assert.Equal("model/2", DataModel.FormatId);
+        var one = Load(Model(1));
+        Assert.True(one.Ok, string.Join("\n", one.Diagnostics));
+        Assert.Equal((1, null), (one.Model!.SchemaVersion, one.Model.Cache));
+        var two = Load(Model(2));
+        Assert.True(two.Ok, string.Join("\n", two.Diagnostics));
+        Assert.Equal(2, two.Model!.SchemaVersion);
+        Assert.Null(two.Model.Cache);
+    }
+
+    [Fact]
+    public void A_format_2_file_with_each_key_of_the_cache_section_loads()
+    {
+        var result = Load(Model(2, "cache: {enabled: true, ttl: 10m, scope: rules, dataset: region}\nchecks:\n  - {kind: freshness}"));
+        Assert.True(result.Ok, string.Join("\n", result.Diagnostics));
+        Assert.Equal(new CacheSection(true, TimeSpan.FromMinutes(10), CacheScope.Rules, "region"), result.Model!.Cache);
+        Assert.Equal(1, result.Model.Checks);
+    }
+
+    [Fact]
+    public void A_format_1_file_with_a_section_of_format_2_is_refused_naming_the_file_and_the_line()
+    {
+        var result = Load(Model(1, "cache: {enabled: true}\nchecks: []"));
+        Assert.False(result.Ok);
+        Assert.All(result.Diagnostics, d => Assert.Equal(DataModelLoader.CacheNotInThisFormat, d.Code));
+        Assert.Equal([("sales.model.yaml", 4), ("sales.model.yaml", 5)], result.Diagnostics.Select(d => (d.Path, d.Line)));
+        Assert.Contains("section of format 2 (model/2)", result.Diagnostics[0].Message);
+        Assert.Contains("schemaVersion: 2", result.Diagnostics[0].Fix);
+    }
+
+    [Theory]
+    [InlineData("cache: {enabled: maybe}", "`cache.enabled` is `true` or `false`")]
+    [InlineData("cache: {ttl: 2d}", "the unit is")]
+    [InlineData("cache: {ttl: 48h}", "at most 24 hours")]
+    [InlineData("cache: {scope: all}", "`cache.scope` is `all`")]
+    [InlineData("cache: {enabled: true, dataset: nothing}", "not an entity of this model")]
+    [InlineData("cache: {unknown: 1}", "Unknown key `unknown`")]
+    [InlineData("checks: yes", "`checks` is a list")]
+    public void Each_bad_value_is_refused_with_file_and_line(string extra, string says)
+    {
+        var result = Load(Model(2, extra));
+        Assert.False(result.Ok);
+        var error = Assert.Single(result.Diagnostics);
+        Assert.Equal(("sales.model.yaml", 4), (error.Path, error.Line));
+        Assert.Contains(says, error.Message);
+    }
+
+    [Fact]
+    public void A_dataset_that_cannot_be_cached_refuses_the_cache()
+    {
+        // an entity with effective-dated history is read while writes of other dates are in flight
+        var whole = Load(Model(2, "cache: {enabled: true}", history: "effective_dated"));
+        var error = Assert.Single(whole.Diagnostics);
+        Assert.Equal(DataModelLoader.CannotBeCached, error.Code);
+        Assert.Contains("`territory`", error.Message);
+        Assert.Contains("effective-dated", error.Message);
+
+        // another entity of the model can be cached, and the cache can be left off
+        Assert.True(Load(Model(2, "cache: {enabled: true, dataset: region}", history: "effective_dated")).Ok);
+        Assert.True(Load(Model(2, "cache: {enabled: false}", history: "effective_dated")).Ok);
+        Assert.False(Load(Model(2, "cache: {enabled: true, dataset: territory}", history: "effective_dated")).Ok);
+    }
+
+    [Fact]
+    public void A_program_that_reads_only_format_1_refuses_a_format_2_file_by_its_version()
+    {
+        // what the previous release does with the file: its newest version is 1 (modelled by a file that says 3 here, which this one does not read either)
+        var future = Load(Model(3));
+        var error = Assert.Single(future.Diagnostics);
+        Assert.Equal(SharedCodes.SchemaVersionNewer, error.Code);
+        Assert.Equal(("sales.model.yaml", 1), (error.Path, error.Line));
+        Assert.Contains("up to 2", error.Message);
+    }
+}

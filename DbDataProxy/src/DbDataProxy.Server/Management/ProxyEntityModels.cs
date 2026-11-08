@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using DbDataKit.DataModel;
+using DbDataKit.State;
 using DbDataKit.Web.Trust;
 using DbDataProxy.Server.Configuration;
 using DbDataProxy.Server.Serving;
@@ -116,7 +117,14 @@ public sealed partial class ProxyEntityModels(PublishedEntityModels models, Func
             var was = models.Current(name)?.Version;
             // a publishing client's model is its own; one an administrator changes keeps the owner it had
             var managedBy = client ?? (models.Current(name) is { } held ? PublishedEntityModels.Parse(held).ManagedBy : null);
-            var version = models.Publish(name, text, dataSource, managedBy, Who(caller));
+            DefinitionVersion version;
+            try { version = models.Publish(name, text, dataSource, managedBy, Who(caller), loaded.Model.SchemaVersion); }
+            catch (PublishRefusedException groupRefused)
+            {
+                // the group cannot take this format (24a UC01): a live instance of it does not read it; the message names the instance
+                Record(caller, "entity-model publish", name, "refused");
+                return new ManagementResult(409, new JsonObject { ["error"] = groupRefused.Message, ["valid"] = true });
+            }
             var unchanged = was == version.Version;
             Record(caller, "entity-model publish", name, created ? "created" : unchanged ? "unchanged" : "changed");
             return ManagementResult.Ok(new JsonObject { ["name"] = name, ["version"] = version.Version, ["created"] = created, ["unchanged"] = unchanged });

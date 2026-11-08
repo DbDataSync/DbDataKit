@@ -25,6 +25,41 @@
       "type": "string"
     },
     "ai_context": {},
+    "cache": {
+      "type": "object",
+      "description": "Format 2 of the semantic package (plan 24a UC03): whether results of this model are cached in the serving layer. Off unless enabled is true. A catalog that has it is published in format 2; an instance that reads only format 1 refuses it by its format.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "ttl": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,5}(s|m|h)$",
+          "description": "At most how long an entry lives when nothing the suite can see has changed: a whole number and s, m or h, at most 24h. Default 5m."
+        },
+        "scope": {
+          "enum": [
+            "caller",
+            "rules",
+            "shared"
+          ],
+          "description": "Who may share an entry. Default caller."
+        },
+        "dataset": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The part of the model the setting is about; the whole model when absent."
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "description": "Format 2 of the semantic package (plan 24a UC03): the place of the model's checks. Plan 23's check model gives the entries their keys (23a FQ01); until then they are objects whose keys are not read.",
+      "items": {
+        "type": "object"
+      }
+    },
     "timezone": {
       "type": "string",
       "minLength": 1,

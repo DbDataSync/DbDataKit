@@ -33,6 +33,9 @@ public sealed partial class PublishedSemanticModels(DefinitionStore store, Seman
 
     public string Kind => DefinitionKind;
 
+    /// <summary>Format 1 of the semantic package, and format 2 (the sections <c>cache</c> and <c>checks</c> of the catalog, plan 24a UC03).</summary>
+    public DefinitionFormats Formats => DefinitionFormats.Of(2);
+
     public static bool ValidName(string name) => NamePattern().IsMatch(name);
 
     // model names are case-insensitive; the store's key is the name in lower case (the catalog keeps its own spelling)
@@ -55,12 +58,13 @@ public sealed partial class PublishedSemanticModels(DefinitionStore store, Seman
     public PublishedVersion? Version(string name, int number) => store.Get(DefinitionKind, Key(name), number) is { } version ? Meta(version) : null;
 
     /// <summary>Stores the next version and makes it the one the group serves. The caller has checked it loads.</summary>
-    public PublishedVersion Publish(string name, string catalogText, string? managedBy, string? publishedBy, Dictionary<string, string> sources, Dictionary<string, string> ssas, DateTimeOffset at)
+    /// <param name="format">The format of the package (24a UC03): <see cref="Catalog.Format"/> of the catalog, 2 when it carries a <c>cache</c> or <c>checks</c> section; a publish is refused while a live instance of the group cannot read it.</param>
+    public PublishedVersion Publish(string name, string catalogText, string? managedBy, string? publishedBy, Dictionary<string, string> sources, Dictionary<string, string> ssas, DateTimeOffset at, int format = 1)
     {
         var content = JsonSerializer.Serialize(new Content(catalogText, managedBy, sources, ssas), Json);
         // what the model reads, so a dependency check needs no change of format later (plan 21)
         var dependsOn = sources.Values.Distinct(StringComparer.OrdinalIgnoreCase).Select(s => "data-source/" + s).ToList();
-        return Meta(store.Publish(DefinitionKind, Key(name), content, publishedBy ?? "management", dependsOn));
+        return Meta(store.Publish(DefinitionKind, Key(name), content, publishedBy ?? "management", dependsOn, format: format));
     }
 
     /// <summary>Makes an earlier version the one the group serves again.</summary>

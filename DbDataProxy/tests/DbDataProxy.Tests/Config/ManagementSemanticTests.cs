@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using DbDataKit.Semantic;
+using DbDataKit.State;
 using DbDataKit.Serving.Semantic;
 using DbDataKit.Web.Trust;
 using Microsoft.Extensions.DependencyInjection;
@@ -64,6 +65,52 @@ public sealed partial class ManagementTests
 
         // it is the group's: kept in the state, which every instance (and this one after a restart) serves from
         Assert.Equal(1, app.Services.GetRequiredService<DbDataProxy.Server.Serving.PublishedSemanticModels>().Current("sales_catalog"));
+    }
+
+    [Fact]
+    public async Task A_catalog_with_a_cache_section_is_published_in_format_2_and_refused_while_a_live_instance_reads_only_format_1()
+    {
+        // plan 24a UC03 and UC01: the format of the package is 2 only when the catalog uses a section of it; the group never holds a version one of its instances cannot serve
+        await StartAsync();
+        var publisher = await PairPublisherAsync(build1);
+        await CallAsAsync(build1, publisher, HttpMethod.Put, "/api/v1/data-sources/sales-ro", ServerRole.Publisher, Put(SalesData("sales-ro"), null));
+        var store = app.Services.GetRequiredService<DbDataKit.State.DefinitionStore>();
+        var withCache = CatalogText.TrimEnd() + "\ncache:\n  enabled: true\n  ttl: 10m\n";
+
+        var plain = await CallAsAsync(build1, publisher, HttpMethod.Put, "/api/v1/semantic-models/sales_catalog", ServerRole.Publisher, Publish(CatalogText, "sales-ro"));
+        Assert.Equal(HttpStatusCode.OK, plain.StatusCode);
+        Assert.Equal(1, store.Current("semantic-model", "sales_catalog")!.Format);
+
+        // an instance of the group that reads format 1 only (an older release), live: the publish is refused naming it, and the model stays as it was
+        var state = app.Services.GetRequiredService<DbDataKit.State.StateDatabase>();
+        using (var connection = state.OpenConnection())
+        {
+            using var insert = state.Command("serving", connection, "INSERT INTO {table:serving_instance} (instance_key, host, process_id, started_at, heartbeat_at, software_version, module_versions, definition_formats) VALUES ($key, $host, $pid, $at, $at, $software, $modules, $formats);");
+            insert.Bind(state, "key", "older-instance").Bind(state, "host", "other-host").Bind(state, "pid", 7).Bind(state, "at", DateTimeOffset.UtcNow)
+                .Bind(state, "software", "2026.9.1.0900").Bind(state, "modules", "serving=4").Bind(state, "formats", "semantic-model=1-1");
+            insert.ExecuteNonQuery();
+        }
+
+        var refused = await CallAsAsync(build1, publisher, HttpMethod.Put, "/api/v1/semantic-models/sales_catalog", ServerRole.Publisher, Publish(withCache, "sales-ro", expected: 1));
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        var message = (string)(await BodyAsync(refused))["error"]!;
+        Assert.Contains("older-instance", message);
+        Assert.Contains("other-host", message);
+        Assert.Contains("2026.9.1.0900", message);
+        Assert.Contains("format 2", message);
+        Assert.Equal(1, store.Current("semantic-model", "sales_catalog")!.Version);
+
+        // the instance is upgraded (it reads 1 to 2 now): the same publish goes through, in format 2, and the catalog's cache section is what the instance serves
+        using (var connection = state.OpenConnection())
+        {
+            using var update = state.Command("serving", connection, "UPDATE {table:serving_instance} SET definition_formats = $formats WHERE instance_key = 'older-instance';");
+            update.Bind(state, "formats", "semantic-model=1-2").ExecuteNonQuery();
+        }
+
+        var accepted = await CallAsAsync(build1, publisher, HttpMethod.Put, "/api/v1/semantic-models/sales_catalog", ServerRole.Publisher, Publish(withCache, "sales-ro", expected: 1));
+        Assert.True(accepted.StatusCode == HttpStatusCode.OK, await accepted.Content.ReadAsStringAsync());
+        Assert.Equal((2, 2), (store.Current("semantic-model", "sales_catalog")!.Version, store.Current("semantic-model", "sales_catalog")!.Format));
+        Assert.True(app.Services.GetRequiredService<SemanticModels>().Find("sales_catalog") is not null);
     }
 
     [Fact]

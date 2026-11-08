@@ -165,6 +165,14 @@ public static partial class CatalogLoader
             doc.Timezone = zone;
             if (!TimeZones.IsValid(zone)) errors.Add(Err("unknown_timezone", "$.timezone", $"{zone} isn't a time zone; use an IANA name such as America/Chicago or UTC."));
         }
+        // format 2 (24a UC03): the cache setting's values are checked as the shared section checks them, and its dataset is a table of the catalog
+        if (root["cache"] is JsonObject cache)
+        {
+            if (cache["ttl"]?.GetValue<string>() is { } ttl && !CacheSection.TryParseTtl(ttl, out _, out var ttlProblem))
+                errors.Add(Err("invalid_cache", "$.cache.ttl", ttlProblem!.Replace("`ttl`", "cache.ttl", StringComparison.Ordinal)));
+            if (cache["dataset"]?.GetValue<string>() is { } dataset && root["tables"]!.AsArray().All(t => t!["name"]?.GetValue<string>() != dataset))
+                errors.Add(Err("unknown_cache_dataset", "$.cache.dataset", $"cache.dataset is {dataset}, which isn't a table of the catalog."));
+        }
         var sources = root["sources"]!.AsObject();
         foreach (var (sourceId, sourceNode) in sources)
             if (sourceNode!["datetime_zone"]?.GetValue<string>() is { } storedIn && !TimeZones.IsValid(storedIn))

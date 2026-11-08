@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using DbDataKit.Config.Git;
+using DbDataKit.State;
 using DbDataKit.Web.Trust;
 using DbDataProxy.Server.Auth;
 using DbDataProxy.Server.Data;
@@ -143,11 +144,21 @@ public sealed partial class ProxyDataSources(
         {
             // the group's: in the state, served here at once and by every other instance when it next looks (plan 20 O04b)
             var was = published!.Text(name);
-            var grouped = await _guard.RunAsync(name, request.ExpectedVersion, () => Task.FromResult(published.Text(name) is { } now ? VersionOf(now) : null), () =>
+            WriteResult<string> grouped;
+            try
             {
-                published.Publish(name, text, Who(caller));
-                return Task.FromResult(VersionOf(text));
-            }, cancellationToken);
+                grouped = await _guard.RunAsync(name, request.ExpectedVersion, () => Task.FromResult(published.Text(name) is { } now ? VersionOf(now) : null), () =>
+                {
+                    published.Publish(name, text, Who(caller));
+                    return Task.FromResult(VersionOf(text));
+                }, cancellationToken);
+            }
+            catch (PublishRefusedException groupRefused)
+            {
+                // the group cannot take this format (24a UC01): a live instance of it does not read it; the message names the instance
+                Record(caller, "data-source write", name, "refused");
+                return new ManagementResult(409, new JsonObject { ["error"] = groupRefused.Message });
+            }
             if (!grouped.Applied)
             {
                 Record(caller, "data-source write", name, "stale");
