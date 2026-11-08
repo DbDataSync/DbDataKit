@@ -1,8 +1,8 @@
-import { useMemo, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { DashboardView, type ClientDiagnostic, type ViewKind, type ViewsDoc } from '@dbdatakit/visuals'
-import { describeValue, readLayout, readParameters, writeLayout, writeParameters } from '../viewsUrl'
+import { DashboardView, checkDrill, type ClientDiagnostic, type ResolvedDrill, type ViewKind, type ViewsDoc } from '@dbdatakit/visuals'
+import { crumbAddress, describeValue, drillAddress, readKiosk, readLayout, readParameters, readTrail, writeKiosk, writeLayout, writeParameters } from '../viewsUrl'
 import { resolveLog, viewsClient } from '../viewsSource'
 import { DashboardEditor } from './DashboardEditor'
 
@@ -97,8 +97,33 @@ function Listing({ kind }: { kind: ViewKind }) {
   )
 }
 
+/** The board with no chrome of the console (`?mode=kiosk`): the whole window, and in a corner the way out (Escape too) and the way back where a drill came from. */
+function KioskFrame({ children, search, setSearch }: { children: ReactNode; search: URLSearchParams; setSearch: (next: URLSearchParams) => void }) {
+  const navigate = useNavigate()
+  const trail = readTrail(search)
+  const exit = () => setSearch(writeKiosk(search, false))
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') exit() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+  return (
+    <div className="vz-kiosk" data-testid="views-kiosk-page">
+      {children}
+      <div className="vz-kiosk-controls">
+        {trail.length > 0 && <button type="button" className="btn btn-sm" data-testid="views-kiosk-back" onClick={() => navigate(crumbAddress(trail, trail.length - 1))}>Back</button>}
+        <button type="button" className="btn btn-sm" data-testid="views-kiosk-exit" onClick={exit}>Exit kiosk</button>
+      </div>
+    </div>
+  )
+}
+
 function Board({ kind, name, document }: { kind: ViewKind; name: string; document: ViewsDoc }) {
   const [search, setSearch] = useSearchParams()
+  const navigate = useNavigate()
+  const kiosk = readKiosk(search)
+  const trail = readTrail(search)
+  const [drillNotice, setDrillNotice] = useState<string | null>(null)
   const { layout, unknown } = readLayout(search, document.layouts)
   const searchKey = search.toString()
   // the values are the address's: the same address is the same values, which is what the view resolves by
@@ -109,12 +134,61 @@ function Board({ kind, name, document }: { kind: ViewKind; name: string; documen
   const last = log[log.length - 1]
   const atDefaults = JSON.stringify(parameters) === JSON.stringify(defaults)
 
+  /** A drill: the target is opened (its own parameters are the ones the drill is checked against), and the address that carries the values and the way back is gone to. */
+  const drill = async (d: ResolvedDrill) => {
+    setDrillNotice(null)
+    if (d.kind === 'view') { setDrillNotice(`The drill goes to the view \`${d.name}\`; views are opened from the Rendered views tab, which a drill does not reach yet.`); return }
+    let target
+    try {
+      target = await viewsClient().open(d.kind, d.name)
+    } catch (e) {
+      setDrillNotice(`The drill goes to the ${d.kind} \`${d.name}\`, which could not be opened: ${e instanceof Error ? e.message : String(e)}`)
+      return
+    }
+    if (!target.document) { setDrillNotice(`The drill goes to the ${d.kind} \`${d.name}\`, which has errors and is not shown.`); return }
+    const checked = checkDrill(d, target.document.parameters)
+    if (!checked.ok) { setDrillNotice(checked.message); return }
+    navigate(drillAddress({ drill: { kind: d.kind, name: d.name, parameters: d.parameters }, targetParameters: target.document.parameters, here: { kind, name, search } }))
+  }
+  const view = (
+    <DashboardView
+      kind={kind}
+      name={name}
+      document={document}
+      client={viewsClient()}
+      layout={layout ?? undefined}
+      theme="auto"
+      kiosk={kiosk}
+      parameters={parameters}
+      onParameterChange={(parameter, value) => setSearch(writeParameters(search, document.parameters, { ...parameters, [parameter]: value }), { replace: true })}
+      onSelect={(selection) => setShown(selection.layout.name)}
+      onDrill={(d) => void drill(d)}
+    />
+  )
+  if (kiosk)
+    return (
+      <KioskFrame search={search} setSearch={(next) => setSearch(next, { replace: true })}>
+        <div className="vz-kiosk-stage" data-testid="views-stage">{view}</div>
+        {drillNotice && <p className="vz-interaction-notice" role="alert" data-testid="views-drill-refused">{drillNotice}</p>}
+      </KioskFrame>
+    )
+
   return (
     <>
+      {trail.length > 0 && (
+        <nav className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }} aria-label="Where this drill came from" data-testid="views-trail">
+          <button type="button" className="btn btn-sm" data-testid="views-trail-back" onClick={() => navigate(crumbAddress(trail, trail.length - 1))}>Back</button>
+          {trail.map((c, i) => (
+            <span key={i}><Link to={crumbAddress(trail, i)} data-testid={`views-trail-${i}`}>{c.name}</Link> / </span>
+          ))}
+          <strong data-testid="views-trail-here">{document.title}</strong>
+        </nav>
+      )}
       <div className="row" style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap' }} data-testid="views-toolbar">
         <Link to={AREA[kind].path} data-testid="views-back">All {AREA[kind].plural.toLowerCase()}</Link>
         <strong data-testid="views-title">{document.title}</strong>
         <Link to="?edit=1" className="btn btn-sm" data-testid="views-edit">Edit</Link>
+        <button type="button" className="btn btn-sm" data-testid="views-kiosk" title="Show this board alone, filling the window" onClick={() => setSearch(writeKiosk(search, true))}>Kiosk</button>
         <label htmlFor="views-layout-select">Layout</label>
         <select id="views-layout-select" data-testid="views-layout-select" value={layout ?? ''} onChange={(e) => setSearch(writeLayout(search, e.target.value === '' ? null : e.target.value), { replace: true })}>
           <option value="">Automatic (by window size)</option>
@@ -131,22 +205,11 @@ function Board({ kind, name, document }: { kind: ViewKind; name: string; documen
           {last ? `Last request: ${last.widgets.length} widget${last.widgets.length === 1 ? '' : 's'} (${last.widgets.join(', ')})` : 'Nothing requested yet'}
         </span>
       </div>
+      {drillNotice && <div className="empty" data-testid="views-drill-refused" role="alert">{drillNotice} <button type="button" className="btn btn-sm" onClick={() => setDrillNotice(null)}>Dismiss</button></div>}
       {unknown && <div className="empty" data-testid="views-layout-unknown" role="note">This {kind} has no layout named `{unknown}`; the window decides instead. Its layouts: {document.layouts.map((l) => l.name).join(', ')}.</div>}
       {/* the stage fills what the page has left: the view follows its size, so the document never scrolls */}
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }} data-testid="views-stage">
-        <div style={{ position: 'absolute', inset: 0 }}>
-          <DashboardView
-            kind={kind}
-            name={name}
-            document={document}
-            client={viewsClient()}
-            layout={layout ?? undefined}
-            theme="auto"
-            parameters={parameters}
-            onParameterChange={(parameter, value) => setSearch(writeParameters(search, document.parameters, { ...parameters, [parameter]: value }), { replace: true })}
-            onSelect={(selection) => setShown(selection.layout.name)}
-          />
-        </div>
+        <div style={{ position: 'absolute', inset: 0 }}>{view}</div>
       </div>
     </>
   )
@@ -154,23 +217,26 @@ function Board({ kind, name, document }: { kind: ViewKind; name: string; documen
 
 function Opened({ kind, name }: { kind: ViewKind; name: string }) {
   const area = AREA[kind]
+  const [search, setSearch] = useSearchParams()
+  // in kiosk the page has no chrome, so what is not the board (opening, an error) still has the way out
+  const wrap = (node: ReactNode) => (readKiosk(search) ? <KioskFrame search={search} setSearch={(next) => setSearch(next, { replace: true })}>{node}</KioskFrame> : node)
   const opened = useQuery({ queryKey: ['views', 'open', kind, name], queryFn: () => viewsClient().open(kind, name), retry: false })
-  if (opened.isPending) return <div className="empty" data-testid="views-loading" role="status">Opening {name}…</div>
+  if (opened.isPending) return wrap(<div className="empty" data-testid="views-loading" role="status">Opening {name}…</div>)
   if (opened.isError) {
-    return (
+    return wrap(
       <div className="empty" data-testid="views-error" role="alert">
         {opened.error instanceof Error ? opened.error.message : String(opened.error)} <Link to={area.path}>All {area.plural.toLowerCase()}</Link>
-      </div>
+      </div>,
     )
   }
   const { document, diagnostics } = opened.data
   if (!document) {
-    return (
+    return wrap(
       <div className="empty" data-testid="views-refused" role="alert">
         <strong>The {area.singular} {name} is not shown: it has errors.</strong>
         <Problems diagnostics={diagnostics} />
         <Link to={area.path}>All {area.plural.toLowerCase()}</Link>
-      </div>
+      </div>,
     )
   }
   return <Board key={name} kind={kind} name={name} document={document} />

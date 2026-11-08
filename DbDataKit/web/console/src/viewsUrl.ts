@@ -1,5 +1,4 @@
-import type { ParameterDefinition, ParameterValue, ParameterValues } from '@dbdatakit/visuals'
-
+import type { ParameterDefinition, ParameterValue, ParameterValues, ViewKind } from '@dbdatakit/visuals'
 /**
  * The address of an open board (plan 32 DBR23): the layout the person picked is `?layout=name` (absent: the one the window size selects), and each parameter that differs from its default is
  * `p.<name>=value` (a list: the key repeated). Reading and writing are pure, so the page logic is tested without a browser.
@@ -75,4 +74,94 @@ export function readLayout(search: URLSearchParams, layouts: Array<{ name: strin
 export function describeValue(value: ParameterValue | undefined): string {
   if (value === null || value === undefined || (Array.isArray(value) && value.length === 0)) return 'none chosen'
   return Array.isArray(value) ? value.join(', ') : String(value)
+}
+
+// ---- kiosk, drill and the way back (plan 32 DBR08) ----
+
+export const MODE_KEY = 'mode'
+export const TRAIL_KEY = 'trail'
+
+/** `?mode=kiosk`: the board without the console's chrome. Any other value is the ordinary page. */
+export function readKiosk(search: URLSearchParams): boolean {
+  return search.get(MODE_KEY) === 'kiosk'
+}
+
+/** The address with kiosk mode on or off (off removes the key); everything else is kept. */
+export function writeKiosk(search: URLSearchParams, on: boolean): URLSearchParams {
+  const next = new URLSearchParams(search)
+  if (on) next.set(MODE_KEY, 'kiosk')
+  else next.delete(MODE_KEY)
+  return next
+}
+
+/** Where a board is in the console. */
+export function viewPath(kind: ViewKind, name: string): string {
+  return `/views/${kind === 'dashboard' ? 'dashboards' : 'reports'}/${encodeURIComponent(name)}`
+}
+
+/** One step of the way back: a board and the address state (layout, parameters, mode) it was left in. */
+export interface Crumb { kind: ViewKind; name: string; search: string }
+
+const encodeCrumb = (c: Crumb) => `${c.kind}/${encodeURIComponent(c.name)}?${c.search}`
+function decodeCrumb(text: string): Crumb | null {
+  const m = /^(dashboard|report)\/([^?]+)\?(.*)$/.exec(text)
+  if (!m) return null
+  try {
+    return { kind: m[1] as ViewKind, name: decodeURIComponent(m[2]!), search: m[3]! }
+  } catch {
+    return null
+  }
+}
+
+/** The boards a drill came through, oldest first (the repeated `trail` key). An entry that is not one is left out. */
+export function readTrail(search: URLSearchParams): Crumb[] {
+  return search.getAll(TRAIL_KEY).map(decodeCrumb).filter((c): c is Crumb => c !== null)
+}
+
+/** The address with the trail written (an empty trail removes the key). */
+export function writeTrail(search: URLSearchParams, trail: Crumb[]): URLSearchParams {
+  const next = new URLSearchParams()
+  for (const [k, v] of search) if (k !== TRAIL_KEY) next.append(k, v)
+  for (const c of trail) next.append(TRAIL_KEY, encodeCrumb(c))
+  return next
+}
+
+/** The address state of a board without its trail: what a crumb remembers. */
+export function withoutTrail(search: URLSearchParams): URLSearchParams {
+  return writeTrail(search, [])
+}
+
+/** The address of the board a crumb stands for, with the trail up to it (what is before it): going back is this address. */
+export function crumbAddress(trail: Crumb[], index: number): string {
+  const c = trail[index]!
+  const search = writeTrail(new URLSearchParams(c.search), trail.slice(0, index)).toString()
+  return `${viewPath(c.kind, c.name)}${search ? `?${search}` : ''}`
+}
+
+/**
+ * The address a drill goes to: the target board with the parameters it gives (written as the target's own `p.<name>`, each read as the target's type: a value that is not one is left to the default), the
+ * mode kept (a drill in kiosk stays in kiosk), and the trail grown by the board it leaves, in the state it leaves it (`here`).
+ */
+export function drillAddress(args: {
+  drill: { kind: ViewKind; name: string; parameters: Record<string, ParameterValue> }
+  targetParameters: ParameterDefinition[] | undefined
+  here: { kind: ViewKind; name: string; search: URLSearchParams }
+}): string {
+  const { drill, targetParameters, here } = args
+  const given: ParameterValues = readParameters(new URLSearchParams(), targetParameters)
+  for (const d of targetParameters ?? []) {
+    const v = drill.parameters[d.name]
+    if (v === undefined || v === null) continue
+    // through the address's own reader, so a value is accepted exactly as it would be typed into a link
+    const raw = Array.isArray(v) ? v : [v]
+    const probe = new URLSearchParams()
+    for (const r of raw) probe.append(PARAMETER_PREFIX + d.name, String(r))
+    if (raw.length === 0) probe.append(PARAMETER_PREFIX + d.name, '')
+    given[d.name] = readParameters(probe, [d])[d.name]!
+  }
+  let search = writeParameters(new URLSearchParams(), targetParameters, given)
+  if (readKiosk(here.search)) search = writeKiosk(search, true)
+  const trail = [...readTrail(here.search), { kind: here.kind, name: here.name, search: withoutTrail(here.search).toString() }]
+  const text = writeTrail(search, trail).toString()
+  return `${viewPath(drill.kind, drill.name)}${text ? `?${text}` : ''}`
 }

@@ -2,6 +2,7 @@ import type { Theme } from '../theme'
 import type { Box, LayoutDoc, ParameterDefinition, ParameterValue, ParameterValues, ViewsDoc } from '../views/model'
 import type { RenderedWidget } from '../views/rendered'
 import { WidgetView } from '../widgets/WidgetView'
+import type { Hit, HitHow } from './interaction'
 
 /** What every layout engine's frame needs to draw one widget: shared by `DashboardFrame` and `CanvasFrame`, so a tile is the same in both. */
 export interface TileContext {
@@ -13,6 +14,13 @@ export interface TileContext {
   parameters?: ParameterValues
   onParameterChange?: (parameter: string, value: ParameterValue) => void
   onMaximize?: (widget: string | null) => void
+  /** A widget was pointed at (cross-filter, drill): which widget, what, how. */
+  onHit?: (widget: string, hit: Hit, how: HitHow) => void
+  /** When each widget's rows were read (hh:mm) and whether the last refresh failed; given only where the document refreshes. */
+  asOf?: Record<string, string>
+  stale?: boolean
+  /** The host follows a `drill` (default yes). */
+  canDrill?: boolean
 }
 
 export function tileView(c: TileContext, id: string, box: Box, isMaximized: boolean) {
@@ -32,6 +40,10 @@ export function tileView(c: TileContext, id: string, box: Box, isMaximized: bool
       onParameterChange={c.onParameterChange}
       maximized={isMaximized}
       onMaximize={c.onMaximize ? () => c.onMaximize!(isMaximized ? null : id) : undefined}
+      onHit={c.onHit ? (hit, how) => c.onHit!(id, hit, how) : undefined}
+      asOf={c.asOf?.[id]}
+      stale={c.stale}
+      canDrill={c.canDrill}
     />
   )
 }

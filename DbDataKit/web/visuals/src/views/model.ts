@@ -64,6 +64,8 @@ export interface ViewsDoc {
   widgets: Record<string, WidgetDoc>
   layouts: LayoutDoc[]
   refresh?: { every: string }
+  /** The layout `?mode=kiosk` shows (a wall layout, usually); `?layout=` still wins. */
+  kiosk?: { layout: string }
   [key: string]: unknown
 }
 

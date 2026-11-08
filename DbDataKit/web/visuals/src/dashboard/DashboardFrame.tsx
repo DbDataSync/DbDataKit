@@ -3,7 +3,7 @@ import type { Theme } from '../theme'
 import type { Box, LayoutDoc, ParameterValue, ParameterValues, ViewsDoc } from '../views/model'
 import type { RenderedWidget } from '../views/rendered'
 import { CanvasFrame } from './CanvasFrame'
-import { tileView } from './tile'
+import { tileView, type TileContext } from './tile'
 import { TILE_GUTTER, layoutReflow, type ReflowResult } from './reflow'
 
 export interface DashboardFrameProps {
@@ -23,6 +23,11 @@ export interface DashboardFrameProps {
   onMaximize?: (widget: string | null) => void
   /** Precomputed reflow layout of this layout and box (reflow only). */
   placed?: ReflowResult
+  /** Pointing at a widget (cross-filter, drill) and the freshness shown in each tile: see `TileContext`. */
+  onHit?: TileContext['onHit']
+  asOf?: TileContext['asOf']
+  stale?: boolean
+  canDrill?: boolean
 }
 
 /**
@@ -30,13 +35,13 @@ export interface DashboardFrameProps {
  * scroll**; a tile below its minimum puts the whole layout on the **compact stack** (one column, minimum heights, the page scrolls: the only scrolling a reflow dashboard does). A table or matrix that does
  * not fit its tile says "12 of 40 rows" and can be **maximized** to the whole container, where it scrolls. No state and no effects: the box and the results are given, so a test draws any size.
  */
-export function DashboardFrame({ document, layout, box, theme, results, loading, parameters = {}, onParameterChange, maximized = null, onMaximize, placed }: DashboardFrameProps) {
+export function DashboardFrame({ document, layout, box, theme, results, loading, parameters = {}, onParameterChange, maximized = null, onMaximize, placed, onHit, asOf, stale, canDrill }: DashboardFrameProps) {
   const root = (mode: string, children: ReactNode) => (
     <div className="vz vz-dashboard" data-vz-theme={theme} data-testid="vz-dashboard" data-layout={layout.name} data-layout-type={layout.type} data-mode={mode} style={{ width: box.width, height: box.height }}>
       {children}
     </div>
   )
-  const context = { document, layout, theme, results, loading, parameters, onParameterChange, onMaximize }
+  const context = { document, layout, theme, results, loading, parameters, onParameterChange, onMaximize, onHit, asOf, stale, canDrill }
   if (layout.type === 'canvas') return <CanvasFrame {...context} layout={layout} box={box} maximized={maximized} />
   if (layout.type !== 'reflow')
     return root('none', <p className="vz-state vz-dashboard-notice" role="note" data-testid="vz-engine-missing">{`The layout \`${layout.name}\` is a ${layout.type} layout, which this view does not draw yet.`}</p>)

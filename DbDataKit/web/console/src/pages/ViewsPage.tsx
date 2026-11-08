@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { SubTabs, type SubTab } from '@dbdatakit/shell'
 import { RenderedViews, validateViewDocument, type ThemeChoice } from '@dbdatakit/visuals'
 import { ConsoleShell } from '../ConsoleShell'
+import { readKiosk } from '../viewsUrl'
 import { DashboardsPanel } from './DashboardsPanel'
 
 type Opened =
@@ -93,6 +95,10 @@ const NOTES = {
  * nothing here draws or checks anything of its own.
  */
 export function ViewsPage({ area = 'rendered' }: { area?: 'rendered' | 'dashboards' | 'reports' }) {
+  const { name } = useParams()
+  const [search] = useSearchParams()
+  // `?mode=kiosk` on an opened dashboard: the board alone, with none of the console's chrome (plan 32 DBR08)
+  if (area === 'dashboards' && name && readKiosk(search) && !search.get('edit')) return <DashboardsPanel kind="dashboard" />
   return (
     <ConsoleShell crumbs={[{ label: 'Views', heading: true }]}>
       <div className="pane" data-testid="views-page" data-area={area}>
