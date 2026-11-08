@@ -1,0 +1,45 @@
+{
+  "about": "The format registry of plan 24a UC02: every definition and file format with a version the code declares. scripts/check_formats.py fails when the code declares another version than 'current' (a bump without an entry) and when a file of a frozen format changed (sha256). An open format records no hashes. 'Published definition' (definition_version.format, per kind) and the management API / compatibility generation of the 24a table are not file formats with a schema and are not listed.",
+  "formats": [
+    {
+      "id": "model",
+      "title": "DbDataStore entity model (schemaVersion)",
+      "current": 2,
+      "previous": 1,
+      "status": "open",
+      "note": "gains cache and checks; open until the first release that holds either (24a D5)",
+      "version_source": { "file": "DbDataKit/src/DbDataKit.DataModel/DataModelLoader.cs", "pattern": "public const int Version = (\\d+);" },
+      "files": [ { "path": "DbDataKit/src/DbDataKit.DataModel/DataModelLoader.cs", "sha256": null } ]
+    },
+    {
+      "id": "connection",
+      "title": "Serving data source (a connection file, schema: connection/N)",
+      "current": 2,
+      "previous": 1,
+      "status": "open",
+      "note": "gains cache and checks; open until the first release that holds either (24a D5)",
+      "version_source": { "file": "DbDataKit/src/DbDataKit.Connections.Abstractions/ConnectionDefinition.cs", "pattern": "public const int CurrentVersion = (\\d+);" },
+      "files": [ { "path": "DbDataKit/src/DbDataKit.Connections.Abstractions/ConnectionDefinitionLoader.cs", "sha256": null } ]
+    },
+    {
+      "id": "semantic-package",
+      "title": "Semantic package (the catalog, format of the semantic-model definition)",
+      "current": 2,
+      "previous": 1,
+      "status": "open",
+      "note": "gains cache and checks; open until the first release that holds either (24a D5)",
+      "version_source": { "file": "DbDataKit/src/DbDataKit.Semantic/Catalog.cs", "pattern": "Source\\[\"checks\"\\] is not null \\? (\\d+) : 1;" },
+      "files": [ { "path": "DbDataKit/src/DbDataKit.Semantic/schemas/catalog.schema.json", "sha256": null } ]
+    },
+    {
+      "id": "package",
+      "title": "Runner package manifest (schema: package/N)",
+      "current": 1,
+      "previous": 1,
+      "status": "frozen",
+      "note": "frozen by its release; the strict reader is its definition",
+      "version_source": { "file": "DbDataKit/src/DbDataKit.Runner.Abstractions/PackageManifest.cs", "pattern": "public const int FormatVersion = (\\d+);" },
+      "files": [ { "path": "DbDataKit/src/DbDataKit.Runner.Abstractions/PackageManifestReader.cs", "sha256": "8b3716b715005e42c8dc0d62953c5f5db4136e262941f46501c34fc0a4ce1b3f" } ]
+    }
+  ]
+}
