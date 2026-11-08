@@ -64,3 +64,40 @@ export interface FailureRow { at: string; data_source: string; kind: string; cod
 export interface NotificationRow { id: number; kind: string; created: string; message: string }
 export interface CommitRow { sha: string; message: string; author: string; email: string; when: string }
 export interface CommitDiff { sha: string; message: string; truncated: boolean; changes: { path: string; kind: string; before: string | null; after: string | null }[] }
+
+// ---- Apps (plan 26, AP24): what the Proxy's /api/v1/apps, /app-instances, /app-navigation and /app-approvals answer ----
+
+/** What the caller may do, as the Proxy decided it from their roles on this server; the screen only explains it (the Proxy enforces it on every call). */
+export interface AppsCaller { can_publish: boolean; can_approve: boolean; you: string }
+export interface AppSummary {
+  name: string; version: number; versions: number[]; title: string | null; manifest_version: string | null; description: string | null
+  kind: 'app' | 'portal' | null; trust: 'sandbox' | 'trusted' | null; published_by: string; published_at: string; instances: string[]
+}
+export interface AppAccess { model: string; entity: string; operations: string }
+export interface AppEgressRow { directive: string; origins: string[] }
+/** The "about" data of a version (AP18): what its manifest declares it can reach, who published it and which approval stands for these bytes. */
+export interface AppAbout {
+  title: string | null; description: string | null; kind: string; trust: 'sandbox' | 'trusted'; roles: string[]; models: AppAccess[]; semantic_models: string[]; egress: AppEgressRow[]
+  storage: { user: boolean; instance: boolean; quota_mb: number } | null; published_by: string; published_at: string
+  approval: { id: string; approved_by: string; approved_at: string; note: string | null } | null
+}
+export interface AppVersionRow {
+  version: number; manifest_version: string | null; trust: 'sandbox' | 'trusted' | null; published_by: string; published_at: string; note: string | null
+  serving: boolean; hash: string; approval_id: string | null; files: number; about: AppAbout | null
+}
+export interface AppDetail { name: string; serving: number | null; versions: AppVersionRow[]; caller: AppsCaller }
+export interface AppInstanceRow {
+  name: string; app: string; title: string | null; pin: number | null; follows: boolean; instance_version: number; published_by: string; published_at: string
+  path: string; address: string | null; bindings: Record<string, string>; navigation: string[]; mounted_by: string[]
+  /** The version of the app the instance runs, and what the app serves now; absent when the instance's app is gone (then `problem` says so). */
+  app_version?: number; serving_version?: number | null; manifest_version?: string; kind?: 'app' | 'portal'; trust?: 'sandbox' | 'trusted'
+  runs_as_asked?: boolean; approval_id?: string | null; mounts?: { instance: string; path: string }[]; problem?: string
+}
+export interface AppInstances { instances: AppInstanceRow[]; apps_address: string | null; caller: AppsCaller }
+export interface NavigationSetRow { name: string; title: string; entries: { instance: string; label: string | null; icon: string | null }[] }
+export interface AppApprovalRow {
+  id: string; app: string; version: string; hash: string; approved_by: string; approved_at: string; note: string | null; published_version: number | null; revoked: boolean; revoked_at: string | null
+  operations: AppAccess[]; egress: AppEgressRow[]
+}
+export interface AppApprovals { approvals: AppApprovalRow[]; caller: AppsCaller }
+export interface AppsList { apps: AppSummary[]; caller: AppsCaller }

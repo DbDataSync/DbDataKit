@@ -2,7 +2,7 @@
 
 A matrix of service, object and action: what a person can do from the console's screens today, and what is only an API or a command line. Keep it current in the same change that adds, removes or widens a screen (`scripts/check_ui_coverage.py` fails when a page file is missing from the **Screens** column, or a file named there is gone).
 
-Read as of 2026-11-02 (updated after Z07, O01, O03 and AP04), from the routes and API clients of `DbDataKit/web/*`, not by clicking through every screen. A cell is **Yes**, **Partial** (say what is missing under Notes), or **–** (no screen). **Other actions** are the verbs that are not create, edit or delete.
+Read as of 2026-11-08 (updated after Z07, O01, O03, AP04 and AP24), from the routes and API clients of `DbDataKit/web/*`, not by clicking through every screen. A cell is **Yes**, **Partial** (say what is missing under Notes), or **–** (no screen). **Other actions** are the verbs that are not create, edit or delete.
 
 All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<server>/...`; the products have no web app of their own. Roles gate each action (Viewer, Operator, Author, Approver, Admin); the table says what exists, not who may.
 
@@ -24,6 +24,7 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 | | Drivers, libraries, files, certificate, updates, configuration | Yes | Yes | Yes | Admin screens | `DriversPage.tsx`, `DriverEditPage.tsx`, `LibrariesPage.tsx`, `FilesPage.tsx`, `AdminCertificatePage.tsx`, `AdminUpdatesPage.tsx`, `AdminConfigPage.tsx` |
 | **Proxy** | Data sources | Yes | Yes | Yes | Test, adopt (hand to a paired server) | `DataSourcesPage.tsx` |
 | | Users, JWT mappings, pass-through | Yes | Yes | Yes | – | `IdentitiesPage.tsx` |
+| | Apps: instances, apps and versions, navigation sets, approvals | – (made at the command line: `apps publish`, `instance-save`, `nav-save`) | Pin or follow a version | Remove an instance or an app (the store's rules; a refusal is shown) | Serve an older version (roll back), approve a trusted version, revoke an approval, see a version's data access (models, outside addresses, publisher, approval), open an instance's address | `AppsPage.tsx` |
 | | Certificate | – | – | – | Renew | `TlsPage.tsx` |
 | | Sessions, queries, lockouts | – | – | – | End a session, cancel a query, lift a lockout | `ActivityPage.tsx` |
 | | Configuration history | – | – | – | View and diff commits | `ConfigPage.tsx` |
