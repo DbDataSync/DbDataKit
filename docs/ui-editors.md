@@ -8,7 +8,7 @@ Read as of 2026-11-08 from the code of `DbDataKit/web/*`, `DbDataGateway/src/DbD
 
 **The rule.** A stored format registered in `docs/formats.json` must have a row here with a state. `scripts/check_ui_editors.py` fails, naming the format, when one has none, when a row names a format that is not registered, a `UEnn` that is not in plan 33, a screen file that does not exist, or a `Counts:` line that is wrong. A format that needs no editor gets the row and `none (reason)`.
 
-Counts: full 19, partial 10, view-only 1, none 9, planned 7.
+Counts: full 20, partial 9, view-only 1, none 9, planned 7.
 
 The table is sorted by what blocks "ready to test soon" (apps, dashboards, reports, quality, runner scheduling), then the other gaps, then the planned, then what is complete. The Format column is the id in `docs/formats.json`; `-` means the thing is not in the registry (see "Not in the registry" below).
 
@@ -38,7 +38,7 @@ The table is sorted by what blocks "ready to test soon" (apps, dashboards, repor
 | Identity attribute mapping (a directory claim or group gives an attribute value) | `identity` verbs; `POST /attribute-mappings` of the identity home | - | none: Gateway `IdentityAdminPage.tsx` edits group mappings to roles (`identity-mapping-add`), not attributes | none | Route exists. UE15 |
 | Gateway secrets (a data source's password reference) | `secret set`; `PUT /api/v1/secrets/{name}` | - | none | none | List, set, delete have routes and no screen. UE16 |
 | Gateway serving settings (`server.yaml`: modules, `views.export`, cache) | the file in the configuration repository | - | Gateway `ConfigPage.tsx` shows history and diffs (`commits-table`); `OverviewPage.tsx` shows state | none (settings are files; the screen is history only) | `GET /api/v1/config` and `POST /api/v1/config/validate` exist; no route writes `server.yaml`. UE17 |
-| Build refresh run and the project's tests | `connection refresh`, `project tests run` | - | Build `DeployTabs.tsx` shows refresh plans, their last run and health (`build-status-*`); Console Monitoring runs a scheduled plan | partial | No button runs a refresh plan or the tests (both are callable through the project command route). UE09 |
+| Build refresh run and the project's tests | `connection refresh`, `project tests run` | - | Build `RefreshPanel.tsx` on the Plans tab (`build-refresh-plan`, `build-refresh-selectors`, `build-refresh-dry-run`, `build-refresh-run`, `build-refresh-checks`) runs a refresh plan or chosen members, a dry run first, and shows each load and the checks evaluated afterwards (`data.checks`); `TestsPanel.tsx` on the Check tab runs the project's tests (`build-tests-button`); Console Monitoring runs a scheduled plan | full | Built in UE09. The answer arrives when the run ends (one request, no stream); the role is the operator's and the run is in the server's audit log. Story `refresh-run.spec.ts` needs the test PostgreSQL |
 | Alerts, delivery channels (email, Teams, Slack, webhook) and subscriptions | planned | - | none | planned | GP07 to GP09 (channels), GP16 (alerts), GP17 (subscriptions), screens GP18 (plan 22a) |
 | Access rules `access/1` (row and column rules, rules travel with published definitions) | planned | - | none | planned | GP01, GP02, GP11 to GP15 (plan 22a); no screen slice exists yet: add one to plan 33 when GP01 is built |
 | User-owned dashboards, pins and saved queries | planned | - | none | planned | DBR12 (plan 32), J26, J27 (plan 19); the semantic module's explorer is J14 |

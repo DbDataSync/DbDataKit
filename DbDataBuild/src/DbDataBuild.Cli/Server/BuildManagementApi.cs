@@ -35,7 +35,7 @@ internal static class BuildManagementApi
     /// options that show values and the paths outside the project stay refused. A server started with <c>--read-only</c> offers <see cref="ReadOnlySurface"/> instead.
     /// </summary>
     public static ToolSurface FullSurface(string projectRoot, IEnumerable<CommandInfo> all) =>
-        new(projectRoot, all.Where(c => c.Name is not ("ui terminal" or "ui mcp")));
+        new(projectRoot, all.Where(c => c.Name is not ("ui terminal" or "ui mcp")), alsoWithheld: ["connection refresh --check-results"]);
 
     /// <summary>The person a call is for, as the tracking tables record them: "Ada via Main console".</summary>
     internal static string ActorOf(ValidatedToken token) => $"{token.SubjectName ?? token.SubjectId} via {token.Client.Name}";
@@ -334,7 +334,10 @@ internal static class BuildManagementApi
 
             var decision = ManagementAuthorization.Authorize(context.ManagementToken(), spec, projectId);
             if (!decision.Allowed)
+            {
+                if (command.Name == "connection refresh") RecordRefresh(audit, context.ManagementToken(), projectId, null, "refused: needs the " + decision.Needed.ToString().ToLowerInvariant() + " role", "");
                 return Results.Json(new { error = $"`{command.Name}` needs the {decision.Needed.ToString().ToLowerInvariant()} role." }, statusCode: StatusCodes.Status403Forbidden);
+            }
 
             JsonObject arguments;
             try
@@ -358,12 +361,29 @@ internal static class BuildManagementApi
                 if (!writing.Allowed) return Results.Json(new { error = $"Writing the project's files with `{command.Name}` needs the author role." }, statusCode: StatusCodes.Status403Forbidden);
             }
 
+            // UE09: a refresh run from a screen evaluates the checks stored with the models that loaded and records the results where the console reads them, this server's own directory (the option is withheld from a caller, so
+            // no one names another place). A dry run evaluates nothing.
+            var isRefresh = command.Name == "connection refresh";
+            if (isRefresh && serverDirectory is not null) { argv.Add("--check-results"); argv.Add(serverDirectory); }
+
             var result = await commandRunner.RunAsync(argv, projectRoot, ActorOf(context.ManagementToken()), context.RequestAborted);
             JsonNode? document = null;
             try { document = JsonNode.Parse(result.Out); } catch (JsonException) { }
+            // a refresh changes the target's data: who ran which plan, and how it ended, is in the server's audit log (a refusal for a missing role is recorded too, above)
+            if (isRefresh) RecordRefresh(audit, context.ManagementToken(), projectId, arguments, result.Exit == 0 ? "ok" : $"exit {result.Exit}", argv.Contains("--dry-run") ? "dry run" : "");
             return Results.Json(new JsonObject { ["exit"] = result.Exit, ["document"] = document, ["text"] = document is null ? (result.Out.Length > 0 ? result.Out : result.Err) : null });
         });
     }
+    /// <summary>The audit line of a refresh run through the commands route: <c>refresh.run</c> on <c>project/connection/plan</c> (the plan is <c>default</c> when none was named), by the person the console vouched for.</summary>
+    private static void RecordRefresh(IAuditLog? audit, ValidatedToken token, string project, JsonObject? arguments, string outcome, string detail)
+    {
+        if (audit is null) return;
+        string Named(string key) => arguments?[key] is JsonValue v && v.TryGetValue<string>(out var text) ? text : "";
+        var (connection, plan) = (Named("connection"), Named("plan"));
+        audit.Append(new AuditEntry(TimeProvider.System.GetUtcNow(), "command", "dbdatabuild server", token.SubjectId, token.SubjectName ?? token.SubjectId, false, "refresh.run",
+            $"{project}/{(connection.Length > 0 ? connection : "(default connection)")}/{(plan.Length > 0 ? plan : "default")}", outcome, detail));
+    }
+
     /// <summary>
     /// New projects from templates (plan 13, W07): <c>GET /api/v1/templates</c> lists the templates built into the server, each with its name, description and file count, and says whether the caller may make a project (<c>can_create</c>);
     /// <c>POST /api/v1/projects</c> (<c>{"id", "template"}</c>) makes one. Making a project adds it to what the server hosts, so it needs the author role on the server itself (a role held in one project only does not reach it). The CLI's own

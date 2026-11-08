@@ -4,6 +4,7 @@ import { Outlet, useOutletContext, useParams } from 'react-router-dom'
 import { ErrorBanner, NavLink, tabClass } from '@dbdatakit/shell'
 import { buildApi } from '../api'
 import { BuildShell } from '../BuildShell'
+import { TestsPanel } from './TestsPanel'
 import { layoutGraph, NODE_HEIGHT, NODE_WIDTH, relatives } from '../graphLayout'
 import type { Diagnostic, GraphNode, ProjectGraph } from '../types'
 
@@ -146,6 +147,7 @@ export function CheckTab() {
           ))}
         </div>
       )}
+      <TestsPanel project={project} />
     </div>
   )
 }

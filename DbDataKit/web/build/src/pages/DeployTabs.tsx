@@ -3,35 +3,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { buildApi } from '../api'
-import type { CommandAnswer, Diagnostic } from '../types'
+import type { CommandAnswer } from '../types'
+import { Problems } from './Problems'
+import { RefreshPanel } from './RefreshPanel'
 
 interface ProjectContext {
   project: string
 }
 
 const useProject = () => useOutletContext<ProjectContext>()
-
-/** Why a command that did not run to the end says so: its diagnostics, its errors, or what it printed. */
-function Problems({ answer }: { answer: CommandAnswer<unknown> | undefined }) {
-  if (!answer || answer.exit === 0) return null
-  const diagnostics: Diagnostic[] = answer.document?.diagnostics ?? []
-  const errors = answer.document?.errors ?? []
-  return (
-    <div className="card" style={{ marginBottom: 14 }} data-testid="build-command-problems">
-      <div className="card-body">
-        {diagnostics.map((d, i) => (
-          <div key={`${d.code}-${i}`} data-testid="build-command-problem">
-            <strong>{d.code} {d.title}</strong>
-            <div className="hint">{d.found}</div>
-            {d.fix && <div className="hint">Fix: {d.fix}</div>}
-          </div>
-        ))}
-        {errors.map((e, i) => <div key={i} data-testid="build-command-problem">{e}</div>)}
-        {diagnostics.length === 0 && errors.length === 0 && <div data-testid="build-command-problem">{answer.text ?? 'The command did not finish.'}</div>}
-      </div>
-    </div>
-  )
-}
 
 /** The connection a screen speaks about. Left empty it is the project's default connection, which is what the commands themselves do. */
 function ConnectionField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -184,6 +164,7 @@ export function PlansTab() {
       </div>
       <ErrorBanner error={plans.error ?? write.error} />
       <Problems answer={write.data} />
+      <RefreshPanel project={project} />
       <div className="card flush" style={{ marginBottom: 14 }}>
         <div className="grid-head" style={{ gridTemplateColumns: '2fr 1fr 0.7fr 0.7fr 0.7fr', gap: 14 }}><span>Plan</span><span>Connection</span><span>Steps</span><span>Risky</span><span>Destructive</span></div>
         {plans.data && list.length === 0 && <div className="empty" data-testid="build-plans-empty">No plans yet. Plan a deploy to write one.</div>}

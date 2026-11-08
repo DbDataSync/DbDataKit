@@ -345,3 +345,61 @@ export interface RunnerPublishData {
   bound: string[]
   promoted_from?: string
 }
+
+/** A refresh plan of the project (`project show refresh`), the plans a refresh runs (plan 33 UE09). */
+export interface RefreshPlanEntry {
+  connection: string
+  name: string
+  title?: string | null
+  description?: string | null
+  members: number
+  settings: { schedule?: string | null; on_failure?: string | null; parallel?: number | null; check?: string | null }
+  load_members?: { member: string; model: string; load: string }[] | null
+}
+
+/** One check the models' checks evaluation recorded after a refresh (`data.checks.results`). */
+export interface CheckResultRow {
+  model: string
+  check: string
+  kind: string
+  severity: 'warn' | 'block'
+  status: 'pass' | 'fail' | 'error'
+  measured?: number | null
+  threshold?: number | null
+  sample_keys: string[]
+  message?: string | null
+  blocking: boolean
+}
+
+export interface ChecksAfterRefresh {
+  run_id: string
+  results_in: string
+  evaluated: number
+  passed: number
+  failed: number
+  errors: number
+  blocking: number
+  notes: string[]
+  error?: string
+  results: CheckResultRow[]
+}
+
+/** What `connection refresh` answers (a dry run has `resolved_inputs` and `statements`, a run has `results`). */
+export interface RefreshResult {
+  connection?: string
+  dry_run?: boolean
+  plan?: string | null
+  plan_id?: string
+  outcome?: 'completed' | 'completed_with_failures' | 'stopped' | 'failed'
+  success?: boolean
+  results?: { model: string; member: string; load: string; state: 'done' | 'failed' | 'skipped' | 'not run'; reason?: string | null; rows?: number | null; duration_ms?: number | null; detail?: string | null }[]
+  resolved_inputs?: { model: string; operation: string; member: string; inputs: { name: string; type: string; source: string; value?: string | null }[] }[]
+  warnings?: string[]
+  checks?: ChecksAfterRefresh
+}
+
+/** What `project tests run` answers. */
+export interface TestsResult {
+  counts: { total: number; passed: number; failed: number; warned: number; errored: number }
+  tests: { name: string; kind: 'metadata' | 'model'; file: string; model?: string | null; severity: 'error' | 'warning'; status: 'pass' | 'fail' | 'warn' | 'error'; violations: number; columns: string[]; rows: Record<string, unknown>[]; error?: string | null }[]
+}
