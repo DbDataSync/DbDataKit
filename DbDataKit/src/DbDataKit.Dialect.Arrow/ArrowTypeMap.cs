@@ -3,13 +3,13 @@ using Apache.Arrow.Types;
 namespace DbDataKit.Dialect.Arrow;
 
 /// <summary>
-/// Canonical to Arrow and back, as one rule table per direction (ported from Proxy's ArrowColumnWriter decisions).
+/// Canonical to Arrow and back, as one rule table per direction (ported from Gateway's ArrowColumnWriter decisions).
 /// Choices: timestamps are microseconds, UTC when zone-aware; time is Time64(us); date is Date32; decimals are Decimal128
 /// up to 38 digits (Decimal256 to 76); guid, json and xml travel as text; unsigned integers keep their unsigned Arrow type.
 /// </summary>
 public static class ArrowTypeMap
 {
-    /// <summary>Precision/scale used when a source reports none (Proxy's fallback).</summary>
+    /// <summary>Precision/scale used when a source reports none (Gateway's fallback).</summary>
     public const int FallbackPrecision = 38, FallbackScale = 9;
 
     private delegate TypeMapping<IArrowType> Rule(CanonicalType t);

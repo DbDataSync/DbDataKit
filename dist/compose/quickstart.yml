@@ -1,4 +1,4 @@
-# Everything on one machine, for trying the suite out: the console, a Proxy, a Sync server, a Build server and a Store server, and a PostgreSQL with demo data.
+# Everything on one machine, for trying the suite out: the console, a Gateway, a Sync server, a Build server and a Store server, and a PostgreSQL with demo data.
 # Every server announces itself to the console and waits to be confirmed. See docs/quickstart.md. Run from the repository root:
 #   docker compose -f dist/compose/quickstart.yml up -d --build --wait
 # Not for production: the demo database has a published password and a published port.
@@ -15,22 +15,22 @@ services:
       - "8480:8480"
     volumes:
       - console-data:/data
-  proxy:
+  gateway:
     build:
       context: ../..
-      dockerfile: DbDataProxy/Dockerfile
-    hostname: proxy
+      dockerfile: DbDataGateway/Dockerfile
+    hostname: gateway
     environment:
       <<: *announce
-      DBPROXY_Proxy__Management__Enabled: "true"
-      DBPROXY_Proxy__Management__Address: 0.0.0.0
-      DBPROXY_Proxy__Management__Port: "8816"
-      DBDATAKIT_ADVERTISE_URL: https://proxy:8816
-      DBDATAKIT_INSTANCE_NAME: dbdataproxy
+      DBGATEWAY_Gateway__Management__Enabled: "true"
+      DBGATEWAY_Gateway__Management__Address: 0.0.0.0
+      DBGATEWAY_Gateway__Management__Port: "8816"
+      DBDATAKIT_ADVERTISE_URL: https://gateway:8816
+      DBDATAKIT_INSTANCE_NAME: dbdatagateway
     ports:
       - "8815:8815"
     volumes:
-      - proxy-data:/data
+      - gateway-data:/data
     depends_on:
       - console
   sync:
@@ -87,7 +87,7 @@ services:
       retries: 20
 volumes:
   console-data:
-  proxy-data:
+  gateway-data:
   sync-data:
   build-data:
   store-data:

@@ -1,6 +1,6 @@
 namespace DbDataKit.Hosting;
 
-/// <summary>Safe defaults for request limits (Proxy S-6). Products override per need.</summary>
+/// <summary>Safe defaults for request limits (Gateway S-6). Products override per need.</summary>
 public sealed class RequestLimitOptions
 {
     /// <summary>Concurrent in-flight requests before new ones get 503.</summary>

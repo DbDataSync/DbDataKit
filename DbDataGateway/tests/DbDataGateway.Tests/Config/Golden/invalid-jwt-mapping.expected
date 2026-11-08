@@ -1,0 +1,3 @@
+Gateway:Auth:Jwt:Authority
+Gateway:Auth:Jwt:Mappings:0:Claim
+Gateway:Auth:Jwt:Mappings:0:DataSources:0

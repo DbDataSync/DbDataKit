@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs unixODBC and Microsoft's "ODBC Driver 18 for SQL Server" on Debian/Ubuntu, the pieces the Proxy's SQL Server tests and Kit's ODBC projects need
+# Installs unixODBC and Microsoft's "ODBC Driver 18 for SQL Server" on Debian/Ubuntu, the pieces the Gateway's SQL Server tests and Kit's ODBC projects need
 # (the same steps CI runs). Safe to run again. Works in a Claude Code cloud session: packages.microsoft.com is reachable through the proxy.
 #   scripts/install-odbc.sh            installs, then lists the drivers
 # Environment: ODBC_SKIP_UPDATE=1 skips `apt-get update`.

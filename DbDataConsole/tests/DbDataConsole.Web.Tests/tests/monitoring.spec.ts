@@ -5,17 +5,17 @@ import http2 from 'node:http2'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
-import { monitorBuild, monitorProxy, monitorSync, scratchDirectory } from '../playwright.config'
+import { monitorBuild, monitorGateway, monitorSync, scratchDirectory } from '../playwright.config'
 
 // Plan 13a, M12 (the done-when of M11): the console's Monitoring page across real servers. A Build server that runs schedules has a project whose plan runs every minute and fails (its connection has no login), a
-// Sync server has a replication that is an hour behind, and a Proxy has locked a user out; the page lists the failed run, the lagging replication and the Proxy's notice together, failed first. Pausing the plan
+// Sync server has a replication that is an hour behind, and a Gateway has locked a user out; the page lists the failed run, the lagging replication and the Gateway's notice together, failed first. Pausing the plan
 // stops its next run, and releasing it lets the run happen again. The servers are the ones playwright.config.ts starts for this file (apart from the servers of the other stories, whose pairing codes those spend).
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
 const consoleDll = path.join(repoRoot, 'DbDataConsole/src/DbDataConsole.Server/bin/Debug/net10.0/dbdatakit.dll')
 
 const buildName = 'Monitor build'
 const syncName = 'Monitor sync'
-const proxyName = 'Monitor proxy'
+const gatewayName = 'Monitor gateway'
 const replication = 'hourly-orders'
 const planSubject = `${monitorBuild.project}: ${monitorBuild.connection}/${monitorBuild.plan}`
 
@@ -106,7 +106,7 @@ async function makeLaggingReplication(request: APIRequestContext, sync: string) 
   } finally { db.close() }
 }
 
-/** Failed logins to the Proxy's Flight port: the handshake with a wrong password, as many times as the lockout counts. Nothing else of Flight is needed. */
+/** Failed logins to the Gateway's Flight port: the handshake with a wrong password, as many times as the lockout counts. Nothing else of Flight is needed. */
 async function failLogins(port: number, user: string, times: number) {
   const session = http2.connect(`https://localhost:${port}`, { rejectUnauthorized: false })
   try {
@@ -128,20 +128,20 @@ async function failLogins(port: number, user: string, times: number) {
 test.describe.serial('monitoring across real servers', () => {
   let build = ''
   let sync = ''
-  let proxy = ''
+  let gateway = ''
 
-  test('a failed plan, a lagging replication and a Proxy notice are listed together, failed first', async ({ page, context, baseURL }) => {
+  test('a failed plan, a lagging replication and a Gateway notice are listed together, failed first', async ({ page, context, baseURL }) => {
     test.setTimeout(240_000)
     await signInAsAdmin(page, context, baseURL!)
     await pair(page, `https://localhost:${monitorBuild.port}`, 'monitor-build-pairing-code.txt', buildName)
     await pair(page, `https://localhost:${monitorSync.port}`, 'monitor-sync-pairing-code.txt', syncName)
-    await pair(page, `https://localhost:${monitorProxy.managementPort}`, 'monitor-proxy-pairing-code.txt', proxyName)
+    await pair(page, `https://localhost:${monitorGateway.managementPort}`, 'monitor-gateway-pairing-code.txt', gatewayName)
     build = await instanceId(page.request, buildName)
     sync = await instanceId(page.request, syncName)
-    proxy = await instanceId(page.request, proxyName)
+    gateway = await instanceId(page.request, gatewayName)
 
     await makeLaggingReplication(page.request, sync)
-    await failLogins(monitorProxy.flightPort, 'intruder', 5)
+    await failLogins(monitorGateway.flightPort, 'intruder', 5)
 
     // The scheduler notes the plan when it first sees it and runs it at the next minute; the run ends with an exit code because nothing is set up to log in with.
     await expect.poll(async () => (await schedule(page.request, build)).last_exit, { timeout: 150_000, intervals: [3_000] }).not.toBeNull()
@@ -160,7 +160,7 @@ test.describe.serial('monitoring across real servers', () => {
     await expect(lagging).toContainText(syncName)
     await expect(notice).toHaveAttribute('data-state', 'event')
     await expect(notice).toContainText('intruder')
-    await expect(notice).toContainText(proxyName)
+    await expect(notice).toContainText(gatewayName)
     await expect(notice.getByTestId('monitoring-toggle')).toHaveCount(0)
 
     // Together at the top: before them only other failures, and after them nothing but notices, holds and what is fine.

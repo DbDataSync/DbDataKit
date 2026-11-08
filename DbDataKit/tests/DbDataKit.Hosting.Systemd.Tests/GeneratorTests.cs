@@ -20,14 +20,14 @@ public class GeneratorTests
 
     private static SystemdUnitOptions Dynamic() => new()
     {
-        Name = "dbdataproxy",
-        Description = "DbDataProxy",
-        ExecStart = "/opt/dbdataproxy/current/DbDataProxy.Server --urls https://0.0.0.0:8443",
-        WorkingDirectory = "/opt/dbdataproxy/current",
-        StateDirectories = ["dbdataproxy"],
-        ConfigurationDirectories = ["dbdataproxy"],
-        LogsDirectories = ["dbdataproxy"],
-        LoadCredentials = new Dictionary<string, string> { ["pfx-password"] = "/etc/dbdataproxy/secrets/pfx-password", ["api-key"] = "/etc/dbdataproxy/secrets/api-key" },
+        Name = "dbdatagateway",
+        Description = "DbDataGateway",
+        ExecStart = "/opt/dbdatagateway/current/DbDataGateway.Server --urls https://0.0.0.0:8443",
+        WorkingDirectory = "/opt/dbdatagateway/current",
+        StateDirectories = ["dbdatagateway"],
+        ConfigurationDirectories = ["dbdatagateway"],
+        LogsDirectories = ["dbdatagateway"],
+        LoadCredentials = new Dictionary<string, string> { ["pfx-password"] = "/etc/dbdatagateway/secrets/pfx-password", ["api-key"] = "/etc/dbdatagateway/secrets/api-key" },
         Environment = new Dictionary<string, string> { ["DOTNET_ENVIRONMENT"] = "Production" },
         WatchdogSec = TimeSpan.FromSeconds(30),
     };
@@ -86,7 +86,7 @@ public class GeneratorTests
     public void Unit_always_carries_the_hardening_baseline()
     {
         var text = SystemdUnitGenerator.Generate(Dynamic());
-        foreach (var line in new[] { "NoNewPrivileges=yes", "ProtectSystem=strict", "ProtectHome=yes", "PrivateTmp=yes", "Restart=on-failure", "DynamicUser=yes", "WatchdogSec=30", "LoadCredential=api-key:/etc/dbdataproxy/secrets/api-key" })
+        foreach (var line in new[] { "NoNewPrivileges=yes", "ProtectSystem=strict", "ProtectHome=yes", "PrivateTmp=yes", "Restart=on-failure", "DynamicUser=yes", "WatchdogSec=30", "LoadCredential=api-key:/etc/dbdatagateway/secrets/api-key" })
         {
             Assert.Contains(line + "\n", text);
         }
@@ -107,7 +107,7 @@ public class GeneratorTests
 
     [Fact]
     public void Dockerfile_runtime_golden() =>
-        Golden("runtime.Dockerfile", DockerfileGenerator.Generate(new DockerfileOptions { EntryAssembly = "DbDataProxy.Server.dll" }));
+        Golden("runtime.Dockerfile", DockerfileGenerator.Generate(new DockerfileOptions { EntryAssembly = "DbDataGateway.Server.dll" }));
 
     [Fact]
     public void Dockerfile_dev_pinned_chiseled_golden() =>

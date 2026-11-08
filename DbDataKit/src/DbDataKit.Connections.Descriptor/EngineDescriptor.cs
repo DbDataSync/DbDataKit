@@ -65,18 +65,18 @@ public static class EngineRoles
     public const string SyncTarget = "sync_target";
     public const string BuildTarget = "build_target";
     public const string BuildOrigin = "build_origin";
-    public const string ProxySource = "proxy_source";
+    public const string GatewaySource = "gateway_source";
     public const string SemanticEmitter = "semantic_emitter";
     public const string MasterDataStore = "master_data_store";
 
     /// <summary>Every role, in table order.</summary>
-    public static IReadOnlyList<string> All { get; } = [SyncSource, SyncTarget, BuildTarget, BuildOrigin, ProxySource, SemanticEmitter, MasterDataStore];
+    public static IReadOnlyList<string> All { get; } = [SyncSource, SyncTarget, BuildTarget, BuildOrigin, GatewaySource, SemanticEmitter, MasterDataStore];
 
     /// <summary>The heading of a role in the support table.</summary>
     public static string Title(string role) => role switch
     {
         SyncSource => "Sync source", SyncTarget => "Sync target", BuildTarget => "Build target", BuildOrigin => "Build origin",
-        ProxySource => "Proxy source", SemanticEmitter => "Semantic emitter", MasterDataStore => "Master data store",
+        GatewaySource => "Gateway source", SemanticEmitter => "Semantic emitter", MasterDataStore => "Master data store",
         _ => role,
     };
 }

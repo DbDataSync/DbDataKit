@@ -37,7 +37,7 @@ public sealed class ConsoleAnnouncer(string product, string instanceId, string n
     {
         environment ??= Environment.GetEnvironmentVariable;
         if (!Uri.TryCreate(environment(UrlVariable), UriKind.Absolute, out var console) || console.Scheme is not ("http" or "https")) return null;
-        // optional: the address the console should use when the one it sees the announcement come from is not it (a proxy or published port in between)
+        // optional: the address the console should use when the one it sees the announcement come from is not it (a gateway or published port in between)
         Uri? advertise = Uri.TryCreate(environment(AdvertiseVariable), UriKind.Absolute, out var given) && given.Scheme == Uri.UriSchemeHttps ? given : null;
         return new ConsoleAnnouncer(product, instanceId, environment(NameVariable) is { Length: > 0 } named ? named : product, port, advertise, console, clients, codes);
     }

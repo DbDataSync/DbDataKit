@@ -45,7 +45,7 @@ public sealed class ConsoleAnnouncementTests : IAsyncLifetime
         return request;
     }
 
-    private ConsoleAnnouncer Announcer(bool withAddress = true, string? host = null) => new("dbdataproxy", PairableServer.InstanceId, "Test proxy", () => server.Url.Port, withAddress ? server.Url : null, announce, server.Clients, server.Codes, hostName: host);
+    private ConsoleAnnouncer Announcer(bool withAddress = true, string? host = null) => new("dbdatagateway", PairableServer.InstanceId, "Test gateway", () => server.Url.Port, withAddress ? server.Url : null, announce, server.Clients, server.Codes, hostName: host);
 
     [Fact]
     public async Task An_announced_server_waits_as_pending_and_is_paired_only_when_an_administrator_confirms_it()
@@ -55,8 +55,8 @@ public sealed class ConsoleAnnouncementTests : IAsyncLifetime
 
         var listed = JsonNode.Parse(await (await http.SendAsync(AsAdmin(HttpMethod.Get, "/api/instances/pending"))).Content.ReadAsStringAsync())!.AsArray();
         var row = Assert.Single(listed)!;
-        Assert.Equal("Test proxy", (string)row["name"]!);
-        Assert.Equal("dbdataproxy", (string)row["product"]!);
+        Assert.Equal("Test gateway", (string)row["name"]!);
+        Assert.Equal("dbdatagateway", (string)row["product"]!);
         Assert.DoesNotContain("code", row.AsObject().Select(p => p.Key));
         Assert.Empty(server.Clients.All());                                     // announcing paired nothing
         Assert.Empty(app.Services.GetRequiredService<InstanceRegistry>().All());
@@ -104,7 +104,7 @@ public sealed class ConsoleAnnouncementTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(new Uri(announce, "/announce"))).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await http.PostAsJsonAsync("/announce", new { })).StatusCode);
 
-        var bad = await client.PostAsJsonAsync(new Uri(announce, "/announce"), new Announcement("dbdataproxy", "x", "Plain", 1, null, "http://insecure", "CODE", DateTimeOffset.UtcNow.AddMinutes(5)));
+        var bad = await client.PostAsJsonAsync(new Uri(announce, "/announce"), new Announcement("dbdatagateway", "x", "Plain", 1, null, "http://insecure", "CODE", DateTimeOffset.UtcNow.AddMinutes(5)));
         Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
         var unknown = await client.PostAsJsonAsync(new Uri(announce, "/announce"), new Announcement("something-else", "x", "Other", 1, null, "https://x:1", "CODE", DateTimeOffset.UtcNow.AddMinutes(5)));
         Assert.Equal(HttpStatusCode.BadRequest, unknown.StatusCode);

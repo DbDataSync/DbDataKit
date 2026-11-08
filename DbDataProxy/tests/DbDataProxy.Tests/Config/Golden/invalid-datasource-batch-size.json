@@ -1,1 +1,0 @@
-{ "Proxy": { "DataSources": { "x": { "Provider": "odbc", "BatchSize": 0, "ConnectionString": "a" } } } }

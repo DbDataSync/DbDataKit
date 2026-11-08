@@ -14,7 +14,7 @@ The rules of the first version, decided by the owner:
 | DbDataBuild | the model graph; column lineage from query analysis (`QueryAnalyzer`, the same facts as the metadata documents' `columns[].lineage`); native models and copies at table level; semantic members bound to columns; last load of each model from the tracking tables | `BuildLineage` (design, semantic `binds`, runs) |
 | DbDataSync | each replication's table mapping as `replicates` edges and column mappings as column edges, with the last run's rows | `SyncLineage`, `SyncLineageRuns` |
 | DbDataRunner | the deployment graph of its group: package, version, channel, group, instance, runtime, and the runs that name a version | `RunnerDeploymentLineage` |
-| DbDataProxy, DbDataStore, apps | nothing yet | |
+| DbDataGateway, DbDataStore, apps | nothing yet | |
 
 ## The model
 
@@ -46,5 +46,5 @@ The **Lineage** page of the console (`/lineage`) draws the joined graph with `Li
 
 - Run lineage history follows the servers' retention of run detail, not a setting of its own.
 - Tracing a value back from a result or a visual is later.
-- The Proxy's run lineage is a summary per served table, never per query; a per-query record belongs in the Proxy's activity log.
+- The Gateway's run lineage is a summary per served table, never per query; a per-query record belongs in the Gateway's activity log.
 - The graph library: React Flow with dagre; ELK is kept as an option if needed ([lineage-graph-view.md](lineage-graph-view.md)).

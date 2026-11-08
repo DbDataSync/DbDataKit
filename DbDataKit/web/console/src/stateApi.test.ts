@@ -7,7 +7,7 @@ describe('stateApi helpers', () => {
     expect(stateBase('console')).toBe('')
   })
   it('offers the panel for the products that mount the state API', () => {
-    expect(offersState('dbdataproxy')).toBe(true)
+    expect(offersState('dbdatagateway')).toBe(true)
     expect(offersState('dbdatasync')).toBe(false)
     expect(offersState(null)).toBe(false)
   })

@@ -26,7 +26,7 @@ public sealed class ConnectionCopyTests
     [Fact]
     public void Only_the_name_changes_and_the_sources_comments_and_layout_stay()
     {
-        var plan = ConnectionCopy.Plan(Base + "\n", ConnectionCopy.Proxy, ConnectionCopy.Proxy, "erp2");
+        var plan = ConnectionCopy.Plan(Base + "\n", ConnectionCopy.Gateway, ConnectionCopy.Gateway, "erp2");
 
         Assert.Null(plan.Problem);
         Assert.Equal(Base.Replace("name: erp   # the name", "name: erp2   # the name") + "\n", plan.Text);
@@ -36,36 +36,36 @@ public sealed class ConnectionCopyTests
     [Fact]
     public void A_managed_by_is_dropped_with_a_note_whatever_the_target()
     {
-        var plan = ConnectionCopy.Plan(Base + "\nmanaged_by: build-9\n", ConnectionCopy.Proxy, ConnectionCopy.Proxy, "erp2");
+        var plan = ConnectionCopy.Plan(Base + "\nmanaged_by: build-9\n", ConnectionCopy.Gateway, ConnectionCopy.Gateway, "erp2");
 
         Assert.Null(Read(plan).ManagedBy);
         Assert.DoesNotContain("build-9", plan.Text);
-        Assert.Contains(plan.Notes, n => n.Contains("managed_by (build-9)") && n.Contains("a Proxy"));
+        Assert.Contains(plan.Notes, n => n.Contains("managed_by (build-9)") && n.Contains("a Gateway"));
     }
 
     [Fact]
     public void Another_products_extension_goes_the_targets_own_stays_and_nothing_empty_is_left_behind()
     {
-        var both = Base + "\nextensions:\n  sync:\n    test_query: SELECT 1\n  proxy:\n    allow_writes: false\n  build:\n    x: 1\n";
+        var both = Base + "\nextensions:\n  sync:\n    test_query: SELECT 1\n  gateway:\n    allow_writes: false\n  build:\n    x: 1\n";
 
-        var toProxy = Read(ConnectionCopy.Plan(both, ConnectionCopy.Sync, ConnectionCopy.Proxy, "e"));
-        Assert.Equal(["proxy"], toProxy.Extensions.Items.Keys);
+        var toGateway = Read(ConnectionCopy.Plan(both, ConnectionCopy.Sync, ConnectionCopy.Gateway, "e"));
+        Assert.Equal(["gateway"], toGateway.Extensions.Items.Keys);
 
-        var toSync = ConnectionCopy.Plan(both, ConnectionCopy.Proxy, ConnectionCopy.Sync, "e");
+        var toSync = ConnectionCopy.Plan(both, ConnectionCopy.Gateway, ConnectionCopy.Sync, "e");
         Assert.Equal(["sync"], Read(toSync).Extensions.Items.Keys);
-        Assert.Contains(toSync.Notes, n => n.Contains("extensions.build, extensions.proxy"));
+        Assert.Contains(toSync.Notes, n => n.Contains("extensions.build, extensions.gateway"));
 
-        var onlyForeign = ConnectionCopy.Plan(Base + "\nextensions:\n  sync:\n    test_query: SELECT 1\n", ConnectionCopy.Sync, ConnectionCopy.Proxy, "e");
+        var onlyForeign = ConnectionCopy.Plan(Base + "\nextensions:\n  sync:\n    test_query: SELECT 1\n", ConnectionCopy.Sync, ConnectionCopy.Gateway, "e");
         Assert.DoesNotContain("extensions", onlyForeign.Text);
         Assert.Empty(Read(onlyForeign).Extensions.Items);
     }
 
     [Theory]
-    [InlineData(ConnectionCopy.Proxy, ConnectionCopy.Sync, "env:PW", "secret:dbdata:sync:connection:e2")]               // Sync reads one reference only
+    [InlineData(ConnectionCopy.Gateway, ConnectionCopy.Sync, "env:PW", "secret:dbdata:sync:connection:e2")]               // Sync reads one reference only
     [InlineData(ConnectionCopy.Sync, ConnectionCopy.Sync, "secret:dbdata:sync:connection:erp", "secret:dbdata:sync:connection:e2")]
-    [InlineData(ConnectionCopy.Sync, ConnectionCopy.Proxy, "secret:dbdata:sync:connection:erp", "secret:dbdata:proxy:connection:e2")]   // not Sync's store
-    [InlineData(ConnectionCopy.Proxy, ConnectionCopy.Proxy, "env:PW", "env:PW")]                                                   // kept as written
-    [InlineData(ConnectionCopy.Proxy, ConnectionCopy.Proxy, "secret:dbdata:proxy:connection:erp", "secret:dbdata:proxy:connection:erp")]
+    [InlineData(ConnectionCopy.Sync, ConnectionCopy.Gateway, "secret:dbdata:sync:connection:erp", "secret:dbdata:gateway:connection:e2")]   // not Sync's store
+    [InlineData(ConnectionCopy.Gateway, ConnectionCopy.Gateway, "env:PW", "env:PW")]                                                   // kept as written
+    [InlineData(ConnectionCopy.Gateway, ConnectionCopy.Gateway, "secret:dbdata:gateway:connection:erp", "secret:dbdata:gateway:connection:erp")]
     public void The_password_reference_is_the_targets_to_hold_and_the_note_says_so(string from, string to, string reference, string expected)
     {
         var plan = ConnectionCopy.Plan(Base.Replace("env:PW", reference) + "\n", from, to, "e2");
@@ -76,25 +76,25 @@ public sealed class ConnectionCopyTests
     }
 
     [Fact]
-    public void A_flow_style_file_and_the_read_and_write_logins_of_a_Proxy_are_edited_too()
+    public void A_flow_style_file_and_the_read_and_write_logins_of_a_Gateway_are_edited_too()
     {
-        var text = "schema: connection/1\nname: erp\nengine: sqlserver\nmanaged_by: c\nconnection_string: Server=s\nread_login: { mode: sql, user: r, password_secret: 'env:R' }\nwrite_login: { mode: sql, user: w, password_secret: 'env:W' }\nextensions: { proxy: { allow_writes: true }, sync: { test_query: x } }\n";
+        var text = "schema: connection/1\nname: erp\nengine: sqlserver\nmanaged_by: c\nconnection_string: Server=s\nread_login: { mode: sql, user: r, password_secret: 'env:R' }\nwrite_login: { mode: sql, user: w, password_secret: 'env:W' }\nextensions: { gateway: { allow_writes: true }, sync: { test_query: x } }\n";
 
-        var plan = ConnectionCopy.Plan(text, ConnectionCopy.Proxy, ConnectionCopy.Proxy, "e2");
+        var plan = ConnectionCopy.Plan(text, ConnectionCopy.Gateway, ConnectionCopy.Gateway, "e2");
 
         var copy = Read(plan);
         Assert.Equal("e2", copy.Name);
-        Assert.Equal(["proxy"], copy.Extensions.Items.Keys);
-        Assert.Equal(["env:R", "env:W"], plan.Secrets.Order());   // kept; the logins of a Proxy are not Sync's
+        Assert.Equal(["gateway"], copy.Extensions.Items.Keys);
+        Assert.Equal(["env:R", "env:W"], plan.Secrets.Order());   // kept; the logins of a Gateway are not Sync's
         Assert.Null(copy.ManagedBy);
     }
 
     [Fact]
-    public void A_copy_to_Sync_leaves_out_the_settings_only_a_Proxy_reads_and_says_so()
+    public void A_copy_to_Sync_leaves_out_the_settings_only_a_Gateway_reads_and_says_so()
     {
         var text = "schema: connection/1\nname: erp\nengine: sqlserver\naccess: readonly\nconnection_string: Server=s\nread_login: { mode: sql, user: r, password_secret: 'env:R' }\n";
 
-        var plan = ConnectionCopy.Plan(text, ConnectionCopy.Proxy, ConnectionCopy.Sync, "e2");
+        var plan = ConnectionCopy.Plan(text, ConnectionCopy.Gateway, ConnectionCopy.Sync, "e2");
 
         Assert.Null(plan.Problem);
         Assert.DoesNotContain("access", plan.Text);
@@ -108,8 +108,8 @@ public sealed class ConnectionCopyTests
     {
         var text = "schema: connection/1\nname: erp\nengine: sqlserver\nconnection_string_secret: 'env:WHOLE'\n";
 
-        Assert.Contains("whole connection string in a secret", ConnectionCopy.Plan(text, ConnectionCopy.Proxy, ConnectionCopy.Sync, "e2").Problem);
-        Assert.Null(ConnectionCopy.Plan(text, ConnectionCopy.Proxy, ConnectionCopy.Proxy, "e2").Problem);
+        Assert.Contains("whole connection string in a secret", ConnectionCopy.Plan(text, ConnectionCopy.Gateway, ConnectionCopy.Sync, "e2").Problem);
+        Assert.Null(ConnectionCopy.Plan(text, ConnectionCopy.Gateway, ConnectionCopy.Gateway, "e2").Problem);
     }
 
     [Fact]
@@ -118,24 +118,24 @@ public sealed class ConnectionCopyTests
         var text = Base.Replace("'env:PW'", "'secret:dbdata:sync:connection:erp'") + "\nextensions:\n  sync:\n    scripts:\n      before: { name: warm-up }\n";
 
         Assert.Contains(ConnectionCopy.Plan(text, ConnectionCopy.Sync, ConnectionCopy.Sync, "e2").Notes, n => n.Contains("scripts and hooks"));
-        Assert.DoesNotContain(ConnectionCopy.Plan(text, ConnectionCopy.Sync, ConnectionCopy.Proxy, "e2").Notes, n => n.Contains("scripts and hooks"));
+        Assert.DoesNotContain(ConnectionCopy.Plan(text, ConnectionCopy.Sync, ConnectionCopy.Gateway, "e2").Notes, n => n.Contains("scripts and hooks"));
     }
 
     [Fact]
     public void A_source_that_is_not_a_connection_file_a_bad_name_and_an_unsupported_target_are_refused_with_a_reason()
     {
-        Assert.Contains("line", ConnectionCopy.Plan("schema: connection/1\nname: a\nengine: sqlserver\nbogus: 1\nconnection_string: x\n", ConnectionCopy.Sync, ConnectionCopy.Proxy, "a").Problem);
-        Assert.Contains("schema", ConnectionCopy.Plan("driverType: sqlserver\n", ConnectionCopy.Sync, ConnectionCopy.Proxy, "a").Problem);
-        Assert.Contains("not a connection name", ConnectionCopy.Plan(Base, ConnectionCopy.Sync, ConnectionCopy.Proxy, "../x").Problem);
-        Assert.Contains("not a connection name", ConnectionCopy.Plan(Base, ConnectionCopy.Sync, ConnectionCopy.Proxy, new string('a', 65)).Problem);
+        Assert.Contains("line", ConnectionCopy.Plan("schema: connection/1\nname: a\nengine: sqlserver\nbogus: 1\nconnection_string: x\n", ConnectionCopy.Sync, ConnectionCopy.Gateway, "a").Problem);
+        Assert.Contains("schema", ConnectionCopy.Plan("driverType: sqlserver\n", ConnectionCopy.Sync, ConnectionCopy.Gateway, "a").Problem);
+        Assert.Contains("not a connection name", ConnectionCopy.Plan(Base, ConnectionCopy.Sync, ConnectionCopy.Gateway, "../x").Problem);
+        Assert.Contains("not a connection name", ConnectionCopy.Plan(Base, ConnectionCopy.Sync, ConnectionCopy.Gateway, new string('a', 65)).Problem);
         Assert.Contains("dbdatabuild", ConnectionCopy.Plan(Base, ConnectionCopy.Sync, "dbdatabuild", "a").Problem);
-        Assert.Null(ConnectionCopy.Plan(Base, ConnectionCopy.Sync, ConnectionCopy.Proxy, "a").Problem);
+        Assert.Null(ConnectionCopy.Plan(Base, ConnectionCopy.Sync, ConnectionCopy.Gateway, "a").Problem);
     }
 
     [Fact]
     public void No_secret_value_is_ever_in_the_copy_only_references()
     {
-        var plan = ConnectionCopy.Plan(Base, ConnectionCopy.Proxy, ConnectionCopy.Sync, "e2");
+        var plan = ConnectionCopy.Plan(Base, ConnectionCopy.Gateway, ConnectionCopy.Sync, "e2");
 
         Assert.All(plan.Secrets, s => Assert.Matches("^(secret|env|file|keyring|dpapi):", s));
         Assert.DoesNotContain("password:", plan.Text, StringComparison.OrdinalIgnoreCase);

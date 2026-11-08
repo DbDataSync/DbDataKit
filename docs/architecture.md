@@ -12,7 +12,7 @@ because source comments cite them). Where each part is described in detail: the 
                        │  every call relayed by the console, as a signed token naming the person (D14, D16)
         ┌──────────────┼─────────────────┬───────────────────┬──────────────────┐
         ▼              ▼                 ▼                   ▼                  ▼
-   Sync           Build            Store               Runner             serving layer (DbDataProxy, to be renamed DbDataGateway)
+   Sync           Build            Store               Runner             serving layer (DbDataGateway)
    replication    many projects,   master data         scheduled and      the EDGE for end users: Flight SQL, semantic, store reads
    engine,        scheduler,       models in your      batch work, a      and writes, apps; hosts the IDENTITY HOME by default (D20)
    TaskRunner     monitoring,      own databases       process per task   │
@@ -33,7 +33,7 @@ because source comments cite them). Where each part is described in detail: the 
   can be paired with several consoles.
 - **A standalone install** is one product plus the console with that product registered. Each product ships on its own (its image, MSI and zips); the
   console has its own MSI, and a product's MSI does not embed it. Pairing after installing both is a documented step (decided 2026-10-28; `dist/README.md`).
-- **The serving layer is the edge** for end users (plan 20). Management traffic (the console) and data traffic (clients of the Proxy) use different
+- **The serving layer is the edge** for end users (plan 20). Management traffic (the console) and data traffic (clients of the Gateway) use different
   listeners, and the management API is never on a hot path.
 - **Identity home** (D20, plan 20): one identity component per install holds users, groups, role assignments and an OpenID Connect provider
   (`DbDataKit.Identity`). The serving layer hosts it by default, so end users sign in without reaching the console; it can run on its own
@@ -58,7 +58,7 @@ is not ours to break and is outside this rule. (CLAUDE.md states the working rul
 | # | Decision | Why |
 | --- | --- | --- |
 | D1 | The console and the products are separate: servers with a management API and no UI; one shared console UI. | A product must keep working with the console down; one UI avoids three web apps. |
-| D2 | One YAML format for every product (Proxy moved off JSON); no migration from `appsettings.json`. | One reader, one editor, one history; the clean break makes migration code unnecessary. |
+| D2 | One YAML format for every product (Gateway moved off JSON); no migration from `appsettings.json`. | One reader, one editor, one history; the clean break makes migration code unnecessary. |
 | D3 | Each product keeps its own CLI; `dbdatakit` is the console's CLI only; lower-case executables; `<noun> <verb>` everywhere, old forms removed. | One grammar to learn; a console CLI that forwarded to products would hide which server a command touches. |
 | D4 | Each product is a standalone install option; the suite release (console image and MSI included) comes from the same workflow and commit; separate MSIs, pairing at install is a documented step. | Nothing forces a user to install products they do not use; one workflow keeps the cost low (`docs/releases.md`). |
 | D5 | The updater is deleted (plan 08, the six `DbDataKit.Update*` packages and Sync's updater). Images, MSI and the install scripts are the distribution. | The updater was shelved and never settled; the other routes cover installing and upgrading. |
@@ -74,7 +74,7 @@ is not ours to break and is outside this rule. (CLAUDE.md states the working rul
 | D15 | Authoring merges by pushing to the project's git remote and opening a pull request when one is configured, else inside the Build server with the author's identity. | The usual review path where a remote exists. |
 | D16 | The console's back end relays every browser call to the servers; browsers never reach them. | Servers stay off the browser's network, pinned self-signed certificates work, no CORS, and live updates (SignalR) are relayed. |
 | D17 | A console and a server can differ in version: the management API carries an integer version, a client supports its own and the one before, and says which side to upgrade (since extended to the suite's compatibility generation, N and N-1). | Products release on their own. |
-| D18 | The Proxy has a state store (SQLite through `DbDataKit.State`) for its audit, notifications and per-console read state. | It had none. |
+| D18 | The Gateway has a state store (SQLite through `DbDataKit.State`) for its audit, notifications and per-console read state. | It had none. |
 | D19 | A Build server's projects come from a local path or a git remote and branch it clones and pulls before each scheduled run. | Both ways of working exist. |
 | D20 | One identity home per install, amended by plan 20: hosted by the serving layer by default. | End users must sign in without reaching the console; one list of people, roles assigned once. |
 
@@ -87,7 +87,7 @@ is not ours to break and is outside this rule. (CLAUDE.md states the working rul
 | A stolen console signing key acts on every server paired with that console | The key never leaves the console's protected store; role ceilings limit the damage; `server unpair` on each server, or a signed key rotation, cuts it off. |
 | Authoring lets a web user write files that a scheduled run then executes | Drafts live in per-user worktrees; schedules run from a pinned ref; merging needs a role; every write goes through the confined `project file` commands. |
 | The console holds every product's credentials to manage it | Per-server pairing, short-lived tokens scoped to one server, ceilings per console, no database secrets in any console (each server resolves its own references). |
-| A management API weakens the Proxy's security | A separate listener, HTTPS with a pinned certificate, signed tokens checked on every call, roles enforced on the server, no shared code on the query path, the same failure classification and redaction. |
+| A management API weakens the Gateway's security | A separate listener, HTTPS with a pinned certificate, signed tokens checked on every call, roles enforced on the server, no shared code on the query path, the same failure classification and redaction. |
 | Two consoles change the same thing | Every write is checked against the version it was based on and refused when stale (`WriteGuard`). |
 | Monitoring depends on the console being up | Each server evaluates its own health rules and keeps its own notifications; the console only shows them. |
 | A schedule runs twice | The per-load lock and `on_busy` cover a manual run; the work queue's lease and run lock cover two servers; a project is hosted by one server at a time. |

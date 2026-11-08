@@ -11,7 +11,7 @@ On 2026-11-07 the remote had 127 branches. A review (read-only, nothing was chan
 | One obsolete note | 1 | `suite/j14-note` changed one row of plan 19 that `main` now words differently (J14 "waiting on J28") |
 | `claude/wonderful-dirac-o0g74c` | 1 | held the only content not on `main`: the Studio plan and its lane I for plan 13a. Both are kept, unreviewed, in `docs/plans/needs-review/` before the branch goes |
 
-The owner approved deleting all of them on 2026-11-07 and asked for the earlier history not to be kept (no tag was made). Sessions of the AI agent cannot delete remote branches (its git proxy refuses deletion and its GitHub tools have no such call), which is why this is a script and a workflow.
+The owner approved deleting all of them on 2026-11-07 and asked for the earlier history not to be kept (no tag was made). Sessions of the AI agent cannot delete remote branches (its git gateway refuses deletion and its GitHub tools have no such call), which is why this is a script and a workflow.
 
 ## How
 

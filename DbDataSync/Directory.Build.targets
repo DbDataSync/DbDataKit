@@ -1,7 +1,7 @@
 <Project>
   <!--
     Shared DbDataKit.* libraries are declared in project files as <DbDataKitReference Include="Hosting.Certificates" /> (the package
-    id without the DbDataKit. prefix), the same convention DbDataProxy uses. In local-source mode (UseLocalDbDataKit=true, on
+    id without the DbDataKit. prefix), the same convention DbDataGateway uses. In local-source mode (UseLocalDbDataKit=true, on
     automatically in the monorepo, where DbDataKit/ sits next to this folder) each becomes a ProjectReference into the sibling
     DbDataKit/ folder; otherwise a PackageReference whose version is in Directory.Packages.props ($(DbDataKitVersion)).
   -->

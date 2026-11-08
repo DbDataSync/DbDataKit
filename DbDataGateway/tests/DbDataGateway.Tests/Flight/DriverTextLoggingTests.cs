@@ -1,0 +1,70 @@
+using DbDataGateway.Client;
+using DbDataGateway.Server.Auth;
+using DbDataGateway.Server.Hosting;
+using DbDataGateway.Tests.Support;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.Extensions.Logging;
+
+namespace DbDataGateway.Tests.Flight;
+
+/// <summary>The driver's own error text never reaches a client; it reaches the local log (scrubbed) unless <c>Gateway:LogDriverErrors</c> is off.</summary>
+public class DriverTextLoggingTests
+{
+    private static async Task<(string ClientDetail, IReadOnlyList<CapturedLine> Log)> RunAsync(bool logDriverErrors)
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "dbgateway-logs-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var logs = new CaptureLoggerProvider();
+        var settings = new Dictionary<string, string?>
+        {
+            ["Gateway:Listen:Address"] = "127.0.0.1",
+            ["Gateway:Listen:Port"] = "0",
+            ["Gateway:Tls:Mode"] = "None",
+            ["Gateway:DataDirectory"] = dir,
+            ["Gateway:Compression:Mode"] = "None",
+            ["Gateway:LogDriverErrors"] = logDriverErrors ? "true" : "false",
+            ["Gateway:DataSources:duck:Provider"] = "duckdb",
+            ["Gateway:DataSources:duck:ConnectionString"] = "Data Source=:memory:",
+            ["Gateway:DataSources:duck:Classifier"] = "off",
+        };
+        HomeSeed.Open(settings, ["duck"]);
+        await using var app = GatewayHost.Build([], b =>
+        {
+            b.Configuration.AddInMemoryCollection(settings);
+            b.Logging.SetMinimumLevel(LogLevel.Trace);
+            b.Logging.AddProvider(logs);
+        });
+        await app.StartAsync();
+        var aliceToken = HomeSeed.ServiceAccount(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>(), "alice");
+        string address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.First().Replace("0.0.0.0", "127.0.0.1");
+
+        using var client = new GatewayFlightClient(address);
+        await client.AuthenticateAsync("alice", aliceToken);
+        var ex = await Rpc.ExpectAsync(async () => await client.QueryAsync("SELECT * FROM salaries_of_the_board", new QueryOptions { DataSource = "duck" }));
+        try { Directory.Delete(dir, true); } catch (IOException) { }
+        return (ex.Status.Detail, logs.Lines);
+    }
+
+    [Fact]
+    public async Task Driver_text_goes_to_the_log_not_to_the_client()
+    {
+        var (detail, log) = await RunAsync(logDriverErrors: true);
+
+        Assert.DoesNotContain("salaries_of_the_board", detail);
+        var line = Assert.Single(log, l => l.Text.Contains("Data source duck failed"));
+        Assert.Contains("Syntax Catalog-Error", line.Text);
+        Assert.Contains("salaries_of_the_board", line.Text);
+    }
+
+    [Fact]
+    public async Task With_log_driver_errors_off_only_kind_and_code_are_logged()
+    {
+        var (detail, log) = await RunAsync(logDriverErrors: false);
+
+        Assert.DoesNotContain("salaries_of_the_board", detail);
+        var line = Assert.Single(log, l => l.Text.Contains("Data source duck failed"));
+        Assert.Contains("Syntax Catalog-Error", line.Text);
+        Assert.DoesNotContain("salaries_of_the_board", line.Text);
+    }
+}

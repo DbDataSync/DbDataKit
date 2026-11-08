@@ -12,7 +12,7 @@ public sealed record DatasetIdentity(string Namespace, string Name)
 }
 
 /// <summary>
-/// Who a dataset or column is (plan 18, section 4), worked out from a <c>connection/1</c> definition and not from each product's own names, so Sync's target table, Build's source and Proxy's served table are one node. Two definitions of one server meet in
+/// Who a dataset or column is (plan 18, section 4), worked out from a <c>connection/1</c> definition and not from each product's own names, so Sync's target table, Build's source and Gateway's served table are one node. Two definitions of one server meet in
 /// one identity: the host is lower-cased, the machine's own names (<c>.</c>, <c>(local)</c>, <c>localhost</c>, <c>127.0.0.1</c>, <c>::1</c>) are one, a port that is the engine's default is left out, and SQL Server's <c>tcp:</c> prefix and <c>host,port</c> form
 /// are read. Names are taken as the engine stores them: a dialect that folds unquoted names folds them here; one that keeps the case keeps what it was given.
 /// </summary>

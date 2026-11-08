@@ -2,7 +2,7 @@ using Apache.Arrow.Types;
 
 namespace DbDataKit.Dialect.Arrow;
 
-/// <summary>Provider-reported CLR type to canonical, as Proxy's ArrowColumnWriter decides it.</summary>
+/// <summary>Provider-reported CLR type to canonical, as Gateway's ArrowColumnWriter decides it.</summary>
 public static class ClrCanonicalMap
 {
     /// <param name="providerTypeName">DbDataReader.GetDataTypeName; only "date" matters (a DateTime column that is a date).</param>
@@ -44,7 +44,7 @@ public static class ClrCanonicalMap
         return new(CanonicalType.String(), Fidelity.Lossy, $"{clr.Name} travels as its invariant-culture text");
     }
 
-    /// <summary>The Arrow type Proxy would pick for this CLR type.</summary>
+    /// <summary>The Arrow type Gateway would pick for this CLR type.</summary>
     public static TypeMapping<IArrowType> ToArrow(Type clr, string? providerTypeName = null, int? precision = null, int? scale = null)
     {
         var c = FromClr(clr, providerTypeName, precision, scale);

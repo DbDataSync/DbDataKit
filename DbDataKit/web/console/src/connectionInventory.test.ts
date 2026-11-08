@@ -6,7 +6,7 @@ const server = (id: string, name: string, product: string, reachable = true): In
 const build = server('b1', 'Build', 'dbdatabuild')
 const sync = server('s1', 'Sync', 'dbdatasync')
 const runner = server('r1', 'Runner', 'dbdatarunner')
-const proxy = server('p1', 'Proxy', 'dbdataproxy')
+const gateway = server('p1', 'Gateway', 'dbdatagateway')
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -21,12 +21,12 @@ describe('the connection inventory', () => {
       return json(answer(url.includes('/b1/') ? 'wh' : url.includes('/s1/') ? 'erp' : 'src', []))
     }))
 
-    const { rows, problems } = await loadInventory([runner, proxy, sync, build, server('x', 'Down', 'dbdatasync', false)])
+    const { rows, problems } = await loadInventory([runner, gateway, sync, build, server('x', 'Down', 'dbdatasync', false)])
 
     expect(asked.sort()).toEqual(['/relay/b1/api/v1/connections', '/relay/r1/api/v1/connections', '/relay/s1/api/v1/connections'])
     expect(rows.map((r) => `${r.serverName}/${r.name}`)).toEqual(['Build/wh', 'Runner/src', 'Sync/erp'])
     expect(problems).toEqual([])
-    expect([build, sync, runner, proxy].map(hasInventory)).toEqual([true, true, true, false])
+    expect([build, sync, runner, gateway].map(hasInventory)).toEqual([true, true, true, false])
   })
 
   it('names a server that does not answer and still shows the others', async () => {

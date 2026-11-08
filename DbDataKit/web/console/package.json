@@ -13,7 +13,7 @@
   "dependencies": {
     "@dbdatakit/admin": "*",
     "@dbdatakit/build": "*",
-    "@dbdatakit/proxy": "*",
+    "@dbdatakit/gateway": "*",
     "@dbdatakit/runner": "*",
     "@dbdatakit/store": "*",
     "@dbdatakit/store-ui": "*",

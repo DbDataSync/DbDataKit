@@ -7,7 +7,7 @@ namespace DbDataKit.Hosting;
 /// <summary>
 /// Forwarded-headers guidance as data. Rule: never trust <c>X-Forwarded-*</c> from arbitrary peers (it lets any
 /// client spoof its address and scheme, defeating network-trust checks such as Sync 9.6). Trust only listed proxies
-/// and do not enable it at all unless a proxy is configured.
+/// and do not enable it at all unless a gateway is configured.
 /// </summary>
 public sealed class ForwardedHeadersPolicy
 {
@@ -17,7 +17,7 @@ public sealed class ForwardedHeadersPolicy
     /// <summary>Trusted proxy networks as (prefix, prefix length).</summary>
     public IList<(IPAddress Prefix, int PrefixLength)> TrustedNetworks { get; } = [];
 
-    /// <summary>Number of proxy hops honoured. Default 1.</summary>
+    /// <summary>Number of gateway hops honoured. Default 1.</summary>
     public int ForwardLimit { get; set; } = 1;
 
     public bool Enabled => TrustedProxies.Count > 0 || TrustedNetworks.Count > 0;

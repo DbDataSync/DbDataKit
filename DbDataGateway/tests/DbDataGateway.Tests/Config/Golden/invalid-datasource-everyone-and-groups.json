@@ -1,0 +1,1 @@
+{ "Gateway": { "DataSources": { "erp": { "Provider": "sqlserver", "ConnectionString": "Server=a", "Everyone": true, "Groups": [ "finance" ] } } } }

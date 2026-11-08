@@ -12,7 +12,7 @@ Contracts and pure logic for Plan 02. No dependencies.
 - `ISecretResolver`, `ISecretProvider` (chain link: `CanHandle`, `TryResolveAsync` returning null for "not here"),
   `ISecretStore` (names only), `IRedactor`, `ISecretAudit` (names, never values), `SecretNotFoundException`.
 - `CredentialKeyDetector`: `FindInConnectionString`, `FindInProperties`, `ContainsCredential`,
-  `IsCredentialKey` (strict, whole key) and `IsCredentialPropertyKey` (broader: `DbPassword`, `ProxyToken`).
+  `IsCredentialKey` (strict, whole key) and `IsCredentialPropertyKey` (broader: `DbPassword`, `GatewayToken`).
   Findings carry the key, never the value.
 
 ## Decisions

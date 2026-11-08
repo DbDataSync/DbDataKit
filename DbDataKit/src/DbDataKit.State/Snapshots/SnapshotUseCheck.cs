@@ -6,9 +6,9 @@ namespace DbDataKit.State.Snapshots;
 /// <summary>
 /// Is something using the database? (plan 29b decision M1: moving is offline, and the exporter refuses a database a live instance writes to.) Two checks, each only where it can apply:
 /// <list type="bullet">
-/// <item>The instance rows of the modules the database has: a <c>serving_instance</c> row of the <c>serving</c> module (the Proxy's) or an <c>instance</c> row of the <c>runner</c> module that is still
+/// <item>The instance rows of the modules the database has: a <c>serving_instance</c> row of the <c>serving</c> module (the Gateway's) or an <c>instance</c> row of the <c>runner</c> module that is still
 /// inside its lease. A row has a lease when the table has a <c>lease_expires_at</c> (or <c>lease_until</c>) column, else its <c>heartbeat_at</c> counts for <see cref="SnapshotOptions.InstanceLease"/>, else
-/// (a table with neither) every row counts. Only modules in the database's layout are looked at, so a database without the Proxy's module is not asked about it.</item>
+/// (a table with neither) every row counts. Only modules in the database's layout are looked at, so a database without the Gateway's module is not asked about it.</item>
 /// <item>SQLite: another process holding the file, found by taking an exclusive lock for a moment (waiting up to <see cref="SnapshotOptions.SqliteLockTimeout"/>).</item>
 /// </list>
 /// </summary>

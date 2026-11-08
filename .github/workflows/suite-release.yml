@@ -1,8 +1,8 @@
 name: Suite release
 
 # One release of the whole suite from one commit (plan 13a, L06): the console's zips, MSI and image, and each product's own release (its zips, MSI and
-# install files), which this workflow calls: dbdatabuild-release.yml, dbdataproxy-release.yml and dbdatasync-release.yml. Container images are
-# built for every product here and pushed to ghcr.io/<owner>/<product> (dbdatakit, dbdatabuild, dbdataproxy); DbDataSync's own image
+# install files), which this workflow calls: dbdatabuild-release.yml, dbdatagateway-release.yml and dbdatasync-release.yml. Container images are
+# built for every product here and pushed to ghcr.io/<owner>/<product> (dbdatakit, dbdatabuild, dbdatagateway); DbDataSync's own image
 # keeps its multi-architecture workflow, dbdatasync-publish-image.yml, and is only built here, to prove the commit makes one.
 #
 #   gh workflow run suite-release.yml --ref main -f dry_run=true                 build everything, tag and publish nothing
@@ -202,9 +202,9 @@ jobs:
     permissions:
       contents: write
       actions: read
-  proxy:
+  gateway:
     needs: guard
-    uses: ./.github/workflows/dbdataproxy-release.yml
+    uses: ./.github/workflows/dbdatagateway-release.yml
     with:
       sha: ${{ needs.guard.outputs.sha }}
       beta: ${{ inputs.beta }}
@@ -241,7 +241,7 @@ jobs:
         include:
           - { image: dbdatakit,   dockerfile: DbDataConsole/Dockerfile, health: true,  push: true }
           - { image: dbdatabuild, dockerfile: DbDataBuild/Dockerfile,   health: true,  push: true }
-          - { image: dbdataproxy, dockerfile: DbDataProxy/Dockerfile,   health: false, push: true }
+          - { image: dbdatagateway, dockerfile: DbDataGateway/Dockerfile,   health: false, push: true }
           - { image: dbdatasync,  dockerfile: DbDataSync/Dockerfile,    health: false, push: false }
     name: image (${{ matrix.image }})
     env:
@@ -284,7 +284,7 @@ jobs:
   verify:
     # The images job is skipped for a snapshot, so this cannot rely on the default (every need succeeded).
     if: ${{ inputs.dry_run && !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
-    needs: [console, build, proxy, sync, images]
+    needs: [console, build, gateway, sync, images]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -295,7 +295,7 @@ jobs:
       - name: Every artifact has its checksum
         run: |
           set -euo pipefail
-          for product in dbdatakit dbdatabuild dbdataproxy dbdatasync; do
+          for product in dbdatakit dbdatabuild dbdatagateway dbdatasync; do
             dir="release/release-$product"
             sums="$dir/SHA256SUMS"
             [ -f "$sums" ] || { echo "::error::$product has no SHA256SUMS"; exit 1; }

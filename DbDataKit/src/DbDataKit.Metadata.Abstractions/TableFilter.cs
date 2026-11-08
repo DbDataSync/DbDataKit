@@ -3,7 +3,7 @@ namespace DbDataKit.Metadata;
 /// <summary>
 /// SQL LIKE patterns with an escape character: <c>%</c> any run, <c>_</c> any one character, <c>\</c> (by default) makes the next character
 /// literal. Matching is done in memory by a linear two-pointer algorithm, so a hostile pattern cannot cause backtracking blow-ups
-/// (the Proxy's regex translation did not support escapes at all).
+/// (the Gateway's regex translation did not support escapes at all).
 /// </summary>
 public static class LikePattern
 {

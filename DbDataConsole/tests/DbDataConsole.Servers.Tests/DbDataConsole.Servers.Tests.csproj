@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
-    Real servers in one run (plan 13a, T12): a Build server and a Proxy as the programs they are, started from their built output, with a console in this process between them. The two programs are not
-    project references on purpose: this project builds on its own, and the job that runs it (dbdataconsole-ci.yml, `servers`) builds Build's and the Proxy's first, as the Playwright job does.
+    Real servers in one run (plan 13a, T12): a Build server and a Gateway as the programs they are, started from their built output, with a console in this process between them. The two programs are not
+    project references on purpose: this project builds on its own, and the job that runs it (dbdataconsole-ci.yml, `servers`) builds Build's and the Gateway's first, as the Playwright job does.
   -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -14,7 +14,7 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Microsoft.Data.SqlClient" />
     <ProjectReference Include="..\..\src\DbDataConsole.Server\DbDataConsole.Server.csproj" />
-    <ProjectReference Include="..\..\..\DbDataProxy\src\DbDataProxy.Core\DbDataProxy.Core.csproj" />   <!-- the Flight client (a library; the Proxy itself is still the program) -->
+    <ProjectReference Include="..\..\..\DbDataGateway\src\DbDataGateway.Core\DbDataGateway.Core.csproj" />   <!-- the Flight client (a library; the Gateway itself is still the program) -->
     <DbDataKitReference Include="Secrets" />
   </ItemGroup>
 </Project>

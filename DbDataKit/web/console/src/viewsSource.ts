@@ -2,9 +2,9 @@ import { catalogDiagnostics, fixtureClient, moduleClient, retailCatalog, storedD
 import { consoleApi, type InstanceSummary } from './api'
 
 /**
- * The console's sources of dashboards and reports (plan 32 DBR23 and DBR11b). **Fixtures** (plan 32 DBR23, M1): the retail sample's files and recorded results, no server. **A Proxy's published documents**: the Proxy that runs the `views` module
+ * The console's sources of dashboards and reports (plan 32 DBR23 and DBR11b). **Fixtures** (plan 32 DBR23, M1): the retail sample's files and recorded results, no server. **A Gateway's published documents**: the Gateway that runs the `views` module
  * (DBR11) answers the module's own routes on its management API, which the console relays with the signed-in person's token (`/relay/<server>/api/v1/dashboards...`), so every widget is read as that person; `moduleClient` is the same
- * `ViewsClient` over them. A Proxy without the module (or one that does not answer) is not a source, and with none the page shows the fixtures. What follows is the fixture source. The documents are the retail template's sample bundle and the recorded results of each
+ * `ViewsClient` over them. A Gateway without the module (or one that does not answer) is not a source, and with none the page shows the fixtures. What follows is the fixture source. The documents are the retail template's sample bundle and the recorded results of each
  * widget (`DbDataKit/conformance/views/widget-results`), read into the build as text and JSON, so the page asks no server and no other host for anything. The module client (`moduleClient`, DBR11) is a second
  * implementation of the same `ViewsClient` and replaces this one in `viewsClient()` when it is wired.
  */
@@ -51,7 +51,7 @@ export interface ViewsSource {
 
 export const fixturesSource: ViewsSource = { id: FIXTURES, label: 'Fixtures (recorded results)', published: false }
 
-/** What a server's status said of the module, or null when it is not a source: no answer, no such call (a Proxy without the module, or an older one) or `enabled: false`. */
+/** What a server's status said of the module, or null when it is not a source: no answer, no such call (a Gateway without the module, or an older one) or `enabled: false`. */
 async function moduleEnabled(server: InstanceSummary, doFetch: typeof fetch): Promise<boolean> {
   try {
     const response = await doFetch(`/relay/${encodeURIComponent(server.id)}/api/v1/views/status`, { credentials: 'same-origin', headers: { accept: 'application/json' } })
@@ -62,14 +62,14 @@ async function moduleEnabled(server: InstanceSummary, doFetch: typeof fetch): Pr
   }
 }
 
-/** The sources there are: the fixtures, then each reachable Proxy that runs the views module, in the console's order. A console that cannot list its servers has the fixtures. */
+/** The sources there are: the fixtures, then each reachable Gateway that runs the views module, in the console's order. A console that cannot list its servers has the fixtures. */
 export async function discoverSources(deps: { list?: () => Promise<InstanceSummary[]>; fetch?: typeof fetch } = {}): Promise<ViewsSource[]> {
   let servers: InstanceSummary[] = []
   try { servers = await (deps.list ?? consoleApi.instances.list)() } catch { /* no list: the fixtures */ }
   const doFetch = deps.fetch ?? ((input, init) => fetch(input, init))
-  const proxies = servers.filter((s) => s.product === 'dbdataproxy' && s.reachable)
-  const enabled = await Promise.all(proxies.map((s) => moduleEnabled(s, doFetch)))
-  return [...proxies.filter((_, i) => enabled[i]).map((s): ViewsSource => ({ id: s.id, label: `${s.name} (published)`, published: true })), fixturesSource]
+  const gateways = servers.filter((s) => s.product === 'dbdatagateway' && s.reachable)
+  const enabled = await Promise.all(gateways.map((s) => moduleEnabled(s, doFetch)))
+  return [...gateways.filter((_, i) => enabled[i]).map((s): ViewsSource => ({ id: s.id, label: `${s.name} (published)`, published: true })), fixturesSource]
 }
 
 /** The source an address asks for (`?source=`): a known id, else the first published source (the automatic choice), else the fixtures; `unknown` is the id asked for that is not a source now. */

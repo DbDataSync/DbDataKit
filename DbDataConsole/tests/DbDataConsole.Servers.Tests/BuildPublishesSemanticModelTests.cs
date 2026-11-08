@@ -5,7 +5,7 @@ using Apache.Arrow;
 using DbDataConsole.Server;
 using DbDataKit.Secrets;
 using DbDataKit.State;
-using DbDataProxy.Client;
+using DbDataGateway.Client;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,8 +13,8 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DbDataConsole.Servers.Tests;
 
 /// <summary>
-/// Plan 19, J12's end-to-end test: a project's semantic model, with the connection it reads, published by a real Build server to a real Proxy (each started from its built output), with a console in this process speaking for a signed-in person.
-/// The model is then served: the Proxy lists it at version 1, a client with an account on the Proxy asks it for the members of an attribute and gets the rows of the database behind it, and the Proxy's audit names the person and the Build server.
+/// Plan 19, J12's end-to-end test: a project's semantic model, with the connection it reads, published by a real Build server to a real Gateway (each started from its built output), with a console in this process speaking for a signed-in person.
+/// The model is then served: the Gateway lists it at version 1, a client with an account on the Gateway asks it for the members of an attribute and gets the rows of the database behind it, and the Gateway's audit names the person and the Build server.
 /// It needs a SQL Server (<c>DBDATA_TEST_SQLSERVER</c>, the shared test engine): publishing a model checks that every table it names can be read, and a project's models build on SQL Server or PostgreSQL only. Without one it is skipped.
 /// </summary>
 public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
@@ -27,10 +27,10 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
     private string database = "";
     private WebApplication console = null!;
     private HttpClient http = null!;
-    private string proxyId = null!;
+    private string gatewayId = null!;
     private string buildId = null!;
     private string personId = null!;
-    private string proxyDirectory = null!;
+    private string gatewayDirectory = null!;
     private int flightPort;
     private string aliceToken = "";
 
@@ -52,27 +52,27 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
         await Execute(readLogin, "INSERT INTO marts.fct_sales_lines VALUES (1, 1, 1, 20260101), (1, 1, 1, 20260102), (2, 1, 1, 20260101)");
 
         var build = Programs.Build;
-        var proxy = Programs.Proxy;
-        proxyDirectory = Path.Combine(root, "proxy");
+        var gateway = Programs.Gateway;
+        gatewayDirectory = Path.Combine(root, "gateway");
         var (buildDirectory, consoleDirectory) = (Path.Combine(root, "build"), Path.Combine(root, "console"));
         var project = Path.Combine(root, "retail");
-        Directory.CreateDirectory(Path.Combine(proxyDirectory, "config", "connections"));
-        Directory.CreateDirectory(Path.Combine(proxyDirectory, "config", "proxy"));
+        Directory.CreateDirectory(Path.Combine(gatewayDirectory, "config", "connections"));
+        Directory.CreateDirectory(Path.Combine(gatewayDirectory, "config", "gateway"));
         Directory.CreateDirectory(buildDirectory);
 
-        // the Proxy: a management listener, a certificate of its own, and one person who may read the data source the publish will make
-        File.WriteAllText(Path.Combine(proxyDirectory, "config", "server.yaml"), "schemaVersion: 2\ntls: { mode: selfSigned }\n");
-        File.WriteAllText(Path.Combine(proxyDirectory, "config", "proxy", "auth.yaml"), "jwt:\n  signingKey: servers-e2e-signing-key-0123456789abcdef\n  audience: api://servers-e2e\n");
-        // the person is a service account of the Proxy's identity home (P13: Proxy has no users of its own) with a personal access token, made as an operator does
-        await RealProcess.RunAsync(proxy, "identity", "service-account-add", "--name", "alice", "--repo", proxyDirectory);
-        aliceToken = System.Text.RegularExpressions.Regex.Match(await RealProcess.RunAsync(proxy, "identity", "token-create", "--account", "alice", "--name", "e2e", "--repo", proxyDirectory), @"ddk_[A-Za-z0-9_-]+").Value;
+        // the Gateway: a management listener, a certificate of its own, and one person who may read the data source the publish will make
+        File.WriteAllText(Path.Combine(gatewayDirectory, "config", "server.yaml"), "schemaVersion: 2\ntls: { mode: selfSigned }\n");
+        File.WriteAllText(Path.Combine(gatewayDirectory, "config", "gateway", "auth.yaml"), "jwt:\n  signingKey: servers-e2e-signing-key-0123456789abcdef\n  audience: api://servers-e2e\n");
+        // the person is a service account of the Gateway's identity home (P13: Gateway has no users of its own) with a personal access token, made as an operator does
+        await RealProcess.RunAsync(gateway, "identity", "service-account-add", "--name", "alice", "--repo", gatewayDirectory);
+        aliceToken = System.Text.RegularExpressions.Regex.Match(await RealProcess.RunAsync(gateway, "identity", "token-create", "--account", "alice", "--name", "e2e", "--repo", gatewayDirectory), @"ddk_[A-Za-z0-9_-]+").Value;
         Assert.NotEmpty(aliceToken);
         (flightPort, var management) = (Programs.FreePort(), Programs.FreePort());
-        var proxyCode = Programs.CodeIn(await RealProcess.RunAsync(proxy, "server", "pair", "--repo", proxyDirectory, "--max-role", "admin"));
-        var proxyProcess = RealProcess.Start(proxy, ["server", "run", $"--Proxy:DataDirectory={proxyDirectory}", "--Proxy:Listen:Address=127.0.0.1", $"--Proxy:Listen:Port={flightPort}",
-            "--Proxy:Management:Enabled=true", "--Proxy:Management:Address=127.0.0.1", $"--Proxy:Management:Port={management}", "--Proxy:Management:LocalChannel=false"]);
-        started.Add(proxyProcess);
-        var proxyUrl = new Uri($"https://127.0.0.1:{management}");
+        var gatewayCode = Programs.CodeIn(await RealProcess.RunAsync(gateway, "server", "pair", "--repo", gatewayDirectory, "--max-role", "admin"));
+        var gatewayProcess = RealProcess.Start(gateway, ["server", "run", $"--Gateway:DataDirectory={gatewayDirectory}", "--Gateway:Listen:Address=127.0.0.1", $"--Gateway:Listen:Port={flightPort}",
+            "--Gateway:Management:Enabled=true", "--Gateway:Management:Address=127.0.0.1", $"--Gateway:Management:Port={management}", "--Gateway:Management:LocalChannel=false"]);
+        started.Add(gatewayProcess);
+        var gatewayUrl = new Uri($"https://127.0.0.1:{management}");
 
         // the Build server: the retail project (its semantic model reads the project's one connection, sqlserver), whose read login is in the server's own store
         await RealProcess.RunAsync(build, "project", "create", "retail", project);
@@ -82,13 +82,13 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
         var buildUrl = new Uri($"https://127.0.0.1:{Programs.FreePort()}");
         var buildProcess = RealProcess.Start(build, ["server", "run", "--repo", buildDirectory, "--listen", buildUrl.AbsoluteUri.TrimEnd('/')]);
         started.Add(buildProcess);
-        await Task.WhenAll(proxyProcess.WaitUntilAsync(new Uri(proxyUrl, "/health/live"), TimeSpan.FromSeconds(90)), buildProcess.WaitUntilAsync(new Uri(buildUrl, "/health/live"), TimeSpan.FromSeconds(90)));
+        await Task.WhenAll(gatewayProcess.WaitUntilAsync(new Uri(gatewayUrl, "/health/live"), TimeSpan.FromSeconds(90)), buildProcess.WaitUntilAsync(new Uri(buildUrl, "/health/live"), TimeSpan.FromSeconds(90)));
 
         console = ConsoleHost.Build(new ConsoleSettings(consoleDirectory, new Uri("https://localhost:0")), ConsoleHost.Certificate(consoleDirectory), _ => { }, webRoot: Path.Combine(consoleDirectory, "none"));
         await console.StartAsync();
         http = new HttpClient(new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, _, _, _) => true, UseCookies = false }) { BaseAddress = new Uri(console.Urls.First()) };
         var instances = console.Services.GetRequiredService<ConsoleInstances>();
-        proxyId = (await instances.PairAsync(proxyUrl, proxyCode, "Edge proxy")).InstanceId;
+        gatewayId = (await instances.PairAsync(gatewayUrl, gatewayCode, "Edge gateway")).InstanceId;
         buildId = (await instances.PairAsync(buildUrl, buildCode, "Retail build")).InstanceId;
         personId = console.Services.GetRequiredService<IUserAccounts>().CreateUser("Ada Admin", null, UserRole.Admin).Id;
     }
@@ -128,9 +128,9 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
 
     private async Task<List<string>> MembersAsync(string attribute)
     {
-        // the Proxy's Flight listener has a certificate of its own, which this client has no reason to distrust here
+        // the Gateway's Flight listener has a certificate of its own, which this client has no reason to distrust here
         var handler = new SocketsHttpHandler { SslOptions = new System.Net.Security.SslClientAuthenticationOptions { RemoteCertificateValidationCallback = (_, _, _, _) => true } };
-        using var client = new ProxyFlightClient($"https://127.0.0.1:{flightPort}", new Grpc.Net.Client.GrpcChannelOptions { HttpHandler = handler });
+        using var client = new GatewayFlightClient($"https://127.0.0.1:{flightPort}", new Grpc.Net.Client.GrpcChannelOptions { HttpHandler = handler });
         await client.AuthenticateAsync("alice", aliceToken);
         var result = await client.QueryAsync($"{{\"kind\": \"members\", \"attribute\": \"{attribute}\"}}", new QueryOptions { DataSource = "semantic:retail_sales" });
         var members = new List<string>();
@@ -139,16 +139,16 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
         return members;
     }
 
-    /// <summary>A data source a client published names no home group, so no home user may use it: the Proxy's administrator opens it by editing its file (the serving policy, <c>extensions.proxy</c>, is theirs, not the publisher's).</summary>
+    /// <summary>A data source a client published names no home group, so no home user may use it: the Gateway's administrator opens it by editing its file (the serving policy, <c>extensions.gateway</c>, is theirs, not the publisher's).</summary>
     private async Task OpenToEveryoneAsync(string connectionFile)
     {
         var text = File.ReadAllText(connectionFile);
         Assert.DoesNotContain("extensions:", text);
-        File.WriteAllText(connectionFile, text.TrimEnd() + "\nextensions:\n  proxy:\n    everyone: true\n");
+        File.WriteAllText(connectionFile, text.TrimEnd() + "\nextensions:\n  gateway:\n    everyone: true\n");
         await ServedAsync();
     }
 
-    /// <summary>The Proxy reads its configuration folder again a moment after a file changes; waits, up to a limit, until the person can use the data source.</summary>
+    /// <summary>The Gateway reads its configuration folder again a moment after a file changes; waits, up to a limit, until the person can use the data source.</summary>
     private async Task ServedAsync()
     {
         for (var attempt = 0; ; attempt++)
@@ -159,10 +159,10 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_build_server_publishes_a_projects_semantic_model_with_its_connection_to_a_proxy_that_then_serves_it_and_the_audit_names_the_person_and_the_server()
+    public async Task A_build_server_publishes_a_projects_semantic_model_with_its_connection_to_a_gateway_that_then_serves_it_and_the_audit_names_the_person_and_the_server()
     {
         // 1. the console links the two, as in the data source story
-        var linked = await AsPerson(HttpMethod.Post, "/api/instances/link", new { from = buildId, to = proxyId, name = "edge" });
+        var linked = await AsPerson(HttpMethod.Post, "/api/instances/link", new { from = buildId, to = gatewayId, name = "edge" });
         Assert.True(linked.Status == HttpStatusCode.OK, $"link: {linked.Status} {linked.Body}");
 
         // 2. publishes the model: the connection it reads first (a read-only data source, the login a secret), then the catalog, as version 1
@@ -172,17 +172,17 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
         Assert.Equal(1, (int)published.Body["version"]!);
         Assert.True((bool)published.Body["created"]!);
 
-        // 3. the Proxy holds it: current version 1, and the data source it reads is the one Build made
-        var held = await AsPerson(HttpMethod.Get, $"/relay/{proxyId}/api/v1/semantic-models/retail_sales");
+        // 3. the Gateway holds it: current version 1, and the data source it reads is the one Build made
+        var held = await AsPerson(HttpMethod.Get, $"/relay/{gatewayId}/api/v1/semantic-models/retail_sales");
         Assert.True(held.Status == HttpStatusCode.OK, $"read: {held.Status} {held.Body}");
         Assert.Equal(1, (int)held.Body!["current_version"]!);
         Assert.Contains("retail_sales", (string)held.Body["catalog"]!);
-        var connectionFile = Path.Combine(proxyDirectory, "config", "connections", "sqlserver.yaml");
+        var connectionFile = Path.Combine(gatewayDirectory, "config", "connections", "sqlserver.yaml");
         Assert.Contains("engine: sqlserver", File.ReadAllText(connectionFile));
 
         await OpenToEveryoneAsync(connectionFile);
 
-        // 4. and serves it: a person with an account on the Proxy asks for the members of an attribute and reads the database behind the model
+        // 4. and serves it: a person with an account on the Gateway asks for the members of an attribute and reads the database behind the model
         Assert.Equal(["East", "West"], (await MembersAsync("customers.region")).Order().ToArray());
 
         // 5. publishing the same model again is no new version (plan 20 O03: the group's definitions keep one version of the same content), and the model keeps serving
@@ -195,8 +195,8 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
         await OpenToEveryoneAsync(connectionFile);
         Assert.Equal(2, (await MembersAsync("customers.region")).Count);
 
-        // 6. the Proxy's audit says who: the person, and the Build server that acted for them
-        var audit = ProxyAudit.Read(proxyDirectory);
+        // 6. the Gateway's audit says who: the person, and the Build server that acted for them
+        var audit = GatewayAudit.Read(gatewayDirectory);
         Assert.Contains(audit, a => (string?)a["command"] == "semantic-model publish" && (string?)a["target"] == "retail_sales" && (string?)a["outcome"] == "created" && (string?)a["userId"] == personId);
         Assert.Contains(audit, a => (string?)a["command"] == "semantic-model publish" && (string?)a["target"] == "retail_sales" && (string?)a["outcome"] == "unchanged" && (string?)a["userId"] == personId);
     }

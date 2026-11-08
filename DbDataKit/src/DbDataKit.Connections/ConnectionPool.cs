@@ -4,7 +4,7 @@ namespace DbDataKit.Connections;
 
 public sealed record ConnectionPoolOptions
 {
-    /// <summary>Most leases at once (the global concurrency limit, Proxy S-6).</summary>
+    /// <summary>Most leases at once (the global concurrency limit, Gateway S-6).</summary>
     public int MaxConcurrency { get; init; } = 16;
     /// <summary>Per-user limit when a user key is given. Null: no per-user limit.</summary>
     public int? MaxPerUser { get; init; }

@@ -6,5 +6,5 @@ dialect: ansi
 # no IDbProvider yet: DbDataKit.Connections.FlightSql is an ADO.NET client the products open themselves
 catalog_reader: information_schema
 roles:
-  sync_source: { status: supported, note: "a source only: a reload of a table or query from any server that speaks the protocol (usually a proxy)" }
+  sync_source: { status: supported, note: "a source only: a reload of a table or query from any server that speaks the protocol (usually a gateway)" }
   build_origin: { status: supported, note: "Flight SQL metadata calls, information_schema as the fallback" }

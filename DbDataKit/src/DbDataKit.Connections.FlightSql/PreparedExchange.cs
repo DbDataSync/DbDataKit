@@ -11,7 +11,7 @@ namespace DbDataKit.Connections.FlightSql;
 /// A server-side prepared statement: its opaque handle, and the schema of its rows when the server said it.
 /// <para>
 /// The exchange is made from the protocol's own messages (the <c>CreatePreparedStatement</c> and <c>ClosePreparedStatement</c> actions, a DoPut of the parameters, a FlightInfo for the handle) instead of with the library's
-/// <c>PreparedStatement</c>, which refuses a server that leaves the dataset or the parameter schema empty (the protocol allows it, and a proxy may well do it) and holds the handle as UTF-8 text.
+/// <c>PreparedStatement</c>, which refuses a server that leaves the dataset or the parameter schema empty (the protocol allows it, and a gateway may well do it) and holds the handle as UTF-8 text.
 /// </para>
 /// </summary>
 public sealed class PreparedHandle(FlightSqlClient client, ByteString handle, Schema? datasetSchema)

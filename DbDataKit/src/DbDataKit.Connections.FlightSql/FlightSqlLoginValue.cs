@@ -15,7 +15,7 @@ public sealed class FlightSqlLoginValueException(string message) : Exception(mes
 /// The schemes are <c>grpc</c> and <c>grpc+tcp</c> (no TLS) and <c>grpc+tls</c>. The options are <c>token</c> (a bearer token), <c>token_env</c> (the name of an environment variable that holds one), <c>token_command</c> (a program a
 /// client runs when it connects; it prints the token), <c>user</c> and <c>password</c> (the server's basic-authentication handshake, which trades them for a bearer token), <c>tls_skip_verify</c> (<c>true</c>: do not check the server's
 /// certificate), <c>ca_file</c> (a PEM file of the certificate authority to trust instead of the machine's) and <c>header.&lt;name&gt;</c> (a header sent with every call). At most one way to authenticate; none means the server is called
-/// without credentials. This type only reads the grammar: running a <c>token_command</c> or reading <c>token_env</c> is the caller's, and a server that must not do either (the Proxy) refuses those two options itself.
+/// without credentials. This type only reads the grammar: running a <c>token_command</c> or reading <c>token_env</c> is the caller's, and a server that must not do either (the Gateway) refuses those two options itself.
 /// </summary>
 public sealed record FlightSqlLoginValue(
     string Scheme, string Host, int Port, string? Token, string? TokenEnv, string? TokenCommand, string? User, string? Password, bool TlsSkipVerify, string? CaFile,

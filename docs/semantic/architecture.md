@@ -7,7 +7,7 @@ The engine came from QueryIntentSpec (QIS) and is now part of this repository. I
 ```
 sources -> DbDataSync -> warehouse -> DbDataBuild -> marts + metadata -> semantic layer -> agents, BI, console
          (replicate)               (model, deploy,                       on the serving layer   (Flight SQL, semantic SQL)
-                                    refresh, test)                       (DbDataProxy today)
+                                    refresh, test)                       (DbDataGateway today)
 ```
 
 ## Where models live: Build projects (R1)
@@ -21,14 +21,14 @@ sources -> DbDataSync -> warehouse -> DbDataBuild -> marts + metadata -> semanti
 
 ## Serving: the serving layer hosts, Build deploys (R2, R2a)
 
-**One connection, two views.** A warehouse is a target for Build and a source for Proxy; it is defined once, in the Build project (`connection/1`: engine, server, database, TLS, and Build's read and write logins, kept apart).
+**One connection, two views.** A warehouse is a target for Build and a source for Gateway; it is defined once, in the Build project (`connection/1`: engine, server, database, TLS, and Build's read and write logins, kept apart).
 
 - **Build publishes it.** `POST /api/v1/projects/{p}/proxies/{proxy}/publish-model` on a Build server publishes the connections a model reads, then the model. What reaches the Proxy is the connection with **the read login only**, sent once over the paired, pinned TLS channel into the Proxy's own secret store; the data source is written `access: readonly`. A test (`BuildServerProxyTests`) asserts the write login never appears in a request.
-- **Ownership is split by concern.** Where the server is and how to log in to read belong to Build. The serving policy (`extensions.proxy`: limits, statement classifier, which identities, pass-through) belongs to Proxy and is never touched by a publish.
+- **Ownership is split by concern.** Where the server is and how to log in to read belong to Build. The serving policy (`extensions.gateway`: limits, statement classifier, which identities, pass-through) belongs to Gateway and is never touched by a publish.
 - **An existing data source is not taken over silently**: a publish that finds one stops and returns the call that adopts it (`POST /api/v1/data-sources/{name}/adopt`); after that Build manages its connection fields.
-- **A Build server is a paired client of the Proxy**, as a console is (a code from `dbdataproxy server pair`, entered on the Build side), with the fixed ceiling **Publisher**: it may create data sources and models and change or remove only those its server made, and map models only to data sources it made. The token names the person who asked; the Proxy's audit records them.
-- **The package.** A semantic package is the compiled catalog with its physical layer, source to data source. The Proxy (`PUT/GET/DELETE /api/v1/semantic-models/{name}`, `POST .../rollback`) loads it, checks it with a test query per data source, switches to it atomically, keeps the earlier versions under `semantic-models/` of its data directory and reloads them at start. A package that fails leaves the old one serving.
-- **Semantic queries are Flight SQL queries.** `DbDataKit.Serving.Semantic` (`services.WithSemantic(models)`) wraps a serving host's core services. A request on the source `semantic:<model>` (`x-datasource`) is JSON when the text starts with `{`, otherwise semantic SQL. The answer is an Arrow table with `qis.*` schema metadata (status, request hash, level, warnings, remaining, resolved, descriptor). Every source scan goes to the host's own `IServingQueries` **as the caller**, so access rules, the read-only classifier, limits and the failure model are the host's. `{"kind":"describe"}`, `{"kind":"members"}` and `EXPLAIN ...` are statements on the model source; there is no custom Flight action. The Proxy reads a `semantic:` section of `server.yaml` (models, sources, combine limits) and applies a changed file without a restart; a catalog that does not load keeps the old model serving.
+- **A Build server is a paired client of the Gateway**, as a console is (a code from `dbdatagateway server pair`, entered on the Build side), with the fixed ceiling **Publisher**: it may create data sources and models and change or remove only those its server made, and map models only to data sources it made. The token names the person who asked; the Gateway's audit records them.
+- **The package.** A semantic package is the compiled catalog with its physical layer, source to data source. The Gateway (`PUT/GET/DELETE /api/v1/semantic-models/{name}`, `POST .../rollback`) loads it, checks it with a test query per data source, switches to it atomically, keeps the earlier versions under `semantic-models/` of its data directory and reloads them at start. A package that fails leaves the old one serving.
+- **Semantic queries are Flight SQL queries.** `DbDataKit.Serving.Semantic` (`services.WithSemantic(models)`) wraps a serving host's core services. A request on the source `semantic:<model>` (`x-datasource`) is JSON when the text starts with `{`, otherwise semantic SQL. The answer is an Arrow table with `qis.*` schema metadata (status, request hash, level, warnings, remaining, resolved, descriptor). Every source scan goes to the host's own `IServingQueries` **as the caller**, so access rules, the read-only classifier, limits and the failure model are the host's. `{"kind":"describe"}`, `{"kind":"members"}` and `EXPLAIN ...` are statements on the model source; there is no custom Flight action. The Gateway reads a `semantic:` section of `server.yaml` (models, sources, combine limits) and applies a changed file without a restart; a catalog that does not load keeps the old model serving.
 - **Source executors** are `DbDataKit.Semantic.Connections` (an `ISourceExecutor` over `DbDataKit.Connections`) and `DbDataKit.Semantic.Ssas` (Windows; other systems report `dax_execution_unavailable`). **SSAS is a supported source**; its DAX path runs against a real Analysis Services in the `semantic-ssas` CI job. Its connection is the server account's, so a data source's access rules do not reach it.
 - **The combine** (union, spread, rollup, allocate, transforms, totals) runs in DuckDB, sandboxed like `Connections.DuckDb`. Limits are set by `semantic.combine` (`memory_mb` 1024, `timeout_seconds` 60, `max_input_rows` 5,000,000); a stop is answered as Flight `ResourceExhausted`.
 
@@ -37,22 +37,22 @@ sources -> DbDataSync -> warehouse -> DbDataBuild -> marts + metadata -> semanti
 | Package | Holds | Used by |
 | --- | --- | --- |
 | `DbDataKit.Semantic.Abstractions` | requests, results, descriptors, errors, `ISourceExecutor`, Arrow rows | everyone |
-| `DbDataKit.Semantic` | catalog, validator, planner, emitters (T-SQL, PostgreSQL, DuckDB, DAX through `Ssas`), combine, sandbox, semantic SQL (`Sql/`), authoring format | Proxy, Build |
+| `DbDataKit.Semantic` | catalog, validator, planner, emitters (T-SQL, PostgreSQL, DuckDB, DAX through `Ssas`), combine, sandbox, semantic SQL (`Sql/`), authoring format | Gateway, Build |
 | `DbDataKit.Semantic.Connections` | executor over the shared connections | serving hosts |
-| `DbDataKit.Semantic.Ssas` | the DAX executor | Proxy on Windows |
+| `DbDataKit.Semantic.Ssas` | the DAX executor | Gateway on Windows |
 | `DbDataKit.Semantic.Extraction` | spreadsheet extraction | uploads, agents |
-| `DbDataKit.Semantic.Cli` | the `semantic describe\|query\|explain\|members` noun | the Proxy's command surface |
-| `DbDataKit.Serving.Semantic` | the semantic module of a serving host | Proxy |
+| `DbDataKit.Semantic.Cli` | the `semantic describe\|query\|explain\|members` noun | the Gateway's command surface |
+| `DbDataKit.Serving.Semantic` | the semantic module of a serving host | Gateway |
 
 Emitters write through `ISqlDialect`; the fixtures run on real SQL Server and PostgreSQL from `testenv/`.
 
 ## Agents and the console (R4)
 
-Agents use `semantic describe|query|explain|members`, mounted in the Proxy and offered by `ui mcp`. The password comes from `DBPROXY_PASSWORD`, never from a flag an agent would put in a tool call. The console's semantic module is not built (it waits on the console reaching a Proxy for queries). QIS scopes map onto the suite's: `session` and `personal` are per-user state, `shared` needs an owner's approval, and **`governed` means committed to the Build project**, so versioning and review are the project's.
+Agents use `semantic describe|query|explain|members`, mounted in the Gateway and offered by `ui mcp`. The password comes from `DBGATEWAY_PASSWORD`, never from a flag an agent would put in a tool call. The console's semantic module is not built (it waits on the console reaching a Gateway for queries). QIS scopes map onto the suite's: `session` and `personal` are per-user state, `shared` needs an owner's approval, and **`governed` means committed to the Build project**, so versioning and review are the project's.
 
 ## One engine registry (R5)
 
-`DbDataKit.Connections.Descriptor` holds `engine/1` descriptors (`engines/*.engine.yaml`, nine built in: ansi, sqlserver, postgres, mysql, oracle, duckdb, fabric, odbc, flightsql): dialect, provider, catalog reader and a status per role (Sync source, Sync target, Build target, Build origin, Proxy source, semantic emitter, master data store: `supported`, `unverified`, `planned`, `no`; the last three need a note). `EngineRegistry` refuses a set that lacks a descriptor for a dialect, repeats an id or alias, or names an unknown role, with the file and line. [docs/engine-support.md](../engine-support.md) is generated from it by `EngineSupportTableTests`, which fails when the checked-in file differs. The products' own engine enums and README tables do not read it yet.
+`DbDataKit.Connections.Descriptor` holds `engine/1` descriptors (`engines/*.engine.yaml`, nine built in: ansi, sqlserver, postgres, mysql, oracle, duckdb, fabric, odbc, flightsql): dialect, provider, catalog reader and a status per role (Sync source, Sync target, Build target, Build origin, Gateway source, semantic emitter, master data store: `supported`, `unverified`, `planned`, `no`; the last three need a note). `EngineRegistry` refuses a set that lacks a descriptor for a dialect, repeats an id or alias, or names an unknown role, with the file and line. [docs/engine-support.md](../engine-support.md) is generated from it by `EngineSupportTableTests`, which fails when the checked-in file differs. The products' own engine enums and README tables do not read it yet.
 
 ## Semantic SQL (R6)
 
@@ -60,7 +60,7 @@ A subset of DuckDB SQL with `MEASURE()`, translated to and from the JSON request
 
 ## Decisions
 
-- Semantic models are authored and deployed by Build and hosted by the serving layer; the Proxy never authors.
+- Semantic models are authored and deployed by Build and hosted by the serving layer; the Gateway never authors.
 - The engine is a shared library, integrated before any semantic SQL work.
 - Name: "semantic model".
 - Ad hoc data (registrations, bindings, value maps) and extraction are not in the first release: governed semantic queries come first. The engine has them, the serving module does not serve them.

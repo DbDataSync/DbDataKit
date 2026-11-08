@@ -5,7 +5,7 @@ namespace DbDataConsole.Server;
 public sealed record PairRequest(string Url, string Code, string? Name);
 
 /// <param name="From">The server that will publish (a Build server): its id or name.</param>
-/// <param name="To">The server it publishes to (a Proxy): its id or name.</param>
+/// <param name="To">The server it publishes to (a Gateway): its id or name.</param>
 /// <param name="Name">What the publisher calls the other server; the other server's name, made into an id, when empty.</param>
 public sealed record LinkRequest(string From, string To, string? Name);
 
@@ -78,7 +78,7 @@ public sealed class InstancesController(ConsoleInstances instances, ConsoleRelay
     }
 
     /// <summary>
-    /// Pairs two servers this console manages (plan 13, T11): the Proxy makes a single-use code for a publisher, and the Build server pairs with it, both as the signed-in person, so no code is typed. The Proxy's address is the one this console uses; the Build
+    /// Pairs two servers this console manages (plan 13, T11): the Gateway makes a single-use code for a publisher, and the Build server pairs with it, both as the signed-in person, so no code is typed. The Gateway's address is the one this console uses; the Build
     /// server must be able to reach it too.
     /// </summary>
     [HttpPost("link")]
@@ -88,8 +88,8 @@ public sealed class InstancesController(ConsoleInstances instances, ConsoleRelay
             return NotFound(new { error = "Both servers must be registered here." });
         if (publisher.InstanceId == target.InstanceId) return BadRequest(new { error = "A server cannot be paired with itself." });
         var (from, to) = (await instances.StatusAsync(publisher, cancellationToken), await instances.StatusAsync(target, cancellationToken));
-        if (from.Product != "dbdatabuild" || to.Product != "dbdataproxy")
-            return BadRequest(new { error = $"Linking pairs a Build server with a proxy; {publisher.Name} is {from.Product ?? "not reachable"} and {target.Name} is {to.Product ?? "not reachable"}." });
+        if (from.Product != "dbdatabuild" || to.Product != "dbdatagateway")
+            return BadRequest(new { error = $"Linking pairs a Build server with a gateway; {publisher.Name} is {from.Product ?? "not reachable"} and {target.Name} is {to.Product ?? "not reachable"}." });
 
         var name = string.IsNullOrWhiteSpace(request.Name) ? Slug(target.Name) : request.Name.Trim();
         var (codeStatus, code) = await relay.CallAsync(target, HttpMethod.Post, DbDataKit.Web.Trust.PairingCodeIssuer.Path, new { name = $"{publisher.Name} (Build)", minutes = 5 }, cancellationToken);
@@ -105,7 +105,7 @@ public sealed class InstancesController(ConsoleInstances instances, ConsoleRelay
     private static string Slug(string name)
     {
         var slug = new string([.. name.ToLowerInvariant().Select(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' ? c : '-')]).Trim('-');
-        return slug.Length == 0 ? "proxy" : slug;
+        return slug.Length == 0 ? "gateway" : slug;
     }
 
     [HttpDelete("{id}")]

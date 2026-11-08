@@ -25,7 +25,7 @@ public sealed record FlightSqlImportedKey(string? KeyName, int? Sequence, string
 /// Flight SQL's catalog calls on a <see cref="FlightSqlConnection"/> (<c>GetCatalogs</c>, <c>GetDbSchemas</c>, <c>GetTables</c>, <c>GetPrimaryKeys</c>, <c>GetImportedKeys</c>, <c>GetSqlInfo</c>), each read to the end
 /// and handed over as plain records. The commands are built here, not through the client library's metadata methods, which send an empty string for a filter left out (<c>catalog = ""</c>), and servers read that as
 /// "the catalog with no name" and answer with nothing: a field left unset is the protocol's way of saying "no filter".
-/// Every call is optional in the protocol, and a proxy often implements none of them, so each answer is <b>null</b> when the server does not offer the call (gRPC <c>Unimplemented</c>; and
+/// Every call is optional in the protocol, and a gateway often implements none of them, so each answer is <b>null</b> when the server does not offer the call (gRPC <c>Unimplemented</c>; and
 /// <c>InvalidArgument</c> too when <c>invalidArgumentIsNotOffered</c> is set, which is how a server that rejects a metadata command it does not know says so). Any other failure is a <see cref="FlightSqlException"/>.
 /// </summary>
 public sealed class FlightSqlMetadataReader(FlightSqlConnection connection, bool invalidArgumentIsNotOffered = false)

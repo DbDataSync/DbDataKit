@@ -1,1 +1,0 @@
-{ "Proxy": { "Semantic": { "Models": [ { "Catalog": "semantic/sales.yaml", "Ssas": { "ssas_finance": "" } } ] } } }

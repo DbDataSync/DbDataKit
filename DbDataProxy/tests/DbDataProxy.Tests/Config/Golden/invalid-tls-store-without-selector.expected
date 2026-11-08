@@ -1,2 +1,0 @@
-Proxy:Tls:CertificateThumbprint
-required when `Tls.Mode` is Store

@@ -16,7 +16,7 @@ truth; their header comments say how to dispatch them. What a release contains a
   and publishes a GitHub Release in this repository.
 - **One version scheme: CalVer `YYYY.M.D.HHmm`** from the UTC clock, for every product. A `-beta` suffix is a beta and `-snapshot.g<sha>` a
   snapshot; both are prereleases.
-- **Names are per product.** Tags are `<product>/v<version>` (`dbdatabuild/`, `dbdatasync/`, `dbdataproxy/`, `dbdatakit/` for the console).
+- **Names are per product.** Tags are `<product>/v<version>` (`dbdatabuild/`, `dbdatasync/`, `dbdatagateway/`, `dbdatakit/` for the console).
   Container images are `ghcr.io/<owner>/<product>`, tagged with the version (a stable release also moves `latest`).
   Releases are created with `--latest=false`: GitHub's "latest" is one marker per repository, not per product.
 - **NuGet publishing is paused.** No release workflow has a nuget.org push step today. Bringing it back needs a new step and a new Trusted
@@ -43,8 +43,8 @@ on request, and as the gate inside Build's release.
 and computes the version, which it hands to the console job and to each product's release workflow (their `version` input). It produces:
 
 - the console (`dbdatakit`): zips for win-x64 and linux-x64, the MSI, `SHA256SUMS`, the tag `dbdatakit/v<version>` and its GitHub Release;
-- DbDataBuild, DbDataProxy and DbDataSync, each by calling its own release workflow (zips, MSI, install files, tag, GitHub Release);
-- container images for the console, Build and Proxy, pushed to GHCR after a container health check. DbDataSync's image is built to prove the
+- DbDataBuild, DbDataGateway and DbDataSync, each by calling its own release workflow (zips, MSI, install files, tag, GitHub Release);
+- container images for the console, Build and Gateway, pushed to GHCR after a container health check. DbDataSync's image is built to prove the
   commit makes one, and pushed by `dbdatasync-publish-image.yml` (dispatch-only, against an existing `dbdatasync/v<version>` tag).
 
 ```
@@ -55,13 +55,13 @@ gh workflow run suite-release.yml --ref main -f sha=<older commit on main>
 gh workflow run suite-release.yml --ref <branch> -f snapshot=true  # a snapshot of any branch
 ```
 
-**Each product release is still dispatchable alone** (`dbdatabuild-release.yml`, `dbdataproxy-release.yml`, `dbdatasync-release.yml`, same
+**Each product release is still dispatchable alone** (`dbdatabuild-release.yml`, `dbdatagateway-release.yml`, `dbdatasync-release.yml`, same
 inputs; an empty `version` means the clock now).
 
 **The guard.** Unless it is a snapshot, a release refuses to run when dispatched against anything but `main`, and when the commit (the tip, or
 `sha`) is not on `main`. It also needs a gate on that exact commit:
 
-- the console, Proxy and Sync look up a successful run of the product's CI workflow for the commit (a lookup, not a re-run; any successful run
+- the console, Gateway and Sync look up a successful run of the product's CI workflow for the commit (a lookup, not a re-run; any successful run
   counts, so a flake that was re-run to green is accepted);
 - Build runs the full conformance suite on every engine on that commit, then the unit suite and a smoke test of each executable.
 

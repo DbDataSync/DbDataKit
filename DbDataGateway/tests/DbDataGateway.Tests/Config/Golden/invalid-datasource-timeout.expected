@@ -1,0 +1,2 @@
+Gateway:DataSources:x:CommandTimeoutSeconds
+the minimum is 0

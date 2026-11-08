@@ -5,7 +5,7 @@ description: >
 
 inputs:
   product:
-    description: The product's lowercase name (dbdatabuild, dbdatasync, dbdataproxy).
+    description: The product's lowercase name (dbdatabuild, dbdatasync, dbdatagateway).
     required: true
   meta:
     description: Path to the product's dist.json.

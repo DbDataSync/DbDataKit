@@ -47,7 +47,7 @@ public sealed class TlsSpec
     public bool EffectiveVerify => Verify && !TrustServerCertificate;
 }
 
-/// <summary>Timeouts in seconds. Never null: an unset timeout is the default, not "forever" (Proxy gap).</summary>
+/// <summary>Timeouts in seconds. Never null: an unset timeout is the default, not "forever" (Gateway gap).</summary>
 [ConfigSchema(Naming = KeyNaming.SnakeCase)]
 public sealed class TimeoutSpec
 {
@@ -57,7 +57,7 @@ public sealed class TimeoutSpec
     public int CommandS { get; set; } = 300;
 }
 
-/// <summary>Per-product settings (<c>extensions.sync</c>, <c>extensions.proxy</c>, ...), kept as nodes so each product binds its own part.</summary>
+/// <summary>Per-product settings (<c>extensions.sync</c>, <c>extensions.gateway</c>, ...), kept as nodes so each product binds its own part.</summary>
 [ConfigSchema(UnknownKeys = UnknownKeyPolicy.Preserve)]
 public sealed class ExtensionBag
 {

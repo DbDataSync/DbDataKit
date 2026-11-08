@@ -3,7 +3,7 @@ name: Republish install files
 # Rebuilds the standard install files (dist/README.md) for a product's newest stable release and replaces the assets of its fixed
 # `<product>/dist` release: for when that release was deleted or lost its files. It changes nothing else; the versioned release's own
 # assets are untouched apart from re-attaching install.ps1 / install.sh to it. Run it by hand:
-#   gh workflow run dist-republish.yml --ref main -f product=dbdataproxy
+#   gh workflow run dist-republish.yml --ref main -f product=dbdatagateway
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ on:
       product:
         description: The product whose install files to republish.
         type: choice
-        options: [dbdatakit, dbdatabuild, dbdatasync, dbdataproxy]
+        options: [dbdatakit, dbdatabuild, dbdatasync, dbdatagateway]
         required: true
 
 permissions:
@@ -36,7 +36,7 @@ jobs:
             dbdatakit)   meta=DbDataConsole/dist.json ;;
             dbdatabuild) meta=DbDataBuild/dist.json ;;
             dbdatasync)  meta=DbDataSync/dist.json ;;
-            dbdataproxy) meta=DbDataProxy/dist.json ;;
+            dbdatagateway) meta=DbDataGateway/dist.json ;;
           esac
           tag=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
             --jq "[.[] | select(.draft == false and .prerelease == false and (.tag_name | startswith(\"$PRODUCT/v\")))][0].tag_name")

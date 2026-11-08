@@ -1,0 +1,1 @@
+{ "Gateway": { "Auth": { "Jwt": { "SigningKey": "env:K" } } } }

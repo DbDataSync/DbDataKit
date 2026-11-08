@@ -1,6 +1,6 @@
 # DbDataKit.Scripting
 
-Our own scripting (plan 14; decision D9): `.csx` scripts and libraries that ask for NuGet packages with `#r "nuget: Id, 1.2.3"` and run with only the .NET runtime installed, no SDK and no MSBuild. The resolver (S02), the loader (S03) and the compiler (S04) are here; Sync, Proxy and Build adopt them slice by slice (S05-S07).
+Our own scripting (plan 14; decision D9): `.csx` scripts and libraries that ask for NuGet packages with `#r "nuget: Id, 1.2.3"` and run with only the .NET runtime installed, no SDK and no MSBuild. The resolver (S02), the loader (S03) and the compiler (S04) are here; Sync, Gateway and Build adopt them slice by slice (S05-S07).
 
 | Type | What it does |
 | --- | --- |
@@ -33,4 +33,4 @@ Limits: the key is `schema`, not `schemaVersion` (this is a JSON file, not one o
 
 ## Running loaded code
 
-Loading a package into a process is code execution in that process, and unloading is best effort (see `ClosureLoader`): a native library stays loaded for the life of the process, and a managed context is collected only when every reference to its types is gone. So a custom driver that Sync or the Proxy adopts runs **isolated**: in a child process, or in a collectible load context where its limits are accepted. The TaskRunner already runs each run in a process of its own, so unloading never matters there. What the API loads and runs itself today (library, driver and script loading, connection tests, schema discovery, previews, scripted queries) is not isolated and nothing is unloaded; the owner chose not to retrofit isolation or unloading into the existing paths, only to add it as those paths are refactored or when a real problem shows up. The Proxy has no loader and gets none without isolation.
+Loading a package into a process is code execution in that process, and unloading is best effort (see `ClosureLoader`): a native library stays loaded for the life of the process, and a managed context is collected only when every reference to its types is gone. So a custom driver that Sync or the Gateway adopts runs **isolated**: in a child process, or in a collectible load context where its limits are accepted. The TaskRunner already runs each run in a process of its own, so unloading never matters there. What the API loads and runs itself today (library, driver and script loading, connection tests, schema discovery, previews, scripted queries) is not isolated and nothing is unloaded; the owner chose not to retrofit isolation or unloading into the existing paths, only to add it as those paths are refactored or when a real problem shows up. The Gateway has no loader and gets none without isolation.

@@ -8,7 +8,7 @@ namespace DbDataConsole.Server;
 /// <param name="Instance">The registered server.</param>
 /// <param name="Reachable">Whether it answered at all with a certificate and management API version this console accepts.</param>
 /// <param name="Ready">Whether it said it was ready (null when it did not answer).</param>
-/// <param name="Product">What it says it is (<c>dbdatabuild</c>, <c>dbdatasync</c>, <c>dbdataproxy</c>).</param>
+/// <param name="Product">What it says it is (<c>dbdatabuild</c>, <c>dbdatasync</c>, <c>dbdatagateway</c>).</param>
 /// <param name="Version">The program version it reported.</param>
 /// <param name="ApiVersion">The management API version it reported.</param>
 /// <param name="Problem">Why it could not be reached or is not usable, in words for the person.</param>

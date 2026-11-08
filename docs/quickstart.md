@@ -15,7 +15,7 @@ The first build takes several minutes (five images). It starts:
 | Service | What it is | Reachable at |
 | --- | --- | --- |
 | `console` | the web app that manages the others | https://localhost:8480 |
-| `proxy` | DbDataProxy, the Arrow Flight SQL proxy | `localhost:8815` (Flight), management inside the network |
+| `gateway` | DbDataGateway, the Arrow Flight SQL gateway | `localhost:8815` (Flight), management inside the network |
 | `sync` | DbDataSync, replication | through the console |
 | `build` | DbDataBuild, tables and views from SQL models | through the console |
 | `store` | DbDataStore, master data models | through the console |
@@ -39,7 +39,7 @@ docker compose -f dist/compose/quickstart.yml exec console dotnet /app/dbdatakit
 
 ## 3. Confirm the servers
 
-Each server announces itself to the console and waits. In the web app open **Servers**: the waiting ones are listed above the paired ones, each with a Confirm button. Confirm all four (`dbdataproxy`, `dbdatasync`, `dbdatabuild`, `dbdatastore`). The same from the command line:
+Each server announces itself to the console and waits. In the web app open **Servers**: the waiting ones are listed above the paired ones, each with a Confirm button. Confirm all four (`dbdatagateway`, `dbdatasync`, `dbdatabuild`, `dbdatastore`). The same from the command line:
 
 ```
 docker compose -f dist/compose/quickstart.yml exec console dotnet /app/dbdatakit.dll instance pending
@@ -70,4 +70,4 @@ docker compose -f dist/compose/quickstart.yml down -v     # starts from nothing 
 * `docker compose -f dist/compose/quickstart.yml ps` shows which service is not healthy; `logs <service>` says why.
 * A server missing from the waiting list: it announces every half minute, so wait a little, then check its log.
 * Ports 8480, 8815 and 15434 must be free on the machine. Change the left-hand number of the `ports:` entry in `dist/compose/quickstart.yml` to move one.
-* `dist/compose/check.sh dist/compose/quickstart.yml dbdataproxy dbdatasync dbdatabuild dbdatastore` starts a fresh copy, confirms every server and checks the console lists them as ready, then removes it; CI runs the same.
+* `dist/compose/check.sh dist/compose/quickstart.yml dbdatagateway dbdatasync dbdatabuild dbdatastore` starts a fresh copy, confirms every server and checks the console lists them as ready, then removes it; CI runs the same.

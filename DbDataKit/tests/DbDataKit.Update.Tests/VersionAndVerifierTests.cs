@@ -33,7 +33,7 @@ public class VersionTests
 
 public class VerifierTests
 {
-    private static byte[] Manifest(string version = "1.4.0", string product = "dbdataproxy")
+    private static byte[] Manifest(string version = "1.4.0", string product = "dbdatagateway")
         => ManifestBuilder.ToBytes(new ReleaseManifest { Product = product, Version = version, Channel = "stable" });
 
     [Fact]
@@ -41,7 +41,7 @@ public class VerifierTests
     {
         var k = new KeyPair("k1");
         var bytes = Manifest();
-        var v = ReleaseVerifier.VerifyManifest(bytes, ManifestSigner.Sign(bytes, k.Seed, k.Id), k.Trust(), "dbdataproxy");
+        var v = ReleaseVerifier.VerifyManifest(bytes, ManifestSigner.Sign(bytes, k.Seed, k.Id), k.Trust(), "dbdatagateway");
         Assert.Equal("1.4.0", v.Manifest.Version);
         Assert.Equal(64, v.Sha256.Length);
     }
@@ -96,7 +96,7 @@ public class VerifierTests
         var k = new KeyPair("k1");
         var bytes = Manifest(product: "dbdatasync");
         var ex = Assert.Throws<UpdateVerificationException>(() =>
-            ReleaseVerifier.VerifyManifest(bytes, ManifestSigner.Sign(bytes, k.Seed, k.Id), k.Trust(), "dbdataproxy"));
+            ReleaseVerifier.VerifyManifest(bytes, ManifestSigner.Sign(bytes, k.Seed, k.Id), k.Trust(), "dbdatagateway"));
         Assert.Equal(VerificationFailure.WrongProduct, ex.Failure);
     }
 

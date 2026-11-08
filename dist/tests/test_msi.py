@@ -182,11 +182,11 @@ class SourceTests(unittest.TestCase):
             msi.wxs(meta, "2026.10.19.509", make_payload(self.tmp / "p2"))
 
     def test_every_products_dist_json_describes_a_valid_installer(self):
-        for product in ("DbDataBuild", "DbDataSync", "DbDataProxy", "DbDataRunner"):
+        for product in ("DbDataBuild", "DbDataSync", "DbDataGateway", "DbDataRunner"):
             meta = json.loads((DIST.parent / product / "dist.json").read_text())
             payload = make_payload(self.tmp / product, {meta["platforms"]["win-x64"]["exe"]: "x"})
             self.root(msi.wxs(meta, "2026.10.19.509", payload))
-        codes = {json.loads((DIST.parent / p / "dist.json").read_text())["msi"]["upgradeCode"] for p in ("DbDataBuild", "DbDataSync", "DbDataProxy", "DbDataRunner")}
+        codes = {json.loads((DIST.parent / p / "dist.json").read_text())["msi"]["upgradeCode"] for p in ("DbDataBuild", "DbDataSync", "DbDataGateway", "DbDataRunner")}
         self.assertEqual(len(codes), 4)
 
 

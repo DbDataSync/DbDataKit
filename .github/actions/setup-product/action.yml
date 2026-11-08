@@ -5,10 +5,10 @@ description: >
 
 inputs:
   product:
-    description: The product folder (DbDataSync, DbDataProxy, DbDataBuild); its project files key the package cache.
+    description: The product folder (DbDataSync, DbDataGateway, DbDataBuild); its project files key the package cache.
     required: true
   global-json:
-    description: The global.json that picks the SDK, relative to the repository root. Proxy and the shared libraries have their own (they add the Microsoft Testing Platform runner).
+    description: The global.json that picks the SDK, relative to the repository root. Gateway and the shared libraries have their own (they add the Microsoft Testing Platform runner).
     default: global.json
   duckdb:
     description: Fetch the pinned DuckDB engine for this runner (scripts/fetch-duckdb.sh; Git Bash on Windows).

@@ -6,7 +6,7 @@ namespace DbDataSync.Updates.Tests;
 /// <summary>
 /// The GitHub fixture is **synthetic**, shaped exactly like the release objects GitHub returns for the DbDataKit
 /// monorepo (trimmed to the fields the catalog reads): valid DbDataSync snapshot, stable and beta releases, plus
-/// releases the catalog must skip — other products' (<c>dbdataproxy/…</c>, <c>dbdatabuild/…</c>), a DbDataSync tag carrying
+/// releases the catalog must skip — other products' (<c>dbdatagateway/…</c>, <c>dbdatabuild/…</c>), a DbDataSync tag carrying
 /// another product's assets, a release whose prerelease flag disagrees with its version, the retired <c>snapshot-</c> tag form, a draft,
 /// one with no checksum asset, an asset hosted somewhere else, a wrong asset name, a scratch tag, and a tag with
 /// no product prefix at all.

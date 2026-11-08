@@ -112,6 +112,6 @@ public static class AppApprovals
         if (manifest.Trust == AppTrust.Sandbox) return new AppGateResult(true, null, null);
         return Find(approvals, manifest, bundleSha256, manifestSha256, reproducesFromReviewedSource) is { } approval
             ? new AppGateResult(true, approval, null)
-            : new AppGateResult(false, null, $"'{manifest.Name}' {manifest.Version} asks to be trusted and has no approval for these exact files and manifest (hash {ContentHash(bundleSha256, manifestSha256)}). An approver has to review and approve that hash: dbdataproxy apps approve --path <folder> --by <approver>.");
+            : new AppGateResult(false, null, $"'{manifest.Name}' {manifest.Version} asks to be trusted and has no approval for these exact files and manifest (hash {ContentHash(bundleSha256, manifestSha256)}). An approver has to review and approve that hash: dbdatagateway apps approve --path <folder> --by <approver>.");
     }
 }

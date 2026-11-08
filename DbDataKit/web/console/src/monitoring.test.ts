@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildRow, duration, LAG_LIMIT_MS, loadRows, NOTICE_WINDOW_MS, proxyRow, runnerGoneRow, runnerTaskRow, sortRows, syncRow } from './monitoring'
+import { buildRow, duration, LAG_LIMIT_MS, loadRows, NOTICE_WINDOW_MS, gatewayRow, runnerGoneRow, runnerTaskRow, sortRows, syncRow } from './monitoring'
 import type { InstanceSummary } from './api'
 
 const server = (id: string, name: string, product: string): InstanceSummary => ({ id, name, url: 'https://x', product, version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null })
@@ -7,7 +7,7 @@ const sync = server('s1', 'Sync prod', 'dbdatasync')
 const build = server('b1', 'Build prod', 'dbdatabuild')
 const status = { running: false, enabled: true, paused: false }
 
-const proxy = server('p1', 'Proxy prod', 'dbdataproxy')
+const gateway = server('p1', 'Gateway prod', 'dbdatagateway')
 
 describe('monitoring rows', () => {
   it('shows a failed last run, a lag past the limit and a hold from what the servers said', () => {
@@ -46,10 +46,10 @@ describe('monitoring rows', () => {
     expect(duration(72 * 3_600_000)).toBe('3 days')
   })
 
-  it('shows a Proxy notice as a row of its own, with no buttons to act on, after what failed and what lags', () => {
-    const notice = proxyRow(proxy, { id: 7, kind: 'LoginLockedOut', created: '2026-10-30T10:00:00Z', message: 'The user reader from 10.0.0.5 is locked out for 15 minutes.' })
-    expect(notice).toMatchObject({ state: 'event', kind: 'event', product: 'dbdataproxy', subject: 'Login locked out', target: null, key: 'p1/notice/7' })
-    expect(proxyRow(proxy, { id: 8, kind: 'SomethingNew', created: '', message: 'm' }).subject).toBe('SomethingNew')
+  it('shows a Gateway notice as a row of its own, with no buttons to act on, after what failed and what lags', () => {
+    const notice = gatewayRow(gateway, { id: 7, kind: 'LoginLockedOut', created: '2026-10-30T10:00:00Z', message: 'The user reader from 10.0.0.5 is locked out for 15 minutes.' })
+    expect(notice).toMatchObject({ state: 'event', kind: 'event', product: 'dbdatagateway', subject: 'Login locked out', target: null, key: 'p1/notice/7' })
+    expect(gatewayRow(gateway, { id: 8, kind: 'SomethingNew', created: '', message: 'm' }).subject).toBe('SomethingNew')
     const rows = sortRows([
       syncRow(sync, 'quiet', status, { highestLagMs: 0 }, { runs: [] }),
       notice,
@@ -60,7 +60,7 @@ describe('monitoring rows', () => {
   })
 })
 
-describe('loading the rows of a Proxy', () => {
+describe('loading the rows of a Gateway', () => {
   const now = Date.parse('2026-10-30T12:00:00Z')
   const feed = [
     { id: 1, kind: 'StatementRefused', created: '2026-10-28T12:00:00Z', message: 'too old' },
@@ -73,7 +73,7 @@ describe('loading the rows of a Proxy', () => {
     const real = globalThis.fetch
     globalThis.fetch = (async (url: string) => { asked.push(String(url)); return new Response(JSON.stringify({ notifications: feed }), { status: 200, headers: { 'content-type': 'application/json' } }) }) as typeof fetch
     try {
-      const { rows, problems } = await loadRows([proxy], now)
+      const { rows, problems } = await loadRows([gateway], now)
       expect(asked).toEqual(['/relay/p1/api/v1/notifications'])
       expect(problems).toEqual([])
       expect(rows.map((r) => r.detail)).toEqual(['newer', 'older'])

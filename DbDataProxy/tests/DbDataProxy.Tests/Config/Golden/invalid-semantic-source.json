@@ -1,2 +1,0 @@
-{ "Proxy": { "DataSources": { "warehouse": { "Provider": "duckdb", "ConnectionString": "Data Source=:memory:" } },
-  "Semantic": { "Models": [ { "Catalog": "semantic/sales.yaml", "Sources": { "sqlserver_sales": "warehous" } } ] } } }

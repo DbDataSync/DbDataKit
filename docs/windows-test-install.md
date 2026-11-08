@@ -4,7 +4,7 @@ A step-by-step for installing the console (`dbdatakit`) and DbDataSync from the 
 your live Sync server. It is written from the release's files and the code on `main`; **only the global Scoop install and its machine variables have been confirmed on Windows** (by the owner, 2026-11-06).
 Each step marked *untested* is the first time anyone does it, so write down what happens.
 
-There are two builds to choose from (Proxy and Build have the same versions; they are not needed for this test):
+There are two builds to choose from (Gateway and Build have the same versions; they are not needed for this test):
 
 - **The snapshot `2026.11.6.2114-snapshot.gcf65995`**, cut from `main` at `cf65995`: the first suite release's code plus the Sync fixes
   merged since (PR #400), and the manifests that set the data folders on a global install. This guide uses it.
@@ -130,7 +130,7 @@ Do these against a **copy** of your old folder, never the live one. The full lis
 ## 6. Known gaps in this release
 
 - **Only the global Scoop install and its machine variables have been run on Windows** (owner, 2026-11-06). Everything else here, the console and Sync first runs, both certificate steps, pairing and the MSI route, is untested.
-- **The container images for the console and Proxy were not published** (the registry refused the push). Windows installs do not use
+- **The container images for the console and Gateway were not published** (the registry refused the push). Windows installs do not use
   them.
 - **One Build test is skipped on SQL Server** (`docs/plans/13c-follow-ups.md`, T16): a plan run with `--parallel 1` took about 7.4 s
   where three 3-second pauses should take at least 9 s. It is not known whether Build or the test is wrong.

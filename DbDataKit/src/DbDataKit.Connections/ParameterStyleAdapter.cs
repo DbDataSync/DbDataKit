@@ -32,7 +32,7 @@ public sealed record PositionalCommand(string Sql, IReadOnlyList<string> Paramet
 /// <summary>
 /// Rewrites <c>@name</c> (or <c>:name</c>, <c>$1</c>) markers to <c>?</c> for positional providers such as ODBC, using the Plan 05
 /// lexer so markers inside strings, comments and quoted identifiers are left alone, and records the order to bind in. Fixes the
-/// Sync ODBC gap and replaces Proxy's <c>SqlMarkers</c>.
+/// Sync ODBC gap and replaces Gateway's <c>SqlMarkers</c>.
 /// </summary>
 public static class ParameterStyleAdapter
 {

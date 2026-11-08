@@ -132,7 +132,7 @@ public sealed record SnapshotOptions
     /// <summary>Rows asked for in one keyset query.</summary>
     public int BatchSize { get; init; } = 1000;
 
-    /// <summary>How recent a heartbeat has to be for an instance row to count as live where the row has no lease column of its own (the Proxy's lease is 30 seconds).</summary>
+    /// <summary>How recent a heartbeat has to be for an instance row to count as live where the row has no lease column of its own (the Gateway's lease is 30 seconds).</summary>
     public TimeSpan InstanceLease { get; init; } = TimeSpan.FromSeconds(30);
 
     /// <summary>How long to wait for the exclusive lock of a SQLite file before saying another process holds it (rounded up to whole seconds).</summary>

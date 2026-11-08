@@ -10,13 +10,13 @@ public static partial class ServerProducts
 {
     public const string Build = "dbdatabuild";
     public const string Sync = "dbdatasync";
-    public const string Proxy = "dbdataproxy";
+    public const string Gateway = "dbdatagateway";
     public const string Store = "dbdatastore";
     /// <summary>The runner (plan 28): scheduled and batch work, the tasks of published packages.</summary>
     public const string Runner = "dbdatarunner";
 
     /// <summary>The products a server may announce itself as.</summary>
-    public static readonly IReadOnlyList<string> Announced = [Build, Sync, Proxy, Store, Runner];
+    public static readonly IReadOnlyList<string> Announced = [Build, Sync, Gateway, Store, Runner];
 
     /// <summary>
     /// Whether the relay passes a call to a server of this product. Only a runner is limited: its documented management calls are the ones the console's screens make (status, the group's instances, runs, run now, pause and resume a task,

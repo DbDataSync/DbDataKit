@@ -49,7 +49,7 @@ export function InstancesPage() {
 
   const reachable = (instances.data ?? []).filter((i) => i.reachable)
   const builds = reachable.filter((i) => i.product === 'dbdatabuild')
-  const proxies = reachable.filter((i) => i.product === 'dbdataproxy')
+  const gateways = reachable.filter((i) => i.product === 'dbdatagateway')
 
   if (!isAdmin) {
     return (
@@ -90,7 +90,7 @@ export function InstancesPage() {
                 <span data-testid="instance-status" data-tone={status.tone}>{status.text}</span>
                 <span className="mono">{instance.url}</span>
                 <span className="row" style={{ gap: 8 }}>
-                  {instance.reachable && (instance.product === 'dbdatasync' || instance.product === 'dbdatabuild' || instance.product === 'dbdataproxy' || instance.product === 'dbdatarunner' || instance.product === 'dbdatakit-identity') && (
+                  {instance.reachable && (instance.product === 'dbdatasync' || instance.product === 'dbdatabuild' || instance.product === 'dbdatagateway' || instance.product === 'dbdatarunner' || instance.product === 'dbdatakit-identity') && (
                     <Link to={`/servers/${instance.id}`} className="btn btn-primary" data-testid="instance-open-link">Open</Link>
                   )}
                   {instance.reachable && offersState(instance.product) && (
@@ -123,11 +123,11 @@ export function InstancesPage() {
           </div>
         </div>
 
-        {builds.length > 0 && proxies.length > 0 && (
+        {builds.length > 0 && gateways.length > 0 && (
           <div className="card" style={{ marginTop: 20 }} data-testid="link-card">
-            <div className="card-head"><span className="card-title">Link a Build server to a proxy</span></div>
+            <div className="card-head"><span className="card-title">Link a Build server to a gateway</span></div>
             <div className="card-body">
-              <span className="hint">Lets the Build server publish to the proxy. The console makes the pairing code and hands it over; nobody types it.</span>
+              <span className="hint">Lets the Build server publish to the gateway. The console makes the pairing code and hands it over; nobody types it.</span>
               <ErrorBanner error={link.error} />
               <Field label="Build server">
                 <select className="input" value={linkFrom} onChange={(e) => { setLinkFrom(e.target.value); link.reset() }} data-testid="link-from-select">
@@ -135,10 +135,10 @@ export function InstancesPage() {
                   {builds.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
                 </select>
               </Field>
-              <Field label="Proxy">
+              <Field label="Gateway">
                 <select className="input" value={linkTo} onChange={(e) => { setLinkTo(e.target.value); link.reset() }} data-testid="link-to-select">
                   <option value="">Choose…</option>
-                  {proxies.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+                  {gateways.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
                 </select>
               </Field>
               <button type="button" className="btn btn-primary" disabled={link.isPending || !linkFrom || !linkTo} onClick={() => link.mutate()} data-testid="link-button">

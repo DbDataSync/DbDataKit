@@ -9,5 +9,5 @@ VOLUME ["/data"]
 EXPOSE 8080
 USER 1654:1654
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD ["dotnet", "DbDataProxy.Server.dll", "--healthcheck", "http://127.0.0.1:8080/health/live"]
-ENTRYPOINT ["dotnet", "DbDataProxy.Server.dll"]
+  CMD ["dotnet", "DbDataGateway.Server.dll", "--healthcheck", "http://127.0.0.1:8080/health/live"]
+ENTRYPOINT ["dotnet", "DbDataGateway.Server.dll"]

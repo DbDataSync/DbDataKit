@@ -12,13 +12,13 @@ check "postgres gives the canonical PostgreSQL variables" '[[ "$(t postgres)" ==
 check "the ADO string is complete" '[[ "$(t mssql --dotenv)" == *"DBKIT_TEST_MSSQL=Server=127.0.0.1,14330;User Id=sa;Password=DbKit_Test_Pw1;TrustServerCertificate=True;Encrypt=False"* ]]'
 check "the ODBC string names the driver" '[[ "$(t mssql --dotenv)" == *"DBKIT_TEST_MSSQL_ODBC=Driver={ODBC Driver 18 for SQL Server};Server=127.0.0.1,14330;"* ]]'
 
-# Proxy mapping
-out="$(t mssql dbdataproxy --dotenv)"
-check "proxy: server, user, password" '[[ "$out" == *"DBPROXY_TEST_SQLSERVER=127.0.0.1,14330"* && "$out" == *"DBPROXY_TEST_SQLSERVER_USER=sa"* && "$out" == *"DBPROXY_TEST_SQLSERVER_PASSWORD=DbKit_Test_Pw1"* ]]'
-check "proxy: SQL Server is required when it was started" '[[ "$out" == *"DBPROXY_REQUIRE_SQLSERVER=true"* ]]'
-out="$(t postgres dbdataproxy --dotenv)"
-check "proxy: nothing about SQL Server mapped without it" '[[ "$out" != *DBPROXY_TEST_SQLSERVER* && "$out" != *DBPROXY_REQUIRE_SQLSERVER* ]]'
-check "proxy: the PostgreSQL string, and it is required when it was started" '[[ "$out" == *"DBPROXY_TEST_POSTGRES=Host=127.0.0.1;Port=15432;"* && "$out" == *"DBPROXY_REQUIRE_POSTGRES=true"* ]]'
+# Gateway mapping
+out="$(t mssql dbdatagateway --dotenv)"
+check "gateway: server, user, password" '[[ "$out" == *"DBGATEWAY_TEST_SQLSERVER=127.0.0.1,14330"* && "$out" == *"DBGATEWAY_TEST_SQLSERVER_USER=sa"* && "$out" == *"DBGATEWAY_TEST_SQLSERVER_PASSWORD=DbKit_Test_Pw1"* ]]'
+check "gateway: SQL Server is required when it was started" '[[ "$out" == *"DBGATEWAY_REQUIRE_SQLSERVER=true"* ]]'
+out="$(t postgres dbdatagateway --dotenv)"
+check "gateway: nothing about SQL Server mapped without it" '[[ "$out" != *DBGATEWAY_TEST_SQLSERVER* && "$out" != *DBGATEWAY_REQUIRE_SQLSERVER* ]]'
+check "gateway: the PostgreSQL string, and it is required when it was started" '[[ "$out" == *"DBGATEWAY_TEST_POSTGRES=Host=127.0.0.1;Port=15432;"* && "$out" == *"DBGATEWAY_REQUIRE_POSTGRES=true"* ]]'
 
 # Shared libraries mapping
 out="$(t "mssql postgres" dbdatakit --dotenv)"
@@ -106,7 +106,7 @@ fi
 
 # Output formats
 check "shell format quotes values" '[[ "$(t postgres)" == *"export DBKIT_TEST_POSTGRES_USER='"'"'postgres'"'"'"* ]]'
-check "eval makes the variables real" '(eval "$(t mssql dbdataproxy)"; [ "$DBPROXY_TEST_SQLSERVER_USER" = sa ] && [ "$DBPROXY_REQUIRE_SQLSERVER" = true ])'
+check "eval makes the variables real" '(eval "$(t mssql dbdatagateway)"; [ "$DBGATEWAY_TEST_SQLSERVER_USER" = sa ] && [ "$DBGATEWAY_REQUIRE_SQLSERVER" = true ])'
 check "a password with a quote survives eval" '(export DBKIT_TEST_PASSWORD="a'"'"'b"; eval "$(t mssql)"; [ "$DBKIT_TEST_MSSQL_PASSWORD" = "a'"'"'b" ])'
 check "an unknown product is an error" '! t mssql nosuchproduct >/dev/null 2>&1'
 check "an unknown engine is refused by up, before Docker is asked" '[[ "$("$here/testenv.sh" up nosuchengine 2>&1 || true)" == *"unknown engine"* ]]'

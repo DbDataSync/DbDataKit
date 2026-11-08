@@ -1,0 +1,4 @@
+{ "Gateway": { "DataSources": {
+  "a": { "Provider": "sqlserver", "ConnectionString": "Server=a", "Groups": [ "g" ], "Default": true },
+  "b": { "Provider": "sqlserver", "ConnectionString": "Server=b", "Groups": [ "g" ], "Default": true }
+} } }

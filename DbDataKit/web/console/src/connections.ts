@@ -1,8 +1,8 @@
 import { ApiError, request } from '@dbdatakit/shell'
 import type { InstanceSummary } from './api'
 
-/** The products whose servers keep connections the console lists and copies between: a Sync server's connections and a Proxy's data sources are the same `connection/1` file. */
-export const CONNECTION_PRODUCTS = ['dbdatasync', 'dbdataproxy'] as const
+/** The products whose servers keep connections the console lists and copies between: a Sync server's connections and a Gateway's data sources are the same `connection/1` file. */
+export const CONNECTION_PRODUCTS = ['dbdatasync', 'dbdatagateway'] as const
 export type ConnectionProduct = (typeof CONNECTION_PRODUCTS)[number]
 
 export const keepsConnections = (server: InstanceSummary): boolean => server.reachable && (CONNECTION_PRODUCTS as readonly (string | null)[]).includes(server.product)
@@ -23,7 +23,7 @@ export interface ConnectionRow {
 }
 
 interface SyncConnection { name: string; driverType: string; host: string | null; port: number | null; database: string | null; connectionString: string | null }
-interface ProxyDataSource { name: string; engine: string | null; access: string | null; valid: boolean; managed_by: string | null }
+interface GatewayDataSource { name: string; engine: string | null; access: string | null; valid: boolean; managed_by: string | null }
 
 const enc = encodeURIComponent
 const relay = (server: InstanceSummary, path: string) => `/relay/${enc(server.id)}${path}`
@@ -34,11 +34,11 @@ export function syncConnectionRow(server: InstanceSummary, c: SyncConnection): C
   return { key: `${server.id}/${c.name}`, server: server.id, serverName: server.name, product: 'dbdatasync', name: c.name, engine: c.driverType, detail: address, valid: true }
 }
 
-/** A Proxy data source: its engine, whether it can write, and who manages it. */
-export function proxyConnectionRow(server: InstanceSummary, d: ProxyDataSource): ConnectionRow {
+/** A Gateway data source: its engine, whether it can write, and who manages it. */
+export function gatewayConnectionRow(server: InstanceSummary, d: GatewayDataSource): ConnectionRow {
   const owner = d.managed_by ? `managed by ${d.managed_by}` : 'by hand'
   return {
-    key: `${server.id}/${d.name}`, server: server.id, serverName: server.name, product: 'dbdataproxy', name: d.name, engine: d.engine ?? 'unreadable',
+    key: `${server.id}/${d.name}`, server: server.id, serverName: server.name, product: 'dbdatagateway', name: d.name, engine: d.engine ?? 'unreadable',
     detail: d.valid ? `${d.access ?? 'readwrite'}, ${owner}` : 'the file is not valid', valid: d.valid,
   }
 }
@@ -58,8 +58,8 @@ export async function loadConnections(servers: InstanceSummary[]): Promise<{ row
       if (server.product === 'dbdatasync') {
         rows.push(...(await request<SyncConnection[]>(relay(server, '/api/connections'))).map((c) => syncConnectionRow(server, c)))
       } else {
-        const { data_sources } = await request<{ data_sources: ProxyDataSource[] }>(relay(server, '/api/v1/data-sources'))
-        rows.push(...data_sources.map((d) => proxyConnectionRow(server, d)))
+        const { data_sources } = await request<{ data_sources: GatewayDataSource[] }>(relay(server, '/api/v1/data-sources'))
+        rows.push(...data_sources.map((d) => gatewayConnectionRow(server, d)))
       }
     } catch (error) {
       problems.push({ server: server.name, message: error instanceof Error ? error.message : 'No answer' })

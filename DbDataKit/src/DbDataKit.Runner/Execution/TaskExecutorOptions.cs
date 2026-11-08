@@ -59,7 +59,7 @@ public sealed class TaskExecutorOptions
     /// </summary>
     public string? RuntimeExtractDirectory { get; init; }
 
-    /// <summary>Variables added to every task process (a proxy setting, say). They are visible to the task and must not hold secrets.</summary>
+    /// <summary>Variables added to every task process (a gateway setting, say). They are visible to the task and must not hold secrets.</summary>
     public IReadOnlyDictionary<string, string> ExtraEnvironment { get; init; } = new Dictionary<string, string>();
 
     /// <summary>Turns a task's connection slots into logins: the environment of the slots that ask for injection, and the answer to the protocol's <c>ResolveConnection</c>. Null: a runner with no connection bindings (tasks with slots then get no login).</summary>

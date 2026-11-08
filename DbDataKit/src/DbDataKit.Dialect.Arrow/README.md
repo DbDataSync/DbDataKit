@@ -1,10 +1,10 @@
 # DbDataKit.Dialect.Arrow
 
-Canonical type to Apache Arrow mapping (Apache.Arrow 23.0.0), ported from Proxy's `ArrowColumnWriter`.
+Canonical type to Apache Arrow mapping (Apache.Arrow 23.0.0), ported from Gateway's `ArrowColumnWriter`.
 
 ## Public contract
 - `ArrowTypeMap.ToArrow(CanonicalType) : TypeMapping<IArrowType>` and `FromArrow(IArrowType) : TypeMapping<CanonicalType>`; a rule table keyed by canonical kind, not an if-chain.
-- `ClrCanonicalMap.FromClr(Type, providerTypeName, precision, scale)` and `.ToArrow(...)`: the CLR-type decisions Proxy makes (a `DateTime` column whose provider type is `date` is a date).
+- `ClrCanonicalMap.FromClr(Type, providerTypeName, precision, scale)` and `.ToArrow(...)`: the CLR-type decisions Gateway makes (a `DateTime` column whose provider type is `date` is a date).
 
 ## Decisions
 - Timestamp is microseconds; zone-aware timestamps carry `"UTC"`; scale above 6 is Lossy.
@@ -15,4 +15,4 @@ Canonical type to Apache Arrow mapping (Apache.Arrow 23.0.0), ported from Proxy'
 - Arrow types have no value equality: compare `Name`/properties, not `Equals`.
 
 ## Consumers
-- `DbDataKit.Transfer.Abstractions` uses this mapping. The Proxy does **not**: it keeps its own `ArrowColumnWriter`, because Arrow is written on its hot query path. Move the Proxy onto this package only with a benchmark that shows no regression (owner review 13b, A20).
+- `DbDataKit.Transfer.Abstractions` uses this mapping. The Gateway does **not**: it keeps its own `ArrowColumnWriter`, because Arrow is written on its hot query path. Move the Gateway onto this package only with a benchmark that shows no regression (owner review 13b, A20).

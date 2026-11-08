@@ -11,8 +11,8 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DbDataConsole.Servers.Tests;
 
 /// <summary>
-/// Plan 13a, E05, with the real programs: a Sync server and a Proxy (each started from its built output), a console in this process speaking for a signed-in person. A connection made on Sync through the relay is listed, copied to the Proxy as a data source,
-/// and the Proxy validates it as it would any file (a copy it does not support is refused with its diagnostic and nothing is written); a data source of the Proxy is copied to Sync, which stores the password the person typed under the copy's own reference
+/// Plan 13a, E05, with the real programs: a Sync server and a Gateway (each started from its built output), a console in this process speaking for a signed-in person. A connection made on Sync through the relay is listed, copied to the Gateway as a data source,
+/// and the Gateway validates it as it would any file (a copy it does not support is refused with its diagnostic and nothing is written); a data source of the Gateway is copied to Sync, which stores the password the person typed under the copy's own reference
 /// and never in the file. What Playwright shows in the browser is these calls: the lists are the servers' own, through the relay, and the copy is the console's.
 /// </summary>
 public sealed class ConnectionsAcrossServersTests : IAsyncLifetime
@@ -22,31 +22,31 @@ public sealed class ConnectionsAcrossServersTests : IAsyncLifetime
     private WebApplication console = null!;
     private HttpClient http = null!;
     private string syncId = null!;
-    private string proxyId = null!;
+    private string gatewayId = null!;
     private string personId = null!;
-    private string proxyDirectory = null!;
+    private string gatewayDirectory = null!;
     private string syncDirectory = null!;
 
     public async ValueTask InitializeAsync()
     {
-        var (proxy, sync) = (Programs.Proxy, Programs.Sync);
-        (proxyDirectory, syncDirectory) = (Path.Combine(root, "proxy"), Path.Combine(root, "sync"));
+        var (gateway, sync) = (Programs.Gateway, Programs.Sync);
+        (gatewayDirectory, syncDirectory) = (Path.Combine(root, "gateway"), Path.Combine(root, "sync"));
         var consoleDirectory = Path.Combine(root, "console");
-        Directory.CreateDirectory(Path.Combine(proxyDirectory, "config", "connections"));
-        Directory.CreateDirectory(Path.Combine(proxyDirectory, "config", "proxy"));
+        Directory.CreateDirectory(Path.Combine(gatewayDirectory, "config", "connections"));
+        Directory.CreateDirectory(Path.Combine(gatewayDirectory, "config", "gateway"));
         Directory.CreateDirectory(syncDirectory);
 
-        // the Proxy: a management listener, a certificate of its own and one data source made by hand
-        File.WriteAllText(Path.Combine(proxyDirectory, "config", "server.yaml"), "schemaVersion: 2\ntls: { mode: selfSigned }\n");
-        File.WriteAllText(Path.Combine(proxyDirectory, "config", "proxy", "auth.yaml"), "jwt:\n  signingKey: servers-e2e-signing-key-0123456789abcdef\n  audience: api://servers-e2e\n");
-        File.WriteAllText(Path.Combine(proxyDirectory, "config", "connections", "erp.yaml"),
-            "# the ERP reader\nschema: connection/1\nname: erp\nengine: sqlserver\naddress: { host: localhost, database: Erp }\nauth: { mode: sql, user: reader, password_secret: 'env:ERP_DB_PASSWORD' }\nextensions:\n  proxy:\n    allow_writes: false\n");
+        // the Gateway: a management listener, a certificate of its own and one data source made by hand
+        File.WriteAllText(Path.Combine(gatewayDirectory, "config", "server.yaml"), "schemaVersion: 2\ntls: { mode: selfSigned }\n");
+        File.WriteAllText(Path.Combine(gatewayDirectory, "config", "gateway", "auth.yaml"), "jwt:\n  signingKey: servers-e2e-signing-key-0123456789abcdef\n  audience: api://servers-e2e\n");
+        File.WriteAllText(Path.Combine(gatewayDirectory, "config", "connections", "erp.yaml"),
+            "# the ERP reader\nschema: connection/1\nname: erp\nengine: sqlserver\naddress: { host: localhost, database: Erp }\nauth: { mode: sql, user: reader, password_secret: 'env:ERP_DB_PASSWORD' }\nextensions:\n  gateway:\n    allow_writes: false\n");
         var management = Programs.FreePort();
-        var proxyCode = Programs.CodeIn(await RealProcess.RunAsync(proxy, "server", "pair", "--repo", proxyDirectory, "--max-role", "admin"));
-        var proxyProcess = RealProcess.Start(proxy, ["server", "run", $"--Proxy:DataDirectory={proxyDirectory}", "--Proxy:Listen:Address=127.0.0.1", $"--Proxy:Listen:Port={Programs.FreePort()}",
-            "--Proxy:Management:Enabled=true", "--Proxy:Management:Address=127.0.0.1", $"--Proxy:Management:Port={management}", "--Proxy:Management:LocalChannel=false"]);
-        started.Add(proxyProcess);
-        var proxyUrl = new Uri($"https://127.0.0.1:{management}");
+        var gatewayCode = Programs.CodeIn(await RealProcess.RunAsync(gateway, "server", "pair", "--repo", gatewayDirectory, "--max-role", "admin"));
+        var gatewayProcess = RealProcess.Start(gateway, ["server", "run", $"--Gateway:DataDirectory={gatewayDirectory}", "--Gateway:Listen:Address=127.0.0.1", $"--Gateway:Listen:Port={Programs.FreePort()}",
+            "--Gateway:Management:Enabled=true", "--Gateway:Management:Address=127.0.0.1", $"--Gateway:Management:Port={management}", "--Gateway:Management:LocalChannel=false"]);
+        started.Add(gatewayProcess);
+        var gatewayUrl = new Uri($"https://127.0.0.1:{management}");
 
         // the Sync server: https with a certificate made here (a server must present one to be paired with)
         var certificate = Path.Combine(root, "sync.pfx");
@@ -67,13 +67,13 @@ public sealed class ConnectionsAcrossServersTests : IAsyncLifetime
             ["Kestrel__Certificates__Default__Path"] = certificate, ["Kestrel__Certificates__Default__Password"] = "servers-e2e",
         });
         started.Add(syncProcess);
-        await Task.WhenAll(proxyProcess.WaitUntilAsync(new Uri(proxyUrl, "/health/live"), TimeSpan.FromSeconds(90)), syncProcess.WaitUntilAsync(new Uri(syncUrl, "/api/health"), TimeSpan.FromSeconds(120)));
+        await Task.WhenAll(gatewayProcess.WaitUntilAsync(new Uri(gatewayUrl, "/health/live"), TimeSpan.FromSeconds(90)), syncProcess.WaitUntilAsync(new Uri(syncUrl, "/api/health"), TimeSpan.FromSeconds(120)));
 
         console = ConsoleHost.Build(new ConsoleSettings(consoleDirectory, new Uri("https://localhost:0")), ConsoleHost.Certificate(consoleDirectory), _ => { }, webRoot: Path.Combine(consoleDirectory, "none"));
         await console.StartAsync();
         http = new HttpClient(new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, _, _, _) => true, UseCookies = false }) { BaseAddress = new Uri(console.Urls.First()) };
         var instances = console.Services.GetRequiredService<ConsoleInstances>();
-        proxyId = (await instances.PairAsync(proxyUrl, proxyCode, "Edge proxy")).InstanceId;
+        gatewayId = (await instances.PairAsync(gatewayUrl, gatewayCode, "Edge gateway")).InstanceId;
         syncId = (await instances.PairAsync(syncUrl, syncCode, "Sync one")).InstanceId;
         personId = console.Services.GetRequiredService<IUserAccounts>().CreateUser("Ada Admin", null, UserRole.Admin).Id;
     }
@@ -96,10 +96,10 @@ public sealed class ConnectionsAcrossServersTests : IAsyncLifetime
         return (response.StatusCode, text.Length > 0 ? JsonNode.Parse(text) : null);
     }
 
-    private string ProxyFile(string name) => Path.Combine(proxyDirectory, "config", "connections", name + ".yaml");
+    private string GatewayFile(string name) => Path.Combine(gatewayDirectory, "config", "connections", name + ".yaml");
 
     [Fact]
-    public async Task A_connection_is_listed_and_copied_between_a_real_Sync_server_and_a_real_Proxy_and_the_target_validates_it()
+    public async Task A_connection_is_listed_and_copied_between_a_real_Sync_server_and_a_real_Gateway_and_the_target_validates_it()
     {
         // a connection made on Sync as its screen makes it (through the relay, with the password typed once)
         var made = await AsPerson(HttpMethod.Put, $"/relay/{syncId}/api/connections/orders", new
@@ -112,36 +112,36 @@ public sealed class ConnectionsAcrossServersTests : IAsyncLifetime
         // the lists, as the Connections page asks for them
         var syncList = await AsPerson(HttpMethod.Get, $"/relay/{syncId}/api/connections");
         Assert.Equal(["orders"], syncList.Body!.AsArray().Select(c => (string)c!["name"]!));
-        var proxyList = await AsPerson(HttpMethod.Get, $"/relay/{proxyId}/api/v1/data-sources");
-        Assert.Equal(["erp"], proxyList.Body!["data_sources"]!.AsArray().Select(c => (string)c!["name"]!));
+        var gatewayList = await AsPerson(HttpMethod.Get, $"/relay/{gatewayId}/api/v1/data-sources");
+        Assert.Equal(["erp"], gatewayList.Body!["data_sources"]!.AsArray().Select(c => (string)c!["name"]!));
 
-        // Sync to the Proxy: the file the Proxy has is the Sync file with its own settings left out, and the Proxy has validated it (it is in force: listed and valid)
-        var toProxy = await AsPerson(HttpMethod.Post, "/api/connections/copy", new { from = syncId, name = "orders", to = proxyId, newName = "orders-edge" });
-        Assert.True(toProxy.Status == HttpStatusCode.OK, $"copy to proxy: {toProxy.Status} {toProxy.Body}");
-        var written = File.ReadAllText(ProxyFile("orders-edge"));
+        // Sync to the Gateway: the file the Gateway has is the Sync file with its own settings left out, and the Gateway has validated it (it is in force: listed and valid)
+        var toGateway = await AsPerson(HttpMethod.Post, "/api/connections/copy", new { from = syncId, name = "orders", to = gatewayId, newName = "orders-edge" });
+        Assert.True(toGateway.Status == HttpStatusCode.OK, $"copy to gateway: {toGateway.Status} {toGateway.Body}");
+        var written = File.ReadAllText(GatewayFile("orders-edge"));
         Assert.Contains("name: orders-edge", written);
         Assert.DoesNotContain("test_query", written);                         // extensions.sync is Sync's
         Assert.DoesNotContain("sync-typed-pw", written);
-        Assert.Equal("secret:dbdata:proxy:connection:orders-edge", DbDataKit.Connections.ConnectionDefinitionLoader.Load(written, "orders-edge.yaml").Require().Auth!.PasswordSecret);
-        var listed = (await AsPerson(HttpMethod.Get, $"/relay/{proxyId}/api/v1/data-sources")).Body!["data_sources"]!.AsArray().Single(d => (string)d!["name"]! == "orders-edge")!;
+        Assert.Equal("secret:dbdata:gateway:connection:orders-edge", DbDataKit.Connections.ConnectionDefinitionLoader.Load(written, "orders-edge.yaml").Require().Auth!.PasswordSecret);
+        var listed = (await AsPerson(HttpMethod.Get, $"/relay/{gatewayId}/api/v1/data-sources")).Body!["data_sources"]!.AsArray().Single(d => (string)d!["name"]! == "orders-edge")!;
         Assert.True((bool)listed["valid"]!);
 
-        // a copy the Proxy does not support is its refusal: its words and the line, and nothing is written
+        // a copy the Gateway does not support is its refusal: its words and the line, and nothing is written
         var refused = await AsPerson(HttpMethod.Put, $"/relay/{syncId}/api/connections/events", new { name = "events", driverType = "Postgres", host = "pg01", port = 5432, database = "Events", authMode = "IntegratedAuth" });
         Assert.True(refused.Status == HttpStatusCode.OK, $"make events: {refused.Status} {refused.Body}");
-        var pg = await AsPerson(HttpMethod.Post, "/api/connections/copy", new { from = syncId, name = "events", to = proxyId });
+        var pg = await AsPerson(HttpMethod.Post, "/api/connections/copy", new { from = syncId, name = "events", to = gatewayId });
         Assert.NotEqual(HttpStatusCode.OK, pg.Status);
         Assert.Contains("did not accept the copy", (string)pg.Body!["error"]!);
         Assert.NotEmpty(pg.Body["diagnostics"]!.AsArray());
-        Assert.False(File.Exists(ProxyFile("events")));
+        Assert.False(File.Exists(GatewayFile("events")));
 
         // the name is taken now: a second copy is a conflict, not an overwrite
-        var again = await AsPerson(HttpMethod.Post, "/api/connections/copy", new { from = syncId, name = "orders", to = proxyId, newName = "orders-edge" });
+        var again = await AsPerson(HttpMethod.Post, "/api/connections/copy", new { from = syncId, name = "orders", to = gatewayId, newName = "orders-edge" });
         Assert.Equal(HttpStatusCode.Conflict, again.Status);
-        Assert.Equal(written, File.ReadAllText(ProxyFile("orders-edge")));
+        Assert.Equal(written, File.ReadAllText(GatewayFile("orders-edge")));
 
-        // the Proxy to Sync: Sync reads the file with its own loader and stores the typed password under the copy's own reference
-        var toSync = await AsPerson(HttpMethod.Post, "/api/connections/copy", new { from = proxyId, name = "erp", to = syncId, newName = "erp-sync", password = "typed-for-sync" });
+        // the Gateway to Sync: Sync reads the file with its own loader and stores the typed password under the copy's own reference
+        var toSync = await AsPerson(HttpMethod.Post, "/api/connections/copy", new { from = gatewayId, name = "erp", to = syncId, newName = "erp-sync", password = "typed-for-sync" });
         Assert.True(toSync.Status == HttpStatusCode.OK, $"copy to sync: {toSync.Status} {toSync.Body}");
         var copy = (await AsPerson(HttpMethod.Get, $"/relay/{syncId}/api/connections/erp-sync")).Body!;
         Assert.Equal("localhost", (string)copy["host"]!);
@@ -150,10 +150,10 @@ public sealed class ConnectionsAcrossServersTests : IAsyncLifetime
         var file = (await AsPerson(HttpMethod.Get, $"/relay/{syncId}/api/connections/erp-sync/file")).Body!;
         Assert.DoesNotContain("typed-for-sync", (string)file["text"]!);
         Assert.StartsWith("schema: connection/1", (string)file["text"]!);
-        Assert.DoesNotContain("allow_writes", (string)file["text"]!);        // the Proxy's serving policy stays on the Proxy
+        Assert.DoesNotContain("allow_writes", (string)file["text"]!);        // the Gateway's serving policy stays on the Gateway
 
         // without the typed password Sync says what it lacks, naming the reference, and keeps nothing
-        var noPassword = await AsPerson(HttpMethod.Post, "/api/connections/copy", new { from = proxyId, name = "erp", to = syncId, newName = "erp-no-password" });
+        var noPassword = await AsPerson(HttpMethod.Post, "/api/connections/copy", new { from = gatewayId, name = "erp", to = syncId, newName = "erp-no-password" });
         Assert.Equal(HttpStatusCode.BadRequest, noPassword.Status);
         Assert.Contains("dbdata:sync:connection:erp-no-password", (string)noPassword.Body!["error"]!);
         Assert.Equal(HttpStatusCode.NotFound, (await AsPerson(HttpMethod.Get, $"/relay/{syncId}/api/connections/erp-no-password")).Status);

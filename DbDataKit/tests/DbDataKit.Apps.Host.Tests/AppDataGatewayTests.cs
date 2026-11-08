@@ -11,7 +11,7 @@ namespace DbDataKit.Apps.Tests;
 public sealed class AppDataGatewayTests : IDisposable
 {
     private readonly string folder = Path.Combine(Path.GetTempPath(), "app-gateway-" + Guid.NewGuid().ToString("N")[..8]);
-    private readonly ConsoleIdentity host = new("dbdataproxy-apps", ConsoleSigningKey.Generate());
+    private readonly ConsoleIdentity host = new("dbdatagateway-apps", ConsoleSigningKey.Generate());
     private readonly Recorder data = new();
     private readonly AppInstanceStore instances;
     private readonly AppDataGateway gateway;

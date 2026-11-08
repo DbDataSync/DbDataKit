@@ -1,0 +1,11 @@
+{
+  "solution": {
+    "path": "../DbDataKit.slnx",
+    "projects": [
+      "DbDataGateway/src/DbDataGateway.Core/DbDataGateway.Core.csproj",
+      "DbDataGateway/src/DbDataGateway.Server/DbDataGateway.Server.csproj",
+      "DbDataGateway/src/DbDataGateway.Worker/DbDataGateway.Worker.csproj",
+      "DbDataGateway/tests/DbDataGateway.Tests/DbDataGateway.Tests.csproj"
+    ]
+  }
+}

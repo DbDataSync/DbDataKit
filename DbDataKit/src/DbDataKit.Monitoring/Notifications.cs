@@ -34,13 +34,13 @@ public static class NotificationKinds
     /// approaching it) and a feed should be able to find those without matching on prose.</summary>
     public const string CertificateExpired = "CertificateExpired";
 
-    /// <summary>A client was locked out after too many failed logins — the Proxy (plan 13, P10). The message names the user and the client address, never a password.</summary>
+    /// <summary>A client was locked out after too many failed logins — the Gateway (plan 13, P10). The message names the user and the client address, never a password.</summary>
     public const string LoginLockedOut = "LoginLockedOut";
 
-    /// <summary>A statement was refused on a read-only data source — the Proxy (plan 13, P10). The message names the user, the data source and the rule, never the statement.</summary>
+    /// <summary>A statement was refused on a read-only data source — the Gateway (plan 13, P10). The message names the user, the data source and the rule, never the statement.</summary>
     public const string StatementRefused = "StatementRefused";
 
-    /// <summary>A data source turned a caller away because every slot was in use — the Proxy (plan 13, P10).</summary>
+    /// <summary>A data source turned a caller away because every slot was in use — the Gateway (plan 13, P10).</summary>
     public const string LimitReached = "LimitReached";
 }
 

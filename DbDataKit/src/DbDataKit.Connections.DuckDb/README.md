@@ -1,6 +1,6 @@
 # DbDataKit.Connections.DuckDb
 
-DuckDB provider over DuckDB.NET.Data.Full 1.5.6 with the sandbox recipe (Build's set; closes Proxy S-1 for DuckDB).
+DuckDB provider over DuckDB.NET.Data.Full 1.5.6 with the sandbox recipe (Build's set; closes Gateway S-1 for DuckDB).
 
 Read-only contexts open the file with `access_mode=READ_ONLY`, then run, in order:
 

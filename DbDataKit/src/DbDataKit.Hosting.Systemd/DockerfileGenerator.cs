@@ -14,7 +14,7 @@ public enum ImageFlavor
 
 public sealed class DockerfileOptions
 {
-    /// <summary>Dll to run, e.g. <c>DbDataProxy.Server.dll</c>.</summary>
+    /// <summary>Dll to run, e.g. <c>DbDataGateway.Server.dll</c>.</summary>
     public required string EntryAssembly { get; init; }
 
     /// <summary>Directory of the <c>dotnet publish</c> output relative to the build context.</summary>

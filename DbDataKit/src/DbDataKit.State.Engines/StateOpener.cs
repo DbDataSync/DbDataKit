@@ -5,7 +5,7 @@ using Npgsql;
 
 namespace DbDataKit.State;
 
-/// <summary>The one place a product turns its state settings into an open <see cref="StateDatabase"/>, so the console, the Proxy and any command that opens the same store reach it the same way.</summary>
+/// <summary>The one place a product turns its state settings into an open <see cref="StateDatabase"/>, so the console, the Gateway and any command that opens the same store reach it the same way.</summary>
 public static class StateOpener
 {
     private static readonly object Registration = new();

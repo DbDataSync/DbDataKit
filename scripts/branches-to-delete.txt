@@ -43,12 +43,12 @@ suite/k03-key-functions
 suite/k04-key-lowering
 suite/l01-l04-l06-release
 suite/l03-pending-servers-ui
-suite/l07-proxy-compose
+suite/l07-gateway-compose
 suite/l08-sync-compose
 suite/l08-sync-https-compose
 suite/l09-store-compose
 suite/m12-monitoring-playwright
-suite/p12-proxy-more-engines
+suite/p12-gateway-more-engines
 suite/plan-decisions-2026-10-30
 suite/plan-j28-deferred
 suite/plan-t12-t10-remainder
@@ -139,7 +139,7 @@ suite/x04b-snapshot-verbs
 suite/j14-note
 
 # --- group 4: merged since, and the batch's topic branches
-suite/fix-proxy-secret-scan
+suite/fix-gateway-secret-scan
 suite/fix-activation-race
 suite/branch-hygiene
 suite/fix-staging-inflight-flake

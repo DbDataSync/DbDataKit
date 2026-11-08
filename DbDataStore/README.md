@@ -106,7 +106,7 @@ Reads and writes of the data itself are served by the serving layer from the mod
 
 ## Publishing to the serving layer
 
-Reads and writes of master data are served by the serving layer (plan 20), from the models this server publishes to it, so they go on with this server stopped. Pair once with the serving group as a publishing client, with a code its administrator made (`dbdataproxy server pair --max-role publisher`): `dbdatastore proxy add edge --url https://serving.example:8815 --code <code>`.
+Reads and writes of master data are served by the serving layer (plan 20), from the models this server publishes to it, so they go on with this server stopped. Pair once with the serving group as a publishing client, with a code its administrator made (`dbdatagateway server pair --max-role publisher`): `dbdatastore proxy add edge --url https://serving.example:8815 --code <code>`.
 
 **Publishing is the one act that makes the model you are working on available** (plan 20 O10b). Editing a model's file changes nothing for anyone; `dbdatastore model publish <model>` (the first time with `--proxy <name>`; after that, to every group the model is published to):
 

@@ -1,0 +1,9 @@
+schema: connection/1
+name: scratch
+engine: duckdb
+connection_string: "Data Source=C:\\data\\scratch.duckdb"
+extensions:
+  gateway:
+    # every user of the identity home may use this one (a deliberate choice: leaving the groups out opens nothing)
+    everyone: true
+    allow_writes: true

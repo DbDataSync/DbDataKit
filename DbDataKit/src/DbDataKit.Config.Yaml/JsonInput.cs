@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace DbDataKit.Config.Yaml;
 
 /// <summary>
-/// JSON as an input format behind the same node tree (Proxy can keep <c>appsettings.json</c>). Like appsettings.json, <c>//</c> and <c>/* */</c> comments and
+/// JSON as an input format behind the same node tree (Gateway can keep <c>appsettings.json</c>). Like appsettings.json, <c>//</c> and <c>/* */</c> comments and
 /// trailing commas are allowed: they are blanked out (positions unchanged) and the text is checked as JSON so syntax errors carry JSON-accurate positions.
 /// JSON is a subset of YAML flow syntax, so the same strict reader then builds the nodes (scalars stay strings, duplicate keys are errors) with line and column.
 /// </summary>

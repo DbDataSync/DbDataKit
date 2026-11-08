@@ -107,13 +107,13 @@ public sealed class BuildServerProxyTests : IAsyncLifetime
             {
                 var name = path[(path.LastIndexOf('/') + 1)..];
                 if (context.Request.Method == "DELETE") storedSecrets.Remove(name); else storedSecrets.Add(name);
-                return Results.Json(new { reference = "secret:dbdata:proxy:managed-x:" + name });
+                return Results.Json(new { reference = "secret:dbdata:gateway:managed-x:" + name });
             }
             if (path.StartsWith("/api/v1/semantic-models/", StringComparison.Ordinal))
                 return context.Request.Method == "GET" ? Results.Json(new { error = "none" }, statusCode: 404)
                     : modelAnswer == HttpStatusCode.OK ? Results.Json(new { version = 1, created = true }) : Results.Json(new { error = "The catalog does not load, so nothing was published." }, statusCode: (int)modelAnswer);
             if (context.Request.Method == "GET")
-                return dataSourceStatus == 200 ? Results.Json(new { version = "v1", text = $"schema: connection/1\nname: x\nengine: sqlserver\naccess: readonly\nconnection_string_secret: 'secret:dbdata:proxy:managed-x:{path[(path.LastIndexOf('/') + 1)..]}-read'\n" })
+                return dataSourceStatus == 200 ? Results.Json(new { version = "v1", text = $"schema: connection/1\nname: x\nengine: sqlserver\naccess: readonly\nconnection_string_secret: 'secret:dbdata:gateway:managed-x:{path[(path.LastIndexOf('/') + 1)..]}-read'\n" })
                     : Results.Json(new { error = dataSourceStatus == 404 ? "none" : "The object was not made by a publisher, so it is not this client's to change" }, statusCode: dataSourceStatus);
             return writeAnswer == HttpStatusCode.OK
                 ? Results.Json(new { version = "v2", created = dataSourceStatus != 200 })
@@ -209,7 +209,7 @@ public sealed class BuildServerProxyTests : IAsyncLifetime
         var definition = (string)JsonNode.Parse(seen.Single(r => r.Method == "PUT" && r.Path == "/api/v1/data-sources/warehouse").Body)!["text"]!;
         Assert.Contains("engine: sqlserver", definition);
         Assert.Contains("access: readonly", definition);
-        Assert.Contains("connection_string_secret: 'secret:dbdata:proxy:managed-x:warehouse-read'", definition);
+        Assert.Contains("connection_string_secret: 'secret:dbdata:gateway:managed-x:warehouse-read'", definition);
         Assert.DoesNotContain("READ-pw", definition);                                       // the file refers to the secret and holds none
         Assert.DoesNotContain(seen, r => r.Body.Contains("WRITE-pw", StringComparison.Ordinal));      // the write login never leaves
 
@@ -354,7 +354,7 @@ public sealed class BuildServerProxyTests : IAsyncLifetime
             var definition = (string)JsonNode.Parse(seen.Single(r => r.Method == "PUT" && r.Path == $"/api/v1/data-sources/{name}").Body)!["text"]!;
             Assert.Contains($"engine: {driver}", definition);
             Assert.Contains("access: readonly", definition);
-            Assert.Contains($"connection_string_secret: 'secret:dbdata:proxy:managed-x:{name}-read'", definition);
+            Assert.Contains($"connection_string_secret: 'secret:dbdata:gateway:managed-x:{name}-read'", definition);
             Assert.DoesNotContain("hunter2", definition);                                   // the login is in the secret, never in the file
         }
 

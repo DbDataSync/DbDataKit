@@ -74,7 +74,7 @@ public sealed class AppSite(AppInstanceStore instances, Func<string, AppEgress>?
     /// </summary>
     private AppResponse ViewsGet(ResolvedInstance instance, string instanceName, string subpath, bool hostOrigin)
     {
-        if (views is null) return Text(503, "This host has no runtime for apps of views: the Proxy was published without DbDataKit/web/view-app (build it with `npm run build -w @dbdatakit/view-app`).");
+        if (views is null) return Text(503, "This host has no runtime for apps of views: the Gateway was published without DbDataKit/web/view-app (build it with `npm run build -w @dbdatakit/view-app`).");
         var path = WebUtility.UrlDecode(subpath).Trim('/');
         if (path.Length > 0 && !AppPackage.IsPlain(path)) return Text(400, "That is not a path inside the app.");
         (byte[] Body, string Type)? served = path switch

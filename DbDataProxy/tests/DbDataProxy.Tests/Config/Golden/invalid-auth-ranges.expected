@@ -1,3 +1,0 @@
-Proxy:Auth:SessionIdleMinutes
-Proxy:Auth:SessionMaxHours
-Proxy:Worker:StartupTimeoutSeconds

@@ -1,7 +1,7 @@
 namespace DbDataKit.Hosting.Local;
 
 /// <summary>Where a server's local channel is and who may reach it.</summary>
-/// <param name="Name">The server's name (<c>dbdataproxy</c>, <c>dbdatasync</c>): one channel per name per machine.</param>
+/// <param name="Name">The server's name (<c>dbdatagateway</c>, <c>dbdatasync</c>): one channel per name per machine.</param>
 public sealed record LocalChannelOptions(string Name)
 {
     /// <summary>

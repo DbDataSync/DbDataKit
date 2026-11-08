@@ -13,7 +13,7 @@ namespace DbDataKit.Connections.FlightSql;
 /// <para>
 /// <c>FlightSqlClient.DoGetAsync</c> cannot: the Flight client decodes each message with an Arrow stream
 /// reader built without a codec factory, so a batch whose buffers are LZ4- or Zstd-compressed (which is
-/// what a compression-minded proxy sends) throws as soon as it is read, whatever packages are installed.
+/// what a compression-minded gateway sends) throws as soon as it is read, whatever packages are installed.
 /// So the call is made here, on the channel's raw call invoker, and each Flight message is re-framed into
 /// the Arrow IPC stream format — which is exactly what a Flight message is, split into header and body —
 /// and read with <see cref="ArrowStreamReader"/> given <see cref="CompressionCodecFactory"/>.

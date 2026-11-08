@@ -7,7 +7,7 @@ lists rules its tests enforce.
 | --- | --- | --- |
 | `DbDataKit/` | the shared libraries (`DbDataKit.*`, packages under `src/`, tests under `tests/`) | what two or more products need: config, connections, dialects, metadata, secrets, hosting, transfer |
 | `DbDataSync/` | replication tool: ASP.NET API (no web app of its own), its screens (`DbDataKit/web/sync`, an npm workspace, shown by the console), per-run TaskRunner | the replication engine, its drivers, its UI |
-| `DbDataProxy/` | Arrow Flight SQL proxy for relational databases | the Flight SQL server, its authentication, the 32-bit ODBC worker |
+| `DbDataGateway/` | Arrow Flight SQL gateway for relational databases | the Flight SQL server, its authentication, the 32-bit ODBC worker |
 | `DbDataConsole/` | the `dbdatakit` console host: the web app (`DbDataKit/web/console`): sign-in, users, invitations, the servers it manages and their screens, every module's docs (more arrive slice by slice, the open slices in `docs/plans/13a-suite-slices.md`) | the console's host and its command line |
 | `DbDataStore/` | master data models in your own databases (`model/1`, validated writes, history, audit; plan 15 and plan 19 lane Z): a server of the suite's shape (`docs/architecture.md`), the skeleton so far | the store's server and its command line |
 | `DbDataRunner/` | scheduled and batch work: the runner host (`dbdatarunner`; the engine is the library `DbDataKit.Runner`; plan 28 and 28a): a server of the suite's shape (`docs/architecture.md`) that runs the tasks of published packages, each in a process of its own | the host and its command line |
@@ -27,7 +27,7 @@ project reference in this repository, a package reference otherwise). Do not cop
   and `global.json` (SDK) apply to everything; each product's props imports the root one and adds its own.
 - Versions live only in the root `Directory.Packages.props`. A `PackageReference` has no `Version`; the one allowed `VersionOverride`
   is listed in `scripts/check_package_versions.py`.
-- `global.json` is read from the nearest folder only. `DbDataKit/` and `DbDataProxy/` have their own copy that adds the Microsoft Testing
+- `global.json` is read from the nearest folder only. `DbDataKit/` and `DbDataGateway/` have their own copy that adds the Microsoft Testing
   Platform runner (xunit v3); Sync and Build test on VSTest (xunit v2) and use the root one.
 - `DbDataKit.slnx` lists every project (`scripts/check_solution.py` keeps it complete); `<Product>.slnf` is each product's filter of it.
 - Warnings are errors in every product.
@@ -42,7 +42,7 @@ python3 -I scripts/check_package_versions.py && python3 -I scripts/check_solutio
 
 Per product, from its folder: `dotnet build`, then the suites below. Run the suites a change can affect; CI runs the rest on the pull request.
 
-- **DbDataKit, DbDataProxy, DbDataConsole, DbDataStore, DbDataRunner** (xunit v3, MTP): `dotnet test --project tests/<Name>`. If the test host cannot start (`Handshake failures`),
+- **DbDataKit, DbDataGateway, DbDataConsole, DbDataStore, DbDataRunner** (xunit v3, MTP): `dotnet test --project tests/<Name>`. If the test host cannot start (`Handshake failures`),
   run the built executable: `tests/<Name>/bin/Debug/net10.0/<Name>`; `-class` and `-method` select tests.
 - **DbDataSync**: `dotnet test --filter "Category!=Integration"` (add `DbDataSync.slnf`); `Category=Integration` needs the engines.
 - **DbDataBuild**: `scripts/fetch-native.sh` once, then `dotnet test tests/DbDataBuild.Tests.Unit`. The conformance suite needs engines.
@@ -59,7 +59,7 @@ Then `eval "$(testenv/testenv.sh env dbdatakit)"` sets `DBDATA_TEST_SQLSERVER` a
 Test engines:
 
 - One environment for every suite, `testenv/docker-compose.yml`, one profile per engine: `testenv/testenv.sh up mssql postgres`, then
-  `eval "$(testenv/testenv.sh env dbdataproxy)"` (also `dbdatakit`, `dbdatabuild`, `dbdatasync`); `down` when finished. Profiles: `mssql`
+  `eval "$(testenv/testenv.sh env dbdatagateway)"` (also `dbdatakit`, `dbdatabuild`, `dbdatasync`); `down` when finished. Profiles: `mssql`
   (14330, SQL Server Agent on), `mssql-target` (14331), `postgres` (15432), `postgres-logical` (15433), `mysql` (13306), `mariadb`
   (13307), `oracle` (15210). The previous release of each state engine (N-1, plan 29b U01) runs beside the current ones and is left out of a bare `up`:
   `mssql2022` (14333, SQL Server 2022) and `postgres16` (15434, `pgvector/pgvector:pg16`); `testenv/testenv.sh up mssql2022 postgres16`, then
@@ -68,7 +68,7 @@ Test engines:
   `eval "$(testenv/testenv.sh env dbdatasync)"`. `postgres-logical` is the one second engine of a kind (wal_level=logical and wal2json,
   built from `testenv/postgres-logical` on a fresh `postgres:17`), kept apart so the plain `postgres` stays what the other suites test.
   Run one stack at a time on a machine: the ports are fixed.
-- Tests with ODBC data sources (Proxy's SQL Server tests, Kit's ODBC projects) need unixODBC and Microsoft's "ODBC Driver 18 for SQL
+- Tests with ODBC data sources (Gateway's SQL Server tests, Kit's ODBC projects) need unixODBC and Microsoft's "ODBC Driver 18 for SQL
   Server" installed on the machine. In a cloud session run `scripts/install-odbc.sh` (Debian/Ubuntu; it is the CI install, safe to repeat).
 
 ## Making changes

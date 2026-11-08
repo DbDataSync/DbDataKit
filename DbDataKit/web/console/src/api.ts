@@ -129,7 +129,7 @@ export const consoleApi = {
     /** Forgets a waiting server without pairing; it is listed again if it keeps announcing. */
     reject: (id: string) => request<void>(`/api/instances/pending/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     forget: (id: string) => request<void>(`/api/instances/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-    /** Pairs a Build server with a proxy so Build can publish to it; no code is typed (T11). */
+    /** Pairs a Build server with a gateway so Build can publish to it; no code is typed (T11). */
     link: (from: string, to: string, name: string | null) =>
       request<{ from: string; to: string; name: string }>('/api/instances/link', { method: 'POST', body: JSON.stringify({ from, to, name }) }),
   },

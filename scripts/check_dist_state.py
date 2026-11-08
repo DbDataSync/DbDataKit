@@ -6,7 +6,7 @@ import os
 import sys
 
 # product folder -> program name; DbDataSync has no `state` noun yet (it is not listed)
-PRODUCTS = {"DbDataConsole": "dbdatakit", "DbDataProxy": "dbdataproxy", "DbDataBuild": "dbdatabuild"}
+PRODUCTS = {"DbDataConsole": "dbdatakit", "DbDataGateway": "dbdatagateway", "DbDataBuild": "dbdatabuild"}
 
 
 def problems(root):

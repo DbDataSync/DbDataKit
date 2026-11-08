@@ -30,8 +30,8 @@ public class CliTests
         Assert.Equal(0, r.Code);
         var art = Path.Combine(c.Dir, "art");
         Directory.CreateDirectory(art);
-        File.WriteAllText(Path.Combine(art, "dbdataproxy-1.4.0-win-x64.zip"), "zip-bytes");
-        File.WriteAllText(Path.Combine(art, "dbdataproxy-1.4.0-linux-x64.tar.gz"), "tar-bytes");
+        File.WriteAllText(Path.Combine(art, "dbdatagateway-1.4.0-win-x64.zip"), "zip-bytes");
+        File.WriteAllText(Path.Combine(art, "dbdatagateway-1.4.0-linux-x64.tar.gz"), "tar-bytes");
         File.WriteAllText(Path.Combine(art, "SHA256SUMS"), "ignored");
         return (c, PublicKeyOf(r.Out), art);
     }
@@ -41,13 +41,13 @@ public class CliTests
     {
         var (c, pub, art) = Setup();
         using var _ = c;
-        var cr = c.Run("manifest", "create", "--product", "dbdataproxy", "--version", "1.4.0", "--artifacts", art,
+        var cr = c.Run("manifest", "create", "--product", "dbdatagateway", "--version", "1.4.0", "--artifacts", art,
             "--base-url", "https://github.com/o/r/releases/download/v1.4.0", "--out", c.P("release.json"),
             "--min-updater", "1.0", "--requires-config-migration", "--schema-version", "config=3", "--supersedes", "1.3.0", "--notes", "hello");
         Assert.Equal(0, cr.Code);
         var m = ReleaseManifest.Parse(File.ReadAllBytes(c.P("release.json")));
         Assert.Equal(2, m.Artifacts.Count);
-        Assert.Contains(m.Artifacts, a => a.Rid == "win-x64" && a.Kind == "zip" && a.Url.EndsWith("/dbdataproxy-1.4.0-win-x64.zip"));
+        Assert.Contains(m.Artifacts, a => a.Rid == "win-x64" && a.Kind == "zip" && a.Url.EndsWith("/dbdatagateway-1.4.0-win-x64.zip"));
         Assert.Contains(m.Artifacts, a => a.Rid == "linux-x64" && a.Kind == "tarball");
         Assert.True(m.RequiresConfigMigration);
         Assert.Equal(3, m.SchemaVersions["config"]);
@@ -55,9 +55,9 @@ public class CliTests
 
         var sg = c.Run("manifest", "sign", "--manifest", c.P("release.json"), "--key-file", c.P("k1.key"), "--key-id", "k1");
         Assert.Equal(0, sg.Code);
-        var vr = c.Run("manifest", "verify", "--manifest", c.P("release.json"), "--trusted-key", $"k1={pub}", "--product", "dbdataproxy", "--artifacts", art);
+        var vr = c.Run("manifest", "verify", "--manifest", c.P("release.json"), "--trusted-key", $"k1={pub}", "--product", "dbdatagateway", "--artifacts", art);
         Assert.Equal(0, vr.Code);
-        Assert.Contains("OK: dbdataproxy 1.4.0", vr.Out);
+        Assert.Contains("OK: dbdatagateway 1.4.0", vr.Out);
     }
 
     [Fact]
@@ -65,7 +65,7 @@ public class CliTests
     {
         var (c, pub, art) = Setup();
         using var _ = c;
-        c.Run("manifest", "create", "--product", "dbdataproxy", "--version", "1.4.0", "--artifacts", art, "--base-url", "https://x/y", "--out", c.P("release.json"));
+        c.Run("manifest", "create", "--product", "dbdatagateway", "--version", "1.4.0", "--artifacts", art, "--base-url", "https://x/y", "--out", c.P("release.json"));
         c.Env[UpdateToolCli.SigningKeyEnv] = File.ReadAllText(c.P("k1.key"));
         Assert.Equal(0, c.Run("manifest", "sign", "--manifest", c.P("release.json"), "--key-id", "k1").Code);
         Assert.Equal(0, c.Run("manifest", "verify", "--manifest", c.P("release.json"), "--trusted-key", $"k1={pub}").Code);
@@ -76,15 +76,15 @@ public class CliTests
     {
         var (c, pub, art) = Setup();
         using var _ = c;
-        c.Run("manifest", "create", "--product", "dbdataproxy", "--version", "1.4.0", "--artifacts", art, "--base-url", "https://x/y", "--out", c.P("release.json"));
+        c.Run("manifest", "create", "--product", "dbdatagateway", "--version", "1.4.0", "--artifacts", art, "--base-url", "https://x/y", "--out", c.P("release.json"));
         c.Run("manifest", "sign", "--manifest", c.P("release.json"), "--key-file", c.P("k1.key"), "--key-id", "k1");
 
         // artifact tampered after signing
-        File.WriteAllText(Path.Combine(art, "dbdataproxy-1.4.0-win-x64.zip"), "zip-bytez");
+        File.WriteAllText(Path.Combine(art, "dbdatagateway-1.4.0-win-x64.zip"), "zip-bytez");
         var r1 = c.Run("manifest", "verify", "--manifest", c.P("release.json"), "--trusted-key", $"k1={pub}", "--artifacts", art);
         Assert.Equal(1, r1.Code);
         Assert.Contains("HashMismatch", r1.Err);
-        File.WriteAllText(Path.Combine(art, "dbdataproxy-1.4.0-win-x64.zip"), "zip-bytes");
+        File.WriteAllText(Path.Combine(art, "dbdatagateway-1.4.0-win-x64.zip"), "zip-bytes");
 
         // wrong key
         var other = c.Run("keys", "generate", "--key-id", "k1", "--out-private", c.P("other.key"));

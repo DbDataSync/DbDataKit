@@ -21,7 +21,7 @@ public sealed record StateTarget(StateSettings Settings, string SqlitePath, Func
 /// of the process. A product with no module list yet passes <c>null</c> for <see cref="Modules"/> and the verbs say so.
 /// </summary>
 /// <param name="Program">The command's name, as an operator types it (<c>dbdatakit</c>): it is in the sentences that name a fix.</param>
-/// <param name="Product">What the state belongs to, for a heading: <c>the console</c>, <c>the proxy</c>.</param>
+/// <param name="Product">What the state belongs to, for a heading: <c>the console</c>, <c>the gateway</c>.</param>
 /// <param name="Locate">Reads the product's own sources (a settings file, the environment, <c>--repo</c>) into a <see cref="StateTarget"/>. May throw <see cref="InvalidOperationException"/> or <see cref="ArgumentException"/> with a message naming what is wrong.</param>
 /// <param name="Modules">The modules the product's state is built from; null when the product has none listed yet.</param>
 /// <param name="Scope">The group and service this process is.</param>

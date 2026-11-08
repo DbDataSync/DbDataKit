@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace DbDataConsole.Server;
 
 /// <param name="From">The server the connection is on: its id or name.</param>
-/// <param name="Name">The connection (a Sync connection, a Proxy data source) to copy.</param>
+/// <param name="Name">The connection (a Sync connection, a Gateway data source) to copy.</param>
 /// <param name="To">The server to copy it to: its id or name.</param>
 /// <param name="NewName">What the copy is called there; the same name when empty.</param>
 /// <param name="Password">The password of a connection that logs in with one, for a Sync target, which stores it under the copy's own secret reference. It is sent on to that one server and kept nowhere here.</param>
@@ -34,7 +34,7 @@ public sealed class ConnectionsController(ConsoleInstances instances, ConsoleRel
         var (from, to) = (await instances.StatusAsync(fromInstance, cancellationToken), await instances.StatusAsync(toInstance, cancellationToken));
         foreach (var (status, role) in new[] { (from, "copy from"), (to, "copy to") })
             if (!status.Reachable || ConnectionCopy.ExtensionKey(status.Product) is null)
-                return BadRequest(new { error = $"{status.Instance.Name} cannot be used to {role}: {(status.Reachable ? $"connections are kept by Sync and Proxy servers, and it is {status.Product}" : status.Problem ?? "it is not answering")}." });
+                return BadRequest(new { error = $"{status.Instance.Name} cannot be used to {role}: {(status.Reachable ? $"connections are kept by Sync and Gateway servers, and it is {status.Product}" : status.Problem ?? "it is not answering")}." });
         if (request.Password is { Length: > 0 } && to.Product != ConnectionCopy.Sync)
             return BadRequest(new { error = $"{toInstance.Name} takes a password from its own secret store; a password cannot be sent to it." });
 

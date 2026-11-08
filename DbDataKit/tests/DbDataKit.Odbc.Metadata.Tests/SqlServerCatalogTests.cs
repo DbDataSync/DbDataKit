@@ -4,7 +4,7 @@ using DbDataKit.Odbc.Metadata;
 namespace DbDataKit.Odbc.Metadata.Tests;
 
 /// <summary>
-/// The native layer against a real driver. Variables (DBDATA_ prefix, or the DBPROXY_ prefix the proxy's tests use): TEST_SQLSERVER_SERVER
+/// The native layer against a real driver. Variables (DBDATA_ prefix, or the DBGATEWAY_ prefix the proxy's tests use): TEST_SQLSERVER_SERVER
 /// (default .\SQLEXPRESS with Windows authentication), TEST_SQLSERVER_USER and _PASSWORD for SQL authentication, and REQUIRE_SQLSERVER=true
 /// to fail instead of skip when the server or driver is missing. TEST_SQLSERVER alone is still read as the server name, as before, unless
 /// it holds a connection string: the SqlServer and Transfer suites use that same variable for a full connection string, and one value
@@ -12,8 +12,8 @@ namespace DbDataKit.Odbc.Metadata.Tests;
 /// </summary>
 public sealed class SqlServerCatalogTests : IAsyncLifetime
 {
-    // DBDATA_* first, then the DBPROXY_* names the Proxy tests use.
-    private static string? Env(string name) => Environment.GetEnvironmentVariable("DBDATA_" + name) ?? Environment.GetEnvironmentVariable("DBPROXY_" + name);
+    // DBDATA_* first, then the DBGATEWAY_* names the Proxy tests use.
+    private static string? Env(string name) => Environment.GetEnvironmentVariable("DBDATA_" + name) ?? Environment.GetEnvironmentVariable("DBGATEWAY_" + name);
 
     private static readonly string Server = Env("TEST_SQLSERVER_SERVER") ?? ServerNameOrNull(Env("TEST_SQLSERVER")) ?? @".\SQLEXPRESS";
 
