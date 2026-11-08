@@ -1,10 +1,120 @@
-# Plan 22a: the slices of plan 22 (filling the suite's major gaps)
+# Plan 22a: filling the suite's major gaps (direction and slices)
 
-Status: **proposed** (2026-11-07). [Plan 22](22-suite-gaps.md) says *what* the owner decided (2026-10-27); this plan says *in what pieces*, in what order,
-what exists to build on, and what test proves each piece. It is written in the shape of [28a](28a-runner-slices.md) and [29a](29a-state-slices.md): one slice,
-one branch `suite/gp<nn>-<short-name>`, one pull request, "done" is the test in the last column but one, and the status goes in the slice's row in the same change.
-It was written together with [23a](23a-first-run-and-quality-slices.md) and [24a](24a-upgrade-and-cache-slices.md) because their stored formats and
-their order depend on each other.
+Status: **proposed** (2026-11-07). This file is plans 22 and 22a in one: the **direction** the owner decided on 2026-10-27 (one question at a time; formerly plan 22) comes first, then the **slices** (what exists in the code, the order, decisions, questions, milestones, the slice rows). Both plan numbers, 22 and 22a, stay in the index and in the source comments.
+
+A slice is one branch, one pull request, "done" is the test in the last column but one, and the status goes in the slice's row in the same change (the shape of [28a](28a-runner-slices.md) and [29a](29a-state-slices.md)).
+
+> **Under review (the owner's hold of 2026-11-08).** Where the grants live is **undecided**, and the glossary is **not** a DbDataStore entity. The glossary is business knowledge per [plan 27](27-knowledge-agents-integrations-work.md) decisions 35 and 36 (git, `knowledge: 1`), so **GP05 is dropped**. The grants: the lean is the identity home, next to GP04's `attribute_mapping`; the alternatives are DbDataStore (QG5) and git files. Marked below as "under review": D5, QG5, GP03, GP05 (dropped), GP23, GP24, GP26 (rows that use the glossary entity), and GP10, which needs GP03. Nothing below that depends on them starts before the owner decides. Rows are kept, not deleted.
+
+## Direction (decided by the owner, 2026-10-27)
+
+The gaps came from a review of plans 13 to 21 against the data-flow diagram (`docs/suite-data-flow.md`). The seventh gap,
+environments and promotion, is plan 21.
+
+### 1. App authoring
+
+Plan 16 described how an app is served, not how it is written, built, tested and versioned.
+
+1. **Shared authoring.** The authoring machinery Build already has moves into a shared library (`DbDataKit.Authoring`), and both Build
+   projects and app projects use it. That machinery is plan 13a's W02–W10:
+   - git workspaces on the server, one per user (a branch);
+   - the console's file tree and editor with diagnostics;
+   - diff, commit and merge;
+   - the Author role.
+
+   The W slices still to come build it in the shared library instead of in Build.
+2. **An apps back-end server** (DbDataApps) owns app repositories, builds and versions. It publishes built versions to the serving
+   layer's `apps` module (plan 20), following the same pattern as Build and DbDataStore.
+3. **The framework.**
+   - Every app starts from one template.
+   - The default library set is fixed: `@dbdatakit/shell`, `@dbdatakit/visuals`, and typed clients for DbDataStore and semantic
+     queries.
+   - Builds run on the server in a child process, offline, from vendored packages.
+   - An **allow-list** lets an administrator add further packages. No other `npm install` runs.
+4. **Declarative views are part of the framework, not a second kind of app.** The template ships components that render spec files
+   (grid, form, detail page, dashboard). A new app can be nothing but spec files, and an author drops into code one page at a time.
+   This replaces plan 16's "two kinds of app".
+5. **One workflow for people and agents:**
+   - create a workspace (a branch);
+   - edit;
+   - build and preview (plan 21: previews are read-only by default, with sandboxed writes on request);
+   - commit and merge;
+   - publish.
+
+   A person does this in the console's editor. An agent does the same through MCP, with every step approved by its user as it happens.
+
+### 2. Row- and column-level access rules
+
+Plan 14 deferred row-level security ("not needed now"). With one serving layer, there is now one place to enforce it.
+
+1. **Enforced in the serving layer**, by one policy engine applied to every module: Flight SQL, semantic, store, apps, MCP and feeds.
+   Rules are added to the query before it runs and to the result's columns before it is returned. A module cannot bypass them.
+2. **Rules are defined with the data's owner and published with it.**
+   - Build defines rules on its models and semantic packages.
+   - DbDataStore defines rules on its entities.
+   - The rules travel with the published definition (plan 20, principle 1), so a promotion moves rules and data together.
+3. **Rules key on user attributes,** which come from two sources:
+   - **The directory:** claims and groups from Entra ID, Active Directory or Windows sign-in, mapped to attributes in the identity home.
+   - **A grants entity in DbDataStore**, defined by the suite (**under review, see plan 27 decisions 35/36 and the owner's 2026-11-08 hold: where grants live is undecided**).
+     - Each row is a subject (a user or a group), an attribute, a value and effective dates.
+     - A user or group can hold many values (a manager over three regions), and a new attribute needs no model change.
+     - Each attribute is declared once, naming the entity that holds its valid values (for example `region`), so a grant is validated
+       like any other write.
+     - Grants are maintained by business owners, with DbDataStore's history, approval and audit. "Who could see what, when" is therefore
+       answerable.
+4. **An example rule:** `region IN user.attributes('region')`, where the values come from the directory and the grants entity together.
+5. **Masking:** a column rule can hide a column, mask it, or replace it with null, again keyed on attributes.
+6. **Later:** limits on non-production channels reading production data (plan 21 section 2b) use this same engine.
+
+### 3. Catalog and search
+
+1. **Built on the lineage graph** (plan 18). Every node is searchable: datasets, columns, jobs, semantic models and members, entities,
+   apps.
+2. **Descriptions and owners come from the definitions:** Build's model and column descriptions, DbDataStore model text, semantic
+   member descriptions, app manifests. Nothing is typed twice.
+3. **The glossary is a DbDataStore entity** (**dropped: the glossary is business knowledge per plan 27 decisions 35/36, git `knowledge: 1`; under the owner's 2026-11-08 hold**): terms, definitions, owners and links to nodes, with history and approval like any
+   managed data.
+4. **Agents use the same search** through the command surface (`catalog search`, `catalog show`), so "which table has customer
+   churn" is a tool call.
+
+### 4. Backup and recovery
+
+| Part of the suite's state | How it is protected |
+| --- | --- |
+| Definitions (Sync configuration, Build projects, serving-layer configuration, connection definitions without secret values, app source, DbDataStore models) | **git remotes.** Each configuration repository can push to a remote the owner chooses (GitHub, Azure DevOps, any git server) on every commit. Published definitions can be republished from them |
+| The secrets store's key | documented as a separate backup (plan 13 section on secrets); never in git; a DPAPI-bound key is machine-specific, so the docs say how to re-key on restore |
+| Identity home, pairing and trust, audit, approvals, change requests, run history | on SQL Server or PostgreSQL (required for serving groups), **the database's own backups**. For single-instance SQLite installs, a small command (`<product> state backup` and `state restore`) archives the state database, with a restore test in CI |
+| DbDataStore's data, the warehouse | the customer's database backups; Build can also rebuild the warehouse |
+
+### 5. Delivery: alerts and subscriptions
+
+1. **One delivery service**, shared code (`DbDataKit.Delivery`), used by both alerts and report subscriptions.
+2. **Channels:** email (SMTP), Teams and Slack webhooks, and a generic signed webhook. Each channel is configured once per install,
+   with its secrets in the secrets store.
+3. **Alerts** come from monitoring (plan 13 W10): failed runs, late data, approvals waiting, expiring previews.
+4. **Subscriptions** deliver a report or a view (plan 16 section 2a) on a schedule, through the shared scheduler (`DbDataKit.Scheduling`).
+   They are rendered under the subscriber's own identity, so access rules (section 2) apply to what is sent.
+
+### 6. External monitoring
+
+1. **OpenTelemetry** from every server and the serving layer: metrics, traces and logs.
+   - Off by default, and turned on by one setting.
+   - Exported to any OpenTelemetry collector; Prometheus scraping goes through the OpenTelemetry exporter.
+2. **Traces follow a request across servers,** for example a query from an app through the semantic module to a database. Identities
+   in traces are the user's id, never secrets or query parameters.
+3. **The console's own monitoring stays.** OpenTelemetry is for operations teams who already have their own tools.
+
+### 7. What this changes in other plans
+
+| Plan | Change |
+| --- | --- |
+| 13a W02–W10 | built in `DbDataKit.Authoring` rather than in Build, so app projects can use them; the W slices' tests stay as written |
+| 14 concern 5 (row-level security) | superseded by section 2: enforced in the serving layer, keyed on user attributes |
+| 16 section 2 | app authoring (section 1); declarative views become framework components; builds use the allow-list |
+| 18 | the catalog (section 3) builds on the lineage graph |
+| 20 | the policy engine (section 2) becomes a principle of the serving layer |
+
+---
 
 **Slice ids.** `GP01`... for plan 22, `FQ01`... for plan 23, `UC01`... for plan 24. Checked free in plans 13a, 13c, 18, 19, 20, 26, 28a, 28b, 28c, 29a, 29b
 (taken: A to F, G (plan 18), H, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z, AP, D, DR, E, ED, QE).
@@ -65,7 +175,7 @@ them one bump.
 | D2 | **Rules fail closed:** a rule that cannot be evaluated, or an attribute a user has no value for, returns no rows (never all) | a security rule that fails open is a leak |
 | D3 | The rule expression is a **small boolean expression of our own**, parsed to a tree (`=`, `<>`, `IN`, `AND`, `OR`, `NOT`, `IS NULL`, `user.id`, `user.attributes('name')`, `user.in_group('name')`), then rendered per dialect | it must be checkable at publish time, and the same tree filters a semantic request, an entity read and (later) SQL |
 | D4 | Attributes are **multi-valued**: `ServingCaller` gains `Attributes` (name to a list of values); `Claims` stays for what it is today | "a manager over three regions" |
-| D5 | The grants entity and the glossary are **built-in DbDataStore models** shipped with the product (`suite.access`, `suite.glossary`), published to the group like any model | they get history, approval and audit with no new machinery; one mechanism (GP03) |
+| D5 | **Under review, see plan 27 decisions 35/36 and the owner's 2026-11-08 hold.** The grants entity and the glossary are **built-in DbDataStore models** shipped with the product (`suite.access`, `suite.glossary`), published to the group like any model | they get history, approval and audit with no new machinery; one mechanism (GP03) |
 | D6 | Delivery is **an outbox**: a message is written to the `delivery` state module first, a sender takes it, retries with back-off, and the attempt is recorded | a lost process or an unreachable mail server loses nothing; it is also what a test can look at |
 | D7 | Alerts and subscriptions are **runner tasks** of a system package, not threads inside a host | plan 28 and 28a; the schedule, the lease and the history come for free |
 | D8 | The apps back end is **DbDataWorkspace** (plan 27, 2026-11-06). Plans 22 and 23 still say DbDataApps; read it as this | owner's later decision; the plans' text is not edited here |
@@ -80,7 +190,7 @@ None blocks GP01 to GP06. Each has a default, so work continues.
 | QG2 | The rule language: our own small expression, or a SQL expression subset in DuckDB's syntax | **deferred by the owner (2026-11-07): low priority, needs more design.** Until it is decided, GP01 (the `access/1` document and its rule language), GP02 and GP10 to GP15 are not started; nothing else in wave 1 depends on them. The earlier default (our own small expression with SQL-like spelling, D3) stays a proposal only |
 | QG3 | A rule on a table that Flight SQL clients can also query by **pass-through SQL**: rewrite the statement, or refuse | **refuse** pass-through to any table that has a rule, naming the rule; semantic and store paths work. Rewriting through a parser is a later slice if wanted (GP12 says which) **Confirmed by the owner, 2026-11-07.** |
 | QG4 | A user who holds **no value** for an attribute a rule uses | sees no rows (D2); the console explains it in "why can't I see this" (GP15) **Confirmed by the owner, 2026-11-07.** |
-| QG5 | Grants live in DbDataStore, which stores on SQL Server and PostgreSQL only; plan 23's single-machine bundle keeps its state in SQLite | the grants entity is **available where DbDataStore has a SQL Server or PostgreSQL storage connection**; a bundle without one has directory attributes only, and says so on the rules screen. SQLite storage for models is not planned **Confirmed by the owner, 2026-11-07.** |
+| QG5 | **Under review, see plan 27 decisions 35/36 and the owner's 2026-11-08 hold.** Grants live in DbDataStore, which stores on SQL Server and PostgreSQL only; plan 23's single-machine bundle keeps its state in SQLite | the grants entity is **available where DbDataStore has a SQL Server or PostgreSQL storage connection**; a bundle without one has directory attributes only, and says so on the rules screen. SQLite storage for models is not planned **Confirmed by the owner, 2026-11-07.** |
 | QG6 | The SMTP library | **MailKit** (MIT), version pinned in `Directory.Packages.props` (the package check in `scripts/check_package_versions.py` is the gate) |
 | QG7 | Webhooks to private addresses (a channel pointing at 10.x or localhost) | **blocked unless the administrator lists the address**; every request is signed (HMAC-SHA256 over timestamp and body) |
 | QG8 | Where subscriptions are stored | the `delivery` state module (they are per-person data), not published definitions |
@@ -113,9 +223,9 @@ Size: S under a day, M a few days, L about a week. **Format** says whether the s
 | --- | --- | --- | --- | --- | --- |
 | GP01 | **The access rule document** `access/1` and the library `DbDataKit.Access`: row rules (D3), column rules (`hide`, `mask` with a mask kind, `null`), the attributes a rule uses declared by name, a strict loader with diagnostics naming file and line, a JSON schema; validated against the entity's or model's columns **Deferred: waits for QG2 (rule language), owner 2026-11-07.** | UC02 | M | **new section `access`** of the semantic package, the DbDataStore model and the serving data source (format 2, D1) | unit tests: a complete document loads; each bad part (unknown column, unknown attribute, expression that does not parse, mask on a column that is not text) is refused with a message naming file and line; a rule that is not closed (could return everything on a missing attribute) is refused (D2); the schema agrees with the loader (`SchemaAgreement`) |
 | GP02 | **Rules travel with the published definition:** the kinds `semantic-model` and `store-model` accept `access` in their validators; the version's hash covers it; a rule change is a new version; promotion between channels moves rules and definition together; a serving instance reads format 1 and 2 **Deferred: waits for QG2 (rule language), owner 2026-11-07.** | GP01, UC01 | M | `definition_version.format` of UC01; the definitions' *content* gains `access` | on SQLite, SQL Server and PostgreSQL: publish a model with a rule, the version row carries it, a rollback returns the old rules with the old version; promote prod to test moves both (conformance on the three engines); a definition with `access` published to a group with an instance that reads only format 1 is refused naming the instance (UC01) |
-| GP03 | **Built-in suite models and the grants entity:** DbDataStore ships models it did not read from a customer file; `suite.access` has `access_attribute` (name, the entity that holds valid values, owner) and `access_grant` (subject kind and id, attribute, value, valid from, valid to; `effective_dated`, approval `steward`); a grant is validated like any write (the value must exist in the attribute's entity) | Z04 and O10 (built), UC02 | M | **new model** (tables in the customer's database under `storage.connection`) and `model/1` gains nothing | conformance on SQL Server and PostgreSQL: create the model, grant a manager three regions, an unknown region is refused naming the attribute, an expired grant stays in history, "who held what on 3 March" answered by an as-of read; on SQLite the model is refused with the QG5 message |
+| GP03 | **Under review, see plan 27 decisions 35/36 and the owner's 2026-11-08 hold.** **Built-in suite models and the grants entity:** DbDataStore ships models it did not read from a customer file; `suite.access` has `access_attribute` (name, the entity that holds valid values, owner) and `access_grant` (subject kind and id, attribute, value, valid from, valid to; `effective_dated`, approval `steward`); a grant is validated like any write (the value must exist in the attribute's entity) | Z04 and O10 (built), UC02 | M | **new model** (tables in the customer's database under `storage.connection`) and `model/1` gains nothing | conformance on SQL Server and PostgreSQL: create the model, grant a manager three regions, an unknown region is refused naming the attribute, an expired grant stays in history, "who held what on 3 March" answered by an as-of read; on SQLite the model is refused with the QG5 message |
 | GP04 | **Directory attributes in the identity home:** a mapping from a directory claim or group (Entra, Active Directory, Windows) to an attribute and value; `HomeTokens` and the serving context carry multi-valued `Attributes` (D4); the home's id token claim shape documented | none | M | **identity module migration** (`attribute_mapping`), **token claim shape** (additive: a claim `attrs`) | on three engines: a group maps to `region=east`, a user in two groups gets two values in the token; a client that ignores `attrs` still works (N-1: a console built before reads the token); unit tests of the mapping; the admin API lists and edits mappings |
-| GP05 | **The glossary entity:** built-in model `suite.glossary` (term, definition, owner, links to lineage node ids, status), with history and approval like any managed data | GP03 | S | **new model** | conformance on SQL Server and PostgreSQL: a term is added, changed (history has both), approved by a second person, and its link to a node id is validated against the shape of `suite://` ids |
+| GP05 | **DROPPED (the owner's 2026-11-08 hold: the glossary is business knowledge per plan 27 decisions 35/36, git `knowledge: 1`, not a DbDataStore entity).** ~~**The glossary entity:** built-in model `suite.glossary` (term, definition, owner, links to lineage node ids, status), with history and approval like any managed data~~ | GP03 | S | **new model** | conformance on SQL Server and PostgreSQL: a term is added, changed (history has both), approved by a second person, and its link to a node id is validated against the shape of `suite://` ids |
 | GP06 | **The spec-file format for declarative app views** `view-spec/1`: grid, form, detail page and dashboard as files in an app's source (an entity and attributes from a model, parameters, links); schema, strict loader with diagnostics in `DbDataKit.Apps.Manifest`, and `app validate` checks the spec against the models the manifest names | AP03 (built) | M | **new file format** in app source (and so in a published app version) | unit tests: each spec kind loads, each bad part is refused with file and line, a spec naming an attribute the model does not have is refused; `app validate` over the template spec files passes |
 
 ### G-B: delivery configuration (wave 2; plan 22 section 5)
@@ -130,7 +240,7 @@ Size: S under a day, M a few days, L about a week. **Format** says whether the s
 
 | Slice | What | Needs | Size | Format | Done when |
 | --- | --- | --- | --- | --- | --- |
-| GP10 | **Attribute resolution:** `IAccessAttributes` combines the directory's values (GP04) and the grants entity **as of now** (GP03) for a caller, cached per session with a time-to-live, and as of any date for an explanation **Deferred: waits for QG2 (rule language), owner 2026-11-07.** | GP03, GP04 | M | none | tests with fake sources: union of both, an expired grant not included, a grant starting tomorrow not included, as-of 3 March includes the grant that ended in April; a failing grants source fails closed (D2) |
+| GP10 | **Under review, see plan 27 decisions 35/36 and the owner's 2026-11-08 hold.** (it needs GP03, where the grants live.) **Attribute resolution:** `IAccessAttributes` combines the directory's values (GP04) and the grants entity **as of now** (GP03) for a caller, cached per session with a time-to-live, and as of any date for an explanation **Deferred: waits for QG2 (rule language), owner 2026-11-07.** | GP03, GP04 | M | none | tests with fake sources: union of both, an expired grant not included, a grant starting tomorrow not included, as-of 3 March includes the grant that ended in April; a failing grants source fails closed (D2) |
 | GP11 | **Row filter in the serving core** for semantic requests and entity reads: the rule tree becomes a filter on the plan before it runs; every request kind in `ServingRequest` is handled or refused **Deferred: waits for QG2 (rule language), owner 2026-11-07.** | GP01, GP02, GP10 | L | none | on SQL Server and PostgreSQL data sources: a user with `region=east` sees east rows through a semantic request and an entity read, a user with no value sees none (D2), a new grant shows without a restart; the same query as two users gives two answers (conformance); the count and any total are over the filtered rows |
 | GP12 | **Pass-through SQL and Flight SQL tables:** a table with a rule is refused to pass-through SQL naming the rule (QG3); a table that Flight SQL lists is listed only where the caller may query it (through the semantic or entity path) **Deferred: waits for QG2 (rule language), owner 2026-11-07.** | GP11 | M | none | Flight SQL client tests: pass-through to a ruled table is refused with the rule's name, the same data through the semantic path works, an unruled table is untouched. (If the owner chooses to rewrite, this slice becomes L and gains a statement tree test per engine.) |
 | GP13 | **Column rules:** hide, mask and null applied to results and to the catalog (a hidden column is not described); masks are deterministic per kind and never reversible **Deferred: waits for QG2 (rule language), owner 2026-11-07.** | GP01, GP11 | M | none | tests: a hidden column is missing from `DescribeAsync` and from results, a masked column shows the mask, an aggregate over a hidden column is refused, a mask hides the length of the value |
@@ -158,10 +268,10 @@ Size: S under a day, M a few days, L about a week. **Format** says whether the s
 
 | Slice | What | Needs | Size | Format | Done when |
 | --- | --- | --- | --- | --- | --- |
-| GP23 | **Descriptions and owners from the definitions:** each lineage emitter writes `description` and `owner` into the node's `Properties` (Build's model and column descriptions, DbDataStore model text, semantic member descriptions, app manifests, glossary links from GP05) | G05, G07, G11 (built), GP05 | M | none (the `Properties` map exists; the names are fixed here) | per emitter a test that the text typed once in the definition appears on the node and nowhere else needs typing; a node without a description says so (`description: null`), never an empty string |
-| GP24 | **The catalog index:** a search over the joined graph (names, descriptions, owners, glossary terms), ranked, with the caller's rules applied (a hidden column is not found) | GP23, G09, GP13 | M | none (the index is rebuilt, not stored) | tests: a search for "churn" finds the column whose description says it, a column hidden for the caller is not in the result, a rebuild after a changed description finds the new text |
+| GP23 | **Under review, see plan 27 decisions 35/36 and the owner's 2026-11-08 hold.** **Descriptions and owners from the definitions:** each lineage emitter writes `description` and `owner` into the node's `Properties` (Build's model and column descriptions, DbDataStore model text, semantic member descriptions, app manifests, glossary links from GP05) | G05, G07, G11 (built), GP05 | M | none (the `Properties` map exists; the names are fixed here) | per emitter a test that the text typed once in the definition appears on the node and nowhere else needs typing; a node without a description says so (`description: null`), never an empty string |
+| GP24 | **Under review, see plan 27 decisions 35/36 and the owner's 2026-11-08 hold.** **The catalog index:** a search over the joined graph (names, descriptions, owners, glossary terms), ranked, with the caller's rules applied (a hidden column is not found) | GP23, G09, GP13 | M | none (the index is rebuilt, not stored) | tests: a search for "churn" finds the column whose description says it, a column hidden for the caller is not in the result, a rebuild after a changed description finds the new text |
 | GP25 | **`catalog search` and `catalog show`** on the shared command surface with JSON schemas, so an agent's "which table has customer churn" is a tool call | GP24, plan 13 C01 | S | none | command tests: documents validate against their schemas; the command spec test (suite-wide) lists both |
-| GP26 | **The console's catalog page:** search, a node's page (description, owner, glossary terms, lineage link, later: its checks, FQ17) | GP24, G10 (built) | M | none | Playwright: type a word, open a node, follow the link into the lineage graph, edit a glossary term through its link |
+| GP26 | **Under review, see plan 27 decisions 35/36 and the owner's 2026-11-08 hold.** **The console's catalog page:** search, a node's page (description, owner, glossary terms, lineage link, later: its checks, FQ17) | GP24, G10 (built) | M | none | Playwright: type a word, open a node, follow the link into the lineage graph, edit a glossary term through its link |
 
 ### G-G: external monitoring (plan 22 section 6)
 
@@ -195,7 +305,7 @@ and everything in the apps libraries (manifest, bundler, instances, host, portal
 | Plan 23's blocking and warning alerts (FQ13), first-run's delivery item (FQ21) | GP07 to GP09, GP16 |
 | Plan 24's cache key with attributes (UC12) | GP10 |
 | Plan 23's setup checklist item "git remotes" | GP19 |
-| Plan 27 wave 1 (the back-end agent), wave 4 (integrations), wave 3 (knowledge editor needs rules and the glossary) | GP30, GP31 (waves 1 and 4); GP05 and GP11 (wave 3) |
+| Plan 27 wave 1 (the back-end agent), wave 4 (integrations), wave 3 (knowledge editor needs rules and the glossary) | GP30, GP31 (waves 1 and 4); GP05 (dropped, under review) and GP11 (wave 3) |
 | Plan 26 AP12's declarative home views | GP06, GP34 |
 | Plan 31 report catalogs' subscriptions | GP17 |
 | Plan 18 G12 (DbDataStore and Workspace emitters) | GP03, GP31 |
@@ -203,7 +313,7 @@ and everything in the apps libraries (manifest, bundler, instances, host, portal
 ## What can start now
 
 In wave 1, **GP04, GP06 and UC01 need nothing that is not built** and can start together; GP01 and GP03 need only UC02's lock file to exist (they can start with format 2
-*open*, and UC02's script part can start at once). GP02 follows GP01 and UC01. GP05 follows GP03. In later waves GP07 (delivery), GP19 (config push), GP21 (secrets key), GP27 (telemetry) and GP30
+*open*, and UC02's script part can start at once). GP02 follows GP01 and UC01. GP05 is dropped (the 2026-11-08 hold). In later waves GP07 (delivery), GP19 (config push), GP21 (secrets key), GP27 (telemetry) and GP30
 (authoring) need nothing from this plan and can start whenever wave 1 is merged.
 
 ## Risks

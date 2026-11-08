@@ -68,6 +68,10 @@ class CheckPlans(unittest.TestCase):
         files = dict(GOOD, **{"docs/plans/README.md": readme(("01", "01-a.md"), ("02", "02-b.md"), ("09", "../done.md"), extra="plan 9\n")})
         self.assertEqual(([], []), self.problems(files))
 
+    def test_a_row_pointing_at_the_merged_file_of_a_plan_keeps_its_number_known(self):
+        files = {"docs/plans/01-a.md": "# A\n\nStatus: done.\n", "docs/plans/02a-c.md": "# C\n\nStatus: done.\n", "docs/plans/README.md": readme(("01", "01-a.md"), ("02", "02a-c.md"), ("02a", "02a-c.md"), extra="plan 2\n")}
+        self.assertEqual(([], []), self.problems(files))
+
     def test_a_suffixed_number_resolves_to_its_file(self):
         files = dict(GOOD, **{"docs/plans/02a-c.md": "# C\n\nStatus: done.\n", "docs/plans/README.md": readme(("01", "01-a.md"), ("02", "02-b.md"), ("02a", "02a-c.md"), extra="plan 2a\n")})
         self.assertEqual(([], []), self.problems(files))
