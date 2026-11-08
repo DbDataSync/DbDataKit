@@ -150,12 +150,13 @@ public static class DefinitionEditor
         return (newText, null);
     }
 
-    /// <summary>Scalars in grain and the unique_key and time_column of the kind that name <paramref name="column"/> (case-insensitive).</summary>
+    /// <summary>Scalars in grain, the columns of the model's own checks and the unique_key and time_column of the kind that name <paramref name="column"/> (case-insensitive).</summary>
     private static IEnumerable<YamlScalar> References(YamlMapping root, string column)
     {
         bool Is(YamlNode n) => n is YamlScalar s && string.Equals(s.Value, column, StringComparison.OrdinalIgnoreCase);
         if (root.Get("grain") is YamlSequence grain)
             foreach (var g in grain.Items.Where(Is)) yield return (YamlScalar)g;
+        foreach (var c in ModelChecksReader.ColumnReferences(root).Where(Is)) yield return c;   // the model's own checks name columns too
         if (ModelKindShape.SettingsOf(root.Get("kind")) is { } kind)
         {
             if (kind.Get("unique_key") is YamlSequence key)

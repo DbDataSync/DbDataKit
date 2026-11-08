@@ -6,7 +6,10 @@ namespace DbDataBuild.Models;
 /// <summary>Loads and validates one model definition (.yml). All problems are reported in one pass.</summary>
 public static class ModelDefinitionLoader
 {
-    private static readonly string[] TopKeys = ["name", "kind", "grain", "connections", "columns", "renames", "loads", "indexes", "hooks", "lint_ignore", "rewrites", "parameters", "refresh", "keys", "foreign_keys", .. YamlFieldReader.InfoKeys];
+    /// <summary>The newest format of a model file this reads: 2 (<c>schemaVersion: 2</c>, the section <c>checks</c>, plan 23a FQ02); a file with no <c>schemaVersion</c> is format 1 and is read as before. Registered in docs/formats.json.</summary>
+    public const int Version = 2;
+
+    private static readonly string[] TopKeys = [ModelChecksReader.VersionKey, "name", "kind", "grain", "connections", "columns", "renames", "loads", "indexes", "hooks", "lint_ignore", "rewrites", "parameters", "refresh", "keys", "foreign_keys", "checks", .. YamlFieldReader.InfoKeys];
     private static readonly string[] KeyKeys = ["from", "method", "unknown_member", "history", "version_key"];
     private static readonly string[] RenameKeys = ["from", "to"];
 
@@ -88,7 +91,9 @@ public static class ModelDefinitionLoader
                 foreach (var t in targets.Where(t => !connections.Contains(t.Value)))
                     Add(DiagnosticCatalog.InvalidValue, t, $"Unknown connection `{t.Value}`.", $"One of: {string.Join(", ", connections.Order(StringComparer.Ordinal))}.");
 
-            var columns = isCopy ? [] : ReadColumns(top);
+            var columns = isCopy ? [] : ReadColumns(top, allowChecks: true);
+            var schemaVersion = ModelChecksReader.ReadVersion(top, File, Diagnostics);
+            var checks = schemaVersion is { } v ? ModelChecksReader.Read(top, name?.Value ?? "", v, columns, File, Diagnostics) : [];
             var loads = ReadLoads(top, kindType?.Value, uniqueKey, timeColumn, columns, slice);
             var renames = ReadRenames(top);
             var indexes = ReadIndexes(top, columns, targets?.Select(t => t.Value).ToList());
@@ -143,7 +148,7 @@ public static class ModelDefinitionLoader
             return new ModelDefinition(name.Value, kindType.Value,
                 uniqueKey?.Select(k => k.Value).ToList() ?? [], timeColumn?.Value, lookback?.Value,
                 grain?.Select(g => g.Value).ToList() ?? [], targets?.Select(t => t.Value).ToList(),
-                columns, renames, loads, indexes, hooks, lintIgnore?.Select(c => c.Value).ToList(), rewrites, from?.Value, from?.Line ?? 0, slice, onMismatch, false, watermark, modelParameters, false, info, refresh, keys, foreignKeys);
+                columns, renames, loads, indexes, hooks, lintIgnore?.Select(c => c.Value).ToList(), rewrites, from?.Value, from?.Line ?? 0, slice, onMismatch, false, watermark, modelParameters, false, info, refresh, keys, foreignKeys, schemaVersion ?? 1, checks);
         }
 
         /// <summary>`watermark: {column, lookback}` of an incremental copy. It needs a `unique_key` (the rows it reads again replace the ones with the same key).</summary>

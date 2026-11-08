@@ -885,6 +885,13 @@
             "$ref": "urn:dbdatabuild:schemas:metadata#/$defs/indexAdvice"
           }
         },
+        "checks": {
+          "description": "The checks the model's file carries (format 2 of the model file); left out when it has none.",
+          "type": "array",
+          "items": {
+            "$ref": "urn:dbdatabuild:schemas:metadata#/$defs/check"
+          }
+        },
         "rewrites_off": {
           "description": "The rewrites that are off for this model, after the project's settings and the model's own (empty by default).",
           "type": "array",
@@ -1051,6 +1058,113 @@
         "definition_hash",
         "columns",
         "indexes"
+      ]
+    },
+    "check": {
+      "description": "One check the model's file carries (`checks:` in the model, or in a column's declaration), as read through the shared check model (plan 23a FQ02). Read and validated against the model's columns; not evaluated. Its dataset is the model.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "not_null",
+            "unique",
+            "accepted_values",
+            "range",
+            "referential",
+            "freshness",
+            "row_count_change"
+          ]
+        },
+        "severity": {
+          "enum": [
+            "warn",
+            "block"
+          ]
+        },
+        "on_error": {
+          "enum": [
+            "alert",
+            "block"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "columns": {
+          "description": "The columns the check is about (none for `row_count_change`, and for `freshness` that has no column).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "in_column": {
+          "description": "The column whose declaration holds the check; absent for a check written in the model's own `checks:`.",
+          "type": "string"
+        },
+        "parameters": {
+          "description": "The kind's own settings as the file writes them: `values`; `min` and `max` (text); `references` (`dataset`, `columns`); `max_age` (such as `6h`); `max_increase_percent`, `max_decrease_percent`. Empty for `not_null` and `unique`.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "min": {
+              "type": "string"
+            },
+            "max": {
+              "type": "string"
+            },
+            "references": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "dataset": {
+                  "type": "string"
+                },
+                "columns": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "dataset",
+                "columns"
+              ]
+            },
+            "max_age": {
+              "type": "string"
+            },
+            "max_increase_percent": {
+              "type": "number"
+            },
+            "max_decrease_percent": {
+              "type": "number"
+            }
+          }
+        },
+        "line": {
+          "description": "The line of the check in the model's file.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "severity",
+        "on_error",
+        "columns",
+        "parameters",
+        "line"
       ]
     }
   }

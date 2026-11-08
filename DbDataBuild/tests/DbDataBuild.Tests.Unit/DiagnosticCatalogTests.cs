@@ -39,6 +39,8 @@ public class DiagnosticCatalogTests
         { "DDB-243", ValidModel + "\nproperties:\n  \"two words\": 1\n" },
         { "DDB-245", ValidModel + "\nrefresh:\n  hourly: [default, default]\n" },
         { "DDB-246", ValidModel + "\nrefresh:\n  hourly: nope\n" },
+        { "DDB-622", "schemaVersion: 2\n" + ValidModel + "\nchecks:\n  - {id: x, kind: not_nul, column: order_id}\n" },
+        { "DDB-623", ValidModel + "\nchecks:\n  - {id: x, kind: not_null, column: order_id}\n" },
     };
 
     [Theory, MemberData(nameof(Fixtures))]

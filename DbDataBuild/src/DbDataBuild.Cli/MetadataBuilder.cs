@@ -8,6 +8,7 @@ using DbDataBuild.Sql.Matrix;
 using DbDataBuild.State;
 using DbDataBuild.Targets;
 using DbDataBuild.Targets.Ddl;
+using DbDataKit.Quality;
 
 namespace DbDataBuild.Cli;
 
@@ -237,6 +238,38 @@ internal static class MetadataBuilder
         };
     }
 
+    /// <summary>The checks the model's file carries (plan 23a FQ02), as the file wrote them: null (so left out) when it has none. The dataset of every check is the model, so it is not repeated.</summary>
+    internal static List<object>? ChecksDocument(ModelDefinition def) => def.Checks.Count == 0 ? null : def.Checks.Select(m => CheckDocument(m)).ToList();
+
+    private static object CheckDocument(ModelCheck model)
+    {
+        var c = model.Check;
+        var parameters = new Dictionary<string, object>();
+        switch (c.Parameters)
+        {
+            case AcceptedValuesParameters v: parameters["values"] = v.Values; break;
+            case RangeParameters r:
+                if (r.Min is not null) parameters["min"] = r.Min.Text;
+                if (r.Max is not null) parameters["max"] = r.Max.Text;
+                break;
+            case ReferentialParameters r: parameters["references"] = new { dataset = r.Dataset, columns = r.Columns }; break;
+            case FreshnessParameters f: parameters["max_age"] = AgeText(f.MaxAge); break;
+            case RowCountChangeParameters n:
+                if (n.MaxIncreasePercent is { } up) parameters["max_increase_percent"] = up;
+                if (n.MaxDecreasePercent is { } down) parameters["max_decrease_percent"] = down;
+                break;
+        }
+        return new
+        {
+            id = c.Id, kind = CheckNames.Name(c.Kind), severity = CheckNames.Name(c.Severity), on_error = CheckNames.Name(c.OnError), description = c.Description,
+            columns = c.Attachment.Columns, in_column = model.InColumn, parameters, line = model.Line,
+        };
+    }
+
+    /// <summary>A freshness age as a file writes it: the largest unit that holds it whole (<c>1d</c>, <c>6h</c>, <c>90m</c>, <c>45s</c>).</summary>
+    private static string AgeText(TimeSpan age) =>
+        age.TotalSeconds % 86400 == 0 ? $"{(long)age.TotalDays}d" : age.TotalSeconds % 3600 == 0 ? $"{(long)age.TotalHours}h" : age.TotalSeconds % 60 == 0 ? $"{(long)age.TotalMinutes}m" : $"{(long)age.TotalSeconds}s";
+
     public static object Model(ProjectContext ctx, BuiltModel built, string sql)
     {
         var def = built.Definition;
@@ -328,6 +361,7 @@ internal static class MetadataBuilder
             loads = rendered,
             indexes = def.Indexes.Select(i => new { name = i.Name, title = i.Info?.Title, description = i.Info?.Description, tags = i.Info?.TagsForDocument, properties = i.Info?.PropertiesForDocument, columns = i.Columns, unique = i.Unique, include = i.Include, connections = i.Targets }).ToList(),
             hooks,
+            checks = ChecksDocument(def),
             index_advice = IndexAdvisor.For(def, targets).Select(a => new
             {
                 code = a.Code, severity = a.Severity, reason = a.Reason, columns = a.Columns, unique = a.WantUnique,

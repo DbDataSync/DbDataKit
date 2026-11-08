@@ -30,6 +30,11 @@ are in the metadata (`dbdatabuild project show metadata marts.orders`), in the t
 which fails a mart that has no title, description or `owner`. `models/marts/_dbdatabuild.yml` gives every mart the tag `mart` and the property `layer: mart` once; `dbdatabuild project show graph tag:finance` or
 `property:owner=finance` selects models by them.
 
+## Checks
+
+`models/marts/orders.yml` says `schemaVersion: 2` and carries data quality `checks`: some in its own `checks:` (not null, a range, freshness, row count change) and two in the declaration of a column (`unique`, `accepted_values`). They are stored with the model,
+read and validated against its columns when the project loads (a check on a column the model does not have is an error at its line) and shown by `dbdatabuild project show metadata marts.orders`. Nothing runs them yet.
+
 ## Things to try
 
 - `dbdatabuild project show graph +marts.customers` and `dbdatabuild project show graph --column raw.payments.amount_cents`.

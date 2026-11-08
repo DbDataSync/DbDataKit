@@ -188,6 +188,30 @@ public class SchemaConformanceTests
         Semantic("loads: defaults on different targets are fine only when targets differ", "name: marts.fct_orders\nkind: full\n" + Cols + "loads:\n  a:\n    default: true\n    strategy: full_replace\n    connections: [sqlserver]\n  b:\n    default: true\n    strategy: full_replace\n    connections: [sqlserver, postgres]\n", "DDB-106"),
         Semantic("kind lookback unit does not fit the time column", "name: marts.fct_orders\nkind: {incremental_by_time_range: {time_column: d, lookback: 2 hours}}\ngrain: [d]\ncolumns:\n  - {name: d, type: DATE}\n", "DDB-106"),
         Semantic("rename to an undeclared column", "name: marts.fct_orders\nkind: full\n" + Cols + "renames:\n  - {from: old, to: ghost}\n", "DDB-217"),
+
+        // checks (format 2 of the model file, plan 23a FQ02)
+        Ok("checks: the seven kinds, in the model and in columns", "schemaVersion: 2\nname: marts.fct_orders\nkind: full\n" +
+            "columns:\n  - {name: a, type: INT, checks: [{id: a_unique, kind: unique, severity: block}, {id: a_ok, kind: accepted_values, values: [1, 2]}, {id: a_range, kind: range, min: 0, max: 9}, {id: a_ref, kind: referential, references: {dataset: marts.other, column: id}}, {id: a_fresh, kind: freshness, max_age: 1d}]}\n  - {name: b, type: INT, checks: [{id: b_set, kind: not_null, on_error: block, description: \"b is always there\"}]}\n" +
+            "checks:\n  - {id: n_a, kind: not_null, column: a}\n  - {id: u_ab, kind: unique, columns: [a, b]}\n  - {id: rows, kind: row_count_change, max_decrease_percent: 20}\n  - {id: r_ab, kind: referential, columns: [a, b], references: {dataset: marts.other, columns: [x, y]}, dataset: marts.fct_orders}\n"),
+        Ok("schemaVersion 2 without checks, quoted or not", "schemaVersion: \"2\"\nname: marts.fct_orders\nkind: full\n" + Cols),
+        Ok("schemaVersion 1 written out", "schemaVersion: 1\nname: marts.fct_orders\nkind: full\n" + Cols),
+        Bad("checks: an unknown kind", "schemaVersion: 2\nname: marts.fct_orders\nkind: full\n" + Cols + "checks:\n  - {id: x, kind: not_nul, column: a}\n", "DDB-622"),
+        Bad("checks: not a list", "schemaVersion: 2\nname: marts.fct_orders\nkind: full\n" + Cols + "checks: {id: x}\n", "DDB-622"),
+        Bad("checks: a key the kind does not take", "schemaVersion: 2\nname: marts.fct_orders\nkind: full\n" + Cols + "checks:\n  - {id: x, kind: not_null, column: a, min: 1}\n", "DDB-622"),
+        Bad("checks: a severity that is neither warn nor block", "schemaVersion: 2\nname: marts.fct_orders\nkind: full\n" + Cols + "checks:\n  - {id: x, kind: not_null, column: a, severity: fatal}\n", "DDB-622"),
+        Bad("checks: a column check names its column", "schemaVersion: 2\nname: marts.fct_orders\nkind: full\ncolumns:\n  - {name: a, type: INT, checks: [{id: x, kind: not_null, column: a}]}\n", "DDB-622"),
+        Bad("checks: row_count_change in a column", "schemaVersion: 2\nname: marts.fct_orders\nkind: full\ncolumns:\n  - {name: a, type: INT, checks: [{id: x, kind: row_count_change, max_decrease_percent: 5}]}\n", "DDB-622"),
+        Bad("schemaVersion newer than the tool reads", "schemaVersion: 3\nname: marts.fct_orders\nkind: full\n" + Cols, "DDB-623"),
+        Bad("schemaVersion not a number", "schemaVersion: two\nname: marts.fct_orders\nkind: full\n" + Cols, "DDB-623"),
+        Semantic("checks: a range with min above max", "schemaVersion: 2\nname: marts.fct_orders\nkind: full\n" + Cols + "checks:\n  - {id: x, kind: range, column: a, min: 9, max: 1}\n", "DDB-622"),
+        Semantic("checks: a check id used twice", "schemaVersion: 2\nname: marts.fct_orders\nkind: full\n" + Cols + "checks:\n  - {id: x, kind: not_null, column: a}\n  - {id: x, kind: unique, column: a}\n", "DDB-622"),
+        Semantic("checks: one id in the model and in a column", "schemaVersion: 2\nname: marts.fct_orders\nkind: full\ncolumns:\n  - {name: a, type: INT, checks: [{id: x, kind: not_null}]}\nchecks:\n  - {id: x, kind: unique, column: a}\n", "DDB-622"),
+        Semantic("checks: about another model", "schemaVersion: 2\nname: marts.fct_orders\nkind: full\n" + Cols + "checks:\n  - {id: x, kind: not_null, column: a, dataset: marts.other}\n", "DDB-622"),
+        Semantic("checks: on a column the model does not declare", "schemaVersion: 2\nname: marts.fct_orders\nkind: full\n" + Cols + "checks:\n  - {id: x, kind: not_null, column: ghost}\n", "DDB-217"),
+        Semantic("checks: one of several columns not declared", "schemaVersion: 2\nname: marts.fct_orders\nkind: full\n" + Cols + "checks:\n  - {id: x, kind: unique, columns: [a, ghost]}\n", "DDB-217"),
+        Semantic("checks: freshness on a column the model does not declare", "schemaVersion: 2\nname: marts.fct_orders\nkind: full\n" + Cols + "checks:\n  - {id: x, kind: freshness, column: ghost, max_age: 1d}\n", "DDB-217"),
+        Semantic("checks without schemaVersion 2", "name: marts.fct_orders\nkind: full\n" + Cols + "checks:\n  - {id: x, kind: not_null, column: a}\n", "DDB-623"),
+        Semantic("a column's checks without schemaVersion 2", "name: marts.fct_orders\nkind: full\ncolumns:\n  - {name: a, type: INT, checks: [{id: x, kind: not_null}]}\n", "DDB-623"),
     ];
 
     public static TheoryData<Fixture> ModelData
@@ -217,7 +241,7 @@ public class SchemaConformanceTests
     public void Corpus_covers_every_structural_code_the_model_loader_can_raise()
     {
         var raised = ModelFixtures.SelectMany(f => f.Codes).ToHashSet();
-        foreach (var code in new[] { "DDB-102", "DDB-104", "DDB-105", "DDB-106", "DDB-107", "DDB-214", "DDB-215", "DDB-216", "DDB-217" })
+        foreach (var code in new[] { "DDB-102", "DDB-104", "DDB-105", "DDB-106", "DDB-107", "DDB-214", "DDB-215", "DDB-216", "DDB-217", "DDB-622", "DDB-623" })
             Assert.Contains(code, raised);
     }
 

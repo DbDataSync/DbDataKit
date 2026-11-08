@@ -116,6 +116,24 @@ A table that exists and that the tool does not build or write: a source system's
 
 A table the engine computes from its own query: a table-valued function, `STRING_SPLIT`, an engine-native `SELECT`. The text is in the engine's own dialect and is never lowered or transpiled, so it lives on exactly one connection. A query on that connection reads it as a derived table. With `access: command` (a stored procedure or a function call that returns rows, allowed only where the connection sets `allow_native_commands: true`) it can only be the origin of a copy, and the copy is a risky step.
 
+## Checks (`checks:`, format 2 of the model file)
+
+A built model may carry data quality checks, stored with it: in its own `checks:` and in a column's declaration. Each is a `check/1` entry (`id`, `kind`, the kind's keys, `severity: warn|block`, `on_error: alert|block`); the kinds are `not_null`, `unique`, `accepted_values`, `range`, `referential`, `freshness` and `row_count_change`. A file with checks says `schemaVersion: 2` (a file without checks needs no `schemaVersion`; this tool refuses `checks` without it, DDB-623, and an older tool refuses the file as an unknown key).
+
+```yaml
+schemaVersion: 2
+name: marts.orders
+kind: full
+columns:
+  - {name: order_id, type: INTEGER, nullable: false, checks: [{id: orders_order_id_unique, kind: unique, severity: block}]}   # about this column: no column, no dataset
+  - {name: amount, type: "DECIMAL(14, 2)"}
+checks:
+  - {id: orders_amount_not_negative, kind: range, column: amount, min: 0}
+  - {id: orders_row_count_stable, kind: row_count_change, max_decrease_percent: 50}
+```
+
+The project loader validates them against the model's columns (a check on a column the model does not declare is DDB-217 at its line; any other problem is DDB-622 with the shared code) and `project show metadata` lists them. **Nothing runs them yet.** Mapped and native models carry none (the tool does not own those tables).
+
 ## Surrogate keys (`keys:`)
 
 A model that owns a surrogate key defines it once, `keys: {customer_key: {from: [source_system, customer_id]}}`; the key's name is the name of a function that queries will call. `from` lists the function's arguments in order (they need not be columns of the model), `method` is `hash` (a 64-bit hash of the normalized business key, the same on every engine) and `unknown_member: true` makes a call with a NULL argument give the reserved key `0` instead of NULL and adds a row with that key to the owning model (its other columns NULL, or the plainest value of the type where the column cannot be NULL; only a view, a full table or an incremental-by-unique-key table can hold it), and `history`/`version_key` are read and checked. A query calls the key by name, `customer_key(c.source_system, c.customer_id)`, and a call with the wrong number of arguments is refused naming the arguments the key takes. A key part is text, a whole number, a date or a moment: a `TIMESTAMP` column is written to the second, cut and not rounded, so a version key over a `valid_from` is the same on every engine (a `TIMESTAMPTZ` is treated as text). A key name is a function of the whole project: two models cannot define the same name, and a name that DuckDB has as a function is refused. A model that calls a key builds for SQL Server, Fabric and PostgreSQL: the lowered query keeps the call (as a `ddb_key_...` marker, so `lowered.sql` is for review, not for DuckDB to run) and each engine's file gets that engine's hash. **Not yet:** `unknown_member`, history version keys and `key_map` (read, not acted on), and the engine text has not run on a real engine.

@@ -600,6 +600,16 @@ public static class DiagnosticCatalog
         "Move each entry of `connections:` to its own file: `connections/<name>.yaml` with `schema: connection/1`, `name`, `engine` (the driver), `dialect`, `access: readonly` where the entry said `readonly`, and the rest under `extensions.build`. The templates show the form.",
         "Connections moved out of dbdatabuild.yml so the console, Sync and Proxy read the same file format. Nothing was converted: the project is not loaded until the entries are moved.");
 
+    // 622, 623: the checks a model file carries (format 2 of the model file, plan 23a FQ02)
+    public static readonly DiagnosticDescriptor ModelChecksInvalid = E("622", "A check of a model is not valid",
+        "`checks:` in a model's file (and `checks:` in a column's declaration) are check/1 entries: `id`, `kind` (not_null, unique, accepted_values, range, referential, freshness, row_count_change), the kind's own keys, `severity` (warn or block) and `on_error` (alert or block). A check in a model's file is about that model and names only columns the model declares; a check in a column's declaration is about that column.",
+        "Correct the check at the reported line (`dbdatabuild project agent-kit` writes `schemas/model.schema.json` for an editor). The text names the shared code of the check model (`DBD-QLT-nnn`, or the shared `DBD-nnn`); `docs/models.md` has the section.",
+        "Checks are the shared check model of the suite (`DbDataKit.Quality`), stored with the dataset they are about. The reader is strict, like every file of this tool: an unknown kind or key, a range whose minimum is above its maximum, a referential check that names no target, a check id used twice, a dataset that is not the model, a check on a column the model does not declare. Nothing is evaluated here: a check is read, validated and shown (`project show metadata`).");
+    public static readonly DiagnosticDescriptor ModelFormatMismatch = E("623", "A model file's format does not match what it says",
+        "`schemaVersion` absent or 1 (a model file of the first format), or 2 (the format that may carry `checks`); a file that has `checks:` says `schemaVersion: 2`.",
+        "Add `schemaVersion: 2` to a model file that uses `checks`, or remove the section; for a newer `schemaVersion`, upgrade the tool.",
+        "A model file is written in the lowest format that can say what it says: a file with no `checks` has no `schemaVersion` and is read as before. A file with `checks` must say `schemaVersion: 2`, so that a tool that knows only the first format refuses the whole file by an unknown key, naming the file and the line, instead of building the model without its checks. A `schemaVersion` above what this tool reads is refused with both numbers.");
+
     public static readonly IReadOnlyList<DiagnosticDescriptor> All =
     [
         YamlSyntax, DuplicateKey, UnsupportedYamlFeature, UnknownKey, MissingKey, InvalidValue, NameMismatch, OrphanFile, ConfigNotFound, CopyOriginDiffers, ModelReadsAnotherConnection, NativeReadsNotDeclared, StringsCompareDifferently, TrimmedColumnHasTrailingSpaces, QueryHeadInvalid, LoadSliceSourceNotIndexed, ReadsInconsistentHistory, NameTooLongForEngine, DatabaseErrorUnhandled, InfoOutOfBounds, NativeDefinitionChanged, NativeDefinitionNotChecked, TrackingNotConfigured,
@@ -613,7 +623,7 @@ public static class DiagnosticCatalog
         SemanticFileInvalid, SemanticUnknownModel, SemanticModelNotOnConnection, SemanticUnknownColumn, SemanticBindingTypeMismatch, SemanticRelationshipInvalid, SemanticUnknownConnection, SemanticModelInvalid, ForeignKeyInvalid,
         LoginNotConfigured, GateRefused, StatementLogUnavailable, ReadStatementRefused, TrackingNotInitialized,
         InternalError, ProjectFilePathRefused, ProjectFileHashStale, ProjectFileUnusable,
-        ConnectionFileInvalid, ConnectionsInProjectFile,
+        ConnectionFileInvalid, ConnectionsInProjectFile, ModelChecksInvalid, ModelFormatMismatch,
     ];
 
     public static DiagnosticDescriptor? Find(string code) =>
