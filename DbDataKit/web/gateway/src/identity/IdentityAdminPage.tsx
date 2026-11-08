@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ErrorBanner, useIsAdmin, type Crumb } from '@dbdatakit/shell'
 import { identityApi, type Place } from './api'
+import { AttributeMappingsCard } from './AttributeMappings'
 
 /** The frame a host draws around the page: the Gateway's rail, or the identity home's own. */
 export type Frame = (props: { crumbs: Crumb[]; children: ReactNode }) => ReactNode
@@ -114,6 +115,9 @@ export function IdentityAdminPage({ Frame }: { Frame: Frame }) {
             <button type="submit" className="btn" data-testid="identity-mapping-add">Map</button>
           </form>
         </div>
+
+        <h2 className="card-title" style={{ marginTop: 24 }}>Attributes from groups</h2>
+        <AttributeMappingsCard />
 
         <h2 className="card-title" style={{ marginTop: 24 }}>Groups</h2>
         <div className="card flush" data-testid="identity-groups">

@@ -10,6 +10,7 @@ export type Group = { id: string; name: string; members: string[] }
 export type Assignment = { id: string; subject_kind: 'user' | 'group'; subject: string; subject_name: string; scope: 'server' | 'project' | 'app'; target: string; project: string | null; roles: string[] }
 export type Client = { id: string; name: string; redirect_uris: string[]; logout_redirect_uris: string[]; confidential: boolean }
 export type GroupMapping = { id: string; source: 'entra' | 'windows'; group: string; scope: 'server' | 'project' | 'app'; target: string; project: string | null; roles: string[] }
+export type AttributeMapping = { id: string; source: 'entra' | 'windows'; group: string; attribute: string; value: string }
 export type Token = { id: string; user: string; user_name: string | null; name: string; created: string; expires: string | null; revoked: string | null; last_used: string | null; active: boolean }
 export type ServiceAccount = { id: string; name: string; description: string | null; created_by: string; active_tokens: number }
 
@@ -44,6 +45,12 @@ export const identityApi = {
     list: () => request<{ group_mappings: GroupMapping[] }>(`${base}/group-mappings`).then((r) => r.group_mappings),
     add: (source: string, group: string, place: Place, roles: string[]) => post<unknown>('group-mappings', { source, group, ...place, roles }),
     remove: (id: string) => remove(`group-mappings/${enc(id)}`),
+  },
+  /** A directory group gives its members an attribute value (plan 22a GP04); the values reach a token as the `attrs` claim and decide what a person sees. */
+  attributeMappings: {
+    list: () => request<{ attribute_mappings: AttributeMapping[] }>(`${base}/attribute-mappings`).then((r) => r.attribute_mappings),
+    add: (m: { source: string; group: string; attribute: string; value: string }) => post<{ attribute_mappings: AttributeMapping[] }>('attribute-mappings', m),
+    remove: (id: string) => remove(`attribute-mappings/${enc(id)}`),
   },
   tokens: {
     list: () => request<{ tokens: Token[] }>(`${base}/tokens`).then((r) => r.tokens),
