@@ -1,7 +1,7 @@
 import { put, request } from '@dbdatakit/shell'
-import type { InstanceRequest } from './appEditors'
+import type { InstanceRequest, PublishBody } from './appEditors'
 import type {
-  AdoptAnswer, AppApprovals, AppDetail, AppInstances, AppsList, NavigationSetRow, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SessionRow, TestResult, WriteDataSourceResult,
+  AdoptAnswer, AppApprovals, AppCheck, AppDetail, AppInstances, AppsList, NavigationSetRow, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SessionRow, TestResult, WriteDataSourceResult,
 } from './types'
 
 const v1 = '/api/v1'
@@ -56,8 +56,16 @@ export const gatewayApi = {
     saveInstance: (name: string, body: InstanceRequest) => put<{ name: string; app: string; version: number }>(`${v1}/app-instances/${enc(name)}`, body),
     removeInstance: (name: string) => request<{ name: string; removed: boolean }>(`${v1}/app-instances/${enc(name)}`, { method: 'DELETE' }),
     removeApp: (name: string) => request<{ name: string; removed: boolean }>(`${v1}/apps/${enc(name)}`, { method: 'DELETE' }),
-    approve: (app: string, version: number, by: string, note: string) =>
-      request<{ id: string }>(`${v1}/app-approvals`, { method: 'POST', body: JSON.stringify({ app, version, by, note: note || undefined }) }),
+    /** Approves one published version, for the outside origins chosen (`connect=https://api.x.com,img=...`: only origins the manifest asks for; none by default). */
+    approve: (app: string, version: number, by: string, note: string, egress?: string) =>
+      request<{ id: string }>(`${v1}/app-approvals`, { method: 'POST', body: JSON.stringify({ app, version, by, note: note || undefined, egress }) }),
+    /** Approves exact files that are not published yet (a trusted app is published only with such an approval): the body of the publish, the approver, a note and the origins chosen. */
+    approvePackage: (body: PublishBody, by: string, note: string, egress?: string) =>
+      request<{ id: string; app: string; hash: string }>(`${v1}/app-approvals`, { method: 'POST', body: JSON.stringify({ manifest: body.manifest, files: body.files, by, note: note || undefined, egress }) }),
+    /** What publishing these files would meet, without publishing: the Gateway's own diagnostics, the version it would be, the trust and the hash, whether an approval stands, what the manifest declares. */
+    check: (body: PublishBody) => request<AppCheck>(`${v1}/apps/check`, { method: 'POST', body: JSON.stringify({ manifest: body.manifest, files: body.files }) }),
+    /** Publishes a version: the manifest as text, every other file as base64 (what `apps publish --to` sends). */
+    publish: (name: string, body: PublishBody) => put<{ name: string; version: number; files: number; published_by: string }>(`${v1}/apps/${enc(name)}`, body),
     revoke: (id: string, by: string) => request<{ id: string }>(`${v1}/app-approvals/${enc(id)}/revoke`, { method: 'POST', body: JSON.stringify({ by }) }),
   },
   history: {

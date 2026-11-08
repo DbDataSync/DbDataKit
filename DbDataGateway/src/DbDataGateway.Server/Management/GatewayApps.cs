@@ -1,6 +1,8 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using DbDataKit.Apps;
+using DbDataKit.Config.Yaml;
 using DbDataKit.State;
 using DbDataKit.Web.Trust;
 
@@ -17,6 +19,7 @@ namespace DbDataGateway.Server.Management;
 /// <item><c>DELETE /api/v1/apps/{name}</c> and <c>DELETE /api/v1/app-instances/{name}</c>: stop serving an app or an instance, when the store's rules allow (a refusal is a 409 with the store's message; publisher or admin).</item>
 /// <item><c>POST /api/v1/app-approvals/{id}/revoke</c> (<c>{"by", "note"}</c>): end an approval; like approving it needs the approver role, and <c>by</c> is a user of the identity home who holds the Approver role.</item>
 /// <item><c>PUT /api/v1/apps/{name}</c> (<c>{"manifest": "&lt;app.yaml&gt;", "files": {"path": "&lt;base64&gt;"}, "note": "..."}</c>): publish a version (publisher or admin).</item>
+/// <item><c>POST /api/v1/apps/check</c> (<c>{"manifest", "files"}</c>, the body of a publish): what publishing these files would do, without doing it: the manifest's own diagnostics (and those of the portal's home views, the view specs and the files it names), the version it would be, its trust, the content hash, whether an approval stands for these exact files and what the manifest declares (publisher or admin; nothing is stored or audited).</item>
 /// <item><c>POST /api/v1/apps/{name}/rollback</c> (<c>{"to": n}</c>, or empty for the version before): move the version an app serves (publisher or admin).</item>
 /// <item><c>PUT /api/v1/app-instances/{name}</c> (<c>{"app", "pin", "title", "settings", "bindings"}</c>): make or change an instance (publisher or admin).</item>
 /// <item><c>POST /api/v1/app-approvals</c> (<c>{"manifest", "files"}</c> or <c>{"app", "hash"}</c> or <c>{"app", "version"}</c>, and <c>"by"</c>, <c>"note"</c>, <c>"egress"</c>): approve exact bytes of a trusted app (the approver role, which a publisher pairing never has).</item>
@@ -73,6 +76,7 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
         {
             case ("apps", "DELETE", 1): return await WriteAsync(() => RemoveApp(Uri.UnescapeDataString(rest[0]), caller));
             case ("app-instances", "DELETE", 1): return await WriteAsync(() => RemoveInstance(Uri.UnescapeDataString(rest[0]), caller));
+            case ("apps", "POST", 1) when rest[0] == "check": return Check(body, caller);
             case ("apps", "PUT", 1): return await WriteAsync(() => Publish(Uri.UnescapeDataString(rest[0]), body, caller));
             case ("apps", "POST", 2) when rest[1] == "rollback": return await WriteAsync(() => Rollback(Uri.UnescapeDataString(rest[0]), body, caller));
             case ("app-instances", "PUT", 1): return await WriteAsync(() => SaveInstance(Uri.UnescapeDataString(rest[0]), body, caller));
@@ -136,14 +140,14 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
             {
                 ["version"] = version.Version, ["manifest_version"] = manifest?.Version, ["trust"] = manifest?.Trust.ToString().ToLowerInvariant(), ["published_by"] = version.PublishedBy, ["published_at"] = version.PublishedAt, ["note"] = version.Note,
                 ["serving"] = version.Version == serving, ["hash"] = AppApprovals.ContentHash(bundle, manifestHash), ["approval_id"] = standing?.Id, ["files"] = package.Files.Count,
-                ["about"] = manifest is null ? null : About(manifest, version, standing),
+                ["about"] = manifest is null ? null : About(manifest, version.PublishedBy, version.PublishedAt, standing),
             });
         }
         return ManagementResult.Ok(new JsonObject { ["name"] = name, ["serving"] = serving, ["versions"] = rows, ["caller"] = Capabilities(caller) });
     }
 
     /// <summary>What an app's manifest declares it can reach, as the host's about page lists it (AP18): the models and what it does with each entity, the outside addresses, the storage, who published it and who approved these bytes.</summary>
-    private static JsonObject About(AppManifest manifest, DefinitionVersion version, AppApproval? standing)
+    private static JsonObject About(AppManifest manifest, string publishedBy, DateTimeOffset publishedAt, AppApproval? standing)
     {
         var access = new JsonArray();
         foreach (var use in manifest.Models)
@@ -158,7 +162,7 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
             ["title"] = manifest.Title, ["description"] = manifest.Description, ["kind"] = manifest.Kind.ToString().ToLowerInvariant(), ["trust"] = manifest.Trust.ToString().ToLowerInvariant(),
             ["roles"] = new JsonArray([.. manifest.Roles.Select(r => (JsonNode)r)]), ["models"] = access, ["semantic_models"] = new JsonArray([.. manifest.SemanticModels.Select(m => (JsonNode)m)]), ["egress"] = egress,
             ["storage"] = storage.User || storage.Instance ? new JsonObject { ["user"] = storage.User, ["instance"] = storage.Instance, ["quota_mb"] = storage.QuotaMb } : null,
-            ["published_by"] = version.PublishedBy, ["published_at"] = version.PublishedAt,
+            ["published_by"] = publishedBy, ["published_at"] = publishedAt,
             ["approval"] = standing is null ? null : new JsonObject { ["id"] = standing.Id, ["approved_by"] = standing.ApprovedBy, ["approved_at"] = standing.ApprovedAt, ["note"] = standing.Note },
         };
     }
@@ -285,6 +289,44 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
         }
     }
 
+    /// <summary>What a publish of these files would meet, said without publishing: the diagnostics the screen shows before it sends the files, and what the approver needs to choose (the origins the manifest asks for).</summary>
+    private ManagementResult Check(string? body, ManagementCaller caller)
+    {
+        var request = Read<PublishRequest>(body);
+        if (request?.Manifest is not { Length: > 0 } manifestText)
+            return ManagementResult.Problem(400, "The body is a JSON object: {\"manifest\": \"<app.yaml>\", \"files\": {\"<path>\": \"<base64>\"}}.");
+        AppPackage package;
+        try { package = Package(manifestText, request.Files); }
+        catch (AppPackageException ex) { return ManagementResult.Problem(400, ex.Message); }
+
+        var load = AppManifestLoader.Load(package.ManifestYaml);
+        var diagnostics = new List<ConfigDiagnostic>(load.Diagnostics);
+        var result = new JsonObject { ["files"] = package.Files.Count, ["ok"] = load.Ok };
+        if (load.Manifest is { } manifest)
+        {
+            string? Text(string path) => package.Files.TryGetValue(path, out var bytes) ? Encoding.UTF8.GetString(bytes) : null;
+            diagnostics.AddRange(AppChecks.FilesWhere(manifest, path => package.Files.ContainsKey(path)));
+            diagnostics.AddRange(AppChecks.HomeViews(manifest, Text));
+            diagnostics.AddRange(AppChecks.ViewSpecs(manifest, Text));
+            var store = new AppInstanceStore(definitions);
+            var (bundle, manifestHash) = AppApprovalStore.Hashes(package);
+            var standing = AppApprovals.Find(new AppApprovalStore(definitions).ForApp(manifest.Name), manifest, bundle, manifestHash);
+            result["name"] = manifest.Name;
+            result["manifest_version"] = manifest.Version;
+            result["trust"] = manifest.Trust.ToString().ToLowerInvariant();
+            result["hash"] = AppApprovals.ContentHash(bundle, manifestHash);
+            result["approval_id"] = standing?.Id;
+            result["next_version"] = store.AppVersions(manifest.Name).Select(v => v.Version).DefaultIfEmpty(0).Max() + 1;
+            result["about"] = About(manifest, CallerName(caller), _clock.GetUtcNow(), standing);
+            result["ok"] = !diagnostics.Any(d => d.Severity == ConfigSeverity.Error);
+        }
+        result["diagnostics"] = new JsonArray([.. diagnostics.Select(d => (JsonNode)new JsonObject
+        {
+            ["code"] = d.Code, ["severity"] = d.Severity.ToString().ToLowerInvariant(), ["file"] = d.Path, ["line"] = d.Line, ["column"] = d.Column, ["message"] = d.Message, ["fix"] = d.Fix,
+        })]);
+        return ManagementResult.Ok(result);
+    }
+
     private ManagementResult Rollback(string name, string? body, ManagementCaller caller)
     {
         var request = Read<RollbackRequest>(body);
@@ -321,7 +363,8 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
         var request = Read<ApproveRequest>(body);
         if (ApproverName(request?.By, caller) is not { Length: > 0 } by)
             return ManagementResult.Problem(400, "The body names who approves: {\"by\": \"<a user of the identity home who holds the Approver role>\", and one of \"manifest\" and \"files\", \"app\" and \"hash\", or \"app\" and \"version\"}.");
-        var target = request!.App ?? "(package)";
+        // a package approval is audited under the app its manifest names, as a version approval is under the app it names
+        var target = request!.App ?? (request.Manifest is { Length: > 0 } text ? AppManifestLoader.Load(text).Manifest?.Name : null) ?? "(package)";
         try
         {
             var approvalStore = new AppApprovalStore(definitions, approvers: approvers());

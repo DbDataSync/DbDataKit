@@ -5,9 +5,9 @@ import { gatewayApi } from '../api'
 import {
   approveBlock, NEEDS_PUBLISHER, removeAppBlock, removeInstanceBlock, revokeBlock, runsLabel, safeAddress, serveBlock, shortHash, sortApprovals, sortApps, sortInstances, trustLabel,
 } from '../apps'
-import { configurationLabel, emptyInstanceForm, formFromRow, instanceRequest, modelsOf, pinRequest, type InstanceForm } from '../appEditors'
+import { configurationLabel, egressChoices, egressParam, emptyInstanceForm, formFromRow, instanceRequest, modelsOf, pinRequest, prepareFolder, prepareManifest, publishBody, toggled, type InstanceForm, type PickedFile, type Prepared } from '../appEditors'
 import { GatewayShell } from '../GatewayShell'
-import { InstanceEditorView, Why, wrap } from './AppEditors'
+import { InstanceEditorView, PublishView, Why, wrap } from './AppEditors'
 import type { AppAbout, AppApprovalRow, AppDetail, AppInstanceRow, AppsCaller, AppSummary, AppVersionRow, NavigationSetRow } from '../types'
 
 const when = (iso: string) => new Date(iso).toLocaleString()
@@ -204,6 +204,9 @@ export interface VersionsViewProps {
   onAskApprove: (version: number | null) => void
   onNote: (text: string) => void
   onApprove: (version: number) => void
+  /** The outside origins ticked in the approval form, as `directive=origin` (UE02). */
+  egress: string[]
+  onToggleEgress: (id: string) => void
 }
 
 const VERSION_COLUMNS = '0.6fr 1fr 1.6fr 1.2fr 1.4fr 2.4fr'
@@ -240,6 +243,18 @@ export function VersionsView(p: VersionsViewProps) {
               <div className="card-body" data-testid={`approve-form-${v.version}`} style={{ borderTop: '1px solid var(--line, #ddd)' }}>
                 <p style={{ margin: '0 0 8px' }}>Approving records that <b>{detail.name} {v.manifest_version}</b>, these exact files (hash <span className="mono">{shortHash(v.hash)}</span>), may run as trusted. Any changed byte needs a new approval.</p>
                 <p className="hint" style={{ margin: '0 0 8px' }}>The approver is named in the audit: {p.by || 'name the approver above'}. The Gateway checks that they hold the Approver role and are not {v.published_by}, who published this version.</p>
+                {egressChoices(v.about).length === 0
+                  ? <div className="hint" style={{ margin: '0 0 8px' }} data-testid="approve-egress-none">This version asks for no outside address, so the approval allows none.</div>
+                  : (
+                    <fieldset style={{ border: 0, padding: 0, margin: '0 0 8px' }} data-testid="approve-egress">
+                      <legend className="hint">Outside addresses this version asks for: tick the ones the app may use (none ticked, none allowed)</legend>
+                      {egressChoices(v.about).map((c) => (
+                        <label key={c.id} style={{ display: 'block' }}>
+                          <input type="checkbox" checked={p.egress.includes(c.id)} onChange={() => p.onToggleEgress(c.id)} data-testid={`approve-egress-${c.id}`} /> <span className="mono">{c.directive} {c.origin}</span>
+                        </label>
+                      ))}
+                    </fieldset>
+                  )}
                 <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
                   <input className="input" placeholder="note (a link to the review, for example)" value={p.note} onChange={(e) => p.onNote(e.target.value)} data-testid="approve-note" aria-label="Note" />
                   <button type="button" className="btn btn-primary" disabled={approveReason !== null || p.busy} onClick={() => p.onApprove(v.version)} data-testid={`approve-confirm-${v.version}`}>Approve these files</button>
@@ -350,6 +365,21 @@ export function AppsPage() {
   const [editing, setEditing] = useState<{ form: InstanceForm; isNew: boolean } | null>(null)
   const editDetail = useQuery({ queryKey: ['gateway', 'apps', editing?.form.app], queryFn: () => gatewayApi.apps.detail(editing!.form.app), enabled: editing !== null && editing.form.app !== '' })
 
+  // the approval form of a published version: the origins ticked (UE02)
+  const [versionEgress, setVersionEgress] = useState<string[]>([])
+  // the publish panel (UE02): what was chosen, what the Gateway said of it, and the refusal of the last call
+  const [publishing, setPublishing] = useState(false)
+  const [mode, setMode] = useState<'folder' | 'manifest'>('folder')
+  const [prepared, setPrepared] = useState<Prepared | null>(null)
+  const [pickId, setPickId] = useState(0)
+  const [pasted, setPasted] = useState('')
+  const [publishNote, setPublishNote] = useState('')
+  const [approveNote, setApproveNote] = useState('')
+  const [packageEgress, setPackageEgress] = useState<string[]>([])
+  const [refusal, setRefusal] = useState<string | null>(null)
+  const body = prepared?.ok ? publishBody(prepared.package, '') : null
+  const check = useQuery({ queryKey: ['gateway', 'apps-check', pickId], queryFn: () => gatewayApi.apps.check(body!), enabled: body !== null, retry: false })
+
   const caller: AppsCaller = apps.data?.caller ?? instances.data?.caller ?? approvals.data?.caller ?? { can_publish: false, can_approve: false, you: '' }
   const approver = by ?? caller.you
   // a failure is shown once, at the top: the Gateway's own words (a store's refusal names what to do first)
@@ -372,12 +402,31 @@ export function AppsPage() {
   const removeInstance = useMutation({ mutationFn: gatewayApi.apps.removeInstance, onSuccess: (r) => done(`${r.name} is no longer served.`)(), onError: failed })
   const removeApp = useMutation({ mutationFn: gatewayApi.apps.removeApp, onSuccess: (r) => done(`${r.name} is no longer served; its versions and approvals stay on record.`)(), onError: failed })
   const approve = useMutation({
-    mutationFn: (v: { app: string; version: number }) => gatewayApi.apps.approve(v.app, v.version, approver, note),
-    onSuccess: async (r) => { setApproving(null); setNote(''); await done(`Approved (${r.id}).`)() },
+    mutationFn: (v: { app: string; version: number }) => gatewayApi.apps.approve(v.app, v.version, approver, note, egressParam(versionEgress)),
+    onSuccess: async (r) => { setApproving(null); setNote(''); setVersionEgress([]); await done(`Approved (${r.id}).`)() },
     onError: failed,
   })
   const revoke = useMutation({ mutationFn: (id: string) => gatewayApi.apps.revoke(id, approver), onSuccess: (r) => done(`Revoked ${r.id}; a trusted version it stood for stops running as trusted at once.`)(), onError: failed })
-  const busy = serve.isPending || pin.isPending || saveInstance.isPending || removeInstance.isPending || removeApp.isPending || approve.isPending || revoke.isPending
+  const words = (error: unknown) => error instanceof Error ? error.message : String(error)
+  const publish = useMutation({
+    mutationFn: (v: { name: string; body: ReturnType<typeof publishBody> }) => gatewayApi.apps.publish(v.name, v.body),
+    onSuccess: async (r) => {
+      setPrepared(null); setPasted(''); setPublishNote(''); setApproveNote(''); setPackageEgress([]); setRefusal(null); setPublishing(false); setSelected(r.name)
+      await done(`${r.name} is published as version ${r.version} (${r.files} file${r.files === 1 ? '' : 's'}) and served at once; instances that follow it move.`)()
+    },
+    onError: (error) => setRefusal(words(error)),
+  })
+  const approvePackage = useMutation({
+    mutationFn: () => gatewayApi.apps.approvePackage(body!, approver, approveNote, egressParam(packageEgress)),
+    onSuccess: async (r) => { setRefusal(null); setApproveNote(''); await done(`Approved ${r.app} (${r.id}): these exact files may now be published.`)() },
+    onError: (error) => setRefusal(words(error)),
+  })
+  const pick = (next: Prepared | null) => { setPrepared(next); setPickId((n) => n + 1); setRefusal(null); setPackageEgress([]) }
+  const pickFolder = async (list: FileList | null) => {
+    const files: PickedFile[] = await Promise.all([...(list ?? [])].map(async (f) => ({ path: f.webkitRelativePath || f.name, bytes: new Uint8Array(await f.arrayBuffer()) })))
+    pick(files.length === 0 ? null : prepareFolder(files))
+  }
+  const busy = publish.isPending || approvePackage.isPending || serve.isPending || pin.isPending || saveInstance.isPending || removeInstance.isPending || removeApp.isPending || approve.isPending || revoke.isPending
 
   const appList = sortApps(apps.data?.apps ?? [])
   const rows = sortInstances(instances.data?.instances ?? [])
@@ -415,6 +464,30 @@ export function AppsPage() {
           )}
         </Section>
 
+        <Section title="Publish a version" note="Send the built folder of an app: the Gateway checks it, says what the version would be, and serves it at once. A trusted app also needs an approval of exactly these files." testId="apps-publish">
+          {!publishing
+            ? (
+              <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <button type="button" className="btn sm btn-primary" disabled={!caller.can_publish} onClick={() => setPublishing(true)} data-testid="publish-open">Publish a version…</button>
+                {!caller.can_publish && <Why reason={NEEDS_PUBLISHER} testId="publish-open-why" />}
+              </div>
+            )
+            : (
+              <PublishView
+                caller={caller} mode={mode} prepared={prepared} pasted={pasted} note={publishNote} check={body === null ? null : check.data ?? null} checking={body !== null && check.isFetching && !check.data}
+                checkFailure={body !== null && check.error ? words(check.error) : null} refusal={refusal} busy={busy} by={approver} approveNote={approveNote} chosenEgress={packageEgress}
+                onMode={(m) => { setMode(m); pick(m === 'manifest' && pasted.trim() !== '' ? prepareManifest(pasted) : null) }}
+                onPickFiles={(list) => { void pickFolder(list) }}
+                onPaste={(text) => { setPasted(text); pick(text.trim() === '' ? null : prepareManifest(text)) }}
+                onNote={setPublishNote}
+                onPublish={() => { const name = check.data?.name; if (prepared?.ok && name) publish.mutate({ name, body: publishBody(prepared.package, publishNote) }) }}
+                onBy={setBy} onApproveNote={setApproveNote} onToggleEgress={(id) => setPackageEgress((c) => toggled(c, id))} onApprove={() => approvePackage.mutate()}
+                onClear={() => { pick(null) }}
+              />
+            )}
+          {publishing && <div style={{ marginTop: 8 }}><button type="button" className="btn sm" onClick={() => { setPublishing(false); pick(null) }} data-testid="publish-close">Close</button></div>}
+        </Section>
+
         <Section title="Apps" note="What is published, and the version each serves. Roll an app back by serving an older version; instances that follow it move at once." testId="apps-apps">
           <AppsView
             apps={appList} selected={selected} caller={caller} confirming={confirming?.startsWith('app:') ? confirming.slice(4) : null} busy={busy}
@@ -427,7 +500,8 @@ export function AppsPage() {
               <VersionsView
                 detail={detail.data} by={approver} note={note} approving={approving} showing={showing} busy={busy}
                 onServe={(version) => serve.mutate({ app: selected, to: version })} onShow={setShowing}
-                onAskApprove={(version) => { setApproving(version); setFailure(null) }} onNote={setNote} onApprove={(version) => approve.mutate({ app: selected, version })}
+                egress={versionEgress} onToggleEgress={(id) => setVersionEgress((c) => toggled(c, id))}
+                onAskApprove={(version) => { setApproving(version); setVersionEgress([]); setFailure(null) }} onNote={setNote} onApprove={(version) => approve.mutate({ app: selected, version })}
               />
             </div>
           )}
@@ -447,7 +521,7 @@ export function AppsPage() {
             onAskRevoke={(id) => setConfirming(id === null ? null : `revoke:${id}`)} onRevoke={(id) => revoke.mutate(id)}
           />
         </Section>
-        <p className="hint" style={{ marginTop: 16 }}>Publishing a new version and the navigation sets are still done with the command line (<span className="mono">dbdatagateway apps</span>, also <span className="mono">--to</span> this server from another machine).</p>
+        <p className="hint" style={{ marginTop: 16 }}>The navigation sets are still made with the command line (<span className="mono">dbdatagateway apps</span>, also <span className="mono">--to</span> this server from another machine).</p>
       </div>
     </GatewayShell>
   )

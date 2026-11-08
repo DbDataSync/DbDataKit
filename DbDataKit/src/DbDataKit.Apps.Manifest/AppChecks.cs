@@ -7,12 +7,16 @@ namespace DbDataKit.Apps;
 public static partial class AppChecks
 {
     /// <summary>The entry, view, home and logo files the manifest names that are not in the source folder. A diagnostic names the manifest file; the message names the missing path.</summary>
-    public static IReadOnlyList<ConfigDiagnostic> Files(AppManifest manifest, string sourceDirectory, string manifestFile = "app.yaml")
+    public static IReadOnlyList<ConfigDiagnostic> Files(AppManifest manifest, string sourceDirectory, string manifestFile = "app.yaml") =>
+        FilesWhere(manifest, path => File.Exists(Path.Combine(sourceDirectory, path.Replace('/', Path.DirectorySeparatorChar))), manifestFile);
+
+    /// <summary><see cref="Files(AppManifest, string, string)"/> over any list of files, <paramref name="exists"/> saying whether the app has a file at a path with <c>/</c> between folders (the files of a package that is not in a folder, as the Gateway checks one sent to it).</summary>
+    public static IReadOnlyList<ConfigDiagnostic> FilesWhere(AppManifest manifest, Func<string, bool> exists, string manifestFile = "app.yaml")
     {
         var found = new List<ConfigDiagnostic>();
         var named = manifest.Views.Prepend(manifest.Entry!).Concat(manifest.Portal is { } portal ? portal.Home.Append(portal.Identity.Logo!).Append(portal.Identity.Favicon!) : []);
         foreach (var path in named.Where(p => p is not null))
-            if (!File.Exists(Path.Combine(sourceDirectory, path.Replace('/', Path.DirectorySeparatorChar))))
+            if (!exists(path))
                 found.Add(DefaultDiagnosticCatalog.Instance.Create(AppManifestLoader.MissingFile, manifestFile, 1, 1, $"The manifest names `{path}`, which is not in the app's folder.", "Create the file, or take it out of the manifest."));
         return found;
     }

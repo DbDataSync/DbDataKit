@@ -346,6 +346,179 @@ public sealed class AppsScreenTests : IAsyncLifetime
         Assert.Contains(entries, a => a.Command == "app instance-save" && a.Target == "other" && a.Outcome == "refused" && a.UserName == "Ada");
     }
 
+    /// <summary>The body a browser sends for a package: the manifest as text, every other file as base64, as `PUT /api/v1/apps/{name}` and `POST /api/v1/apps/check` take it.</summary>
+    private static string Body(AppPackage package, string? note = null, string? by = null, string? egress = null)
+    {
+        var files = new JsonObject();
+        foreach (var (path, bytes) in package.Files) files[path] = Convert.ToBase64String(bytes);
+        return new JsonObject { ["manifest"] = package.ManifestYaml, ["files"] = files, ["note"] = note, ["by"] = by, ["egress"] = egress }.ToJsonString();
+    }
+
+    [Fact]
+    public async Task A_version_is_checked_and_published_from_the_screen_with_the_files_of_a_folder_and_each_refusal_is_a_message()
+    {
+        Seed();
+        var audit = new StateAuditLog(State);
+        var next = Package("notes", "1.2.0", Models);
+
+        // the check says what a publish would do and stores nothing: the version it would be, the trust, the hash the CLI computes for the same folder, no approval needed
+        var check = await CallAsync(ServerRole.Publisher, HttpMethod.Post, "/api/v1/apps/check", Body(next));
+        Assert.Equal(HttpStatusCode.OK, check.Status);
+        Assert.True((bool)check.Body["ok"]!);
+        Assert.Equal("notes", (string?)check.Body["name"]);
+        Assert.Equal("1.2.0", (string?)check.Body["manifest_version"]);
+        Assert.Equal(3, (int)check.Body["next_version"]!);
+        Assert.Equal("sandbox", (string?)check.Body["trust"]);
+        Assert.Equal(1, (int)check.Body["files"]!);
+        var (bundle, manifestHash) = AppApprovalStore.Hashes(next);
+        Assert.Equal(AppApprovals.ContentHash(bundle, manifestHash), (string?)check.Body["hash"]);
+        Assert.Equal("territories", (string?)check.Body["about"]!["models"]![0]!["model"]);
+        Assert.Empty(check.Body["diagnostics"]!.AsArray());
+        Assert.Equal(2, Store.AppVersions("notes").Count);                                          // nothing was published
+        Assert.DoesNotContain(audit.Read(100), a => a.Command == "app publish");
+
+        // a manifest that names a file the folder does not have, one that does not read, a file that is not base64 and a body without a manifest: said in words, nothing stored
+        var missing = await CallAsync(ServerRole.Publisher, HttpMethod.Post, "/api/v1/apps/check", Body(new AppPackage("schemaVersion: 1\nname: notes\nversion: 1.3.0\nentry: app.html\nroles: [viewer]\n")));
+        Assert.False((bool)missing.Body["ok"]!);
+        Assert.Contains(missing.Body["diagnostics"]!.AsArray(), d => ((string)d!["message"]!).Contains("app.html") && (string?)d["severity"] == "error");
+        var unreadable = await CallAsync(ServerRole.Publisher, HttpMethod.Post, "/api/v1/apps/check", "{\"manifest\": \"name: [oops\"}");
+        Assert.False((bool)unreadable.Body["ok"]!);
+        Assert.NotEmpty(unreadable.Body["diagnostics"]!.AsArray());
+        Assert.Null(unreadable.Body["name"]);
+        var notBase64 = await CallAsync(ServerRole.Publisher, HttpMethod.Post, "/api/v1/apps/check", "{\"manifest\": \"name: notes\", \"files\": {\"index.html\": \"***\"}}");
+        Assert.Equal(HttpStatusCode.BadRequest, notBase64.Status);
+        Assert.Contains("'index.html' is not base64", (string)notBase64.Body["error"]!);
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(ServerRole.Publisher, HttpMethod.Post, "/api/v1/apps/check", "{}")).Status);
+
+        // publishing: the new version serves at once, its note and its author are kept, the instance that follows moves, and the audit names the person
+        var published = await CallAsync(ServerRole.Publisher, HttpMethod.Put, "/api/v1/apps/notes", Body(next, note: "from the screen"));
+        Assert.Equal(HttpStatusCode.OK, published.Status);
+        Assert.Equal(3, (int)published.Body["version"]!);
+        Assert.Equal(1, (int)published.Body["files"]!);
+        Assert.Equal("Ada", (string?)published.Body["published_by"]);
+        var detail = (await CallAsync(ServerRole.Viewer, HttpMethod.Get, "/api/v1/apps/notes")).Body;
+        Assert.Equal(3, (int)detail["serving"]!);
+        Assert.Equal("from the screen", (string?)detail["versions"]![0]!["note"]);
+        Assert.Equal(AppApprovals.ContentHash(bundle, manifestHash), (string?)detail["versions"]![0]!["hash"]);   // the hash the check showed is the hash of the version
+        var acme = (await CallAsync(ServerRole.Viewer, HttpMethod.Get, "/api/v1/app-instances")).Body["instances"]!.AsArray().Single(i => (string?)i!["name"] == "acme")!;
+        Assert.Equal(3, (int)acme["app_version"]!);
+        Assert.Equal(4, (int)(await CallAsync(ServerRole.Publisher, HttpMethod.Post, "/api/v1/apps/check", Body(next))).Body["next_version"]!);
+
+        // a name that is not the manifest's, a manifest that does not read, a folder over the limit: refused in the store's words
+        var named = await CallAsync(ServerRole.Publisher, HttpMethod.Put, "/api/v1/apps/other", Body(next));
+        Assert.Equal(HttpStatusCode.BadRequest, named.Status);
+        Assert.Contains("The manifest is named 'notes' and the call names 'other'", (string)named.Body["error"]!);
+        var invalid = await CallAsync(ServerRole.Publisher, HttpMethod.Put, "/api/v1/apps/notes", "{\"manifest\": \"name: [oops\"}");
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.Status);
+        var traversal = await CallAsync(ServerRole.Publisher, HttpMethod.Put, "/api/v1/apps/notes", "{\"manifest\": \"" + next.ManifestYaml.Replace("\n", "\\n") + "\", \"files\": {\"../escape.html\": \"PGI+PC9iPg==\"}}");
+        Assert.Equal(HttpStatusCode.BadRequest, traversal.Status);
+        Assert.Contains("is not a path inside the app", (string)traversal.Body["error"]!);
+        Assert.Equal(3, Store.AppVersions("notes").Count);
+
+        // only a publisher or an administrator checks and publishes; a viewer, an approver and an operator are refused and nothing is stored
+        foreach (var role in new[] { ServerRole.Viewer, ServerRole.Approver, ServerRole.Operator, ServerRole.None })
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(role, HttpMethod.Post, "/api/v1/apps/check", Body(next))).Status);
+            var refused = await CallAsync(role, HttpMethod.Put, "/api/v1/apps/notes", Body(Package("notes", "1.9.0", Models)));
+            Assert.Equal(HttpStatusCode.Forbidden, refused.Status);
+            Assert.Contains("publisher", (string)refused.Body["error"]!);
+        }
+        Assert.Equal(3, Store.AppVersions("notes").Count);
+
+        var entries = audit.Read(100);
+        Assert.Contains(entries, a => a.Command == "app publish" && a.Target == "notes" && a.Outcome == "version 3" && a.UserName == "Ada");
+        Assert.Contains(entries, a => a.Command == "app publish" && a.Target == "other" && a.Outcome == "refused" && a.UserName == "Ada");
+    }
+
+    /// <summary>The samples a tester picks in the screen's folder chooser pass the check with nothing to fix, and the package a browser would send for a folder (every file but app.yaml, under its path) is the package the command line makes for it.</summary>
+    [Fact]
+    public async Task The_sample_apps_pass_the_check_a_screen_runs_and_hash_as_the_command_line_does()
+    {
+        Seed();
+        var folder = AppContext.BaseDirectory;
+        while (folder is not null && !Directory.Exists(Path.Combine(folder, "DbDataGateway", "templates", "apps"))) folder = Path.GetDirectoryName(folder);
+        var samples = Path.Combine(folder ?? throw new DirectoryNotFoundException("DbDataGateway/templates/apps"), "DbDataGateway", "templates", "apps");
+        foreach (var sample in new[] { "territory-notes", "front-portal", "territory-views" })
+        {
+            var package = AppPackage.FromFolder(Path.Combine(samples, sample));
+            var check = await CallAsync(ServerRole.Publisher, HttpMethod.Post, "/api/v1/apps/check", Body(package));
+            Assert.Equal(HttpStatusCode.OK, check.Status);
+            Assert.True((bool)check.Body["ok"]!, sample + ": " + check.Body["diagnostics"]);
+            Assert.Empty(check.Body["diagnostics"]!.AsArray());
+            Assert.Equal(sample, (string?)check.Body["name"]);
+            Assert.Equal(package.Files.Count, (int)check.Body["files"]!);
+            var (bundle, manifestHash) = AppApprovalStore.Hashes(package);
+            Assert.Equal(AppApprovals.ContentHash(bundle, manifestHash), (string?)check.Body["hash"]);
+        }
+    }
+
+    [Fact]
+    public async Task A_trusted_version_is_refused_without_an_approval_and_is_approved_from_the_screen_for_the_origins_the_manifest_asks_for()
+    {
+        Seed();
+        var audit = new StateAuditLog(State);
+        var ledger = Package("ledger", "1.0.0", "trust: trusted\negress:\n  connect: [https://api.example.com]\n  img: [https://cdn.example.com]\n");
+
+        // the check says it asks to be trusted, no approval stands, and which origins it asks for (what the approver chooses from)
+        var check = (await CallAsync(ServerRole.Publisher, HttpMethod.Post, "/api/v1/apps/check", Body(ledger))).Body;
+        Assert.Equal("trusted", (string?)check["trust"]);
+        Assert.Null(check["approval_id"]);
+        var asked = check["about"]!["egress"]!.AsArray().ToDictionary(e => (string)e!["directive"]!, e => string.Join(",", e!["origins"]!.AsArray().Select(o => (string)o!)));
+        Assert.Equal("https://api.example.com", asked["connect"]);
+        Assert.Equal("https://cdn.example.com", asked["img"]);
+
+        // publishing it is refused, naming the hash an approver has to approve; nothing is stored and the refusal is audited
+        var refused = await CallAsync(ServerRole.Admin, HttpMethod.Put, "/api/v1/apps/ledger", Body(ledger));
+        Assert.Equal(HttpStatusCode.BadRequest, refused.Status);
+        Assert.Contains("asks to be trusted and has no approval for these exact files", (string)refused.Body["error"]!);
+        Assert.Contains((string)check["hash"]!, (string)refused.Body["error"]!);
+        Assert.Empty(Store.AppVersions("ledger"));
+
+        // an origin the manifest did not ask for, a malformed list, and an approver who is no approver at the identity home: refused in words, no approval made
+        var wider = await CallAsync(ServerRole.Approver, HttpMethod.Post, "/api/v1/app-approvals", Body(ledger, by: "Grace Hopper", egress: "connect=https://evil.example.com"));
+        Assert.Equal(HttpStatusCode.BadRequest, wider.Status);
+        Assert.Contains("https://evil.example.com, which 'ledger' does not ask for", (string)wider.Body["error"]!);
+        var malformed = await CallAsync(ServerRole.Approver, HttpMethod.Post, "/api/v1/app-approvals", Body(ledger, by: "Grace Hopper", egress: "nonsense"));
+        Assert.Equal(HttpStatusCode.BadRequest, malformed.Status);
+        Assert.Contains("is not <directive>=<origin>", (string)malformed.Body["error"]!);
+        var notApprover = await CallAsync(ServerRole.Approver, HttpMethod.Post, "/api/v1/app-approvals", Body(ledger, by: "Bob Babbage", egress: "connect=https://api.example.com"));
+        Assert.Equal(HttpStatusCode.BadRequest, notApprover.Status);
+        Assert.Contains("Approver", (string)notApprover.Body["error"]!);
+        Assert.DoesNotContain(new AppApprovalStore(Definitions).All(), a => a.App == "ledger");
+
+        // the publisher role alone cannot approve; the approver role approves these exact files for the origin chosen (not the other one the manifest asked for)
+        Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(ServerRole.Publisher, HttpMethod.Post, "/api/v1/app-approvals", Body(ledger, by: "Grace Hopper"))).Status);
+        var approved = await CallAsync(ServerRole.Approver, HttpMethod.Post, "/api/v1/app-approvals", Body(ledger, note: "reviewed the origins", by: "Grace Hopper", egress: "connect=https://api.example.com"));
+        Assert.Equal(HttpStatusCode.OK, approved.Status);
+        Assert.Equal("Grace Hopper", (string?)approved.Body["approved_by"]);
+        Assert.Equal("Ada", (string?)approved.Body["author"]);
+        var listed = (await CallAsync(ServerRole.Viewer, HttpMethod.Get, "/api/v1/app-approvals")).Body["approvals"]!.AsArray().Single(a => (string?)a!["app"] == "ledger")!;
+        var egress = listed["egress"]!.AsArray().Single()!;
+        Assert.Equal("connect", (string?)egress["directive"]);
+        Assert.Equal(["https://api.example.com"], egress["origins"]!.AsArray().Select(o => (string)o!).ToArray());
+
+        // the check now says an approval stands, and the publish goes through and runs as asked
+        var standing = (await CallAsync(ServerRole.Publisher, HttpMethod.Post, "/api/v1/apps/check", Body(ledger))).Body;
+        Assert.Equal((string?)approved.Body["id"], (string?)standing["approval_id"]);
+        var published = await CallAsync(ServerRole.Admin, HttpMethod.Put, "/api/v1/apps/ledger", Body(ledger));
+        Assert.Equal(HttpStatusCode.OK, published.Status);
+        Store.Save(new AppInstance("books", "ledger"), "ada-laptop");
+        var books = (await CallAsync(ServerRole.Viewer, HttpMethod.Get, "/api/v1/app-instances")).Body["instances"]!.AsArray().Single(i => (string?)i!["name"] == "books")!;
+        Assert.True((bool)books["runs_as_asked"]!);
+
+        // a changed byte is a new hash: the approval does not stand for it
+        var changed = Package("ledger", "1.0.0", "trust: trusted\negress:\n  connect: [https://api.example.com]\n  img: [https://cdn.example.com]\n");
+        var edited = new AppPackage(changed.ManifestYaml, new Dictionary<string, byte[]> { ["index.html"] = Encoding.UTF8.GetBytes("<html>changed</html>") });
+        Assert.Null((await CallAsync(ServerRole.Publisher, HttpMethod.Post, "/api/v1/apps/check", Body(edited))).Body["approval_id"]);
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(ServerRole.Admin, HttpMethod.Put, "/api/v1/apps/ledger", Body(edited))).Status);
+
+        var entries = audit.Read(100);
+        Assert.Contains(entries, a => a.Command == "app publish" && a.Target == "ledger" && a.Outcome == "refused" && a.UserName == "Ada");
+        Assert.Contains(entries, a => a.Command == "app approve" && a.Target == "ledger" && a.Outcome == "refused");
+        Assert.Contains(entries, a => a.Command == "app approve" && a.Target == "ledger" && a.Outcome.Contains("Grace Hopper", StringComparison.Ordinal) && a.UserName == "Ada");
+        Assert.Contains(entries, a => a.Command == "app publish" && a.Target == "ledger" && a.Outcome == "version 1");
+    }
+
     [Fact]
     public async Task An_approval_is_revoked_by_an_approver_who_is_an_approver_at_the_identity_home_and_the_instance_stops_running_as_trusted()
     {
