@@ -7,7 +7,8 @@ import {
   NAME_PATTERN, canRedo, canUndo, clientStore, draftFromOpened, edit, editText, errorsOf, format, formTarget, diagnosticsFor, isDirty, markersOf, newDocumentText, newDraft, redo, reloadDraft, saveDraft, undo,
   widgetModel, type Catalog, type ClientDiagnostic, type Draft, type RenderedWidget, type EditCommand, type TileDoc, type ViewKind, type WidgetDoc, type WidgetType, type LayoutDoc,
 } from '@dbdatakit/visuals'
-import { viewsClient } from '../viewsSource'
+import { viewsClient, FIXTURES } from '../viewsSource'
+import { withSource } from '../viewsUrl'
 import { newWidget, nextTile } from '../viewsEditing'
 import { GridEditor, LayoutSettings, SelectorEditor, SelectorTester } from './LayoutEditors'
 import { DocumentSettings } from './DocumentSettings'
@@ -33,10 +34,11 @@ type Message = { tone: 'ok' | 'error'; text: string } | null
  * the layout, the tile) and in the YAML view as markers, save with the version the file was opened at (a stale save is a conflict that offers a reload), duplicate and delete. A form change and a YAML change are the same text.
  * What it does not do yet: field wells and the derived request (DBR25), dragging on the grid and the canvas, selectors and parameters (DBR26), the report's sections (DBR27), a live preview of the unsaved draft (DBR28).
  */
-export function DashboardEditor({ kind, name }: { kind: ViewKind; name: string | null }) {
+export function DashboardEditor({ kind, name, source = FIXTURES, keep = null }: { kind: ViewKind; name: string | null; source?: string; keep?: string | null }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const store = useMemo(() => clientStore(viewsClient()), [])
+  const store = useMemo(() => clientStore(viewsClient(source)), [source])
+  const area = (path: string) => withSource(path, keep)
   const [draft, setDraftState] = useState<Draft | null>(null)
   // the draft as the last change left it: a drag sends a change per pointer move, and each must start from the one before it, rendered or not
   const latest = useRef<Draft | null>(null)
@@ -73,22 +75,22 @@ export function DashboardEditor({ kind, name }: { kind: ViewKind; name: string |
   useEffect(() => {
     if (!selectedModel) { setCatalog(null); return }
     let cancelled = false
-    const client = viewsClient()
+    const client = viewsClient(source)
     if (!client.catalog) { setCatalog({ model: selectedModel, catalog: null, note: 'This source has no catalog: type field names into the wells.' }); return }
     client.catalog(selectedModel).then(
       (c) => { if (!cancelled) setCatalog({ model: selectedModel, catalog: c, note: null }) },
       (e: unknown) => { if (!cancelled) setCatalog({ model: selectedModel, catalog: null, note: e instanceof Error ? e.message : String(e) }) })
     return () => { cancelled = true }
-  }, [selectedModel])
+  }, [selectedModel, source])
   const draftText = draft?.text
   useEffect(() => {
     if (draftText === undefined || !selected) { setServer([]); return }
     let cancelled = false
-    const timer = setTimeout(() => { viewsClient().validate(draftText, { kind }).then((r) => { if (!cancelled) setServer(r.diagnostics) }, () => { if (!cancelled) setServer([]) }) }, 200)
+    const timer = setTimeout(() => { viewsClient(source).validate(draftText, { kind }).then((r) => { if (!cancelled) setServer(r.diagnostics) }, () => { if (!cancelled) setServer([]) }) }, 200)
     return () => { cancelled = true; clearTimeout(timer) }
-  }, [draftText, kind, selected])
+  }, [draftText, kind, selected, source])
 
-  if (loadError) return <div className="empty" data-testid="ed-error" role="alert">{loadError} <Link to={AREA[kind]}>All {kind}s</Link></div>
+  if (loadError) return <div className="empty" data-testid="ed-error" role="alert">{loadError} <Link to={area(AREA[kind])}>All {kind}s</Link></div>
   if (!draft) return <div className="empty" data-testid="ed-loading" role="status">Opening the editor…</div>
 
   const saved = name !== null || draft.baseVersion !== undefined
@@ -114,7 +116,7 @@ export function DashboardEditor({ kind, name }: { kind: ViewKind; name: string |
       setConflict(null)
       setMessage({ tone: 'ok', text: `Saved ${outcome.draft.name} (version ${outcome.draft.baseVersion}).` })
       await refresh()
-      if (!saved) navigate(`${AREA[kind]}/${encodeURIComponent(outcome.draft.name)}?edit=1`, { replace: true })
+      if (!saved) navigate(area(`${AREA[kind]}/${encodeURIComponent(outcome.draft.name)}?edit=1`), { replace: true })
     } else if (outcome.status === 'conflict') {
       setConflict({ message: outcome.message, storedVersion: outcome.storedVersion })
       setMessage({ tone: 'error', text: outcome.message })
@@ -133,7 +135,7 @@ export function DashboardEditor({ kind, name }: { kind: ViewKind; name: string |
   return (
     <div data-testid="ed-root" style={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
       <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }} data-testid="ed-toolbar">
-        <Link to={saved ? `${AREA[kind]}/${encodeURIComponent(draft.name)}` : AREA[kind]} data-testid="ed-back">{saved ? 'View' : `All ${kind}s`}</Link>
+        <Link to={area(saved ? `${AREA[kind]}/${encodeURIComponent(draft.name)}` : AREA[kind])} data-testid="ed-back">{saved ? 'View' : `All ${kind}s`}</Link>
         {saved ? <strong data-testid="ed-name">{draft.name}.yaml</strong> : (
           <>
             <label htmlFor="ed-file-name">File name</label>
@@ -211,7 +213,7 @@ export function DashboardEditor({ kind, name }: { kind: ViewKind; name: string |
 
           {selected && widgets[selected] && (
             <WidgetEditor id={selected} widget={widgets[selected]!} doc={doc} catalog={catalog?.catalog ?? null} catalogNote={catalog?.note ?? null} apply={apply} diagnostics={draft.validation.diagnostics} server={server}
-              preview={(widget) => viewsClient().preview({ widget, widgetId: selected, document: draft.name || undefined }) as Promise<RenderedWidget>} />
+              preview={(widget) => viewsClient(source).preview({ widget, widgetId: selected, document: draft.name || undefined }) as Promise<RenderedWidget>} />
           )}
 
           <DocumentSettings doc={doc} diagnostics={draft.validation.diagnostics} apply={apply} />
@@ -294,7 +296,7 @@ export function DashboardEditor({ kind, name }: { kind: ViewKind; name: string |
             <label htmlFor="ed-duplicate-name">Duplicate as</label>
             <input id="ed-duplicate-name" data-testid="ed-duplicate-name" value={duplicateAs} placeholder={`${draft.name}-copy`} onChange={(e) => setDuplicateAs(e.target.value)} />
             <button type="button" className="btn" data-testid="ed-duplicate" disabled={!NAME_PATTERN.test(duplicateAs)} onClick={() => {
-              void store.duplicate(kind, draft.name, duplicateAs).then(async () => { await refresh(); navigate(`${AREA[kind]}/${encodeURIComponent(duplicateAs)}?edit=1`) }, (e: unknown) => setMessage({ tone: 'error', text: e instanceof Error ? e.message : String(e) }))
+              void store.duplicate(kind, draft.name, duplicateAs).then(async () => { await refresh(); navigate(area(`${AREA[kind]}/${encodeURIComponent(duplicateAs)}?edit=1`)) }, (e: unknown) => setMessage({ tone: 'error', text: e instanceof Error ? e.message : String(e) }))
             }}>Duplicate</button>
             {!confirmDelete
               ? <button type="button" className="btn" data-testid="ed-delete" onClick={() => setConfirmDelete(true)}>Delete…</button>
@@ -302,7 +304,7 @@ export function DashboardEditor({ kind, name }: { kind: ViewKind; name: string |
                 <>
                   <span className="hint">Delete {draft.name}.yaml for good?</span>
                   <button type="button" className="btn btn-primary" data-testid="ed-delete-confirm" onClick={() => {
-                    void store.delete(kind, draft.name).then(async () => { await refresh(); navigate(AREA[kind]) }, (e: unknown) => setMessage({ tone: 'error', text: e instanceof Error ? e.message : String(e) }))
+                    void store.delete(kind, draft.name).then(async () => { await refresh(); navigate(area(AREA[kind])) }, (e: unknown) => setMessage({ tone: 'error', text: e instanceof Error ? e.message : String(e) }))
                   }}>Delete</button>
                   <button type="button" className="btn" data-testid="ed-delete-cancel" onClick={() => setConfirmDelete(false)}>Keep</button>
                 </>

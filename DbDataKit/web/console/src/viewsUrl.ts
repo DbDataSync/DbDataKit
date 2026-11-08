@@ -161,7 +161,25 @@ export function drillAddress(args: {
   }
   let search = writeParameters(new URLSearchParams(), targetParameters, given)
   if (readKiosk(here.search)) search = writeKiosk(search, true)
+  const fromSource = readSource(here.search)
+  if (fromSource !== null) search = writeSource(search, fromSource)
   const trail = [...readTrail(here.search), { kind: here.kind, name: here.name, search: withoutTrail(here.search).toString() }]
   const text = writeTrail(search, trail).toString()
   return `${viewPath(drill.kind, drill.name)}${text ? `?${text}` : ''}`
 }
+
+/** `?source=`: where the documents come from (`fixtures`, or the id of a server this console manages); absent, the console chooses. */
+export const SOURCE_KEY = 'source'
+
+export const readSource = (search: URLSearchParams): string | null => search.get(SOURCE_KEY) || null
+
+/** The address with the source named (null: the console chooses); the other keys are kept. */
+export function writeSource(search: URLSearchParams, source: string | null): URLSearchParams {
+  const next = new URLSearchParams(search)
+  if (source === null) next.delete(SOURCE_KEY)
+  else next.set(SOURCE_KEY, source)
+  return next
+}
+
+/** A path of the Views page that keeps the source the person chose (a link from a list to a document, and back). */
+export const withSource = (path: string, source: string | null): string => (source ? `${path}${path.includes('?') ? '&' : '?'}${SOURCE_KEY}=${encodeURIComponent(source)}` : path)

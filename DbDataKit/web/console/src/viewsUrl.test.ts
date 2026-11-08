@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ParameterDefinition } from '@dbdatakit/visuals'
-import { crumbAddress, describeValue, drillAddress, readKiosk, readLayout, readParameters, readTrail, viewPath, withoutTrail, writeKiosk, writeLayout, writeParameters, writeTrail } from './viewsUrl'
+import { crumbAddress, describeValue, drillAddress, readKiosk, readLayout, readParameters, readSource, readTrail, viewPath, withSource, withoutTrail, writeKiosk, writeLayout, writeParameters, writeSource, writeTrail } from './viewsUrl'
 
 const defs: ParameterDefinition[] = [
   { name: 'region', type: 'string', many: true, default: [] },
@@ -123,5 +123,25 @@ describe('drill address and the way back', () => {
     expect(readTrail(q('trail=nonsense&trail=dashboard%2Fa%3F'))).toEqual([{ kind: 'dashboard', name: 'a', search: '' }])
     expect(withoutTrail(search).toString()).toBe('layout=wall')
     expect(viewPath('dashboard', 'a b')).toBe('/views/dashboards/a%20b')
+  })
+})
+
+describe('the source in the address', () => {
+  it('is read, written and kept beside the layout and the parameters', () => {
+    expect(readSource(new URLSearchParams(''))).toBeNull()
+    expect(readSource(new URLSearchParams('source=proxy-1&layout=wall'))).toBe('proxy-1')
+    expect(writeSource(new URLSearchParams('layout=wall&p.region=West'), 'fixtures').toString()).toBe('layout=wall&p.region=West&source=fixtures')
+    expect(writeSource(new URLSearchParams('source=a&layout=wall'), null).toString()).toBe('layout=wall')
+    expect(writeLayout(new URLSearchParams('source=a'), 'wall').toString()).toBe('source=a&layout=wall')
+    expect(writeParameters(new URLSearchParams('source=a'), defs, { region: ['West'] }).toString()).toContain('source=a')
+    // a drill stays in the source it was made in
+    expect(new URLSearchParams(drillAddress({ drill: { kind: 'dashboard', name: 'detail', parameters: {} }, targetParameters: undefined, here: { kind: 'dashboard', name: 'sales', search: new URLSearchParams('source=a&mode=kiosk') } }).split('?')[1]).get('source')).toBe('a')
+  })
+
+  it('is added to a path only when one was chosen', () => {
+    expect(withSource('/views/dashboards', null)).toBe('/views/dashboards')
+    expect(withSource('/views/dashboards/sales', 'proxy 1')).toBe('/views/dashboards/sales?source=proxy%201')
+    expect(withSource('/views/dashboards?new=1', 'a')).toBe('/views/dashboards?new=1&source=a')
+    expect(withSource('?edit=1', 'a')).toBe('?edit=1&source=a')
   })
 })
