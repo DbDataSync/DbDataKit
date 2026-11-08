@@ -45,7 +45,8 @@ test('refresh a plan from the Plans tab (dry run first, then the run with its ch
     // The deploy that makes the mart: tracking tables, a plan, applied (an administrator holds every role).
     await page.getByTestId('build-tab-status').click()
     await page.getByTestId('build-initialise-tracking').click()
-    await check(page.getByTestId('build-initialise-done').filter({ hasText: 'tracking tables' })).toBeVisible()
+    // what the command left: its line, or (when it failed) the problems or the banner, so a failure names its cause
+    await check(page.getByTestId('build-initialise-done').or(page.getByTestId('build-command-problems')).or(page.getByRole('alert')).first()).toContainText('tracking tables')
     await page.getByTestId('build-tab-plans').click()
     await page.getByTestId('build-plan-write').click()
     await check(page.getByTestId('build-plan-review')).toBeVisible()

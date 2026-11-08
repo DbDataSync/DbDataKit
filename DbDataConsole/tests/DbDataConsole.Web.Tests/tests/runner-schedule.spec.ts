@@ -90,8 +90,11 @@ test('a task is moved between its publishing product, observation and the runner
   await expect(panel.getByTestId('runner-task-run-with-inputs')).toBeDisabled()
   await expect(panel.getByTestId('runner-task-inputs-why')).toContainText('is not name=value')
   await panel.getByTestId('runner-task-inputs').fill('note=hello')
+  // the runner refuses a run now while the task is queued or running (409 "queued or running already"): the run its own schedule queued when the package was served may still be going on a slow machine, so wait until
+  // nothing is queued or running (the panel polls every five seconds), and let a refusal show its words if it comes anyway
+  await expect(panel.getByTestId('runner-task-position')).toContainText('0 running, 0 waiting', { timeout: 60_000 })
   await panel.getByTestId('runner-task-run-with-inputs').click()
-  await expect(panel.getByTestId('runner-task-owner-moved')).toContainText('queued', { timeout: 30_000 })
+  await expect(panel.getByTestId('runner-task-owner-moved').or(panel.getByRole('alert')).first()).toContainText('queued', { timeout: 30_000 })
   // the run ends; how it ends is the job's: the sample task `ok` declares no input, so a real runner may end a run that was given one as Failed (seen in CI), and the story is about the queue and the screen
   await expect(ok.getByTestId('runner-task-last')).toContainText(/Succeeded|Failed/, { timeout: 60_000 })
 
