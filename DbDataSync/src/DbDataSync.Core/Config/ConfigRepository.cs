@@ -183,7 +183,8 @@ public sealed class ConfigRepository
     /// Manifest and code are written and committed **together**, so history never shows a manifest
     /// describing code that was not yet there, or code with no manifest to say what it implements.
     /// </summary>
-    public ScriptDefinition SaveScript(ScriptDefinition script, GitAuthor author)
+    /// <param name="packageLock">The content of the script's <c>.lock</c> file (<c>ScriptCompilation.PackageLock</c> of the compilation that validated the code being saved): written beside the script and committed with it, only when it differs from what is there. Null leaves an existing lock file as it is.</param>
+    public ScriptDefinition SaveScript(ScriptDefinition script, GitAuthor author, string? packageLock = null)
     {
         ConfigValidation.ValidateName(script.Manifest.Name, nameof(script.Manifest.Name));
 
@@ -205,8 +206,10 @@ public sealed class ConfigRepository
         if (File.Exists(stalePath))
             File.Delete(stalePath);
 
-        // the lock file of the script's packages is written when the script is validated, just before it is saved (S12); it is committed with the script
+        // the lock file of the script's packages (S12) is written here, when the script is saved, and committed with it; validating a script never writes it
         var lockPath = ConfigPaths.ScriptLockFile(_configRoot, script.Manifest.Name);
+        if (packageLock is not null && (!File.Exists(lockPath) || File.ReadAllText(lockPath) != packageLock))
+            WriteAtomically(lockPath, packageLock);
         _git.CommitChanges(File.Exists(lockPath) ? [manifestPath, codePath, lockPath] : [manifestPath, codePath], $"Save script '{script.Manifest.Name}'", author);
 
         return script;
