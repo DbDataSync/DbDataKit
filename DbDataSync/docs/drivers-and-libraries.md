@@ -80,17 +80,16 @@ dbdatasync library install SomeVendor.Data.Provider --version 3.1.0 \
   --factory-type "SomeVendor.Data.SomeFactory, SomeVendor.Data.Provider"
 ```
 
-On a machine with no .NET SDK to restore with (the runtime-only container image), an install of a
-catalog id at its exact pinned version is copied from an in-image cache instead — no SDK, no network.
-Anything else is written as a manifest and left pending until `config library sync` runs somewhere with
-an SDK.
+Nothing here needs the .NET SDK: packages are resolved in process from a feed. In the runtime-only
+container image, an install of a catalog id at its exact pinned version is copied from an in-image cache
+instead (no network). An install either completes or fails with the reason.
 
 ### Other library commands
 
 | command | does |
 | --- | --- |
-| `dbdatasync library sync [<id>]` | re-restores one library (or, with no id, every installed library) at its pinned version — how a pending install (above) gets completed, or how a hand-edited `library.json` version bump takes effect |
-| `dbdatasync library list` | every installed library, its packages/versions, its factory type, and whether it currently resolves, doesn't resolve, or is still pending a `sync` |
+| `dbdatasync library sync [<id>]` | re-restores one library (or, with no id, every installed library) at its pinned version — how a library whose manifest is in git but whose files are not on this machine yet (a fresh deployment) is restored, or how a hand-edited `library.json` version bump takes effect |
+| `dbdatasync library list` | every installed library, its packages/versions, its factory type, and whether it currently resolves, doesn't resolve, or has a manifest but no files on this machine yet (a fresh deployment: `sync` restores it) |
 | `dbdatasync library uninstall <id>` | deletes `<RepoRoot>/libraries/<id>` entirely |
 | `dbdatasync library validate <id> --connection <name>` | for a library backing a *built-in* driver only: opens the named connection for real and drives that driver's actual staging/writer pipeline against a real scratch table, reporting rows written — proof the library resolves correctly, not just that the manifest parses |
 
