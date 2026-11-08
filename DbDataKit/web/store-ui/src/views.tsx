@@ -6,14 +6,14 @@ import { StoreError, type InstanceList, type AttributeSchema, type EntitySchema,
 
 export function ErrorNote({ error }: { error: Error | null | undefined }) {
   if (!error) return null
-  return <div className="sui-error" role="alert">{error.message}</div>
+  return <div className="sui-error" role="alert" data-testid="sui-error">{error.message}</div>
 }
 
 export function ViolationList({ violations }: { violations: Violation[] }) {
   if (violations.length === 0) return null
   return (
-    <ul className="sui-violations" role="alert">
-      {violations.map((v, i) => <li key={i}><span className="sui-rule">{v.rule}</span> {v.attribute ? <b>{v.attribute}: </b> : null}{v.message}</li>)}
+    <ul className="sui-violations" role="alert" data-testid="sui-violations">
+      {violations.map((v, i) => <li key={i} data-testid="sui-violation" data-rule={v.rule}><span className="sui-rule">{v.rule}</span> {v.attribute ? <b>{v.attribute}: </b> : null}{v.message}</li>)}
     </ul>
   )
 }
@@ -38,15 +38,15 @@ export function sameKey(entity: EntitySchema, a: RowValues, b: RowValues) {
 export function GridView({ entity, rows, offset, limit, selected, onSelect, onPage, columns }: GridViewProps) {
   const shown = (columns ? columns.map((c) => entity.attributes.find((a) => a.name === c)).filter((a): a is AttributeSchema => !!a) : entity.attributes)
   return (
-    <div className="sui-grid">
+    <div className="sui-grid" data-testid="sui-grid">
       <table>
         <thead><tr>{shown.map((a) => <th key={a.name} scope="col">{titleOf(a)}</th>)}</tr></thead>
         <tbody>
-          {rows.length === 0 && <tr><td className="sui-empty" colSpan={shown.length || 1}>No rows.</td></tr>}
+          {rows.length === 0 && <tr><td className="sui-empty" data-testid="sui-empty" colSpan={shown.length || 1}>No rows.</td></tr>}
           {rows.map((row) => {
             const isSelected = !!selected && sameKey(entity, keyOf(entity, row.values), selected)
             return (
-              <tr key={entity.key.map((k) => String(row.values[k])).join('\u0001')} aria-selected={isSelected} className={isSelected ? 'sui-selected' : undefined} onClick={onSelect ? () => onSelect(row) : undefined}>
+              <tr key={entity.key.map((k) => String(row.values[k])).join('\u0001')} data-testid="sui-row" data-key={entity.key.map((k) => String(row.values[k])).join('/')} aria-selected={isSelected} className={isSelected ? 'sui-selected' : undefined} onClick={onSelect ? () => onSelect(row) : undefined}>
                 {shown.map((a) => <td key={a.name} className={a.kind === 'decimal' || a.kind.startsWith('int') || a.kind === 'double' || a.kind === 'float' ? 'sui-num' : undefined}>{formatCell(a, row.values[a.name])}</td>)}
               </tr>
             )
@@ -54,9 +54,9 @@ export function GridView({ entity, rows, offset, limit, selected, onSelect, onPa
         </tbody>
       </table>
       <div className="sui-pager">
-        <button type="button" disabled={offset === 0 || !onPage} onClick={() => onPage?.(Math.max(0, offset - limit))}>Previous</button>
-        <span>{rows.length === 0 ? 'No rows' : `${offset + 1}–${offset + rows.length}`}</span>
-        <button type="button" disabled={rows.length < limit || !onPage} onClick={() => onPage?.(offset + limit)}>Next</button>
+        <button type="button" data-testid="sui-prev" disabled={offset === 0 || !onPage} onClick={() => onPage?.(Math.max(0, offset - limit))}>Previous</button>
+        <span data-testid="sui-range">{rows.length === 0 ? 'No rows' : `${offset + 1}–${offset + rows.length}`}</span>
+        <button type="button" data-testid="sui-next" disabled={rows.length < limit || !onPage} onClick={() => onPage?.(offset + limit)}>Next</button>
       </div>
     </div>
   )
@@ -77,18 +77,18 @@ export function FieldView({ attribute, value, onChange, disabled, problem }: Fie
   const id = `sui-${attribute.name}`
   const set = (v: string) => onChange?.(v)
   let control: ReactNode
-  if (kind === 'checkbox') control = <input id={id} type="checkbox" checked={value === 'true'} disabled={disabled} onChange={(e) => set(String(e.target.checked))} />
+  if (kind === 'checkbox') control = <input id={id} data-testid={`sui-field-${attribute.name}`} type="checkbox" checked={value === 'true'} disabled={disabled} onChange={(e) => set(String(e.target.checked))} />
   else if (kind === 'select') control = (
-    <select id={id} value={value} disabled={disabled} onChange={(e) => set(e.target.value)}>
+    <select id={id} data-testid={`sui-field-${attribute.name}`} value={value} disabled={disabled} onChange={(e) => set(e.target.value)}>
       <option value="">{attribute.required ? 'Choose…' : ''}</option>
       {attribute.allowed!.map((a) => <option key={a} value={a}>{a}</option>)}
     </select>
   )
-  else if (kind === 'textarea' || kind === 'json') control = <textarea id={id} value={value} rows={kind === 'json' ? 6 : 3} disabled={disabled} onChange={(e) => set(e.target.value)} />
+  else if (kind === 'textarea' || kind === 'json') control = <textarea id={id} data-testid={`sui-field-${attribute.name}`} value={value} rows={kind === 'json' ? 6 : 3} disabled={disabled} onChange={(e) => set(e.target.value)} />
   else {
     const type = kind === 'integer' || kind === 'number' ? 'number' : kind === 'datetime' ? 'datetime-local' : kind
     control = (
-      <input id={id} type={type} value={value} disabled={disabled} step={kind === 'integer' ? 1 : kind === 'number' ? 'any' : undefined}
+      <input id={id} data-testid={`sui-field-${attribute.name}`} type={type} value={value} disabled={disabled} step={kind === 'integer' ? 1 : kind === 'number' ? 'any' : undefined}
         min={attribute.min ?? undefined} max={attribute.max ?? undefined} maxLength={attribute.kind === 'string' && attribute.length ? attribute.length : undefined}
         onChange={(e) => set(e.target.value)} />
     )
@@ -99,7 +99,7 @@ export function FieldView({ attribute, value, onChange, disabled, problem }: Fie
       <label htmlFor={id}>{titleOf(attribute)}{attribute.required ? <span aria-hidden="true"> *</span> : null}</label>
       {control}
       {hints.length > 0 && <span className="sui-hint">{hints.join(' · ')}</span>}
-      {problem && <span className="sui-problem" role="alert">{problem}</span>}
+      {problem && <span className="sui-problem" role="alert" data-testid={`sui-problem-${attribute.name}`}>{problem}</span>}
     </div>
   )
 }
@@ -125,20 +125,20 @@ export function FormView({ entity, row, text, onText, problems = {}, violations 
   const isNew = row === null
   const conflict = error instanceof StoreError && error.status === 409
   return (
-    <form className="sui-form" onSubmit={(e) => { e.preventDefault(); onSubmit?.() }}>
-      <h3>{isNew ? `New ${titleOf(entity).toLowerCase()}` : `${titleOf(entity)} ${entity.key.map((k) => String(row!.values[k])).join(' / ')}`}</h3>
+    <form className="sui-form" data-testid="sui-form" data-mode={isNew ? 'new' : 'edit'} onSubmit={(e) => { e.preventDefault(); onSubmit?.() }}>
+      <h3 data-testid="sui-form-title">{isNew ? `New ${titleOf(entity).toLowerCase()}` : `${titleOf(entity)} ${entity.key.map((k) => String(row!.values[k])).join(' / ')}`}</h3>
       {!isNew && entity.key.map((k) => {
         const attribute = entity.attributes.find((a) => a.name === k)!
         return <FieldView key={k} attribute={attribute} value={toInput(attribute, row!.values[k])} disabled />
       })}
       {editable(entity, isNew).map((a) => <FieldView key={a.name} attribute={a} value={text[a.name] ?? ''} onChange={(v) => onText?.(a.name, v)} disabled={readOnly || busy} problem={problems[a.name]} />)}
       <ViolationList violations={violations.filter((v) => !v.attribute || !problems[v.attribute])} />
-      {conflict ? <div className="sui-error" role="alert">{error!.message} Reload the row to see its latest values.</div> : <ErrorNote error={violations.length > 0 ? null : error} />}
+      {conflict ? <div className="sui-error" role="alert" data-testid="sui-conflict">{error!.message} Reload the row to see its latest values.</div> : <ErrorNote error={violations.length > 0 ? null : error} />}
       {!readOnly && (
         <div className="sui-actions">
-          <button type="submit" disabled={busy}>{isNew ? 'Create' : 'Save'}</button>
-          {onCancel && <button type="button" onClick={onCancel} disabled={busy}>Cancel</button>}
-          {!isNew && onDelete && <button type="button" className="sui-danger" onClick={onDelete} disabled={busy}>Delete</button>}
+          <button type="submit" disabled={busy} data-testid="sui-submit">{isNew ? 'Create' : 'Save'}</button>
+          {onCancel && <button type="button" onClick={onCancel} disabled={busy} data-testid="sui-cancel">Cancel</button>}
+          {!isNew && onDelete && <button type="button" className="sui-danger" data-testid="sui-delete" onClick={onDelete} disabled={busy}>Delete</button>}
         </div>
       )}
     </form>
@@ -147,11 +147,11 @@ export function FormView({ entity, row, text, onText, problems = {}, violations 
 
 export function HistoryView({ entity, versions }: { entity: EntitySchema; versions: StoredRow[] }) {
   return (
-    <table className="sui-history">
+    <table className="sui-history" data-testid="sui-history">
       <thead><tr><th scope="col">Version</th><th scope="col">From</th><th scope="col">To</th>{entity.attributes.filter((a) => !entity.key.includes(a.name)).map((a) => <th key={a.name} scope="col">{titleOf(a)}</th>)}</tr></thead>
       <tbody>
         {versions.map((v) => (
-          <tr key={`${v.version}-${v.valid_from}`}>
+          <tr key={`${v.version}-${v.valid_from}`} data-testid="sui-version">
             <td>{v.version}</td><td>{v.valid_from ?? ''}</td><td>{v.valid_to ?? 'current'}</td>
             {entity.attributes.filter((a) => !entity.key.includes(a.name)).map((a) => <td key={a.name}>{formatCell(a, v.values[a.name])}</td>)}
           </tr>
@@ -167,7 +167,7 @@ export function InstancePickerView({ list, value, onChange }: { list: InstanceLi
   return (
     <div className="sui-instance">
       <label htmlFor="sui-instance">Instance</label>
-      <select id="sui-instance" value={value ?? ''} onChange={(e) => onChange?.(e.target.value === '' ? null : e.target.value)}>
+      <select id="sui-instance" data-testid="sui-instance-select" value={value ?? ''} onChange={(e) => onChange?.(e.target.value === '' ? null : e.target.value)}>
         <option value="">default</option>
         {list.instances.map((i) => <option key={i.name} value={i.name}>{i.name}</option>)}
       </select>
