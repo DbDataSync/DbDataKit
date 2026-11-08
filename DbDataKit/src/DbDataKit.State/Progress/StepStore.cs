@@ -137,18 +137,20 @@ public sealed class StepStore(StateDatabase database, ProgressKey key, StepOptio
     /// The newest <b>complete</b> payload owned by the step's row, or null. A streaming step's writer is owned by the row, and a payload is complete only when the body returned normally, so a complete payload of a step
     /// that never completed proves the body finished writing and the process died before the step was marked completed (plan 28b K14). Incomplete payloads (a write that was interrupted) are not returned.
     /// </summary>
-    public PayloadInfo? FindOwnedCompletePayload(Guid stepId) =>
-        database.Retry(() =>
+    public PayloadInfo? FindOwnedCompletePayload(Guid stepId)
+    {
+        // The id is read and the connection closed before the payload store is asked (a connection of its own): never a second connection while this one is open (docs/ci-lessons.md, SQLite).
+        var id = database.Retry(() =>
         {
             using var connection = database.OpenConnection();
             using var cmd = database.Command(PayloadStore.ModuleName, connection,
                 "SELECT id FROM {table:payload} WHERE owner_module = $module AND owner_row = $row AND state = $complete ORDER BY created_at DESC, id DESC;");
             cmd.Bind(database, "module", Module).Bind(database, "row", stepId.ToString("D")).Bind(database, "complete", PayloadStore.CompleteState);
             using var reader = cmd.ExecuteReader();
-            Guid? id = reader.Read() ? reader.Uuid(0) : null;
-            reader.Close();
-            return id is { } found ? new PayloadStore(database).Get(found) : null;
+            return reader.Read() ? reader.Uuid(0) : (Guid?)null;
         });
+        return id is { } found ? new PayloadStore(database).Get(found) : null;
+    }
 
     /// <summary>
     /// Takes over an in-doubt streaming step and completes it with the complete payload its dead attempt left (<paramref name="payloadId"/>, from <see cref="FindOwnedCompletePayload"/>), in one statement. The row

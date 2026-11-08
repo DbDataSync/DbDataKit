@@ -7,5 +7,13 @@
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <ProjectReference Include="..\DbDataKit.Monitoring\DbDataKit.Monitoring.csproj" />
     <InternalsVisibleTo Include="DbDataKit.State.Tests" />
+    <InternalsVisibleTo Include="DbDataKit.State.Engines.Tests" />
+    <InternalsVisibleTo Include="DbDataKit.Scheduling.Tests" />
+    <InternalsVisibleTo Include="DbDataKit.Runner.Tests" />
+    <InternalsVisibleTo Include="DbDataKit.Identity.Tests" />
+    <InternalsVisibleTo Include="DbDataKit.Lineage.Tests" />
+    <InternalsVisibleTo Include="DbDataKit.Web.Tests" />
+    <InternalsVisibleTo Include="DbDataKit.State.Api.Tests" />
+    <InternalsVisibleTo Include="DbDataKit.State.Cli.Tests" />
   </ItemGroup>
 </Project>

@@ -19,4 +19,7 @@
     <ProjectReference Include="..\..\src\DbDataKit.State.Api\DbDataKit.State.Api.csproj" />
     <ProjectReference Include="..\..\src\DbDataKit.Secrets\DbDataKit.Secrets.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\DbDataKit.State.Tests\SqliteLockGuard.cs" Link="SqliteLockGuard.cs" />
+  </ItemGroup>
 </Project>

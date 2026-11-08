@@ -6,5 +6,6 @@
     <ProjectReference Include="..\..\src\DbDataKit.Scheduling\DbDataKit.Scheduling.csproj" />
     <!-- the throwaway state database per engine, the same one the State tests use -->
     <Compile Include="..\DbDataKit.State.Tests\StateEngines.cs" Link="StateEngines.cs" />
+    <Compile Include="..\DbDataKit.State.Tests\SqliteLockGuard.cs" Link="SqliteLockGuard.cs" />
   </ItemGroup>
 </Project>
