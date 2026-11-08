@@ -163,11 +163,11 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData("PUT", "api/v1/artifacts/0123456789abcdef")]
-    [InlineData("HEAD", "api/v1/artifacts/0123456789abcdef")]
-    [InlineData("PUT", "api/v1/definitions/integration/sample")]
-    [InlineData("PUT", "api/v1/bindings/dev/integration/sample")]
-    [InlineData("PUT", "api/v1/settings/require_signatures")]
+    [InlineData("PUT", "api/v1/artifacts/0123456789abcdef")]            // a hash is 64 digits
+    [InlineData("PUT", "api/v1/settings/max_artifact_bytes")]
+    [InlineData("PUT", "api/v1/definitions/integration/sample/activate")]
+    [InlineData("DELETE", "api/v1/bindings/dev/integration/sample")]
+    [InlineData("POST", "api/v1/tasks/sample/dev/ok/decisions")]       // what a product reports to a runner is not a console's call
     [InlineData("POST", "api/v1/webhooks/sample/dev/shop")]
     [InlineData("POST", "api/v1/definitions/integration/sample/publish")]
     [InlineData("POST", "api/v1/tasks/sample/dev/ok/delete")]
@@ -204,4 +204,16 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         Assert.False(ServerProducts.Relayable("dbdatarunner", "PUT", "api/v1/artifacts/abc"));
         Assert.False(ServerProducts.Relayable("dbdatarunner", "GET", "api/v1/runs/../artifacts/x"));
     }
+
+    [Theory]
+    [InlineData("GET", "api/v1/tasks/sample/dev/ok/schedule")]
+    [InlineData("GET", "api/v1/tasks/sample/dev/ok/decisions")]
+    [InlineData("PUT", "api/v1/tasks/sample/dev/ok/owner")]
+    [InlineData("PUT", "api/v1/bindings/dev/integration/sample")]
+    [InlineData("PUT", "api/v1/settings/require_signatures")]
+    [InlineData("HEAD", "api/v1/artifacts/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")]
+    [InlineData("PUT", "api/v1/artifacts/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")]
+    [InlineData("PUT", "api/v1/definitions/integration/sample")]
+    public void The_screens_of_plan_33_may_bind_publish_label_and_move_a_task_owner_and_the_runner_still_decides_who(string method, string path) =>
+        Assert.True(ServerProducts.Relayable("dbdatarunner", method, path));
 }

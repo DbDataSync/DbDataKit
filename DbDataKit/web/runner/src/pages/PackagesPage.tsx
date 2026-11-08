@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import { ErrorBanner, Link, useIsAdmin } from '@dbdatakit/shell'
@@ -6,22 +6,9 @@ import { runnerApi, type ActivationAnswer, type ChannelHead, type DefinitionDeta
 import { activationBody, headText, needsAnyway, stagingRows } from '../model'
 import { RunnerShell } from '../RunnerShell'
 import { when } from './format'
-
-function Modal({ label, testId, onCancel, children }: { label: string; testId: string; onCancel: () => void; children: React.ReactNode }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onCancel])
-  return (
-    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel() }}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={label} data-testid={testId}>
-        <div className="card-head"><span className="card-title">{label}</span></div>
-        <div className="card-body">{children}</div>
-      </div>
-    </div>
-  )
-}
+import { ConfirmDialog, Modal } from './Dialogs'
+import { BindingsCard } from './BindingsCard'
+import { PublishingSettings } from './PublishingSettings'
 
 /**
  * The activation of a staged version. When the progress migration the runner ran as a dry run would lose something, the dialog lists the losses and the person confirms them: the runner takes the confirmation only with the same list echoed back. When
@@ -66,20 +53,6 @@ function ActivateDialog({ name, staging, active, onDone, onCancel }: { name: str
   )
 }
 
-function ConfirmDialog({ label, text, go, onCancel, onDone }: { label: string; text: string; go: () => Promise<unknown>; onCancel: () => void; onDone: (answer: unknown) => void }) {
-  const run = useMutation({ mutationFn: go, onSuccess: onDone })
-  return (
-    <Modal label={label} testId="runner-confirm-dialog" onCancel={onCancel}>
-      <p>{text}</p>
-      <ErrorBanner error={run.error} />
-      <div className="row" style={{ gap: 8, justifyContent: 'flex-end' }}>
-        <button type="button" className="btn" onClick={onCancel} data-testid="runner-confirm-cancel">Cancel</button>
-        <button type="button" className="btn btn-danger" disabled={run.isPending} onClick={() => run.mutate()} data-testid="runner-confirm-go">{label}</button>
-      </div>
-    </Modal>
-  )
-}
-
 type Pending =
   | { kind: 'activate'; staging: StagingInfo; active: number | null }
   | { kind: 'rollback' | 'retire'; head: ChannelHead }
@@ -116,6 +89,7 @@ function PackageDetail({ detail, isAdmin }: { detail: DefinitionDetail; isAdmin:
                   </span>
                 )}
               </div>
+              <BindingsCard detail={detail} channel={head.channel} canEdit={isAdmin} />
               {staging && (
                 <div data-testid="runner-staging" data-version={staging.version} data-needs-confirmation={staging.needs_confirmation}>
                   <p>Version {staging.version} is staged: <span data-testid="runner-staging-summary">{staging.summary}</span></p>
@@ -187,6 +161,7 @@ export function PackagesPage() {
       <div className="pane" data-testid="runner-packages-page">
         <div className="page-head"><h1 className="page-title">{name ?? 'Packages'}</h1></div>
         <ErrorBanner error={list.error ?? detail.error} />
+        {!name && <PublishingSettings canEdit={isAdmin} />}
         {!name && list.isSuccess && list.data.length === 0 && <div className="empty" data-testid="runner-no-packages">No package has been published to this runner.</div>}
         {!name && (list.data ?? []).map((p) => (
           <div key={p.name} className="card" data-testid="runner-package-row">
