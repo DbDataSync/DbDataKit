@@ -49,7 +49,8 @@ public static class EgressPolicy
     /// <param name="effective">What an administrator approved of what the app asked for (<see cref="Effective"/>).</param>
     /// <param name="sandboxed">Adds the <c>sandbox</c> directive: the document gets an opaque origin, with scripts, forms and pop-ups allowed.</param>
     /// <param name="frameAncestors">The origins that may frame the document (the instance's <c>embed.allowed_origins</c>); none by default, the host's own pages excepted.</param>
-    public static string Build(AppEgress effective, bool sandboxed, IReadOnlyList<string>? frameAncestors = null)
+    /// <param name="framesSelf">The document may frame pages of this host (a trusted portal frames the apps it mounts).</param>
+    public static string Build(AppEgress effective, bool sandboxed, IReadOnlyList<string>? frameAncestors = null, bool framesSelf = false)
     {
         string List(IReadOnlyList<string> origins, params string[] always) => string.Join(' ', always.Concat(origins));
         var text = new StringBuilder();
@@ -61,7 +62,7 @@ public static class EgressPolicy
         Add("font-src", List(effective.Font, "'self'", "data:"));
         Add("media-src", List(effective.Media, "'self'"));
         Add("connect-src", List(effective.Connect, "'self'"));
-        Add("frame-src", effective.Frame.Count == 0 ? "'none'" : List(effective.Frame));
+        Add("frame-src", effective.Frame.Count == 0 && !framesSelf ? "'none'" : framesSelf ? List(effective.Frame, "'self'") : List(effective.Frame));
         Add("object-src", "'none'");
         Add("base-uri", "'self'");
         Add("form-action", List(effective.Form, "'self'"));

@@ -80,6 +80,24 @@ const portalYaml = (name: string, title: string, accent: string, menu: string, f
   mounts, '',
 ].join('\n')
 
+// AP16: a trusted portal. Its document runs on the host's origin (no sandbox): it asks the host for its own token with the person's session and writes a row, which the Store's audit names with the approval.
+const trustedYaml = [
+  'schemaVersion: 1', 'name: portal-trusted', 'title: Trusted portal', 'version: 1.0.0', 'kind: portal', 'entry: index.html', 'trust: trusted', 'roles: [author]',
+  'models:', '  - model: territories', '    entities: {territory: [read, write]}', 'portal:', '  mounts: [{app: acme, path: /sales/}]', '',
+].join('\n')
+const trustedIndex = '<!doctype html><html><head><meta charset="utf-8"><title>Trusted portal</title></head><body><h1>Trusted portal</h1><pre id="portal-out">loading</pre><script src="portal.js"></script></body></html>\n'
+const trustedScript = `
+const out = (text) => { document.getElementById('portal-out').textContent = text }
+async function main() {
+  const t = await fetch('/apps/trusted/_token', { method: 'POST', credentials: 'same-origin', headers: { 'X-DbData-Shell': '1' } })
+  if (!t.ok) throw new Error('token ' + t.status)
+  const headers = { Authorization: 'Bearer ' + (await t.json()).token, 'Content-Type': 'application/json' }
+  const write = await fetch('/apps/trusted/_data/api/v1/models/territories/changes', { method: 'POST', headers, body: JSON.stringify({ changes: [{ action: 'insert', entity: 'territory', values: { code: 'PT', name: 'Portal Row', quota: 1 } }] }) })
+  out('origin ' + location.origin + '; write ' + write.status)
+}
+main().catch((e) => out('failed: ' + e.message))
+`
+
 const manifest = [
   'schemaVersion: 1', 'name: territory-notes', 'title: Territory notes', 'version: 1.0.0', 'entry: index.html', 'roles: [author]',
   'storage: {user: true, instance: true, quota_mb: 5}', 'models:', '  - model: territories', '    entities: {territory: [read, write]}', '',
@@ -195,6 +213,15 @@ test.beforeAll(async () => {
     run(proxyDll, proxyDirectory, ['apps', 'publish', '--dir', directory])
     run(proxyDll, proxyDirectory, ['apps', 'instance-save', '--name', name.replace('portal-', ''), '--app', name])
   }
+  // a portal with code of its own (trusted): published, and run only once someone other than its author approves that version
+  const trustedDirectory = path.join(os.tmpdir(), 'dbdata-e2e-portal-trusted')
+  fs.rmSync(trustedDirectory, { recursive: true, force: true })
+  fs.mkdirSync(trustedDirectory, { recursive: true })
+  fs.writeFileSync(path.join(trustedDirectory, 'app.yaml'), trustedYaml)
+  fs.writeFileSync(path.join(trustedDirectory, 'index.html'), trustedIndex)
+  fs.writeFileSync(path.join(trustedDirectory, 'portal.js'), trustedScript)
+  run(proxyDll, proxyDirectory, ['apps', 'publish', '--dir', trustedDirectory])
+  run(proxyDll, proxyDirectory, ['apps', 'instance-save', '--name', 'trusted', '--app', 'portal-trusted'])
   // two more instances and a menu of three: Ada is given a role on beta but not on hidden
   for (const name of ['beta', 'hidden']) run(proxyDll, proxyDirectory, ['apps', 'instance-save', '--name', name, '--app', 'territory-notes', '--bind', 'territories=default'])
   run(proxyDll, proxyDirectory, ['apps', 'nav-save', '--name', 'main', '--title', 'Main', '--item', 'acme=Acme,beta=Beta,hidden=Hidden'])
@@ -339,4 +366,38 @@ test('a person signs in and the sandboxed app reads and writes the published mod
   const rows = await client.query('SELECT name FROM territories.territory')
   await client.end()
   expect(rows.rows.map((r) => r.name)).toEqual(['North America'])
+
+  // AP16: the trusted portal is not run without an approval: the person gets the default portal, and the reason
+  await page.goto(`${appsUrl}/apps/trusted/`)
+  await expect(page.locator('p.notice')).toContainText('Showing the default portal instead.')
+  await expect(page.locator('p.notice')).toContainText('asks to be trusted')
+  await expect(page.locator('#portal-out')).toHaveCount(0)
+  expect((await page.goto(`${appsUrl}/apps/trusted/_app/`))!.status()).toBe(403)
+
+  // an approval by someone else (not its author) for that exact version; Ada is given a role on the portal and signs in again
+  const approval = run(proxyDll, proxyDirectory, ['apps', 'approve', '--app', 'portal-trusted', '--version', '1', '--by', 'grace', '--note', 'reviewed'])
+  const user = run(proxyDll, proxyDirectory, ['identity', 'user-list']).users.find((u: any) => u.name === 'Ada Lovelace')
+  run(proxyDll, proxyDirectory, ['identity', 'assign', '--user', user.id, '--app', 'trusted', '--roles', 'author'])
+  await context.clearCookies({ domain: 'localhost' })
+  await page.goto(`${homeUrl}/identity/sign-in`)
+  await page.getByTestId('identity-sign-in-passkey').click()
+  await expect(page.getByTestId('identity-signed-in')).toHaveText('Signed in as Ada Lovelace.')
+
+  // approved: its own page on the host's origin, which calls the data API for Ada through its own token
+  await page.goto(`${appsUrl}/apps/trusted/`)
+  await expect(page.locator('#portal-out')).toHaveText(`origin ${appsUrl}; write 200`)
+  await expect(page.locator('p.notice')).toHaveCount(0)
+
+  // and the Store's audit row of that write names her, the portal's version and the approver
+  const audited = new pg.Client({ connectionString: toPg(warehouse!) })
+  await audited.connect()
+  const trail = await audited.query("SELECT actor_name FROM territories._audit WHERE row_key LIKE '%PT%'")
+  await audited.end()
+  expect(trail.rows.map((r) => r.actor_name)).toEqual([`Ada Lovelace, through portal-trusted 1.0.0, approved by grace (${approval.id})`])
+
+  // revoked: the portal is not run again
+  run(proxyDll, proxyDirectory, ['apps', 'approval-revoke', '--id', approval.id, '--by', 'grace'])
+  await page.goto(`${appsUrl}/apps/trusted/`)
+  await expect(page.locator('p.notice')).toContainText('Showing the default portal instead.')
+  await expect(page.locator('#portal-out')).toHaveCount(0)
 })

@@ -106,7 +106,7 @@ public sealed class GroupStoreApi(Func<ProxyOptions> options, SecretsRuntime sec
         }
         return await WithWriter(served, async writer =>
         {
-            await writer.ApplyAsync(changes!, new WriteActor(caller.UserId, caller.Name), cancellationToken);
+            await writer.ApplyAsync(changes!, new WriteActor(caller.UserId, caller.AuditName), cancellationToken);
             return StoreAnswer.Ok(new JsonObject { ["applied"] = changes!.Count });
         }, cancellationToken);
     }

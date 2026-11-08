@@ -84,8 +84,21 @@ public sealed class GroupChangeRequests(StateDatabase database)
 }
 
 /// <summary>Who called the store module: the identity home's user, whether as an agent (a service account), and the roles the home gives them on this group.</summary>
-public sealed record StoreCaller(string UserId, string? Name, bool IsAgent, ServerRole Roles)
+public sealed record StoreCaller(string UserId, string? Name, bool IsAgent, ServerRole Roles, string? Via = null)
 {
+    /// <summary>How the audit names the caller: the person, and for a call made through a trusted app, the app, its version and the approval (plan 26 AP15, AP16).</summary>
+    public string? AuditName
+    {
+        get
+        {
+            if (Via is null) return Name;
+            // the audit column holds 200 characters: a long name gives way, never the approval
+            var tail = $", through {Via}";
+            var person = Name ?? UserId;
+            return person.Length + tail.Length <= 200 ? person + tail : person[..Math.Max(0, 200 - tail.Length)] + tail[..Math.Min(tail.Length, 200)];
+        }
+    }
+
     public bool Holds(ServerRole role) => (ServerRoles.Close(Roles) & role) == role;
 }
 

@@ -16,7 +16,7 @@ public sealed class GroupAppData(GroupStoreApi api) : IAppData
             return Answer(StoreAnswer.Error(404, $"The group serves the model's default copy, and this app is bound to '{copy}'; bind it to '{GroupStoreApi.DefaultCopy}', or leave the binding out."));
         if (call.Entity is { } entity && !call.Allows(entity, write: false))
             return Answer(StoreAnswer.Error(403, $"This app may not read `{entity}`: its manifest does not list that entity of '{call.Model}'."));
-        var caller = new StoreCaller(call.SubjectId, call.SubjectName, IsAgent: false, call.Roles);
+        var caller = new StoreCaller(call.SubjectId, call.SubjectName, IsAgent: false, call.Roles, call.Via);
         var answer = call.Route switch
         {
             AppDataRoute.Row => await api.RowAsync(caller, call.Model, call.Entity!, call.Query, cancellationToken),

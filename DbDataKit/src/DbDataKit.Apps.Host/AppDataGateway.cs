@@ -16,11 +16,11 @@ public enum AppDataRoute { Row, Rows, Changes }
 
 /// <summary>
 /// One data call of an app, checked by the host: the person (the subject of the app's token, with the roles the identity home gave them on the app's instance), the app's instance, the scope of its manifest's <c>models</c>
-/// (<c>model/entity:read|write</c>), and what it asks for. <see cref="Copy"/> is the copy of the model's data the instance is bound to, or the one the path named; null is the model's default copy.
+/// (<c>model/entity:read|write</c>), and what it asks for. <see cref="Via"/> is what the servers' audit says the call went through for a trusted app (its name, version and approval: <see cref="AppApproval.AuditLabel"/>), null for a sandboxed one. <see cref="Copy"/> is the copy of the model's data the instance is bound to, or the one the path named; null is the model's default copy.
 /// </summary>
 public sealed record AppDataCall(
     string App, string SubjectId, string? SubjectName, ServerRole Roles, IReadOnlyList<string> Scope, AppDataRoute Route, string Model, string? Entity, string? Copy,
-    IReadOnlyDictionary<string, string> Query, byte[] Body)
+    IReadOnlyDictionary<string, string> Query, byte[] Body, string? Via = null)
 {
     /// <summary>Whether the manifest lets the app read (or, with <paramref name="write"/>, write) the entity; write includes read.</summary>
     public bool Allows(string entity, bool write) =>
@@ -58,7 +58,14 @@ public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, Co
     {
         if (instances.Resolve(instance) is not { } resolved) return Refuse(404, "No such app.");
         // a token lives five minutes: an approval revoked in that time still stops the data
-        if (resolved.Manifest.Trust == AppTrust.Trusted && (approvals is null || approvals.Gate(resolved) is { Allowed: false })) return Refuse(403, $"'{resolved.Manifest.Name}' asks to be trusted and no approval stands for this version.");
+        // and the approval that stands goes with every call, for the servers' audit
+        string? via = null;
+        if (resolved.Manifest.Trust == AppTrust.Trusted)
+        {
+            var gate = approvals?.Gate(resolved);
+            if (gate is not { Allowed: true, Approval: { } standing }) return Refuse(403, $"'{resolved.Manifest.Name}' asks to be trusted and no approval stands for this version.");
+            via = standing.AuditLabel;
+        }
         var validated = new ConsoleTokenValidator(AppInstanceAudience.Of(instance), _self, new ReusableTokens(), clock).Validate(authorization is { } h && h.StartsWith("Bearer ", StringComparison.Ordinal) ? h[7..] : null);
         if (validated.Token is not { } token) return Refuse(401, "A token for this app is needed.");
 
@@ -77,7 +84,7 @@ public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, Co
         var copy = match.Groups["copy"].Success ? Uri.UnescapeDataString(match.Groups["copy"].Value) : resolved.Instance.Bindings.TryGetValue(model, out var bound) ? bound : null;
         var parameters = QueryHelpers.ParseQuery(query).ToDictionary(p => p.Key, p => p.Value.ToString(), StringComparer.Ordinal);
         var call = new AppDataCall(instance, token.SubjectId, token.SubjectName, token.Roles, AppTokenBroker.ScopeOf(resolved.Manifest), route, model,
-            match.Groups["entity"].Success ? Uri.UnescapeDataString(match.Groups["entity"].Value) : null, copy, parameters, body);
+            match.Groups["entity"].Success ? Uri.UnescapeDataString(match.Groups["entity"].Value) : null, copy, parameters, body, via);
         var answer = await data.SendAsync(call, ct);
         return answer with { Headers = Cors };
     }

@@ -239,6 +239,53 @@ public sealed class AppsModuleTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_trusted_portal_runs_on_the_hosts_origin_only_with_an_approval_and_otherwise_the_default_portal_says_why()
+    {
+        appsPort = FreePort();
+        var (clientId, ada, _, database) = Prepare();
+        var definitions = new DefinitionStore(database);
+        var store = new AppInstanceStore(definitions);
+        const string portal = "schemaVersion: 1\nname: sales-portal\ntitle: Sales\nversion: 1.0.0\nkind: portal\nentry: index.html\ntrust: trusted\nroles: [author]\nmodels:\n  - model: territories\n    entities: {territory: [read, write]}\nportal:\n  mounts: [{app: acme, path: /sales/}]\n";
+        store.PublishApp(new AppPackage(portal, new Dictionary<string, byte[]> { ["index.html"] = "<html><head></head><body>portal code runs here</body></html>"u8.ToArray() }), "ada");
+        store.Save(new AppInstance("front", "sales-portal"), "ada");
+        var (apps, home) = await StartAsync(clientId);
+        var session = await SignInAsync(apps, home, database, ada, "/apps/acme/");
+
+        // without an approval: the default portal, the reason on the page, and none of the portal's code (neither at its address, nor as a file, nor a token for it)
+        async Task AssertFallbackAsync()
+        {
+            var page = await GetAsync(apps, "/apps/front/", session);
+            Assert.Equal(HttpStatusCode.OK, page.StatusCode);
+            var body = await page.Content.ReadAsStringAsync();
+            Assert.Contains("Showing the default portal instead.", body);
+            Assert.Contains("asks to be trusted", body);
+            Assert.DoesNotContain("portal code runs here", body);
+            Assert.Contains("/apps/front/sales/", body);   // the default portal still lists what the portal mounts that she may open
+            var mounted = await (await GetAsync(apps, "/apps/front/sales/", session)).Content.ReadAsStringAsync();
+            Assert.Contains("src=\"/apps/acme/_app/\"", mounted);
+            Assert.Contains("Showing the default portal instead.", mounted);
+            Assert.Equal(HttpStatusCode.Forbidden, (await GetAsync(apps, "/apps/front/_app/", session)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await PostTokenAsync(apps, "front", session)).StatusCode);
+        }
+        await AssertFallbackAsync();
+
+        // approved: the portal's own document, on this origin (no sandbox directive; it may frame this host's pages), and it can ask for its token
+        var approval = new AppApprovalStore(definitions).Approve("sales-portal", 1, "grace");
+        var approved = await GetAsync(apps, "/apps/front/", session);
+        Assert.Equal(HttpStatusCode.OK, approved.StatusCode);
+        Assert.Contains("portal code runs here", await approved.Content.ReadAsStringAsync());
+        var policy = string.Join(' ', approved.Headers.GetValues("Content-Security-Policy"));
+        Assert.DoesNotContain("sandbox", policy);
+        Assert.Contains("frame-src 'self'", policy);
+        Assert.Equal(HttpStatusCode.OK, (await GetAsync(apps, "/apps/front/_app/", session)).StatusCode);
+        Assert.Contains("portal code runs here", await (await GetAsync(apps, "/apps/front/sales/", session)).Content.ReadAsStringAsync());   // its own routes are its own page
+
+        // revoked: back to the default portal at once
+        new AppApprovalStore(definitions).Revoke(approval.Id, "grace");
+        await AssertFallbackAsync();
+    }
+
+    [Fact]
     public async Task A_trusted_app_runs_only_while_an_approval_stands_for_its_version()
     {
         appsPort = FreePort();
