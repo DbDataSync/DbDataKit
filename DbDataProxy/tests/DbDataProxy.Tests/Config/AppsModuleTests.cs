@@ -239,6 +239,27 @@ public sealed class AppsModuleTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_declared_portals_home_shows_its_view_and_only_the_tiles_the_person_may_open()
+    {
+        appsPort = FreePort();
+        var (clientId, ada, bob, database) = Prepare();
+        var store = new AppInstanceStore(new DefinitionStore(database));
+        store.PublishApp(new AppPackage("schemaVersion: 1\nname: front-portal\ntitle: Front\nversion: 1.0.0\nkind: portal\nportal:\n  mounts: [{app: acme, path: /notes/}]\n  home: [views/home.yaml]\n",
+            new Dictionary<string, byte[]> { ["views/home.yaml"] = "schemaVersion: 1\nblocks:\n  - text: |\n      # Hello from the front\n      Read the **guide**.\n  - links:\n      - label: Handbook\n        href: https://example.com/handbook\n  - tiles: all\n"u8.ToArray() }), "ada");
+        store.Save(new AppInstance("front", "front-portal"), "ada");
+        var (apps, home) = await StartAsync(clientId);
+
+        var adaPage = await (await GetAsync(apps, "/apps/front/", await SignInAsync(apps, home, database, ada, "/apps/acme/"))).Content.ReadAsStringAsync();
+        Assert.Contains("<h1>Hello from the front</h1>", adaPage);
+        Assert.Contains("href=\"https://example.com/handbook\"", adaPage);
+        Assert.Contains("/apps/front/notes/", adaPage);                  // Ada holds a role on acme: its tile
+        var bobPage = await (await GetAsync(apps, "/apps/front/", await SignInAsync(apps, home, database, bob, "/apps/acme/"))).Content.ReadAsStringAsync();
+        Assert.Contains("<h1>Hello from the front</h1>", bobPage);
+        Assert.DoesNotContain("/apps/front/notes/", bobPage);            // Bob holds none: no tile, and no refusal advertised
+        Assert.Contains("Nothing here is open to you yet.", bobPage);
+    }
+
+    [Fact]
     public async Task A_trusted_portal_runs_on_the_hosts_origin_only_with_an_approval_and_otherwise_the_default_portal_says_why()
     {
         appsPort = FreePort();

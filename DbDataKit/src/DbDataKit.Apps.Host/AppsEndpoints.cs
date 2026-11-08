@@ -167,7 +167,7 @@ public static class AppsEndpoints
                 : HeaderOf(instances, session, mount?.App ?? instance);
             if (notice is not null) header = (header ?? new AppShell.Header(PersonOf(session), [])) with { Notice = notice };
             if (portal is not null && mount is null)
-                await Write(context, AppShell.PortalHome(TitleOf(resolved), header ?? new AppShell.Header(PersonOf(session), [], PortalChrome.Look(instances, portal, session, null)), PortalChrome.Tiles(instances, portal, session), origins));
+                await Write(context, AppShell.PortalHome(TitleOf(resolved), header ?? new AppShell.Header(PersonOf(session), [], PortalChrome.Look(instances, portal, session, null)), PortalChrome.Tiles(instances, portal, session), origins, notice is null ? HomeViewHtml.Render(instances, portal, session) : null));
             else
                 await Write(context, AppShell.Page(shown.Instance.Name, TitleOf(shown), header, origins));
         });

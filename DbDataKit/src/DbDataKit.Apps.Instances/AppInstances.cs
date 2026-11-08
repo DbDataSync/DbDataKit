@@ -60,6 +60,9 @@ public sealed class AppInstanceStore(DefinitionStore definitions)
     {
         var load = AppManifestLoader.Load(package.ManifestYaml);
         if (!load.Ok) throw new AppInstanceException("The manifest is not valid: " + string.Join(" ", load.Diagnostics.Select(d => d.Message)));
+        // a portal's home view files are part of what is published: one that does not read is refused here, with the file and line, not found by the person who opens the home
+        var homeProblems = AppChecks.HomeViews(load.Manifest!, path => package.Files.TryGetValue(path, out var bytes) ? System.Text.Encoding.UTF8.GetString(bytes) : null).Where(d => d.Severity == DbDataKit.Config.Yaml.ConfigSeverity.Error).ToList();
+        if (homeProblems.Count > 0) throw new AppInstanceException("The portal's home view is not valid: " + string.Join(" ", homeProblems.Select(d => d.ToString())));
         var approval = approvals is not null && load.Manifest!.Trust == AppTrust.Trusted ? approvals.RequireForPublish(package, by) : null;
         var version = definitions.Publish(AppKind, load.Manifest!.Name, package.Serialize(), by, note: note, channel: channel);
         if (approval is not null) approvals!.RecordPublished(approval, version.Version);
