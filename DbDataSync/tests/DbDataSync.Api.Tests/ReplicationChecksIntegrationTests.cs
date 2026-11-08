@@ -173,9 +173,11 @@ public sealed class ReplicationChecksIntegrationTests(TestApiFactory factory) : 
         Assert.Equal(CheckOutcome.Pass, status.Outcome);
         Assert.Empty(store.BlocksOf(identity));
         var history = store.History(identity, "orders_fresh");
-        Assert.Equal([CheckOutcome.Pass, CheckOutcome.Fail], history.Select(h => h.Outcome));
-        Assert.Equal(runId.ToString(), history[0].RunId);                                  // the run that set it off
-        Assert.Null(history[1].RunId);                                                     // the evaluation on demand
+        // the host evaluates on a clock too, so an evaluation with no run may fall between the two: the history is read by what each entry is for, never by its position
+        var afterRun = Assert.Single(history, h => h.RunId == runId.ToString());          // the run that set it off
+        Assert.Equal(CheckOutcome.Pass, afterRun.Outcome);
+        Assert.Equal(CheckOutcome.Fail, history[^1].Outcome);                              // the evaluation on demand, the first one
+        Assert.Null(history[^1].RunId);
     }
 
     [Fact]

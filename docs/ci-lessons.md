@@ -162,6 +162,7 @@ How it works now, and what to keep true when you add a job:
 | `COPY failed` or `not found` for `.duckdb-archives` in a Docker build | a `.dockerignore` excludes the folder, or the `COPY` lost the `.duckdb-archive[s]` pattern | keep the pattern and keep the folder out of the ignore list |
 | `check_duckdb_cache.py`: `job X, step N: ... but no step before it uses ./.github/actions/duckdb-cache` | a new job fetches DuckDB (or builds an image that does) on its own | add `- uses: ./.github/actions/duckdb-cache` before it (with `rids:` if it is not the host's platform) |
 
+| `ReplicationChecksIntegrationTests` ... `Collections differ ... [Pass, Pass, Fail]` (history of a check has one more entry than the test made) | the test host also evaluates checks on its clock (FQ10), so an evaluation with no run can fall between the test's own; read a check's history by what each entry is for (its run id), never by position |
 ### Infrastructure (not your change; re-run once, then look closer)
 
 | Signature | What it is |
