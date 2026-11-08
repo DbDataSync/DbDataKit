@@ -9,7 +9,7 @@ namespace DbDataBuild.Cli.Web;
 
 /// <summary>
 /// What the page can do besides reading: write the answers a person gave to the questions of `plan`, and apply a plan they have read. Neither is a general command: the page cannot send an argument line.
-/// Applying needs `dbdatabuild ui web --allow-apply` (the operator's decision when the server starts), the write login in the server's environment, and, per request, the person's own confirmation: the plan's
+/// Applying needs `dbdatabuild ui mcp --allow-apply` (the operator's decision when the server starts), the write login in the server's environment, and, per request, the person's own confirmation: the plan's
 /// id and target typed back, and each allowance (risky steps, each object with a destructive step) named. The server checks them against the plan file it reads itself, and refuses an allowance the plan
 /// does not need. An apply is a background job the page follows and can ask to stop between steps (the same hook the terminal interface uses).
 /// </summary>
@@ -63,7 +63,7 @@ internal sealed class WebActions(string projectRoot, ICommandHost host, Semaphor
     /// <summary>Starts applying (or checking, with dry_run) a plan the server read itself. Returns the id of the job to follow.</summary>
     public (int, string, string) StartApply(JsonObject? body)
     {
-        if (!allowApply) return Refuse(403, "This server was not started with --allow-apply: it can read plans but not apply them. Start `dbdatabuild ui web --allow-apply` to apply from this page.");
+        if (!allowApply) return Refuse(403, "This server was not started with --allow-apply: it can read plans but not apply them. Start `dbdatabuild ui mcp --allow-apply` to apply from this page.");
         var planFile = body?["plan"] is JsonValue p && p.TryGetValue<string>(out var s) ? s : null;
         if (planFile == null || Path.IsPathRooted(planFile) || planFile.Replace('\\', '/').Split('/') is not ["plans", _, ..] parts || parts.Any(x => x is ".." or "." or "") || !planFile.EndsWith(".plan.yml", StringComparison.Ordinal))
             return Refuse(400, "A plan file under plans/.");

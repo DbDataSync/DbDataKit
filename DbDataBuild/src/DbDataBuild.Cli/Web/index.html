@@ -598,7 +598,7 @@ function stepsTable(steps) {
 // Only when the server was started with --allow-apply. The person reads the plan above, names each allowance, and types the target; the server checks all of it against the plan file again.
 
 function applyPanel(file, plan, d) {
-  if (!capabilities?.apply) return h("div", { class: "panel" }, h("h2", null, "Apply"), h("div", { class: "muted" }, "This page was not started with --allow-apply, so it cannot apply plans. Apply at a terminal with the command above, or restart with `dbdatabuild ui web --allow-apply`."));
+  if (!capabilities?.apply) return h("div", { class: "panel" }, h("h2", null, "Apply"), h("div", { class: "muted" }, "This page was not started with --allow-apply, so it cannot apply plans. Apply at a terminal with the command above, or restart with `dbdatabuild ui mcp --allow-apply`."));
   const out = h("div");
   const risky = h("input", { type: "checkbox", "aria-label": "Allow the risky steps", onchange: () => update() });
   const destructive = d.apply_needs.allow_destructive.map((o) => ({ o, box: h("input", { type: "checkbox", "aria-label": "Allow destructive steps on " + o, onchange: () => update() }) }));

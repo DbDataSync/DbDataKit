@@ -142,6 +142,41 @@ jobs:
           DBDATABUILD_TEST_PUBLISHED: ${{ runner.temp }}/runtime
         run: dotnet test tests/DbDataBuild.Tests.Conformance -c Release --no-build --filter "Group=runtime-package"
 
+  # The web page in a real browser (B-PW): `dbdatabuild ui mcp` serves it by a one-time link, over a starter project; every screen, the plans screen, the apply panel and the markup rule
+  # (tests/DbDataBuild.Web.Tests). Each spec starts its own server, so nothing here needs a port or an engine.
+  playwright:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-product
+        with:
+          product: DbDataBuild
+          duckdb: 'false'
+      - name: Prebuilt polyglot library
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/fetch-native.sh
+      - name: Pinned DuckDB engine
+        shell: bash
+        working-directory: .
+        run: scripts/fetch-duckdb.sh
+      - run: dotnet build src/DbDataBuild.Cli -c Debug
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Install the browser
+        working-directory: DbDataBuild/tests/DbDataBuild.Web.Tests
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run the browser tests
+        working-directory: DbDataBuild/tests/DbDataBuild.Web.Tests
+        run: npx playwright test
+
   # The conformance suite against real engines, in groups that run side by side (each starts only the engines it needs): `quick` is
   # everything not named below, `apply` is the whole plan and apply loop, `templates` builds the sample projects and compares every
   # table with DuckDB, `release` (the sample projects again with the rewrites off) runs only in dbdatabuild-conformance-full.yml.

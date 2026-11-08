@@ -48,6 +48,15 @@ The CI runners are small (two cores, Windows and Linux), run many jobs at once, 
 | `ENOENT ... FIRST-RUN.txt` in `identity-home.spec.ts` although its Proxy is "up" (the failure is immediate) | a fixture server added to `playwright.config.ts` took a port a spec starts its own server on (8497 and 8498 were the identity-home spec's home and console): the spec's health check was answered by the OTHER server, so it believed its own Proxy was running | before choosing a port, `grep -n "<port>" playwright.config.ts tests/*.ts`; ports 8481 to 8499 and 8511 to 8515 are in use, 8501 and 8502 are the inventory story's |
 | a new fixture server never starts | every server in `playwright.config.ts` needs its own port and its own directory under the temp folder; the `webServer` entry needs `url`, `reuseExistingServer: false`, a timeout | copy an existing entry; ports in use are listed in the config |
 
+### Playwright (Build)
+
+| Signature | Cause | Fix |
+| --- | --- | --- |
+| a Build browser test runs `ChromeFact`/`--dump-dom` and times out or is skipped | the old tests looked for `google-chrome` on `PATH`; cloud sessions keep Chromium in `/opt/pw-browsers`, not on `PATH` | `DbDataBuild.Web.Tests` (Playwright) replaced them; its config uses `/opt/pw-browsers/chromium-*/chrome-linux64/chrome` when it exists and `CI` is not set (the release `@playwright/test` wants is not installed there, and `playwright install` is not available); CI runs `npx playwright install --with-deps chromium` |
+| `Running the commands…` is the text of `main#view` when a spec expects a screen; or a screen shows the health screen after the spec set its route | the page draws the link's own screen first and runs the project's commands on each screen; a route set before that first draw finishes is overwritten | `BuildPage.open` waits for `tests passed` (the health screen) before it sets the route; `expect.timeout` is 30 s locally, 60 s in CI |
+| text a spec expects is missing from `main#view` although the page has it | `innerText` leaves out the content of a closed `<details>` (the statements of a plan) | read `textContent` (`screenText` in `fixtures.ts`) |
+| the page of a Build server cannot be opened by `goto` | `ui web` is gone: the page is served only by `dbdatabuild ui mcp` (a host that does not advertise MCP Apps gets a link from `show`, which works once) | the fixture speaks MCP over standard input to `ui mcp`, calls `show` for every page it opens, and keeps no port of its own; a plan fixture is a file written by `PlanDocument.Serialize` (the hash is part of the file), edited in the spec when it must look hand-edited |
+
 ### Console image / publish
 
 | Signature | Cause | Fix |

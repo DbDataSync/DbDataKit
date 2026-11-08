@@ -158,7 +158,7 @@ internal sealed class WebServer : IDisposable
         var path = request.Url!.AbsolutePath;
         if (oneTimeLinks && request.HttpMethod == "GET" && path == "/") return OpenWithLink(request);
         if (request.HttpMethod == "GET" && path == "/")
-            return TokenMatches(request.QueryString["token"]) ? (200, "text/html; charset=utf-8", page) : Refuse(403, "Open the address `dbdatabuild ui web` printed: it carries the token.");
+            return TokenMatches(request.QueryString["token"]) ? (200, "text/html; charset=utf-8", page) : Refuse(403, "Open the link the `show` tool returned: it carries the token.");
 
         if (oneTimeLinks ? !IsSession(request.Headers["X-DDB-Token"]) : !TokenMatches(request.Headers["X-DDB-Token"])) return Refuse(403, "Missing or wrong token.");
         if (request.HttpMethod == "POST" && path == "/api/run") return WithJsonBody(request, backend.RunCommand);
