@@ -248,7 +248,8 @@ public sealed class AppsRemoteTests : IAsyncLifetime
             return await http.SendAsync(request);
         }
 
-        Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Get, "/api/v1/apps", ServerRole.Viewer)).StatusCode);
+        // AP24a: reading apps is for a viewer too (the console's Apps screen); changing them is not
+        Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Get, "/api/v1/apps", ServerRole.Viewer)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Put, "/api/v1/apps/notes", ServerRole.Viewer, "{}")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Post, "/api/v1/app-approvals", ServerRole.Viewer, "{}")).StatusCode);
         Assert.Empty(Instances.AppVersions("notes"));

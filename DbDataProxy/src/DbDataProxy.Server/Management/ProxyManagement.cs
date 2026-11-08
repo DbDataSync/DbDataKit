@@ -105,7 +105,7 @@ public sealed partial class ProxyManagement(IConfigurationRoot configuration, st
             var rest = route.Length > (Prefix + "/entity-models").Length ? route[(Prefix + "/entity-models/").Length..].Split('/') : [];
             return await entityModels.HandleAsync(method, rest, body, caller, cancellationToken);
         }
-        foreach (var kind in new[] { "apps", "app-instances", "app-approvals" })
+        foreach (var kind in new[] { "apps", "app-instances", "app-approvals", "app-navigation" })
             if (route == Prefix + "/" + kind || route.StartsWith(Prefix + "/" + kind + "/", StringComparison.Ordinal))
             {
                 if (apps is null) return ManagementResult.Problem(404, "There is no such call.");
