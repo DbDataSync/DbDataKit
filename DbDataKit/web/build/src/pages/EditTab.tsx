@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext, useSearchParams } from 'react-router-dom'
-import { CodeEditor, ErrorBanner, SchemaForm, SchemaSet, schemaFor, type EditorDiagnostic } from '@dbdatakit/shell'
+import { CodeEditor, ErrorBanner, Link, SchemaForm, SchemaSet, schemaFor, type EditorDiagnostic } from '@dbdatakit/shell'
 import { buildApi } from '../api'
 import { CompilePanel } from './CompilePanel'
 import { DefinitionPanel } from './DefinitionPanel'
@@ -12,6 +12,7 @@ import { NewFilePanel, OpenFileTools } from './FileTools'
 import { NewModelPanel } from './NewModelPanel'
 import { PreviewPanel, isModelQuery } from './PreviewPanel'
 import type { Diagnostic, ProjectFile, Workspace } from '../types'
+import { viewFileOf } from '../views/workspaceStore'
 
 const languageOf = (path: string) => (path.endsWith('.sql') ? 'sql' : path.endsWith('.yml') || path.endsWith('.yaml') ? 'yaml' : 'plaintext')
 
@@ -203,6 +204,9 @@ export function EditTab() {
                   <span className="mono" data-testid="build-edit-open">{open}</span>
                   <button type="button" className="btn btn-primary" disabled={!dirty || save.isPending} onClick={() => save.mutate()} data-testid="build-edit-save">{save.isPending ? 'Saving…' : 'Save'}</button>
                   {!dirty && <span className="hint" data-testid="build-edit-saved">Saved</span>}
+                  {viewFileOf(open) && workspace !== null && (dirty
+                    ? <span className="hint" data-testid="build-edit-open-editor-why">Save the file to open it in the dashboard editor.</span>
+                    : <Link to={`/projects/${encodeURIComponent(project)}/views?workspace=${encodeURIComponent(workspace)}&edit=${viewFileOf(open)!.kind}/${encodeURIComponent(viewFileOf(open)!.name)}`} data-testid="build-edit-open-editor">Open in the dashboard editor</Link>)}
                 </div>
                 {canAuthor && workspace !== null && <OpenFileTools key={open} project={project} workspace={workspace} path={open} hash={hash} dirty={dirty} onMoved={(to) => { void wrote(); read.mutate(to) }} onDeleted={() => { setOpen(null); void wrote() }} />}
                 {refused && <div className="empty" data-testid="build-edit-refused">{refused}</div>}

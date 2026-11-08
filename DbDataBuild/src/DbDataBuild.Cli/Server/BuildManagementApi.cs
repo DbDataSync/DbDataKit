@@ -469,6 +469,21 @@ internal static class BuildManagementApi
             return Results.NoContent();
         });
 
+        // the catalog of a semantic model of the draft (plan 32 DBR29): what the dashboard editor's field wells offer, from the model as the compiler reads it in the person's own workspace
+        app.MapGet("/api/v1/projects/{project}/workspaces/{id}/models/{model}/catalog", (string project, string id, string model, HttpContext context) =>
+        {
+            if (projects.Find(project) is not { } hosted) return Results.NotFound();
+            var token = context.ManagementToken();
+            var decision = ManagementAuthorization.Authorize(token, ServerRole.Viewer, hosted.Id);
+            if (!decision.Allowed) return Refused(decision);
+            if (workspaces.Find(hosted.Id, id) is not { } workspace) return Results.NotFound();
+            if (workspace.Owner != token.SubjectId) return Results.Json(new { error = "A workspace is its owner's." }, statusCode: StatusCodes.Status403Forbidden);
+            var loaded = ProjectContext.Load(workspaces.RootOf(workspace));
+            if (loaded.Semantic.Models.FirstOrDefault(m => m.Name == model) is not { } file) return Results.Json(new { error = $"The project has no semantic model '{model}'." }, statusCode: StatusCodes.Status404NotFound);
+            if (file.Compilation is null) return Results.Json(new { error = $"The semantic model '{model}' ({file.File}) does not compile; fix it first (project compile shows why)." }, statusCode: StatusCodes.Status409Conflict);
+            return Results.Json(new { model = file.Name, catalog = JsonNode.Parse(ProjectViews.CatalogOf(file).ToJsonString()) });
+        });
+
         MapWorkspaceGit(app, projects, workspaces, sessions);
     }
 
@@ -541,6 +556,36 @@ internal static class BuildManagementApi
             var loaded = ProjectContext.Load(projects.RootOf(hosted));
             if (loaded.Semantic.Models.FirstOrDefault(m => m.Name == model) is not { } file) return Results.Json(new { error = $"The project has no semantic model '{model}'." }, statusCode: StatusCodes.Status404NotFound);
             var result = await publisher.PublishSemanticAsync(proxy, file, loaded.Config, token, context.RequestAborted);
+            return Results.Json(result.Body, statusCode: result.Status);
+        });
+
+        // plan 32 DBR29: a dashboard or report of the project (as merged, not a draft) to the same proxy's registry. Checked here first with the project's own models; the Gateway checks it again against the model versions it serves.
+        app.MapPost("/api/v1/projects/{project}/proxies/{proxy}/publish-view", async (string project, string proxy, HttpContext context) =>
+        {
+            if (projects.Find(project) is not { } hosted) return Results.NotFound();
+            var token = context.ManagementToken();
+            if (!ManagementAuthorization.Authorize(token, ServerRole.Approver, hosted.Id).Allowed) return Results.Json(new { error = "This needs the approver role." }, statusCode: StatusCodes.Status403Forbidden);
+            string? kindText, name, note; int? expected = null;
+            try
+            {
+                var body = await JsonSerializer.DeserializeAsync<JsonObject>(context.Request.Body, cancellationToken: context.RequestAborted);
+                (kindText, name, note) = (body?["kind"]?.GetValue<string>(), body?["name"]?.GetValue<string>(), body?["note"]?.GetValue<string>());
+                if (body?["expected_version"] is { } e) expected = e.GetValue<int>();
+            }
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException) { kindText = name = note = null; }
+            if ((kindText is not ("dashboard" or "report")) || string.IsNullOrWhiteSpace(name))
+                return Results.Json(new { error = "The body is a JSON object with the \"kind\" (dashboard or report) and the \"name\" of a document of the project, and optionally the \"expected_version\" last seen and a \"note\"." }, statusCode: StatusCodes.Status400BadRequest);
+
+            var root = projects.RootOf(hosted);
+            if (!Directory.Exists(root)) return Results.Json(new { error = $"The project '{hosted.Id}' has no working copy on this server yet." }, statusCode: StatusCodes.Status409Conflict);
+            var kind = kindText == "report" ? DbDataKit.Views.ViewKind.Report : DbDataKit.Views.ViewKind.Dashboard;
+            if (ProjectViews.Find(root, kind, name) is not { } file) return Results.Json(new { error = $"The project has no {kindText} '{name}' (it is the file {ProjectViews.FolderOf(kind)}/{name}.yaml of the project as merged; a draft is published after its merge)." }, statusCode: StatusCodes.Status404NotFound);
+            var text = (await File.ReadAllTextAsync(Path.Combine(root, file.Path), context.RequestAborted)).Replace("\r\n", "\n");
+            var loaded = ProjectContext.Load(root);
+            var problems = ProjectViews.CheckText(kind, file.Path, text, loaded.Semantic, out _).Where(d => d.Severity == DbDataKit.Config.Yaml.ConfigSeverity.Error).ToList();
+            if (problems.Count > 0)
+                return Results.Json(new { error = $"{file.Path} has {problems.Count} problem(s), so it was not published: {problems[0].Code} {problems[0].Message}", diagnostics = problems.Select(d => new { code = d.Code, message = d.Message, file = d.Path, line = d.Line, column = d.Column }) }, statusCode: StatusCodes.Status409Conflict);
+            var result = await publisher.PublishViewAsync(proxy, kindText!, name, text, expected, note, token, context.RequestAborted);
             return Results.Json(result.Body, statusCode: result.Status);
         });
     }

@@ -1,5 +1,5 @@
 import { request, type SchemaAssociation, type SchemaNode } from '@dbdatakit/shell'
-import type { PublishModelAnswer, SemanticModelEntry, RefreshPlanEntry, RefreshResult, TestsResult, CommandOffer, DefineResult, DefinitionAnswer, ImportResult, ProjectConnections, ProjectTemplateInfo, TemplateCatalog, AdoptAnswer, PairedProxy, PairedRunner, PublishAnswer, RunnerPublishData, GitChange, GitCommit, RenderedFiles, BuildProject, FileContent, ProjectFile, Workspace, CommandAnswer, CompareResult, CompileSummary, ConnectionStatus, DeployResult, PlanDetail, PlanEntry, ProjectGraph, SampleResult } from './types'
+import type { PublishViewAnswer, PublishViewBody, PublishModelAnswer, SemanticModelEntry, RefreshPlanEntry, RefreshResult, TestsResult, CommandOffer, DefineResult, DefinitionAnswer, ImportResult, ProjectConnections, ProjectTemplateInfo, TemplateCatalog, AdoptAnswer, PairedProxy, PairedRunner, PublishAnswer, RunnerPublishData, GitChange, GitCommit, RenderedFiles, BuildProject, FileContent, ProjectFile, Workspace, CommandAnswer, CompareResult, CompileSummary, ConnectionStatus, DeployResult, PlanDetail, PlanEntry, ProjectGraph, SampleResult } from './types'
 
 const project = (id: string) => `/api/v1/projects/${encodeURIComponent(id)}`
 
@@ -149,4 +149,11 @@ export const buildApi = {
   push: (id: string, workspace: string) => request<{ pushed: boolean; branch: string; pull_request_url: string | null }>(`${project(id)}/workspaces/${encodeURIComponent(workspace)}/push`, { method: 'POST' }),
   /** For a project without a remote: merges the draft into the project, for an approver. A conflict changes nothing. */
   merge: (id: string, workspace: string) => request<{ merged: boolean; sha: string }>(`${project(id)}/workspaces/${encodeURIComponent(workspace)}/merge`, { method: 'POST' }),
+  /** The catalog of a semantic model of the draft, as the compiler reads it: what the dashboard editor's field wells offer (plan 32 DBR29). */
+  modelCatalog: (id: string, workspace: string, model: string) => request<{ model: string; catalog: unknown }>(`${project(id)}/workspaces/${encodeURIComponent(workspace)}/models/${encodeURIComponent(model)}/catalog`),
+  /** The files of the project as merged (no workspace): what a publish reads. */
+  projectFiles: (id: string) => run<{ files: ProjectFile[] }>(id, 'project_file_list'),
+  /** Publishes a dashboard or report of the project as merged to a paired Gateway's registry (plan 32 DBR29). The server needs the approver role; the Gateway's refusal comes back in its own words. */
+  publishView: (id: string, proxy: string, body: PublishViewBody) =>
+    request<PublishViewAnswer>(`${project(id)}/proxies/${encodeURIComponent(proxy)}/publish-view`, { method: 'POST', body: JSON.stringify(body) }),
 }

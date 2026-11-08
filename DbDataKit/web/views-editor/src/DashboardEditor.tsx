@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
-import { Link } from 'react-router-dom'
-import { CodeEditor } from '@dbdatakit/shell'
+import { CodeEditor, Link } from '@dbdatakit/shell'
 import {
   NAME_PATTERN, canRedo, canUndo, draftFromOpened, edit, editText, errorsOf, format, formTarget, diagnosticsFor, isDirty, markersOf, newDocumentText, newDraft, redo, reloadDraft, saveDraft, undo,
   widgetModel, type Catalog, type ClientDiagnostic, type Draft, type DocumentStore, type ViewsClient, type RenderedWidget, type EditCommand, type TileDoc, type ViewKind, type WidgetDoc, type WidgetType, type LayoutDoc,

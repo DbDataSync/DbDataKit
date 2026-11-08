@@ -19,7 +19,7 @@ namespace DbDataBuild.Tests.Unit;
 /// Publishing a connection of a project to a paired Proxy as a read-only data source (plan 13, T10, Build's side): pairing as a server client, only the read login leaving, the person and the Publisher role on the call, and the proxy's refusals
 /// passed on in its own words. The Proxy here is a stand-in that pairs and records; the Proxy's own rules are tested in its suite.
 /// </summary>
-public sealed class BuildServerProxyTests : IAsyncLifetime
+public sealed partial class BuildServerProxyTests : IAsyncLifetime
 {
     private const string ReadLogin = "Server=db;User Id=reader;Password=READ-pw-1c9";
     private const string WriteLogin = "Server=db;User Id=writer;Password=WRITE-pw-77f";
@@ -109,6 +109,7 @@ public sealed class BuildServerProxyTests : IAsyncLifetime
                 if (context.Request.Method == "DELETE") storedSecrets.Remove(name); else storedSecrets.Add(name);
                 return Results.Json(new { reference = "secret:dbdata:gateway:managed-x:" + name });
             }
+            if (path.StartsWith("/api/v1/dashboards/", StringComparison.Ordinal) || path.StartsWith("/api/v1/reports/", StringComparison.Ordinal)) return ViewsAnswer(body);       // plan 32 DBR29 (BuildServerProxyViewsTests)
             if (path.StartsWith("/api/v1/semantic-models/", StringComparison.Ordinal))
                 return context.Request.Method == "GET" ? Results.Json(new { error = "none" }, statusCode: 404)
                     : modelAnswer == HttpStatusCode.OK ? Results.Json(new { version = 1, created = true }) : Results.Json(new { error = "The catalog does not load, so nothing was published." }, statusCode: (int)modelAnswer);

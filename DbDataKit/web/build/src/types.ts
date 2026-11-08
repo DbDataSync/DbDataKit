@@ -420,3 +420,22 @@ export interface PublishModelAnswer {
   created: boolean
   data_sources: (string | null)[]
 }
+
+/** What a dashboard or report is published as (plan 32 DBR29): its kind and name in the project's `dashboards/` or `reports/`, the registry version last seen when the person wants a conflict refused, and a note. */
+export interface PublishViewBody {
+  kind: 'dashboard' | 'report'
+  name: string
+  expected_version?: number
+  note?: string
+}
+
+/** What publishing a dashboard or report answered: the registry's version, whether it is new or was unchanged, and the model versions it now depends on. */
+export interface PublishViewAnswer {
+  proxy: string
+  kind: 'dashboard' | 'report'
+  name: string
+  version: string | null
+  created: boolean | null
+  unchanged: boolean | null
+  depends_on: string[] | null
+}

@@ -542,7 +542,8 @@ public static class CliApp
         foreach (var s in result.BuiltModels.Where(s => s.Inherited.Count > 0).OrderBy(s => s.Definition.Name, StringComparer.Ordinal))
             output.WriteLine($"Inherited by {s.Definition.Name}: {string.Join(", ", s.Inherited.Select(o => $"{o.Path} = {o.Value} ({o.File}:{o.Line})"))}");
         diagnostics.AddRange(ProjectChecks.Run(result.BuiltModels, config, null, projectRoot, new ModelLowering(result.Models, result.DeclaredModelsAndStaging, config, result.Macros)));
-        _ = DbDataBuild.Semantic.SemanticProject.Load(projectRoot, ProjectModels.Of(result, config.DefaultConnections), config, diagnostics);       // the semantic files, against the models as loaded: a renamed column breaks them here
+        var semanticProject = DbDataBuild.Semantic.SemanticProject.Load(projectRoot, ProjectModels.Of(result, config.DefaultConnections), config, diagnostics);       // the semantic files, against the models as loaded: a renamed column breaks them here
+        diagnostics.AddRange(ProjectViews.Check(projectRoot, semanticProject));       // dashboards/ and reports/: the views loader, then the project's own semantic models as the catalog (plan 32, DBR29)
         if (!diagnostics.Any(d => d.Severity == Severity.Error)) diagnostics.AddRange(ProjectChecks.Reachability(ProjectContext.Load(projectRoot), null));
 
         diagnostics = diagnostics.DistinctBy(d => (d.Code, d.Location, d.Found)).ToList();      // one line per finding, however many checks reached it
