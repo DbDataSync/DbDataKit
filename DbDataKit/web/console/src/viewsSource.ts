@@ -4,7 +4,7 @@ import { consoleApi, type InstanceSummary } from './api'
 /**
  * The console's sources of dashboards and reports (plan 32 DBR23 and DBR11b). **Fixtures** (plan 32 DBR23, M1): the retail sample's files and recorded results, no server. **A Gateway's published documents**: the Gateway that runs the `views` module
  * (DBR11) answers the module's own routes on its management API, which the console relays with the signed-in person's token (`/relay/<server>/api/v1/dashboards...`), so every widget is read as that person; `moduleClient` is the same
- * `ViewsClient` over them. A Gateway without the module (or one that does not answer) is not a source, and with none the page shows the fixtures. What follows is the fixture source. The documents are the retail template's sample bundle and the recorded results of each
+ * `ViewsClient` over them, with `serverCheck` on (DBR28b: the Gateway relays `POST /api/v1/views/preview`, so the editor's text is also checked by the module as a publish would check it). A Gateway without the module (or one that does not answer) is not a source, and with none the page shows the fixtures. What follows is the fixture source. The documents are the retail template's sample bundle and the recorded results of each
  * widget (`DbDataKit/conformance/views/widget-results`), read into the build as text and JSON, so the page asks no server and no other host for anything. The module client (`moduleClient`, DBR11) is a second
  * implementation of the same `ViewsClient` and replaces this one in `viewsClient()` when it is wired.
  */
@@ -98,7 +98,7 @@ export function viewsClient(source: string = FIXTURES): ViewsClient {
   if (source === FIXTURES) return fixtureViewsClient()
   let found = clients.get(source)
   if (!found) {
-    found = logged(moduleClient({ baseUrl: `/relay/${encodeURIComponent(source)}` }))
+    found = logged(moduleClient({ baseUrl: `/relay/${encodeURIComponent(source)}`, serverCheck: true }))
     clients.set(source, found)
   }
   return found

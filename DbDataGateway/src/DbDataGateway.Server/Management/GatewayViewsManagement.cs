@@ -15,6 +15,7 @@ namespace DbDataGateway.Server.Management;
 /// GET  /api/v1/dashboards | /reports              the list the caller may open
 /// GET  /api/v1/dashboards/{name} | /reports/{name} the document as published
 /// POST /api/v1/dashboards/{name}/render           the rendered widgets, as the person the console vouches for
+/// POST /api/v1/views/preview                      the live preview of an unsaved draft (DBR28), as that person, stored nowhere (viewer; the module's own checks refuse what a publish would refuse)
 /// PUT  /api/v1/dashboards/{name} | /reports/{name} {text, expected_version?, note?} publishes it to the group (author, publisher or administrator)
 /// </code>
 /// Reading is <b>as the person</b>: a console's token names them, and a person who signs in through the identity home is that home user, so their groups decide which data sources every widget may read. Publishing needs no module: the document is checked and
@@ -25,7 +26,7 @@ public sealed class GatewayViewsManagement(GatewayViewsPublishing publishing, Ga
     public const string Prefix = GatewayManagement.Prefix;
 
     public static bool Handles(string route) =>
-        route is Prefix + "/dashboards" or Prefix + "/reports" or Prefix + "/views/status"
+        route is Prefix + "/dashboards" or Prefix + "/reports" or Prefix + "/views/status" or Prefix + "/views/preview"
         || route.StartsWith(Prefix + "/dashboards/", StringComparison.Ordinal) || route.StartsWith(Prefix + "/reports/", StringComparison.Ordinal);
 
     private static ManagementResult Problem(int status, string code, string message) =>
@@ -35,6 +36,8 @@ public sealed class GatewayViewsManagement(GatewayViewsPublishing publishing, Ga
     {
         if (route == Prefix + "/views/status")
             return method == "GET" ? (caller.Holds(ServerRole.Viewer) ? Status() : Problem(403, "denied", "This needs the viewer role.")) : Problem(405, "invalid", "The status is read with GET.");
+
+        if (route == Prefix + "/views/preview") return await PreviewAsync(method, body, caller, cancellationToken);
 
         var parts = route[(Prefix.Length + 1)..].Split('/');
         var kind = parts[0] == "reports" ? ViewDefinitions.Report : ViewDefinitions.Dashboard;
@@ -67,6 +70,25 @@ public sealed class GatewayViewsManagement(GatewayViewsPublishing publishing, Ga
                 break;
             default: return Problem(405, "invalid", "That method is not allowed here.");
         }
+        return new ManagementResult(answer.Status, answer.Body);
+    }
+
+    /// <summary>The module's own <see cref="ViewsApi.PreviewAsync"/>, in process, as the person the console's token names (DBR28): the same roles and refusals as a render, the same 413 over the module's limit for a draft.</summary>
+    private async Task<ManagementResult> PreviewAsync(string method, string? body, ManagementCaller caller, CancellationToken cancellationToken)
+    {
+        if (method != "POST") return Problem(405, "invalid", "A preview is asked with POST.");
+        if (!caller.Holds(ServerRole.Viewer)) return Problem(403, "denied", "This needs the viewer role.");
+        if (views is null) return Problem(404, "not_found", "This gateway does not serve the views module: list `views` under `modules:` in server.yaml.");
+        if (caller.Token is not { } token) return Problem(403, "denied", "A preview is made as a person: sign in through a console, or call the module's own address with a token of the identity home.");
+        var limit = new ViewsOptions().MaxPreviewBytes;
+        if (body is not null && System.Text.Encoding.UTF8.GetByteCount(body) > limit) return Problem(413, "too_large", $"A preview request is at most {limit} bytes.");
+        JsonObject? json;
+        try { json = string.IsNullOrWhiteSpace(body) ? null : JsonNode.Parse(body) as JsonObject ?? throw new JsonException("The body must be a JSON object."); }
+        catch (JsonException ex) { return Problem(400, "invalid", $"The body is not JSON: {ex.Message}"); }
+        var who = await views.ConsolePrincipalAsync(token, cancellationToken);
+        var api = views.Module.Api;
+        if (api is null) return Problem(503, "unavailable", "The views module has not started.");
+        var answer = await api.PreviewAsync(who, json, null, System.Diagnostics.Activity.Current?.TraceId.ToString(), cancellationToken);
         return new ManagementResult(answer.Status, answer.Body);
     }
 
