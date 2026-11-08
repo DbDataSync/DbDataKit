@@ -6,6 +6,14 @@ namespace DbDataKit.Serving;
 public record ServingCaller(string Id, string Name, IReadOnlySet<string> Roles, IReadOnlyDictionary<string, string> Claims)
 {
     public ServingCaller(string id, string name) : this(id, name, new HashSet<string>(), new Dictionary<string, string>()) { }
+
+    /// <summary>
+    /// What the directory says about the caller (plan 22a D4, GP04): attribute name to its values, several for one name when the caller is in several groups ("a manager over three regions": <c>region</c> to <c>east</c>, <c>west</c>, <c>north</c>).
+    /// Empty for a caller whose identity provider says nothing. <see cref="Claims"/> stays what it is: single-valued facts of the credential (the sign-in method).
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> Attributes { get; init; } = EmptyAttributes;
+
+    private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> EmptyAttributes = new Dictionary<string, IReadOnlyList<string>>();
 }
 
 /// <summary>What a protocol received to prove who the caller is. A protocol builds the kind its wire format carries and nothing else.</summary>

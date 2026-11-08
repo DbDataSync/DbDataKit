@@ -14,7 +14,7 @@ public static class HomeTokens
     {
         if (users.Get(userId) is not { Enabled: true } user) return null;
         var held = directory.RolesOn(user.Id, serverId);
-        return new ConsoleTokenRequest(serverId, user.Id, user.DisplayName, held.Roles, held.Projects);
+        return new ConsoleTokenRequest(serverId, user.Id, user.DisplayName, held.Roles, held.Projects, Attributes: directory.AttributesOf(user.Id));
     }
 
     /// <summary>A signed token for the call, or null (see <see cref="For"/>).</summary>

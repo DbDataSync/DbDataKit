@@ -23,6 +23,7 @@ public sealed record IdentityAdminResult(int Status, JsonNode Body)
 /// <item><c>GET assignments</c>; <c>POST assignments</c> <c>{"user"|"group", "server" [,"project"] | "app", "roles"}</c> (again replaces); <c>DELETE assignments/{id}</c>.</item>
 /// <item><c>GET clients</c>; <c>POST clients</c> <c>{"name","redirect_uris","logout_redirect_uris","public"}</c> (a confidential client's secret is answered once); <c>DELETE clients/{id}</c>.</item>
 /// <item><c>GET group-mappings</c>; <c>POST group-mappings</c> <c>{"source","group","server" [,"project"] | "app","roles"}</c>; <c>DELETE group-mappings/{id}</c>.</item>
+/// <item><c>GET attribute-mappings</c>; <c>POST attribute-mappings</c> <c>{"source","group","attribute","value"}</c> (a group gives its members the value; the same again changes nothing; several mappings of one attribute give several values); <c>DELETE attribute-mappings/{id}</c> (plan 22a GP04).</item>
 /// <item><c>GET tokens[?user=]</c> (never a secret); <c>DELETE tokens/{id}</c> (anyone's).</item>
 /// <item><c>GET service-accounts</c>; <c>POST service-accounts</c> <c>{"name","description"}</c>; <c>DELETE service-accounts/{name}</c>; <c>POST service-accounts/{name}/tokens</c> <c>{"name","days"|"no_expiry"}</c> (answered once).</item>
 /// </list>
@@ -73,6 +74,10 @@ public sealed class IdentityAdminApi(StateDatabase state, string publicUrl, Acce
                 ("GET", ["group-mappings"]) => IdentityAdminResult.Ok(Mappings()),
                 ("POST", ["group-mappings"]) => Map(body),
                 ("DELETE", ["group-mappings", var id]) => _directory.RemoveExternalMapping(id) ? IdentityAdminResult.NoContent() : NotFound("group mapping"),
+
+                ("GET", ["attribute-mappings"]) => IdentityAdminResult.Ok(AttributeMappings()),
+                ("POST", ["attribute-mappings"]) => MapAttribute(body),
+                ("DELETE", ["attribute-mappings", var id]) => _directory.RemoveAttributeMapping(id) ? IdentityAdminResult.NoContent() : NotFound("attribute mapping"),
 
                 ("GET", ["tokens"]) => IdentityAdminResult.Ok(TokenList(query["user"])),
                 ("DELETE", ["tokens", var id]) => Tokens.Revoke(id) ? IdentityAdminResult.NoContent() : NotFound("token that is not already revoked"),
@@ -270,6 +275,24 @@ public sealed class IdentityAdminApi(StateDatabase state, string publicUrl, Acce
         else if (Text(body, "server") is { } server) _directory.MapExternalGroup(source, group, server, roles, Text(body, "project"));
         else return IdentityAdminResult.Problem(400, "Name where: \"server\" (with \"project\" for a Build project) or \"app\".");
         return IdentityAdminResult.Ok(Mappings());
+    }
+
+    private JsonObject AttributeMappings() => new()
+    {
+        ["attribute_mappings"] = new JsonArray([.. _directory.AttributeMappings().Select(m => (JsonNode)new JsonObject
+        {
+            ["id"] = m.Id, ["source"] = m.Source, ["group"] = m.Group, ["attribute"] = m.Attribute, ["value"] = m.Value,
+        })]),
+    };
+
+    private IdentityAdminResult MapAttribute(JsonNode? body)
+    {
+        if (Text(body, "source") is not { } source) return IdentityAdminResult.Problem(400, "Name the source: entra or windows.");
+        if (Text(body, "group") is not { } group) return IdentityAdminResult.Problem(400, "Name the external group (an Entra group id, a Windows group).");
+        if (Text(body, "attribute") is not { } attribute) return IdentityAdminResult.Problem(400, "Name the attribute (lower case letters, digits and underscores).");
+        if (Text(body, "value") is not { } value) return IdentityAdminResult.Problem(400, "Give the value the group gives the attribute.");
+        _directory.MapExternalGroupToAttribute(source, group, attribute, value);
+        return IdentityAdminResult.Ok(AttributeMappings());
     }
 
     // ---- tokens and service accounts ----

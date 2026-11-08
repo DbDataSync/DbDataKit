@@ -1,3 +1,4 @@
+using DbDataKit.Web.Trust;
 using System.Buffers.Text;
 using System.Collections.Concurrent;
 using System.Net.Http.Json;
@@ -63,7 +64,11 @@ public sealed class StateOpenIdAttempts(IOneTimeValues values, string purpose) :
 public sealed record HomeSignIn(HomeIdentity Identity, string? ReturnUrl, HomeGrant Grant);
 
 /// <summary>Who the home says a person is: the stable user id, the name, the groups, and the roles held on every server and app (<c>dbdata_roles</c>: <c>server:&lt;id&gt;</c>, <c>server:&lt;id&gt;/&lt;project&gt;</c>, <c>app:&lt;id&gt;</c>).</summary>
-public sealed record HomeIdentity(string UserId, string? Name, string? Email, IReadOnlyList<string> Groups, IReadOnlyDictionary<string, IReadOnlyList<string>> Roles, bool EmailVerified = false);
+public sealed record HomeIdentity(string UserId, string? Name, string? Email, IReadOnlyList<string> Groups, IReadOnlyDictionary<string, IReadOnlyList<string>> Roles, bool EmailVerified = false)
+{
+    /// <summary>The directory attributes the home holds for the person (the id token's claim <c>attrs</c>, plan 22a GP04): name to values. Empty when the token has none, as one from a home before the claim.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> Attributes { get; init; } = DirectoryAttributes.None;
+}
 
 /// <summary>A sign-in that cannot be completed; the message is ours and never holds a token or a code.</summary>
 public sealed class OpenIdClientException(string message, bool homeRefused = false) : Exception(message)
@@ -214,6 +219,7 @@ public sealed class OpenIdClient(OpenIdClientOptions options, HttpClient http, T
             var roles = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
             if (claims.TryGetProperty("dbdata_roles", out var held))
                 foreach (var p in held.EnumerateObject()) roles[p.Name] = [.. p.Value.EnumerateArray().Select(e => e.GetString()!)];
+            if (!DirectoryAttributes.TryRead(claims, out var attributes)) throw new OpenIdClientException("The id token's attrs claim is not what the home sends.");
             return new HomeIdentity(
                 claims.GetProperty("sub").GetString()!,
                 claims.TryGetProperty("name", out var name) ? name.GetString() : null,
@@ -221,7 +227,7 @@ public sealed class OpenIdClient(OpenIdClientOptions options, HttpClient http, T
                 claims.TryGetProperty("groups", out var groups) ? [.. groups.EnumerateArray().Select(e => e.GetString()!)] : [],
                 roles,
                 // only a JSON true counts (not the string "true", not a missing claim): an address the home does not vouch for links nothing
-                claims.TryGetProperty("email_verified", out var verified) && verified.ValueKind == JsonValueKind.True);
+                claims.TryGetProperty("email_verified", out var verified) && verified.ValueKind == JsonValueKind.True) { Attributes = attributes };
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or FormatException or ArgumentException or CryptographicException)
         {

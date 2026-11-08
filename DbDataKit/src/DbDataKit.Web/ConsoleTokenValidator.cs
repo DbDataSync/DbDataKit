@@ -94,8 +94,11 @@ public sealed class ConsoleTokenValidator(string instanceId, IPairedClients clie
                 scope = [.. scopeElement.EnumerateArray().Select(s => s.GetString()!)];
             }
 
+            // attributes decide what a person may see, so a claim that is not what it should be is refused rather than read as none
+            if (!DirectoryAttributes.TryRead(root, out var attributes)) return TokenResult.Refused(TokenFailure.MissingClaim, DirectoryAttributes.Claim);
+
             var isConsole = Str(root, "kind") == "console";
-            return TokenResult.Success(new ValidatedToken(console, subject, Str(root, "name"), isConsole, ServerRoles.Close(roles), projects, jti, issuedAt, expires, Str(root, "app"), scope));
+            return TokenResult.Success(new ValidatedToken(console, subject, Str(root, "name"), isConsole, ServerRoles.Close(roles), projects, jti, issuedAt, expires, Str(root, "app"), scope) { Attributes = attributes });
         }
     }
 

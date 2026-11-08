@@ -243,7 +243,26 @@ public static class IdentityModule
             -- When a session was last used, for the idle timeout (plan 13a U22). Null on a session made before this column: its sign-in is its last use.
             ALTER TABLE {table:session} {{addcolumn}} seen_at {{time}} NULL;
             """,
+            """
+            -- Directory attributes (plan 22a GP04, D4): an external group (source entra or windows, as in group_mapping) gives its members an attribute with a value, so that a person in two groups of one
+            -- attribute holds two values (region=east, region=west). A person holds an attribute only through external_membership, as with roles. attribute is a lower case name; attr_value is the
+            -- value as written and is compared as written. slot is a hash of source, group key, attribute and value: one mapping per place. The tokens carry the result as the claim attrs.
+            CREATE TABLE {table:attribute_mapping} (
+                id              {{key}} PRIMARY KEY,
+                slot            {{key}} NOT NULL,
+                source          {{key}} NOT NULL,
+                external_group  {{text}} NOT NULL,
+                external_key    {{key}} NOT NULL,
+                attribute       {{key}} NOT NULL,
+                attr_value      {{text}} NOT NULL,
+                created_at      {{time}} NOT NULL
+            );
+            CREATE UNIQUE INDEX {index:attribute_mapping_by_slot} ON {table:attribute_mapping}(slot);
+            CREATE INDEX {index:attribute_mapping_by_group} ON {table:attribute_mapping}(source, external_key);
+            """,
         ],
+        // version 7 only adds a table that the code of version 6 never reads, and the claim it feeds is additive: an instance of the previous version still works with it
+        compatibleWithPrevious: 1,
         retention:
         [
             // a session or an invitation that ran out long ago is history; one still valid is current state
