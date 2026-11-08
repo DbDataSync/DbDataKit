@@ -125,6 +125,7 @@
     <Project Path="DbDataKit/src/DbDataKit.Update.Tools/DbDataKit.Update.Tools.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Update.Updater/DbDataKit.Update.Updater.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Update/DbDataKit.Update.csproj" />
+    <Project Path="DbDataKit/src/DbDataKit.Views/DbDataKit.Views.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Web/DbDataKit.Web.csproj" />
   </Folder>
   <Folder Name="/DbDataKit/tools/">
@@ -213,6 +214,7 @@
     <Project Path="DbDataKit/tests/DbDataKit.Update.Service.Tests/DbDataKit.Update.Service.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Update.Tests/DbDataKit.Update.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Update.Tools.Tests/DbDataKit.Update.Tools.Tests.csproj" />
+    <Project Path="DbDataKit/tests/DbDataKit.Views.Tests/DbDataKit.Views.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Web.Tests/DbDataKit.Web.Tests.csproj" />
   </Folder>
   <Folder Name="/DbDataProxy/src/">

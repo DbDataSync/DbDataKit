@@ -14,3 +14,10 @@ What it gives up, and when that matters:
 - **No PNG or PDF.** The output is SVG. A client that needs a raster draws the SVG itself.
 
 Headless Chromium would be needed only for a pixel-faithful raster or PDF with real font metrics. If that is asked for, add it as a second renderer behind the same function, and compare it with these snapshots; do not replace this one.
+
+## Dashboards and reports (plan 32)
+
+`validateWidgets(widgets, parameters)` is the shape check of the widget vocabulary of `dashboard/1` and `report/1`, from `schemas/core.schema.json` (the widget types, encodings and query forms; the matrix and chart
+encodings are `view.schema.json`'s and the Vega-Lite subset's own definitions, referenced) with the codes and paths of `DbDataKit.Views` in .NET. It refuses an image by URL or an SVG, raw HTML in text, any
+computation in a chart (`transform`, `aggregate`, `bin`, `timeUnit`, an expression), an encoded field that is not an output of an explicit query, an unknown key and the reserved `embed`. The documents and the expected
+refusals are `DbDataKit/conformance/views/widgets`, which the .NET suite runs too. The file format is in [`docs/views.md`](../../../docs/views.md).

@@ -1,0 +1,360 @@
+{
+  "good": [
+    {
+      "file": "good/dashboard-widgets.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ]
+    },
+    {
+      "file": "good/explicit-queries.json",
+      "parameters": [
+        "quarter",
+        "top"
+      ]
+    }
+  ],
+  "bad": [
+    {
+      "name": "image-by-url",
+      "file": "bad/image-by-url.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-VIEW-003",
+      "path": "widgets.logo.url",
+      "line": 21,
+      "schema": true
+    },
+    {
+      "name": "image-hash-is-a-url",
+      "file": "bad/image-hash-is-a-url.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-VIEW-003",
+      "path": "widgets.logo.hash",
+      "line": 17,
+      "schema": true
+    },
+    {
+      "name": "image-svg",
+      "file": "bad/image-svg.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-VIEW-003",
+      "path": "widgets.logo.media_type",
+      "line": 18,
+      "schema": true
+    },
+    {
+      "name": "text-raw-html",
+      "file": "bad/text-raw-html.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-VIEW-002",
+      "path": "widgets.note.text",
+      "line": 13,
+      "schema": false
+    },
+    {
+      "name": "text-image",
+      "file": "bad/text-image.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-VIEW-002",
+      "path": "widgets.note.text",
+      "line": 13,
+      "schema": false
+    },
+    {
+      "name": "text-outside-link",
+      "file": "bad/text-outside-link.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-VIEW-002",
+      "path": "widgets.note.text",
+      "line": 13,
+      "schema": false
+    },
+    {
+      "name": "text-undeclared-parameter",
+      "file": "bad/text-undeclared-parameter.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-VIEW-008",
+      "path": "widgets.note.text",
+      "line": 13,
+      "schema": false
+    },
+    {
+      "name": "chart-vega-expression",
+      "file": "bad/chart-vega-expression.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-VIEW-004",
+      "path": "widgets.by_region.encodings.y.expr",
+      "line": 62,
+      "schema": true
+    },
+    {
+      "name": "chart-transform",
+      "file": "bad/chart-transform.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-VIEW-004",
+      "path": "widgets.by_region.transform",
+      "line": 88,
+      "schema": true
+    },
+    {
+      "name": "chart-aggregate",
+      "file": "bad/chart-aggregate.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-VIEW-004",
+      "path": "widgets.by_region.encodings.y.aggregate",
+      "line": 62,
+      "schema": true
+    },
+    {
+      "name": "chart-time-unit",
+      "file": "bad/chart-time-unit.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-VIEW-004",
+      "path": "widgets.by_region.encodings.x.timeUnit",
+      "line": 60,
+      "schema": true
+    },
+    {
+      "name": "chart-mark-outside-subset",
+      "file": "bad/chart-mark-outside-subset.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-VIEW-004",
+      "path": "widgets.by_region.mark",
+      "line": 55,
+      "schema": true
+    },
+    {
+      "name": "chart-sort-aggregates",
+      "file": "bad/chart-sort-aggregates.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-VIEW-004",
+      "path": "widgets.by_region.encodings.x.sort",
+      "line": 59,
+      "schema": true
+    },
+    {
+      "name": "field-not-in-query",
+      "file": "bad/field-not-in-query.json",
+      "parameters": [
+        "quarter",
+        "top"
+      ],
+      "code": "DBD-VIEW-005",
+      "path": "widgets.semantic.encodings.y",
+      "line": 7,
+      "schema": false
+    },
+    {
+      "name": "matrix-field-not-in-query",
+      "file": "bad/matrix-field-not-in-query.json",
+      "parameters": [
+        "quarter",
+        "top"
+      ],
+      "code": "DBD-VIEW-005",
+      "path": "widgets.answer.encodings.values[1].field",
+      "line": 115,
+      "schema": false
+    },
+    {
+      "name": "saved-field-not-in-outputs",
+      "file": "bad/saved-field-not-in-outputs.json",
+      "parameters": [
+        "quarter",
+        "top"
+      ],
+      "code": "DBD-VIEW-005",
+      "path": "widgets.saved.encodings.value",
+      "line": 66,
+      "schema": false
+    },
+    {
+      "name": "unknown-widget-key",
+      "file": "bad/unknown-widget-key.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-104",
+      "path": "widgets.by_region.colour",
+      "line": 88,
+      "schema": true
+    },
+    {
+      "name": "widget-embed",
+      "file": "bad/widget-embed.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-VIEW-006",
+      "path": "widgets.frame.type",
+      "line": 157,
+      "schema": true
+    },
+    {
+      "name": "widget-type-unknown",
+      "file": "bad/widget-type-unknown.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-107",
+      "path": "widgets.note.type",
+      "line": 12,
+      "schema": true
+    },
+    {
+      "name": "query-explicit-without-mode",
+      "file": "bad/query-explicit-without-mode.json",
+      "parameters": [
+        "quarter",
+        "top"
+      ],
+      "code": "DBD-VIEW-007",
+      "path": "widgets.saved.query",
+      "line": 68,
+      "schema": true
+    },
+    {
+      "name": "query-two-forms",
+      "file": "bad/query-two-forms.json",
+      "parameters": [
+        "quarter",
+        "top"
+      ],
+      "code": "DBD-VIEW-007",
+      "path": "widgets.saved.query",
+      "line": 68,
+      "schema": true
+    },
+    {
+      "name": "query-undeclared-param",
+      "file": "bad/query-undeclared-param.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-VIEW-008",
+      "path": "widgets.revenue.query.filters[0].values[0].param",
+      "line": 38,
+      "schema": false
+    },
+    {
+      "name": "widget-missing-query",
+      "file": "bad/widget-missing-query.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-105",
+      "path": "widgets.revenue.query",
+      "line": 22,
+      "schema": true
+    },
+    {
+      "name": "control-undeclared-parameter",
+      "file": "bad/control-undeclared-parameter.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-VIEW-008",
+      "path": "widgets.regions.parameter",
+      "line": 4,
+      "schema": false
+    },
+    {
+      "name": "on-select-undeclared-parameter",
+      "file": "bad/on-select-undeclared-parameter.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-VIEW-008",
+      "path": "widgets.by_region.on_select.set",
+      "line": 76,
+      "schema": false
+    },
+    {
+      "name": "drill-missing-required-parameter",
+      "file": "bad/drill-missing-required-parameter.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-VIEW-037",
+      "path": "widgets.by_region.drill",
+      "line": 79,
+      "schema": false,
+      "targets": {
+        "report:region_detail": [
+          {
+            "name": "region",
+            "required": true
+          },
+          {
+            "name": "year",
+            "required": true
+          },
+          {
+            "name": "quarter",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "drill-undeclared-parameter",
+      "file": "bad/drill-undeclared-parameter.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-VIEW-008",
+      "path": "widgets.by_region.drill.with.quarter",
+      "line": 85,
+      "schema": false
+    }
+  ]
+}

@@ -94,6 +94,7 @@
     <Project Path="src/DbDataKit.Update.Tools/DbDataKit.Update.Tools.csproj" />
     <Project Path="src/DbDataKit.Update.Updater/DbDataKit.Update.Updater.csproj" />
     <Project Path="src/DbDataKit.Update/DbDataKit.Update.csproj" />
+    <Project Path="src/DbDataKit.Views/DbDataKit.Views.csproj" />
     <Project Path="src/DbDataKit.Web/DbDataKit.Web.csproj" />
   </Folder>
   <Folder Name="/tools/">
@@ -182,6 +183,7 @@
     <Project Path="tests/DbDataKit.Update.Service.Tests/DbDataKit.Update.Service.Tests.csproj" />
     <Project Path="tests/DbDataKit.Update.Tests/DbDataKit.Update.Tests.csproj" />
     <Project Path="tests/DbDataKit.Update.Tools.Tests/DbDataKit.Update.Tools.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Views.Tests/DbDataKit.Views.Tests.csproj" />
     <Project Path="tests/DbDataKit.Web.Tests/DbDataKit.Web.Tests.csproj" />
   </Folder>
 </Solution>
