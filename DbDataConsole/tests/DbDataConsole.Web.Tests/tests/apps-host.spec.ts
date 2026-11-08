@@ -213,15 +213,6 @@ test.beforeAll(async () => {
     run(proxyDll, proxyDirectory, ['apps', 'publish', '--dir', directory])
     run(proxyDll, proxyDirectory, ['apps', 'instance-save', '--name', name.replace('portal-', ''), '--app', name])
   }
-  // a portal with code of its own (trusted): published, and run only once someone other than its author approves that version
-  const trustedDirectory = path.join(os.tmpdir(), 'dbdata-e2e-portal-trusted')
-  fs.rmSync(trustedDirectory, { recursive: true, force: true })
-  fs.mkdirSync(trustedDirectory, { recursive: true })
-  fs.writeFileSync(path.join(trustedDirectory, 'app.yaml'), trustedYaml)
-  fs.writeFileSync(path.join(trustedDirectory, 'index.html'), trustedIndex)
-  fs.writeFileSync(path.join(trustedDirectory, 'portal.js'), trustedScript)
-  run(proxyDll, proxyDirectory, ['apps', 'publish', '--dir', trustedDirectory])
-  run(proxyDll, proxyDirectory, ['apps', 'instance-save', '--name', 'trusted', '--app', 'portal-trusted'])
   // two more instances and a menu of three: Ada is given a role on beta but not on hidden
   for (const name of ['beta', 'hidden']) run(proxyDll, proxyDirectory, ['apps', 'instance-save', '--name', name, '--app', 'territory-notes', '--bind', 'territories=default'])
   run(proxyDll, proxyDirectory, ['apps', 'nav-save', '--name', 'main', '--title', 'Main', '--item', 'acme=Acme,beta=Beta,hidden=Hidden'])
@@ -367,6 +358,26 @@ test('a person signs in and the sandboxed app reads and writes the published mod
   await client.end()
   expect(rows.rows.map((r) => r.name)).toEqual(['North America'])
 
+  // a portal with code of its own (trusted), made here because the first-run invitation exists only while the home has no user (a service account is one): published with an approval that is revoked again, and run only once
+  // someone other than its author approves that version
+  const trustedDirectory = path.join(os.tmpdir(), 'dbdata-e2e-portal-trusted')
+  fs.rmSync(trustedDirectory, { recursive: true, force: true })
+  fs.mkdirSync(trustedDirectory, { recursive: true })
+  fs.writeFileSync(path.join(trustedDirectory, 'app.yaml'), trustedYaml)
+  fs.writeFileSync(path.join(trustedDirectory, 'index.html'), trustedIndex)
+  fs.writeFileSync(path.join(trustedDirectory, 'portal.js'), trustedScript)
+  // AP15: publishing a trusted portal needs an approval for these exact files, by a user of the identity home who holds the Approver role on the server (a service account is a home user): grace is made
+  // one, approves the files before the publish and revokes at once, so the portal is published and not run until the story approves that version (AP16)
+  expect(() => run(proxyDll, proxyDirectory, ['apps', 'publish', '--dir', trustedDirectory])).toThrow()   // refused: no approval yet
+  expect(() => run(proxyDll, proxyDirectory, ['apps', 'approve', '--path', trustedDirectory, '--by', 'grace'])).toThrow()   // refused: grace is no one yet (the attempt makes the server's own id, which the role names)
+  const serverId = /instanceId: (\S+)/.exec(fs.readFileSync(path.join(proxyDirectory, 'config', 'server.yaml'), 'utf8'))![1]
+  const graceAccount = run(proxyDll, proxyDirectory, ['identity', 'service-account-add', '--name', 'grace'])
+  run(proxyDll, proxyDirectory, ['identity', 'assign', '--user', graceAccount.id, '--server', serverId, '--roles', 'approver'])
+  const first = run(proxyDll, proxyDirectory, ['apps', 'approve', '--path', trustedDirectory, '--by', 'grace', '--note', 'so that it can be published'])
+  run(proxyDll, proxyDirectory, ['apps', 'publish', '--dir', trustedDirectory])
+  run(proxyDll, proxyDirectory, ['apps', 'approval-revoke', '--id', first.id, '--by', 'grace'])
+  run(proxyDll, proxyDirectory, ['apps', 'instance-save', '--name', 'trusted', '--app', 'portal-trusted'])
+  await page.waitForTimeout(3000)   // the instance reads the group's definitions every second
   // AP16: the trusted portal is not run without an approval: the person gets the default portal, and the reason
   await page.goto(`${appsUrl}/apps/trusted/`)
   await expect(page.locator('p.notice')).toContainText('Showing the default portal instead.')
