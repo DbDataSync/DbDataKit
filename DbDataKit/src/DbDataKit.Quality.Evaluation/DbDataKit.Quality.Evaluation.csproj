@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Quality</RootNamespace>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <PackageId>DbDataKit.Quality.Evaluation</PackageId>
+    <Description>The evaluator of the check/1 data quality checks (plan 23a FQ07): one SELECT per check through DbDataKit.Dialect over a read-only connection, the measure and a few sample keys, the seven kinds on SQL Server, PostgreSQL and DuckDB; a check that cannot run is an error result, never an exception and never a pass.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Quality\DbDataKit.Quality.csproj" />
+    <ProjectReference Include="..\DbDataKit.Dialect\DbDataKit.Dialect.csproj" />
+    <ProjectReference Include="..\DbDataKit.Connections.Abstractions\DbDataKit.Connections.Abstractions.csproj" />
+    <InternalsVisibleTo Include="DbDataKit.Quality.Evaluation.Tests" />
+  </ItemGroup>
+</Project>
