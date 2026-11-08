@@ -33,13 +33,13 @@ public static class LimitCapabilities
 
     /// <summary>
     /// <c>memory_limit</c>: <c>enforced</c> (job object, cgroup) or <c>watched</c> (watchdog); <c>cpu_limit</c>: <c>enforced</c> or <c>none</c>; <c>os</c>: <c>windows</c>, <c>linux</c>, <c>macos</c> or <c>other</c>;
-    /// <c>mechanism</c>: what holds the limits; <c>network</c>: <c>outside</c> when any probe host answers, <c>none</c> when hosts are configured and none does, <c>unknown</c> when none is configured.
+    /// <c>mechanism</c>: what holds the limits; <c>network</c>: <c>outside</c> when any probe host answers, <c>none</c> when hosts are configured and none does, <c>unknown</c> when none is configured; <c>odbc:&lt;id&gt;</c> per installed ODBC driver (<see cref="OdbcCapabilities"/>).
     /// </summary>
     public static async Task<IReadOnlyDictionary<string, string>> DetectAsync(LimitCapabilityOptions? options = null, CancellationToken cancellationToken = default)
     {
         options ??= new LimitCapabilityOptions();
         var (memory, cpu, mechanism) = ProcessLimits.Probe(options.Limits);
-        return new Dictionary<string, string>
+        var detected = new Dictionary<string, string>
         {
             [MemoryLimit] = Word(memory),
             [CpuLimit] = Word(cpu),
@@ -47,6 +47,9 @@ public static class LimitCapabilities
             [Os] = OperatingSystem.IsWindows() ? "windows" : OperatingSystem.IsLinux() ? "linux" : OperatingSystem.IsMacOS() ? "macos" : "other",
             [Network] = await ProbeNetworkAsync(options, cancellationToken).ConfigureAwait(false),
         };
+        // the ODBC drivers installed here (plan 28c QE12): odbc:<id>, read-only like the rest
+        foreach (var (name, driver) in OdbcCapabilities.Detect()) detected[name] = driver;
+        return detected;
     }
 
     private static string Word(LimitEnforcement e) => e switch

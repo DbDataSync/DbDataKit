@@ -155,6 +155,25 @@ public sealed class GroupRoutingTests
     }
 
     [Fact]
+    public void An_installed_odbc_driver_is_a_label_and_a_task_that_requires_it_is_not_given_to_a_runner_without_it()
+    {
+        // plan 28c QE12: the runner probes the ODBC manager and reports odbc:<id>; the label routes like any other
+        var reported = RunnerLabels.FromCapabilities(new Dictionary<string, string>
+        {
+            ["os"] = "linux", ["odbc:sqlserver18"] = "ODBC Driver 18 for SQL Server", ["odbc:postgresql_unicode"] = "PostgreSQL Unicode", ["odbc:"] = "nothing", ["limit_mechanism"] = "watchdog",
+        });
+        Assert.Equal(["os:linux", "odbc:postgresql_unicode", "odbc:sqlserver18"], reported);
+
+        var with = Live([.. reported]);
+        var without = Live("os:linux");
+        Assert.Empty(RoutingCheck.CanActivate(["odbc:sqlserver18"], [with, without]));
+        Assert.True(RoutingCheck.Serves(["odbc:sqlserver18"], with.Labels));
+        Assert.False(RoutingCheck.Serves(["odbc:sqlserver18"], without.Labels));
+        Assert.Equal(["odbc:sqlserver18"], RoutingCheck.CanActivate(["odbc:sqlserver18"], [without]));
+        Assert.Contains("'odbc:sqlserver18'", RoutingCheck.ActivationRefusal("orders", "7", ["odbc:sqlserver18"]));
+    }
+
+    [Fact]
     public void The_refusal_and_the_reason_name_the_label_and_labels_are_normalized()
     {
         var message = RoutingCheck.ActivationRefusal("orders", "7", ["gpu"]);
