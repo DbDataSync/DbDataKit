@@ -42,6 +42,18 @@ public sealed class AppPackage
         return new AppPackage(manifestYaml, files);
     }
 
+    /// <summary>
+    /// What <c>apps publish</c> uploads for a folder: the manifest is read from <paramref name="manifestPath"/> (default <c>app.yaml</c> in the folder) and the files are the folder's without it. Approving a folder and publishing it hash the same package.
+    /// </summary>
+    public static AppPackage FromFolder(string folder, string? manifestPath = null)
+    {
+        folder = Path.GetFullPath(folder);
+        manifestPath = manifestPath is { Length: > 0 } ? Path.GetFullPath(manifestPath) : Path.Combine(folder, "app.yaml");
+        var package = FromDirectory(File.ReadAllText(manifestPath), folder);
+        var files = package.Files.Where(f => Path.GetFullPath(Path.Combine(folder, f.Key)) != manifestPath).ToDictionary(f => f.Key, f => f.Value, StringComparer.Ordinal);
+        return new AppPackage(package.ManifestYaml, files);
+    }
+
     public string Serialize()
     {
         var files = new JsonObject();

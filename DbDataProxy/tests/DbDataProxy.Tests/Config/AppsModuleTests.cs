@@ -347,28 +347,95 @@ public sealed class AppsModuleTests : IAsyncLifetime
         Assert.NotEqual(0, (await Command("apps", "validate", "--dir", app)).Exit);
     }
 
-    [Fact]
-    public async Task A_trusted_app_is_approved_by_someone_else_listed_and_revoked_at_the_command_line()
+    /// <summary>People of the home made before the commands run: an approver (the Approver role on this server) and one who is not.</summary>
+    private void MakeApprovers()
     {
+        var database = ProxyState.Open(dataDirectory);
+        var users = new IdentityUserStore(database);
+        var options = ProxyConfiguration.LoadOptions(dataDirectory);
+        options.DataDirectory = dataDirectory;
+        var server = ProxyStoreModule.ServerIdOf(options, database);
+        new HomeDirectory(database).Assign(AssignmentSubject.User(users.CreateUser("Grace Hopper", "grace@example.invalid", UserRole.Viewer).Id), server, ServerRole.Approver);
+        new HomeDirectory(database).Assign(AssignmentSubject.User(users.CreateUser("Bob Babbage", "bob@example.invalid", UserRole.Viewer).Id), server, ServerRole.Viewer | ServerRole.Author);
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
+    public async Task A_trusted_app_is_approved_by_hash_before_it_is_published_and_the_publish_requires_it()
+    {
+        MakeApprovers();
         var app = Path.Combine(dataDirectory, "trusted-app");
         Directory.CreateDirectory(app);
         File.WriteAllText(Path.Combine(app, "app.yaml"), Manifest.Replace("name: notes", "name: vault") + "trust: trusted\n");
         File.WriteAllText(Path.Combine(app, "index.html"), "<html><body>v1</body></html>");
-        Assert.Equal(0, (await Command("apps", "publish", "--dir", app)).Exit);
 
-        var author = await Command("apps", "approve", "--app", "vault", "--version", "1", "--by", Environment.UserName);   // the publisher is the author
-        Assert.NotEqual(0, author.Exit);
-        Assert.Contains("cannot approve", author.Error);
-        var approved = await Command("apps", "approve", "--app", "vault", "--version", "1", "--by", "grace", "--note", "reviewed");
-        Assert.Equal(0, approved.Exit);
+        // no approval: refused, naming the missing approval and the hash; nothing is published
+        var refused = await Command("apps", "publish", "--dir", app);
+        Assert.NotEqual(0, refused.Exit);
+        Assert.Contains("no approval", refused.Error);
+        var hash = System.Text.RegularExpressions.Regex.Match(refused.Error, "hash ([0-9a-f]{64})").Groups[1].Value;
+        Assert.NotEmpty(hash);
+
+        // the approver must be a home user who holds the Approver role (the refusal names the user and the role), and not the author
+        var notApprover = await Command("apps", "approve", "--path", app, "--by", "Bob Babbage");
+        Assert.NotEqual(0, notApprover.Exit);
+        Assert.Contains("Bob Babbage", notApprover.Error);
+        Assert.Contains("Approver", notApprover.Error);
+        var stranger = await Command("apps", "approve", "--path", app, "--by", "Mallory");
+        Assert.Contains("not a user of the identity home", stranger.Error);
+
+        var approved = await Command("apps", "approve", "--path", app, "--by", "Grace Hopper", "--note", "reviewed");
+        Assert.True(approved.Exit == 0, approved.Error);
+        Assert.Contains("hash " + hash, approved.Out);
+
+        // a changed byte is another hash and has no approval; the approved bytes publish, and the version is noted on the approval
+        File.WriteAllText(Path.Combine(app, "index.html"), "<html><body>v2</body></html>");
+        Assert.Contains("no approval", (await Command("apps", "publish", "--dir", app)).Error);
+        File.WriteAllText(Path.Combine(app, "index.html"), "<html><body>v1</body></html>");
+        var published = await Command("apps", "publish", "--dir", app);
+        Assert.True(published.Exit == 0, published.Error);
         var listed = (await Command("apps", "approval-list")).Out;
-        Assert.Contains("vault 1.0.0  approved by grace", listed);
+        Assert.Contains("approved by Grace Hopper", listed);
+        Assert.Contains("hash " + hash[..12], listed);
+        Assert.Contains("published as version 1", listed);
         Assert.DoesNotContain("revoked", listed);
 
+        // revoked: the same bytes no longer publish, and the record stays
         var id = System.Text.RegularExpressions.Regex.Match(listed, "apr_[0-9a-f]+").Value;
-        Assert.Equal(0, (await Command("apps", "approval-revoke", "--id", id, "--by", "grace")).Exit);
+        // revoking is a decision of the same weight: the Approver role is needed here too, and a refusal changes nothing
+        var notRevoker = await Command("apps", "approval-revoke", "--id", id, "--by", "Bob Babbage");
+        Assert.NotEqual(0, notRevoker.Exit);
+        Assert.Contains("Bob Babbage", notRevoker.Error);
+        Assert.Contains("Approver", notRevoker.Error);
+        Assert.Contains("not a user of the identity home", (await Command("apps", "approval-revoke", "--id", id, "--by", "Mallory")).Error);
+        Assert.DoesNotContain("revoked", (await Command("apps", "approval-list")).Out);
+        Assert.Equal(0, (await Command("apps", "approval-revoke", "--id", id, "--by", "Grace Hopper")).Exit);
         Assert.Contains("revoked", (await Command("apps", "approval-list")).Out);
-        Assert.NotEqual(0, (await Command("apps", "approval-revoke", "--id", "apr_nothing", "--by", "grace")).Exit);
+        Assert.Contains("no approval", (await Command("apps", "publish", "--dir", app)).Error);
+        Assert.NotEqual(0, (await Command("apps", "approval-revoke", "--id", "apr_nothing", "--by", "Grace Hopper")).Exit);
+    }
+
+    [Fact]
+    public async Task An_already_published_version_and_a_bare_hash_are_still_approved_and_the_modes_are_exclusive()
+    {
+        MakeApprovers();
+        var app = Path.Combine(dataDirectory, "plain-trusted");
+        Directory.CreateDirectory(app);
+        File.WriteAllText(Path.Combine(app, "app.yaml"), Manifest.Replace("name: notes", "name: vault") + "trust: sandbox\n");
+        File.WriteAllText(Path.Combine(app, "index.html"), "<html></html>");
+        Assert.Equal(0, (await Command("apps", "publish", "--dir", app)).Exit);   // a sandboxed app publishes without any approval
+
+        Assert.NotEqual(0, (await Command("apps", "approve", "--app", "vault", "--version", "1", "--by", "Grace Hopper")).Exit);   // it did not ask to be trusted
+        File.WriteAllText(Path.Combine(app, "app.yaml"), Manifest.Replace("name: notes", "name: vault") + "trust: trusted\n");
+        Assert.Contains("no approval", (await Command("apps", "publish", "--dir", app)).Error);
+
+        var author = await Command("apps", "approve", "--path", app, "--by", Environment.UserName);
+        Assert.NotEqual(0, author.Exit);   // not an approver (and the publisher): refused either way
+        var bare = await Command("apps", "approve", "--hash", new string('a', 64), "--app", "vault", "--by", "grace@example.invalid");
+        Assert.True(bare.Exit == 0, bare.Error);
+        Assert.Contains("not a hash", (await Command("apps", "approve", "--hash", "xyz", "--app", "vault", "--by", "Grace Hopper")).Error);
+        Assert.NotEqual(0, (await Command("apps", "approve", "--path", app, "--app", "vault", "--version", "1", "--by", "Grace Hopper")).Exit);   // one way at a time
+        Assert.NotEqual(0, (await Command("apps", "approve", "--by", "Grace Hopper")).Exit);
     }
 
     [Fact]
