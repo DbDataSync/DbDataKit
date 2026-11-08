@@ -945,7 +945,7 @@ policy:
     history_inconsistency: warning       # DDB-240
 ```
 
-**Connection files (as built, plan 13 E03).** A project's connections are one file each, `connections/<name>.yaml`, in the `connection/1` format the console, Sync and Proxy share (`DbDataKit.Connections`), read by `ProjectConnectionFiles` and handed to `ProjectConfigLoader`; `schemas/connection.schema.json` describes the file for an editor and the console. The file name is the connection's name (letters, digits and underscores; it becomes the login's variable `DBDATA_BUILD_<NAME>_READ` and `_WRITE`). A connection named after an engine needs no file unless it sets something (a version).
+**Connection files (as built, plan 13 E03).** A project's connections are one file each, `connections/<name>.yaml`, in the `connection/1` format the console, Sync and Proxy share (`DbDataKit.Connections`), read by `ProjectConnectionFiles` and handed to `ProjectConfigLoader`; `schemas/connection.schema.json` describes the file for an editor and the console. A connection file that says `schema: connection/2` may have `grants:` (`groups` of the Gateway's identity home, or `everyone: true`; plan 22a GP03): who may use the data source this connection is published as. A publish sends it with the data source and replaces the Gateway's grants completely; the console's Build screens edit it (`ConnectionGrants.tsx`, the Edit tab). A connection with none publishes a `connection/1` file, and no home user may use the data source it makes. The file name is the connection's name (letters, digits and underscores; it becomes the login's variable `DBDATA_BUILD_<NAME>_READ` and `_WRITE`). A connection named after an engine needs no file unless it sets something (a version).
 
 ```yaml
 # connections/shop.yaml

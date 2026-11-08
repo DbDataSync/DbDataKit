@@ -16,6 +16,7 @@ namespace DbDataGateway.Server.Configuration;
 /// A data source that can write uses the write login, one that cannot the read login; a read login is never replaced by the write one.</item>
 /// <item><c>connection_string_secret</c> is the whole connection string as a secret reference.</item>
 /// <item><c>timeouts.command_s</c> is the command timeout when the file says it; <c>access: readonly</c> and <c>allow_writes</c> together are refused.</item>
+/// <item><c>grants</c> (connection/2) says which home groups may use the data source (<c>groups</c>) or that everyone may (<c>everyone</c>); it travels with a published definition. A file made by hand may use <c>extensions.gateway.groups</c> instead, not both.</item>
 /// <item><c>extensions.gateway</c> holds the rest (<c>pass_through</c>, <c>bitness</c>, <c>classifier</c>, <c>allow_writes</c>, <c>metadata</c>, <c>allowed_directories</c>, the limits, <c>batch_size</c>, <c>compression</c>), with snake_case keys.</item>
 /// </list>
 /// A file in the data source format of earlier releases (no <c>schema:</c>) is refused with a message naming it.
@@ -70,6 +71,18 @@ internal static class GatewayConnectionFile
         if (composed is null) return;
         add($"{prefix}:ConnectionString", composed, At("connection_string") ?? At("connection_string_secret") ?? At("address") ?? At("auth") ?? At("engine"));
         if (At("timeouts", "command_s") is YamlScalar timeout) add($"{prefix}:CommandTimeoutSeconds", timeout.Value, timeout);
+        // who may use the data source: the definition's `grants` (connection/2, plan 22a GP03), or in a file made by hand `extensions.gateway.groups` / `everyone`; never both, so the grants a definition names are the ones in force
+        if (definition.Grants is { } grants)
+        {
+            foreach (var own in new[] { "groups", "everyone" })
+                if (gateway?.Get(own) is { } duplicate)
+                {
+                    Error($"`grants` and `extensions.gateway.{own}` both say who may use the data source.", "Keep `grants` (it travels with a published definition) and remove `extensions.gateway." + own + "`.", duplicate);
+                    return;
+                }
+            for (var i = 0; i < grants.Groups.Count; i++) add($"{prefix}:Groups:{i}", grants.Groups[i], (At("grants", "groups") as YamlSequence)?.Items[i] ?? At("grants"));
+            if (grants.Everyone) add($"{prefix}:Everyone", "true", At("grants", "everyone") ?? At("grants"));
+        }
         if (gateway is not null)
             foreach (var entry in gateway.Entries) FlattenExtension(entry.Value, $"{prefix}:{Pascal(entry.Key.Value)}", add);
     }

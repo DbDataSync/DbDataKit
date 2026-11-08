@@ -243,9 +243,14 @@ if (!isWorker) {
 export const refreshBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-refresh-build'), port: 8541, project: 'refreshing', plan: 'nightly' }
 export const modelsGateway = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-models-gateway'), flightPort: 8542, managementPort: 8543 }
 export const modelsBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-models-build'), port: 8544, project: 'shop', model: 'shop_sales', projectDirectory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-shop-project') }
+// Plan 22a GP03 (the owner's decision of 2026-11-08: who may read a data source is part of the published definition): a Build server and a Gateway for the data source grants story (`gateway-data-source-grants.spec.ts`). Ports
+// 8581 to 8583 (a port table: 8581 grants Build, 8582 and 8583 the Gateway's Flight SQL and management listeners; 8541 to 8544, 8551, 8561 and up and 8571 and up belong to other stories). No PostgreSQL is needed: a publish only
+// writes the data source file, and the project's connection `postgres` carries a read login that is never used to connect.
+export const grantsBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-grants-build'), port: 8581, project: 'grantsdemo', connection: 'postgres', projectDirectory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-grantsdemo-project') }
+export const grantsGateway = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-grants-gateway'), flightPort: 8582, managementPort: 8583 }
 if (!isWorker) {
   const settings = (plan: string) => 'defaults: {connections: [postgres]}\ntracking: { connection: postgres }\nstring_semantics:\n  case: sensitive\n  trailing_space: significant\n  collations:\n    default: { duckdb: NFC, postgres: C }\n' + plan
-  const makeProject = (directory: string, name: string, files: Record<string, string>) => {
+  const makeProject = (directory: string, name: string, files: Record<string, string>, connectionFile = 'schema: connection/1\nname: postgres\nengine: postgres\ntls:\n  encrypt: false\n  trust_server_certificate: true\n') => {
     const project = path.join(os.tmpdir(), `dbdatakit-console-e2e-${name}-project`)
     fs.rmSync(project, { recursive: true, force: true })
     fs.rmSync(directory, { recursive: true, force: true })
@@ -253,7 +258,7 @@ if (!isWorker) {
     for (const [relative, text] of Object.entries(files)) { const file = path.join(project, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text) }
     // the test database has no certificate to verify: a connection file that says so (the same as the deploy test's)
     fs.mkdirSync(path.join(project, 'connections'), { recursive: true })
-    fs.writeFileSync(path.join(project, 'connections', 'postgres.yaml'), 'schema: connection/1\nname: postgres\nengine: postgres\ntls:\n  encrypt: false\n  trust_server_certificate: true\n')
+    fs.writeFileSync(path.join(project, 'connections', 'postgres.yaml'), connectionFile)
     execFileSync('dotnet', ['exec', buildDll, 'project', 'compile', '--project', project], { stdio: 'ignore' })
     for (const args of [['init', '-q'], ['add', '-A'], ['commit', '-qm', 'The project']])
       execFileSync('git', ['-c', 'user.name=console-e2e', '-c', 'user.email=e2e@example.invalid', ...args], { cwd: project, stdio: 'ignore' })
@@ -286,6 +291,21 @@ if (!isWorker) {
   pairBuild(modelsBuild.directory, 'models-build-pairing-code.txt')
   // the read login a publish sends with the model is the one stored in the server's own store (the environment variables are what a command run reads, not what the publish sends)
   if (warehouseConnection) execFileSync('dotnet', ['exec', buildDll, 'secret', 'set', 'dbdata:build:connection:postgres:read', '--stdin', '--repo', modelsBuild.directory], { input: warehouseConnection + ';SSL Mode=Disable\n', stdio: ['pipe', 'ignore', 'inherit'] })
+
+  // the grants story: the project's connection says who may read the data source it is published as (connection/2 with grants), and the read login is a made-up one in the server's own store
+  makeProject(grantsBuild.directory, grantsBuild.project, {
+    'dbdatabuild.yml': settings(''),
+    'models/sales/facts.yml': 'name: sales.facts\nkind: mapped\ngrain: [sale_id]\ncolumns:\n  - {name: sale_id, type: BIGINT, nullable: false}\n',
+  }, 'schema: connection/2\nname: postgres\nengine: postgres\ntls:\n  encrypt: false\n  trust_server_certificate: true\ngrants:\n  groups: [finance]\n')
+  pairBuild(grantsBuild.directory, 'grants-build-pairing-code.txt')
+  execFileSync('dotnet', ['exec', buildDll, 'secret', 'set', 'dbdata:build:connection:postgres:read', '--stdin', '--repo', grantsBuild.directory], { input: 'Host=localhost;Database=ledger;Username=reader;Password=not-used;SSL Mode=Disable\n', stdio: ['pipe', 'ignore', 'inherit'] })
+  fs.rmSync(grantsGateway.directory, { recursive: true, force: true })
+  fs.mkdirSync(path.join(grantsGateway.directory, 'config', 'gateway'), { recursive: true })
+  fs.mkdirSync(path.join(grantsGateway.directory, 'config', 'connections'), { recursive: true })
+  fs.writeFileSync(path.join(grantsGateway.directory, 'config', 'server.yaml'), 'schemaVersion: 2\ntls: { mode: selfSigned }\n')
+  fs.writeFileSync(path.join(grantsGateway.directory, 'config', 'gateway', 'auth.yaml'), 'jwt:\n  signingKey: console-e2e-signing-key-0123456789abcdef\n  audience: api://console-e2e\n')
+  const madeGrantsGateway = execFileSync('dotnet', ['exec', gatewayDll, 'server', 'pair', '--minutes', '120', '--repo', grantsGateway.directory, '--max-role', 'admin'], { encoding: 'utf8' })
+  fs.writeFileSync(path.join(scratchDirectory, 'grants-gateway-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeGrantsGateway)![1])
 
   fs.rmSync(modelsGateway.directory, { recursive: true, force: true })
   fs.mkdirSync(path.join(modelsGateway.directory, 'config', 'gateway'), { recursive: true })
@@ -474,6 +494,26 @@ export default defineConfig({
         `--Gateway:DataDirectory=${JSON.stringify(modelsGateway.directory)}`, '--Gateway:Listen:Address=127.0.0.1', `--Gateway:Listen:Port=${modelsGateway.flightPort}`,
         '--Gateway:Management:Enabled=true', '--Gateway:Management:Address=127.0.0.1', `--Gateway:Management:Port=${modelsGateway.managementPort}`].join(' '),
       url: `https://localhost:${modelsGateway.managementPort}/health/live`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(grantsBuild.directory), '--listen', `https://localhost:${grantsBuild.port}`].join(' '),
+      url: `https://localhost:${grantsBuild.port}/health/live`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(gatewayDll), 'server', 'run',
+        `--Gateway:DataDirectory=${JSON.stringify(grantsGateway.directory)}`, '--Gateway:Listen:Address=127.0.0.1', `--Gateway:Listen:Port=${grantsGateway.flightPort}`,
+        '--Gateway:Management:Enabled=true', '--Gateway:Management:Address=127.0.0.1', `--Gateway:Management:Port=${grantsGateway.managementPort}`].join(' '),
+      url: `https://localhost:${grantsGateway.managementPort}/health/live`,
       ignoreHTTPSErrors: true,
       reuseExistingServer: false,
       timeout: 60_000,

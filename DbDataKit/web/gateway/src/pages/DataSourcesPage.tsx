@@ -5,9 +5,29 @@ import { ApiError, ErrorBanner, useIsAdmin, useNavigate } from '@dbdatakit/shell
 import { gatewayApi } from '../api'
 import { GatewayShell } from '../GatewayShell'
 import { passwordLine } from '../secrets'
-import type { AdoptAnswer, Diagnostic, ServerClient } from '../types'
+import type { AdoptAnswer, DataSourceGrants, Diagnostic, ServerClient } from '../types'
 
 const COLUMNS = '1.6fr 0.9fr 0.8fr 0.6fr 1.2fr 2.2fr'
+
+/** The sentence under a published data source's grants (owner decision of 2026-11-08): they are the definition's, so this screen only shows them. */
+export const GRANTED_BY_DEFINITION = 'Granted by the published definition; change them in the project and publish again'
+export const GRANTED_BY_FILE = 'Granted by this data source’s file (`grants`, or `extensions.gateway.groups` in a file made by hand); change them in the text above'
+
+/** Who may use a data source, read-only: the groups, or everyone, and where they come from. Nothing here changes them. */
+export function GrantsView({ grants }: { grants: DataSourceGrants | null | undefined }) {
+  if (!grants) return null
+  return (
+    <div className="card" style={{ marginTop: 16 }} data-testid="data-source-grants">
+      <div className="card-head"><span className="card-title">Who may use it</span></div>
+      <div className="card-body">
+        {grants.everyone && <div data-testid="data-source-grants-everyone">Everyone who signs in to this Gateway.</div>}
+        {!grants.everyone && grants.groups.length === 0 && <div className="hint" data-testid="data-source-grants-none">No group is granted: no user of the identity home may use this data source.</div>}
+        {!grants.everyone && grants.groups.map((g) => <div key={g} className="mono" data-testid={`data-source-grants-group-${g}`}>{g}</div>)}
+        <div className="hint" style={{ marginTop: 6 }} data-testid="data-source-grants-source">{grants.source === 'definition' ? GRANTED_BY_DEFINITION : GRANTED_BY_FILE}</div>
+      </div>
+    </div>
+  )
+}
 
 const keys = { list: ['gateway', 'data-sources'] as const, one: (name: string) => ['gateway', 'data-sources', name] as const }
 
@@ -184,6 +204,7 @@ export function DataSourceEditPage({ name, isNew }: { name: string; isNew: boole
           {!isNew && <button type="button" className="btn" disabled={test.isPending} onClick={() => test.mutate()} data-testid="data-source-test">Test the connection</button>}
           {!isNew && <button type="button" className="btn" disabled={remove.isPending || !file.data} onClick={() => remove.mutate()} data-testid="data-source-remove">Remove</button>}
         </div>
+        <GrantsView grants={file.data?.grants} />
         <SecretReferences />
         {test.data && (
           <div className="hint" style={{ marginTop: 10 }} data-testid="data-source-test-result" data-ok={test.data.ok ? 'true' : 'false'}>

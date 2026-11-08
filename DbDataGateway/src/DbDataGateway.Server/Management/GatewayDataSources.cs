@@ -83,6 +83,7 @@ public sealed partial class GatewayDataSources(
                 {
                     ["name"] = Path.GetFileNameWithoutExtension(file), ["version"] = VersionOf(text), ["valid"] = loaded.Ok,
                     ["engine"] = loaded.Definition?.Engine, ["access"] = loaded.Definition?.Access.ToString().ToLowerInvariant(), ["managed_by"] = loaded.Definition?.ManagedBy,
+                    ["grants"] = GrantsView(loaded.Definition, group: false),
                 });
             }
         // the group's published data sources, after this instance's own (a name of its own wins)
@@ -95,7 +96,7 @@ public sealed partial class GatewayDataSources(
             items.Add(new JsonObject
             {
                 ["name"] = name, ["version"] = VersionOf(text), ["valid"] = loaded.Ok, ["engine"] = loaded.Definition?.Engine, ["access"] = loaded.Definition?.Access.ToString().ToLowerInvariant(),
-                ["managed_by"] = loaded.Definition?.ManagedBy, ["group"] = true,
+                ["managed_by"] = loaded.Definition?.ManagedBy, ["group"] = true, ["grants"] = GrantsView(loaded.Definition, group: true),
             });
         }
         return new JsonObject { ["data_sources"] = items };
@@ -104,7 +105,32 @@ public sealed partial class GatewayDataSources(
     private ManagementResult Read(string name)
     {
         if (TextOf(name) is not { } text) return ManagementResult.Problem(404, $"There is no data source '{name}'.");
-        return ManagementResult.Ok(new JsonObject { ["name"] = name, ["text"] = text, ["version"] = VersionOf(text), ["group"] = !File.Exists(FileOf(name)) });
+        var group = !File.Exists(FileOf(name));
+        return ManagementResult.Ok(new JsonObject
+        {
+            ["name"] = name, ["text"] = text, ["version"] = VersionOf(text), ["group"] = group,
+            ["grants"] = GrantsView(DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, name + ".yaml").Definition, group),
+        });
+    }
+
+    /// <summary>
+    /// Who may use a data source, for a screen that shows it and changes nothing (plan 22a GP03, owner decision of 2026-11-08): the groups and <c>everyone</c> the definition says (its <c>grants</c>, or in a file made by hand
+    /// <c>extensions.gateway</c>). <c>source</c> is <c>definition</c> when a client publishes the data source (the group's, or one with a <c>managed_by</c>) or the file has <c>grants</c>: the grants are then the project's, a publish replaces them,
+    /// and the Gateway adds none; otherwise <c>file</c>, the hand-made file's own policy. Null when the file did not load.
+    /// </summary>
+    internal static JsonObject? GrantsView(DbDataKit.Connections.ConnectionDefinition? definition, bool group)
+    {
+        if (definition is null) return null;
+        var groups = new List<string>();
+        var everyone = false;
+        if (definition.Grants is { } grants) { groups.AddRange(grants.Groups); everyone = grants.Everyone; }
+        else if (definition.Extensions.Items.TryGetValue("gateway", out var node) && node is DbDataKit.Config.Yaml.YamlMapping gateway)
+        {
+            if (gateway.Get("groups") is DbDataKit.Config.Yaml.YamlSequence list) groups.AddRange(list.Items.OfType<DbDataKit.Config.Yaml.YamlScalar>().Select(i => i.Value));
+            everyone = gateway.Get("everyone") is DbDataKit.Config.Yaml.YamlScalar { Value: var e } && bool.TryParse(e, out var open) && open;
+        }
+        var fromDefinition = group || definition.Grants is not null || !string.IsNullOrEmpty(definition.ManagedBy);
+        return new JsonObject { ["groups"] = new JsonArray([.. groups.Select(g => (JsonNode?)JsonValue.Create(g))]), ["everyone"] = everyone, ["source"] = fromDefinition ? "definition" : "file" };
     }
 
     private sealed record WriteRequest(string? Text, [property: System.Text.Json.Serialization.JsonPropertyName("expected_version")] string? ExpectedVersion);

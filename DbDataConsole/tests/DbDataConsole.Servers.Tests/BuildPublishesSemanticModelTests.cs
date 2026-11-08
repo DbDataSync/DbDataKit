@@ -76,6 +76,9 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
 
         // the Build server: the retail project (its semantic model reads the project's one connection, sqlserver), whose read login is in the server's own store
         await RealProcess.RunAsync(build, "project", "create", "retail", project);
+        // who may read the data source is part of what the project publishes (plan 22a GP03): the project's connection file says everyone, and the Gateway adds nothing to it
+        Directory.CreateDirectory(Path.Combine(project, "connections"));
+        File.WriteAllText(Path.Combine(project, "connections", "sqlserver.yaml"), "schema: connection/2\nname: sqlserver\nengine: sqlserver\ngrants:\n  everyone: true\n");
         await RealProcess.RunAsync(build, "server", "project", "add", "retail", "--path", project, "--repo", buildDirectory);
         await RealProcess.RunWithInputAsync(build, readLogin + "\n", "secret", "set", "dbdata:build:connection:sqlserver:read", "--stdin", "--repo", buildDirectory);
         var buildCode = Programs.CodeIn(await RealProcess.RunAsync(build, "server", "pair", "--repo", buildDirectory, "--max-role", "viewer,author,operator,approver,admin"));
@@ -139,15 +142,6 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
         return members;
     }
 
-    /// <summary>A data source a client published names no home group, so no home user may use it: the Gateway's administrator opens it by editing its file (the serving policy, <c>extensions.gateway</c>, is theirs, not the publisher's).</summary>
-    private async Task OpenToEveryoneAsync(string connectionFile)
-    {
-        var text = File.ReadAllText(connectionFile);
-        Assert.DoesNotContain("extensions:", text);
-        File.WriteAllText(connectionFile, text.TrimEnd() + "\nextensions:\n  gateway:\n    everyone: true\n");
-        await ServedAsync();
-    }
-
     /// <summary>The Gateway reads its configuration folder again a moment after a file changes; waits, up to a limit, until the person can use the data source.</summary>
     private async Task ServedAsync()
     {
@@ -180,7 +174,10 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
         var connectionFile = Path.Combine(gatewayDirectory, "config", "connections", "sqlserver.yaml");
         Assert.Contains("engine: sqlserver", File.ReadAllText(connectionFile));
 
-        await OpenToEveryoneAsync(connectionFile);
+        // the grants are the project's: the published file says who may read it, and no one had to open it on the Gateway
+        Assert.Contains("everyone: true", File.ReadAllText(connectionFile));
+        Assert.DoesNotContain("extensions:", File.ReadAllText(connectionFile));
+        await ServedAsync();
 
         // 4. and serves it: a person with an account on the Gateway asks for the members of an attribute and reads the database behind the model
         Assert.Equal(["East", "West"], (await MembersAsync("customers.region")).Order().ToArray());
@@ -190,9 +187,8 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
         Assert.True(again.Status == HttpStatusCode.OK, $"publish again: {again.Status} {again.Body}");
         Assert.Equal(1, (int)again.Body!["version"]!);
         Assert.False((bool)again.Body["created"]!);
-        // a publish writes the whole connection file again, so the serving policy the administrator added is gone (a publishing client cannot set it): the data source is closed until they open it again
-        Assert.DoesNotContain("everyone", File.ReadAllText(connectionFile));
-        await OpenToEveryoneAsync(connectionFile);
+        // a publish writes the whole connection file again, grants included (a republish replaces them, the Gateway has none of its own): the data source is as open as the project says
+        Assert.Contains("everyone: true", File.ReadAllText(connectionFile));
         Assert.Equal(2, (await MembersAsync("customers.region")).Count);
 
         // 6. the Gateway's audit says who: the person, and the Build server that acted for them

@@ -6,7 +6,7 @@ using DbDataKit.Connections;
 namespace DbDataBuild.Models;
 
 /// <summary>
-/// The connections a project declares, as files: <c>connections/&lt;name&gt;.yaml</c>, each a <c>connection/1</c> document (plan 13, E03), the format the console, Sync and Proxy read. The shared loader checks the
+/// The connections a project declares, as files: <c>connections/&lt;name&gt;.yaml</c>, each a <c>connection/1</c> document (plan 13, E03; <c>connection/2</c> when it has <c>grants</c>, plan 22a GP03), the format the console, Sync and Proxy read. The shared loader checks the
 /// document (unknown keys, a wrong <c>schema</c>, plaintext credentials); this class adds what is Build's: the file is named for the connection, it carries no address, login, TLS or timeout setting (the login is the
 /// environment variable <c>DBDATA_BUILD_&lt;NAME&gt;_&lt;READ|WRITE&gt;</c>), <c>engine</c> is the driver alone (<c>access: readonly</c> and <c>dialect</c> say the rest) and everything of Build's own is under
 /// <c>extensions.build</c>.
@@ -20,17 +20,18 @@ public static class ProjectConnectionFiles
     public const string Folder = "connections";
 
     /// <summary>The keys of a file that Build reads. Any other key of `connection/1` is refused as not used by this tool; an unknown one is the shared loader's error.</summary>
-    private static readonly string[] Used = ["schema", "name", "engine", "dialect", "access", "tls", "extensions"];
+    private static readonly string[] Used = ["schema", "name", "engine", "dialect", "access", "tls", "grants", "extensions"];
 
     /// <summary>The connections read from the files (null when there is no folder or no file) and, for every node, the file it was read from.</summary>
-    public sealed record Loaded(YamlMapping? Connections, IReadOnlyDictionary<YamlNode, string> NodeFiles, IReadOnlyDictionary<string, TlsSpec> Tls);
+    public sealed record Loaded(YamlMapping? Connections, IReadOnlyDictionary<YamlNode, string> NodeFiles, IReadOnlyDictionary<string, TlsSpec> Tls, IReadOnlyDictionary<string, GrantsSpec>? Grants = null);
 
     public static Loaded Read(string projectRoot, List<Diagnostic> diags)
     {
         var folder = Path.Combine(projectRoot, Folder);
         var files = new Dictionary<YamlNode, string>(ReferenceEqualityComparer.Instance);
         var tls = new Dictionary<string, TlsSpec>(StringComparer.Ordinal);
-        if (!Directory.Exists(folder)) return new(null, files, tls);
+        var grants = new Dictionary<string, GrantsSpec>(StringComparer.Ordinal);
+        if (!Directory.Exists(folder)) return new(null, files, tls, grants);
         var entries = new List<YamlEntry>();
         foreach (var path in Directory.GetFiles(folder).OrderBy(p => p, StringComparer.Ordinal))
         {
@@ -43,13 +44,13 @@ public static class ProjectConnectionFiles
             string text;
             try { text = File.ReadAllText(path); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Report(diags, relative, 0, 0, "The file could not be read.", null); continue; }
-            if (ReadOne(text, relative, Path.GetFileNameWithoutExtension(path), diags, files, tls) is { } entry) entries.Add(entry);
+            if (ReadOne(text, relative, Path.GetFileNameWithoutExtension(path), diags, files, tls, grants) is { } entry) entries.Add(entry);
         }
-        return new(entries.Count == 0 ? null : Own(new YamlMapping(entries, 1, 1), null, files), files, tls);
+        return new(entries.Count == 0 ? null : Own(new YamlMapping(entries, 1, 1), null, files), files, tls, grants);
     }
 
     /// <summary>One file's text (for tests and for editors that hold the text): the entry the loader reads, or null with the problems in <paramref name="diags"/>.</summary>
-    public static YamlEntry? ReadOne(string text, string relative, string expectedName, List<Diagnostic> diags, IDictionary<YamlNode, string> files, IDictionary<string, TlsSpec>? tls = null)
+    public static YamlEntry? ReadOne(string text, string relative, string expectedName, List<Diagnostic> diags, IDictionary<YamlNode, string> files, IDictionary<string, TlsSpec>? tls = null, IDictionary<string, GrantsSpec>? grants = null)
     {
         var before = diags.Count;
         var result = ConnectionDefinitionLoader.Load(text, relative, addressRequired: false);
@@ -90,6 +91,8 @@ public static class ProjectConnectionFiles
         var nameAt = root.Get("name") ?? root;
         // how the login's connection is secured is the connection file's (encrypt, verify, trust_server_certificate, ca_file); a file with no `tls:` gets the shared default, which encrypts and verifies
         if (root.Get("tls") is not null && tls is not null) tls[definition.Name] = definition.Tls;
+        // who may use the data source once it is published (`schema: connection/2`, plan 22a GP03): the project's, published with the connection and replaced by the next publish
+        if (definition.Grants is not null && grants is not null) grants[definition.Name] = definition.Grants;
         var entry = new YamlEntry(new YamlScalar(definition.Name, nameAt.Line, nameAt.Column), new YamlMapping(settings, nameAt.Line, 1));
         Own(entry.Key, relative, files); Own(entry.Value, relative, files);
         return entry;

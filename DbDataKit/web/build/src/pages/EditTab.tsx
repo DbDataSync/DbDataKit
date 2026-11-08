@@ -4,6 +4,7 @@ import { useOutletContext, useSearchParams } from 'react-router-dom'
 import { CodeEditor, ErrorBanner, Link, SchemaForm, SchemaSet, schemaFor, type EditorDiagnostic } from '@dbdatakit/shell'
 import { buildApi } from '../api'
 import { CompilePanel } from './CompilePanel'
+import { ConnectionGrantsEditor, isConnectionFile } from './ConnectionGrants'
 import { DefinitionPanel } from './DefinitionPanel'
 import { GitPanel } from './GitPanel'
 import { ImportPanel } from './ImportPanel'
@@ -217,6 +218,7 @@ export function EditTab() {
                     <span className="hint">{association.kind}: the form and the YAML are the same file.</span>
                   </div>
                 )}
+                {isConnectionFile(open) && <ConnectionGrantsEditor key={open} text={text} onText={setText} readOnly={!canAuthor} />}
                 {association && schemaSet && mode === 'form'
                   ? <SchemaForm schemas={schemaSet} schema={association.schema} text={text} onText={setText} />
                   : <CodeEditor value={text} language={languageOf(open)} onChange={setText} diagnostics={markersFor(open, diagnostics)} minLines={12} maxLines={32} testId="build-edit-editor" />}
