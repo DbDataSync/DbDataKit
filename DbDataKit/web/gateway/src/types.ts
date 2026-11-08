@@ -88,7 +88,7 @@ export interface AppVersionRow {
 export interface AppDetail { name: string; serving: number | null; versions: AppVersionRow[]; caller: AppsCaller }
 export interface AppInstanceRow {
   name: string; app: string; title: string | null; pin: number | null; follows: boolean; instance_version: number; published_by: string; published_at: string
-  path: string; address: string | null; bindings: Record<string, string>; navigation: string[]; mounted_by: string[]
+  path: string; address: string | null; bindings: Record<string, string>; settings: Record<string, string>; navigation: string[]; mounted_by: string[]
   /** The version of the app the instance runs, and what the app serves now; absent when the instance's app is gone (then `problem` says so). */
   app_version?: number; serving_version?: number | null; manifest_version?: string; kind?: 'app' | 'portal'; trust?: 'sandbox' | 'trusted'
   runs_as_asked?: boolean; approval_id?: string | null; mounts?: { instance: string; path: string }[]; problem?: string

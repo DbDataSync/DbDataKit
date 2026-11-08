@@ -1,4 +1,5 @@
 import { put, request } from '@dbdatakit/shell'
+import type { InstanceRequest } from './appEditors'
 import type {
   AdoptAnswer, AppApprovals, AppDetail, AppInstances, AppsList, NavigationSetRow, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SessionRow, TestResult, WriteDataSourceResult,
 } from './types'
@@ -51,9 +52,8 @@ export const gatewayApi = {
     approvals: () => request<AppApprovals>(`${v1}/app-approvals`),
     /** Moves what an app serves (an unpinned instance follows); no version means the one before. */
     rollback: (app: string, to?: number) => request<{ name: string; version: number }>(`${v1}/apps/${enc(app)}/rollback`, { method: 'POST', body: JSON.stringify(to === undefined ? {} : { to }) }),
-    /** Pins an instance to a version, or lets it follow again (`pin: null`). The Gateway replaces the whole instance, so what it has is sent back unchanged. */
-    savePin: (i: { name: string; app: string; title: string | null; bindings: Record<string, string> }, pin: number | null) =>
-      put<{ name: string; app: string; version: number }>(`${v1}/app-instances/${enc(i.name)}`, { app: i.app, pin, title: i.title, bindings: i.bindings }),
+    /** Makes or changes an instance. The Gateway replaces the whole instance, so a call that changes one thing (the pin) sends the rest back unchanged (`pinRequest`). */
+    saveInstance: (name: string, body: InstanceRequest) => put<{ name: string; app: string; version: number }>(`${v1}/app-instances/${enc(name)}`, body),
     removeInstance: (name: string) => request<{ name: string; removed: boolean }>(`${v1}/app-instances/${enc(name)}`, { method: 'DELETE' }),
     removeApp: (name: string) => request<{ name: string; removed: boolean }>(`${v1}/apps/${enc(name)}`, { method: 'DELETE' }),
     approve: (app: string, version: number, by: string, note: string) =>
