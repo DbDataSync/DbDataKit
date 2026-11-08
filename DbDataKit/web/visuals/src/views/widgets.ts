@@ -29,10 +29,10 @@ const queryChecks: Record<string, ValidateFunction> = {
 }
 const channelCheck = ajv.getSchema(`${(vegaSubsetSchema as { $id: string }).$id}#/$defs/channel`)!
 
-const RAW_HTML = /<[A-Za-z/!?]/
-const MARKDOWN_IMAGE = /!\[[^\]]*\]\([^)]*\)/
-const MARKDOWN_LINK = /\[[^\]]*\]\(([^)]*)\)/g
-const PARAM_USE = /\{\{\s*params\.([A-Za-z0-9_-]+)\s*\}\}/g
+export const RAW_HTML = /<[A-Za-z/!?]/
+export const MARKDOWN_IMAGE = /!\[[^\]]*\]\([^)]*\)/
+export const MARKDOWN_LINK = /\[[^\]]*\]\(([^)]*)\)/g
+export const PARAM_USE = /\{\{\s*params\.([A-Za-z0-9_-]+)\s*\}\}/g
 
 export interface WidgetInfo { id: string; type: string; raw: Json }
 
