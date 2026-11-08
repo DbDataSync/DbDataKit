@@ -52,6 +52,7 @@ jobs:
         working-directory: .
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/duckdb-cache
       - name: Build the image
         run: docker build -f DbDataBuild/Dockerfile -t dbdatabuild:ci .
       - name: Start it and wait for its health check
@@ -95,6 +96,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/fetch-native.sh
+      - uses: ./.github/actions/duckdb-cache
       - name: Pinned DuckDB engine
         shell: bash
         working-directory: .
@@ -128,6 +130,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/fetch-native.sh ${{ matrix.rid }}
+      - uses: ./.github/actions/duckdb-cache
       - name: Pinned DuckDB engine
         shell: bash
         working-directory: .
@@ -160,6 +163,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/fetch-native.sh
+      - uses: ./.github/actions/duckdb-cache
       - name: Pinned DuckDB engine
         shell: bash
         working-directory: .
@@ -203,6 +207,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/fetch-native.sh
+      - uses: ./.github/actions/duckdb-cache
       - name: Pinned DuckDB engine
         shell: bash
         working-directory: .
@@ -247,6 +252,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/fetch-native.sh
+      - uses: ./.github/actions/duckdb-cache
       - name: Pinned DuckDB engine
         shell: bash
         working-directory: .

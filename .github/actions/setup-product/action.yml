@@ -11,7 +11,7 @@ inputs:
     description: The global.json that picks the SDK, relative to the repository root. Gateway and the shared libraries have their own (they add the Microsoft Testing Platform runner).
     default: global.json
   duckdb:
-    description: Fetch the pinned DuckDB engine for this runner (scripts/fetch-duckdb.sh; Git Bash on Windows).
+    description: Fetch the pinned DuckDB engine for this runner (scripts/fetch-duckdb.sh; Git Bash on Windows), its archives through the duckdb-cache action. A job that passes 'false' and fetches itself uses that action first.
     default: 'true'
 
 runs:
@@ -24,6 +24,9 @@ runs:
         # What is cached is the shared ~/.nuget/packages download, not a job's build output, so this only saves the trip to nuget.org.
         cache: true
         cache-dependency-path: ${{ inputs.product }}/**/*.csproj
+    - name: Cache the pinned DuckDB archives
+      if: ${{ inputs.duckdb == 'true' }}
+      uses: ./.github/actions/duckdb-cache
     - name: Fetch the pinned DuckDB engine
       if: ${{ inputs.duckdb == 'true' }}
       shell: bash

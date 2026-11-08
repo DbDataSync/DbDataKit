@@ -12,7 +12,10 @@ COPY DbDataKit DbDataKit
 COPY DbDataBuild DbDataBuild
 COPY duckdb.pin ./
 COPY scripts/fetch-duckdb.sh scripts/fetch-duckdb.sh
-RUN scripts/fetch-duckdb.sh linux-x64
+# CI's cache of the archives (.duckdb-archives/, filled by .github/actions/duckdb-cache) is inside the build context; a local build has none and
+# downloads from the pin's address (the pattern matches nothing then, and duckdb.pin alone is copied). An archive missing there is downloaded.
+COPY duckdb.pin .duckdb-archive[s] /duckdb-archives/
+RUN DUCKDB_RELEASE_BASE=file:///duckdb-archives scripts/fetch-duckdb.sh linux-x64
 WORKDIR /src/DbDataBuild
 RUN scripts/fetch-native.sh linux-x64
 RUN dotnet publish src/DbDataBuild.Cli -c Release -r linux-x64 --self-contained false -p:DebugType=none -p:DebugSymbols=false -o /app

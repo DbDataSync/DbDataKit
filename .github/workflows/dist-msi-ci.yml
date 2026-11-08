@@ -131,6 +131,7 @@ jobs:
         with:
           product: DbDataBuild
           duckdb: 'false'
+      - uses: ./.github/actions/duckdb-cache
       - name: Prebuilt polyglot library and pinned DuckDB engine
         shell: bash
         env:

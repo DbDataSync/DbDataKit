@@ -208,6 +208,10 @@ jobs:
         working-directory: .
     steps:
       - uses: actions/checkout@v7
+      # the images of Build, Gateway and Sync fetch the DuckDB engine; .duckdb-archives/ is inside their build context
+      - uses: ./.github/actions/duckdb-cache
+        with:
+          rids: linux-x64
       - name: Build server and console
         run: dist/compose/check.sh dist/compose/build.yml dbdatabuild
       - name: Store server and console
