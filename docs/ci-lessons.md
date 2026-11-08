@@ -120,6 +120,7 @@ The CI runners are small (two cores, Windows and Linux), run many jobs at once, 
 | `429 Too Many Requests` pulling an image | Docker Hub rate limit; pull through `mirror.gcr.io` and re-tag (CLAUDE.md) |
 | a job sits "queued" for a long time | many pull requests run at once; one batch pull request instead of eight is the cure |
 | the `chromium-pin-linux` job downloads and hash-checks the browser, then fails on the `chrome --version` step | the step compared the raw output with `Google Chrome for Testing <VERSION>`; the binary's output does not match byte for byte (trailing whitespace) | the step trims the output and prints both strings (`.github/workflows/repo-checks.yml`); compare version strings trimmed and print them when a check of a tool's output fails |
+| `dotnet publish` of the Proxy fails with NETSDK1152 "multiple publish output files with the same relative path" naming `view-app/dist/views-app.js` (the Windows `windows` job runs `publish.ps1`) | the built `DbDataKit/web/view-app/dist` had been committed (that workspace had no `.gitignore`, the others do), so the `None` glob listed it at evaluation and the `BuildViewsRuntime` target added the same files again | `dist` is untracked and ignored in the workspace; the target only builds, a second target copies the output with a `Copy` task; a build output is never committed: `git ls-files | grep /dist/` is empty |
 
 ## Working in a session (not CI, but it costs the same time)
 

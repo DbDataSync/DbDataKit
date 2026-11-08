@@ -77,13 +77,16 @@
     <Message Importance="high" Text="Building the views runtime in $(ViewsWebDir)" />
     <Exec Command="npm ci" WorkingDirectory="$(ViewsWebDir)" />
     <Exec Command="npm run build -w @dbdatakit/view-app" WorkingDirectory="$(ViewsWebDir)" />
+  </Target>
+  <!--
+    The copy is a task, not items added to the publish list: the None glob above already lists the files when dist existed at evaluation time (a developer who built it before), and a second
+    item for the same file is NETSDK1152. Copying over the same file is harmless.
+  -->
+  <Target Name="CopyViewsRuntimeToPublish" AfterTargets="Publish" Condition="'$(BuildViewsRuntime)' == 'true'">
     <ItemGroup>
       <ViewsRuntimeOutput Include="$(ViewsWebDir)/view-app/dist/**/*" />
-      <ResolvedFileToPublish Include="@(ViewsRuntimeOutput)">
-        <RelativePath>apps-views/%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
-        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      </ResolvedFileToPublish>
     </ItemGroup>
+    <Copy SourceFiles="@(ViewsRuntimeOutput)" DestinationFiles="@(ViewsRuntimeOutput->'$(PublishDir)apps-views/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
   <ItemGroup>
     <None Include="config.example\**" LinkBase="config.example" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
