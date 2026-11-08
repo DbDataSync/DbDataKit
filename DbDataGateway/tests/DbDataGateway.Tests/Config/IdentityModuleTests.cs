@@ -342,4 +342,74 @@ public sealed class IdentityModuleTests : IAsyncLifetime
         Assert.Equal(404, refused.Status);
         Assert.Contains("identity.enabled", (string?)refused.Body["error"]);
     }
+
+    /// <summary>An audit log held in memory, for a test that builds the management object itself.</summary>
+    private sealed class ListAudit : DbDataKit.Web.Trust.IAuditLog
+    {
+        public List<DbDataKit.Web.Trust.AuditEntry> Entries { get; } = [];
+        public void Append(DbDataKit.Web.Trust.AuditEntry entry) => Entries.Add(entry);
+        public IReadOnlyList<DbDataKit.Web.Trust.AuditEntry> Read(int limit = 100) => Entries;
+    }
+
+    private static DbDataGateway.Server.Management.ManagementCaller CallerHolding(ServerRole roles)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var client = new DbDataKit.Web.Trust.PairedClient("console-1", "Console", [], ServerRole.Admin);
+        return new DbDataGateway.Server.Management.ManagementCaller(new DbDataKit.Web.Trust.ValidatedToken(client, "ada", "Ada", false, roles, new Dictionary<string, ServerRole>(), "token-1", now, now.AddMinutes(5)));
+    }
+
+    [Fact]
+    public async Task Attribute_mappings_are_made_listed_and_removed_through_the_management_api_by_an_administrator_only_and_every_change_is_audited()
+    {
+        // plan 33 UE15: a directory group gives its members an attribute value (plan 22a GP04); the admin API of the identity home, behind the management API's roles and audit
+        var database = StateDatabase.OpenModules(Path.Combine(dataDirectory, "attributes-test.db"), DbDataKit.Identity.IdentityHomeState.Modules);
+        Directory.CreateDirectory(dataDirectory);
+        var audit = new ListAudit();
+        var served = new DbDataGateway.Server.Management.GatewayManagement(new ConfigurationBuilder().Build(), dataDirectory, "gateway-1", "test",
+            identityAdmin: new IdentityAdminApi(database, "https://identity.example.invalid/"), audit: audit);
+        var admin = CallerHolding(ServerRole.Admin);
+        const string Route = "/api/v1/identity/attribute-mappings";
+        const string East = "{\"source\":\"entra\",\"group\":\"00000000-0000-0000-0000-00000000ea57\",\"attribute\":\"region\",\"value\":\"east\"}";
+
+        // every role below administrator is refused, on the read and on each change, and nothing is recorded as a change
+        foreach (var roles in new[] { ServerRole.Viewer, ServerRole.Operator, ServerRole.Author, ServerRole.Approver })
+        {
+            Assert.Equal(403, (await served.HandleAsync("GET", Route, null, CallerHolding(roles))).Status);
+            Assert.Equal(403, (await served.HandleAsync("POST", Route, East, CallerHolding(roles))).Status);
+            Assert.Equal(403, (await served.HandleAsync("DELETE", Route + "/x", null, CallerHolding(roles))).Status);
+        }
+        Assert.Empty(audit.Entries);
+        Assert.Empty((await served.HandleAsync("GET", Route, null, admin)).Body["attribute_mappings"]!.AsArray());
+
+        // a mapping is made, the same again changes nothing, a second group gives a second value of the same attribute
+        Assert.Equal(200, (await served.HandleAsync("POST", Route, East, admin)).Status);
+        Assert.Equal(200, (await served.HandleAsync("POST", Route, East, admin)).Status);
+        var both = await served.HandleAsync("POST", Route, East.Replace("ea57", "e57a").Replace("east", "west"), admin);
+        Assert.Equal(["east", "west"], both.Body["attribute_mappings"]!.AsArray().Select(m => (string)m!["value"]!).Order().ToArray());
+        Assert.Equal(2, (await served.HandleAsync("GET", Route, null, admin)).Body["attribute_mappings"]!.AsArray().Count);
+
+        // what the form checks first, the home checks again and says in the same words; nothing is stored
+        var badName = await served.HandleAsync("POST", Route, East.Replace("\"region\"", "\"Not A Name\""), admin);
+        Assert.Equal(400, badName.Status);
+        Assert.Contains("lower case letters, digits and underscores", (string)badName.Body["error"]!);
+        Assert.Equal(400, (await served.HandleAsync("POST", Route, East.Replace("\"east\"", "\" \""), admin)).Status);
+        Assert.Equal(400, (await served.HandleAsync("POST", Route, East.Replace("\"entra\"", "\"\""), admin)).Status);
+        Assert.Equal(400, (await served.HandleAsync("POST", Route, "[]", admin)).Status);
+        Assert.Equal(2, (await served.HandleAsync("GET", Route, null, admin)).Body["attribute_mappings"]!.AsArray().Count);
+
+        // a mapping is removed by its id, once
+        var id = (string)(await served.HandleAsync("GET", Route, null, admin)).Body["attribute_mappings"]![0]!["id"]!;
+        Assert.Equal(204, (await served.HandleAsync("DELETE", Route + "/" + id, null, admin)).Status);
+        Assert.Equal(404, (await served.HandleAsync("DELETE", Route + "/" + id, null, admin)).Status);
+        Assert.Single((await served.HandleAsync("GET", Route, null, admin)).Body["attribute_mappings"]!.AsArray());
+
+        // each change is in the audit with who made it and what it was, a refusal as a refusal, a read not at all
+        Assert.All(audit.Entries, e => Assert.Equal("ada", e.UserId));
+        Assert.Contains(audit.Entries, e => e.Command == "identity attribute-mappings add" && e.Target == "region" && e.Outcome.Contains("entra:00000000-0000-0000-0000-00000000ea57 gives region=east", StringComparison.Ordinal));
+        Assert.Contains(audit.Entries, e => e.Command == "identity attribute-mappings add" && e.Outcome == "refused");
+        Assert.Contains(audit.Entries, e => e.Command == "identity attribute-mappings remove" && e.Target == id && e.Outcome == "done");
+        Assert.Contains(audit.Entries, e => e.Command == "identity attribute-mappings remove" && e.Outcome == "not found");
+        Assert.DoesNotContain(audit.Entries, e => e.Command.Contains("get", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(8, audit.Entries.Count);   // three adds, three refused adds, two removes (a body that is no JSON object is refused before the home is asked)
+    }
 }

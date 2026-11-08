@@ -98,9 +98,9 @@ public sealed class IdentityAdminApi(StateDatabase state, string publicUrl, Acce
 
     private static IdentityAdminResult NotFound(string what) => IdentityAdminResult.Problem(404, $"There is no such {what}.");
 
-    private static string? Text(JsonNode? body, string name) => body?[name] is JsonValue v && v.TryGetValue<string>(out var s) && !string.IsNullOrWhiteSpace(s) ? s.Trim() : null;
+    private static string? Text(JsonNode? body, string name) => body is JsonObject o && o[name] is JsonValue v && v.TryGetValue<string>(out var s) && !string.IsNullOrWhiteSpace(s) ? s.Trim() : null;
 
-    private static bool Flag(JsonNode? body, string name) => body?[name] is JsonValue v && v.TryGetValue<bool>(out var b) && b;
+    private static bool Flag(JsonNode? body, string name) => body is JsonObject o && o[name] is JsonValue v && v.TryGetValue<bool>(out var b) && b;
 
     private static JsonArray Strings(IEnumerable<string> values) => new([.. values.Select(v => (JsonNode)JsonValue.Create(v))]);
 

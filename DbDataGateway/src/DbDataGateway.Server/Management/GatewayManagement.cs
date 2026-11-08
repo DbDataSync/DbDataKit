@@ -27,7 +27,7 @@ public sealed record ManagementResult(int Status, JsonNode Body)
 /// </list>
 /// A secret is never part of an answer: the settings are shown the way <c>config show</c> shows them, and the sentinel test puts a value in every place a secret can be and looks for it in every answer.
 /// </summary>
-public sealed partial class GatewayManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, GatewayDataSources? dataSources = null, GatewayIdentities? identities = null, GatewayActivity? activity = null, GatewayCertificate? certificate = null, DbDataKit.Config.Git.GitCommitService? git = null, GatewaySecrets? secrets = null, IPairingCodeStore? pairingCodes = null, GatewaySemanticModels? semanticModels = null, Func<IReadOnlyList<PairedClient>>? pairedClients = null, DbDataKit.Identity.IdentityAdminApi? identityAdmin = null, GatewayEntityModels? entityModels = null, DbDataKit.State.Api.StateManagement? stateApi = null, GatewayApps? apps = null, GatewayViewsManagement? views = null)
+public sealed partial class GatewayManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, GatewayDataSources? dataSources = null, GatewayIdentities? identities = null, GatewayActivity? activity = null, GatewayCertificate? certificate = null, DbDataKit.Config.Git.GitCommitService? git = null, GatewaySecrets? secrets = null, IPairingCodeStore? pairingCodes = null, GatewaySemanticModels? semanticModels = null, Func<IReadOnlyList<PairedClient>>? pairedClients = null, DbDataKit.Identity.IdentityAdminApi? identityAdmin = null, GatewayEntityModels? entityModels = null, DbDataKit.State.Api.StateManagement? stateApi = null, GatewayApps? apps = null, GatewayViewsManagement? views = null, IAuditLog? audit = null)
 {
     public const string Prefix = "/api/v1";
 
@@ -79,8 +79,10 @@ public sealed partial class GatewayManagement(IConfigurationRoot configuration, 
             JsonNode? json;
             try { json = string.IsNullOrWhiteSpace(body) ? null : JsonNode.Parse(body); }
             catch (JsonException) { return ManagementResult.Problem(400, "The body is not JSON."); }
+            if (json is not null and not JsonObject) return ManagementResult.Problem(400, "The body is a JSON object.");
             var rest = path[DbDataKit.Identity.IdentityAdminApi.Prefix.Length..];
             var answer = identityAdmin.Handle(method, rest, json, caller.Holds(ServerRole.Admin), caller.Token?.SubjectId ?? "local:" + caller.Author.Name);
+            if (method != "GET" && audit is not null && answer.Status != 403) AuditIdentityChange(caller, method, rest, json, answer.Status);
             return new ManagementResult(answer.Status, answer.Body);
         }
         if (route == Prefix + "/data-sources" || route.StartsWith(Prefix + "/data-sources/", StringComparison.Ordinal))
@@ -144,6 +146,29 @@ public sealed partial class GatewayManagement(IConfigurationRoot configuration, 
             return certificate.Handle(method, first, body, caller);
         }
         return ManagementResult.Problem(404, "There is no such call.");
+    }
+
+    /// <summary>
+    /// A change to the identity home through the management API is in the audit: what kind of thing, which one (an id from the path, never a body), and whether it was done. An attribute mapping names its attribute, the group and the value, which are
+    /// settings and not secrets; a token or a password is never in the body of an entry (the answer of a token's creation is not recorded).
+    /// </summary>
+    private void AuditIdentityChange(ManagementCaller caller, string method, string rest, JsonNode? body, int status)
+    {
+        var parts = rest.Split('?')[0].Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return;
+        var verb = method == "DELETE" ? "remove" : "change";
+        var resource = parts[0];
+        string target = string.Join('/', parts.Skip(1));
+        string outcome = status < 300 ? "done" : status == 404 ? "not found" : "refused";
+        if (resource == "attribute-mappings" && method == "POST")
+        {
+            verb = "add";
+            string Say(string key) => body?[key] is JsonValue v && v.TryGetValue<string>(out var text) ? text.Trim() : "";
+            target = Say("attribute");
+            if (status < 300) outcome = $"{Say("source")}:{Say("group")} gives {Say("attribute")}={Say("value")}";
+        }
+        else if (method == "POST" && parts.Length == 1) verb = "add";
+        audit!.Append(caller.Audit($"identity {resource} {verb}", target, outcome, DateTimeOffset.UtcNow));
     }
 
     private static ManagementResult Denied(ServerRole needed) => ManagementResult.Problem(403, $"This call needs the {needed.ToString().ToLowerInvariant()} role.");
