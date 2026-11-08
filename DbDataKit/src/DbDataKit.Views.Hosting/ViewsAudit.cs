@@ -21,4 +21,5 @@ public static class ViewsAuditVerbs
     public const string Open = "view.open";
     public const string Render = "view.render";
     public const string Export = "view.export";
+    public const string Print = "view.print";
 }

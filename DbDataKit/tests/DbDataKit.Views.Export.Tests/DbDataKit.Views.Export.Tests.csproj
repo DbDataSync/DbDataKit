@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <PackageReference Include="PdfPig" />
+    <ProjectReference Include="..\..\src\DbDataKit.Views.Export\DbDataKit.Views.Export.csproj" />
+  </ItemGroup>
+</Project>

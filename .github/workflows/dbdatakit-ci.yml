@@ -13,6 +13,10 @@ on:
       - "testenv/**"
       - "duckdb.pin"
       - "scripts/fetch-duckdb.*"
+      - "chromium.pin"
+      - "fonts.pin"
+      - "scripts/fetch-chromium.*"
+      - "scripts/fetch-fonts.*"
       - "Directory.Build.props"
       - "Directory.Packages.props"
       - "global.json"
@@ -25,6 +29,10 @@ on:
       - "testenv/**"
       - "duckdb.pin"
       - "scripts/fetch-duckdb.*"
+      - "chromium.pin"
+      - "fonts.pin"
+      - "scripts/fetch-chromium.*"
+      - "scripts/fetch-fonts.*"
       - "Directory.Build.props"
       - "Directory.Packages.props"
       - "global.json"
@@ -63,6 +71,61 @@ jobs:
     with:
       # The live tests run against the shared engines every time (a dispatch can still switch them off).
       engines: ${{ github.event_name != 'workflow_dispatch' || inputs.engines }}
+
+  # The PDF exporter on the pinned Chromium (plan 32 DBR15): the pin and the bundled fonts are fetched and hash-checked, the visuals' print page is built, and the exporter's tests and the
+  # module's export tests run against that browser. They fail, not skip, here (DBDATA_REQUIRE_CHROMIUM): a skipped export test is a test that did not run. The same pin on Windows.
+  views-export:
+    name: PDF export on the pinned Chromium (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: "DbDataKit/**/*.csproj"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Fetch the pinned Chromium, the bundled fonts and DuckDB
+        if: runner.os != 'Windows'
+        run: |
+          scripts/fetch-chromium.sh
+          scripts/fetch-fonts.sh
+          scripts/fetch-duckdb.sh
+      - name: Fetch the pinned Chromium, the bundled fonts and DuckDB (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./scripts/fetch-chromium.ps1
+          ./scripts/fetch-fonts.ps1
+          ./scripts/fetch-duckdb.ps1
+      - name: Build the print page
+        shell: bash
+        working-directory: DbDataKit/web
+        run: |
+          npm ci --workspace @dbdatakit/visuals --include-workspace-root --ignore-scripts
+          npm run build:print --workspace @dbdatakit/visuals
+      - name: Point the tests at them
+        shell: bash
+        run: |
+          rid=linux-x64; [ "$RUNNER_OS" = "Windows" ] && rid=win-x64
+          echo "DBDATA_TEST_CHROMIUM=$GITHUB_WORKSPACE/.chromium/$rid" >> "$GITHUB_ENV"
+          echo "DBDATA_TEST_PRINT_ASSETS=$GITHUB_WORKSPACE/DbDataKit/web/visuals/dist/print" >> "$GITHUB_ENV"
+          echo "DBDATA_REQUIRE_CHROMIUM=true" >> "$GITHUB_ENV"
+          # the runner's kernel may forbid the user namespaces Chromium's sandbox needs
+          [ "$RUNNER_OS" = "Linux" ] && echo "DBDATA_TEST_NOSANDBOX=true" >> "$GITHUB_ENV" || true
+      - name: Exporter tests
+        working-directory: DbDataKit
+        run: dotnet test --project tests/DbDataKit.Views.Export.Tests
+      - name: Module export tests
+        working-directory: DbDataKit
+        run: dotnet test --project tests/DbDataKit.Views.Hosting.Tests --filter-class "*ViewsExportTests"
 
   # The semantic layer's conformance fixtures (plan 19, J02) on the shared engines, as a check of their own: the engine seeds a scratch
   # database on SQL Server and PostgreSQL and runs every fixture through it. The tests also run in the job above whenever the engines

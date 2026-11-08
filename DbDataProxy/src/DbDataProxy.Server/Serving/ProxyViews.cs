@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using DbDataKit.Serving;
 using DbDataKit.State;
 using DbDataKit.Views;
+using DbDataKit.Views.Export;
 using DbDataKit.Views.Hosting;
 using DbDataKit.Web.Trust;
 using DbDataProxy.Server.Auth;
@@ -95,8 +96,19 @@ public sealed class ProxyViews
             Listen = null,
             Follow = false,
             CacheTtl = TimeSpan.FromSeconds(options.CurrentValue.Views.CacheSeconds),
+            Exporter = ExporterOf(options.CurrentValue.Views.Export, loggers),
+            PageAssets = options.CurrentValue.Views.Export.PageAssets,
         }, Publications, new Callers(this), new StateViewsAudit(new AuditLog(state, DbDataProxy.Server.State.ProxyState.ServiceId)), loggers);
     }
+
+    /// <summary>The PDF exporter of <c>views.export</c> (plan 32 DBR15), or null when the section gives no <c>Mode</c>: export is off unless a host turns it on.</summary>
+    private static ChromiumExporter? ExporterOf(ViewsExportOptions e, ILoggerFactory loggers) =>
+        string.IsNullOrEmpty(e.Mode) ? null : new ChromiumExporter(new ExportSettings
+        {
+            Mode = e.Mode == "system" ? BrowserMode.System : BrowserMode.Pinned,
+            Path = e.Path, Pin = e.Pin, PageAssets = e.PageAssets, Deadline = TimeSpan.FromSeconds(e.DeadlineSeconds), MaxPages = e.MaxPages, MaxConcurrent = e.MaxConcurrent, NoSandbox = e.NoSandbox,
+            FontsDirectory = e.Fonts.Directory, FontsPin = e.Fonts.Pin, AllowedFonts = [.. e.Fonts.Allowed], RequiredFonts = [.. e.Fonts.Required],
+        }, loggers.CreateLogger("Views.Export"));
 
     private readonly HomeCallers homeCallers;
     private readonly IOptionsMonitor<ProxyOptions> options;

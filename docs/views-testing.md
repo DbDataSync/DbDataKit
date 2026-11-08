@@ -50,9 +50,26 @@ What is real today and what is not: the **model** is published by Build (it has 
 2. Open the editor in two browser tabs, save in one, save in the other: the second is a **conflict** (`expected_version` is stale) and offers a reload.
 3. Break it: name an unknown measure (`sales.no_such_measure`) in a widget and Save: the editor shows the registry's refusal with the position, and version 2 is still what is served.
 
+## 6. Get a PDF (plan 32 DBR15)
+
+Export is off until the host is told which browser to use.
+1. Get the pieces once, from the repository root: `scripts/fetch-chromium.sh` (the pinned Chrome for Testing, about 200 MB, under `.chromium/linux-x64/`; `.ps1` on Windows), `scripts/fetch-fonts.sh` (the bundled Noto fonts, 1.5 MB, under `.fonts/`), and the print page: `cd DbDataKit/web && npm ci --workspace @dbdatakit/visuals --include-workspace-root && npm run build:print -w @dbdatakit/visuals` (writes `visuals/dist/print/print.js` and `print.css`).
+2. In the Proxy's `server.yaml` (the `views` module is on, as in section 1) add
+   ```yaml
+   views:
+     export:
+       mode: pinned                      # or: system, with path: /usr/bin/google-chrome (an installed Chrome or Edge; its version is recorded)
+       pageAssets: /path/to/DbDataKit/web/visuals/dist/print
+       # noSandbox: true                 # only as root or in a container
+   ```
+   (`--Proxy:Views:Export:Mode=pinned --Proxy:Views:Export:PageAssets=...` on the command line.) Restart. `curl -k https://<proxy>:8820/health` says `export: {available: true, browser: "HeadlessChrome/156...."}`; if not, `reason` says which setting or file.
+3. Take the PDF with a token of the identity home: `curl -k -H "Authorization: Bearer <token>" -o sales.pdf "https://<proxy>:8820/api/v1/dashboards/retail-sales-today/export?format=pdf"`; `?layout=print` or `?layout=wall` names a layout, `&p.region=West` sets a parameter. A report: `/api/v1/reports/<name>/export`. Open it: one page for a dashboard (A4 landscape, or the canvas's own size), the report's pages with its header and footer ("Page n of N").
+4. A person whose groups lack the data source gets a PDF with an error where the rows would be (the same as the screen). `GET .../print` is the same page as HTML for the browser's own Print. Every download is in the audit (`view.export`, with the pages and the browser version).
+5. Break it: a wrong `path` or a pin of another version (`export unavailable: ...` in the health and a 501 naming `views.export.path`), no `pageAssets`, `fonts.required: [No Such Font]` (unavailable, naming the font).
+
 ## What a tester may not find (known gaps)
 
 * Rows that differ by person: plan 22. Today only the data source's groups differ.
 * An app's narrowed token over REST, and a dashboard inside an app (the apps host does not call the module yet).
-* Reports are not drawn (DBR14); there is no export (the module answers 501 `export_unavailable`) and no way to remove a published document.
+* A PDF comes only from the module's own listener (a curl or an app with a token), not from the console: the relay carries JSON, so the console's Print preview stays disabled; use the browser's Print on the report, or `.../print` on the module. No CSV, xlsx or SVG (DBR17), no scheduled delivery (DBR18), no way to remove a published document.
 * Images in a dashboard (files in the version): the Proxy's publish takes the document only, so a dashboard with an `image` widget is refused (`DBD-VIEW-063`).

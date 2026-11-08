@@ -71,7 +71,7 @@ public sealed class ViewsModuleTests : IAsyncLifetime
         TestFolder.Delete(dataDirectory);
     }
 
-    private async Task StartAsync(bool views = true)
+    private async Task StartAsync(bool views = true, params string[] more)
     {
         viewsPort = FreePort();
         managementPort = FreePort();
@@ -79,6 +79,7 @@ public sealed class ViewsModuleTests : IAsyncLifetime
         List<string> args = [$"--Proxy:DataDirectory={dataDirectory}", "--Proxy:Listen:Address=127.0.0.1", "--Proxy:Listen:Port=0", "--Proxy:Modules:0=flightsql",
             "--Proxy:Management:Enabled=true", "--Proxy:Management:Address=127.0.0.1", $"--Proxy:Management:Port={managementPort}", "--Proxy:DefinitionPollSeconds=1"];
         if (views) args.AddRange(["--Proxy:Modules:1=views", "--Proxy:Views:Address=127.0.0.1", $"--Proxy:Views:Port={viewsPort}"]);
+        args.AddRange(more);
         app = ProxyHost.Build([.. args]);
         await app.StartAsync();
     }
@@ -139,6 +140,19 @@ public sealed class ViewsModuleTests : IAsyncLifetime
         using var response = await http.SendAsync(request);
         var text = await response.Content.ReadAsStringAsync();
         return (response.StatusCode, text.Length > 0 ? JsonNode.Parse(text) : null);
+    }
+
+    /// <summary>Playwright's Chromium (or DBDATA_TEST_CHROME_SYSTEM) of a cloud session, or null: the export test then skips and says so.</summary>
+    private static string? SystemChromium()
+    {
+        if (Environment.GetEnvironmentVariable("DBDATA_TEST_CHROME_SYSTEM") is { Length: > 0 } env && File.Exists(env)) return env;
+        if (Environment.GetEnvironmentVariable("DBDATA_TEST_CHROMIUM") is { Length: > 0 } dir)
+            foreach (var name in new[] { "chrome-linux64/chrome", "chrome-win64/chrome.exe" })
+                if (File.Exists(Path.Combine(dir, name))) return Path.Combine(dir, name);
+        if (Directory.Exists("/opt/pw-browsers"))
+            foreach (var d in Directory.EnumerateDirectories("/opt/pw-browsers", "chromium-*").Order(StringComparer.Ordinal))
+                if (File.Exists(Path.Combine(d, "chrome-linux64", "chrome"))) return Path.Combine(d, "chrome-linux64", "chrome");
+        return null;
     }
 
     private PairedServer? paired;
@@ -313,5 +327,70 @@ public sealed class ViewsModuleTests : IAsyncLifetime
         File.WriteAllText(file, Dashboard().Replace(Model, "no_such_model"));
         Assert.NotEqual(0, await DbDataProxy.Server.Hosting.Cli.RunAsync(["views", "publish", "--file", file, "--repo", dataDirectory], context));
         Assert.Contains("no_such_model", error.ToString());
+    }
+
+    [Fact]
+    public async Task A_pdf_is_taken_from_the_module_listener_as_the_person_whose_token_asks_and_a_host_with_export_off_says_so()
+    {
+        var browser = SystemChromium();
+        if (browser is null) Assert.Skip("No Chromium found (DBDATA_TEST_CHROMIUM, DBDATA_TEST_CHROME_SYSTEM or /opt/pw-browsers): the Proxy's export test was not run.");
+        var assets = Path.Combine(dataDirectory, "print");
+        Directory.CreateDirectory(assets);
+        File.WriteAllText(Path.Combine(assets, "print.css"), "body { font-family: sans-serif }");
+        File.WriteAllText(Path.Combine(assets, "print.js"), """
+            (function () {
+              var p = JSON.parse(document.getElementById('dbdatakit-print').textContent), w = p.rendered.widgets, root = document.getElementById('root');
+              Object.keys(w).forEach(function (id) { var d = document.createElement('div'); d.textContent = id + ' ' + w[id].type + (w[id].type === 'metric' ? ' ' + w[id].value.text : ''); root.appendChild(d); });
+              document.fonts.ready.then(function () { window.__reportReady = true; });
+            })();
+            """);
+        await StartAsync(true, "--Proxy:Views:Export:Mode=system", $"--Proxy:Views:Export:Path={browser}", $"--Proxy:Views:Export:PageAssets={assets}", $"--Proxy:Views:Export:NoSandbox={Environment.IsPrivilegedProcess}");
+        var state = Get<StateDatabase>();
+        var (_, adaToken) = HomeSeed.Person(state, "Ada", "ada@example.invalid", Analysts);
+        var (_, bobToken) = HomeSeed.Person(state, "Bob", "bob@example.invalid", "visitors");
+        PublishModel();
+        Assert.Equal(200, Get<ProxyViewsPublishing>().Publish("dashboard", "sales", Dashboard(), "test").Status);
+        Poll();
+
+        async Task<(HttpStatusCode Status, byte[] Bytes, string? Type)> PdfAsync(string token)
+        {
+            using var http = Trusting();
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"https://127.0.0.1:{viewsPort}/api/v1/dashboards/sales/export?format=pdf");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            using var response = await http.SendAsync(request);
+            return (response.StatusCode, await response.Content.ReadAsByteArrayAsync(), response.Content.Headers.ContentType?.MediaType);
+        }
+
+        var ada = await PdfAsync(adaToken);
+        Assert.Equal((HttpStatusCode.OK, "application/pdf"), (ada.Status, ada.Type));
+        using (var pdf = UglyToad.PdfPig.PdfDocument.Open(ada.Bytes))
+        {
+            var text = string.Join(" ", pdf.GetPages().SelectMany(p => p.GetWords()).Select(w => w.Text));
+            Assert.Contains("revenue metric", text);
+            Assert.Contains("by_region table", text);
+        }
+        // Bob's group does not name the data source: his PDF is the page with an error where the rows would be, not the rows
+        var bob = await PdfAsync(bobToken);
+        Assert.Equal(HttpStatusCode.OK, bob.Status);
+        using (var pdf = UglyToad.PdfPig.PdfDocument.Open(bob.Bytes))
+            Assert.Contains("revenue error", string.Join(" ", pdf.GetPages().SelectMany(p => p.GetWords()).Select(w => w.Text)));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await ModuleAsync(HttpMethod.Get, "/api/v1/dashboards/sales/export", null)).Status);
+
+        // the module's health says the browser, and the management API (JSON only) points at the module's listener for a download
+        var probe = Assert.Single(app!.Services.GetServices<IReadinessProbe>(), p => p.Name == "views");
+        Assert.NotNull(probe);
+        var events = new AuditLog(state, DbDataProxy.Server.State.ProxyState.ServiceId).Read(new AuditQuery(Verb: "view.export"));
+        Assert.Equal(2, events.Count(e => e.Entry.Outcome == "ok"));
+        Assert.All(events.Where(e => e.Entry.Outcome == "ok"), e => Assert.Matches("Chrome/", e.Entry.Detail!));
+    }
+
+    [Fact]
+    public async Task Export_is_off_unless_the_section_names_a_mode_and_a_bad_mode_is_refused_in_words()
+    {
+        await StartAsync();
+        Assert.Contains("views.export", ((string)(await ModuleAsync(HttpMethod.Get, "/health", null)).Body!["export"]!["reason"]!));
+        var ex = await Record.ExceptionAsync(() => ProxyHost.Build([$"--Proxy:DataDirectory={dataDirectory}", "--Proxy:Modules:0=flightsql", "--Proxy:Modules:1=views", "--Proxy:Views:Export:Mode=edge"]).StartAsync());
+        Assert.NotNull(ex);
+        Assert.Contains("`Mode` is `edge`", ex.Message);
     }
 }
