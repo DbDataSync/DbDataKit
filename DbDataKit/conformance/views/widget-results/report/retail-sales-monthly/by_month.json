@@ -1,0 +1,62 @@
+{
+  "id": "by_month",
+  "type": "chart",
+  "vega_lite": {
+    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+    "mark": "line",
+    "encoding": {
+      "x": {
+        "field": "date_year_month",
+        "type": "ordinal"
+      },
+      "y": {
+        "field": "sales_net_amount",
+        "type": "quantitative"
+      }
+    },
+    "data": {
+      "values": [
+        {
+          "date_year_month": 202601,
+          "sales_net_amount": 1040000
+        },
+        {
+          "date_year_month": 202602,
+          "sales_net_amount": 1120000
+        },
+        {
+          "date_year_month": 202603,
+          "sales_net_amount": 1200000
+        },
+        {
+          "date_year_month": 202604,
+          "sales_net_amount": 1280000
+        },
+        {
+          "date_year_month": 202605,
+          "sales_net_amount": 1360000
+        },
+        {
+          "date_year_month": 202606,
+          "sales_net_amount": 1440000
+        },
+        {
+          "date_year_month": 202607,
+          "sales_net_amount": 1520000
+        },
+        {
+          "date_year_month": 202608,
+          "sales_net_amount": 1327000
+        },
+        {
+          "date_year_month": 202609,
+          "sales_net_amount": 1407000
+        },
+        {
+          "date_year_month": 202610,
+          "sales_net_amount": 1487000
+        }
+      ]
+    }
+  }
+}

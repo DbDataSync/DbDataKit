@@ -9,6 +9,19 @@ export { VIEWS_FORMAT, validateDashboard, validateReport, validateViewsDocument 
 export type { ViewKind, ViewsOptions } from './views/document'
 export { matches as layoutMatches, selectLayout, specificity as layoutSpecificity } from './views/selectLayout'
 export type { LayoutChoice, LayoutContext, LayoutSelection, Medium, SelectableDocument, SelectableLayout } from './views/selectLayout'
+export type {
+  Box, ChartDoc, ControlDoc, ControlKind, ImageDoc, LayoutDoc, MatrixDoc, MetricDoc, ParameterDefinition, ParameterValue, ParameterValues, ReflowLayoutDoc, CanvasLayoutDoc, FlowLayoutDoc, TableColumnDoc, TableDoc, TextDoc,
+  TileDoc, ViewsDoc, WidgetDoc, WidgetOptionsDoc, WidgetType,
+} from './views/model'
+export type {
+  RenderedControl, RenderedImage, RenderedMetric, RenderedNumber, RenderedTable, RenderedText, RenderedWidget, RenderedWidgetError, RenderedWidgets,
+} from './views/rendered'
+export {
+  FIXTURE_AS_OF, NO_RECORDED_IMAGE, NO_RECORDED_RESULT, ViewsClientError, fixtureClient, moduleClient, placedWidgets, textVersion, validateText,
+} from './client'
+export type {
+  ClientDiagnostic, DocumentSummary, FixtureBundle, FixtureClientOptions, ModuleClientOptions, OpenedDocument, PreviewRequest, ResolveOptions, SaveResult, ValidationResult, ViewsClient, ViewsClientErrorCode,
+} from './client'
 export { RenderedViews } from './RenderedViews'
 export type { RenderedViewsProps } from './RenderedViews'
 export { MatrixGrid } from './MatrixGrid'

@@ -1,0 +1,91 @@
+# A report over the semantic model `retail_sales`: plan 32, the sample of the first testable cut (9a). The default layout is a paged flow (a summary row, a trend, a long table that splits over pages);
+# `wall` is a fit canvas of the summary for a big screen. Recorded results: `DbDataKit/conformance/views/widget-results/report/retail-sales-monthly`.
+schemaVersion: 1
+kind: report
+title: Retail sales by month
+parameters:
+  - {name: region, type: string, for: customers.region, many: true, default: [], label: Region}
+widgets:
+  intro:
+    type: text
+    text: |
+      # Retail sales by month
+
+      Net sales, margin and units for **{{params.region}}** (no region chosen means all regions).
+  net:
+    type: metric
+    label: Net sales
+    format: compact
+    encodings: {value: sales.net_amount}
+    query:
+      model: retail_sales
+      filters: [{attribute: customers.region, operator: in, values: {param: region}}]
+  margin:
+    type: metric
+    label: Margin rate
+    format: percent
+    encodings: {value: sales.margin_rate}
+    query:
+      model: retail_sales
+      filters: [{attribute: customers.region, operator: in, values: {param: region}}]
+  units:
+    type: metric
+    label: Units sold
+    format: full
+    encodings: {value: sales.units}
+    query:
+      model: retail_sales
+      filters: [{attribute: customers.region, operator: in, values: {param: region}}]
+  by_month:
+    type: chart
+    title: Net sales by month
+    mark: line
+    encodings: {x: date.year_month, y: sales.net_amount}
+    query:
+      model: retail_sales
+      filters: [{attribute: customers.region, operator: in, values: {param: region}}]
+      order: [[date.year_month, asc]]
+      limit: 24
+  products:
+    type: table
+    title: Products
+    encodings:
+      columns:
+        - {field: products.category, label: Category}
+        - {field: products.product, label: Product}
+        - {field: sales.units, label: Units, align: right, format: full}
+        - {field: sales.net_amount, label: Net sales, align: right, format: full}
+    query:
+      model: retail_sales
+      filters: [{attribute: customers.region, operator: in, values: {param: region}}]
+      order: [[sales.net_amount, desc]]
+      limit: 500
+layouts:
+  - name: paged
+    type: flow
+    default: true
+    page: {size: A4, orientation: portrait, margins: {top: 20, right: 15, bottom: 20, left: 15}}
+    header: {left: "{title}", right: "{asof}"}
+    footer: {center: "Page {page} of {pages}"}
+    sections:
+      - title: Summary
+        blocks:
+          - {widget: intro}
+          - row: [{widget: net, span: 4}, {widget: margin, span: 4}, {widget: units, span: 4}]
+      - title: Trend
+        blocks:
+          - {widget: by_month, height: 80}
+      - title: Products
+        blocks:
+          - {widget: products, repeat_header: true}
+  - name: wall
+    type: canvas
+    when: {width: {min: 2400}, medium: screen}
+    canvas: {width: 1920, height: 1080}
+    overflow: scale
+    tiles:
+      - {widget: net, x: 40, y: 40, w: 560, h: 200}
+      - {widget: margin, x: 680, y: 40, w: 560, h: 200}
+      - {widget: units, x: 1320, y: 40, w: 560, h: 200}
+      - {widget: by_month, x: 40, y: 280, w: 1840, h: 560}
+      - {widget: intro, x: 40, y: 860, w: 1840, h: 160}

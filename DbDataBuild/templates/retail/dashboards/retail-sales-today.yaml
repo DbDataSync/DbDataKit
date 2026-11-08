@@ -1,0 +1,104 @@
+# A dashboard over the semantic model `retail_sales` (semantic/sales.yml): plan 32, the sample of the first testable cut (9a).
+# One widget map, four layouts over it: `desk` (the reflowing grid, the default), `wall` (a fixed 1920 x 1080 canvas for a big screen), `phone` (a canvas that shows five of the seven widgets) and `print` (a paged form).
+# The console shows it from recorded results until a serving module answers the queries (`DbDataKit/conformance/views/widget-results/dashboard/retail-sales-today`).
+schemaVersion: 1
+kind: dashboard
+title: Retail sales today
+parameters:
+  - {name: region, type: string, for: customers.region, many: true, default: [], label: Region}
+refresh: {every: 5m}
+widgets:
+  regions:
+    type: control
+    parameter: region
+    control: multiselect
+    label: Region
+    values: {attribute: customers.region, limit: 20}
+  net:
+    type: metric
+    label: Net sales
+    format: compact
+    encodings: {value: sales.net_amount}
+    query:
+      model: retail_sales
+      filters: [{attribute: customers.region, operator: in, values: {param: region}}]
+  margin:
+    type: metric
+    label: Margin rate
+    format: percent
+    encodings: {value: sales.margin_rate}
+    query:
+      model: retail_sales
+      filters: [{attribute: customers.region, operator: in, values: {param: region}}]
+  note:
+    type: text
+    text: |
+      Showing **{{params.region}}** (no region chosen means all regions).
+      Figures are net of discounts; see [the sales glossary](/docs/glossary).
+  by_region:
+    type: chart
+    title: Net sales by region and category
+    mark: bar
+    encodings: {x: customers.region, y: sales.net_amount, color: products.category}
+    query: {model: retail_sales, order: [[sales.net_amount, desc]], limit: 40}
+    on_select: {set: region, from: customers.region}
+  top_products:
+    type: table
+    title: Best-selling products
+    encodings:
+      columns:
+        - {field: products.product, label: Product}
+        - {field: sales.units, label: Units, align: right, format: full}
+    query:
+      model: retail_sales
+      filters: [{attribute: customers.region, operator: in, values: {param: region}}]
+      order: [[sales.units, desc]]
+      limit: 100
+layouts:
+  - name: desk
+    type: reflow
+    default: true
+    grid: {columns: 12, rows: 8}
+    tiles:
+      - {widget: regions, x: 0, y: 0, w: 12, h: 1}
+      - {widget: net, x: 0, y: 1, w: 3, h: 2}
+      - {widget: margin, x: 3, y: 1, w: 3, h: 2}
+      - {widget: note, x: 6, y: 1, w: 6, h: 2}
+      - {widget: by_region, x: 0, y: 3, w: 7, h: 5}
+      - {widget: top_products, x: 7, y: 3, w: 5, h: 5}
+  - name: wall
+    type: canvas
+    when: {width: {min: 2400}, medium: screen}
+    canvas: {width: 1920, height: 1080}
+    overflow: scale
+    tiles:
+      - {widget: regions, x: 40, y: 30, w: 1840, h: 70}
+      - {widget: net, x: 40, y: 120, w: 440, h: 200}
+      - {widget: margin, x: 500, y: 120, w: 440, h: 200}
+      - {widget: note, x: 960, y: 120, w: 920, h: 200}
+      - {widget: by_region, x: 40, y: 340, w: 1100, h: 700}
+      - {widget: top_products, x: 1160, y: 340, w: 720, h: 700}
+  - name: phone
+    type: canvas
+    when: {width: {max: 600}, orientation: portrait}
+    canvas: {width: 390, height: 900}
+    overflow: scale
+    tiles:
+      - {widget: regions, x: 10, y: 10, w: 370, h: 60}
+      - {widget: net, x: 10, y: 80, w: 180, h: 100}
+      - {widget: margin, x: 200, y: 80, w: 180, h: 100}
+      - {widget: by_region, x: 10, y: 190, w: 370, h: 300}
+      - {widget: top_products, x: 10, y: 500, w: 370, h: 390}
+  - name: print
+    type: flow
+    when: {medium: [print, export]}
+    page: {size: A4, orientation: landscape, margins: {top: 15, right: 15, bottom: 15, left: 15}}
+    header: {left: "{title}", right: "{asof}"}
+    footer: {center: "Page {page} of {pages}"}
+    sections:
+      - title: Today
+        blocks:
+          - row: [{widget: net, span: 6}, {widget: margin, span: 6}]
+          - {widget: note}
+          - {widget: by_region, height: 90}
+          - {widget: top_products, repeat_header: true}

@@ -1,0 +1,1244 @@
+{
+  "type": "table",
+  "columns": [
+    {
+      "field": "products.category",
+      "label": "Category"
+    },
+    {
+      "field": "products.product",
+      "label": "Product"
+    },
+    {
+      "field": "sales.units",
+      "label": "Units",
+      "align": "right"
+    },
+    {
+      "field": "sales.net_amount",
+      "label": "Net sales",
+      "align": "right"
+    }
+  ],
+  "rows": [
+    {
+      "cells": [
+        {
+          "v": "Apparel",
+          "text": "Apparel"
+        },
+        {
+          "v": "Apparel item 01",
+          "text": "Apparel item 01"
+        },
+        {
+          "v": 1800,
+          "text": "1,800"
+        },
+        {
+          "v": 55800,
+          "text": "$55,800"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Footwear",
+          "text": "Footwear"
+        },
+        {
+          "v": "Footwear item 02",
+          "text": "Footwear item 02"
+        },
+        {
+          "v": 1773,
+          "text": "1,773"
+        },
+        {
+          "v": 56736,
+          "text": "$56,736"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Outdoor",
+          "text": "Outdoor"
+        },
+        {
+          "v": "Outdoor item 03",
+          "text": "Outdoor item 03"
+        },
+        {
+          "v": 1746,
+          "text": "1,746"
+        },
+        {
+          "v": 57618,
+          "text": "$57,618"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Accessories",
+          "text": "Accessories"
+        },
+        {
+          "v": "Accessories item 04",
+          "text": "Accessories item 04"
+        },
+        {
+          "v": 1719,
+          "text": "1,719"
+        },
+        {
+          "v": 58446,
+          "text": "$58,446"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Apparel",
+          "text": "Apparel"
+        },
+        {
+          "v": "Apparel item 05",
+          "text": "Apparel item 05"
+        },
+        {
+          "v": 1692,
+          "text": "1,692"
+        },
+        {
+          "v": 59220,
+          "text": "$59,220"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Footwear",
+          "text": "Footwear"
+        },
+        {
+          "v": "Footwear item 06",
+          "text": "Footwear item 06"
+        },
+        {
+          "v": 1665,
+          "text": "1,665"
+        },
+        {
+          "v": 59940,
+          "text": "$59,940"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Outdoor",
+          "text": "Outdoor"
+        },
+        {
+          "v": "Outdoor item 07",
+          "text": "Outdoor item 07"
+        },
+        {
+          "v": 1638,
+          "text": "1,638"
+        },
+        {
+          "v": 60606,
+          "text": "$60,606"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Accessories",
+          "text": "Accessories"
+        },
+        {
+          "v": "Accessories item 08",
+          "text": "Accessories item 08"
+        },
+        {
+          "v": 1611,
+          "text": "1,611"
+        },
+        {
+          "v": 49941,
+          "text": "$49,941"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Apparel",
+          "text": "Apparel"
+        },
+        {
+          "v": "Apparel item 09",
+          "text": "Apparel item 09"
+        },
+        {
+          "v": 1584,
+          "text": "1,584"
+        },
+        {
+          "v": 50688,
+          "text": "$50,688"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Footwear",
+          "text": "Footwear"
+        },
+        {
+          "v": "Footwear item 10",
+          "text": "Footwear item 10"
+        },
+        {
+          "v": 1557,
+          "text": "1,557"
+        },
+        {
+          "v": 51381,
+          "text": "$51,381"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Outdoor",
+          "text": "Outdoor"
+        },
+        {
+          "v": "Outdoor item 11",
+          "text": "Outdoor item 11"
+        },
+        {
+          "v": 1530,
+          "text": "1,530"
+        },
+        {
+          "v": 52020,
+          "text": "$52,020"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Accessories",
+          "text": "Accessories"
+        },
+        {
+          "v": "Accessories item 12",
+          "text": "Accessories item 12"
+        },
+        {
+          "v": 1503,
+          "text": "1,503"
+        },
+        {
+          "v": 52605,
+          "text": "$52,605"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Apparel",
+          "text": "Apparel"
+        },
+        {
+          "v": "Apparel item 13",
+          "text": "Apparel item 13"
+        },
+        {
+          "v": 1476,
+          "text": "1,476"
+        },
+        {
+          "v": 53136,
+          "text": "$53,136"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Footwear",
+          "text": "Footwear"
+        },
+        {
+          "v": "Footwear item 14",
+          "text": "Footwear item 14"
+        },
+        {
+          "v": 1449,
+          "text": "1,449"
+        },
+        {
+          "v": 53613,
+          "text": "$53,613"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Outdoor",
+          "text": "Outdoor"
+        },
+        {
+          "v": "Outdoor item 15",
+          "text": "Outdoor item 15"
+        },
+        {
+          "v": 1422,
+          "text": "1,422"
+        },
+        {
+          "v": 44082,
+          "text": "$44,082"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Accessories",
+          "text": "Accessories"
+        },
+        {
+          "v": "Accessories item 16",
+          "text": "Accessories item 16"
+        },
+        {
+          "v": 1395,
+          "text": "1,395"
+        },
+        {
+          "v": 44640,
+          "text": "$44,640"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Apparel",
+          "text": "Apparel"
+        },
+        {
+          "v": "Apparel item 17",
+          "text": "Apparel item 17"
+        },
+        {
+          "v": 1368,
+          "text": "1,368"
+        },
+        {
+          "v": 45144,
+          "text": "$45,144"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Footwear",
+          "text": "Footwear"
+        },
+        {
+          "v": "Footwear item 18",
+          "text": "Footwear item 18"
+        },
+        {
+          "v": 1341,
+          "text": "1,341"
+        },
+        {
+          "v": 45594,
+          "text": "$45,594"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Outdoor",
+          "text": "Outdoor"
+        },
+        {
+          "v": "Outdoor item 19",
+          "text": "Outdoor item 19"
+        },
+        {
+          "v": 1314,
+          "text": "1,314"
+        },
+        {
+          "v": 45990,
+          "text": "$45,990"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Accessories",
+          "text": "Accessories"
+        },
+        {
+          "v": "Accessories item 20",
+          "text": "Accessories item 20"
+        },
+        {
+          "v": 1287,
+          "text": "1,287"
+        },
+        {
+          "v": 46332,
+          "text": "$46,332"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Apparel",
+          "text": "Apparel"
+        },
+        {
+          "v": "Apparel item 21",
+          "text": "Apparel item 21"
+        },
+        {
+          "v": 1260,
+          "text": "1,260"
+        },
+        {
+          "v": 46620,
+          "text": "$46,620"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Footwear",
+          "text": "Footwear"
+        },
+        {
+          "v": "Footwear item 22",
+          "text": "Footwear item 22"
+        },
+        {
+          "v": 1233,
+          "text": "1,233"
+        },
+        {
+          "v": 38223,
+          "text": "$38,223"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Outdoor",
+          "text": "Outdoor"
+        },
+        {
+          "v": "Outdoor item 23",
+          "text": "Outdoor item 23"
+        },
+        {
+          "v": 1206,
+          "text": "1,206"
+        },
+        {
+          "v": 38592,
+          "text": "$38,592"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Accessories",
+          "text": "Accessories"
+        },
+        {
+          "v": "Accessories item 24",
+          "text": "Accessories item 24"
+        },
+        {
+          "v": 1179,
+          "text": "1,179"
+        },
+        {
+          "v": 38907,
+          "text": "$38,907"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Apparel",
+          "text": "Apparel"
+        },
+        {
+          "v": "Apparel item 25",
+          "text": "Apparel item 25"
+        },
+        {
+          "v": 1152,
+          "text": "1,152"
+        },
+        {
+          "v": 39168,
+          "text": "$39,168"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Footwear",
+          "text": "Footwear"
+        },
+        {
+          "v": "Footwear item 26",
+          "text": "Footwear item 26"
+        },
+        {
+          "v": 1125,
+          "text": "1,125"
+        },
+        {
+          "v": 39375,
+          "text": "$39,375"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Outdoor",
+          "text": "Outdoor"
+        },
+        {
+          "v": "Outdoor item 27",
+          "text": "Outdoor item 27"
+        },
+        {
+          "v": 1098,
+          "text": "1,098"
+        },
+        {
+          "v": 39528,
+          "text": "$39,528"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Accessories",
+          "text": "Accessories"
+        },
+        {
+          "v": "Accessories item 28",
+          "text": "Accessories item 28"
+        },
+        {
+          "v": 1071,
+          "text": "1,071"
+        },
+        {
+          "v": 39627,
+          "text": "$39,627"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Apparel",
+          "text": "Apparel"
+        },
+        {
+          "v": "Apparel item 29",
+          "text": "Apparel item 29"
+        },
+        {
+          "v": 1044,
+          "text": "1,044"
+        },
+        {
+          "v": 32364,
+          "text": "$32,364"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Footwear",
+          "text": "Footwear"
+        },
+        {
+          "v": "Footwear item 30",
+          "text": "Footwear item 30"
+        },
+        {
+          "v": 1017,
+          "text": "1,017"
+        },
+        {
+          "v": 32544,
+          "text": "$32,544"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Outdoor",
+          "text": "Outdoor"
+        },
+        {
+          "v": "Outdoor item 31",
+          "text": "Outdoor item 31"
+        },
+        {
+          "v": 990,
+          "text": "990"
+        },
+        {
+          "v": 32670,
+          "text": "$32,670"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Accessories",
+          "text": "Accessories"
+        },
+        {
+          "v": "Accessories item 32",
+          "text": "Accessories item 32"
+        },
+        {
+          "v": 963,
+          "text": "963"
+        },
+        {
+          "v": 32742,
+          "text": "$32,742"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Apparel",
+          "text": "Apparel"
+        },
+        {
+          "v": "Apparel item 33",
+          "text": "Apparel item 33"
+        },
+        {
+          "v": 936,
+          "text": "936"
+        },
+        {
+          "v": 32760,
+          "text": "$32,760"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Footwear",
+          "text": "Footwear"
+        },
+        {
+          "v": "Footwear item 34",
+          "text": "Footwear item 34"
+        },
+        {
+          "v": 909,
+          "text": "909"
+        },
+        {
+          "v": 32724,
+          "text": "$32,724"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Outdoor",
+          "text": "Outdoor"
+        },
+        {
+          "v": "Outdoor item 35",
+          "text": "Outdoor item 35"
+        },
+        {
+          "v": 882,
+          "text": "882"
+        },
+        {
+          "v": 32634,
+          "text": "$32,634"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Accessories",
+          "text": "Accessories"
+        },
+        {
+          "v": "Accessories item 36",
+          "text": "Accessories item 36"
+        },
+        {
+          "v": 855,
+          "text": "855"
+        },
+        {
+          "v": 26505,
+          "text": "$26,505"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Apparel",
+          "text": "Apparel"
+        },
+        {
+          "v": "Apparel item 37",
+          "text": "Apparel item 37"
+        },
+        {
+          "v": 828,
+          "text": "828"
+        },
+        {
+          "v": 26496,
+          "text": "$26,496"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Footwear",
+          "text": "Footwear"
+        },
+        {
+          "v": "Footwear item 38",
+          "text": "Footwear item 38"
+        },
+        {
+          "v": 801,
+          "text": "801"
+        },
+        {
+          "v": 26433,
+          "text": "$26,433"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Outdoor",
+          "text": "Outdoor"
+        },
+        {
+          "v": "Outdoor item 39",
+          "text": "Outdoor item 39"
+        },
+        {
+          "v": 774,
+          "text": "774"
+        },
+        {
+          "v": 26316,
+          "text": "$26,316"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Accessories",
+          "text": "Accessories"
+        },
+        {
+          "v": "Accessories item 40",
+          "text": "Accessories item 40"
+        },
+        {
+          "v": 747,
+          "text": "747"
+        },
+        {
+          "v": 26145,
+          "text": "$26,145"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Apparel",
+          "text": "Apparel"
+        },
+        {
+          "v": "Apparel item 41",
+          "text": "Apparel item 41"
+        },
+        {
+          "v": 720,
+          "text": "720"
+        },
+        {
+          "v": 25920,
+          "text": "$25,920"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Footwear",
+          "text": "Footwear"
+        },
+        {
+          "v": "Footwear item 42",
+          "text": "Footwear item 42"
+        },
+        {
+          "v": 693,
+          "text": "693"
+        },
+        {
+          "v": 25641,
+          "text": "$25,641"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Outdoor",
+          "text": "Outdoor"
+        },
+        {
+          "v": "Outdoor item 43",
+          "text": "Outdoor item 43"
+        },
+        {
+          "v": 666,
+          "text": "666"
+        },
+        {
+          "v": 20646,
+          "text": "$20,646"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Accessories",
+          "text": "Accessories"
+        },
+        {
+          "v": "Accessories item 44",
+          "text": "Accessories item 44"
+        },
+        {
+          "v": 639,
+          "text": "639"
+        },
+        {
+          "v": 20448,
+          "text": "$20,448"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Apparel",
+          "text": "Apparel"
+        },
+        {
+          "v": "Apparel item 45",
+          "text": "Apparel item 45"
+        },
+        {
+          "v": 612,
+          "text": "612"
+        },
+        {
+          "v": 20196,
+          "text": "$20,196"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Footwear",
+          "text": "Footwear"
+        },
+        {
+          "v": "Footwear item 46",
+          "text": "Footwear item 46"
+        },
+        {
+          "v": 585,
+          "text": "585"
+        },
+        {
+          "v": 19890,
+          "text": "$19,890"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Outdoor",
+          "text": "Outdoor"
+        },
+        {
+          "v": "Outdoor item 47",
+          "text": "Outdoor item 47"
+        },
+        {
+          "v": 558,
+          "text": "558"
+        },
+        {
+          "v": 19530,
+          "text": "$19,530"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Accessories",
+          "text": "Accessories"
+        },
+        {
+          "v": "Accessories item 48",
+          "text": "Accessories item 48"
+        },
+        {
+          "v": 531,
+          "text": "531"
+        },
+        {
+          "v": 19116,
+          "text": "$19,116"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Apparel",
+          "text": "Apparel"
+        },
+        {
+          "v": "Apparel item 49",
+          "text": "Apparel item 49"
+        },
+        {
+          "v": 504,
+          "text": "504"
+        },
+        {
+          "v": 18648,
+          "text": "$18,648"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Footwear",
+          "text": "Footwear"
+        },
+        {
+          "v": "Footwear item 50",
+          "text": "Footwear item 50"
+        },
+        {
+          "v": 477,
+          "text": "477"
+        },
+        {
+          "v": 14787,
+          "text": "$14,787"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Outdoor",
+          "text": "Outdoor"
+        },
+        {
+          "v": "Outdoor item 51",
+          "text": "Outdoor item 51"
+        },
+        {
+          "v": 450,
+          "text": "450"
+        },
+        {
+          "v": 14400,
+          "text": "$14,400"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Accessories",
+          "text": "Accessories"
+        },
+        {
+          "v": "Accessories item 52",
+          "text": "Accessories item 52"
+        },
+        {
+          "v": 423,
+          "text": "423"
+        },
+        {
+          "v": 13959,
+          "text": "$13,959"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Apparel",
+          "text": "Apparel"
+        },
+        {
+          "v": "Apparel item 53",
+          "text": "Apparel item 53"
+        },
+        {
+          "v": 396,
+          "text": "396"
+        },
+        {
+          "v": 13464,
+          "text": "$13,464"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Footwear",
+          "text": "Footwear"
+        },
+        {
+          "v": "Footwear item 54",
+          "text": "Footwear item 54"
+        },
+        {
+          "v": 369,
+          "text": "369"
+        },
+        {
+          "v": 12915,
+          "text": "$12,915"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Outdoor",
+          "text": "Outdoor"
+        },
+        {
+          "v": "Outdoor item 55",
+          "text": "Outdoor item 55"
+        },
+        {
+          "v": 342,
+          "text": "342"
+        },
+        {
+          "v": 12312,
+          "text": "$12,312"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Accessories",
+          "text": "Accessories"
+        },
+        {
+          "v": "Accessories item 56",
+          "text": "Accessories item 56"
+        },
+        {
+          "v": 315,
+          "text": "315"
+        },
+        {
+          "v": 11655,
+          "text": "$11,655"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Apparel",
+          "text": "Apparel"
+        },
+        {
+          "v": "Apparel item 57",
+          "text": "Apparel item 57"
+        },
+        {
+          "v": 288,
+          "text": "288"
+        },
+        {
+          "v": 8928,
+          "text": "$8,928"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Footwear",
+          "text": "Footwear"
+        },
+        {
+          "v": "Footwear item 58",
+          "text": "Footwear item 58"
+        },
+        {
+          "v": 261,
+          "text": "261"
+        },
+        {
+          "v": 8352,
+          "text": "$8,352"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Outdoor",
+          "text": "Outdoor"
+        },
+        {
+          "v": "Outdoor item 59",
+          "text": "Outdoor item 59"
+        },
+        {
+          "v": 234,
+          "text": "234"
+        },
+        {
+          "v": 7722,
+          "text": "$7,722"
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "v": "Accessories",
+          "text": "Accessories"
+        },
+        {
+          "v": "Accessories item 60",
+          "text": "Accessories item 60"
+        },
+        {
+          "v": 207,
+          "text": "207"
+        },
+        {
+          "v": 7038,
+          "text": "$7,038"
+        }
+      ]
+    },
+    {
+      "total": true,
+      "cells": [
+        {
+          "text": "Total"
+        },
+        {
+          "text": ""
+        },
+        {
+          "v": 60210,
+          "text": "60,210"
+        },
+        {
+          "v": 2039472,
+          "text": "$2,039,472"
+        }
+      ]
+    }
+  ]
+}
