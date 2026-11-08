@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
@@ -9,6 +9,8 @@ import {
 } from '@dbdatakit/visuals'
 import { viewsClient } from '../viewsSource'
 import { newWidget, nextTile } from '../viewsEditing'
+import { GridEditor, LayoutSettings, SelectorEditor, SelectorTester } from './LayoutEditors'
+import { DocumentSettings } from './DocumentSettings'
 
 const AREA: Record<ViewKind, string> = { dashboard: '/views/dashboards', report: '/views/reports' }
 const PALETTE: WidgetType[] = ['metric', 'chart', 'table', 'text']
@@ -34,7 +36,13 @@ export function DashboardEditor({ kind, name }: { kind: ViewKind; name: string |
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const store = useMemo(() => clientStore(viewsClient()), [])
-  const [draft, setDraft] = useState<Draft | null>(null)
+  const [draft, setDraftState] = useState<Draft | null>(null)
+  // the draft as the last change left it: a drag sends a change per pointer move, and each must start from the one before it, rendered or not
+  const latest = useRef<Draft | null>(null)
+  const setDraft = (next: Draft | null | ((current: Draft | null) => Draft | null)) => {
+    latest.current = typeof next === 'function' ? next(latest.current) : next
+    setDraftState(latest.current)
+  }
   const [loadError, setLoadError] = useState<string | null>(null)
   const [tab, setTab] = useState<'form' | 'yaml'>('form')
   const [message, setMessage] = useState<Message>(null)
@@ -43,6 +51,8 @@ export function DashboardEditor({ kind, name }: { kind: ViewKind; name: string |
   const [duplicateAs, setDuplicateAs] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [layoutName, setLayoutName] = useState('')
+  const [renaming, setRenaming] = useState<Record<string, string>>({})
 
   useEffect(() => {
     let cancelled = false
@@ -61,10 +71,11 @@ export function DashboardEditor({ kind, name }: { kind: ViewKind; name: string |
   const errors = errorsOf(draft)
   const dirty = isDirty(draft)
   const apply = (command: EditCommand, group?: string) => {
-    const result = edit(draft, command, group)
+    const result = edit(latest.current ?? draft, command, group)
     setDraft(result.draft)
     setMessage(result.error ? { tone: 'error', text: result.error.message } : null)
   }
+  const say = (text: string | null) => setMessage(text === null ? null : { tone: 'error', text })
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['views'] })
 
   const save = async () => {
@@ -170,8 +181,16 @@ export function DashboardEditor({ kind, name }: { kind: ViewKind; name: string |
             </div>
           </div>
 
+          <DocumentSettings doc={doc} diagnostics={draft.validation.diagnostics} apply={apply} />
+
           <div className="card" data-testid="ed-layouts">
             <strong>Layouts</strong>
+            <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap', margin: '6px 0' }} data-testid="ed-layout-add">
+              <input aria-label="New layout name" data-testid="ed-layout-new-name" placeholder="phone" value={layoutName} onChange={(e) => setLayoutName(e.target.value)} />
+              <button type="button" className="btn btn-sm" data-testid="ed-layout-add-reflow" disabled={!NAME_PATTERN.test(layoutName)} onClick={() => { apply({ type: 'addLayout', layout: { name: layoutName, type: 'reflow', grid: { columns: 12 }, tiles: [] } }); setLayoutName('') }}>Add reflow layout</button>
+              <button type="button" className="btn btn-sm" data-testid="ed-layout-add-canvas" disabled={!NAME_PATTERN.test(layoutName)} onClick={() => { apply({ type: 'addLayout', layout: { name: layoutName, type: 'canvas', canvas: { width: 390, height: 900 }, tiles: [] } }); setLayoutName('') }}>Add canvas layout</button>
+            </div>
+            <SelectorTester doc={doc} />
             {layouts.map((layout, index) => {
               const own = diagnosticsFor(draft.validation.diagnostics, { area: 'layout', index })
               const tiles = (layout as { tiles?: TileDoc[] }).tiles
@@ -181,6 +200,10 @@ export function DashboardEditor({ kind, name }: { kind: ViewKind; name: string |
                   <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                     <strong>{layout.name}</strong> <span className="hint">{layout.type}</span>
                     <label><input type="radio" name="ed-default" data-testid={`ed-layout-default-${layout.name}`} checked={layout.default === true} onChange={() => apply({ type: 'setDefaultLayout', name: layout.name })} /> default</label>
+                    <input aria-label={`Rename ${layout.name}`} data-testid={`ed-layout-rename-${layout.name}`} style={{ width: 110 }} placeholder="rename" value={renaming[layout.name] ?? ''}
+                      onChange={(e) => setRenaming({ ...renaming, [layout.name]: e.target.value })}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && NAME_PATTERN.test(renaming[layout.name] ?? '')) { apply({ type: 'renameLayout', name: layout.name, to: renaming[layout.name]! }); setRenaming({}) } }} />
+                    <button type="button" className="btn btn-sm" data-testid={`ed-layout-rename-go-${layout.name}`} disabled={!NAME_PATTERN.test(renaming[layout.name] ?? '')} onClick={() => { apply({ type: 'renameLayout', name: layout.name, to: renaming[layout.name]! }); setRenaming({}) }}>Rename</button>
                     <button type="button" className="btn btn-sm" data-testid={`ed-layout-up-${layout.name}`} disabled={index === 0} onClick={() => apply({ type: 'moveLayout', name: layout.name, to: index - 1 })}>Up</button>
                     <button type="button" className="btn btn-sm" data-testid={`ed-layout-down-${layout.name}`} disabled={index === layouts.length - 1} onClick={() => apply({ type: 'moveLayout', name: layout.name, to: index + 1 })}>Down</button>
                     <button type="button" className="btn btn-sm" data-testid={`ed-layout-duplicate-${layout.name}`} onClick={() => { let as = `${layout.name}-copy`, n = 1; while (layouts.some((l) => l.name === as)) as = `${layout.name}-copy${++n}`; apply({ type: 'duplicateLayout', name: layout.name, as }) }}>Duplicate</button>
@@ -188,9 +211,12 @@ export function DashboardEditor({ kind, name }: { kind: ViewKind; name: string |
                   </div>
                   <Problems diagnostics={own.filter((d) => formTarget(d.path).area === 'layout' && (formTarget(d.path) as { tile?: number }).tile === undefined)} testId={`ed-layout-problems-${layout.name}`} />
                   {layout.type === 'flow' && <div className="hint">A flow layout places widgets in sections and blocks: edit it in the YAML view (the report editor is the next slice).</div>}
+                  <SelectorEditor layout={layout} apply={apply} />
+                  {layout.type !== 'flow' && <LayoutSettings layout={layout} index={index} apply={apply} />}
+                  {layout.type !== 'flow' && <GridEditor layout={layout} widgets={widgets} apply={apply} say={say} />}
                   {tiles && (
                     <table className="table" data-testid={`ed-tiles-${layout.name}`}>
-                      <thead><tr><th>Tile</th><th>x</th><th>y</th><th>w</th><th>h</th><th /></tr></thead>
+                      <thead><tr><th>Tile</th><th>x</th><th>y</th><th>w</th><th>h</th>{layout.type === 'canvas' && <th>layer</th>}<th /></tr></thead>
                       <tbody>
                         {tiles.map((tile, ti) => (
                           <tr key={tile.widget} data-testid={`ed-tile-${layout.name}-${tile.widget}`}>
@@ -201,6 +227,10 @@ export function DashboardEditor({ kind, name }: { kind: ViewKind; name: string |
                                   onChange={(e) => { if (e.target.value !== '') apply({ type: 'setTile', layout: layout.name, widget: tile.widget, changes: { [k]: Number(e.target.value) } }, `tile:${layout.name}:${tile.widget}:${k}`) }} />
                               </td>
                             ))}
+                            {layout.type === 'canvas' && (
+                              <td><input type="number" aria-label={`${tile.widget} layer`} data-testid={`ed-tile-${layout.name}-${tile.widget}-layer`} style={{ width: 60 }} value={tile.layer ?? ''}
+                                onChange={(e) => apply({ type: 'setTile', layout: layout.name, widget: tile.widget, changes: { layer: e.target.value === '' ? undefined : Number(e.target.value) } }, `tile:${layout.name}:${tile.widget}:layer`)} /></td>
+                            )}
                             <td>
                               <Problems diagnostics={diagnosticsFor(draft.validation.diagnostics, { area: 'layout', index, tile: ti })} testId={`ed-tile-problems-${layout.name}-${tile.widget}`} />
                               <button type="button" className="btn btn-sm" data-testid={`ed-tile-remove-${layout.name}-${tile.widget}`} onClick={() => apply({ type: 'removeTile', layout: layout.name, widget: tile.widget })}>Remove</button>

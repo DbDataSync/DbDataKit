@@ -1,5 +1,5 @@
 import { isMap, isScalar, isSeq, parseDocument, type Document } from 'yaml'
-import { alwaysBlock, flowOk, styleNode } from './canonical'
+import { alwaysBlock, flowOk, keyOrderAt, styleNode } from './canonical'
 
 /** Where a value is in a document: keys of mappings and positions in lists. */
 export type Path = Array<string | number>
@@ -43,7 +43,17 @@ function applyOne(doc: Document, op: Op): void {
       if (isScalar(existing) && isPlain(op.value) && typeof existing.value !== 'object') { existing.value = op.value; return }
       if (op.path.length === 0) { doc.contents = create(doc, op.value, []) as never; return }
       // a missing parent is made as a mapping, or a list when the next step is a position
-      for (let i = 1; i < op.path.length; i++) if (!doc.hasIn(op.path.slice(0, i))) doc.setIn(op.path.slice(0, i), doc.createNode(typeof op.path[i] === 'number' ? [] : {}))
+      for (let i = 1; i < op.path.length; i++) if (!doc.hasIn(op.path.slice(0, i))) applyOne(doc, { op: 'set', path: op.path.slice(0, i), value: typeof op.path[i] === 'number' ? [] : {} })
+      const parent = doc.getIn(op.path.slice(0, -1), true)
+      const key = op.path[op.path.length - 1]
+      const order = keyOrderAt(op.path.slice(0, -1))
+      // a new key of a mapping with a canonical order goes where that order puts it, so a document edited by commands stays in the order `canonicalText` writes
+      if (order && isMap(parent) && typeof key === 'string' && !parent.has(key) && order.includes(key)) {
+        const rank = order.indexOf(key)
+        const after = parent.items.reduce((at, pair, i) => (isScalar(pair.key) && order.includes(String(pair.key.value)) && order.indexOf(String(pair.key.value)) < rank ? i + 1 : at), 0)
+        parent.items.splice(after, 0, doc.createPair(key, create(doc, op.value, op.path)))
+        return
+      }
       doc.setIn(op.path, create(doc, op.value, op.path))
       return
     }

@@ -21,6 +21,8 @@ export type EditCommand =
   | { type: 'deleteLayout'; name: string }
   | { type: 'moveLayout'; name: string; to: number }
   | { type: 'setDefaultLayout'; name: string }
+  /** The layout's selector (`when`); absent removes it. */
+  | { type: 'setSelector'; layout: string; when: Record<string, unknown> | undefined }
   | { type: 'placeTile'; layout: string; tile: TileDoc }
   | { type: 'setTile'; layout: string; widget: string; changes: Partial<TileDoc> }
   | { type: 'removeTile'; layout: string; widget: string }
@@ -183,6 +185,12 @@ export function commandOps(doc: ViewsDoc, command: EditCommand): Op[] {
       const ops: Op[] = doc.layouts.flatMap((l, j) => (j !== i && l.default ? [{ op: 'remove', path: ['layouts', j, 'default'] } as Op] : []))
       if (!doc.layouts[i]!.default) ops.push({ op: 'set', path: ['layouts', i, 'default'], value: true })
       return ops
+    }
+
+    case 'setSelector': {
+      const i = layoutIndex(doc, command.layout)
+      if (command.when === undefined) return doc.layouts[i]!.when === undefined ? [] : [{ op: 'remove', path: ['layouts', i, 'when'] }]
+      return JSON.stringify(doc.layouts[i]!.when) === JSON.stringify(command.when) ? [] : [{ op: 'set', path: ['layouts', i, 'when'], value: command.when }]
     }
 
     case 'placeTile': {

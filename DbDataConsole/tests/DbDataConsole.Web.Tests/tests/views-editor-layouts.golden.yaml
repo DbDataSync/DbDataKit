@@ -1,0 +1,33 @@
+schemaVersion: 1
+kind: dashboard
+title: Layout board
+parameters:
+  - {name: region, type: string, default: West}
+refresh: {every: 5m}
+widgets:
+  metric:
+    type: metric
+    label: Net sales
+    encodings: {value: sales.net_amount}
+    query: {model: retail_sales}
+  chart:
+    type: chart
+    title: New chart
+    mark: bar
+    encodings: {x: customers.region, y: sales.net_amount}
+    query: {model: retail_sales}
+layouts:
+  - name: desk
+    type: reflow
+    default: true
+    grid: {columns: 12}
+    tiles:
+      - {widget: metric, x: 2, y: 0, w: 8, h: 2}
+      - {widget: chart, x: 0, y: 2, w: 6, h: 2}
+  - name: phone
+    type: canvas
+    when: {width: {max: 600}, orientation: portrait}
+    canvas: {width: 390, height: 900}
+    tiles:
+      - {widget: metric, x: 0, y: 10, w: 300, h: 200}
+      - {widget: chart, x: 10, y: 220, w: 300, h: 200}

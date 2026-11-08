@@ -12,6 +12,17 @@ const LAYOUT = ['name', 'type', 'default', 'when', 'grid', 'canvas', 'overflow',
 const TILE = ['widget', 'x', 'y', 'w', 'h', 'min', 'layer']
 const PARAMETER = ['name', 'type', 'for', 'many', 'required', 'default', 'label']
 
+/** The canonical key order of the mapping at a path of the document (the document, a widget, a layout, a tile, a parameter), or none for a mapping whose order is its own. */
+export function keyOrderAt(path: ReadonlyArray<string | number>): string[] | undefined {
+  if (path.length === 0) return ROOT
+  const [a, , c, , e] = path
+  if (a === 'widgets' && path.length === 2) return WIDGET
+  if (a === 'parameters' && path.length === 2) return PARAMETER
+  if (a === 'layouts' && path.length === 2) return LAYOUT
+  if (a === 'layouts' && c === 'tiles' && path.length === 4 && e === undefined) return TILE
+  return undefined
+}
+
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
 function ordered(object: Record<string, unknown>, order: string[]): Record<string, unknown> {
