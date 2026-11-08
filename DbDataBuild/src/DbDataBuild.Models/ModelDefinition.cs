@@ -98,8 +98,13 @@ public sealed record ModelDefinition(
     ObjectInfo? DeclaredInfo = null,
     IReadOnlyList<RefreshMembership>? DeclaredRefresh = null,
     IReadOnlyList<KeyDefinition>? DeclaredKeys = null,
-    IReadOnlyList<ForeignKeyDefinition>? DeclaredForeignKeys = null)
+    IReadOnlyList<ForeignKeyDefinition>? DeclaredForeignKeys = null,
+    int SchemaVersion = 1,
+    IReadOnlyList<ModelCheck>? DeclaredChecks = null)
 {
+    /// <summary>The checks the model's file carries (`checks:` in the model and in its columns' declarations; format 2, plan 23a FQ02): read and validated against the model's columns, not evaluated.</summary>
+    public IReadOnlyList<ModelCheck> Checks => DeclaredChecks ?? [];
+
     /// <summary>The foreign keys the model declares (`foreign_keys:`, plan 19 J29): a claim about the data that is tested and read by the semantic layer as relationships, and never created in a database.</summary>
     public IReadOnlyList<ForeignKeyDefinition> ForeignKeys => DeclaredForeignKeys ?? [];
 

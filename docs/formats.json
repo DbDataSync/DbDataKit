@@ -32,6 +32,16 @@
       "files": [ { "path": "DbDataKit/src/DbDataKit.Semantic/schemas/catalog.schema.json", "sha256": null } ]
     },
     {
+      "id": "build-model",
+      "title": "Build model file (a model's .yml, schemaVersion)",
+      "current": 2,
+      "previous": 1,
+      "status": "open",
+      "note": "gains checks (23a FQ02); format 1 has no schemaVersion; open until the first release that holds checks (24a D5)",
+      "version_source": { "file": "DbDataBuild/src/DbDataBuild.Models/ModelDefinitionLoader.cs", "pattern": "public const int Version = (\\d+);" },
+      "files": [ { "path": "DbDataBuild/schemas/model.schema.json", "sha256": null } ]
+    },
+    {
       "id": "package",
       "title": "Runner package manifest (schema: package/N)",
       "current": 1,

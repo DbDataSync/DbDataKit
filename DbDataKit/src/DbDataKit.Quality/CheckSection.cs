@@ -39,12 +39,13 @@ public static partial class CheckSection
 
     /// <summary>
     /// Reads the section from its node. Null with diagnostics when the section or any check is not valid. <paramref name="defaultDataset"/> is the dataset a check that names none is about (a definition with one dataset of its own); without it each check names its
-    /// <c>dataset</c>.
+    /// <c>dataset</c>. <paramref name="defaultColumn"/> is the column a check that names none is about (the checks written in a column's own declaration): the kinds that take a column then take it, and
+    /// <c>freshness</c> is about it; <c>row_count_change</c> is about the whole dataset and ignores it.
     /// </summary>
-    public static IReadOnlyList<CheckDefinition>? Read(YamlNode node, string file, List<ConfigDiagnostic> diagnostics, string? defaultDataset = null, IDiagnosticCatalog? catalog = null) =>
-        new Reader(file, diagnostics, catalog, defaultDataset).ReadSection(node);
+    public static IReadOnlyList<CheckDefinition>? Read(YamlNode node, string file, List<ConfigDiagnostic> diagnostics, string? defaultDataset = null, IDiagnosticCatalog? catalog = null, string? defaultColumn = null) =>
+        new Reader(file, diagnostics, catalog, defaultDataset, defaultColumn).ReadSection(node);
 
-    private sealed class Reader(string file, List<ConfigDiagnostic> diagnostics, IDiagnosticCatalog? catalog, string? defaultDataset) : YamlFieldReader(file, diagnostics, catalog)
+    private sealed class Reader(string file, List<ConfigDiagnostic> diagnostics, IDiagnosticCatalog? catalog, string? defaultDataset, string? defaultColumn = null) : YamlFieldReader(file, diagnostics, catalog)
     {
         public IReadOnlyList<CheckDefinition>? ReadSection(YamlNode node)
         {
@@ -154,7 +155,9 @@ public static partial class CheckSection
             var single = map.Get("column");
             var many = map.Get("columns");
             var needs = kind is CheckKind.NotNull or CheckKind.Unique or CheckKind.AcceptedValues or CheckKind.Range or CheckKind.Referential;
-            if (kind == CheckKind.RowCountChange || kind == CheckKind.Freshness && many is null && single is null) return [];
+            if (kind == CheckKind.RowCountChange) return [];
+            if (single is null && many is null && defaultColumn is not null) return [defaultColumn];
+            if (kind == CheckKind.Freshness && many is null && single is null) return [];
             if (single is not null && many is not null)
             {
                 Add(SharedCodes.InvalidValue, many, "Write `column` or `columns`, not both.", keyPath: "checks.columns");

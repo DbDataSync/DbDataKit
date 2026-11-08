@@ -115,6 +115,7 @@ The rule is held by this section and, in part, by `scripts/check_formats.py` aga
 | DbDataStore entity model | `model/2` (`schemaVersion`) | 2 / 1 | open: gains `cache`, `checks` |
 | Serving data source (a connection file) | `connection/2` (`schema`) | 2 / 1 | open: gains `cache`, `checks` |
 | Semantic package (the catalog) | format 2 of the definition (`Catalog.Format`) | 2 / 1 | open: gains `cache`, `checks` |
+| Build model file (a model's `.yml`) | `schemaVersion` (absent is 1; `build-model`) | 2 / 1 | open: gains `checks` (23a FQ02) |
 | Runner package | `package/1` | 1 / 1 | frozen by its release |
 | Management API / compatibility generation | `ManagementApi.Version` / `SuiteCompatibility.Generation` | own and one before | UC04 |
 

@@ -149,7 +149,7 @@ internal abstract class YamlFieldReader(string file, List<Diagnostic> diags)
     }
 
     /// <summary>Reads a required, non-empty `columns:` list (name, type, nullable, collation), reporting every problem.</summary>
-        protected List<ColumnDefinition> ReadColumns(YamlMapping top)
+        protected List<ColumnDefinition> ReadColumns(YamlMapping top, bool allowChecks = false)
         {
             var result = new List<ColumnDefinition>();
             var node = top.Get("columns");
@@ -160,7 +160,7 @@ internal abstract class YamlFieldReader(string file, List<Diagnostic> diags)
             foreach (var item in seq.Items)
             {
                 if (item is not YamlMapping col) { Add(DiagnosticCatalog.InvalidValue, item, "Each column must be a mapping with `name` and `type`."); continue; }
-                CheckKeys(col, ColumnKeys, "a column");
+                CheckKeys(col, allowChecks ? [.. ColumnKeys, "checks"] : ColumnKeys, "a column");
                 var n = Scalar(col, "name", required: true, at: col);
                 var t = Scalar(col, "type", required: true, at: col);
                 var nullable = true;
