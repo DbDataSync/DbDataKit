@@ -68,7 +68,7 @@ Test engines:
   built from `testenv/postgres-logical` on a fresh `postgres:17`), kept apart so the plain `postgres` stays what the other suites test.
   Run one stack at a time on a machine: the ports are fixed.
 - Tests with ODBC data sources (Proxy's SQL Server tests, Kit's ODBC projects) need unixODBC and Microsoft's "ODBC Driver 18 for SQL
-  Server" installed on the machine.
+  Server" installed on the machine. In a cloud session run `scripts/install-odbc.sh` (Debian/Ubuntu; it is the CI install, safe to repeat).
 
 ## Making changes
 
