@@ -70,7 +70,7 @@ public sealed class SecretCommandTests : IDisposable
     {
         Run(["set", Ref, "sup3r-secret"]);
 
-        Assert.Equal("sup3r-secret", SecretStore.Open(_root).Resolve(Ref));
+        Assert.Equal("sup3r-secret", SecretStore.OpenInRepository(_root).Resolve(Ref));
     }
 
     /// <summary>A name in the old form (<c>dbdatasync:...</c>) is not a name of the store: setting one is refused with the form to use, and nothing is stored.</summary>

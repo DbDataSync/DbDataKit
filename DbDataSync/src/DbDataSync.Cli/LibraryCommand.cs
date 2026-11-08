@@ -181,7 +181,7 @@ public static class LibraryCommand
             return 1;
         }
 
-        var secretStore = SecretStore.Open(repoRoot);
+        var secretStore = SecretStore.OpenInRepository(repoRoot);
         var configRepository = new ConfigRepository(
             Path.Combine(repoRoot, "config"), new GitCommitService(repoRoot), secretStore);
 

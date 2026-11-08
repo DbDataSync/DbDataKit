@@ -9,6 +9,9 @@ namespace DbDataSync.TaskRunner;
 /// </param>
 /// <param name="StateGraceSeconds">How long to keep retrying an unreachable owner before journalling
 /// and shutting down. The owner is this process's parent, so a restart should be far shorter.</param>
+/// <param name="DataDirectory">Where the process may write beside the definition: the secret store and its key. Absent, the repository root (the worker the API spawns, whose repository
+/// is writable); a process that reads a read-only definition view (plan 28c ED8) is given a directory of its own. The script cache, the journal and the verification files are beside
+/// <see cref="StateDbPath"/>, which is never inside a view either.</param>
 /// <param name="DegreeOfParallelism">Consumers on the change-processing lane (<c>RunKind.Primary</c>).</param>
 /// <param name="BulkLoadDegreeOfParallelism">Consumers on the bulk load lane (<c>RunKind.BulkLoad</c> +
 /// <c>RunKind.Verification</c>). Its own budget so a big reload never takes a slot an incremental pass
@@ -20,13 +23,17 @@ public sealed record TaskRunnerOptions(
     int DegreeOfParallelism = 4,
     int BulkLoadDegreeOfParallelism = 4,
     string? StateEndpoint = null,
-    int StateGraceSeconds = 60)
+    int StateGraceSeconds = 60,
+    string? DataDirectory = null)
 {
     public const int DefaultDegreeOfParallelism = 4;
 
     /// <summary>config/ lives at a fixed location under the git repo root — the same convention
     /// DbDataSync.Core.Config.ConfigPaths uses.</summary>
     public string ConfigRoot => Path.Combine(RepoRoot, "config");
+
+    /// <summary>The directory the secret store lives under: <c>--data-dir</c>, else the repository root.</summary>
+    public string SecretsRoot => DataDirectory ?? RepoRoot;
 
     public WorkerLanes Lanes => new(DegreeOfParallelism, BulkLoadDegreeOfParallelism);
 
@@ -39,6 +46,7 @@ public sealed record TaskRunnerOptions(
         int? bulkLoadDegreeOfParallelism = null;
         string? stateEndpoint = null;
         int? graceSeconds = null;
+        string? dataDirectory = null;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -46,6 +54,9 @@ public sealed record TaskRunnerOptions(
             {
                 case "--repo-root" when i + 1 < args.Length:
                     repoRoot = args[++i];
+                    break;
+                case "--data-dir" when i + 1 < args.Length:
+                    dataDirectory = args[++i];
                     break;
                 case "--state-db" when i + 1 < args.Length:
                     stateDbPath = args[++i];
@@ -107,7 +118,8 @@ public sealed record TaskRunnerOptions(
             bulkLoadDegreeOfParallelism ?? DefaultDegreeOfParallelism,
             // The endpoint may also arrive by environment, beside the token — see StateProtocol.
             stateEndpoint ?? Environment.GetEnvironmentVariable(DbDataSync.State.Remote.StateProtocol.EndpointEnvironmentVariable),
-            graceSeconds ?? 60);
+            graceSeconds ?? 60,
+            dataDirectory);
         error = null;
         return true;
     }

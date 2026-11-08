@@ -12,7 +12,7 @@ namespace DbDataSync.Core.Config;
 public sealed class ConfigRepository
 {
     private readonly string _configRoot;
-    private readonly GitCommitService _git;
+    private readonly GitCommitService? _git;
     private readonly SecretStore _secrets;
 
     public ConfigRepository(string configRoot, GitCommitService git, SecretStore secrets)
@@ -24,6 +24,20 @@ public sealed class ConfigRepository
         Directory.CreateDirectory(ConfigPaths.ConnectionsDir(_configRoot));
         Directory.CreateDirectory(ConfigPaths.ReplicationsDir(_configRoot));
     }
+
+    /// <summary>
+    /// A repository that is only read (plan 28c ED8): the definition view of a published package, which is read-only. It has no git service and creates no directory; a commit throws
+    /// <see cref="InvalidOperationException"/> naming the root (a save fails before it on a view that is really read-only), and a directory the definition does not have lists as empty.
+    /// </summary>
+    public static ConfigRepository ReadOnly(string configRoot, SecretStore secrets) => new(configRoot, secrets);
+
+    private ConfigRepository(string configRoot, SecretStore secrets)
+    {
+        _configRoot = configRoot;
+        _secrets = secrets;
+    }
+
+    private GitCommitService Git => _git ?? throw new InvalidOperationException($"The configuration at '{_configRoot}' is read-only (a published definition is immutable); change it where it is authored and publish it again.");
 
     // ---- Connections ----
 
@@ -84,7 +98,7 @@ public sealed class ConfigRepository
         var path = ConfigPaths.ConnectionFile(_configRoot, input.Name);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         WriteAtomically(path, SyncConnectionFile.Write(config));
-        _git.CommitChanges([path], $"Save connection '{input.Name}'", author);
+        Git.CommitChanges([path], $"Save connection '{input.Name}'", author);
 
         return config;
     }
@@ -171,7 +185,7 @@ public sealed class ConfigRepository
             _secrets.Delete(credentialRef);
 
         File.Delete(path);
-        _git.CommitChanges([path], $"Delete connection '{name}'", author);
+        Git.CommitChanges([path], $"Delete connection '{name}'", author);
     }
 
     // ---- Scripts ----
@@ -210,7 +224,7 @@ public sealed class ConfigRepository
         var lockPath = ConfigPaths.ScriptLockFile(_configRoot, script.Manifest.Name);
         if (packageLock is not null && (!File.Exists(lockPath) || File.ReadAllText(lockPath) != packageLock))
             WriteAtomically(lockPath, packageLock);
-        _git.CommitChanges(File.Exists(lockPath) ? [manifestPath, codePath, lockPath] : [manifestPath, codePath], $"Save script '{script.Manifest.Name}'", author);
+        Git.CommitChanges(File.Exists(lockPath) ? [manifestPath, codePath, lockPath] : [manifestPath, codePath], $"Save script '{script.Manifest.Name}'", author);
 
         return script;
     }
@@ -271,7 +285,7 @@ public sealed class ConfigRepository
         if (File.Exists(lockPath))
             File.Delete(lockPath);
 
-        _git.CommitChanges([manifestPath, csPath, sqlPath, lockPath], $"Delete script '{name}'", author);
+        Git.CommitChanges([manifestPath, csPath, sqlPath, lockPath], $"Delete script '{name}'", author);
     }
 
     // ---- Replication tasks ----
@@ -289,7 +303,7 @@ public sealed class ConfigRepository
         // the checks section is not part of the model a screen edits: what the file has is kept as written (FQ04)
         if (TryReadAllTextAllowingConcurrentReplace(path) is { } existing) yaml = ReplicationChecks.Carry(existing, yaml);
         WriteAtomically(path, yaml);
-        _git.CommitChanges([path], $"Save replication task '{task.Name}'", author);
+        Git.CommitChanges([path], $"Save replication task '{task.Name}'", author);
 
         return task;
     }
@@ -323,7 +337,7 @@ public sealed class ConfigRepository
     /// the SPA's Config History view. Relies on the fixed configRoot == &lt;repoRoot&gt;/config
     /// convention used throughout (see ConfigPaths) to know the path relative to the repo root.</summary>
     public IReadOnlyList<CommitInfo> GetReplicationHistory(string replicationName, int limit = 50) =>
-        _git.GetHistory(ReplicationPrefix(replicationName), limit);
+        Git.GetHistory(ReplicationPrefix(replicationName), limit);
 
     public void DeleteReplicationTask(string replicationName, GitAuthor author)
     {
@@ -333,7 +347,7 @@ public sealed class ConfigRepository
 
         var files = Directory.GetFiles(dir, "*.yaml", SearchOption.AllDirectories);
         Directory.Delete(dir, recursive: true);
-        _git.CommitChanges(files, $"Delete replication task '{replicationName}'", author);
+        Git.CommitChanges(files, $"Delete replication task '{replicationName}'", author);
     }
 
     // ---- Table mappings ----
@@ -349,7 +363,7 @@ public sealed class ConfigRepository
         var path = ConfigPaths.TableMappingFile(_configRoot, replicationName, mapping.Name);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         WriteAtomically(path, YamlConfigSerializer.Serialize(mapping));
-        _git.CommitChanges([path], $"Save table mapping '{mapping.Name}' on replication '{replicationName}'", author);
+        Git.CommitChanges([path], $"Save table mapping '{mapping.Name}' on replication '{replicationName}'", author);
 
         return mapping;
     }
@@ -371,7 +385,7 @@ public sealed class ConfigRepository
             return;
 
         File.Delete(path);
-        _git.CommitChanges([path], $"Delete table mapping '{mappingName}' on replication '{replicationName}'", author);
+        Git.CommitChanges([path], $"Delete table mapping '{mappingName}' on replication '{replicationName}'", author);
     }
 
     public IReadOnlyList<string> ListTableMappings(string replicationName) =>
@@ -454,13 +468,13 @@ public sealed class ConfigRepository
     /// <summary>The patch one commit made to this replication — phase 35's "View changes".</summary>
     public ConfigDiff GetReplicationCommitDiff(
         string replicationName, string sha, int maxContentBytes = GitCommitService.DefaultMaxContentBytes) =>
-        _git.GetCommitDiff(ReplicationPrefix(replicationName), sha, maxContentBytes);
+        Git.GetCommitDiff(ReplicationPrefix(replicationName), sha, maxContentBytes);
 
     /// <summary>What <see cref="RestoreReplication"/> would change — the diff from now to then, which
     /// is what a confirmation has to show and is not the same set as the commit's own patch.</summary>
     public ConfigDiff GetReplicationRestoreDiff(
         string replicationName, string sha, int maxContentBytes = GitCommitService.DefaultMaxContentBytes) =>
-        _git.GetRestoreDiff(ReplicationPrefix(replicationName), sha, maxContentBytes);
+        Git.GetRestoreDiff(ReplicationPrefix(replicationName), sha, maxContentBytes);
 
     /// <summary>
     /// Puts this replication's config back the way it was at <paramref name="sha"/>, and records that
@@ -495,7 +509,7 @@ public sealed class ConfigRepository
         ConfigValidation.ValidateName(replicationName, nameof(replicationName));
 
         var prefix = ReplicationPrefix(replicationName);
-        var restored = _git.GetTextFilesAt(prefix, sha);
+        var restored = Git.GetTextFilesAt(prefix, sha);
         if (restored.Count == 0)
             throw new ConfigValidationException(
                 $"Replication '{replicationName}' did not exist at commit '{sha}', so there is nothing " +
@@ -531,13 +545,13 @@ public sealed class ConfigRepository
         }
 
         // Read before writing, so the answer describes the restore rather than its aftermath.
-        var diff = _git.GetRestoreDiff(prefix, sha);
+        var diff = Git.GetRestoreDiff(prefix, sha);
         var warnings = DanglingConnectionWarnings(task, mappings);
 
         // Everything that has to be staged: what the restore writes, and what it removes. A file on
         // disk that is not in the restored set is one created after that commit, and leaving it would
         // make the result neither the old state nor the new one.
-        var root = _git.RepositoryRoot;
+        var root = Git.RepositoryRoot;
         var touched = new List<string>();
 
         var replicationDir = ConfigPaths.ReplicationDir(_configRoot, replicationName);
@@ -568,7 +582,7 @@ public sealed class ConfigRepository
 
         // diff.Sha rather than the caller's, which may have been an abbreviation — the message an
         // operator later reads in the log should name the commit, not however much of it was typed.
-        var commitSha = _git.CommitChanges(
+        var commitSha = Git.CommitChanges(
             touched, $"Restore replication '{replicationName}' to {Short(diff.Sha)}", author);
 
         return new ConfigRestoreResult(diff.Sha, commitSha, diff.Changes, warnings);

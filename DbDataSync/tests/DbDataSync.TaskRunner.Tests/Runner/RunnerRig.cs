@@ -162,17 +162,23 @@ internal sealed class RunnerRig : IDisposable
     /// read-only view the task runs from, like a published version. The view is made of copies, not links: the .NET host resolves a link to the file it points at and looks for the runtime configuration and the
     /// dependencies beside <i>that</i>, so <c>dotnet engine.dll</c> does not start from a view of links (what Windows gets anyway; plan 28c E04 and E05 meet it again).
     /// </summary>
-    public async Task<TaskRunRequest> DrainRequestAsync(string source, string replication, int degreeOfParallelism = 1, Guid? runId = null, string chain = Chain)
+    public async Task<TaskRunRequest> DrainRequestAsync(string source, string replication, int degreeOfParallelism = 1, Guid? runId = null, string chain = Chain, string? runtimeSource = null)
     {
         var cacheRoot = Directory.CreateTempSubdirectory("dbdatasync-e03-cache-").FullName;
         _cleanups.Add(() => Rewritable(cacheRoot));
         var version = await new ArtifactCache(Path.Combine(cacheRoot, "cache"), new DirectorySource(source), ArtifactLinkMode.Copy).MaterializeAsync("sync-e03@1");
+        // plan 28c E06: the engine as a runtime package of its own, its view beside the definition's, started as its manifest says (`dotnet {runtime}/bin/DbDataSync.TaskRunner.dll --runner`)
+        var runtime = runtimeSource is null ? null
+            : await new ArtifactCache(Path.Combine(cacheRoot, "runtime-cache"), new DirectorySource(runtimeSource), ArtifactLinkMode.Copy).MaterializeAsync("dbdatasync-runtime@1");
         return new TaskRunRequest
         {
             Task = new TaskRef(Package, Channel, "drain"),
             PackageDirectory = version.Directory,
             PackageVersion = "1.0.0",
-            Launch = new PackageLaunch(LaunchKind.Executable, Command: "dotnet", Args: ["{package}/engine/DbDataSync.TaskRunner.dll", "--runner"]),
+            Launch = runtime is null
+                ? new PackageLaunch(LaunchKind.Executable, Command: "dotnet", Args: ["{package}/engine/DbDataSync.TaskRunner.dll", "--runner"])
+                : new PackageLaunch(LaunchKind.Executable, Command: "dotnet", Args: ["{runtime}/bin/DbDataSync.TaskRunner.dll", "--runner"]),
+            RuntimeDirectory = runtime?.Directory,
             RunId = runId ?? Database.NewId(),
             Chain = chain,
             Inputs = new Dictionary<string, string>

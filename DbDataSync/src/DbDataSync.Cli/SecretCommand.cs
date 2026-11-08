@@ -25,7 +25,7 @@ public static class SecretCommand
         }
 
         var root = DbDataSyncRoot.Resolve(args);
-        var secrets = SecretStore.Open(root);
+        var secrets = SecretStore.OpenInRepository(root);
         args = WithoutRepoOption(args);
 
         try

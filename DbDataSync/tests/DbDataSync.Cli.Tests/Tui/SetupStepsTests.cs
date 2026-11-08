@@ -90,7 +90,7 @@ public sealed class SetupStepsTests : IDisposable
         Assert.Equal(StateEngineIds.MsSql, config["DbDataSync:State:Engine"]);
         Assert.Equal(connectionString, config["DbDataSync:State:ConnectionString"]);
 
-        var secrets = SecretStore.Open(_root);
+        var secrets = SecretStore.OpenInRepository(_root);
         Assert.True(secrets.TryResolve(SecretRefs.ForAppSetting("stateConnectionString"), out var password));
         Assert.Equal("hunter2", password);
         secrets.Delete(SecretRefs.ForAppSetting("stateConnectionString"));
@@ -115,7 +115,7 @@ public sealed class SetupStepsTests : IDisposable
         Assert.True(result.Warning);
         Assert.Contains("Could not connect yet", result.Message);
 
-        var secrets = SecretStore.Open(_root);
+        var secrets = SecretStore.OpenInRepository(_root);
         secrets.Delete(SecretRefs.ForAppSetting("stateConnectionString"));
     }
 
