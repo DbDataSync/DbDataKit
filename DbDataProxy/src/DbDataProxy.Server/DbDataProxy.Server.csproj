@@ -45,6 +45,7 @@
     <DbDataKitReference Include="State.Cli" />   <!-- state show, test and grants; plan 29b, C01 -->
     <DbDataKitReference Include="State.Engines" />   <!-- SQLite, SQL Server or PostgreSQL for it, as the operator names; plan 13a, P11 -->   <!-- the proxy's state database; plan 13, P02 -->
     <DbDataKitReference Include="Web" />   <!-- the management API: pairing, tokens, roles; plan 13, P03 -->
+    <DbDataKitReference Include="Apps.Bundling" />   <!-- apps build: the bundler behind a command line; plan 26, AP23 -->
     <DbDataKitReference Include="Apps.Host" />   <!-- the apps module: published apps by subpath; plan 26, AP05 -->
     <DbDataKitReference Include="Identity" />   <!-- the identity home as a module; plan 20, O06 -->
     <DbDataKitReference Include="Config.Git" />   <!-- the configuration folder is a git repository; every change is a commit by the person who made it -->
@@ -53,6 +54,12 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="DbDataProxy.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- the sample apps `apps init` copies, inside the program: no repository and no network needed (plan 26, AP23) -->
+    <EmbeddedResource Include="..\..\templates\apps\territory-notes\**\*" LogicalName="apps-templates/territory-notes/%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\templates\apps\territory-notes-src\**\*" LogicalName="apps-templates/territory-notes-src/%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\templates\apps\front-portal\**\*" LogicalName="apps-templates/front-portal/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
     <None Include="config.example\**" LinkBase="config.example" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

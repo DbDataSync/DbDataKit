@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Territory notes (built)</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <h1>Territory notes</h1>
+  <p id="status">Asking the host for a token...</p>
+  <form id="add">
+    <input id="code" placeholder="code" maxlength="10" required>
+    <input id="name" placeholder="name" maxlength="100" required>
+    <input id="quota" placeholder="quota" type="number" min="0" step="0.01">
+    <button type="submit">Add territory</button>
+  </form>
+  <table id="rows"><thead><tr><th>Code</th><th>Name</th><th>Quota</th></tr></thead><tbody></tbody></table>
+  <h2>My note</h2>
+  <textarea id="note" rows="3" placeholder="Kept in this app's storage for you (not in the model)"></textarea>
+  <button id="save-note" type="button">Save note</button>
+  <p id="saved"></p>
+  <script src="main.js"></script>
+</body>
+</html>

@@ -16,6 +16,12 @@ public static class AppsCommand
 
     public static Noun Noun() => new("apps", "The apps host this proxy serves: its apps, instances and navigation sets",
     [
+        new Verb("init", "Make a new app folder from a sample (territory-notes, territory-notes-src or front-portal): a manifest and a starter file set that validate; nothing is read from the network", EffectClass.RepoFilesOnly,
+            $"--template <{string.Join("|", AppsBuild.Templates.Keys)}> --dir <new folder> [--name <app name>]", AppsBuild.InitAsync,
+            DataSchemas.Object([("template", DataSchemas.String), ("dir", DataSchemas.String), ("files", DataSchemas.ListOf(DataSchemas.String))], "template", "dir", "files")),
+        new Verb("build", "Build an app's source tree into a folder that validates and publishes: bundles src/main.ts (or --entry) with the pinned Bun, copies the files that are not source, runs the built-in checks on the result", EffectClass.RepoFilesOnly,
+            "--src <source folder> --out <build folder> [--entry <script>] [--manifest <file>] [--no-minify] [--offline] [--bun <path>] [--timeout <seconds>]", AppsBuild.BuildAsync,
+            DataSchemas.Object([("app", DataSchemas.String), ("out", DataSchemas.String), ("files", DataSchemas.Integer), ("bundled", DataSchemas.ListOf(DataSchemas.String))], "app", "out", "files", "bundled")),
         new Verb("publish", "Publish an app version from a folder: its manifest (app.yaml) and the files the host serves", EffectClass.RepoFilesOnly, $"--dir <folder> [--manifest <file, default <folder>/app.yaml>] [--note <text>] {Where}", PublishAsync,
             DataSchemas.Object([("app", DataSchemas.String), ("version", DataSchemas.Integer), ("files", DataSchemas.Integer)], "app", "version", "files")),
         new Verb("instance-save", "Make or change an instance of a published app: its version pin, title, settings and data bindings (a new instance version; the host serves it at once)", EffectClass.RepoFilesOnly,
