@@ -14,7 +14,7 @@ public sealed record TrackingStatus(TrackingState State, int? Version)
         TrackingState.Ready => null,
         TrackingState.Missing => new Diagnostic(DiagnosticCatalog.TrackingNotInitialized, new($"schema:{schema}", 0, 0), $"The tracking tables do not exist under the schema name `{schema}` on the target."),
         _ => new Diagnostic(DiagnosticCatalog.TrackingNotInitialized, new($"schema:{schema}", 0, 0),
-            $"The tracking tables under the schema name `{schema}` are at layout version {(Version?.ToString() ?? "unreadable")}; this tool knows version {TrackingSchema.Version}. A layout older than 4 has no `connection` column in its records, and layout 4 has no `lane` or `project_hash`: `connection init --upgrade --apply` adds them (every existing record is given the connection that is initialized) and replaces the views. Layout 5 lacks the table `object_info`, layout 6 the columns and the table of the refresh plans (layout 7), and layout 7 the column `model_kind` of `metadata_document` and the table `metadata_dependency` (layout 8): the upgrade adds them (init alone only creates tables). Or name another schema with `tracking: {{ schema: ... }}` and run `init` there."),
+            $"The tracking tables under the schema name `{schema}` are at layout version {(Version?.ToString() ?? "unreadable")}; this tool knows version {TrackingSchema.Version}. A layout older than 4 has no `connection` column in its records, and layout 4 has no `lane` or `project_hash`: `connection init --upgrade --apply` adds them (every existing record is given the connection that is initialized) and replaces the views. Layout 5 lacks the table `object_info`, layout 6 the columns and the table of the refresh plans (layout 7), and layout 7 the column `model_kind` of `metadata_document` and the table `metadata_dependency` (layout 8): the upgrade adds them (init alone only creates tables); layout 9 lacks the column `recorded_utc` of `operation_interval` (layout 10, which the copy of the tracking tables in the state database reads), which the upgrade adds and fills. Or name another schema with `tracking: {{ schema: ... }}` and run `init` there."),
     };
 }
 
@@ -265,10 +265,10 @@ public static partial class AuditLog
     public static Task IntervalAsync(MutationGate gate, TrackingScope scope, string stepId, string model, Guid runId, string? rangeStart, string? rangeEnd, string shapeHash, string operation, CancellationToken ct = default)
     {
         string c(string n) => C(scope.Engine, n);
-        var text = $"INSERT INTO {T(scope, "operation_interval")} ({c("connection")}, {c("interval_id")}, {c("model")}, {c("run_id")}, {c("range_start")}, {c("range_end")}, {c("shape_hash")}, {c("operation")}) " +
-                   "VALUES (@connection, @interval_id, @model, @run_id, @range_start, @range_end, @shape_hash, @operation)";
+        var text = $"INSERT INTO {T(scope, "operation_interval")} ({c("connection")}, {c("interval_id")}, {c("model")}, {c("run_id")}, {c("range_start")}, {c("range_end")}, {c("shape_hash")}, {c("operation")}, {c("recorded_utc")}) " +
+                   "VALUES (@connection, @interval_id, @model, @run_id, @range_start, @range_end, @shape_hash, @operation, @recorded_utc)";
         return gate.ExecuteAsync(GateStatement.Tracking(stepId, text,
-            [Connection(scope), new("interval_id", DbType.Guid, Guid.NewGuid()), S("model", model), new("run_id", DbType.Guid, runId), A("range_start", rangeStart), A("range_end", rangeEnd), Fixed("shape_hash", shapeHash), A("operation", operation)]), ct);
+            [Connection(scope), new("interval_id", DbType.Guid, Guid.NewGuid()), S("model", model), new("run_id", DbType.Guid, runId), A("range_start", rangeStart), A("range_end", rangeEnd), Fixed("shape_hash", shapeHash), A("operation", operation), new("recorded_utc", DbType.DateTime2, TrackingClock.NextUtc())]), ct);
     }
 
     /// <summary>A person's acknowledgement of a block, recorded so planning accepts exactly that block (code, object, hash) from now on.</summary>

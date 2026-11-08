@@ -15,8 +15,8 @@ public sealed record TrackingTable(string Name, string Purpose, IReadOnlyList<Tr
 /// </summary>
 public static class TrackingSchema
 {
-    /// <summary>Layout version. 2 added `metadata_document` and its views; 3 made `metadata_columns` cover source descriptors too (a `kind` column); 4 keyed every record by the `connection` it describes, so one tracking store can hold any number of connections' records; `init` upgrades an older layout by creating what is missing; 5 told a deploy from a refresh and recorded the project's structure on each event (`lane`, `project_hash`); 6 added `object_info`, the title, description, tags and properties of the project, its connections, models, sources, columns and indexes as rows (the documents hold them as well); 7 recorded refresh plans: the plan, the selection and the plan's members as run on each event, and the membership, load plan, inputs with their sources, attempt and duration on each load row; 8 recorded the kind of each model beside its document (`model_kind` on `metadata_document`, and so on the view `metadata_current`) and what each model or native model depends on as rows (the table `metadata_dependency`); 9 made every model, mapped and native ones included, one subject kind (`model`; the subject kind of a stored document is `subject_kind`, as on `object_info`, and a mapped model's old `source` rows become `model`; the table `metadata_dependency` says what a dependency is with `depends_on_category` (model, macro, unknown) and the model kind of a model in `depends_on_kind`, null for the others).</summary>
-    public const int Version = 9;
+    /// <summary>Layout version. 2 added `metadata_document` and its views; 3 made `metadata_columns` cover source descriptors too (a `kind` column); 4 keyed every record by the `connection` it describes, so one tracking store can hold any number of connections' records; `init` upgrades an older layout by creating what is missing; 5 told a deploy from a refresh and recorded the project's structure on each event (`lane`, `project_hash`); 6 added `object_info`, the title, description, tags and properties of the project, its connections, models, sources, columns and indexes as rows (the documents hold them as well); 7 recorded refresh plans: the plan, the selection and the plan's members as run on each event, and the membership, load plan, inputs with their sources, attempt and duration on each load row; 8 recorded the kind of each model beside its document (`model_kind` on `metadata_document`, and so on the view `metadata_current`) and what each model or native model depends on as rows (the table `metadata_dependency`); 9 made every model, mapped and native ones included, one subject kind (`model`; the subject kind of a stored document is `subject_kind`, as on `object_info`, and a mapped model's old `source` rows become `model`; the table `metadata_dependency` says what a dependency is with `depends_on_category` (model, macro, unknown) and the model kind of a model in `depends_on_kind`, null for the others); 10 gave `operation_interval` the time it was recorded (`recorded_utc`, so a copy of the table can read it by a time that only grows, plan 28c E16).</summary>
+    public const int Version = 10;
 
     private static TrackingColumn C(string n, TrackingType t, bool nullable = false) => new(n, t, nullable);
 
@@ -54,7 +54,7 @@ public static class TrackingSchema
         [
             C("connection", TrackingType.Name),
             C("interval_id", TrackingType.Guid), C("model", TrackingType.Name), C("run_id", TrackingType.Guid), C("range_start", TrackingType.Short, true),
-            C("range_end", TrackingType.Short, true), C("shape_hash", TrackingType.Hash), C("operation", TrackingType.Short),
+            C("range_end", TrackingType.Short, true), C("shape_hash", TrackingType.Hash), C("operation", TrackingType.Short), C("recorded_utc", TrackingType.TimestampUtc, true),
         ], ["interval_id"]),
         new("block_log", "Blocks raised by planning and the human acknowledgement that cleared them.",
         [
@@ -141,6 +141,12 @@ public static class TrackingSchema
     /// none). The upgrade empties the table (its rows are derived from the project and the next publish writes them again), makes `depends_on_kind` nullable and adds the column.
     /// </summary>
     public const string DependencyCategoryColumn = "depends_on_category";
+
+    /// <summary>
+    /// What layout 10 added to a store of layout 9: the time an interval was recorded (a column the init script never adds to a table, so `init --upgrade` does). It is nullable because the rows of layout 9 have none: the upgrade gives each the start of its
+    /// run (`run_log.started_utc` of its `run_id`), else the time of the upgrade. A row written by this layout always has it; the copy of the table (plan 28c E16) reads only rows that have one.
+    /// </summary>
+    public static readonly IReadOnlyList<(string Table, string Column)> AddedInLayout10 = [("operation_interval", "recorded_utc")];
 
     public static TrackingTable Table(string name) => Tables.First(t => t.Name == name);
 }

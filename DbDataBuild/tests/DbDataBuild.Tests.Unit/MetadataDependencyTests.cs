@@ -111,7 +111,7 @@ public class MetadataDependencyTests
     [Fact]
     public void Layout_nine_has_the_subject_kind_column_and_the_dependency_table_and_the_init_script_keeps_the_old_view_until_the_column_is_there()
     {
-        Assert.Equal(9, TrackingSchema.Version);
+        Assert.Equal(10, TrackingSchema.Version);
         Assert.Contains(TrackingSchema.Table("metadata_document").Columns, c => c.Name == "model_kind" && c.Nullable);
         Assert.Contains(TrackingSchema.Table("metadata_document").Columns, c => c.Name == "subject_kind" && !c.Nullable);
         Assert.DoesNotContain(TrackingSchema.Table("metadata_document").Columns, c => c.Name == "kind");

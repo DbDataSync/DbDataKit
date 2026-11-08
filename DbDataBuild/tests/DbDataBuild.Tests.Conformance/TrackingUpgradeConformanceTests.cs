@@ -102,7 +102,7 @@ public class TrackingUpgradeConformanceTests
 
             // the layout as it was: this layout without the two columns of layout five, recorded as four (the table of layout six is left: a store at four is not claimed whatever else it holds)
             foreach (var (table, column) in TrackingSchema.AddedInLayout5) await engine.ExecAsync($"ALTER TABLE {Q(schema)}.{Q(table)} DROP COLUMN {Q(column)}");
-            await engine.ExecAsync($"DELETE FROM {Q(schema)}.{Q("tracking_version")} WHERE {Q("version")} IN (7, 8, 9)");
+            await engine.ExecAsync($"DELETE FROM {Q(schema)}.{Q("tracking_version")} WHERE {Q("version")} IN (7, 8, 9, 10)");
             await engine.ExecAsync($"INSERT INTO {Q(schema)}.{Q("tracking_version")} ({Q("version")}, {Q("tool_version")}, {Q("applied_utc")}) VALUES (4, 'old', {(name == "postgres" ? "now()" : "SYSUTCDATETIME()")})");
 
             // init never alters, so it does not claim the store: the version stays four and the tool says what to do
@@ -147,7 +147,7 @@ public class TrackingUpgradeConformanceTests
             await engine.ExecAsync($"DROP TABLE IF EXISTS {Q(schema)}.{Q(TrackingSchema.AddedInLayout6)}");
             await engine.ExecAsync($"DROP TABLE IF EXISTS {Q(schema)}.{Q(TrackingSchema.TableAddedInLayout7)}");
             foreach (var (table, column) in TrackingSchema.AddedInLayout7) await engine.ExecAsync($"ALTER TABLE {Q(schema)}.{Q(table)} DROP COLUMN {Q(column)}");
-            await engine.ExecAsync($"DELETE FROM {Q(schema)}.{Q("tracking_version")} WHERE {Q("version")} IN (5, 6, 7, 8, 9)");
+            await engine.ExecAsync($"DELETE FROM {Q(schema)}.{Q("tracking_version")} WHERE {Q("version")} IN (5, 6, 7, 8, 9, 10)");
             await engine.ExecAsync($"INSERT INTO {Q(schema)}.{Q("tracking_version")} ({Q("version")}, {Q("tool_version")}, {Q("applied_utc")}) VALUES (5, 'old', {(name == "postgres" ? "now()" : "SYSUTCDATETIME()")})");
         }
         try
@@ -276,7 +276,7 @@ public class TrackingUpgradeConformanceTests
             await engine.ExecAsync($"DROP TABLE {Q(schema)}.{Q(TrackingSchema.TableAddedInLayout8)}");
             foreach (var (table, column) in TrackingSchema.AddedInLayout8) await engine.ExecAsync($"ALTER TABLE {Q(schema)}.{Q(table)} DROP COLUMN {Q(column)}");
             await RenameColumn(engine, name, schema, "metadata_document", "subject_kind", "kind");
-            await engine.ExecAsync($"DELETE FROM {Q(schema)}.{Q("tracking_version")} WHERE {Q("version")} IN (8, 9)");
+            await engine.ExecAsync($"DELETE FROM {Q(schema)}.{Q("tracking_version")} WHERE {Q("version")} IN (8, 9, 10)");
             await engine.ExecAsync($"INSERT INTO {Q(schema)}.{Q("tracking_version")} ({Q("version")}, {Q("tool_version")}, {Q("applied_utc")}) VALUES (7, 'old', {timestamp})");
             var json = "{\"schema\":\"dbdatabuild.model/1\",\"name\":\"marts.old\",\"kind\":{\"type\":\"view\"}}";
             await engine.ExecAsync($"INSERT INTO {Q(schema)}.{Q("metadata_document")} ({Q("connection")}, {Q("kind")}, {Q("subject")}, {Q("document")}, {Q("document_hash")}, {Q("recorded_utc")}, {Q("tool_version")}) VALUES ('{name}', 'model', 'marts.old', '{json}', '{new string('c', 64)}', {timestamp}, 'old')");
@@ -350,7 +350,7 @@ public class TrackingUpgradeConformanceTests
             Assert.Equal(0, Cli("project", "compile").Exit);
             Assert.Equal(0, Cli("connection", "init", name, "--apply").Exit);
             Assert.Equal(0, Cli("connection", "publish", name).Exit);
-            Assert.Equal("9", await Version());
+            Assert.Equal(TrackingSchema.Version.ToString(), await Version());
 
             // the layout as it was: the column is `kind`, a mapped model is of kind `source` in the documents and in object_info, the views are the old ones' absence, recorded as eight
             foreach (var view in new[] { "metadata_columns", "metadata_current" }) await engine.ExecAsync($"DROP VIEW {Q(schema)}.{Q(view)}");
@@ -361,7 +361,7 @@ public class TrackingUpgradeConformanceTests
             Assert.Equal(["marts.v1>src.t|model|mapped|1"], await engine.RowsAsync(Concat($"SELECT {Q("subject")} + '>' + {Q("depends_on")} + '|' + {Q("depends_on_category")} + '|' + {Q("depends_on_kind")} + '|' + CAST({Q("depth")} AS VARCHAR(5)) FROM {Q(schema)}.{Q("metadata_dependency")}")));
             await engine.ExecAsync($"ALTER TABLE {Q(schema)}.{Q("metadata_dependency")} DROP COLUMN {Q(TrackingSchema.DependencyCategoryColumn)}");
             await engine.ExecAsync(name == "postgres" ? $"ALTER TABLE {Q(schema)}.{Q("metadata_dependency")} ALTER COLUMN {Q("depends_on_kind")} SET NOT NULL" : $"ALTER TABLE {Q(schema)}.{Q("metadata_dependency")} ALTER COLUMN {Q("depends_on_kind")} varchar(128) NOT NULL");
-            await engine.ExecAsync($"DELETE FROM {Q(schema)}.{Q("tracking_version")} WHERE {Q("version")} = 9");
+            await engine.ExecAsync($"DELETE FROM {Q(schema)}.{Q("tracking_version")} WHERE {Q("version")} IN (9, 10)");
             await engine.ExecAsync($"INSERT INTO {Q(schema)}.{Q("tracking_version")} ({Q("version")}, {Q("tool_version")}, {Q("applied_utc")}) VALUES (8, 'old', {timestamp})");
 
             var refused = Cli("connection", "publish", name);
@@ -378,7 +378,7 @@ public class TrackingUpgradeConformanceTests
             var review = Cli("connection", "init", name, "--upgrade");
             Assert.Contains("(layout 9)", review.Out);
             Assert.Equal(0, Cli("connection", "init", name, "--upgrade", "--apply").Exit);
-            Assert.Equal("9", await Version());
+            Assert.Equal(TrackingSchema.Version.ToString(), await Version());
             Assert.Equal(0, Cli("connection", "init", name, "--upgrade", "--apply").Exit);
             Assert.Equal(["model|marts.v1|view", "model|src.t|mapped", "project|project|"], await engine.RowsAsync(Concat($"SELECT {Q("subject_kind")} + '|' + {Q("subject")} + '|' + COALESCE({Q("model_kind")}, '') FROM {Q(schema)}.{Q("metadata_current")} ORDER BY 1")));
             Assert.Empty(await engine.RowsAsync($"SELECT {Q("subject")} FROM {Q(schema)}.{Q("object_info")} WHERE {Q("subject_kind")} = 'source'"));

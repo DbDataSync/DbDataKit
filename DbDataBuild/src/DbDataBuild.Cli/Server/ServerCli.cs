@@ -54,7 +54,7 @@ internal static class ServerCli
             var directory = Path.GetFullPath(args.Get("repo") ?? BuildServerSettings.DefaultDirectory(environment));
             return DbDataKit.State.Cli.StateTarget.From(BuildState.Resolve(directory, environment, args.Get("engine"), engineFlagName: "--engine"), BuildState.SqlitePath(directory), () => BuildState.Secrets(directory, environment), BuildState.SettingsFile(directory));
         },
-        BuildSchedulerSchema.Modules, DbDataKit.State.StateScope.Install, ["engine", "repo"], "[--engine mssql|postgres] [--repo <server directory>]"));
+        BuildSchedulerSchema.Modules, BuildSchedulerSchema.Scope, ["engine", "repo"], "[--engine mssql|postgres] [--repo <server directory>]"));
 
     /// <summary>The shared <c>secret</c> verbs over the server's own store (<c>dbdatabuild secret ...</c>, with <c>--repo</c> as for the pairing verbs). The value of a secret comes from a hidden prompt or standard input, never an argument.</summary>
     private static Noun SecretVerbs(string[] invocation)
@@ -145,7 +145,19 @@ internal static class ServerCli
         BuildScheduler? scheduler = null;
         var gate = new DbDataKit.State.Api.MaintenanceGate(work: () => scheduler?.Running ?? 0);
         if (parsed.Has("scheduler"))
-            scheduler = new BuildScheduler(projects, runner, BuildSchedulerSchema.Open(settings.Directory, settings: state), TimeProvider.System, line => context.Error.WriteLine(line), paused: () => gate.Enabled);
+        {
+            DbDataKit.State.Tracking.TrackingSettings tracking;
+            try { tracking = BuildTrackingSettings.Read(settings.Directory); }
+            catch (InvalidOperationException ex)
+            {
+                await context.Error.WriteLineAsync(ex.Message);
+                return DbDataKit.State.Cli.StateExit.Settings;
+            }
+
+            var schedulerState = BuildSchedulerSchema.Open(settings.Directory, settings: state);
+            var trackingHost = new BuildTrackingHost(projects, schedulerState, tracking, token => ServerSecrets.LoginsAsync(secrets, token), line => context.Error.WriteLine(line));
+            scheduler = new BuildScheduler(projects, runner, schedulerState, TimeProvider.System, line => context.Error.WriteLine(line), paused: () => gate.Enabled, tracking: trackingHost);
+        }
         var publisher = new ProxyPublisher(new ProxiesFile(settings.Directory), new ConsoleKeyStore(secrets, secrets), secrets);
         var app = BuildServer.Build(settings, BuildServer.Certificate(settings.Directory), runner, projects, host.Commands, line => context.Error.WriteLine(line), parsed.Has("read-only") ? BuildManagementApi.ReadOnlySurface : null, scheduler, sessions, publisher, gate,
             state is null ? null : new DbDataKit.State.Cli.StateTarget(state, BuildState.SqlitePath(settings.Directory), () => BuildState.Secrets(settings.Directory, environment), BuildState.SettingsFile(settings.Directory), sources));

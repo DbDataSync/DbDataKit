@@ -117,6 +117,15 @@ internal sealed class TSqlTrackingDdl(string target, bool unverified) : ITrackin
                 $"IF OBJECT_ID({dep}, N'U') IS NOT NULL AND COL_LENGTH({dep}, {TrackingDdl.Literal(TrackingSchema.DependencyCategoryColumn)}) IS NULL\nBEGIN\n  DELETE FROM {depTable};\n" +
                 $"  ALTER TABLE {depTable} ALTER COLUMN {Quote("depends_on_kind")} {Native(TrackingType.Short)} NULL;\n  ALTER TABLE {depTable} ADD {Quote(TrackingSchema.DependencyCategoryColumn)} {Native(TrackingType.Short)} NOT NULL;\nEND;"));
         }
+        foreach (var (table, column) in TrackingSchema.AddedInLayout10)
+        {
+            var c = TrackingSchema.Table(table).Columns.First(x => x.Name == column);
+            var obj = TrackingDdl.Literal(schema + "." + table);
+            list.Add(new($"upgrade-{++n:00}", $"table {table}: add `{column}` (layout 10) when it is not there",
+                $"IF OBJECT_ID({obj}, N'U') IS NOT NULL AND COL_LENGTH({obj}, {TrackingDdl.Literal(column)}) IS NULL\n  ALTER TABLE {s}.{Quote(table)} ADD {Quote(column)} {Native(c.Type)} NULL;"));
+            list.Add(new($"upgrade-{++n:00}", $"table {table}: a row of layout 9 gets the start of its run as `{column}`, else the time of the upgrade (layout 10)",
+                $"IF OBJECT_ID({obj}, N'U') IS NOT NULL AND COL_LENGTH({obj}, {TrackingDdl.Literal(column)}) IS NOT NULL\n  EXEC({TrackingDdl.Literal($"UPDATE oi SET oi.{Quote(column)} = COALESCE((SELECT MIN(r.{Quote("started_utc")}) FROM {s}.{Quote("run_log")} r WHERE r.{Quote("connection")} = oi.{Quote("connection")} AND r.{Quote("run_id")} = oi.{Quote("run_id")}), SYSUTCDATETIME()) FROM {s}.{Quote(table)} oi WHERE oi.{Quote(column)} IS NULL")});"));
+        }
         list.Add(new($"upgrade-{++n:00}", "drop the views of the older layout (the init script creates them again)",
             $"IF OBJECT_ID({TrackingDdl.Literal(schema + ".metadata_columns")}, N'V') IS NOT NULL DROP VIEW {s}.[metadata_columns];\nIF OBJECT_ID({TrackingDdl.Literal(schema + ".metadata_current")}, N'V') IS NOT NULL DROP VIEW {s}.[metadata_current];"));
         return list;
@@ -148,8 +157,9 @@ internal sealed class TSqlTrackingDdl(string target, bool unverified) : ITrackin
         var last = TrackingSchema.AddedInLayout7[^1];
         var layout8 = TrackingSchema.AddedInLayout8[^1];
         var layout5 = TrackingSchema.AddedInLayout5[^1];
+        var layout10 = TrackingSchema.AddedInLayout10[^1];
         list.Add(new($"init-{n}", "record the layout version",
-            $"IF NOT EXISTS (SELECT 1 FROM {v} WHERE [version] = {TrackingSchema.Version}) AND COL_LENGTH({TrackingDdl.Literal(schema + "." + last.Table)}, {TrackingDdl.Literal(last.Column)}) IS NOT NULL AND COL_LENGTH({TrackingDdl.Literal(schema + "." + layout8.Table)}, {TrackingDdl.Literal(layout8.Column)}) IS NOT NULL AND COL_LENGTH({TrackingDdl.Literal(schema + "." + layout5.Table)}, {TrackingDdl.Literal(layout5.Column)}) IS NOT NULL AND OBJECT_ID({TrackingDdl.Literal(schema + "." + TrackingSchema.AddedInLayout6)}, N'U') IS NOT NULL AND OBJECT_ID({TrackingDdl.Literal(schema + "." + TrackingSchema.TableAddedInLayout8)}, N'U') IS NOT NULL AND COL_LENGTH({TrackingDdl.Literal(schema + "." + TrackingSchema.TableAddedInLayout8)}, {TrackingDdl.Literal(TrackingSchema.DependencyCategoryColumn)}) IS NOT NULL AND COL_LENGTH({TrackingDdl.Literal(schema + "." + TrackingSchema.RenamedInLayout9.Table)}, {TrackingDdl.Literal(TrackingSchema.RenamedInLayout9.Column)}) IS NOT NULL\nINSERT INTO {v} ([version], [tool_version], [applied_utc]) VALUES ({TrackingSchema.Version}, {TrackingDdl.Literal(toolVersion)}, SYSUTCDATETIME());"));
+            $"IF NOT EXISTS (SELECT 1 FROM {v} WHERE [version] = {TrackingSchema.Version}) AND COL_LENGTH({TrackingDdl.Literal(schema + "." + last.Table)}, {TrackingDdl.Literal(last.Column)}) IS NOT NULL AND COL_LENGTH({TrackingDdl.Literal(schema + "." + layout8.Table)}, {TrackingDdl.Literal(layout8.Column)}) IS NOT NULL AND COL_LENGTH({TrackingDdl.Literal(schema + "." + layout5.Table)}, {TrackingDdl.Literal(layout5.Column)}) IS NOT NULL AND OBJECT_ID({TrackingDdl.Literal(schema + "." + TrackingSchema.AddedInLayout6)}, N'U') IS NOT NULL AND OBJECT_ID({TrackingDdl.Literal(schema + "." + TrackingSchema.TableAddedInLayout8)}, N'U') IS NOT NULL AND COL_LENGTH({TrackingDdl.Literal(schema + "." + TrackingSchema.TableAddedInLayout8)}, {TrackingDdl.Literal(TrackingSchema.DependencyCategoryColumn)}) IS NOT NULL AND COL_LENGTH({TrackingDdl.Literal(schema + "." + TrackingSchema.RenamedInLayout9.Table)}, {TrackingDdl.Literal(TrackingSchema.RenamedInLayout9.Column)}) IS NOT NULL AND COL_LENGTH({TrackingDdl.Literal(schema + "." + layout10.Table)}, {TrackingDdl.Literal(layout10.Column)}) IS NOT NULL\nINSERT INTO {v} ([version], [tool_version], [applied_utc]) VALUES ({TrackingSchema.Version}, {TrackingDdl.Literal(toolVersion)}, SYSUTCDATETIME());"));
         return list;
     }
 }
@@ -223,6 +233,14 @@ internal sealed class PostgresTrackingDdl : ITrackingDdl
                 $"DO $$\nBEGIN\n  IF to_regclass({TrackingDdl.Literal(schema + "." + TrackingSchema.TableAddedInLayout8)}) IS NOT NULL AND NOT {Has(TrackingSchema.TableAddedInLayout8, TrackingSchema.DependencyCategoryColumn)} THEN\n" +
                 $"    DELETE FROM {depTable};\n    ALTER TABLE {depTable} ALTER COLUMN {Quote("depends_on_kind")} DROP NOT NULL;\n    ALTER TABLE {depTable} ADD COLUMN {Quote(TrackingSchema.DependencyCategoryColumn)} {Native(TrackingType.Short)} NOT NULL;\n  END IF;\nEND $$;"));
         }
+        foreach (var (table, column) in TrackingSchema.AddedInLayout10)
+        {
+            var c = TrackingSchema.Table(table).Columns.First(x => x.Name == column);
+            list.Add(new($"upgrade-{++n:00}", $"table {table}: add `{column}` (layout 10) when it is not there",
+                $"ALTER TABLE IF EXISTS {s}.{Quote(table)} ADD COLUMN IF NOT EXISTS {Quote(column)} {Native(c.Type)} NULL;"));
+            list.Add(new($"upgrade-{++n:00}", $"table {table}: a row of layout 9 gets the start of its run as `{column}`, else the time of the upgrade (layout 10)",
+                $"DO $$\nBEGIN\n  IF to_regclass({TrackingDdl.Literal(schema + "." + table)}) IS NOT NULL THEN\n    UPDATE {s}.{Quote(table)} oi SET {Quote(column)} = COALESCE((SELECT MIN(r.{Quote("started_utc")}) FROM {s}.{Quote("run_log")} r WHERE r.{Quote("connection")} = oi.{Quote("connection")} AND r.{Quote("run_id")} = oi.{Quote("run_id")}), (now() AT TIME ZONE 'utc')) WHERE oi.{Quote(column)} IS NULL;\n  END IF;\nEND $$;"));
+        }
         list.Add(new($"upgrade-{++n:00}", "drop the views of the older layout (the init script creates them again)",
             $"DROP VIEW IF EXISTS {s}.\"metadata_columns\";\nDROP VIEW IF EXISTS {s}.\"metadata_current\";"));
         return list;
@@ -246,9 +264,10 @@ internal sealed class PostgresTrackingDdl : ITrackingDdl
         var last = TrackingSchema.AddedInLayout7[^1];
         var layout8 = TrackingSchema.AddedInLayout8[^1];
         var layout5 = TrackingSchema.AddedInLayout5[^1];
+        var layout10 = TrackingSchema.AddedInLayout10[^1];
         list.Add(new($"init-{n}", "record the layout version",
             $"INSERT INTO {v} (\"version\", \"tool_version\", \"applied_utc\")\nSELECT {TrackingSchema.Version}, {TrackingDdl.Literal(toolVersion)}, (now() AT TIME ZONE 'utc')\n" +
-            $"WHERE NOT EXISTS (SELECT 1 FROM {v} WHERE \"version\" = {TrackingSchema.Version}) AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = {TrackingDdl.Literal(schema)} AND table_name = {TrackingDdl.Literal(last.Table)} AND column_name = {TrackingDdl.Literal(last.Column)}) AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = {TrackingDdl.Literal(schema)} AND table_name = {TrackingDdl.Literal(layout5.Table)} AND column_name = {TrackingDdl.Literal(layout5.Column)}) AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = {TrackingDdl.Literal(schema)} AND table_name = {TrackingDdl.Literal(layout8.Table)} AND column_name = {TrackingDdl.Literal(layout8.Column)}) AND to_regclass({TrackingDdl.Literal(schema + "." + TrackingSchema.AddedInLayout6)}) IS NOT NULL AND to_regclass({TrackingDdl.Literal(schema + "." + TrackingSchema.TableAddedInLayout8)}) IS NOT NULL AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = {TrackingDdl.Literal(schema)} AND table_name = {TrackingDdl.Literal(TrackingSchema.TableAddedInLayout8)} AND column_name = {TrackingDdl.Literal(TrackingSchema.DependencyCategoryColumn)}) AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = {TrackingDdl.Literal(schema)} AND table_name = {TrackingDdl.Literal(TrackingSchema.RenamedInLayout9.Table)} AND column_name = {TrackingDdl.Literal(TrackingSchema.RenamedInLayout9.Column)});"));
+            $"WHERE NOT EXISTS (SELECT 1 FROM {v} WHERE \"version\" = {TrackingSchema.Version}) AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = {TrackingDdl.Literal(schema)} AND table_name = {TrackingDdl.Literal(last.Table)} AND column_name = {TrackingDdl.Literal(last.Column)}) AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = {TrackingDdl.Literal(schema)} AND table_name = {TrackingDdl.Literal(layout5.Table)} AND column_name = {TrackingDdl.Literal(layout5.Column)}) AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = {TrackingDdl.Literal(schema)} AND table_name = {TrackingDdl.Literal(layout8.Table)} AND column_name = {TrackingDdl.Literal(layout8.Column)}) AND to_regclass({TrackingDdl.Literal(schema + "." + TrackingSchema.AddedInLayout6)}) IS NOT NULL AND to_regclass({TrackingDdl.Literal(schema + "." + TrackingSchema.TableAddedInLayout8)}) IS NOT NULL AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = {TrackingDdl.Literal(schema)} AND table_name = {TrackingDdl.Literal(TrackingSchema.TableAddedInLayout8)} AND column_name = {TrackingDdl.Literal(TrackingSchema.DependencyCategoryColumn)}) AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = {TrackingDdl.Literal(schema)} AND table_name = {TrackingDdl.Literal(TrackingSchema.RenamedInLayout9.Table)} AND column_name = {TrackingDdl.Literal(TrackingSchema.RenamedInLayout9.Column)}) AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = {TrackingDdl.Literal(schema)} AND table_name = {TrackingDdl.Literal(layout10.Table)} AND column_name = {TrackingDdl.Literal(layout10.Column)});"));
         return list;
     }
 }
