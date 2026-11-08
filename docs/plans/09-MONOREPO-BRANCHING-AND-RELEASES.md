@@ -104,7 +104,7 @@ Root files (`LICENSE`, `.gitattributes`, `docs/`) are ordinary pull requests.
   A `paths:` filter was not used for the products because a skipped required check is awkward; it is used for `dbdatakit-ci.yml`, which has
   one simple trigger.
 - **`dbdatakit-ci.yml`** runs the shared libraries' suite once, on a change under `DbDataKit/` or `testenv/`, on Linux and Windows, with the
-  shared engines (SQL Server and PostgreSQL from `testenv/`). See [11-ci-and-testing.md](11-ci-and-testing.md).
+  shared engines (SQL Server and PostgreSQL from `testenv/`). See [11-ci-and-testing.md](11-ci-and-testing.md) (what exists and what is left).
 - **Working directory.** The products' workflows run their steps inside the product's folder (`defaults.run.working-directory`, explicit
   paths for actions), with cache and artifact names prefixed by product.
 - **Cost control.** A newer push to a pull request cancels the older run; runs on `main` always complete. DbDataBuild runs its slow engines
