@@ -141,12 +141,26 @@ public sealed class ReplicationQuality(ConfigRepository config, IConnectionFacto
     }
 
     /// <summary>Evaluates the checks of <paramref name="replication"/> and records the results; <paramref name="runId"/> is the run that set it off (null for an evaluation on the clock).</summary>
-    public async Task<(QualityRunReport Report, IReadOnlyList<string> Notes)> EvaluateAsync(string replication, string? runId, CancellationToken ct = default)
+    public async Task<(QualityRunReport Report, IReadOnlyList<string> Notes)> EvaluateAsync(string replication, string? runId, CancellationToken ct = default, string? dataset = null)
     {
         var notes = new List<string>();
         var source = SourceFor(replication, notes);
-        var report = await new QualityRunService(source, new QualityStore(state), time: _time).RunAsync(null, runId, ct).ConfigureAwait(false);
+        var report = await new QualityRunService(source, new QualityStore(state), time: _time).RunAsync(dataset, runId, ct).ConfigureAwait(false);
         return (report, notes);
+    }
+
+    /// <summary>The replication whose checks are about <paramref name="dataset"/> (an identity or a name the check uses), for a person who asks to evaluate that dataset; null when none is.</summary>
+    public async Task<string?> ReplicationOfAsync(string dataset, CancellationToken ct = default)
+    {
+        foreach (var name in ReplicationsWithChecks())
+        {
+            IReadOnlyList<QualityDataset> datasets;
+            try { datasets = await SourceFor(name).DatasetsAsync(ct).ConfigureAwait(false); }
+            catch (Exception ex) when (ex is not OperationCanceledException) { continue; }
+            if (datasets.Any(d => d.Is(dataset))) return name;
+        }
+
+        return null;
     }
 }
 

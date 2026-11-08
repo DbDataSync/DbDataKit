@@ -130,6 +130,16 @@ if (!isWorker) {
   }
 }
 
+// A Sync server for the quality story (plan 23a, FQ17): its state database is seeded by the story with a blocking check's results, and a replication whose target cannot be reached is evaluated on request. Its own directory and port
+// (8531; 8481 to 8499, 8501, 8502 and 8511 to 8519 are taken), so nothing the other stories leave in the servers above is in its way.
+export const qualitySync = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-quality-sync'), port: 8531 }
+if (!isWorker) {
+  fs.rmSync(qualitySync.directory, { recursive: true, force: true })
+  fs.mkdirSync(qualitySync.directory, { recursive: true })
+  const madeQuality = execFileSync('dotnet', ['exec', syncDll, 'server', 'pair', '--repo', qualitySync.directory, '--max-role', 'admin'], { encoding: 'utf8' })
+  fs.writeFileSync(path.join(scratchDirectory, 'quality-sync-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeQuality)![1])
+}
+
 // Servers for the monitoring story (plan 13a, M12): a Build server that runs schedules and hosts a project whose one refresh plan runs every minute and fails (no login is set for its connection, so a run ends
 // with an exit code), a Sync server for a replication made in the story, and a Gateway the story sends failed logins to. They are separate from the servers above, whose pairing codes the first-run story spends.
 export const monitorBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-monitor-build'), port: 8489, project: 'scheduled', plan: 'minutely', connection: 'sqlserver' }
@@ -455,6 +465,16 @@ export default defineConfig({
     {
       command: ['dotnet', 'exec', JSON.stringify(syncDll), 'server', 'run', '--repo', JSON.stringify(monitorSync.directory), '--url', `https://localhost:${monitorSync.port}`].join(' '),
       url: `https://localhost:${monitorSync.port}/api/health`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 90_000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
+      env: { Kestrel__Certificates__Default__Path: syncCertificate, Kestrel__Certificates__Default__Password: syncCertificatePassword },
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(syncDll), 'server', 'run', '--repo', JSON.stringify(qualitySync.directory), '--url', `https://localhost:${qualitySync.port}`].join(' '),
+      url: `https://localhost:${qualitySync.port}/api/health`,
       ignoreHTTPSErrors: true,
       reuseExistingServer: false,
       timeout: 90_000,

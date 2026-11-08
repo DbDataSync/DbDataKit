@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { LineageGraphView, projectLineage, reach } from '@dbdatakit/visuals'
 import { consoleApi } from '../api'
 import { ConsoleShell } from '../ConsoleShell'
 import { findCards, serverNote, withoutDeployments } from '../lineage'
+import { panelLine, qualityApi } from '../quality'
 
 /**
  * What feeds what, across the servers (plan 18, G10): the graphs of the Build and Sync servers joined by identity, drawn at the table level with a dataset opening to its columns. Pick a card (click it, or search) and what feeds
@@ -13,6 +15,8 @@ import { findCards, serverNote, withoutDeployments } from '../lineage'
 export function LineagePage() {
   const client = useQueryClient()
   const lineage = useQuery({ queryKey: ['lineage'], queryFn: () => consoleApi.lineage(false) })
+  // the checks of the chosen dataset (plan 23a FQ17); a console without them still draws the graph
+  const quality = useQuery({ queryKey: ['quality'], queryFn: qualityApi.overview, retry: false })
   const [selected, setSelected] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const graph = useMemo(() => (lineage.data ? withoutDeployments(lineage.data) : undefined), [lineage.data])
@@ -62,6 +66,16 @@ export function LineagePage() {
                 {chosen.unknown_upstream && ' · what feeds it is not known'} · <span className="mono">{chosen.id}</span>
               </div>
             )}
+            {chosen && counts && quality.data && (() => {
+              const checks = quality.data.datasets.find((d) => d.dataset === chosen.id)
+              return (
+                <div className="hint" style={{ marginBottom: 8 }} data-testid="lineage-quality" data-blocking={checks?.blocking ?? 0}>
+                  Checks: {panelLine(checks)}
+                  {checks && checks.blocking > 0 && ` · a block stops what it feeds (${counts.downstream} downstream)`}
+                  {checks && <> · <Link to={`/quality?dataset=${encodeURIComponent(chosen.id)}`} data-testid="lineage-quality-open">open in Quality</Link></>}
+                </div>
+              )
+            })()}
             <LineageGraphView graph={graph} selected={selected} onSelect={setSelected} height={640} />
           </>
         )}

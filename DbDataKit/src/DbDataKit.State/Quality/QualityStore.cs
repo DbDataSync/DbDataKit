@@ -154,6 +154,10 @@ public sealed class QualityStore(StateDatabase database)
     public IReadOnlyList<CheckStatusRow> StatusesOf(string dataset) =>
         database.Retry(() => Statuses("WHERE dataset_hash = $hash", c => c.Bind(database, "hash", DatasetHash(dataset))));
 
+    /// <summary>The status of every check there is, by dataset and check id: what a screen lists (plan 23a FQ17).</summary>
+    public IReadOnlyList<CheckStatusRow> All() =>
+        database.Retry(() => Statuses("", _ => { }, "dataset, check_id"));
+
     /// <summary>The checks that block now, oldest block first: what a downstream run, a publish or a promotion asks (plan 23a FQ14).</summary>
     public IReadOnlyList<CheckStatusRow> Blocks() =>
         database.Retry(() => Statuses("WHERE blocking = $true", c => c.Bind(database, "true", true), "blocked_at, check_id"));

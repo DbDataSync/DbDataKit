@@ -68,6 +68,8 @@ In the web app, `/instances` lists them and `/servers/<id>/...` opens a server's
 
 **Lineage** (plan 18, G09): `GET /api/lineage` joins the design graphs of the paired Build and Sync servers by identity (a table Sync writes and a Build model reads is one node), with what each server said or why it gave none; `?node=<id>&direction=downstream|upstream&depth=<n>` is the impact or provenance of one node across all of them, and `?refresh=true` asks the servers again instead of using what was kept for 30 seconds.
 
+**Data quality** (plan 23a, FQ17): `GET /api/quality` joins the results of the checks that the paired Sync (`/api/quality`) and Build (`/api/v1/quality`) servers evaluate, by dataset identity: every dataset with its checks, the latest result and the block of each, and what each server said (or why it gave none, `can_run`, and how a server that cannot evaluate on request does). The page `/quality` reads the history of a check from the evaluating server through the relay (`.../api/quality/history`) and evaluates on request (`POST .../api/quality/run`, a Sync server, admin); the console holds no results and decides no block.
+
 The Connections page (`/connections`, in the rail) lists the connections of every Sync server and the data sources of every Gateway the console manages, each asked of its server through the relay (a server that does not answer, or whose list it refuses, is named above the list and the others still show).
 A Sync connection and a Gateway data source are the same `connection/1` file, so a connection on one server can be **copied to another**: *Copy to...* on a row, choose the server and the name it will have there (the same name when it is another server).
 
