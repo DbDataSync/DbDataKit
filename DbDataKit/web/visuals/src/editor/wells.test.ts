@@ -275,3 +275,20 @@ describe('what only the server can check goes through ViewsClient.validate', () 
     await expect(client.catalog!('nope')).rejects.toMatchObject({ code: 'not_found' })
   })
 })
+
+describe('a layout\'s widget_options', () => {
+  it('sets one option, keeps the others, and removes the entry and the key when the last one goes', async () => {
+    let d = await open()
+    const options = () => (docOf(d).layouts[0] as any).widget_options
+    d = must(edit(d, { type: 'setWidgetOption', layout: 'desk', widget: 'net', key: 'density', value: 'compact' }))
+    d = must(edit(d, { type: 'setWidgetOption', layout: 'desk', widget: 'net', key: 'show_title', value: false }))
+    expect(options().net).toEqual({ density: 'compact', show_title: false })
+    d = must(edit(d, { type: 'setWidgetOption', layout: 'desk', widget: 'by_region', key: 'legend', value: 'hide' }))
+    d = must(edit(d, { type: 'setWidgetOption', layout: 'desk', widget: 'net', key: 'density', value: undefined }))
+    d = must(edit(d, { type: 'setWidgetOption', layout: 'desk', widget: 'net', key: 'show_title', value: undefined }))
+    expect(options()).toEqual({ by_region: { legend: 'hide' } })
+    d = must(edit(d, { type: 'setWidgetOption', layout: 'desk', widget: 'by_region', key: 'legend', value: undefined }))
+    expect(options()).toBeUndefined()
+    expect(edit(d, { type: 'setWidgetOption', layout: 'nope', widget: 'net', key: 'density', value: 'compact' }).error).toMatchObject({ code: 'unknown_layout' })
+  })
+})

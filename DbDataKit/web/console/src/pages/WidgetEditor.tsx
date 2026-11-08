@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   WIDGET_TYPES, WellError, WidgetView, bindingIssues, catalogRoles, defaultLimit, derivedQuery, describeDerivation, explicitQuery, memberProblem, parseRequestText, wellFields, wellsOf,
-  type Catalog, type CatalogMember, type ClientDiagnostic, type EditCommand, type RenderedWidget, type ViewsDoc, type WellChange, type WellSpec, type WidgetDoc,
+  type Catalog, type CatalogMember, type ClientDiagnostic, type EditCommand, type RenderedWidget, type ViewsDoc, type WellChange, type WellSpec, type WidgetDoc, type WidgetOptionsDoc,
 } from '@dbdatakit/visuals'
 
 type Apply = (command: EditCommand, group?: string) => void
@@ -130,7 +130,7 @@ function Preview({ id, widget, doc, preview }: { id: string; widget: WidgetDoc; 
 /**
  * The widget editor of the Views page's form view (plan 32 DBR25): the type chooser, the field wells over the model's catalog (a field is dragged from the list or picked; a measure goes only where a measure goes), the
  * properties each type has, the request the encodings derive (read-only, with each part's place in the document and the parameter bindings; a switch to a written query with its binding check), what the source's
- * check says of the widget (filters, order and totals are the server's), and the preview. Every change is an edit command: one undo step.
+ * check says of the widget (filters, order and totals are the server's), the preview, and how each layout shows the widget (`widget_options`). Every change is an edit command: one undo step.
  */
 export function WidgetEditor({ id, widget, doc, catalog, catalogNote, apply, diagnostics, server, preview }: {
   id: string; widget: WidgetDoc; doc: ViewsDoc; catalog: Catalog | null; catalogNote: string | null; apply: Apply
@@ -152,6 +152,7 @@ export function WidgetEditor({ id, widget, doc, catalog, catalogNote, apply, dia
   const query = (hasQuery ? (w.query ?? {}) : {}) as Record<string, any>
   const explicit = query.mode === 'explicit'
   const totals = (widget.type === 'matrix' ? (widget.encodings.totals ?? {}) : {}) as Record<string, boolean>
+  const setOption = (layout: string, key: keyof WidgetOptionsDoc, value: string) => apply({ type: 'setWidgetOption', layout, widget: id, key, value: value === '' ? undefined : key === 'show_title' ? value === 'true' : (value as never) })
 
   return (
     <div className="card" style={{ marginBottom: 12 }} data-testid={`ed-widget-editor-${id}`}>
@@ -297,6 +298,29 @@ export function WidgetEditor({ id, widget, doc, catalog, catalogNote, apply, dia
       )}
 
       {hasQuery && <Preview id={id} widget={widget} doc={doc} preview={preview} />}
+
+      <div data-testid={`ed-options-${id}`} style={{ marginTop: 8 }}>
+        <strong>How each layout shows it</strong> <span className="hint">widget_options</span>
+        {doc.layouts.map((layout) => {
+          const o = layout.widget_options?.[id] ?? {}
+          return (
+            <div key={layout.name} className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '2px 0' }} data-testid={`ed-options-${id}-${layout.name}`}>
+              <code style={{ minWidth: 70 }}>{layout.name}</code>
+              <label className="hint">density{' '}
+                <select data-testid={`ed-opt-${layout.name}-${id}-density`} value={o.density ?? ''} onChange={(e) => setOption(layout.name, 'density', e.target.value)}><option value="">(by the box)</option><option value="compact">compact</option><option value="comfortable">comfortable</option></select>
+              </label>
+              <label className="hint">title{' '}
+                <select data-testid={`ed-opt-${layout.name}-${id}-show_title`} value={o.show_title === undefined ? '' : String(o.show_title)} onChange={(e) => setOption(layout.name, 'show_title', e.target.value)}><option value="">(shown)</option><option value="true">show</option><option value="false">hide</option></select>
+              </label>
+              {widget.type === 'chart' && (
+                <label className="hint">legend{' '}
+                  <select data-testid={`ed-opt-${layout.name}-${id}-legend`} value={o.legend ?? ''} onChange={(e) => setOption(layout.name, 'legend', e.target.value)}><option value="">(default)</option><option value="show">show</option><option value="hide">hide</option></select>
+                </label>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

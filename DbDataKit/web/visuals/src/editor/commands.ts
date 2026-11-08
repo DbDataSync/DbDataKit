@@ -1,4 +1,4 @@
-import type { LayoutDoc, ParameterDefinition, TileDoc, ViewsDoc, WidgetDoc, WidgetType } from '../views/model'
+import type { LayoutDoc, ParameterDefinition, TileDoc, ViewsDoc, WidgetDoc, WidgetOptionsDoc, WidgetType } from '../views/model'
 import type { CatalogRoles } from '../views/derive'
 import type { Op, Path } from './yamlEdit'
 import { WellError, convertWidget, wellOps, wellsOf } from './wells'
@@ -33,8 +33,10 @@ export type EditCommand =
   | { type: 'setWell'; widget: string; well: string; change: WellChange; roles?: CatalogRoles }
   /** The widget as another type (the chooser): its title, model and filters stay, its fields go where they fit. `roles` (the catalog's) place them by kind. */
   | { type: 'changeWidgetType'; id: string; to: WidgetType; roles?: CatalogRoles }
+  /** One of a layout's `widget_options` for one widget; undefined removes it (and the entry, and `widget_options`, when they are left empty). */
+  | { type: 'setWidgetOption'; layout: string; widget: string; key: keyof WidgetOptionsDoc; value: WidgetOptionsDoc[keyof WidgetOptionsDoc] | undefined }
 
-export type EditErrorCode = 'unknown_widget' | 'unknown_layout' | 'unknown_parameter' | 'name_taken' | 'bad_name' | 'last_layout' | 'not_placeable' | 'already_placed' | 'unknown_well' | 'wrong_member_kind' | 'bad_field' | 'bad_position'
+export type EditErrorCode = 'unknown_widget' | 'unknown_layout' | 'unknown_parameter' | 'name_taken' | 'bad_name' | 'last_layout' | 'not_placeable' | 'already_placed' | 'unknown_well' | 'wrong_member_kind' | 'bad_field' | 'bad_position' | 'bad_option'
 
 /** What a command refuses with: a code a form can act on and a sentence a person can read. */
 export class EditError extends Error {
@@ -237,6 +239,19 @@ export function commandOps(doc: ViewsDoc, command: EditCommand): Op[] {
         const model = Object.values(doc.widgets).map((w) => (w as { query?: { model?: unknown } }).query?.model).find((m): m is string => typeof m === 'string') ?? ''
         return [{ op: 'set', path: ['widgets', command.id], value: convertWidget(widget, command.to, { roles: command.roles, model, parameter: doc.parameters?.[0]?.name }).widget }]
       } catch (e) { if (e instanceof WellError) throw new EditError(e.code === 'unknown_well' ? 'unknown_parameter' : e.code, e.message); throw e }
+    }
+    case 'setWidgetOption': {
+      const li = layoutIndex(doc, command.layout)
+      widgetOf(doc, command.widget)
+      const layout = doc.layouts[li]!
+      const all = layout.widget_options
+      const mine: Record<string, unknown> = { ...all?.[command.widget] }
+      if (command.value === undefined) delete mine[command.key]
+      else mine[command.key] = command.value
+      if (JSON.stringify(all?.[command.widget] ?? {}) === JSON.stringify(mine)) return []
+      if (Object.keys(mine).length > 0) return [{ op: 'set', path: ['layouts', li, 'widget_options', command.widget], value: mine }]
+      const others = Object.keys(all ?? {}).filter((k) => k !== command.widget)
+      return [{ op: 'remove', path: others.length > 0 ? ['layouts', li, 'widget_options', command.widget] : ['layouts', li, 'widget_options'] }]
     }
   }
 }
