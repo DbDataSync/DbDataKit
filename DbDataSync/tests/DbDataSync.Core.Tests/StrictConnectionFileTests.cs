@@ -152,11 +152,19 @@ public sealed class StrictConnectionFileTests : IDisposable
 
     [Theory]
     [InlineData("name: orders\nengine: sqlserver\naddress: { host: sql01 }\n", "`schema` is missing")]
-    [InlineData("schema: connection/2\nname: orders\nengine: sqlserver\naddress: { host: sql01 }\n", "`schema` is `connection/2`")]
     public void A_file_without_the_current_schema_is_refused_with_a_message_that_says_why(string yaml, string text)
     {
         var d = Assert.Single(Refused(yaml).Diagnostics);
         Assert.Equal("DBD-CONN-001", d.Code);
         Assert.Contains(text, d.Message);
+    }
+
+    [Fact]
+    public void A_file_in_a_format_newer_than_the_program_reads_is_refused_naming_it()
+    {
+        // connection/2 is read since plan 24a UC01/UC03 (the program reads 1 and 2); a 3 is the next format
+        var d = Assert.Single(Refused("schema: connection/3\nname: orders\nengine: sqlserver\naddress: { host: sql01 }\n").Diagnostics);
+        Assert.Equal("DBD-110", d.Code);
+        Assert.Contains("connection/3", d.Message);
     }
 }
