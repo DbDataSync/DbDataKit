@@ -7,7 +7,7 @@ import { signInNewAdmin } from './people'
 
 // Plan 33, UE05: a person publishes a Build project to a runner from Build's Publish tab. The console pairs with a Build server (which hosts the project `orders`, one plan scheduled every hour) and with a runner; the Build server is paired with
 // the runner as a publisher by the runner's own command (the Build server reads its pairings from the folder it was started with). The story then reads the list of paired runners on the Publish tab, publishes, sees the staged version and its task
-// with the schedule, publishes again to see that nothing changed, and finds the package staged on the Runner screens. Not in the story: activation. A Build package needs the `dbdatabuild-runtime` package on the runner and this runner has none, so the version stays staged.
+// with the schedule, publishes again to see that nothing changed, and finds the package staged on the Runner screens. Publishing without a binding for the project's one slot is refused by the runner (reproduced against a real runner), so the story shows that refusal, binds `sqlserver=erp` and publishes. Not in the story: activation. A Build package needs the `dbdatabuild-runtime` package on the runner and this runner has none, so the version stays staged.
 // It signs in a new administrator (an invitation), so it sorts after identity-home (see docs/ci-lessons.md, Playwright).
 const buildName = 'Publish build'
 const runnerName = 'Publish runner'
@@ -60,7 +60,13 @@ test('a Build project is published to a paired runner from the Publish tab, and 
   await expect(button).toBeEnabled()
   await expect(page.getByTestId('build-publish-runner-why')).toHaveCount(0)
 
-  // ---- publish: staged, with the task of the plan, its schedule and its connection slot
+  // ---- the runner refuses a package whose connection slot has no binding in the channel, in its own words (found against a real runner: a channel's bindings are its own)
+  await button.click()
+  await expect(page.getByTestId('build-publish-runner-failed')).toContainText("needs the slot 'sqlserver' bound in channel 'dev'", { timeout: 60_000 })
+  await expect(page.getByTestId('build-publish-runner-done')).toHaveCount(0)
+
+  // ---- bind the slot and publish: staged, with the task of the plan, its schedule and its connection slot
+  await page.getByTestId('build-publish-runner-bind').fill('sqlserver=erp')
   await button.click()
   const done = page.getByTestId('build-publish-runner-done')
   await expect(done).toBeVisible({ timeout: 120_000 })
