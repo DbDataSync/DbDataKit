@@ -34,10 +34,10 @@ if (!isWorker) {
     execFileSync('git', ['-c', 'user.name=console-e2e', '-c', 'user.email=e2e@example.invalid', ...args], { cwd: project, stdio: 'ignore' })
   execFileSync('dotnet', ['exec', buildDll, 'server', 'project', 'add', 'starter', '--path', project, '--repo', buildDirectory], { stdio: 'ignore' })
   // the console may grant every role there, which is what its administrators will hold
-  const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', buildDirectory, '--max-role', 'viewer,author,operator,approver'], { encoding: 'utf8' })
+  const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--minutes', '120', '--repo', buildDirectory, '--max-role', 'viewer,author,operator,approver'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'build-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
   // a second code for the same server: the story forgets the first pairing (testing that), and pairs the server again for the publishing steps, which link it to a Gateway (the admin role on the Build server)
-  const madeAgain = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', buildDirectory, '--max-role', 'viewer,author,operator,approver,admin'], { encoding: 'utf8' })
+  const madeAgain = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--minutes', '120', '--repo', buildDirectory, '--max-role', 'viewer,author,operator,approver,admin'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'build-pairing-code-again.txt'), /Pairing code: (\S+)/.exec(madeAgain)![1])
   // the read login of the starter's SQL Server connection, in the server's own store (what publishing it to a Gateway sends; nothing connects to it)
   execFileSync('dotnet', ['exec', buildDll, 'secret', 'set', 'dbdata:build:connection:sqlserver:read', '--stdin', '--repo', buildDirectory],
@@ -85,7 +85,7 @@ if (!isWorker) {
   fs.rmSync(syncDirectory, { recursive: true, force: true })
   fs.mkdirSync(syncDirectory, { recursive: true })
   execFileSync('dotnet', ['dev-certs', 'https', '--export-path', syncCertificate, '--password', syncCertificatePassword, '--format', 'Pfx'], { stdio: 'inherit' })
-  const made = execFileSync('dotnet', ['exec', syncDll, 'server', 'pair', '--repo', syncDirectory, '--max-role', 'admin'], { encoding: 'utf8' })
+  const made = execFileSync('dotnet', ['exec', syncDll, 'server', 'pair', '--minutes', '120', '--repo', syncDirectory, '--max-role', 'admin'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'sync-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
 
@@ -112,7 +112,7 @@ if (!isWorker) {
   fs.writeFileSync(path.join(gatewayDirectory, 'config', 'connections', 'ledger.yaml'), [
     'schema: connection/1', 'name: ledger', 'engine: sqlserver', 'address: { host: localhost, database: Ledger }',
     "auth: { mode: sql, user: reader, password_secret: 'env:LEDGER_DB_PASSWORD' }", ''].join('\n'))
-  const made = execFileSync('dotnet', ['exec', gatewayDll, 'server', 'pair', '--repo', gatewayDirectory, '--max-role', 'admin'], { encoding: 'utf8' })
+  const made = execFileSync('dotnet', ['exec', gatewayDll, 'server', 'pair', '--minutes', '120', '--repo', gatewayDirectory, '--max-role', 'admin'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'gateway-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
 
@@ -136,7 +136,7 @@ export const qualitySync = { directory: path.join(os.tmpdir(), 'dbdatakit-consol
 if (!isWorker) {
   fs.rmSync(qualitySync.directory, { recursive: true, force: true })
   fs.mkdirSync(qualitySync.directory, { recursive: true })
-  const madeQuality = execFileSync('dotnet', ['exec', syncDll, 'server', 'pair', '--repo', qualitySync.directory, '--max-role', 'admin'], { encoding: 'utf8' })
+  const madeQuality = execFileSync('dotnet', ['exec', syncDll, 'server', 'pair', '--minutes', '120', '--repo', qualitySync.directory, '--max-role', 'admin'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'quality-sync-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeQuality)![1])
 }
 
@@ -162,12 +162,12 @@ if (!isWorker) {
   write('models/marts/fct_events.sql', 'SELECT e.event_id, e.event_ts, e.amount FROM staging.events e\n')
   execFileSync('dotnet', ['exec', buildDll, 'project', 'compile', '--project', project], { stdio: 'ignore' })
   execFileSync('dotnet', ['exec', buildDll, 'server', 'project', 'add', monitorBuild.project, '--path', project, '--repo', monitorBuild.directory], { stdio: 'ignore' })
-  const madeBuild = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', monitorBuild.directory, '--max-role', 'viewer,author,operator,approver'], { encoding: 'utf8' })
+  const madeBuild = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--minutes', '120', '--repo', monitorBuild.directory, '--max-role', 'viewer,author,operator,approver'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'monitor-build-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeBuild)![1])
 
   fs.rmSync(monitorSync.directory, { recursive: true, force: true })
   fs.mkdirSync(monitorSync.directory, { recursive: true })
-  const madeSync = execFileSync('dotnet', ['exec', syncDll, 'server', 'pair', '--repo', monitorSync.directory, '--max-role', 'admin'], { encoding: 'utf8' })
+  const madeSync = execFileSync('dotnet', ['exec', syncDll, 'server', 'pair', '--minutes', '120', '--repo', monitorSync.directory, '--max-role', 'admin'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'monitor-sync-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeSync)![1])
 
   fs.rmSync(monitorGateway.directory, { recursive: true, force: true })
@@ -176,7 +176,7 @@ if (!isWorker) {
   fs.writeFileSync(path.join(monitorGateway.directory, 'config', 'server.yaml'), 'schemaVersion: 2\ntls: { mode: selfSigned }\n')
   fs.writeFileSync(path.join(monitorGateway.directory, 'config', 'gateway', 'auth.yaml'), 'jwt:\n  signingKey: console-e2e-signing-key-0123456789abcdef\n  audience: api://console-e2e\n')
   fs.copyFileSync(path.join(gatewayDirectory, 'config', 'connections', 'erp.yaml'), path.join(monitorGateway.directory, 'config', 'connections', 'erp.yaml'))
-  const madeGateway = execFileSync('dotnet', ['exec', gatewayDll, 'server', 'pair', '--repo', monitorGateway.directory, '--max-role', 'admin'], { encoding: 'utf8' })
+  const madeGateway = execFileSync('dotnet', ['exec', gatewayDll, 'server', 'pair', '--minutes', '120', '--repo', monitorGateway.directory, '--max-role', 'admin'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'monitor-gateway-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeGateway)![1])
 }
 
@@ -202,12 +202,12 @@ if (!isWorker) {
   write(`connections/${inventoryBuild.connection}.yaml`, `schema: connection/1\nname: ${inventoryBuild.connection}\nengine: sqlserver\n`)
   execFileSync('dotnet', ['exec', buildDll, 'project', 'compile', '--project', project], { stdio: 'ignore' })
   execFileSync('dotnet', ['exec', buildDll, 'server', 'project', 'add', inventoryBuild.project, '--path', project, '--repo', inventoryBuild.directory], { stdio: 'ignore' })
-  const madeBuild = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', inventoryBuild.directory, '--max-role', 'viewer,author,operator,approver'], { encoding: 'utf8' })
+  const madeBuild = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--minutes', '120', '--repo', inventoryBuild.directory, '--max-role', 'viewer,author,operator,approver'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'inventory-build-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeBuild)![1])
 
   fs.rmSync(inventorySync.directory, { recursive: true, force: true })
   fs.mkdirSync(inventorySync.directory, { recursive: true })
-  const madeSync = execFileSync('dotnet', ['exec', syncDll, 'server', 'pair', '--repo', inventorySync.directory, '--max-role', 'admin'], { encoding: 'utf8' })
+  const madeSync = execFileSync('dotnet', ['exec', syncDll, 'server', 'pair', '--minutes', '120', '--repo', inventorySync.directory, '--max-role', 'admin'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'inventory-sync-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeSync)![1])
 }
 
@@ -223,7 +223,7 @@ if (!isWorker) {
   execFileSync('dotnet', ['exec', buildDll, 'project', 'create', 'adventureworks', source], { stdio: 'ignore' })
   execFileSync('dotnet', ['exec', buildDll, 'project', 'seed', '--project', source, '--out', authoringBuild.origin], { stdio: 'ignore' })
   execFileSync('dotnet', ['exec', buildDll, 'secret', 'set', 'dbdata:build:connection:origin:read', '--stdin', '--repo', authoringBuild.directory], { input: authoringBuild.origin + '\n', stdio: ['pipe', 'ignore', 'inherit'] })
-  const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', authoringBuild.directory, '--max-role', 'viewer,author,operator,approver'], { encoding: 'utf8' })
+  const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--minutes', '120', '--repo', authoringBuild.directory, '--max-role', 'viewer,author,operator,approver'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'authoring-build-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
 
@@ -233,7 +233,7 @@ export const endToEndBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-cons
 if (!isWorker) {
   fs.rmSync(endToEndBuild.directory, { recursive: true, force: true })
   fs.mkdirSync(endToEndBuild.directory, { recursive: true })
-  const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', endToEndBuild.directory, '--max-role', 'viewer,author,operator,approver,admin'], { encoding: 'utf8' })
+  const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--minutes', '120', '--repo', endToEndBuild.directory, '--max-role', 'viewer,author,operator,approver,admin'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'end-to-end-build-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
 
@@ -260,7 +260,7 @@ if (!isWorker) {
     execFileSync('dotnet', ['exec', buildDll, 'server', 'project', 'add', name, '--path', project, '--repo', directory], { stdio: 'ignore' })
   }
   const pairBuild = (directory: string, file: string) => {
-    const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', directory, '--max-role', 'viewer,author,operator,approver,admin'], { encoding: 'utf8' })
+    const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--minutes', '120', '--repo', directory, '--max-role', 'viewer,author,operator,approver,admin'], { encoding: 'utf8' })
     fs.writeFileSync(path.join(scratchDirectory, file), /Pairing code: (\S+)/.exec(made)![1])
   }
   const columns = 'grain: [event_id]\ncolumns:\n  - {name: event_id, type: BIGINT, nullable: false}\n  - {name: event_ts, type: TIMESTAMP, nullable: false}\n  - {name: amount, type: "DECIMAL(14, 2)"}\n'
@@ -284,13 +284,15 @@ if (!isWorker) {
       'measures:\n  sales.amount:\n    type: number\n    source: default\n    agg: sum\n    of: {table: sales.facts, column: amount}\n    semantics: {rollup: {default: sum}, spread: blank, status: governed}\n',
   })
   pairBuild(modelsBuild.directory, 'models-build-pairing-code.txt')
+  // the read login a publish sends with the model is the one stored in the server's own store (the environment variables are what a command run reads, not what the publish sends)
+  if (warehouseConnection) execFileSync('dotnet', ['exec', buildDll, 'secret', 'set', 'dbdata:build:connection:postgres:read', '--stdin', '--repo', modelsBuild.directory], { input: warehouseConnection + ';SSL Mode=Disable\n', stdio: ['pipe', 'ignore', 'inherit'] })
 
   fs.rmSync(modelsGateway.directory, { recursive: true, force: true })
   fs.mkdirSync(path.join(modelsGateway.directory, 'config', 'gateway'), { recursive: true })
   fs.mkdirSync(path.join(modelsGateway.directory, 'config', 'connections'), { recursive: true })
   fs.writeFileSync(path.join(modelsGateway.directory, 'config', 'server.yaml'), 'schemaVersion: 2\ntls: { mode: selfSigned }\n')
   fs.writeFileSync(path.join(modelsGateway.directory, 'config', 'gateway', 'auth.yaml'), 'jwt:\n  signingKey: console-e2e-signing-key-0123456789abcdef\n  audience: api://console-e2e\n')
-  const madeModelsGateway = execFileSync('dotnet', ['exec', gatewayDll, 'server', 'pair', '--repo', modelsGateway.directory, '--max-role', 'admin'], { encoding: 'utf8' })
+  const madeModelsGateway = execFileSync('dotnet', ['exec', gatewayDll, 'server', 'pair', '--minutes', '120', '--repo', modelsGateway.directory, '--max-role', 'admin'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'models-gateway-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeModelsGateway)![1])
 }
 
@@ -306,7 +308,7 @@ if (!isWorker) {
   for (const args of [['init', '-q'], ['add', '-A'], ['commit', '-qm', 'The retail project']])
     execFileSync('git', ['-c', 'user.name=console-e2e', '-c', 'user.email=e2e@example.invalid', ...args], { cwd: project, stdio: 'ignore' })
   execFileSync('dotnet', ['exec', buildDll, 'server', 'project', 'add', viewsBuild.project, '--path', project, '--repo', viewsBuild.directory], { stdio: 'ignore' })
-  const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', viewsBuild.directory, '--max-role', 'viewer,author,operator,approver,admin'], { encoding: 'utf8' })
+  const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--minutes', '120', '--repo', viewsBuild.directory, '--max-role', 'viewer,author,operator,approver,admin'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'views-build-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
 
@@ -338,9 +340,9 @@ if (!isWorker) {
     '          parts:', `            - { name: value, type: int${seenReset ? ', reset: true' : ''} }`, ''].join('\n')
   fs.writeFileSync(path.join(runnerServer.manifests, 'v1.yaml'), manifest(false))
   fs.writeFileSync(path.join(runnerServer.manifests, 'v2.yaml'), manifest(true))
-  const made = execFileSync('dotnet', ['exec', runnerServer.dll, 'server', 'pair', '--repo', runnerServer.directory, '--max-role', 'viewer,operator,admin'], { encoding: 'utf8' })
+  const made = execFileSync('dotnet', ['exec', runnerServer.dll, 'server', 'pair', '--minutes', '120', '--minutes', '120', '--repo', runnerServer.directory, '--max-role', 'viewer,operator,admin'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'runner-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
-  const madePublisher = execFileSync('dotnet', ['exec', runnerServer.dll, 'server', 'pair', '--repo', runnerServer.directory, '--max-role', 'publisher'], { encoding: 'utf8' })
+  const madePublisher = execFileSync('dotnet', ['exec', runnerServer.dll, 'server', 'pair', '--minutes', '120', '--minutes', '120', '--repo', runnerServer.directory, '--max-role', 'publisher'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'runner-publisher-code.txt'), /Pairing code: (\S+)/.exec(madePublisher)![1])
 }
 
@@ -361,7 +363,7 @@ if (!isWorker) {
     fs.mkdirSync(directory, { recursive: true })
   }
   const code = (file: string, output: string) => fs.writeFileSync(path.join(scratchDirectory, file), /Pairing code: (\S+)/.exec(output)![1])
-  const pairRunner = (roles: string) => execFileSync('dotnet', ['exec', publishRunner.dll, 'server', 'pair', '--repo', publishRunner.directory, '--max-role', roles], { encoding: 'utf8' })
+  const pairRunner = (roles: string) => execFileSync('dotnet', ['exec', publishRunner.dll, 'server', 'pair', '--minutes', '120', '--minutes', '120', '--repo', publishRunner.directory, '--max-role', roles], { encoding: 'utf8' })
   code('publish-runner-console-code.txt', pairRunner('viewer,operator,admin'))
   code('publish-runner-build-code.txt', pairRunner('viewer,operator,publisher,admin'))
   code('publish-runner-sample-code.txt', pairRunner('publisher'))
@@ -381,7 +383,7 @@ if (!isWorker) {
   for (const args of [['init', '-q'], ['add', '-A'], ['commit', '-qm', 'The orders project']])
     execFileSync('git', ['-c', 'user.name=console-e2e', '-c', 'user.email=e2e@example.invalid', ...args], { cwd: project, stdio: 'ignore' })
   execFileSync('dotnet', ['exec', buildDll, 'server', 'project', 'add', publishBuild.project, '--path', project, '--repo', publishBuild.directory], { stdio: 'ignore' })
-  code('publish-build-code.txt', execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--repo', publishBuild.directory, '--max-role', 'viewer,author,operator,approver,admin'], { encoding: 'utf8' }))
+  code('publish-build-code.txt', execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--minutes', '120', '--repo', publishBuild.directory, '--max-role', 'viewer,author,operator,approver,admin'], { encoding: 'utf8' }))
 }
 
 // A passkey is bound to the host name and the port it was made on, and the server builds its list of allowed origins from the address it is told to listen on,

@@ -231,7 +231,6 @@ export function ViewsTab() {
       changed: async () => {
         await queryClient.invalidateQueries({ queryKey: ['build', project, workspace, 'files'] })
         await queryClient.invalidateQueries({ queryKey: ['build', project, workspace, 'git'] })
-        check.mutate()
       },
       fileLabel: (kind, name) => `${FOLDERS[kind]}/${name}.yaml`,
       defaultModel: models.data?.[0],

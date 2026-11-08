@@ -208,7 +208,7 @@ internal static class PlanCommand
     private static (AuditLog.EventRow? Deploy, AuditLog.EventRow? Refresh, string? Why) LastEvents(ProjectConfig config, string connection, Func<string, string?> env)
     {
         if (config.TrackingOf(connection).Target is not { } t) return (null, null, "unknown: nothing is tracked");
-        var (login, _) = LoginSettings.FromEnvironment(t.Connection, t.Engine, DbDataBuild.Execution.Login.Read, env);
+        var (login, _) = LoginSettings.FromEnvironment(config, t.Connection, DbDataBuild.Execution.Login.Read, env);
         if (login == null) return (null, null, "unknown: the tracking connection's read login is not set");
         try
         {

@@ -62,7 +62,7 @@ describe('the refresh form', () => {
 describe('the answer of a refresh', () => {
   const run = answer(1, {
     outcome: 'completed_with_failures',
-    results: [{ model: 'a', member: 'a.load', load: 'load', state: 'done', rows: 12, duration_ms: 40 }, { model: 'b', member: 'b.load', load: 'load', state: 'failed', reason: 'check failed' }],
+    results: [{ model: 'a', member: 'load', load: 'load', state: 'done', rows: 12, duration_ms: 40 }, { model: 'b', member: 'load', load: 'load', state: 'failed', reason: 'check failed' }],
     checks: {
       run_id: 'r1', results_in: '/srv', evaluated: 2, passed: 1, failed: 1, errors: 0, blocking: 1, notes: ['The checks of c were not evaluated: the connection is DuckDB.'],
       results: [{ model: 'a', check: 'rows', kind: 'row_count', severity: 'warn', status: 'pass', measured: 12, threshold: 1, sample_keys: [], blocking: false },
@@ -88,7 +88,7 @@ describe('the answer of a refresh', () => {
     expect(renderToStaticMarkup(RefreshAnswerView({ answer: answer(0, { outcome: 'completed', results: [] }), running: false }) as ReactElement)).toContain('build-refresh-no-checks')
   })
   it('shows what a dry run resolved and that nothing was executed, and no checks note', () => {
-    const dry = answer(0, { dry_run: true, resolved_inputs: [{ model: 'a', operation: 'load', member: 'a.load', inputs: [{ name: 'since', type: 'date', source: 'flag', value: '2026-01-01' }] }] })
+    const dry = answer(0, { dry_run: true, resolved_inputs: [{ model: 'a', operation: 'load', member: 'load', inputs: [{ name: 'since', type: 'date', source: 'flag', value: '2026-01-01' }] }] })
     const text = renderToStaticMarkup(RefreshAnswerView({ answer: dry, running: false }) as ReactElement)
     expect(text).toContain('Nothing was executed')
     expect(text).toContain('since = 2026-01-01 (flag)')
