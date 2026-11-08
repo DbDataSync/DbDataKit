@@ -541,12 +541,19 @@ public sealed partial class DefinitionPublisher
 
     private Guid? FindPayload(DbConnection connection, DbTransaction? transaction, string sha)
     {
-        using var command = _database.Command(Module, connection, transaction, "SELECT payload_id FROM {table:definition_artifact} WHERE sha256 = $sha;");
-        command.Bind(_database, "sha", sha);
-        using var reader = command.ExecuteReader();
-        while (reader.Read())
+        // The candidates are read to the end and the reader closed before the payload store is asked about any of them: PayloadStore.Get opens a connection of its own, and on SQLite a second
+        // connection that wants a read lock while this reader holds one deadlocks with any writer waiting to commit (it holds the file's pending lock, so the new reader is refused, and it
+        // waits for this reader). Nothing breaks the wait but the 5 s busy timeout, again and again.
+        var candidates = new List<Guid>();
+        using (var command = _database.Command(Module, connection, transaction, "SELECT payload_id FROM {table:definition_artifact} WHERE sha256 = $sha;"))
         {
-            var id = reader.Uuid(0);
+            command.Bind(_database, "sha", sha);
+            using var reader = command.ExecuteReader();
+            while (reader.Read()) candidates.Add(reader.Uuid(0));
+        }
+
+        foreach (var id in candidates)
+        {
             // a payload that has since been removed is not one to reuse
             if (_payloads is null || _payloads.Get(id) is { Complete: true }) return id;
         }

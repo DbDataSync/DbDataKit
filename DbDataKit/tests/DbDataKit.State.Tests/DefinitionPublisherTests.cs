@@ -303,6 +303,35 @@ public sealed class DefinitionPublisherTests : IDisposable
         Assert.Equal(InstanceStates.Failed, publisher.Status.List("integration", "nightly", "prod").Single(s => s.Instance == "r2").State);
     }
 
+    [Fact]
+    public async Task Looking_up_a_stored_file_never_waits_for_a_writer_on_the_same_sqlite_file()
+    {
+        var (publisher, database, _) = Open(StateEngineIds.Sqlite);
+        var payloads = new PayloadStore(database);
+        var files = new PublishArtifacts(payloads, publisher, "ada");
+        var file = files.Add("job.csx", "version one"u8);
+        publisher.Publish(new PublishRequest("integration", "nightly", "m0", "ada", Artifacts: [file]));
+
+        using var stop = new CancellationTokenSource();
+        var writer = Task.Run(() =>
+        {
+            for (var i = 1; !stop.IsCancellationRequested; i++)
+                publisher.Publish(new PublishRequest("integration", "writer" + (i % 5), "m" + i, "ada", Artifacts: [file]));
+        });
+
+        var slowest = TimeSpan.Zero;
+        for (var i = 0; i < 200; i++)
+        {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            Assert.NotNull(publisher.FindArtifact(file.Sha256));
+            if (watch.Elapsed > slowest) slowest = watch.Elapsed;
+        }
+
+        stop.Cancel();
+        await writer;
+        Assert.True(slowest < TimeSpan.FromSeconds(2), $"a lookup waited {slowest.TotalSeconds:F1} s for the writer");
+    }
+
     [Theory]
     [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
     public void A_file_unchanged_between_versions_is_stored_once(string engine)
