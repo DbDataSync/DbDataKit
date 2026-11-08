@@ -2,7 +2,7 @@
 
 A matrix of service, object and action: what a person can do from the console's screens today, and what is only an API or a command line. Keep it current in the same change that adds, removes or widens a screen (`scripts/check_ui_coverage.py` fails when a page file is missing from the **Screens** column, or a file named there is gone).
 
-Read as of 2026-11-08 (updated after Z07, O01, O03, AP04, AP24 and FQ17), from the routes and API clients of `DbDataKit/web/*`, not by clicking through every screen. A cell is **Yes**, **Partial** (say what is missing under Notes), or **–** (no screen). **Other actions** are the verbs that are not create, edit or delete.
+Read as of 2026-11-08 (updated after Z07, O01, O03, AP04, AP24, FQ17 and UE07), from the routes and API clients of `DbDataKit/web/*`, not by clicking through every screen. A cell is **Yes**, **Partial** (say what is missing under Notes), or **–** (no screen). **Other actions** are the verbs that are not create, edit or delete.
 
 All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<server>/...`; the products have no web app of their own. Roles gate each action (Viewer, Operator, Author, Approver, Admin); the table says what exists, not who may.
 
@@ -17,6 +17,7 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 | | Data quality (`/quality`; plan 23a FQ17): the datasets of the checks stored with Sync's replications and Build's models, joined by dataset identity, worst first; per check the latest result, the measure, the block and its history with the keys of the rows that failed; an evaluation on request on a Sync server (admin; Build evaluates after a refresh and the button says so); the chosen table's checks on the Lineage page | – (checks are written in the product's own files: `checks:` of a replication's `task.yaml`, a model's file) | – | – | Evaluate (Sync), read history, ask the servers again; **no release by hand** of a block yet (it clears when the check passes; the serving layer's release is FQ15) | `QualityPage.tsx` |
 | **Sync** | Connections | Yes | Yes | Yes | Test | `ConnectionsPage.tsx`, `ConnectionEditPage.tsx` |
 | | Replications | Yes | Yes | Yes | Enable, pause and resume | `ReplicationsPage.tsx`, `ReplicationDetailPage.tsx` |
+| | Quality checks of a replication (`checks:` of `task.yaml`; plan 33 UE07) | Yes (seven kinds, severity, on_error) | Yes | Yes | Save as one commit, refused with the strict reader's file and line; a stale version is refused | `ReplicationDetailPage.tsx` (tab **Quality Checks**) |
 | | Table mappings | Yes | Yes (columns, transforms, segmenting, provisioning, pipeline) | Yes (`delete-mapping-<name>`) | Verify, preview, diagnostics, history diff | `ReplicationDetailPage.tsx` |
 | | Runs | – | – | – | Start, cancel, resync, bulk load, reconcile | `ReplicationDetailPage.tsx` |
 | | Target provisioning | – | – | – | Plan and apply | `ReplicationDetailPage.tsx` |

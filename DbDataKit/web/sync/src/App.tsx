@@ -10,7 +10,7 @@ import { ReplicationsPage } from './pages/ReplicationsPage'
 import { ScriptEditPage } from './pages/ScriptEditPage'
 import { ScriptsPage } from './pages/ScriptsPage'
 import { ReplicationDetailPage } from './pages/ReplicationDetailPage'
-import { HistoryTab, MappingsTab, MonitoringTab, OverviewTab } from './pages/replication-detail/tabs'
+import { ChecksTab, HistoryTab, MappingsTab, MonitoringTab, OverviewTab } from './pages/replication-detail/tabs'
 import {
   CustomTransformsTab, OverviewNotesTab, PipelineTab, SegmentingStrategiesTab, TargetProvisioningTab,
 } from './pages/replication-detail/OverviewPanel'
@@ -150,6 +150,7 @@ export function SyncRoutes() {
               its own doc comment named as a future consumer. */}
           <Route path="bulk-load-history" element={<MonitoringBulkLoadHistoryTab />} />
         </Route>
+        <Route path="checks" element={<ChecksTab />} />
         <Route path="history" element={<HistoryTab />} />
       </Route>
 

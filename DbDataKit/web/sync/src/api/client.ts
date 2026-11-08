@@ -1,6 +1,8 @@
 import { adminApi } from '@dbdatakit/admin'
 import { ApiError, put, request, shellApi } from '@dbdatakit/shell'
 import type {
+  ReplicationChecks,
+  CheckForm,
   ApplyResult,
   BulkLoadBatchProgress,
   BulkLoadHistoryFilters,
@@ -158,6 +160,11 @@ export const api = {
     upsert: (name: string, task: ReplicationTaskConfig) =>
       put<ReplicationTaskConfig>(`/api/replications/${encodeURIComponent(name)}`, task),
     delete: (name: string) => request<void>(`/api/replications/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+    /** The quality checks stored with the replication (`checks:` of its task file). */
+    checks: (name: string) => request<ReplicationChecks>(`/api/replications/${encodeURIComponent(name)}/checks`),
+    /** Replaces them; `version` is the one `checks` gave. A refusal carries the strict reader's diagnostics (400) or the current checks (409). */
+    saveChecks: (name: string, checks: CheckForm[], version: string) =>
+      put<ReplicationChecks>(`/api/replications/${encodeURIComponent(name)}/checks`, { checks, version }),
     history: (name: string) => request<CommitInfo[]>(`/api/replications/${encodeURIComponent(name)}/history`),
     /** The patch one commit made to this replication — phase 35's "View changes". Read-only. */
     commitDiff: (name: string, sha: string) =>

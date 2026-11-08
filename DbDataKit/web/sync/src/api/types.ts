@@ -1442,3 +1442,41 @@ export interface AboutInfo extends ShellAboutInfo {
 
 // Who the caller is and the notification feed are the shell's: every product's console shows them the same way.
 export type { AuthStatus, NotificationFeed, NotificationRecord } from '@dbdatakit/shell'
+
+/** One quality check of a replication as the file writes it (plan 33 UE07, `check/1`): the keys of a `checks:` entry, flat. Which keys a kind takes is the server's to say; the screen sends the ones the kind has. */
+export interface CheckForm {
+  id?: string | null
+  kind?: string | null
+  dataset?: string | null
+  column?: string | null
+  columns?: string[] | null
+  severity?: string | null
+  on_error?: string | null
+  description?: string | null
+  max_age?: string | null
+  values?: string[] | null
+  min?: string | null
+  max?: string | null
+  references?: { dataset?: string | null; column?: string | null; columns?: string[] | null } | null
+  max_increase_percent?: string | null
+  max_decrease_percent?: string | null
+}
+
+/** The checks of a replication, the section as the file has it, and the version a save quotes. `hasComments`: a save rewrites the section and does not carry its comments. */
+export interface ReplicationChecks {
+  checks: CheckForm[]
+  version: string
+  text: string
+  hasComments: boolean
+}
+
+/** One fault of the section from the strict reader: where it is and what to do. */
+export interface ChecksFault {
+  code: string
+  file: string
+  line: number
+  column: number
+  message: string
+  fix?: string | null
+  keyPath?: string | null
+}
