@@ -76,6 +76,26 @@ internal static class BuildManagementApi
                 return Results.Json(document);
             });
 
+        // the results of the models' checks (plan 23a FQ17), in the form every server sends a console: Build evaluates after a refresh, so it cannot be asked to evaluate on request
+        if (serverDirectory is not null)
+        {
+            var qualityState = new Lazy<StateDatabase>(() => BuildSchedulerSchema.Open(serverDirectory));
+            app.MapGet("/api/v1/quality", (HttpContext context) =>
+            {
+                var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
+                if (!decision.Allowed) return Results.Json(new { error = $"This needs the {decision.Needed.ToString().ToLowerInvariant()} role." }, statusCode: StatusCodes.Status403Forbidden);
+                return Results.Json(QualityDocuments.Overview(new QualityStore(qualityState.Value), canRun: false,
+                    runNote: "Build evaluates a model's checks after a refresh: run the refresh with `connection refresh <connection> <plan> --check-results <server directory>`."));
+            });
+            app.MapGet("/api/v1/quality/history", (HttpContext context, string? dataset, string? check, int? limit) =>
+            {
+                var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
+                if (!decision.Allowed) return Results.Json(new { error = $"This needs the {decision.Needed.ToString().ToLowerInvariant()} role." }, statusCode: StatusCodes.Status403Forbidden);
+                if (string.IsNullOrWhiteSpace(dataset) || string.IsNullOrWhiteSpace(check)) return Results.Json(new { error = "Say which check: `dataset` and `check`." }, statusCode: StatusCodes.Status400BadRequest);
+                return Results.Json(QualityDocuments.History(new QualityStore(qualityState.Value), dataset, check, limit ?? QualityDocuments.HistoryLimit));
+            });
+        }
+
         app.MapGet("/api/v1/schemas", () => Results.Text(FileSchemas.Document().ToJsonString(), "application/json"));
 
         app.MapGet("/api/v1/projects/{project}/commands", (string project, HttpContext context) =>

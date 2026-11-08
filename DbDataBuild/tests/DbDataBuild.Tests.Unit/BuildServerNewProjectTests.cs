@@ -107,6 +107,24 @@ public sealed class BuildServerNewProjectTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_servers_check_results_are_served_to_a_viewer_with_a_history_and_say_that_build_evaluates_after_a_refresh()
+    {
+        const string dataset = "postgres://pg01/dwh.marts.orders";
+        new DbDataKit.State.QualityStore(BuildSchedulerSchema.Open(ServerDir)).Record(new DbDataKit.State.CheckResultRecord(
+            "order_id_present", dataset, DbDataKit.State.CheckOutcome.Fail, DateTimeOffset.Parse("2026-11-08T12:00:00Z"), 1, 0, ["order_id=3"], "track-1", "block", "alert"));
+
+        var overview = await Json(await AsVic(HttpMethod.Get, "/api/v1/quality"));
+        var history = await Json(await AsVic(HttpMethod.Get, $"/api/v1/quality/history?dataset={Uri.EscapeDataString(dataset)}&check=order_id_present"));
+
+        Assert.False((bool)overview["can_run"]!);
+        Assert.Contains("--check-results", (string)overview["run_note"]!);
+        var check = overview["datasets"]![0]!["checks"]![0]!;
+        Assert.Equal(("order_id_present", "fail", true), ((string)check["check_id"]!, (string)check["status"]!, (bool)check["blocking"]!));
+        Assert.Equal("order_id=3", (string)history["results"]![0]!["sample_keys"]![0]!);
+        Assert.Equal(HttpStatusCode.BadRequest, (await AsVic(HttpMethod.Get, "/api/v1/quality/history?dataset=x")).StatusCode);
+    }
+
+    [Fact]
     public async Task A_project_made_from_a_template_is_hosted_a_repository_with_the_author_as_its_first_committer_and_has_workspaces()
     {
         var made = await AsAda(HttpMethod.Post, "/api/v1/projects", """{"id":"shop","template":"retail"}""");

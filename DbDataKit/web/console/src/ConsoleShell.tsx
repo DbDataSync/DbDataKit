@@ -38,6 +38,11 @@ const LineageIcon = () => (
     <circle cx="5" cy="12" r="2" /><circle cx="19" cy="6" r="2" /><circle cx="19" cy="18" r="2" /><path d="M7 12h4l6-5.5" /><path d="M11 12l6 5.5" />
   </svg>
 )
+const QualityIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6z" /><path d="M8.5 12l2.5 2.5 4.5-5" />
+  </svg>
+)
 const DocsIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="M4 5.5C4 4.7 4.7 4 5.5 4H12v16H5.5C4.7 20 4 19.3 4 18.5z" /><path d="M20 5.5c0-.8-.7-1.5-1.5-1.5H12v16h6.5c.8 0 1.5-.7 1.5-1.5z" />
@@ -56,6 +61,7 @@ const rail: RailItem[] = [
   { to: '/connections', title: 'Connections', icon: <ConnectionsIcon />, testId: 'rail-connections-all' },
   { to: '/monitoring', title: 'Monitoring', icon: <MonitoringIcon />, testId: 'rail-monitoring' },
   { to: '/lineage', title: 'Lineage', icon: <LineageIcon />, testId: 'rail-lineage' },
+  { to: '/quality', title: 'Quality', icon: <QualityIcon />, testId: 'rail-quality' },
   { to: '/deployments', title: 'Deployments', icon: <LineageIcon />, testId: 'rail-deployments' },
   { to: '/views', title: 'Views', icon: <ViewsIcon />, testId: 'rail-views' },
   { to: '/docs', title: 'Docs', icon: <DocsIcon />, testId: 'rail-docs' },
