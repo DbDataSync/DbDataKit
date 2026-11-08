@@ -9,6 +9,7 @@ import { when } from './format'
 import { ConfirmDialog, Modal } from './Dialogs'
 import { BindingsCard } from './BindingsCard'
 import { PublishingSettings } from './PublishingSettings'
+import { PublishFromFiles } from './PublishFromFiles'
 
 /**
  * The activation of a staged version. When the progress migration the runner ran as a dry run would lose something, the dialog lists the losses and the person confirms them: the runner takes the confirmation only with the same list echoed back. When
@@ -162,6 +163,7 @@ export function PackagesPage() {
         <div className="page-head"><h1 className="page-title">{name ?? 'Packages'}</h1></div>
         <ErrorBanner error={list.error ?? detail.error} />
         {!name && <PublishingSettings canEdit={isAdmin} />}
+        {!name && <PublishFromFiles canPublish={isAdmin} />}
         {!name && list.isSuccess && list.data.length === 0 && <div className="empty" data-testid="runner-no-packages">No package has been published to this runner.</div>}
         {!name && (list.data ?? []).map((p) => (
           <div key={p.name} className="card" data-testid="runner-package-row">

@@ -77,11 +77,12 @@ public sealed class EmbeddedRunnerTests : IDisposable
         private static string Session(WebApplication app, UserRole role) =>
             app.Services.GetRequiredService<ISessionStore>().Create(app.Services.GetRequiredService<IUserAccounts>().CreateUser(role + " person", null, role).Id).Id;
 
-        public async Task<(HttpStatusCode Status, JsonNode? Body)> Call(HttpMethod method, string path, string? session, object? body = null)
+        public async Task<(HttpStatusCode Status, JsonNode? Body)> Call(HttpMethod method, string path, string? session, object? body = null, byte[]? raw = null)
         {
             using var request = new HttpRequestMessage(method, path);
             if (session is not null) request.Headers.Add("Cookie", $"{ConsoleHost.Auth.SessionCookie}={session}");
             if (body is not null) request.Content = JsonContent.Create(body);
+            if (raw is not null) { request.Content = new ByteArrayContent(raw); request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream"); }
             using var response = await http.SendAsync(request);
             var text = await response.Content.ReadAsStringAsync();
             JsonNode? json = null;
@@ -379,15 +380,39 @@ public sealed class EmbeddedRunnerTests : IDisposable
     }
 
     [Fact]
-    public async Task A_file_is_uploaded_by_its_hash_and_a_wrong_hash_or_a_viewer_is_refused_on_the_embedded_runner()
+    public async Task A_package_is_published_from_files_through_the_relay_on_the_embedded_runner_and_a_wrong_hash_or_a_viewer_is_refused()
     {
         var rig = await Start("sqlite");
         var bytes = System.Text.Encoding.UTF8.GetBytes("hello");
         var sha = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes));
         var path = "/relay/console-runner/api/v1/artifacts/" + sha;
         Assert.Equal(HttpStatusCode.NotFound, (await rig.Call(HttpMethod.Head, path, rig.Admin)).Status);
-        Assert.Equal(HttpStatusCode.Forbidden, (await rig.Call(HttpMethod.Put, path, rig.Viewer, new { })).Status);
-        Assert.Equal(HttpStatusCode.BadRequest, (await rig.Call(HttpMethod.Put, "/relay/console-runner/api/v1/artifacts/" + new string('a', 64), rig.Admin, new { })).Status);   // the bytes are not the hash named
+        Assert.Equal(HttpStatusCode.Forbidden, (await rig.Call(HttpMethod.Put, path, rig.Viewer, raw: bytes)).Status);
+        var wrong = await rig.Call(HttpMethod.Put, "/relay/console-runner/api/v1/artifacts/" + new string('a', 64), rig.Admin, raw: bytes);   // the bytes are not the hash named
+        Assert.Equal(HttpStatusCode.BadRequest, wrong.Status);
+        Assert.Contains(sha, (string)wrong.Body!["error"]!);
+
+        var stored = await rig.Call(HttpMethod.Put, path, rig.Admin, raw: bytes);
+        Assert.Equal(HttpStatusCode.OK, stored.Status);
+        Assert.False((bool)stored.Body!["already_stored"]!);
+        Assert.Equal(HttpStatusCode.OK, (await rig.Call(HttpMethod.Head, path, rig.Admin)).Status);
+        Assert.Equal(HttpStatusCode.OK, (await rig.Call(HttpMethod.Head, path, rig.Viewer)).Status);   // a viewer may ask whether the runner has a file
+
+        var body = new { manifest = Manifest("etl2", [("one", null)]), channel = "dev", mode = "stage", artifacts = new[] { new { path = "notes.txt", sha256 = sha, size = bytes.Length } } };
+        var definition = "/relay/console-runner/api/v1/definitions/integration/etl2";
+        Assert.Equal(HttpStatusCode.Forbidden, (await rig.Call(HttpMethod.Put, definition, rig.Viewer, body)).Status);
+        var published = await rig.Call(HttpMethod.Put, definition, rig.Admin, body);
+        Assert.Equal(HttpStatusCode.OK, published.Status);
+        Assert.Equal("stage", (string)published.Body!["mode"]!);
+        Assert.Equal(1, (int)published.Body["version"]!);
+        var (_, detail) = await rig.Call(HttpMethod.Get, "/relay/console-runner/api/v1/definitions/integration/etl2", rig.Viewer);
+        Assert.Equal(1, (int)detail!["channels"]![0]!["staged"]!);
+
+        var audit = new AuditLog(rig.State, "dbdatakit").Read(new AuditQuery(VerbPrefix: "runner."));
+        Assert.Contains(audit, r => r.Entry.Verb == RunnerPublishing.UploadVerb && r.Entry.Outcome == AuditEvent.Ok && r.Entry.ViaKind == "console");
+        Assert.Contains(audit, r => r.Entry.Verb == RunnerPublishing.UploadVerb && r.Entry.Outcome == AuditEvent.Refused);
+        Assert.Contains(audit, r => r.Entry.Verb == RunnerPublishing.PublishVerb && r.Entry.Outcome == AuditEvent.Ok && r.Entry.TargetId == "etl2/dev");
+        Assert.Contains(audit, r => r.Entry.Verb == RunnerPublishing.PublishVerb && r.Entry.Outcome == AuditEvent.Refused);
     }
 
     // ---- the stop

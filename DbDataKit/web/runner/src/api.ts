@@ -1,4 +1,4 @@
-import { request } from '@dbdatakit/shell'
+import { ApiError, request } from '@dbdatakit/shell'
 
 /** One run as `GET /api/v1/runs` and a task's `last_run` give it. */
 export interface RunRecord {
@@ -184,6 +184,12 @@ export const runnerApi = {
   resume: (task: TaskKey) => post<unknown>(`${taskPath(task)}/resume`),
   definitions: () => request<{ definitions: DefinitionSummary[] }>('/api/v1/definitions/integration').then((r) => r.definitions),
   definition: (name: string) => request<DefinitionDetail>(`/api/v1/definitions/integration/${enc(name)}`),
+  /** Whether the runner holds the file with this hash (`HEAD`: 200 or 404; anything else is a refusal). */
+  hasFile: (sha256: string) => request<unknown>(`/api/v1/artifacts/${sha256}`, { method: 'HEAD' }).then(() => true, (e) => (e instanceof ApiError && e.status === 404 ? false : Promise.reject(e))),
+  /** Sends the bytes of a file under its hash; the runner refuses bytes that do not hash to it. */
+  putFile: (sha256: string, body: Blob) => request<{ sha256: string; size: number; already_stored: boolean }>(`/api/v1/artifacts/${sha256}`, { method: 'PUT', body, headers: { 'Content-Type': 'application/octet-stream' } }),
+  publishPackage: (name: string, body: unknown) =>
+    request<{ kind: string; name: string; channel: string; version: number; changed: boolean; mode: string; signature: string; tasks: string[] }>(`/api/v1/definitions/integration/${enc(name)}`, { method: 'PUT', body: JSON.stringify(body) }),
   settings: () => request<PublishSettings>('/api/v1/settings'),
   setRequireSignatures: (value: boolean) => request<{ require_signatures: boolean }>('/api/v1/settings/require_signatures', { method: 'PUT', body: JSON.stringify({ value }) }),
   bind: (name: string, channel: string, body: BindRequest) =>
