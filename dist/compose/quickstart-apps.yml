@@ -1,0 +1,23 @@
+# The quickstart's Proxy also serving the identity home and the apps host, with the sample apps mounted (docs/apps-testing.md). Add it to the quickstart's file:
+#   docker compose -f dist/compose/quickstart.yml -f dist/compose/quickstart-apps.yml up -d --build --wait
+#   dist/compose/quickstart/apps-bootstrap.sh        # publishes the sample model and apps (run from the repository root)
+# People sign in at https://localhost:8817 (the identity home), apps are at https://localhost:8818/apps/<instance>/. Self-signed certificates; not for production.
+# The apps host signs in through a public client registered at the home: apps-proxy.sh makes it the first time the container starts and keeps its id in /data.
+services:
+  proxy:
+    entrypoint: ["/bin/sh", "/quickstart/apps-proxy.sh"]
+    environment:
+      DBPROXY_Proxy__Modules__0: flightsql
+      DBPROXY_Proxy__Modules__1: identity
+      DBPROXY_Proxy__Modules__2: apps
+      DBPROXY_Proxy__Identity__PublicUrl: https://localhost:8817
+      DBPROXY_Proxy__Apps__PublicUrl: https://localhost:8818
+    ports:
+      - "8817:8817"
+      - "8818:8818"
+    volumes:
+      - ./quickstart/apps-proxy.sh:/quickstart/apps-proxy.sh:ro
+      - ../../DbDataProxy/templates/apps:/samples/apps:ro
+  store:
+    volumes:
+      - ../../DbDataProxy/templates/apps:/samples/apps:ro
