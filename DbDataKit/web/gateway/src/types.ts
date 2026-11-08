@@ -150,3 +150,10 @@ export interface EntityModelDetail { name: string; current_version: number; data
 export interface SecretItem { name: string; reference: string }
 export interface SecretsList { secrets: string[]; items: SecretItem[] }
 export interface SecretWritten { name: string; reference: string; replaced: boolean }
+
+/** server.yaml as the Gateway shows it (plan 33, UE17): secrets masked, the version of the real file, the keys a running Gateway reads at start only. */
+export interface ServerSettings { text: string; version: string | null; masked: boolean; protected: string[]; restart_keys: string[] }
+export interface SettingsFields { modules?: string[]; 'views.cacheSeconds'?: number; 'views.export.mode'?: string | null; 'views.export.path'?: string | null; logSql?: boolean }
+export interface SettingsCheck { valid: boolean; diagnostics: Diagnostic[]; fields: SettingsFields; changed: string[]; restart_keys: string[]; problems: string[] }
+export interface SettingsEdit { set?: Record<string, string | number | boolean>; remove?: string[]; list?: Record<string, string[]> }
+export interface SettingsWritten { version: string; changed: string[]; restart_keys: string[]; restart_needed: boolean; commit: string | null }

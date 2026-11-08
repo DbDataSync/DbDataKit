@@ -14,7 +14,7 @@ export function ConfigHistoryPage() {
   return (
     <GatewayShell crumbs={crumbs}>
       <div className="pane" data-testid="gateway-config-history">
-        <div className="page-head"><h1 className="page-title">Configuration history</h1><span className="page-note">Each save is a commit by the person who made it.</span></div>
+        <div className="page-head"><h1 className="page-title">Configuration history</h1><span className="page-note">Each save is a commit by the person who made it.</span><Link to="/settings" className="btn" data-testid="config-edit-settings">Edit server settings</Link></div>
         <ErrorBanner error={history.error} />
         <div className="card flush" data-testid="commits-table">
           {(history.data ?? []).length === 0 && !history.isLoading && <div className="empty">No change recorded yet.</div>}

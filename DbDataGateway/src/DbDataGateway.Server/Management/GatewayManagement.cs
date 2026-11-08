@@ -23,11 +23,12 @@ public sealed record ManagementResult(int Status, JsonNode Body)
 /// <item><c>GET /api/v1/config</c>: every effective setting with where it came from, secrets masked, and what the validator says about the current configuration (admin).</item>
 /// <item><c>GET /api/v1/clients</c>: the paired server clients, by id and name, for handing a data source over (admin).</item>
 /// <item><c>GET /api/v1/state</c> (viewer), <c>GET</c> and <c>POST /api/v1/state/maintenance</c> (viewer, admin): the state and its pending migrations, and the maintenance mode (<c>DbDataKit.State.Api</c>).</item>
+/// <item><c>GET</c>, <c>PUT</c> <c>/api/v1/config/server.yaml</c> and <c>POST .../check</c>, <c>.../edit</c>: the serving settings with secrets masked, checked as a draft and written as a commit (admin; <see cref="GatewayServerSettings"/>).</item>
 /// <item><c>POST /api/v1/config/validate</c>: body <c>{"files": {"server.yaml": "...", "connections/erp.yaml": "..."}}</c>: whether the configuration would be valid with those files in place of the current ones; nothing is written (admin).</item>
 /// </list>
 /// A secret is never part of an answer: the settings are shown the way <c>config show</c> shows them, and the sentinel test puts a value in every place a secret can be and looks for it in every answer.
 /// </summary>
-public sealed partial class GatewayManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, GatewayDataSources? dataSources = null, GatewayIdentities? identities = null, GatewayActivity? activity = null, GatewayCertificate? certificate = null, DbDataKit.Config.Git.GitCommitService? git = null, GatewaySecrets? secrets = null, IPairingCodeStore? pairingCodes = null, GatewaySemanticModels? semanticModels = null, Func<IReadOnlyList<PairedClient>>? pairedClients = null, DbDataKit.Identity.IdentityAdminApi? identityAdmin = null, GatewayEntityModels? entityModels = null, DbDataKit.State.Api.StateManagement? stateApi = null, GatewayApps? apps = null, GatewayViewsManagement? views = null, IAuditLog? audit = null)
+public sealed partial class GatewayManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, GatewayDataSources? dataSources = null, GatewayIdentities? identities = null, GatewayActivity? activity = null, GatewayCertificate? certificate = null, DbDataKit.Config.Git.GitCommitService? git = null, GatewaySecrets? secrets = null, IPairingCodeStore? pairingCodes = null, GatewaySemanticModels? semanticModels = null, Func<IReadOnlyList<PairedClient>>? pairedClients = null, DbDataKit.Identity.IdentityAdminApi? identityAdmin = null, GatewayEntityModels? entityModels = null, DbDataKit.State.Api.StateManagement? stateApi = null, GatewayApps? apps = null, GatewayViewsManagement? views = null, IAuditLog? audit = null, GatewayServerSettings? serverSettings = null)
 {
     public const string Prefix = "/api/v1";
 
@@ -65,6 +66,8 @@ public sealed partial class GatewayManagement(IConfigurationRoot configuration, 
             }
             case ("POST", Prefix + "/config/validate"):
                 return caller.Holds(ServerRole.Admin) ? Validate(body) : Denied(ServerRole.Admin);
+            case (_, Prefix + "/config/server.yaml" or Prefix + "/config/server.yaml/check" or Prefix + "/config/server.yaml/edit"):
+                return serverSettings is null ? ManagementResult.Problem(404, "There is no such call.") : await serverSettings.HandleAsync(method, route, body, caller, cancellationToken);
             case ("GET", Prefix + "/config/history"):
                 return caller.Holds(ServerRole.Admin) ? History(int.TryParse(query["limit"], out var limit) ? Math.Clamp(limit, 1, 200) : 50) : Denied(ServerRole.Admin);
         }
@@ -248,7 +251,11 @@ public sealed partial class GatewayManagement(IConfigurationRoot configuration, 
     }
 
     /// <summary>Whether the configuration would be valid with these files (layout names, relative to the configuration folder) in place of the current ones. Nothing is written.</summary>
-    public ManagementResult ValidateFiles(IReadOnlyDictionary<string, string> files)
+    public ManagementResult ValidateFiles(IReadOnlyDictionary<string, string> files) =>
+        WithCandidate(files, load => ManagementResult.Ok(new JsonObject { ["valid"] = load.Ok, ["diagnostics"] = Diagnostics(load.Diagnostics) }));
+
+    /// <summary>The configuration as it would be with these files in place of the current ones, handed to <paramref name="use"/> (the typed settings and the validator's diagnostics); nothing is written to the real folder.</summary>
+    public ManagementResult WithCandidate(IReadOnlyDictionary<string, string> files, Func<GatewayConfigLoad, ManagementResult> use)
     {
         // Only the files of the layout, and only inside it: a name that leaves the folder, or is not one of the layout's, is refused before anything is written even to the scratch copy.
         foreach (var name in files.Keys)
@@ -267,13 +274,12 @@ public sealed partial class GatewayManagement(IConfigurationRoot configuration, 
             try
             {
                 var candidate = new ConfigurationBuilder().Add(new GatewayConfigDirectorySource(scratch)).Build();
-                var load = GatewayConfig.Load(candidate);
-                return ManagementResult.Ok(new JsonObject { ["valid"] = load.Ok, ["diagnostics"] = Diagnostics(load.Diagnostics) });
+                return use(GatewayConfig.Load(candidate));
             }
             catch (InvalidDataException ex)
             {
                 // a file that does not parse at all: the reader's own message, which names each file and line
-                return ManagementResult.Ok(new JsonObject { ["valid"] = false, ["diagnostics"] = new JsonArray(new JsonObject { ["code"] = "DBP-101", ["severity"] = "error", ["message"] = ex.Message.Replace(scratch, "config") }) });
+                return ManagementResult.Ok(new JsonObject { ["valid"] = false, ["diagnostics"] = new JsonArray(new JsonObject { ["code"] = "DBP-101", ["severity"] = "error", ["message"] = ex.Message.Replace(scratch, "config") }), ["unreadable"] = true });
             }
         }
         finally
@@ -298,6 +304,8 @@ public sealed partial class GatewayManagement(IConfigurationRoot configuration, 
             File.Copy(file, target, overwrite: true);
         }
     }
+
+    internal static JsonArray DiagnosticsOf(IEnumerable<ConfigDiagnostic> diagnostics) => Diagnostics(diagnostics);
 
     private static JsonArray Diagnostics(IEnumerable<ConfigDiagnostic> diagnostics) =>
         new([.. diagnostics.Select(d => (JsonNode)new JsonObject
