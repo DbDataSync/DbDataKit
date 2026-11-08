@@ -139,14 +139,15 @@ public sealed class ReplicationSetPackageTests : IDisposable
     public void ABadCronAndTwoReplicationsThatMakeOneTaskAreRefusedNamingTheFile()
     {
         Replication("broken", ScheduleMode.Periodic, cron: "not a cron");
-        Replication("Sales_Orders", ScheduleMode.Periodic, cron: "0 1 * * *");
-        Replication("sales_orders", ScheduleMode.Periodic, cron: "0 1 * * *");
+        // two folder names that differ by more than case (a case-insensitive file system, Windows, makes Sales_Orders and sales_orders one folder) and make one task name
+        Replication("sales.orders", ScheduleMode.Periodic, cron: "0 1 * * *");
+        Replication("sales-orders", ScheduleMode.Periodic, cron: "0 1 * * *");
 
         var built = Build(out var problems);
 
         Assert.Null(built);
         Assert.Contains(problems, p => p.Contains(Path.Combine("broken", "task.yaml")) && p.Contains("cronExpression"));
-        Assert.Contains(problems, p => p.Contains("both make the task `sales_orders`"));
+        Assert.Contains(problems, p => p.Contains("both make the task `sales-orders`"));
     }
 
     [Fact]
