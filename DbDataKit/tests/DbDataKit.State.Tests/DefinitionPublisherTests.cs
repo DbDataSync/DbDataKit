@@ -304,32 +304,46 @@ public sealed class DefinitionPublisherTests : IDisposable
     }
 
     [Fact]
-    public async Task Looking_up_a_stored_file_never_waits_for_a_writer_on_the_same_sqlite_file()
+    public void Looking_up_a_stored_file_never_opens_a_connection_while_another_one_holds_a_lock_on_the_same_sqlite_file()
     {
+        // On SQLite (rollback journal) a connection that wants a read lock while another connection's reader is open deadlocks with any writer waiting to commit, until the busy timeout.
+        // Nothing here is timed: whenever the database opens a connection, a probe asks for an exclusive lock and gives up after a second (a lock held by an open reader is held for as long as the probe waits, so the outcome does not depend on speed), which is refused exactly when another
+        // connection holds any lock (an open reader or transaction). The lookup must never open a connection under one.
         var (publisher, database, _) = Open(StateEngineIds.Sqlite);
         var payloads = new PayloadStore(database);
         var files = new PublishArtifacts(payloads, publisher, "ada");
         var file = files.Add("job.csx", "version one"u8);
         publisher.Publish(new PublishRequest("integration", "nightly", "m0", "ada", Artifacts: [file]));
 
-        using var stop = new CancellationTokenSource();
-        var writer = Task.Run(() =>
+        var opened = 0;
+        var underLock = new List<string>();
+        database.ConnectionOpened = connection =>
         {
-            for (var i = 1; !stop.IsCancellationRequested; i++)
-                publisher.Publish(new PublishRequest("integration", "writer" + (i % 5), "m" + i, "ada", Artifacts: [file]));
-        });
+            opened++;
+            using var probe = new Microsoft.Data.Sqlite.SqliteConnection(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = connection.DataSource, Pooling = false, DefaultTimeout = 1 }.ToString());
+            probe.Open();
+            using var command = probe.CreateCommand();
+            command.CommandText = "BEGIN EXCLUSIVE;";
+            try
+            {
+                command.ExecuteNonQuery();
+                command.CommandText = "ROLLBACK;";
+                command.ExecuteNonQuery();
+            }
+            catch (Microsoft.Data.Sqlite.SqliteException e) when (e.SqliteErrorCode == 5)
+            {
+                underLock.Add("opened under a lock");
+                try { command.CommandText = "ROLLBACK;"; command.ExecuteNonQuery(); } catch (Microsoft.Data.Sqlite.SqliteException) { }
+            }
+        };
 
-        var slowest = TimeSpan.Zero;
-        for (var i = 0; i < 200; i++)
-        {
-            var watch = System.Diagnostics.Stopwatch.StartNew();
-            Assert.NotNull(publisher.FindArtifact(file.Sha256));
-            if (watch.Elapsed > slowest) slowest = watch.Elapsed;
-        }
+        Assert.NotNull(publisher.FindArtifact(file.Sha256));
+        Assert.True(opened >= 2, "the lookup is expected to ask the payload store too (a connection each); the probe is not seeing them");
+        Assert.Empty(underLock);
 
-        stop.Cancel();
-        await writer;
-        Assert.True(slowest < TimeSpan.FromSeconds(2), $"a lookup waited {slowest.TotalSeconds:F1} s for the writer");
+        // the same through a publish that names the stored file by its hash
+        publisher.Publish(new PublishRequest("integration", "nightly", "m1", "ada", Artifacts: [new ArtifactRef(file.Path, file.Sha256, file.Size, file.MediaType)]));
+        Assert.Empty(underLock);
     }
 
     [Theory]

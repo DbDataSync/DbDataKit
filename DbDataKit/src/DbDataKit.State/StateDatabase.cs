@@ -195,10 +195,14 @@ public partial class StateDatabase
         return connection;
     }
 
+    /// <summary>Test seam: told of every connection this database opens, so a test can see two open at once (on SQLite a second connection under an open reader can deadlock with a waiting writer).</summary>
+    internal Action<DbConnection>? ConnectionOpened { get; set; }
+
     private DbConnection OpenRawConnection()
     {
         var connection = Dialect.CreateConnection(_connectionString);
         connection.Open();
+        ConnectionOpened?.Invoke(connection);
         Dialect.OnConnectionOpened(connection);
         if (Layout is not null) Dialect.OnConnectionOpened(connection, Layout);
         return connection;
