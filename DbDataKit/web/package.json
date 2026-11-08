@@ -8,6 +8,7 @@
     "build",
     "gateway",
     "visuals",
+    "views-editor",
     "store-ui",
     "view-app",
     "store",

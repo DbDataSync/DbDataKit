@@ -1,17 +1,17 @@
 import type { LayoutDoc, TileDoc, ViewsDoc, WidgetDoc, WidgetType } from '@dbdatakit/visuals'
 
 /** The model the document's widgets already query (the first), or the retail sample's: what a new widget asks of; the field wells (DBR25) then choose its fields from the model's catalog. */
-export function modelOf(doc: ViewsDoc): string {
+export function modelOf(doc: ViewsDoc, fallback = 'retail_sales'): string {
   for (const w of Object.values(doc.widgets ?? {})) {
     const model = (w as { query?: { model?: unknown } }).query?.model
     if (typeof model === 'string') return model
   }
-  return 'retail_sales'
+  return fallback
 }
 
 /** A new widget of a type, valid and plain: a starting point to edit (the palette of DBR24; the wells of DBR25 choose the fields from the model's catalog). */
-export function newWidget(type: WidgetType, doc: ViewsDoc): WidgetDoc {
-  const query = { model: modelOf(doc) }
+export function newWidget(type: WidgetType, doc: ViewsDoc, fallbackModel?: string): WidgetDoc {
+  const query = { model: modelOf(doc, fallbackModel) }
   switch (type) {
     case 'metric': return { type, label: 'New metric', encodings: { value: 'sales.net_amount' }, query }
     case 'chart': return { type, title: 'New chart', mark: 'bar', encodings: { x: 'customers.region', y: 'sales.net_amount' }, query }
