@@ -91,7 +91,7 @@ public sealed class ScriptsController(
                 known = ScriptSlots.All.Append(ScriptSlots.Hook),
             });
 
-        var diagnostics = ValidateScript(script);
+        var diagnostics = ValidateScript(script, out var packageLock);
         if (diagnostics.Count > 0)
             return BadRequest(new
             {
@@ -103,7 +103,7 @@ public sealed class ScriptsController(
 
         try
         {
-            configRepository.SaveScript(script, currentUser.Author);
+            configRepository.SaveScript(script, currentUser.Author, packageLock);
             return Ok(new ScriptSaveResult(script.Manifest, []));
         }
         catch (ConfigValidationException ex)
@@ -151,7 +151,7 @@ public sealed class ScriptsController(
     public ActionResult<ScriptSaveResult> Compile(string name, [FromBody] ScriptDefinition script)
     {
         script.Manifest.Name = name;
-        var diagnostics = ValidateScript(script);
+        var diagnostics = ValidateScript(script, out _);
         return Ok(new ScriptSaveResult(
             script.Manifest,
             diagnostics.Select(d => new ScriptDiagnosticDto(d.Line, d.Column, d.Message)).ToList(),
@@ -159,8 +159,9 @@ public sealed class ScriptsController(
     }
 
     /// <summary>Empty means "compiled/validated cleanly".</summary>
-    private List<ScriptDiagnostic> ValidateScript(ScriptDefinition script)
+    private List<ScriptDiagnostic> ValidateScript(ScriptDefinition script, out string? packageLock)
     {
+        packageLock = null;
         if (script.Manifest.Language == ScriptLanguage.Sql)
         {
             // Point-free: a reusable hook may be bound at more than one point, so only "is every
@@ -172,6 +173,7 @@ public sealed class ScriptsController(
         }
 
         var compilation = scriptHost.Validate(script);
+        packageLock = compilation.PackageLock;
         return compilation.Success ? [] : compilation.Diagnostics.ToList();
     }
 

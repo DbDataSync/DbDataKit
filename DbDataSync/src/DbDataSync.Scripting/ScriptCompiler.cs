@@ -49,7 +49,8 @@ public sealed class ScriptCompiler(ScriptCacheDirectory cache, string? scriptsDi
         catch (ScriptDirectiveException ex) { return ScriptCompilation.Failed([new ScriptDiagnostic(ex.Line, 1, ex.Message)]); }
 
         Closure closure;
-        try { closure = ResolvePackages(script.Manifest.Name, requests); }
+        string? packageLock;
+        try { (closure, packageLock) = ResolvePackages(script.Manifest.Name, requests); }
         catch (Exception ex) when (ex is PackageResolutionException or PackageIntegrityException or InvalidDataException or IOException or UnauthorizedAccessException)
         {
             return ScriptCompilation.Failed([new ScriptDiagnostic(0, 0, $"The packages of script '{script.Manifest.Name}' could not be resolved: {ex.Message}")]);
@@ -69,10 +70,10 @@ public sealed class ScriptCompiler(ScriptCacheDirectory cache, string? scriptsDi
         if (!compiled.Success)
             return ScriptCompilation.Failed(compiled.Diagnostics.Where(d => d.IsError).Select(d => new ScriptDiagnostic(d.Line, d.Column, d.Message)).ToList());
 
-        return Load(compiled.Image!, closure, script);
+        return Load(compiled.Image!, closure, script, packageLock);
     }
 
-    private ScriptCompilation Load(byte[] image, Closure closure, ScriptDefinition script)
+    private ScriptCompilation Load(byte[] image, Closure closure, ScriptDefinition script, string? packageLock)
     {
         var hash = ScriptConfig.ComputeHash(script.Code);
         // Collectible, so replacing a script does not leak an assembly for the life of the process. In the TaskRunner that hardly matters — the process is per run — but the API is long-lived and compiles on every save.
@@ -80,7 +81,7 @@ public sealed class ScriptCompiler(ScriptCacheDirectory cache, string? scriptsDi
             shared: n => System.Runtime.Loader.AssemblyLoadContext.Default.Assemblies.Any(a => a.GetName().Name == n));
         try
         {
-            return ScriptCompilation.Succeeded(context, CsxCompiler.Load(image, context), hash);
+            return ScriptCompilation.Succeeded(context, CsxCompiler.Load(image, context), hash, packageLock);
         }
         catch (Exception ex)
         {
@@ -90,12 +91,12 @@ public sealed class ScriptCompiler(ScriptCacheDirectory cache, string? scriptsDi
     }
 
     // exact versions that are in the package store need no network; a script's packages are fetched when it is first validated (saved or previewed), and a run finds them there.
-    // The hashes are pinned in scripts/<name>.lock beside the script (S12): the first resolution writes it, a package whose bytes differ later is refused naming the file. A compiler with no scripts folder (a test, a preview of an
-    // unsaved script with no repository) has nowhere to keep a lock file and trusts the first download, as before.
-    private Closure ResolvePackages(string scriptName, IReadOnlyList<PackageRequest> requests)
+    // The hashes are pinned in scripts/<name>.lock beside the script (S12): a package whose bytes differ from an existing lock file is refused naming the file. Resolving only READS the lock file: what the pins
+    // should be after this resolution is returned as text (ScriptCompilation.PackageLock) and ConfigRepository.SaveScript writes it when the script is saved, so validating or previewing a script that is never saved
+    // leaves no file in the configuration repository's working tree. A compiler with no scripts folder (a test, a preview of an unsaved script with no repository) has no lock file to check and trusts the first download.
+    private (Closure Closure, string? PackageLock) ResolvePackages(string scriptName, IReadOnlyList<PackageRequest> requests)
     {
-        var closure = new Closure();
-        if (requests.Count == 0) return closure;
+        if (requests.Count == 0) return (new Closure(), null);
         var lockPath = scriptsDirectory is null ? null : Path.Combine(scriptsDirectory, scriptName + ScriptConfig.LockExtension);
         var pins = lockPath is null ? new LockFile() : LockFile.Read(lockPath, $"{Path.GetFileName(scriptsDirectory!.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))}/{scriptName}{ScriptConfig.LockExtension}");
         var options = new PackageResolverOptions
@@ -105,13 +106,9 @@ public sealed class ScriptCompiler(ScriptCacheDirectory cache, string? scriptsDi
             HostProvides = n => Platform.FrameworkAssemblies().ContainsKey(n),
             Lock = pins,
         };
-        closure = new PackageResolver(options).ResolveAsync(requests).GetAwaiter().GetResult();
-        if (lockPath is not null)
-        {
-            pins.Replace(closure.Packages);
-            pins.Write(lockPath);
-        }
-        return closure;
+        var closure = new PackageResolver(options).ResolveAsync(requests).GetAwaiter().GetResult();
+        pins.Replace(closure.Packages);
+        return (closure, pins.ToJson());
     }
 }
 
@@ -122,8 +119,9 @@ public sealed record ScriptDiagnostic(int Line, int Column, string Message)
 
 public sealed class ScriptCompilation
 {
-    private ScriptCompilation(ClosureLoadContext? context, LoadedCsx? script, string? hash, IReadOnlyList<ScriptDiagnostic> diagnostics)
+    private ScriptCompilation(ClosureLoadContext? context, LoadedCsx? script, string? hash, IReadOnlyList<ScriptDiagnostic> diagnostics, string? packageLock = null)
     {
+        PackageLock = packageLock;
         LoadContext = context;
         Script = script;
         Hash = hash;
@@ -135,9 +133,15 @@ public sealed class ScriptCompilation
     public string? Hash { get; }
     public IReadOnlyList<ScriptDiagnostic> Diagnostics { get; }
 
+    /// <summary>
+    /// The content of <c>scripts/&lt;name&gt;.lock</c> as it should be once the script is saved (the hashes of the packages this compilation resolved), or null when the script names no packages. Nothing writes it
+    /// but <c>ConfigRepository.SaveScript</c>, so a script that is only validated leaves no file behind.
+    /// </summary>
+    public string? PackageLock { get; }
+
     public bool Success => Script is not null;
 
-    public static ScriptCompilation Succeeded(ClosureLoadContext context, LoadedCsx script, string hash) => new(context, script, hash, []);
+    public static ScriptCompilation Succeeded(ClosureLoadContext context, LoadedCsx script, string hash, string? packageLock = null) => new(context, script, hash, [], packageLock);
 
     public static ScriptCompilation Failed(IReadOnlyList<ScriptDiagnostic> diagnostics) => new(null, null, null, diagnostics);
 
