@@ -1,0 +1,20 @@
+plan:
+  hash: b746d2c7da6fbc5908531bb0070874e756794480aa974afcebfd8afa6f762176
+  id: "2026-10-06-ffff0006"
+  connection: "postgres"
+  tool_version: "0.1.0"
+  git_dirty: false
+bases:
+  - object: "marts.customers"
+    state: in_sync
+    live_shape_hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    recorded_shape_hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+steps:
+  - id: "1"
+    type: ddl
+    object: "marts.customers"
+    description: "drop column legacy"
+    risk: destructive
+    reasons: ["col.dropped"]
+    hash_after: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    text: "ALTER TABLE marts.customers DROP COLUMN legacy;"
