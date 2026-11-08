@@ -151,7 +151,9 @@ export async function dashboardsStory(page: Page) {
   await expect(page.getByTestId('vz-tile-net')).toBeVisible()
   await expect.poll(() => resolved(page)).toEqual({ count: 1, widgets: DESK })
   await expect(page.getByTestId('vz-loading')).toHaveCount(0) // the first answer is in: a click before it is lost when the tiles are drawn again
-  await page.getByTestId('vz-tile-regions').getByRole('checkbox', { name: 'West' }).check()
+  // a click and then the state, not `.check()`: the page's router applies the new address one render after the click, and `.check()` looks at the box at once
+  await page.getByTestId('vz-tile-regions').getByRole('checkbox', { name: 'West' }).click()
+  await expect(page.getByTestId('vz-tile-regions').getByRole('checkbox', { name: 'West' })).toBeChecked()
   await expect(page).toHaveURL(/p\.region=West/)
   await expect(page.getByTestId('vz-text')).toContainText('Showing West')
   await expect(page.getByTestId('views-parameter-region')).toContainText('West')

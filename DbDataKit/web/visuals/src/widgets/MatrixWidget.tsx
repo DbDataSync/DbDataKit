@@ -3,14 +3,18 @@ import type { RenderedMatrix } from '../types'
 import type { Box } from '../views/model'
 import { MATRIX_COLUMN_WIDTH, MATRIX_LABEL_WIDTH, TABLE_ROW_HEIGHT } from './density'
 import { FitNotice } from './TableWidget'
+import type { Modifiers } from '../MatrixGrid'
 
 /**
  * A matrix widget: the existing `MatrixGrid`, cut to its tile. A matrix **truncates columns first** (a column the grid has no room for goes, a total column is kept), then rows (a total row is kept), and says
  * "6 of 9 columns, 12 of 40 rows" with the action that maximizes the tile. `maximized` draws it whole and the widget scrolls.
  */
-export function MatrixWidget({ view, box, maximized = false, onMaximize, title }: { view: RenderedMatrix; box?: Box; maximized?: boolean; onMaximize?: () => void; title?: string }) {
+export function MatrixWidget({ view, box, maximized = false, onMaximize, title, onCell }: { view: RenderedMatrix; box?: Box; maximized?: boolean; onMaximize?: () => void; title?: string; onCell?: (row: number, column: number | undefined, modifiers: Modifiers) => void }) {
   let shown = view
   const told: string[] = []
+  // what a cell of the shown (cut) matrix is in the whole one
+  let rowIndex = view.rows.map((_, i) => i)
+  let columnIndex = view.columns.map((_, i) => i)
   if (box && !maximized) {
     const labels = Math.max(1, ...view.rows.map((r) => r.labels.length))
     const levels = Math.max(1, ...view.columns.map((c) => c.labels.length))
@@ -32,10 +36,12 @@ export function MatrixWidget({ view, box, maximized = false, onMaximize, title }
     }
     if (told.length > 0)
       shown = { ...view, columns: columns.map((i) => view.columns[i]!), rows: rows.map((r) => ({ ...view.rows[r]!, cells: columns.map((c) => view.rows[r]!.cells[c]!) })) }
+    rowIndex = rows
+    columnIndex = columns
   }
   return (
     <div className={maximized ? 'vz-matrix-fit vz-maximized' : 'vz-matrix-fit'}>
-      <MatrixGrid view={shown} />
+      <MatrixGrid view={shown} onCell={onCell ? (r, c, m) => onCell(rowIndex[r]!, c === undefined ? undefined : columnIndex[c]!, m) : undefined} />
       {told.length > 0 ? <FitNotice text={told.join(', ')} onMaximize={onMaximize} label={`Show the whole matrix${title ? ` ${title}` : ''}`} /> : null}
     </div>
   )

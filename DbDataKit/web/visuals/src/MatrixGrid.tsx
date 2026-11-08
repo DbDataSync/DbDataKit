@@ -1,4 +1,7 @@
+import type { KeyboardEvent, MouseEvent } from 'react'
 import type { RenderedMatrix } from './types'
+
+export interface Modifiers { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean; altKey: boolean }
 
 /** Header cells for one level: adjacent columns that share every label down to this level are one cell, so two measures under one quarter read as a quarter over two columns. */
 function headerCells(columns: RenderedMatrix['columns'], level: number) {
@@ -17,7 +20,7 @@ function headerCells(columns: RenderedMatrix['columns'], level: number) {
  * A matrix view as a grid: row labels down the left, column labels across the top (outermost first), the server's text in every cell. Nothing is computed here: a
  * total row or column is the one the result held (`total` on the row or column), Other is a sum the server made, and a cell reads as the server formatted it.
  */
-export function MatrixGrid({ view }: { view: RenderedMatrix }) {
+export function MatrixGrid({ view, onCell }: { view: RenderedMatrix; onCell?: (row: number, column: number | undefined, modifiers: Modifiers) => void }) {
   const levels = Math.max(1, ...view.columns.map((c) => c.labels.length))
   const rowLabelWidth = Math.max(1, ...view.rows.map((r) => r.labels.length))
   return (
@@ -39,10 +42,25 @@ export function MatrixGrid({ view }: { view: RenderedMatrix }) {
           {view.rows.map((row, r) => (
             <tr key={r} className={row.total ? 'vz-total' : undefined}>
               {Array.from({ length: rowLabelWidth }, (_, i) => (
-                <th key={i} scope="row">{row.labels[i] ?? ''}</th>
+                <th
+                  key={i}
+                  scope="row"
+                  className={onCell && !row.total ? 'vz-pointable' : undefined}
+                  tabIndex={onCell && !row.total ? 0 : undefined}
+                  onClick={onCell && !row.total ? (e: MouseEvent) => onCell(r, undefined, e) : undefined}
+                  onKeyDown={onCell && !row.total ? (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onCell(r, undefined, e) } } : undefined}
+                >
+                  {row.labels[i] ?? ''}
+                </th>
               ))}
               {row.cells.map((cell, c) => (
-                <td key={c} className={['vz-num', view.columns[c]?.total ? 'vz-total' : '', view.columns[c]?.other ? 'vz-other' : ''].filter(Boolean).join(' ')}>{cell.text}</td>
+                <td
+                  key={c}
+                  className={['vz-num', view.columns[c]?.total ? 'vz-total' : '', view.columns[c]?.other ? 'vz-other' : '', onCell && !row.total && !view.columns[c]?.total ? 'vz-pointable' : ''].filter(Boolean).join(' ')}
+                  onClick={onCell && !row.total && !view.columns[c]?.total ? (e: MouseEvent) => onCell(r, c, e) : undefined}
+                >
+                  {cell.text}
+                </td>
               ))}
             </tr>
           ))}

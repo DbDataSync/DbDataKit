@@ -345,3 +345,29 @@ answers, and `moduleClient` is the same interface over its REST.
 legend, then its axis titles, then thins its ticks; a table and a matrix show the rows that fit and say "12 of 40 rows" with an action that maximizes the tile (where the widget scrolls). `widget_options: {density}` pins it.
 
 **Text and images.** Text is markdown without raw HTML, images or links off the host, `{{params.name}}` substituted as text; an image is drawn only from the `data:` URI of its raster, at most 1 MiB, never an SVG.
+
+## Interaction: cross-filter, drill, refresh and kiosk
+
+Pure logic is in `@dbdatakit/visuals` (`src/dashboard/interaction.ts`, `refresh.ts`), the host's part (the address, the way back, the chrome) in the console's Views page (`viewsUrl.ts`, `DashboardsPanel.tsx`).
+
+**Cross-filter (`on_select: {set: region, from: customers.region}`)** on a `chart` or a `matrix`: pointing at a mark (a chart's bar, a matrix's row label or cell) sets the declared parameter exactly as a `control` would, so the address
+carries it (`?p.region=West`) and only the widgets that use `region` are resolved again (`dependentWidgets`, the client's `only`). The value is the pointed-at row's `from` field read as the parameter's type (a chart's datum
+is read by `customers.region` or its chart spelling `customers_region`; a matrix's row label by its position in the `rows` encoding, a cell also by `columns`; a total row or column stands for no one value and selects nothing).
+A plain click sets the parameter (a list of one for a `many` parameter); clicking the one chosen value again, or the **Clear** button of the chip in the tile, puts the parameter back to its default; shift, control or command
+adds a value to a `many` list or takes it out. The tile shows what it has chosen ("Region: West") whatever layout draws it; the selection is the parameter, so it survives a switch between a reflow and a canvas layout. A table has no
+`on_select` (the loader refuses it): its rows can only drill. A row with no value for `from`, or a value that is not the parameter's type, selects nothing and says why in the tile area.
+
+**Drill (`drill: {to: {dashboard: name}, with: {region: $customers.region, year: $params.year, tag: fixed}}`)** on a chart, matrix or table: `with` is `$field` of the pointed-at row, `$params.name` (a parameter of this document, its value now) or a literal.
+A click drills where the widget has no `on_select`; where it has both, a click selects and **Alt+click drills**. A table row is focusable and Enter drills. The host is given the target and the values (`onDrill`); without a host that
+follows drills nothing is clickable for it. The console opens the target, **refuses** a drill that does not give a parameter the target requires (and has no default for), or that gives one the target does not declare
+(`checkDrill`; the refusal names them and the board stays), and goes to the target's address: its own `?p.<name>=` values, `trail=` entries for the way back and `mode=kiosk` kept. The page shows the way back as a
+breadcrumb (`Back`, and each board left, restoring it as it was left: layout, parameters, selection). A drill to a `view` is not followed yet; a drill to a report opens its screen view when reports are drawn.
+
+**Refresh (`refresh: {every: 5m}`)** re-resolves every placed widget of the shown layout at that interval and says "as of hh:mm" in each data tile. Limits: never below the **floor** (15 s, the server's setting; a shorter `every` is
+raised to it); up to 10 % is added at random to each wait (never subtracted); **nothing is requested while the page is hidden**, and when it is shown again a refresh that came due is made at once; a refresh never starts while one
+is running; a **failed refresh keeps the rows shown** and marks each tile "stale" until one succeeds. The clock and the page's visibility are injected (`clock`, `visibility`), so tests use `fakeClock` and no real time; in a browser
+test, Playwright's clock drives the page's own. The interval starts again when the layout changes.
+
+**Kiosk (`kiosk: {layout: wall}`, address `?mode=kiosk`)**: the board alone in the whole window, none of the console's chrome (no rail, header or toolbar), the document's kiosk layout (`?layout=` still wins; a window-size selector
+does not), no maximize action, refresh and cross-filter as usual. A canvas layout (a wall) is scaled as one picture to the window. In a corner, faint until the pointer or the keyboard comes near, are **Exit kiosk** (Escape does the same)
+and, after a drill, **Back**. The toolbar's Kiosk button turns it on. Rotating several boards (`?rotate=a,b&every=60`) is a host feature not built yet.

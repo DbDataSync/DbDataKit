@@ -11,6 +11,8 @@ export interface Resolution {
   parameters: ParameterValues
   results: Record<string, RenderedWidget>
   asOf: string | null
+  /** When each widget's result was read (the source's `as_of` of the resolution that gave it): a partial re-resolution or a refresh moves only the widgets it asked for. */
+  asOfBy: Record<string, string>
 }
 
 /** A parameter value set as a stable string: its keys in order, so the same values are the same key. */
@@ -60,19 +62,24 @@ export async function resolveLayout(args: {
   previous: Resolution | null
   /** The document, to know which widgets use which parameter; without it a change of parameters asks for every placed widget again. */
   document?: Pick<ViewsDoc, 'widgets'>
+  /** Ask again for every placed widget, whatever is kept (a refresh); the results of widgets this layout does not place stay. */
+  force?: boolean
   signal?: AbortSignal
 }): Promise<Resolution> {
-  const { client, ref, layout, placed, parameters, previous, document, signal } = args
+  const { client, ref, layout, placed, parameters, previous, document, signal, force = false } = args
   const key = parametersKey(parameters)
   const same = previous !== null && previous.key === key
   let have: Record<string, RenderedWidget> = {}
-  if (same) have = previous.results
+  if (force) have = Object.fromEntries(Object.entries(previous?.results ?? {}).filter(([id]) => !placed.includes(id)))
+  else if (same) have = previous.results
   else if (previous !== null && document) {
     const stale = new Set(dependentWidgets(document, changedParameters(previous.parameters, parameters)))
     have = Object.fromEntries(Object.entries(previous.results).filter(([id]) => !stale.has(id)))
   }
   const needed = placed.filter((id) => !(id in have))
-  if (needed.length === 0 && same) return previous
+  if (needed.length === 0 && same && !force) return previous
   const fresh = needed.length === 0 ? null : await client.resolve(ref, layout, parameters, { only: needed.length === placed.length ? undefined : needed, signal })
-  return { key, parameters, results: { ...have, ...fresh?.widgets }, asOf: fresh?.as_of ?? previous?.asOf ?? null }
+  const asOfBy: Record<string, string> = Object.fromEntries(Object.entries(previous?.asOfBy ?? {}).filter(([id]) => id in have))
+  if (fresh) for (const id of Object.keys(fresh.widgets)) asOfBy[id] = fresh.as_of
+  return { key, parameters, results: { ...have, ...fresh?.widgets }, asOf: fresh?.as_of ?? previous?.asOf ?? null, asOfBy }
 }

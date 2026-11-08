@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { chartClick, type Hit, type HitHow } from './dashboard/interaction'
 import { refusingLoader, safeVegaOptions } from './safety'
 import { chartConfig, type Theme } from './theme'
 import type { RenderedChart } from './types'
@@ -16,7 +17,11 @@ import { densityClass, type DensityClass } from './widgets/density'
  *
  * `vega-embed` is loaded when the first chart is drawn, so a page without a chart does not carry Vega.
  */
-export function VegaChart({ view, theme, box, density, legend }: { view: RenderedChart; theme: Theme; box?: Box; density?: DensityClass; legend?: 'show' | 'hide' }) {
+export function VegaChart({ view, theme, box, density, legend, onHit }: { view: RenderedChart; theme: Theme; box?: Box; density?: DensityClass; legend?: 'show' | 'hide'; onHit?: (hit: Hit, how: HitHow) => void }) {
+  // the latest handler, read when a mark is clicked: a new handler does not draw the chart again
+  const hit = useRef(onHit)
+  hit.current = onHit
+  const pointable = onHit !== undefined
   const host = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
   const width = box?.width
@@ -30,9 +35,12 @@ export function VegaChart({ view, theme, box, density, legend }: { view: Rendere
     let cancelled = false
     let finalize: (() => void) | undefined
     setError(null)
+    // each draw has an element of its own: when the spec changes while an earlier embed is still on its way, the earlier one must not draw over (or clear) the later one's picture
+    const mount = document.createElement('div')
+    host.current?.appendChild(mount)
     import('vega-embed')
       .then(({ default: embed }) =>
-        embed(host.current!, spec as never, {
+        embed(mount, spec as never, {
           actions: false,
           renderer: 'svg',
           config: chartConfig(theme) as never,
@@ -42,7 +50,10 @@ export function VegaChart({ view, theme, box, density, legend }: { view: Rendere
       )
       .then((result) => {
         if (cancelled) result.finalize()
-        else finalize = () => result.finalize()
+        else {
+          if (pointable) result.view.addEventListener('click', chartClick((h, how) => hit.current?.(h, how)))
+          finalize = () => result.finalize()
+        }
       })
       .catch((e: unknown) => {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
@@ -50,12 +61,13 @@ export function VegaChart({ view, theme, box, density, legend }: { view: Rendere
     return () => {
       cancelled = true
       finalize?.()
+      mount.remove()
     }
-  }, [spec, theme])
+  }, [spec, theme, pointable])
 
   const title = typeof view.vega_lite.title === 'string' ? view.vega_lite.title : `Chart ${view.id}`
   return (
-    <div className="vz-chart" data-testid={`vz-chart-${view.id}`} style={box ? { width: box.width, height: box.height } : undefined}>
+    <div className={pointable ? 'vz-chart vz-pointable' : 'vz-chart'} data-testid={`vz-chart-${view.id}`} style={box ? { width: box.width, height: box.height } : undefined}>
       <div ref={host} role="img" aria-label={title} />
       {error ? <p className="vz-error" role="alert">{`The chart could not be drawn: ${error}`}</p> : null}
     </div>
