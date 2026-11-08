@@ -98,11 +98,24 @@ internal static class Programs
 
     public static string Sync => Built("DbDataSync/src/DbDataSync.Cli", "DbDataSync.Cli.dll");
 
+    private static readonly HashSet<int> Issued = [];
+
+    /// <summary>
+    /// A free port that no other test of this process was given. The program that is started on it binds it later, so two tests asking at the same moment
+    /// could each be handed the port the operating system had just freed, and a test would then pair with another test's server (the pairing code is refused).
+    /// </summary>
     public static int FreePort()
     {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        return ((IPEndPoint)listener.LocalEndpoint).Port;
+        while (true)
+        {
+            int port;
+            using (var listener = new TcpListener(IPAddress.Loopback, 0))
+            {
+                listener.Start();
+                port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            }
+            lock (Issued) if (Issued.Add(port)) return port;
+        }
     }
 
     /// <summary>The code a <c>server pair</c> command printed.</summary>
