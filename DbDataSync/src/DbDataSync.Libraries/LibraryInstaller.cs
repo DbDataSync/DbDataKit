@@ -5,15 +5,12 @@ using DbDataKit.Scripting;
 namespace DbDataSync.Libraries;
 
 /// <summary>
-/// Restores a library package (and its full transitive closure — managed dependencies and any
-/// <c>runtimes/&lt;rid&gt;/native/</c> assets) into <c>&lt;repo&gt;/libraries/&lt;id&gt;/lib/</c>, using
-/// nothing but the <c>dotnet</c> muxer <see cref="System.Diagnostics.ProcessStartInfo"/> already runs
-/// everywhere else in this solution — no NuGet client library in the host.
+/// Installs a library package (and its full transitive closure — managed dependencies and any
+/// <c>runtimes/&lt;rid&gt;/native/</c> assets) into <c>&lt;repo&gt;/libraries/&lt;id&gt;/lib/</c>.
 /// <para>
-/// The mechanism is a throwaway SDK-style class-library project referencing every package in the
-/// manifest, published (not merely restored) so the SDK's own build copies the full dependency closure —
-/// managed DLLs, <c>.deps.json</c>, and any native <c>runtimes/</c> assets — into one flat output
-/// directory, which is copied verbatim into <c>lib/</c>.
+/// The packages are resolved in process by <see cref="LibraryResolution"/> (the resolver of <c>DbDataKit.Scripting</c>)
+/// against a feed; no .NET SDK, no <c>dotnet</c> process and no project file is involved. The closure is written
+/// to <c>lib/</c>, the pins to <c>library.lock</c>.
 /// </para>
 /// </summary>
 public static class LibraryInstaller
@@ -79,10 +76,9 @@ public static class LibraryInstaller
 
     /// <summary>Re-runs the restore for an already-written manifest — a fresh deployment, or after
     /// hand-editing a package version in <c>library.csx</c>. Also what completes the
-    /// "pending restore" state: <see cref="InstallAsync"/> restores into <c>lib/</c> unconditionally,
-    /// whether or not one was already there, so a manifest written with no <c>lib/</c> at all (because
-    /// no SDK was available at install time) restores for the first time exactly the same way a
-    /// re-sync of a normal library does.</summary>
+    /// "pending restore" state (a manifest in git whose <c>lib/</c>, which is not tracked, is not on this machine yet):
+    /// <see cref="InstallAsync"/> restores into <c>lib/</c> unconditionally, whether or not one was already there,
+    /// so it restores for the first time exactly the same way a re-sync of a normal library does.</summary>
     public static async Task SyncAsync(string repoRoot, string id, CancellationToken cancellationToken = default)
     {
         var libraryDir = LibraryPaths.LibraryDir(repoRoot, id);
