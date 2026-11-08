@@ -20,7 +20,7 @@ export {
   FIXTURE_AS_OF, NO_RECORDED_IMAGE, NO_RECORDED_RESULT, ViewsClientError, fixtureClient, moduleClient, placedWidgets, textVersion, validateText,
 } from './client'
 export type {
-  ClientDiagnostic, DocumentSummary, FixtureBundle, FixtureClientOptions, ModuleClientOptions, OpenedDocument, PreviewRequest, ResolveOptions, SaveResult, ValidationResult, ViewsClient, ViewsClientErrorCode,
+  ClientDiagnostic, DocumentMap, DocumentSummary, FixtureBundle, FixtureClientOptions, ModuleClientOptions, OpenedDocument, PreviewRequest, ResolveOptions, SaveResult, ValidationResult, ViewsClient, ViewsClientErrorCode,
 } from './client'
 export { MetricTile } from './widgets/MetricTile'
 export { FitNotice, TableWidget } from './widgets/TableWidget'
@@ -69,3 +69,8 @@ export type { Reach } from './lineage/reach'
 export type { CardState } from './lineage/LineageGraphView'
 export { PagedFrame, ReportView, FLOW_FONT_STACK, flowCss, layoutFlow, pageGeometry, paginate, expandTokens } from './report'
 export type { FlowPlan, PagedFrameProps, PageGeometry, Pagination, PaginationItem } from './report'
+export {
+  EditError, NAME_PATTERN, YamlEditError, applyOps, canRedo, canUndo, canonicalText, canonicalValue, clientStore, commandOps, diagnosticsFor, draftFromOpened, edit, editAll, editText, errorsOf, format, formTarget, isDirty,
+  localFileStore, markSaved, markersOf, newDocumentText, newDraft, redo, reloadDraft, saveDraft, storedDocuments, styleNode, toMarker, undo,
+} from './editor'
+export type { DocumentStore, Draft, EditCommand, EditErrorCode, EditResult, EditorMarker, FormTarget, LocalFileStore, Op, Path, SaveOutcome, StorageLike } from './editor'

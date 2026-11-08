@@ -18,7 +18,17 @@ export interface FixtureBundle {
   images?: Record<string, string>
 }
 
+/** What the fixture client keeps its documents in: a `Map` does, and so does a store that outlives the page (the console keeps saved documents in the browser's storage). */
+export interface DocumentMap {
+  get(key: string): string | undefined
+  set(key: string, text: string): unknown
+  delete(key: string): unknown
+  entries(): Iterable<[string, string]>
+}
+
 export interface FixtureClientOptions {
+  /** Where documents live; default a `Map` of the bundle's documents. */
+  documents?: DocumentMap
   /** The `as_of` every resolution reports (a fixture's rows were read once); fixed so a snapshot is the same on every run. */
   asOf?: string
   /** Called for each resolution with the widgets asked for: a counting fixture (a parameter change resolves only the dependent widgets). */
@@ -54,7 +64,7 @@ export function placedWidgets(document: ViewsDoc, layoutName: string): string[] 
  * a text widget needs none, a control needs one only when it lists values. `save` keeps the text in memory under the file's hash as its version and refuses a stale one, as every real store does.
  */
 export function fixtureClient(bundle: FixtureBundle, options: FixtureClientOptions = {}): ViewsClient {
-  const documents = new Map(Object.entries(bundle.documents))
+  const documents: DocumentMap = options.documents ?? new Map(Object.entries(bundle.documents))
   const asOf = options.asOf ?? FIXTURE_AS_OF
 
   const summary = (k: string, text: string): DocumentSummary | null => {
@@ -123,6 +133,11 @@ export function fixtureClient(bundle: FixtureBundle, options: FixtureClientOptio
       if (!result.ok) throw new ViewsClientError('invalid', `The ${kind} \`${name}\` is not saved: ${(result.diagnostics.find((d) => d.severity === 'error') as ClientDiagnostic).message}`, { diagnostics: result.diagnostics })
       documents.set(key(kind, name), text)
       return { name, version: textVersion(text) }
+    },
+
+    async delete(kind, name) {
+      if (documents.get(key(kind, name)) === undefined) throw notFound(kind, name)
+      documents.delete(key(kind, name))
     },
 
     async preview(request: PreviewRequest) {

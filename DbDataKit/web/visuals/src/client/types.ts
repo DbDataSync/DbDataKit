@@ -72,6 +72,8 @@ export interface ViewsClient {
   validate(text: string, options?: { kind?: ViewKind; file?: string }): Promise<ValidationResult>
   /** Saves text under a name when `expectedVersion` is still the stored one (`version_conflict` otherwise); a new name needs none. */
   save(kind: ViewKind, name: string, text: string, expectedVersion?: string): Promise<SaveResult>
+  /** Removes a document (the editor's Delete). Optional: a source that cannot says so by not having it. */
+  delete?(kind: ViewKind, name: string): Promise<void>
   /** One widget's rendered form, for the editor's live preview. */
   preview(request: PreviewRequest): Promise<RenderedWidget>
 }
