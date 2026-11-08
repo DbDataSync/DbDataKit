@@ -29,7 +29,7 @@ public sealed record ViewsAnswer(int Status, JsonNode Body, IReadOnlyDictionary<
 /// Every call is audited (<c>view.list</c>, <c>view.open</c>, <c>view.render</c>, <c>view.export</c>: who, through what, which document and version, the outcome, never a parameter's value), and the answer is held back when the entry cannot be written.
 /// While draining, new calls are refused with 503 and the ones in flight finish.
 /// </summary>
-public sealed class ViewsApi(ViewsPublications published, IServingServices services, ViewsOptions options, IViewsAudit audit, IDrainCoordinator drain)
+public sealed partial class ViewsApi(ViewsPublications published, IServingServices services, ViewsOptions options, IViewsAudit audit, IDrainCoordinator drain)
 {
     public const string ExportUnavailable = "export_unavailable";
 
@@ -106,57 +106,62 @@ public sealed class ViewsApi(ViewsPublications published, IServingServices servi
         {
             var found = Find(who, kind, name, ViewsAuditVerbs.Render, traceId);
             if (found.View is not { } view) return found.Refusal!;
+            return await RenderViewAsync(who, kind, view, body, ViewsAuditVerbs.Render, clientAddress, traceId, cancellationToken, isPublished: true).ConfigureAwait(false);
+        }
+    }
 
-            Dictionary<string, JsonNode?>? parameters = null;
-            List<string>? only = null;
-            string? layout = null;
-            LayoutContext viewport = new();
-            try
-            {
-                foreach (var key in body?.Select(p => p.Key) ?? [])
-                    if (key is not ("parameters" or "layout" or "only" or "viewport" or "medium"))
-                        throw new ArgumentException($"Unknown key `{key}`: a render request has `parameters`, `layout`, `only`, `viewport` and `medium`.");
-                if (body?["parameters"] is { } p) parameters = (p as JsonObject ?? throw new ArgumentException("`parameters` must be an object of values by parameter name.")).ToDictionary(x => x.Key, x => x.Value?.DeepClone());
-                if (body?["only"] is { } o) only = (o as JsonArray ?? throw new ArgumentException("`only` must be a list of widget ids.")).Select(x => x is JsonValue v && v.TryGetValue<string>(out var s) ? s : throw new ArgumentException("`only` must be a list of widget ids.")).ToList();
-                if (body?["layout"] is { } l) layout = l is JsonValue lv && lv.TryGetValue<string>(out var ls) ? ls : throw new ArgumentException("`layout` must be a layout's name.");
-                var medium = body?["medium"] is JsonValue mv && mv.TryGetValue<string>(out var ms) ? ms : "screen";
-                double? Dimension(string key) => body?["viewport"] is JsonObject v && v[key] is JsonValue d && d.TryGetValue<double>(out var n) ? n : null;
-                viewport = new LayoutContext(Dimension("width"), Dimension("height"), medium, layout);
-            }
-            catch (ArgumentException e)
-            {
-                return Refuse(who, ViewsAuditVerbs.Render, kind, view, 400, "invalid", e.Message, traceId);
-            }
+    /// <summary>The render of a document already found: a published one (the module's cache, the definition header) or a person's own (<paramref name="isPublished"/> false: no cache, no header, the audit says whose it is).</summary>
+    private async Task<ViewsAnswer> RenderViewAsync(ViewsPrincipal who, string kind, PublishedView view, JsonObject? body, string verb, string? clientAddress, string? traceId, CancellationToken cancellationToken, bool isPublished)
+    {
+        Dictionary<string, JsonNode?>? parameters = null;
+        List<string>? only = null;
+        string? layout = null;
+        LayoutContext viewport = new();
+        try
+        {
+            foreach (var key in body?.Select(p => p.Key) ?? [])
+                if (key is not ("parameters" or "layout" or "only" or "viewport" or "medium"))
+                    throw new ArgumentException($"Unknown key `{key}`: a render request has `parameters`, `layout`, `only`, `viewport` and `medium`.");
+            if (body?["parameters"] is { } p) parameters = (p as JsonObject ?? throw new ArgumentException("`parameters` must be an object of values by parameter name.")).ToDictionary(x => x.Key, x => x.Value?.DeepClone());
+            if (body?["only"] is { } o) only = (o as JsonArray ?? throw new ArgumentException("`only` must be a list of widget ids.")).Select(x => x is JsonValue v && v.TryGetValue<string>(out var s) ? s : throw new ArgumentException("`only` must be a list of widget ids.")).ToList();
+            if (body?["layout"] is { } l) layout = l is JsonValue lv && lv.TryGetValue<string>(out var ls) ? ls : throw new ArgumentException("`layout` must be a layout's name.");
+            var medium = body?["medium"] is JsonValue mv && mv.TryGetValue<string>(out var ms) ? ms : "screen";
+            double? Dimension(string key) => body?["viewport"] is JsonObject v && v[key] is JsonValue d && d.TryGetValue<double>(out var n) ? n : null;
+            viewport = new LayoutContext(Dimension("width"), Dimension("height"), medium, layout);
+        }
+        catch (ArgumentException e)
+        {
+            return Refuse(who, verb, kind, view, 400, "invalid", e.Message, traceId);
+        }
 
-            var chosen = LayoutSelector.Select(view.Document, viewport);
-            if (chosen.Layout is not { } picked)
-                return Refuse(who, ViewsAuditVerbs.Render, kind, view, 400, ResolveCodes.UnknownLayout, chosen.Refusal ?? "No layout fits.", traceId);
+        var chosen = LayoutSelector.Select(view.Document, viewport);
+        if (chosen.Layout is not { } picked)
+            return Refuse(who, verb, kind, view, 400, ResolveCodes.UnknownLayout, chosen.Refusal ?? "No layout fits.", traceId);
 
-            var context = ContextOf(who, clientAddress, traceId);
-            try
-            {
-                var resolver = view.Resolver(services.Queries, Basis(), services.Entities);
-                var rendered = await resolver.ResolveAsync(context, view.Document, picked.Name, parameters, only, cancellationToken).ConfigureAwait(false);
-                var errors = rendered.Widgets.Where(w => rendered.Failed(w.Key)).Select(w => (w.Value["code"]?.GetValue<string>() ?? "error")).ToList();
-                var detail = Detail(traceId, ("layout", picked.Name), ("widgets", rendered.Widgets.Count), ("errors", errors.Count), ("error_codes", errors.Distinct().Order(StringComparer.Ordinal).ToList()),
-                    ("parameters", parameters?.Keys.Order(StringComparer.Ordinal).ToList()), ("only", only));
-                return Finish(who, ViewsAuditVerbs.Render, kind, view.Name, view.Version, AuditEvent.Ok, detail, new ViewsAnswer(200, rendered.ToJson(), Definition(view)));
-            }
-            catch (ViewResolutionException e)
-            {
-                return Refuse(who, ViewsAuditVerbs.Render, kind, view, 400, e.Code, e.Message, traceId);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception e) when (e is not (OutOfMemoryException or StackOverflowException or AuditFailure))
-            {
-                // only the kind of an unexpected failure leaves the module: its words can name tables, servers and files
-                Record(who, ViewsAuditVerbs.Render, kind, view.Name, view.Version, AuditEvent.Failed, Detail(traceId, ("error", e.GetType().Name)));
-                Interlocked.Increment(ref refused);
-                return ViewsAnswer.Error(500, "error", $"The render failed ({e.GetType().Name}).");
-            }
+        var context = ContextOf(who, clientAddress, traceId);
+        try
+        {
+            var resolver = view.Resolver(services.Queries, Basis(cached: isPublished), services.Entities);
+            var rendered = await resolver.ResolveAsync(context, view.Document, picked.Name, parameters, only, cancellationToken).ConfigureAwait(false);
+            var errors = rendered.Widgets.Where(w => rendered.Failed(w.Key)).Select(w => (w.Value["code"]?.GetValue<string>() ?? "error")).ToList();
+            var detail = Detail(traceId, ("layout", picked.Name), ("widgets", rendered.Widgets.Count), ("errors", errors.Count), ("error_codes", errors.Distinct().Order(StringComparer.Ordinal).ToList()),
+                ("parameters", parameters?.Keys.Order(StringComparer.Ordinal).ToList()), ("only", only));
+            return Finish(who, verb, kind, view.Name, view.Version, AuditEvent.Ok, detail, new ViewsAnswer(200, rendered.ToJson(), isPublished ? Definition(view) : null));
+        }
+        catch (ViewResolutionException e)
+        {
+            return Refuse(who, verb, kind, view, 400, e.Code, e.Message, traceId);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception e) when (e is not (OutOfMemoryException or StackOverflowException or AuditFailure))
+        {
+            // only the kind of an unexpected failure leaves the module: its words can name tables, servers and files
+            Record(who, verb, kind, view.Name, view.Version, AuditEvent.Failed, Detail(traceId, ("error", e.GetType().Name)));
+            Interlocked.Increment(ref refused);
+            return ViewsAnswer.Error(500, "error", $"The render failed ({e.GetType().Name}).");
         }
     }
 

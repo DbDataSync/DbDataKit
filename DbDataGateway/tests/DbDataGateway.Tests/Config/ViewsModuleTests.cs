@@ -22,7 +22,7 @@ namespace DbDataGateway.Tests.Config;
 /// against the models the group serves; the module's health is among the Gateway's readiness components.
 /// </summary>
 [Collection(ProcessStateCollection.Name)]
-public sealed class ViewsModuleTests : IAsyncLifetime
+public sealed partial class ViewsModuleTests : IAsyncLifetime
 {
     private const string Model = "sales_catalog";
     private const string Source = "sales-ro";

@@ -40,8 +40,10 @@ describe('the sources of the Views page', () => {
         throw new TypeError('network')                                                   // f does not answer
       }) as typeof fetch,
     })
-    expect(sources.map((s) => s.id)).toEqual(['a', 'fixtures'])
+    // the Gateway that runs the module also keeps a person's own documents (DBR12): a source after the published ones
+    expect(sources.map((s) => s.id)).toEqual(['a', 'mine:a', 'fixtures'])
     expect(sources[0]).toEqual({ id: 'a', label: 'Gateway a (published)', published: true })
+    expect(sources[1]).toEqual({ id: 'mine:a', label: 'My dashboards on Gateway a', published: false, personal: { server: 'a' } })
     // only the reachable Gateways were asked, through the relay and at the module's status route
     expect(asked.sort()).toEqual(['/relay/a/api/v1/views/status', '/relay/b/api/v1/views/status', '/relay/e/api/v1/views/status', '/relay/f/api/v1/views/status'])
   })

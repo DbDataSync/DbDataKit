@@ -32,7 +32,7 @@ public sealed class GatewayViewsManagement(GatewayViewsPublishing publishing, Ga
     public const string Prefix = GatewayManagement.Prefix;
 
     public static bool Handles(string route) =>
-        route is Prefix + "/dashboards" or Prefix + "/reports" or Prefix + "/views/status" or Prefix + "/views/preview"
+        route.StartsWith(Prefix + "/my/", StringComparison.Ordinal) || route is Prefix + "/dashboards" or Prefix + "/reports" or Prefix + "/views/status" or Prefix + "/views/preview"
         || route.StartsWith(Prefix + "/dashboards/", StringComparison.Ordinal) || route.StartsWith(Prefix + "/reports/", StringComparison.Ordinal);
 
     private static ManagementResult Problem(int status, string code, string message) =>
@@ -44,6 +44,9 @@ public sealed class GatewayViewsManagement(GatewayViewsPublishing publishing, Ga
             return method == "GET" ? (caller.Holds(ServerRole.Viewer) ? Status() : Problem(403, "denied", "This needs the viewer role.")) : Problem(405, "invalid", "The status is read with GET.");
 
         if (route == Prefix + "/views/preview") return await PreviewAsync(method, body, caller, cancellationToken);
+
+        // a person's own dashboards and reports (DBR12): the module's own routes under /my/, as the person the console vouches for
+        if (route.StartsWith(Prefix + "/my/", StringComparison.Ordinal)) return await GatewayUserViews.HandleAsync(views, method, route, query, body, caller, cancellationToken);
 
         var parts = route[(Prefix.Length + 1)..].Split('/');
         var kind = parts[0] == "reports" ? ViewDefinitions.Report : ViewDefinitions.Dashboard;

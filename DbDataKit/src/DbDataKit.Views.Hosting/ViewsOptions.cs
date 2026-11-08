@@ -54,5 +54,8 @@ public sealed class ViewsOptions
     /// <summary>The most rows a CSV or xlsx export holds in all (the rows of every sheet): a larger one is refused, in words, with 413. Not a browser's limit, so it does not come from <c>views.export</c>'s exporter settings.</summary>
     public long MaxExportRows { get; init; } = 100_000;
 
+    /// <summary>The store of people's own dashboards and reports (plan 32 DBR12, the state module <c>user_views</c>); null leaves the <c>/api/v1/my/...</c> routes answering 404 and says why. The host opens the module and passes the store.</summary>
+    public UserViewStore? UserViews { get; init; }
+
     public TimeProvider Time { get; init; } = TimeProvider.System;
 }

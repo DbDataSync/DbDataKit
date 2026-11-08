@@ -3,9 +3,11 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { DashboardView, checkDrill, type ClientDiagnostic, type ResolvedDrill, type ViewKind, type ViewsDoc } from '@dbdatakit/visuals'
 import { crumbAddress, describeValue, drillAddress, readKiosk, readLayout, readParameters, readSource, readTrail, withSource, writeKiosk, writeLayout, writeParameters, writeSource } from '../viewsUrl'
-import { discoverSources, pickSource, resolveLog, viewsClient, type ViewsSource } from '../viewsSource'
+import { discoverSources, personalFor, pickSource, resolveLog, viewsClient, type ViewsSource } from '../viewsSource'
+import { isShared } from '../userViews'
 import { DashboardEditor } from './DashboardEditor'
 import { VersionsPanel } from './VersionsPanel'
+import { MyViewsPanel, PinPanel, SharedBy } from './MyViewsPanel'
 
 const AREA: Record<ViewKind, { path: string; plural: string; singular: string }> = {
   dashboard: { path: '/views/dashboards', plural: 'Dashboards', singular: 'dashboard' },
@@ -38,7 +40,7 @@ async function openFile(file: File): Promise<{ kind: ViewKind; name: string } | 
 }
 
 /** Where the documents come from: the fixtures, or a Gateway's published ones; a change of source is a different list, so it goes back to the list. */
-function SourcePicker({ sources, source, unknown, kind }: { sources: ViewsSource[]; source: ViewsSource; unknown: string | null; kind: ViewKind }) {
+export function SourcePicker({ sources, source, unknown, kind }: { sources: ViewsSource[]; source: ViewsSource; unknown: string | null; kind: ViewKind }) {
   const navigate = useNavigate()
   return (
     <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 8 }} data-testid="views-source-picker">
@@ -47,7 +49,7 @@ function SourcePicker({ sources, source, unknown, kind }: { sources: ViewsSource
         {sources.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
       </select>
       <span className="hint" data-testid="views-source-current" data-source={source.id} data-published={source.published ? 'true' : 'false'}>
-        {source.published ? 'Published to the group: every widget is read as you.' : sources.some((s) => s.published) ? 'The sample files and their recorded results; nothing is sent anywhere.' : 'No Gateway runs the views module, so these are the sample files and their recorded results.'}
+        {source.personal ? 'Your own documents, and the ones others shared with you: every widget is read as you, so a shared document shows you the rows your own access gives.' : source.published ? 'Published to the group: every widget is read as you.' : sources.some((s) => s.published) ? 'The sample files and their recorded results; nothing is sent anywhere.' : 'No Gateway runs the views module, so these are the sample files and their recorded results.'}
       </span>
       {unknown && <span className="hint" role="note" data-testid="views-source-unknown">`{unknown}` is not a source now (it has no views module, or it did not answer); showing {source.label}.</span>}
     </div>
@@ -66,8 +68,8 @@ function Listing({ kind, source, sources, unknown, keep }: { kind: ViewKind; sou
       <div className="card" style={{ marginBottom: 16 }}>
         <SourcePicker sources={sources} source={source} unknown={unknown} kind={kind} />
         <div className="row" style={{ gap: 8, alignItems: 'center' }}>
-          {!source.published && <label className="btn" htmlFor={`views-open-file-${kind}`}>Open file</label>}
-          {!source.published && <input
+          {!source.published && !source.personal && <label className="btn" htmlFor={`views-open-file-${kind}`}>Open file</label>}
+          {!source.published && !source.personal && <input
             id={`views-open-file-${kind}`}
             type="file"
             accept=".yaml,.yml,.json"
@@ -147,7 +149,7 @@ function KioskFrame({ children, search, setSearch }: { children: ReactNode; sear
   )
 }
 
-function Board({ kind, name, document, source, keep }: { kind: ViewKind; name: string; document: ViewsDoc; source: ViewsSource; keep: string | null }) {
+function Board({ kind, name, document, source, keep, personal }: { kind: ViewKind; name: string; document: ViewsDoc; source: ViewsSource; keep: string | null; personal: ViewsSource | null }) {
   const [search, setSearch] = useSearchParams()
   const navigate = useNavigate()
   const kiosk = readKiosk(search)
@@ -218,8 +220,10 @@ function Board({ kind, name, document, source, keep }: { kind: ViewKind; name: s
         <Link to={withSource(AREA[kind].path, keep)} data-testid="views-back">All {AREA[kind].plural.toLowerCase()}</Link>
         <strong data-testid="views-title">{document.title}</strong>
         <span className="hint" data-testid="views-source-current" data-source={source.id} data-published={source.published ? 'true' : 'false'}>{source.published ? source.label : 'Fixtures'}</span>
-        <Link to={withSource('?edit=1', keep)} className="btn btn-sm" data-testid="views-edit">Edit</Link>
+        {isShared(name) && <SharedBy source={source} kind={kind} name={name} />}
+        {!isShared(name) && <Link to={withSource('?edit=1', keep)} className="btn btn-sm" data-testid="views-edit">Edit</Link>}
         {source.published && <button type="button" className="btn btn-sm" data-testid="views-versions" aria-expanded={showVersions} title="Who published each version, serve an earlier one, or remove it from the group" onClick={() => setShowVersions(!showVersions)}>Versions</button>}
+        {personal && <PinPanel document={document} personal={personal} />}
         <button type="button" className="btn btn-sm" data-testid="views-kiosk" title="Show this board alone, filling the window" onClick={() => setSearch(writeKiosk(search, true))}>Kiosk</button>
         <label htmlFor="views-layout-select">Layout</label>
         <select id="views-layout-select" data-testid="views-layout-select" value={layout ?? ''} onChange={(e) => setSearch(writeLayout(search, e.target.value === '' ? null : e.target.value), { replace: true })}>
@@ -248,7 +252,7 @@ function Board({ kind, name, document, source, keep }: { kind: ViewKind; name: s
   )
 }
 
-function Opened({ kind, name, source, keep }: { kind: ViewKind; name: string; source: ViewsSource; keep: string | null }) {
+function Opened({ kind, name, source, keep, personal }: { kind: ViewKind; name: string; source: ViewsSource; keep: string | null; personal: ViewsSource | null }) {
   const area = AREA[kind]
   const [search, setSearch] = useSearchParams()
   // in kiosk the page has no chrome, so what is not the board (opening, an error) still has the way out
@@ -272,7 +276,7 @@ function Opened({ kind, name, source, keep }: { kind: ViewKind; name: string; so
       </div>,
     )
   }
-  return <Board key={`${source.id}/${name}`} kind={kind} name={name} document={document} source={source} keep={keep} />
+  return <Board key={`${source.id}/${name}`} kind={kind} name={name} document={document} source={source} keep={keep} personal={personal} />
 }
 
 /**
@@ -293,7 +297,10 @@ export function DashboardsPanel({ kind }: { kind: ViewKind }) {
   const keep = requested && !unknown ? requested : null
   if (!name && search.get('new')) return <DashboardEditor key={`new-${source.id}`} kind={kind} name={null} source={source.id} keep={keep} />
   if (name && search.get('edit')) return <DashboardEditor key={`${source.id}/${name}`} kind={kind} name={decodeURIComponent(name)} source={source.id} keep={keep} />
+  // a person's own documents (plan 32 DBR12): the personal source of the same server, which a widget is pinned to
+  const personal = personalFor(sources.data ?? [], source)
+  if (!name && source.personal) return <MyViewsPanel kind={kind} source={source} keep={keep} picker={<SourcePicker sources={sources.data ?? []} source={source} unknown={unknown} kind={kind} />} />
   return name
-    ? <Opened kind={kind} name={decodeURIComponent(name)} source={source} keep={keep} />
+    ? <Opened kind={kind} name={decodeURIComponent(name)} source={source} keep={keep} personal={personal} />
     : <Listing kind={kind} source={source} sources={sources.data ?? []} unknown={unknown} keep={keep} />
 }
