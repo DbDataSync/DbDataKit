@@ -145,3 +145,8 @@ export interface EntityModelRow {
 }
 
 export interface EntityModelDetail { name: string; current_version: number; data_source: string; managed_by: string | null; versions: ModelVersionRow[] }
+
+/** A secret this gateway keeps for the console (plan 33, UE16): its name and the reference a data source's file writes. Never its value. */
+export interface SecretItem { name: string; reference: string }
+export interface SecretsList { secrets: string[]; items: SecretItem[] }
+export interface SecretWritten { name: string; reference: string; replaced: boolean }

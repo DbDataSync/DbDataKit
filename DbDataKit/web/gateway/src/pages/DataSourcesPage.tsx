@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { ApiError, ErrorBanner, useIsAdmin, useNavigate } from '@dbdatakit/shell'
 import { gatewayApi } from '../api'
 import { GatewayShell } from '../GatewayShell'
+import { passwordLine } from '../secrets'
 import type { AdoptAnswer, Diagnostic, ServerClient } from '../types'
 
 const COLUMNS = '1.6fr 0.9fr 0.8fr 0.6fr 1.2fr 2.2fr'
@@ -121,6 +122,26 @@ function Diagnostics({ items }: { items: Diagnostic[] }) {
   )
 }
 
+/** The secrets this gateway keeps, with the line to write in the file for each (plan 33, UE16): the editor shows the reference, the Secrets screen sets the value. */
+function SecretReferences() {
+  const secrets = useQuery({ queryKey: ['gateway', 'secrets'], queryFn: gatewayApi.secrets.list, retry: false })
+  return (
+    <div className="card" style={{ marginTop: 16 }} data-testid="data-source-secrets">
+      <div className="card-head"><span className="card-title">Secrets</span><Link to="/secrets" data-testid="data-source-secrets-link">Set or change a secret</Link></div>
+      <div className="card-body">
+        {secrets.isPending && <span className="hint" data-testid="data-source-secrets-loading">Reading the secrets…</span>}
+        {secrets.isError && <span className="hint" role="alert" data-testid="data-source-secrets-error">The secrets could not be listed: {secrets.error instanceof Error ? secrets.error.message : String(secrets.error)}</span>}
+        {secrets.data?.length === 0 && <span className="hint" data-testid="data-source-secrets-empty">No secret is kept yet. Set one on the Secrets screen, then write its reference in this file instead of the password.</span>}
+        {(secrets.data ?? []).map((s) => (
+          <div key={s.name} className="row" style={{ gap: 10, marginBottom: 4 }} data-testid={`data-source-secret-${s.name}`}>
+            <span className="mono">{s.name}</span><code>{s.reference ? passwordLine(s.reference) : 'no reference listed'}</code>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /** One data source's file: edit, save (against the version read), test, remove. */
 export function DataSourceEditPage({ name, isNew }: { name: string; isNew: boolean }) {
   const queryClient = useQueryClient()
@@ -163,6 +184,7 @@ export function DataSourceEditPage({ name, isNew }: { name: string; isNew: boole
           {!isNew && <button type="button" className="btn" disabled={test.isPending} onClick={() => test.mutate()} data-testid="data-source-test">Test the connection</button>}
           {!isNew && <button type="button" className="btn" disabled={remove.isPending || !file.data} onClick={() => remove.mutate()} data-testid="data-source-remove">Remove</button>}
         </div>
+        <SecretReferences />
         {test.data && (
           <div className="hint" style={{ marginTop: 10 }} data-testid="data-source-test-result" data-ok={test.data.ok ? 'true' : 'false'}>
             {test.data.ok ? `Connected (${test.data.elapsed_ms} ms).` : `Could not connect: ${test.data.message ?? 'no answer'}`}
