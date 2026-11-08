@@ -254,6 +254,8 @@ public sealed class WidgetResolver
         var bytes = options.ImageBytes?.Invoke(hash)
             ?? throw new WidgetProblem(ResolveCodes.ImageNotFound, $"The image `{hash}` is not among the definition's artifacts here.", $"widgets.{widget.Id}.hash");
         if (bytes.Length > options.MaxImageBytes) throw new WidgetProblem(ResolveCodes.TooLarge, $"The image is {bytes.Length} bytes; at most {options.MaxImageBytes} are drawn.", $"widgets.{widget.Id}.hash");
+        // a raster by its first bytes, never an SVG or a renamed file (the check the renderers and the publish make, ImageCheck)
+        if (ImageCheck.Refusal(bytes, media) is { } unsafeImage) throw new WidgetProblem(ViewsCodes.UnsafeImage, unsafeImage, $"widgets.{widget.Id}.hash");
         return new JsonObject { ["type"] = "image", ["src"] = $"data:{media};base64,{Convert.ToBase64String(bytes)}" };
     }
 

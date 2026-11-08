@@ -32,6 +32,26 @@
       "files": [ { "path": "DbDataKit/src/DbDataKit.Apps.Manifest/schemas/view-spec.schema.json", "sha256": null } ]
     },
     {
+      "id": "dashboard",
+      "title": "Views dashboard (a file, schema: dashboard/N; one number with the shared core and the other kind)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "new with plan 32 (DBR02); one number, ViewsFormat.Current, for dashboard and report and the widget vocabulary of the shared core: a new widget type, query form, layout type or selector condition bumps both; a newer one is refused naming kind, file and both numbers. Open until the first release that holds either (24a D5)",
+      "version_source": { "file": "DbDataKit/src/DbDataKit.Views/ViewsFormat.cs", "pattern": "public const int Current = (\\d+);" },
+      "files": [ { "path": "DbDataKit/web/visuals/schemas/core.schema.json", "sha256": null }, { "path": "DbDataKit/web/visuals/schemas/dashboard.schema.json", "sha256": null } ]
+    },
+    {
+      "id": "report",
+      "title": "Views report (a file, schema: report/N; one number with the shared core and the other kind)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "new with plan 32 (DBR02); one number, ViewsFormat.Current, for dashboard and report and the widget vocabulary of the shared core: a new widget type, query form, layout type or selector condition bumps both; a newer one is refused naming kind, file and both numbers. Open until the first release that holds either (24a D5)",
+      "version_source": { "file": "DbDataKit/src/DbDataKit.Views/ViewsFormat.cs", "pattern": "public const int Current = (\\d+);" },
+      "files": [ { "path": "DbDataKit/web/visuals/schemas/core.schema.json", "sha256": null }, { "path": "DbDataKit/web/visuals/schemas/report.schema.json", "sha256": null } ]
+    },
+    {
       "id": "semantic-package",
       "title": "Semantic package (the catalog, format of the semantic-model definition)",
       "current": 2,

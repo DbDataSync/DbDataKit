@@ -31,49 +31,12 @@ public class DeriveTests
         return result.Widgets!.Single();
     }
 
-    /// <summary>
-    /// The engine's validator as the catalog check sees it. The engine resolves a request's parameters before it validates (<c>{"param": name}</c> stands for a value), so the adapter does the same with a placeholder
-    /// of the type the attribute takes: what is checked is the shape of the request against the model, never a value (the viewer's values are checked when the widget runs).
-    /// </summary>
-    private sealed class EngineValidator(Validator validator) : IRequestValidator
-    {
-        public IReadOnlyList<RequestProblem> Validate(JsonObject request)
-        {
-            var bound = (JsonObject)request.DeepClone();
-            Bind(bound, null);
-            return validator.ValidateRequest(bound).Select(e => new RequestProblem(e.Code, e.Path, e.Message)).ToList();
-        }
-
-        private static bool IsMarker(JsonNode? n) => n is JsonObject { Count: 1 } o && o.ContainsKey("param");
-
-        private static JsonNode Placeholder(string? attribute) => attribute is not null && Cat.Doc.Attributes.ContainsKey(attribute)
-            ? Cat.TypeOf(attribute) switch { "date" => "2026-01-01", "datetime" => "2026-01-01T00:00:00Z", "integer" => 1, "number" => 1.5, "boolean" => true, _ => "x" }
-            : 100;
-
-        private static void Bind(JsonNode? node, string? attribute)
-        {
-            switch (node)
-            {
-                case JsonObject o:
-                    var here = o["attribute"] is JsonValue a && a.TryGetValue<string>(out var name) ? name : attribute;
-                    foreach (var key in o.Select(p => p.Key).ToList())
-                    {
-                        if (IsMarker(o[key])) o[key] = key == "values" ? new JsonArray(Placeholder(here)) : Placeholder(null);
-                        else Bind(o[key], here);
-                    }
-                    break;
-                case JsonArray list:
-                    for (var i = 0; i < list.Count; i++)
-                        if (IsMarker(list[i])) list[i] = Placeholder(attribute); else Bind(list[i], attribute);
-                    break;
-            }
-        }
-    }
+    // the validator is the production adapter (SemanticRequestValidator, which DBR10 moved into the library): it resolves a request's parameters before it validates
 
     public static CatalogRoles EngineRoles() => new("sales_catalog", name => Cat.IsMeasure(name) ? CatalogRole.Measure : Cat.IsAttribute(name) ? CatalogRole.Attribute : CatalogRole.Unknown);
 
     private static IReadOnlyDictionary<string, CatalogBinding> Catalogs() =>
-        new Dictionary<string, CatalogBinding> { ["sales_catalog"] = new(EngineRoles(), new EngineValidator(Engine)) };
+        new Dictionary<string, CatalogBinding> { ["sales_catalog"] = new(EngineRoles(), new SemanticRequestValidator(Cat)) };
 
     [Theory, MemberData(nameof(Good))]
     public void A_widget_gives_exactly_the_golden_request_byte_for_byte(string file)
@@ -90,7 +53,7 @@ public class DeriveTests
     public void A_derived_request_validates_against_the_conformance_model(string file)
     {
         var request = (JsonObject)Case(file)["request"]!;
-        var errors = new EngineValidator(Engine).Validate(request);
+        var errors = new SemanticRequestValidator(Cat).Validate(request);
         Assert.True(errors.Count == 0, string.Join("\n", errors.Select(e => $"{e.Code} {e.Path}: {e.Message}")));
     }
 

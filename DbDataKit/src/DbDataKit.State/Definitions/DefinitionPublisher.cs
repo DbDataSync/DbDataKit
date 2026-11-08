@@ -110,7 +110,8 @@ public sealed partial class DefinitionPublisher
 
         var depends = request.DependsOn ?? [];
         var artifacts = ResolveArtifacts(request.Artifacts ?? []);
-        var candidate = new DefinitionCandidate(request.Kind, request.Name, request.Manifest, request.Artifacts ?? [], depends, format);
+        // the validator is shown the files as resolved (their payloads found and checked), so it can read what a file holds
+        var candidate = new DefinitionCandidate(request.Kind, request.Name, request.Manifest, [.. artifacts.Select(a => new ArtifactRef(a.Path, a.Sha256, a.Size, a.MediaType, a.PayloadId))], depends, format);
         if (validate?.Invoke(request.Manifest) is { } refusal) throw new DefinitionRejectedException(refusal);
         if (kind?.Validator?.Invoke(candidate) is { } kindRefusal)
             throw new PublishRefusedException(PublishRefusal.Invalid, $"The {request.Kind} '{request.Name}' failed its validator: {kindRefusal}");
@@ -225,38 +226,113 @@ public sealed partial class DefinitionPublisher
 
     /// <summary>Points the channel at any stored version (promotion). The same version again changes nothing.</summary>
     public DefinitionVersion Switch(string kind, string name, int version, string by, string channel = DefinitionStore.Production, int? expectedVersion = null, Action<DefinitionChange>? inTransaction = null, string? note = null) =>
+        Run(kind, name, channel, c => SwitchIn(c, kind, name, version, by, channel, expectedVersion, inTransaction, note));
+
+    private DefinitionVersion SwitchIn(Scope c, string kind, string name, int version, string by, string channel, int? expectedVersion, Action<DefinitionChange>? inTransaction, string? note)
+    {
+        var head = ReadHead(c.Connection, c.Transaction, kind, name, channel);
+        CheckExpected(kind, name, expectedVersion, head);
+        if (_store.ReadVersion(c.Connection, c.Transaction, kind, name, version) is not { } wanted) throw new DefinitionNotFoundException($"'{name}' has no version {version}.");
+        if (head is { Active: > 0 } already && already.Active == version) return wanted;
+        CheckInstancesRead(c.Connection, c.Transaction, kind, name, wanted.Version, wanted.Format);
+        if (_kinds is not null) CheckCanBeActive(c.Connection, c.Transaction, kind, name, channel, wanted, wanted.DependsOn);
+        var after = new Pointer(version, head is { Active: > 0 } ? head.Active : null, head?.Staged == version ? null : head?.Staged, head?.StagedAt, head?.StagedBy);
+        if (!Save(c.Connection, c.Transaction, kind, name, channel, after, head is not null, activeChanged: true, by, c.Now, head is null ? null : new Guard(head.Active, null, false)))
+            throw new DefinitionConflictException($"The {kind} '{name}' was changed by someone else while this call switched it; read it again.", expectedVersion ?? 0, head?.Active ?? 0);
+        inTransaction?.Invoke(new DefinitionChange(c.Connection, c.Transaction, kind, name, channel, head is { Active: > 0 } ? head.Active : null, version));
+        Log(c.Connection, c.Transaction, "switch", kind, name, channel, version, by, c.Now, note);
+        return wanted;
+    }
+
+    /// <summary>
+    /// Promotion that carries what the version depends on (plan 32 DBR10: a dashboard moves with the model version it was published against): the dependencies a version pins (<c>kind:name@version</c>), and theirs,
+    /// are pointed at the pinned version first, in the same transaction, and then the version itself; a dependency already at its pinned version is left alone, an unpinned one is only checked (it must be active, as
+    /// for any promotion). If any step is refused nothing moves. Returns the versions that moved, dependencies first.
+    /// </summary>
+    public IReadOnlyList<DefinitionVersion> PromoteWithDependencies(string kind, string name, int version, string by, string channel = DefinitionStore.Production, string? note = null) =>
         Run(kind, name, channel, c =>
         {
-            var head = ReadHead(c.Connection, c.Transaction, kind, name, channel);
-            CheckExpected(kind, name, expectedVersion, head);
-            if (_store.ReadVersion(c.Connection, c.Transaction, kind, name, version) is not { } wanted) throw new DefinitionNotFoundException($"'{name}' has no version {version}.");
-            if (head is { Active: > 0 } already && already.Active == version) return wanted;
-            CheckInstancesRead(c.Connection, c.Transaction, kind, name, wanted.Version, wanted.Format);
-            if (_kinds is not null) CheckCanBeActive(c.Connection, c.Transaction, kind, name, channel, wanted, wanted.DependsOn);
-            var after = new Pointer(version, head is { Active: > 0 } ? head.Active : null, head?.Staged == version ? null : head?.Staged, head?.StagedAt, head?.StagedBy);
-            if (!Save(c.Connection, c.Transaction, kind, name, channel, after, head is not null, activeChanged: true, by, c.Now, head is null ? null : new Guard(head.Active, null, false)))
-                throw new DefinitionConflictException($"The {kind} '{name}' was changed by someone else while this call switched it; read it again.", expectedVersion ?? 0, head?.Active ?? 0);
-            inTransaction?.Invoke(new DefinitionChange(c.Connection, c.Transaction, kind, name, channel, head is { Active: > 0 } ? head.Active : null, version));
-            Log(c.Connection, c.Transaction, "switch", kind, name, channel, version, by, c.Now, note);
-            return wanted;
+            var moved = new List<DefinitionVersion>();
+            var seen = new HashSet<(string, string)>();
+            void Carry(string k, string n, int v)
+            {
+                if (!seen.Add((k, n))) return;
+                if (_store.ReadVersion(c.Connection, c.Transaction, k, n, v) is not { } wanted) throw new DefinitionNotFoundException($"'{n}' has no version {v}.");
+                foreach (var text in wanted.DependsOn)
+                {
+                    if (Dependency().Match(text) is not { Success: true, Groups: var g } || !g[3].Success) continue;
+                    var dk = g[1].Value; var dn = g[2].Value; var dv = int.Parse(g[3].Value, System.Globalization.CultureInfo.InvariantCulture);
+                    if (ReadHead(c.Connection, c.Transaction, dk, dn, channel) is { Active: > 0 } head && head.Active == dv) continue;
+                    Carry(dk, dn, dv);
+                }
+                var before = ReadHead(c.Connection, c.Transaction, k, n, channel);
+                var done = SwitchIn(c, k, n, v, by, channel, null, null, note);
+                if (before is not { Active: > 0 } || before.Active != v) moved.Add(done);
+            }
+            Carry(kind, name, version);
+            return (IReadOnlyList<DefinitionVersion>)moved;
         });
 
     /// <summary>Returns the channel to the version it had before the current one.</summary>
     public DefinitionVersion Rollback(string kind, string name, string by, string channel = DefinitionStore.Production, int? expectedVersion = null, Action<DefinitionChange>? inTransaction = null, string? note = null) =>
+        Run(kind, name, channel, c => RollbackIn(c, kind, name, by, channel, expectedVersion, inTransaction, note));
+
+    private DefinitionVersion RollbackIn(Scope c, string kind, string name, string by, string channel, int? expectedVersion, Action<DefinitionChange>? inTransaction, string? note)
+    {
+        var head = ReadHead(c.Connection, c.Transaction, kind, name, channel);
+        CheckExpected(kind, name, expectedVersion, head);
+        var target = head?.Previous ?? throw new DefinitionNotFoundException($"'{name}' on {channel} has no earlier version to return to.");
+        var wanted = _store.ReadVersion(c.Connection, c.Transaction, kind, name, target) ?? throw new DefinitionNotFoundException($"'{name}' has no version {target}.");
+        CheckInstancesRead(c.Connection, c.Transaction, kind, name, wanted.Version, wanted.Format);
+        var after = new Pointer(target, head.Active > 0 ? head.Active : null, head.Staged, head.StagedAt, head.StagedBy);
+        if (!Save(c.Connection, c.Transaction, kind, name, channel, after, true, activeChanged: true, by, c.Now, new Guard(head.Active, null, false)))
+            throw new DefinitionConflictException($"The {kind} '{name}' was changed by someone else while this call rolled it back; read it again.", expectedVersion ?? 0, head.Active);
+        inTransaction?.Invoke(new DefinitionChange(c.Connection, c.Transaction, kind, name, channel, head.Active > 0 ? head.Active : null, target));
+        Log(c.Connection, c.Transaction, "rollback", kind, name, channel, target, by, c.Now, note);
+        return wanted;
+    }
+
+    /// <summary>
+    /// The rollback that matches <see cref="PromoteWithDependencies"/>: the version before returns, and each dependency it pins that is not at its pinned version is pointed back to it, in the same transaction.
+    /// A dependency that another active definition of the channel pins at the version it has now is not moved (the other would lose what it was published against): the rollback is refused naming that definition.
+    /// </summary>
+    public IReadOnlyList<DefinitionVersion> RollbackWithDependencies(string kind, string name, string by, string channel = DefinitionStore.Production, string? note = null) =>
         Run(kind, name, channel, c =>
         {
-            var head = ReadHead(c.Connection, c.Transaction, kind, name, channel);
-            CheckExpected(kind, name, expectedVersion, head);
-            var target = head?.Previous ?? throw new DefinitionNotFoundException($"'{name}' on {channel} has no earlier version to return to.");
-            var wanted = _store.ReadVersion(c.Connection, c.Transaction, kind, name, target) ?? throw new DefinitionNotFoundException($"'{name}' has no version {target}.");
-            CheckInstancesRead(c.Connection, c.Transaction, kind, name, wanted.Version, wanted.Format);
-            var after = new Pointer(target, head.Active > 0 ? head.Active : null, head.Staged, head.StagedAt, head.StagedBy);
-            if (!Save(c.Connection, c.Transaction, kind, name, channel, after, true, activeChanged: true, by, c.Now, new Guard(head.Active, null, false)))
-                throw new DefinitionConflictException($"The {kind} '{name}' was changed by someone else while this call rolled it back; read it again.", expectedVersion ?? 0, head.Active);
-            inTransaction?.Invoke(new DefinitionChange(c.Connection, c.Transaction, kind, name, channel, head.Active > 0 ? head.Active : null, target));
-            Log(c.Connection, c.Transaction, "rollback", kind, name, channel, target, by, c.Now, note);
-            return wanted;
+            var restored = RollbackIn(c, kind, name, by, channel, null, null, note);
+            var moved = new List<DefinitionVersion> { restored };
+            foreach (var text in restored.DependsOn)
+            {
+                if (Dependency().Match(text) is not { Success: true, Groups: var g } || !g[3].Success) continue;
+                var dk = g[1].Value; var dn = g[2].Value; var dv = int.Parse(g[3].Value, System.Globalization.CultureInfo.InvariantCulture);
+                if (ReadHead(c.Connection, c.Transaction, dk, dn, channel) is not { Active: > 0 } head || head.Active == dv) continue;
+                var pinnedBy = ActiveDependents(c, dk, dn, head.Active, channel).FirstOrDefault(d => d != (kind, name));
+                if (pinnedBy != default)
+                    throw new PublishRefusedException(PublishRefusal.DependencyNotActive, $"The {kind} '{name}' cannot go back to version {restored.Version} in channel '{channel}': it was published against {dk}:{dn}@{dv}, which is at version {head.Active}, and the {pinnedBy.Kind} '{pinnedBy.Name}' needs that version.");
+                moved.Add(SwitchIn(c, dk, dn, dv, by, channel, null, null, note));
+            }
+            return (IReadOnlyList<DefinitionVersion>)moved;
         });
+
+    /// <summary>The active definitions of a channel (of every registered kind) whose version pins <c>kind:name@version</c>.</summary>
+    private List<(string Kind, string Name)> ActiveDependents(Scope c, string kind, string name, int version, string channel)
+    {
+        var pin = $"{kind}:{name}@{version}";
+        var found = new List<(string, string)>();
+        foreach (var registered in _kinds!.All)
+        {
+            var names = new List<(string Name, int Version)>();
+            using (var command = _database.Command(Module, c.Connection, c.Transaction, "SELECT name, version FROM {table:definition_serving} WHERE kind = $kind AND channel = $channel ORDER BY name;"))
+            {
+                command.Bind(_database, "kind", registered.Name).Bind(_database, "channel", channel);
+                using var reader = command.ExecuteReader();
+                while (reader.Read()) if (reader.Int32(1) > 0) names.Add((reader.GetString(0), reader.Int32(1)));
+            }
+            foreach (var (n, v) in names)
+                if (_store.ReadVersion(c.Connection, c.Transaction, registered.Name, n, v) is { } active && active.DependsOn.Contains(pin, StringComparer.Ordinal)) found.Add((registered.Name, n));
+        }
+        return found;
+    }
 
     /// <summary>Stops serving a definition in a channel (and drops what it had staged there); the versions and bindings stay. False when the channel had neither.</summary>
     public bool Retire(string kind, string name, string by, string channel = DefinitionStore.Production, int? expectedVersion = null)

@@ -71,6 +71,14 @@ public static class ViewsCodes
     public const string TotalsConflict = "DBD-VIEW-042";
     /// <summary>The catalog check has no catalog for the model a widget's query names.</summary>
     public const string ModelNotBound = "DBD-VIEW-043";
+    /// <summary>A model the document depends on is not pinned, has no such version, or does not load; or a model its widgets query is not a dependency (publishing, DBR10).</summary>
+    public const string DependencyMissing = "DBD-VIEW-060";
+    /// <summary>A saved query a widget runs is in none of the models the document depends on.</summary>
+    public const string SavedQueryNotFound = "DBD-VIEW-061";
+    /// <summary>A control lists the values of an attribute none of the models the document depends on has.</summary>
+    public const string ControlAttributeUnknown = "DBD-VIEW-062";
+    /// <summary>An image widget's hash is not among the files of the version being published.</summary>
+    public const string ImageNotInDefinition = "DBD-VIEW-063";
     /// <summary>Warning: two layouts have equal selectors, so the later one is never reached.</summary>
     public const string EqualSelectors = "DBD-VIEW-080";
     /// <summary>Warning: a range with its minimum above its maximum matches nothing.</summary>

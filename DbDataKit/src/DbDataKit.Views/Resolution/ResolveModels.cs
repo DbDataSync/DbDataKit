@@ -54,7 +54,7 @@ public sealed class ResolverOptions
     public TimeProvider Time { get; init; } = TimeProvider.System;
 
     /// <summary>The largest image the resolver gives (1 MiB, the same as <c>IMAGE_MAX_BYTES</c> of the renderers).</summary>
-    public int MaxImageBytes { get; init; } = 1024 * 1024;
+    public int MaxImageBytes { get; init; } = ImageCheck.MaxBytes;
 
     /// <summary>The prefix of a semantic model as a serving source (<c>semantic:retail_sales</c>), the serving core's convention.</summary>
     public string ModelSourcePrefix { get; init; } = "semantic:";
