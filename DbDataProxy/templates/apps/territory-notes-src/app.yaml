@@ -1,0 +1,11 @@
+schemaVersion: 1
+name: territory-notes-src
+title: Territory notes (built)
+description: The territory-notes code app as a source tree, with TypeScript in src/ that `apps build` bundles into the one script the page loads.
+version: 1.0.0
+entry: index.html
+roles: [viewer, author]
+storage: {user: true, instance: true, quota_mb: 5}
+models:
+  - model: territories
+    entities: {territory: [read, write]}

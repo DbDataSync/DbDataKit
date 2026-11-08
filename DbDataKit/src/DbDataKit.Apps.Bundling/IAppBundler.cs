@@ -7,7 +7,8 @@ namespace DbDataKit.Apps.Bundling;
 /// <param name="Minify">Minify the bundle (the default for a deployed version).</param>
 /// <param name="MaxBundleBytes">The most the bundle's files may add up to; a larger build fails rather than being served.</param>
 /// <param name="Timeout">How long the build may take before it is stopped.</param>
-public sealed record AppBundleRequest(string SourceDirectory, string EntryPoint, string OutputDirectory, bool Minify = true, long MaxBundleBytes = 20L * 1024 * 1024, TimeSpan? Timeout = null);
+/// <param name="Offline">Reach no package registry: nothing is installed, and a source with dependencies builds only when its <c>node_modules</c> folder is already there (a vendored or earlier install). The allow-listed mirror of plan 22a GP33 is not built yet; this is its first half, no network.</param>
+public sealed record AppBundleRequest(string SourceDirectory, string EntryPoint, string OutputDirectory, bool Minify = true, long MaxBundleBytes = 20L * 1024 * 1024, TimeSpan? Timeout = null, bool Offline = false);
 
 /// <summary>One line the bundler said about the source, in the words it used (a file, a line, a reason). Never carries the environment.</summary>
 public sealed record AppBundleDiagnostic(string Message);

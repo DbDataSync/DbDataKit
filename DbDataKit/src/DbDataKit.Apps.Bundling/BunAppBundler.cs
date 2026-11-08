@@ -32,8 +32,16 @@ public sealed class BunAppBundler(string bunPath = "bun") : IAppBundler
         {
             if (HasDependencies(Path.Combine(source, "package.json")))
             {
-                var install = await RunAsync(["install", "--ignore-scripts"], source, linked.Token);
-                if (install.ExitCode != 0) return Failure(started, "Installing the app's packages failed.", install);
+                if (request.Offline)
+                {
+                    if (!Directory.Exists(Path.Combine(source, "node_modules")))
+                        return AppBundleResult.Failed(started.Elapsed, "The app's package.json lists packages and the build is offline, so none can be installed, and there is no node_modules folder in the source. Install them where a network is (bun install --ignore-scripts) and build again, or build without --offline.");
+                }
+                else
+                {
+                    var install = await RunAsync(["install", "--ignore-scripts"], source, linked.Token);
+                    if (install.ExitCode != 0) return Failure(started, "Installing the app's packages failed.", install);
+                }
             }
             var arguments = new List<string> { "build", entry, "--outdir", output, "--target", "browser", "--format", "esm", "--splitting", "--entry-naming", "[name].[ext]" };
             if (request.Minify) arguments.Add("--minify");
