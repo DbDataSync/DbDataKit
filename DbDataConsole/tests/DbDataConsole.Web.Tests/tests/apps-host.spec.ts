@@ -222,7 +222,7 @@ test.beforeAll(async () => {
 
   // the Store publishes the model to the group: its tables first, then the login, the data source and the model, which every instance of the group serves from then on
   const code = /Pairing code: (\S+)/.exec(execFileSync('dotnet', ['exec', gatewayDll, 'server', 'pair', '--repo', gatewayDirectory, '--max-role', 'publisher'], { encoding: 'utf8' }))![1]
-  run(storeDll, storeDirectory, ['gateway', 'add', 'edge', '--url', managementUrl, '--code', code])
+  run(storeDll, storeDirectory, ['proxy', 'add', 'edge', '--url', managementUrl, '--code', code])
   run(storeDll, storeDirectory, ['model', 'publish', 'territories', '--proxy', 'edge'], env)
   await new Promise((resolve) => setTimeout(resolve, 3000))   // the instance reads the group's definitions every second
 })
