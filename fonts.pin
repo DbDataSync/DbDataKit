@@ -1,0 +1,126 @@
+# The bundled font set of the PDF export (plan 32, DBR15b): Noto Sans, Noto Serif and Noto Sans Mono as WOFF2, regular (400) and bold (700), with the italics
+# where upstream has them (Noto Sans Mono has no italic: the browser slants the regular when asked, and the plan does not promise more).
+# Read by scripts/fetch-fonts.sh and scripts/fetch-fonts.ps1 (KEY=value lines, nothing else is evaluated). Fonts are the same on every platform: no rid entries.
+# Each archive is checked against the SHA-256 recorded here, and so is every file taken from it (FILE= lines); the licence text of each family is checked and
+# installed beside its files. Installed under .fonts/<family>/ (gitignored: the files are fetched at build or install time, never at run time, never committed).
+#
+# SOURCE. The npm packages @fontsource/noto-sans, -noto-serif and -noto-sans-mono 5.3.0 (https://github.com/fontsource/font-files, directory fonts/google/<family>),
+# fetched from https://registry.npmjs.org (an immutable, versioned tarball URL; each archive's SHA-256 below was computed from the download and its sha512 matched
+# the registry's recorded integrity). Why this source: it publishes WOFF2 already, one file per Unicode subset (the browser loads only the subsets a document uses,
+# through unicode-range), whereas the notofonts GitHub releases (https://github.com/notofonts/latin-greek-cyrillic/releases) are blocked from the authoring sandbox,
+# publish TTF and OTF only, and would need a WOFF2 conversion step (fonttools, pinned) to be reproducible. The files are Google Fonts' build of Noto
+# (static 400 and 700 instances of the variable NotoSans/NotoSerif[wdth,wght] fonts, subsetted and converted to WOFF2 by Fontsource); the upstream design is the
+# Noto Project's (https://github.com/notofonts/latin-greek-cyrillic). The unicode-range of each subset is in the package's 400.css, 700.css, 400-italic.css and
+# 700-italic.css (the later slice that writes the @font-face block takes it from there). Subsets taken: latin, latin-ext, greek, greek-ext, cyrillic,
+# cyrillic-ext, vietnamese. Not in the set: CJK, Arabic, Hebrew, Devanagari and the other scripts (documented, not promised).
+#
+# LICENCE CHECK (done on the packages' own LICENSE files, which are the OFL.txt of the font project): every family is under the SIL Open Font License 1.1
+# ("This Font Software is licensed under the SIL Open Font License, Version 1.1"), npm metadata license OFL-1.1.
+#   - Copyright line: "Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)" (Noto Sans and Noto Serif add the same line for their italic
+#     source file); none of the three declares a Reserved Font Name (the copyright line has no "with Reserved Font Name" clause), so the OFL's condition 3
+#     (no use of a Reserved Font Name by a Modified Version) binds nothing; the aliases DbDataKit Sans, DbDataKit Serif and DbDataKit Mono are used regardless.
+#   - Subsetting and WOFF2 conversion are allowed: the licence grants the right to "use, study, copy, merge, embed, modify, redistribute, and sell modified and unmodified
+#     copies", and defines a Modified Version as including "changing formats". Condition 1: the fonts are never sold by themselves. Condition 2: bundled with software is
+#     allowed "provided that each copy contains the above copyright notice and this license", which is why the licence text is installed next to the files (OFL.txt) and kept in
+#     the repository under licenses/fonts/ (the installed export component must carry it too: DBR16). Condition 4: the Noto Project's and its authors' names are not used to promote the product.
+#   - Condition 5: the Font Software stays under the OFL (the product's licence does not change it); the requirement does not apply to a document made with the fonts, so a PDF that embeds them is not affected.
+# To move to new files: set VERSION (and the archive paths), then each archive's SHA-256, the licence's and every FILE's, and run scripts/fetch-fonts.sh. A font update re-pins this
+# file only (never chromium.pin) and regenerates the exporter's goldens in the same change.
+VERSION=5.3.0
+BASE=https://registry.npmjs.org/@fontsource
+FAMILIES=noto-sans noto-serif noto-sans-mono
+
+
+# Noto Sans: alias DbDataKit Sans, OFL-1.1, archive 6927031 bytes
+ALIAS_noto_sans=DbDataKit Sans
+ARCHIVE_noto_sans=noto-sans/-/noto-sans-5.3.0.tgz
+ARCHIVE_SHA256_noto_sans=f62f8ed40e378f15134e32bed2fd5718d81e9ec7a5603d1022d7b385e2297abc
+LICENSE_noto_sans=OFL-1.1
+LICENSE_FILE_noto_sans=package/LICENSE
+LICENSE_SHA256_noto_sans=54ec7b5a35310ad66f9f3091426f7028484cbf9ae1ab5da30122ee412a3009e1
+FILE=noto-sans|package/files/noto-sans-latin-400-normal.woff2|09aee8065d25508f23a4c3d92cd777ac869c52d93fd868a88f025d888a7937d6
+FILE=noto-sans|package/files/noto-sans-latin-400-italic.woff2|c302cbfdd98d628d60b6ef8de3c8459c70449df3a5ff2baacfa7481d95e79f4c
+FILE=noto-sans|package/files/noto-sans-latin-700-normal.woff2|e77bfe1db912f687b0319b60de158cfada67f89c8ee4f8e2bd6020f970accbfb
+FILE=noto-sans|package/files/noto-sans-latin-700-italic.woff2|445b663e3234ac661a1b501afbbdd7fc01380e0dd59951af10ff7568f6ee7ddd
+FILE=noto-sans|package/files/noto-sans-latin-ext-400-normal.woff2|c8e6bf928ae88c948ebc49dbe1df01ea5505d12408904ea3302309b26487fbca
+FILE=noto-sans|package/files/noto-sans-latin-ext-400-italic.woff2|8931874d4c940ef6eed0e231e74e3048fdd36eb5333246235aeb2b0113a8b361
+FILE=noto-sans|package/files/noto-sans-latin-ext-700-normal.woff2|c0cd431266a7ed82d6f0dfe281e38a883c28a03eec1fdac308cc2f7c0ea39c3b
+FILE=noto-sans|package/files/noto-sans-latin-ext-700-italic.woff2|5fd2ac79eb23ebbfe615f2841df6611e900dd64afc654bc097c7615425469351
+FILE=noto-sans|package/files/noto-sans-greek-400-normal.woff2|c7c42b4b60ab0553cabd0a22b12d7ac595ae1fb90f4dff814e1a42e4eb95d0d6
+FILE=noto-sans|package/files/noto-sans-greek-400-italic.woff2|083cf480ee5b05d7c210d5a736d72bdf6ce173b79687a34ffdca6b88f7299d8b
+FILE=noto-sans|package/files/noto-sans-greek-700-normal.woff2|453c49c9043e04c1103ed1228a1d8d96750c858e08d6b204119d7a16b7642246
+FILE=noto-sans|package/files/noto-sans-greek-700-italic.woff2|183a931a017c57330b6838a3fb09e832fbc97e77e7c201fcf3385b0f2c8814fc
+FILE=noto-sans|package/files/noto-sans-greek-ext-400-normal.woff2|cf9669423c4b33c00dca35269187661f7311d23c753190afb7af9f36d701e5ba
+FILE=noto-sans|package/files/noto-sans-greek-ext-400-italic.woff2|f0930caef373fad465aff18f4952941f1faad487ccfbe589555646253c848b91
+FILE=noto-sans|package/files/noto-sans-greek-ext-700-normal.woff2|028e5e1a2d40dea342508a352c4ee953457dfd2fcd00d9245d94dc4bfae70598
+FILE=noto-sans|package/files/noto-sans-greek-ext-700-italic.woff2|2b9cdadbfff2161dfe2d631d7f3d5e3ac16013a1f2995d6cf1811fd54531aa78
+FILE=noto-sans|package/files/noto-sans-cyrillic-400-normal.woff2|05af9e705d3b63aedba67197d19fb448b97353e1386930716c7e835b08f126ba
+FILE=noto-sans|package/files/noto-sans-cyrillic-400-italic.woff2|8d37eb626fdbb4188026558df33ea1d5c62c96e630f2ef367e9c370adf48a8e7
+FILE=noto-sans|package/files/noto-sans-cyrillic-700-normal.woff2|0980b97224d9130cf3f651c8ad15b9e0b1eb361d31c71259363ec2bbd5f70750
+FILE=noto-sans|package/files/noto-sans-cyrillic-700-italic.woff2|46a3aa1b2d627bdf4efc7102a0c0f3911d01eed9aa9e85bf83bbc08f81e0d721
+FILE=noto-sans|package/files/noto-sans-cyrillic-ext-400-normal.woff2|fa8331498f2c20fe4e4288eb00ed832c9ebcd8f5e7529a45a557e870baeaed93
+FILE=noto-sans|package/files/noto-sans-cyrillic-ext-400-italic.woff2|74c34f5ce7414f353e4d5beba0dc4ef173bc3e930d628c51d785e1b8fbda629c
+FILE=noto-sans|package/files/noto-sans-cyrillic-ext-700-normal.woff2|d5af4da0950580f5fbfc64d0bffa916f813c989858b2f8558938b261a5928a0e
+FILE=noto-sans|package/files/noto-sans-cyrillic-ext-700-italic.woff2|d05a5cf2ad589dcd217073bd822e985e786aa38fe81c1b2c1c79755d8f247f28
+FILE=noto-sans|package/files/noto-sans-vietnamese-400-normal.woff2|0f0c8a4858f1f5b2701331cf0a471ee00824ed92d33ecb21c9248ded975e297f
+FILE=noto-sans|package/files/noto-sans-vietnamese-400-italic.woff2|36e30fbf2839f9e2bee84697e8e5cf859b6714f63da244ac7fb26fc6a1bdc0c5
+FILE=noto-sans|package/files/noto-sans-vietnamese-700-normal.woff2|81e42f41bb61f9d1b2004c243cf15ea4946dffb14be4888e76fb3ca3cb75cdf8
+FILE=noto-sans|package/files/noto-sans-vietnamese-700-italic.woff2|122ff3db2238c51ae17164f889df2b5ca307598ee0b9a0f16341d630bbd6fa1a
+
+# Noto Serif: alias DbDataKit Serif, OFL-1.1, archive 7105480 bytes
+ALIAS_noto_serif=DbDataKit Serif
+ARCHIVE_noto_serif=noto-serif/-/noto-serif-5.3.0.tgz
+ARCHIVE_SHA256_noto_serif=846d219c2c9c668ebe2b5ca0e76c403a35f847d83c4c441c107f9bdc152830df
+LICENSE_noto_serif=OFL-1.1
+LICENSE_FILE_noto_serif=package/LICENSE
+LICENSE_SHA256_noto_serif=45d545469122348b916bfa4d362f691c3f7f3af7169fd46f920845cae97923df
+FILE=noto-serif|package/files/noto-serif-latin-400-normal.woff2|4c0cbe3eec50d260754d681c17ee2af49a43d7fd93ce42877f665fcb1a889b87
+FILE=noto-serif|package/files/noto-serif-latin-400-italic.woff2|a7386f772de25b62a3a449fa5d9f3e09916b65cf6a6dfc52f5a103c276fee157
+FILE=noto-serif|package/files/noto-serif-latin-700-normal.woff2|0d0b440760c93e6fec440ad438d10cea6c70367a0f5ecfcfa15cef0a85c67093
+FILE=noto-serif|package/files/noto-serif-latin-700-italic.woff2|cc89f2cf96acfcf7415d44de050ae7666d44d29acc608e4ef8a19697de6c5f3f
+FILE=noto-serif|package/files/noto-serif-latin-ext-400-normal.woff2|536857e8de0e3b12176fefbf1233a294c7dece1f2f4d018d26cb386a8de75cd0
+FILE=noto-serif|package/files/noto-serif-latin-ext-400-italic.woff2|4851e60df7e67b489609516bdc9f53d3ed8b6090c3e16e149350a88f172a574e
+FILE=noto-serif|package/files/noto-serif-latin-ext-700-normal.woff2|52c9361ebb521542e71e5a11aa5683ab3bbd8df5428888e95786478bb1377cba
+FILE=noto-serif|package/files/noto-serif-latin-ext-700-italic.woff2|0b34946f322216a1b4e3751a21c6f1f050c1d23016169f456802bcf6b7617620
+FILE=noto-serif|package/files/noto-serif-greek-400-normal.woff2|4f87b0a2fc2f0a9ce734414bb54edb9bb3e9f0143c4d17e3879881adf8058cfa
+FILE=noto-serif|package/files/noto-serif-greek-400-italic.woff2|8d51258200de4d85d209eac6f0cd6798ec251b7be4672e8a2e6e7f6f07dc8460
+FILE=noto-serif|package/files/noto-serif-greek-700-normal.woff2|bd24b899d9fe3955fed1c9b0ffa1d12aca02db45474fe906735456430a2efd36
+FILE=noto-serif|package/files/noto-serif-greek-700-italic.woff2|df47e2957aa6e25c1ad4b224dcb794891f4cdee5ea9066f053cec5d3500fd6d9
+FILE=noto-serif|package/files/noto-serif-greek-ext-400-normal.woff2|82791822ba505972b0be62837a4875a07547859f0f66189572372c05614fda66
+FILE=noto-serif|package/files/noto-serif-greek-ext-400-italic.woff2|585d109a9951bf6a99b13386fe90dc4e19a0ad38c210bad0cd22140e238842d2
+FILE=noto-serif|package/files/noto-serif-greek-ext-700-normal.woff2|bef9cf09cf749d942c62bd44295c25205ac425a4b036e1bea545976a31a2e563
+FILE=noto-serif|package/files/noto-serif-greek-ext-700-italic.woff2|db8a344b5c1a0ebae712ca1faab95522ac900e225324b615594cc226df5cd1d9
+FILE=noto-serif|package/files/noto-serif-cyrillic-400-normal.woff2|8deaf453448fb06f5cdd79262bc0a22a8af999541ef2639202f6dc44d0cae392
+FILE=noto-serif|package/files/noto-serif-cyrillic-400-italic.woff2|cc967469ff60e3386f8fc664b1df34ada138cfaac8ad4ae549b4849df687f27e
+FILE=noto-serif|package/files/noto-serif-cyrillic-700-normal.woff2|1dd6e758015cc8e424c0d57eabb94addf4adcba14c67ecdfd3b6386fc88295d0
+FILE=noto-serif|package/files/noto-serif-cyrillic-700-italic.woff2|57d4e660664c194b71e69dfdbd5002093cf3581a3785ce43b05a98ab19a52c9d
+FILE=noto-serif|package/files/noto-serif-cyrillic-ext-400-normal.woff2|0755b43b6a12ecbc955540aabe0e2753093eb744b6e0dbbab50c7a133bc5519b
+FILE=noto-serif|package/files/noto-serif-cyrillic-ext-400-italic.woff2|bb4982fa7f34b1814c5c1addcc64831a5c2657b4905fcb77a5d1914c36ebb602
+FILE=noto-serif|package/files/noto-serif-cyrillic-ext-700-normal.woff2|a81d26bfa75cf51c3249d83d4ad788f883b3c56ef32e297202fbeb1c84c30994
+FILE=noto-serif|package/files/noto-serif-cyrillic-ext-700-italic.woff2|a172f36df03a20ba22f0415778a010b632bd90d0b1a13238eb268d2b1ee295b4
+FILE=noto-serif|package/files/noto-serif-vietnamese-400-normal.woff2|207dac0723db2e3832fb864c23a416dd953df68b27289acaec79ed94cd37b7ee
+FILE=noto-serif|package/files/noto-serif-vietnamese-400-italic.woff2|4b59ce2a13d696b34950c628aea26585b870169c78719f3d6fb6ad5dce00e4df
+FILE=noto-serif|package/files/noto-serif-vietnamese-700-normal.woff2|e2c65dbf3abb07aee564c409257b942d3baedc2f4fe2f585ae88bf3d821503fc
+FILE=noto-serif|package/files/noto-serif-vietnamese-700-italic.woff2|87191559c217768073146c7ef45ea4e7391f586eb7c26abbce189b04ef4acdbd
+
+# Noto Sans Mono: alias DbDataKit Mono, OFL-1.1, archive 2173662 bytes
+ALIAS_noto_sans_mono=DbDataKit Mono
+ARCHIVE_noto_sans_mono=noto-sans-mono/-/noto-sans-mono-5.3.0.tgz
+ARCHIVE_SHA256_noto_sans_mono=712c4a229ea2f077ab0c07333b243afbb4b55b89c09055a5ed6070b20736e9c0
+LICENSE_noto_sans_mono=OFL-1.1
+LICENSE_FILE_noto_sans_mono=package/LICENSE
+LICENSE_SHA256_noto_sans_mono=9e73c367ca79c54f9bce96d879b7a7f7fa279119ed4b3e61299f061b34f361cb
+FILE=noto-sans-mono|package/files/noto-sans-mono-latin-400-normal.woff2|1e4b885e90f8e794d33fff5095497e4ce847d8c5fa2b7810d1b10a770d0f8e34
+FILE=noto-sans-mono|package/files/noto-sans-mono-latin-700-normal.woff2|20ef1d988a28230959f5414bc3712297a0598ad5d77a25f00717a514f202c0c5
+FILE=noto-sans-mono|package/files/noto-sans-mono-latin-ext-400-normal.woff2|59b04df56c666f79ca173fc721a9986d3ace531cec5a96d0e060d21e54dd12f6
+FILE=noto-sans-mono|package/files/noto-sans-mono-latin-ext-700-normal.woff2|3121e8d02d8063220e8723c0bf29faf55472e15a04874f4b0d13c95407510059
+FILE=noto-sans-mono|package/files/noto-sans-mono-greek-400-normal.woff2|127bdd57fab3329cc2aff2c24b1b02a7864d48f05ad5be95a66a709fa10c49a3
+FILE=noto-sans-mono|package/files/noto-sans-mono-greek-700-normal.woff2|53d8e084fbddea3f65df7bf3631e75eb374ef81d9bf22967ddbdda4ee7f9ebc1
+FILE=noto-sans-mono|package/files/noto-sans-mono-greek-ext-400-normal.woff2|22ce12bbc5dbda16ac1840292600a0119cf79d50bcdb56860f7cda4415b20e33
+FILE=noto-sans-mono|package/files/noto-sans-mono-greek-ext-700-normal.woff2|c2c4ffd33c2c752032d58e5edaa9df2f5442585ecfbfd3fcda21bf6b15c969d2
+FILE=noto-sans-mono|package/files/noto-sans-mono-cyrillic-400-normal.woff2|84782732e59fabf125cbe35de8532da946d20e7866a54f69df99f73b662870ba
+FILE=noto-sans-mono|package/files/noto-sans-mono-cyrillic-700-normal.woff2|b6081794df7c9f1408f52d036e8375dc9fec3511d0476c08217fd707c0e4d96b
+FILE=noto-sans-mono|package/files/noto-sans-mono-cyrillic-ext-400-normal.woff2|035de6bf29c5dda4829e34c9cb374ec15c19b18721c4b5b10f84a82c49aa43c3
+FILE=noto-sans-mono|package/files/noto-sans-mono-cyrillic-ext-700-normal.woff2|061859e317c54ba91ac96d9de5fe2e7ca2deed2860b07126016c784cb2e77b5d
+FILE=noto-sans-mono|package/files/noto-sans-mono-vietnamese-400-normal.woff2|bc2d6d6a65e42937148016e843186fccbf1a8c168c4a5103efd7794341acac17
+FILE=noto-sans-mono|package/files/noto-sans-mono-vietnamese-700-normal.woff2|a2e0da24e49ebf9cee2f33b5982b14c7264fa4f8ee6b2fbb79af160a8c64f9ff
