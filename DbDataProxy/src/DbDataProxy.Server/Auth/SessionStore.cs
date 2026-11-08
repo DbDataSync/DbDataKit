@@ -159,6 +159,11 @@ public sealed class SessionStore(IOptionsMonitor<ProxyOptions> options, TimeProv
             ["data_sources"] = new JsonArray([.. principal.DataSources.Select(d => (JsonNode)JsonValue.Create(d))]),
             ["default_data_source"] = principal.DefaultDataSource,
         };
+        if (principal.HomeUserId is { } homeUser)
+        {
+            json["home_user"] = homeUser;
+            json["home_groups"] = new JsonArray([.. principal.HomeGroups.Select(g => (JsonNode)JsonValue.Create(g))]);
+        }
         if (principal.Credentials is { } credentials)
         {
             var plain = JsonSerializer.SerializeToUtf8Bytes(new { user = credentials.User, password = credentials.Password });
@@ -182,7 +187,8 @@ public sealed class SessionStore(IOptionsMonitor<ProxyOptions> options, TimeProv
             }
             finally { CryptographicOperations.ZeroMemory(plain); }
         }
-        return new ProxyPrincipal((string)json["name"]!, (string)json["method"]!, json["data_sources"]!.AsArray().Select(n => (string)n!), (string?)json["default_data_source"], credentials);
+        return new ProxyPrincipal((string)json["name"]!, (string)json["method"]!, json["data_sources"]!.AsArray().Select(n => (string)n!), (string?)json["default_data_source"], credentials,
+            (string?)json["home_user"], (json["home_groups"] as JsonArray)?.Select(n => (string)n!));
     }
 
     /// <summary>Who a stored session is, for a listing: never its credentials, so the key is not needed.</summary>

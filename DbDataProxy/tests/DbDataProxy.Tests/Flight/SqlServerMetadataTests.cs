@@ -21,6 +21,7 @@ public sealed class SqlServerMetadataTests : IAsyncLifetime
     private readonly string _prefix = "pm_" + Guid.NewGuid().ToString("N")[..8];
     private WebApplication? _app;
     private string _address = "";
+    private string _aliceToken = "";
     private string _dir = "";
 
     private string Connection => SqlServerEnv.SqlClient() + ";Initial Catalog=tempdb";
@@ -62,12 +63,11 @@ public sealed class SqlServerMetadataTests : IAsyncLifetime
             ["Proxy:DataSources:sql:Provider"] = "sqlserver",
             ["Proxy:DataSources:sql:ConnectionString"] = Connection,
             ["Proxy:DataSources:sql:Classifier"] = "off",
-            ["Proxy:Users:0:Name"] = "alice",
-            ["Proxy:Users:0:PasswordHash"] = PasswordHasher.Hash("pw", 1000),
-            ["Proxy:Users:0:DataSources:0"] = "sql",
         };
+        HomeSeed.Open(settings, ["sql"]);
         _app = ProxyHost.Build([], b => b.Configuration.AddInMemoryCollection(settings));
         await _app.StartAsync();
+        _aliceToken = HomeSeed.ServiceAccount(_app.Services.GetRequiredService<DbDataKit.State.StateDatabase>(), "alice");
         _address = _app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.First().Replace("0.0.0.0", "127.0.0.1");
     }
 
@@ -118,7 +118,7 @@ public sealed class SqlServerMetadataTests : IAsyncLifetime
     private async Task<ProxyFlightClient> LoginAsync()
     {
         var client = new ProxyFlightClient(_address);
-        await client.AuthenticateAsync("alice", "pw");
+        await client.AuthenticateAsync("alice", _aliceToken);
         return client;
     }
 

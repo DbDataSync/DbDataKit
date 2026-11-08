@@ -11,6 +11,10 @@ tls: { trust_server_certificate: true }
 timeouts: { command_s: 300 }
 extensions:
   proxy:
+    # Who may use this data source: the groups of the identity home named here. A source that names no group (and is not "everyone: true") is used by no home user.
+    groups: [finance-reporting]
+    # The source a person gets when their client names none (one source at most may say so).
+    default: true
     # Optional limits, off by default (0): queries running at once on this source, and per user. A streaming result counts until it is read
     # or discarded. Requests wait up to acquire_timeout_seconds for a slot and are then refused with ResourceExhausted.
     max_concurrent_queries: 20

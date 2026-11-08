@@ -101,6 +101,13 @@ public static class ProxyConfig
             return new ProxyConfigLoad(null, diags, Result(null));
         }
 
+        // Proxy's own users are retired (P13): a configuration that still lists them is refused naming the file and the key, before the binder calls the key unknown
+        if (section == ProxyOptions.SectionName && ProxyRetiredUsers.Find(configuration) is { } retired)
+        {
+            diags.Add(retired);
+            return new ProxyConfigLoad(null, diags, Result(null));
+        }
+
         var bound = new ConfigBinder(Catalog, tree.FileOf).Bind<ProxyOptions>(root, section);
         var value = bound.Value;
         diags.AddRange(bound.Diagnostics);

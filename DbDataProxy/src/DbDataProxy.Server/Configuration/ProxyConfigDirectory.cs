@@ -10,8 +10,8 @@ namespace DbDataProxy.Server.Configuration;
 /// <code>
 /// config/
 ///   server.yaml            the server's own settings (listen, tls, secrets, compression, hosting, worker, logging switches)
-///   proxy/auth.yaml        how clients prove who they are (sessions, lockout, pass-through, JWT and its mappings)
-///   proxy/users.yaml       the local client users: a <c>users:</c> list
+///   proxy/auth.yaml        how clients prove who they are (sessions, lockout, pass-through, Windows sign-in, JWT and its mappings)
+///   proxy/users.yaml       retired (P13): read only to refuse a file that still lists users, naming it; people sign in with the identity home
 ///   connections/*.yaml     one data source per file, named by the file (<c>erp.yaml</c> is the data source <c>erp</c>)
 /// </code>
 /// Beside it, <c>group/connections/*.yaml</c> in the data directory holds the data sources published to this instance's group (plan 20 O04b), as the instance last read them from the group's state; one of the same name in
@@ -137,6 +137,7 @@ public sealed class ProxyConfigDirectoryProvider : ConfigurationProvider, IDispo
 
         Add(Path.Combine(directory, ProxyConfigFile.ServerFileName), section);
         Add(Path.Combine(directory, "proxy", "auth.yaml"), $"{section}:Auth");
+        // retired (P13): still read, so that a file that lists users is refused with its name and line (ProxyRetiredUsers) instead of being silently ignored
         Add(Path.Combine(directory, "proxy", "users.yaml"), $"{section}:Users", map => map.Get("users"));
 
         var connections = Path.Combine(directory, "connections");

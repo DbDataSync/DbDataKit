@@ -60,7 +60,7 @@ public static class ProxyConfigFile
             var path = Path.Combine(directory, LegacyFileName);
             if (File.Exists(path))
                 return $"'{path}' is the settings file of an earlier release and is no longer read. Write its settings as '{PathIn(dataDirectory)}' " +
-                       "(camelCase keys, YAML; data sources in connections/<name>.yaml, users in proxy/users.yaml; config.example/ beside the executable shows each file), then delete the old file.";
+                       "(camelCase keys, YAML; data sources in connections/<name>.yaml; config.example/ beside the executable shows each file), then delete the old file.";
         }
         return null;
     }

@@ -19,6 +19,7 @@ public sealed class WorkerTests : IAsyncLifetime
     private string _dir = "";
     private WebApplication? _app;
     private string _address = "";
+    private string _aliceToken = "";
 
     public async ValueTask InitializeAsync()
     {
@@ -43,12 +44,11 @@ public sealed class WorkerTests : IAsyncLifetime
             ["Proxy:DataSources:text64:Provider"] = "odbc",
             ["Proxy:DataSources:text64:Bitness"] = "x64",
             ["Proxy:DataSources:text64:ConnectionString"] = connection,
-            ["Proxy:Users:0:Name"] = "alice",
-            ["Proxy:Users:0:PasswordHash"] = PasswordHasher.Hash("pw", 1000),
-            ["Proxy:Users:0:DataSources:0"] = "*",
         };
+        HomeSeed.Open(settings, ["text32", "text64"]);
         _app = ProxyHost.Build([], b => b.Configuration.AddInMemoryCollection(settings));
         await _app.StartAsync();
+        _aliceToken = HomeSeed.ServiceAccount(_app.Services.GetRequiredService<DbDataKit.State.StateDatabase>(), "alice");
         _address = _app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.First()
             .Replace("0.0.0.0", "127.0.0.1");
     }
@@ -62,7 +62,7 @@ public sealed class WorkerTests : IAsyncLifetime
     private async Task<ProxyClient> LoginAsync()
     {
         var client = new ProxyClient(_address);
-        await client.AuthenticateAsync("alice", "pw");
+        await client.AuthenticateAsync("alice", _aliceToken);
         return client;
     }
 

@@ -24,6 +24,7 @@ public sealed class MetadataGoldenTests : IAsyncLifetime
     private string _dir = "";
     private WebApplication? _app;
     private string _address = "";
+    private string _aliceToken = "";
 
     public async ValueTask InitializeAsync()
     {
@@ -58,9 +59,6 @@ public sealed class MetadataGoldenTests : IAsyncLifetime
             ["Proxy:DataSources:gduck:Provider"] = "duckdb",
             ["Proxy:DataSources:gduck:ConnectionString"] = $"Data Source={db}",
             ["Proxy:DataSources:gduck:Classifier"] = "off",
-            ["Proxy:Users:0:Name"] = "alice",
-            ["Proxy:Users:0:PasswordHash"] = PasswordHasher.Hash("pw", 1000),
-            ["Proxy:Users:0:DataSources:0"] = "*",
         };
         if (OperatingSystem.IsWindows() && Environment.Is64BitProcess)
         {
@@ -71,8 +69,10 @@ public sealed class MetadataGoldenTests : IAsyncLifetime
             settings["Proxy:DataSources:gtext:Bitness"] = "x86";
             settings["Proxy:DataSources:gtext:ConnectionString"] = $"Driver={{Microsoft Text Driver (*.txt; *.csv)}};Dbq={_dir};Extensions=asc,csv,tab,txt;";
         }
+        HomeSeed.Open(settings, [.. settings.Keys.Where(k => k.EndsWith(":Provider")).Select(k => k.Split(':')[2])]);
         _app = ProxyHost.Build([], b => b.Configuration.AddInMemoryCollection(settings));
         await _app.StartAsync();
+        _aliceToken = HomeSeed.ServiceAccount(_app.Services.GetRequiredService<DbDataKit.State.StateDatabase>(), "alice");
         _address = _app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.First().Replace("0.0.0.0", "127.0.0.1");
     }
 
@@ -146,7 +146,7 @@ public sealed class MetadataGoldenTests : IAsyncLifetime
     private async Task CheckAsync(string dataSource, string fileName, List<(string Name, Call Run)> scenarios)
     {
         using var client = new ProxyFlightClient(_address);
-        await client.AuthenticateAsync("alice", "pw");
+        await client.AuthenticateAsync("alice", _aliceToken);
         var options = new QueryOptions { DataSource = dataSource };
 
         var text = new StringBuilder();

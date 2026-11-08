@@ -83,9 +83,6 @@ public sealed class ProxyOptions
     /// <summary>Named back-end connections clients can target. Clients never send connection strings.</summary>
     public Dictionary<string, DataSourceOptions> DataSources { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Local user accounts (hashed passwords) and the data sources they may use.</summary>
-    public List<UserOptions> Users { get; set; } = [];
-
     /// <summary>Semantic models served as sources named <c>semantic:&lt;model&gt;</c> (plan 19, J10). Read at start; a change needs a restart.</summary>
     public SemanticOptions Semantic { get; set; } = new();
 
@@ -453,10 +450,16 @@ public sealed class AuthOptions
     public int LockoutMinutes { get; set; } = 1;
 
     /// <summary>
-    /// Accept credentials that are not in <see cref="ProxyOptions.Users"/> and hand them to pass-through data sources,
+    /// Accept credentials that are not the identity home's (a personal access token) and hand them to pass-through data sources,
     /// which validate them by connecting to the database as that user.
     /// </summary>
     public bool AllowPassThrough { get; set; } = true;
+
+    /// <summary>
+    /// Let a person sign in with their Windows account (plan 13a P13, U16): the user name is their UPN (<c>ada@corp.example</c>), the password is checked by the operating system (Windows only), and the account is the identity home's user who holds that
+    /// verified address. Off by default; a UPN no home user holds is left to pass-through.
+    /// </summary>
+    public bool Windows { get; set; }
 
     /// <summary>Accept JWT bearer tokens from an OpenID Connect provider such as Microsoft Entra ID.</summary>
     public JwtOptions Jwt { get; set; } = new();
@@ -484,6 +487,18 @@ public sealed class DataSourceOptions
 
     /// <summary>Connect with the caller's own credentials (UID/PWD injected into the connection string).</summary>
     public bool PassThrough { get; set; }
+
+    /// <summary>
+    /// The identity home's groups whose members may use this data source (<c>extensions.proxy.groups</c> in its file; plan 13a P13). The home's groups of the person decide, case does not matter. A data source that names no group and is not
+    /// <see cref="Everyone"/> is used by no home user (the safe default); a pass-through source needs none, the database decides there.
+    /// </summary>
+    public List<string> Groups { get; set; } = [];
+
+    /// <summary>The data source a home user who may use it gets when the client names none (<c>extensions.proxy.default: true</c>; at most one). It replaces the <c>DefaultDataSource</c> of the retired Proxy users; it opens nothing by itself.</summary>
+    public bool Default { get; set; }
+
+    /// <summary>Every user of the identity home may use this data source, whatever their groups (<c>extensions.proxy.everyone: true</c>). Say it explicitly: leaving the groups out opens nothing.</summary>
+    public bool Everyone { get; set; }
 
     /// <summary>Allow statements sent as updates (INSERT/UPDATE/DDL via ExecuteUpdate). Off by default.</summary>
     public bool AllowWrites { get; set; }
@@ -543,31 +558,4 @@ public enum ClassifierMode
 
     /// <summary>No statement text checks.</summary>
     Off,
-}
-
-[ConfigSchema(Naming = KeyNaming.Verbatim)]
-public sealed class UserOptions
-{
-    public string Name { get; set; } = "";
-
-    /// <summary>How the user proves who they are.</summary>
-    public UserAuthType AuthType { get; set; } = UserAuthType.Password;
-
-    /// <summary>PBKDF2 hash as produced by "dbdataproxy secret hash" (AuthType Password).</summary>
-    [Secret]
-    public string? PasswordHash { get; set; }
-
-    /// <summary>Data sources this user may query ("*" for all).</summary>
-    public List<string> DataSources { get; set; } = [];
-
-    /// <summary>Used when the client does not name a data source.</summary>
-    public string? DefaultDataSource { get; set; }
-}
-
-public enum UserAuthType
-{
-    /// <summary>Password checked against <see cref="UserOptions.PasswordHash"/>.</summary>
-    Password,
-    /// <summary>Windows account (local or domain) checked by the operating system; Name is the account name.</summary>
-    Windows,
 }

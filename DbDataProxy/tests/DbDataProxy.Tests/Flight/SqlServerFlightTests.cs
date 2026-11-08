@@ -24,6 +24,7 @@ public sealed class SqlServerFlightTests : IAsyncLifetime
     private WebApplication? _app;
     private string _address = "";
     private string _dir = "";
+    private string _aliceToken = "";
     private bool _odbcAvailable;
 
     public async ValueTask InitializeAsync()
@@ -47,11 +48,6 @@ public sealed class SqlServerFlightTests : IAsyncLifetime
             ["Proxy:DataSources:sql:Provider"] = "sqlserver",
             ["Proxy:DataSources:sql:ConnectionString"] = SqlServerEnv.SqlClient(30) + database,
             ["Proxy:DataSources:sql:AllowWrites"] = "true",
-            ["Proxy:Users:0:Name"] = "alice",
-            ["Proxy:Users:0:PasswordHash"] = PasswordHasher.Hash("pw", 1000),
-            ["Proxy:Users:0:DataSources:0"] = "sql",
-            ["Proxy:Users:0:DataSources:1"] = "odbc",
-            ["Proxy:Users:0:DataSources:2"] = "sql_odbc_infoschema",
         };
         if (_odbcAvailable)
         {
@@ -68,8 +64,11 @@ public sealed class SqlServerFlightTests : IAsyncLifetime
             settings["Proxy:DataSources:sql_pass:ConnectionString"] = SqlServerEnv.SqlClientWithoutLogin() + database;
         }
 
+        // sql_pass is decided by the database: its caller brings database credentials
+        HomeSeed.Open(settings, ["sql", "odbc", "sql_odbc_infoschema"]);
         _app = ProxyHost.Build([], b => b.Configuration.AddInMemoryCollection(settings));
         await _app.StartAsync();
+        _aliceToken = HomeSeed.ServiceAccount(_app.Services.GetRequiredService<DbDataKit.State.StateDatabase>(), "alice");
         _address = _app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.First()
             .Replace("0.0.0.0", "127.0.0.1");
     }
@@ -112,10 +111,10 @@ public sealed class SqlServerFlightTests : IAsyncLifetime
         return false;
     }
 
-    private async Task<ProxyClient> LoginAsync(string user = "alice", string password = "pw")
+    private async Task<ProxyClient> LoginAsync(string user = "alice", string? password = null)
     {
         var client = new ProxyClient(_address);
-        await client.AuthenticateAsync(user, password);
+        await client.AuthenticateAsync(user, password ?? _aliceToken);
         return client;
     }
 

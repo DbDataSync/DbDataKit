@@ -13,7 +13,7 @@ public class MetadataTests(ProxyFixture proxy) : IClassFixture<ProxyFixture>
     private async Task<ProxyClient> LoginAsync()
     {
         var client = proxy.Connect();
-        await client.AuthenticateAsync("alice", ProxyFixture.AlicePassword);
+        await client.AuthenticateAsync("alice", proxy.AliceToken);
         return client;
     }
 
@@ -131,7 +131,7 @@ public class DeclaredColumnTests(ProxyFixture proxy) : IClassFixture<ProxyFixtur
     private async Task<Schema> TableSchemaAsync(string table)
     {
         using var client = proxy.Connect();
-        await client.AuthenticateAsync("alice", ProxyFixture.AlicePassword);
+        await client.AuthenticateAsync("alice", proxy.AliceToken);
         await foreach (var batch in await client.Raw.GetTablesAsync(tablePattern: table, includeSchema: true))
         {
             if (batch.Length == 0) continue;
@@ -165,7 +165,7 @@ public class DeclaredColumnTests(ProxyFixture proxy) : IClassFixture<ProxyFixtur
     public async Task Zero_row_decimal_results_do_not_collapse_to_scale_zero()
     {
         using var client = proxy.Connect();
-        await client.AuthenticateAsync("alice", ProxyFixture.AlicePassword);
+        await client.AuthenticateAsync("alice", proxy.AliceToken);
         var (schema, _) = await client.QueryAsync("SELECT amount FROM prices WHERE 1 = 0");
         Assert.True(Assert.IsType<Decimal128Type>(schema.GetFieldByName("amount").DataType).Scale > 0);
     }
@@ -182,7 +182,7 @@ public class SqlInfoTests(ProxyFixture proxy) : IClassFixture<ProxyFixture>
     private async Task<Dictionary<uint, object>> InfoAsync(string? dataSource)
     {
         using var client = proxy.Connect();
-        await client.AuthenticateAsync("alice", ProxyFixture.AlicePassword);
+        await client.AuthenticateAsync("alice", proxy.AliceToken);
         return await SqlInfoReader.ReadAsync(await client.Raw.GetSqlInfoAsync(new DbDataProxy.Client.QueryOptions { DataSource = dataSource }));
     }
 
@@ -217,7 +217,7 @@ public class SqlInfoTests(ProxyFixture proxy) : IClassFixture<ProxyFixture>
     public async Task Does_not_describe_data_sources_the_user_cannot_use()
     {
         using var client = proxy.Connect();
-        await client.AuthenticateAsync("alice", ProxyFixture.AlicePassword);
+        await client.AuthenticateAsync("alice", proxy.AliceToken);
         var ex = await Rpc.ExpectAsync(async () => await SqlInfoReader.ReadAsync(
             await client.Raw.GetSqlInfoAsync(new DbDataProxy.Client.QueryOptions { DataSource = "other" })));
         Assert.Equal(Grpc.Core.StatusCode.PermissionDenied, ex.StatusCode);

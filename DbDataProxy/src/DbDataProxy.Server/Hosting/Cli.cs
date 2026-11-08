@@ -148,43 +148,11 @@ public static class Cli
         Secret("export", "Write every secret to a file under a passphrase", EffectClass.OfflineOnly, "<file> [--prefix <prefix>] [--passphrase-stdin]"),
         Secret("import", "Read secrets from an export file", EffectClass.RepoFilesOnly, "<file> [--overwrite] [--passphrase-stdin]"),
         Secret("protect", "An inline, encrypted dpapi: reference for one value (Windows, machine scope)", EffectClass.OfflineOnly, "[--stdin]"),
-        new Verb("hash", "Print a password hash for a Proxy:Users entry; the password comes from a prompt or standard input", EffectClass.OfflineOnly, "", (args, context) => HashAsync(args, context), DataSchemas.None),
     ]);
 
     private static Verb Secret(string name, string summary, EffectClass effect, string usage) =>
         new(name, summary, effect, usage, async (args, context) =>
             await SecretCommand.RunAsync([name, .. args], ProxyConfiguration.LoadOptions(), DbDataKit.Secrets.Cli.SecretNoun.Captured(context, new DbDataKit.Secrets.Cli.SystemConsole())), DataSchemas.None);
-
-    private static async Task<int> HashAsync(string[] args, CliContext context)
-    {
-        if (args.Length > 0)
-        {
-            await context.Error.WriteLineAsync("Usage: secret hash  (the password is read from a prompt or standard input, never an argument)");
-            return CliExit.Usage;
-        }
-        string? password = ReadPasswordFromConsole();
-        if (string.IsNullOrEmpty(password))
-        {
-            await context.Error.WriteLineAsync("A password is required.");
-            return CliExit.Usage;
-        }
-        await context.Out.WriteLineAsync(PasswordHasher.Hash(password));
-        return CliExit.Ok;
-    }
-
-    private static string? ReadPasswordFromConsole()
-    {
-        if (Console.IsInputRedirected) return Console.In.ReadLine();
-        Console.Error.Write("Password: ");
-        var sb = new System.Text.StringBuilder();
-        while (Console.ReadKey(intercept: true) is { Key: not ConsoleKey.Enter } key)
-        {
-            if (key.Key == ConsoleKey.Backspace) { if (sb.Length > 0) sb.Length--; }
-            else sb.Append(key.KeyChar);
-        }
-        Console.Error.WriteLine();
-        return sb.ToString();
-    }
 
     // ---- config ----
 

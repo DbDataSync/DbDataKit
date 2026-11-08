@@ -1,1 +1,1 @@
-{ "Proxy": { "Datasources": {}, "Usres": [ { "Name": "a" } ], "Lisen": { "Port": 1 } } }
+{ "Proxy": { "Datasources": {}, "Compresion": { "Mode": "None" }, "Lisen": { "Port": 1 } } }

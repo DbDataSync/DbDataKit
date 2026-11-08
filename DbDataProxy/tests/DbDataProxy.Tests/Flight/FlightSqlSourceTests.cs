@@ -25,9 +25,10 @@ public sealed class FlightSqlSourceTests(ProxyFixture upstream) : IClassFixture<
     private WebApplication? _app;
     private string _address = "";
     private string _dir = "";
+    private string _bobToken = "";
 
-    private string UpstreamLogin(string password = ProxyFixture.AlicePassword, string source = "duck_off") =>
-        $"grpc://{new Uri(upstream.Address).Authority};user=alice;password={password};header.x-datasource={source}";
+    private string UpstreamLogin(string? password = null, string source = "duck_off") =>
+        $"grpc://{new Uri(upstream.Address).Authority};user=alice;password={password ?? upstream.AliceToken};header.x-datasource={source}";
 
     public async ValueTask InitializeAsync()
     {
@@ -40,11 +41,7 @@ public sealed class FlightSqlSourceTests(ProxyFixture upstream) : IClassFixture<
             ["Proxy:Tls:Mode"] = "None",
             ["Proxy:DataDirectory"] = _dir,
             ["Proxy:Compression:Mode"] = "None",
-            ["Proxy:Users:0:Name"] = "bob",
-            ["Proxy:Users:0:PasswordHash"] = DbDataProxy.Server.Auth.PasswordHasher.Hash("pw", 1000),
         };
-        string[] sources = ["fs_strict", "fs_off", "fs_badpw"];
-        for (int i = 0; i < sources.Length; i++) settings[$"Proxy:Users:0:DataSources:{i}"] = sources[i];
 
         settings["Proxy:DataSources:fs_strict:Provider"] = "flightsql";
         settings["Proxy:DataSources:fs_strict:ConnectionString"] = UpstreamLogin();
@@ -59,8 +56,10 @@ public sealed class FlightSqlSourceTests(ProxyFixture upstream) : IClassFixture<
         settings["Proxy:DataSources:fs_badpw:ConnectionString"] = UpstreamLogin("not-the-password");
         settings["Proxy:DataSources:fs_badpw:Classifier"] = "strict";
 
+        HomeSeed.Open(settings, ["fs_strict", "fs_off", "fs_badpw"]);
         _app = ProxyHost.Build([], b => b.Configuration.AddInMemoryCollection(settings));
         await _app.StartAsync();
+        _bobToken = HomeSeed.ServiceAccount(_app.Services.GetRequiredService<DbDataKit.State.StateDatabase>(), "bob");
         _address = _app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.First().Replace("0.0.0.0", "127.0.0.1");
     }
 
@@ -73,7 +72,7 @@ public sealed class FlightSqlSourceTests(ProxyFixture upstream) : IClassFixture<
     private async Task<ProxyClient> LoginAsync()
     {
         var client = new ProxyClient(_address);
-        await client.AuthenticateAsync("bob", "pw");
+        await client.AuthenticateAsync("bob", _bobToken);
         return client;
     }
 

@@ -11,7 +11,6 @@ config="${CONFIGURATION:-Release}"
 : "${DBKIT_TEST_MSSQL:?set DBKIT_TEST_MSSQL to a SQL Server connection string (eval \"\$(testenv/testenv.sh env dbdatakit)\")}"
 port="${DBPROXY_E2E_PORT:-18815}"
 user=e2e
-password="e2e-$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 
 dotnet build "$root/DbDataProxy/src/DbDataProxy.Server" -c "$config" --nologo -v q
 dll="$(ls "$root"/DbDataProxy/src/DbDataProxy.Server/bin/"$config"/net*/dbdataproxy.dll | head -1)"
@@ -27,21 +26,23 @@ cleanup() {
 }
 trap cleanup EXIT
 
-hash="$(printf '%s\n' "$password" | dotnet "$dll" secret hash | tail -n 1 | tr -d '\r\n')"
-
 export DBPROXY_Proxy__SchemaVersion=2
 export DBPROXY_Proxy__DataDirectory="$tmp"
 export DBPROXY_Proxy__Listen__Address=127.0.0.1
 export DBPROXY_Proxy__Listen__Port="$port"
-export DBPROXY_Proxy__Users__0__Name="$user"
-export DBPROXY_Proxy__Users__0__PasswordHash="$hash"
-export DBPROXY_Proxy__Users__0__DataSources__0=duck
-export DBPROXY_Proxy__Users__0__DataSources__1=mssql
 export DBPROXY_Proxy__DataSources__duck__Provider=duckdb
 export DBPROXY_Proxy__DataSources__duck__ConnectionString="Data Source=$tmp/e2e.duckdb"
 export DBPROXY_Proxy__DataSources__duck__AllowWrites=true
+# who may use a data source is a matter of the identity home's groups (P13); the e2e user is a service account of the home, so the sources are open to everyone
+export DBPROXY_Proxy__DataSources__duck__Everyone=true
+export DBPROXY_Proxy__DataSources__mssql__Everyone=true
 export DBPROXY_Proxy__DataSources__mssql__Provider=sqlserver
 export DBPROXY_Proxy__DataSources__mssql__ConnectionString="$DBKIT_TEST_MSSQL"
+
+# the e2e user: a service account of the identity home (in the proxy's state, under the data directory) and its personal access token, which is the password
+dotnet "$dll" identity service-account-add --name "$user" --repo "$tmp" >/dev/null
+password="$(dotnet "$dll" identity token-create --account "$user" --name e2e --repo "$tmp" | grep -o 'ddk_[A-Za-z0-9_-]*' | head -n 1)"
+[ -n "$password" ] || { echo "no token was made for the e2e service account"; exit 1; }
 
 dotnet "$dll" server run >"$tmp/proxy.log" 2>&1 &
 proxy_pid=$!

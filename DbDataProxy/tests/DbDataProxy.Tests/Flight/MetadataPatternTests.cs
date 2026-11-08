@@ -10,7 +10,7 @@ public class MetadataPatternTests(ProxyFixture proxy) : IClassFixture<ProxyFixtu
     private async Task<List<string?>> TableNamesAsync(string pattern, string? schemaPattern = null)
     {
         using var client = proxy.Connect();
-        await client.AuthenticateAsync("alice", ProxyFixture.AlicePassword);
+        await client.AuthenticateAsync("alice", proxy.AliceToken);
         var names = new List<string?>();
         await foreach (var batch in await client.Raw.GetTablesAsync(schemaPattern: schemaPattern, tablePattern: pattern))
             for (int i = 0; i < batch.Length; i++) names.Add(ArrowText.Get(batch.Column("table_name"), i));

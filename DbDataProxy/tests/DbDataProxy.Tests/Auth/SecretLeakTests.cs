@@ -54,11 +54,9 @@ public sealed class SecretLeakTests : IDisposable
         ["Proxy:DataSources:pt:Provider"] = "sqlserver",
         ["Proxy:DataSources:pt:PassThrough"] = "true",
         ["Proxy:DataSources:pt:ConnectionString"] = "Server=127.0.0.1,1;Connect Timeout=2;Encrypt=False",
-        ["Proxy:Users:0:Name"] = "alice",
-        ["Proxy:Users:0:PasswordHash"] = PasswordHasher.Hash("alice-real-pw", 1000),
-        ["Proxy:Users:0:DataSources:0"] = "ref",
-        ["Proxy:Users:0:DataSources:1"] = "lit",
-        ["Proxy:Users:0:DefaultDataSource"] = "ref",
+        ["Proxy:DataSources:ref:Groups:0"] = HomeSeed.Group,
+        ["Proxy:DataSources:ref:Default"] = "true",
+        ["Proxy:DataSources:lit:Groups:0"] = HomeSeed.Group,
     };
 
     private WebApplication Build(Dictionary<string, string?> settings) => ProxyHost.Build([], b =>
@@ -128,17 +126,18 @@ public sealed class SecretLeakTests : IDisposable
         await app.StartAsync();
         string address = AddressOf(app);
         var statuses = new List<string>();
+        var aliceToken = HomeSeed.ServiceAccount(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>(), "alice");
 
-        // Failed login: a local user with the wrong password, and the sentinel as the (wrong) password.
+        // Failed login: a home user with the wrong token (it has the shape of one: the sentinel as its secret).
         using (var client = new ProxyFlightClient(address))
         {
-            var login = await Rpc.ExpectAsync(() => client.AuthenticateAsync("alice", LoginSentinel));
+            var login = await Rpc.ExpectAsync(() => client.AuthenticateAsync("alice", "ddk_wrong_" + LoginSentinel));
             Assert.Equal(StatusCode.Unauthenticated, login.StatusCode);
             statuses.Add(login.Status.Detail);
         }
 
         // Failed connections: configured credentials (referenced and literal) and pass-through credentials.
-        foreach (var (user, password, source) in new[] { ("alice", "alice-real-pw", "ref"), ("alice", "alice-real-pw", "lit"), ("mallory", PassThroughSentinel, "pt") })
+        foreach (var (user, password, source) in new[] { ("alice", aliceToken, "ref"), ("alice", aliceToken, "lit"), ("mallory", PassThroughSentinel, "pt") })
         {
             using var client = new ProxyFlightClient(address);
             await client.AuthenticateAsync(user, password);

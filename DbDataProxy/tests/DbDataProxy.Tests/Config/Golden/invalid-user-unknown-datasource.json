@@ -1,4 +1,0 @@
-{ "Proxy": {
-  "DataSources": { "erp": { "ConnectionString": "Driver=x" } },
-  "Users": [ { "Name": "a", "PasswordHash": "h", "DataSources": [ "erq" ] } ]
-} }

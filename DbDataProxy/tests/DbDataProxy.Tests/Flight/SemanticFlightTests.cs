@@ -23,6 +23,7 @@ public sealed class SemanticFlightTests : IAsyncLifetime
 
     private WebApplication? _app;
     private string _dir = "";
+    private readonly Dictionary<string, string> _tokens = new();
     private string _address = "";
 
     public async ValueTask InitializeAsync()
@@ -51,15 +52,15 @@ public sealed class SemanticFlightTests : IAsyncLifetime
             ["Proxy:DataSources:other:ConnectionString"] = "Data Source=:memory:",
             ["Proxy:Semantic:Models:0:Catalog"] = Path.Combine(AppContext.BaseDirectory, "semantic", "catalog.yaml"),
             ["Proxy:Semantic:Models:0:Sources:sqlserver_sales"] = "warehouse",
-            ["Proxy:Users:0:Name"] = "alice",
-            ["Proxy:Users:0:PasswordHash"] = PasswordHasher.Hash("pw", 1000),
-            ["Proxy:Users:0:DataSources:0"] = "warehouse",
-            ["Proxy:Users:1:Name"] = "bob",
-            ["Proxy:Users:1:PasswordHash"] = PasswordHasher.Hash("pw", 1000),
-            ["Proxy:Users:1:DataSources:0"] = "other",
         };
+        // alice is in the group that uses the warehouse, bob in the one that uses the other source
+        HomeSeed.Open(settings, ["warehouse"], group: "analysts");
+        HomeSeed.Open(settings, ["other"], group: "others");
         _app = ProxyHost.Build([], b => b.Configuration.AddInMemoryCollection(settings));
         await _app.StartAsync();
+        var state = _app.Services.GetRequiredService<DbDataKit.State.StateDatabase>();
+        _tokens["alice"] = HomeSeed.ServiceAccount(state, "alice", "analysts");
+        _tokens["bob"] = HomeSeed.ServiceAccount(state, "bob", "others");
         _address = _app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.First().Replace("0.0.0.0", "127.0.0.1");
     }
 
@@ -72,7 +73,7 @@ public sealed class SemanticFlightTests : IAsyncLifetime
     private async Task<(Schema Schema, List<string> Rows)> QueryAsync(string user, string text)
     {
         using var client = new ProxyFlightClient(_address);
-        await client.AuthenticateAsync(user, "pw");
+        await client.AuthenticateAsync(user, _tokens[user]);
         var result = await client.QueryAsync(text, new QueryOptions { DataSource = "semantic:sales_catalog" });
         var rows = new List<string>();
         await foreach (var batch in result)
@@ -101,7 +102,7 @@ public sealed class SemanticFlightTests : IAsyncLifetime
     private async Task<List<string>> BoundAsync(string sql, object values)
     {
         using var client = new ProxyFlightClient(_address);
-        await client.AuthenticateAsync("alice", "pw");
+        await client.AuthenticateAsync("alice", _tokens["alice"]);
         var options = new QueryOptions { DataSource = "semantic:sales_catalog" };
         var result = values switch
         {
@@ -135,7 +136,7 @@ public sealed class SemanticFlightTests : IAsyncLifetime
     public async Task APreparedStatementOnAModelReportsItsParametersWithTheAttributeEachIsFor()
     {
         using var client = new ProxyFlightClient(_address);
-        await client.AuthenticateAsync("alice", "pw");
+        await client.AuthenticateAsync("alice", _tokens["alice"]);
         var schema = await client.DescribeParametersAsync(
             "SELECT customers.region, MEASURE(orders.net_revenue) FROM sales_catalog WHERE date.fiscal_quarter = :quarter AND customers.region IN :regions GROUP BY ALL LIMIT $top",
             new QueryOptions { DataSource = "semantic:sales_catalog" });
@@ -184,7 +185,7 @@ public sealed class SemanticFlightTests : IAsyncLifetime
 
     private async Task<(int Code, string Out, string Error, CliContext Context)> SemanticCli(params string[] args)
     {
-        Environment.SetEnvironmentVariable("DBPROXY_PASSWORD", "pw");
+        Environment.SetEnvironmentVariable("DBPROXY_PASSWORD", _tokens["alice"]);
         var (output, error) = (new StringWriter(), new StringWriter());
         var context = new CliContext(output, error, TextReader.Null);
         var code = await DbDataProxy.Server.Hosting.Cli.RunAsync(["semantic", .. args, "--address", _address, "--user", "alice"], context);
@@ -247,7 +248,7 @@ public sealed class SemanticFlightTests : IAsyncLifetime
     public async Task APlainSqlStatementOnTheDataSourceIsUnchanged()
     {
         using var client = new ProxyFlightClient(_address);
-        await client.AuthenticateAsync("alice", "pw");
+        await client.AuthenticateAsync("alice", _tokens["alice"]);
         var result = await client.QueryAsync("SELECT count(*) AS n FROM fact_sales", new QueryOptions { DataSource = "warehouse" });
         long n = 0;
         await foreach (var batch in result) n += ((Int64Array)batch.Column(0)).GetValue(0)!.Value;

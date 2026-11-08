@@ -1,4 +1,5 @@
 using DbDataProxy.Server.Configuration;
+using DbDataProxy.Server.Serving;
 using Microsoft.Extensions.Options;
 
 namespace DbDataProxy.Server.Auth;
@@ -20,21 +21,19 @@ public interface IBasicCredentialValidator
     ValueTask<CredentialResult> ValidateAsync(string user, string password, CancellationToken cancellationToken);
 }
 
-/// <summary>Checks credentials against the hashed-password users in configuration.</summary>
-public sealed class LocalUserValidator(IOptionsMonitor<ProxyOptions> options) : IBasicCredentialValidator
+/// <summary>
+/// The identity home's people with a user name and a personal access token (plan 13a P13; plan 16 "Sign-in decisions" item 2): the user name is the person's address, a service account's name or the user id, the password the token (<c>ddk_...</c>).
+/// A password that has the shape of a token and is not the right one for that user is refused for good, never handed on to pass-through; anything else is not this validator's.
+/// </summary>
+public sealed class HomeCredentialValidator(HomeCallers callers, IOptionsMonitor<ProxyOptions> options) : IBasicCredentialValidator
 {
-    public ValueTask<CredentialResult> ValidateAsync(string user, string password, CancellationToken cancellationToken)
+    public async ValueTask<CredentialResult> ValidateAsync(string user, string password, CancellationToken cancellationToken)
     {
-        var entry = options.CurrentValue.Users.FirstOrDefault(u => string.Equals(u.Name, user, StringComparison.OrdinalIgnoreCase));
-        // Windows-account users are handled by WindowsAccountValidator.
-        if (entry is null || entry.AuthType != UserAuthType.Password) return ValueTask.FromResult(CredentialResult.NotMine);
-
-        // A configured user is always authoritative: a wrong password must not fall through to pass-through.
-        if (entry.PasswordHash is null || !PasswordHasher.Verify(password, entry.PasswordHash))
-            return ValueTask.FromResult(CredentialResult.Rejected);
-
-        return ValueTask.FromResult(CredentialResult.Accepted(
-            new ProxyPrincipal(entry.Name, "password", entry.DataSources, entry.DefaultDataSource)));
+        if (!HomePrincipals.LooksLikeToken(password)) return CredentialResult.NotMine;
+        var home = await callers.GetAsync(cancellationToken).ConfigureAwait(false);
+        return home.IdentifyPassword(user, password) is { } found
+            ? CredentialResult.Accepted(HomePrincipals.Create(home, found, "home-user", options.CurrentValue))
+            : CredentialResult.Rejected;
     }
 }
 

@@ -16,7 +16,7 @@ public class FailureModelTests(ProxyFixture proxy) : IClassFixture<ProxyFixture>
     private async Task<ProxyClient> LoginAsync()
     {
         var client = proxy.Connect();
-        await client.AuthenticateAsync("alice", ProxyFixture.AlicePassword);
+        await client.AuthenticateAsync("alice", proxy.AliceToken);
         return client;
     }
 

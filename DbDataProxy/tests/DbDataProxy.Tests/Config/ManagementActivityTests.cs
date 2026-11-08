@@ -316,7 +316,7 @@ public sealed partial class ManagementTests
         Assert.Equal("dbdataproxy", (string)overview["product"]!);
         Assert.Equal(server.InstanceId, (string)overview["instance_id"]!);
         Assert.Equal(1, (int)overview["data_sources"]!);
-        Assert.Equal(1, (int)overview["users"]!);
+        Assert.Equal(0, (int)overview["users"]!);   // Proxy has no users of its own (P13); the field stays for a console of the release before
         Assert.True((bool)overview["jwt"]!);
         Assert.Equal(0, (int)overview["sessions"]!);
         Assert.Equal(0, (int)overview["running_queries"]!);
@@ -331,31 +331,32 @@ public sealed partial class ManagementTests
     }
 
     [Fact]
-    public async Task The_history_starts_with_the_configuration_as_found_each_change_is_a_commit_and_a_diff_shows_both_sides_without_a_hash_or_a_key()
+    public async Task The_history_starts_with_the_configuration_as_found_each_change_is_a_commit_and_a_diff_shows_both_sides_without_a_key()
     {
         await StartAsync();
         var server = await PairAsync();
         Write("connections/scratch.yaml", Scratch("scratch"));
-        await CallAsync(server, HttpMethod.Put, "/api/v1/users/carol", ServerRole.Admin, UserBody("a password", ["*"]));
+        var view = await IdentitiesAsync(server);
+        await CallAsync(server, HttpMethod.Put, "/api/v1/auth", ServerRole.Admin, JsonSerializer(new { allow_pass_through = false, expected_version = (string)view["auth_version"]! }));
 
         var commits = JsonNode.Parse(await (await CallAsync(server, HttpMethod.Get, "/api/v1/config/history", ServerRole.Admin)).Content.ReadAsStringAsync())!["commits"]!.AsArray();
-        Assert.Equal(["Add user carol", "Configuration as found"], commits.Select(c => (string)c!["message"]!).ToList());
+        Assert.Equal(["Set pass-through off", "Configuration as found"], commits.Select(c => (string)c!["message"]!).ToList());
         Assert.Equal("Ada", (string)commits[0]!["author"]!);
 
         // the first commit holds the files as they were found, with the secrets in them masked
         var initial = JsonNode.Parse(await (await CallAsync(server, HttpMethod.Get, $"/api/v1/config/history/{(string)commits[1]!["sha"]!}", ServerRole.Admin)).Content.ReadAsStringAsync())!;
-        var users = initial["changes"]!.AsArray().Single(c => ((string)c!["path"]!).EndsWith("users.yaml"))!;
-        Assert.Equal("added", (string)users["kind"]!);
-        Assert.Contains("passwordHash: ********", (string)users["after"]!);
+        var auth = initial["changes"]!.AsArray().Single(c => ((string)c!["path"]!).EndsWith("auth.yaml"))!;
+        Assert.Equal("added", (string)auth["kind"]!);
+        Assert.Contains("signingKey: ********", (string)auth["after"]!);
         Assert.DoesNotContain(Sentinel, initial.ToJsonString());
 
         // the change adds an entry; the hash of the new password is not in the diff either
         var change = JsonNode.Parse(await (await CallAsync(server, HttpMethod.Get, $"/api/v1/config/history/{(string)commits[0]!["sha"]!}", ServerRole.Admin)).Content.ReadAsStringAsync())!;
         var modified = change["changes"]!.AsArray().Single()!;
         Assert.Equal("modified", (string)modified["kind"]!);
-        Assert.DoesNotContain("PBKDF2", change.ToJsonString());
-        Assert.Contains("carol", (string)modified["after"]!);
-        Assert.DoesNotContain("carol", (string)modified["before"]!);
+        Assert.DoesNotContain(Sentinel, change.ToJsonString());
+        Assert.Contains("allowPassThrough: false", (string)modified["after"]!);
+        Assert.DoesNotContain("allowPassThrough", (string)modified["before"]!);
 
         Assert.Equal(HttpStatusCode.NotFound, (await CallAsync(server, HttpMethod.Get, "/api/v1/config/history/0000000", ServerRole.Admin)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await CallAsync(server, HttpMethod.Get, "/api/v1/config/history/not-a-sha", ServerRole.Admin)).StatusCode);

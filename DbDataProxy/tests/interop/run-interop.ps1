@@ -19,20 +19,22 @@ New-Item -ItemType Directory $tmp | Out-Null
 $db = Join-Path $tmp 'interop.duckdb'
 & $Python (Join-Path $PSScriptRoot 'seed.py') $db
 
-$hash = ('interop-pw' | & $exe secret hash).Trim()
 $env:DBPROXY_Proxy__DataDirectory = $tmp
 $env:DBPROXY_Proxy__Listen__Port = "$Port"
-$env:DBPROXY_Proxy__Users__0__Name = 'py'
-$env:DBPROXY_Proxy__Users__0__PasswordHash = $hash
-$env:DBPROXY_Proxy__Users__0__DataSources__0 = 'duck'
 $env:DBPROXY_Proxy__DataSources__duck__Provider = 'duckdb'
 $env:DBPROXY_Proxy__DataSources__duck__ConnectionString = "Data Source=$db"
 $env:DBPROXY_Proxy__DataSources__duck__AllowWrites = 'true'
+# who may use a data source is a matter of the identity home's groups (P13); the client is a service account of the home, so the source is open to everyone
+$env:DBPROXY_Proxy__DataSources__duck__Everyone = 'true'
+& $exe identity service-account-add --name py --repo $tmp | Out-Null
+$made = (& $exe identity token-create --account py --name interop --repo $tmp | Out-String)
+$token = [regex]::Match($made, 'ddk_[A-Za-z0-9_-]+').Value
+if (-not $token) { throw 'no token was made for the interop service account' }
 $proxy = Start-Process $exe -ArgumentList 'server','run' -PassThru -WindowStyle Hidden `
   -RedirectStandardOutput (Join-Path $tmp 'out.log') -RedirectStandardError (Join-Path $tmp 'err.log')
 try {
   Start-Sleep 5
-  & $Python (Join-Path $PSScriptRoot 'interop.py') $Port py interop-pw
+  & $Python (Join-Path $PSScriptRoot 'interop.py') $Port py $token
   $code = $LASTEXITCODE
 } finally {
   Stop-Process -Id $proxy.Id -Force

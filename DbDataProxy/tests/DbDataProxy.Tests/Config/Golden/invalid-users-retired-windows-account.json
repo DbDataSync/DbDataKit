@@ -1,0 +1,1 @@
+{ "Proxy": { "Users": [ { "Name": "CORP\\bob", "AuthType": "Windows", "DataSources": [ "erp" ] } ] } }

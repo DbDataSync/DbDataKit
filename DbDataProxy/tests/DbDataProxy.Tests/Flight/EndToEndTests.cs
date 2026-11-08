@@ -6,10 +6,10 @@ namespace DbDataProxy.Tests.Flight;
 
 public class EndToEndTests(ProxyFixture proxy) : IClassFixture<ProxyFixture>
 {
-    private async Task<ProxyClient> LoginAsync(string user = "alice", string password = ProxyFixture.AlicePassword)
+    private async Task<ProxyClient> LoginAsync(string user = "alice", string? password = null)
     {
         var client = proxy.Connect();
-        await client.AuthenticateAsync(user, password);
+        await client.AuthenticateAsync(user, password ?? proxy.AliceToken);
         return client;
     }
 
@@ -121,7 +121,7 @@ public class HandshakeRaceTests(ProxyFixture proxy) : IClassFixture<ProxyFixture
             await Task.WhenAll(Enumerable.Range(0, 32).Select(async _ =>
             {
                 using var client = proxy.Connect();
-                await client.AuthenticateAsync("alice", ProxyFixture.AlicePassword);
+                await client.AuthenticateAsync("alice", proxy.AliceToken);
             }));
         }
     }

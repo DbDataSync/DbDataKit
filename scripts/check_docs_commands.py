@@ -26,7 +26,7 @@ RETIRED = [
     (r"\bdbdatasync(?:\.exe)?\s+serve\b", "dbdatasync server run"),
     (r"\bdbdatasync(?:\.exe)?\s+setup\b", "dbdatasync server setup"),
     (r"\bdbdatasync(?:\.exe)?\s+config\s+(cert|secret|library|driver)\b", "dbdatasync <cert|secret|library|driver> ... (no longer under config)"),
-    (r"\bdbdataproxy(?:\.exe)?\s+hash-password\b", "dbdataproxy secret hash"),
+    (r"\bdbdataproxy(?:\.exe)?\s+(?:hash-password|secret\s+hash)\b", "a home token: dbdataproxy identity service-account-add / token-create (Proxy has no users of its own to hash a password for)"),
     (r"\bdbdataproxy(?:\.exe)?\s+protect-secret\b", "dbdataproxy secret protect"),
     (r"\bdbdataproxy(?:\.exe)?\s+(install|uninstall)\b", "dbdataproxy service install|uninstall"),
     (r"\bdbdataproxy(?:\.exe)?\s+query(?!\s+run)\b", "dbdataproxy query run"),

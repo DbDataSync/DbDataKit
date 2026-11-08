@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using DbDataProxy.Server.Configuration;
+using DbDataProxy.Server.Serving;
 using Microsoft.Extensions.Options;
 using Microsoft.Win32.SafeHandles;
 
@@ -11,7 +12,8 @@ public interface IWindowsLogon
     /// <summary>False when this platform cannot check Windows accounts at all.</summary>
     bool IsAvailable => true;
 
-    bool Validate(string domain, string user, string password);
+    /// <param name="domain">The domain, or null when <paramref name="user"/> is a UPN (<c>ada@corp.example</c>), which names its own.</param>
+    bool Validate(string? domain, string user, string password);
 }
 
 /// <summary>LogonUser-based implementation (Windows only).</summary>
@@ -22,7 +24,7 @@ public sealed partial class NativeWindowsLogon : IWindowsLogon
 
     public bool IsAvailable => OperatingSystem.IsWindows();
 
-    public bool Validate(string domain, string user, string password)
+    public bool Validate(string? domain, string user, string password)
     {
         if (!OperatingSystem.IsWindows()) return false;
         // A network logon needs no "log on locally" right and does not create an interactive session.
@@ -37,39 +39,33 @@ public sealed partial class NativeWindowsLogon : IWindowsLogon
 }
 
 /// <summary>
-/// Authenticates configured users whose <see cref="UserOptions.AuthType"/> is Windows against the machine's
-/// (or domain's) account database. The configured user then maps to data sources whose connection strings carry
-/// the database credentials, so Windows accounts never need database logins of their own.
+/// Windows sign-in resolved to the identity home (plan 13a P13, U16): the user name is the person's UPN (<c>ada@corp.example</c>), the password is checked by the operating system, and the account is the home user who holds that verified address.
+/// Only with <c>Proxy:Auth:Windows</c>. A UPN that no home user holds is not this validator's (it may be a database login for pass-through); a home user's UPN with a password the operating system refuses is refused for good, and on a platform that
+/// cannot check Windows accounts it is refused too. The data sources are the home groups' (<see cref="DataSourceOptions.Groups"/>), as for every home user: a Windows account needs no database login of its own.
 /// </summary>
-public sealed class WindowsAccountValidator(IOptionsMonitor<ProxyOptions> options, IWindowsLogon logon, ILogger<WindowsAccountValidator> log)
+public sealed class WindowsAccountValidator(IOptionsMonitor<ProxyOptions> options, IWindowsLogon logon, HomeCallers callers, ILogger<WindowsAccountValidator> log)
     : IBasicCredentialValidator
 {
     public async ValueTask<CredentialResult> ValidateAsync(string user, string password, CancellationToken cancellationToken)
     {
-        var entry = options.CurrentValue.Users.FirstOrDefault(u =>
-            u.AuthType == UserAuthType.Windows && string.Equals(u.Name, user, StringComparison.OrdinalIgnoreCase));
-        if (entry is null) return CredentialResult.NotMine;
+        if (!options.CurrentValue.Auth.Windows || HomePrincipals.LooksLikeToken(password) || !IsUpn(user)) return CredentialResult.NotMine;
+
+        var home = await callers.GetAsync(cancellationToken).ConfigureAwait(false);
+        if (home.FindByAddress(user.Trim()) is not { } person) return CredentialResult.NotMine;
 
         if (!logon.IsAvailable)
         {
-            log.LogWarning("User {User} is configured for Windows authentication, which this platform cannot check.", user);
+            log.LogWarning("{User} is a user of the identity home and signed in with a Windows password, which this platform cannot check.", user);
             return CredentialResult.Rejected;
         }
-
-        var (domain, account) = Split(user);
-        bool valid = await Task.Run(() => logon.Validate(domain, account, password), cancellationToken).ConfigureAwait(false);
-        return valid
-            ? CredentialResult.Accepted(new ProxyPrincipal(entry.Name, "windows", entry.DataSources, entry.DefaultDataSource))
-            : CredentialResult.Rejected;
+        bool valid = await Task.Run(() => logon.Validate(null, user.Trim(), password), cancellationToken).ConfigureAwait(false);
+        return valid ? CredentialResult.Accepted(HomePrincipals.Create(home, person, "windows", options.CurrentValue)) : CredentialResult.Rejected;
     }
 
-    /// <summary>"DOMAIN\user" and "user@domain" are split; a bare name (or ".\user") is a local account.</summary>
-    public static (string Domain, string User) Split(string name)
+    /// <summary>A UPN is <c>name@domain</c>; <c>DOMAIN\name</c> and a bare name are not resolved to a home user (they have no address to look up).</summary>
+    public static bool IsUpn(string name)
     {
-        int slash = name.IndexOf((char)92);
-        if (slash > 0) return (name[..slash], name[(slash + 1)..]);
         int at = name.IndexOf('@');
-        if (at > 0) return (name[(at + 1)..], name[..at]);
-        return (".", name);
+        return at > 0 && at < name.Length - 1 && name.IndexOf((char)92) < 0 && name.IndexOf('@', at + 1) < 0;
     }
 }

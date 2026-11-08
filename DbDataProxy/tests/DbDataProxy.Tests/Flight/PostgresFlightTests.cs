@@ -25,6 +25,7 @@ public sealed class PostgresFlightTests : IAsyncLifetime
     private WebApplication? _app;
     private string _address = "";
     private string _dir = "";
+    private string _aliceToken = "";
 
     public async ValueTask InitializeAsync()
     {
@@ -51,11 +52,7 @@ public sealed class PostgresFlightTests : IAsyncLifetime
             ["Proxy:DataDirectory"] = _dir,
             ["Proxy:Compression:Mode"] = "Arrow",
             ["Proxy:Compression:Codec"] = "zstd",
-            ["Proxy:Users:0:Name"] = "alice",
-            ["Proxy:Users:0:PasswordHash"] = PasswordHasher.Hash("pw", 1000),
         };
-        string[] sources = ["pg_rw", "pg_ro", "pg_off", "pg_pass"];
-        for (int i = 0; i < sources.Length; i++) settings[$"Proxy:Users:0:DataSources:{i}"] = sources[i];
 
         settings["Proxy:DataSources:pg_rw:Provider"] = "postgres";
         settings["Proxy:DataSources:pg_rw:ConnectionString"] = PostgresEnv.ConnectionString();
@@ -76,8 +73,11 @@ public sealed class PostgresFlightTests : IAsyncLifetime
         settings["Proxy:DataSources:pg_pass:ConnectionString"] = PostgresEnv.WithoutLogin();
         settings["Proxy:DataSources:pg_pass:Classifier"] = "strict";
 
+        // pg_pass is decided by the database: its caller brings database credentials
+        HomeSeed.Open(settings, ["pg_rw", "pg_ro", "pg_off"]);
         _app = ProxyHost.Build([], b => b.Configuration.AddInMemoryCollection(settings));
         await _app.StartAsync();
+        _aliceToken = HomeSeed.ServiceAccount(_app.Services.GetRequiredService<DbDataKit.State.StateDatabase>(), "alice");
         _address = _app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.First()
             .Replace("0.0.0.0", "127.0.0.1");
     }
@@ -93,10 +93,10 @@ public sealed class PostgresFlightTests : IAsyncLifetime
         }
     }
 
-    private async Task<ProxyClient> LoginAsync(string user = "alice", string password = "pw")
+    private async Task<ProxyClient> LoginAsync(string user = "alice", string? password = null)
     {
         var client = new ProxyClient(_address);
-        await client.AuthenticateAsync(user, password);
+        await client.AuthenticateAsync(user, password ?? _aliceToken);
         return client;
     }
 

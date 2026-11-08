@@ -85,7 +85,6 @@ public sealed class ConfigStartupTests
             var o = app.Services.GetRequiredService<IOptionsMonitor<ProxyOptions>>().CurrentValue;
             Assert.Equal(1, o.SchemaVersion);
             Assert.Equal("0.0.0.0", o.Listen.Address);
-            Assert.Empty(o.Users);
         }
     }
 
@@ -124,23 +123,24 @@ public sealed class ConfigStartupTests
     }
 
     [Fact]
-    public void The_layout_is_one_server_file_an_auth_file_a_users_file_and_a_data_source_per_connections_file()
+    public void The_layout_is_one_server_file_an_auth_file_and_a_data_source_per_connections_file()
     {
         string dir = NewDataDirectory("listen: { port: 2222 }\n");
         string config = ProxyConfigFile.DirectoryIn(dir);
         Directory.CreateDirectory(Path.Combine(config, "proxy"));
         Directory.CreateDirectory(Path.Combine(config, "connections"));
         File.WriteAllText(Path.Combine(config, "proxy", "auth.yaml"), "sessionIdleMinutes: 5\nallowPassThrough: false\n");
-        File.WriteAllText(Path.Combine(config, "proxy", "users.yaml"), "users:\n  - name: bob\n    passwordHash: PBKDF2-SHA256$1$a$b\n    dataSources: [erp]\n");
-        File.WriteAllText(Path.Combine(config, "connections", "erp.yaml"), Conn.Yaml("erp", connectionString: "Server=x", auth: "auth: { mode: sql, user: u, password_secret: env:ERP_PW }", proxy: ["classifier: off"]));
+        File.WriteAllText(Path.Combine(config, "connections", "erp.yaml"), Conn.Yaml("erp", connectionString: "Server=x", auth: "auth: { mode: sql, user: u, password_secret: env:ERP_PW }", proxy: ["classifier: off", "groups: [finance, Analysts]", "default: true"]));
         File.WriteAllText(Path.Combine(config, "connections", "notes.txt"), "not a data source");
 
         var o = ProxyConfiguration.LoadOptions(dir);
         Assert.Equal(2222, o.Listen.Port);
         Assert.Equal(5, o.Auth.SessionIdleMinutes);
         Assert.False(o.Auth.AllowPassThrough);
-        Assert.Equal("bob", Assert.Single(o.Users).Name);
         var erp = Assert.Single(o.DataSources);
+        Assert.Equal(["finance", "Analysts"], erp.Value.Groups);   // the home groups that may use it (P13)
+        Assert.True(erp.Value.Default);
+        Assert.False(erp.Value.Everyone);
         Assert.Equal("erp", erp.Key);
         Assert.Equal(ClassifierMode.Off, erp.Value.Classifier);
         Assert.Equal("sqlserver", erp.Value.Provider);
@@ -323,11 +323,9 @@ public sealed class ConfigCommandTests
     public void Show_origin_lists_effective_values_with_file_line_or_default_and_masks_secrets()
     {
         const string signingKey = "c2lnbmluZy1rZXktbGl0ZXJhbA==";
-        const string hash = "PBKDF2-SHA256$210000$salt$hashvalue";
         using var c = TempConfig.Create(
             ("server.yaml", "schemaVersion: 2\nlisten: { port: 9100 }\ntls: { mode: file, certificatePath: c.pfx, certificatePassword: 'env:PFX_PW' }\n"),
             ("proxy/auth.yaml", $"jwt:\n  signingKey: {signingKey}\n  audience: a\n  mappings: [ {{ claim: c, value: v, dataSources: ['*'] }} ]\n"),
-            ("proxy/users.yaml", $"users:\n  - name: u\n    passwordHash: '{hash}'\n    dataSources: [a]\n"),
             ("connections/a.yaml", Conn.Yaml("a", connectionString: "Server=s;Encrypt=True", auth: "auth: { mode: sql, user: u, password_secret: 'env:A_PW' }")),
             ("connections/b.yaml", Conn.Yaml("b", connectionString: "Server=s", auth: "auth: { mode: sql, user: u, password_secret: 'env:B_PW' }")),
             ("connections/c.yaml", Conn.Yaml("c", connectionString: null, extra: "connection_string_secret: 'secret:dbdata:proxy:c'")));
@@ -340,13 +338,12 @@ public sealed class ConfigCommandTests
         Assert.Contains("Listen.Address = 0.0.0.0   (default)", text);
         Assert.Contains("SchemaVersion = 2", text);
 
-        foreach (var secret in new[] { signingKey, hash })
+        foreach (var secret in new[] { signingKey })
         {
             Assert.DoesNotContain(secret, text);
             Assert.DoesNotContain(secret, r.Err);
         }
         Assert.Contains("Auth.Jwt.SigningKey = ********", text);
-        Assert.Contains("Users[0].PasswordHash = ********", text);
         Assert.Contains("Tls.CertificatePassword = env:PFX_PW", text);                      // a reference is not secret
         Assert.Contains("DataSources.a.ConnectionString = Server=s;Encrypt=True;User Id=u;Password=env:A_PW", text);   // a reference is shown as it is: it is not the secret
         Assert.Contains("Password=env:B_PW", text);
@@ -359,13 +356,12 @@ public sealed class ConfigCommandTests
     {
         using var c = TempConfig.Create(
             ("server.yaml", "listen: { address: 127.0.0.1, port: 9000 }\ntls: { mode: none }\n"),
-            ("proxy/users.yaml", "users:\n  - name: bob\n    passwordHash: PBKDF2-SHA256$1$a$b\n    dataSources: [ERP]\n    defaultDataSource: erp\n"),
-            ("connections/erp.yaml", Conn.Yaml("erp", connectionString: "Server=x;Database=y", auth: "auth: { mode: sql, user: u, password_secret: 'env:ERP_PW' }")));
+            ("connections/erp.yaml", Conn.Yaml("erp", connectionString: "Server=x;Database=y", auth: "auth: { mode: sql, user: u, password_secret: 'env:ERP_PW' }", proxy: ["groups: [finance]"])));
         var r = Run("show", "--file", c.Directory);
         Assert.Equal(0, r.Code);
         Assert.Contains("Proxy:Listen:Port = 9000", r.Out);
         Assert.Contains("Proxy:DataSources:erp:Provider = sqlserver", r.Out);
-        Assert.Contains("Proxy:Users:0:Name = bob", r.Out);
+        Assert.Contains("Proxy:DataSources:erp:Groups:0 = finance", r.Out);
         Assert.DoesNotContain("(", r.Out);
     }
 
@@ -476,9 +472,11 @@ public sealed class ConfigReloadTests
         using var _l = loggers;
         using var _m = monitor;
 
-        config.Write("proxy/users.yaml", "users:\n  - name: nobody\n    passwordHash: h\n");   // warning: no data sources
+        config.Write("connections/closed.yaml", Conn.Yaml("closed", "duckdb", "Data Source=y.duckdb"));   // warning: no group names it, so no home user may use it
         provider.ReloadNow();
-        Assert.Single(monitor.CurrentValue.Users);
+        Assert.True(monitor.CurrentValue.DataSources.ContainsKey("closed"));
+        File.Delete(config.Path("connections/closed.yaml"));
+        provider.ReloadNow();
 
         config.Write("connections/new.yaml", Conn.Yaml("new", "duckdb", "Data Source=x.duckdb", proxy: ["allow_writes: true"]));
         provider.ReloadNow();
