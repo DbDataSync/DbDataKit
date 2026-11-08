@@ -9,5 +9,6 @@
     <None Include="..\..\conformance\views\**\*" LinkBase="conformance\views" CopyToOutputDirectory="PreserveNewest" />
     <!-- the schemas, which live with the shared visuals -->
     <None Include="..\..\web\visuals\schemas\*.schema.json" LinkBase="schemas" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\web\visuals\schemas\views-format.lock.json" LinkBase="schemas" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

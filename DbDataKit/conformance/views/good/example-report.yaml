@@ -1,0 +1,42 @@
+schemaVersion: 1
+kind: report
+title: Regional sales
+parameters:
+  - {name: quarter, type: string, for: date.fiscal_quarter, default: FY27-Q1}
+strict: true
+limits: {pages: 50}
+cover: {parameters: true}
+widgets:
+  intro: {type: text, text: "Net revenue for **{{params.quarter}}** by region."}
+  lines:
+    type: table
+    title: Orders
+    encodings:
+      columns:
+        - {field: customers.region, label: Region}
+        - {field: orders.net_revenue, label: Net revenue, format: full, align: right}
+      sort: {by: orders.net_revenue, dir: desc}
+    query:
+      model: sales
+      filters: [{attribute: date.fiscal_quarter, operator: equals, values: [{param: quarter}]}]
+      totals: {grand_total: true}
+      limit: 1000
+layouts:
+  - name: print
+    type: flow
+    default: true
+    page: {size: A4, orientation: landscape}
+    header: {left: "{title}", right: "{params.quarter}"}
+    footer: {center: "Page {page} of {pages}"}
+    sections:
+      - title: Detail
+        blocks:
+          - {widget: intro}
+          - {widget: lines, repeat_header: true}
+  - name: wall
+    type: canvas
+    when: {width: {min: 1700}, medium: screen}
+    canvas: {width: 1920, height: 1080}
+    tiles:
+      - {widget: intro, x: 40, y: 40, w: 600, h: 80}
+      - {widget: lines, x: 40, y: 140, w: 1200, h: 700}

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dbdatakit.invalid/visuals/report.schema.json",
+  "title": "Report document (report/1)",
+  "description": "A report: the shared core (widgets, parameters, layouts, theme) plus strict, limits and cover defaults. Its default layout is a flow layout; it may carry fit layouts for the screen. A report is a run: refresh is refused. The loader (DbDataKit.Views) is the authority; a test keeps the two equal.",
+  "type": "object",
+  "required": ["schemaVersion", "kind", "title", "widgets", "layouts"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "kind": { "const": "report" },
+    "title": { "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/title" },
+    "parameters": { "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/parameters" },
+    "theme": { "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/theme" },
+    "strict": { "description": "An over-width block refuses the export.", "type": "boolean" },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "pages": { "type": "integer", "minimum": 1, "maximum": 500 }, "rows": { "type": "integer", "minimum": 1, "maximum": 100000 } }
+    },
+    "cover": { "description": "Defaults for a flow layout that has no cover of its own.", "type": "object", "additionalProperties": false, "properties": { "parameters": { "type": "boolean" } } },
+    "widgets": { "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/widgets" },
+    "layouts": { "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/layouts" }
+  }
+}
