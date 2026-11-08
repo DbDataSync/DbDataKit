@@ -124,12 +124,16 @@ public sealed class StateSqliteFilesTests : IDisposable
         using var transaction = db.BeginTransaction(busy, "heavy");   // deferred: it locks only the heavy file
         using (var insert = db.Command(busy, transaction, "INSERT INTO " + db.Layout!.Table("heavy", "event") + " (id) VALUES ('long');")) insert.ExecuteNonQuery();
 
-        var watch = Stopwatch.StartNew();
-        Run(db, "INSERT INTO " + db.Layout.Table("light", "note") + " (id) VALUES ('n1');");
-        watch.Stop();
-
-        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(2), $"the write to the light module waited {watch.Elapsed.TotalSeconds:F1} s for a write to the heavy module's file");
+        // the write to the light module must finish while the heavy file's lock is still held: a write that needed that lock would wait for it until the busy timeout.
+        // The test asks whether it finishes (with a generous wait that a slow runner does not reach), never how fast: a wall-clock threshold fails on a loaded machine.
+        var layout = db.Layout;
+        var write = Task.Run(() => Run(db, "INSERT INTO " + layout.Table("light", "note") + " (id) VALUES ('n1');"));
+#pragma warning disable xUnit1031   // bounded waits, and the test stays synchronous: SqliteLockGuard.Allow() above is per thread, so an await that moved the test to another thread would unbalance it
+        var finished = write.Wait(TimeSpan.FromSeconds(30));
         transaction.Rollback();
+        if (!finished) write.Wait(TimeSpan.FromSeconds(60));   // let a blocked write end before the test does
+#pragma warning restore xUnit1031
+        Assert.True(finished, "the write to the light module did not finish while another connection held the write lock of the heavy module's file");
     }
 
     [Fact]
