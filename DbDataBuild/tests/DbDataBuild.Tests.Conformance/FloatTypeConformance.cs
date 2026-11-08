@@ -5,7 +5,7 @@ namespace DbDataBuild.Tests.Conformance;
 /// <summary>
 /// DuckDB's FLOAT (also FLOAT4 and REAL) is 32 bits; DOUBLE (FLOAT8, DOUBLE PRECISION) is 64. Through the tool's own pipeline (lowering, target rules, transpile) on both engines against DuckDB: the values
 /// (a FLOAT widened to DOUBLE shows the 32-bit rounding: 0.1 is 0.100000001490116 and 16777217 is 16777216) and the column type from `sys.dm_exec_describe_first_result_set` and `pg_typeof`
-/// (OPEN-ITEMS W-10(a), entry 179).
+/// (OPEN-ITEMS W-10(a)): proves, on the real engines, that a FLOAT of either width keeps its width.
 /// </summary>
 public class FloatTypeConformance
 {

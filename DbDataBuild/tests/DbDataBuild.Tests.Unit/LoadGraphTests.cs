@@ -7,7 +7,7 @@ using static DbDataBuild.Tests.Unit.TestSupport;
 namespace DbDataBuild.Tests.Unit;
 
 /// <summary>
-/// The dependency graph that `loads.yml` carries (entry 166): compiled with the loads and hashed with them, the same rows `publish` writes as `metadata_dependency`, and read by a refresh in place of the project, which a
+/// The dependency graph that `loads.yml` carries: compiled with the loads and hashed with them, the same rows `publish` writes as `metadata_dependency`, and read by a refresh in place of the project, which a
 /// refresh no longer loads to order, skip or select.
 /// </summary>
 public class LoadGraphTests

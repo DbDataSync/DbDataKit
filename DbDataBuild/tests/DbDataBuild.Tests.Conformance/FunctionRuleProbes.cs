@@ -6,7 +6,7 @@ using Xunit;
 namespace DbDataBuild.Tests.Conformance;
 
 /// <summary>
-/// The real-engine leg of the function rules (docs/research/function-matrix.md, entry 177 onward): each case is a DuckDB query over the probe table (and literal edge values) that the tool lowers, rewrites for the
+/// The real-engine leg of the function rules (docs/research/function-matrix.md): each case is a DuckDB query over the probe table (and literal edge values) that the tool lowers, rewrites for the
 /// engine and sends; the rows must be DuckDB's. A case in <see cref="Engines"/> only runs on the engines it names. A case that DuckDB itself rejects (a domain error) must be rejected by the engine too: the
 /// engines' messages differ, the fact that nothing wrong is returned does not.
 /// </summary>

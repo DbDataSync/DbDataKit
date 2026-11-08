@@ -9,7 +9,7 @@ namespace DbDataBuild.Tests.Unit;
 
 /// <summary>
 /// DuckDB's FLOAT (FLOAT4, REAL) is 32 bits and its DOUBLE (FLOAT8, DOUBLE PRECISION) is 64; FLOAT(n) is the first for n up to 24 and the second for 25 to 53. The rule `float-width` writes the first as REAL
-/// and the second as DOUBLE whatever the position (OPEN-ITEMS W-10(a), entry 179). Tested three ways: the text each target gets (here), the rule's DuckDB-dialect output run on DuckDB against the original for
+/// and the second as DOUBLE whatever the position (OPEN-ITEMS W-10(a)). Tested three ways: the text each target gets (here), the rule's DuckDB-dialect output run on DuckDB against the original for
 /// values and column types (here), and the engines' values and column types against DuckDB's (`FloatTypeConformance`).
 /// </summary>
 public class FloatWidthTests

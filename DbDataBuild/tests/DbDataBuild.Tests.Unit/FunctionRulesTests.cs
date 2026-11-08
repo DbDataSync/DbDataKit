@@ -9,7 +9,7 @@ using DuckDB.NET.Data;
 namespace DbDataBuild.Tests.Unit;
 
 /// <summary>
-/// The function rules of entry 177 onward (docs/research/function-matrix.md), each tested the way CLAUDE.md asks: the text a target gets (here), the rewritten query run on DuckDB against the original (the
+/// The function rules (docs/research/function-matrix.md), each tested the way CLAUDE.md asks: the text a target gets (here), the rewritten query run on DuckDB against the original (the
 /// differential, here: a rule writes DuckDB-dialect text, so DuckDB can run both), and the engines' rows against DuckDB's (`FunctionRuleProbes` in the conformance suite).
 /// </summary>
 public class FunctionRulesTests

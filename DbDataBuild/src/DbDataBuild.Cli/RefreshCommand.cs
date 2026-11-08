@@ -372,7 +372,7 @@ internal static class RefreshCommand
 
     /// <summary>
     /// The members of a plan the selectors choose, by their `model.member` names. No selector chooses all. `load:name` chooses by the load's name; anything else is the model selector grammar of every command (<see cref="ModelSelection"/>:
-    /// names and patterns, files, `+model`, `kind:`, `tag:`, `property:`, `connection:`, `path:`, `exclude:`). When the loads file carries the facts the grammar reads and its dependency graph (entry 171), the grammar runs over them and the
+    /// names and patterns, files, `+model`, `kind:`, `tag:`, `property:`, `connection:`, `path:`, `exclude:`). When the loads file carries the facts the grammar reads and its dependency graph, the grammar runs over them and the
     /// project's files are not read; only `changed:` needs the working tree (and its revision history), and a file compiled before the facts were carried needs the project for every term.
     /// </summary>
     internal static HashSet<string>? Select(RefreshPlanFile plan, List<string> selectors, string root, TextWriter error, LoadsFile? loads = null)
