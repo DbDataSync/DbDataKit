@@ -1,148 +1,20 @@
-# Plan 18: lineage across the suite
+# Plan 18: lineage, what is left
 
-Status: **proposed** (2026-10-26) from the owner's direction. The slices (section 7) belong to the next wave ([plan 19](19-next-wave.md));
-none are in plan 13a.
-
-## 1. Goal
-
-Every dependency and data flow in the suite can be traced, both ways:
-
-- **downstream, for impact**: what reads this column, table, measure or entity, and what breaks if it changes;
-- **upstream, for provenance**: where a number on a dashboard, a row in a mart or a value in a report came from.
-
-The owner's rules for the first version:
-
-- **Best effort**: column level wherever a product knows it, **table level where column level is too complicated or unavailable**. A gap is
-  shown as a gap, never filled by a guess.
-- **Manual lineage entries** (documenting external systems by hand) may be needed later; not in the first version.
-- **Export** (to OpenLineage and external catalogs) will be needed eventually; not in the first version. The model is designed so it maps
-  onto OpenLineage, so export is a later addition, not a redesign.
-- **Tracing a value back** (from a query result or a visual's value to where it came from, and further to the rows behind it) is a later
-  feature, not in the first version (owner, 2026-10-26).
-
-## 2. What the suite already knows
-
-| Product | What it knows today | Granularity |
-| --- | --- | --- |
-| DbDataBuild | the model graph (`project show graph`, Mermaid and Graphviz output); **column lineage** from query analysis (`DbDataBuild.Sql/Analysis/QueryAnalyzer.cs`), carried in the metadata documents (`columns[].lineage`: transform, upstream columns); mapped and native models as the sources; loads and their rows in the tracking tables | column (built models), table (native models, copies) |
-| DbDataSync | each replication's source and target tables and its column mappings; run history with rows and times | column (mappings) |
-| DbDataProxy | its data sources and the tables it reads for each query; with plan 14, the semantic model's measures and dimensions bound to columns | table (pass-through SQL), column (semantic models) |
-| Semantic layer (plan 14) | result provenance (`x_provenance`: source, request, overrides), run records | column |
-| DbDataStore (plan 15), DbDataApps (plan 16) | not built yet | |
-| Monitoring and audit (plan 13 W10, W12) | runs, outcomes, freshness; who changed what | |
-
-## 3. The model
-
-**One graph for the suite**, assembled from what each server knows about its own objects.
-
-**Nodes** (each with a stable identity, section 4):
-
-| Kind | Examples |
-| --- | --- |
-| dataset | a table or view in a database, a file, a DbDataStore entity, a document's extracted table |
-| column | a column of a dataset |
-| job | a Sync replication, a Build model's load, a Build copy, an extraction |
-| semantic member | a semantic model, its measures and dimensions |
-| serving | a Proxy data source, a published feed (plan 17 R2), a semantic package |
-| consumer | a DbDataApps app, dashboard or report; an external report server (later); an agent action |
-| deployment | a package, one of its versions, a channel it is served on, a runner group or instance, the runtime an instance runs on (plan 28c ED18); its `deployment` property says which, and the runs that name a version join to it |
-
-**Edges**, each with a kind, a granularity (`column` or `table`), and where the knowledge came from:
-
-| Edge | From, to |
-| --- | --- |
-| `replicates` | source dataset (or column) to target, through a Sync replication |
-| `derives` | upstream columns to a Build model's column (with the transform kind: identity, expression, aggregate); table level for a native model |
-| `copies` | a Build copy's origin to its table |
-| `binds` | a column to a semantic measure or dimension |
-| `serves` | a dataset or semantic model to a Proxy data source or feed |
-| `extracts` | a document to the tables extracted from it |
-| `reads` | a consumer (an app, a report, a dashboard view) to what it queries |
-| `promotes` | a query's ad hoc table to the DbDataStore entity made from it (plan 15) |
-| `deploys` | a package to its versions, a version to the channel that serves it (detail: active, previous or staged), a channel to the runner instance that holds it (detail: version and state), a group or runtime to its instances |
-| `runs` | a deployed version to a run that named it (`package_version`) |
-
-**Two layers**:
-
-- **Design lineage**, from definitions: what *can* flow where (models, mappings, bindings, published queries). Rebuilt when a definition
-  changes; cheap and complete for what the definitions say.
-- **Run lineage**, from executions: what *did* flow, when and how much (a replication run, a load, a refresh, a semantic query's sources).
-  Attached to design edges as their latest runs; this is where freshness and failures come from. **Its history is kept and pruned by the
-  same retention policy as the server's other run detail** (plan 13 W10, `DbDataKit.Monitoring`), not by a lineage setting of its own
-  (owner, 2026-10-26).
-
-**Confidence**: every edge says how it is known: `declared` (written in a definition), `derived` (computed, as Build's query analysis does),
-`observed` (seen in a run). A dataset whose upstream is unknown shows an explicit "unknown upstream" marker, so a reader can tell "nothing
-flows here" from "we do not know".
-
-## 4. Identity: the same table must be the same node everywhere
-
-The graph is only useful if Sync's target table, Build's source and Proxy's served table are one node. Identity is built from the
-connection, not from each product's names:
-
-- **Dataset identity**: the engine, the server (host and port, normalized), the database, the schema and the table, from the
-  `connection/1` definition (plan 13 W8) and the engine registry (plan 14 R5). Two products that name the same server differently (an
-  alias, a port spelled out) resolve to one identity through the connection definition, not by string matching.
-- **Column identity**: dataset identity plus the column name, as the engine stores it (case rules from the dialect).
-- **Suite objects** (a replication, a model, a measure, an entity): the owning server's instance id plus the object's own name.
-- The shape follows OpenLineage's `namespace` and `name` (namespace from the engine and server, name from database, schema and table), so
-  a later export maps one to one.
-
-## 5. Where it lives
-
-The same pattern as monitoring (plan 13 W10) and the console's other cross-server views:
-
-- **Each server owns the lineage of its own objects**, builds it from its definitions and runs, and serves it through its management API
-  as commands on the shared surface (plan 13 W4a): `lineage graph`, `lineage impact <node>`, `lineage provenance <node>`, read-only, Viewer
-  role.
-- **A shared library, `DbDataKit.Lineage`**: the node and edge model, identities, the per-server store (on `DbDataKit.State`), and the
-  graph queries (impact, provenance, path between two nodes), so every server and the console compute them the same way.
-- **The console joins the servers' graphs** by identity into one view, pulled like monitoring (the console calls the servers; plan 13 W12
-  rule 1), cached in the console's state and refreshed when a server reports a newer version of its graph.
-- **Agents** read lineage through the same commands (plan 16): "what would break if I drop this column" is a tool call.
-
-## 6. Visualizations
-
-In the shared visuals package (plan 16 section 2a; plan 19 lane Y), a **graph view** beside the Vega-Lite and matrix views. Vega-Lite has no
-graph layout, so the graph view uses a layout library chosen in slice Y04 (candidates: ELK.js, Cytoscape.js, React Flow).
-
-- **Levels of detail**: systems (servers and their databases) to datasets to columns, expanding on demand; a big graph never draws at once.
-- **Impact and provenance**: select a node, highlight everything downstream or upstream, with the path's edges labelled by kind.
-- **Run overlay**: each job and dataset coloured by its last run and freshness (from `DbDataKit.Monitoring`): failed, late, fresh.
-- **Gaps visible**: "unknown upstream" and table-level edges drawn differently from column-level ones.
-- **Later, not in the first version: tracing a value.** From a query result or a visual's value (the console's query explorer, a
-  dashboard cell), open where it came from: the measures, their columns, the Build models and loads, the Sync replications and the source
-  tables (the definition path), and later the rows behind the value (a drill to detail, which needs the semantic engine's help and is
-  its own design).
-- **Text too**: every view has a list form (and the commands' JSON), so lineage is usable without the drawing and in an agent's answer.
-
-## 7. Slices
-
-Same rules as plan 13a (one pull request each, a "Done when" test, status in the row). Lane notes are in plan 19.
+Status: **in progress**. What is built (the graph model, identity, queries, the commands, Build, Sync and Runner graphs, the console's join and page) is in [docs/lineage.md](../lineage.md). This plan holds the slices still open. Slice ids are as in plan 19's lanes.
 
 | # | Slice | Needs | Size | Done when |
 | --- | --- | --- | --- | --- |
-| G01 | `DbDataKit.Lineage`: nodes, edges (kind, granularity, confidence), design and run layers, the per-server store on `DbDataKit.State` | | M | unit tests: build a graph, store and reload it on SQLite, SQL Server and PostgreSQL | **Status: done** (branch `suite/g01-lineage`, with G02 and G03). New package `DbDataKit.Lineage`: `LineageNode` (kind, name, `UnknownUpstream`, properties), `LineageEdge` (kind, granularity, confidence, detail; the edge runs upstream to downstream), `EdgeRun` (when, outcome, rows), `LineageGraph` (immutable, refuses a missing end, a self edge and a cycle, naming them; `Merge` joins graphs by identity; `Fingerprint`), and `LineageStore` on `DbDataKit.State` (`LineageSchema.Tables`: nodes and edges keyed by hashes of their identities, a version per owner, runs): `Replace` writes nothing when the graph is unchanged and drops the runs of an edge that is gone, `Load`, `Version`, `AddRun` (only along a design edge), `LatestRuns`, `PruneRuns` (for the server's retention of run detail). Tested on SQLite, SQL Server and PostgreSQL |
-| G02 | Identity: dataset and column identity from a `connection/1` definition and the engine registry; normalization of server names and ports; OpenLineage-shaped namespace and name | G01 | M | tests: two definitions of one server (an alias, an explicit default port) give one identity; case rules per dialect | **Status: done** (same branch). `LineageIdentity.Dataset(connection, schema, table)` gives the OpenLineage-shaped `namespace/name` (`engine://server` and `database.schema.table`) from a `connection/1` definition (address or connection string): host lower-cased, the machine's own names one, the engine's default port left out, SQL Server's `tcp:` and `host,port` read, a named instance part of the server and its port not, names folded by the dialect's case rule (an engine with no dialect keeps what it is given), a DuckDB file by its path; `Column` and `SuiteObject` (`suite://<instance>/<kind>/<name>`). **Not done:** engine defaults come from a table in the library until the engine registry (plan 19 J06) can supply them |
-| G03 | Graph queries: impact, provenance, path; bounded depth; gaps reported | G01 | S | tests over a fixture graph, including cycles refused and unknown upstreams reported | **Status: done** (same branch). `Impact`, `Provenance` (breadth-first, by distance, bounded by a depth that says `Truncated` when it stopped with more to follow) and `Path` (the shortest chain of edges, null when data does not flow that way); a slice reports its `Gaps`, the nodes reached whose upstream is unknown, so "nothing flows here" and "we do not know" stay different. A cycle is refused when the graph is built |
-| G04 | The lineage commands on the shared surface (`lineage graph`, `lineage impact`, `lineage provenance`) with JSON schemas, served by any host | G03, plan 13 C01 | S | command tests: the documents validate against their schemas | **Status: done** (branch `suite/g04-lineage-commands`). `DbDataKit.Lineage.Cli`: `LineageNoun.Create(source)` gives the `lineage` noun for any `NounRouter` (so also `--format json` and `ui mcp`), over a function that returns the host's `LineageGraph`. `graph [--kind]`, `impact <node> [--depth]`, `provenance <node> [--depth]`; each declares its data schema, the documents are validated against the router's output schema in 7 tests; an unknown node is exit 1, bad use exit 2. No product uses it yet (G05, G07 and G08 do) |
-| G05 | Build: design lineage from the model graph and the metadata documents' column lineage; table level for native models and copies | G02, G04 | M | a template project's lineage matches its `project show graph --columns` (test) | **Status: done** (branch `suite/g05-build-lineage`, with G06). `BuildLineage.Design` (Build CLI project) emits the model graph and the query analysis's column lineage (the same facts the metadata documents and `project show graph --columns` carry) as `DbDataKit.Lineage` nodes and edges: a dataset per model on each of its connections, table-level `derives` edges (derived from queries, declared from a native model's `reads:`), `copies` edges (declared), and column-level `derives` edges with the transform as detail for built models that are not copies. A mapped model, an unknown table, a native model without `reads:`, and the columns of a native model, a copy or a mapped model are marked unknown upstream. Identity is `LineageIdentity` from the address in the login's connection string (server, port, database only); a connection with no login in the environment gets a placeholder host of its own name so nothing joins wrongly. Test: every template's lineage equals its `project show graph --columns` (copies excepted: their column edges in the graph come from the tool's own staging table). The `lineage` noun (`graph`, `impact`, `provenance`) is on Build's **server** command line (`dbdatabuild lineage ... [--project <id>] [--repo <server directory>]`, `ServerLineage`): one graph merged over every hosted project (so the same table in two projects is one node), `--project` narrows it (an unknown id is refused naming the hosted ones), a server with no project has an empty graph, and the connections' addresses come from the logins the server stores. By decision the per-project command line stays unwired. **Not done:** run lineage is not in the server's graph (it needs the tracking database); a job node per load; copies at column level |
-| G06 | Build: run lineage from the tracking tables (loads, rows, times) | G05 | S | after a refresh in the conformance suite, each load edge carries its last run | **Status: done** (same branch). `AuditLog.LastLoadsAsync` reads the last run of each model from `run_log` (its non-hook steps of the newest run id: end time, `ok` or failed, rows) and `BuildLineage.Runs` lays it as an `EdgeRun` along each table-level edge into the model. Conformance test `After_a_refresh_each_load_edge_carries_its_last_run_from_the_tracking_tables` (SQL Server and PostgreSQL) is written and compiles; **not run**, as no container engine was available. **Not done:** runs on column edges; a model that reads nothing has no load edge to carry its run
-| G07 | Sync: design lineage from replications and column mappings; run lineage from run history | G02, G04 | M | a replication's mapping appears as column edges with the last run's rows (test) | **Status: done as a library; not yet reachable** (branch `suite/g07-sync-lineage`). `SyncLineage.Design` (`DbDataSync.Core`) lays each table mapping as `replicates` edges from its source tables to its target tables (declared; the detail is `replication/mapping`) and each column mapping as a column edge with its transform as the detail, in the identity `LineageIdentity` gives a table, so a table Sync writes and the one a Build model reads are one node. A source that is a hand-written query is a node of its own with an unknown upstream; a mapping whose connection is not configured is left out and said in the notes; without column mappings a mapping is table-level only. `SyncLineageRuns.Runs` (`DbDataSync.State`) lays each mapping's newest finished run (primary or bulk load) along its table edges: when it ended, whether it succeeded, the rows written. 3 tests (the edges and identities, the query source and the missing connection, the run layer with a failure and a queued run). **Not done:** the `lineage` noun in Sync's command line and an endpoint on its API (G09 pulls the graphs through the API), keeping the graph in a `LineageStore` between runs, and the target table's own upstream when Sync is not its only writer. |
-| G08 | Proxy: design lineage for data sources and the tables they serve; run lineage aggregated per table (read count, last read, the clients that read it; never per query: a per-query record belongs to Proxy's activity log, plan 13a P09, under its retention, and the table node links to it) | G02, G04 | S | after queries, the served tables show their last use (test) |
-| G09 | Console: pull and join the servers' graphs by identity; cache and refresh | G04, plan 13 U08 | M | a Sync target and a Build source on one table are one node in the console (test with two paired servers) | **Status: done for Build and Sync** (branch `suite/g09-console-lineage`). A shared wire form, `LineageJson` (strict: a document of another shape or with an unknown kind is refused saying where). `GET /api/v1/lineage` on a Build server (viewer role; the hosted projects' design graph as one, with what was left out in `problems`; the command line and the endpoint share `ServerLineage.MergedAsync`) and `GET /api/lineage` on a Sync server (`LineageController`, from the replications, `SyncLineage`). The console's `GET /api/lineage` (`ConsoleLineage`, `LineageController`) asks every reachable Build and Sync server through the relay as the signed-in person, keeps an answer for 30 seconds (`?refresh=true` asks again), joins the graphs by identity and returns the graph with what each server said (`servers`: its nodes and edges, its problems, or why it gave none); `?node=&direction=downstream|upstream&depth=` is the impact or provenance of one node across all of them. A server that fails is named and left out and the others still show; graphs that together would make data flow in a circle are said, not hidden. Tests: the wire form (4), the Build endpoint through a real server, the Sync endpoint through its API, and the console against a fake Sync and a fake Build that share a table (one node, flow through it, impact and provenance across both, a failing server, the kept answer and the refresh). **Not done:** the Proxy (G08 gives it a graph), run lineage on the wire (the graphs carry design only), and a screen (G10). |
-| G10 | Console: the graph view (systems to datasets to columns), impact and provenance highlighting, run overlay | G09, plan 19 Y04, plan 13 M11 | M | Playwright: open a table, see its upstream to the source, its downstream to a Build model; a failed run is marked | **Status: done, without the run overlay** (branch `suite/g10-console-lineage-page`). A **Lineage** page in the console (`/lineage`, rail item `rail-lineage`): the joined graph of the Build and Sync servers (G09) drawn by `LineageGraphView` (Y04), with the servers listed under it (each with its size, what it left out, or why it gave none; *Ask the servers again* bypasses the 30 seconds kept), a search by name or id, and the selection: click a card (or find it) and **what feeds it is marked on one side and what it feeds on the other, the rest dims** (`reach` over the table-level lines, each along its own direction; a card that only shares a neighbour is neither), with the counts and whether its own upstream is unknown. A dataset opens to its columns. Tests: `reach` (2) and the search and server notes (3) in unit tests, and the Playwright story of W07 gains its last step against the real Build server: open the page, find `marts.dim_customer`, see `staging.customers` marked upstream, the semantic model downstream and a fact that only shares a neighbour dimmed. **Not done:** the run overlay (a failed run marked on its edge): the graphs on the wire carry design only, so the runs (`EdgeRun`, which Build and Sync both compute) have to be sent too; and a graph of a project's impact on the semantic layer by measure (G11's `serves` half, with G08). |
-| G11 | Semantic layer: measure and dimension bindings as `binds` edges; the semantic models served by Proxy as `serves` edges | G05, plan 19 J12 | S | the console's graph shows a measure's path from the source table through the Sync replication and the Build model (test) | **Status: the `binds` half is done; `serves` waits on G08** (branch `suite/g11-semantic-lineage`). `BuildLineage.Design` adds, for every semantic model of a project that compiles, a `semantic_member` node for each attribute and measure (`suite://<server instance>/semantic/<catalog>/<member>`, with the catalog, member and member kind as properties) and a column-level `binds` edge (declared; the aggregate of a measure as the detail) from the column of the model it reads, on the connection it is bound to. The measure's provenance then runs back through the mart's column and the columns it is made of to the staging tables, and through the console's join (G09) to the Sync replication that fills them. The instance id comes from the server (the endpoint passes its own; the command line says `local`). Test: the retail template's `sales.net_amount` is bound from `marts.fct_sales_lines.net_amount` with `sum`, its provenance reaches a staging column, and an attribute is bound the same way. **Not done:** the `serves` edges (the Proxy serving a model: they need the Proxy to have a graph, G08), and semantic members of a catalog published to a Proxy without Build's project. |
-| G12 | DbDataStore and DbDataApps emitters (entities, documents, extractions, promotions; apps and dashboards as consumers), when those products exist | G04, plan 19 Z03 | S each | per product, its objects appear in the console's graph |
+| G08 | Proxy: design lineage for data sources and the tables they serve (a `GET /api/v1/lineage` and the `lineage` noun); run lineage as a summary per table (read count, last read, the clients that read it; never per query: a per-query record belongs to the Proxy's activity log, plan 13a P09, under its retention, and the table node links to it) | `DbDataKit.Lineage`, identity | S | after queries, the served tables show their last use (test) |
+| G11b | Semantic layer: `serves` edges (the Proxy serving a model), and semantic members of a catalog published to a Proxy without Build's project. The `binds` half is built | G08 | S | the console's graph shows a measure's path from the source table through the Sync replication and the Build model to the Proxy that serves it (test) |
+| G10b | Console: the run overlay (a failed run marked on its edge, late and fresh colours from `DbDataKit.Monitoring`). The wire form carries design only, so `EdgeRun` (which Build and Sync both compute) has to be sent too | G09 | S | Playwright: a failed run is marked on its edge |
+| G07b | Sync: the `lineage` noun on Sync's command line (the endpoint `GET /api/lineage` is built, and the library `SyncLineage`); keeping the graph in a `LineageStore` between runs; run lineage on the wire; the target table's own upstream when Sync is not its only writer | | S | `dbdatasync lineage graph` answers a document that validates against the noun's schema |
+| G06b | Build: runs on column edges; a job node per load; copies at column level; the conformance test `After_a_refresh_each_load_edge_carries_its_last_run_from_the_tracking_tables` was written without a container engine and has not been run (run it on SQL Server and PostgreSQL); run lineage in the server's graph (needs the tracking database) | | S | the test passes in CI; column edges carry runs |
+| G12 | DbDataStore and apps emitters (entities, documents, extractions, promotions; apps and dashboards as consumers) | Store, apps | S each | per product, its objects appear in the console's graph |
+| Retention | one server calling `LineageStore.PruneRuns` with its run-detail retention; today no server keeps a store | G07b | S | runs older than the retention are gone after a prune (test) |
+| Engine defaults | `LineageIdentity`'s default-port table replaced by the registry's `default_port` | plan 14 R5 | S | one source of default ports |
 
-Later, not in the first version: tracing a value from a result or a visual (section 6), then the rows behind it; manual lineage entries for external systems (a lineage file or console form, as `declared` edges with an
-owner), and export to OpenLineage (events from run lineage, datasets and jobs from design lineage) and to external catalogs.
+## Later, not in the first version
 
-## 8. Decisions
-
-All decided by the owner on 2026-10-26:
-
-- Run lineage history follows the servers' retention policy for run detail (section 3).
-- Tracing a value back from a result or a visual is a later feature (section 6).
-- Proxy's run lineage is a summary per served table (G08). A per-query record, if wanted, belongs in Proxy's activity log, not in lineage.
-- The graph view's layout library: no preference. It is chosen in slice Y04 by the comparison described there.
+- **Tracing a value.** From a query result or a visual's value (the query explorer, a dashboard cell) open where it came from: the measures, their columns, the Build models and loads, the Sync replications and the source tables (the definition path), and later the rows behind the value (a drill to detail, which needs the semantic engine's help and is its own design).
+- **Manual entries** for external systems (a lineage file or console form, as `declared` edges with an owner).
+- **Export** to OpenLineage (events from run lineage, datasets and jobs from design lineage) and to external catalogs.
