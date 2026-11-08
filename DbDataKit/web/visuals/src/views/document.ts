@@ -42,7 +42,8 @@ const KEYS: Record<ViewKind, string[]> = { dashboard: props(dashboardSchema as J
 const LAYOUT_KEYS: Record<string, string[]> = { reflow: props(defs.layout_reflow!), canvas: props(defs.layout_canvas!), flow: props(defs.layout_flow!) }
 const LAYOUT_COMMON = LAYOUT_KEYS.reflow!.filter((k) => LAYOUT_KEYS.canvas!.includes(k) && LAYOUT_KEYS.flow!.includes(k))
 const WIDGET_OWN_KEYS = ['type', 'title', 'encodings', 'query', 'format', 'formats', 'parameter', 'parameters', 'mark', 'columns', 'text', 'hash', 'label', 'values', 'control']
-const RUNNING_TOKENS = ['title', 'page', 'pages', 'asof', 'viewer']
+/** The tokens header and footer text may hold (plus `{params.name}` of a declared parameter). */
+export const RUNNING_TOKENS = ['title', 'page', 'pages', 'asof', 'viewer']
 export const MINIMUMS: Record<string, [number, number]> = { metric: [160, 88], text: [160, 56], control: [180, 56], chart: [280, 180], table: [320, 200], matrix: [360, 220] }
 const EPSILON = 1e-9
 const TOKEN = /\{([^{}]*)\}/g

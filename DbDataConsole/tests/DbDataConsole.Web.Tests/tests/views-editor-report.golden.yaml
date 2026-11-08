@@ -1,0 +1,49 @@
+schemaVersion: 1
+kind: report
+title: Quarterly report
+parameters:
+  - {name: quarter, type: string, default: FY27-Q1}
+strict: true
+limits: {pages: 50}
+cover: {parameters: true}
+widgets:
+  text:
+    type: text
+    text: Write a note.
+  metric:
+    type: metric
+    label: New metric
+    encodings: {value: sales.net_amount}
+    query: {model: retail_sales}
+  metric2:
+    type: metric
+    label: New metric
+    encodings: {value: sales.net_amount}
+    query: {model: retail_sales}
+  table:
+    type: table
+    title: New table
+    encodings:
+      columns:
+        - {field: products.product, label: Product}
+        - {field: sales.units, label: Units, align: right}
+    query: {model: retail_sales}
+layouts:
+  - name: paged
+    type: flow
+    default: true
+    page: {size: Letter, orientation: landscape, margins: {top: 15, right: 15, bottom: 15, left: 20}}
+    header: {left: "{title}", right: "{params.quarter}"}
+    footer: {center: "Page {page} of {pages}"}
+    cover: {parameters: true}
+    sections:
+      - title: Summary
+        blocks:
+          - {widget: text}
+          - row:
+              - {widget: metric, span: 6}
+              - {widget: metric2, span: 6}
+      - title: Detail
+        break: before
+        blocks:
+          - {widget: table, repeat_header: true}

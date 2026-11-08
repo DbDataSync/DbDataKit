@@ -116,6 +116,24 @@ The console's editor (`?edit=1` on a dashboard, form view; `DbDataKit/web/consol
 - **Write the query out** switches the widget to `mode: explicit` with the derived request as its starting text, a raw editor, and the binding check on every keystroke (`DBD-VIEW-005`: an encoded field that is not an output of
   the query); "Derive it from the encodings again" gives the written request up.
 
+## The report editor
+
+A report opens in the same editor as a dashboard (`?edit=1`, form view). Its **flow layout** has its own form (`DbDataKit/web/console/src/pages/FlowEditor.tsx`, the commands in `@dbdatakit/visuals` `src/editor/flow.ts`); the YAML view
+is the same text. A new report starts with one flow layout (A4 portrait, 15 mm margins) and one empty section, which the loader does not accept until it has a block.
+
+- **Page**: size (a named one, or a custom width and height in millimetres), orientation and the four margins; the form says the printable area in millimetres and CSS pixels, the same numbers the guides are drawn from. An empty
+  field removes the key (and `page`, `margins`, `header` or `footer` when it is left empty), so the file keeps the defaults.
+- **Header and footer**: left, centre and right text. Tokens are `{title}`, `{page}`, `{pages}`, `{asof}`, `{viewer}` and `{params.<name>}` of a declared parameter; any other `{token}` is refused by the loader at its field
+  (`DBD-VIEW-030`, an undeclared parameter `DBD-VIEW-008`) and the message is shown under the field. `cover` is a checkbox.
+- **Sections and blocks**: a section has an optional title and `break` (`before` or `after`) and blocks; a block is a widget (`keep`, `repeat_header` for a table or matrix, `height` in millimetres), a **row** of cells with spans
+  (a row's spans add up to at most 12: the loader says so at the row) or a **page break**. Sections and blocks move up and down; the last section cannot be removed. A layout places a widget **once** (`DBD-VIEW-020`).
+  Removing a widget takes its blocks and cells with it (a row left with no cell goes whole); renaming follows every place.
+- **Report options**: `strict`, `limits.pages`, `limits.rows` and the cover default (`cover.parameters`). A report has no refresh, so the form does not offer it. Every key a command adds is written at its canonical place
+  (`strict`, `limits` and `cover` follow `title` and `parameters` and precede `widgets`), so a report built in the editor is the text `canonicalText` writes.
+- **Preview**: the draft's flow layout drawn by `PagedFrame` (the guides where a page starts, the running text with its tokens, the cover), from what is written, saved or not. Each widget it places is asked of
+  `ViewsClient.preview`; the fixture source answers with the recorded result of a saved document of that name and an error entry otherwise. Print is the browser's; the exact PDF preview waits for the exporter.
+- A report may also carry canvas or reflow layouts for the screen (`Add reflow layout`, `Add canvas layout`, `Add flow layout`); the dashboard's grid and canvas editors work on them unchanged.
+
 ## A document: the shared core and the two kinds
 
 ```yaml

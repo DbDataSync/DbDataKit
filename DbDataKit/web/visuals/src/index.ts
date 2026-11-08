@@ -9,13 +9,13 @@ export { MAXIMUM_LIMIT, SPEC_VERSION, defaultLimit, deriveRequest, memberProblem
 export type { CatalogRole, CatalogRoles, DerivableWidget, DerivedRequest, ParameterBinding, Well } from './views/derive'
 export { catalogDiagnostics, catalogFromModel, catalogRoles, retailCatalog } from './views/catalog'
 export type { Catalog, CatalogMember } from './views/catalog'
-export { VIEWS_FORMAT, validateDashboard, validateReport, validateViewsDocument } from './views/document'
+export { RUNNING_TOKENS, VIEWS_FORMAT, validateDashboard, validateReport, validateViewsDocument } from './views/document'
 export type { ViewKind, ViewsOptions } from './views/document'
 export { matches as layoutMatches, selectLayout, specificity as layoutSpecificity } from './views/selectLayout'
 export type { LayoutChoice, LayoutContext, LayoutSelection, Medium, SelectableDocument, SelectableLayout } from './views/selectLayout'
 export type {
   Box, ChartDoc, ControlDoc, ControlKind, ImageDoc, LayoutDoc, MatrixDoc, MetricDoc, ParameterDefinition, ParameterValue, ParameterValues, ReflowLayoutDoc, CanvasLayoutDoc, FlowLayoutDoc, TableColumnDoc, TableDoc, TextDoc,
-  TileDoc, ViewsDoc, WidgetDoc, WidgetOptionsDoc, WidgetType,
+  TileDoc, ViewsDoc, WidgetDoc, WidgetOptionsDoc, WidgetType, FlowBlockDoc, FlowCellDoc, FlowSectionDoc,
 } from './views/model'
 export type {
   RenderedControl, RenderedImage, RenderedMetric, RenderedNumber, RenderedTable, RenderedText, RenderedWidget, RenderedWidgetError, RenderedWidgets,
@@ -88,3 +88,5 @@ export { MEDIA, REFERENCE_BOX, badNumbers, defaultSnap, dragTile, extent, fields
 export type { DragOptions, DragResult, Handle, Rect, SelectorFields, SelectorTest, TileMark } from './editor'
 export { WIDGET_TYPES, WellError, bindingIssues, changedFields, convertWidget, derivedQuery, describeDerivation, explicitQuery, parseRequestText, wellFields, wellOps, wellsOf, widgetModel } from './editor'
 export type { Conversion, Derivation, WellChange, WellSpec } from './editor'
+export { FLOW_COMMANDS, flowOps, runningTokens, unknownTokens } from './editor'
+export type { FlowCommand } from './editor'

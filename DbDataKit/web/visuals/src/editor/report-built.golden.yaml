@@ -1,0 +1,50 @@
+schemaVersion: 1
+kind: report
+title: Regional sales
+parameters:
+  - {name: quarter, type: string, default: FY27-Q1}
+strict: true
+limits: {pages: 50}
+cover: {parameters: true}
+widgets:
+  intro:
+    type: text
+    text: Net revenue for **{{params.quarter}}**.
+  net:
+    type: metric
+    label: Net revenue
+    encodings: {value: sales.net_amount}
+    query: {model: retail_sales}
+  units:
+    type: metric
+    label: Units
+    encodings: {value: sales.net_amount}
+    query: {model: retail_sales}
+  lines:
+    type: table
+    title: Orders
+    encodings:
+      columns:
+        - {field: customers.region, label: Region}
+        - {field: sales.net_amount, label: Net revenue, align: right}
+    query: {model: retail_sales}
+layouts:
+  - name: paged
+    type: flow
+    default: true
+    page: {size: A4, orientation: landscape, margins: {top: 15, right: 15, bottom: 15, left: 20}}
+    header: {left: "{title}", right: "{params.quarter}"}
+    footer: {center: "Page {page} of {pages}"}
+    cover: {parameters: true}
+    sections:
+      - title: Summary
+        blocks:
+          - {widget: intro}
+          - row:
+              - {widget: net, span: 6}
+              - {widget: units, span: 6}
+      - title: Detail
+        break: before
+        blocks:
+          - {pagebreak: true}
+          - {widget: lines, repeat_header: true}

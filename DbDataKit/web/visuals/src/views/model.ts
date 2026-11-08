@@ -56,6 +56,14 @@ export interface CanvasLayoutDoc extends LayoutCommon {
 export interface FlowLayoutDoc extends LayoutCommon { type: 'flow'; page?: Record<string, unknown>; header?: Record<string, string>; footer?: Record<string, string>; cover?: unknown; sections: unknown[] }
 export type LayoutDoc = ReflowLayoutDoc | CanvasLayoutDoc | FlowLayoutDoc
 
+/** The parts of a flow layout as the editor reads them (`FlowLayoutDoc.sections` stays loose for the engines): a section holds blocks; a block is a widget, a row of spans or a forced page break. */
+export interface FlowCellDoc { widget: string; span: number }
+export type FlowBlockDoc =
+  | { widget: string; height?: number; keep?: boolean; repeat_header?: boolean }
+  | { row: FlowCellDoc[]; keep?: boolean }
+  | { pagebreak: true }
+export interface FlowSectionDoc { title?: string; break?: 'before' | 'after'; blocks: FlowBlockDoc[] }
+
 export interface ViewsDoc {
   schemaVersion: number
   kind: 'dashboard' | 'report'
