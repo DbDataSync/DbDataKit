@@ -90,10 +90,12 @@ The rule is about that, not about branches or merge style.
   `main` readable, but it is not a rule worth a delay.
 - Before anything is pushed, read `docs/ci-lessons.md` and run its "before you push" list: the CI problems already found and fixed are written there with
   how to recognise them. A new CI problem and its fix are added to that file in the same commit that fixes it.
-- **Finished plans are deleted or cut down.** When the last slice of a plan lands, the same commit deletes the plan, or cuts it to a short "as built"
-  note beside the product's docs; open decisions and unbuilt work move to the plan that owns them. Never leave a plan whose status says proposed or
-  in progress while all its rows are done, and never link to a plan that does not exist. `scripts/check_plans.py` checks this (links between plans,
-  the numbers the index names, the index itself, open status with every row done); what it tolerates today is in `scripts/plan_check_baseline.txt`,
+- **A finished plan becomes a product doc.** When the last slice of a plan lands, the same commit turns what is still true and useful (how it works,
+  its rules and conventions, the decisions and why, how to use or operate it) into documentation beside the code it describes (a package or product README,
+  `docs/<topic>.md`, a help page), written as how it is, not as a plan, and deletes the plan. History, rationale about abandoned options and status
+  narrative are not carried over; git keeps them. Open decisions and unbuilt work move to the plan that owns them. Never leave a plan whose status says
+  proposed or in progress while all its rows are done, and never link to a plan that does not exist. `scripts/check_plans.py` checks this (links between
+  plans, the numbers the index names, the index itself, open status with every row done); what it tolerates today is in `scripts/plan_check_baseline.txt`,
   which only shrinks.
 - A clean break is allowed, but never a silent one: a changed file format fails with a message naming the file, and a test says so.
 - Branches: pushing a work-in-progress branch is fine; leaving it behind is not. The workflow `delete-merged-branch.yml` deletes a pull request's branch
