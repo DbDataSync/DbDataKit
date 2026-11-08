@@ -127,8 +127,7 @@ internal static class SystemdService
                     $"'{executable}' is installed in a user profile, and this unit hardens with " +
                     "ProtectHome=yes (the default --repo hides user-profile paths from the service) — " +
                     "it would install but fail to start. Install dbdatasync machine-wide first:");
-                Console.Error.WriteLine($"    sudo dotnet tool install --tool-path {CliOptions.DefaultToolDir} DbDataSync");
-                Console.Error.WriteLine($"    sudo {CliOptions.DefaultToolDir}/dbdatasync tool install");
+                Console.Error.WriteLine("    install.sh --system, run as root (see docs/install.md; it installs into " + CliOptions.DefaultToolDir + ")");
                 return 1;
             }
 
@@ -136,8 +135,7 @@ internal static class SystemdService
                 $"Warning: '{executable}' is installed in a user profile — a service pointing here " +
                 "breaks if that profile is removed, or you re-register from another account. Install " +
                 "machine-wide first:");
-            Console.WriteLine($"    sudo dotnet tool install --tool-path {CliOptions.DefaultToolDir} DbDataSync");
-            Console.WriteLine($"    sudo {CliOptions.DefaultToolDir}/dbdatasync tool install");
+            Console.WriteLine("    install.sh --system, run as root (see docs/install.md; it installs into " + CliOptions.DefaultToolDir + ")");
             Console.WriteLine();
         }
 

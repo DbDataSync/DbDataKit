@@ -10,8 +10,8 @@ distinction matters more than any individual setting below, so it's worth readin
 
 - **`dotnet run --project src/DbDataSync.Api`** — the raw ASP.NET Core project. This is the dev-loop
   path documented in [Building from source](development.md).
-- **`dbdatasync`** — a dotnet global tool (`src/DbDataSync.Cli`, `PackAsTool=true`,
-  `ToolCommandName=dbdatasync`, [on NuGet](https://www.nuget.org/packages/DbDataSync)). This is the
+- **`dbdatasync`** — the command line program (`src/DbDataSync.Cli`), shipped as zips, an MSI,
+  install scripts, a Scoop manifest and a container image. This is the
   actual product distribution: `dbdatasync server setup`, `dbdatasync server run`,
   `dbdatasync service install|uninstall|status`, `dbdatasync cert ...`,
   `dbdatasync health check`, `dbdatasync version`. It's also what the Docker image runs. See

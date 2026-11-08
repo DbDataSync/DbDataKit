@@ -14,9 +14,8 @@ name: DbDataSync image
 
 # Phase 163: the container image, on GitHub Container Registry (ghcr.io), for linux/amd64 and linux/arm64.
 #
-# Called by dbdatasync-release.yml once a release is out (so an image only ever exists for a version nuget.org has), and dispatchable by
-# hand to publish or re-publish one — a failure here comes after the NuGet publish, which cannot be repeated, so this has to be
-# retryable on its own.
+# Dispatched by hand once a release is out (so an image only ever exists for a version that has a GitHub Release), to publish or
+# re-publish one; it has to be retryable on its own.
 #
 # **Each architecture builds on that architecture**, on a native runner, rather than cross-building one from the other. The
 # Dockerfile bakes native libraries into the image (`libduckdb.so`, `libe_sqlite3.so` in the catalog cache) by running the app

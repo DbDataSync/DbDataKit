@@ -157,11 +157,9 @@ internal static class SetupSteps
         [
             "This tool is installed in a user profile — install it machine-wide first:",
             OperatingSystem.IsWindows()
-                ? $"    dotnet tool install --tool-path \"{CliOptions.DefaultToolDir}\" DbDataSync"
-                : $"    sudo dotnet tool install --tool-path {CliOptions.DefaultToolDir} DbDataSync",
-            OperatingSystem.IsWindows()
-                ? $"    \"{CliOptions.DefaultToolDir}\\dbdatasync.exe\" tool install"
-                : $"    sudo {CliOptions.DefaultToolDir}/dbdatasync tool install",
+                ? $"    the Windows installer (MSI), or install.ps1 -Machine from an elevated prompt (into {CliOptions.DefaultToolDir})"
+                : $"    install.sh --system, run as root (into {CliOptions.DefaultToolDir})",
+            "    (see docs/install.md)",
         ];
     }
 

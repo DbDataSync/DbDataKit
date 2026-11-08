@@ -11,7 +11,7 @@ SHA=""
 
 usage() {
   echo "Usage: $0 [--beta] [--sha <commit>]"
-  echo "  --beta         Publish as a SemVer 2 prerelease (hidden from a plain dotnet tool install)."
+  echo "  --beta         Publish as a SemVer 2 prerelease (the install scripts take only stable as "newest")."
   echo "  --sha <commit> Release an older commit on main instead of its tip (it needs a green DbDataSync CI run)."
 }
 

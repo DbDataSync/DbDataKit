@@ -42,15 +42,19 @@ a YAML descriptor. See [Drivers and libraries](docs/drivers-and-libraries.md).
 
 ## Install
 
-```sh
-dotnet tool install -g DbDataSync
+```powershell
+irm https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/install.ps1 | iex
 dbdatasync server setup
 ```
 
-This installs DbDataSync into your own profile and walks you through setup. See
-[Install](docs/install.md) for a Windows or
-systemd service, a machine-wide install, or running in a container. The package is also on
-[nuget.org](https://www.nuget.org/packages/DbDataSync).
+```bash
+curl -fsSL https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/install.sh | bash
+dbdatasync server setup
+```
+
+This installs DbDataSync into your own profile and walks you through setup. It needs the .NET 10 runtime. See
+[Install](docs/install.md) for the Windows installer (MSI), Scoop, a Windows or
+systemd service, a machine-wide install, or running in a container. There is no .NET tool package any more.
 
 ## Where the screens are
 
