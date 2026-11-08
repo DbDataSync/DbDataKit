@@ -82,6 +82,8 @@ public static class ConsoleHost
         builder.Services.AddSingleton(sp => new NotificationFeedStore(sp.GetRequiredService<StateDatabase>(), ConsoleState.ServiceId));
         builder.Services.AddSingleton(new ConsoleActivitySource(settings.State is { IsSqlite: false }));
         builder.Services.AddSingleton<DbDataKit.Monitoring.INotificationFeed>(sp => sp.GetRequiredService<NotificationFeedStore>());
+        // how long a sign-in lasts: the session: section of settings.yaml (plan 13a U22); a file that sets it out of range stops the console from starting, with a message naming the setting
+        builder.Services.AddSingleton(SessionSettingsFile.Load(settings.SettingsPath));
         builder.Services.AddSessionAuth(Auth,
             sp => sp.GetRequiredService<StateDatabase>(),
             sp => PasskeyOptions.FromConfiguration(sp.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>(), Auth, settings.Public.GetLeftPart(UriPartial.Authority), [], []),

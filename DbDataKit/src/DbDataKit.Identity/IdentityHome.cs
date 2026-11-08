@@ -78,7 +78,7 @@ public static class IdentityHome
         services.AddSingleton(sp => new OidcClients(options.State(sp)));
         services.AddSingleton(sp => new SigningKeys(options.State(sp), options.Protector(sp)));
         services.AddSingleton(sp => new OpenIdProvider(options.State(sp), sp.GetRequiredService<IUserAccounts>(), sp.GetRequiredService<HomeDirectory>(),
-            sp.GetRequiredService<OidcClients>(), sp.GetRequiredService<SigningKeys>(), options.Issuer, sp.GetService<TimeProvider>(), sp.GetService<IAppGrants>()));
+            sp.GetRequiredService<OidcClients>(), sp.GetRequiredService<SigningKeys>(), options.Issuer, sp.GetService<TimeProvider>(), sp.GetService<IAppGrants>(), sp.GetService<SessionSettings>()?.Length));
         return builder;
     }
 

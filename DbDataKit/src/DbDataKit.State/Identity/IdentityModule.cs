@@ -239,6 +239,10 @@ public static class IdentityModule
             );
             CREATE UNIQUE INDEX {index:oidc_client_app_by_instance} ON {table:oidc_client_app}(instance);
             """,
+            """
+            -- When a session was last used, for the idle timeout (plan 13a U22). Null on a session made before this column: its sign-in is its last use.
+            ALTER TABLE {table:session} {{addcolumn}} seen_at {{time}} NULL;
+            """,
         ],
         retention:
         [
