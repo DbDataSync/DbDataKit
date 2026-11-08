@@ -15,7 +15,7 @@ namespace DbDataConsole.Server;
 /// what the person may do from the roles in the token, which the console's ceiling for that server limits.
 /// <para>
 /// Only <c>api/...</c> and <c>hubs/...</c> are relayed, only to a registered server, and the path is not interpreted: nothing the browser sends can name another host. A runner is the one server whose calls are limited further
-/// (<see cref="ServerProducts.Relayable"/>): its publish, upload and webhook calls are not a console's to make.
+/// (<see cref="ServerProducts.RunnerRoutes"/>): only the routes of its table pass, and only for a person who holds the role the runner asks for there; a product's reports and a webhook are not a console's to make.
 /// </para>
 /// </summary>
 public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore keys, CurrentUser current, ILogger<ConsoleRelay> log, DbDataKit.Identity.FederatedUsers? federated = null)
@@ -49,19 +49,26 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
         ? ServerRole.Admin | ServerRole.Operator | ServerRole.Author | ServerRole.Approver
         : ServerRole.Viewer;
 
+    /// <summary>What the signed-in person holds on <paramref name="instance"/> (the lower of their role here and what the server lets this console grant), and per project when the identity home says so.</summary>
+    private (ServerRole Roles, Dictionary<string, ServerRole>? Projects) HeldOn(RegisteredInstance instance, string userId, UserRole role)
+    {
+        // A server paired before the ceiling was recorded is asked for reading only.
+        var ceiling = instance.Ceiling == ServerRole.None ? ServerRole.Viewer : instance.Ceiling;
+        // A person who signs in through the identity home holds what the home says on this server and its projects; the console's ceiling still limits it.
+        if (federated?.RolesOn(userId, instance.InstanceId) is { } held)
+            return (ServerRoles.Lower(held.Roles, ceiling), held.Projects.ToDictionary(p => p.Key, p => ServerRoles.Lower(p.Value, ceiling)));
+        return (ServerRoles.Lower(RolesOf(role), ceiling), null);
+    }
+
     /// <summary>The token that says the signed-in person is calling <paramref name="instance"/>: the key that server knows, and the roles the person has there (the lower of their role here and what the server lets this console grant).</summary>
     private async Task<string> TokenForAsync(RegisteredInstance instance, string userId, string? userName, UserRole role, CancellationToken ct)
     {
         // The key this server knows: the current one, or the one a rotation is moving to if the server already has that.
         var identity = (instance.KeyFingerprint is { } fingerprint ? await keys.ForKeyAsync(fingerprint, ct) : null) ?? await keys.GetOrCreateAsync(ct);
-        // A server paired before the ceiling was recorded is asked for reading only.
-        var ceiling = instance.Ceiling == ServerRole.None ? ServerRole.Viewer : instance.Ceiling;
-        // A person who signs in through the identity home holds what the home says on this server and its projects; the console's ceiling still limits it.
-        if (federated?.RolesOn(userId, instance.InstanceId) is { } held)
-            return identity.Issuer().Issue(new ConsoleTokenRequest(instance.InstanceId, userId, userName, ServerRoles.Lower(held.Roles, ceiling),
-                held.Projects.ToDictionary(p => p.Key, p => ServerRoles.Lower(p.Value, ceiling))));
-        var roles = ServerRoles.Lower(RolesOf(role), ceiling);
-        return identity.Issuer().Issue(new ConsoleTokenRequest(instance.InstanceId, userId, userName, roles));
+        var (roles, projects) = HeldOn(instance, userId, role);
+        return identity.Issuer().Issue(projects is null
+            ? new ConsoleTokenRequest(instance.InstanceId, userId, userName, roles)
+            : new ConsoleTokenRequest(instance.InstanceId, userId, userName, roles, projects));
     }
 
     /// <summary>
@@ -119,10 +126,22 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
             return;
         }
         // a runner has calls for its publishers and the serving layer that a console does not make: only the documented management calls pass
-        if (!ServerProducts.Relayable(await ProductOfAsync(instance, context.RequestAborted), context.Request.Method, path))
+        var product = await ProductOfAsync(instance, context.RequestAborted);
+        if (!ServerProducts.Relayable(product, context.Request.Method, path))
         {
             await Refuse(context, StatusCodes.Status403Forbidden, $"{instance.Name} is a runner: the console relays only its management calls (status, instances, runs, tasks, packages and their life cycle).");
             return;
+        }
+        // the person makes the call with their own roles (owner decision of 2026-11-08): a call the person's roles do not cover is refused here, before the runner is asked; the runner checks the same roles again from the token
+        if (product == ServerProducts.Runner && ServerProducts.RunnerRouteOf(context.Request.Method, path) is { } wanted)
+        {
+            var held = HeldOn(instance, userId, role).Roles;
+            if (!wanted.Allows(held))
+            {
+                var holds = held == ServerRole.None ? "nothing" : string.Join(" and ", ServerRoles.Names(ServerRoles.Close(held)));
+                await Refuse(context, StatusCodes.Status403Forbidden, $"This needs the {wanted.Needs} role on {instance.Name}, and you hold {holds} there.");
+                return;
+            }
         }
 
         // a file of a package (plan 33, UE10) can be larger than Kestrel's default limit on a request body and takes longer than a call: the runner has its own size cap and answers 413 past it

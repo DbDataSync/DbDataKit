@@ -69,11 +69,22 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
             var body = await new StreamReader(c.Request.Body).ReadToEndAsync();
             return Needs(c, ServerRole.Admin, () => Results.Json(new { act, body }));
         });
-        // what a publisher or the serving layer calls: a console never reaches these, whoever is signed in
+        // the rest of the table (RunnerRoutes), each with the role the real runner asks for (RunnerRoleTests pins them to the real runner)
+        server.MapGet("/api/v1/connections", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { connections = Array.Empty<object>() })));
+        server.MapGet("/api/v1/settings", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { require_signatures = false })));
+        server.MapGet("/api/v1/lineage", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { edges = Array.Empty<object>() })));
+        server.MapGet("/api/v1/instances/{id}/labels", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { labels = Array.Empty<object>() })));
+        server.MapGet("/api/v1/tasks/{package}/{channel}/{task}/schedule", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { owner = "runner" })));
+        server.MapGet("/api/v1/tasks/{package}/{channel}/{task}/decisions", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { decisions = Array.Empty<object>() })));
+        server.MapMethods("/api/v1/artifacts/{sha}", ["HEAD"], (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.NotFound()));
+        server.MapPut("/api/v1/tasks/{package}/{channel}/{task}/owner", (HttpContext c) => Needs(c, ServerRole.Operator, () => Results.Json(new { owner = "runner" })));
+        server.MapPut("/api/v1/instances/{id}/labels", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { added = Array.Empty<string>() })));
         server.MapPut("/api/v1/artifacts/{sha}", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Ok()));
         server.MapPut("/api/v1/definitions/integration/{name}", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Ok()));
         server.MapPut("/api/v1/bindings/{channel}/integration/{name}", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Ok()));
         server.MapPut("/api/v1/settings/require_signatures", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Ok()));
+        // what a product reports and the serving layer calls: a console never reaches these, whoever is signed in
+        server.MapPut("/api/v1/settings/max_artifact_bytes", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Ok()));
         server.MapPost("/api/v1/webhooks/{package}/{channel}/{source}", (HttpContext c) => Needs(c, ServerRole.Operator, () => Results.Ok()));
     }
 
@@ -138,20 +149,20 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_viewer_reads_and_the_runners_own_refusal_of_an_act_comes_through()
+    public async Task A_viewer_reads_and_the_relays_refusal_of_an_act_names_the_role_it_needs()
     {
         Assert.Equal(HttpStatusCode.OK, (await Send(HttpMethod.Get, Relay("api/v1/status"), viewer)).StatusCode);
         foreach (var path in new[] { "api/v1/tasks/sample/dev/ok/run", "api/v1/tasks/sample/dev/ok/pause", "api/v1/tasks/sample/dev/ok/resume" })
         {
             var refused = await Send(HttpMethod.Post, Relay(path), viewer, "{}");
             Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
-            Assert.Equal("This needs the operator role.", (string)JsonNode.Parse(await refused.Content.ReadAsStringAsync())!["error"]!);
+            Assert.Equal("This needs the operator role on Runner, and you hold viewer there.", (string)JsonNode.Parse(await refused.Content.ReadAsStringAsync())!["error"]!);
         }
 
         var activate = await Send(HttpMethod.Post, Relay("api/v1/definitions/integration/sample/activate"), viewer, """{"channel":"dev"}""");
         Assert.Equal(HttpStatusCode.Forbidden, activate.StatusCode);
-        Assert.Contains("admin role", await activate.Content.ReadAsStringAsync());
-        Assert.All(reached.Where(r => r.Contains("tasks") || r.Contains("activate")), r => Assert.Contains("as viewer by Viewer person", r));
+        Assert.Contains("admin role on Runner", await activate.Content.ReadAsStringAsync());
+        Assert.DoesNotContain(reached, r => r.Contains("tasks") || r.Contains("activate"));   // the relay refused them: the runner was never asked
     }
 
     [Fact]
@@ -183,7 +194,7 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
     }
 
     [Fact]
-    public void The_allowlist_is_for_a_runner_alone_and_names_nothing_a_publisher_does()
+    public void The_allowlist_is_for_a_runner_alone_and_is_a_table_of_method_and_route()
     {
         Assert.True(ServerProducts.Relayable("dbdatabuild", "PUT", "api/v1/anything"));
         Assert.True(ServerProducts.Relayable(null, "DELETE", "api/anything"));
@@ -193,29 +204,118 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         Assert.True(ServerProducts.Relayable("dbdatarunner", "POST", "api/v1/tasks/orders-sync/prod/extract/run"));
         Assert.False(ServerProducts.Relayable("dbdatarunner", "GET", "api/v1/tasks/orders-sync/prod/extract/run"));
         Assert.False(ServerProducts.Relayable("dbdatarunner", "POST", "api/v1/runs"));
-        // who schedules a task (plan 33 UE06): exactly these three, and nothing beside them
-        Assert.True(ServerProducts.Relayable("dbdatarunner", "GET", "api/v1/tasks/orders/prod/extract/schedule"));
-        Assert.True(ServerProducts.Relayable("dbdatarunner", "GET", "api/v1/tasks/orders/prod/extract/decisions"));
-        Assert.True(ServerProducts.Relayable("dbdatarunner", "PUT", "api/v1/tasks/orders/prod/extract/owner"));
         Assert.False(ServerProducts.Relayable("dbdatarunner", "POST", "api/v1/tasks/orders/prod/extract/decisions"));   // the product reports decisions, not a console
         Assert.False(ServerProducts.Relayable("dbdatarunner", "PUT", "api/v1/tasks/orders/prod/extract/schedule"));
-        Assert.False(ServerProducts.Relayable("dbdatarunner", "PUT", "api/v1/bindings/prod/integration/orders"));
-        Assert.False(ServerProducts.Relayable("dbdatarunner", "PUT", "api/v1/definitions/integration/orders"));
-        Assert.False(ServerProducts.Relayable("dbdatarunner", "PUT", "api/v1/artifacts/abc"));
+        Assert.False(ServerProducts.Relayable("dbdatarunner", "PUT", "api/v1/artifacts/abc"));                           // a hash is 64 digits
         Assert.False(ServerProducts.Relayable("dbdatarunner", "GET", "api/v1/runs/../artifacts/x"));
+        Assert.False(ServerProducts.Relayable("dbdatarunner", "HEAD", "api/v1/status"));                                   // HEAD is the one artifact route, not a pass for every read
+        Assert.False(ServerProducts.Relayable("dbdatarunner", "PUT", "api/v1/settings/max_artifact_bytes"));
+    }
+
+    /// <summary>The table, as the owner decision of 2026-11-08 fixed it: the routes UE06 and the screens before it use, and what UE08, UE10 and UE11 add, with the runner's own role for each. A route added or a role changed fails here until this list says so.</summary>
+    public static readonly (string Method, string Pattern, ServerRole Role, ServerRole Or)[] Expected =
+    [
+        ("GET", "api/v1/status", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/instances", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/connections", ServerRole.Viewer, ServerRole.None),
+        ("GET", "api/v1/runs", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/settings", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/lineage", ServerRole.Viewer, ServerRole.None),
+        ("GET", "api/v1/definitions/integration", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/definitions/integration/{name}", ServerRole.Viewer, ServerRole.None),
+        ("GET", "api/v1/instances/{id}/labels", ServerRole.Viewer, ServerRole.None),
+        ("GET", "api/v1/tasks/{name}/{name}/{name}/schedule", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/tasks/{name}/{name}/{name}/decisions", ServerRole.Viewer, ServerRole.None),
+        ("HEAD", "api/v1/artifacts/{sha}", ServerRole.Viewer, ServerRole.Publisher),
+        ("POST", "api/v1/tasks/{name}/{name}/{name}/run", ServerRole.Operator, ServerRole.None), ("POST", "api/v1/tasks/{name}/{name}/{name}/pause", ServerRole.Operator, ServerRole.None),
+        ("POST", "api/v1/tasks/{name}/{name}/{name}/resume", ServerRole.Operator, ServerRole.None), ("PUT", "api/v1/tasks/{name}/{name}/{name}/owner", ServerRole.Operator, ServerRole.None),
+        ("POST", "api/v1/definitions/integration/{name}/activate", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/definitions/integration/{name}/switch", ServerRole.Admin, ServerRole.None),
+        ("POST", "api/v1/definitions/integration/{name}/rollback", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/definitions/integration/{name}/retire", ServerRole.Admin, ServerRole.None),
+        ("PUT", "api/v1/artifacts/{sha}", ServerRole.Admin, ServerRole.Publisher), ("PUT", "api/v1/definitions/integration/{name}", ServerRole.Admin, ServerRole.Publisher),
+        ("PUT", "api/v1/bindings/{name}/integration/{name}", ServerRole.Admin, ServerRole.Publisher), ("PUT", "api/v1/settings/require_signatures", ServerRole.Admin, ServerRole.None),
+        ("PUT", "api/v1/instances/{id}/labels", ServerRole.Admin, ServerRole.None),
+    ];
+
+    public static TheoryData<string> Rows => [.. ServerProducts.RunnerRoutes.Select(r => $"{r.Method} {r.Pattern}")];
+
+    /// <summary>A path the route's pattern matches (the fake runner answers any name).</summary>
+    private static string Sample(ServerProducts.RunnerRoute route) =>
+        route.Pattern.Replace("{name}", "sample").Replace("{sha}", new string('a', 64)).Replace("{id}", "6f1c0f1e-1111-4222-8333-444455556666");
+
+    private static ServerProducts.RunnerRoute RouteOf(string row) => ServerProducts.RunnerRoutes.Single(r => $"{r.Method} {r.Pattern}" == row);
+
+    /// <summary>Pairs the runner again so that this console may grant at most <paramref name="ceiling"/>; the administrator then holds what both allow, so it stands for a person with exactly that role.</summary>
+    private Task HoldOnly(ServerRole ceiling) =>
+        app.Services.GetRequiredService<ConsoleInstances>().PairAsync(runner.Url, runner.NewCodeWith(ceiling), "Runner", default);
+
+    [Fact]
+    public void The_table_is_exactly_the_routes_of_the_owner_decision_with_the_runners_own_roles() =>
+        Assert.Equal(Expected, ServerProducts.RunnerRoutes.Select(r => (r.Method, r.Pattern, r.Role, r.Or)).ToArray());
+
+    [Fact]
+    public void Every_route_of_the_table_matches_its_own_sample_and_no_other_row_with_the_same_method()
+    {
+        foreach (var route in ServerProducts.RunnerRoutes)
+            Assert.Same(route, ServerProducts.RunnerRouteOf(route.Method, Sample(route)));
     }
 
     [Theory]
-    [InlineData("GET", "api/v1/instances/6f1c0f1e-1111-4222-8333-444455556666/labels")]
-    [InlineData("PUT", "api/v1/instances/6f1c0f1e-1111-4222-8333-444455556666/labels")]
-    [InlineData("GET", "api/v1/tasks/sample/dev/ok/schedule")]
-    [InlineData("GET", "api/v1/tasks/sample/dev/ok/decisions")]
-    [InlineData("PUT", "api/v1/tasks/sample/dev/ok/owner")]
-    [InlineData("PUT", "api/v1/bindings/dev/integration/sample")]
-    [InlineData("PUT", "api/v1/settings/require_signatures")]
-    [InlineData("HEAD", "api/v1/artifacts/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")]
-    [InlineData("PUT", "api/v1/artifacts/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")]
-    [InlineData("PUT", "api/v1/definitions/integration/sample")]
-    public void The_screens_of_plan_33_may_bind_publish_label_and_move_a_task_owner_and_the_runner_still_decides_who(string method, string path) =>
-        Assert.True(ServerProducts.Relayable("dbdatarunner", method, path));
+    [MemberData(nameof(Rows))]
+    public async Task A_person_who_holds_the_role_of_a_route_passes_as_themselves(string row)
+    {
+        var route = RouteOf(row);
+        await HoldOnly(route.Role);
+        var response = await Send(new HttpMethod(route.Method), Relay(Sample(route)), admin, route.Method is "PUT" or "POST" ? "{}" : null);
+        Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
+        // the runner was asked, and the token named the signed-in person with the roles they hold there (never the console)
+        var call = reached.Last(r => r.StartsWith($"{route.Method} /{Sample(route)} as ", StringComparison.Ordinal));
+        Assert.EndsWith("by Admin person", call);
+        Assert.Contains(route.Role.ToString().ToLowerInvariant(), call);
+    }
+
+    [Theory]
+    [MemberData(nameof(Rows))]
+    public async Task A_person_without_the_role_of_a_route_is_refused_at_the_relay_naming_the_role_and_the_runner_is_not_asked(string row)
+    {
+        var route = RouteOf(row);
+        if (route.Role == ServerRole.Viewer) return;   // a person signed in to the console always reads (the ceiling of a server is at least viewer)
+        var below = route.Role == ServerRole.Admin ? ServerRole.Operator : ServerRole.Viewer;
+        await HoldOnly(below);
+        var response = await Send(new HttpMethod(route.Method), Relay(Sample(route)), admin, route.Method is "PUT" or "POST" ? "{}" : null);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        var error = (string)JsonNode.Parse(await response.Content.ReadAsStringAsync())!["error"]!;
+        Assert.Contains($"This needs the {route.Needs} role on Runner", error);
+        Assert.Contains($"you hold {string.Join(" and ", ServerRoles.Names(ServerRoles.Close(below)))} there", error);
+        Assert.Empty(reached);
+    }
+
+    [Theory]
+    [MemberData(nameof(Rows))]
+    public async Task A_viewer_of_the_console_is_refused_by_the_relay_on_every_route_above_reading(string row)
+    {
+        var route = RouteOf(row);
+        var response = await Send(new HttpMethod(route.Method), Relay(Sample(route)), viewer, route.Method is "PUT" or "POST" ? "{}" : null);
+        if (route.Role == ServerRole.Viewer) { Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode); return; }
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Contains($"This needs the {route.Needs} role on Runner, and you hold viewer there.", await response.Content.ReadAsStringAsync());
+        Assert.Empty(reached);
+    }
+
+    [Theory]
+    [InlineData("PUT", "api/v1/artifacts/0123456789abcdef")]            // a hash is 64 digits
+    [InlineData("PUT", "api/v1/settings/max_artifact_bytes")]
+    [InlineData("PUT", "api/v1/definitions/integration/sample/activate")]
+    [InlineData("PUT", "api/v1/tasks/sample/dev/ok/schedule")]
+    [InlineData("PUT", "api/v1/runs")]
+    [InlineData("PUT", "api/v1/status")]
+    [InlineData("PUT", "api/v1/bindings/dev/integration/sample/extra")]
+    [InlineData("DELETE", "api/v1/instances/6f1c0f1e-1111-4222-8333-444455556666/labels")]
+    [InlineData("DELETE", "api/v1/bindings/dev/integration/sample")]
+    [InlineData("POST", "api/v1/instances/6f1c0f1e-1111-4222-8333-444455556666/labels")]
+    [InlineData("PATCH", "api/v1/bindings/dev/integration/sample")]
+    [InlineData("HEAD", "api/v1/status")]                                 // HEAD is only the artifact route
+    [InlineData("HEAD", "api/v1/artifacts/0123456789abcdef")]
+    [InlineData("HEAD", "api/v1/definitions/integration/sample")]
+    [InlineData("GET", "api/v1/artifacts/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")]   // an artifact is not read through a console
+    public async Task A_call_that_is_not_a_row_of_the_table_is_refused_for_an_administrator_as_a_console_is_not_their_client(string method, string path)
+    {
+        var response = await Send(new HttpMethod(method), Relay(path), admin, method is "PUT" or "POST" or "PATCH" ? "{}" : null);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        if (method != "HEAD") Assert.Contains("relays only its management calls", await response.Content.ReadAsStringAsync());
+        Assert.Empty(reached);
+    }
 }

@@ -87,6 +87,12 @@ The CI runners are small (two cores, Windows and Linux), run many jobs at once, 
 | text a spec expects is missing from `main#view` although the page has it | `innerText` leaves out the content of a closed `<details>` (the statements of a plan) | read `textContent` (`screenText` in `fixtures.ts`) |
 | the page of a Build server cannot be opened by `goto` | `ui web` is gone: the page is served only by `dbdatabuild ui mcp` (a host that does not advertise MCP Apps gets a link from `show`, which works once) | the fixture speaks MCP over standard input to `ui mcp`, calls `show` for every page it opens, and keeps no port of its own; a plan fixture is a file written by `PlanDocument.Serialize` (the hash is part of the file), edited in the spec when it must look hand-edited |
 
+### Console relay to a runner
+
+| Signature | Cause | Fix |
+| --- | --- | --- |
+| a console test fails with `This needs the admin role on Runner, and you hold viewer there.` (403 from the relay), or a new runner screen's call is refused with `relays only its management calls` | the relay passes a runner's call only if it is a row of `ServerProducts.RunnerRoutes` (method, route, role), and only for a person who holds the row's role (owner decision of 2026-11-08: route by route, as the signed-in person) | add the row with the role the runner asks for, the same row in `ConsoleRunnerTests.Expected` and `DbDataRunner.Tests/RelayRolesTests.cs`; never widen a pattern or add a blanket method |
+
 ### Console image / publish
 
 | Signature | Cause | Fix |

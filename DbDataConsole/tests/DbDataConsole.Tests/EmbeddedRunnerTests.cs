@@ -1,3 +1,4 @@
+using DbDataKit.Web.Trust;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
@@ -434,6 +435,37 @@ public sealed class EmbeddedRunnerTests : IDisposable
         var audit = new AuditLog(rig.State, "dbdatakit").Read(new AuditQuery(VerbPrefix: "runner.label."));
         Assert.Contains(audit, r => r.Entry.Verb == "runner.label.add" && r.Entry.Outcome == AuditEvent.Ok && r.Entry.ViaKind == "console");
         Assert.Contains(audit, r => r.Entry.Verb == "runner.label.set" && r.Entry.Outcome == AuditEvent.Refused);
+    }
+
+    /// <summary>A path the route's pattern matches, on the embedded runner's own address.</summary>
+    private static string EmbeddedPath(ServerProducts.RunnerRoute route, Guid instance) =>
+        "/relay/console-runner/" + route.Pattern.Replace("{name}", "etl").Replace("{sha}", new string('a', 64)).Replace("{id}", instance.ToString());
+
+    public static TheoryData<string> RouteRows => [.. ServerProducts.RunnerRoutes.Select(r => $"{r.Method} {r.Pattern}")];
+
+    [Theory]
+    [MemberData(nameof(RouteRows))]
+    public async Task Every_route_of_the_relays_table_is_the_embedded_runners_with_the_role_the_table_names_a_viewer_is_refused_by_the_runner_above_reading_and_an_administrator_is_not(string row)
+    {
+        var route = ServerProducts.RunnerRoutes.Single(r => $"{r.Method} {r.Pattern}" == row);
+        var rig = await Start("sqlite");
+        Assert.True(await rig.Eventually(() => rig.Runner.Host?.InstanceId is not null));
+        var path = EmbeddedPath(route, rig.Runner.Host!.InstanceId!.Value);
+        object? body = route.Method switch
+        {
+            "PUT" when route.Pattern.EndsWith("definitions/integration/{name}", StringComparison.Ordinal) => new { manifest = Manifest("etl", [("one", null)]), channel = "dev", mode = "stage", artifacts = Array.Empty<object>() },
+            "PUT" when route.Pattern.Contains("/bindings/", StringComparison.Ordinal) => new { slots = new { source = "erp" } },
+            "PUT" when route.Pattern.EndsWith("require_signatures", StringComparison.Ordinal) => new { value = false },
+            "PUT" when route.Pattern.EndsWith("/labels", StringComparison.Ordinal) => new { labels = new[] { "gpu" } },
+            "PUT" when route.Pattern.EndsWith("/owner", StringComparison.Ordinal) => new { owner = "runner", reason = "table test" },
+            "POST" => new { channel = "dev" },
+            _ => null,
+        };
+
+        var viewer = await rig.Call(new HttpMethod(route.Method), path, rig.Viewer, body);
+        if (route.Role == ServerRole.Viewer) Assert.NotEqual(HttpStatusCode.Forbidden, viewer.Status);
+        else Assert.Equal(HttpStatusCode.Forbidden, viewer.Status);
+        Assert.NotEqual(HttpStatusCode.Forbidden, (await rig.Call(new HttpMethod(route.Method), path, rig.Admin, body)).Status);
     }
 
     // ---- the stop
