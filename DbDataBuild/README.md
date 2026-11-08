@@ -75,6 +75,7 @@ The real-engine suite uses throwaway SQL Server and PostgreSQL containers (`test
 - `docs/getting-started.md`: from an offline example project to a build on a database.
 - `docs/commands.md`: every command and option (generated from the program; a test keeps it current).
 - `docs/operations.md`: running it against real databases, scheduling, failure and recovery.
+- `docs/keys.md`: surrogate keys: the 64-bit hash, `keys:` in a model, the generated function, history keys, the unknown member.
 - `docs/agents.md`: working with AI agents.
 - `docs/interfaces.md`: the terminal, web page, MCP server and MCP app; connecting a host.
 - `docs/progress/`: the build log (`state-and-apply.md`), the owner's review summary (`REVIEW.md`) and what is unfinished (`OPEN-ITEMS.md`).
