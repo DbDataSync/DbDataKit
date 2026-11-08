@@ -170,22 +170,14 @@ function Opened({ kind, name }: { kind: ViewKind; name: string }) {
       </div>
     )
   }
-  if (kind === 'report') {
-    return (
-      <div className="empty" data-testid="views-report-note" role="note">
-        <strong data-testid="views-title">{document.title}</strong>
-        <p>Reports are not drawn yet: a report is a paged flow layout, and its screen view (page-break guides, print preview) is the next slice (DBR14). This one is valid and has the layouts {document.layouts.map((l) => `${l.name} (${l.type})`).join(', ')}.</p>
-        <Link to={area.path} data-testid="views-back">All reports</Link>
-      </div>
-    )
-  }
   return <Board key={name} kind={kind} name={name} document={document} />
 }
 
 /**
  * The Dashboards and Reports tabs of the Views page (plan 32 DBR23, M1): the documents of the fixture source (and any file opened), and one document drawn with `DashboardView` from the shared visuals:
  * the layout the window selects or the one picked (`?layout=`), parameters kept in the address (`?p.region=West`) so a link opens the same board, only the widgets that use a changed parameter resolved again.
- * Flow layouts and reports are not drawn yet (DBR14); canvas layouts are drawn (DBR07); there is no server route: the source is recorded results until the `views` module (DBR11) answers.
+ * A report is the same board over its `flow` layout (DBR14): a scrolling paged sheet with page-break guides, Print, and a Print preview that stays disabled until the exporter is wired (DBR15); a dashboard's
+ * `print` layout is the same view (`?layout=print`). Canvas layouts are drawn (DBR07); there is no server route: the source is recorded results until the `views` module (DBR11) answers.
  */
 export function DashboardsPanel({ kind }: { kind: ViewKind }) {
   const { name } = useParams()

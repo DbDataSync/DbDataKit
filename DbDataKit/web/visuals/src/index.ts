@@ -67,3 +67,5 @@ export type { LineageGraphDoc, LineageNodeDoc, LineageEdgeDoc, LineageCard, Line
 export { reach } from './lineage/reach'
 export type { Reach } from './lineage/reach'
 export type { CardState } from './lineage/LineageGraphView'
+export { PagedFrame, ReportView, FLOW_FONT_STACK, flowCss, layoutFlow, pageGeometry, paginate, expandTokens } from './report'
+export type { FlowPlan, PagedFrameProps, PageGeometry, Pagination, PaginationItem } from './report'

@@ -1,0 +1,29 @@
+@page { size: A4 portrait; margin: 20mm 15mm 20mm 15mm; }
+.vz.vz-flow-outer { font-family: system-ui, -apple-system, 'Segoe UI', 'DbDataKit Sans', sans-serif; }
+.vz-flow-item { margin: 0 0 12px; }
+.vz-flow-section[data-break-before] { break-before: page; }
+.vz-flow-section[data-break-after] { break-after: page; }
+.vz-flow-title { break-after: avoid; margin: 0 0 12px; font-size: 18px; }
+.vz-flow-item[data-keep] { break-inside: avoid; }
+.vz-flow-break { break-after: page; height: 0; margin: 0; }
+.vz-flow-cover { break-after: page; }
+.vz-flow-item .vz-text p, .vz-flow-item .vz-text li { orphans: 2; widows: 2; }
+.vz-flow .vz-widget { display: block; height: auto; overflow: visible; }
+.vz-flow .vz-widget-body { overflow: visible; }
+.vz-flow-item[data-fixed] > .vz-widget { display: flex; height: 100%; }
+.vz-flow table { table-layout: fixed; width: 100%; }
+.vz-flow .vz-table-widget th, .vz-flow .vz-table-widget td { height: auto; min-height: 28px; white-space: normal; overflow-wrap: anywhere; }
+.vz-flow table thead { display: table-header-group; }
+.vz-flow [data-no-repeat] table thead { display: table-row-group; }
+.vz-flow table tfoot { display: table-row-group; }
+.vz-flow table tr { break-inside: avoid; }
+.vz-flow-row { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; }
+@media print {
+  /* only the report prints: whatever is not it, not inside it and not one of its ancestors goes; the ancestors lose their fixed heights and scrolling so the pages can run on */
+  body *:not(.vz-flow-outer):not(.vz-flow-outer *):not(:has(.vz-flow-outer)) { display: none !important; }
+  html, body, *:has(.vz-flow-outer) { display: block !important; position: static !important; width: auto !important; height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; padding: 0 !important; margin: 0 !important; border: 0 !important; transform: none !important; }
+  .vz-flow-outer { display: block !important; position: static !important; width: auto !important; height: auto !important; overflow: visible !important; background: none; }
+  .vz-flow-scroll { overflow: visible !important; height: auto !important; padding: 0 !important; }
+  .vz-flow-sheet { width: auto !important; padding: 0 !important; box-shadow: none !important; background: none !important; min-height: 0 !important; }
+  .vz-flow-guide, .vz-flow-bar, .vz-flow-running, .vz-flow-note { display: none !important; }
+}

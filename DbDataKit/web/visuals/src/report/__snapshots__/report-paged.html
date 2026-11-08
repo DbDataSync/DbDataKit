@@ -1,0 +1,518 @@
+<div class="vz vz-flow-outer vz-flow" data-vz-theme="light" data-testid="vz-flow" data-layout="paged" data-layout-type="flow" data-pages="3" style="width:1000px;height:700px">
+<style>@page { size: A4 portrait; margin: 20mm 15mm 20mm 15mm; }
+.vz.vz-flow-outer { font-family: system-ui, -apple-system, 'Segoe UI', 'DbDataKit Sans', sans-serif; }
+.vz-flow-item { margin: 0 0 12px; }
+.vz-flow-section[data-break-before] { break-before: page; }
+.vz-flow-section[data-break-after] { break-after: page; }
+.vz-flow-title { break-after: avoid; margin: 0 0 12px; font-size: 18px; }
+.vz-flow-item[data-keep] { break-inside: avoid; }
+.vz-flow-break { break-after: page; height: 0; margin: 0; }
+.vz-flow-cover { break-after: page; }
+.vz-flow-item .vz-text p, .vz-flow-item .vz-text li { orphans: 2; widows: 2; }
+.vz-flow .vz-widget { display: block; height: auto; overflow: visible; }
+.vz-flow .vz-widget-body { overflow: visible; }
+.vz-flow-item[data-fixed] > .vz-widget { display: flex; height: 100%; }
+.vz-flow table { table-layout: fixed; width: 100%; }
+.vz-flow .vz-table-widget th, .vz-flow .vz-table-widget td { height: auto; min-height: 28px; white-space: normal; overflow-wrap: anywhere; }
+.vz-flow table thead { display: table-header-group; }
+.vz-flow [data-no-repeat] table thead { display: table-row-group; }
+.vz-flow table tfoot { display: table-row-group; }
+.vz-flow table tr { break-inside: avoid; }
+.vz-flow-row { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; }
+@media print {
+  /* only the report prints: whatever is not it, not inside it and not one of its ancestors goes; the ancestors lose their fixed heights and scrolling so the pages can run on */
+  body *:not(.vz-flow-outer):not(.vz-flow-outer *):not(:has(.vz-flow-outer)) { display: none !important; }
+  html, body, *:has(.vz-flow-outer) { display: block !important; position: static !important; width: auto !important; height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; padding: 0 !important; margin: 0 !important; border: 0 !important; transform: none !important; }
+  .vz-flow-outer { display: block !important; position: static !important; width: auto !important; height: auto !important; overflow: visible !important; background: none; }
+  .vz-flow-scroll { overflow: visible !important; height: auto !important; padding: 0 !important; }
+  .vz-flow-sheet { width: auto !important; padding: 0 !important; box-shadow: none !important; background: none !important; min-height: 0 !important; }
+  .vz-flow-guide, .vz-flow-bar, .vz-flow-running, .vz-flow-note { display: none !important; }
+}</style>
+<div class="vz-flow-bar">
+<span class="vz-flow-note" data-testid="vz-flow-note">A4 portrait, about 3 pages: the dashed lines are where the pages probably start; the PDF is exact.</span>
+<span class="vz-flow-actions">
+<button type="button" class="vz-button" data-testid="vz-flow-print">Print</button>
+<button type="button" class="vz-button" data-testid="vz-flow-preview" disabled="" title="Print preview needs the PDF exporter, which is not installed.">Print preview</button>
+</span>
+</div>
+<div class="vz-flow-scroll" data-testid="vz-flow-scroll">
+<div class="vz-flow-sheet" data-testid="vz-flow-sheet" style="width:793.7px;padding:75.59px 56.69px 75.59px 56.69px">
+<div class="vz-flow-running vz-flow-head" data-testid="vz-flow-header" style="top:0;height:75.59px;left:56.69px;right:56.69px">
+<span>Retail sales by month</span>
+<span>
+</span>
+<span>2026-11-08 09:30 UTC</span>
+</div>
+<div class="vz-flow-content" data-testid="vz-flow-content">
+<section class="vz-flow-section" data-testid="vz-flow-section-0">
+<h2 class="vz-flow-title" data-flow-key="s0t">Summary</h2>
+<div class="vz-flow-item" data-flow-key="s0b0" data-widgets="intro" data-testid="vz-flow-block-intro">
+<section class="vz vz-widget vz-w-text vz-d-l" data-vz-theme="light" data-density="l" data-testid="vz-widget-intro" aria-label="text intro" aria-busy="true">
+<div class="vz-widget-body">
+<div class="vz-text" data-testid="vz-text">
+<h2>Retail sales by month</h2>
+<p>Net sales, margin and units for <strong>
+</strong> (no region chosen means all regions).</p>
+</div>
+</div>
+</section>
+</div>
+<div class="vz-flow-item" data-flow-key="s0b1" data-widgets="net margin units" data-keep="">
+<div class="vz-flow-row">
+<div style="grid-column:span 4;min-width:0" data-flow-cell="net" data-testid="vz-flow-cell-net">
+<section class="vz vz-widget vz-w-metric vz-d-s" data-vz-theme="light" data-density="s" data-testid="vz-widget-net">
+<div class="vz-widget-body">
+<div class="vz-metric vz-d-s" data-testid="vz-metric" role="group" aria-label="Net sales: $33.01M">
+<div class="vz-metric-value">$33.01M</div>
+</div>
+</div>
+</section>
+</div>
+<div style="grid-column:span 4;min-width:0" data-flow-cell="margin" data-testid="vz-flow-cell-margin">
+<section class="vz vz-widget vz-w-metric vz-d-s" data-vz-theme="light" data-density="s" data-testid="vz-widget-margin">
+<div class="vz-widget-body">
+<div class="vz-metric vz-d-s" data-testid="vz-metric" role="group" aria-label="Margin rate: 38.2%">
+<div class="vz-metric-value">38.2%</div>
+</div>
+</div>
+</section>
+</div>
+<div style="grid-column:span 4;min-width:0" data-flow-cell="units" data-testid="vz-flow-cell-units">
+<section class="vz vz-widget vz-w-metric vz-d-s" data-vz-theme="light" data-density="s" data-testid="vz-widget-units">
+<div class="vz-widget-body">
+<div class="vz-metric vz-d-s" data-testid="vz-metric" role="group" aria-label="Units sold: 152,340">
+<div class="vz-metric-value">152,340</div>
+</div>
+</div>
+</section>
+</div>
+</div>
+</div>
+</section>
+<section class="vz-flow-section" data-testid="vz-flow-section-1">
+<h2 class="vz-flow-title" data-flow-key="s1t">Trend</h2>
+<div class="vz-flow-item" data-flow-key="s1b0" data-widgets="by_month" data-keep="" data-fixed="" style="height:302.36px" data-testid="vz-flow-block-by_month">
+<section class="vz vz-widget vz-w-chart vz-d-m" data-vz-theme="light" data-density="m" data-testid="vz-widget-by_month" aria-labelledby="vz-title-by_month">
+<header class="vz-widget-title">
+<h2 id="vz-title-by_month">Net sales by month</h2>
+</header>
+<div class="vz-widget-body">
+<div class="vz-chart" data-testid="vz-chart-by_month" style="width:662.31px;height:256.36px">
+<div role="img" aria-label="Chart by_month">
+</div>
+</div>
+</div>
+</section>
+</div>
+</section>
+<section class="vz-flow-section" data-testid="vz-flow-section-2">
+<h2 class="vz-flow-title" data-flow-key="s2t">Products</h2>
+<div class="vz-flow-item" data-flow-key="s2b0" data-widgets="products" data-testid="vz-flow-block-products">
+<section class="vz vz-widget vz-w-table vz-d-l" data-vz-theme="light" data-density="l" data-testid="vz-widget-products" aria-labelledby="vz-title-products">
+<header class="vz-widget-title">
+<h2 id="vz-title-products">Products</h2>
+</header>
+<div class="vz-widget-body">
+<div class="vz-table-fit">
+<table class="vz-table vz-table-widget" data-testid="vz-table-products">
+<caption class="vz-sr">Products</caption>
+<thead>
+<tr>
+<th scope="col">Category</th>
+<th scope="col">Product</th>
+<th scope="col" class="vz-right">Units</th>
+<th scope="col" class="vz-right">Net sales</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Apparel</td>
+<td>Apparel item 01</td>
+<td class="vz-right">1,800</td>
+<td class="vz-right">$55,800</td>
+</tr>
+<tr>
+<td>Footwear</td>
+<td>Footwear item 02</td>
+<td class="vz-right">1,773</td>
+<td class="vz-right">$56,736</td>
+</tr>
+<tr>
+<td>Outdoor</td>
+<td>Outdoor item 03</td>
+<td class="vz-right">1,746</td>
+<td class="vz-right">$57,618</td>
+</tr>
+<tr>
+<td>Accessories</td>
+<td>Accessories item 04</td>
+<td class="vz-right">1,719</td>
+<td class="vz-right">$58,446</td>
+</tr>
+<tr>
+<td>Apparel</td>
+<td>Apparel item 05</td>
+<td class="vz-right">1,692</td>
+<td class="vz-right">$59,220</td>
+</tr>
+<tr>
+<td>Footwear</td>
+<td>Footwear item 06</td>
+<td class="vz-right">1,665</td>
+<td class="vz-right">$59,940</td>
+</tr>
+<tr>
+<td>Outdoor</td>
+<td>Outdoor item 07</td>
+<td class="vz-right">1,638</td>
+<td class="vz-right">$60,606</td>
+</tr>
+<tr>
+<td>Accessories</td>
+<td>Accessories item 08</td>
+<td class="vz-right">1,611</td>
+<td class="vz-right">$49,941</td>
+</tr>
+<tr>
+<td>Apparel</td>
+<td>Apparel item 09</td>
+<td class="vz-right">1,584</td>
+<td class="vz-right">$50,688</td>
+</tr>
+<tr>
+<td>Footwear</td>
+<td>Footwear item 10</td>
+<td class="vz-right">1,557</td>
+<td class="vz-right">$51,381</td>
+</tr>
+<tr>
+<td>Outdoor</td>
+<td>Outdoor item 11</td>
+<td class="vz-right">1,530</td>
+<td class="vz-right">$52,020</td>
+</tr>
+<tr>
+<td>Accessories</td>
+<td>Accessories item 12</td>
+<td class="vz-right">1,503</td>
+<td class="vz-right">$52,605</td>
+</tr>
+<tr>
+<td>Apparel</td>
+<td>Apparel item 13</td>
+<td class="vz-right">1,476</td>
+<td class="vz-right">$53,136</td>
+</tr>
+<tr>
+<td>Footwear</td>
+<td>Footwear item 14</td>
+<td class="vz-right">1,449</td>
+<td class="vz-right">$53,613</td>
+</tr>
+<tr>
+<td>Outdoor</td>
+<td>Outdoor item 15</td>
+<td class="vz-right">1,422</td>
+<td class="vz-right">$44,082</td>
+</tr>
+<tr>
+<td>Accessories</td>
+<td>Accessories item 16</td>
+<td class="vz-right">1,395</td>
+<td class="vz-right">$44,640</td>
+</tr>
+<tr>
+<td>Apparel</td>
+<td>Apparel item 17</td>
+<td class="vz-right">1,368</td>
+<td class="vz-right">$45,144</td>
+</tr>
+<tr>
+<td>Footwear</td>
+<td>Footwear item 18</td>
+<td class="vz-right">1,341</td>
+<td class="vz-right">$45,594</td>
+</tr>
+<tr>
+<td>Outdoor</td>
+<td>Outdoor item 19</td>
+<td class="vz-right">1,314</td>
+<td class="vz-right">$45,990</td>
+</tr>
+<tr>
+<td>Accessories</td>
+<td>Accessories item 20</td>
+<td class="vz-right">1,287</td>
+<td class="vz-right">$46,332</td>
+</tr>
+<tr>
+<td>Apparel</td>
+<td>Apparel item 21</td>
+<td class="vz-right">1,260</td>
+<td class="vz-right">$46,620</td>
+</tr>
+<tr>
+<td>Footwear</td>
+<td>Footwear item 22</td>
+<td class="vz-right">1,233</td>
+<td class="vz-right">$38,223</td>
+</tr>
+<tr>
+<td>Outdoor</td>
+<td>Outdoor item 23</td>
+<td class="vz-right">1,206</td>
+<td class="vz-right">$38,592</td>
+</tr>
+<tr>
+<td>Accessories</td>
+<td>Accessories item 24</td>
+<td class="vz-right">1,179</td>
+<td class="vz-right">$38,907</td>
+</tr>
+<tr>
+<td>Apparel</td>
+<td>Apparel item 25</td>
+<td class="vz-right">1,152</td>
+<td class="vz-right">$39,168</td>
+</tr>
+<tr>
+<td>Footwear</td>
+<td>Footwear item 26</td>
+<td class="vz-right">1,125</td>
+<td class="vz-right">$39,375</td>
+</tr>
+<tr>
+<td>Outdoor</td>
+<td>Outdoor item 27</td>
+<td class="vz-right">1,098</td>
+<td class="vz-right">$39,528</td>
+</tr>
+<tr>
+<td>Accessories</td>
+<td>Accessories item 28</td>
+<td class="vz-right">1,071</td>
+<td class="vz-right">$39,627</td>
+</tr>
+<tr>
+<td>Apparel</td>
+<td>Apparel item 29</td>
+<td class="vz-right">1,044</td>
+<td class="vz-right">$32,364</td>
+</tr>
+<tr>
+<td>Footwear</td>
+<td>Footwear item 30</td>
+<td class="vz-right">1,017</td>
+<td class="vz-right">$32,544</td>
+</tr>
+<tr>
+<td>Outdoor</td>
+<td>Outdoor item 31</td>
+<td class="vz-right">990</td>
+<td class="vz-right">$32,670</td>
+</tr>
+<tr>
+<td>Accessories</td>
+<td>Accessories item 32</td>
+<td class="vz-right">963</td>
+<td class="vz-right">$32,742</td>
+</tr>
+<tr>
+<td>Apparel</td>
+<td>Apparel item 33</td>
+<td class="vz-right">936</td>
+<td class="vz-right">$32,760</td>
+</tr>
+<tr>
+<td>Footwear</td>
+<td>Footwear item 34</td>
+<td class="vz-right">909</td>
+<td class="vz-right">$32,724</td>
+</tr>
+<tr>
+<td>Outdoor</td>
+<td>Outdoor item 35</td>
+<td class="vz-right">882</td>
+<td class="vz-right">$32,634</td>
+</tr>
+<tr>
+<td>Accessories</td>
+<td>Accessories item 36</td>
+<td class="vz-right">855</td>
+<td class="vz-right">$26,505</td>
+</tr>
+<tr>
+<td>Apparel</td>
+<td>Apparel item 37</td>
+<td class="vz-right">828</td>
+<td class="vz-right">$26,496</td>
+</tr>
+<tr>
+<td>Footwear</td>
+<td>Footwear item 38</td>
+<td class="vz-right">801</td>
+<td class="vz-right">$26,433</td>
+</tr>
+<tr>
+<td>Outdoor</td>
+<td>Outdoor item 39</td>
+<td class="vz-right">774</td>
+<td class="vz-right">$26,316</td>
+</tr>
+<tr>
+<td>Accessories</td>
+<td>Accessories item 40</td>
+<td class="vz-right">747</td>
+<td class="vz-right">$26,145</td>
+</tr>
+<tr>
+<td>Apparel</td>
+<td>Apparel item 41</td>
+<td class="vz-right">720</td>
+<td class="vz-right">$25,920</td>
+</tr>
+<tr>
+<td>Footwear</td>
+<td>Footwear item 42</td>
+<td class="vz-right">693</td>
+<td class="vz-right">$25,641</td>
+</tr>
+<tr>
+<td>Outdoor</td>
+<td>Outdoor item 43</td>
+<td class="vz-right">666</td>
+<td class="vz-right">$20,646</td>
+</tr>
+<tr>
+<td>Accessories</td>
+<td>Accessories item 44</td>
+<td class="vz-right">639</td>
+<td class="vz-right">$20,448</td>
+</tr>
+<tr>
+<td>Apparel</td>
+<td>Apparel item 45</td>
+<td class="vz-right">612</td>
+<td class="vz-right">$20,196</td>
+</tr>
+<tr>
+<td>Footwear</td>
+<td>Footwear item 46</td>
+<td class="vz-right">585</td>
+<td class="vz-right">$19,890</td>
+</tr>
+<tr>
+<td>Outdoor</td>
+<td>Outdoor item 47</td>
+<td class="vz-right">558</td>
+<td class="vz-right">$19,530</td>
+</tr>
+<tr>
+<td>Accessories</td>
+<td>Accessories item 48</td>
+<td class="vz-right">531</td>
+<td class="vz-right">$19,116</td>
+</tr>
+<tr>
+<td>Apparel</td>
+<td>Apparel item 49</td>
+<td class="vz-right">504</td>
+<td class="vz-right">$18,648</td>
+</tr>
+<tr>
+<td>Footwear</td>
+<td>Footwear item 50</td>
+<td class="vz-right">477</td>
+<td class="vz-right">$14,787</td>
+</tr>
+<tr>
+<td>Outdoor</td>
+<td>Outdoor item 51</td>
+<td class="vz-right">450</td>
+<td class="vz-right">$14,400</td>
+</tr>
+<tr>
+<td>Accessories</td>
+<td>Accessories item 52</td>
+<td class="vz-right">423</td>
+<td class="vz-right">$13,959</td>
+</tr>
+<tr>
+<td>Apparel</td>
+<td>Apparel item 53</td>
+<td class="vz-right">396</td>
+<td class="vz-right">$13,464</td>
+</tr>
+<tr>
+<td>Footwear</td>
+<td>Footwear item 54</td>
+<td class="vz-right">369</td>
+<td class="vz-right">$12,915</td>
+</tr>
+<tr>
+<td>Outdoor</td>
+<td>Outdoor item 55</td>
+<td class="vz-right">342</td>
+<td class="vz-right">$12,312</td>
+</tr>
+<tr>
+<td>Accessories</td>
+<td>Accessories item 56</td>
+<td class="vz-right">315</td>
+<td class="vz-right">$11,655</td>
+</tr>
+<tr>
+<td>Apparel</td>
+<td>Apparel item 57</td>
+<td class="vz-right">288</td>
+<td class="vz-right">$8,928</td>
+</tr>
+<tr>
+<td>Footwear</td>
+<td>Footwear item 58</td>
+<td class="vz-right">261</td>
+<td class="vz-right">$8,352</td>
+</tr>
+<tr>
+<td>Outdoor</td>
+<td>Outdoor item 59</td>
+<td class="vz-right">234</td>
+<td class="vz-right">$7,722</td>
+</tr>
+<tr>
+<td>Accessories</td>
+<td>Accessories item 60</td>
+<td class="vz-right">207</td>
+<td class="vz-right">$7,038</td>
+</tr>
+<tr class="vz-total">
+<td>Total</td>
+<td>
+</td>
+<td class="vz-right">60,210</td>
+<td class="vz-right">$2,039,472</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+</div>
+</section>
+<div class="vz-flow-guide" data-testid="vz-flow-guide" data-page="2" data-y="892" style="top:892px;left:-56.69px;width:793.7px" aria-hidden="true">
+<span>Page 2</span>
+</div>
+<div class="vz-flow-guide" data-testid="vz-flow-guide" data-page="3" data-y="1816" style="top:1816px;left:-56.69px;width:793.7px" aria-hidden="true">
+<span>Page 3</span>
+</div>
+</div>
+<div class="vz-flow-running vz-flow-foot" data-testid="vz-flow-footer" style="bottom:0;height:75.59px;left:56.69px;right:56.69px">
+<span>
+</span>
+<span>Page 3 of 3</span>
+<span>
+</span>
+</div>
+</div>
+</div>
+</div>

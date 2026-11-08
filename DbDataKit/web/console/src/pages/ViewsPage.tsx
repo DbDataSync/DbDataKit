@@ -85,7 +85,7 @@ const TABS: SubTab[] = [
 const NOTES = {
   rendered: 'Open a rendered view document and see it as a table or a chart.',
   dashboards: 'Open a dashboard and see it fit the window. Shown from recorded results until a serving module answers.',
-  reports: 'Reports are listed and checked; drawing them is not built yet.',
+  reports: 'Open a report and scroll its pages, with the page-break guides. Shown from recorded results until a serving module answers.',
 }
 
 /**
