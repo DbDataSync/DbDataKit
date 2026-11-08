@@ -22,11 +22,11 @@ STATES = ("full", "partial", "view-only", "none", "planned")
 HEADER = re.compile(r"^\|\s*Feature\s*\|")
 CELL_SPLIT = re.compile(r"(?<!\\)\|")
 SLICE_ID = re.compile(r"\b[A-Z]{1,3}\d+[a-z]?\b")
-UE_ID = re.compile(r"\bUE\d+\b")
+UE_ID = re.compile(r"\bUE\d+[a-z]?\b")
 BACKTICKED = re.compile(r"`([^`]+)`")
 TSX = re.compile(r"`([A-Za-z0-9_]+\.tsx)`")
 COUNTS = re.compile(r"^Counts: full (\d+), partial (\d+), view-only (\d+), none (\d+), planned (\d+)\.\s*$", re.M)
-PLAN_ROW = re.compile(r"^\|\s*\**(UE\d+)\**\s*\|", re.M)
+PLAN_ROW = re.compile(r"^\|\s*\**(UE\d+[a-z]?)\**\s*\|", re.M)
 DOC = "docs/ui-editors.md"
 PLAN = "docs/plans/33-ui-editors.md"
 

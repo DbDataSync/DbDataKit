@@ -84,6 +84,11 @@ public static partial class StoreModels
         ["fix"] = d.Fix,
     }).ToArray());
 
+    private static bool IsAdmin(HttpContext context) => ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Admin).Allowed;
+
+    private static bool CanWrite(HttpContext context) =>
+        ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Author).Allowed || ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Admin).Allowed;
+
     private static IResult Denied(AuthorizationDecision decision) =>
         Results.Json(new { error = $"This needs the {decision.Needed.ToString().ToLowerInvariant()} role." }, statusCode: StatusCodes.Status403Forbidden);
 
@@ -116,7 +121,12 @@ public static partial class StoreModels
             if (!decision.Allowed) return Denied(decision);
             if (!IsValidName(name) || !File.Exists(FileOf(directory, name))) return Results.NotFound(new { error = $"There is no model '{name}'." });
             var text = File.ReadAllText(FileOf(directory, name));
-            return Results.Json(new JsonObject { ["name"] = name, ["text"] = text, ["diagnostics"] = Diagnostics(Check(name, text).Diagnostics) });
+            // `version` is what a save quotes (`?expected_version=`); `can` is what this caller's roles allow (`admin` also covers the storage and migration routes), so a screen offers only that (every route checks again)
+            return Results.Json(new JsonObject
+            {
+                ["name"] = name, ["text"] = text, ["version"] = VersionOf(text), ["diagnostics"] = Diagnostics(Check(name, text).Diagnostics),
+                ["can"] = new JsonObject { ["save"] = CanWrite(context), ["remove"] = IsAdmin(context), ["admin"] = IsAdmin(context) },
+            });
         });
 
         // a dry run: the diagnostics of a text as it would be saved under this name, nothing written
@@ -139,6 +149,13 @@ public static partial class StoreModels
             if (!IsValidName(name)) return Results.BadRequest(new { error = NameProblem(name) });
             using var reader = new StreamReader(context.Request.Body);
             var text = await reader.ReadToEndAsync(context.RequestAborted);
+            // a save may quote the version it read: a model changed since (or removed) is refused with the current version, so two people's edits do not overwrite each other
+            if (context.Request.Query["expected_version"].ToString() is { Length: > 0 } expected)
+            {
+                var held = File.Exists(FileOf(directory, name)) ? VersionOf(File.ReadAllText(FileOf(directory, name))) : null;
+                if (held != expected)
+                    return Results.Json(new JsonObject { ["error"] = held is null ? $"The model '{name}' was removed since you read it." : $"The model '{name}' was changed by someone else since you read it.", ["current_version"] = held }, statusCode: StatusCodes.Status409Conflict);
+            }
             var result = Check(name, text);
             if (!result.Ok) return Results.Json(new JsonObject { ["error"] = $"{name}.yaml is not a valid model, so nothing was saved.", ["diagnostics"] = Diagnostics(result.Diagnostics) }, statusCode: StatusCodes.Status422UnprocessableEntity);
             var path = FileOf(directory, name);
@@ -147,8 +164,8 @@ public static partial class StoreModels
             var temporary = path + ".tmp";
             await File.WriteAllTextAsync(temporary, text.ReplaceLineEndings("\n"), new System.Text.UTF8Encoding(false), context.RequestAborted);
             File.Move(temporary, path, true);
-            Snapshot(directory, name, text.ReplaceLineEndings("\n"));
-            return Results.Json(new JsonObject { ["name"] = name, ["created"] = !existed, ["diagnostics"] = Diagnostics(result.Diagnostics) }, statusCode: existed ? StatusCodes.Status200OK : StatusCodes.Status201Created);
+            var version = Snapshot(directory, name, text.ReplaceLineEndings("\n"));
+            return Results.Json(new JsonObject { ["name"] = name, ["created"] = !existed, ["version"] = version, ["diagnostics"] = Diagnostics(result.Diagnostics) }, statusCode: existed ? StatusCodes.Status200OK : StatusCodes.Status201Created);
         });
 
         app.MapDelete("/api/v1/models/{name}", (string name, HttpContext context) =>

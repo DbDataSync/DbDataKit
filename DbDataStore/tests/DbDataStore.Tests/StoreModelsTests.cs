@@ -122,6 +122,44 @@ public sealed class StoreModelsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_read_says_the_version_and_what_this_caller_may_do_and_a_save_may_quote_the_version_it_read()
+    {
+        var send = await Client();
+        var created = await Json(await send(HttpMethod.Put, "/api/v1/models/territories", Territories, ServerRole.Author));
+        var version = (string)created["version"]!;
+
+        var read = await Json(await send(HttpMethod.Get, "/api/v1/models/territories", null, ServerRole.Viewer));
+        Assert.Equal(version, (string)read["version"]!);
+        Assert.Equal(StoreModels.VersionOf((string)read["text"]!), version);
+        Assert.False((bool)read["can"]!["save"]!);
+        Assert.False((bool)read["can"]!["remove"]!);
+        var asAuthor = await Json(await send(HttpMethod.Get, "/api/v1/models/territories", null, ServerRole.Author));
+        Assert.True((bool)asAuthor["can"]!["save"]!);
+        Assert.False((bool)asAuthor["can"]!["remove"]!);
+        Assert.False((bool)asAuthor["can"]!["admin"]!);
+        var asAdmin = await Json(await send(HttpMethod.Get, "/api/v1/models/territories", null, ServerRole.Admin));
+        Assert.True((bool)asAdmin["can"]!["save"]!);
+        Assert.True((bool)asAdmin["can"]!["remove"]!);
+        Assert.True((bool)asAdmin["can"]!["admin"]!);
+
+        // quoting the version that is held saves; quoting an old one is a conflict that names the current version and changes nothing
+        var changed = Territories.Replace("VARCHAR(100)", "VARCHAR(120)");
+        var saved = await send(HttpMethod.Put, $"/api/v1/models/territories?expected_version={version}", changed, ServerRole.Author);
+        Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+        var newVersion = (string)(await Json(saved))["version"]!;
+        Assert.NotEqual(version, newVersion);
+        var stale = await send(HttpMethod.Put, $"/api/v1/models/territories?expected_version={version}", Territories, ServerRole.Author);
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        Assert.Equal(newVersion, (string)(await Json(stale))["current_version"]!);
+        Assert.Contains("VARCHAR(120)", File.ReadAllText(StoreModels.FileOf(directory, "territories")));
+
+        // a model that is not there cannot be saved against a version
+        var gone = await send(HttpMethod.Put, $"/api/v1/models/other?expected_version={version}", Territories.Replace("name: territories", "name: other"), ServerRole.Author);
+        Assert.Equal(HttpStatusCode.Conflict, gone.StatusCode);
+        Assert.Null((await Json(gone))["current_version"]);
+    }
+
+    [Fact]
     public async Task The_schema_is_the_model_as_data_for_a_form_a_grid_or_a_typed_client()
     {
         var send = await Client();

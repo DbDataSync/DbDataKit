@@ -51,6 +51,13 @@ class CheckUiEditors(unittest.TestCase):
     def test_a_gap_that_names_a_slice_passes(self):
         self.assertEqual([], check.problems(tree(["| A | x | `alpha` | none | none | UE02 |"], counts=c(none=1))))
 
+    def test_a_slice_split_into_lettered_parts_is_found_in_the_plan(self):
+        plan = "| UE13a | the editor |\n| UE13b | the storage |\n"
+        self.assertEqual([], check.problems(tree(["| A | x | `alpha` | none | partial | UE13b |"], counts=c(partial=1), plan=plan)))
+        found = check.problems(tree(["| A | x | `alpha` | none | partial | UE13c |"], counts=c(partial=1), plan=plan))
+        self.assertEqual(1, len(found))
+        self.assertIn("UE13c", found[0])
+
     def test_another_plans_slice_passes(self):
         self.assertEqual([], check.problems(tree(["| A | x | `alpha` | none | planned | DBR27 |"], counts=c(planned=1))))
 

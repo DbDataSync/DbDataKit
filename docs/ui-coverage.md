@@ -45,9 +45,9 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 | | Connections of a project | Yes | – | – | – | `NewConnectionPanel.tsx`, `DefinitionPanel.tsx` |
 | | Publish to a Gateway: a connection, a semantic model (UE12) | – | – | – | Yes (approver); a model's connections go with it | `PublishTab.tsx`, `ModelPublish.tsx` |
 | | Publish to a runner (a package of the project: one task per scheduled refresh plan) | – | – | – | Publish (staged or served) or promote a channel's version to a paired runner, with the tasks shown (author role here, a publisher pairing there); the list of paired runners | `PublishTab.tsx`, `RunnerPublish.tsx` |
-| **Store** | Models | – | – | – | List them and their entities | `ModelsPage.tsx` |
+| **Store** | Models | Yes (from a starting text; the name is the file's) | Yes (form from a schema of the `model/1` shape, or YAML; the Store's diagnostics as you type; Save quotes the version read) | Remove (administrator, with a confirmation; tables and rows stay) | List the models and their entities; links to each model's definition (and storage, change requests) | `ModelsPage.tsx`, `NewModelPage.tsx`, `ModelWorkspace.tsx`, `ModelEditor.tsx` |
 | | Rows of an entity | Yes | Yes | Yes | Page through rows, history of a row (an entity that keeps one), pick an instance of a model that has them | `EntityPage.tsx` |
-| | Model definition, storage (create tables) | – | – | – | **No UI** (API only: Z08, Z09) | |
+| | Storage of a model (create tables, migration) | – | – | – | **No UI yet** (API only: Z09, Z13; the Storage tab is UE13b) | |
 | | Change requests (an agent's write, or a model that asks for approval) | – (made by `POST changes`, answered 202) | – | – | List and read by state, approve, reject: **API only** (Z07; the console's review screen is not built) | |
 | **Runner** | Tasks and instances | – | Move a task to another scheduler (the publishing product, observed, this runner) with a reason | – | Run now (with `name=value` inputs), pause, resume (operator); who schedules each task, since when and why, its position and an observed task's decisions; instances with labels and capabilities (read-only) | `TasksPage.tsx`, `TaskPanel.tsx` |
 | | Runs | – | – | – | List and filter | `RunsPage.tsx` |

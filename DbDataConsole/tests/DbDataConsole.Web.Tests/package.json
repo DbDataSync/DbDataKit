@@ -8,6 +8,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "yaml": "^2.9.1"
   }
 }
