@@ -43,7 +43,19 @@ export function roleOf(roles: CatalogRoles, name: string): CatalogRole {
   return roles.measures.includes(name) ? 'measure' : roles.attributes.includes(name) ? 'attribute' : 'unknown'
 }
 
-type Well = 'either' | 'measure' | 'attribute'
+export type Well = 'either' | 'measure' | 'attribute'
+
+/**
+ * What is wrong with a field in a well, in the engine's own words (`Validator.CheckMember`, including its "a attribute"), so the derivation and a field well refuse in one voice: a field the catalog
+ * lacks is `unknown_member`; a measure where an attribute goes, or the other way round, is `wrong_member_kind`. An `either` well takes both roles.
+ */
+export function memberProblem(roles: CatalogRoles, field: string, well: Well): { code: 'unknown_member' | 'wrong_member_kind'; message: string } | null {
+  const role = roleOf(roles, field)
+  if (role === 'unknown') return { code: 'unknown_member', message: `${field} is not a catalog member.` }
+  if (well === 'measure' && role === 'attribute') return { code: 'wrong_member_kind', message: `${field} is a attribute, not a measure.` }
+  if (well === 'attribute' && role === 'measure') return { code: 'wrong_member_kind', message: `${field} is a measure, not a attribute.` }
+  return null
+}
 interface Slot { field: string; path: string; well: Well }
 
 const isString = (v: unknown): v is string => typeof v === 'string' && v.length > 0
@@ -91,10 +103,8 @@ export function deriveRequest(widget: DerivableWidget, roles: CatalogRoles): Der
 
   const place = (field: string, path: string, well: Well) => {
     const role = roleOf(roles, field)
-    // the words are the engine's own (Validator.CheckMember), so a field well and the engine refuse in one voice
-    if (role === 'unknown') issue('unknown_member', path, `${field} is not a catalog member.`)
-    else if (well === 'measure' && role === 'attribute') issue('wrong_member_kind', path, `${field} is a attribute, not a measure.`)
-    else if (well === 'attribute' && role === 'measure') issue('wrong_member_kind', path, `${field} is a measure, not a attribute.`)
+    const problem = memberProblem(roles, field, well)
+    if (problem) issue(problem.code, path, problem.message)
     const toMeasures = well === 'measure' || (well === 'either' && role === 'measure')
     const list = toMeasures ? measures : attributes
     if (list.includes(field)) return

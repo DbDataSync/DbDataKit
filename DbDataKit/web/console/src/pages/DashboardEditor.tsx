@@ -5,15 +5,16 @@ import { useQueryClient } from '@tanstack/react-query'
 import { CodeEditor } from '@dbdatakit/shell'
 import {
   NAME_PATTERN, canRedo, canUndo, clientStore, draftFromOpened, edit, editText, errorsOf, format, formTarget, diagnosticsFor, isDirty, markersOf, newDocumentText, newDraft, redo, reloadDraft, saveDraft, undo,
-  type ClientDiagnostic, type Draft, type EditCommand, type TileDoc, type ViewKind, type WidgetDoc, type WidgetType, type LayoutDoc,
+  widgetModel, type Catalog, type ClientDiagnostic, type Draft, type RenderedWidget, type EditCommand, type TileDoc, type ViewKind, type WidgetDoc, type WidgetType, type LayoutDoc,
 } from '@dbdatakit/visuals'
 import { viewsClient } from '../viewsSource'
 import { newWidget, nextTile } from '../viewsEditing'
 import { GridEditor, LayoutSettings, SelectorEditor, SelectorTester } from './LayoutEditors'
 import { DocumentSettings } from './DocumentSettings'
+import { WidgetEditor } from './WidgetEditor'
 
 const AREA: Record<ViewKind, string> = { dashboard: '/views/dashboards', report: '/views/reports' }
-const PALETTE: WidgetType[] = ['metric', 'chart', 'table', 'text']
+const PALETTE: WidgetType[] = ['metric', 'chart', 'matrix', 'table', 'text', 'image', 'control']
 const where = (d: ClientDiagnostic) => (d.line !== undefined ? `line ${d.line}${d.column !== undefined ? `:${d.column}` : ''}` : d.path)
 
 function Problems({ diagnostics, testId }: { diagnostics: ClientDiagnostic[]; testId: string }) {
@@ -53,6 +54,9 @@ export function DashboardEditor({ kind, name }: { kind: ViewKind; name: string |
   const [busy, setBusy] = useState(false)
   const [layoutName, setLayoutName] = useState('')
   const [renaming, setRenaming] = useState<Record<string, string>>({})
+  const [selected, setSelected] = useState<string | null>(null)
+  const [catalog, setCatalog] = useState<{ model: string; catalog: Catalog | null; note: string | null } | null>(null)
+  const [server, setServer] = useState<ClientDiagnostic[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -62,6 +66,27 @@ export function DashboardEditor({ kind, name }: { kind: ViewKind; name: string |
     store.open(kind, name).then((opened) => { if (!cancelled) setDraft(draftFromOpened(opened)) }, (e: unknown) => { if (!cancelled) setLoadError(e instanceof Error ? e.message : String(e)) })
     return () => { cancelled = true }
   }, [kind, name, store])
+
+  // the catalog of the selected widget's model (the wells' fields), and the source's check of the text (what the browser cannot check: filters, order, totals), a moment after each change
+  const selectedWidget = selected && draft?.value ? draft.value.widgets?.[selected] : undefined
+  const selectedModel = selectedWidget ? widgetModel(selectedWidget, draft!.value) : undefined
+  useEffect(() => {
+    if (!selectedModel) { setCatalog(null); return }
+    let cancelled = false
+    const client = viewsClient()
+    if (!client.catalog) { setCatalog({ model: selectedModel, catalog: null, note: 'This source has no catalog: type field names into the wells.' }); return }
+    client.catalog(selectedModel).then(
+      (c) => { if (!cancelled) setCatalog({ model: selectedModel, catalog: c, note: null }) },
+      (e: unknown) => { if (!cancelled) setCatalog({ model: selectedModel, catalog: null, note: e instanceof Error ? e.message : String(e) }) })
+    return () => { cancelled = true }
+  }, [selectedModel])
+  const draftText = draft?.text
+  useEffect(() => {
+    if (draftText === undefined || !selected) { setServer([]); return }
+    let cancelled = false
+    const timer = setTimeout(() => { viewsClient().validate(draftText, { kind }).then((r) => { if (!cancelled) setServer(r.diagnostics) }, () => { if (!cancelled) setServer([]) }) }, 200)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [draftText, kind, selected])
 
   if (loadError) return <div className="empty" data-testid="ed-error" role="alert">{loadError} <Link to={AREA[kind]}>All {kind}s</Link></div>
   if (!draft) return <div className="empty" data-testid="ed-loading" role="status">Opening the editor…</div>
@@ -161,6 +186,7 @@ export function DashboardEditor({ kind, name }: { kind: ViewKind; name: string |
                     <td>{(widget as { title?: string; label?: string }).title ?? (widget as { label?: string }).label ?? ''}</td>
                     <td>
                       <Problems diagnostics={diagnosticsFor(draft.validation.diagnostics, { area: 'widget', id })} testId={`ed-widget-problems-${id}`} />
+                      <button type="button" className="btn btn-sm" data-testid={`ed-widget-edit-${id}`} aria-pressed={selected === id} onClick={() => setSelected(selected === id ? null : id)}>{selected === id ? 'Close' : 'Fields'}</button>{' '}
                       <button type="button" className="btn btn-sm" data-testid={`ed-widget-remove-${id}`} onClick={() => apply({ type: 'removeWidget', id })}>Remove</button>
                     </td>
                   </tr>
@@ -174,12 +200,19 @@ export function DashboardEditor({ kind, name }: { kind: ViewKind; name: string |
                 <button key={type} type="button" className="btn btn-sm" data-testid={`ed-add-${type}`} onClick={() => {
                   let id: string = type, n = 1
                   while (widgets[id]) id = `${type}${++n}`
-                  const widget: WidgetDoc = newWidget(type, doc)
+                  let widget: WidgetDoc
+                  try { widget = newWidget(type, doc) } catch (e) { say(e instanceof Error ? e.message : String(e)); return }
                   apply({ type: 'addWidget', id, widget })
+                  setSelected(id)
                 }}>{type}</button>
               ))}
             </div>
           </div>
+
+          {selected && widgets[selected] && (
+            <WidgetEditor id={selected} widget={widgets[selected]!} doc={doc} catalog={catalog?.catalog ?? null} catalogNote={catalog?.note ?? null} apply={apply} diagnostics={draft.validation.diagnostics} server={server}
+              preview={(widget) => viewsClient().preview({ widget, widgetId: selected, document: draft.name || undefined }) as Promise<RenderedWidget>} />
+          )}
 
           <DocumentSettings doc={doc} diagnostics={draft.validation.diagnostics} apply={apply} />
 

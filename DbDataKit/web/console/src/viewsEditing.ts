@@ -1,6 +1,6 @@
 import type { LayoutDoc, TileDoc, ViewsDoc, WidgetDoc, WidgetType } from '@dbdatakit/visuals'
 
-/** The model the document's widgets already query (the first), or the retail sample's: what a new widget asks of until the field wells (DBR25) fill the catalog. */
+/** The model the document's widgets already query (the first), or the retail sample's: what a new widget asks of; the field wells (DBR25) then choose its fields from the model's catalog. */
 export function modelOf(doc: ViewsDoc): string {
   for (const w of Object.values(doc.widgets ?? {})) {
     const model = (w as { query?: { model?: unknown } }).query?.model
@@ -16,8 +16,15 @@ export function newWidget(type: WidgetType, doc: ViewsDoc): WidgetDoc {
     case 'metric': return { type, label: 'New metric', encodings: { value: 'sales.net_amount' }, query }
     case 'chart': return { type, title: 'New chart', mark: 'bar', encodings: { x: 'customers.region', y: 'sales.net_amount' }, query }
     case 'table': return { type, title: 'New table', encodings: { columns: [{ field: 'products.product', label: 'Product' }, { field: 'sales.units', label: 'Units', align: 'right' }] }, query }
+    case 'matrix': return { type, title: 'New matrix', encodings: { rows: ['customers.region'], columns: ['products.category'], values: [{ field: 'sales.net_amount' }] }, query }
     case 'text': return { type, text: 'Write a note.' }
-    default: throw new Error(`The palette has no ${type} widget yet.`)
+    // an image is held by the hash of its bytes: until the publish slice uploads one this is the placeholder, and the editor says no bytes are recorded
+    case 'image': return { type, hash: `sha256:${'0'.repeat(64)}`, media_type: 'image/png', alt: 'Describe the image' }
+    case 'control': {
+      const parameter = doc.parameters?.[0]
+      if (!parameter) throw new Error('A control edits a parameter of the document: add a parameter first.')
+      return { type, parameter: parameter.name, label: parameter.label ?? parameter.name }
+    }
   }
 }
 

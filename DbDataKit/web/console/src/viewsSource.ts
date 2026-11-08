@@ -1,4 +1,4 @@
-import { fixtureClient, storedDocuments, type FixtureBundle, type ViewKind, type ViewsClient } from '@dbdatakit/visuals'
+import { catalogDiagnostics, fixtureClient, retailCatalog, storedDocuments, type FixtureBundle, type ViewKind, type ViewsClient } from '@dbdatakit/visuals'
 
 /**
  * The console's source of dashboards and reports until a serving module answers (plan 32 DBR23, M1): the fixture source. The documents are the retail template's sample bundle and the recorded results of each
@@ -44,6 +44,8 @@ export function viewsClient(): ViewsClient {
   // what the editor saves stays in the browser's storage (this viewer's convenience, until a real store answers): a reload opens the saved file, and a second tab sees it
   let storage: Storage | null = null
   try { storage = window.localStorage } catch { /* blocked: this visit's memory */ }
-  client ??= fixtureClient(bundle, { documents: storedDocuments(bundle.documents, storage), onResolve: (c) => resolveLog.record({ kind: c.kind, name: c.name, layout: c.layout, widgets: c.widgets }) })
+  // the fixture source knows the retail model's catalog and stands in for the server's catalog check of filters and order (`ViewsClient.validate`)
+  const catalogs = { [retailCatalog.model]: retailCatalog }
+  client ??= fixtureClient(bundle, { documents: storedDocuments(bundle.documents, storage), catalogs, validateHook: (document) => catalogDiagnostics(document, catalogs), onResolve: (c) => resolveLog.record({ kind: c.kind, name: c.name, layout: c.layout, widgets: c.widgets }) })
   return client
 }
