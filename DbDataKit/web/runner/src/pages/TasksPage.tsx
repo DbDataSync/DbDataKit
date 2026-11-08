@@ -1,7 +1,10 @@
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { runnerApi, type RunnerInstance, type TaskStatus } from '../api'
 import { capabilityLines, connectionsOfTask, isBad, isGone, outcomeText, taskKey, taskState, type TaskState } from '../model'
+import { TaskPanel } from './TaskPanel'
+import { effectiveOwner, ownerLabel } from '../ownership'
 import { RunnerShell } from '../RunnerShell'
 import { when } from './format'
 
@@ -31,11 +34,11 @@ function InstancesCard({ instances }: { instances: RunnerInstance[] }) {
   )
 }
 
-function TaskRow({ task, canAct, busy, act, connections }: { task: TaskStatus; canAct: boolean; busy: boolean; connections: { name: string; kind: string; role: string }[]; act: (what: 'run' | 'pause' | 'resume', task: TaskStatus) => void }) {
+function TaskRow({ task, canAct, busy, act, connections, open, onToggle }: { task: TaskStatus; canAct: boolean; busy: boolean; connections: { name: string; kind: string; role: string }[]; act: (what: 'run' | 'pause' | 'resume', task: TaskStatus) => void; open: boolean; onToggle: () => void }) {
   const state = taskState(task)
   const last = task.last_run
   return (
-    <div className="grid-row" style={{ gridTemplateColumns: '1.3fr 0.6fr 1fr 0.6fr 1.3fr 1.6fr 0.8fr 1.6fr', gap: 14 }} data-testid="runner-task" data-task={taskKey(task)} data-state={state}>
+    <div className="grid-row auto" style={{ gridTemplateColumns: '1.3fr 0.6fr 1fr 0.6fr 1.3fr 1.6fr 0.8fr 1.6fr', gap: 14 }} data-testid="runner-task" data-task={taskKey(task)} data-state={state}>
       <span className="mono">{task.package}</span>
       <span>{task.channel}</span>
       <span className="mono">{task.task}</span>
@@ -50,12 +53,17 @@ function TaskRow({ task, canAct, busy, act, connections }: { task: TaskStatus; c
           <button type="button" className="btn btn-sm" disabled={busy} onClick={() => act('run', task)} data-testid="runner-task-run">Run now</button>
           <button type="button" className="btn btn-sm" disabled={busy} onClick={() => act(task.paused ? 'resume' : 'pause', task)} data-testid="runner-task-toggle">{task.paused ? 'Resume' : 'Pause'}</button>
         </>}
+        <button type="button" className="btn btn-sm" onClick={onToggle} aria-expanded={open} data-testid="runner-task-details">{open ? 'Hide' : 'Details'}</button>
+      </span>
+      <span style={{ gridColumn: '1 / -1' }} className="hint" data-testid="runner-task-owner" data-owner={effectiveOwner(task.owner)}>
+        Scheduled by {ownerLabel(task.owner).toLowerCase()}{effectiveOwner(task.owner) !== 'runner' ? (effectiveOwner(task.owner) === 'observe' ? ': it records what it would queue and queues nothing.' : ': this runner does not queue it until it is moved.') : '.'}
       </span>
       {connections.length > 0 && (
         <span style={{ gridColumn: '1 / -1' }} className="hint" data-testid="runner-task-connections">
           Connects to {connections.map((c, i) => <span key={c.name} data-testid="runner-task-connection" data-connection={c.name}>{i > 0 ? ', ' : ''}<span className="mono">{c.name}</span> ({c.kind}, {c.role} login)</span>)}
         </span>
       )}
+      {open && <TaskPanel task={task} canAct={canAct} />}
       {(task.waiting_reason || task.problem || task.paused_by) && (
         <span style={{ gridColumn: '1 / -1' }} className="hint" data-testid="runner-task-note">
           {task.waiting_reason && <span data-testid="runner-task-waiting">{task.waiting_reason} </span>}
@@ -79,9 +87,10 @@ export function TasksPage() {
   // the connections each task uses (plan 28c E23); a runner too old to answer leaves the line out
   const connections = useQuery({ queryKey: ['runner', 'connections'], queryFn: runnerApi.connections, refetchInterval: 15000, retry: false })
   const act = useMutation({
-    mutationFn: ({ what, task }: { what: 'run' | 'pause' | 'resume'; task: TaskStatus }) => runnerApi[what](task),
+    mutationFn: ({ what, task }: { what: 'run' | 'pause' | 'resume'; task: TaskStatus }) => (what === 'run' ? runnerApi.run(task) : runnerApi[what](task)),
     onSuccess: () => client.invalidateQueries({ queryKey: ['runner'] }),
   })
+  const [openTask, setOpenTask] = useState<string | null>(null)
   const tasks = status.data?.tasks ?? []
   const problems = status.data?.problems ?? []
 
@@ -104,7 +113,7 @@ export function TasksPage() {
             <div className="grid-head" style={{ gridTemplateColumns: '1.3fr 0.6fr 1fr 0.6fr 1.3fr 1.6fr 0.8fr 1.6fr', gap: 14 }}>
               <span>Package</span><span>Channel</span><span>Task</span><span>Version</span><span>Next due</span><span>Last run</span><span>State</span><span />
             </div>
-            {tasks.map((t) => <TaskRow key={taskKey(t)} task={t} connections={connectionsOfTask(connections.data ?? [], t)} canAct={canAct} busy={act.isPending} act={(what, task) => act.mutate({ what, task })} />)}
+            {tasks.map((t) => <TaskRow key={taskKey(t)} task={t} connections={connectionsOfTask(connections.data ?? [], t)} canAct={canAct} busy={act.isPending} act={(what, task) => act.mutate({ what, task })} open={openTask === taskKey(t)} onToggle={() => setOpenTask(openTask === taskKey(t) ? null : taskKey(t))} />)}
           </div>
         )}
       </div>

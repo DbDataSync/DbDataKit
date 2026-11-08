@@ -43,7 +43,7 @@ internal static class BuildManagementApi
     /// <param name="projects">The projects served, read again on every call so one added or removed is served or gone at once.</param>
     /// <param name="commands">All the commands there are; each project is offered the read-only ones.</param>
     /// <param name="surfaceFor">Which of them a project is offered and how their inputs are checked; the read-only rules unless a test or a later slice says otherwise.</param>
-    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, Workspaces? workspaces = null, WarmSessionRunner? workspaceRunner = null, ProxiesFile? proxies = null, ProxyPublisher? publisher = null, IPairingCodeStore? pairingCodes = null, string? clientName = null, ProjectCreator? creator = null, string? serverDirectory = null, Func<ScheduleRunnerLink, DbDataBuild.Cli.Runner.IRunnerTaskControl>? runnerControl = null, IAuditLog? audit = null, string? runnerClientDirectory = null)
+    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, Workspaces? workspaces = null, WarmSessionRunner? workspaceRunner = null, ProxiesFile? proxies = null, ProxyPublisher? publisher = null, IPairingCodeStore? pairingCodes = null, string? clientName = null, ProjectCreator? creator = null, string? serverDirectory = null, Func<ScheduleRunnerLink, DbDataBuild.Cli.Runner.IRunnerTaskControl>? runnerControl = null, IAuditLog? audit = null, Func<ScheduleRunnerLink, DbDataBuild.Cli.Runner.IRunnerSchedule>? runnerSchedule = null, string? runnerClientDirectory = null)
     {
         surfaceFor ??= FullSurface;
         var specs = CommandSpecs.All.ToDictionary(s => s.Name);
@@ -244,6 +244,53 @@ internal static class BuildManagementApi
                 return Results.Json(new { runners = store.All().Select(r => new { name = r.Name, url = r.Url, instance_id = r.InstanceId, roles = r.Roles, paired_at = r.PairedAt }) });
             }
             catch (InvalidDataException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
+        });
+
+        // Who schedules a plan (plan 33, UE06): the moves `server schedule observe|cutover|rollback` make, as one call. The order of the steps is BuildOwnership's (this server's file and the runner's record move together, never both scheduling); an operator's call.
+        app.MapPut("/api/v1/projects/{project}/schedule/{connection}/{plan}/owner", async (string project, string connection, string plan, HttpContext context) =>
+        {
+            if (projects.Find(project) is not { } hosted) return Results.NotFound();
+            var token = context.ManagementToken();
+            if (!ManagementAuthorization.Authorize(token, ServerRole.Operator, hosted.Id).Allowed) return Results.Json(new { error = "Moving a plan's schedule needs the operator role." }, statusCode: StatusCodes.Status403Forbidden);
+            if (serverDirectory is null) return Results.Json(new { error = "This server keeps no settings to record an owner in." }, statusCode: StatusCodes.Status409Conflict);
+            JsonObject? body;
+            try { body = await JsonSerializer.DeserializeAsync<JsonObject>(context.Request.Body, cancellationToken: context.RequestAborted); }
+            catch (JsonException) { body = null; }
+            string? Text(string name) => body?[name] is JsonValue v && v.TryGetValue<string>(out var t) && t.Length > 0 ? t : null;
+            var owner = Text("owner");
+            if (!TaskOwners.IsOwner(owner)) return Results.Json(new { error = $"The body is a JSON object with \"owner\": one of {string.Join(", ", TaskOwners.All)} (and optionally \"reason\", \"wait_seconds\", \"runner\" and \"channel\")." }, statusCode: StatusCodes.Status400BadRequest);
+            TimeSpan? wait = null;
+            if (body?["wait_seconds"] is { } waitNode)
+            {
+                if (waitNode is not JsonValue wv || !wv.TryGetValue<double>(out var seconds) || seconds < 0 || seconds > 3600) return Results.Json(new { error = "wait_seconds is a number from 0 to 3600." }, statusCode: StatusCodes.Status400BadRequest);
+                wait = TimeSpan.FromSeconds(seconds);
+            }
+
+            BuildScheduleSettings settings;
+            try { settings = BuildScheduleSettings.Read(serverDirectory); }
+            catch (InvalidOperationException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
+            var link = settings.Runner;
+            if (Text("runner") is not null || Text("channel") is not null)
+                link = new ScheduleRunnerLink(Text("runner") ?? link?.Server ?? "", Text("channel") ?? link?.Channel ?? "", link?.ClientDirectory);
+            if (link is null || link.Server.Length == 0 || link.Channel.Length == 0)
+                return Results.Json(new { error = "Say where the runner is: \"runner\" (a paired runner's name) and \"channel\", or schedule.runner in this server's settings." }, statusCode: StatusCodes.Status400BadRequest);
+
+            var actor = ActorOf(token);
+            try
+            {
+                var schedule = (runnerSchedule ?? (l => new DbDataBuild.Cli.Runner.ClientRunnerSchedule(new DbDataKit.Runner.Client.RunnerPublishClient(new DbDataKit.Runner.Client.RunnerClientStore(l.ClientDirectory ?? runnerClientDirectory ?? DbDataKit.Runner.Client.RunnerClientStore.DefaultDirectory(Environment.GetEnvironmentVariable)), Environment.GetEnvironmentVariable), l)))(link);
+                var ownership = new DbDataBuild.Cli.Runner.BuildOwnership(serverDirectory, projects, BuildSchedulerSchema.Open(serverDirectory), TimeProvider.System, schedule, audit ?? new FileAuditLog(Path.Combine(serverDirectory, "management-audit.log")), actor);
+                var reason = Text("reason");
+                var change = owner switch
+                {
+                    TaskOwners.Observe => await ownership.ObserveAsync(hosted.Id, connection, plan, link, reason, context.RequestAborted),
+                    TaskOwners.Runner => await ownership.CutOverAsync(hosted.Id, connection, plan, link, reason, wait, context.RequestAborted),
+                    _ => await ownership.RollBackAsync(hosted.Id, connection, plan, link, reason, wait, context.RequestAborted),
+                };
+                return Results.Json(new { owner = change.To, from = change.From, runner = link.Server, channel = link.Channel, handled_up_to = change.HandledUpTo?.UtcDateTime.ToString("O"), paused_by = change.PausedBy, waited = change.Waited });
+            }
+            catch (DbDataBuild.Cli.Runner.OwnershipException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
+            catch (DbDataKit.Runner.Client.RunnerClientException ex) { return Results.Json(new { error = $"The runner {link.Server} did not take it: {ex.Message}" }, statusCode: StatusCodes.Status502BadGateway); }
         });
 
         app.MapPost("/api/v1/projects/{project}/commands/{tool}", async (string project, string tool, HttpContext context) =>

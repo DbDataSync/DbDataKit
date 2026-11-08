@@ -42,13 +42,14 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 | | Rows of an entity | Yes | Yes | Yes | Page through rows, history of a row (an entity that keeps one), pick an instance of a model that has them | `EntityPage.tsx` |
 | | Model definition, storage (create tables) | – | – | – | **No UI** (API only: Z08, Z09) | |
 | | Change requests (an agent's write, or a model that asks for approval) | – (made by `POST changes`, answered 202) | – | – | List and read by state, approve, reject: **API only** (Z07; the console's review screen is not built) | |
-| **Runner** | Tasks and instances | – | – | – | Run now, pause, resume (operator); instances with labels and capabilities (read-only) | `TasksPage.tsx` |
+| **Runner** | Tasks and instances | – | Move a task to another scheduler (the publishing product, observed, this runner) with a reason | – | Run now (with `name=value` inputs), pause, resume (operator); who schedules each task, since when and why, its position and an observed task's decisions; instances with labels and capabilities (read-only) | `TasksPage.tsx`, `TaskPanel.tsx` |
 | | Runs | – | – | – | List and filter | `RunsPage.tsx` |
 | | Packages (published definitions) | – (published by `package publish` or Build's `project publish`; see docs/ui-editors.md) | – | Retire | Activate (with confirmed losses, or anyway with a reason), switch, roll back, see staging per runner and the history | `PackagesPage.tsx` |
 | **Apps** | App packages and instances | – | – | – | **No UI, no host yet.** Libraries only: the manifest and bundling (AP01-AP03), the published-definition store with channels and rollback (O03), and instances that resolve to a package and an audience (AP04, PR open). Serving, the shell page and the sandbox are AP05; the Store's controls (`@dbdatakit/store-ui`) are written to be mounted by an app. | |
 
 ## Notes and gaps
 
+* **Monitoring** (console) also says who schedules a Build plan or a runner task and moves a Build plan between this server's scheduler, observation by a runner and the runner (`monitoring-owner-*`; the Build server changes its own settings and the runner's record together).
 * **Console connections** lists and copies; a connection is created and edited in the product's own screens (Sync, or the Gateway's data sources).
 * **Build**: the connections row is from reading `NewConnectionPanel` and `DefinitionPanel`, not from using them; confirm what they edit before relying on the Edit cell.
 * **Semantic models and saved queries** (plan 19, lane J): no screen was found; the Views page renders view documents, and opens dashboards from recorded fixtures (plan 32 DBR23) or from those published to a Gateway that runs the `views` module (DBR11b); it has no screen for the models themselves, which a Build server publishes.

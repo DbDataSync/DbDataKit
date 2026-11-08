@@ -15,6 +15,10 @@ export interface MonitorRow {
   detail: string
   /** Whether the person (or the server) holds it: a failed row can be held too, and then it is the hold that is released. */
   held: boolean
+  /** Who schedules it, for a scheduled plan or a runner's task: `old` (the Build or Sync server that publishes it), `observe` or `runner`. Absent where the row has no such thing. */
+  owner?: 'old' | 'observe' | 'runner'
+  /** For a plan the runner schedules: which runner and channel, and why its own row could not be read. */
+  runner?: { server: string; channel: string; error: string | null }
   /** What the row's buttons act on. */
   target: { replication: string } | { project: string; connection: string; plan: string } | { runnerTask: { package: string; channel: string; task: string } } | null
 }
@@ -54,7 +58,21 @@ export function syncRow(server: InstanceSummary, name: string, status: SyncStatu
   return { key: `${server.id}/${name}`, server: server.id, serverName: server.name, product: 'dbdatasync', kind: 'replication', subject: name, state, detail, held: status.paused, target: { replication: name } }
 }
 
-export interface BuildJob { connection: string; plan: string; schedule: string; next_due: string | null; last_started: string | null; last_exit: number | null; paused?: boolean; paused_by?: string | null }
+export interface BuildJob {
+  connection: string; plan: string; schedule: string; next_due: string | null; last_started: string | null; last_exit: number | null; paused?: boolean; paused_by?: string | null
+  /** Who schedules the plan (plan 28c E09) and, for the runner's, its own row. A server that predates ownership says nothing: its own scheduler does. */
+  owner?: string
+  runner?: { server: string; channel: string; error?: string | null; last_run?: { outcome: string } | null }
+}
+
+const ownerOf = (owner: string | undefined): 'old' | 'observe' | 'runner' => (owner === 'observe' || owner === 'runner' ? owner : 'old')
+
+/** Who schedules a plan, as a sentence for a row. */
+export function ownerSentence(owner: 'old' | 'observe' | 'runner', runner?: { server: string; channel: string }): string {
+  if (owner === 'runner') return runner ? `Scheduled by the runner ${runner.server} (${runner.channel})` : 'Scheduled by the runner'
+  if (owner === 'observe') return runner ? `Scheduled here, observed by the runner ${runner.server}` : 'Scheduled here, observed by a runner'
+  return 'Scheduled by this server'
+}
 
 /** One scheduled Build plan. */
 export function buildRow(server: InstanceSummary, project: string, job: BuildJob): MonitorRow {
@@ -62,7 +80,10 @@ export function buildRow(server: InstanceSummary, project: string, job: BuildJob
   let detail = job.next_due ? `Next ${new Date(job.next_due).toLocaleString()}` : 'No next time'
   if (job.last_exit !== null && job.last_exit !== 0) { state = 'failed'; detail = `The last run ended with exit code ${job.last_exit}` }
   else if (job.paused) { state = 'paused'; detail = job.paused_by ? `Paused by ${job.paused_by}` : 'Paused' }
-  return { key: `${server.id}/${project}/${job.connection}/${job.plan}`, server: server.id, serverName: server.name, product: 'dbdatabuild', kind: 'plan', subject: `${project}: ${job.connection}/${job.plan}`, state, detail, held: job.paused === true, target: { project, connection: job.connection, plan: job.plan } }
+  const owner = ownerOf(job.owner)
+  if (owner !== 'old') detail = `${detail}. ${ownerSentence(owner, job.runner)}`
+  if (job.runner?.error) detail = `${detail}. The runner did not answer: ${job.runner.error}`
+  return { owner, runner: job.runner ? { server: job.runner.server, channel: job.runner.channel, error: job.runner.error ?? null } : undefined, key: `${server.id}/${project}/${job.connection}/${job.plan}`, server: server.id, serverName: server.name, product: 'dbdatabuild', kind: 'plan', subject: `${project}: ${job.connection}/${job.plan}`, state, detail, held: job.paused === true, target: { project, connection: job.connection, plan: job.plan } }
 }
 
 /** What a Gateway's notification feed says: `GET /api/v1/notifications` (a failed-login lockout, a refused statement, a limit reached). */
@@ -82,7 +103,7 @@ export function gatewayRow(server: InstanceSummary, notice: GatewayNotification)
 /** What a runner says in `GET /api/v1/status` about a task, and in `GET /api/v1/instances?all=true` about an instance. */
 export interface RunnerTask {
   package: string; channel: string; task: string; paused: boolean; paused_by?: string | null; running: number | boolean; queued?: number | boolean
-  problem?: string | null; waiting_reason?: string | null; last_run: { outcome: string; started?: string } | null
+  problem?: string | null; waiting_reason?: string | null; owner?: string; last_run: { outcome: string; started?: string } | null
 }
 export interface RunnerInstanceRow { id: string; host: string; live?: boolean; state?: string; heartbeat?: string }
 
@@ -99,7 +120,11 @@ export function runnerTaskRow(server: InstanceSummary, task: RunnerTask): Monito
   else if (task.problem) { state = 'failed'; detail = task.problem }
   else if (task.paused) { state = 'paused'; detail = task.paused_by ? `Paused by ${task.paused_by}` : 'Paused' }
   else if (task.running === true || (typeof task.running === 'number' && task.running > 0)) { state = 'running'; detail = 'Running now' }
-  return { key: `${server.id}/${key}`, server: server.id, serverName: server.name, product: 'dbdatarunner', kind: 'task', subject: key, state, detail, held: task.paused, target: { runnerTask: ref } }
+  const owner = ownerOf(task.owner === undefined ? 'runner' : task.owner)
+  // a task the runner does not schedule is the publishing product's to run: say so beside what is known of it
+  if (owner === 'old') detail = `${detail}. Scheduled by the publishing product, not by this runner`
+  else if (owner === 'observe') detail = `${detail}. Scheduled by the publishing product, observed by this runner`
+  return { owner, key: `${server.id}/${key}`, server: server.id, serverName: server.name, product: 'dbdatarunner', kind: 'task', subject: key, state, detail, held: task.paused, target: { runnerTask: ref } }
 }
 
 /** A runner of the group that is not live: it left (marked gone) or went silent past its lease. It has no buttons; what to do is the administrator's. */
@@ -173,4 +198,26 @@ function act(row: MonitorRow, what: 'pause' | 'resume' | 'run') {
   }
   const { project, connection, plan } = row.target
   return request<unknown>(`${base}/api/v1/projects/${enc(project)}/schedule/${enc(connection)}/${enc(plan)}/${what}`, { method: 'POST' })
+}
+
+/** What moving a Build plan to another scheduler sends (`PUT .../schedule/{connection}/{plan}/owner`): the move is the Build server's, which changes its own file and the runner's record in the order that never schedules the plan twice. */
+export interface PlanMove { owner: 'old' | 'observe' | 'runner'; reason: string; runner?: string; channel?: string }
+
+/** Why a plan's move cannot be sent yet, in words; null when it can. The server decides again (the operator role, whether the runner serves the package). */
+export function moveBlock(row: MonitorRow, move: PlanMove): string | null {
+  if (row.kind !== 'plan') return 'Only a Build plan moves from here.'
+  if (move.owner === (row.owner ?? 'old')) return `The plan is already ${row.owner === 'runner' ? "the runner's" : row.owner === 'observe' ? 'observed' : "this server's"}.`
+  if (move.reason.trim() === '') return 'Say why: the reason is recorded with who moved it.'
+  if (move.owner !== 'old' && row.runner === undefined && ((move.runner ?? '').trim() === '' || (move.channel ?? '').trim() === '')) return 'Name the runner and its channel: this server has none written down yet.'
+  if (move.owner === 'observe' && row.owner === 'runner') return 'The runner schedules it: roll it back first, then observe.'
+  return null
+}
+
+/** Moves a Build plan (a row of kind `plan`) to another scheduler. */
+export function movePlan(row: MonitorRow, move: PlanMove) {
+  if (row.target === null || !('project' in row.target)) return Promise.resolve(null)
+  const { project, connection, plan } = row.target
+  const body: Record<string, string> = { owner: move.owner, reason: move.reason.trim() }
+  if (move.owner !== 'old' && row.runner === undefined) { body.runner = (move.runner ?? '').trim(); body.channel = (move.channel ?? '').trim() }
+  return request<{ owner: string; runner: string; channel: string; waited: boolean }>(`/relay/${row.server}/api/v1/projects/${enc(project)}/schedule/${enc(connection)}/${enc(plan)}/owner`, { method: 'PUT', body: JSON.stringify(body) })
 }

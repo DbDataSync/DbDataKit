@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildRow, duration, LAG_LIMIT_MS, loadRows, NOTICE_WINDOW_MS, gatewayRow, runnerGoneRow, runnerTaskRow, sortRows, syncRow } from './monitoring'
+import { buildRow, duration, moveBlock, ownerSentence, type PlanMove, LAG_LIMIT_MS, loadRows, NOTICE_WINDOW_MS, gatewayRow, runnerGoneRow, runnerTaskRow, sortRows, syncRow } from './monitoring'
 import type { InstanceSummary } from './api'
 
 const server = (id: string, name: string, product: string): InstanceSummary => ({ id, name, url: 'https://x', product, version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null })
@@ -103,5 +103,55 @@ describe('runner rows', () => {
     expect(runnerGoneRow(runner, { id: 'i3', host: 'box-3', live: false, state: 'Running' }).detail).toBe('The runner stopped reporting')
     const rows = sortRows([runnerTaskRow(runner, task), syncRow(sync, 'orders', status, { highestLagMs: LAG_LIMIT_MS * 2 }, { runs: [] }), gone, runnerTaskRow(runner, { ...task, last_run: { outcome: 'failed' } })])
     expect(rows.map((r) => r.state)).toEqual(['failed', 'gone', 'lagging', 'ok'])
+  })
+})
+
+
+describe('who schedules a plan (plan 33, UE06)', () => {
+  const job = { connection: 'pg', plan: 'hourly', schedule: '15 * * * *', next_due: '2026-10-27T13:15:00Z', last_started: null, last_exit: null }
+
+  it('says nothing more for a plan this server schedules, and names the runner for the one the runner schedules', () => {
+    expect(buildRow(build, 'sales', job)).toMatchObject({ owner: 'old' })
+    expect(buildRow(build, 'sales', job).detail).not.toContain('Scheduled by')
+    const runner = { server: 'runner-x', channel: 'prod', last_run: null, error: null }
+    const owned = buildRow(build, 'sales', { ...job, owner: 'runner', runner })
+    expect(owned).toMatchObject({ owner: 'runner', runner: { server: 'runner-x', channel: 'prod', error: null } })
+    expect(owned.detail).toContain('Scheduled by the runner runner-x (prod)')
+    expect(buildRow(build, 'sales', { ...job, owner: 'observe', runner }).detail).toContain('observed by the runner runner-x')
+  })
+
+  it('says when the runner that schedules a plan did not answer, and keeps the failure of its last run', () => {
+    const row = buildRow(build, 'sales', { ...job, owner: 'runner', last_exit: 1, runner: { server: 'runner-x', channel: 'prod', error: 'no route to host' } })
+    expect(row.state).toBe('failed')
+    expect(row.detail).toContain('The runner did not answer: no route to host')
+  })
+
+  it('shows a runner task the runner does not schedule as the publishing product\'s', () => {
+    const runnerServer = server('r1', 'Runner', 'dbdatarunner')
+    const task = { package: 'sales', channel: 'prod', task: 'refresh', paused: false, running: false, last_run: null }
+    expect(runnerTaskRow(runnerServer, task)).toMatchObject({ owner: 'runner' })
+    expect(runnerTaskRow(runnerServer, { ...task, owner: 'old' }).detail).toContain('Scheduled by the publishing product, not by this runner')
+    expect(runnerTaskRow(runnerServer, { ...task, owner: 'observe' }).detail).toContain('observed by this runner')
+  })
+
+  it('words the owner', () => {
+    expect(ownerSentence('old')).toBe('Scheduled by this server')
+    expect(ownerSentence('runner')).toBe('Scheduled by the runner')
+  })
+
+  it('asks for what a move lacks: a reason, and a runner and channel when this server has none written down', () => {
+    const row = buildRow(build, 'sales', job)
+    const move = (over: Partial<PlanMove> = {}): PlanMove => ({ owner: 'observe', reason: 'trial', runner: 'runner-x', channel: 'prod', ...over })
+    expect(moveBlock(row, move())).toBeNull()
+    expect(moveBlock(row, move({ reason: ' ' }))).toContain('Say why')
+    expect(moveBlock(row, move({ owner: 'old' }))).toContain('already')
+    expect(moveBlock(row, move({ runner: '' }))).toContain('Name the runner')
+    expect(moveBlock(row, move({ channel: undefined }))).toContain('Name the runner')
+    const known = buildRow(build, 'sales', { ...job, owner: 'observe', runner: { server: 'runner-x', channel: 'prod' } })
+    expect(moveBlock(known, move({ owner: 'runner', runner: undefined, channel: undefined }))).toBeNull()   // the server's own link is used
+    const owned = buildRow(build, 'sales', { ...job, owner: 'runner', runner: { server: 'runner-x', channel: 'prod' } })
+    expect(moveBlock(owned, move({ owner: 'observe' }))).toContain('roll it back first')
+    expect(moveBlock(owned, move({ owner: 'old' }))).toBeNull()
+    expect(moveBlock({ ...row, kind: 'replication' }, move())).toContain('Only a Build plan')
   })
 })
