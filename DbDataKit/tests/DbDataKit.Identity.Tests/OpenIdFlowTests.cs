@@ -251,7 +251,7 @@ public sealed class OpenIdFlowTests : IAsyncLifetime
         Assert.Equal(_ada.Id, (await ok.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("sub").GetString());
 
         var forged = new HttpRequestMessage(HttpMethod.Get, "/identity/userinfo");
-        forged.Headers.Authorization = new("Bearer", access[..^4] + "AAAA");
+        forged.Headers.Authorization = new("Bearer", ForgedSignature(access));
         Assert.Equal(HttpStatusCode.Unauthorized, (await _http.SendAsync(forged)).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await _http.GetAsync("/identity/userinfo")).StatusCode);
         // An id token is not an access token.
@@ -388,8 +388,7 @@ public sealed class OpenIdFlowTests : IAsyncLifetime
     public async Task An_end_session_request_with_a_hint_that_is_not_this_homes_ends_nothing_and_redirects_nowhere()
     {
         var (refresh, idToken) = await SignInOffline();
-        var parts = idToken.Split('.');
-        var forged = $"{parts[0]}.{parts[1]}.{parts[2][..^2]}AA";
+        var forged = ForgedSignature(idToken);
         var response = await _http.GetAsync($"/identity/end-session?id_token_hint={Uri.EscapeDataString(forged)}&post_logout_redirect_uri={Uri.EscapeDataString(PostLogout)}");
         Assert.Null(response.Headers.Location);
         Assert.Equal(HttpStatusCode.OK, (await Refresh(refresh)).StatusCode);
@@ -398,5 +397,14 @@ public sealed class OpenIdFlowTests : IAsyncLifetime
         var access = (await (await Token(CodeOf(await AuthorizeAs(_ada.Id, AuthorizeUri(challenge))), verifier)).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("access_token").GetString()!;
         var viaAccess = await _http.GetAsync($"/identity/end-session?id_token_hint={Uri.EscapeDataString(access)}&post_logout_redirect_uri={Uri.EscapeDataString(PostLogout)}");
         Assert.Null(viaAccess.Headers.Location);
+    }
+
+    /// <summary>The same token with a signature that is certainly different: the FIRST character of the signature carries six bits of it, and is changed to another valid one. (Changing the last characters can leave the decoded signature as it was: the last character of a base64url signature holds padding bits, and one of 64 replacements can equal the original.)</summary>
+    private static string ForgedSignature(string jwt)
+    {
+        var parts = jwt.Split('.');
+        var signature = parts[2];
+        var replacement = signature[0] == 'A' ? 'B' : 'A';
+        return $"{parts[0]}.{parts[1]}.{replacement}{signature[1..]}";
     }
 }
