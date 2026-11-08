@@ -17,6 +17,7 @@ namespace DbDataKit.Runner.Api;
 /// <list type="bullet">
 /// <item><c>GET /api/v1/status</c>: the engine of the state, the channels served, what this machine reports (<c>LimitCapabilities</c>), this instance's id and every task's status: next due, last run, what is running or waiting, whether it is paused.</item>
 /// <item><c>GET /api/v1/runs[?package=&amp;channel=&amp;task=&amp;outcome=&amp;limit=&amp;before=]</c>: the run history, newest first; <c>task</c> needs the package and the channel.</item>
+/// <item><c>.../tasks/{package}/{channel}/{task}/schedule</c>, <c>.../owner</c> and <c>.../decisions</c>: who schedules a task while a product's own scheduler is still in the picture (plan 28c E09), see <c>MapOwnership</c>.</item>
 /// <item><c>POST /api/v1/tasks/{package}/{channel}/{task}/run</c> with an optional <c>{"inputs": {"name": "value"}}</c>: queues a run now (202 with its run id; 409 when one is queued or running already). <c>.../pause</c> and <c>.../resume</c>.</item>
 /// </list>
 /// </summary>
@@ -123,7 +124,107 @@ public static class RunnerApi
                 return Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["paused"] = false });
             });
         });
+
+        MapOwnership(app, root, engine, context => Deny(context, ServerRole.Viewer), (context, verb, reference) => Deny(context, ServerRole.Operator, verb, engine(), reference), ActorOf);
     }
+
+    /// <summary>
+    /// Who schedules a task (plan 28c E09): <c>GET .../tasks/{package}/{channel}/{task}/schedule</c> (owner, position, pause, items in flight), <c>PUT .../owner</c> with <c>{"owner": "old|observe|runner", "reason": "...", "handled_up_to": "...", "paused_by": "...",
+    /// "paused_at": "..."}</c> (an operator; the seed is the position the product's scheduler had reached, <c>paused_by</c> its pause), <c>GET .../decisions[?since=]</c> and <c>POST .../decisions</c> with <c>{"at": "...", "missed": 0, "paused": false}</c>
+    /// (the product reports what its own scheduler queued for an observed task).
+    /// </summary>
+    private static void MapOwnership(IEndpointRouteBuilder app, string root, Func<RunnerHost> engine, Func<HttpContext, IResult?> viewer, Func<HttpContext, string, TaskRef, IResult?> operatorOnly, Func<HttpContext, RunnerActor> actorOf)
+    {
+        static string? Time(DateTimeOffset? at) => at?.UtcDateTime.ToString("O");
+
+        app.MapGet($"{root}/tasks/{{package}}/{{channel}}/{{task}}/schedule", (string package, string channel, string task, HttpContext context) =>
+        {
+            if (!ParseTask(package, channel, task, out var reference, out var bad)) return bad!;
+            if (viewer(context) is { } denied) return denied;
+            return Control(engine(), control =>
+            {
+                var state = control.ScheduleState(reference!);
+                var record = control.Owner(reference!).Record;
+                return Results.Json(new JsonObject
+                {
+                    ["task"] = reference!.ToString(), ["owner"] = state.Owner, ["owner_set_by"] = record?.ChangedBy, ["owner_set_at"] = Time(record?.ChangedAt), ["reason"] = record?.Reason,
+                    ["handled_up_to"] = Time(state.HandledUpTo), ["paused"] = state.PausedBy is not null, ["paused_by"] = state.PausedBy, ["paused_at"] = Time(state.PausedAt),
+                    ["running"] = state.Running, ["queued"] = state.Queued, ["version"] = state.Version,
+                });
+            });
+        });
+
+        app.MapPut($"{root}/tasks/{{package}}/{{channel}}/{{task}}/owner", async (string package, string channel, string task, HttpContext context) =>
+        {
+            if (!ParseTask(package, channel, task, out var reference, out var bad)) return bad!;
+            if (operatorOnly(context, RunnerControl.OwnerVerb, reference!) is { } denied) return denied;
+            if (await ReadObject(context) is not { } body) return Results.BadRequest(new { error = "The body is a JSON object, such as {\"owner\": \"runner\", \"handled_up_to\": \"2026-11-07T12:00:00Z\"}." });
+            var owner = Field(body, "owner");
+            if (!TaskOwners.IsOwner(owner)) return Results.BadRequest(new { error = $"owner is one of {string.Join(", ", TaskOwners.All)}." });
+            DateTimeOffset? handled = null, pausedAt = null;
+            foreach (var (name, set) in new (string, Action<DateTimeOffset>)[] { ("handled_up_to", t => handled = t), ("paused_at", t => pausedAt = t) })
+            {
+                if (Field(body, name) is not { } text) continue;
+                if (!DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed)) return Results.BadRequest(new { error = $"{name} is a time, such as 2026-11-07T12:00:00Z." });
+                set(parsed);
+            }
+
+            var pausedBy = Field(body, "paused_by");
+            if (handled is null && (pausedBy is not null || pausedAt is not null)) return Results.BadRequest(new { error = "A pause is handed over with the position it belongs to: give handled_up_to too." });
+            var seed = handled is { } at ? new ScheduleSeed(at, pausedBy, pausedAt) : null;
+            return Control(engine(), control =>
+            {
+                control.SetOwner(reference!, owner!, Field(body, "reason"), seed, actorOf(context));
+                return Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["owner"] = owner });
+            });
+        });
+
+        app.MapGet($"{root}/tasks/{{package}}/{{channel}}/{{task}}/decisions", (string package, string channel, string task, HttpContext context) =>
+        {
+            if (!ParseTask(package, channel, task, out var reference, out var bad)) return bad!;
+            if (viewer(context) is { } denied) return denied;
+            DateTimeOffset? since = null;
+            if (Text(context.Request.Query["since"]) is { } text)
+            {
+                if (!DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed)) return Results.BadRequest(new { error = "since is a time, such as 2026-11-07T12:00:00Z." });
+                since = parsed;
+            }
+
+            return Control(engine(), control => Results.Json(new JsonObject
+            {
+                ["task"] = reference!.ToString(),
+                ["decisions"] = new JsonArray(control.Decisions(reference!, since).Select(d => (JsonNode)new JsonObject { ["source"] = d.Source, ["at"] = Time(d.DecidedAt), ["missed"] = d.Missed, ["paused"] = d.Paused }).ToArray()),
+            }));
+        });
+
+        app.MapPost($"{root}/tasks/{{package}}/{{channel}}/{{task}}/decisions", async (string package, string channel, string task, HttpContext context) =>
+        {
+            if (!ParseTask(package, channel, task, out var reference, out var bad)) return bad!;
+            if (operatorOnly(context, RunnerControl.OwnerVerb, reference!) is { } denied) return denied;
+            if (await ReadObject(context) is not { } body || Field(body, "at") is not { } atText
+                || !DateTimeOffset.TryParse(atText, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var at))
+                return Results.BadRequest(new { error = "The body is a JSON object with the time the product's scheduler queued the run: {\"at\": \"2026-11-07T12:00:00Z\", \"missed\": 0, \"paused\": false}." });
+            var missed = body["missed"] is JsonValue m && m.TryGetValue<int>(out var count) && count >= 0 ? count : 0;
+            var paused = body["paused"] is JsonValue p && p.TryGetValue<bool>(out var flag) && flag;
+            return Control(engine(), control =>
+            {
+                control.RecordOldDecision(reference!, at, missed, paused);
+                return Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["recorded"] = true });
+            });
+        });
+    }
+
+    private static string? Field(JsonObject body, string name) => body[name] is JsonValue v && v.TryGetValue<string>(out var text) && !string.IsNullOrWhiteSpace(text) ? text : null;
+
+    private static async Task<JsonObject?> ReadObject(HttpContext context)
+    {
+        using var reader = new StreamReader(context.Request.Body);
+        var text = await reader.ReadToEndAsync(context.RequestAborted);
+        if (text.Length is 0 or > 100_000) return null;
+        try { return JsonNode.Parse(text) as JsonObject; }
+        catch (System.Text.Json.JsonException) { return null; }
+    }
+
 
     public static JsonObject Status(StateDatabase state, RunnerHost engine, string instanceId, RunnerApiOptions options)
     {
@@ -166,6 +267,7 @@ public static class RunnerApi
             ["next_attempt_at"] = t.NextAttemptAt?.UtcDateTime.ToString("O"),
             ["paused"] = t.Paused,
             ["paused_by"] = t.PausedBy,
+            ["owner"] = t.Owner,
             ["problem"] = t.Problem,
             ["required_labels"] = new JsonArray((t.RequiredLabels ?? []).Select(l => (JsonNode)JsonValue.Create(l)!).ToArray()),
             ["waiting_reason"] = t.WaitingReason,

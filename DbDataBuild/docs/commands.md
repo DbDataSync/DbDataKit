@@ -427,6 +427,7 @@ Usage: `dbdatabuild project publish [options]`
 | `--package` `<text>` | The package's name on the runner (default: the project folder's name) |
 | `--project` `<path>` | Project root |
 | `--promote-from` `<text>` | Do not publish: promote the version this channel serves to --channel (the same version; the runner's `switch`, which needs an administrator pairing) |
+| `--runner-schedules` | Let the runner schedule the plans from the first activation. By default each task is recorded on the runner as scheduled by the Build server (`server schedule`) until it is cut over, so a published plan never runs from two schedulers |
 | `--runtime-range` `<text>` | The engine versions the package accepts, instead of this tool's minor line (`0.4.x`, `>=0.4 <1`) |
 | `--serve` | Make the version active at once instead of staging it (staged is the default: runners prepare it, then it activates) |
 | `--server` `<text>` | The runner: the name it was paired under or its https address |

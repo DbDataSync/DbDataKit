@@ -30,6 +30,9 @@ public sealed partial class RunnerScheduler
     /// <summary>The kind of every work item of the runner.</summary>
     public const string Kind = "task";
 
+    /// <summary>Appended to the service name the job state and the pauses are kept under to name the copy an observed task is evaluated against (plan 28c E09, ED7): the same tables, other rows, so the real position of a task is never touched while it is observed.</summary>
+    public const string ObservedServiceSuffix = ".observed";
+
     private readonly StateDatabase _database;
     private readonly ITaskRunner _runner;
     private readonly ArtifactCache _cache;
@@ -41,6 +44,10 @@ public sealed partial class RunnerScheduler
     private readonly ModuleJobStateStore _jobs;
     private readonly ModuleJobPauseStore _pauses;
     private readonly ModuleRunLockStore _locks;
+    private readonly TaskOwnerStore _owners;
+    private readonly TaskDecisions _decisions;
+    private readonly ModuleJobStateStore _observedJobs;
+    private readonly ModuleJobPauseStore _observedPauses;
     private readonly TaskProjections _projections;
     private readonly ActivationHolds _holds;
     private readonly RunnerInstances _instances;
@@ -68,6 +75,10 @@ public sealed partial class RunnerScheduler
         _jobs = new ModuleJobStateStore(database, options.Service);
         _pauses = new ModuleJobPauseStore(database, options.Service);
         _locks = new ModuleRunLockStore(database, options.Service);
+        _owners = new TaskOwnerStore(database);
+        _decisions = new TaskDecisions(database);
+        _observedJobs = new ModuleJobStateStore(database, options.Service + ObservedServiceSuffix);
+        _observedPauses = new ModuleJobPauseStore(database, options.Service + ObservedServiceSuffix);
         _projections = new TaskProjections(database);
         _holds = new ActivationHolds(database);
         _instances = new RunnerInstances(database);
@@ -162,9 +173,24 @@ public sealed partial class RunnerScheduler
             var enqueued = new List<TaskRef>();
             var refused = 0;
             var paused = 0;
+            var observed = 0;
+            var leftToOld = 0;
             foreach (var task in served)
             {
                 ct.ThrowIfCancellationRequested();
+                // who schedules the task (plan 28c E09): the product's own scheduler for old and observe; the runner looks at the schedule of a runner-owned task only, and observe only records what it would do
+                switch (_owners.OwnerOf(task.Ref.Package, task.Ref.Channel, task.Ref.Task))
+                {
+                    case TaskOwners.Old:
+                        leftToOld++;
+                        continue;
+                    case TaskOwners.Observe:
+                        leftToOld++;
+                        observed++;
+                        Observe(task);
+                        continue;
+                }
+
                 var owner = OwnerOf(task.Ref);
                 var state = _jobs.Get(owner, task.Ref.Task);
                 var decision = ScheduleEvaluator.Evaluate(task.Schedule, state?.HandledUpTo, _time.GetUtcNow());
@@ -183,7 +209,7 @@ public sealed partial class RunnerScheduler
             await _triggers.TickAsync(ct).ConfigureAwait(false);   // R13: events become work items on the same path
 
             var claimed = ClaimAndStart(served.Select(t => OwnerOf(t.Ref)).Distinct(StringComparer.Ordinal).ToList(), served);
-            return new TickReport(enqueued, refused, paused, claimed, rowProblems.Count, expired);
+            return new TickReport(enqueued, refused, paused, claimed, rowProblems.Count, expired, observed, leftToOld);
         }
         finally
         {
@@ -216,6 +242,28 @@ public sealed partial class RunnerScheduler
                 Report($"item {id}", $"Renewing the lease before the tick failed: {ex.GetType().Name}: {ex.Message}");   // the item's own heartbeat reports it again and tries again
             }
         }
+    }
+
+    /// <summary>
+    /// Evaluates an observed task's schedule against its copy of the position and records what would have been queued (plan 28c E09, ED7); nothing is queued, whatever the answer. The rules are the ones the product's scheduler follows (13a M08):
+    /// a copy with no position is a first sight, which is noted (the position becomes now) and never a decision; a time that was due while the copy of the pause is set is recorded as passed over, and the position moves past it; several missed
+    /// times are one decision that says how many were missed.
+    /// </summary>
+    private void Observe(Served task)
+    {
+        var owner = OwnerOf(task.Ref);
+        var now = _time.GetUtcNow();
+        var state = _observedJobs.Get(owner, task.Ref.Task);
+        if (state?.HandledUpTo is null)
+        {
+            _observedJobs.SaveHandled(owner, task.Ref.Task, now);
+            return;
+        }
+
+        var decision = ScheduleEvaluator.Evaluate(task.Schedule, state.HandledUpTo, now);
+        if (decision.HandledUpTo is { } handled && handled != state.HandledUpTo) _observedJobs.SaveHandled(owner, task.Ref.Task, handled);
+        if (!decision.Due) return;
+        _decisions.Record(new TaskDecision(task.Ref.Package, task.Ref.Channel, task.Ref.Task, TaskDecisions.Runner, now, decision.Missed, _observedPauses.IsPaused(owner, task.Ref.Task)));
     }
 
     private sealed record Served(TaskProjection Row, TaskRef Ref, Schedule Schedule, TaskLimits Limits, bool AllowOverlap);
@@ -787,6 +835,60 @@ public sealed partial class RunnerScheduler
         _pauses.Clear(OwnerOf(task), task.Task);
     }
 
+    // ---- who schedules a task (plan 28c E09)
+
+    /// <summary>The task's owner, when it was set and by whom; <see cref="TaskOwners.Runner"/> with no record for a task nobody handed over.</summary>
+    public (string Owner, TaskOwner? Record) OwnerOfTask(TaskRef task) => (_owners.OwnerOf(task.Package, task.Channel, task.Task), _owners.Get(task.Package, task.Channel, task.Task));
+
+    /// <summary>
+    /// Sets who schedules the task, with the position the product's scheduler had reached when it let go (<paramref name="seed"/>). The task need not have a version yet (a product says <c>old</c> before it publishes), and its channel need not be one this loop serves: the owner is state of the group, read by whichever instance serves the channel. <c>runner</c> writes the seed as the task's position and pause, <c>observe</c> writes it to the copy the schedule is evaluated against (a seed-less observe starts from a first sight), and <c>old</c> leaves the position where it is,
+    /// for the product to read back (<see cref="ScheduleStateOf"/>). The position is written before a switch to <c>runner</c> and the owner before a switch away from it, so a failure in between leaves a task nobody schedules, never one both do.
+    /// </summary>
+    public void SetOwner(TaskRef task, string owner, string by, string? reason, ScheduleSeed? seed)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+        if (!TaskOwners.IsOwner(owner)) throw new ArgumentException($"'{owner}' is not an owner ({string.Join(", ", TaskOwners.All)}).", nameof(owner));
+        var key = OwnerOf(task);
+        var before = _owners.OwnerOf(task.Package, task.Channel, task.Task);
+        if (owner == TaskOwners.Runner || owner == TaskOwners.Observe)
+        {
+            if (seed is not null)
+            {
+                var (jobs, pauses) = owner == TaskOwners.Runner ? (_jobs, _pauses) : (_observedJobs, _observedPauses);
+                jobs.SaveHandled(key, task.Task, seed.HandledUpTo);
+                pauses.Clear(key, task.Task);
+                if (seed.PausedBy is { } who) pauses.Set(key, task.Task, who, seed.PausedAt ?? _time.GetUtcNow());
+            }
+            else if (owner == TaskOwners.Observe)
+            {
+                _observedJobs.Clear(key, task.Task);   // a first sight, as the product's scheduler treats a job it has not seen
+                _observedPauses.Clear(key, task.Task);
+            }
+        }
+
+        if (before == TaskOwners.Observe && owner != TaskOwners.Observe) _observedJobs.Clear(key, task.Task);
+        _owners.Set(task.Package, task.Channel, task.Task, owner, by, reason);
+    }
+
+    /// <summary>What a product needs to take a task back, or to wait for the runner to finish with it: who schedules it, its position and pause, and how many items of it are queued or running.</summary>
+    public TaskScheduleState ScheduleStateOf(TaskRef task)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+        var key = OwnerOf(task);
+        var owner = _owners.OwnerOf(task.Package, task.Channel, task.Task);
+        var (jobs, pauses) = owner == TaskOwners.Observe ? (_observedJobs, _observedPauses) : (_jobs, _pauses);
+        var mine = _queue.ListInFlight(key).Where(w => w.Item.Subject == task.Task).ToList();
+        var pause = pauses.Get(key, task.Task);
+        return new TaskScheduleState(owner, jobs.Get(key, task.Task)?.HandledUpTo, pause?.By, pause?.At, mine.Count(w => w.Item.Status is WorkItemStatus.Claimed or WorkItemStatus.Running), mine.Count(w => w.Item.Status == WorkItemStatus.Pending), _projections.Get(task.Package, task.Channel, task.Task)?.Version);
+    }
+
+    /// <summary>The decisions recorded for an observed task, oldest first (both sides: <see cref="TaskDecisions.Runner"/> and <see cref="TaskDecisions.Old"/>).</summary>
+    public IReadOnlyList<TaskDecision> DecisionsOf(TaskRef task, DateTimeOffset? since = null) => _decisions.List(task.Package, task.Channel, task.Task, since);
+
+    /// <summary>Records what the product's own scheduler did for an observed task (it queued a run at <paramref name="at"/>), beside what this loop would have done.</summary>
+    public void RecordOldDecision(TaskRef task, DateTimeOffset at, int missed, bool paused) =>
+        _decisions.Record(new TaskDecision(task.Package, task.Channel, task.Task, TaskDecisions.Old, at, missed, paused));
+
     private Served Find(TaskRef task)
     {
         if (!_options.Channels.Contains(task.Channel)) throw new InvalidOperationException($"This scheduler serves the channels {string.Join(", ", _options.Channels)}, not '{task.Channel}'.");
@@ -823,7 +925,7 @@ public sealed partial class RunnerScheduler
                 reference, row.Version, next, _runs.LastRun(reference.ToString()),
                 mine.Count(w => w.Item.Status is WorkItemStatus.Claimed or WorkItemStatus.Running), waiting.Count,
                 waiting.Count == 0 ? null : waiting.Min(w => w.AvailableAt), pause is not null, pause?.By, parsed ? null : problem,
-                row.RequiredLabels, WaitingReasonOf(row.RequiredLabels, ref live)));
+                row.RequiredLabels, WaitingReasonOf(row.RequiredLabels, ref live), _owners.OwnerOf(row.Package, row.Channel, row.Task)));
         }
 
         var problems = _rowProblems.Values.Concat(_problems).Concat(_triggers.Problems()).OrderBy(p => p.At).ToList();

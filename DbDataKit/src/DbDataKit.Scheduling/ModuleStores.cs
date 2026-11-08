@@ -73,6 +73,16 @@ public sealed class ModuleJobStateStore(StateDatabase database, string service)
 
     public void SaveExit(string owner, string job, int exit) => Set(owner, job, "last_exit", (long)exit);
 
+    /// <summary>Forgets everything about the job, so the next tick sees it for the first time (the copy an observed task is evaluated against starts again; a scheduler's own record of a job is not cleared by anyone).</summary>
+    public void Clear(string owner, string job) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, "DELETE FROM {table:job_state} WHERE service = $service AND owner = $owner AND job = $job;");
+            Bind(cmd, owner, job);
+            cmd.ExecuteNonQuery();
+        });
+
     private void Set(string owner, string job, string column, object value) =>
         database.Retry(() =>
         {

@@ -1,3 +1,4 @@
+using DbDataBuild.Cli.Runner;
 using DbDataBuild.Core;
 using DbDataBuild.Tui.Model;
 using DbDataKit.Cli;
@@ -37,7 +38,7 @@ internal static class ServerCli
 
     private static NounRouter Router(string[] invocation, Func<string, string?>? environment) => new("dbdatabuild",
     [
-        ServerNoun.Create((args, context) => RunServerAsync(args, context, environment)).With([.. PairingVerbs.Create(args => new PairingFiles(Path.Combine(DirectoryOf(args), "server.yaml"))), new Verb("project", "The projects this server hosts: add, remove, list, pull", EffectClass.RepoFilesOnly, ProjectUsage, ProjectAsync, DataSchemas.None), new Verb("proxy", "The proxies this server publishes data sources to: add, remove, list", EffectClass.RepoFilesOnly, ProxyUsage, ProxyAsync, DataSchemas.None)]),
+        ServerNoun.Create((args, context) => RunServerAsync(args, context, environment)).With([.. PairingVerbs.Create(args => new PairingFiles(Path.Combine(DirectoryOf(args), "server.yaml"))), new Verb("project", "The projects this server hosts: add, remove, list, pull", EffectClass.RepoFilesOnly, ProjectUsage, ProjectAsync, DataSchemas.None), new Verb("proxy", "The proxies this server publishes data sources to: add, remove, list", EffectClass.RepoFilesOnly, ProxyUsage, ProxyAsync, DataSchemas.None), new Verb("schedule", "Who schedules each refresh plan while the move to a runner is made one plan at a time: owners, observe, cutover, rollback, compare", EffectClass.RepoFilesOnly, ScheduleVerb.Usage, (args, context) => ScheduleVerb.RunAsync(args, context, environment), DataSchemas.None)]),
         // the store is opened (and its key made on first use) only for the secret verbs
         .. invocation is ["secret", ..] ? new[] { SecretVerbs(invocation) } : Array.Empty<Noun>(),
         .. invocation is ["health", ..] ? new[] { HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl) } : Array.Empty<Noun>(),
@@ -154,9 +155,20 @@ internal static class ServerCli
                 return DbDataKit.State.Cli.StateExit.Settings;
             }
 
+            try { BuildScheduleSettings.Read(settings.Directory); }       // an owner that is not one, or a runner that is not named, stops the start naming the file
+            catch (InvalidOperationException ex)
+            {
+                await context.Error.WriteLineAsync(ex.Message);
+                return DbDataKit.State.Cli.StateExit.Settings;
+            }
+
             var schedulerState = BuildSchedulerSchema.Open(settings.Directory, settings: state);
             var trackingHost = new BuildTrackingHost(projects, schedulerState, tracking, token => ServerSecrets.LoginsAsync(secrets, token), line => context.Error.WriteLine(line));
-            scheduler = new BuildScheduler(projects, runner, schedulerState, TimeProvider.System, line => context.Error.WriteLine(line), paused: () => gate.Enabled, tracking: trackingHost);
+            var ownerFile = settings.Directory;
+            var reporter = new RunnerDecisionReporter(() => BuildScheduleSettings.Read(ownerFile).Runner is { } link
+                ? new ClientRunnerSchedule(new DbDataKit.Runner.Client.RunnerPublishClient(new DbDataKit.Runner.Client.RunnerClientStore(link.ClientDirectory ?? DbDataKit.Runner.Client.RunnerClientStore.DefaultDirectory(environment)), environment), link) : null, line => context.Error.WriteLine(line));
+            scheduler = new BuildScheduler(projects, runner, schedulerState, TimeProvider.System, line => context.Error.WriteLine(line), paused: () => gate.Enabled, tracking: trackingHost,
+                schedule: () => BuildScheduleSettings.Read(ownerFile), observed: reporter);
         }
         var publisher = new ProxyPublisher(new ProxiesFile(settings.Directory), new ConsoleKeyStore(secrets, secrets), secrets);
         var app = BuildServer.Build(settings, BuildServer.Certificate(settings.Directory), runner, projects, host.Commands, line => context.Error.WriteLine(line), parsed.Has("read-only") ? BuildManagementApi.ReadOnlySurface : null, scheduler, sessions, publisher, gate,
