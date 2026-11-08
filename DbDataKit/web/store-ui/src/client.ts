@@ -1,4 +1,4 @@
-import { StoreError, type InstanceList, type ModelSchema, type RowChange, type RowPage, type RowValues, type StoredRow, type Violation } from './types'
+import { StoreError, type ApplyResult, type InstanceList, type ModelSchema, type RowChange, type RowPage, type RowValues, type StoredRow, type Violation } from './types'
 
 /** How a host reaches the Store: the console sends it through its relay as the signed-in person, an app with its own scoped token. The path is relative to the Store's management API root. */
 export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>
@@ -13,7 +13,8 @@ export interface StoreClient {
   rows(model: string, entity: string, page?: { limit?: number; offset?: number }): Promise<RowPage>
   row(model: string, entity: string, key: RowValues): Promise<StoredRow | null>
   history(model: string, entity: string, key: RowValues): Promise<StoredRow[]>
-  apply(model: string, changes: RowChange[]): Promise<void>
+  /** Writes a batch. The answer says when it was not applied but kept for approval (HTTP 202): the rows are not there until someone approves. */
+  apply(model: string, changes: RowChange[]): Promise<ApplyResult>
 }
 
 const enc = encodeURIComponent
@@ -49,6 +50,11 @@ export function createStoreClient(fetcher: Fetcher, base = '/api/v1', instance: 
     apply: async (model, changes) => {
       const response = await fetcher(`${base}${under(model)}/changes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ changes }) })
       if (!response.ok) await fail(response)
+      if (response.status === 202) {
+        const body = (await response.json().catch(() => ({}))) as { id?: string }
+        return { waiting: { id: body.id ?? '' } }
+      }
+      return {}
     },
   }
 }

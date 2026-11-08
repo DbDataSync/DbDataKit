@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { CopyState, Diagnostic, MigrationPlan, StoragePlan } from './api'
-import { copyAction, isModelName, markersOf, migrationSummary, newModelText, saveState, storageReason, summaryOf } from './model'
+import type { ChangeRequestRow, CopyState, Diagnostic, MigrationPlan, ProposedChange, RequestList, StoragePlan } from './api'
+import { changeSummary, copyAction, decideState, fieldDiff, isModelName, markersOf, migrationSummary, newModelText, saveState, sortRequests, storageReason, summaryOf } from './model'
 
 const error = (over: Partial<Diagnostic> = {}): Diagnostic => ({ code: 'DBD-1', severity: 'error', file: 'm.yaml', line: 3, column: 5, message: 'bad type', fix: 'use VARCHAR(n)', ...over })
 const inputs = { isNew: false, name: 'm', canWrite: true, changed: true, checking: false, stale: false, diagnostics: [] as Diagnostic[], saving: false }
@@ -92,3 +92,52 @@ describe('a migration dry run', () => {
   })
 })
 
+const request = (over: Partial<ChangeRequestRow> = {}): ChangeRequestRow => ({
+  id: 'a'.repeat(32), model: 'm', instance: 'default', state: 'pending', proposed_by: 'agent:bot', proposed_by_name: null, by_agent: true, proposed_at: '2026-11-08T10:00:00Z',
+  description: null, change_count: 1, decided_by: null, decided_at: null, note: null, ...over,
+})
+const list = (over: Partial<RequestList> = {}): RequestList => ({ requests: [], can_decide: true, decision_needs: 'author', approval: 'steward', ...over })
+
+describe('who may decide', () => {
+  it('is allowed for a pending request when the Store says the caller may', () => {
+    expect(decideState(list(), request(), false)).toEqual({ allowed: true, reason: null })
+  })
+  it('says which role is needed when the Store says no, and that an agent never decides', () => {
+    const reason = decideState(list({ can_decide: false, decision_needs: 'admin', approval: 'owner' }), request(), false).reason!
+    expect(reason).toMatch(/admin role/)
+    expect(reason).toMatch(/owner approves/)
+    expect(reason).toMatch(/agent never decides/)
+  })
+  it('a decided request cannot be decided again, and says by whom', () => {
+    expect(decideState(list(), request({ state: 'approved', decided_by: 'ada' }), false).reason).toBe('Already approved by ada.')
+    expect(decideState(undefined, request(), false).allowed).toBe(false)
+    expect(decideState(list(), request(), true).allowed).toBe(false)
+  })
+})
+
+describe('what a request proposes, beside what the row holds', () => {
+  const current = { code: 'EU', name: 'Europe', tier: 'gold' }
+  it('an update shows the attributes it sets against the row and leaves the others unchanged', () => {
+    const change: ProposedChange = { action: 'update', entity: 't', key: { code: 'EU' }, expected_version: 2, values: { name: 'Europe West' } }
+    const diff = fieldDiff(change, current)
+    expect(diff.find((f) => f.name === 'name')).toEqual({ name: 'name', before: 'Europe', after: 'Europe West', changed: true })
+    expect(diff.find((f) => f.name === 'tier')).toEqual({ name: 'tier', before: 'gold', after: 'gold', changed: false })
+    expect(diff.find((f) => f.name === 'code')!.changed).toBe(false)
+  })
+  it('an insert has no before, and a delete no after', () => {
+    const insert = fieldDiff({ action: 'insert', entity: 't', values: { code: 'NA', name: 'North' } }, null)
+    expect(insert.every((f) => f.before === undefined && f.changed)).toBe(true)
+    const remove = fieldDiff({ action: 'delete', entity: 't', key: { code: 'EU' } }, current)
+    expect(remove.every((f) => f.after === undefined && f.changed)).toBe(true)
+  })
+  it('an update of a row that is gone still lists what it would set', () => {
+    const diff = fieldDiff({ action: 'update', entity: 't', key: { code: 'EU' }, values: { name: 'X' } }, null)
+    expect(diff.find((f) => f.name === 'name')).toEqual({ name: 'name', before: undefined, after: 'X', changed: true })
+  })
+  it('summarises a request and sorts the waiting ones first, newest first', () => {
+    expect(changeSummary([{ action: 'insert', entity: 't' }, { action: 'insert', entity: 't' }, { action: 'delete', entity: 't' }], 3)).toBe('add 2, remove 1')
+    expect(changeSummary(undefined, 1)).toBe('1 change')
+    const rows = [request({ id: 'old', state: 'approved' }), request({ id: 'a', proposed_at: '2026-11-01T00:00:00Z' }), request({ id: 'b', proposed_at: '2026-11-05T00:00:00Z' })]
+    expect(sortRequests(rows).map((r) => r.id)).toEqual(['b', 'a', 'old'])
+  })
+})

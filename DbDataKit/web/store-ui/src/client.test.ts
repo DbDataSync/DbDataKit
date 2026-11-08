@@ -36,6 +36,13 @@ describe('the client', () => {
     expect(JSON.parse(calls[0]!.init!.body as string)).toEqual({ changes: [{ action: 'insert', entity: 'e', values: { a: 1 } }] })
   })
 
+  it('a write that was kept for approval says so (202), and one applied at once does not', async () => {
+    const waiting = recording(() => json({ id: 'ab12cd34ef56ab12cd34ef56ab12cd34', state: 'pending' }, 202))
+    expect(await waiting.client.apply('m', [{ action: 'insert', entity: 'e', values: { a: 1 } }])).toEqual({ waiting: { id: 'ab12cd34ef56ab12cd34ef56ab12cd34' } })
+    const applied = recording(() => json({ applied: 1 }))
+    expect(await applied.client.apply('m', [{ action: 'insert', entity: 'e', values: { a: 1 } }])).toEqual({})
+  })
+
   it('a refusal carries the broken rules, a stale version the current one', async () => {
     const refused = recording(() => json({ error: 'breaks rules', violations: [{ rule: 'min', entity: 'e', attribute: 'a', key: {}, message: 'too low' }] }, 422))
     const error = await refused.client.apply('m', []).catch((e: unknown) => e)

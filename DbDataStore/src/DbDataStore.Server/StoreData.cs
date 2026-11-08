@@ -377,7 +377,17 @@ public static class StoreData
             if (problem is not null) return problem;
             var state = context.Request.Query["state"].ToString();
             if (state.Length > 0 && state is not (ChangeRequest.Pending or ChangeRequest.Approved or ChangeRequest.Rejected)) return Results.BadRequest(new { error = "state is pending, approved or rejected." });
-            return Results.Json(new JsonObject { ["requests"] = new JsonArray(StoreChangeRequests.List(directory, name, InstanceName(context), state.Length > 0 ? state : null).Select(r => (JsonNode)r.ToJson(withChanges: false)).ToArray()) });
+            // `can_decide` is whether this caller may approve or reject on this model (the role the model's approval asks for, and never an agent), `decision_needs` the role that is, so a screen can say why its buttons are off
+            var needed = StoreChangeRequests.Approver(model!);
+            var token = context.ManagementToken();
+            var canDecide = !StoreChangeRequests.IsAgent(token) && (ManagementAuthorization.Authorize(token, needed).Allowed || (needed == ServerRole.Author && ManagementAuthorization.Authorize(token, ServerRole.Admin).Allowed));
+            return Results.Json(new JsonObject
+            {
+                ["requests"] = new JsonArray(StoreChangeRequests.List(directory, name, InstanceName(context), state.Length > 0 ? state : null).Select(r => (JsonNode)r.ToJson(withChanges: false)).ToArray()),
+                ["can_decide"] = canDecide,
+                ["decision_needs"] = needed.ToString().ToLowerInvariant(),
+                ["approval"] = model!.Approval.ToString().ToLowerInvariant(),
+            });
         });
 
         app.MapGet(prefix + "/requests/{id}", (string name, string id, HttpContext context) =>

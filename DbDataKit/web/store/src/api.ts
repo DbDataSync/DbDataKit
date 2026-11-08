@@ -17,6 +17,16 @@ export interface Migrations { definition: string; instances: CopyState[] }
 export interface InstanceRow { name: string; connection: string | null; schema: string | null }
 export interface Instances { mode: string; instances: InstanceRow[] }
 
+export interface ChangeRequestRow {
+  id: string; model: string; instance: string; state: 'pending' | 'approved' | 'rejected' | string
+  proposed_by: string; proposed_by_name: string | null; by_agent: boolean; proposed_at: string; description: string | null; change_count: number
+  decided_by: string | null; decided_at: string | null; note: string | null
+  /** The proposed row changes, as sent; only on a single request. */
+  changes?: ProposedChange[]
+}
+export interface ProposedChange { action: 'insert' | 'update' | 'delete' | string; entity: string; key?: Record<string, unknown>; expected_version?: number; values?: Record<string, unknown>; effective_from?: string }
+export interface RequestList { requests: ChangeRequestRow[]; can_decide: boolean; decision_needs: string; approval: string }
+
 /** The Store's calls through the console's relay, as the signed-in person. The same controls an app mounts get a fetcher with the app's own token instead. */
 export const relayFetcher: Fetcher = (path, init) => fetch(apiUrl(path), { ...init, credentials: 'same-origin' })
 
@@ -40,6 +50,10 @@ export const storeApi = {
   storage: (name: string, instance: string | null) => request<StoragePlan>(`${base(name, instance)}/storage`),
   createStorage: (name: string, instance: string | null) => request<{ engine: string; statements: Statement[] }>(`${base(name, instance)}/storage/create`, { method: 'POST' }),
   migrate: (name: string, instance: string | null, apply: boolean) => request<MigrationPlan>(`${base(name, instance)}/migrate${apply ? '?apply=true' : ''}`, { method: 'POST' }),
+  requests: (name: string, instance: string | null, state: string | null) => request<RequestList>(`${base(name, instance)}/requests${state ? `?state=${enc(state)}` : ''}`),
+  changeRequest: (name: string, instance: string | null, id: string) => request<ChangeRequestRow>(`${base(name, instance)}/requests/${enc(id)}`),
+  decide: (name: string, instance: string | null, id: string, approve: boolean, note: string) =>
+    request<ChangeRequestRow>(`${base(name, instance)}/requests/${enc(id)}/${approve ? 'approve' : 'reject'}`, { method: 'POST', body: JSON.stringify(note.trim() ? { note: note.trim() } : {}) }),
 }
 
 /** What a refusal carried besides its sentence: the Store's diagnostics (a model that does not load), or the current version (a stale save). */

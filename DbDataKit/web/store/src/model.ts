@@ -1,5 +1,5 @@
 import type { EditorDiagnostic } from '@dbdatakit/shell'
-import type { CopyState, Diagnostic, MigrationPlan, StoragePlan } from './api'
+import type { ChangeRequestRow, CopyState, Diagnostic, MigrationPlan, ProposedChange, RequestList, StoragePlan } from './api'
 
 /** Where a model's name must fit: what the server accepts (`StoreModels.IsValidName`). The server decides; this only keeps a button off for a name it will refuse. */
 export const modelNamePattern = /^[a-z0-9][a-z0-9_-]{0,63}$/
@@ -103,3 +103,52 @@ export function storageReason(isAdmin: boolean, valid: boolean, published: boole
   return null
 }
 
+// ---- change requests (UE14)
+
+export const stateText = (state: string) => state === 'pending' ? 'Waiting' : state === 'approved' ? 'Approved' : state === 'rejected' ? 'Rejected' : state
+
+/** Who proposed it, in words: the agent or person's name, with a marker for an agent. */
+export const proposerText = (r: Pick<ChangeRequestRow, 'proposed_by' | 'proposed_by_name' | 'by_agent'>) => `${r.proposed_by_name ?? r.proposed_by}${r.by_agent ? ' (agent)' : ''}`
+
+/**
+ * Whether Approve and Reject are offered for a request, and the sentence that says why not. The Store decides who may (`can_decide` and `decision_needs` of its list): the role the model's approval asks for, never an agent.
+ * Nothing in the Store stops a person approving their own request, so nothing here does either; a note says so when it is theirs.
+ */
+export function decideState(list: RequestList | undefined, request: ChangeRequestRow, busy: boolean): { allowed: boolean; reason: string | null } {
+  if (request.state !== 'pending') return { allowed: false, reason: `Already ${request.state}${request.decided_by ? ` by ${request.decided_by}` : ''}.` }
+  if (!list) return { allowed: false, reason: 'Loading...' }
+  if (!list.can_decide) return { allowed: false, reason: `Deciding needs the ${list.decision_needs} role on this model${list.approval === 'owner' ? ' (its owner approves)' : ''}, and an agent never decides.` }
+  if (busy) return { allowed: false, reason: 'Sending...' }
+  return { allowed: true, reason: null }
+}
+
+export interface FieldDiff { name: string; before: unknown; after: unknown; changed: boolean }
+
+/** Per attribute: what the row holds now and what the change would leave. An insert has no before, a delete no after; an update names only what it sets (the rest stays and is shown unchanged). */
+export function fieldDiff(change: ProposedChange, current: Record<string, unknown> | null): FieldDiff[] {
+  const names = new Set<string>([...Object.keys(current ?? {}), ...Object.keys(change.key ?? {}), ...Object.keys(change.values ?? {})])
+  return [...names].map((name) => {
+    const before = change.action === 'insert' ? undefined : current?.[name] ?? change.key?.[name]
+    const after = change.action === 'delete' ? undefined
+      : change.action === 'insert' ? change.values?.[name] ?? change.key?.[name]
+      : change.values && name in change.values ? change.values[name] : before
+    return { name, before, after, changed: JSON.stringify(before) !== JSON.stringify(after) }
+  })
+}
+
+export const cellText = (value: unknown) => value === undefined ? '' : value === null ? 'empty' : typeof value === 'object' ? JSON.stringify(value) : String(value)
+
+export const actionText = (action: string) => action === 'insert' ? 'Add' : action === 'update' ? 'Change' : action === 'delete' ? 'Remove' : action
+
+export const keyText = (key: Record<string, unknown> | undefined) => Object.entries(key ?? {}).map(([k, v]) => `${k}=${cellText(v)}`).join(', ')
+
+/** One line for the list: what the request wants done. */
+export function changeSummary(changes: ProposedChange[] | undefined, count: number): string {
+  if (!changes) return `${count} change${count === 1 ? '' : 's'}`
+  const by = (a: string) => changes.filter((c) => c.action === a).length
+  const parts = [['add', by('insert')], ['change', by('update')], ['remove', by('delete')]].filter(([, n]) => (n as number) > 0).map(([a, n]) => `${a} ${n}`)
+  return parts.join(', ') || `${count} changes`
+}
+
+export const sortRequests = (rows: ChangeRequestRow[]) =>
+  [...rows].sort((a, b) => (a.state === 'pending' ? 0 : 1) - (b.state === 'pending' ? 0 : 1) || b.proposed_at.localeCompare(a.proposed_at))
