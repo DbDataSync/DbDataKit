@@ -14,6 +14,7 @@ criteria, risks and acceptance. Plans are proposals; review the "decisions" in e
 | 05 | [SQL dialect and types](05-sql-dialect.md) | Sync dialects, Build `DialectProfile`, Proxy Arrow map | One quoting, lexer, canonical types, conformance suite |
 | 06 | [Connections / providers](06-connections.md) | Sync `IDriver`, Proxy `IDbProvider`, Build logins | One definition, composer, read-only recipes, failure model |
 | 07 | [Data transfer, staging, loading](07-data-transfer.md) | Sync pipeline, Build copy models | Shared converters, bulk writers, strategies, write gate |
+| 07a | [Sync vs Build strategy semantics](07a-strategy-comparison.md) | The code of both products | Written from the code (read-only): what each strategy means in Sync and in Build |
 | 08 | [Install and update](08-update-system.md) | Sync Updates, Proxy install.ps1, Build Scoop | Signed manifest, service swap with rollback |
 | 09 | [Monorepo branching, CI, releases](09-MONOREPO-BRANCHING-AND-RELEASES.md) | DbDataSync model, per-product lanes | Per-product dev/test, main as integration |
 | 10 | [Proxy adoption](10-proxy-adoption.md) | Plans 01-07 applied to DbDataProxy | Hub CI and publishing, feed and override, per-library adoption order (update system skipped) |
@@ -21,7 +22,11 @@ criteria, risks and acceptance. Plans are proposals; review the "decisions" in e
 | 12 | [Shared TLS rollout](12-shared-tls-rollout.md) | Sync and Proxy certificates, services, systemd | One certificate, service and unit implementation |
 | 13 | [Suite standardization](13-suite-standardization.md) | Adoption state of plans 01-12, DuckDB 2.0, Sync scripting | dbdatakit console, product servers with no UI of their own, console-to-server trust, one grammar, shared scheduling, Build authoring; DuckDB 2.0; dotnet-script |
 | 13a | [Suite slices](13a-suite-slices.md) | Plan 13 | About 150 small pull requests with a test each, grouped into milestones, each naming the decision it waits on |
+| 13a-x01 | [Removal scan](13a-x01-removal-scan.md) | Slices X01 and X02 | The evidence for what the removal slices deleted |
+| 13b | [Owner review items](13b-owner-review.md) | Owner, 2026-10-28 | Closed: every item decided and built |
+| 13c | [Follow-ups](13c-follow-ups.md) | Work of 2026-10-28 to 2026-10-30 | Open items no plan row owns |
 | 14 | [Semantic layer](14-semantic-layer.md) | QueryIntentSpec at `139bbf9`, Build metadata, Proxy | Proposal for review (not in 13a): semantic models authored and deployed by Build and hosted by Proxy, one connection managed in Build, one engine registry, semantic SQL, MDX for Excel over XMLA, more protocols |
+| 14 | [Roslyn scripting with NuGet libraries](14-roslyn-nuget-scripting-spike.md) | Spike | Adopted: Roslyn scripting plus NuGet libraries, embedded |
 | 15 | [DbDataStore: master data and documents](15-master-data-and-documents.md) | Owner's direction, plans 13 and 14 | Proposal for review (not in 13a): user- and agent-defined models on SQL engines, documents with WebDAV, extraction, consumed by Sync, Build and semantic queries |
 | 16 | [Embedded agents and apps](16-embedded-agents-and-custom-front-ends.md) | Owner's backlog, plans 13 to 15 | Backlog (not scheduled): agents in the console on OpenAI, Anthropic and Microsoft Foundry, every action approved by the user; a standalone app host with DbDataStore data, Vega-Lite dashboards, reports and assistants; Windows, OpenID Connect and Entra sign-in. Sign-in decided by the owner on 2026-11-02 (section 2, "Sign-in decisions"), sliced as 13a U19 to U22, P13, X06, plan 20 O15 to O17 and plan 26 AP17, AP18 |
 | 17 | [Report servers on the semantic models](17-report-servers-on-semantic-models.md) | Plans 14 and 16, Power BI Report Server's supported sources | Documented scenarios (not in 13a), decided per route later: published views, result feeds for many tools, ODBC, Postgres wire with a compatibility layer kept apart from semantic SQL, MDX only via the Excel work |
