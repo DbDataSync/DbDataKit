@@ -28,7 +28,7 @@ public static class QualityModule
         """
         -- One evaluation of one check, kept for the history (retention, 90 days). dataset_hash is the SHA-256 (lower-case hex) of the dataset's lineage identity, dataset is the identity itself.
         -- status is pass, fail or error (error: the check could not run, plan 23a QF10: it is neither a pass nor a fail). measured and threshold are numbers in the unit of the check's kind (failing rows,
-        -- seconds of age, percent of change). sample_keys is a JSON array of a few keys of the rows that failed. message says why a check is in error; it never holds a secret. run_id is the run that made the evaluation.
+        -- seconds of age, percent of change). observed is the raw reading behind a result where the kind has one (the row count of row_count_change, the next evaluation's baseline, QF3). sample_keys is a JSON array of a few keys of the rows that failed. message says why a check is in error; it never holds a secret. run_id is the run that made the evaluation.
         CREATE TABLE {table:check_result} (
             id            {{uuid}} PRIMARY KEY,
             dataset_hash  {{key}} NOT NULL,
@@ -38,6 +38,7 @@ public static class QualityModule
             measured      {{decimal}} NULL,
             threshold     {{decimal}} NULL,
             sample_keys   {{json}} NULL,
+            observed      {{decimal}} NULL,
             message       {{text}} NULL,
             run_id        {{key}} NULL,
             evaluated_at  {{time}} NOT NULL

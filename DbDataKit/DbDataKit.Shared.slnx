@@ -54,6 +54,8 @@
     <Project Path="src/DbDataKit.Lineage.Cli/DbDataKit.Lineage.Cli.csproj" />
     <Project Path="src/DbDataKit.Quality/DbDataKit.Quality.csproj" />
     <Project Path="src/DbDataKit.Quality.Evaluation/DbDataKit.Quality.Evaluation.csproj" />
+    <Project Path="src/DbDataKit.Quality.Runner/DbDataKit.Quality.Runner.csproj" />
+    <Project Path="src/DbDataKit.Quality.Cli/DbDataKit.Quality.Cli.csproj" />
     <Project Path="src/DbDataKit.Monitoring/DbDataKit.Monitoring.csproj" />
     <Project Path="src/DbDataKit.Odbc.Metadata/DbDataKit.Odbc.Metadata.csproj" />
     <Project Path="src/DbDataKit.Schema/DbDataKit.Schema.csproj" />
@@ -147,6 +149,7 @@
     <Project Path="tests/DbDataKit.Lineage.Cli.Tests/DbDataKit.Lineage.Cli.Tests.csproj" />
     <Project Path="tests/DbDataKit.Quality.Tests/DbDataKit.Quality.Tests.csproj" />
     <Project Path="tests/DbDataKit.Quality.Evaluation.Tests/DbDataKit.Quality.Evaluation.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Quality.Runner.Tests/DbDataKit.Quality.Runner.Tests.csproj" />
     <Project Path="tests/DbDataKit.Monitoring.Tests/DbDataKit.Monitoring.Tests.csproj" />
     <Project Path="tests/DbDataKit.Odbc.Metadata.Tests/DbDataKit.Odbc.Metadata.Tests.csproj" />
     <Project Path="tests/DbDataKit.State.Tests/DbDataKit.State.Tests.csproj" />

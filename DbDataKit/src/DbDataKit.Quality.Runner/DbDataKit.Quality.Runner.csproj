@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Quality</RootNamespace>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <PackageId>DbDataKit.Quality.Runner</PackageId>
+    <Description>Runs the check/1 data quality checks of a dataset and records the results (plan 23a FQ08): the run service (evaluate, then write check_result and check_status with the block rules), the sources of datasets and checks, and the system package quality-system whose task evaluates on request, on a schedule and after another task's run.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Quality.Evaluation\DbDataKit.Quality.Evaluation.csproj" />
+    <ProjectReference Include="..\DbDataKit.Runner\DbDataKit.Runner.csproj" />
+    <ProjectReference Include="..\DbDataKit.Connections\DbDataKit.Connections.csproj" />
+  </ItemGroup>
+</Project>

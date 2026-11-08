@@ -18,11 +18,12 @@ public enum CheckOutcome { Pass, Fail, Error }
 /// <param name="RunId">The run that made the evaluation (Build's tracking id, a runner run), when there is one.</param>
 /// <param name="EvaluatedAt">When it was evaluated, UTC.</param>
 /// <param name="Message">Why a check is in error; never a secret.</param>
+/// <param name="Observed">The raw reading behind the result where the kind has one: the row count of a <c>row_count_change</c> check, which the next evaluation compares with (<see cref="QualityStore.Baseline"/>).</param>
 public sealed record CheckResultRecord(string CheckId, string Dataset, CheckOutcome Outcome, DateTimeOffset EvaluatedAt, decimal? Measured = null, decimal? Threshold = null, IReadOnlyList<string>? SampleKeys = null,
-    string? RunId = null, string Severity = "warn", string OnError = "alert", string? Message = null);
+    string? RunId = null, string Severity = "warn", string OnError = "alert", string? Message = null, decimal? Observed = null);
 
 /// <summary>A stored evaluation.</summary>
-public sealed record StoredCheckResult(Guid Id, string CheckId, string Dataset, CheckOutcome Outcome, DateTimeOffset EvaluatedAt, decimal? Measured, decimal? Threshold, IReadOnlyList<string> SampleKeys, string? RunId, string? Message);
+public sealed record StoredCheckResult(Guid Id, string CheckId, string Dataset, CheckOutcome Outcome, DateTimeOffset EvaluatedAt, decimal? Measured, decimal? Threshold, IReadOnlyList<string> SampleKeys, string? RunId, string? Message, decimal? Observed = null);
 
 /// <summary>The latest result of a check, and whether it blocks now and since when.</summary>
 public sealed record CheckStatusRow(string CheckId, string Dataset, string Severity, string OnError, CheckOutcome Outcome, DateTimeOffset StatusSince, Guid LastResultId, decimal? Measured, decimal? Threshold,
@@ -85,11 +86,12 @@ public sealed class QualityStore(StateDatabase database)
             using var connection = database.OpenConnection();
             using var transaction = database.BeginTransaction(connection, Module);
             using (var insert = database.Command(Module, connection, transaction,
-                "INSERT INTO {table:check_result} (id, dataset_hash, check_id, dataset, status, measured, threshold, sample_keys, message, run_id, evaluated_at) VALUES ($id, $hash, $check, $dataset, $status, $measured, $threshold, CAST($samples AS {{json}}), $message, $run, $at);"))
+                "INSERT INTO {table:check_result} (id, dataset_hash, check_id, dataset, status, measured, threshold, sample_keys, message, run_id, evaluated_at, observed) VALUES ($id, $hash, $check, $dataset, $status, $measured, $threshold, CAST($samples AS {{json}}), $message, $run, $at, $observed);"))
             {
                 insert.Bind(database, "id", id).Bind(database, "hash", hash).Bind(database, "check", result.CheckId).Bind(database, "dataset", result.Dataset).Bind(database, "status", status)
                     .Bind(database, "measured", result.Measured, System.Data.DbType.Decimal).Bind(database, "threshold", result.Threshold, System.Data.DbType.Decimal).Bind(database, "samples", samples, System.Data.DbType.String)
-                    .Bind(database, "message", result.Message, System.Data.DbType.String).Bind(database, "run", result.RunId, System.Data.DbType.String).Bind(database, "at", result.EvaluatedAt);
+                    .Bind(database, "message", result.Message, System.Data.DbType.String).Bind(database, "run", result.RunId, System.Data.DbType.String).Bind(database, "at", result.EvaluatedAt)
+                    .Bind(database, "observed", result.Observed, System.Data.DbType.Decimal);
                 insert.ExecuteNonQuery();
             }
 
@@ -178,14 +180,29 @@ public sealed class QualityStore(StateDatabase database)
             ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
             using var connection = database.OpenConnection();
             using var command = database.Command(Module, connection,
-                $"SELECT id, check_id, dataset, status, evaluated_at, measured, threshold, sample_keys, run_id, message FROM {{table:check_result}} WHERE dataset_hash = $hash AND check_id = $check ORDER BY evaluated_at DESC, id DESC {database.Limit("limit")};");
+                $"SELECT id, check_id, dataset, status, evaluated_at, measured, threshold, sample_keys, run_id, message, observed FROM {{table:check_result}} WHERE dataset_hash = $hash AND check_id = $check ORDER BY evaluated_at DESC, id DESC {database.Limit("limit")};");
             command.Bind(database, "hash", DatasetHash(dataset)).Bind(database, "check", checkId).Bind(database, "limit", (long)limit);
             using var reader = command.ExecuteReader();
             var rows = new List<StoredCheckResult>();
             while (reader.Read())
                 rows.Add(new StoredCheckResult(reader.Uuid(0), reader.GetString(1), reader.GetString(2), Parse(reader.GetString(3)), reader.Time(4), reader.IsDBNull(5) ? null : reader.Decimal(5), reader.IsDBNull(6) ? null : reader.Decimal(6),
-                    reader.IsDBNull(7) ? [] : JsonSerializer.Deserialize<List<string>>(reader.GetString(7), Json) ?? [], reader.IsDBNull(8) ? null : reader.GetString(8), reader.IsDBNull(9) ? null : reader.GetString(9)));
+                    reader.IsDBNull(7) ? [] : JsonSerializer.Deserialize<List<string>>(reader.GetString(7), Json) ?? [], reader.IsDBNull(8) ? null : reader.GetString(8), reader.IsDBNull(9) ? null : reader.GetString(9), reader.IsDBNull(10) ? null : reader.Decimal(10)));
             return rows;
+        });
+
+    /// <summary>
+    /// The baseline of a <c>row_count_change</c> check (plan 23a QF3): the <see cref="CheckResultRecord.Observed"/> of the check's latest <b>successful</b> evaluation, a <c>pass</c> or a <c>fail</c> that took a reading (an <c>error</c> did not); null
+    /// when there is none, which makes the next evaluation the first, which only records. History expires (90 days), so a check that is not evaluated for longer starts again.
+    /// </summary>
+    public decimal? Baseline(string dataset, string checkId) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var command = database.Command(Module, connection,
+                $"SELECT observed FROM {{table:check_result}} WHERE dataset_hash = $hash AND check_id = $check AND status <> $error AND observed IS NOT NULL ORDER BY evaluated_at DESC, id DESC {database.Limit("limit")};");
+            command.Bind(database, "hash", DatasetHash(dataset)).Bind(database, "check", checkId).Bind(database, "error", Name(CheckOutcome.Error)).Bind(database, "limit", 1L);
+            var value = command.ExecuteScalar();
+            return value is null or DBNull ? (decimal?)null : StateValues.ToDecimal(value);
         });
 
     /// <summary>Removes a check's status, and with it any block it held (the check is gone from its definition). Its history ages out under retention. False when it had none.</summary>

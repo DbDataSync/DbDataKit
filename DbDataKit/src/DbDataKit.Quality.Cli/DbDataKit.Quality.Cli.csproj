@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Quality.Cli</RootNamespace>
+    <PackageId>DbDataKit.Quality.Cli</PackageId>
+    <Description>The quality noun of the shared command surface (quality run, quality show) over a host's datasets with checks, with JSON documents and their schemas.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Cli\DbDataKit.Cli.csproj" />
+    <ProjectReference Include="..\DbDataKit.Quality.Runner\DbDataKit.Quality.Runner.csproj" />
+  </ItemGroup>
+</Project>

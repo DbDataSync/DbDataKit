@@ -4,8 +4,13 @@
     <PackageReference Include="Npgsql" />
     <Using Include="Xunit" />
     <ProjectReference Include="..\..\src\DbDataKit.Runner\DbDataKit.Runner.csproj" />
+    <!-- the quality system task (plan 23a FQ08) and the DuckDB file its checks read -->
+    <ProjectReference Include="..\..\src\DbDataKit.Quality.Runner\DbDataKit.Quality.Runner.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Connections.DuckDb\DbDataKit.Connections.DuckDb.csproj" />
+    <Compile Include="..\DbDataKit.Quality.Runner.Tests\QualityData.cs" Link="QualityData.cs" />
     <!-- the throwaway state database per engine, the same one the State tests use -->
     <Compile Include="..\DbDataKit.State.Tests\StateEngines.cs" Link="StateEngines.cs" />
     <Compile Include="..\DbDataKit.State.Tests\SqliteLockGuard.cs" Link="SqliteLockGuard.cs" />
   </ItemGroup>
+  <Import Project="..\..\build\DuckDb.Native.targets" />
 </Project>
