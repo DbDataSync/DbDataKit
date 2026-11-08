@@ -56,8 +56,8 @@ function useBox(given: Box | undefined) {
 
 /**
  * A dashboard or report document drawn in its container (plan 32 DBR06): the layout its selector picks for the container (`selectLayout`), its widgets resolved through the `ViewsClient` as the viewer, a
- * reflow layout laid out by `layoutReflow` and redrawn when the container changes size (a `ResizeObserver`, or the `box` a test gives). Resizing across a selector switches layout and keeps the results of
- * the widgets both layouts place. A widget that fails shows its own error; a failure of the call itself shows once, for the page. A canvas or flow layout is the work of their own engines (DBR07, DBR14):
+ * reflow layout laid out by `layoutReflow` (a canvas by `layoutCanvas`) and redrawn when the container changes size (a `ResizeObserver`, or the `box` a test gives). Resizing across a selector switches layout and keeps the results of
+ * the widgets both layouts place. A widget that fails shows its own error; a failure of the call itself shows once, for the page. A canvas layout is drawn by `layoutCanvas` (DBR07), scaled or scrolled in the same container; a flow layout is the work of its own engine (DBR14):
  * until then a note says so.
  */
 export function DashboardView({ kind = 'dashboard', name, document, client, layout, medium, box: given, theme = 'auto', parameters, onParameterChange, onSelect }: DashboardViewProps) {

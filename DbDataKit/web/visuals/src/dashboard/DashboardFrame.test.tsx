@@ -69,13 +69,11 @@ describe('DashboardFrame, the reflow layout as markup', () => {
     expect(markup).toContain('data-testid="vz-control-regions"')
   })
 
-  it('a canvas or flow layout says its engine is not here, and draws nothing else', () => {
-    for (const name of ['wall', 'print']) {
-      const markup = frame({ width: 1366, height: 768 }, { layout: layout(name) })
-      expect(markup).toContain('data-testid="vz-engine-missing"')
-      expect(markup).toContain(`data-layout="${name}"`)
-      expect(markup).not.toContain('vz-widget-net')
-    }
+  it('a flow layout says its engine is not here, and draws nothing else (the canvas has its own tests)', () => {
+    const markup = frame({ width: 1366, height: 768 }, { layout: layout('print') })
+    expect(markup).toContain('data-testid="vz-engine-missing"')
+    expect(markup).toContain('data-layout="print"')
+    expect(markup).not.toContain('vz-widget-net')
   })
 
   it('a layout\'s widget options reach the widget (a pinned density)', () => {

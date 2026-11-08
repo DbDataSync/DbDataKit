@@ -29,7 +29,7 @@ function overflow(page: Page) {
 
 /**
  * The Views page opening a dashboard from fixtures (plan 32 DBR23, M1): the sample dashboard fits the window at three sizes with no scrolling of the document or of a tile; a maximized tile scrolls and closes;
- * `?layout=` is honoured and a switch of layout resolves only the widgets not yet resolved; a parameter change (kept in the address) resolves only the widgets that use it; a file with an error is refused with its position;
+ * `?layout=` is honoured, the canvas layouts are drawn scaled (three sizes, `min_scale`, `overflow: scroll`) and a switch of layout resolves only the widgets not yet resolved; a parameter change (kept in the address) resolves only the widgets that use it; a file with an error is refused with its position;
  * a report is listed and said not to be drawn yet; and the browser contacts no other host. Needs a signed-in page and nothing else: the source is recorded results inside the page.
  */
 export async function dashboardsStory(page: Page) {
@@ -76,20 +76,64 @@ export async function dashboardsStory(page: Page) {
   await expect(page.getByTestId('vz-maximized')).toHaveCount(0)
   await expect(page.getByTestId('vz-tile-net')).toBeVisible()
 
-  // The layout in the address wins over the window; a layout the document lacks is said so and the window decides. A canvas layout is not drawn yet and says so.
+  // The layout in the address wins over the window; a layout the document lacks is said so and the window decides.
   await page.setViewportSize({ width: 1366, height: 768 })
   await page.goto(`${OPEN}?layout=wall`)
   await expect(page.getByTestId('views-layout-current')).toHaveAttribute('data-layout', 'wall')
   await expect(page.getByTestId('views-layout-select')).toHaveValue('wall')
-  await expect(page.getByTestId('vz-engine-missing')).toContainText('canvas layout')
   await page.goto(`${OPEN}?layout=tv`)
   await expect(page.getByTestId('views-layout-unknown')).toContainText('no layout named `tv`')
   await expect(page.getByTestId('views-layout-current')).toHaveAttribute('data-layout', 'desk')
 
+  // A canvas layout (DBR07): `wall` is a 1920 x 1080 picture, scaled as one to the room it has. At three window sizes it is uniformly scaled (the stage's aspect decides which side fits), keeps its tiles' proportions,
+  // does not scroll the document or the stage, and the chart is an SVG inside the transform.
+  for (const [width, height] of [[1920, 1080], [1600, 900], [1366, 768]] as const) {
+    await page.setViewportSize({ width, height })
+    await page.goto(`${OPEN}?layout=wall`)
+    const stage = page.getByTestId('vz-dashboard')
+    await expect(stage).toHaveAttribute('data-mode', 'canvas')
+    await expect(stage).toHaveAttribute('data-layout-type', 'canvas')
+    await expect(page.getByTestId('vz-engine-missing')).toHaveCount(0)
+    for (const id of DESK) await expect(page.getByTestId(`vz-tile-${id}`)).toBeVisible()
+    await expect(page.getByTestId('vz-chart-by_region').locator('svg')).toBeVisible()
+    await expect(page.getByTestId('vz-loading')).toHaveCount(0)
+    const room = (await stage.boundingBox())!
+    const scale = Number(await stage.getAttribute('data-scale'))
+    expect(scale, `${width} x ${height}`).toBeCloseTo(Math.min(room.width / 1920, room.height / 1080), 3)
+    const picture = (await page.getByTestId('vz-canvas').boundingBox())!
+    expect(picture.width).toBeCloseTo(1920 * scale, 0)
+    expect(picture.height).toBeCloseTo(1080 * scale, 0)
+    // the tiles keep their proportions: by_region is 1100 x 700 on the canvas
+    const tile = (await page.getByTestId('vz-tile-by_region').boundingBox())!
+    expect(tile.width / tile.height).toBeCloseTo(1100 / 700, 1)
+    expect(await overflow(page), `${width} x ${height}`).toEqual({ documentX: 0, documentY: 0, scrolls: [] })
+  }
+
+  // Too small a room for `min_scale` (0.5; the stage of a 1280 x 720 window is already below it): the picture holds half size and the stage scrolls, so text stays readable.
+  await page.setViewportSize({ width: 800, height: 450 })
+  await page.goto(`${OPEN}?layout=wall`)
+  await expect(page.getByTestId('vz-dashboard')).toHaveAttribute('data-scale', '0.5000')
+  await expect(page.getByTestId('vz-dashboard')).toHaveAttribute('data-scrolls', '')
+  expect(await page.getByTestId('vz-dashboard').evaluate((e) => e.scrollHeight > e.clientHeight || e.scrollWidth > e.clientWidth)).toBe(true)
+  expect((await overflow(page)).documentY).toBe(0)
+
+  // `overflow: scroll` is scale 1 with scrollbars (a file of the sample with that one change; it has no recorded results of its own, which is not what this checks).
+  const scrolling = sample.replace('overflow: scale\n    tiles:\n      - {widget: regions, x: 40', 'overflow: scroll\n    tiles:\n      - {widget: regions, x: 40')
+  expect(scrolling).not.toBe(sample)
+  await page.setViewportSize({ width: 1280, height: 720 })
+  await page.goto('/views/dashboards')
+  await page.getByTestId('views-open-file').setInputFiles({ name: 'scrolling.yaml', mimeType: 'application/yaml', buffer: Buffer.from(scrolling) })
+  await expect(page).toHaveURL(/\/views\/dashboards\/scrolling$/)
+  await page.getByTestId('views-layout-select').selectOption('wall')
+  await expect(page.getByTestId('vz-dashboard')).toHaveAttribute('data-overflow', 'scroll')
+  await expect(page.getByTestId('vz-dashboard')).toHaveAttribute('data-scale', '1.0000')
+  expect(await page.getByTestId('vz-dashboard').evaluate((e) => e.scrollWidth > e.clientWidth && e.scrollHeight > e.clientHeight)).toBe(true)
+  expect((await page.getByTestId('vz-canvas').boundingBox())!.width).toBeCloseTo(1920, 0)
+
   // A switch of layout resolves only what the new layout places and nothing has yet: phone places five widgets, desk adds the note and nothing else; back to phone asks for nothing.
   await page.goto(`${OPEN}?layout=phone`)
   await expect(page.getByTestId('views-layout-current')).toHaveAttribute('data-layout', 'phone')
-  await expect(page.getByTestId('vz-engine-missing')).toBeVisible()
+  await expect(page.getByTestId('vz-dashboard')).toHaveAttribute('data-mode', 'canvas')
   await expect.poll(() => resolved(page)).toEqual({ count: 1, widgets: ['regions', 'net', 'margin', 'by_region', 'top_products'] })
   await page.getByTestId('views-layout-select').selectOption('desk')
   await expect(page).toHaveURL(/layout=desk/)
@@ -140,6 +184,10 @@ export async function dashboardsStory(page: Page) {
   await expect(page).toHaveURL(/\/views\/dashboards\/mine$/)
   await expect(page.getByTestId('vz-dashboard')).toHaveAttribute('data-layout', 'desk')
   await expect(page.getByTestId('vz-widget-error').first()).toContainText('no_recorded_result')
+
+  // A flow layout is chosen and not drawn yet (DBR14): it says so.
+  await page.goto(`${OPEN}?layout=print`)
+  await expect(page.getByTestId('vz-engine-missing')).toContainText('flow layout')
 
   // A report is listed and checked; drawing it is not built, and the page says so.
   await page.getByTestId('views-tab-reports').click()
