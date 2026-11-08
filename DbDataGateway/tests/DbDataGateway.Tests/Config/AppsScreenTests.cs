@@ -292,6 +292,61 @@ public sealed class AppsScreenTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task An_instance_is_made_from_the_screen_with_its_settings_and_bindings_and_the_list_reads_them_back()
+    {
+        Seed();
+        var audit = new StateAuditLog(State);
+        const string body = "{\"app\": \"notes\", \"pin\": 1, \"title\": \"Sales notes\", \"settings\": {\"embed.allowed_origins\": \"https://portal.example.com\", \"theme\": \"dark\"}, \"bindings\": {\"territories\": \"live\"}}";
+
+        var made = await CallAsync(ServerRole.Publisher, HttpMethod.Put, "/api/v1/app-instances/sales", body);
+        Assert.Equal(HttpStatusCode.OK, made.Status);
+        Assert.Equal(1, (int)made.Body["version"]!);
+
+        var row = (await CallAsync(ServerRole.Viewer, HttpMethod.Get, "/api/v1/app-instances")).Body["instances"]!.AsArray().Single(i => (string?)i!["name"] == "sales")!;
+        Assert.Equal("Sales notes", (string?)row["title"]);
+        Assert.Equal(1, (int)row["pin"]!);
+        Assert.Equal("dark", (string?)row["settings"]!["theme"]);
+        Assert.Equal("https://portal.example.com", (string?)row["settings"]!["embed.allowed_origins"]);
+        Assert.Equal("live", (string?)row["bindings"]!["territories"]);
+
+        // the screen's pin control sends the whole instance back: the Gateway replaces it, so a call without the settings would drop them
+        var pinned = await CallAsync(ServerRole.Admin, HttpMethod.Put, "/api/v1/app-instances/sales", "{\"app\": \"notes\", \"pin\": 2, \"title\": \"Sales notes\", \"settings\": {\"embed.allowed_origins\": \"https://portal.example.com\", \"theme\": \"dark\"}, \"bindings\": {\"territories\": \"live\"}}");
+        Assert.Equal(HttpStatusCode.OK, pinned.Status);
+        Assert.Equal(2, (int)pinned.Body["version"]!);
+        Assert.Equal("dark", Store.Get("sales")!.Settings["theme"]);
+        await CallAsync(ServerRole.Admin, HttpMethod.Put, "/api/v1/app-instances/sales", "{\"app\": \"notes\", \"title\": \"Sales notes\"}");
+        Assert.Empty(Store.Get("sales")!.Settings);
+        Assert.Empty(Store.Get("sales")!.Bindings);
+
+        // a binding for a model the app does not use, a setting the host cannot read, a name that is not a name, an app that is not published, a body without an app: each refused in the store's words, nothing saved
+        var unlisted = await CallAsync(ServerRole.Publisher, HttpMethod.Put, "/api/v1/app-instances/other", "{\"app\": \"notes\", \"bindings\": {\"orders\": \"live\"}}");
+        Assert.Equal(HttpStatusCode.BadRequest, unlisted.Status);
+        Assert.Contains("'orders' is not a model the app 'notes' uses", (string)unlisted.Body["error"]!);
+        Assert.Contains("territories", (string)unlisted.Body["error"]!);
+        var origin = await CallAsync(ServerRole.Publisher, HttpMethod.Put, "/api/v1/app-instances/other", "{\"app\": \"notes\", \"settings\": {\"embed.allowed_origins\": \"https://portal.example.com/path\"}}");
+        Assert.Equal(HttpStatusCode.BadRequest, origin.Status);
+        Assert.Contains("is not an origin", (string)origin.Body["error"]!);
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(ServerRole.Publisher, HttpMethod.Put, "/api/v1/app-instances/Not A Name", "{\"app\": \"notes\"}")).Status);
+        Assert.Contains("has not been published", (string)(await CallAsync(ServerRole.Publisher, HttpMethod.Put, "/api/v1/app-instances/other", "{\"app\": \"nothing\"}")).Body["error"]!);
+        var noApp = await CallAsync(ServerRole.Publisher, HttpMethod.Put, "/api/v1/app-instances/other", "{\"title\": \"x\"}");
+        Assert.Equal(HttpStatusCode.BadRequest, noApp.Status);
+        Assert.Null(Store.Get("other"));
+
+        // only a publisher or an administrator writes an instance; a viewer, an approver and an operator are refused and nothing is saved
+        foreach (var role in new[] { ServerRole.Viewer, ServerRole.Approver, ServerRole.Operator, ServerRole.None })
+        {
+            var refused = await CallAsync(role, HttpMethod.Put, "/api/v1/app-instances/viewed", body);
+            Assert.Equal(HttpStatusCode.Forbidden, refused.Status);
+        }
+        Assert.Null(Store.Get("viewed"));
+
+        // audited under the signed-in person: the saves and the refusals
+        var entries = audit.Read(100);
+        Assert.Contains(entries, a => a.Command == "app instance-save" && a.Target == "sales" && a.Outcome == "version 1" && a.UserName == "Ada");
+        Assert.Contains(entries, a => a.Command == "app instance-save" && a.Target == "other" && a.Outcome == "refused" && a.UserName == "Ada");
+    }
+
+    [Fact]
     public async Task An_approval_is_revoked_by_an_approver_who_is_an_approver_at_the_identity_home_and_the_instance_stops_running_as_trusted()
     {
         var (approvalId, _) = Seed();

@@ -12,7 +12,7 @@ namespace DbDataGateway.Server.Management;
 /// <list type="bullet">
 /// <item><c>GET /api/v1/apps</c>: the published apps with the version each serves and its title, trust and publisher (viewer or publisher, so also admin).</item>
 /// <item><c>GET /api/v1/apps/{name}</c>: one app: every version (who published it and when, whether it serves, the approval standing for its exact bytes) and what its manifest declares, the "about" data of AP18 (viewer or publisher).</item>
-/// <item><c>GET /api/v1/app-instances</c>: the instances with the app version each runs (pinned, or following the channel), whether it runs as its manifest asks, its address, the portals that mount it and the navigation sets that list it (viewer or publisher).</item>
+/// <item><c>GET /api/v1/app-instances</c>: the instances with the app version each runs (pinned, or following the channel), their settings and bindings, whether it runs as its manifest asks, its address, the portals that mount it and the navigation sets that list it (viewer or publisher).</item>
 /// <item><c>GET /api/v1/app-navigation</c>: the navigation sets (viewer or publisher). <c>GET /api/v1/app-approvals</c>: every approval with its hash, approver, time, what it was for and whether it is revoked (viewer or publisher).</item>
 /// <item><c>DELETE /api/v1/apps/{name}</c> and <c>DELETE /api/v1/app-instances/{name}</c>: stop serving an app or an instance, when the store's rules allow (a refusal is a 409 with the store's message; publisher or admin).</item>
 /// <item><c>POST /api/v1/app-approvals/{id}/revoke</c> (<c>{"by", "note"}</c>): end an approval; like approving it needs the approver role, and <c>by</c> is a user of the identity home who holds the Approver role.</item>
@@ -182,6 +182,7 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
                 ["instance_version"] = current[instance.Name].Version, ["published_by"] = current[instance.Name].PublishedBy, ["published_at"] = current[instance.Name].PublishedAt,
                 ["path"] = $"/apps/{instance.Name}/", ["address"] = address is null ? null : new Uri(address, $"/apps/{instance.Name}/").AbsoluteUri,
                 ["bindings"] = new JsonObject(instance.Bindings.OrderBy(b => b.Key, StringComparer.Ordinal).Select(b => KeyValuePair.Create(b.Key, (JsonNode?)b.Value))),
+                ["settings"] = new JsonObject(instance.Settings.OrderBy(b => b.Key, StringComparer.Ordinal).Select(b => KeyValuePair.Create(b.Key, (JsonNode?)b.Value))),
                 ["navigation"] = new JsonArray([.. sets.Where(s => s.Entries.Any(e => e.Instance == instance.Name)).Select(s => (JsonNode)s.Name)]),
                 ["mounted_by"] = new JsonArray([.. resolved.Values.Where(r => r is not null && r.Instance.Name != instance.Name && r.Manifest.Portal?.Mounts.Any(m => m.App == instance.Name) == true).Select(r => (JsonNode)r!.Instance.Name)]),
             };

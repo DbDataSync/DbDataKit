@@ -5,18 +5,12 @@ import { gatewayApi } from '../api'
 import {
   approveBlock, NEEDS_PUBLISHER, removeAppBlock, removeInstanceBlock, revokeBlock, runsLabel, safeAddress, serveBlock, shortHash, sortApprovals, sortApps, sortInstances, trustLabel,
 } from '../apps'
+import { configurationLabel, emptyInstanceForm, formFromRow, instanceRequest, modelsOf, pinRequest, type InstanceForm } from '../appEditors'
 import { GatewayShell } from '../GatewayShell'
+import { InstanceEditorView, Why, wrap } from './AppEditors'
 import type { AppAbout, AppApprovalRow, AppDetail, AppInstanceRow, AppsCaller, AppSummary, AppVersionRow, NavigationSetRow } from '../types'
 
 const when = (iso: string) => new Date(iso).toLocaleString()
-
-/** The grid rows clip long text; what a person must read (a reason, an address, an id) wraps instead. */
-const wrap = { whiteSpace: 'normal', overflowWrap: 'anywhere' } as const
-
-/** A button that is off says why, next to itself and as its tooltip, so a person is not left guessing which role or step is missing. */
-function Why({ reason, testId }: { reason: string | null; testId: string }) {
-  return reason ? <div className="hint" style={wrap} data-testid={testId}>{reason}</div> : null
-}
 
 function Section({ title, note, testId, children }: { title: string; note?: string; testId: string; children: ReactNode }) {
   return (
@@ -45,6 +39,9 @@ export interface InstancesViewProps {
   onPin: (row: AppInstanceRow) => void
   onAskRemove: (name: string | null) => void
   onRemove: (name: string) => void
+  /** Open the form for a new instance (UE01), or for this one. */
+  onNew: () => void
+  onEdit: (row: AppInstanceRow) => void
 }
 
 const INSTANCE_COLUMNS = '1.1fr 1.1fr 2.2fr 1.6fr 1.5fr 2.4fr'
@@ -52,9 +49,14 @@ const INSTANCE_COLUMNS = '1.1fr 1.1fr 2.2fr 1.6fr 1.5fr 2.4fr'
 /** The instances: which app, which version each runs (follow or pin), whether it runs as its manifest asks, where it is served, and the actions. */
 export function InstancesView(p: InstancesViewProps) {
   return (
+    <div>
+    <div className="row" style={{ gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      <button type="button" className="btn sm btn-primary" disabled={!p.caller.can_publish || p.busy} onClick={p.onNew} data-testid="instance-new">New instance</button>
+      {!p.caller.can_publish && <Why reason={NEEDS_PUBLISHER} testId="instance-new-why" />}
+    </div>
     <div className="card flush" data-testid="instances-table">
       <div className="grid-head" style={{ gridTemplateColumns: INSTANCE_COLUMNS, gap: 14 }}><span>Instance</span><span>App</span><span>Runs</span><span>Trust</span><span>Address</span><span>Actions</span></div>
-      {p.rows.length === 0 && <div className="empty" data-testid="instances-empty">No instance yet. An instance is made with <span className="mono">apps instance-save</span>.</div>}
+      {p.rows.length === 0 && <div className="empty" data-testid="instances-empty">No instance yet. Make one with New instance above, or at the command line with <span className="mono">apps instance-save</span>.</div>}
       {p.rows.map((i) => {
         const address = safeAddress(i.address)
         const wanted = p.chosen[i.name] ?? (i.pin === null ? '' : String(i.pin))
@@ -69,6 +71,7 @@ export function InstancesView(p: InstancesViewProps) {
               <span data-testid="instance-runs">{runsLabel(i)}</span>
               {i.problem && <div className="hint" role="alert" style={wrap} data-testid="instance-problem">{i.problem}</div>}
               {i.manifest_version && <div className="hint">{i.manifest_version}{i.navigation.length > 0 ? `, in the menu ${i.navigation.join(', ')}` : ''}</div>}
+              {configurationLabel(i) !== '' && <div className="hint mono" style={wrap} data-testid={`instance-config-${i.name}`}>{configurationLabel(i)}</div>}
             </span>
             <span style={wrap} data-testid="instance-trust">{i.problem ? '—' : trustLabel(i)}</span>
             <span>
@@ -87,6 +90,7 @@ export function InstancesView(p: InstancesViewProps) {
               </span>
               <Why reason={pinReason} testId={`instance-pin-why-${i.name}`} />
               <div className="row" style={{ gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                <button type="button" className="btn sm" disabled={!p.caller.can_publish || p.busy} title={pinReason ?? undefined} onClick={() => p.onEdit(i)} data-testid={`instance-edit-${i.name}`}>Edit…</button>
                 {p.confirming === i.name
                   ? (
                     <>
@@ -101,6 +105,7 @@ export function InstancesView(p: InstancesViewProps) {
           </div>
         )
       })}
+    </div>
     </div>
   )
 }
@@ -341,6 +346,9 @@ export function AppsPage() {
   const [note, setNote] = useState('')
   const [by, setBy] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  /** The instance form (UE01): open for a new instance or for one being changed. */
+  const [editing, setEditing] = useState<{ form: InstanceForm; isNew: boolean } | null>(null)
+  const editDetail = useQuery({ queryKey: ['gateway', 'apps', editing?.form.app], queryFn: () => gatewayApi.apps.detail(editing!.form.app), enabled: editing !== null && editing.form.app !== '' })
 
   const caller: AppsCaller = apps.data?.caller ?? instances.data?.caller ?? approvals.data?.caller ?? { can_publish: false, can_approve: false, you: '' }
   const approver = by ?? caller.you
@@ -352,8 +360,13 @@ export function AppsPage() {
 
   const serve = useMutation({ mutationFn: (v: { app: string; to: number }) => gatewayApi.apps.rollback(v.app, v.to), onSuccess: (r) => done(`${r.name} now serves version ${r.version}.`)(), onError: failed })
   const pin = useMutation({
-    mutationFn: (v: { row: AppInstanceRow; to: number | null }) => gatewayApi.apps.savePin(v.row, v.to),
+    mutationFn: (v: { row: AppInstanceRow; to: number | null }) => gatewayApi.apps.saveInstance(v.row.name, pinRequest(v.row, v.to)),
     onSuccess: async (r, v) => { setChosen((c) => { const next = { ...c }; delete next[v.row.name]; return next }); await done(v.to === null ? `${r.name} follows ${r.app} again.` : `${r.name} is pinned to version ${v.to}.`)() },
+    onError: failed,
+  })
+  const saveInstance = useMutation({
+    mutationFn: (v: { form: InstanceForm; models: string[] }) => gatewayApi.apps.saveInstance(v.form.name.trim(), instanceRequest(v.form, v.models)),
+    onSuccess: async (r, v) => { setEditing(null); await done(`${v.form.name.trim()} is saved as instance version ${r.version}; the host serves it at once.`)() },
     onError: failed,
   })
   const removeInstance = useMutation({ mutationFn: gatewayApi.apps.removeInstance, onSuccess: (r) => done(`${r.name} is no longer served.`)(), onError: failed })
@@ -364,7 +377,7 @@ export function AppsPage() {
     onError: failed,
   })
   const revoke = useMutation({ mutationFn: (id: string) => gatewayApi.apps.revoke(id, approver), onSuccess: (r) => done(`Revoked ${r.id}; a trusted version it stood for stops running as trusted at once.`)(), onError: failed })
-  const busy = serve.isPending || pin.isPending || removeInstance.isPending || removeApp.isPending || approve.isPending || revoke.isPending
+  const busy = serve.isPending || pin.isPending || saveInstance.isPending || removeInstance.isPending || removeApp.isPending || approve.isPending || revoke.isPending
 
   const appList = sortApps(apps.data?.apps ?? [])
   const rows = sortInstances(instances.data?.instances ?? [])
@@ -387,7 +400,19 @@ export function AppsPage() {
             onChoose={(name, value) => setChosen((c) => ({ ...c, [name]: value }))}
             onPin={(row) => pin.mutate({ row, to: (chosen[row.name] ?? '') === '' ? null : Number(chosen[row.name]) })}
             onAskRemove={(name) => setConfirming(name === null ? null : `instance:${name}`)} onRemove={(name) => removeInstance.mutate(name)}
+            onNew={() => { setFailure(null); setNotice(null); setEditing({ form: emptyInstanceForm(), isNew: true }) }}
+            onEdit={(row) => { setFailure(null); setNotice(null); setEditing({ form: formFromRow(row), isNew: false }) }}
           />
+          {editing && (
+            <div style={{ marginTop: 12 }}>
+              <InstanceEditorView
+                form={editing.form} isNew={editing.isNew} apps={appList} versionsOf={(app) => appList.find((a) => a.name === app)?.versions ?? []}
+                models={editing.form.app === '' ? [] : modelsOf(editDetail.data, editing.form.pin)} existing={rows.map((r) => r.name)} caller={caller} busy={busy}
+                onChange={(form) => setEditing({ ...editing, form })} onCancel={() => setEditing(null)}
+                onSave={() => saveInstance.mutate({ form: editing.form, models: modelsOf(editDetail.data, editing.form.pin) ?? [] })}
+              />
+            </div>
+          )}
         </Section>
 
         <Section title="Apps" note="What is published, and the version each serves. Roll an app back by serving an older version; instances that follow it move at once." testId="apps-apps">
@@ -422,7 +447,7 @@ export function AppsPage() {
             onAskRevoke={(id) => setConfirming(id === null ? null : `revoke:${id}`)} onRevoke={(id) => revoke.mutate(id)}
           />
         </Section>
-        <p className="hint" style={{ marginTop: 16 }}>Publishing a new version, making an instance and the navigation sets are still done with the command line (<span className="mono">dbdatagateway apps</span>, also <span className="mono">--to</span> this server from another machine).</p>
+        <p className="hint" style={{ marginTop: 16 }}>Publishing a new version and the navigation sets are still done with the command line (<span className="mono">dbdatagateway apps</span>, also <span className="mono">--to</span> this server from another machine).</p>
       </div>
     </GatewayShell>
   )

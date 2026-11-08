@@ -1,6 +1,8 @@
 import { isValidElement, type ReactElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
+import { InstanceEditorView, instanceSaveBlock, type InstanceEditorProps } from './AppEditors'
+import { emptyInstanceForm, formFromRow } from '../appEditors'
 import { ApprovalsView, AppsView, AboutView, InstancesView, NavigationView, VersionsView, type ApprovalsViewProps, type InstancesViewProps, type VersionsViewProps } from './AppsPage'
 import type { AppAbout, AppApprovalRow, AppDetail, AppInstanceRow, AppsCaller, AppSummary, AppVersionRow } from '../types'
 
@@ -10,12 +12,12 @@ const approver: AppsCaller = { can_publish: false, can_approve: true, you: 'Grac
 
 const acme: AppInstanceRow = {
   name: 'acme', app: 'notes', title: 'Acme notes', pin: null, follows: true, instance_version: 1, published_by: 'ada', published_at: '2026-11-01T10:00:00Z', path: '/apps/acme/', address: 'https://apps.example:8818/apps/acme/',
-  bindings: {}, navigation: ['main'], mounted_by: ['front'], app_version: 2, serving_version: 2, manifest_version: '1.1.0', kind: 'app', trust: 'sandbox', runs_as_asked: true, approval_id: null,
+  bindings: {}, settings: {}, navigation: ['main'], mounted_by: ['front'], app_version: 2, serving_version: 2, manifest_version: '1.1.0', kind: 'app', trust: 'sandbox', runs_as_asked: true, approval_id: null,
 }
 const pinned: AppInstanceRow = { ...acme, name: 'pinned', follows: false, pin: 1, app_version: 1, mounted_by: [], navigation: [], address: null }
 
 function instancesProps(over: Partial<InstancesViewProps> = {}): InstancesViewProps {
-  return { rows: [acme, pinned], versionsOf: () => [1, 2], caller: admin, appsAddress: 'https://apps.example:8818/', chosen: {}, confirming: null, busy: false, onChoose: () => {}, onPin: () => {}, onAskRemove: () => {}, onRemove: () => {}, ...over }
+  return { rows: [acme, pinned], versionsOf: () => [1, 2], caller: admin, appsAddress: 'https://apps.example:8818/', chosen: {}, confirming: null, busy: false, onChoose: () => {}, onPin: () => {}, onAskRemove: () => {}, onRemove: () => {}, onNew: () => {}, onEdit: () => {}, ...over }
 }
 
 function find(node: ReactNode, testId: string): ReactElement<Record<string, unknown>> | undefined {
@@ -182,5 +184,95 @@ describe('the navigation sets', () => {
     const text = html(NavigationView({ sets: [{ name: 'main', title: 'Main menu', entries: [{ instance: 'acme', label: 'Acme', icon: null }, { instance: 'pinned', label: null, icon: null }] }] }))
     expect(text).toContain('acme (Acme) → pinned')
     expect(html(NavigationView({ sets: [] }))).toContain('data-testid="navigation-empty"')
+  })
+})
+
+// ---- UE01: the instance form ----
+
+const territoriesApp: AppSummary = { ...notes, versions: [1, 2] }
+
+function editorProps(over: Partial<InstanceEditorProps> = {}): InstanceEditorProps {
+  return {
+    form: { ...emptyInstanceForm('notes'), name: 'sales' }, isNew: true, apps: [territoriesApp, { ...notes, name: 'vault', versions: [1] }], versionsOf: (app) => (app === 'notes' ? [1, 2] : [1]),
+    models: ['territories', 'people'], existing: ['acme', 'pinned'], caller: admin, busy: false, onChange: () => {}, onSave: () => {}, onCancel: () => {}, ...over,
+  }
+}
+
+describe('the new instance form', () => {
+  it('offers a binding for each model the manifest lists and for no other', () => {
+    const text = html(InstanceEditorView(editorProps()))
+    expect(text).toContain('data-testid="instance-editor-binding-territories"')
+    expect(text).toContain('data-testid="instance-editor-binding-people"')
+    expect(text).not.toContain('instance-editor-binding-orders')
+    expect(html(InstanceEditorView(editorProps({ models: [] })))).toContain('data-testid="instance-editor-bindings-none"')
+  })
+
+  it('shows a binding the version no longer has a model for, and says that saving removes it', () => {
+    const form = { ...formFromRow({ ...acme, bindings: { territories: 'default', orders: 'live' } }) }
+    const text = html(InstanceEditorView(editorProps({ form, isNew: false, models: ['territories'] })))
+    expect(text).toContain('data-testid="instance-editor-binding-stale-orders"')
+    expect(text).toContain('saving removes this binding')
+    expect(text).not.toContain('instance-editor-binding-stale-territories')
+  })
+
+  it('waits for the models before saving, so that no binding is dropped by mistake', () => {
+    const view = InstanceEditorView(editorProps({ models: null }))
+    expect(find(view, 'instance-editor-save')!.props.disabled).toBe(true)
+    expect(html(view)).toContain('data-testid="instance-editor-bindings-loading"')
+    expect(html(view)).toContain('saving waits')
+  })
+
+  it('says why Save is off: no role, no name, a name already taken, no app, an empty or repeated setting', () => {
+    const why = (over: Partial<InstanceEditorProps>) => instanceSaveBlock({ ...editorProps(), ...over })
+    expect(why({ caller: viewer })).toContain('publisher or administrator role')
+    expect(why({ form: { ...emptyInstanceForm('notes'), name: ' ' } })).toContain('Name the instance')
+    expect(why({ form: { ...emptyInstanceForm('notes'), name: 'acme' } })).toContain('already an instance named acme')
+    expect(why({ form: { ...emptyInstanceForm(''), name: 'sales' } })).toContain('Choose the app')
+    expect(why({ form: { ...emptyInstanceForm('notes'), name: 'sales', settings: [{ key: ' ', value: 'x' }] } })).toContain('needs a name')
+    expect(why({ form: { ...emptyInstanceForm('notes'), name: 'sales', settings: [{ key: 'a', value: '1' }, { key: 'a', value: '2' }] } })).toContain('listed twice')
+    expect(why({})).toBeNull()
+    const off = InstanceEditorView(editorProps({ caller: viewer }))
+    expect(find(off, 'instance-editor-save')!.props.disabled).toBe(true)
+    expect(html(off)).toContain('data-testid="instance-editor-why"')
+  })
+
+  it('saves when the form is complete, and changing the app of a new instance clears the pin and the bindings', () => {
+    const onSave = vi.fn()
+    const view = InstanceEditorView(editorProps({ onSave }))
+    expect(find(view, 'instance-editor-save')!.props.disabled).toBe(false)
+    ;(find(view, 'instance-editor-save')!.props.onClick as () => void)()
+    expect(onSave).toHaveBeenCalled()
+    const onChange = vi.fn()
+    const changed = InstanceEditorView(editorProps({ form: { ...emptyInstanceForm('notes'), name: 'sales', pin: '1', bindings: { territories: 'default' } }, onChange }))
+    ;(find(changed, 'instance-editor-app')!.props.onChange as (e: { target: { value: string } }) => void)({ target: { value: 'vault' } })
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ app: 'vault', pin: '', bindings: {} }))
+  })
+
+  it('fixes the name and the app of an instance that exists, and lists its settings with a hint for one the host reads', () => {
+    const form = formFromRow({ ...acme, settings: { 'embed.allowed_origins': 'https://portal.example.com' } })
+    const view = InstanceEditorView(editorProps({ form, isNew: false }))
+    expect(find(view, 'instance-editor-name')!.props.disabled).toBe(true)
+    expect(find(view, 'instance-editor-app')!.props.disabled).toBe(true)
+    const text = html(view)
+    expect(text).toContain('data-testid="instance-editor-setting-key-0"')
+    expect(text).toContain('Origins that may frame this instance')
+    expect(text).toContain('data-mode="edit"')
+    expect(html(InstanceEditorView(editorProps()))).toContain('data-testid="instance-editor-settings-none"')
+  })
+
+  it('has New instance and Edit on the list, off with the reason for a person without the role', () => {
+    expect(find(InstancesView(instancesProps()), 'instance-new')!.props.disabled).toBe(false)
+    const onEdit = vi.fn()
+    ;(find(InstancesView(instancesProps({ onEdit })), 'instance-edit-acme')!.props.onClick as () => void)()
+    expect(onEdit).toHaveBeenCalledWith(acme)
+    const off = InstancesView(instancesProps({ caller: viewer }))
+    expect(find(off, 'instance-new')!.props.disabled).toBe(true)
+    expect(find(off, 'instance-edit-acme')!.props.disabled).toBe(true)
+    expect(html(off)).toContain('data-testid="instance-new-why"')
+  })
+
+  it('shows an instance\'s settings and bindings in its row', () => {
+    const text = html(InstancesView(instancesProps({ rows: [{ ...acme, settings: { portal: 'front' }, bindings: { territories: 'default' } }] })))
+    expect(text).toContain('portal=front, territories → default')
   })
 })
