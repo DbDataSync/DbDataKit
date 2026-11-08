@@ -293,8 +293,10 @@ public sealed class EmbeddedRunnerTests : IDisposable
 
         Assert.True(await rig.Eventually(() => audit.Read(new AuditQuery(Verb: "fixture.expired")).Count == 0), "the expired row was removed by the system task");
 
-        var runs = new RunStore(rig.State, RunnerNames.EngineService).Read(new RunQuery(RunnerNames.EngineService, Package: ConsoleSystemTasks.Package, Channel: "system"));
-        Assert.Contains(runs, r => r.Run.Outcome == RunOutcome.Succeeded && r.Run.JobId == "console-system/system/state-retention");
+        // the task removes the rows before its run record is closed: wait for the record, do not read it in the gap (Windows showed the run still Running)
+        var store = new RunStore(rig.State, RunnerNames.EngineService);
+        Assert.True(await rig.Eventually(() => store.Read(new RunQuery(RunnerNames.EngineService, Package: ConsoleSystemTasks.Package, Channel: "system"))
+            .Any(r => r.Run.Outcome == RunOutcome.Succeeded && r.Run.JobId == "console-system/system/state-retention")), "the system task's run was recorded as succeeded");
         Assert.Empty(rig.Recorder.Started);   // it ran in the console's process, not through the executor
     }
 
