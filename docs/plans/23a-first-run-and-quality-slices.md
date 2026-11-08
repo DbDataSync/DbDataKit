@@ -1,0 +1,146 @@
+# Plan 23a: the slices of plan 23 (first-run setup and data quality)
+
+Status: **proposed** (2026-11-07). [Plan 23](23-first-run-and-data-quality.md) says *what* the owner decided (2026-10-27); this plan breaks it into pull requests in the
+shape of [22a](22a-gap-slices.md), [28a](28a-runner-slices.md) and [29a](29a-state-slices.md): one slice, one branch `suite/fq<nn>-<short-name>`, one pull request,
+"done" is the test in the last column but one, and the status goes in the slice's row in the same change.
+
+**Slice ids** `FQ01`... (F is taken by 13a, Q by 29a; FQ was free in 13a, 13c, 18, 19, 20, 26, 28a, 28c, 29a, 29b). **The order across plans 22, 23 and 24 is in
+[22a, "The owner's order"](22a-gap-slices.md#the-owners-order-and-the-reason):** formats and definitions first, then the delivery configuration, then the rest. In this plan the
+slices FQ01 to FQ06 are wave 1 (stored formats), FQ07 onward wave 3. Plan 23 has no delivery work of its own: it waits on 22a's GP07 to GP09 and GP16.
+
+## What exists (verified on `origin/main` at `4ffa395b`, 2026-11-07)
+
+| Part of plan 23 | What is there | Where | What is not |
+| --- | --- | --- | --- |
+| **1. One installer, one machine** | each product has its own zip, MSI and image; the console's MSI registers the service stopped; one compose file starts the whole suite for trying out, with servers announcing themselves and waiting to be confirmed | `dist/`, `DbDataConsole/dist.json`, `dist/compose/quickstart.yml`, 13a L03 to L06 | **no bundle**: the MSI test says "separate MSIs, pairing is a step after both are installed" (`dist/tests/msi-pairing-e2e.ps1`); an announced server waits for an administrator's Confirm; nothing pairs by itself |
+| **1. Pairing** | a server announces on the console's private port; the console lists it (`PendingInstances`); an administrator confirms; the certificate is pinned; the management API version is exchanged and N and N-1 are checked | `DbDataConsole.Server/PendingInstances.cs`, `DbDataKit.Web` (`PairingClient`, `ManagementApi`, `InstanceRegistry`) | no automatic confirmation on the same machine |
+| **1. State on SQLite, scaling out** | SQLite is the default; `state move` and `state show` between engines, offline, with `state verify` (plan 29b C and X slices) | `DbDataKit.State.Cli` | no documented scale-out path tested as one story |
+| **1. First administrator** | the console writes a first-run **invitation** and `FIRST-RUN.txt` into its directory and prints its path; the invitation is a single-use `InviteRecord` (`CreatedByUserId` null; invitations expire, `InviteStore.DefaultLifetime` is 24 hours); the identity host does the same | `DbDataConsole.Server/ConsoleHost.cs`, `ConsoleCli.cs`, `IdentityHost.cs`, `DbDataKit.State/InviteStore.cs` | **no `setup link` command**; the invitation is in a file the person must find, not a link the installer prints; the lifetime is a constant, not a setting |
+| **1. Setup checklist** | the console's pages: Home, Servers, Connections, Lineage, Monitoring, State; the Build console has a "new project from a template" screen (W07) | `DbDataKit/web/console/src/pages`, 13a W07 | **no checklist** (no `checklist` or `setup` page or state) |
+| **2. Check model** | nothing shared (`git grep` for `DataQuality`, `IQualityCheck`, `DbDataKit.Quality` is empty) | | the library `DbDataKit.Quality` does not exist |
+| **2. Build** | `project tests run`: metadata rules (DuckDB SQL over metadata views) and model tests with given and expected rows; `connection check`: data checks generated from the semantic models (hierarchy has one parent per member, relationships' keys exist) run against a connection | `DbDataBuild/docs/commands.md`, `DbDataBuild.Semantic`, tracking in `DbDataBuild.Execution` (`Tracker`, `TrackingStore`) | no not-null, unique, accepted values, range, freshness or row-count checks as data; tests do not run after a refresh |
+| **2. Sync** | health rules over runs, including **Lagging** (further behind its source than allowed), and the notification feed | `DbDataKit.Monitoring` (`HealthRule.Lagging`), Sync's `ReplicationLagController` | no checks on the data written |
+| **2. DbDataStore** | validated writes with `required`, `pattern`, `min`, `max`, `allowed`, `unique`, `reference`, `sum_equals`, `no_overlap`, `no_cycle` at write time | `DbDataKit.Store` (`ModelWriter`) | nothing that evaluates an entity later (data written in other ways, a model changed) |
+| **2. Serving layer** | `ServingProvenance` carries the definition version and channel | `DbDataKit.Serving.Abstractions` | no freshness; no "last good version" notion beyond rollback (`definition_serving.previous_version`) |
+| **3. Warn and block** | the notification feed; a rollback and **activation holds** on a published version (`ActivationHolds`); a Build run's tracking; the runner's `after-run` trigger | `DbDataKit.Monitoring`, `DbDataKit.State/Definitions/ActivationHolds.cs`, `PackageManifest` | no alert delivery (22a GP07), no "downstream waits", no publish refusal that names a check |
+| **4. Results, monitoring, lineage** | health findings, run records, lineage nodes with `Properties`, impact queries | `DbDataKit.Monitoring`, `DbDataKit.Lineage` (`Impact`) | no check status on a node |
+
+## Rules for every slice
+
+- The rules of [13a](13a-suite-slices.md) and [22a](22a-gap-slices.md) apply: one small pull request, "done" is the test, CI green and independently revertable, behaviour changes
+  named, docs and the status line in the same change; **a wave 1 slice names the formats it touches in the first line of its pull request**; a changed format is a clean break with a message naming the file.
+- State runs on **SQLite, SQL Server and PostgreSQL**; check evaluation runs on the data engines of `testenv/` (SQL Server and PostgreSQL always; DuckDB where Build uses it);
+  a screen has a Playwright test; a library has unit tests.
+- New state is a state module with declared retention; scheduled work is a runner task; published definitions go through the publish API (plan 30).
+
+## Decisions made while planning
+
+| # | Decision | Why |
+| --- | --- | --- |
+| D1 | A check is a **definition stored with the dataset it is about**, in the section `checks:` of the host's own format (Build's model file, `model/1`, Sync's replication file, the serving data source). The shape is one shared `check/1` | plan 23 section 2.1 "attachment"; the check travels with a published definition and a promotion (plan 20 principle 1) |
+| D2 | `checks` is part of **format 2** of the affected definitions, the same bump as `access` and `cache` ([22a D1](22a-gap-slices.md)) | one break, not three |
+| D3 | A check names its dataset by the **lineage identity** (`LineageIdentity`, plan 18 G02), so a result, a node and a block line up | results join to lineage and impact analysis without a second key |
+| D4 | The seven kinds are **not null, unique, accepted values, range, referential, freshness, row-count change**; a kind takes a column (or columns) and a parameter set; no free-form SQL check in the first version | the plan lists these seven; a free-form check is a later, separate question (QF8) |
+| D5 | Evaluation runs **where the data is**, through a read-only connection recipe, as a **runner task** (`quality`, a system package); the check's SQL comes from `DbDataKit.Dialect`, one statement per check, returning counts and a few sample keys | no data leaves the engine; quoting and types are the dialect's |
+| D6 | `check_result` keeps a row per evaluation under retention; `check_status` keeps the latest result per check and the current block | the history is for trends and is allowed to expire; the status is what blocks, so it must not |
+| D7 | A **blocking** check stops *dependents*, not the dataset's own writers (DbDataStore writes and Build loads into the dataset go on) | plan 23 section 2.3 lists what is stopped: downstream runs, publish and promotion, serving the new version |
+| D8 | Automatic pairing in the bundle uses a **bundle token** in a file only the install's service accounts can read (`DbDataKit.Security.Acl`), not a typed code and not an open port | "no codes typed" without making the announce port a way in |
+
+## Questions for the owner
+
+None blocks FQ01 to FQ06. Each has a default.
+
+| # | Question | Default |
+| --- | --- | --- |
+| QF1 | Result retention | `check_result`: **90 days**, a module default an administrator can change; `check_status`: kept while the check exists. (The state default is 30 days; trends need longer) |
+| QF2 | A freshness check on a dataset with no timestamp column | uses the **last successful load** from run metadata (Build tracking, Sync runs); a column is used when named |
+| QF3 | The baseline of a row-count change check | the **previous successful evaluation** of the same check; the first evaluation only records |
+| QF4 | Does a block on a DbDataStore entity stop writes to it? | **no** (D7); it stops dependents |
+| QF5 | The expiry of the setup link | **24 hours**, a setting; single use; `dbdatakit setup link` can be run on the machine at any time and is audited |
+| QF6 | May a bundle without a human confirm pair automatically? | yes, **only on the same machine and only with the bundle token** (D8); servers on other machines still announce and wait |
+| QF7 | Build's existing `project tests` | **stay as they are**; checks are added beside them and the generated semantic checks of `connection check` are shown as built-in checks, not rewritten |
+| QF8 | Free-form SQL checks | **not in the first version**; asked for again after the seven kinds are in use |
+| QF9 | Checks on source tables Sync only reads | **only on datasets a product owns or writes** (targets, models, entities, served data sources) |
+| QF10 | A check that cannot run (connection down) | the result is **`error`**, not pass or fail; a block check in `error` does **not** block (it alerts) unless the check says `on_error: block` |
+
+## Milestones
+
+| Milestone | Slices | What is true after it |
+| --- | --- | --- |
+| **F-A: formats** | FQ01 to FQ06 | a check has its final shape and a place in every dataset-owning definition; results have their tables and retention. Nothing is evaluated |
+| **F-B: evaluation** | FQ07 to FQ12 | each product runs its checks and writes results |
+| **F-C: severity** | FQ13 to FQ17 | warn alerts, block stops dependents, monitoring, lineage and the console show it |
+| **F-D: first run** | FQ18 to FQ23 | one machine bundle, a setup link, a checklist, scale-out as a documented and tested step |
+
+## The slices
+
+Size: S under a day, M a few days, L about a week. **Format** says whether the slice changes a stored format or a definition, and which.
+
+### F-A: formats (wave 1)
+
+| Slice | What | Needs | Size | Format | Done when |
+| --- | --- | --- | --- | --- | --- |
+| FQ01 | **The check model `check/1` and `DbDataKit.Quality`:** the seven kinds (D4) with their parameters, the attachment (a dataset, an entity, or a column of either, by lineage identity, D3), severity `warn` or `block`, `on_error` (QF10), a strict loader with diagnostics naming file and line, a JSON schema | UC02 (the lock file) | M | **new section `checks`** (format 2, D2) | unit tests: each kind loads with its parameters; each bad part (unknown kind, a range with min above max, a referential check naming no dataset, severity other than `warn` or `block`) is refused with file and line and a suggestion for a near key; the schema agrees with the loader |
+| FQ02 | **Checks stored with Build's datasets:** the section in a model's `.yml` and in a column's declaration; read by the project loader, validated against the model's columns, shown by `project show`; `schemaVersion` of the model file raised once | FQ01 | M | **Build model file format** gains `checks` | `DbDataBuild.Tests.Unit`: a template project with checks loads; a check on a column the model does not have is refused with file and line; a file with the new section read by the old loader fails with the clean-break message naming the file; the model JSON Schema (`DbDataBuild/schemas`) is updated and its agreement test passes |
+| FQ03 | **Checks stored with DbDataStore entities:** the section in `model/1` per entity and attribute (beside, not instead of, the write rules); `schemaVersion` of `model/1` raised once, together with `access` (GP02) | FQ01, GP01 | S | **`model/1` file format** (schemaVersion 2) | `DbDataKit.DataModel.Tests`: a model with checks loads; a check duplicating a write rule is accepted and noted; a newer `schemaVersion` is refused as DBD-110 says; the model's JSON Schema agrees |
+| FQ04 | **Checks stored with Sync's replications:** the section in the replication's target dataset, freshness first; read by Sync's strict config loader; Sync's configuration `schemaVersion` raised once | FQ01 | M | **Sync replication config format** gains `checks` | `DbDataSync` unit tests (`Category!=Integration`): a replication with a freshness check loads and round-trips with comments kept; an unknown key near `checks` suggests it; Sync's schema agreement test passes |
+| FQ05 | **Checks stored with the serving layer's data sources:** `checks` and freshness on a served dataset in the definition the group publishes (the same format 2 as `access` and `cache`) | FQ01, GP02, UC03 | S | **serving data source / semantic package definition** (format 2) | on three engines: a definition with checks publishes, its version row carries them, a rollback restores the old checks with the old version; a group with an instance that reads format 1 only refuses it (UC01) |
+| FQ06 | **Results and their retention:** the state module `quality` (per install; per group for the serving layer): `check_result` (check id, dataset identity, status `pass`, `fail`, `error`, measured value, threshold, a few sample keys, run id, evaluated at) and `check_status` (latest per check, the current block, since when); retention (QF1) | Q05 (built), FQ01 | M | **new state module `quality`** | on three engines: the module's convention, layout and retention tests; rows older than 90 days go and `check_status` stays; a block row is set and cleared in one transaction with its result; `0.25` days is six hours as in 29a Q05 |
+
+### F-B: evaluation (wave 3)
+
+| Slice | What | Needs | Size | Format | Done when |
+| --- | --- | --- | --- | --- | --- |
+| FQ07 | **The evaluator:** one statement per check through `DbDataKit.Dialect` and a read-only connection, returning the measure and a few sample keys; the seven kinds on SQL Server, PostgreSQL and DuckDB (MySQL, MariaDB and Oracle follow the dialect's own conformance, not this slice) | FQ01, plan 05 (built) | L | none | a conformance suite (the `Dialect.Conformance` pattern): the same seven checks over the same rows give the same result on SQL Server, PostgreSQL and DuckDB; a check on a quoted, mixed-case and reserved-word column works; a connection that is down gives `error` (QF10), not `fail` |
+| FQ08 | **`quality run` and the `quality` runner task:** a command (`quality run --dataset`, `quality show`) and a system package whose task evaluates a dataset's checks on request, on a schedule and after a run (the manifest's `after-run` trigger), writing `check_result` and `check_status` | FQ06, FQ07, 28a R10 | M | none | command test with a JSON schema; a runner test on SQLite state: a task ran after another's run and the result is in the table; two runners do not both evaluate one check (lease) |
+| FQ09 | **Build runs its checks after a refresh** and writes the results (the project's tracking id is the run id); `project tests run` is untouched (QF7) | FQ02, FQ08 | M | none | `DbDataBuild.Tests.Conformance` on PostgreSQL: a refresh then its checks; a failing not-null check is a `fail` result with sample keys; the model test results are unchanged |
+| FQ10 | **Sync runs its checks after a replication run,** freshness above all, from the run's end (and from the lag reading when a run is skipped) | FQ04, FQ08 | M | none | Sync integration test (`Category=Integration`, engines up): a replication that falls behind makes its freshness check fail; after a successful run it passes; the lag finding of Monitoring and the check agree |
+| FQ11 | **DbDataStore runs checks on its entities** on demand and on a schedule, beyond the write rules | FQ03, FQ08 | S | none | on SQL Server and PostgreSQL: rows made invalid outside the writer (a direct insert) are found by a `unique` and a `referential` check; the writer's own refusal still happens at write time |
+| FQ12 | **The serving layer reports freshness** for what it serves: per served dataset, the age of its newest data and of its published version, from the `quality` module of the group | FQ05, FQ08 | M | none | two Proxy instances share one result; a dataset with a freshness target reports `fail` once past it; the Flight SQL metadata of the dataset carries the age (a test of the answer) |
+
+### F-C: severity (wave 3)
+
+| Slice | What | Needs | Size | Format | Done when |
+| --- | --- | --- | --- | --- | --- |
+| FQ13 | **Warn:** a failed `warn` check writes a notification and, through the delivery service, an alert to the dataset's owner and the configured recipients; marked once per failure, not per evaluation | FQ08, 22a GP07, GP16 | M | none | with a fake clock on three engines: a check failing twice sends one alert; passing again sends one "recovered"; the alert's body names the check, the dataset, the measure and the sample keys, never a secret |
+| FQ14 | **Block, part one:** downstream Build runs wait; a publish or promotion that reads a blocked dataset is refused, naming the check and the dataset (the plan 30 refusal set gains `blocked_by_check`) | FQ06, FQ09, plan 30 R15 (built) | L | none | Build: a model downstream of a blocked dataset is not run and says why (conformance on PostgreSQL); the publish API refuses a model that reads a blocked dataset with the check's name; clearing the block lets it through |
+| FQ15 | **Block, part two:** in the serving layer a dataset whose check blocks **keeps serving its last good published version**; the new version is held (as an activation hold) until the check passes or an administrator releases it | FQ05, FQ12, FQ14 | M | none | two instances: a new version published while its dataset's check fails is staged and held, queries keep returning the old version's rows, the provenance names the old version; on a pass it activates; an administrator's release is audited |
+| FQ16 | **Results in monitoring and lineage:** a `CheckFailed` health rule in `DbDataKit.Monitoring`; lineage nodes carry `check_status` (properties); impact analysis lists what a block stops | FQ06, G03 (built) | M | none | `Monitoring.Tests`: a failing check is a finding with the dataset; `Lineage.Tests`: impact of a blocked node lists the dependents it stops; the joined graph in the console shows the node's status (a test of the JSON) |
+| FQ17 | **Console screens:** a dataset's checks, their last result and history, a manual run, the block and who may release it; the node's panel in the lineage page shows the same | FQ08, FQ16 | M | none | Playwright: open a node with a failing check, see the measure and sample keys, run it again after fixing the data, see the block clear and its dependents resume |
+
+### F-D: first-run setup (wave 3; plan 23 section 1)
+
+| Slice | What | Needs | Size | Format | Done when |
+| --- | --- | --- | --- | --- | --- |
+| FQ18 | **The single-machine bundle:** one installer (MSI, and a zip with a script for Linux) that installs the console with the identity home, the serving layer and the chosen back-ends, each as its own service, state in SQLite, and pairs them with the **bundle token** (D8, QF6) with no code typed | 13a L03 to L06 (built), O06 (built) | L | **new** install layout and `bundle.json` (what the bundle holds, the token's path) | `msi-pairing-e2e`-style CI on Windows and a Linux container test: after install every chosen product is listed by the console as paired and ready with nobody confirming; a server on **another** machine still waits for a Confirm; the token file's ACL is checked (only the service accounts can read it) |
+| FQ19 | **The setup link:** the installer prints and logs a single-use link that expires (QF5); following it creates the first administrator through the existing invitation machinery; afterwards it is dead; `dbdatakit setup link` makes a new one, only from the machine itself | InviteStore (built) | M | **none stored** (the invitation record and its expiry exist); a new **setting** for the link's lifetime | `DbDataConsole.Tests`: the link works once; an expired link says so and names `setup link`; the link of a second try is refused; `setup link` from a remote address (the API, not the command) is refused; the audit has the creation; `FIRST-RUN.txt` now holds the link, not a path to find |
+| FQ20 | **Scaling out is a step, not a reinstall:** the documented and tested path: move state from SQLite to SQL Server or PostgreSQL (`state move`), add a serving instance, move a back-end to another machine and re-pair it | 29b C and X (built), 22a (none) | M | none | a CI scenario on the real engines: a bundle on SQLite, `state move` to PostgreSQL, a second serving instance joins and serves the same definitions, the console still lists everything; the document's commands are the ones the test runs |
+| FQ21 | **The setup checklist in the console:** sign-in method, first connections, git remotes (22a GP19), delivery channels (22a GP18), a first Build project from a template (W07); each item skippable; reachable later; state kept per install | FQ19, 22a GP18, GP19 | M | **state** (a console module `setup_item`) | Playwright: a new install shows the checklist, an item opens its page, skipping hides it from the banner but not from the checklist, a finished item is marked by what the install actually has (a connection exists), not by a click |
+| FQ22 | **A single product stays installable on its own** (plan 13): a guard that each product's MSI, zip and image still installs, starts and pairs alone, after the bundle exists | FQ18 | S | none | the existing per-product install and upgrade jobs (`dist-msi-ci.yml`) run unchanged and pass; a test that the bundle's `bundle.json` is the only difference |
+| FQ23 | **First-run in the product documents:** the console's docs for the bundle, the link and the checklist, and `docs/quickstart.md` updated so the quickstart compose file also uses the setup link | FQ19, FQ21 | S | none | the docs tests (links resolve, commands in the text exist in the command spec); a check that `docs/quickstart.md` no longer tells the reader to find `FIRST-RUN.txt` |
+
+## What each slice unblocks
+
+| Waiting work | Unblocked by |
+| --- | --- |
+| Plan 22 section 2's console "who can see what" (nothing here), plan 24's publish refusal reasons | FQ14 adds a refusal; UC01 defines the others |
+| Plan 22a GP16 alerts for failed checks | FQ13 uses it (the other direction: GP16 does not wait for FQ) |
+| Plan 24 UC13 (cache invalidation on data change) | FQ09 and FQ10 emit the "data changed" moment the invalidation also needs (a shared event, see UC13) |
+| Plan 18's catalog node page (22a GP26) | FQ16 adds check status to nodes |
+| Plan 28's evaluation runs (plan 27) | FQ08 shows a second system task on the runner |
+| Plan 21's promotion gates | FQ14 (a promotion refused by a check) |
+
+## What can start now
+
+**FQ01 needs only UC02's lock file** (it can start with format 2 open), then FQ02 to FQ05 can run in parallel (four formats, four owners), and FQ06 needs only FQ01 and the built
+state mechanism. FQ19 (the setup link) and FQ22 need nothing from this plan and can start at once; they do not change a definition. FQ07 (the evaluator) can start as soon as FQ01 lands because
+it needs the model, not the stored formats.
+
+## Risks
+
+- **Four formats change in wave 1** (FQ02 to FQ05): Build's model file, `model/1`, Sync's replication file and the serving definition. They share one shape (`check/1`), but each product's reader is strict, so each needs its clean-break message and its own pull request. The risk is the order of merge against plan 22 (`access`) and plan 24 (`cache`): [22a D1](22a-gap-slices.md) holds format 2 open for all three.
+- **Cost of evaluation.** A `unique` or `referential` check on a large table is a full scan. FQ07 puts a time limit and a row limit on every statement and says so in the result (`error`, "limit reached"), never a silent pass.
+- **Blocking can stop production.** A wrong block check stops dependents and the serving layer's new versions. D7 and QF10 keep the blast radius to dependents and make an erroring check alert instead of block; an administrator can always release a block, audited (FQ15).
+- **The bundle and automatic pairing** (FQ18) must not widen the way in: the announce port stays closed to anyone without the token for the same-machine case; the test asserts the ACL.
+- **Grants need SQL Server or PostgreSQL** ([22a QG5](22a-gap-slices.md)); the bundle's checklist (FQ21) shows rules as "directory attributes only" until DbDataStore has such a connection.
+- **Plan 27's DbDataWorkspace** hosts Build projects eventually; FQ09 reads Build's model files through the library, not through the Build server's HTTP, so the move does not change it.

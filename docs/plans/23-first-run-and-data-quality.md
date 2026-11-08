@@ -1,6 +1,6 @@
 # Plan 23: first-run setup and data quality
 
-Status: **direction decided by the owner (2026-10-27)**, one question at a time. Not sliced yet.
+Status: **direction decided by the owner (2026-10-27)**, one question at a time. Sliced in [23a](23a-first-run-and-quality-slices.md) (2026-11-07: 23 slices FQ01 to FQ23).
 
 ## 1. First-run setup
 
