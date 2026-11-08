@@ -1,4 +1,4 @@
-import { ApiError } from '@dbdatakit/shell'
+import { ApiError, stagedText, type StagedVersionData } from '@dbdatakit/shell'
 import type { CommandAnswer, PairedRunner, RunnerPublishData } from '../types'
 
 /** What the person is doing: sending the project's files as a new version, or moving the version one channel serves to another channel. */
@@ -90,11 +90,11 @@ export function taskLine(t: RunnerPublishData['tasks'][number]): string {
   return `${when}; ${slots}`
 }
 
-/** What the staged-version card says about the state of the version: staged versions wait for every runner of the group to have them ready. */
-export function modeText(data: RunnerPublishData): string {
-  if (data.promoted_from) return `Version ${data.version} of ${data.package} is served on ${data.channel} (promoted from ${data.promoted_from}).`
-  const base = data.mode === 'stage'
-    ? `Version ${data.version} of ${data.package} is staged on ${data.channel}: the runners prepare it and it activates once every runner of the group has it ready (the Runner screens show it).`
-    : `Version ${data.version} of ${data.package} is served on ${data.channel}.`
-  return data.changed ? base : `${base} It is the same content as before; nothing changed.`
-}
+/** What the staged-version card says about the state of the version (the words are the shell's, shared with the Runner's publish from files). */
+export const modeText = (data: RunnerPublishData): string => stagedText({ package: data.package, channel: data.channel, mode: data.mode, version: data.version, changed: data.changed, promotedFrom: data.promoted_from })
+
+/** What Build's answer says, as the shared staged-version card shows it. */
+export const stagedFrom = (data: RunnerPublishData): StagedVersionData => ({
+  package: data.package, channel: data.channel, mode: data.mode, version: data.version, changed: data.changed, uploaded: data.uploaded, skipped: data.skipped, promotedFrom: data.promoted_from,
+  tasks: (data.tasks ?? []).map((t) => ({ name: t.name, detail: taskLine(t) })), oldScheduled: data.owner_old ?? [], bound: data.bound ?? [],
+})

@@ -125,6 +125,10 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
             return;
         }
 
+        // a file of a package (plan 33, UE10) can be larger than Kestrel's default limit on a request body and takes longer than a call: the runner has its own size cap and answers 413 past it
+        var upload = path.StartsWith("api/v1/artifacts/", StringComparison.Ordinal) && context.Request.Method == HttpMethods.Put;
+        if (upload) context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>()?.MaxRequestBodySize = null;
+
         var token = await TokenForAsync(instance, userId, current.Name, role, context.RequestAborted);
 
         if (context.WebSockets.IsWebSocketRequest)
@@ -145,7 +149,7 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
 
         try
         {
-            using var response = await ClientFor(instance).SendAsync(request, HttpCompletionOption.ResponseHeadersRead, context.RequestAborted);
+            using var response = await ClientFor(instance, upload).SendAsync(request, HttpCompletionOption.ResponseHeadersRead, context.RequestAborted);
             context.Response.StatusCode = (int)response.StatusCode;
             foreach (var name in ForwardedResponseHeaders)
                 if (response.Headers.TryGetValues(name, out var values) || response.Content.Headers.TryGetValues(name, out values)) context.Response.Headers[name] = values.ToArray();
@@ -211,8 +215,9 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
         }
     }
 
-    private HttpClient ClientFor(RegisteredInstance instance) =>
-        _clients.GetOrAdd(instance.CertificateFingerprint, fingerprint => new HttpClient(PairingClient.Pinned(fingerprint)) { Timeout = TimeSpan.FromMinutes(2) });
+    private HttpClient ClientFor(RegisteredInstance instance, bool upload = false) =>
+        _clients.GetOrAdd(upload ? "upload:" + instance.CertificateFingerprint : instance.CertificateFingerprint,
+            _ => new HttpClient(PairingClient.Pinned(instance.CertificateFingerprint)) { Timeout = upload ? TimeSpan.FromMinutes(30) : TimeSpan.FromMinutes(2) });
 
     private static async Task Refuse(HttpContext context, int status, string error)
     {

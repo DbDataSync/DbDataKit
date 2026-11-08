@@ -1,4 +1,8 @@
 import { expect, type Page, type Route } from '@playwright/test'
+import { createHash } from 'node:crypto'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 
 // The Runner screens' editors (plan 33, UE08, UE10, UE11) against a runner whose management routes are mocked in the page, the way `gateway-apps-editors-screen.ts` does for the Gateway: the console's relay is its own route, so the story needs the
 // signed-in console only and takes no port (the runner's side is DbDataRunner.Tests: ScreenRoutesTests and PublishApiTests, and the console's own side is ConsoleRunnerTests and EmbeddedRunnerTests). The mock keeps state, answers the routes the
@@ -18,6 +22,11 @@ export interface MockRunner {
   conflictNext: boolean
   /** Makes every write answer 403 as a runner does for a person without the role. */
   deny: boolean
+  /** The hashes of the files the runner holds, and the order of the calls that asked for or sent them. */
+  artifacts: Set<string>
+  fileCalls: string[]
+  /** What was published from files, by package name: the versions in the order they were made. */
+  published: Map<string, { version: number; channel: string; mode: string; manifest: string; content: string }[]>
   lastBody: (key: string) => unknown | undefined
 }
 
@@ -30,7 +39,7 @@ const SLOTS = [
 /** A runner with the package `orders`: version 1 serves on `prod` and `test`, version 2 is staged on `prod` and wants a second slot (`target`) that nothing binds yet. */
 export async function mockRunner(page: Page): Promise<MockRunner> {
   const mock: MockRunner = {
-    sent: {}, requireSignatures: false, conflictNext: false, deny: false,
+    sent: {}, requireSignatures: false, conflictNext: false, deny: false, artifacts: new Set(), fileCalls: [], published: new Map(),
     bindings: [{ channel: 'prod', slot: 'source', bound_to: 'erp', revision: 1 }, { channel: 'test', slot: 'source', bound_to: 'erp-test', revision: 1 }],
     lastBody: (key) => mock.sent[key]?.at(-1),
   }
@@ -51,8 +60,8 @@ export async function mockRunner(page: Page): Promise<MockRunner> {
     const method = request.method()
     const tail = new URL(request.url()).pathname.slice(`/relay/${RUNNER}/api/v1/`.length)
     const parts = tail.split('/').map(decodeURIComponent)
-    const body = method === 'GET' || method === 'HEAD' ? undefined : request.postDataJSON() as Record<string, any>
-    if (method !== 'GET' && method !== 'HEAD') (mock.sent[`${method} ${tail}`] ??= []).push(body ?? null)
+    const body = method === 'GET' || method === 'HEAD' || parts[0] === 'artifacts' ? undefined : request.postDataJSON() as Record<string, any>
+    if (method !== 'GET' && method !== 'HEAD' && parts[0] !== 'artifacts') (mock.sent[`${method} ${tail}`] ??= []).push(body ?? null)
     const refuse = (status: number, message: string) => json(route, { error: message }, status)
     const needsAdmin = () => refuse(403, 'This needs the admin role.')
 
@@ -66,8 +75,42 @@ export async function mockRunner(page: Page): Promise<MockRunner> {
       mock.requireSignatures = body!.value
       return json(route, { require_signatures: mock.requireSignatures })
     }
-    if (method === 'GET' && tail === 'definitions/integration') return json(route, { kind: 'integration', definitions: [{ name: 'orders', latest_version: 2, owner: null, channels: heads }] })
+    if (method === 'GET' && tail === 'definitions/integration') {
+      const made = [...mock.published].map(([name, versions]) => {
+        const last = versions.at(-1)!
+        return { name, latest_version: last.version, owner: null, channels: [{ channel: last.channel, active: last.mode === 'serve' ? last.version : null, previous: null, staged: last.mode === 'stage' ? last.version : null }] }
+      })
+      return json(route, { kind: 'integration', definitions: [{ name: 'orders', latest_version: 2, owner: null, channels: heads }, ...made] })
+    }
     if (method === 'GET' && tail === 'definitions/integration/orders') return json(route, detail())
+    if (method === 'HEAD' && parts[0] === 'artifacts') {
+      mock.fileCalls.push(`HEAD ${parts[1]!.slice(0, 8)}`)
+      return route.fulfill({ status: mock.artifacts.has(parts[1]!) ? 200 : 404 })
+    }
+    if (method === 'PUT' && parts[0] === 'artifacts') {
+      if (mock.deny) return needsAdmin()
+      const named = parts[1]!
+      const actual = createHash('sha256').update(request.postDataBuffer() ?? Buffer.alloc(0)).digest('hex')
+      if (actual !== named) return refuse(400, `The bytes sent for ${named} hash to ${actual}.`)
+      const already = mock.artifacts.has(named)
+      mock.artifacts.add(named)
+      mock.fileCalls.push(`PUT ${named.slice(0, 8)}`)
+      return json(route, { sha256: named, size: request.postDataBuffer()?.length ?? 0, already_stored: already })
+    }
+    if (method === 'PUT' && parts[0] === 'definitions' && parts[1] === 'integration') {
+      if (mock.deny) return needsAdmin()
+      const name = parts[2]!
+      if (mock.requireSignatures) return refuse(403, `This runner requires signed versions (require_signatures is on) and the integration '${name}' has no valid signature (the version is unsigned). Publish it signed, or have an administrator turn require_signatures off.`)
+      const missing = (body!.artifacts as { sha256: string }[]).find((a) => !mock.artifacts.has(a.sha256))
+      if (missing) return refuse(400, `The file ${missing.sha256} has not been uploaded.`)
+      const versions = mock.published.get(name) ?? []
+      const content = JSON.stringify([body!.manifest, body!.artifacts])
+      const same = versions.at(-1)?.content === content
+      const version = same ? versions.at(-1)!.version : versions.length + 1
+      if (!same) { versions.push({ version, channel: body!.channel, mode: body!.mode, manifest: body!.manifest, content }); mock.published.set(name, versions) }
+      const tasks = [...(body!.manifest as string).matchAll(/^ {2}- name: (\S+)/gm)].map((m) => m[1])
+      return json(route, { kind: 'integration', name, channel: body!.channel, version, changed: !same, mode: body!.mode, signature: 'unsigned', tasks })
+    }
     if (method === 'PUT' && parts[0] === 'bindings' && parts[2] === 'integration') {
       const channel = parts[1]!
       if (mock.deny) return needsAdmin()
@@ -176,4 +219,110 @@ export async function bindingsStory(page: Page) {
   await test.getByTestId('runner-bindings-save').click()
   await expect(test).toContainText('This needs the admin role.')
   expect(outside).toEqual([])   // nothing went to another origin
+}
+
+const sha = (bytes: string | Buffer) => createHash('sha256').update(bytes).digest('hex')
+
+/** A package folder in the temporary directory: a manifest (`package.yaml`), a launch file, notes and a file in a sub folder. */
+export function makePackageFolder(name: string, notes = 'notes v1'): { directory: string; manifest: string; files: Record<string, string> } {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), `ddk-pkg-${name}-`))
+  const manifest = `schema: package/1\nname: ${name}\nlaunch: { assembly: app.dll }\ntasks:\n  - name: load\n  - name: check\n`
+  const files: Record<string, string> = { 'app.dll': 'dll bytes', 'notes.txt': notes, 'sub/data.json': '{"a":1}' }
+  fs.writeFileSync(path.join(directory, 'package.yaml'), manifest)
+  for (const [file, text] of Object.entries(files)) {
+    fs.mkdirSync(path.dirname(path.join(directory, file)), { recursive: true })
+    fs.writeFileSync(path.join(directory, file), text)
+  }
+  return { directory, manifest, files }
+}
+
+/** UE10: publish a package from a folder chosen in the browser: read and hashed there, only the files the runner lacks sent, staged or served, the runner's refusal in its words. */
+export async function publishFilesStory(page: Page) {
+  const outside: string[] = []
+  const origin = new URL(page.url()).origin
+  page.on('request', (request) => { if (/^https?:/.test(request.url()) && !request.url().startsWith(origin)) outside.push(request.url()) })
+  const runner = await mockRunner(page)
+  const pkg = makePackageFolder('invoices')
+  const card = page.getByTestId('runner-pub')
+
+  await page.goto(`/servers/${RUNNER}/packages`)
+  await expect(page.getByTestId('runner-package-row')).toHaveCount(1)
+  await expect(card.getByTestId('runner-pub-button')).toBeDisabled()
+  await expect(card.getByTestId('runner-pub-why')).toContainText('Choose the folder of the package.')
+
+  // ---- a folder: its files are listed (the manifest is not one of them), the package is named by the manifest, the channel is asked for
+  await card.getByTestId('runner-pub-folder').setInputFiles(pkg.directory)
+  await expect(card.getByTestId('runner-pub-files')).toHaveAttribute('data-count', '3')
+  await expect(card.getByTestId('runner-pub-file')).toHaveText(['app.dll', 'notes.txt', 'sub/data.json'])
+  await expect(card.getByTestId('runner-pub-manifest-read')).toHaveAttribute('data-package', 'invoices')
+  await expect(card.getByTestId('runner-pub-manifest-read')).toContainText('package.yaml in the folder')
+  await expect(card.getByTestId('runner-pub-button')).toBeDisabled()
+  await expect(card.getByTestId('runner-pub-why')).toContainText('Name the channel.')
+  await card.getByTestId('runner-pub-channel').fill('Dev')
+  await expect(card.getByTestId('runner-pub-why')).toContainText('not a channel name')
+  await card.getByTestId('runner-pub-channel').fill('dev')
+  await expect(card.getByTestId('runner-pub-button')).toBeEnabled()
+
+  // ---- staged: every file is asked about and sent, then the version is published naming each by its hash
+  await card.getByTestId('runner-pub-button').click()
+  await expect(card.getByTestId('runner-pub-folder-summary')).toContainText('3 file(s)')
+  await expect(card.getByTestId('runner-pub-done')).toBeVisible({ timeout: 30_000 })
+  await expect(card.getByTestId('runner-pub-summary')).toContainText('Version 1 of invoices is staged on dev')
+  await expect(card.getByTestId('runner-pub-counts')).toContainText('3 file(s) sent, 0 already on the runner.')
+  await expect(card.getByTestId('runner-pub-task')).toHaveCount(2)
+  expect(runner.fileCalls.filter((c) => c.startsWith('HEAD'))).toHaveLength(3)
+  expect(runner.fileCalls.filter((c) => c.startsWith('PUT'))).toHaveLength(3)
+  expect(runner.lastBody('PUT definitions/integration/invoices')).toEqual({
+    manifest: pkg.manifest, channel: 'dev', mode: 'stage',
+    artifacts: Object.entries(pkg.files).map(([file, text]) => ({ path: file, sha256: sha(text), size: Buffer.byteLength(text) })),
+  })
+  await expect(page.getByTestId('runner-package-row')).toHaveCount(2, { timeout: 30_000 })
+  await expect(page.getByTestId('runner-package-row').filter({ hasText: 'invoices' })).toContainText('v1 staged')
+
+  // ---- a change in one file: only that file is sent again, and the version is the next
+  fs.writeFileSync(path.join(pkg.directory, 'notes.txt'), 'notes v2')
+  runner.fileCalls.length = 0
+  await card.getByTestId('runner-pub-folder').setInputFiles(pkg.directory)
+  await expect(card.getByTestId('runner-pub-button')).toBeEnabled()
+  await expect(card.getByTestId('runner-pub-done')).toHaveCount(0)   // choosing again clears the last answer
+  await card.getByTestId('runner-pub-button').click()
+  await expect(card.getByTestId('runner-pub-counts')).toContainText('1 file(s) sent, 2 already on the runner.', { timeout: 30_000 })
+  await expect(card.getByTestId('runner-pub-summary')).toContainText('Version 2 of invoices is staged on dev')
+  expect(runner.fileCalls.filter((c) => c.startsWith('PUT'))).toEqual([`PUT ${sha('notes v2').slice(0, 8)}`])
+
+  // ---- served at once, with a note
+  await card.getByTestId('runner-pub-serve').check()
+  await card.getByTestId('runner-pub-note').fill('hotfix')
+  await card.getByTestId('runner-pub-button').click()
+  await expect(card.getByTestId('runner-pub-summary')).toContainText('is served on dev', { timeout: 30_000 })
+  expect(runner.lastBody('PUT definitions/integration/invoices')).toMatchObject({ mode: 'serve', note: 'hotfix' })
+  await card.getByTestId('runner-pub-serve').uncheck()
+
+  // ---- a manifest chosen on its own that is not package/1 is named, and nothing is sent
+  const wrong = path.join(pkg.directory, '..', `ddk-wrong-${Date.now()}.yaml`)
+  fs.writeFileSync(wrong, 'schema: build/1\nname: invoices\n')
+  await card.getByTestId('runner-pub-manifest').setInputFiles(wrong)
+  await expect(card.getByTestId('runner-pub-manifest-problem')).toContainText('not package/1')
+  await expect(card.getByTestId('runner-pub-button')).toBeDisabled()
+  await card.getByTestId('runner-pub-manifest').setInputFiles([])
+  await expect(card.getByTestId('runner-pub-manifest-read')).toContainText('package.yaml in the folder')
+
+  // ---- the runner's refusal of the publish is shown in its words, with the step; the files it already holds are not sent again
+  runner.requireSignatures = true
+  runner.fileCalls.length = 0
+  await card.getByTestId('runner-pub-button').click()
+  await expect(card.getByTestId('runner-pub-failed')).toContainText("The runner refused the package invoices (403): This runner requires signed versions (require_signatures is on)", { timeout: 30_000 })
+  expect(runner.fileCalls.filter((c) => c.startsWith('PUT'))).toEqual([])
+  runner.requireSignatures = false
+
+  // ---- a refusal of a file (a person without the role) names the file
+  runner.deny = true
+  fs.writeFileSync(path.join(pkg.directory, 'notes.txt'), 'notes v3')
+  await card.getByTestId('runner-pub-folder').setInputFiles(pkg.directory)
+  await expect(card.getByTestId('runner-pub-button')).toBeEnabled()
+  await card.getByTestId('runner-pub-button').click()
+  await expect(card.getByTestId('runner-pub-failed')).toContainText('The runner refused the file notes.txt (403): This needs the admin role.', { timeout: 30_000 })
+  expect(outside).toEqual([])
+  fs.rmSync(pkg.directory, { recursive: true, force: true })
+  fs.rmSync(wrong, { force: true })
 }

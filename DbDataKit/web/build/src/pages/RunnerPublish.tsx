@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
-import { ErrorBanner } from '@dbdatakit/shell'
+import { ErrorBanner, StagedVersionView } from '@dbdatakit/shell'
 import { buildApi } from '../api'
 import type { CommandAnswer, PairedRunner, RunnerPublishData } from '../types'
-import { emptyRunnerForm, modeText, runnerPublishBlock, runnerPublishFailure, runnerPublishRequest, taskLine, type RunnerForm } from './runnerPublish'
+import { emptyRunnerForm, runnerPublishBlock, runnerPublishFailure, runnerPublishRequest, stagedFrom, type RunnerForm } from './runnerPublish'
 
 export interface RunnerPublishViewProps {
   runners: PairedRunner[] | undefined
@@ -97,21 +97,7 @@ export function RunnerPublishView(p: RunnerPublishViewProps) {
         </>
       )}
       {failed !== null && <div className="banner error" role="alert" data-testid="build-publish-runner-failed"><span className="mark">!</span><span>{failed}</span></div>}
-      {data && (
-        <div className="card" data-testid="build-publish-runner-done">
-          <div className="card-body">
-            <div data-testid="build-publish-runner-summary">{modeText(data)}</div>
-            {!data.promoted_from && <div className="hint" data-testid="build-publish-runner-counts">{data.uploaded} file(s) sent, {data.skipped} already on the runner.</div>}
-            {(data.tasks?.length ?? 0) > 0 && (
-              <div style={{ marginTop: 8 }} data-testid="build-publish-runner-tasks">
-                {data.tasks.map((t) => <div key={t.name} data-testid="build-publish-runner-task" data-task={t.name}><span className="mono">{t.name}</span> <span className="hint">{taskLine(t)}</span></div>)}
-              </div>
-            )}
-            {(data.owner_old?.length ?? 0) > 0 && <div className="hint" style={{ marginTop: 8 }} data-testid="build-publish-runner-old">Still scheduled by this server until cut over: {data.owner_old.join(', ')}.</div>}
-            {(data.bound?.length ?? 0) > 0 && <div className="hint" data-testid="build-publish-runner-bound">Bound in {data.channel}: {data.bound.join(', ')}.</div>}
-          </div>
-        </div>
-      )}
+      {data && <StagedVersionView data={stagedFrom(data)} testIdPrefix="build-publish-runner" />}
     </div>
   )
 }
