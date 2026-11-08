@@ -315,7 +315,7 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
         if (!source.Everyone && source.Groups.Count == 0 && !source.PassThrough
             && !o.Auth.Jwt.Mappings.Any(m => m.DataSources.Contains("*") || m.DataSources.Contains(name, StringComparer.OrdinalIgnoreCase)))
             cx.Warning($"{at}.Groups", $"The data source `{name}` names no home group and is not open to everyone, so no user of the identity home may use it.",
-                "List the home groups allowed to use it under `extensions.gateway.groups`, or set `extensions.gateway.everyone: true`.");
+                "List the home groups allowed to use it under `grants.groups` (connection/2; a published definition carries them) or, in a file made by hand, `extensions.gateway.groups`, or open it to everyone with `everyone: true` in the same place.");
     }
 
     private static void ValidateJwt(GatewayOptions o, IConfigValidationContext cx)

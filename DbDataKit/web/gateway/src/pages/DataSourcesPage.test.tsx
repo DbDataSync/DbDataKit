@@ -2,7 +2,7 @@ import { isValidElement, type ReactElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@dbdatakit/shell'
-import { HandOverView, ownerLabel, type HandOverViewProps } from './DataSourcesPage'
+import { GRANTED_BY_DEFINITION, GRANTED_BY_FILE, GrantsView, HandOverView, ownerLabel, type HandOverViewProps } from './DataSourcesPage'
 
 const build = { id: 'build-1', name: 'Build one' }
 
@@ -55,5 +55,32 @@ describe('handing a data source to a paired server', () => {
     expect(ownerLabel(null, [build])).toBe('by hand')
     expect(ownerLabel('build-1', [build])).toBe('Build one')
     expect(ownerLabel('gone-7', [build])).toBe('gone-7')
+  })
+})
+
+describe('who may use a data source', () => {
+  it('shows a published definition’s grants read-only, with the sentence that says where to change them', () => {
+    const view = GrantsView({ grants: { groups: ['Finance', 'auditors'], everyone: false, source: 'definition' } })
+    const markup = renderToStaticMarkup(view)
+    expect(GRANTED_BY_DEFINITION).toBe('Granted by the published definition; change them in the project and publish again')
+    expect(markup).toContain(GRANTED_BY_DEFINITION)
+    expect(markup).toContain('Finance')
+    expect(markup).toContain('auditors')
+    expect(markup).not.toMatch(/<(input|button|textarea|select)/)           // nothing here changes them
+  })
+
+  it('says everyone, or that no group is granted, and that a hand-made file is the file’s own', () => {
+    expect(renderToStaticMarkup(GrantsView({ grants: { groups: [], everyone: true, source: 'definition' } }))).toContain('Everyone who signs in')
+    expect(renderToStaticMarkup(GrantsView({ grants: { groups: [], everyone: false, source: 'definition' } }))).toContain('No group is granted')
+    const byHand = renderToStaticMarkup(GrantsView({ grants: { groups: ['ops'], everyone: false, source: 'file' } }))
+    expect(byHand).toContain('ops')
+    expect(byHand).toContain('made by hand')
+    expect(byHand).not.toContain(GRANTED_BY_DEFINITION)
+    expect(GRANTED_BY_FILE).toContain('made by hand')
+  })
+
+  it('shows nothing for a file that did not load', () => {
+    expect(renderToStaticMarkup(GrantsView({ grants: null }))).toBe('')
+    expect(renderToStaticMarkup(GrantsView({ grants: undefined }))).toBe('')
   })
 })

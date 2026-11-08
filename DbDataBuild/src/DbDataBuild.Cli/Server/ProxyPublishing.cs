@@ -169,7 +169,7 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
                 (storedNew, replaced) = (!exists, exists);
             }
 
-            var text = $"schema: connection/1\nname: {dataSource}\nengine: {engine}\naccess: readonly\nconnection_string_secret: '{reference}'\n";
+            var text = DataSourceText(dataSource, engine, reference!, config.Grants);
             using var written = await Send(HttpMethod.Put, $"/api/v1/data-sources/{Uri.EscapeDataString(dataSource)}", new { text, expected_version = version });
             if (!written.IsSuccessStatusCode) return await Undone(await Refused(written, "writing the data source", AdoptHint(self.Id, dataSource)));
             var answer = JsonNode.Parse(await written.Content.ReadAsStringAsync(ct))!;
@@ -185,6 +185,21 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
         {
             return await Undone(Fail(502, $"The proxy '{proxyName}' did not answer ({ex.GetType().Name})."));
         }
+    }
+
+    /// <summary>
+    /// The data source file a publish sends. Without grants it is the <c>connection/1</c> file it always was, so a group whose instances read only format 1 still takes it; with the connection's <c>grants</c> (plan 22a GP03) it is
+    /// <c>connection/2</c> and carries them: the Gateway serves exactly these grants, and the next publish replaces them (a connection whose grants were removed publishes a file with none).
+    /// </summary>
+    internal static string DataSourceText(string dataSource, string engine, string reference, GrantsSpec? grants)
+    {
+        var text = $"schema: connection/{(grants is null ? 1 : 2)}\nname: {dataSource}\nengine: {engine}\naccess: readonly\nconnection_string_secret: '{reference}'\n";
+        if (grants is null) return text;
+        text += "grants:\n";
+        if (grants.Everyone) text += "  everyone: true\n";
+        if (grants.Groups.Count > 0) text += "  groups: [" + string.Join(", ", grants.Groups.Select(g => "'" + g.Replace("'", "''", StringComparison.Ordinal) + "'")) + "]\n";
+        if (!grants.Everyone && grants.Groups.Count == 0) text += "  groups: []\n";
+        return text;
     }
 
     /// <summary>The reference a data source file's <c>connection_string_secret</c> holds when it names the secret <paramref name="secretName"/> (references end in the secret's name), else null.</summary>

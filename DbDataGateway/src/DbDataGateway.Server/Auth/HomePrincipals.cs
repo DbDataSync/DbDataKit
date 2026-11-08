@@ -30,5 +30,5 @@ public static class DataSourceAccess
     public static string Refusal(string name, DataSourceOptions source, string person) =>
         source.Everyone || source.Groups.Count > 0
             ? $"Not authorized for data source '{name}': it is for the home groups {string.Join(", ", source.Groups)}, and {person} is in none of them."
-            : $"Not authorized for data source '{name}': it names no home group and is not open to everyone, so no home user may use it (an administrator lists the groups under extensions.gateway.groups in its file).";
+            : $"Not authorized for data source '{name}': it names no home group and is not open to everyone, so no home user may use it (a published definition lists the groups under `grants`, and a Build project publishes it again; an administrator lists them under extensions.gateway.groups in a file made by hand).";
 }

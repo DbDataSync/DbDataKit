@@ -86,8 +86,23 @@ public sealed class CacheSpec
 }
 
 /// <summary>
+/// The <c>grants:</c> section of a connection definition used as a serving data source (plan 22a GP03, owner decision of 2026-11-08; <c>connection/2</c>): which people of the identity home may read the data source, by home group, or everyone.
+/// The grants are part of the definition a Build project publishes: a publish replaces them completely, and the Gateway that serves the data source enforces exactly what the definition says (it has no grants of its own to add or take away).
+/// A data source with no <c>grants</c> (or an empty one) is used by no home user.
+/// </summary>
+[ConfigSchema(Naming = KeyNaming.SnakeCase, Description = "Who may read a serving data source: home groups, or everyone (connection/2).")]
+public sealed class GrantsSpec
+{
+    /// <summary>The identity home's groups whose members may use the data source (names match ignoring case). Not together with <see cref="Everyone"/>.</summary>
+    public List<string> Groups { get; set; } = [];
+
+    /// <summary>Every user of the identity home may use the data source, whatever their groups. Say it explicitly: leaving the groups out opens nothing.</summary>
+    public bool Everyone { get; set; }
+}
+
+/// <summary>
 /// The shared connection definition, schema <c>connection/2</c> (and <c>connection/1</c>, which is read as before). Load it with <see cref="ConnectionDefinitionLoader"/>, which also enforces the rules a binder cannot.
-/// Format 2 adds the optional sections <c>cache</c> and <c>checks</c> (plan 24a D5 and UC03); a file that says <c>connection/1</c> and has either is refused naming the file and line.
+/// Format 2 adds the optional sections <c>cache</c>, <c>checks</c> (plan 24a D5 and UC03) and <c>grants</c> (plan 22a GP03); a file that says <c>connection/1</c> and has either is refused naming the file and line.
 /// </summary>
 [ConfigSchema("connection", Naming = KeyNaming.SnakeCase, VersionKey = "schema", Version = 2, Description = "A database connection (connection/2; connection/1 is read as well).")]
 public sealed class ConnectionDefinition
@@ -131,6 +146,9 @@ public sealed class ConnectionDefinition
 
     /// <summary>The cache setting of a serving data source (format 2); null: the cache is off.</summary>
     public CacheSpec? Cache { get; set; }
+
+    /// <summary>Who may read a serving data source (format 2, plan 22a GP03): home groups, or everyone. Null: no home user may use it. Travels with the published definition; a republish replaces it.</summary>
+    public GrantsSpec? Grants { get; set; }
 
     /// <summary>
     /// The checks of this data source (format 2) as the binder sees them: a list of mappings. <c>ConnectionDefinitionLoader</c> reads them strictly as <c>check/1</c> entries (<see cref="CheckDefinitions"/>); null when the file has none.

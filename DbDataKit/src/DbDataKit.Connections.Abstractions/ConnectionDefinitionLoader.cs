@@ -33,6 +33,7 @@ public static class ConnectionDefinitionLoader
     public const string SectionNotInThisFormat = "DBD-CONN-009";
     public const string CannotBeCached = "DBD-CONN-010";
     public const string BadCache = "DBD-CONN-011";
+    public const string BadGrants = "DBD-CONN-012";
 
     /// <summary>JSON Schema for editor aids, generated from the type.</summary>
     public static string JsonSchema() => JsonSchemaGenerator.ToJson(typeof(ConnectionDefinition), "https://dbdata.dev/schema/connection/1.json");
@@ -138,6 +139,7 @@ public static class ConnectionDefinitionLoader
         {
             if (d.Cache is not null) Err(SectionNotInThisFormat, "cache", "`cache` is a section of format 2 (connection/2), and this file says `schema: connection/1`.", "Set `schema: connection/2`. A program that reads only connection/1 then refuses the file by its version, which keeps it from serving the data source without the section.");
             if (d.Checks is not null) Err(SectionNotInThisFormat, "checks", "`checks` is a section of format 2 (connection/2), and this file says `schema: connection/1`.", "Set `schema: connection/2`.");
+            if (d.Grants is not null) Err(SectionNotInThisFormat, "grants", "`grants` is a section of format 2 (connection/2), and this file says `schema: connection/1`.", "Set `schema: connection/2`. A program that reads only connection/1 then refuses the file by its version instead of serving the data source without the grants the definition names.");
         }
         else if (d.Cache is { } cache)
         {
@@ -149,9 +151,26 @@ public static class ConnectionDefinitionLoader
                     "Give it an `address` (host or database) or a `connection_string`, or leave the cache off.");
         }
 
+        if (d.SchemaVersion >= 2 && d.Grants is { } grants) CheckGrants(grants);
+
         if (!d.Tls.Verify) Warn(TlsOptOut, "tls.verify", "Certificate verification is off for this connection.");
         if (d.Tls.TrustServerCertificate) Warn(TlsOptOut, "tls.trust_server_certificate", "The server certificate is trusted without verification.");
         if (!d.Tls.Encrypt) Warn(TlsOptOut, "tls.encrypt", "Encryption is off for this connection.");
+
+        void CheckGrants(GrantsSpec grants)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (var i = 0; i < grants.Groups.Count; i++)
+            {
+                var group = grants.Groups[i];
+                if (string.IsNullOrWhiteSpace(group) || group != group.Trim() || group.Any(char.IsControl))
+                    Err(BadGrants, $"grants.groups[{i}]", "A group name in `grants.groups` is empty, has leading or trailing spaces, or has control characters.", "Name a group of the identity home exactly as the home shows it.");
+                else if (!seen.Add(group))
+                    Err(BadGrants, $"grants.groups[{i}]", $"The group `{group}` is listed twice in `grants.groups` (names match ignoring case).", "Remove the repeated name.");
+            }
+            if (grants.Everyone && grants.Groups.Count > 0)
+                Err(BadGrants, "grants.everyone", "`grants` opens the data source to everyone and also names groups; the groups would mean nothing.", "Remove `everyone`, or remove `groups`.");
+        }
 
         void CheckRef(string text, string path)
         {

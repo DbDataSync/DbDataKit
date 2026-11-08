@@ -25,7 +25,7 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 | | Scripts | Yes | Yes | Yes | Compile, test | `ScriptsPage.tsx`, `ScriptEditPage.tsx` |
 | | Docs | – | – | – | Read the shipped documentation | `DocsPage.tsx` |
 | | Drivers, libraries, files, certificate, updates, configuration | Yes | Yes | Yes | Admin screens | `DriversPage.tsx`, `DriverEditPage.tsx`, `LibrariesPage.tsx`, `FilesPage.tsx`, `AdminCertificatePage.tsx`, `AdminUpdatesPage.tsx`, `AdminConfigPage.tsx` |
-| **Gateway** | Data sources | Yes | Yes | Yes | Test, adopt (hand to a paired server) | `DataSourcesPage.tsx` |
+| **Gateway** | Data sources | Yes | Yes | Yes | Test, adopt (hand to a paired server); shows who may use a published data source, read-only (GP03) | `DataSourcesPage.tsx` |
 | | Users, JWT mappings, pass-through | Yes | Yes | Yes | – | `IdentitiesPage.tsx` |
 | | Identity home: people, groups, role assignments, external group mappings, **attribute mappings** (a directory group gives its members an attribute value), app clients, service accounts, tokens | Yes (an attribute mapping: group, attribute, value; the form checks the name and the value before sending) | – | Yes (remove) | Disable and enable a person | the identity-home screen (`identity/IdentityAdminPage.tsx`, `identity/AttributeMappings.tsx`) |
 | | Apps: instances, apps and versions, navigation sets, approvals | An instance (form: app, version, title, settings, bindings); a version of an app (a built folder or a manifest, checked by the Gateway first); a navigation set (a titled, ordered list of instances) | Edit an instance (form), pin or follow a version; reorder, label and rename a navigation set | Remove an instance, an app or a navigation set (the store's rules; a refusal is shown) | Serve an older version (roll back), approve a trusted version (also exact files before they are published) choosing its outside origins, revoke an approval, see a version's data access (models, outside addresses, publisher, approval), open an instance's address | `AppsPage.tsx`, `AppEditors.tsx` |
@@ -38,7 +38,7 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 | | Overview | – | – | – | Read-only | `OverviewPage.tsx` |
 | | Serving modules (`flightsql`, `identity`; `apps` and `rest` planned) | – | – | – | **No UI**: the `Modules` setting in `server.yaml` (O01) | |
 | **Build** | Projects | Yes (from a template, or import) | – | – | – | `ProjectsPage.tsx`, `NewProjectPanel.tsx`, `ImportPanel.tsx` |
-| | Model and project files | Yes | Yes (editor) | Yes | Move or rename | `EditTab.tsx`, `NewModelPanel.tsx`, `FileTools.tsx` |
+| | Model and project files | Yes | Yes (editor) | Yes | Move or rename; the grants of a connection file (who may use the data source once published, GP03) | `EditTab.tsx`, `NewModelPanel.tsx`, `FileTools.tsx` |
 | | Dashboards and reports of a project (plan 32 DBR29: the files of `dashboards/` and `reports/`) | Yes (new, in a workspace) | Yes (the shared editor of `@dbdatakit/views-editor`, with the project's own model as the catalog; the Edit tab links to it) | Yes | Check with the project's models, publish to a paired Gateway (approver) | `ViewsTab.tsx` |
 | | Draft (workspace) | – | – | – | Check, compile, sample, diff, commit, push or merge | `CompilePanel.tsx`, `GitPanel.tsx`, `PreviewPanel.tsx`, `ProjectPage.tsx` |
 | | Deploy plans | Yes | – | – | Dry run, apply (approver) | `DeployTabs.tsx` |

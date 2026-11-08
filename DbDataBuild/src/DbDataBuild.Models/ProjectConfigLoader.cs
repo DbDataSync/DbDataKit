@@ -51,6 +51,7 @@ public static class ProjectConfigLoader
         /// <summary>The mapping connections are read from: the files' (project on disk) or the `connections:` of the text (in memory).</summary>
         private YamlMapping? connectionNodes;
         private IReadOnlyDictionary<string, DbDataKit.Connections.TlsSpec>? connectionTls;
+        private IReadOnlyDictionary<string, DbDataKit.Connections.GrantsSpec>? connectionGrants;
         private bool connectionsInText;
 
         private readonly Dictionary<string, int> lines = [];
@@ -86,6 +87,7 @@ public static class ProjectConfigLoader
                     Add(DiagnosticCatalog.ConnectionsInProjectFile, old.Key, $"`{ProductInfo.ConfigFile}` declares connections under `connections:`: {string.Join(", ", (old.Value as YamlMapping)?.Entries.Select(e => "`" + e.Key.Value + "`") ?? [])}.");
                 connectionNodes = files.Connections;
                 connectionTls = files.Tls;
+                connectionGrants = files.Grants;
             }
             else { connectionNodes = top.Get("connections") as YamlMapping; connectionsInText = top.Get("connections") is not null; }
             readOnlyConnections = ReadOnlyNames(connectionNodes);
@@ -516,7 +518,7 @@ public static class ProjectConfigLoader
                     if (mp is YamlScalar mps && int.TryParse(mps.Value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var cap) && cap is >= 1 and <= 64) maxParallel = cap;
                     else Add(DiagnosticCatalog.InvalidValue, mp, $"`connections.{name}.max_parallel` must be a whole number from 1 to 64.");
                 }
-                if (engine != null) result[name] = new ConnectionConfig(name, engine, version, e.Key.Line, parameters, ownTracking, allowCommands, ReadSemanticsOverride(settings, name), ReadLifecycleOverride(settings, $"connections.{name}"), ReadInfo(settings)) { Timezone = ReadTimezone(settings, $"`connections.{name}.timezone`"), MaxParallel = maxParallel, DeclaredKind = kind, Profile = ProfileOf(kind, dialects), Tls = connectionTls?.GetValueOrDefault(name) };
+                if (engine != null) result[name] = new ConnectionConfig(name, engine, version, e.Key.Line, parameters, ownTracking, allowCommands, ReadSemanticsOverride(settings, name), ReadLifecycleOverride(settings, $"connections.{name}"), ReadInfo(settings)) { Timezone = ReadTimezone(settings, $"`connections.{name}.timezone`"), MaxParallel = maxParallel, DeclaredKind = kind, Profile = ProfileOf(kind, dialects), Tls = connectionTls?.GetValueOrDefault(name), Grants = connectionGrants?.GetValueOrDefault(name) };
             }
             return result;
         }

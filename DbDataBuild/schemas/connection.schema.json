@@ -12,7 +12,11 @@
   ],
   "properties": {
     "schema": {
-      "const": "connection/1"
+      "description": "connection/1, or connection/2 when the file has `grants` (a program that reads only connection/1 then refuses the file by its version).",
+      "enum": [
+        "connection/1",
+        "connection/2"
+      ]
     },
     "name": {
       "description": "The connection's name; equal to the file's name. Letters, digits and underscores, starting with a letter.",
@@ -58,6 +62,26 @@
         },
         "ca_file": {
           "type": "string"
+        }
+      }
+    },
+    "grants": {
+      "description": "Who may use this connection once it is published to a Gateway as a data source (needs `schema: connection/2`): the home groups that may read it, or everyone. They are part of the definition that is published: a publish replaces the Gateway's grants completely, and the Gateway adds none and takes none away. Without grants no home user may use the published data source.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "groups": {
+          "description": "Groups of the Gateway's identity home whose members may use the data source (names match ignoring case). Not together with `everyone`.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "everyone": {
+          "description": "Every user of the Gateway's identity home may use the data source. Say it deliberately: leaving the groups out opens nothing.",
+          "type": "boolean"
         }
       }
     },

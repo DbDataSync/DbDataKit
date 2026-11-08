@@ -55,6 +55,9 @@ public sealed record ConnectionConfig(string Name, string Engine, int? Version =
     /// <summary>The connection file's `tls:` block (encrypt, verify, trust_server_certificate, ca_file); null when the file has none, which is the shared default: encrypt and verify the certificate.</summary>
     public DbDataKit.Connections.TlsSpec? Tls { get; init; }
 
+    /// <summary>The connection file's `grants:` (home groups, or everyone; `schema: connection/2`): who may use the data source this connection is published as. Null when the file has none, which publishes a data source no home user may use. Published with the connection and replaced completely by the next publish (plan 22a GP03).</summary>
+    public DbDataKit.Connections.GrantsSpec? Grants { get; init; }
+
     public ConnectionKind Kind => DeclaredKind ?? ConnectionKind.OfEngine(Engine);
 
     /// <summary>The project's own dialect profile (`dialects:`) that this connection's `engine` names; null when the dialect is a built-in.</summary>
