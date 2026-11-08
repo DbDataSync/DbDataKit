@@ -165,7 +165,8 @@ function EditorBody({ model, entity: entityName, canWrite, pageSize, columns }: 
       <div className="sui-main">
         <div className="sui-toolbar">
           <h2>{entity.title ?? entity.name}</h2>
-          {canWrite && <button type="button" onClick={() => { setSelected(null); setCreating(true) }}>New</button>}
+          <button type="button" data-testid="sui-new" disabled={!canWrite} title={canWrite ? undefined : 'Changing rows needs the author or administrator role.'} onClick={() => { setSelected(null); setCreating(true) }}>New</button>
+          {!canWrite && <span className="sui-hint" data-testid="sui-readonly">Changing rows needs the author or administrator role.</span>}
         </div>
         <EntityGrid model={model} entity={entityName} pageSize={pageSize} columns={columns} refresh={refresh} selected={selected ? keyOf(entity, selected.values) : null} onSelect={(r) => { setCreating(false); setSelected(r) }} />
       </div>

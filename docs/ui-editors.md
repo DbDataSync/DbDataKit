@@ -58,7 +58,7 @@ The table is sorted by what blocks "ready to test soon" (apps, dashboards, repor
 | Sync mapping verification checks | the mapping's `checks` | - | Sync `ChecksCard.tsx`: `add-check-button`, `check-editor`, `check-kind-select`, `save-check-button`, `remove-check-<name>` | full | |
 | Sync scripts | script manifest and source | `sync-script-config` | Sync `ScriptsPage.tsx`, `ScriptEditPage.tsx`: `new-script-button`, `script-name-input`, `check-script-button`, `save-script-button` | full | Compile, test and delete as well |
 | Sync connections, drivers, libraries | connection files, driver YAML, NuGet libraries | - | Sync `ConnectionEditPage.tsx`, `DriversPage.tsx`, `DriverEditPage.tsx`, `LibrariesPage.tsx` | full | |
-| Store rows of an entity | rows through `ModelWriter` | - | Store `EntityPage.tsx` with the controls of `@dbdatakit/store-ui` (`store-entity`) | full | Create, edit, delete, history, instance picker; no console story yet (Z06 left its browser test pending). UE18 |
+| Store rows of an entity | rows through `ModelWriter` | - | Store `EntityPage.tsx` with the controls of `@dbdatakit/store-ui` (`store-entity`, `sui-new`, `sui-field-<attribute>`, `sui-submit`, `sui-delete`, `sui-instance-select`); story `store-entity.spec.ts` | full | Create, edit, delete, history, instance picker, the Store's refusals against the attribute they name; a reader sees New disabled with the reason |
 | Console servers, users, invitations, state databases | pairing, `users`, invitations, state connections | - | Console `InstancesPage.tsx`, `PendingServers.tsx`, `UsersPage.tsx`, `InvitePage.tsx`, `StateConnections.tsx`, `ServerStatePage.tsx`; stories `pending-servers.spec.ts`, `state-move.spec.ts` | full | |
 
 ## Not in the registry
@@ -67,4 +67,4 @@ The table is sorted by what blocks "ready to test soon" (apps, dashboards, repor
 
 ## How the screens are tested
 
-A console screen has a Playwright story in `DbDataConsole/tests/DbDataConsole.Web.Tests/tests`, a Sync screen in `DbDataSync/tests/DbDataSync.Web.Tests/tests`. Whether every screen above has one is not audited here (the stories named in the table were found by file name, not run); the one known to be missing is the Store entity editor (UE18).
+A console screen has a Playwright story in `DbDataConsole/tests/DbDataConsole.Web.Tests/tests`, a Sync screen in `DbDataSync/tests/DbDataSync.Web.Tests/tests`. Whether every screen above has one is not audited here (the stories named in the table were found by file name, not run); the Store's screens are the three `store-*.spec.ts` stories (UE13, UE14, UE18), which run the console against a Store server mocked in the page (`store-fake.ts`).

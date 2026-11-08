@@ -10,7 +10,7 @@ const field = (page: Page, path: string) => page.getByTestId(`form-field-${path}
 
 /**
  * Plan 33, UE13a and UE13b: the Store's model screens, through the console (a Store server answering through the relay, `store-fake.ts`). A person makes a model from the starting text, breaks it and reads the Store's own diagnostics with
- * Save off and saying why, fixes it and saves; creates its tables; adds an attribute, sees the copy fall behind, reads the migration dry run and applies it; removes the model. Then a person who may only read,
+ * Save off and saying why, fixes it and saves; creates its tables; adds an attribute, sees the copy fall behind, reads the migration dry run and applies it; writes a row on the entity screen; removes the model. Then a person who may only read,
  * and one who may write but not remove, see the buttons off with the reason, and a save of a model that somebody else saved meanwhile is refused with a way out.
  */
 export async function modelsStory(page: Page) {
@@ -89,6 +89,18 @@ export async function modelsStory(page: Page) {
   await expect(page.getByTestId('storage-done')).toContainText('Migrated')
   await expect(page.getByTestId('storage-status')).toHaveAttribute('data-status', 'current')
   expect(store.calls.filter((c) => c.startsWith('POST models/sales_territories/migrate'))).toEqual(['POST models/sales_territories/migrate', 'POST models/sales_territories/migrate?apply=true'])
+
+  // a row of the new attribute, in the entity screen
+  await page.goto(`/servers/${SERVER}`)
+  await page.getByTestId('store-entity-link').click()
+  await expect(page.getByTestId('store-entity')).toBeVisible()
+  await page.getByTestId('sui-new').click()
+  await page.getByTestId('sui-field-code').fill('EU')
+  await page.getByTestId('sui-field-name').fill('Europe')
+  await page.getByTestId('sui-field-region').fill('West')
+  await page.getByTestId('sui-submit').click()
+  await expect(page.locator('[data-testid="sui-row"][data-key="EU"]')).toContainText('West')
+  expect(store.rows('sales_territories', 'item')).toEqual([{ code: 'EU', name: 'Europe', region: 'West' }])
 
   // removing the model asks first, says what it leaves, and the list is empty again
   await page.goto(`/servers/${SERVER}/model/sales_territories`)
