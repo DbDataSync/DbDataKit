@@ -255,7 +255,7 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await page.getByTestId('rail-home-link').click()
   await expect(page.getByTestId('instances-page')).toBeVisible()
 
-  // A Proxy: its screens open inside the console too. The overview, the data source it was started with, a user made here, the certificate and the history of its configuration.
+  // A Proxy: its screens open inside the console too. The overview, the data source it was started with, a JWT claim mapping made here, the certificate and the history of its configuration.
   await page.getByTestId('pair-url-input').fill(proxyUrl)
   await page.getByTestId('pair-code-input').fill(fs.readFileSync(path.join(scratchDirectory, 'proxy-pairing-code.txt'), 'utf8').trim())
   await page.getByTestId('pair-name-input').fill('Proxy one')
@@ -271,14 +271,7 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await expect(page.getByTestId('data-source-erp')).toBeVisible()
 
   await page.getByTestId('rail-identities').click()
-  await page.getByTestId('user-name-input').fill('analyst')
-  await page.getByTestId('user-password-input').fill('correct horse battery')
-  await page.getByTestId('user-sources-input').fill('erp')
-  await page.getByTestId('user-save').click()
-  const analyst = page.getByTestId('user-analyst')
-  await expect(analyst).toBeVisible()
-  await expect(analyst.getByTestId('user-has-password')).toHaveText('set')
-  await expect(page.getByText('correct horse battery')).toHaveCount(0)   // a password is never shown back
+  // Proxy users are retired (plan 13a, P13): people reach a data source as home users, in the groups its file names, so there is no user to make on this screen.
 
   // a JWT claim mapping, saved as a list into proxy/auth.yaml and shown again from the server
   await page.getByTestId('jwt-mapping-add').click()
@@ -300,7 +293,7 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await expect(page.getByTestId('proxy-activity')).toBeVisible()
   await expect(page.getByTestId('lockouts-table')).toContainText('Nobody is locked out.')
 
-  // The user made above is a commit by the person who made it.
+  // The mapping made above is a commit by the person who made it.
   await page.getByTestId('rail-config').click()
   await expect(page.getByTestId('commits-table').locator('[data-testid^="commit-"]').first()).toBeVisible()
 
