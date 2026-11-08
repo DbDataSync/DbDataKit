@@ -127,6 +127,7 @@ public static class GatewayManagementHost
             stateApi: stateApi,
             views: new GatewayViewsManagement(app.Services.GetRequiredService<Serving.GatewayViewsPublishing>(), GatewayModules.Has(options, GatewayModules.Views) ? app.Services.GetRequiredService<Serving.GatewayViews>() : null, audit),
             audit: audit,
+            serverSettings: new GatewayServerSettings(configDirectory, management, provider.ReloadNow, audit, git),
             entityModels: new GatewayEntityModels(app.Services.GetRequiredService<Serving.PublishedEntityModels>(),
                 () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue,
                 dataSource =>

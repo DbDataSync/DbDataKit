@@ -15,6 +15,7 @@ const rail: RailItem[] = [
   { to: '/models', title: 'Models', testId: 'rail-models', icon: icon(<><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z" /><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5" /></>) },
   { to: '/tls', title: 'Certificate', testId: 'rail-tls', icon: icon(<><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 018 0v3" /></>) },
   { to: '/activity', title: 'Activity', testId: 'rail-activity', icon: icon(<><path d="M4 19V9M10 19V5M16 19v-7M22 19H2" /></>) },
+  { to: '/settings', title: 'Server settings', testId: 'rail-settings', icon: icon(<><path d="M4 7h10M18 7h2M4 17h2M10 17h10" /><circle cx="16" cy="7" r="2" /><circle cx="8" cy="17" r="2" /></>) },
   { to: '/config', title: 'Configuration history', testId: 'rail-config', icon: icon(<><circle cx="6" cy="6" r="2.5" /><circle cx="6" cy="18" r="2.5" /><circle cx="18" cy="12" r="2.5" /><path d="M6 8.5v7M8.5 6.5c5 0 7 2 7 5" /></>) },
 ]
 

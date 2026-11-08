@@ -1,7 +1,7 @@
 import { put, request } from '@dbdatakit/shell'
 import type { InstanceRequest, NavigationRequest, PublishBody } from './appEditors'
 import type {
-  AdoptAnswer, EntityModelDetail, EntityModelRow, SemanticModelDetail, SemanticModelRow, AppApprovals, AppCheck, AppDetail, AppInstances, AppsList, NavigationSetRow, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SecretWritten, SecretsList, SessionRow, TestResult, WriteDataSourceResult,
+  AdoptAnswer, EntityModelDetail, EntityModelRow, SemanticModelDetail, SemanticModelRow, AppApprovals, AppCheck, AppDetail, AppInstances, AppsList, NavigationSetRow, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SecretWritten, SecretsList, ServerSettings, SettingsCheck, SettingsEdit, SettingsWritten, SessionRow, TestResult, WriteDataSourceResult,
 } from './types'
 
 const v1 = '/api/v1'
@@ -91,6 +91,13 @@ export const gatewayApi = {
     list: () => request<SecretsList>(`${v1}/secrets`).then((r) => r.items ?? r.secrets.map((name) => ({ name, reference: '' }))),
     set: (name: string, value: string) => put<SecretWritten>(`${v1}/secrets/${enc(name)}`, { value }),
     remove: (name: string) => request<{ name: string; removed: boolean }>(`${v1}/secrets/${enc(name)}`, { method: 'DELETE' }),
+  },
+  /** server.yaml (plan 33, UE17): read with its secrets masked, checked and edited as a draft (nothing written), written against the version read. */
+  settings: {
+    read: () => request<ServerSettings>(`${v1}/config/server.yaml`),
+    check: (text: string) => request<SettingsCheck>(`${v1}/config/server.yaml/check`, { method: 'POST', body: JSON.stringify({ text }) }),
+    edit: (text: string, change: SettingsEdit) => request<{ text: string }>(`${v1}/config/server.yaml/edit`, { method: 'POST', body: JSON.stringify({ text, ...change }) }).then((r) => r.text),
+    write: (text: string, expectedVersion: string | null, note: string) => put<SettingsWritten>(`${v1}/config/server.yaml`, { text, expected_version: expectedVersion, note: note || undefined }),
   },
   history: {
     list: () => request<{ commits: CommitRow[] }>(`${v1}/config/history`).then((r) => r.commits),

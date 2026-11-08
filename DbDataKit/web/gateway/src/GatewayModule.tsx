@@ -9,6 +9,7 @@ import { GatewayShell } from './GatewayShell'
 import { ModelsPage } from './pages/ModelsPage'
 import { OverviewPage } from './pages/OverviewPage'
 import { SecretsPage } from './pages/SecretsPage'
+import { SettingsPage } from './pages/SettingsPage'
 import { TlsPage } from './pages/TlsPage'
 
 function EditRoute() {
@@ -31,6 +32,7 @@ export function GatewayModule() {
       <Route path="/models" element={<ModelsPage />} />
       <Route path="/tls" element={<TlsPage />} />
       <Route path="/activity" element={<ActivityPage />} />
+      <Route path="/settings" element={<SettingsPage />} />
       <Route path="/config" element={<ConfigHistoryPage />} />
       <Route path="/config/:sha" element={<ConfigCommitPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
