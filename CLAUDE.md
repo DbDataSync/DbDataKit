@@ -68,6 +68,8 @@ Test engines:
   `eval "$(testenv/testenv.sh env dbdatasync)"`. `postgres-logical` is the one second engine of a kind (wal_level=logical and wal2json,
   built from `testenv/postgres-logical` on a fresh `postgres:17`), kept apart so the plain `postgres` stays what the other suites test.
   Run one stack at a time on a machine: the ports are fixed.
+- The DuckDB engine (`duckdb.pin`): `scripts/fetch-duckdb.sh` (or `.ps1`) downloads and hash-checks it. They read `DUCKDB_RELEASE_BASE` (a `file://` folder or an https address) before the pin's address and retry a failed download; CI fills a folder from the Actions cache with
+  `.github/actions/duckdb-cache`, so a GitHub release outage does not fail runs (`scripts/check_duckdb_cache.py` makes a new job use it; `docs/ci-lessons.md`).
 - Tests with ODBC data sources (Gateway's SQL Server tests, Kit's ODBC projects) need unixODBC and Microsoft's "ODBC Driver 18 for SQL
   Server" installed on the machine. In a cloud session run `scripts/install-odbc.sh` (Debian/Ubuntu; it is the CI install, safe to repeat).
 
