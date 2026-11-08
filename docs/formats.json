@@ -42,6 +42,36 @@
       "files": [ { "path": "DbDataBuild/schemas/model.schema.json", "sha256": null } ]
     },
     {
+      "id": "sync-task-config",
+      "title": "Sync replication file (task.yaml, schemaVersion)",
+      "current": 2,
+      "previous": 1,
+      "status": "open",
+      "note": "gains the checks section (plan 23a FQ04); open until the first release that holds it (24a D5)",
+      "version_source": { "file": "DbDataSync/src/DbDataSync.Core/Config/ConfigSchema.cs", "pattern": "public const int TaskCurrent = (\\d+);" },
+      "files": [ { "path": "DbDataSync/src/DbDataSync.Core/Config/ReplicationTaskConfig.cs", "sha256": null } ]
+    },
+    {
+      "id": "sync-mapping-config",
+      "title": "Sync table-mapping file (schemaVersion)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "unchanged by FQ04; one entry per Sync file kind because each has its own version",
+      "version_source": { "file": "DbDataSync/src/DbDataSync.Core/Config/ConfigSchema.cs", "pattern": "public const int MappingCurrent = (\\d+);" },
+      "files": [ { "path": "DbDataSync/src/DbDataSync.Core/Config/TableMappingConfig.cs", "sha256": null } ]
+    },
+    {
+      "id": "sync-script-config",
+      "title": "Sync script manifest (schemaVersion)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "unchanged by FQ04; one entry per Sync file kind because each has its own version",
+      "version_source": { "file": "DbDataSync/src/DbDataSync.Core/Config/ConfigSchema.cs", "pattern": "public const int ScriptCurrent = (\\d+);" },
+      "files": [ { "path": "DbDataSync/src/DbDataSync.Core/Config/ScriptConfig.cs", "sha256": null } ]
+    },
+    {
       "id": "package",
       "title": "Runner package manifest (schema: package/N)",
       "current": 1,

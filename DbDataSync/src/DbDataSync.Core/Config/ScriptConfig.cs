@@ -42,7 +42,7 @@ public sealed class ScriptConfig
     public const string LockExtension = ".lock";
 
     /// <summary>The version of this file's format (plan 13, A03). Required: a file without it, or from an older format, is refused with a message rather than read as if it were current.</summary>
-    public int SchemaVersion { get; set; } = ConfigSchema.Current;
+    public int SchemaVersion { get; set; } = ConfigSchema.ScriptCurrent;
 
     public required string Name { get; set; }
 

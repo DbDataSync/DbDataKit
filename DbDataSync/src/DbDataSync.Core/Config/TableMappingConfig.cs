@@ -251,7 +251,7 @@ public sealed class RelationshipConfig
 public sealed class TableMappingConfig
 {
     /// <summary>The version of this file's format (plan 13, A03). Required: a file without it, or from an older format, is refused with a message rather than read as if it were current.</summary>
-    public int SchemaVersion { get; set; } = ConfigSchema.Current;
+    public int SchemaVersion { get; set; } = ConfigSchema.MappingCurrent;
 
     public required string Name { get; set; }
     public required List<SourceTableSpec> Sources { get; set; }
