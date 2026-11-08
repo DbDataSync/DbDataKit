@@ -70,21 +70,39 @@ async function makeLaggingReplication(request: APIRequestContext, sync: string) 
   // What a pass and the polling gate would have written: the mapping applied a position that committed at 10:00, and the source's latest check says it is at 11:00.
   const applied = new Date(Date.now() - 2 * 3_600_000).toISOString()
   const current = new Date(Date.now() - 3_600_000).toISOString()
+  // The Sync server is running and writes this file too (its scheduler and heartbeat); the file is not in WAL mode, so a second writer is refused at once unless it waits.
+  // Wait for the lock (busy_timeout) and write everything in one immediate transaction, retried when the lock is still not ours: nothing here depends on how fast the machine is.
   const db = new DatabaseSync(path.join(monitorSync.directory, 'state.db'))
   try {
+    db.exec('PRAGMA busy_timeout = 30000')
     // The position is a checkpoint of the progress module (plan 28c, E15): a head row and one row per part, under package `dbdatasync`, channel `local`, the replication as the task, and the key `mapping|source table`.
     // Times are the state store's SQLite text, UTC with seven fractional digits.
     const at = (iso: string) => iso.replace('Z', '0000Z')
     const key = ['dbdatasync', 'local', replication, 'watermark', 'orders|lag-source/[AppDb]/[dbo].[orders]']
-    db.prepare('INSERT OR REPLACE INTO dbdatakit_runner_progress_main_checkpoint_head (package, channel, task, name, item_key, row_version, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(...key, 1, at(applied), 'dbdatasync')
-    const part = db.prepare('INSERT OR REPLACE INTO dbdatakit_runner_progress_main_checkpoint_part (package, channel, task, name, item_key, part, value_type, value_text, value_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    part.run(...key, 'position', 'Text', '0x0000002A000000100001', null)
-    part.run(...key, 'position_time', 'Time', null, at(applied))
-    part.run(...key, 'intent', 'Text', 'Changes', null)
-    part.run(...key, 'hold', 'Text', 'None', null)
-    db.prepare('INSERT INTO dbdatakit_sync_state_main_change_check (connection_name, source_database, source_kind, value_text, checked_at, source_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run('lag-source', 'AppDb', 'MsSqlCdc', '0x0000002A000000200001', at(current), at(current))
+    const write = () => {
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        db.prepare('INSERT OR REPLACE INTO dbdatakit_runner_progress_main_checkpoint_head (package, channel, task, name, item_key, row_version, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+          .run(...key, 1, at(applied), 'dbdatasync')
+        const part = db.prepare('INSERT OR REPLACE INTO dbdatakit_runner_progress_main_checkpoint_part (package, channel, task, name, item_key, part, value_type, value_text, value_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        part.run(...key, 'position', 'Text', '0x0000002A000000100001', null)
+        part.run(...key, 'position_time', 'Time', null, at(applied))
+        part.run(...key, 'intent', 'Text', 'Changes', null)
+        part.run(...key, 'hold', 'Text', 'None', null)
+        db.prepare('INSERT INTO dbdatakit_sync_state_main_change_check (connection_name, source_database, source_kind, value_text, checked_at, source_at) VALUES (?, ?, ?, ?, ?, ?)')
+          .run('lag-source', 'AppDb', 'MsSqlCdc', '0x0000002A000000200001', at(current), at(current))
+        db.exec('COMMIT')
+      } catch (e) {
+        try { db.exec('ROLLBACK') } catch { /* nothing open */ }
+        throw e
+      }
+    }
+    for (let attempt = 1; ; attempt++) {
+      try { write(); break } catch (e) {
+        if (attempt >= 10 || !/database is locked|busy/i.test(String(e))) throw e
+        await new Promise(r => setTimeout(r, 500))   // the file is held by the server's own write; try again, the wait is not what the test asserts on
+      }
+    }
   } finally { db.close() }
 }
 
