@@ -4,6 +4,7 @@ import { ErrorBanner, Link, SubTabs } from '@dbdatakit/shell'
 import { storeApi } from '../api'
 import { StoreShell } from '../StoreShell'
 import { ModelEditor } from './ModelEditor'
+import { StorageTab } from './StorageTab'
 
 function DefinitionTab({ model }: { model: string }) {
   const doc = useQuery({ queryKey: ['store', 'model', model], queryFn: () => storeApi.model(model), staleTime: Infinity, refetchOnWindowFocus: false })
@@ -13,7 +14,7 @@ function DefinitionTab({ model }: { model: string }) {
   return <ModelEditor key={model} existing={doc.data} canWriteNew startText="" />
 }
 
-/** One model: its definition (form and YAML), as the first tab of routes (`/model/<name>`; storage and change requests are the next slices' tabs). */
+/** One model: its definition (form and YAML) and its storage, as tabs of routes (`/model/<name>`, `/storage`; change requests are the next slice's tab). */
 export function ModelWorkspace() {
   const { model = '' } = useParams()
   const base = `/model/${encodeURIComponent(model)}`
@@ -28,9 +29,11 @@ export function ModelWorkspace() {
         )}
         <SubTabs base={base} testId="model-tabs" tabs={[
           { path: null, label: 'Definition', testId: 'model-tab-definition' },
+          { path: 'storage', label: 'Storage', testId: 'model-tab-storage' },
         ]} />
         <Routes>
           <Route index element={<DefinitionTab model={model} />} />
+          <Route path="storage" element={<StorageTab model={model} />} />
         </Routes>
       </div>
     </StoreShell>

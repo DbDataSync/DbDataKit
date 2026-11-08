@@ -9,8 +9,8 @@ const ledger = [
 const field = (page: Page, path: string) => page.getByTestId(`form-field-${path}`)
 
 /**
- * Plan 33, UE13a: the Store's model screens, through the console (a Store server answering through the relay, `store-fake.ts`). A person makes a model from the starting text, breaks it and reads the Store's own diagnostics with
- * Save off and saying why, fixes it and saves; adds an attribute; removes the model (the storage and migration steps are UE13b's). Then a person who may only read,
+ * Plan 33, UE13a and UE13b: the Store's model screens, through the console (a Store server answering through the relay, `store-fake.ts`). A person makes a model from the starting text, breaks it and reads the Store's own diagnostics with
+ * Save off and saying why, fixes it and saves; creates its tables; adds an attribute, sees the copy fall behind, reads the migration dry run and applies it; removes the model. Then a person who may only read,
  * and one who may write but not remove, see the buttons off with the reason, and a save of a model that somebody else saved meanwhile is refused with a way out.
  */
 export async function modelsStory(page: Page) {
@@ -53,6 +53,17 @@ export async function modelsStory(page: Page) {
   await expect(page.getByTestId('model-save')).toBeDisabled()
   await expect(page.getByTestId('model-save-why')).toContainText('Nothing has changed')
 
+  // storage: no tables yet, so the one step is to create them; afterwards the copy is up to date
+  await page.getByTestId('model-tab-storage').click()
+  const copy = page.getByTestId('storage-copy')
+  await expect(copy).toHaveAttribute('data-action', 'create')
+  await expect(page.getByTestId('storage-tables')).toContainText('No tables of this model are in the database yet')
+  await expect(page.getByTestId('storage-create-statements')).toBeVisible()
+  await page.getByTestId('storage-create').click()
+  await expect(page.getByTestId('storage-done')).toContainText('Created: 1 statement on postgres')
+  await expect(page.getByTestId('storage-status')).toHaveAttribute('data-status', 'current')
+  await expect(page.getByTestId('storage-tables')).toContainText('item')
+
   // an attribute is added in the form; the edit shows as a change and is saved
   await page.getByTestId('model-tab-definition').click()
   await page.getByTestId('form-newkey-entities.item.attributes').fill('region')
@@ -64,6 +75,20 @@ export async function modelsStory(page: Page) {
   await page.getByTestId('model-save').click()
   await expect(page.getByTestId('model-saved')).toContainText('Saved as version')
   expect(store.text('sales_territories')).toContain('region')
+
+  // the copy is behind the model: a dry run lists what would be added and changes nothing, then it is applied
+  await page.getByTestId('model-tab-storage').click()
+  await expect(page.getByTestId('storage-status')).toHaveAttribute('data-status', 'behind')
+  await expect(page.getByTestId('storage-apply')).toHaveCount(0)
+  await page.getByTestId('storage-dry-run').click()
+  await expect(page.getByTestId('storage-dry-summary')).toContainText('1 statement would be run')
+  await page.getByTestId('storage-dry-statements').locator('summary').click()
+  await expect(page.getByTestId('storage-dry-statements')).toContainText('ADD COLUMN region VARCHAR(40) NULL')
+  await expect(page.getByTestId('storage-status')).toHaveAttribute('data-status', 'behind')
+  await page.getByTestId('storage-apply').click()
+  await expect(page.getByTestId('storage-done')).toContainText('Migrated')
+  await expect(page.getByTestId('storage-status')).toHaveAttribute('data-status', 'current')
+  expect(store.calls.filter((c) => c.startsWith('POST models/sales_territories/migrate'))).toEqual(['POST models/sales_territories/migrate', 'POST models/sales_territories/migrate?apply=true'])
 
   // removing the model asks first, says what it leaves, and the list is empty again
   await page.goto(`/servers/${SERVER}/model/sales_territories`)
@@ -84,6 +109,9 @@ export async function modelsStory(page: Page) {
   await expect(page.getByTestId('model-save-why')).toContainText('needs the author or administrator role')
   await expect(page.getByTestId('model-remove')).toBeDisabled()
   await expect(page.getByTestId('model-remove-why')).toContainText('needs the administrator role')
+  await page.getByTestId('model-tab-storage').click()
+  await expect(page.getByTestId('storage-create')).toBeDisabled()
+
   // an author may write but not remove, and a save of a model somebody else saved meanwhile is refused with both ways out
   store.setRole('author')
   await page.goto(`/servers/${SERVER}/model/ledger`)
