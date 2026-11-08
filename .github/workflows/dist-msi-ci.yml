@@ -47,19 +47,24 @@ jobs:
             if [ "$product" = dbdatakit ]; then
               unzip -q "$work/dbdatakit-v2026.1.1.0-win-x64.zip" -d "$work/payload"
             else
+              # Transitional (O14): the Gateway has no release of its own yet, so its newest published package is the last one of its former name.
+              # Delete this mapping, and the rename below, once a dbdatagateway/v release exists.
+              src="$product"
+              # retired-name-ok: the old release name is what the newest published package still has
+              if [ "$product" = dbdatagateway ]; then src=dbdataproxy; fi
               tag=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-                --jq "[.[] | select(.draft == false and .prerelease == false and (.tag_name | startswith(\"$product/v\")))][0].tag_name")
-              version=${tag#"$product"/v}
-              echo "$product: $version"
-              gh release download "$tag" --pattern "$product-v$version-win-x64.zip" --dir "$work"
-              unzip -q "$work/$product-v$version-win-x64.zip" -d "$work/payload"
+                --jq "[.[] | select(.draft == false and .prerelease == false and (.tag_name | startswith(\"$src/v\")))][0].tag_name")
+              version=${tag#"$src"/v}
+              echo "$product: $version (from $src)"
+              gh release download "$tag" --pattern "$src-v$version-win-x64.zip" --dir "$work"
+              unzip -q "$work/$src-v$version-win-x64.zip" -d "$work/payload"
             fi
-            # Transitional (plan 13, C03): Gateway's executable is lower case from now on, and the newest published package still has the old
-            # file name. Rename it in the unpacked copy so the MSI is built from dist.json as it is now; delete this once a release has the new name.
-            # retired-name-ok: the old file name is what the newest published package still has
-            if [ "$product" = dbdatagateway ] && [ -f "$work/payload/DbDataGateway.exe" ] && [ ! -f "$work/payload/dbdatagateway.exe" ]; then
-              # retired-name-ok
-              mv "$work/payload/DbDataGateway.exe" "$work/payload/dbdatagateway.exe"
+            # Transitional (O14): the newest published Gateway package still has its former executable name; rename it in the unpacked copy so the
+            # MSI is built from dist.json as it is now. Delete this once a release has the new name.
+            if [ "$product" = dbdatagateway ] && [ ! -f "$work/payload/dbdatagateway.exe" ]; then
+              for old in dbdataproxy.exe DbDataProxy.exe DbDataGateway.exe; do # retired-name-ok
+                if [ -f "$work/payload/$old" ]; then mv "$work/payload/$old" "$work/payload/dbdatagateway.exe"; break; fi
+              done
             fi
             python3 dist/msi.py build --meta "${META[$product]}/dist.json" --version 2026.1.1.0 --payload "$work/payload" --out "out/$product/v1.msi"
             cp -r "$work/payload" "$work/payload2"
