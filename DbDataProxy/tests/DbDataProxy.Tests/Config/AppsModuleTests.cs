@@ -271,6 +271,26 @@ public sealed class AppsModuleTests : IAsyncLifetime
         Assert.Equal(1, (await Command("apps", "instance-remove", "--name", "acme")).Exit);
     }
 
+    /// <summary>The samples a tester publishes (docs/apps-testing.md) stay valid and publishable: the repository's own copy, found from the test's folder upwards.</summary>
+    [Fact]
+    public async Task The_sample_apps_validate_publish_and_run_as_instances()
+    {
+        var folder = AppContext.BaseDirectory;
+        while (folder is not null && !Directory.Exists(Path.Combine(folder, "DbDataProxy", "templates", "apps"))) folder = Path.GetDirectoryName(folder);
+        var samples = Path.Combine(folder ?? throw new DirectoryNotFoundException("DbDataProxy/templates/apps"), "DbDataProxy", "templates", "apps");
+        foreach (var sample in new[] { "territory-notes", "front-portal" })
+        {
+            var checkedIt = await Command("apps", "validate", "--dir", Path.Combine(samples, sample));
+            Assert.Equal(0, checkedIt.Exit);
+            Assert.Contains("the files reach no other host", checkedIt.Out);
+            Assert.Equal(0, (await Command("apps", "publish", "--dir", Path.Combine(samples, sample))).Exit);
+        }
+        Assert.Equal(0, (await Command("apps", "instance-save", "--name", "notes", "--app", "territory-notes", "--bind", "territories=default")).Exit);
+        Assert.Equal(0, (await Command("apps", "instance-save", "--name", "front", "--app", "front-portal")).Exit);
+        Assert.Equal(0, (await Command("apps", "nav-save", "--name", "main", "--title", "Main", "--item", "notes=Territory notes")).Exit);
+        Assert.Contains("front  front-portal", (await Command("apps", "instance-list")).Out);
+    }
+
     [Fact]
     public async Task A_declared_portals_home_shows_its_view_and_only_the_tiles_the_person_may_open()
     {

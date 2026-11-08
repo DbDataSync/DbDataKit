@@ -1,0 +1,10 @@
+schemaVersion: 1
+name: territories
+storage: {connection: mdm}
+entities:
+  territory:
+    key: [code]
+    attributes:
+      code: {type: VARCHAR(10), required: true}
+      name: {type: VARCHAR(100), required: true}
+      quota: {type: "DECIMAL(10,2)", min: 0}
