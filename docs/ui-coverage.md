@@ -27,6 +27,7 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 | **Gateway** | Data sources | Yes | Yes | Yes | Test, adopt (hand to a paired server) | `DataSourcesPage.tsx` |
 | | Users, JWT mappings, pass-through | Yes | Yes | Yes | – | `IdentitiesPage.tsx` |
 | | Apps: instances, apps and versions, navigation sets, approvals | An instance (form: app, version, title, settings, bindings); a version of an app (a built folder or a manifest, checked by the Gateway first); a navigation set (a titled, ordered list of instances) | Edit an instance (form), pin or follow a version; reorder, label and rename a navigation set | Remove an instance, an app or a navigation set (the store's rules; a refusal is shown) | Serve an older version (roll back), approve a trusted version (also exact files before they are published) choosing its outside origins, revoke an approval, see a version's data access (models, outside addresses, publisher, approval), open an instance's address | `AppsPage.tsx`, `AppEditors.tsx` |
+| | Published models: semantic models and entity models (UE12) | – (published from Build's Publish tab, or by the Store) | – | Retire (second click) | Versions, what this instance serves, serve an earlier version of a semantic model | `ModelsPage.tsx` |
 | | Certificate | – | – | – | Renew | `TlsPage.tsx` |
 | | Sessions, queries, lockouts | – | – | – | End a session, cancel a query, lift a lockout | `ActivityPage.tsx` |
 | | Configuration history | – | – | – | View and diff commits | `ConfigPage.tsx` |
@@ -39,7 +40,7 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 | | Refresh plans and the project's tests (UE09) | – | – | – | Dry run, then run a refresh plan or chosen members (operator); see each load and the checks evaluated after it; run the project's tests (viewer) | `RefreshPanel.tsx`, `TestsPanel.tsx` |
 | | Tracking tables and seeds | – | – | – | Initialise and seed (admin) | `DeployTabs.tsx` |
 | | Connections of a project | Yes | – | – | – | `NewConnectionPanel.tsx`, `DefinitionPanel.tsx` |
-| | Publish to a Gateway | – | – | – | Yes | `PublishTab.tsx` |
+| | Publish to a Gateway: a connection, a semantic model (UE12) | – | – | – | Yes (approver); a model's connections go with it | `PublishTab.tsx`, `ModelPublish.tsx` |
 | | Publish to a runner (a package of the project: one task per scheduled refresh plan) | – | – | – | Publish (staged or served) or promote a channel's version to a paired runner, with the tasks shown (author role here, a publisher pairing there); the list of paired runners | `PublishTab.tsx`, `RunnerPublish.tsx` |
 | **Store** | Models | – | – | – | List them and their entities | `ModelsPage.tsx` |
 | | Rows of an entity | Yes | Yes | Yes | Page through rows, history of a row (an entity that keeps one), pick an instance of a model that has them | `EntityPage.tsx` |
@@ -55,7 +56,7 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 * **Monitoring** (console) also says who schedules a Build plan or a runner task and moves a Build plan between this server's scheduler, observation by a runner and the runner (`monitoring-owner-*`; the Build server changes its own settings and the runner's record together).
 * **Console connections** lists and copies; a connection is created and edited in the product's own screens (Sync, or the Gateway's data sources).
 * **Build**: the connections row is from reading `NewConnectionPanel` and `DefinitionPanel`, not from using them; confirm what they edit before relying on the Edit cell.
-* **Semantic models and saved queries** (plan 19, lane J): no screen was found; the Views page renders view documents, and opens dashboards from recorded fixtures (plan 32 DBR23) or from those published to a Gateway that runs the `views` module (DBR11b); it has no screen for the models themselves, which a Build server publishes.
+* **Semantic models and saved queries** (plan 19, lane J): Build publishes a model and the Gateway's Models screen lists and retires it (UE12); the Views page renders view documents, and opens dashboards from recorded fixtures (plan 32 DBR23) or from those published to a Gateway that runs the `views` module (DBR11b); it has no screen for the models themselves.
 * **Sync** hides most of its screens in `ReplicationDetailPage` and its tab components; the matrix names the page, not each tab.
 
 ## Keeping it current
