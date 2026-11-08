@@ -76,6 +76,12 @@ public sealed record ClientTaskSchedule(string Task, string Owner, string? Owner
 /// <summary>The position a product's scheduler hands to the runner with a task: scheduled times up to <paramref name="HandledUpTo"/> are dealt with, and its pause if it had one.</summary>
 public sealed record ClientSeed(DateTimeOffset HandledUpTo, string? PausedBy, DateTimeOffset? PausedAt);
 
+/// <summary>How a task's last run on the runner ended, as the runner's status gives it (plan 28c E10).</summary>
+public sealed record ClientLastRun(string Id, string Outcome, DateTimeOffset Started, DateTimeOffset? Finished, int Attempt, long? Rows);
+
+/// <summary>A task as the runner's status lists it: who schedules it, the next time it is due, its last run, what is running or waiting there and whether it is paused (plan 28c E10).</summary>
+public sealed record ClientTaskStatus(string Task, string Owner, DateTimeOffset? NextDue, ClientLastRun? LastRun, int Running, int Queued, bool Paused, string? PausedBy);
+
 /// <summary>One scheduling decision of an observed task: <paramref name="Source"/> is <c>runner</c> (would have queued) or <c>old</c> (the product queued).</summary>
 public sealed record ClientDecision(string Source, DateTimeOffset At, int Missed, bool Paused);
 
@@ -294,5 +300,50 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
         var body = new JsonObject { ["at"] = at.UtcDateTime.ToString("O"), ["missed"] = missed, ["paused"] = paused };
         using var response = await link.SendAsync(HttpMethod.Post, TaskPath(package, channel, task) + "/decisions", JsonContent.Create(body, options: Json), ct);
         if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"the decision for {package}/{channel}/{task}", ct);
+    }
+
+    /// <summary>Stops the task being queued at its scheduled times until it is resumed: <c>POST .../pause</c> (an operator of the pairing; the runner audits the paired client as the actor).</summary>
+    public async Task PauseAsync(string server, string? code, string package, string channel, string task, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        using var response = await link.SendAsync(HttpMethod.Post, TaskPath(package, channel, task) + "/pause", null, ct);
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to pause {package}/{channel}/{task}", ct);
+    }
+
+    /// <summary>Lets a paused task be queued again at its scheduled times: <c>POST .../resume</c>.</summary>
+    public async Task ResumeAsync(string server, string? code, string package, string channel, string task, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        using var response = await link.SendAsync(HttpMethod.Post, TaskPath(package, channel, task) + "/resume", null, ct);
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to resume {package}/{channel}/{task}", ct);
+    }
+
+    /// <summary>Queues a run of the task now, apart from its schedule: <c>POST .../run</c>. The id of the run, or null when one is queued or running already (409).</summary>
+    public async Task<string?> RunNowAsync(string server, string? code, string package, string channel, string task, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        using var response = await link.SendAsync(HttpMethod.Post, TaskPath(package, channel, task) + "/run", new StringContent("{}", Encoding.UTF8, "application/json"), ct);
+        if (response.StatusCode == HttpStatusCode.Conflict) return null;
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to run {package}/{channel}/{task}", ct);
+        return (string?)JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!["run_id"];
+    }
+
+    /// <summary>The task's row of the runner's status (<c>GET /api/v1/status</c>: owner, next due, last run, running, queued, paused), or null when the runner lists no such task.</summary>
+    public async Task<ClientTaskStatus?> TaskStatusAsync(string server, string? code, string package, string channel, string task, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        using var response = await link.SendAsync(HttpMethod.Get, "api/v1/status", null, ct);
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, "for its status", ct);
+        var status = JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!;
+        foreach (var t in status["tasks"]?.AsArray() ?? [])
+        {
+            if ((string?)t!["package"] != package || (string?)t["channel"] != channel || (string?)t["task"] != task) continue;
+            ClientLastRun? last = t["last_run"] is JsonObject r
+                ? new ClientLastRun((string)r["id"]!, (string)r["outcome"]!, Time(r["started"])!.Value, Time(r["finished"]), (int?)r["attempt"] ?? 1, (long?)r["rows"])
+                : null;
+            return new ClientTaskStatus(task, (string?)t["owner"] ?? "runner", Time(t["next_due"]), last, (int?)t["running"] ?? 0, (int?)t["queued"] ?? 0, (bool?)t["paused"] ?? false, (string?)t["paused_by"]);
+        }
+
+        return null;
     }
 }

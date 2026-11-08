@@ -2,7 +2,9 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using DbDataBuild.Cli.Mcp;
 using DbDataBuild.Tui.Model;
+using DbDataBuild.Cli.Runner;
 using DbDataKit.Scheduling;
+using DbDataKit.State;
 using DbDataKit.Web.Trust;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -41,7 +43,7 @@ internal static class BuildManagementApi
     /// <param name="projects">The projects served, read again on every call so one added or removed is served or gone at once.</param>
     /// <param name="commands">All the commands there are; each project is offered the read-only ones.</param>
     /// <param name="surfaceFor">Which of them a project is offered and how their inputs are checked; the read-only rules unless a test or a later slice says otherwise.</param>
-    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, Workspaces? workspaces = null, WarmSessionRunner? workspaceRunner = null, ProxiesFile? proxies = null, ProxyPublisher? publisher = null, IPairingCodeStore? pairingCodes = null, string? clientName = null, ProjectCreator? creator = null, string? serverDirectory = null)
+    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, Workspaces? workspaces = null, WarmSessionRunner? workspaceRunner = null, ProxiesFile? proxies = null, ProxyPublisher? publisher = null, IPairingCodeStore? pairingCodes = null, string? clientName = null, ProjectCreator? creator = null, string? serverDirectory = null, Func<ScheduleRunnerLink, DbDataBuild.Cli.Runner.IRunnerTaskControl>? runnerControl = null, IAuditLog? audit = null)
     {
         surfaceFor ??= FullSurface;
         var specs = CommandSpecs.All.ToDictionary(s => s.Name);
@@ -107,40 +109,118 @@ internal static class BuildManagementApi
             });
         if (proxies is not null && publisher is not null) MapProxies(app, projects, proxies, publisher, clientName ?? "Build server");
 
-        // the scheduled plans of a project, whether or not this server runs them (the scheduler is opt-in): their schedule, the next time each is due and how the last run went
-        app.MapGet("/api/v1/projects/{project}/schedule", (string project) =>
+        // who schedules a plan (plan 28c E09) is the server's file; for a plan the runner owns this server forwards to the runner (E10, QE5)
+        BuildScheduleSettings OwnersNow() => serverDirectory is null ? BuildScheduleSettings.Default : BuildScheduleSettings.Read(serverDirectory);
+        DbDataBuild.Cli.Runner.IRunnerTaskControl? ControlOf(BuildScheduleSettings owners) => owners.Runner is { } link
+            ? (runnerControl ?? (l => DbDataBuild.Cli.Runner.ClientRunnerTaskControl.For(l, Environment.GetEnvironmentVariable)))(link)
+            : null;
+
+        // the scheduled plans of a project, whether or not this server runs them (the scheduler is opt-in): their schedule, the next time each is due and how the last run went.
+        // A plan the runner owns carries owner "runner" and the runner's own row (pause, next due, last run): what this server's scheduler recorded is not what runs it.
+        app.MapGet("/api/v1/projects/{project}/schedule", async (string project, HttpContext context) =>
         {
             if (projects.Find(project) is not { } hosted) return Results.NotFound();
             var now = TimeProvider.System.GetUtcNow();
+            BuildScheduleSettings owners;
+            try { owners = OwnersNow(); }
+            catch (InvalidOperationException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
             var jobs = scheduler is not null
                 ? scheduler.Jobs(hosted)
                 : [.. RefreshJobs.Discover(projects.RootOf(hosted)).Select(j => (j, (DateTimeOffset?)DbDataKit.Scheduling.ScheduleEvaluator.NextAfter(j.Schedule, now), (JobState?)null))];
-            return Results.Json(new
+            var control = ControlOf(owners);
+            var rows = new List<object>();
+            foreach (var j in jobs)
             {
-                enabled = scheduler is not null,
-                jobs = jobs.Select(j => new
+                var owner = owners.OwnerOf(hosted.Id, j.Job.Subject);
+                var (pausedHere, pausedByHere) = (scheduler?.PausedBy(hosted, j.Job) is not null, scheduler?.PausedBy(hosted, j.Job)?.By);
+                if (owner != TaskOwners.Runner || control is null)
                 {
-                    connection = j.Job.Connection,
-                    plan = j.Job.Plan,
-                    schedule = j.Job.Schedule.Cron,
-                    time_zone = j.Job.Schedule.TimeZoneId,
-                    next_due = j.NextDue,
-                    last_started = j.State?.LastStarted,
-                    last_exit = j.State?.LastExit,
-                    paused = scheduler?.PausedBy(hosted, j.Job) is not null,
-                    paused_by = scheduler?.PausedBy(hosted, j.Job)?.By,
-                }),
-            });
+                    rows.Add(new
+                    {
+                        connection = j.Job.Connection, plan = j.Job.Plan, schedule = j.Job.Schedule.Cron, time_zone = j.Job.Schedule.TimeZoneId,
+                        owner,
+                        next_due = j.NextDue, last_started = j.State?.LastStarted, last_exit = j.State?.LastExit,
+                        paused = pausedHere, paused_by = pausedByHere,
+                    });
+                    continue;
+                }
+
+                // the runner schedules this plan: the row is the runner's (a runner that cannot be asked leaves the row saying so, and nothing of this server's own record stands in for it)
+                object? last = null;
+                DateTimeOffset? nextDue = null, lastStarted = null;
+                int? lastExit = null;
+                bool paused = false;
+                string? pausedBy = null, runnerError = null;
+                try
+                {
+                    var status = await control.StatusAsync(RunnerNaming.PackageOf(hosted.Id), RunnerNaming.TaskOf(j.Job.Connection, j.Job.Plan), context.RequestAborted);
+                    if (status is null) runnerError = "the runner lists no such task (publish the project, or the channel does not serve it).";
+                    else
+                    {
+                        (nextDue, paused, pausedBy, lastStarted) = (status.NextDue, status.Paused, status.PausedBy, status.LastRun?.Started);
+                        // the console's monitoring row reads last_exit: 0 for a run that succeeded, 1 for one that ended any other way, none while it is under way (the outcome itself is in runner.last_run)
+                        lastExit = status.LastRun?.Outcome switch { null or "running" => null, "succeeded" => 0, _ => 1 };
+                        last = status.LastRun is null ? null : new { id = status.LastRun.Id, outcome = status.LastRun.Outcome, started = status.LastRun.Started, finished = status.LastRun.Finished, attempt = status.LastRun.Attempt, rows = status.LastRun.Rows };
+                    }
+                }
+                catch (DbDataKit.Runner.Client.RunnerClientException ex) { runnerError = ex.Message; }
+                rows.Add(new
+                {
+                    connection = j.Job.Connection, plan = j.Job.Plan, schedule = j.Job.Schedule.Cron, time_zone = j.Job.Schedule.TimeZoneId,
+                    owner,
+                    next_due = nextDue, last_started = lastStarted, last_exit = lastExit,
+                    paused, paused_by = pausedBy,
+                    runner = new { server = owners.Runner!.Server, channel = owners.Runner.Channel, last_run = last, error = runnerError },
+                });
+            }
+
+            return Results.Json(new { enabled = scheduler is not null, jobs = rows });
         });
 
-        // Pausing, resuming and running a scheduled plan now are an operator's (running a plan changes target data). They need the scheduler: without it nothing is queued, so there is nothing to pause or start.
+        // Pausing, resuming and running a scheduled plan now are an operator's (running a plan changes target data). For a plan this server's scheduler owns they need the scheduler: without it nothing is queued, so there is nothing to
+        // pause or start. For a plan the runner owns the call is forwarded to the runner (a server that runs no scheduler forwards too), and what the runner answers is what the caller is told; the audit line names the caller.
         foreach (var action in new[] { "pause", "resume", "run" })
-            app.MapPost("/api/v1/projects/{project}/schedule/{connection}/{plan}/" + action, (string project, string connection, string plan, HttpContext context) =>
+            app.MapPost("/api/v1/projects/{project}/schedule/{connection}/{plan}/" + action, async (string project, string connection, string plan, HttpContext context) =>
             {
                 if (projects.Find(project) is not { } hosted) return Results.NotFound();
                 var token = context.ManagementToken();
                 var decision = ManagementAuthorization.Authorize(token, ServerRole.Operator, hosted.Id);
                 if (!decision.Allowed) return Results.Json(new { error = "This needs the operator role." }, statusCode: StatusCodes.Status403Forbidden);
+                BuildScheduleSettings owners;
+                try { owners = OwnersNow(); }
+                catch (InvalidOperationException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
+                var owner = owners.OwnerOf(hosted.Id, connection, plan);
+                if (owner == TaskOwners.Runner && ControlOf(owners) is { } control)
+                {
+                    if ((scheduler?.Find(hosted, connection, plan) ?? RefreshJobs.Discover(projects.RootOf(hosted)).FirstOrDefault(j => j.Connection == connection && j.Plan == plan)) is null) return Results.NotFound();
+                    var (package, task) = (RunnerNaming.PackageOf(hosted.Id), RunnerNaming.TaskOf(connection, plan));
+                    var named = $"{owners.Runner!.Server} ({package}/{owners.Runner.Channel}/{task})";
+                    var actor = token.SubjectName ?? token.SubjectId;
+                    void Audit(string outcome) => audit?.Append(new AuditEntry(TimeProvider.System.GetUtcNow(), "command", "dbdatabuild server", token.SubjectId, actor, false, "schedule." + action, BuildScheduleSettings.KeyOf(hosted.Id, connection, plan), outcome, "runner " + named));
+                    try
+                    {
+                        switch (action)
+                        {
+                            case "pause": await control.PauseAsync(package, task, context.RequestAborted); Audit("ok"); return Results.Json(new { paused = true, owner, runner = owners.Runner.Server });
+                            case "resume": await control.ResumeAsync(package, task, context.RequestAborted); Audit("ok"); return Results.Json(new { paused = false, owner, runner = owners.Runner.Server });
+                            default:
+                                if (await control.RunNowAsync(package, task, context.RequestAborted) is not { } runId)
+                                {
+                                    Audit("refused: queued or running");
+                                    return Results.Json(new { error = $"A run of this plan is already queued or going on the runner {named}." }, statusCode: StatusCodes.Status409Conflict);
+                                }
+
+                                Audit("ok");
+                                return Results.Json(new { queued = true, run_id = runId, owner, runner = owners.Runner.Server });
+                        }
+                    }
+                    catch (DbDataKit.Runner.Client.RunnerClientException ex)
+                    {
+                        Audit("failed");
+                        return Results.Json(new { error = $"This plan is scheduled by the runner {named}, which did not take the {action}: {ex.Message}" }, statusCode: StatusCodes.Status502BadGateway);
+                    }
+                }
+
                 if (scheduler is null) return Results.Json(new { error = "This server does not run schedules (start it with --scheduler)." }, statusCode: StatusCodes.Status409Conflict);
                 if (scheduler.Find(hosted, connection, plan) is not { } job) return Results.NotFound();
                 switch (action)
