@@ -31,6 +31,9 @@ public sealed class ViewsOptions
     /// <summary>The largest request body (parameters and a layout name are small).</summary>
     public int MaxBodyBytes { get; init; } = 64 * 1024;
 
+    /// <summary>The largest preview request (plan 32 DBR28): a whole draft document travels in it, so it is larger than a render request; one over it is refused with 413 and nothing is read.</summary>
+    public int MaxPreviewBytes { get; init; } = 256 * 1024;
+
     /// <summary>Whether the module follows the group's definitions itself (a <see cref="DefinitionFollower"/> polled every <see cref="PollInterval"/>). A host that already runs one follower adds <see cref="ViewsPublications.Subscribers"/> to it and sets this false.</summary>
     public bool Follow { get; init; } = true;
 

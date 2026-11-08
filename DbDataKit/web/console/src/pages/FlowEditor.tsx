@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   PagedFrame, defaultParameters, diagnosticsFor, pageGeometry, placedWidgets, runningTokens, unknownTokens, useTheme,
-  type ClientDiagnostic, type EditCommand, type FlowBlockDoc, type FlowLayoutDoc, type FlowSectionDoc, type RenderedWidget, type ViewsDoc, type WidgetDoc,
+  type ClientDiagnostic, type DocumentPreviewRequest, type EditCommand, type FlowBlockDoc, type FlowLayoutDoc, type FlowSectionDoc, type RenderedWidget, type RenderedWidgets, type ViewsDoc, type WidgetDoc,
 } from '@dbdatakit/visuals'
 
 type Apply = (command: EditCommand, group?: string) => void
@@ -33,9 +33,13 @@ const describe = (block: FlowBlockDoc, widgets: ViewsDoc['widgets']) =>
  * The form of one flow layout (plan 32 DBR27): page setup (size, orientation, margins, with the printable area the guides are drawn from), header and footer text with their tokens, the cover, and the
  * sections with their blocks (a widget, a row of spans, a page break; keep, repeat the header, height). Every change is an edit command, one undo step, and the validator's answer is shown at the field it is about.
  */
-export function FlowEditor({ layout, index, doc, diagnostics, apply, name, preview }: {
+export function FlowEditor({ layout, index, doc, diagnostics, apply, name, text, preview, previewDocument }: {
   layout: FlowLayoutDoc; index: number; doc: ViewsDoc; diagnostics: ClientDiagnostic[]; apply: Apply; name: string
+  /** The draft's text, which `previewDocument` sends. */
+  text: string
   preview: (widget: WidgetDoc, id: string) => Promise<RenderedWidget>
+  /** The source's one-call preview of an unsaved document (DBR28); a source without one is asked for each widget through `preview`. */
+  previewDocument?: (request: Pick<DocumentPreviewRequest, 'text' | 'layout'>) => Promise<RenderedWidgets>
 }) {
   const L = layout.name
   const id = (rest: string) => `ed-flow-${L}-${rest}`
@@ -194,33 +198,50 @@ export function FlowEditor({ layout, index, doc, diagnostics, apply, name, previ
         {Object.keys(widgets).filter((w) => !placed.has(w)).length > 0 && <span className="hint" data-testid={id('unplaced')}>Not placed in this layout: {Object.keys(widgets).filter((w) => !placed.has(w)).join(', ')}</span>}
       </div>
 
-      <FlowPreview layout={layout} doc={doc} name={name} preview={preview} testId={id('preview')} />
+      <FlowPreview layout={layout} doc={doc} name={name} text={text} preview={preview} previewDocument={previewDocument} testId={id('preview')} />
     </div>
   )
 }
 
-/** The paged preview of the draft's flow layout (DBR14's `PagedFrame`: the guides where a page starts, the running text with its tokens, the cover), drawn from the draft as it stands, saved or not: each widget it places is asked of `preview`. */
-function FlowPreview({ layout, doc, name, preview, testId }: { layout: FlowLayoutDoc; doc: ViewsDoc; name: string; preview: (widget: WidgetDoc, id: string) => Promise<RenderedWidget>; testId: string }) {
+/**
+ * The paged preview of the draft's flow layout (DBR14's `PagedFrame`: the guides where a page starts, the running text with its tokens, the cover), drawn from the draft as it stands, saved or not. With a source that previews a document
+ * (the module, DBR28) the whole draft is sent in one call and resolved as the person; otherwise each widget the layout places is asked of `preview`. A draft the source refuses (what a publish would refuse) is said, not drawn.
+ */
+function FlowPreview({ layout, doc, name, text, preview, previewDocument, testId }: {
+  layout: FlowLayoutDoc; doc: ViewsDoc; name: string; text: string; testId: string
+  preview: (widget: WidgetDoc, id: string) => Promise<RenderedWidget>
+  previewDocument?: (request: Pick<DocumentPreviewRequest, 'text' | 'layout'>) => Promise<RenderedWidgets>
+}) {
   const theme = useTheme('auto')
   const [results, setResults] = useState<Record<string, RenderedWidget>>({})
+  const [refused, setRefused] = useState<string | null>(null)
   const ids = useMemo(() => placedWidgets(doc, layout.name), [doc, layout.name])
-  const key = JSON.stringify(ids.map((id) => [id, doc.widgets[id]]))
+  const key = previewDocument ? `${layout.name}\n${text}` : JSON.stringify(ids.map((id) => [id, doc.widgets[id]]))
   useEffect(() => {
     let cancelled = false
+    const failed = (message: string): Record<string, RenderedWidget> => Object.fromEntries(ids.map((id): [string, RenderedWidget] => [id, { type: 'error', code: 'preview_failed', message }]))
     const timer = setTimeout(() => {
+      if (previewDocument) {
+        previewDocument({ text, layout: layout.name }).then(
+          (answer) => { if (!cancelled) { setRefused(null); setResults(answer.widgets) } },
+          (e: unknown) => { if (!cancelled) { const message = e instanceof Error ? e.message : String(e); setRefused(message); setResults(failed(message)) } })
+        return
+      }
       const asked = JSON.parse(key) as Array<[string, WidgetDoc | undefined]>
       void Promise.all(asked.map(async ([id, widget]): Promise<[string, RenderedWidget]> => {
         if (!widget) return [id, { type: 'error', code: 'unknown_widget', message: `There is no widget named \`${id}\`.` }]
         try { return [id, await preview(widget, id)] } catch (e) { return [id, { type: 'error', code: 'preview_failed', message: e instanceof Error ? e.message : String(e) }] }
-      })).then((pairs) => { if (!cancelled) setResults(Object.fromEntries(pairs)) })
+      })).then((pairs) => { if (!cancelled) { setRefused(null); setResults(Object.fromEntries(pairs)) } })
     }, 200)
     return () => { cancelled = true; clearTimeout(timer) }
-  }, [key, name, preview])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is the draft (the text, or the widgets it places); the functions are the page's and change with it
+  }, [key, name])
   const parameters = useMemo(() => defaultParameters(doc), [doc])
   return (
-    <div style={{ marginTop: 8 }} data-testid={testId} data-widgets={ids.join(' ')} data-ready={String(ids.every((id) => results[id] !== undefined))}>
+    <div style={{ marginTop: 8 }} data-testid={testId} data-widgets={ids.join(' ')} data-via={previewDocument ? 'document' : 'widgets'} data-ready={String(ids.every((id) => results[id] !== undefined))}>
       <strong>Preview</strong> <span className="hint">of what is written here, saved or not</span>
-      <div style={{ width: 'min(100%, 820px)', height: 560, marginTop: 4, border: '1px solid var(--border, #ddd)' }}>
+      {refused && <p className="hint" role="alert" data-testid={`${testId}-refused`}>{refused}</p>}
+      <div style={{ width: 'min(100%, 820px)', height: 560, marginTop: 4, border: '1px solid var(--border, #ddd)', overflow: 'auto' }}>
         <PagedFrame document={doc} layout={layout} box={{ width: 820, height: 560 }} theme={theme} results={results} parameters={parameters} />
       </div>
     </div>

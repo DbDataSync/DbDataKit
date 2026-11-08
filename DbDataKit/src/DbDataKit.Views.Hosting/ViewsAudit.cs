@@ -22,4 +22,5 @@ public static class ViewsAuditVerbs
     public const string Render = "view.render";
     public const string Export = "view.export";
     public const string Print = "view.print";
+    public const string Preview = "view.preview";
 }

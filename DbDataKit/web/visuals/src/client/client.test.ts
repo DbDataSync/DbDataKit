@@ -3,6 +3,7 @@ import { validateRenderedView } from '../validate'
 import { sampleBundle } from '../testing/sampleBundle'
 import { fixtureClient, FIXTURE_AS_OF, NO_RECORDED_RESULT, placedWidgets } from './fixtureClient'
 import { moduleClient } from './moduleClient'
+import { diagnosticsFromRefusal } from './refusal'
 import { validateText } from './text'
 import { ViewsClientError } from './types'
 
@@ -237,7 +238,7 @@ describe('moduleClient', () => {
 
   it('preview posts to /api/v1/views/preview; list reads both collections; save puts the text with the expected version', async () => {
     const { calls, client } = fake([
-      { body: { type: 'text' } },
+      { body: { kind: 'rendered_widgets', layout: 'preview', as_of: FIXTURE_AS_OF, widgets: { note: { type: 'text' } } } },
       { body: { items: [{ name: 'b', title: 'B' }] } },
       { body: { items: [{ name: 'a', title: 'A' }] } },
       { body: { name: 'a', version: 'v2' } },
@@ -249,8 +250,36 @@ describe('moduleClient', () => {
     expect(calls.map((c) => `${c.method} ${c.url.replace('https://views.example', '')}`)).toEqual([
       'POST /api/v1/views/preview', 'GET /api/v1/dashboards', 'GET /api/v1/reports', 'PUT /api/v1/dashboards/a',
     ])
-    expect(calls[0]!.body).toMatchObject({ widget_id: 'note', parameters: {} })
+    expect(calls[0]!.body).toMatchObject({ kind: 'dashboard', widget_id: 'note', parameters: {} })
     expect(calls[3]!.body).toEqual({ text: 'text', expected_version: 'v1' })
+  })
+
+  it('preview sends the widget with its document\'s parameters and kind and gives the one entry; a module that gives none is a bad response', async () => {
+    const d = validateText(bundle.documents['dashboard/retail-sales-today']!).document!
+    const { calls, client } = fake([
+      { body: { kind: 'rendered_widgets', layout: 'preview', as_of: FIXTURE_AS_OF, widgets: { net: { type: 'metric', value: { text: '1' } } } } },
+      { body: { kind: 'rendered_widgets', layout: 'preview', as_of: FIXTURE_AS_OF, widgets: {} } },
+    ])
+    expect(await client.preview({ widget: d.widgets.net!, widgetId: 'net', draft: d, parameters: { region: ['West'] } })).toEqual({ type: 'metric', value: { text: '1' } })
+    expect(calls[0]!.body).toEqual({ kind: 'dashboard', widget: d.widgets.net, widget_id: 'net', document: { kind: 'dashboard', parameters: d.parameters }, parameters: { region: ['West'] } })
+    const e = (await client.preview({ widget: d.widgets.net!, kind: 'report' }).catch((x: unknown) => x)) as ViewsClientError
+    expect(e.code).toBe('bad_response')
+    expect(calls[1]!.body).toMatchObject({ kind: 'report', widget_id: 'preview' })
+  })
+
+  it('previewDocument posts the text with the layout, the widgets and the parameters, and gives the rendered widgets; a refusal keeps its diagnostics', async () => {
+    const diagnostics = [{ code: 'DBD-VIEW-020', severity: 'error', path: 'layouts[0].tiles[1].widget', message: 'twice', line: 9, column: 4 }]
+    const { calls, client } = fake([{ body: rendered }, { body: rendered }, { status: 400, body: { code: 'invalid', message: 'The dashboard does not load: x', diagnostics } }])
+    expect(await client.previewDocument!({ kind: 'dashboard', text: 'kind: dashboard', layout: 'desk', only: ['net'], parameters: { region: 'West' } })).toEqual(rendered)
+    await client.previewDocument!({ kind: 'report', text: 't' })
+    expect(calls[0]).toMatchObject({ method: 'POST', url: 'https://views.example/api/v1/views/preview', body: { kind: 'dashboard', text: 'kind: dashboard', layout: 'desk', only: ['net'], parameters: { region: 'West' } } })
+    expect(calls[1]!.body).toEqual({ kind: 'report', text: 't', parameters: {} })
+    const e = (await client.previewDocument!({ kind: 'dashboard', text: 'x' }).catch((x: unknown) => x)) as ViewsClientError
+    expect([e.code, e.status, e.diagnostics]).toEqual(['invalid', 400, diagnostics])
+  })
+
+  it('the fixture source has no previewDocument: the editor asks it for each widget', () => {
+    expect(fixtureClient(bundle).previewDocument).toBeUndefined()
   })
 
   it('maps the server\'s refusals to codes, keeping its words and diagnostics', async () => {
@@ -286,11 +315,49 @@ describe('moduleClient', () => {
     expect(calls).toEqual([])
   })
 
+  it('validate with serverCheck asks the module (nothing to resolve) of a text the local validator passes, and shows its refusal as diagnostics; any other answer leaves the local one', async () => {
+    const text = bundle.documents['dashboard/retail-sales-today']!
+    const refusal = 'dashboard/draft.json:1:132: error unknown_member: orders.no_such_measure is not a catalog member. [widgets.net.encodings.value]'
+    const asked: unknown[] = []
+    const answers: Array<{ status?: number; body?: unknown }> = [{ body: rendered }, { status: 400, body: { code: 'invalid', message: refusal, diagnostics: [] } }, { status: 404, body: {} }, { status: 400, body: { code: 'invalid', message: refusal, diagnostics: [] } }]
+    const fetcher = (async (_: string, init: RequestInit) => { asked.push(JSON.parse(init.body as string)); const a = answers.shift()!; return new Response(JSON.stringify(a.body), { status: a.status ?? 200 }) }) as unknown as typeof fetch
+    const checked = moduleClient({ baseUrl: 'https://x', fetch: fetcher, serverCheck: true })
+    expect((await checked.validate(text, { kind: 'dashboard', file: 'a.yaml' })).ok).toBe(true)
+    expect(asked[0]).toEqual({ kind: 'dashboard', text, only: [], parameters: {} })
+    const bad = await checked.validate(text, { kind: 'dashboard', file: 'a.yaml' })
+    expect(bad.ok).toBe(false)
+    expect(bad.diagnostics).toEqual([{ code: 'unknown_member', severity: 'error', path: 'widgets.net.encodings.value', message: 'orders.no_such_measure is not a catalog member.', file: 'a.yaml', line: 1, column: 132 }])
+    // a module that cannot be asked (404 from a relay without the route), or a text the local validator refuses, is not asked or not heard
+    expect((await checked.validate(text, { kind: 'dashboard' })).ok).toBe(true)
+    expect(asked).toHaveLength(3)
+    expect((await checked.validate('kind: dashboard\n', { kind: 'dashboard' })).ok).toBe(false)
+    expect(asked).toHaveLength(3)
+    // off by default: never asked
+    const quiet = moduleClient({ baseUrl: 'https://x', fetch: fetcher })
+    expect((await quiet.validate(text, { kind: 'dashboard' })).ok).toBe(true)
+    expect(asked).toHaveLength(3)
+  })
+
   it('a resolve in flight is cancelled by its signal, and the abort is not turned into a module error', async () => {
     const controller = new AbortController()
     const abort = new DOMException('aborted', 'AbortError')
     const fetcher = (async () => { controller.abort(); throw abort }) as unknown as typeof fetch
     const client = moduleClient({ baseUrl: 'https://x', fetch: fetcher })
     await expect(client.resolve(dashboard, 'desk', {}, { signal: controller.signal })).rejects.toBe(abort)
+  })
+})
+
+describe('diagnosticsFromRefusal', () => {
+  it('reads each finding of a publish refusal back: code, message, place in the text and key path', () => {
+    expect(diagnosticsFromRefusal('d/x.yaml:3:5: error unknown_member: a.b is not a catalog member. [widgets.w.encodings.x] | d/x.yaml:9:1: error DBD-VIEW-043: No model. [widgets.v.query]', 'x.yaml')).toEqual([
+      { code: 'unknown_member', severity: 'error', path: 'widgets.w.encodings.x', message: 'a.b is not a catalog member.', file: 'x.yaml', line: 3, column: 5 },
+      { code: 'DBD-VIEW-043', severity: 'error', path: 'widgets.v.query', message: 'No model.', file: 'x.yaml', line: 9, column: 1 },
+    ])
+  })
+
+  it('a finding with no place is kept without one, a loader refusal loses its lead-in, and a text it cannot read is kept whole', () => {
+    expect(diagnosticsFromRefusal('error DBD-VIEW-040: The model `m` has no version 3.')).toEqual([{ code: 'DBD-VIEW-040', severity: 'error', path: '', message: 'The model `m` has no version 3.', file: undefined }])
+    expect(diagnosticsFromRefusal('The dashboard does not load: d.yaml:2:1: error DBD-106: bad.')[0]).toMatchObject({ code: 'DBD-106', line: 2, column: 1, message: 'bad.' })
+    expect(diagnosticsFromRefusal('something went wrong')).toEqual([{ code: 'DBD-VIEW-SERVER', severity: 'error', path: '', message: 'something went wrong', file: undefined }])
   })
 })

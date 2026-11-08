@@ -2,7 +2,7 @@
 
 A script for a tester (plan 32 DBR11b): publish the retail model and its dashboard to a Gateway, open them from the console as two people whose access differs, resize, switch layout and edit. It needs a Gateway, a console paired to it, the retail project's data on an engine the Gateway can read, and a Build server paired to the Gateway for the model.
 
-What is real today and what is not: the **model** is published by Build (it has the physical layer); the **dashboard** is published by the Proxy's own verb (`dbdatagateway views publish`) or from the console's editor; the dashboard is read through the Proxy's `views` module. **Different access** today is the data source's home groups (a person outside them gets a `denied` entry in every widget that needs the data): row-level rules are plan 22's and are not built, so two people never see two row sets yet. The report is listed but not drawn (DBR14).
+What is real today and what is not: the **model** is published by Build (it has the physical layer); the **dashboard** is published by the Gateway's own verb (`dbdatagateway views publish`) or from the console's editor; the dashboard is read through the Gateway's `views` module. **Different access** today is the data source's home groups (a person outside them gets a `denied` entry in every widget that needs the data): row-level rules are plan 22's and are not built, so two people never see two row sets yet. The report is listed but not drawn (DBR14).
 
 ## 1. A Gateway with the module on
 
@@ -46,10 +46,10 @@ What is real today and what is not: the **model** is published by Build (it has 
 
 ## 5. Edit and publish a new version
 
-1. **Edit** on the board. Change the title or move a tile, **Save**. On a published source, saving publishes a new version through the Proxy (the author role; a viewer's console gets a refusal in words). `dbdatagateway views list` shows version 2; the board shows the change within the poll.
+1. **Edit** on the board. Change the title or move a tile, **Save**. On a published source, saving publishes a new version through the Gateway (the author role; a viewer's console gets a refusal in words). `dbdatagateway views list` shows version 2; the board shows the change within the poll.
 2. Open the editor in two browser tabs, save in one, save in the other: the second is a **conflict** (`expected_version` is stale) and offers a reload.
 3. Break it: name an unknown measure (`sales.no_such_measure`) in a widget and Save: the editor shows the registry's refusal with the position, and version 2 is still what is served.
-4. A report: **Reports**, **New report**. Add a text, two metrics and a table; place them (a row of two metrics with spans 6 and 6; the table in a second section that breaks before and repeats its head); set the page (Letter, landscape), a header with `{title}` and a footer with `Page {page} of {pages}`. Type `{nope}` in a header field: the loader refuses it at that field. The **Preview** below the form shows the draft with guides where pages start, before anything is saved; choosing a smaller page gives more guides.
+4. A report: **Reports**, **New report**. Add a text, two metrics and a table; place them (a row of two metrics with spans 6 and 6; the table in a second section that breaks before and repeats its head); set the page (Letter, landscape), a header with `{title}` and a footer with `Page {page} of {pages}`. Type `{nope}` in a header field: the loader refuses it at that field. The **Preview** below the form shows the draft with guides where pages start, before anything is saved; choosing a smaller page gives more guides. On the module's own listener `POST /api/v1/views/preview` with `{"kind": "report", "text": "<the draft>"}` and a token gives the rendered widgets of an unsaved draft as that person (a draft the registry would refuse is a 400 with the reason, and the install's audit has a `view.preview` row); the console's relay does not carry that route yet, so the editor on a Gateway source says the preview was refused (404) until the Gateway's management API does.
 
 ## 6. Get a PDF (plan 32 DBR15)
 

@@ -25,6 +25,7 @@ namespace DbDataKit.Views.Hosting;
 /// GET  /api/v1/dashboards                 {items: [{name, title, version}]}          (and /api/v1/reports)
 /// GET  /api/v1/dashboards/{name}          {kind, name, title, version, as_of, text, document, layouts: [{name, type, default}]}
 /// POST /api/v1/dashboards/{name}/render   {parameters?, layout?, only?, viewport?: {width, height}, medium?} gives the rendered-widgets document
+/// POST /api/v1/views/preview              {document|text|widget, widget_id?, layout?, only?, parameters?} the rendered widgets of an unsaved draft, as the caller, stored nowhere (plan 32 DBR28)
 /// GET  /api/v1/dashboards/{name}/export?format=pdf&amp;layout=&amp;p.name=   the PDF (501 export_unavailable naming the setting when the host has no browser)
 /// GET  /api/v1/dashboards/{name}/export?format=csv|xlsx|svg&amp;widget=&amp;layout=&amp;p.name=   a widget's rows (csv, xlsx: no browser), a dashboard's sheets (xlsx without widget), a chart's SVG
 /// GET  /api/v1/dashboards/{name}/print?layout=   the print page as HTML (the browser's own print)
@@ -176,6 +177,13 @@ public sealed class ViewsModule(ViewsOptions options, ViewsPublications publishe
         routes.MapGet(ViewsApi.PrintAssetRoute + "{**file}", (string file) =>
             api?.PrintAsset(file) is { } asset ? Results.Bytes(asset.Content, asset.ContentType) : Results.NotFound());
 
+        // the preview of an unsaved document or widget (plan 32 DBR28): resolved as the caller, stored nowhere
+        routes.MapPost("/api/v1/views/preview", (Func<HttpContext, Task<IResult>>)(c => As(c, async (who, trace) =>
+        {
+            var (body, refusal) = await ReadBodyAsync(c, options.MaxPreviewBytes, "A preview request").ConfigureAwait(false);
+            return refusal ?? await api!.PreviewAsync(who, body, c.Connection.RemoteIpAddress?.ToString(), trace, c.RequestAborted).ConfigureAwait(false);
+        })));
+
         foreach (var kind in ViewDefinitions.Kinds)
         {
             var prefix = "/api/v1/" + ViewsApi.Collection(kind);
@@ -187,7 +195,7 @@ public sealed class ViewsModule(ViewsOptions options, ViewsPublications publishe
                 As(c, (who, trace) => api!.PrintPageAsync(who, kind, name, Query(c, "layout"), Parameters(c), c.Connection.RemoteIpAddress?.ToString(), trace, c.RequestAborted))));
             routes.MapPost(prefix + "/{name}/render", (Func<string, HttpContext, Task<IResult>>)((name, c) => As(c, async (who, trace) =>
             {
-                var (body, refusal) = await ReadBodyAsync(c).ConfigureAwait(false);
+                var (body, refusal) = await ReadBodyAsync(c, options.MaxBodyBytes, "A render request").ConfigureAwait(false);
                 return refusal ?? await api!.RenderAsync(who, kind, name, body, c.Connection.RemoteIpAddress?.ToString(), trace, c.RequestAborted).ConfigureAwait(false);
             })));
         }
@@ -226,16 +234,16 @@ public sealed class ViewsModule(ViewsOptions options, ViewsPublications publishe
         }
     }
 
-    private async Task<(JsonObject? Body, ViewsAnswer? Refusal)> ReadBodyAsync(HttpContext context)
+    private async Task<(JsonObject? Body, ViewsAnswer? Refusal)> ReadBodyAsync(HttpContext context, int limit, string what)
     {
-        if (context.Request.ContentLength > options.MaxBodyBytes) return (null, ViewsAnswer.Error(413, "too_large", $"A render request is at most {options.MaxBodyBytes} bytes."));
+        if (context.Request.ContentLength > limit) return (null, ViewsAnswer.Error(413, "too_large", $"{what} is at most {limit} bytes."));
         using var buffer = new MemoryStream();
         var chunk = new byte[8192];
         int read;
         while ((read = await context.Request.Body.ReadAsync(chunk, context.RequestAborted).ConfigureAwait(false)) > 0)
         {
             buffer.Write(chunk, 0, read);
-            if (buffer.Length > options.MaxBodyBytes) return (null, ViewsAnswer.Error(413, "too_large", $"A render request is at most {options.MaxBodyBytes} bytes."));
+            if (buffer.Length > limit) return (null, ViewsAnswer.Error(413, "too_large", $"{what} is at most {limit} bytes."));
         }
         if (buffer.Length == 0) return (null, null);
         try
