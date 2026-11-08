@@ -11,6 +11,8 @@ on:
       - '**/*.slnf'
       - 'duckdb.pin'
       - 'chromium.pin'
+      - 'fonts.pin'
+      - 'licenses/fonts/**'
       - '**/*.props'
       - '**/*.targets'
       - 'scripts/**'
@@ -26,6 +28,8 @@ on:
       - '**/*.slnf'
       - 'duckdb.pin'
       - 'chromium.pin'
+      - 'fonts.pin'
+      - 'licenses/fonts/**'
       - '**/*.props'
       - '**/*.targets'
       - 'scripts/**'
@@ -111,3 +115,27 @@ jobs:
       - name: PowerShell 7 (a second run finds every browser current)
         shell: pwsh
         run: ./scripts/fetch-chromium.ps1 all
+
+  # The font pin (fonts.pin, plan 32 DBR15b): every family's archive, font files and licence text download and match their recorded hashes; the PowerShell script
+  # does the same on Windows, in Windows PowerShell 5.1 and in PowerShell 7.
+  fonts-pin-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - run: scripts/fetch-fonts.sh all
+      - run: scripts/fetch-fonts.sh all   # the second run finds every family current
+      - name: Every pinned file is installed, nothing else
+        run: test "$(find .fonts -name '*.woff2' | wc -l)" = "$(grep -c '^FILE=' fonts.pin)"
+
+  fonts-pin-windows:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Windows PowerShell 5.1
+        shell: powershell
+        run: ./scripts/fetch-fonts.ps1 all
+      - name: PowerShell 7 (a second run finds every family current)
+        shell: pwsh
+        run: ./scripts/fetch-fonts.ps1 all

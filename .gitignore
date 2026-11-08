@@ -10,3 +10,4 @@ __pycache__/
 .duckdb/
 .bun/
 .chromium/
+.fonts/
