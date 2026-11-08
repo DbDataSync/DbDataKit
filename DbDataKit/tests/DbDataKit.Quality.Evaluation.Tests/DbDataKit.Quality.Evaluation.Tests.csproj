@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <ProjectReference Include="..\..\src\DbDataKit.Quality.Evaluation\DbDataKit.Quality.Evaluation.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Connections.Postgres\DbDataKit.Connections.Postgres.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Connections.SqlServer\DbDataKit.Connections.SqlServer.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Connections.DuckDb\DbDataKit.Connections.DuckDb.csproj" />
+  </ItemGroup>
+  <Import Project="..\..\build\DuckDb.Native.targets" />
+</Project>
