@@ -306,6 +306,10 @@ public sealed class ViewsModuleOptions
     [ConfigKey(Min = 0, Max = 3600)]
     public int CacheSeconds { get; set; } = 30;
 
+    /// <summary>The most rows a CSV or xlsx export holds in all (plan 32 DBR17, <c>ViewsOptions.MaxExportRows</c>): a larger one is refused with 413 in words. Not a browser's limit, so it is not part of <c>Export</c>.</summary>
+    [ConfigKey(Min = 1, Max = 10_000_000)]
+    public int MaxExportRows { get; set; } = 100_000;
+
     /// <summary>PDF export (plan 32 DBR15, <c>views.export</c>): off unless <c>Mode</c> is set; the module's health says "export unavailable" otherwise and screens keep working.</summary>
     public ViewsExportOptions Export { get; set; } = new();
 }

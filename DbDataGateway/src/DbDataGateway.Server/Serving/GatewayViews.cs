@@ -96,6 +96,7 @@ public sealed class GatewayViews
             Listen = null,
             Follow = false,
             CacheTtl = TimeSpan.FromSeconds(options.CurrentValue.Views.CacheSeconds),
+            MaxExportRows = options.CurrentValue.Views.MaxExportRows,
             Exporter = ExporterOf(options.CurrentValue.Views.Export, loggers),
             PageAssets = options.CurrentValue.Views.Export.PageAssets,
         }, Publications, new Callers(this), new StateViewsAudit(new AuditLog(state, DbDataGateway.Server.State.GatewayState.ServiceId)), loggers);

@@ -94,4 +94,23 @@ describe('the sources of the Views page', () => {
       globalThis.fetch = realFetch
     }
   })
+
+  it('checks a text the local validator passes with the Gateway through the relay (serverCheck, DBR28b) and shows the publish\'s refusal as diagnostics', async () => {
+    const calls: Array<{ method: string; url: string; body?: unknown }> = []
+    const realFetch = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ method: init?.method ?? 'GET', url: String(input), body: init?.body ? JSON.parse(String(init.body)) : undefined })
+      return answer({ code: 'invalid', message: 'The dashboard is refused: dashboard/draft.yaml:3:1: error DBD-VIEW-060: The model `gone` has no version.', diagnostics: [] }, 400)
+    }) as typeof fetch
+    try {
+      const text = 'schemaVersion: 1\nkind: dashboard\ntitle: Sales\nwidgets:\n  note: {type: text, text: Hello}\nlayouts:\n  - {name: desk, type: reflow, default: true, grid: {columns: 12, rows: 2}, tiles: [{widget: note, x: 0, y: 0, w: 12, h: 1}]}\n'
+      const checked = await viewsClient('gateway 2').validate(text, { kind: 'dashboard', file: 'draft.yaml' })
+      expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual(['POST /relay/gateway%202/api/v1/views/preview'])
+      expect(calls[0]!.body).toMatchObject({ kind: 'dashboard', only: [] })
+      expect(checked.ok).toBe(false)
+      expect(checked.diagnostics.some((d) => d.message.includes('DBD-VIEW-060') || d.code === 'DBD-VIEW-060')).toBe(true)
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
 })

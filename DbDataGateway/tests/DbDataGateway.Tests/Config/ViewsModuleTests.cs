@@ -287,6 +287,60 @@ public sealed class ViewsModuleTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_console_previews_an_unsaved_draft_in_process_as_the_person_it_vouches_for_and_the_gateway_refuses_what_a_publish_would_refuse()
+    {
+        await StartAsync();
+        var state = Get<StateDatabase>();
+        var (ada, _) = HomeSeed.Person(state, "Ada", "ada@example.invalid", Analysts);
+        var (bob, _) = HomeSeed.Person(state, "Bob", "bob@example.invalid", "visitors");
+        PublishModel();
+        var draft = new JsonObject { ["text"] = Dashboard("Draft, not saved"), ["layout"] = "desk" };
+
+        // nothing is published, and the draft resolves as the person: Ada's group reads the data source, Bob's does not (an error entry per widget, not a refusal of the request)
+        var asAda = await ManagementAsync(HttpMethod.Post, "/api/v1/views/preview", ada.Id, ServerRole.Viewer, draft);
+        Assert.Equal(HttpStatusCode.OK, asAda.Status);
+        Assert.Equal("rendered_widgets", (string)asAda.Body!["kind"]!);
+        Assert.Equal("table", (string)asAda.Body["widgets"]!["by_region"]!["type"]!);
+        Assert.NotEmpty(asAda.Body["widgets"]!["by_region"]!["rows"]!.AsArray());
+        var asBob = await ManagementAsync(HttpMethod.Post, "/api/v1/views/preview", bob.Id, ServerRole.Viewer, draft);
+        Assert.Equal(HttpStatusCode.OK, asBob.Status);
+        Assert.Equal("error", (string)asBob.Body!["widgets"]!["by_region"]!["type"]!);
+        Assert.Empty(Get<GatewayViewsPublishing>().List());
+
+        // a draft a publish would refuse is refused in the publish's words, with the loader's diagnostics
+        var wrong = await ManagementAsync(HttpMethod.Post, "/api/v1/views/preview", ada.Id, ServerRole.Viewer, new JsonObject { ["text"] = Dashboard().Replace("orders.net_revenue}", "orders.no_such_measure}") });
+        Assert.Equal(HttpStatusCode.BadRequest, wrong.Status);
+        Assert.Equal("invalid", (string)wrong.Body!["code"]!);
+        Assert.Contains("no_such_measure", (string)wrong.Body["message"]!);
+        var publish = await ManagementAsync(HttpMethod.Put, "/api/v1/dashboards/sales", ada.Id, ServerRole.Author, Publish(Dashboard().Replace("orders.net_revenue}", "orders.no_such_measure}")));
+        Assert.Equal(HttpStatusCode.BadRequest, publish.Status);
+
+        // roles and shapes: a viewer is enough, GET and a body that is not an object are refused, an oversized draft is a 413
+        Assert.Equal(HttpStatusCode.Forbidden, (await ManagementAsync(HttpMethod.Post, "/api/v1/views/preview", ada.Id, ServerRole.None, draft)).Status);
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, (await ManagementAsync(HttpMethod.Get, "/api/v1/views/preview", ada.Id, ServerRole.Viewer)).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await ManagementAsync(HttpMethod.Post, "/api/v1/views/preview", ada.Id, ServerRole.Viewer, new JsonArray())).Status);
+        var huge = await ManagementAsync(HttpMethod.Post, "/api/v1/views/preview", ada.Id, ServerRole.Viewer, new JsonObject { ["text"] = new string('#', 300 * 1024) });
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, huge.Status);
+
+        // audited as the person, as view.preview, with the shape and never the text
+        var events = new AuditLog(state, DbDataGateway.Server.State.GatewayState.ServiceId).Read(new AuditQuery(Verb: "view.preview"));
+        Assert.Contains(events, e => e.Entry.ActorId == ada.Id && e.Entry.Outcome == "ok");
+        Assert.Contains(events, e => e.Entry.ActorId == bob.Id);
+        Assert.Contains(events, e => e.Entry.ActorId == ada.Id && e.Entry.Outcome == "refused");
+        Assert.DoesNotContain(events, e => (e.Entry.Detail ?? "").Contains("Draft, not saved", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_gateway_without_the_views_module_answers_a_preview_with_404_in_words()
+    {
+        await StartAsync(views: false);
+        var (ada, _) = HomeSeed.Person(Get<StateDatabase>(), "Ada", "ada@example.invalid", Analysts);
+        var reply = await ManagementAsync(HttpMethod.Post, "/api/v1/views/preview", ada.Id, ServerRole.Viewer, new JsonObject { ["text"] = Dashboard() });
+        Assert.Equal(HttpStatusCode.NotFound, reply.Status);
+        Assert.Contains("modules", (string)reply.Body!["message"]!);
+    }
+
+    [Fact]
     public async Task A_gateway_without_the_views_module_says_so_and_still_takes_a_publish()
     {
         await StartAsync(views: false);
@@ -382,6 +436,26 @@ public sealed class ViewsModuleTests : IAsyncLifetime
         var events = new AuditLog(state, DbDataGateway.Server.State.GatewayState.ServiceId).Read(new AuditQuery(Verb: "view.export"));
         Assert.Equal(2, events.Count(e => e.Entry.Outcome == "ok"));
         Assert.All(events.Where(e => e.Entry.Outcome == "ok"), e => Assert.Matches("Chrome/", e.Entry.Detail!));
+    }
+
+    [Fact]
+    public async Task The_largest_data_export_is_a_setting_of_the_views_section_and_a_larger_one_is_refused_in_words()
+    {
+        await StartAsync(true, "--Gateway:Views:MaxExportRows=1");
+        var (_, adaToken) = HomeSeed.Person(Get<StateDatabase>(), "Ada", "ada@example.invalid", Analysts);
+        PublishModel();
+        Assert.Equal(200, Get<GatewayViewsPublishing>().Publish("dashboard", "sales", Dashboard(), "test").Status);
+        Poll();
+        var refused = await ModuleAsync(HttpMethod.Get, "/api/v1/dashboards/sales/export?format=csv&widget=by_region", adaToken);
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, refused.Status);
+        Assert.Equal("export_too_large", (string)refused.Body!["code"]!);
+        Assert.Contains("MaxExportRows", (string)refused.Body["message"]!);
+        await app!.StopAsync();
+        await app.DisposeAsync();
+        app = null;
+        var ex = Record.Exception(() => GatewayHost.Build([$"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Modules:0=flightsql", "--Gateway:Modules:1=views", "--Gateway:Views:MaxExportRows=0"]));
+        Assert.NotNull(ex);
+        Assert.Contains("MaxExportRows", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
