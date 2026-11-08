@@ -26,6 +26,8 @@ public sealed class GatewayViewsPublishing(DefinitionStore store, StateDatabase 
 
     public DefinitionPublisher Publisher => publisher;
 
+    public DefinitionStore Store => store;
+
     public const string ModelKind = ViewDefinitions.ModelKind;
 
     /// <summary>The model versions the production channel serves, by the name a document writes (the published definition is lower case).</summary>

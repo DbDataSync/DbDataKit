@@ -77,6 +77,30 @@ export interface DocumentPreviewRequest {
 
 export interface SaveResult { name: string; version: string }
 
+/** One stored version of a published document: who published it, when, and why (never its text). */
+export interface DocumentVersion {
+  version: number
+  publishedBy: string
+  publishedAt: string
+  note: string | null
+  /** The version the group serves now. */
+  active: boolean
+  /** The model versions it was published against (`semantic-model:name@version`). */
+  dependsOn: string[]
+}
+
+/** The versions of a published document, newest first, and which one is served (null once it is retired). */
+export interface DocumentVersions {
+  kind: ViewKind
+  name: string
+  active: number | null
+  previous: number | null
+  versions: DocumentVersion[]
+}
+
+/** What a switch, a rollback or a retire did: the version now served (null when retired). */
+export interface LifecycleResult { version: number | null; moved: string[] }
+
 export interface ViewsClient {
   list(kind?: ViewKind): Promise<DocumentSummary[]>
   /** Reads a document. A name that does not exist rejects with `ViewsClientError` `not_found`. A document with errors is still returned, with its diagnostics and no `document`. */
@@ -89,6 +113,14 @@ export interface ViewsClient {
   save(kind: ViewKind, name: string, text: string, expectedVersion?: string): Promise<SaveResult>
   /** Removes a document (the editor's Delete). Optional: a source that cannot says so by not having it. */
   delete?(kind: ViewKind, name: string): Promise<void>
+  /** The stored versions of a published document (who, when, why, which is served). Optional: a source with no history (the fixtures) does not have it. */
+  versions?(kind: ViewKind, name: string): Promise<DocumentVersions>
+  /** Serves a stored version instead (with the model versions it was published against); `expectedVersion` is the version served when the caller looked (`version_conflict` otherwise). */
+  switchTo?(kind: ViewKind, name: string, version: number, expectedVersion?: number | null): Promise<LifecycleResult>
+  /** Returns to the version before the one served. */
+  rollback?(kind: ViewKind, name: string, expectedVersion?: number | null): Promise<LifecycleResult>
+  /** Stops serving the document (its versions stay and a publish brings it back). */
+  retire?(kind: ViewKind, name: string, expectedVersion?: number | null): Promise<void>
   /** One widget's rendered form, for the editor's live preview. */
   preview(request: PreviewRequest): Promise<RenderedWidget>
   /** An unsaved document as the caller would see it, in one call (plan 32 DBR28). Optional: a source with no server (the fixture source) leaves the editor to ask `preview` for each widget. A document the server would refuse to publish rejects with `invalid`, its diagnostics placed in the text. */

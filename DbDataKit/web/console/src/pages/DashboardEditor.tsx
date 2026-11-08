@@ -308,7 +308,7 @@ export function DashboardEditor({ kind, name, source = FIXTURES, keep = null }: 
               ? <button type="button" className="btn" data-testid="ed-delete" onClick={() => setConfirmDelete(true)}>Delete…</button>
               : (
                 <>
-                  <span className="hint">Delete {draft.name}.yaml for good?</span>
+                  <span className="hint">{source === FIXTURES ? `Delete ${draft.name}.yaml for good?` : `Stop serving ${draft.name} to the group? Its versions are kept and publishing it again brings it back (Versions on the board).`}</span>
                   <button type="button" className="btn btn-primary" data-testid="ed-delete-confirm" onClick={() => {
                     void store.delete(kind, draft.name).then(async () => { await refresh(); navigate(area(AREA[kind])) }, (e: unknown) => setMessage({ tone: 'error', text: e instanceof Error ? e.message : String(e) }))
                   }}>Delete</button>

@@ -5,6 +5,7 @@ import { DashboardView, checkDrill, type ClientDiagnostic, type ResolvedDrill, t
 import { crumbAddress, describeValue, drillAddress, readKiosk, readLayout, readParameters, readSource, readTrail, withSource, writeKiosk, writeLayout, writeParameters, writeSource } from '../viewsUrl'
 import { discoverSources, pickSource, resolveLog, viewsClient, type ViewsSource } from '../viewsSource'
 import { DashboardEditor } from './DashboardEditor'
+import { VersionsPanel } from './VersionsPanel'
 
 const AREA: Record<ViewKind, { path: string; plural: string; singular: string }> = {
   dashboard: { path: '/views/dashboards', plural: 'Dashboards', singular: 'dashboard' },
@@ -158,6 +159,7 @@ function Board({ kind, name, document, source, keep }: { kind: ViewKind; name: s
   const parameters = useMemo(() => readParameters(search, document.parameters), [searchKey, document]) // eslint-disable-line react-hooks/exhaustive-deps
   const defaults = useMemo(() => readParameters(new URLSearchParams(), document.parameters), [document])
   const [shown, setShown] = useState<string | null>(null)
+  const [showVersions, setShowVersions] = useState(false)
   const log = useSyncExternalStore(resolveLog.subscribe, resolveLog.snapshot)
   const last = log[log.length - 1]
   const atDefaults = JSON.stringify(parameters) === JSON.stringify(defaults)
@@ -217,6 +219,7 @@ function Board({ kind, name, document, source, keep }: { kind: ViewKind; name: s
         <strong data-testid="views-title">{document.title}</strong>
         <span className="hint" data-testid="views-source-current" data-source={source.id} data-published={source.published ? 'true' : 'false'}>{source.published ? source.label : 'Fixtures'}</span>
         <Link to={withSource('?edit=1', keep)} className="btn btn-sm" data-testid="views-edit">Edit</Link>
+        {source.published && <button type="button" className="btn btn-sm" data-testid="views-versions" aria-expanded={showVersions} title="Who published each version, serve an earlier one, or remove it from the group" onClick={() => setShowVersions(!showVersions)}>Versions</button>}
         <button type="button" className="btn btn-sm" data-testid="views-kiosk" title="Show this board alone, filling the window" onClick={() => setSearch(writeKiosk(search, true))}>Kiosk</button>
         <label htmlFor="views-layout-select">Layout</label>
         <select id="views-layout-select" data-testid="views-layout-select" value={layout ?? ''} onChange={(e) => setSearch(writeLayout(search, e.target.value === '' ? null : e.target.value), { replace: true })}>
@@ -234,6 +237,7 @@ function Board({ kind, name, document, source, keep }: { kind: ViewKind; name: s
           {last ? `Last request: ${last.widgets.length} widget${last.widgets.length === 1 ? '' : 's'} (${last.widgets.join(', ')})` : 'Nothing requested yet'}
         </span>
       </div>
+      {source.published && showVersions && <VersionsPanel kind={kind} name={name} source={source.id} keep={keep} listPath={AREA[kind].path} />}
       {drillNotice && <div className="empty" data-testid="views-drill-refused" role="alert">{drillNotice} <button type="button" className="btn btn-sm" onClick={() => setDrillNotice(null)}>Dismiss</button></div>}
       {unknown && <div className="empty" data-testid="views-layout-unknown" role="note">This {kind} has no layout named `{unknown}`; the window decides instead. Its layouts: {document.layouts.map((l) => l.name).join(', ')}.</div>}
       {/* the stage fills what the page has left: the view follows its size, so the document never scrolls */}
