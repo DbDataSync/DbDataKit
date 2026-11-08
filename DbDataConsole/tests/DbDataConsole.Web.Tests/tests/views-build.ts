@@ -93,11 +93,11 @@ export async function buildViewsStory(page: Page, context: BrowserContext, proje
   await page.getByTestId('build-views-check-button').click()
   await check(page.getByTestId('build-views-check-clean')).toBeVisible()
 
-  // 7. The Edit tab lists the file with the others and opens it; from there the editor is one link away.
+  // 7. The Edit tab lists the file with the others and opens it; from there the editor is one link away. (The tab compiles the draft as it opens, and the server runs a workspace's commands one at a time, so the file is read when that ends.)
   await page.getByTestId('build-tab-edit').click()
   await page.getByTestId('build-edit-workspace').selectOption({ label: 'dash' })
   await page.getByTestId('build-edit-file-dashboards/my-sales.yaml').click()
-  await expect(page.getByTestId('build-edit-open')).toHaveText('dashboards/my-sales.yaml')
+  await check(page.getByTestId('build-edit-open')).toHaveText('dashboards/my-sales.yaml')
   await page.getByTestId('build-edit-open-editor').click()
   await check(page.getByTestId('ed-title')).toHaveValue('My sales, other tab')
 
@@ -108,6 +108,7 @@ export async function buildViewsStory(page: Page, context: BrowserContext, proje
   await page.getByTestId('build-git-commit').click()
   await check(page.getByTestId('build-git-merge')).toBeEnabled()
   await page.getByTestId('build-git-merge').click()
+  await check(page.getByTestId('build-edit-none')).toBeVisible()   // the merge has ended (the workspace is gone): only then does the project as merged hold the file
   await page.getByTestId('build-tab-views').click()
   await check(page.getByTestId('build-views-publish-row-dashboard-my-sales')).toBeVisible()
   await expect(page.getByTestId('build-views-publish-button-dashboard-my-sales')).toBeDisabled()

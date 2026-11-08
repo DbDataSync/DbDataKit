@@ -306,7 +306,7 @@ internal static class RefreshViews
         var names = PlanNames(root, connection).Where(n => only == null || n == only).ToList();
         if (names.Count == 0) return [];
         if (config.TrackingOf(connection).Target is not { } t) { why = "unknown: nothing is tracked"; return null; }
-        var (login, _) = LoginSettings.FromEnvironment(t.Connection, t.Engine, Login.Read, env);
+        var (login, _) = LoginSettings.FromEnvironment(config, t.Connection, Login.Read, env);
         if (login == null) { why = "unknown: the tracking connection's read login is not set"; return null; }
         try
         {

@@ -56,7 +56,7 @@ describe('refusals in words', () => {
 describe('the summary of an answer', () => {
   it('counts the loads by how they ended and tones the line', () => {
     const s = summarize(answer(1, { outcome: 'completed_with_failures', results: [
-      { model: 'a', member: 'a.l', load: 'l', state: 'done' }, { model: 'b', member: 'b.l', load: 'l', state: 'failed' }, { model: 'c', member: 'c.l', load: 'l', state: 'skipped' }, { model: 'd', member: 'd.l', load: 'l', state: 'not run' }] }))!
+      { model: 'a', member: 'l', load: 'l', state: 'done' }, { model: 'b', member: 'l', load: 'l', state: 'failed' }, { model: 'c', member: 'l', load: 'l', state: 'skipped' }, { model: 'd', member: 'd.l', load: 'l', state: 'not run' }] }))!
     expect([s.done, s.failed, s.skipped, s.notRun, s.tone]).toEqual([1, 1, 1, 1, 'warn'])
     expect(s.headline).toBe('The refresh completed with failures.')
   })

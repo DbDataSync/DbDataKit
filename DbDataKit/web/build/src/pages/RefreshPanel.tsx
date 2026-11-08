@@ -27,8 +27,8 @@ export function RefreshAnswerView({ answer, running }: { answer: CommandAnswer<R
           <div className="card flush" style={{ margin: '10px 0' }} data-testid="build-refresh-results">
             <div className="grid-head" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 2fr', gap: 14 }}><span>Load</span><span>State</span><span>Rows</span><span>Time</span><span>Why</span></div>
             {data!.results!.map((r) => (
-              <div key={r.member} className="grid-row auto" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 2fr', gap: 14 }} data-testid={`build-refresh-load-${r.member}`}>
-                <span className="mono">{r.member}</span><span data-testid="build-refresh-load-state">{r.state}</span><span>{r.rows ?? '-'}</span><span>{r.duration_ms === null || r.duration_ms === undefined ? '-' : `${r.duration_ms} ms`}</span><span style={wrap}>{r.reason ?? r.detail ?? ''}</span>
+              <div key={`${r.model}.${r.member}`} className="grid-row auto" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 2fr', gap: 14 }} data-testid={`build-refresh-load-${r.model}.${r.member}`}>
+                <span className="mono">{r.model}.{r.member}</span><span data-testid="build-refresh-load-state">{r.state}</span><span>{r.rows ?? '-'}</span><span>{r.duration_ms === null || r.duration_ms === undefined ? '-' : `${r.duration_ms} ms`}</span><span style={wrap}>{r.reason ?? r.detail ?? ''}</span>
               </div>
             ))}
           </div>
@@ -37,7 +37,7 @@ export function RefreshAnswerView({ answer, running }: { answer: CommandAnswer<R
           <div style={{ margin: '10px 0' }} data-testid="build-refresh-resolved">
             <div className="hint">The inputs each load would run with:</div>
             {data.resolved_inputs!.map((l) => (
-              <div key={l.member} className="hint" style={wrap}><span className="mono">{l.member}</span>: {l.inputs.length === 0 ? 'none' : l.inputs.map((i) => `${i.name} = ${i.value ?? 'null'} (${i.source})`).join(', ')}</div>
+              <div key={`${l.model}.${l.member}`} className="hint" style={wrap}><span className="mono">{l.model}.{l.member}</span>: {l.inputs.length === 0 ? 'none' : l.inputs.map((i) => `${i.name} = ${i.value ?? 'null'} (${i.source})`).join(', ')}</div>
             ))}
           </div>
         )}
