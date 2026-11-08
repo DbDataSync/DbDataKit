@@ -74,3 +74,5 @@ export {
   localFileStore, markSaved, markersOf, newDocumentText, newDraft, redo, reloadDraft, saveDraft, storedDocuments, styleNode, toMarker, undo,
 } from './editor'
 export type { DocumentStore, Draft, EditCommand, EditErrorCode, EditResult, EditorMarker, FormTarget, LocalFileStore, Op, Path, SaveOutcome, StorageLike } from './editor'
+export { MEDIA, REFERENCE_BOX, badNumbers, defaultSnap, dragTile, extent, fieldsFromWhen, overlapping, pointerToUnits, rectChanges, testSelector, tileMarks, whenFromFields } from './editor'
+export type { DragOptions, DragResult, Handle, Rect, SelectorFields, SelectorTest, TileMark } from './editor'

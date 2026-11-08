@@ -11,6 +11,8 @@ import { diagnosticsFor, formTarget, markersOf } from './diagnostics'
 import { clientStore, localFileStore, reloadDraft, saveDraft } from './store'
 import { newDocumentText } from './newDocument'
 import { storedDocuments } from './storedDocuments'
+import { testSelector } from './geometry'
+import { badNumbers, fieldsFromWhen, whenFromFields } from './selector'
 
 const bundle = sampleBundle()
 const TODAY = bundle.documents['dashboard/retail-sales-today']!
@@ -380,5 +382,61 @@ describe('style of edited text', () => {
     expect(grown.text).toMatch(/tiles:\n {6}- \{widget: metric, x: 0, y: 0, w: 4, h: 2\}\n {6}- \{widget: note, x: 4, y: 0, w: 4, h: 2\}\n/)
     expect(grown.text).toContain('encodings: {value: a.b}')
     expect(canonicalText(parse(grown.text))).toBe(grown.text)
+  })
+})
+
+describe('selectors', () => {
+  it('sets and removes a layout selector, and a selector the form builds is one the loader accepts and selectLayout honours', async () => {
+    const { draft } = await open()
+    const fields = { ...fieldsFromWhen(undefined), widthMax: '700', orientation: 'portrait' as const }
+    expect(whenFromFields(fields)).toEqual({ width: { max: 700 }, orientation: 'portrait' })
+    let d = must(editAll(draft, [{ type: 'duplicateLayout', name: 'phone', as: 'tablet' }, { type: 'setSelector', layout: 'tablet', when: whenFromFields(fields) }]))
+    expect(d.validation.ok).toBe(true)
+    expect(d.text).toContain('when: {width: {max: 700}, orientation: portrait}')
+    expect(testSelector(d.value!, { width: 650, height: 900 }).layout).toBe('tablet')
+    expect(testSelector(d.value!, { width: 590, height: 900 }).layout).toBe('phone')   // both match, equally specific: document order
+    expect(d.validation.diagnostics.some((x) => x.severity === 'warning')).toBe(false)
+    d = must(edit(d, { type: 'setSelector', layout: 'tablet', when: undefined }))
+    expect(d.value!.layouts.find((l) => l.name === 'tablet')!.when).toBeUndefined()
+    expect(edit(d, { type: 'setSelector', layout: 'tablet', when: undefined }).draft.text).toBe(d.text)
+  })
+  it('turns fields into a selector and back, leaving out what is empty and saying which numbers are not numbers', () => {
+    const when = { width: { min: 600, max: 1200 }, height: { max: 900 }, orientation: 'landscape', aspect: { min: 1.5 }, medium: ['screen', 'export'] } as const
+    const fields = fieldsFromWhen(when as never)
+    expect(fields).toMatchObject({ widthMin: '600', widthMax: '1200', heightMin: '', heightMax: '900', aspectMin: '1.5', orientation: 'landscape', media: ['screen', 'export'] })
+    expect(whenFromFields(fields)).toEqual(when)
+    expect(whenFromFields(fieldsFromWhen(undefined))).toBeUndefined()
+    expect(whenFromFields({ ...fieldsFromWhen(undefined), media: ['print'] })).toEqual({ medium: 'print' })
+    expect(badNumbers({ ...fieldsFromWhen(undefined), widthMin: '12x', heightMax: '5' })).toEqual(['widthMin'])
+    expect(whenFromFields({ ...fieldsFromWhen(undefined), widthMin: '12x' })).toBeUndefined()
+  })
+  it('equal selectors give the loader\'s warning', async () => {
+    const { draft } = await open()
+    const d = must(editAll(draft, [{ type: 'duplicateLayout', name: 'phone', as: 'phone2' }]))
+    expect(d.validation.diagnostics.filter((x) => x.severity === 'warning').length).toBeGreaterThan(0)
+    expect(d.validation.ok).toBe(true)
+  })
+})
+
+describe('where a new key goes', () => {
+  it('a key a command adds to a document, layout, widget, tile or parameter lands in canonical order, and unknown keys stay where they were', async () => {
+    const text = 'title: T\nkind: dashboard\nschemaVersion: 1\nx-note: kept\nwidgets:\n  a: {text: hi, type: text}\nlayouts:\n  - {tiles: [{y: 0, widget: a, x: 0, w: 6, h: 1}], grid: {columns: 12}, name: desk, type: reflow, default: true}\n'
+    let d = newDraft('dashboard', 'x', text)
+    d = must(editAll(d, [
+      { type: 'setPath', path: ['refresh', 'every'], value: '5m' },
+      { type: 'addParameter', parameter: { name: 'p', type: 'string' } },
+      { type: 'setSelector', layout: 'desk', when: { width: { min: 1000 } } },
+      { type: 'setPath', path: ['layouts', 0, 'tiles', 0, 'layer'], value: 1 },
+      { type: 'setPath', path: ['widgets', 'a', 'title'], value: 'A' },
+      { type: 'setPath', path: ['layouts', 0, 'overflow'], value: 'scale' },
+    ]))
+    // refresh and parameters come before widgets; unknown `x-note` keeps its place
+    expect(d.text.indexOf('parameters:')).toBeLessThan(d.text.indexOf('widgets:'))
+    expect(d.text.indexOf('refresh:')).toBeLessThan(d.text.indexOf('widgets:'))
+    expect(Object.keys(d.value!).indexOf('x-note')).toBeGreaterThan(Object.keys(d.value!).indexOf('schemaVersion'))
+    const layout = Object.keys((d.value!.layouts[0] as unknown) as object)
+    expect(layout).toEqual(['tiles', 'grid', 'name', 'type', 'default', 'when', 'overflow'])
+    expect(Object.keys(d.value!.widgets.a!)).toEqual(['text', 'type', 'title'])
+    expect(Object.keys((d.value!.layouts[0] as unknown as { tiles: object[] }).tiles[0]!)).toEqual(['y', 'widget', 'x', 'w', 'h', 'layer'])
   })
 })
