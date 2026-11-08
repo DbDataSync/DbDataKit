@@ -129,7 +129,8 @@ internal sealed class SchedulerHarness : IDisposable
             MaxConcurrentRuns = maxRuns,
             Jitter = () => jitter,
             Instance = instance,
-            Platform = platform,
+            // the tests publish runtime packages for linux-x64 unless they say otherwise, so the scheduler is a linux-x64 runner on every OS (the default is the platform of the process: win-x64 on the Windows job)
+            Platform = platform ?? RuntimePlatforms.LinuxX64,
         });
 
     public static async Task<TickReport> Tick(RunnerScheduler scheduler)
