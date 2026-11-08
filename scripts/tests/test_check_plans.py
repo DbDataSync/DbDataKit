@@ -64,6 +64,10 @@ class CheckPlans(unittest.TestCase):
         self.assertEqual(1, len(problems))
         self.assertIn("plan 9", problems[0])
 
+    def test_a_finished_plans_pointer_row_keeps_its_number_known(self):
+        files = dict(GOOD, **{"docs/plans/README.md": readme(("01", "01-a.md"), ("02", "02-b.md"), ("09", "../done.md"), extra="plan 9\n")})
+        self.assertEqual(([], []), self.problems(files))
+
     def test_a_suffixed_number_resolves_to_its_file(self):
         files = dict(GOOD, **{"docs/plans/02a-c.md": "# C\n\nStatus: done.\n", "docs/plans/README.md": readme(("01", "01-a.md"), ("02", "02-b.md"), ("02a", "02a-c.md"), extra="plan 2a\n")})
         self.assertEqual(([], []), self.problems(files))

@@ -1,7 +1,7 @@
 # CI and testing
 
 Status: in progress. The shared test environment and the per-product CI are built; what is left is nightly runs, a Windows job with a real
-engine, skip visibility and a release gate. Branching and releases are in [09](09-MONOREPO-BRANCHING-AND-RELEASES.md).
+engine, skip visibility and a release gate. Branching and releases are in [docs/releases.md](../releases.md).
 
 ## What exists
 

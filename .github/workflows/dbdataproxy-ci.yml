@@ -1,6 +1,6 @@
 name: DbDataProxy CI
 
-# DbDataProxy on the trunk model (docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md, "Trunk model"): short feature branches, a pull request
+# DbDataProxy on the trunk model (docs/releases.md): short feature branches, a pull request
 # into `main` that runs this, and a rebase merge. There is no dev/test lane and nothing here moves a branch. A rebase merge makes new
 # commits, so the run on `main` is the one that validates what landed, and it is what dbdataproxy-release.yml looks for.
 #

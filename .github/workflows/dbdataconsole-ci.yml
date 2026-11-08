@@ -1,6 +1,6 @@
 name: DbDataConsole CI
 
-# The dbdatakit console on the trunk model (docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md): a pull request into `main` runs this.
+# The dbdatakit console on the trunk model (docs/releases.md): a pull request into `main` runs this.
 # A `changes` job skips the suites when nothing of the console's, of the shared DbDataKit/ code it builds against, or of the build
 # settings changed; the run then still reports success. The shared libraries' own suite is dbdatakit-ci.yml, run once, not per product.
 

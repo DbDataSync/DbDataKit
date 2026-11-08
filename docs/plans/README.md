@@ -16,7 +16,7 @@ criteria, risks and acceptance. Plans are proposals; review the "decisions" in e
 | 07 | [Data transfer, staging, loading](07-data-transfer.md) | Sync pipeline, Build copy models | Shared converters, bulk writers, strategies, write gate |
 | 07a | [Sync vs Build strategy semantics](07a-strategy-comparison.md) | The code of both products | Written from the code (read-only): what each strategy means in Sync and in Build |
 | 08 | [Install and update](08-update-system.md) | Sync Updates, Proxy install.ps1, Build Scoop | Signed manifest, service swap with rollback |
-| 09 | [Monorepo branching, CI, releases](09-MONOREPO-BRANCHING-AND-RELEASES.md) | DbDataSync model, per-product lanes | Per-product dev/test, main as integration |
+| 09 | [Branches, CI and releases](../releases.md) | Finished: now a product doc | `docs/releases.md`: main only, change-based CI, a release is a tag, the suite release flow |
 | 10 | [Proxy adoption](10-proxy-adoption.md) | Plans 01-07 applied to DbDataProxy | Hub CI and publishing, feed and override, per-library adoption order (update system skipped) |
 | 11 | [CI and testing](11-ci-and-testing.md) | Owner's decisions on CI and testing | In progress: the engine catalogue (`testenv/`, N-1 profiles, mapping files) and the per-product CI are built; remaining are CI01 to CI06: a nightly for the products other than Build, a Windows nightly with SQL Server Express, skipped-test summaries and minimum test counts, engine jobs that fail instead of skip, the test-kind vocabulary, and the full matrix inside every release |
 | 12 | [Shared TLS rollout](12-shared-tls-rollout.md) | Sync and Proxy certificates, services, systemd | One certificate, service and unit implementation |

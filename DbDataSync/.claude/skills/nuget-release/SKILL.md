@@ -17,7 +17,7 @@ DbDataSync lives in the **`DbDataSync/DbDataKit`** monorepo. One workflow cuts a
 `DbDataSync.Cli` (the `dbdatasync` global tool), checks the package, tags the released commit `dbdatasync/v<version>`
 and publishes a GitHub Release in this repository with the package and its `.sha512` attached. **It pushes no branch**:
 a release is a tag and its assets, because the repo is on a trunk model (short feature branches, pull requests into
-`main`, rebase merges). Read `docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md` ("Trunk model") and the workflow's
+`main`, rebase merges). Read `docs/releases.md` and the workflow's
 header comment before changing anything.
 
 **What is deliberately not there.** Only the built-in `GITHUB_TOKEN`: no nuget.org push (paused until all three products
@@ -63,6 +63,6 @@ prerelease; nuget.org (when publishing is on) hides it from a plain `dotnet tool
 ## Reference
 
 - `.github/workflows/dbdatasync-release.yml` — the workflow itself; heavily commented.
-- `docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md` — the branching and release model.
+- `docs/releases.md` — the branching and release model.
 - `architecture/implementation/done/phase-127-nuget-trusted-publishing.md` — the original design rationale and
   every real bug found building Trusted Publishing (history, from the single-repo era).

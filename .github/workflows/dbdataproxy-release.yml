@@ -1,6 +1,6 @@
 name: DbDataProxy release
 
-# Cut a release by dispatching this against main (docs/plans/09-MONOREPO-BRANCHING-AND-RELEASES.md, "Trunk model"):
+# Cut a release by dispatching this against main (docs/releases.md):
 #
 #   gh workflow run dbdataproxy-release.yml --ref main -f beta=false
 #   gh workflow run dbdataproxy-release.yml --ref main -f sha=<an older commit on main>
