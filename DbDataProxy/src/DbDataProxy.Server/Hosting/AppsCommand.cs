@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using DbDataKit.Apps;
 using DbDataKit.Cli;
 using DbDataKit.State;
@@ -14,6 +15,30 @@ public static class AppsCommand
 {
     private const string Where = "[--repo <data directory>]";
 
+    /// <summary>The options of the verbs that can act on a Proxy elsewhere (plan 26, AP26): its address or the name it was paired under, the single-use code of the first pairing, and where this machine keeps its pairings.</summary>
+    private const string Remote = "[--to <proxy address or paired name> [--code <pairing code>] [--alias <name>] [--client-name <text>] [--client-dir <folder>]]";
+
+    private static readonly string[] RemoteOptions = ["to", "code", "alias", "client-name", "client-dir"];
+
+    private static HashSet<string> Valued(params string[] names) => [.. names, "repo", .. RemoteOptions];
+
+    private sealed record RemoteTarget(AppsRemote Client, string Server, string? Code, string? Alias, string? ClientName);
+
+    /// <summary>The Proxy named by <paramref name="option"/> (<c>--to</c>; <c>--on</c> for rollback, whose <c>--to</c> is a version), or null for the local verb. Naming both a Proxy and a data directory is a mistake and is said so.</summary>
+    private static RemoteTarget? RemoteOf(CliArgs parsed, string option = "to")
+    {
+        if (parsed.Get(option) is not { Length: > 0 } server) return null;
+        var directory = parsed.Get("client-dir") is { Length: > 0 } named ? named : AppsClientStore.DefaultDirectory();
+        return new RemoteTarget(new AppsRemote(new AppsClientStore(directory)), server, parsed.Get("code"), parsed.Get("alias"), parsed.Get("client-name"));
+    }
+
+    private static bool RemoteMixedWithRepo(CliArgs parsed, string option = "to") => parsed.Get(option) is { Length: > 0 } && parsed.Get("repo") is { Length: > 0 };
+
+    private const string MixedMessage = "--repo names a data directory on this machine and --to a Proxy elsewhere; use one.";
+
+    private static string Describe(RemoteTarget remote, JsonObject answer) =>
+        $"to {remote.Server}{(answer["published_by"]?.GetValue<string>() is { } by ? $" as {by}" : "")}";
+
     public static Noun Noun() => new("apps", "The apps host this proxy serves: its apps, instances and navigation sets",
     [
         new Verb("init", "Make a new app folder from a sample (territory-notes, territory-notes-src or front-portal): a manifest and a starter file set that validate; nothing is read from the network", EffectClass.RepoFilesOnly,
@@ -22,10 +47,10 @@ public static class AppsCommand
         new Verb("build", "Build an app's source tree into a folder that validates and publishes: bundles src/main.ts (or --entry) with the pinned Bun, copies the files that are not source, runs the built-in checks on the result", EffectClass.RepoFilesOnly,
             "--src <source folder> --out <build folder> [--entry <script>] [--manifest <file>] [--no-minify] [--offline] [--bun <path>] [--timeout <seconds>]", AppsBuild.BuildAsync,
             DataSchemas.Object([("app", DataSchemas.String), ("out", DataSchemas.String), ("files", DataSchemas.Integer), ("bundled", DataSchemas.ListOf(DataSchemas.String))], "app", "out", "files", "bundled")),
-        new Verb("publish", "Publish an app version from a folder: its manifest (app.yaml) and the files the host serves", EffectClass.RepoFilesOnly, $"--dir <folder> [--manifest <file, default <folder>/app.yaml>] [--note <text>] {Where}", PublishAsync,
+        new Verb("publish", "Publish an app version from a folder: its manifest (app.yaml) and the files the host serves. With --to, to a Proxy elsewhere, as a paired client", EffectClass.RepoFilesOnly, $"--dir <folder> [--manifest <file, default <folder>/app.yaml>] [--note <text>] ({Where} | {Remote})", PublishAsync,
             DataSchemas.Object([("app", DataSchemas.String), ("version", DataSchemas.Integer), ("files", DataSchemas.Integer)], "app", "version", "files")),
         new Verb("instance-save", "Make or change an instance of a published app: its version pin, title, settings and data bindings (a new instance version; the host serves it at once)", EffectClass.RepoFilesOnly,
-            $"--name <instance> --app <app> [--pin <version>] [--title <text>] [--setting k=v[,k=v]] [--bind model=storeInstance[,model=storeInstance]] {Where}", InstanceSaveAsync,
+            $"--name <instance> --app <app> [--pin <version>] [--title <text>] [--setting k=v[,k=v]] [--bind model=storeInstance[,model=storeInstance]] ({Where} | {Remote})", InstanceSaveAsync,
             DataSchemas.Object([("name", DataSchemas.String), ("app", DataSchemas.String), ("version", DataSchemas.Integer)], "name", "app", "version")),
         new Verb("instance-list", "The instances the host serves, with the app and version each runs", EffectClass.OfflineOnly, Where, InstanceListAsync,
             DataSchemas.Object([("instances", DataSchemas.ListOf(DataSchemas.Object([("name", DataSchemas.String), ("app", DataSchemas.String), ("pin", DataSchemas.Integer), ("title", DataSchemas.String)], "name", "app")))], "instances")),
@@ -34,15 +59,15 @@ public static class AppsCommand
             DataSchemas.Object([("name", DataSchemas.String), ("version", DataSchemas.Integer)], "name", "version")),
         new Verb("nav-list", "The navigation sets and their members", EffectClass.OfflineOnly, Where, NavListAsync,
             DataSchemas.Object([("sets", DataSchemas.ListOf(DataSchemas.Object([("name", DataSchemas.String), ("title", DataSchemas.String), ("instances", DataSchemas.ListOf(DataSchemas.String))], "name", "title", "instances")))], "sets")),
-        new Verb("list", "The published apps with the version each serves, and with --app every version of one (what a rollback or a pin can name)", EffectClass.OfflineOnly, $"[--app <app>] {Where}", ListAsync,
+        new Verb("list", "The published apps with the version each serves, and with --app every version of one (what a rollback or a pin can name)", EffectClass.OfflineOnly, $"[--app <app>] ({Where} | {Remote})", ListAsync,
             DataSchemas.Object([("apps", DataSchemas.ListOf(DataSchemas.Object([("name", DataSchemas.String), ("version", DataSchemas.Integer), ("versions", DataSchemas.ListOf(DataSchemas.Integer))], "name", "version", "versions")))], "apps")),
-        new Verb("rollback", "Move an app's current version back to the one before it, or to --to <version>; instances pinned to a version stay, the others serve it at once", EffectClass.RepoFilesOnly, $"--app <app> [--to <version>] {Where}", RollbackAsync,
+        new Verb("rollback", "Move an app's current version back to the one before it, or to --to <version>; instances pinned to a version stay, the others serve it at once", EffectClass.RepoFilesOnly, $"--app <app> [--to <version>] ({Where} | {Remote.Replace("--to ", "--on ")})", RollbackAsync,
             DataSchemas.Object([("app", DataSchemas.String), ("version", DataSchemas.Integer)], "app", "version")),
         new Verb("remove", "Stop serving an app (its versions and approvals stay on record); refused while an instance of it exists", EffectClass.RepoFilesOnly, $"--app <app> {Where}", RemoveAppAsync, DataSchemas.None),
         new Verb("instance-remove", "Stop serving an instance: its address answers 404 (its storage and history stay); refused while a portal mounts it", EffectClass.RepoFilesOnly, $"--name <instance> {Where}", RemoveInstanceAsync, DataSchemas.None),
         new Verb("nav-remove", "Stop serving a navigation set; its instances are not touched", EffectClass.RepoFilesOnly, $"--name <set> {Where}", RemoveNavAsync, DataSchemas.None),
         new Verb("approve", "Approve the exact bytes of a trusted app, as an identity-home user who holds the Approver role (not the author): the hash of a built folder (--path), a hash as given (--hash), or an already published version's hash (--app --version). Publishing a trusted app needs an approval for its hash", EffectClass.RepoFilesOnly,
-            $"(--path <folder> [--manifest <file>] | --hash <hash> --app <app> | --app <app> --version <n>) --by <approver> [--egress <directive>=<origin>[,...]] [--note <text>] {Where}", ApproveAsync,
+            $"(--path <folder> [--manifest <file>] | --hash <hash> --app <app> | --app <app> --version <n>) --by <approver> [--egress <directive>=<origin>[,...]] [--note <text>] ({Where} | {Remote})", ApproveAsync,
             DataSchemas.Object([("id", DataSchemas.String), ("app", DataSchemas.String), ("version", DataSchemas.String), ("hash", DataSchemas.String)], "id", "app", "version", "hash")),
         new Verb("approval-list", "The approvals on record, with who gave them and whether they still stand", EffectClass.OfflineOnly, Where, ApprovalListAsync,
             DataSchemas.Object([("approvals", DataSchemas.ListOf(DataSchemas.Object([("id", DataSchemas.String), ("app", DataSchemas.String), ("version", DataSchemas.String), ("approved_by", DataSchemas.String), ("hash", DataSchemas.String), ("revoked", DataSchemas.Boolean)], "id", "app", "version", "approved_by", "hash", "revoked")))], "approvals")),
@@ -79,12 +104,13 @@ public static class AppsCommand
 
     private static async Task<int> PublishAsync(string[] args, CliContext context)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "dir", "manifest", "note", "repo" });
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), Valued("dir", "manifest", "note"));
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("dir") is not { Length: > 0 } dir)
         {
-            await context.Error.WriteLineAsync($"Usage: apps publish --dir <folder> [--manifest <file>] [--note <text>] {Where}");
+            await context.Error.WriteLineAsync($"Usage: apps publish --dir <folder> [--manifest <file>] [--note <text>] ({Where} | {Remote})");
             return CliExit.Usage;
         }
+        if (RemoteMixedWithRepo(parsed)) { await context.Error.WriteLineAsync(MixedMessage); return CliExit.Usage; }
         var folder = Path.GetFullPath(dir);
         var manifestPath = parsed.Get("manifest") is { Length: > 0 } m ? Path.GetFullPath(m) : Path.Combine(folder, "app.yaml");
         if (!Directory.Exists(folder) || !File.Exists(manifestPath))
@@ -96,6 +122,15 @@ public static class AppsCommand
         {
             // the manifest is read from where it is; the files are the folder's without it (the same package `apps approve --path` hashes)
             var package = AppPackage.FromFolder(folder, manifestPath);
+            if (RemoteOf(parsed) is { } remote)
+            {
+                var answer = (await remote.Client.PublishAsync(remote.Server, remote.Code, remote.Alias, remote.ClientName, package, parsed.Get("note"), line => context.Out.WriteLine(line), context.Cancellation)).Body;
+                await context.Out.WriteLineAsync($"Published {(string?)answer["name"]} version {(int?)answer["version"]} ({package.Files.Count} files) {Describe(remote, answer)}.");
+                context.Data["app"] = (string?)answer["name"];
+                context.Data["version"] = (int?)answer["version"];
+                context.Data["files"] = package.Files.Count;
+                return CliExit.Ok;
+            }
             var definitions = new DefinitionStore(IdentityCommand.Open(parsed));
             var version = new AppInstanceStore(definitions).PublishApp(package, Environment.UserName, note: parsed.Get("note"), approvals: new AppApprovalStore(definitions));
             await context.Out.WriteLineAsync($"Published {version.Name} version {version.Version} ({package.Files.Count} files).");
@@ -104,7 +139,7 @@ public static class AppsCommand
             context.Data["files"] = package.Files.Count;
             return CliExit.Ok;
         }
-        catch (Exception ex) when (ex is AppInstanceException or AppPackageException)
+        catch (Exception ex) when (ex is AppInstanceException or AppPackageException or AppsRemoteException)
         {
             await context.Error.WriteLineAsync(ex.Message);
             return CliExit.Failure;
@@ -113,7 +148,7 @@ public static class AppsCommand
 
     private static async Task<int> InstanceSaveAsync(string[] args, CliContext context)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "name", "app", "pin", "title", "setting", "bind", "repo" });
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), Valued("name", "app", "pin", "title", "setting", "bind"));
         var settings = Pairs(parsed.Get("setting"), "a setting", out var bad1);
         var bindings = Pairs(parsed.Get("bind"), "a binding", out var bad2);
         int? pin = null;
@@ -124,11 +159,21 @@ public static class AppsCommand
         }
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("name") is not { Length: > 0 } name || parsed.Get("app") is not { Length: > 0 } app || settings is null || bindings is null)
         {
-            await context.Error.WriteLineAsync(bad1 ?? bad2 ?? $"Usage: apps instance-save --name <instance> --app <app> [--pin <version>] [--title <text>] [--setting k=v] [--bind model=instance] {Where}");
+            await context.Error.WriteLineAsync(bad1 ?? bad2 ?? $"Usage: apps instance-save --name <instance> --app <app> [--pin <version>] [--title <text>] [--setting k=v] [--bind model=instance] ({Where} | {Remote})");
             return CliExit.Usage;
         }
+        if (RemoteMixedWithRepo(parsed)) { await context.Error.WriteLineAsync(MixedMessage); return CliExit.Usage; }
         try
         {
+            if (RemoteOf(parsed) is { } remote)
+            {
+                var answer = (await remote.Client.SaveInstanceAsync(remote.Server, remote.Code, remote.Alias, remote.ClientName, new AppInstance(name, app, pin, parsed.Get("title"), settings, bindings), line => context.Out.WriteLine(line), context.Cancellation)).Body;
+                await context.Out.WriteLineAsync($"Saved instance {name} of {app} (version {(int?)answer["version"]}) on {remote.Server}. It is served at /apps/{name}/ by that Proxy's apps host.");
+                context.Data["name"] = name;
+                context.Data["app"] = app;
+                context.Data["version"] = (int?)answer["version"];
+                return CliExit.Ok;
+            }
             var saved = new AppInstanceStore(new DefinitionStore(IdentityCommand.Open(parsed))).Save(new AppInstance(name, app, pin, parsed.Get("title"), settings, bindings), Environment.UserName);
             await context.Out.WriteLineAsync($"Saved instance {name} of {app} (version {saved.Version}). It is served at /apps/{name}/.");
             context.Data["name"] = name;
@@ -136,7 +181,7 @@ public static class AppsCommand
             context.Data["version"] = saved.Version;
             return CliExit.Ok;
         }
-        catch (AppInstanceException ex)
+        catch (Exception ex) when (ex is AppInstanceException or AppsRemoteException)
         {
             await context.Error.WriteLineAsync(ex.Message);
             return CliExit.Failure;
@@ -193,11 +238,35 @@ public static class AppsCommand
 
     private static async Task<int> ListAsync(string[] args, CliContext context)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "app", "repo" });
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), Valued("app"));
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0)
         {
-            await context.Error.WriteLineAsync($"Usage: apps list [--app <app>] {Where}");
+            await context.Error.WriteLineAsync($"Usage: apps list [--app <app>] ({Where} | {Remote})");
             return CliExit.Usage;
+        }
+        if (RemoteMixedWithRepo(parsed)) { await context.Error.WriteLineAsync(MixedMessage); return CliExit.Usage; }
+        if (RemoteOf(parsed) is { } remote)
+        {
+            try
+            {
+                var answer = (await remote.Client.ListAsync(remote.Server, remote.Code, remote.Alias, remote.ClientName, line => context.Out.WriteLine(line), context.Cancellation)).Body;
+                var listed = new List<Dictionary<string, object?>>();
+                foreach (var item in answer["apps"]?.AsArray() ?? [])
+                {
+                    var versions = item!["versions"]!.AsArray().Select(v => (int)v!).ToList();
+                    if (parsed.Get("app") is { Length: > 0 } only && (string?)item["name"] != only) continue;
+                    await context.Out.WriteLineAsync($"{(string?)item["name"]}  serves version {(int?)item["version"]}  (versions: {string.Join(", ", versions)})");
+                    listed.Add(new Dictionary<string, object?> { ["name"] = (string?)item["name"], ["version"] = (int?)item["version"], ["versions"] = versions });
+                }
+                if (listed.Count == 0) await context.Out.WriteLineAsync($"No app is published on {remote.Server}.");
+                context.Data["apps"] = listed;
+                return CliExit.Ok;
+            }
+            catch (AppsRemoteException ex)
+            {
+                await context.Error.WriteLineAsync(ex.Message);
+                return CliExit.Failure;
+            }
         }
         var store = new AppInstanceStore(new DefinitionStore(IdentityCommand.Open(parsed)));
         var current = store.Apps().Where(a => parsed.Get("app") is not { Length: > 0 } only || a.Name == only).ToList();
@@ -217,7 +286,7 @@ public static class AppsCommand
 
     private static async Task<int> RollbackAsync(string[] args, CliContext context)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "app", "to", "repo" });
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "app", "to", "repo", "on", "code", "alias", "client-name", "client-dir" });
         int? to = null;
         if (parsed.Get("to") is { Length: > 0 } toText)
         {
@@ -226,18 +295,27 @@ public static class AppsCommand
         }
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("app") is not { Length: > 0 } app)
         {
-            await context.Error.WriteLineAsync($"Usage: apps rollback --app <app> [--to <version>] {Where}");
+            await context.Error.WriteLineAsync($"Usage: apps rollback --app <app> [--to <version>] ({Where} | {Remote.Replace("--to ", "--on ")})");
             return CliExit.Usage;
         }
+        if (RemoteMixedWithRepo(parsed, "on")) { await context.Error.WriteLineAsync(MixedMessage.Replace("--to", "--on")); return CliExit.Usage; }
         try
         {
+            if (RemoteOf(parsed, "on") is { } remote)
+            {
+                var answer = (await remote.Client.RollbackAsync(remote.Server, remote.Code, remote.Alias, remote.ClientName, app, to, line => context.Out.WriteLine(line), context.Cancellation)).Body;
+                await context.Out.WriteLineAsync($"{app} now serves version {(int?)answer["version"]} on {remote.Server}. Instances pinned to a version are unchanged.");
+                context.Data["app"] = app;
+                context.Data["version"] = (int?)answer["version"];
+                return CliExit.Ok;
+            }
             var moved = new AppInstanceStore(new DefinitionStore(IdentityCommand.Open(parsed))).MoveApp(app, Environment.UserName, to);
             await context.Out.WriteLineAsync($"{app} now serves version {moved.Version}. Instances pinned to a version are unchanged; a trusted app runs only while an approval stands for these exact files.");
             context.Data["app"] = app;
             context.Data["version"] = moved.Version;
             return CliExit.Ok;
         }
-        catch (AppInstanceException ex)
+        catch (Exception ex) when (ex is AppInstanceException or AppsRemoteException)
         {
             await context.Error.WriteLineAsync(ex.Message);
             return CliExit.Failure;
@@ -302,8 +380,8 @@ public static class AppsCommand
 
     private static async Task<int> ApproveAsync(string[] args, CliContext context)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "path", "manifest", "hash", "app", "version", "by", "note", "egress", "repo" });
-        const string usage = $"Usage: apps approve (--path <folder> [--manifest <file>] | --hash <hash> --app <app> | --app <app> --version <n>) --by <approver> [--egress <directive>=<origin>[,...]] [--note <text>] {Where}";
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), Valued("path", "manifest", "hash", "app", "version", "by", "note", "egress"));
+        const string usage = $"Usage: apps approve (--path <folder> [--manifest <file>] | --hash <hash> --app <app> | --app <app> --version <n>) --by <approver> [--egress <directive>=<origin>[,...]] [--note <text>] ({Where} | {Remote})";
         var path = parsed.Get("path");
         var hash = parsed.Get("hash");
         var app = parsed.Get("app");
@@ -315,8 +393,10 @@ public static class AppsCommand
             await context.Error.WriteLineAsync(usage);
             return CliExit.Usage;
         }
+        if (RemoteMixedWithRepo(parsed)) { await context.Error.WriteLineAsync(MixedMessage); return CliExit.Usage; }
         try
         {
+            if (RemoteOf(parsed) is { } remote) return await ApproveRemoteAsync(parsed, remote, by, path, hash, app, versionText, context);
             var options = OptionsOf(parsed);
             var state = IdentityCommand.OpenState(options);
             var approvals = new AppApprovalStore(new DefinitionStore(state), approvers: HomeApprovers.Open(state, options));
@@ -348,11 +428,41 @@ public static class AppsCommand
             context.Data["hash"] = approval.ContentHash;
             return CliExit.Ok;
         }
-        catch (Exception ex) when (ex is AppInstanceException or AppPackageException)
+        catch (Exception ex) when (ex is AppInstanceException or AppPackageException or AppsRemoteException)
         {
             await context.Error.WriteLineAsync(ex.Message);
             return CliExit.Failure;
         }
+    }
+
+    /// <summary>Approval at a Proxy elsewhere (AP26): the Proxy checks that <c>--by</c> is a user of its identity home who holds the Approver role and is not the author, and that this client's pairing allows approving. The author of a built folder is this paired client.</summary>
+    private static async Task<int> ApproveRemoteAsync(CliArgs parsed, RemoteTarget remote, string by, string? path, string? hash, string? app, string? versionText, CliContext context)
+    {
+        JsonObject what;
+        if (path is { Length: > 0 })
+        {
+            var folder = Path.GetFullPath(path);
+            var manifestPath = parsed.Get("manifest") is { Length: > 0 } m ? Path.GetFullPath(m) : Path.Combine(folder, "app.yaml");
+            if (!Directory.Exists(folder) || !File.Exists(manifestPath))
+            {
+                await context.Error.WriteLineAsync(!Directory.Exists(folder) ? $"{folder} is not a folder." : $"{manifestPath} does not exist: an app's manifest is app.yaml in its folder, or name it with --manifest.");
+                return CliExit.Failure;
+            }
+            what = AppsRemote.Encode(AppPackage.FromFolder(folder, manifestPath));
+        }
+        else if (hash is { Length: > 0 }) what = new JsonObject { ["app"] = app, ["hash"] = hash };
+        else
+        {
+            if (!int.TryParse(versionText, out var version) || version < 1) { await context.Error.WriteLineAsync($"'{versionText}' is not a version number."); return CliExit.Usage; }
+            what = new JsonObject { ["app"] = app, ["version"] = version };
+        }
+        var answer = (await remote.Client.ApproveAsync(remote.Server, remote.Code, remote.Alias, remote.ClientName, what, by, parsed.Get("note"), parsed.Get("egress"), line => context.Out.WriteLine(line), context.Cancellation)).Body;
+        await context.Out.WriteLineAsync($"Approved {(string?)answer["app"]} {(string?)answer["version"]} ({(string?)answer["id"]}) as {(string?)answer["approved_by"]} on {remote.Server}. It stands for hash {(string?)answer["hash"]}; publishing exactly those files and manifest needs no other approval.");
+        context.Data["id"] = (string?)answer["id"];
+        context.Data["app"] = (string?)answer["app"];
+        context.Data["version"] = (string?)answer["version"];
+        context.Data["hash"] = (string?)answer["hash"];
+        return CliExit.Ok;
     }
 
     private static async Task<int> ApprovalListAsync(string[] args, CliContext context)
