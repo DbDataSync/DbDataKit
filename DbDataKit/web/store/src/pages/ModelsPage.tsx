@@ -30,6 +30,7 @@ export function ModelsPage() {
               </div>
               <div className="row" style={{ gap: 12, flexWrap: 'wrap', marginTop: 8 }}>
                 <Link to={`/model/${encodeURIComponent(m.name)}`} data-testid="store-model-definition">Definition</Link>
+                <Link to={`/model/${encodeURIComponent(m.name)}/storage`} data-testid="store-model-storage">Storage</Link>
               </div>
             </div>
           </div>

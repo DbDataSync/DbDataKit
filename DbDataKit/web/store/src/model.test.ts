@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { Diagnostic } from './api'
-import { isModelName, markersOf, newModelText, saveState, summaryOf } from './model'
+import type { CopyState, Diagnostic, MigrationPlan, StoragePlan } from './api'
+import { copyAction, isModelName, markersOf, migrationSummary, newModelText, saveState, storageReason, summaryOf } from './model'
 
 const error = (over: Partial<Diagnostic> = {}): Diagnostic => ({ code: 'DBD-1', severity: 'error', file: 'm.yaml', line: 3, column: 5, message: 'bad type', fix: 'use VARCHAR(n)', ...over })
 const inputs = { isNew: false, name: 'm', canWrite: true, changed: true, checking: false, stale: false, diagnostics: [] as Diagnostic[], saving: false }
@@ -54,6 +54,41 @@ describe('summary', () => {
     expect(summaryOf(undefined)).toBe('No entities yet.')
     expect(summaryOf({ a: { attributes: { x: 1, y: 2 } }, b: {} })).toBe('2 entities, 2 attributes')
     expect(summaryOf({ a: { attributes: { x: 1 } } })).toBe('1 entity, 1 attribute')
+  })
+})
+
+const plan = (existing: string[] | null, over: Partial<StoragePlan> = {}): StoragePlan => ({ engine: 'postgres', statements: [], existing, ...over })
+const state = (status: string): CopyState => ({ name: 'default', definition: 'x', applied_at: null, status })
+
+describe('what a copy needs next', () => {
+  it('creates tables when none exist, migrates when behind or unrecorded, and is done when current', () => {
+    expect(copyAction(undefined, undefined).action).toBe('none')
+    expect(copyAction(plan([]), undefined).action).toBe('create')
+    expect(copyAction(plan(['t']), state('behind')).action).toBe('migrate')
+    expect(copyAction(plan(['t']), state('unknown')).action).toBe('migrate')
+    expect(copyAction(plan(['t']), state('current'))).toEqual({ action: 'none', text: 'The tables are up to date with the model.' })
+  })
+  it('shows the connection problem instead of offering anything', () => {
+    expect(copyAction(plan(null, { connection_problem: 'no login' }), undefined)).toEqual({ action: 'none', text: 'no login' })
+  })
+})
+
+describe('a migration dry run', () => {
+  const dry = (over: Partial<MigrationPlan>): MigrationPlan => ({ up_to_date: false, applied: false, statements: [], blocked: [], notes: [], ...over })
+  const statement = { object: 't', description: 'add column', text: 'ALTER TABLE ...' }
+  it('can be applied when it only adds', () => {
+    expect(migrationSummary(dry({ statements: [statement] }))).toEqual({ text: '1 statement would be run; nothing is removed or changed in place.', canApply: true })
+  })
+  it('cannot when something needs more than adding, or when there is nothing to do', () => {
+    expect(migrationSummary(dry({ statements: [statement], blocked: ['x'] })).canApply).toBe(false)
+    expect(migrationSummary(dry({ blocked: ['x', 'y'] })).text).toMatch(/2 changes need more than adding/)
+    expect(migrationSummary(dry({ up_to_date: true })).canApply).toBe(false)
+  })
+  it('names the reason a storage button is off', () => {
+    expect(storageReason(false, true, false)).toMatch(/administrator/)
+    expect(storageReason(true, false, false)).toMatch(/not valid/)
+    expect(storageReason(true, true, true)).toMatch(/published/)
+    expect(storageReason(true, true, false)).toBeNull()
   })
 })
 
