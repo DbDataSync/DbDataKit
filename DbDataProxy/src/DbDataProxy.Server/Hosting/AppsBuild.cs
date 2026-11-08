@@ -21,6 +21,7 @@ public static class AppsBuild
         ["territory-notes"] = "a code app: index.html, app.js and app.css, no build step",
         ["territory-notes-src"] = "the same code app as a source tree (TypeScript in src/): `apps build` bundles it",
         ["front-portal"] = "a declared portal: views of data the host renders, no script",
+        ["territory-views"] = "an app of views only: grid, form, detail and dashboard (view-spec/1) the host draws, no script",
     };
 
     private const string ResourcePrefix = "apps-templates/";

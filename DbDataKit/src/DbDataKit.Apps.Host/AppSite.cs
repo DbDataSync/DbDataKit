@@ -12,7 +12,7 @@ public sealed record AppResponse(int Status, string ContentType, IReadOnlyDictio
 /// and gets the entry document too (the app's own router reads it). Every answer carries the Content-Security-Policy built from what the administrator approved of the manifest's egress requests (<see cref="EgressPolicy"/>),
 /// and an app whose origin is <c>sandbox</c> gets the <c>sandbox</c> directive, which makes its document an opaque origin that cannot read the host's cookies or storage.
 /// </summary>
-public sealed class AppSite(AppInstanceStore instances, Func<string, AppEgress>? approvedEgress = null, string channel = DefinitionStore.Production)
+public sealed class AppSite(AppInstanceStore instances, Func<string, AppEgress>? approvedEgress = null, string channel = DefinitionStore.Production, ViewsRuntime? views = null)
 {
     public const string BasePath = "/apps/";
 
@@ -41,7 +41,7 @@ public sealed class AppSite(AppInstanceStore instances, Func<string, AppEgress>?
         var instance = instances.Resolve(instanceName, channel);
         if (instance is null) return Text(404, "No such app.");
         var entry = instance.Manifest.Entry;
-        if (entry is null) return Text(404, "This app has no page of its own: it is declarative views, which the shell shows.");
+        if (entry is null) return instance.Manifest.Views.Count == 0 ? Text(404, "This app has no page.") : ViewsGet(instance, instanceName, subpath, hostOrigin);
 
         var path = WebUtility.UrlDecode(subpath).Trim('/');
         if (path.Length > 0 && !AppPackage.IsPlain(path)) return Text(400, "That is not a path inside the app.");
@@ -66,6 +66,36 @@ public sealed class AppSite(AppInstanceStore instances, Func<string, AppEgress>?
             ["ETag"] = $"\"{instance.AppVersion.Hash}-{(document ? "d" : "f")}-{name.GetHashCode():x}\"",
         };
         return new AppResponse(200, contentType, headers, bytes);
+    }
+
+    /// <summary>
+    /// An app of views only (AP25): the generated document, <c>views.json</c> (its specs) and the host's runtime. Served with the policy of any app of the instance, so the page is sandboxed and reaches only the host. A host without the runtime
+    /// says so (503); a path that is none of these is a route of the app and gets the document, as for a code app.
+    /// </summary>
+    private AppResponse ViewsGet(ResolvedInstance instance, string instanceName, string subpath, bool hostOrigin)
+    {
+        if (views is null) return Text(503, "This host has no runtime for apps of views: the Proxy was published without DbDataKit/web/view-app (build it with `npm run build -w @dbdatakit/view-app`).");
+        var path = WebUtility.UrlDecode(subpath).Trim('/');
+        if (path.Length > 0 && !AppPackage.IsPlain(path)) return Text(400, "That is not a path inside the app.");
+        (byte[] Body, string Type)? served = path switch
+        {
+            ViewsRuntime.ScriptName => (views.Script, Types[".js"]),
+            ViewsRuntime.StyleName when views.Style is not null => (views.Style, Types[".css"]),
+            ViewsApp.ViewsFile => (ViewsApp.Json(instance), Types[".json"]),
+            _ when path.Length > 0 && Path.HasExtension(path) => null,
+            _ => (ViewsApp.Document(instance.Instance.Title ?? instance.Manifest.Title ?? instanceName, BasePath + Uri.EscapeDataString(instanceName) + "/" + BundleFolder, views.Style is not null, ViewsApp.Json(instance)), Types[".html"]),
+        };
+        if (served is not { } file) return Text(404, "No such file.");
+        var egress = EgressPolicy.Effective(instance.Manifest.Egress ?? AppEgress.None, approvedEgress?.Invoke(instanceName) ?? AppEgress.None);
+        var headers = new Dictionary<string, string>
+        {
+            ["Content-Security-Policy"] = EgressPolicy.Build(egress, sandboxed: !hostOrigin && instance.Manifest.Origin == AppOrigin.Sandbox, framesSelf: hostOrigin),
+            ["X-Content-Type-Options"] = "nosniff",
+            ["Referrer-Policy"] = "no-referrer",
+            ["Cache-Control"] = "no-cache",
+            ["ETag"] = $"\"{instance.AppVersion.Hash}-{views.Hash}-v-{(path.Length > 0 && Path.HasExtension(path) ? path : "doc")}\"",
+        };
+        return new AppResponse(200, file.Type, headers, file.Body);
     }
 
     /// <summary>Puts <c>&lt;base href&gt;</c> first in the head so relative links in the bundle resolve under the instance's path; a document that already has one is left alone.</summary>

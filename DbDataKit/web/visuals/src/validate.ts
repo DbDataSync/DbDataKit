@@ -15,9 +15,14 @@ export interface ViewIssue {
 const AjvCtor = ((Ajv2020 as unknown as { default?: typeof Ajv2020 }).default ?? Ajv2020) as typeof Ajv2020
 // Formats are not validated (the schemas use none), and the schemas are fixed files of this package, so strict mode would only reject the `$id` hosts the semantic library gave its own.
 const ajv = new AjvCtor({ strict: false, allErrors: true, validateFormats: false })
-const checkView: ValidateFunction = ajv.compile(viewSchema as object)
-const checkSubset: ValidateFunction = ajv.compile(vegaSubsetSchema as object)
-const checkRendered: ValidateFunction = ajv.compile(renderedViewSchema as object)
+// Compiled on the first validation, not when the module loads: Ajv compiles a schema to code with `new Function`, which a page under a Content-Security-Policy without `unsafe-eval` (an app in the apps host,
+// plan 26 AP25) refuses, and a page that only draws charts (`VegaChart`) never validates and so never compiles.
+let compiled: { view: ValidateFunction; subset: ValidateFunction; rendered: ValidateFunction } | undefined
+const checks = () => (compiled ??= {
+  view: ajv.compile(viewSchema as object),
+  subset: ajv.compile(vegaSubsetSchema as object),
+  rendered: ajv.compile(renderedViewSchema as object),
+})
 
 // The Vega-Lite subset, as ChartView.cs in DbDataKit.Semantic states it.
 const MARKS = ['area', 'bar', 'line', 'point', 'rule', 'text']
@@ -56,7 +61,7 @@ function ajvIssues(errors: ErrorObject[] | null | undefined, code: ViewIssue['co
 function viewDocumentErrors(document: unknown): ViewIssue[] {
   const views = isObject(document) && Array.isArray(document.views) ? document.views : []
   const kindOf = (i: number) => { const t = (views[i] as { type?: unknown } | undefined)?.type; return t === 'matrix' || t === 'chart' ? t : undefined }
-  const rest = (checkView.errors ?? []).filter((e) => {
+  const rest = (checks().view.errors ?? []).filter((e) => {
     const m = /^\/views\/(\d+)(\/|$)/.exec(e.instancePath)
     return !(m && kindOf(Number(m[1])))
   })
@@ -64,7 +69,7 @@ function viewDocumentErrors(document: unknown): ViewIssue[] {
   views.forEach((_, i) => {
     const kind = kindOf(i)
     if (!kind) return
-    const check = ajv.getSchema(`${(viewSchema as { $id: string }).$id}#/$defs/${kind}`)!
+    const check = (checks(), ajv.getSchema(`${(viewSchema as { $id: string }).$id}#/$defs/${kind}`)!)
     if (!check(views[i])) issues.push(...ajvIssues(check.errors, 'schema_invalid', `$.views[${i}]`))
   })
   return issues
@@ -112,7 +117,7 @@ export function validateVegaLiteSubset(spec: unknown, path = '$.vega_lite'): Vie
     }
   }
   if (issues.length > 0) return issues
-  return checkSubset(spec) ? [] : ajvIssues(checkSubset.errors, 'vega_disallowed', path)
+  return checks().subset(spec) ? [] : ajvIssues(checks().subset.errors, 'vega_disallowed', path)
 }
 
 /**
@@ -121,7 +126,7 @@ export function validateVegaLiteSubset(spec: unknown, path = '$.vega_lite'): Vie
  * a stack of a measure that cannot be added, an attribute on neither axis) is the server's to say, because only it has the descriptor.
  */
 export function validateViewDocument(document: unknown): ViewIssue[] {
-  if (!checkView(document)) return viewDocumentErrors(document)
+  if (!checks().view(document)) return viewDocumentErrors(document)
   const issues: ViewIssue[] = []
   const seen = new Set<string>()
   const views = (document as { views: Record<string, unknown>[] }).views
@@ -140,7 +145,7 @@ export function validateViewDocument(document: unknown): ViewIssue[] {
  * renderer calls this before it hands anything to Vega, whoever wrote the document (a server, an assistant's reply, a file a person opened).
  */
 export function validateRenderedView(document: unknown): ViewIssue[] {
-  if (!checkRendered(document)) return ajvIssues(checkRendered.errors, 'rendered_invalid', '$')
+  if (!checks().rendered(document)) return ajvIssues(checks().rendered.errors, 'rendered_invalid', '$')
   const issues: ViewIssue[] = []
   const views = ((document as { views?: Record<string, unknown>[] | null }).views ?? [])
   views.forEach((view, i) => {

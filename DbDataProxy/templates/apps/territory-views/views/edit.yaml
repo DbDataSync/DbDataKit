@@ -1,0 +1,15 @@
+schemaVersion: 1
+kind: form
+title: Edit a territory
+model: territories
+entity: territory
+mode: edit
+key: code
+params:
+  - {name: code, type: string, required: true}
+fields:
+  - code
+  - name
+  - quota
+links:
+  - {label: Back to the list, to: views/territories.yaml}

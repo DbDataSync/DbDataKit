@@ -68,6 +68,7 @@ public sealed class AppsBuildTests : IDisposable
     [Theory]
     [InlineData("territory-notes")]
     [InlineData("front-portal")]
+    [InlineData("territory-views")]
     public async Task A_folder_made_by_init_validates_and_publishes_with_no_build(string template)
     {
         var app = Folder("init-" + template);
@@ -104,6 +105,8 @@ public sealed class AppsBuildTests : IDisposable
         var unknown = await RunAsync(AppsBuild.InitAsync, "--template", "nope", "--dir", Folder("unknown"));
         Assert.Equal(2, unknown.Exit);
         Assert.Contains("territory-notes-src", unknown.Error);
+        Assert.Contains("territory-views", unknown.Error);
+        Assert.Contains("territory-views", (await RunAsync(AppsBuild.InitAsync)).Error);   // `apps init` alone lists every template
     }
 
     [Fact]

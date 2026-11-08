@@ -22,7 +22,7 @@ $versionArgs = @(if ($Version) { "-p:Version=$Version" })
 if ($LASTEXITCODE) { throw 'Fetching the DuckDB engine failed.' }
 
 dotnet publish (Join-Path $root 'src\DbDataProxy.Server') -c $Configuration -r $Runtime --self-contained `
-  -p:PublishSingleFile=true @versionArgs -o $target
+  -p:PublishSingleFile=true -p:BuildViewsRuntime=true @versionArgs -o $target
 if ($LASTEXITCODE) { throw 'Publishing the proxy failed.' }
 
 if ($Runtime -ne 'win-x86') {

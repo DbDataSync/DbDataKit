@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { semanticSchemaPath, viewFixtures } from './testing/fixtures'
 import { validateRenderedView, validateViewDocument, validateVegaLiteSubset } from './validate'
 
@@ -129,5 +129,17 @@ describe('a rendered view', () => {
   it('that is not a rendered view is refused', () => {
     expect(codes(validateRenderedView({ kind: 'view' }))).toContain('rendered_invalid')
     expect(codes(validateRenderedView(null))).toContain('rendered_invalid')
+  })
+})
+
+describe('loading the validator', () => {
+  it('compiles nothing on import, so a page whose policy forbids unsafe-eval can load the package and draw charts', async () => {
+    vi.resetModules()
+    const real = globalThis.Function
+    globalThis.Function = function Refused() { throw new Error('a schema was compiled to code on import') } as unknown as FunctionConstructor
+    try { await import('./validate') } finally { globalThis.Function = real }
+    // the first validation compiles, and still gives the same answers
+    const fresh = await import('./validate')
+    expect(fresh.validateVegaLiteSubset({ mark: 'bar', encoding: {} }, '$.v')).toEqual([])
   })
 })

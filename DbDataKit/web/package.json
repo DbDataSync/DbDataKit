@@ -9,6 +9,7 @@
     "proxy",
     "visuals",
     "store-ui",
+    "view-app",
     "store",
     "runner",
     "console"

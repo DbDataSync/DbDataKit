@@ -72,6 +72,14 @@ The CI runners are small (two cores, Windows and Linux), run many jobs at once, 
 | --- | --- | --- |
 | the container is "unhealthy"; log: `Could not load file or assembly 'Microsoft.Data.Sqlite'` | publish items for another program (the task host) were added **before** the SDK's file-conflict resolution, which saw two files of one name and dropped the console's | add such items with `AfterTargets="ComputeResolvedFilesToPublishList"` (`TaskHostIntoPublish`); check by publishing and listing the output |
 
+### Web code that runs under an app's policy
+
+| Signature | Cause | Fix |
+| --- | --- | --- |
+| the page of an app of views is empty; the browser console says `Evaluating a string as JavaScript violates the following Content Security Policy directive 'script-src 'self''` and `Error compiling schema` | a module compiled a JSON Schema at import (Ajv generates code with `new Function`), and the app's policy has no `unsafe-eval` | `@dbdatakit/visuals` compiles its validators on first use (`validate.ts`), and `view-app` draws charts with `VegaChart` directly, never `RenderedViews` (its validator would compile). A test refuses `new Function` during import |
+| a sandboxed page cannot read its own data file (`fetch('views.json')` fails with a CORS error) | a document under `sandbox` has an opaque origin: even a same-address `fetch` is a cross-origin read, and the host sends no CORS headers for the bundle | give the page its data inline (`<script type="application/json">`, which the policy does not run), as `ViewsApp.Document` does |
+| the Proxy answers an app of views with `503 ... no runtime for apps of views` | `apps-views` (the web build of `DbDataKit/web/view-app`) is not beside the program: a plain `dotnet publish` does not build it | publish with `-p:BuildViewsRuntime=true` (the Windows script and the Dockerfile's node stage do) |
+
 ### Merging `main` into a branch
 
 | Signature | Cause | Fix |

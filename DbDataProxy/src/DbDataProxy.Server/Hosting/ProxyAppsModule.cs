@@ -23,6 +23,9 @@ public sealed class ProxyAppsModule(IOptionsMonitor<ProxyOptions> options, State
     /// <summary>The secret that holds the seed of the key the apps host signs its app tokens with: made on the first start, and copied to every other instance of a group.</summary>
     public const string SigningKeySecret = "dbdata:proxy:apps:signing-key";
 
+    /// <summary>The folder next to the program that holds the runtime for apps of views only (<c>views-app.js</c>, <c>views-app.css</c>; plan 26, AP25), copied there by the build from <c>DbDataKit/web/view-app/dist</c>.</summary>
+    public const string ViewsRuntimeFolder = "apps-views";
+
     /// <summary>The issuer name in the tokens; a server that accepts them pairs this issuer's public key.</summary>
     public const string TokenIssuer = "dbdataproxy-apps";
 
@@ -81,7 +84,7 @@ public sealed class ProxyAppsModule(IOptionsMonitor<ProxyOptions> options, State
         var key = await SigningKeyAsync(current, cancellationToken);
         var app = builder.Build();
         app.MapGet("/health/live", () => Results.Text("Healthy"));
-        app.MapApps(instances, new AppSite(instances, name => instances.Resolve(name) is { } r ? approvals.ApprovedEgress(r) : AppEgress.None), client, new AppSessions(refresh: client.RefreshAsync, refreshAfter: TimeSpan.FromSeconds(current.Apps.RolesRefreshSeconds)),
+        app.MapApps(instances, new AppSite(instances, name => instances.Resolve(name) is { } r ? approvals.ApprovedEgress(r) : AppEgress.None, views: ViewsRuntime.FromDirectory(Path.Combine(AppContext.BaseDirectory, ViewsRuntimeFolder))), client, new AppSessions(refresh: client.RefreshAsync, refreshAfter: TimeSpan.FromSeconds(current.Apps.RolesRefreshSeconds)),
             new AppTokenBroker(new ConsoleTokenIssuer(TokenIssuer, key)), new AppDataGateway(instances, new GroupAppData(ProxyStoreModule.ApiOf(options, state, secrets, models)), new ConsoleIdentity(TokenIssuer, key), approvals: approvals), new AppStorage(state), approvals);
         app.MapFallback(() => Results.Text("The apps host of this DbDataProxy. An app is at /apps/<instance>/.", "text/plain"));
         await app.StartAsync(cancellationToken);

@@ -49,6 +49,25 @@ public sealed class GroupStoreApi(Func<ProxyOptions> options, SecretsRuntime sec
         });
     }
 
+    /// <summary>
+    /// The model's schema (<see cref="ModelSchemaJson"/>), for a viewer. <paramref name="mayRead"/>, when given (an app's scope), keeps only the entities it says yes to; a model with none of them is refused, so an app never learns
+    /// the shape of an entity its manifest does not list.
+    /// </summary>
+    public StoreAnswer Schema(StoreCaller caller, string name, Func<string, bool>? mayRead = null)
+    {
+        if (Needs(caller, ServerRole.Viewer) is { } denied) return denied;
+        var (served, missing) = Served(name);
+        if (missing is not null) return missing;
+        var schema = ModelSchemaJson.Of(served!.Model);
+        if (mayRead is not null)
+        {
+            var kept = ((JsonArray)schema["entities"]!).OfType<JsonObject>().Where(e => mayRead((string)e["name"]!)).Select(e => (JsonNode)JsonNode.Parse(e.ToJsonString())!).ToArray();
+            if (kept.Length == 0) return StoreAnswer.Error(403, $"This app may not read any entity of '{name}': its manifest does not list one.");
+            schema["entities"] = new JsonArray(kept);
+        }
+        return StoreAnswer.Ok(schema);
+    }
+
     /// <summary>One row by its key (<c>key.&lt;attribute&gt;</c>); <c>as_of</c> the version that held then; <c>history=true</c> every version.</summary>
     public async Task<StoreAnswer> RowAsync(StoreCaller caller, string name, string entity, IReadOnlyDictionary<string, string> query, CancellationToken cancellationToken)
     {

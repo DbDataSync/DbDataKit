@@ -1,0 +1,9 @@
+schemaVersion: 1
+kind: dashboard
+title: Overview
+model: territories
+widgets:
+  - {kind: metric, title: Territories, entity: territory, measure: count}
+  - {kind: metric, title: Total quota, entity: territory, measure: {sum: quota}}
+  - {kind: bar, title: Quota by territory, entity: territory, measure: {sum: quota}, by: name, limit: 10}
+  - {kind: table, title: Largest quotas, entity: territory, columns: [code, name, quota], limit: 5}
