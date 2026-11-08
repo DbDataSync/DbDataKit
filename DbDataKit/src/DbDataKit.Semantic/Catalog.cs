@@ -282,6 +282,9 @@ public sealed class Catalog
     /// <summary>The <c>cache</c> section (format 2), or null when the catalog has none: the cache is off. Values were checked at load.</summary>
     public DbDataKit.Config.Yaml.CacheSection? Cache => Source["cache"] is JsonObject cache ? CacheOf(cache) : null;
 
+    /// <summary>The <c>checks</c> section (format 2): the <c>check/1</c> entries, each about a table of the catalog (or a lineage identity). Empty when the catalog has none. Checked at load.</summary>
+    public IReadOnlyList<DbDataKit.Quality.CheckDefinition> Checks => CatalogLoader.ReadChecks(Source);
+
     private static DbDataKit.Config.Yaml.CacheSection CacheOf(JsonObject cache)
     {
         var ttl = DbDataKit.Config.Yaml.CacheSection.DefaultTtl;

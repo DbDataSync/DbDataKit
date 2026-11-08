@@ -69,6 +69,7 @@
     <Project Path="DbDataKit/src/DbDataKit.Hosting.WindowsService/DbDataKit.Hosting.WindowsService.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Hosting/DbDataKit.Hosting.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Metadata.Abstractions/DbDataKit.Metadata.Abstractions.csproj" />
+    <Project Path="DbDataKit/src/DbDataKit.Quality/DbDataKit.Quality.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Serving.Abstractions/DbDataKit.Serving.Abstractions.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Serving.Conformance/DbDataKit.Serving.Conformance.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Serving.FlightSql/DbDataKit.Serving.FlightSql.csproj" />
@@ -131,6 +132,7 @@
     <Project Path="DbDataKit/tests/DbDataKit.Apps.Instances.Tests/DbDataKit.Apps.Instances.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Apps.Host.Tests/DbDataKit.Apps.Host.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Apps.Manifest.Tests/DbDataKit.Apps.Manifest.Tests.csproj" />
+    <Project Path="DbDataKit/tests/DbDataKit.Quality.Tests/DbDataKit.Quality.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Tools.XmlaForwarder.Tests/DbDataKit.Tools.XmlaForwarder.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Config.Git.Tests/DbDataKit.Config.Git.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Config.Hosting.Tests/DbDataKit.Config.Hosting.Tests.csproj" />

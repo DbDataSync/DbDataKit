@@ -1,6 +1,6 @@
 namespace DbDataKit.Config.Yaml.Tests;
 
-/// <summary>Plan 24a UC03: the shared <c>cache:</c> and <c>checks:</c> sections of format 2: each key valid, each bad value refused with file and line.</summary>
+/// <summary>Plan 24a UC03: the shared <c>cache:</c> section of format 2 (the <c>checks:</c> section is read by <c>DbDataKit.Quality</c>, 23a FQ01): each key valid, each bad value refused with file and line.</summary>
 public sealed class CacheSectionTests
 {
     private static (CacheSection? Section, List<ConfigDiagnostic> Diagnostics) Read(string yaml)
@@ -70,20 +70,5 @@ public sealed class CacheSectionTests
         Assert.Equal(("orders.yaml", line), (error.Path, error.Line));
         Assert.Contains(says, error.Message);
         Assert.Contains($"orders.yaml:{line}:", error.ToString());
-    }
-
-    [Fact]
-    public void The_place_of_the_checks_is_a_list_of_mappings_whose_keys_are_not_read()
-    {
-        var diagnostics = new List<ConfigDiagnostic>();
-        var root = (YamlMapping)StrictYamlReader.Read("checks:\n  - {kind: freshness, anything: 1}\n  - kind: not_null\n", "orders.yaml", diagnostics)!;
-        Assert.Equal(2, ChecksPlace.Read(root.Get("checks")!, "orders.yaml", diagnostics));
-        Assert.Empty(diagnostics);
-
-        var bad = (YamlMapping)StrictYamlReader.Read("checks:\n  - not a mapping\n", "orders.yaml", diagnostics)!;
-        Assert.Null(ChecksPlace.Read(bad.Get("checks")!, "orders.yaml", diagnostics));
-        Assert.Equal(("orders.yaml", 2), (diagnostics[0].Path, diagnostics[0].Line));
-        var scalar = (YamlMapping)StrictYamlReader.Read("checks: none\n", "orders.yaml", [])!;
-        Assert.Null(ChecksPlace.Read(scalar.Get("checks")!, "orders.yaml", diagnostics));
     }
 }

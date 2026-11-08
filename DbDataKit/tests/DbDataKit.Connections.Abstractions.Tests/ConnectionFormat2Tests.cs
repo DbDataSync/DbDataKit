@@ -1,4 +1,5 @@
 using DbDataKit.Config.Yaml;
+using DbDataKit.Quality;
 
 namespace DbDataKit.Connections.Abstractions.Tests;
 
@@ -34,11 +35,13 @@ public sealed class ConnectionFormat2Tests
     [Fact]
     public void Each_key_of_the_cache_section_loads_and_the_checks_have_their_place()
     {
-        var result = ConnectionDefinitionLoader.Load(File(2, "cache: { enabled: true, ttl: 2h, scope: shared, dataset: dbo.orders }\nchecks:\n  - { kind: freshness, whatever: 1 }"));
+        var result = ConnectionDefinitionLoader.Load(File(2, "cache: { enabled: true, ttl: 2h, scope: shared, dataset: dbo.orders }\nchecks:\n  - { id: orders_fresh, kind: freshness, dataset: dbo.orders, max_age: 6h }\n  - { id: fk, kind: referential, dataset: dbo.orders, column: customer_id, references: { dataset: dbo.customers, column: id } }\n  - { id: st, kind: accepted_values, dataset: dbo.orders, column: status, values: [open, shipped] }"));
         Assert.True(result.Ok, string.Join("\n", result.Diagnostics));
         var cache = result.Definition!.Cache!;
         Assert.Equal((true, "2h", "shared", "dbo.orders"), (cache.Enabled, cache.Ttl, cache.Scope, cache.Dataset));
-        Assert.Single(result.Definition.Checks!);
+        Assert.Equal(3, result.Definition.Checks!.Count);
+        Assert.Equal(["orders_fresh", "fk", "st"], result.Definition.CheckDefinitions!.Select(c => c.Id));
+        Assert.Equal(TimeSpan.FromHours(6), ((FreshnessParameters)result.Definition.CheckDefinitions![0].Parameters).MaxAge);
         Assert.Equal(("5m", "caller", false), (new CacheSpec().Ttl, new CacheSpec().Scope, new CacheSpec().Enabled));
     }
 
@@ -51,6 +54,21 @@ public sealed class ConnectionFormat2Tests
         Assert.Equal([ConnectionDefinitionLoader.SectionNotInThisFormat, ConnectionDefinitionLoader.SectionNotInThisFormat], errors.Select(e => e.Code));
         Assert.Equal([("warehouse.yaml", 5), ("warehouse.yaml", 6)], errors.Select(e => (e.Path, e.Line)));
         Assert.Contains("schema: connection/2", errors[0].Fix);
+    }
+
+    [Theory]
+    [InlineData("checks:\n  - { id: a, kind: sql, dataset: t }", 6, "is not a kind of check")]
+    [InlineData("checks:\n  - { id: a, kind: range, dataset: t, column: c, min: 5, max: 1 }", 6, "is above `max`")]
+    [InlineData("checks:\n  - { id: a, kind: referential, dataset: t, column: c }", 6, "names no target")]
+    [InlineData("checks:\n  - { id: a, kind: not_null, column: c }", 6, "names no dataset")]
+    [InlineData("checks:\n  - { id: a, kind: not_null, dataset: t, column: c, severity: high }", 6, "`severity` is `high`")]
+    public void Each_bad_check_is_refused_with_file_and_line(string extra, int line, string says)
+    {
+        var result = ConnectionDefinitionLoader.Load(File(2, extra), "warehouse.yaml");
+        Assert.False(result.Ok);
+        var error = Assert.Single(result.Diagnostics, d => d.Severity == ConfigSeverity.Error);
+        Assert.Equal(("warehouse.yaml", line), (error.Path, error.Line));
+        Assert.Contains(says, error.Message);
     }
 
     [Theory]

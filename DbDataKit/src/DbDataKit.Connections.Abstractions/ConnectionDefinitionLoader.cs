@@ -71,6 +71,9 @@ public static class ConnectionDefinitionLoader
         if (bound.Value is null || diags.HasErrors()) return new(null, diags);
         bound.Value.SchemaVersion = declared;
         Validate(bound.Value, file, bound.Sources, diags, addressRequired);
+        // format 2's checks are check/1 entries (23a FQ01); format 1 has none, and a file that has them was refused above
+        if (declared >= 2 && root is YamlMapping { } whole && whole.Get("checks") is { } checksNode)
+            bound.Value.CheckDefinitions = DbDataKit.Quality.CheckSection.Read(checksNode, file, diags);
         return new(bound.Value, diags);
     }
 

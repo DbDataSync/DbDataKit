@@ -133,9 +133,13 @@ public sealed class ConnectionDefinition
     public CacheSpec? Cache { get; set; }
 
     /// <summary>
-    /// The place of the checks of this data source (format 2): a list of mappings whose keys are not read until plan 23's check model gives them their shape (23a FQ01). Null when the file has none.
+    /// The checks of this data source (format 2) as the binder sees them: a list of mappings. <c>ConnectionDefinitionLoader</c> reads them strictly as <c>check/1</c> entries (<see cref="CheckDefinitions"/>); null when the file has none.
     /// </summary>
     public List<ExtensionBag>? Checks { get; set; }
+
+    /// <summary>The <c>check/1</c> entries of <see cref="Checks"/>, read and validated by the loader (23a FQ01): each names the table it is about in <c>dataset</c>. Null when the file has none or when it was not made by the loader.</summary>
+    [ConfigIgnore]
+    public IReadOnlyList<DbDataKit.Quality.CheckDefinition>? CheckDefinitions { get; set; }
 
     /// <summary>The login spec for <paramref name="role"/>. Read never returns the write login.</summary>
     public LoginSpec? LoginFor(LoginRole role) => role switch

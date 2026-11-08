@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using DbDataKit.Semantic.Abstractions;
 using DbDataKit.Config.Yaml;
+using DbDataKit.Quality;
 
 namespace DbDataKit.Semantic;
 
@@ -42,22 +43,85 @@ public static partial class CatalogLoader
     public static Catalog LoadText(string yaml, string? file = null)
     {
         var root = ReadYaml(yaml, file ?? "catalog");
-        try { return LoadJson(ToJson(root)); }
-        catch (CatalogException e) when (file is not null)
+        var errors = new List<QisError>();
+        Catalog? catalog = null;
+        try { catalog = LoadParsed(ToJson(root), checksOfJson: false); }
+        catch (CatalogException e) { errors.AddRange(file is null ? e.Errors : e.Errors.Select(x => Locate(root, file, x))); }
+
+        // the checks are read from the YAML nodes, so each problem has the file, line and column of what is wrong and says it in the check model's words (23a FQ01); the schema's own errors about an entry
+        // ("expected 1 matching subschema") are left out when the loader has said what is wrong, and kept when it has not (the schema and the loader disagree)
+        if (root.Get(CheckSection.Key) is { } checksNode && !errors.Any(x => x.Path == "$/checks"))
         {
-            throw new CatalogException(e.Errors.Select(x => Locate(root, file, x)).ToList());
+            var diagnostics = new List<ConfigDiagnostic>();
+            var checks = CheckSection.Read(checksNode, file ?? "catalog", diagnostics);
+            var found = diagnostics.Where(d => d.Severity == ConfigSeverity.Error).Select(d => Err("invalid_check", "$.checks", d.ToString())).ToList();
+            if (checks is not null && TablesOf(ToJson(root)) is { } tables) found.AddRange(CheckTargets(checks, tables).Select(x => Locate(root, file ?? "catalog", x)));
+            if (found.Count > 0)
+            {
+                errors.RemoveAll(x => x.Path.StartsWith("$/checks/", StringComparison.Ordinal));
+                errors.AddRange(found);
+            }
         }
+
+        if (errors.Count > 0) throw new CatalogException(errors);
+        return catalog!;
     }
 
     /// <summary>Loads a catalog already read as JSON, for example one imported from Ossie documents.</summary>
-    public static Catalog LoadJson(JsonObject json)
+    public static Catalog LoadJson(JsonObject json) => LoadParsed(json, checksOfJson: true);
+
+    private static Catalog LoadParsed(JsonObject json, bool checksOfJson)
     {
         var errors = SchemaStore.Errors(json, SchemaStore.Get("catalog"), "catalog_schema_invalid", "catalog");
         if (errors.Count > 0) throw new CatalogException(errors);
         errors = [];
         var doc = Build(json, errors);
+        if (checksOfJson && json["checks"] is JsonArray section && errors.Count == 0) errors.AddRange(ChecksOf(section, json));
         if (errors.Count > 0) throw new CatalogException(errors);
         return new Catalog(doc, json);
+    }
+
+    /// <summary>The checks of a catalog that has no YAML text (an imported one): the section is written out as a YAML flow collection, which is JSON, and read as the file would be. The positions are of that text, so the path says where.</summary>
+    internal static List<QisError> ChecksOf(JsonArray section, JsonObject json)
+    {
+        var errors = new List<QisError>();
+        var diagnostics = new List<ConfigDiagnostic>();
+        var node = StrictYamlReader.Read(section.ToJsonString(), "checks", diagnostics);
+        var checks = node is null ? null : CheckSection.Read(node, "checks", diagnostics);
+        errors.AddRange(diagnostics.Where(d => d.Severity == ConfigSeverity.Error).Select(d => Err("invalid_check", "$.checks", d.Message)));
+        if (checks is not null && TablesOf(json) is { } tables) errors.AddRange(CheckTargets(checks, tables));
+        return errors;
+    }
+
+    internal static IReadOnlyList<CheckDefinition> ReadChecks(JsonObject json)
+    {
+        if (json["checks"] is not JsonArray section) return [];
+        var diagnostics = new List<ConfigDiagnostic>();
+        var node = StrictYamlReader.Read(section.ToJsonString(), "checks", diagnostics);
+        return (node is null ? null : CheckSection.Read(node, "checks", diagnostics)) ?? [];
+    }
+
+    private static Dictionary<string, HashSet<string>>? TablesOf(JsonObject json) =>
+        json["tables"] is JsonArray tables
+            ? tables.OfType<JsonObject>().Where(t => t["name"] is not null).GroupBy(t => t["name"]!.GetValue<string>()).ToDictionary(g => g.Key, g => g.SelectMany(t => t["columns"]?.AsArray().Select(c => c?["name"]?.GetValue<string>()) ?? []).OfType<string>().ToHashSet())
+            : null;
+
+    /// <summary>A check names a table of the catalog, and columns of it, unless it names a lineage identity (a dataset outside the catalog).</summary>
+    private static IEnumerable<QisError> CheckTargets(IReadOnlyList<CheckDefinition> checks, Dictionary<string, HashSet<string>> tables)
+    {
+        for (var i = 0; i < checks.Count; i++)
+        {
+            var at = checks[i].Attachment;
+            if (at.IsIdentity) continue;
+            if (!tables.TryGetValue(at.Dataset, out var columns))
+            {
+                yield return Err("unknown_check_dataset", $"$.checks[{i}].dataset", $"The check {checks[i].Id} is about {at.Dataset}, which isn't a table of the catalog.", [.. tables.Keys.Take(5)]);
+                continue;
+            }
+
+            foreach (var column in at.Columns.Where(c => !columns.Contains(c)))
+                yield return Err("unknown_check_column", $"$.checks[{i}].{(checks[i].Attachment.Columns.Count == 1 ? "column" : "columns")}", $"The check {checks[i].Id} is about the column {column}, which {at.Dataset} doesn't have.", [.. columns.Take(5)]);
+        }
     }
 
     // ---------- YAML to typed JSON ----------
