@@ -138,3 +138,21 @@
 .lineage-state-upstream { border-left: 4px solid #8250df; }
 .lineage-state-downstream { border-left: 4px solid #1a7f37; }
 .lineage-state-dim { opacity: 0.3; }
+
+/* the report on screen (plan 32 DBR14): a scrolling sheet the width of the page, page-break guides, the note; the paged-media rules are `flowCss` */
+.vz.vz-flow-outer { box-sizing: border-box; display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 0; border-radius: 0; overflow: hidden; background: var(--vz-head); }
+.vz-flow-bar { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 12px; color: var(--vz-muted); border-bottom: 1px solid var(--vz-edge); }
+.vz-flow-actions { display: flex; gap: 8px; flex: none; }
+.vz-flow-overwidth { flex: none; margin: 6px 12px 0; }
+.vz-flow-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 16px; box-sizing: border-box; }
+.vz-flow-sheet { position: relative; box-sizing: border-box; margin: 0 auto; background: var(--vz-tile); box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25); }
+.vz-flow-content { position: relative; }
+.vz-flow-guide { position: absolute; height: 0; border-top: 1px dashed var(--vz-accent); pointer-events: none; z-index: 2; }
+.vz-flow-guide span { position: absolute; right: 6px; top: 2px; font-size: 11px; color: var(--vz-accent); }
+.vz-flow-running { position: absolute; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--vz-muted); font-size: 11px; }
+.vz-flow-head { top: 0; }
+.vz-flow-foot { bottom: 0; }
+.vz-flow-cover h1 { margin: 0 0 16px; }
+.vz-flow-cover dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
+.vz-flow-cover dt { color: var(--vz-muted); }
+.vz-flow-cover dd { margin: 0; }

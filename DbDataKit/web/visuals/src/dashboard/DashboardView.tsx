@@ -6,6 +6,7 @@ import type { ViewKind } from '../views/document'
 import type { Box, LayoutDoc, ParameterValue, ParameterValues, ViewsDoc } from '../views/model'
 import type { RenderedWidget } from '../views/rendered'
 import { selectLayout, type LayoutSelection, type Medium } from '../views/selectLayout'
+import { PagedFrame } from '../report/PagedFrame'
 import { ErrorTile } from '../widgets/states'
 import { DashboardFrame } from './DashboardFrame'
 import { changedParameters, defaultParameters, dependentWidgets, parametersKey, resolveLayout, type Resolution } from './resolution'
@@ -29,6 +30,10 @@ export interface DashboardViewProps {
   onParameterChange?: (parameter: string, value: ParameterValue) => void
   /** Called when the selected layout changes (a window resized across a selector, a layout named), with how it was chosen. */
   onSelect?: (selection: Extract<LayoutSelection<LayoutDoc>, { ok: true }>) => void
+  /** Who is looking: the `{viewer}` of a flow layout's header, footer and cover. */
+  viewer?: string
+  /** The exact PDF in the viewer (a flow layout's Print preview, DBR15); without it that button says why it is disabled. */
+  onPrintPreview?: () => void
 }
 
 const whole = (n: number) => Math.max(0, Math.round(n))
@@ -60,7 +65,7 @@ function useBox(given: Box | undefined) {
  * the widgets both layouts place. A widget that fails shows its own error; a failure of the call itself shows once, for the page. A canvas layout is drawn by `layoutCanvas` (DBR07), scaled or scrolled in the same container; a flow layout is the work of its own engine (DBR14):
  * until then a note says so.
  */
-export function DashboardView({ kind = 'dashboard', name, document, client, layout, medium, box: given, theme = 'auto', parameters, onParameterChange, onSelect }: DashboardViewProps) {
+export function DashboardView({ kind = 'dashboard', name, document, client, layout, medium, box: given, theme = 'auto', parameters, onParameterChange, onSelect, viewer, onPrintPreview }: DashboardViewProps) {
   const resolvedTheme = useTheme(theme)
   const { ref, box } = useBox(given)
   const defaults = useMemo(() => defaultParameters(document), [document])
@@ -121,6 +126,8 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
   let body
   if (!box) body = null
   else if (selection && !selection.ok) body = <ErrorTile code="no_layout" message={selection.refusal} />
+  else if (chosen?.type === 'flow')
+    body = <PagedFrame document={document} layout={chosen} box={box} theme={resolvedTheme} results={results} loading={loading} parameters={values} onParameterChange={change} asOf={resolution?.asOf} viewer={viewer} onPrintPreview={onPrintPreview} />
   else if (chosen)
     body = (
       <DashboardFrame

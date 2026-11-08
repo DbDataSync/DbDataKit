@@ -2,6 +2,7 @@ import { expect, type Page } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { reportsStory } from './views-reports'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const sample = fs.readFileSync(path.resolve(here, '../../../../DbDataBuild/templates/retail/dashboards/retail-sales-today.yaml'), 'utf8')
@@ -30,7 +31,7 @@ function overflow(page: Page) {
 /**
  * The Views page opening a dashboard from fixtures (plan 32 DBR23, M1): the sample dashboard fits the window at three sizes with no scrolling of the document or of a tile; a maximized tile scrolls and closes;
  * `?layout=` is honoured, the canvas layouts are drawn scaled (three sizes, `min_scale`, `overflow: scroll`) and a switch of layout resolves only the widgets not yet resolved; a parameter change (kept in the address) resolves only the widgets that use it; a file with an error is refused with its position;
- * a report is listed and said not to be drawn yet; and the browser contacts no other host. Needs a signed-in page and nothing else: the source is recorded results inside the page.
+ * the report half is `reportsStory`; and the browser contacts no other host. Needs a signed-in page and nothing else: the source is recorded results inside the page.
  */
 export async function dashboardsStory(page: Page) {
   const outside: string[] = []
@@ -149,6 +150,7 @@ export async function dashboardsStory(page: Page) {
   await page.goto(OPEN)
   await expect(page.getByTestId('vz-tile-net')).toBeVisible()
   await expect.poll(() => resolved(page)).toEqual({ count: 1, widgets: DESK })
+  await expect(page.getByTestId('vz-loading')).toHaveCount(0) // the first answer is in: a click before it is lost when the tiles are drawn again
   await page.getByTestId('vz-tile-regions').getByRole('checkbox', { name: 'West' }).check()
   await expect(page).toHaveURL(/p\.region=West/)
   await expect(page.getByTestId('vz-text')).toContainText('Showing West')
@@ -185,15 +187,8 @@ export async function dashboardsStory(page: Page) {
   await expect(page.getByTestId('vz-dashboard')).toHaveAttribute('data-layout', 'desk')
   await expect(page.getByTestId('vz-widget-error').first()).toContainText('no_recorded_result')
 
-  // A flow layout is chosen and not drawn yet (DBR14): it says so.
-  await page.goto(`${OPEN}?layout=print`)
-  await expect(page.getByTestId('vz-engine-missing')).toContainText('flow layout')
-
-  // A report is listed and checked; drawing it is not built, and the page says so.
-  await page.getByTestId('views-tab-reports').click()
-  await page.getByTestId('views-open-retail-sales-monthly').click()
-  await expect(page.getByTestId('views-report-note')).toContainText('Reports are not drawn yet')
-  await expect(page.getByTestId('vz-dashboard')).toHaveCount(0)
+  // The report half: the sample report scrolls with page-break guides, prints with the paged-media rules, a dashboard's print layout is the same view (views-reports.ts).
+  await reportsStory(page)
 
   // A name the source does not have is an error with the way back, not a blank page.
   await page.goto('/views/dashboards/nothing-here')

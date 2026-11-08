@@ -151,8 +151,8 @@ describe('DashboardView', () => {
   it('a named layout wins over the selector, and a name the document lacks is refused naming the ones it has', async () => {
     const { client } = counting()
     await show({ client, layout: 'print' })
-    expect(layoutNow()).toBe('print')
-    expect(q('vz-engine-missing')!.textContent).toContain('flow layout')
+    expect(q('vz-flow')!.getAttribute('data-layout')).toBe('print') // a flow layout is drawn by the report view (DBR14)
+    expect(q('vz-dashboard')).toBeNull()
     await show({ client, layout: 'tv' })
     expect(host.querySelector('[role="alert"]')!.textContent).toContain('no layout named `tv`')
     expect(host.querySelector('[role="alert"]')!.textContent).toContain('`desk`, `wall`, `phone`, `print`')
