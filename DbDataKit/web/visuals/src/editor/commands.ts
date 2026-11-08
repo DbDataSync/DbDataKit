@@ -1,5 +1,8 @@
-import type { LayoutDoc, ParameterDefinition, TileDoc, ViewsDoc, WidgetDoc } from '../views/model'
+import type { LayoutDoc, ParameterDefinition, TileDoc, ViewsDoc, WidgetDoc, WidgetType } from '../views/model'
+import type { CatalogRoles } from '../views/derive'
 import type { Op, Path } from './yamlEdit'
+import { WellError, convertWidget, wellOps, wellsOf } from './wells'
+import type { WellChange } from './wells'
 
 /**
  * The edit commands of the editor (plan 32 DBR24): what a form, a drag or a menu asks of the document, each a small named change with its checks. `commandOps` turns one into the changes of the text
@@ -26,8 +29,12 @@ export type EditCommand =
   | { type: 'placeTile'; layout: string; tile: TileDoc }
   | { type: 'setTile'; layout: string; widget: string; changes: Partial<TileDoc> }
   | { type: 'removeTile'; layout: string; widget: string }
+  /** A change to one field well of a widget (DBR25): add a field (at a position), remove an entry, move one, clear. `roles` (the catalog's) make a field of the wrong kind refused in the engine's words. */
+  | { type: 'setWell'; widget: string; well: string; change: WellChange; roles?: CatalogRoles }
+  /** The widget as another type (the chooser): its title, model and filters stay, its fields go where they fit. `roles` (the catalog's) place them by kind. */
+  | { type: 'changeWidgetType'; id: string; to: WidgetType; roles?: CatalogRoles }
 
-export type EditErrorCode = 'unknown_widget' | 'unknown_layout' | 'unknown_parameter' | 'name_taken' | 'bad_name' | 'last_layout' | 'not_placeable' | 'already_placed'
+export type EditErrorCode = 'unknown_widget' | 'unknown_layout' | 'unknown_parameter' | 'name_taken' | 'bad_name' | 'last_layout' | 'not_placeable' | 'already_placed' | 'unknown_well' | 'wrong_member_kind' | 'bad_field' | 'bad_position'
 
 /** What a command refuses with: a code a form can act on and a sentence a person can read. */
 export class EditError extends Error {
@@ -215,6 +222,21 @@ export function commandOps(doc: ViewsDoc, command: EditCommand): Op[] {
     case 'removeTile': {
       const li = layoutIndex(doc, command.layout)
       return [{ op: 'remove', path: ['layouts', li, 'tiles', tileIndex(doc.layouts[li]!, command.widget)] }]
+    }
+
+    case 'setWell': {
+      const widget = widgetOf(doc, command.widget)
+      const spec = wellsOf(widget.type).find((w) => w.id === command.well)
+      if (!spec) throw new EditError('unknown_well', `A ${widget.type} widget has no well named \`${command.well}\`; its wells are ${wellsOf(widget.type).map((w) => `\`${w.id}\``).join(', ') || 'none'}.`)
+      try { return wellOps(widget, command.widget, spec, command.change, command.roles) } catch (e) { if (e instanceof WellError) throw new EditError(e.code, e.message); throw e }
+    }
+    case 'changeWidgetType': {
+      const widget = widgetOf(doc, command.id)
+      if (widget.type === command.to) return []
+      try {
+        const model = Object.values(doc.widgets).map((w) => (w as { query?: { model?: unknown } }).query?.model).find((m): m is string => typeof m === 'string') ?? ''
+        return [{ op: 'set', path: ['widgets', command.id], value: convertWidget(widget, command.to, { roles: command.roles, model, parameter: doc.parameters?.[0]?.name }).widget }]
+      } catch (e) { if (e instanceof WellError) throw new EditError(e.code === 'unknown_well' ? 'unknown_parameter' : e.code, e.message); throw e }
     }
   }
 }

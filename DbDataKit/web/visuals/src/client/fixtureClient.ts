@@ -1,6 +1,7 @@
 import type { ViewKind } from '../views/document'
 import type { ParameterValues, ViewsDoc } from '../views/model'
 import type { RenderedWidget, RenderedWidgets } from '../views/rendered'
+import type { Catalog } from '../views/catalog'
 import { textVersion, validateText } from './text'
 import { ViewsClientError } from './types'
 import type { ClientDiagnostic, DocumentSummary, OpenedDocument, PreviewRequest, ResolveOptions, SaveResult, ValidationResult, ViewsClient } from './types'
@@ -31,6 +32,10 @@ export interface FixtureClientOptions {
   documents?: DocumentMap
   /** The `as_of` every resolution reports (a fixture's rows were read once); fixed so a snapshot is the same on every run. */
   asOf?: string
+  /** The catalogs of the models the fixture knows (`ViewsClient.catalog`), by model name. */
+  catalogs?: Record<string, Catalog>
+  /** What the server's catalog check would add to `validate`: the diagnostics for the parts of a document the browser cannot check (filters, order, totals). A test gives it; the fixture source of the console gives a stand-in. */
+  validateHook?: (document: ViewsDoc | null, text: string, options: { kind?: ViewKind; file?: string } | undefined) => ClientDiagnostic[] | Promise<ClientDiagnostic[]>
   /** Called for each resolution with the widgets asked for: a counting fixture (a parameter change resolves only the dependent widgets). */
   onResolve?: (call: { kind: ViewKind; name: string; layout: string; widgets: string[]; parameters: ParameterValues }) => void
 }
@@ -121,7 +126,17 @@ export function fixtureClient(bundle: FixtureBundle, options: FixtureClientOptio
     },
 
     async validate(text, validateOptions): Promise<ValidationResult> {
-      return validateText(text, validateOptions)
+      const result = validateText(text, validateOptions)
+      const more = options.validateHook ? await options.validateHook(result.document, text, validateOptions) : []
+      if (more.length === 0) return result
+      const diagnostics = [...result.diagnostics, ...more]
+      return { ...result, diagnostics, ok: result.ok && !more.some((d) => d.severity === 'error') }
+    },
+
+    async catalog(model) {
+      const found = options.catalogs?.[model]
+      if (!found) throw new ViewsClientError('not_found', `The fixture source has no catalog for the model \`${model}\`.`)
+      return found
     },
 
     async save(kind, name, text, expectedVersion): Promise<SaveResult> {

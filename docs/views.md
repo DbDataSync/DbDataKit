@@ -98,6 +98,24 @@ The engine's JSON Schema check reports every branch of every `oneOf` it tried; t
 The **filter operators** are the engine's: `equals`, `not_equals`, `contains`, `not_contains`, `starts_with`, `gt`, `gte`, `lt`, `lte`, `set`, `not_set`, `between` and the relative periods. A list of values is
 `equals` with a list (`values: {param: region}` for a `many` parameter); there is no `in`.
 
+## The widget editor's field wells
+
+The console's editor (`?edit=1` on a dashboard, form view; `DbDataKit/web/console/src/pages/WidgetEditor.tsx`) edits a widget through **wells**, the places of its encodings: a metric's `value` and `compare`; a chart's `x`, `y`, `color`,
+`column`, `row` and `tooltip`; a matrix's `rows`, `columns` and `values`; a table's `columns`; a control's `values.attribute`. The pure logic is in `@dbdatakit/visuals` (`src/editor/wells.ts`, `src/views/catalog.ts`) and is the same
+`deriveRequest` the server runs, so the panel "The request this asks for" shows what will be asked, each part with the place of the document it comes from (`documentPath`) and the parameter bindings.
+
+- A field comes from the model's **catalog** (`ViewsClient.catalog(model)`; `catalogFromModel` reads the Proxy's model JSON; `catalogRoles` gives `deriveRequest` its roles) by dragging it into a well, picking it from the well's list
+  (which offers only what the well takes) or typing its name.
+- A **measure well** (metric, matrix `values`) takes measures only, an **attribute well** (matrix `rows` and `columns`, a control's values) attributes only; a field of the other kind is refused in the engine's words
+  (`customers.region is a attribute, not a measure.`) and nothing changes. A chart's channels and a table's columns take both.
+- A field the catalog lacks is **placed** and flagged `unknown_member` in the well and in the derivation (the derivation puts it in the request's `attributes`), so a typo can be seen and fixed.
+- Every well change is the edit command `setWell` (one undo step); the type chooser is `changeWidgetType` (the fields go to the wells of the new type that take them, by role: an attribute to a chart's `x`, a measure to its `y`;
+  what no well takes is dropped).
+- What the browser cannot check (a filter's attribute, an order entry, totals) goes through `ViewsClient.validate`, whose answer is shown on the widget ("the source says ..."). The fixture source stands in for the server with
+  `catalogDiagnostics`; a real source answers with the engine's codes at the file, line and path of the entry.
+- **Write the query out** switches the widget to `mode: explicit` with the derived request as its starting text, a raw editor, and the binding check on every keystroke (`DBD-VIEW-005`: an encoded field that is not an output of
+  the query); "Derive it from the encodings again" gives the written request up.
+
 ## A document: the shared core and the two kinds
 
 ```yaml

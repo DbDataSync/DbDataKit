@@ -16,3 +16,5 @@ export { REFERENCE_BOX, defaultSnap, dragTile, extent, overlapping, pointerToUni
 export type { DragOptions, DragResult, Handle, Rect, SelectorTest, TileMark } from './geometry'
 export { MEDIA, badNumbers, fieldsFromWhen, whenFromFields } from './selector'
 export type { SelectorFields } from './selector'
+export { WIDGET_TYPES, WellError, bindingIssues, changedFields, convertWidget, derivedQuery, describeDerivation, explicitQuery, parseRequestText, wellFields, wellOps, wellsOf, widgetModel } from './wells'
+export type { Conversion, Derivation, WellChange, WellSpec } from './wells'

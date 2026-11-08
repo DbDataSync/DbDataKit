@@ -1,3 +1,4 @@
+import type { Catalog } from '../views/catalog'
 import type { ViewKind } from '../views/document'
 import type { ParameterValues, ViewsDoc, WidgetDoc } from '../views/model'
 import type { RenderedWidget, RenderedWidgets } from '../views/rendered'
@@ -76,6 +77,8 @@ export interface ViewsClient {
   delete?(kind: ViewKind, name: string): Promise<void>
   /** One widget's rendered form, for the editor's live preview. */
   preview(request: PreviewRequest): Promise<RenderedWidget>
+  /** The catalog of a semantic model (the Proxy's `GET /api/v1/semantic-models/{name}`, Build's compile): what the editor's field wells offer. Optional: a source without one leaves the wells to typed names. */
+  catalog?(model: string): Promise<Catalog>
 }
 
 export type ViewsClientErrorCode = 'not_found' | 'version_conflict' | 'invalid' | 'denied' | 'unavailable' | 'bad_response' | 'unsupported'
