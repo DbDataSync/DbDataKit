@@ -4,7 +4,7 @@ using DbDataKit.Config.Yaml;
 namespace DbDataKit.Apps;
 
 /// <summary>What <c>app validate</c> checks beyond the manifest text: the files it names, and a built bundle's paths (plan 26 section 3: an app must not assume where it is served).</summary>
-public static class AppChecks
+public static partial class AppChecks
 {
     /// <summary>The entry, view, home and logo files the manifest names that are not in the source folder. A diagnostic names the manifest file; the message names the missing path.</summary>
     public static IReadOnlyList<ConfigDiagnostic> Files(AppManifest manifest, string sourceDirectory, string manifestFile = "app.yaml")

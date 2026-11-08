@@ -63,6 +63,9 @@ public sealed class AppInstanceStore(DefinitionStore definitions)
         // a portal's home view files are part of what is published: one that does not read is refused here, with the file and line, not found by the person who opens the home
         var homeProblems = AppChecks.HomeViews(load.Manifest!, path => package.Files.TryGetValue(path, out var bytes) ? System.Text.Encoding.UTF8.GetString(bytes) : null).Where(d => d.Severity == DbDataKit.Config.Yaml.ConfigSeverity.Error).ToList();
         if (homeProblems.Count > 0) throw new AppInstanceException("The portal's home view is not valid: " + string.Join(" ", homeProblems.Select(d => d.ToString())));
+        // so are its declarative views (view-spec/1): a view that does not read, or is in a format this program does not read, is refused here with the file and line (a newer format names the app, the file and both numbers)
+        var viewProblems = AppChecks.ViewSpecs(load.Manifest!, path => package.Files.TryGetValue(path, out var bytes) ? System.Text.Encoding.UTF8.GetString(bytes) : null).Where(d => d.Severity == DbDataKit.Config.Yaml.ConfigSeverity.Error).ToList();
+        if (viewProblems.Count > 0) throw new AppInstanceException("The app's views are not valid: " + string.Join(" ", viewProblems.Select(d => d.ToString())));
         var approval = approvals is not null && load.Manifest!.Trust == AppTrust.Trusted ? approvals.RequireForPublish(package, by) : null;
         var version = definitions.Publish(AppKind, load.Manifest!.Name, package.Serialize(), by, note: note, channel: channel);
         if (approval is not null) approvals!.RecordPublished(approval, version.Version);
