@@ -46,7 +46,11 @@ internal static class BuildSchedulerSchema
 {
     public const string Service = "dbdatabuild";
 
-    public static IReadOnlyList<StateModule> Modules { get; } = [SchedulingModule.Module];
+    /// <summary>The scheduling module, and the modules of the copy of the tracking tables (plan 28c E16): the progress store the follower's checkpoints are in, the divergence records and <c>build_tracking</c> itself.</summary>
+    public static IReadOnlyList<StateModule> Modules { get; } = [SchedulingModule.Module, .. DbDataBuild.State.BuildTrackingState.Modules];
+
+    /// <summary>Install-scoped modules ignore it; the copy's modules are kept for the group <c>main</c>, the one a server has until it has groups of its own.</summary>
+    public static StateScope Scope => DbDataBuild.State.BuildTrackingState.Scope;
 
     /// <param name="time">The clock the queue's leases and availability are measured on: the system's, or a test's.</param>
     /// <param name="settings">Where the state is; null: what flags-free <see cref="BuildState.Resolve"/> finds (the environment, the <c>state:</c> section of <c>server.yaml</c>, else SQLite in <c>state.db</c>).</param>
@@ -62,7 +66,7 @@ internal static class BuildSchedulerSchema
 /// down run once (<see cref="MisfirePolicy.RunOnce"/>, as Sync does).
 /// </para>
 /// </summary>
-internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunner runner, StateDatabase database, TimeProvider clock, Action<string> log, TimeSpan? lease = null, Func<bool>? paused = null)
+internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunner runner, StateDatabase database, TimeProvider clock, Action<string> log, TimeSpan? lease = null, Func<bool>? paused = null, BuildTrackingHost? tracking = null)
 {
     /// <summary>How long a claimed run stays claimed without a heartbeat; a run beats three times in it, so only a worker that died loses its run.</summary>
     public static readonly TimeSpan DefaultLease = TimeSpan.FromMinutes(10);
@@ -168,7 +172,15 @@ internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunne
             log($"Project '{project.Id}', {item.Subject}: the scheduled run ended with exit code {exit}.");
         }
         _jobs.SaveExit(project.Id, item.Subject, exit);
+        // the copy of the tracking tables follows a run, within a budget and never failing it (a down copy or target is a line in the log)
+        if (tracking is { Enabled: true }) await tracking.CopyAsync(project, parts[0], TrackingBudget, CancellationToken.None);
     }
+
+    /// <summary>The longest the copy after a run, or in a catch-up, takes.</summary>
+    public static readonly TimeSpan TrackingBudget = TimeSpan.FromSeconds(20);
+
+    /// <summary>One catch-up of every hosted project's copy, for the tick: a copy that was down catches up without a refresh.</summary>
+    public Task CatchUpTrackingAsync(CancellationToken cancellationToken) => tracking is { Enabled: true } ? tracking.CopyAsync(null, null, TrackingBudget, cancellationToken) : Task.CompletedTask;
 
     /// <summary>The scheduled plans of a project with the next time each is due and how its last run went.</summary>
     public IReadOnlyList<(ScheduledJob Job, DateTimeOffset? NextDue, JobState? State)> Jobs(HostedProject project)
@@ -203,11 +215,13 @@ internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunne
 internal sealed class BuildSchedulerService(BuildScheduler scheduler, Action<string> log, TimeSpan? tick = null, int maxRuns = 4) : Microsoft.Extensions.Hosting.BackgroundService
 {
     public static readonly TimeSpan DefaultTick = TimeSpan.FromSeconds(10);
+    public static readonly TimeSpan TrackingCatchUpEvery = TimeSpan.FromMinutes(5);
     private readonly string _worker = $"scheduler-{Environment.ProcessId}-{Guid.NewGuid():N}";
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var running = new List<Task>();
+        var lastCatchUp = DateTime.UtcNow;
         using var timer = new PeriodicTimer(tick ?? DefaultTick);
         try
         {
@@ -216,6 +230,7 @@ internal sealed class BuildSchedulerService(BuildScheduler scheduler, Action<str
                 try
                 {
                     scheduler.Tick();
+                    if (DateTime.UtcNow - lastCatchUp > TrackingCatchUpEvery) { lastCatchUp = DateTime.UtcNow; _ = scheduler.CatchUpTrackingAsync(stoppingToken); }
                     running.RemoveAll(t => t.IsCompleted);
                     while (running.Count < maxRuns && scheduler.Claim(_worker) is var (item, project))
                         running.Add(Task.Run(() => scheduler.RunAsync(item, project, _worker, stoppingToken), CancellationToken.None));

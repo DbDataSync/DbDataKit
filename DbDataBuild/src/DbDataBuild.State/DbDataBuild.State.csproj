@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\DbDataBuild.Core\DbDataBuild.Core.csproj" />
     <DbDataKitReference Include="Schema" />
+    <DbDataKitReference Include="State" />   <!-- the build_tracking module and the follower (plan 28c, E16) -->
     <ProjectReference Include="..\DbDataBuild.Models\DbDataBuild.Models.csproj" />
     <ProjectReference Include="..\DbDataBuild.Sql\DbDataBuild.Sql.csproj" />
     <ProjectReference Include="..\DbDataBuild.Define\DbDataBuild.Define.csproj" />

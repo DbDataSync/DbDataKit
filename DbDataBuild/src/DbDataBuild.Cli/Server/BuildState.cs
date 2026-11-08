@@ -31,6 +31,6 @@ internal static class BuildState
         settings ??= Resolve(serverDirectory, environment).Settings;
         Directory.CreateDirectory(serverDirectory);
         var secrets = settings.IsSqlite ? null : Secrets(serverDirectory, environment);
-        return StateOpener.Open(settings, SqlitePath(serverDirectory), BuildSchedulerSchema.Modules, StateScope.Install, secrets, time: time);
+        return StateOpener.Open(settings, SqlitePath(serverDirectory), BuildSchedulerSchema.Modules, BuildSchedulerSchema.Scope, secrets, time: time);
     }
 }

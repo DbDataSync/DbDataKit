@@ -22,7 +22,8 @@ public class GateInvariantTests
             "DbDataKit.Transfer.Postgres/PostgresBulkWriter.cs", "DbDataKit.Transfer/Gate/SourceInvariants.cs"]),
         // Build: the write executor lives in MutationGate.cs (the Build front of the shared gate), reads in ReadSession.cs; the in-memory DuckDB describer and sample runner have no target connection
         new Product("DbDataBuild", "DbDataBuild/src", [
-            "DbDataBuild.Execution/MutationGate.cs", "DbDataBuild.Execution/ReadSession.cs", "DbDataBuild.Targets.DuckDb/", "DbDataBuild.Sample/"]),
+            "DbDataBuild.Execution/MutationGate.cs", "DbDataBuild.Execution/ReadSession.cs", "DbDataBuild.Targets.DuckDb/", "DbDataBuild.Sample/",
+            "DbDataBuild.State/BuildTrackingStore.cs"]),     // the copy of the tracking tables in the server's state database (plan 28c E16): the state layer's statements, never a target's
     };
 
     private static string? RepositoryRoot() => SourceInvariants.FindRoot(AppContext.BaseDirectory, "DbDataKit.slnx");
