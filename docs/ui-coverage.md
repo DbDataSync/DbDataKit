@@ -37,6 +37,7 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 | | Tracking tables and seeds | – | – | – | Initialise and seed (admin) | `DeployTabs.tsx` |
 | | Connections of a project | Yes | – | – | – | `NewConnectionPanel.tsx`, `DefinitionPanel.tsx` |
 | | Publish to a Gateway | – | – | – | Yes | `PublishTab.tsx` |
+| | Publish to a runner (a package of the project: one task per scheduled refresh plan) | – | – | – | Publish (staged or served) or promote a channel's version to a paired runner, with the tasks shown (author role here, a publisher pairing there); the list of paired runners | `PublishTab.tsx`, `RunnerPublish.tsx` |
 | **Store** | Models | – | – | – | List them and their entities | `ModelsPage.tsx` |
 | | Rows of an entity | Yes | Yes | Yes | Page through rows, history of a row (an entity that keeps one), pick an instance of a model that has them | `EntityPage.tsx` |
 | | Model definition, storage (create tables) | – | – | – | **No UI** (API only: Z08, Z09) | |

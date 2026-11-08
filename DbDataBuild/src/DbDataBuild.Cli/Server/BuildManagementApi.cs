@@ -43,7 +43,7 @@ internal static class BuildManagementApi
     /// <param name="projects">The projects served, read again on every call so one added or removed is served or gone at once.</param>
     /// <param name="commands">All the commands there are; each project is offered the read-only ones.</param>
     /// <param name="surfaceFor">Which of them a project is offered and how their inputs are checked; the read-only rules unless a test or a later slice says otherwise.</param>
-    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, Workspaces? workspaces = null, WarmSessionRunner? workspaceRunner = null, ProxiesFile? proxies = null, ProxyPublisher? publisher = null, IPairingCodeStore? pairingCodes = null, string? clientName = null, ProjectCreator? creator = null, string? serverDirectory = null, Func<ScheduleRunnerLink, DbDataBuild.Cli.Runner.IRunnerTaskControl>? runnerControl = null, IAuditLog? audit = null)
+    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, Workspaces? workspaces = null, WarmSessionRunner? workspaceRunner = null, ProxiesFile? proxies = null, ProxyPublisher? publisher = null, IPairingCodeStore? pairingCodes = null, string? clientName = null, ProjectCreator? creator = null, string? serverDirectory = null, Func<ScheduleRunnerLink, DbDataBuild.Cli.Runner.IRunnerTaskControl>? runnerControl = null, IAuditLog? audit = null, string? runnerClientDirectory = null)
     {
         surfaceFor ??= FullSurface;
         var specs = CommandSpecs.All.ToDictionary(s => s.Name);
@@ -233,6 +233,18 @@ internal static class BuildManagementApi
                             : Results.Json(new { error = "A run of this plan is already queued or going." }, statusCode: StatusCodes.Status409Conflict);
                 }
             });
+
+        // the runners this server is paired with as a publisher (plan 33, UE05): what `project publish --server` takes by name, with the roles each pairing allows. Never a key or a code; a viewer may read it.
+        app.MapGet("/api/v1/runners", (HttpContext context) =>
+        {
+            if (!ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer).Allowed) return Results.Json(new { error = "This needs the viewer role." }, statusCode: StatusCodes.Status403Forbidden);
+            try
+            {
+                var store = new DbDataKit.Runner.Client.RunnerClientStore(runnerClientDirectory ?? DbDataKit.Runner.Client.RunnerClientStore.DefaultDirectory(Environment.GetEnvironmentVariable));
+                return Results.Json(new { runners = store.All().Select(r => new { name = r.Name, url = r.Url, instance_id = r.InstanceId, roles = r.Roles, paired_at = r.PairedAt }) });
+            }
+            catch (InvalidDataException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
+        });
 
         app.MapPost("/api/v1/projects/{project}/commands/{tool}", async (string project, string tool, HttpContext context) =>
         {
