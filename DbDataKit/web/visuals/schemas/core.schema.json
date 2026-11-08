@@ -1,0 +1,735 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dbdatakit.invalid/visuals/core.schema.json",
+  "title": "Widget vocabulary of dashboards and reports",
+  "description": "The widget vocabulary shared by dashboard/1 and report/1 (plan 32 section 2): widget types, encodings, query forms and their mode, parameters, cross-filter and drill. Only $defs. Closed: a key not listed is refused. A widget carries encodings and a declarative query, never a computation in the chart spec. The matrix and chart encodings are the view schema's own definitions (view.schema.json, vega-lite-subset.schema.json), referenced and not copied. Layouts, selectors and the kinds are added by DBR02.",
+  "$defs": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+    },
+    "field": {
+      "description": "A field by logical name (orders.net_revenue) or by the alias of a query output.",
+      "type": "string",
+      "minLength": 1
+    },
+    "format": {
+      "description": "A named number preset; catalog takes the catalog's own format of the field.",
+      "enum": [
+        "catalog",
+        "full",
+        "compact",
+        "percent"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "parameter": {
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "type": {
+          "enum": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ]
+        },
+        "for": {
+          "description": "The attribute the parameter is a value of (J25).",
+          "$ref": "#/$defs/field"
+        },
+        "many": {
+          "type": "boolean"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "default": {},
+        "label": {
+          "$ref": "#/$defs/title"
+        }
+      }
+    },
+    "parameters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/parameter"
+      }
+    },
+    "param_map": {
+      "description": "A request's parameter name and the document parameter that supplies it; a name not listed is supplied by the parameter of the same name.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/name"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/name"
+      }
+    },
+    "query_derived": {
+      "description": "The request is derived from the encodings (DeriveRequest, DBR03); the document holds the parts a person chooses beside them.",
+      "type": "object",
+      "required": [
+        "model"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "const": "derived"
+        },
+        "model": {
+          "$ref": "#/$defs/name"
+        },
+        "filters": {
+          "type": "array"
+        },
+        "segments": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "order": {
+          "type": "array"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "totals": {
+          "type": "object"
+        },
+        "timezone": {
+          "type": "string",
+          "minLength": 1
+        },
+        "params": {
+          "$ref": "#/$defs/param_map"
+        }
+      }
+    },
+    "query_explicit_semantic": {
+      "type": "object",
+      "required": [
+        "mode",
+        "semantic"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "const": "explicit"
+        },
+        "semantic": {
+          "type": "object",
+          "required": [
+            "model"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "$ref": "#/$defs/name"
+            },
+            "request": {
+              "description": "A semantic request as docs/semantic/query.md defines it; the engine validates it (the catalog check).",
+              "type": "object"
+            },
+            "sql": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "params": {
+          "$ref": "#/$defs/param_map"
+        }
+      }
+    },
+    "query_explicit_saved": {
+      "type": "object",
+      "required": [
+        "mode",
+        "saved"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "const": "explicit"
+        },
+        "saved": {
+          "$ref": "#/$defs/name"
+        },
+        "outputs": {
+          "description": "The saved query's declared outputs, when the file cannot see the saved query (the shape check of the binding).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/field"
+          }
+        },
+        "params": {
+          "$ref": "#/$defs/param_map"
+        }
+      }
+    },
+    "query_explicit_store": {
+      "type": "object",
+      "required": [
+        "mode",
+        "store"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "const": "explicit"
+        },
+        "store": {
+          "type": "object",
+          "required": [
+            "model",
+            "entity"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "$ref": "#/$defs/name"
+            },
+            "entity": {
+              "$ref": "#/$defs/name"
+            },
+            "columns": {
+              "description": "The columns the read returns, when the file lists them (the shape check of the binding).",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/field"
+              }
+            },
+            "filter": {
+              "type": "object"
+            },
+            "sort": {
+              "type": "array"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            }
+          }
+        },
+        "params": {
+          "$ref": "#/$defs/param_map"
+        }
+      }
+    },
+    "query_explicit_ref": {
+      "description": "An already run result (an assistant's answer): no query.",
+      "type": "object",
+      "required": [
+        "mode",
+        "ref"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "const": "explicit"
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/field"
+          }
+        }
+      }
+    },
+    "query": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/query_derived"
+        },
+        {
+          "$ref": "#/$defs/query_explicit_semantic"
+        },
+        {
+          "$ref": "#/$defs/query_explicit_saved"
+        },
+        {
+          "$ref": "#/$defs/query_explicit_store"
+        },
+        {
+          "$ref": "#/$defs/query_explicit_ref"
+        }
+      ]
+    },
+    "on_select": {
+      "type": "object",
+      "required": [
+        "set",
+        "from"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "set": {
+          "$ref": "#/$defs/name"
+        },
+        "from": {
+          "$ref": "#/$defs/field"
+        }
+      }
+    },
+    "drill": {
+      "type": "object",
+      "required": [
+        "to"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "to": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 1,
+          "additionalProperties": false,
+          "properties": {
+            "dashboard": {
+              "$ref": "#/$defs/name"
+            },
+            "report": {
+              "$ref": "#/$defs/name"
+            },
+            "view": {
+              "$ref": "#/$defs/name"
+            }
+          }
+        },
+        "with": {
+          "description": "Parameter name to a value: $field of the clicked row, $params.name, or a literal.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/name"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "encoding_channel": {
+      "description": "A chart channel: a field name, or the Vega-Lite subset's own channel object.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/field"
+        },
+        {
+          "$ref": "https://dbdatakit.invalid/visuals/vega-lite-subset.schema.json#/$defs/channel"
+        }
+      ]
+    },
+    "chart_encodings": {
+      "description": "The channels of the Vega-Lite subset's encoding (the test compares the names).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "$ref": "#/$defs/encoding_channel"
+        },
+        "y": {
+          "$ref": "#/$defs/encoding_channel"
+        },
+        "color": {
+          "$ref": "#/$defs/encoding_channel"
+        },
+        "column": {
+          "$ref": "#/$defs/encoding_channel"
+        },
+        "row": {
+          "$ref": "#/$defs/encoding_channel"
+        },
+        "tooltip": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/encoding_channel"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/encoding_channel"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "matrix_encodings": {
+      "description": "A QIS matrix view's own properties (everything but type and id), referenced from view.schema.json.",
+      "type": "object",
+      "required": [
+        "values"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "rows": {
+          "$ref": "https://example.internal/qis/view.schema.json#/$defs/matrix/properties/rows"
+        },
+        "columns": {
+          "$ref": "https://example.internal/qis/view.schema.json#/$defs/matrix/properties/columns"
+        },
+        "values": {
+          "$ref": "https://example.internal/qis/view.schema.json#/$defs/matrix/properties/values"
+        },
+        "values_on": {
+          "$ref": "https://example.internal/qis/view.schema.json#/$defs/matrix/properties/values_on"
+        },
+        "totals": {
+          "$ref": "https://example.internal/qis/view.schema.json#/$defs/matrix/properties/totals"
+        },
+        "sort": {
+          "$ref": "https://example.internal/qis/view.schema.json#/$defs/matrix/properties/sort"
+        },
+        "column_limit": {
+          "$ref": "https://example.internal/qis/view.schema.json#/$defs/matrix/properties/column_limit"
+        }
+      }
+    },
+    "table_column": {
+      "type": "object",
+      "required": [
+        "field"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "$ref": "#/$defs/field"
+        },
+        "label": {
+          "type": "string"
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "align": {
+          "enum": [
+            "left",
+            "right",
+            "center"
+          ]
+        },
+        "width": {
+          "description": "A width hint in CSS pixels.",
+          "type": "integer",
+          "minimum": 20,
+          "maximum": 2000
+        }
+      }
+    },
+    "widget_metric": {
+      "type": "object",
+      "required": [
+        "type",
+        "encodings",
+        "query"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "metric"
+        },
+        "title": {
+          "$ref": "#/$defs/title"
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "encodings": {
+          "type": "object",
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "value": {
+              "$ref": "#/$defs/field"
+            },
+            "compare": {
+              "$ref": "#/$defs/field"
+            }
+          }
+        },
+        "query": {
+          "$ref": "#/$defs/query"
+        }
+      }
+    },
+    "widget_chart": {
+      "type": "object",
+      "required": [
+        "type",
+        "mark",
+        "encodings",
+        "query"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "chart"
+        },
+        "title": {
+          "$ref": "#/$defs/title"
+        },
+        "mark": {
+          "$ref": "https://dbdatakit.invalid/visuals/vega-lite-subset.schema.json#/$defs/spec/properties/mark"
+        },
+        "encodings": {
+          "$ref": "#/$defs/chart_encodings"
+        },
+        "query": {
+          "$ref": "#/$defs/query"
+        },
+        "on_select": {
+          "$ref": "#/$defs/on_select"
+        },
+        "drill": {
+          "$ref": "#/$defs/drill"
+        }
+      }
+    },
+    "widget_matrix": {
+      "type": "object",
+      "required": [
+        "type",
+        "encodings",
+        "query"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "matrix"
+        },
+        "title": {
+          "$ref": "#/$defs/title"
+        },
+        "encodings": {
+          "$ref": "#/$defs/matrix_encodings"
+        },
+        "query": {
+          "$ref": "#/$defs/query"
+        },
+        "on_select": {
+          "$ref": "#/$defs/on_select"
+        },
+        "drill": {
+          "$ref": "#/$defs/drill"
+        }
+      }
+    },
+    "widget_table": {
+      "type": "object",
+      "required": [
+        "type",
+        "encodings",
+        "query"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "table"
+        },
+        "title": {
+          "$ref": "#/$defs/title"
+        },
+        "encodings": {
+          "type": "object",
+          "required": [
+            "columns"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "columns": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/table_column"
+              }
+            },
+            "sort": {
+              "$ref": "https://example.internal/qis/view.schema.json#/$defs/sort"
+            }
+          }
+        },
+        "query": {
+          "$ref": "#/$defs/query"
+        },
+        "drill": {
+          "$ref": "#/$defs/drill"
+        }
+      }
+    },
+    "widget_text": {
+      "type": "object",
+      "required": [
+        "type",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "text"
+        },
+        "title": {
+          "$ref": "#/$defs/title"
+        },
+        "text": {
+          "description": "Markdown, the safe subset of the portal home: no raw HTML, no image, links only to a path on the host; {{params.name}} is substituted as text.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20000
+        }
+      }
+    },
+    "widget_image": {
+      "type": "object",
+      "required": [
+        "type",
+        "hash",
+        "media_type",
+        "alt"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "image"
+        },
+        "title": {
+          "$ref": "#/$defs/title"
+        },
+        "hash": {
+          "description": "The image's bytes in the definition's artifacts, by SHA-256 (plan 30 payloads). Never a URL.",
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "media_type": {
+          "description": "A raster only: SVG can script and is refused.",
+          "enum": [
+            "image/png",
+            "image/jpeg",
+            "image/webp"
+          ]
+        },
+        "alt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "fit": {
+          "enum": [
+            "contain",
+            "cover"
+          ]
+        }
+      }
+    },
+    "widget_control": {
+      "type": "object",
+      "required": [
+        "type",
+        "parameter"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "control"
+        },
+        "title": {
+          "$ref": "#/$defs/title"
+        },
+        "parameter": {
+          "$ref": "#/$defs/name"
+        },
+        "control": {
+          "enum": [
+            "select",
+            "multiselect",
+            "date",
+            "daterange",
+            "number",
+            "toggle",
+            "text"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "values": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "attribute": {
+              "$ref": "#/$defs/field"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            }
+          }
+        }
+      }
+    },
+    "widget": {
+      "description": "A widget by its type. `embed` is reserved and refused by the /1 loaders until DBR19.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/widget_metric"
+        },
+        {
+          "$ref": "#/$defs/widget_chart"
+        },
+        {
+          "$ref": "#/$defs/widget_matrix"
+        },
+        {
+          "$ref": "#/$defs/widget_table"
+        },
+        {
+          "$ref": "#/$defs/widget_text"
+        },
+        {
+          "$ref": "#/$defs/widget_image"
+        },
+        {
+          "$ref": "#/$defs/widget_control"
+        }
+      ]
+    },
+    "widgets": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/name"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/widget"
+      }
+    }
+  }
+}

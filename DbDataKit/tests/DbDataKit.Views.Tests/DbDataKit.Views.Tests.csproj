@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <PackageReference Include="JsonSchema.Net" />
+    <ProjectReference Include="..\..\src\DbDataKit.Views\DbDataKit.Views.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- the documents and goldens the TypeScript tests of @dbdatakit/visuals read too -->
+    <None Include="..\..\conformance\views\**\*" LinkBase="conformance\views" CopyToOutputDirectory="PreserveNewest" />
+    <!-- the schemas, which live with the shared visuals -->
+    <None Include="..\..\web\visuals\schemas\*.schema.json" LinkBase="schemas" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,125 @@
+{
+  "semantic": {
+    "type": "chart",
+    "mark": "line",
+    "encodings": {
+      "x": "date.fiscal_month",
+      "y": "orders.net_revenue",
+      "color": "prior"
+    },
+    "query": {
+      "mode": "explicit",
+      "semantic": {
+        "model": "sales",
+        "request": {
+          "measures": [
+            "orders.net_revenue",
+            {
+              "measure": "orders.net_revenue",
+              "as": "prior",
+              "filters": [
+                {
+                  "attribute": "date.fiscal_quarter",
+                  "operator": "equals",
+                  "values": [
+                    {
+                      "param": "quarter"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "attributes": [
+            "date.fiscal_month"
+          ],
+          "limit": {
+            "param": "top"
+          }
+        }
+      }
+    }
+  },
+  "sql": {
+    "type": "table",
+    "encodings": {
+      "columns": [
+        {
+          "field": "region"
+        },
+        {
+          "field": "revenue"
+        }
+      ]
+    },
+    "query": {
+      "mode": "explicit",
+      "semantic": {
+        "model": "sales",
+        "sql": "select customers.region as region, sum(orders.net_revenue) as revenue from sales group by 1"
+      }
+    }
+  },
+  "saved": {
+    "type": "metric",
+    "encodings": {
+      "value": "total"
+    },
+    "query": {
+      "mode": "explicit",
+      "saved": "total_revenue",
+      "outputs": [
+        "total"
+      ],
+      "params": {
+        "quarter": "quarter"
+      }
+    }
+  },
+  "store": {
+    "type": "table",
+    "encodings": {
+      "columns": [
+        {
+          "field": "id"
+        },
+        {
+          "field": "name"
+        }
+      ]
+    },
+    "query": {
+      "mode": "explicit",
+      "store": {
+        "model": "crm",
+        "entity": "accounts",
+        "columns": [
+          "id",
+          "name"
+        ],
+        "limit": 50
+      }
+    }
+  },
+  "answer": {
+    "type": "matrix",
+    "encodings": {
+      "rows": [
+        "region"
+      ],
+      "values": [
+        {
+          "field": "revenue"
+        }
+      ]
+    },
+    "query": {
+      "mode": "explicit",
+      "ref": "result.assistant_1",
+      "outputs": [
+        "region",
+        "revenue"
+      ]
+    }
+  }
+}

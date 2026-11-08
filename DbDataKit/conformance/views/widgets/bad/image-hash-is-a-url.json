@@ -1,0 +1,156 @@
+{
+  "regions": {
+    "type": "control",
+    "parameter": "region",
+    "control": "multiselect",
+    "values": {
+      "attribute": "customers.region",
+      "limit": 100
+    }
+  },
+  "note": {
+    "type": "text",
+    "text": "Net revenue for **{{params.quarter}}**. See [the glossary](/docs/glossary) for the terms."
+  },
+  "logo": {
+    "type": "image",
+    "hash": "https://example.com/logo.png",
+    "media_type": "image/png",
+    "alt": "Company logo",
+    "fit": "contain"
+  },
+  "revenue": {
+    "type": "metric",
+    "label": "Revenue",
+    "format": "compact",
+    "encodings": {
+      "value": "orders.net_revenue",
+      "compare": "orders.net_revenue_prev"
+    },
+    "query": {
+      "model": "sales",
+      "filters": [
+        {
+          "attribute": "date.fiscal_quarter",
+          "operator": "equals",
+          "values": [
+            {
+              "param": "quarter"
+            }
+          ]
+        },
+        {
+          "attribute": "customers.region",
+          "operator": "in",
+          "values": {
+            "param": "region"
+          }
+        }
+      ]
+    }
+  },
+  "by_region": {
+    "type": "chart",
+    "title": "Revenue by region",
+    "mark": "bar",
+    "encodings": {
+      "x": "customers.region",
+      "y": {
+        "field": "orders.net_revenue",
+        "type": "quantitative",
+        "stack": null
+      },
+      "color": "products.category"
+    },
+    "query": {
+      "model": "sales",
+      "order": [
+        [
+          "orders.net_revenue",
+          "desc"
+        ]
+      ],
+      "limit": 20
+    },
+    "on_select": {
+      "set": "region",
+      "from": "customers.region"
+    },
+    "drill": {
+      "to": {
+        "report": "region_detail"
+      },
+      "with": {
+        "region": "$customers.region",
+        "quarter": "$params.quarter"
+      }
+    }
+  },
+  "pivot": {
+    "type": "matrix",
+    "title": "Revenue by region and quarter",
+    "encodings": {
+      "rows": [
+        "customers.region"
+      ],
+      "columns": [
+        "date.fiscal_quarter"
+      ],
+      "values": [
+        {
+          "field": "orders.net_revenue",
+          "format": "compact"
+        }
+      ],
+      "totals": {
+        "rows": true,
+        "columns": true
+      },
+      "sort": {
+        "rows": {
+          "by": "orders.net_revenue",
+          "dir": "desc"
+        }
+      },
+      "column_limit": {
+        "max": 8,
+        "overflow": "top_n_other"
+      }
+    },
+    "query": {
+      "model": "sales",
+      "limit": 1000
+    }
+  },
+  "orders_table": {
+    "type": "table",
+    "title": "Orders",
+    "encodings": {
+      "columns": [
+        {
+          "field": "orders.order_id",
+          "label": "Order",
+          "width": 120
+        },
+        {
+          "field": "customers.region",
+          "label": "Region"
+        },
+        {
+          "field": "orders.net_revenue",
+          "label": "Net revenue",
+          "format": "full",
+          "align": "right"
+        }
+      ],
+      "sort": {
+        "by": "orders.net_revenue",
+        "dir": "desc"
+      }
+    },
+    "query": {
+      "model": "sales",
+      "limit": 100
+    }
+  }
+}
