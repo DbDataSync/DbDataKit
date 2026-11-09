@@ -28,7 +28,7 @@ public sealed class WorkspaceManagementTests
         var workspace = await server.AsAda(HttpMethod.Post, "/api/v1/projects/orders/workspaces", """{"name":"new-orders"}""");
         Assert.Equal(HttpStatusCode.Created, workspace.Response.StatusCode);
         Assert.Equal("ada-new-orders", (string)workspace.Body!["id"]!);
-        Assert.True(File.Exists(Path.Combine(server.Directory, "workspaces", "orders", "ada-new-orders", "README.md")));
+        Assert.True(File.Exists(Path.Combine(server.Directory, "workspaces", "orders", "ada-new-orders", "app.yaml")));
 
         var listed = (await server.AsAda(HttpMethod.Get, "/api/v1/projects/orders/workspaces")).Body!["workspaces"]!.AsArray();
         Assert.Equal(["ada-new-orders"], listed.Select(w => (string)w!["id"]!));
@@ -55,7 +55,7 @@ public sealed class WorkspaceManagementTests
         await using var server = await WorkspaceHarness.StartAsync();
         await server.AsAdmin(HttpMethod.Post, "/api/v1/projects", Orders);
         var id = (string)(await server.AsAda(HttpMethod.Post, "/api/v1/projects/orders/workspaces", """{"name":"draft"}""")).Body!["id"]!;
-        File.AppendAllText(Path.Combine(server.Directory, "workspaces", "orders", id, "README.md"), "More.\n");
+        File.AppendAllText(Path.Combine(server.Directory, "workspaces", "orders", id, "app.yaml"), "# More.\n");
 
         var committed = await server.AsAda(HttpMethod.Post, $"/api/v1/projects/orders/workspaces/{id}/commit", """{"message":"Say more"}""");
         Assert.True((bool)committed.Body!["committed"]!);
@@ -63,7 +63,7 @@ public sealed class WorkspaceManagementTests
         var merged = await server.Send("ann", ServerRole.Approver, HttpMethod.Post, $"/api/v1/projects/orders/workspaces/{id}/merge");
         Assert.True((bool)merged.Body!["merged"]!);
 
-        Assert.Contains("More.", File.ReadAllText(Path.Combine(server.Directory, "projects", "orders", "README.md")));
+        Assert.Contains("# More.", File.ReadAllText(Path.Combine(server.Directory, "projects", "orders", "app.yaml")));
         var store = server.Store();
         Assert.Empty(store.Workspaces("orders"));
         var history = store.Events("orders", id);
@@ -81,7 +81,10 @@ public sealed class WorkspaceManagementTests
         var id = (string)(await server.AsAda(HttpMethod.Post, "/api/v1/projects/orders/workspaces", """{"name":"draft"}""")).Body!["id"]!;
         var files = $"/api/v1/projects/orders/workspaces/{id}/files";
 
-        Assert.Equal(["README.md"], (await server.Send("vic", ServerRole.Viewer, HttpMethod.Get, files)).Body!["files"]!.AsArray().Select(f => (string)f!["path"]!).Where(p => p != ".gitattributes"));
+        var template = (await server.Send("vic", ServerRole.Viewer, HttpMethod.Get, files)).Body!["files"]!.AsArray().Select(f => (string)f!["path"]!).ToList();
+        Assert.Contains("app.yaml", template);                 // an app project starts as the app template (GP32)
+        Assert.Contains("src/main.tsx", template);
+        Assert.DoesNotContain("README.md", template);
         Assert.Equal(HttpStatusCode.Created, (await server.AsAda(HttpMethod.Put, files + "/views/orders.yaml", """{"content":"kind: grid\n"}""")).Response.StatusCode);
         Assert.Equal("kind: grid\n", (string)(await server.Send("vic", ServerRole.Viewer, HttpMethod.Get, files + "/views/orders.yaml")).Body!["content"]!);
         Assert.Equal(HttpStatusCode.Forbidden, (await server.Send("vic", ServerRole.Viewer, HttpMethod.Put, files + "/x.yaml", """{"content":"x"}""")).Response.StatusCode);

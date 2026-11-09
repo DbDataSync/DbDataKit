@@ -66,7 +66,10 @@ public static class WorkspaceServer
         app.UseMaintenance(maintenance, context => context.ManagementTokenOrNull() is { } token && ManagementAuthorization.Authorize(token, ServerRole.Admin).Allowed);
         app.MapState(StateApi(settings, instanceId, maintenance));
         var store = new WorkspaceStore(state);
-        WorkspaceManagement.Map(app, instanceId, settings, store, new WorkspaceProjects(settings.Directory, store), new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), log);
+        var workspaces = new DbDataKit.Authoring.Workspaces(settings.Directory, TimeProvider.System);
+        var builds = new WorkspaceBuilds(settings.Directory, store, workspaces, () => settings.Apps ?? WorkspaceAppSettings.Load(settings.Directory), log);
+        app.Lifetime.ApplicationStopping.Register(builds.Dispose);
+        WorkspaceManagement.Map(app, instanceId, settings, store, new WorkspaceProjects(settings.Directory, store), new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), log, workspaces, builds, new WorkspacePublishing(settings.Directory, store));
         return app;
     }
 

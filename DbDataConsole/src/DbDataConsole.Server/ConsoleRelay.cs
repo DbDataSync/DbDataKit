@@ -23,7 +23,7 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
     public const string Prefix = "/relay";
 
     private static readonly string[] ForwardedRequestHeaders = ["Accept", "Accept-Language", "If-Match", "If-None-Match", "Content-Type"];
-    private static readonly string[] ForwardedResponseHeaders = ["ETag", "Content-Disposition", "Cache-Control", "Last-Modified", "Location"];
+    private static readonly string[] ForwardedResponseHeaders = ["ETag", "Content-Disposition", "Cache-Control", "Last-Modified", "Location", "Content-Security-Policy", "X-Content-Type-Options", "Referrer-Policy"];   // the last three are a Workspace preview's: a built app is shown in a sandbox the server describes
 
     private readonly ConcurrentDictionary<string, HttpClient> _clients = new(StringComparer.Ordinal);
 

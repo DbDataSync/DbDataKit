@@ -22,7 +22,7 @@ namespace DbDataWorkspace.Server;
 /// </summary>
 public static class WorkspaceManagement
 {
-    public static void Map(IEndpointRouteBuilder app, string instanceId, WorkspaceSettings settings, WorkspaceStore store, WorkspaceProjects projects, IAuditLog audit, Action<string> log)
+    public static void Map(IEndpointRouteBuilder app, string instanceId, WorkspaceSettings settings, WorkspaceStore store, WorkspaceProjects projects, IAuditLog audit, Action<string> log, Workspaces workspaces, WorkspaceBuilds builds, WorkspacePublishing publishing)
     {
         app.MapGet("/api/v1/info", () => Results.Json(new JsonObject
         {
@@ -81,7 +81,6 @@ public static class WorkspaceManagement
 
         // ---- workspaces: the shared calls, and the history this server keeps ----
 
-        var workspaces = new Workspaces(settings.Directory, TimeProvider.System);
         DbDataKit.Authoring.WorkspaceApi.Map(app, projects, workspaces, new WorkspaceApiOptions("dbdataworkspace.local", Changed: change =>
         {
             try
@@ -115,12 +114,127 @@ public static class WorkspaceManagement
             return Results.Json(new { events = store.Events(hosted.Id, id).Select(e => new { kind = e.Kind, actor = e.ActorName, detail = e.Detail, at = e.OccurredAt }) });
         });
 
+        // ---- builds, previews and publishing (plan 22a GP35) ----
+
+        app.MapGet("/api/v1/app-build", (HttpContext context) =>
+        {
+            if (ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer) is { Allowed: false } refused && !context.ManagementToken().Projects.Keys.Any(p => ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer, p).Allowed)) return Refused(refused);
+            var readiness = builds.Readiness();
+            return Results.Json(new JsonObject
+            {
+                ["ready"] = readiness.Ready,
+                ["problems"] = new JsonArray([.. readiness.Problems.Select(x => (JsonNode?)x)]),
+                ["package_store"] = readiness.Store is { } packages
+                    ? new JsonObject { ["folder"] = packages.Folder, ["packages"] = packages.Packages.Count, ["files"] = packages.FileCount, ["digest"] = packages.Digest, ["library"] = new JsonArray([.. packages.Library.Select(x => (JsonNode?)x)]) }
+                    : null,
+                ["bun"] = readiness.BunPath is null ? null : new JsonObject { ["path"] = readiness.BunPath, ["source"] = readiness.BunSource },
+                ["isolation"] = new JsonObject { ["setting"] = readiness.Isolation, ["available"] = readiness.CanIsolate },
+            });
+        });
+
+        object DescribeBuild(WorkspaceBuildRow b) => new { id = b.Id, workspace = b.WorkspaceId, status = b.Status, commit = b.CommitSha, requested_by = b.RequestedBy, message = b.Message, requested = b.RequestedAt, started = b.StartedAt, finished = b.FinishedAt };
+
+        // the project of a build route, and whether this caller may do this in it; the failure is the answer
+        IResult? InProject(string project, HttpContext context, ServerRole needed, out AuthoringProject hosted)
+        {
+            hosted = null!;
+            if (projects.Find(project) is not { } found) return Results.NotFound();
+            hosted = found;
+            var decision = ManagementAuthorization.Authorize(context.ManagementToken(), needed, found.Id);
+            return decision.Allowed ? null : Refused(decision);
+        }
+
+        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/builds", (string project, string id, HttpContext context) =>
+        {
+            if (InProject(project, context, ServerRole.Author, out var hosted) is { } refused) return refused;
+            if (workspaces.Find(hosted.Id, id) is not { } workspace) return Results.NotFound();
+            var token = context.ManagementToken();
+            try
+            {
+                var row = builds.Request(hosted, store.FindProject(hosted.Id)!.Kind, workspace, token.SubjectId);
+                Audit(token, "build.request", $"{hosted.Id}/{id}/{row.Id}", "ok");
+                return Results.Json(DescribeBuild(row), statusCode: StatusCodes.Status202Accepted);
+            }
+            catch (WorkspaceBuildException ex)
+            {
+                Audit(token, "build.request", $"{hosted.Id}/{id}", "refused: " + ex.Message);
+                return Results.Json(new { error = ex.Message }, statusCode: ex.Status);
+            }
+        });
+
+        app.MapGet("/api/v1/projects/{project}/workspaces/{id}/builds", (string project, string id, HttpContext context) =>
+        {
+            if (InProject(project, context, ServerRole.Viewer, out var hosted) is { } refused) return refused;
+            return Results.Json(new { builds = store.Builds(hosted.Id, id).Select(DescribeBuild) });
+        });
+
+        app.MapGet("/api/v1/projects/{project}/workspaces/{id}/builds/{build}", (string project, string id, string build, HttpContext context) =>
+        {
+            if (InProject(project, context, ServerRole.Viewer, out var hosted) is { } refused) return refused;
+            if (!Guid.TryParse(build, out var buildId) || builds.Find(hosted.Id, id, buildId) is not { } found) return Results.NotFound();
+            return Results.Json(new JsonObject
+            {
+                ["build"] = JsonSerializer.SerializeToNode(DescribeBuild(found.Row)),
+                ["result"] = found.Result,
+                ["publishes"] = builds.Publishes(hosted.Id, buildId),
+            });
+        });
+
+        // the built app, for a preview: read only, from this server, nothing else (see WorkspacePreview)
+        foreach (var route in new[] { "/api/v1/projects/{project}/workspaces/{id}/builds/{build}/preview", "/api/v1/projects/{project}/workspaces/{id}/builds/{build}/preview/{**path}" })
+            app.MapGet(route, (string project, string id, string build, string? path, HttpContext context) =>
+            {
+                if (InProject(project, context, ServerRole.Viewer, out var hosted) is { } refused) return refused;
+                if (!Guid.TryParse(build, out var buildId) || builds.Find(hosted.Id, id, buildId) is not { } found) return Results.NotFound();
+                return WorkspacePreview.Serve(found.Row, builds.AppFolderOf(hosted.Id, buildId), path);
+            });
+
+        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/builds/{build}/publish", async (string project, string id, string build, HttpContext context) =>
+        {
+            if (InProject(project, context, ServerRole.Approver, out var hosted) is { } refused) return refused;
+            if (!Guid.TryParse(build, out var buildId) || builds.Find(hosted.Id, id, buildId) is not { } found) return Results.NotFound();
+            var token = context.ManagementToken();
+            var body = await Body(context);
+            string? target, note;
+            try { (target, note) = (body?["target"]?.GetValue<string>(), body?["note"]?.GetValue<string>()); }
+            catch (InvalidOperationException) { target = note = null; }
+            if (target is null) return Results.Json(new { error = "The body is a JSON object with the \"target\": the name of a publisher key (and optionally a \"note\")." }, statusCode: StatusCodes.Status400BadRequest);
+            if (found.Row.Status != "succeeded") return Results.Json(new { error = $"This build is {found.Row.Status}, so there is nothing to publish. Only a build that succeeded is published." }, statusCode: StatusCodes.Status409Conflict);
+            var steps = new List<string>();
+            var target1 = $"{hosted.Id}/{id}/{buildId}";
+            try
+            {
+                var provenance = $"From workspace {id} of project {hosted.Id}, build {buildId:D}" + (found.Row.CommitSha is { } sha ? $", commit {sha[..Math.Min(12, sha.Length)]}" : "") +
+                    (found.Result?["uncommitted_changes"]?.GetValue<bool>() == true ? " (with changes not yet committed)" : "") + $", published by {Actor(token)}.";
+                var answer = await publishing.PublishAsync(target, builds.AppFolderOf(hosted.Id, buildId), string.IsNullOrWhiteSpace(note) ? provenance : note.Trim() + " | " + provenance, Actor(token), steps.Add, context.RequestAborted);
+                builds.RecordPublish(hosted.Id, buildId, new JsonObject { ["at"] = DateTimeOffset.UtcNow, ["by"] = Actor(token), ["target"] = target, ["ok"] = true, ["answer"] = answer.DeepClone() });
+                Audit(token, "build.publish", $"{target1} -> {target}", "ok");
+                return Results.Json(new JsonObject { ["steps"] = new JsonArray([.. steps.Select(x => (JsonNode?)x)]), ["published"] = answer });
+            }
+            catch (WorkspacePublishException ex)
+            {
+                builds.RecordPublish(hosted.Id, buildId, new JsonObject { ["at"] = DateTimeOffset.UtcNow, ["by"] = Actor(token), ["target"] = target, ["ok"] = false, ["error"] = ex.Message });
+                Audit(token, "build.publish", $"{target1} -> {target}", "refused: " + ex.Message);
+                return Results.Json(new JsonObject { ["error"] = ex.Message, ["steps"] = new JsonArray([.. steps.Select(x => (JsonNode?)x)]) }, statusCode: ex.Status);
+            }
+        });
+
         // ---- the publisher's key reference ----
+
+        JsonObject DescribeKey(PublisherKeyRow k)
+        {
+            var target = publishing.Find(k.Name);
+            return new JsonObject
+            {
+                ["name"] = k.Name, ["secret_ref"] = k.SecretRef, ["updated"] = k.UpdatedAt,
+                ["gateway"] = target is null ? null : new JsonObject { ["url"] = target.Url, ["roles"] = new JsonArray([.. target.Roles.Select(x => (JsonNode?)x)]), ["client_name"] = target.ClientName, ["paired"] = target.PairedAt },
+            };
+        }
 
         app.MapGet("/api/v1/publisher-keys", (HttpContext context) =>
         {
             if (ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Admin) is { Allowed: false } refused) return Refused(refused);
-            return Results.Json(new { keys = store.PublisherKeys().Select(k => new { name = k.Name, secret_ref = k.SecretRef, updated = k.UpdatedAt }) });
+            return Results.Json(new JsonObject { ["keys"] = new JsonArray([.. store.PublisherKeys().Select(k => (JsonNode?)DescribeKey(k))]) });
         });
 
         app.MapPut("/api/v1/publisher-keys/{name}", async (string name, HttpContext context) =>
@@ -136,12 +250,36 @@ public static class WorkspaceManagement
             {
                 var row = store.SetPublisherKey(name, reference, token.SubjectId);
                 Audit(token, "publisher-key.set", name, "ok");     // the reference is not a secret, but the audit names only the target
-                return Results.Json(new { name = row.Name, secret_ref = row.SecretRef, updated = row.UpdatedAt });
+                return Results.Json(DescribeKey(row));
             }
             catch (ArgumentException ex)
             {
                 Audit(token, "publisher-key.set", name, "refused");
                 return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);
+            }
+        });
+
+        // makes the key and pairs it with a Gateway with the single-use code made there (the code is not a secret that stays: it is used up); the key never leaves the secret store
+        app.MapPost("/api/v1/publisher-keys/{name}/pair", async (string name, HttpContext context) =>
+        {
+            var token = context.ManagementToken();
+            if (ManagementAuthorization.Authorize(token, ServerRole.Admin) is { Allowed: false } refused) return Refused(refused);
+            var body = await Body(context);
+            string? url, code, clientName;
+            try { (url, code, clientName) = (body?["url"]?.GetValue<string>(), body?["code"]?.GetValue<string>(), body?["client_name"]?.GetValue<string>()); }
+            catch (InvalidOperationException) { url = code = clientName = null; }
+            if (url is null || code is null || !Uri.TryCreate(url, UriKind.Absolute, out var address))
+                return Results.Json(new { error = "The body is a JSON object with the Gateway's \"url\" (https://...) and the \"code\" its administrator made (server pair --max-role publisher)." }, statusCode: StatusCodes.Status400BadRequest);
+            try
+            {
+                var made = await publishing.PairAsync(name, address, code, clientName, token.SubjectId, context.RequestAborted);
+                Audit(token, "publisher-key.pair", $"{name} -> {made.Url}", "ok");
+                return Results.Json(DescribeKey(store.PublisherKeys().First(k => k.Name == name)), statusCode: StatusCodes.Status201Created);
+            }
+            catch (WorkspacePublishException ex)
+            {
+                Audit(token, "publisher-key.pair", name, "refused: " + ex.Message);
+                return Results.Json(new { error = ex.Message }, statusCode: ex.Status);
             }
         });
 

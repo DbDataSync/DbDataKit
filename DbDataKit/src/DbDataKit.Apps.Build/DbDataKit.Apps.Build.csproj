@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Apps</RootNamespace>
+    <Description>Builds an app from its source tree into the folder the apps host serves, and the app template a new app starts from (plan 22a GP32 to GP35): the manifest checked first, the bundler run from a vendored package store, the files that are not source copied, the result validated. Used by the Gateway's apps build command and by the Workspace server.</Description>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataKit.Apps.Bundling\DbDataKit.Apps.Bundling.csproj" />
+    <ProjectReference Include="..\DbDataKit.Apps.Manifest\DbDataKit.Apps.Manifest.csproj" />
+    <ProjectReference Include="..\DbDataKit.Apps.Host\DbDataKit.Apps.Host.csproj" />
+    <!-- the app template, inside the library: no repository and no network needed -->
+    <EmbeddedResource Include="templates\app\**\*" LogicalName="apps-templates/app/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

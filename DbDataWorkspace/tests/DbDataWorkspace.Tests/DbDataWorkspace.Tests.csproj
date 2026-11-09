@@ -9,5 +9,7 @@
     <Using Include="Xunit" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\..\src\DbDataWorkspace.Server\DbDataWorkspace.Server.csproj" />
+    <!-- the vendored package store the Gateway's app build tests use (one helper for both: made from the web workspace once per run, or DBDATA_APP_STORE) -->
+    <Compile Include="..\..\..\DbDataGateway\tests\DbDataGateway.Tests\Support\AppStoreSupport.cs" Link="Support\AppStoreSupport.cs" />
   </ItemGroup>
 </Project>

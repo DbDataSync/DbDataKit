@@ -7,6 +7,7 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" />
     <DbDataKitReference Include="Cli" />   <!-- the shared noun-verb grammar -->
+    <DbDataKitReference Include="Apps.Build" />   <!-- the app template a new app project starts from, and the build of an app from a vendored package store (GP32 to GP35) -->
     <DbDataKitReference Include="Authoring" />   <!-- the workspace list, create, abandon and git calls, the same for every project kind (GP30) -->
     <DbDataKitReference Include="Config.Git" />   <!-- a project's repository -->
     <DbDataKitReference Include="Hosting.Abstractions" />   <!-- the shared host: service and systemd modes, drain, /health and /version -->

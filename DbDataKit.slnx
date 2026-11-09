@@ -34,6 +34,7 @@
     <Project Path="DbDataKit/benchmarks/DbDataKit.Transfer.Benchmarks/DbDataKit.Transfer.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/DbDataKit/src/">
+    <Project Path="DbDataKit/src/DbDataKit.Apps.Build/DbDataKit.Apps.Build.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Apps.Bundling/DbDataKit.Apps.Bundling.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Apps.Instances/DbDataKit.Apps.Instances.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Apps.Host/DbDataKit.Apps.Host.csproj" />

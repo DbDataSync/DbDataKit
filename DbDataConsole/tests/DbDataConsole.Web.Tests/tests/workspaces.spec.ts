@@ -63,7 +63,7 @@ test('the console pairs with a Workspace server, makes a workspace, reads its hi
   await expect(workspace.getByTestId('ws-owner')).toContainText('(you)')
   const id = (await workspace.getAttribute('data-workspace'))!
   // the worktree is on the server's disk
-  expect(fs.existsSync(path.join(workspaceServer.directory, 'workspaces', workspaceServer.project, id, 'README.md'))).toBe(true)
+  expect(fs.existsSync(path.join(workspaceServer.directory, 'workspaces', workspaceServer.project, id, 'app.yaml'))).toBe(true)
 
   // the same name again is refused by the form before the server is asked
   await nameInput.fill('new-orders')

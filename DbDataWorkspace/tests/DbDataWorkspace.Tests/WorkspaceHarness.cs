@@ -25,18 +25,18 @@ internal sealed class WorkspaceHarness : IAsyncDisposable
     private WorkspaceHarness(ScratchStateDatabase? scratch) => Scratch = scratch;
 
     /// <summary>Starts the server on <paramref name="engine"/> (<c>sqlite</c>, <c>postgres</c> or <c>mssql</c>; the test is skipped when that engine is not set up).</summary>
-    public static async Task<WorkspaceHarness> StartAsync(string engine = "sqlite", ServerRole ceiling = ServerRole.Admin | ServerRole.Author | ServerRole.Approver)
+    public static async Task<WorkspaceHarness> StartAsync(string engine = "sqlite", ServerRole ceiling = ServerRole.Admin | ServerRole.Author | ServerRole.Approver, WorkspaceAppSettings? apps = null)
     {
         var harness = new WorkspaceHarness(engine == "sqlite" ? null : ScratchStateDatabase.For(engine));
-        await harness.StartAsync(ceiling);
+        await harness.StartAsync(ceiling, apps);
         return harness;
     }
 
-    private async Task StartAsync(ServerRole ceiling)
+    private async Task StartAsync(ServerRole ceiling, WorkspaceAppSettings? apps)
     {
         if (Scratch is not null) new StateSettingsWriter().Write(Path.Combine(Directory, "server.yaml"), new StateSettings(Scratch.Engine, Scratch.Connection));
         var resolved = WorkspaceState.Resolve(Directory, Scratch is null ? null : Scratch.Environment);
-        Settings = new WorkspaceSettings(Directory, new Uri("https://127.0.0.1:0")) { State = resolved.Settings, StateSources = resolved.Sources };
+        Settings = new WorkspaceSettings(Directory, new Uri("https://127.0.0.1:0")) { State = resolved.Settings, StateSources = resolved.Sources, Apps = apps };
         app = WorkspaceServer.Build(Settings, WorkspaceServer.Certificate(Directory), Log.Add);
         await app.StartAsync();
         var url = new Uri(app.Urls.First());
@@ -55,7 +55,9 @@ internal sealed class WorkspaceHarness : IAsyncDisposable
         if (json is not null) request.Content = new StringContent(json, Encoding.UTF8, "application/json");
         var response = await Http.SendAsync(request);
         var text = await response.Content.ReadAsStringAsync();
-        return (response, text.Length > 0 ? JsonNode.Parse(text) : null);
+        if (text.Length == 0) return (response, null);
+        try { return (response, JsonNode.Parse(text)); }
+        catch (System.Text.Json.JsonException) { return (response, null); }       // a page or a plain sentence, not JSON
     }
 
     public Task<(HttpResponseMessage Response, JsonNode? Body)> AsAda(HttpMethod method, string path, string? json = null) => Send("ada", ServerRole.Author, method, path, json);
