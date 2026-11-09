@@ -1,9 +1,15 @@
 # Plan 27: knowledge, agents, integrations and work management
 
-Status: **proposed, high level** (2026-11-03; integrations and actions reworked on 2026-11-04 after the owner's decisions, with the
-runner in [plan 28](28-runner.md)). Four new areas the owner asked for. This page decides their shape and how they fit together
-and with plans 16, 20, 22, 25 and 26. It lists the questions only the owner can answer (section 8). Not sliced yet: each area gets a
-detailed plan of its own (section 9) once the questions are answered.
+Status: **decided design, not built, sliced in [plan 27a](27a-knowledge-slices.md)** (2026-11-09). Proposed 2026-11-03; integrations and actions reworked on
+2026-11-04 after the owner's decisions, with the runner in [plan 28](28-runner.md); every question of section 8 was answered by the owner between 2026-11-03 and
+2026-11-06 except row 61 (the Excel add-in), which is still proposed. Four new areas the owner asked for. This page decides their shape and how they fit together
+and with plans 16, 20, 22, 25 and 26, and it is the record of the decisions. **What is built** is the audit in 27a, item by item with its evidence: of the four areas
+nothing of the product itself exists (no agent runtime, no knowledge library, no actions, no backlog), while what they stand on does: the command surface and MCP
+for outside agents, Build's agent kit, the whole run-time side of integrations (the runner, plan 28a R01 to R20), the state engines' vector check with a test
+environment that has vectors, the publishing library, the JSON query request, semantic SQL and saved queries. The built half is written as product documents:
+[`docs/agent-tools.md`](../agent-tools.md), [`docs/knowledge.md`](../knowledge.md) and the integrations section of
+[`DbDataRunner/README.md`](../../DbDataRunner/README.md). The slices (120, in lanes AG, KN, AX, IX, BK, EA and XL) and the sixteen points the decisions leave
+open (QK1 to QK16, each with a recommended default) are in 27a; the owner's questions of section 8 below stay as recorded.
 
 | Area | What it is for |
 | --- | --- |
@@ -214,8 +220,8 @@ embedded again; activation switches them with the definition; a retired definiti
 
 **Filling the gaps.** Generated knowledge is only as good as the descriptions it is rendered from:
 
-- semantic-model measures, attributes and hierarchies gain a `description` (they have synonyms and formats, but no description today);
-  DbDataStore model fields gain one too;
+- semantic-model measures and attributes already have a `description` (and dimensions and the model too, with a model-level `ai_context`: the audit of
+  [27a](27a-knowledge-slices.md)); hierarchies gain one, and DbDataStore model fields gain one (slice KN14);
 - the console shows what is undescribed ("12 measures in Sales have no description");
 - a business user can **suggest a description** from the knowledge app (section 2.5). When the definition's project is on the Workspace
   server, the suggestion becomes a change to that project (a commit to the model's file, approved by its owner); until then, it becomes a
@@ -1356,6 +1362,7 @@ one branch `suite/<id>-<short-name>`, a "Done when" test, as in 13a):
 | [29](29-unified-state.md) | One structure for the suite's state databases (written at high level, 2026-11-04) | |
 | [30](30-publishing.md) | One way to publish, to the serving layer and the runner (direction decided, 2026-11-04) | |
 | [31](31-report-catalogs.md) | Report catalogs, external (SSRS, PBIRS) and our own, in one place (written at high level, 2026-11-06) | |
+| [27a](27a-knowledge-slices.md) | This plan in slices: the audit of what is built and 120 slices (written 2026-11-09) | lanes AG, KN, AX, IX, BK, EA, XL (chosen: the single letters are all taken) |
 | later | Sync and Build on the runner (plan 28 section 8), after its state design | |
 
 ## 10. What this changes in other plans (once approved)
