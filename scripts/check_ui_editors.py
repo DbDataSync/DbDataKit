@@ -6,9 +6,10 @@ The table is written by hand (read the code, do not guess); this check keeps it 
      cannot arrive without a row that says whether it has an editor;
   2. every backticked id in a Format column is a registered format;
   3. every row has a state: full, partial, view-only, none or planned (the first word of the State cell);
-  4. a state other than full says why or what closes it: a slice id in the Gap column (UE01 of plan 33, or another plan's slice such as
-     DBR27) or a reason in parentheses in the State cell (`none (reason)`, the documented exemption);
-  5. every UEnn named in the table is a slice of docs/plans/33-ui-editors.md;
+  4. a state other than full says why or what closes it: a slice id in the Gap column (a slice of a plan in docs/plans, such as DBR27) or a
+     reason in parentheses in the State cell (`none (reason)`, the documented exemption);
+  5. a planned row names a slice that is a row of a plan in docs/plans (every slice id of its Gap cell that has the shape of one, so a plan
+     that is deleted or renamed cannot leave a row pointing at nothing); no cell names a `UEnn`, the slices of the plan that was removed;
   6. every `Name.tsx` named in the Editor column exists under DbDataKit/web/*/src;
   7. the `Counts:` line equals the count of the rows' states.
 Run from anywhere: python3 scripts/check_ui_editors.py [root]
@@ -23,12 +24,12 @@ HEADER = re.compile(r"^\|\s*Feature\s*\|")
 CELL_SPLIT = re.compile(r"(?<!\\)\|")
 SLICE_ID = re.compile(r"\b[A-Z]{1,3}\d+[a-z]?\b")
 UE_ID = re.compile(r"\bUE\d+[a-z]?\b")
+PLAN_ROW = re.compile(r"^\|\s*\**([A-Z]{1,3}\d+[a-z]?)\**\s*\|", re.M)
 BACKTICKED = re.compile(r"`([^`]+)`")
 TSX = re.compile(r"`([A-Za-z0-9_]+\.tsx)`")
 COUNTS = re.compile(r"^Counts: full (\d+), partial (\d+), view-only (\d+), none (\d+), planned (\d+)\.\s*$", re.M)
-PLAN_ROW = re.compile(r"^\|\s*\**(UE\d+[a-z]?)\**\s*\|", re.M)
 DOC = "docs/ui-editors.md"
-PLAN = "docs/plans/33-ui-editors.md"
+PLANS = os.path.join("docs", "plans")
 
 
 def read(path):
@@ -54,6 +55,18 @@ def rows(text):
     return found
 
 
+def plan_slices(root):
+    """Every slice id that is the first cell of a table row in a plan under docs/plans."""
+    found = set()
+    folder = os.path.join(root, PLANS)
+    if not os.path.isdir(folder):
+        return found
+    for name in os.listdir(folder):
+        if name.endswith(".md"):
+            found.update(PLAN_ROW.findall(read(os.path.join(folder, name))))
+    return found
+
+
 def screen_files(root):
     names = set()
     web = os.path.join(root, "DbDataKit", "web")
@@ -74,8 +87,7 @@ def problems(root):
     out = []
     registry_path = os.path.join(root, "docs", "formats.json")
     registered = [f["id"] for f in json.loads(read(registry_path))["formats"]] if os.path.exists(registry_path) else []
-    plan_path = os.path.join(root, PLAN)
-    slices = set(PLAN_ROW.findall(read(plan_path))) if os.path.exists(plan_path) else set()
+    slices = plan_slices(root)
     table = rows(text)
     if not table:
         return [f"{DOC} has no table whose header starts with | Feature |"]
@@ -98,9 +110,12 @@ def problems(root):
         counts[word] += 1
         if word != "full" and not SLICE_ID.search(gap) and "(" not in state:
             out.append(f"{DOC}: '{feature}' is {word} and says neither which slice closes the gap nor why not: name a slice in the last cell or write `{word} (reason)`")
-        for ue in UE_ID.findall(gap):
-            if ue not in slices:
-                out.append(f"{DOC}: '{feature}' names {ue}, which is not a slice of {PLAN}")
+        for ue in UE_ID.findall(" ".join(cells)):
+            out.append(f"{DOC}: '{feature}' names {ue}, a slice of the removed editors plan: say what was built, or name the slice of the plan that owns the screen")
+        if word == "planned":
+            for ident in sorted(set(SLICE_ID.findall(gap))):
+                if ident not in slices:
+                    out.append(f"{DOC}: '{feature}' is planned and names {ident}, which is not a slice (a table row) of any plan in {PLANS}")
         for name in TSX.findall(editor):
             if name not in existing:
                 out.append(f"{DOC}: '{feature}' names {name}, which is not a file under DbDataKit/web/*/src")
