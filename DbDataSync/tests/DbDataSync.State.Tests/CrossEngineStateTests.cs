@@ -1,3 +1,4 @@
+using DbDataSync.Core.Config;
 namespace DbDataSync.State.Tests;
 
 /// <summary>
@@ -427,5 +428,74 @@ public sealed class CrossEngineStateTests : IClassFixture<LibraryInstallFixture>
             using var cmd = database.Command(connection, $"SELECT COUNT(*) FROM {table};");
             Assert.ThrowsAny<Exception>(() => cmd.ExecuteScalar());
         }
+    }
+    /// <summary>
+    /// A pass that loses the initial-load race is not a failure (owner decision 2026-11-09). Two passes for one mapping ask for the initial load: exactly one load results (one batch, one queued
+    /// segment, the winner's pending position), the second request is refused with the collision, and the pass that lost is recorded the way <c>RunExecutor</c> records it: Succeeded, nothing moved,
+    /// the reason in the summary and no failure kind. The shared model reads it as Succeeded, so Monitoring has no finding and the notification feed gets no run-failed entry. On every engine.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Engines))]
+    public async Task TwoPassesRacingForOneInitialLoad_GiveOneLoad_AndTheLostPassIsNotReportedAsAFailure(string engine)
+    {
+        const string task = "crm-sync";
+        const string mapping = "orders";
+        const string table = "orders-db/App/dbo.Orders";
+        var database = Open(engine);
+        var queue = new WorkQueueStore(database);
+        var runs = new TaskRunStore(database);
+        var watermarks = new ChangeWatermarkStore(database);
+        var batches = new BulkLoadBatchStore(database);
+        using var logs = new LogWriter(database);
+        var state = new LocalRunnerState(
+            runs, queue, new RunLockStore(database), watermarks, new VerificationResultStore(database), logs, batches,
+            new Lazy<IInitialLoadEnqueuer>(() => new FullSegmentEnqueuer(queue, batches)));
+
+        state.RequestInitialLoad(task, mapping, table, "100", null);
+        Assert.Throws<WorkQueueCollisionException>(() => state.RequestInitialLoad(task, mapping, table, "200", null));
+
+        Assert.Single(batches.GetHistory(task).Batches);
+        Assert.True(queue.HasInFlightBulkLoad(task, mapping));
+        var read = watermarks.GetReadState(task, mapping, table)!;
+        Assert.Equal(ReadHold.Loading, read.Hold);
+
+        var lostPass = queue.Enqueue(task, RunKind.Primary, mapping);
+        runs.BeginRun(lostPass, pid: null);
+        const string reason = "Not run: an initial load for mapping 'orders' is already in progress, requested by another pass or a reload.";
+        runs.CompleteRun(lostPass, RunStatus.Succeeded, 0, 0, errorSummary: reason);
+
+        var run = runs.GetRun(lostPass)!;
+        Assert.Equal(RunStatus.Succeeded, run.Status);
+        Assert.Null(run.FailureKind);
+        Assert.Equal(reason, run.ErrorSummary);
+        Assert.Empty(new DbDataKit.State.NotificationFeedStore(database, SyncState.ServiceId).List());
+
+        var last = (await new SyncRunHistory(runs).LastRunAsync(task))!;
+        Assert.Equal(DbDataKit.Monitoring.RunOutcome.Succeeded, last.Outcome);
+        Assert.Null(last.Failure);
+        var health = new DbDataKit.Monitoring.HealthEvaluator().Evaluate(new DbDataKit.Monitoring.JobExpectation(task), last);
+        Assert.True(health.Healthy, string.Join("; ", health.Findings.Select(f => f.Message)));
+    }
+
+    /// <summary>The initial-load enqueue of the Api's <c>BulkLoadService</c>, minimal: one full segment, and a collision throws.</summary>
+    private sealed class FullSegmentEnqueuer(WorkQueueStore queue, BulkLoadBatchStore batches) : IInitialLoadEnqueuer
+    {
+        public Task EnqueueForInitialLoadAsync(string replicationName, string mappingName, string batchId, CancellationToken cancellationToken)
+        {
+            batches.CreateBatch(batchId, replicationName, mappingName, segmentCount: 1, estimatedRows: null, estimateCaveat: null);
+            try
+            {
+                queue.EnqueueOrThrow(replicationName, RunKind.BulkLoad, mappingName, "full", segmentJson: null, kinds: null, batchId);
+            }
+            catch (WorkQueueCollisionException)
+            {
+                batches.DeleteBatch(batchId);   // as BulkLoadService does: a losing attempt leaves no batch behind
+                throw;
+            }
+            return Task.CompletedTask;
+        }
+
+        public Task<string> EnqueueSegmentsAsync(string replicationName, string mappingName, IReadOnlyList<DbDataSync.Core.Config.BatchReloadSegment> segments, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 }

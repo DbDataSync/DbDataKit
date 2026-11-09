@@ -118,17 +118,27 @@ public sealed class ConcurrentRunsIntegrationTests : IClassFixture<TestApiFactor
         // first pass rather than reading directly, so every Primary run's own rowsRead/rowsWritten
         // above is 0 by design — the real load happens on the Bulk Load each pass requested. Wait for
         // each to finish, then check its row instead.
+        // Exactly one load per mapping: a second Primary pass for one mapping (the trigger and the scheduler's tick can both queue one
+        // before the first load has set the Loading hold) must not request a second load, and must not end Failed — it loses the
+        // initial-load race cleanly (ends Succeeded, moved nothing, says why). So: one BulkLoad run, and no run of the replication Failed.
         var loadRuns = await Task.WhenAll(Enumerable.Range(0, ConcurrentReplicationCount).Select(async i =>
         {
             var replicationName = $"repl-{i}-{_databaseName}";
             await _client.WaitForLoadToCompleteAsync(replicationName, "main");
-            var history = await _client.GetFromJsonAsync<JsonElement>(
-                $"/api/replications/{replicationName}/runs?kind=BulkLoad&mappingName=main&limit=1", JsonOptions);
-            return history.GetProperty("runs").EnumerateArray().Single();
+            var loads = await _client.GetFromJsonAsync<JsonElement>(
+                $"/api/replications/{replicationName}/runs?kind=BulkLoad&mappingName=main&limit=50", JsonOptions);
+            var load = Assert.Single(loads.GetProperty("runs").EnumerateArray());
+
+            var all = await _client.GetFromJsonAsync<JsonElement>($"/api/replications/{replicationName}/runs?limit=50", JsonOptions);
+            var failed = all.GetProperty("runs").EnumerateArray().Where(r => r.GetProperty("status").GetString() == "Failed")
+                .Select(r => $"{r.GetProperty("runKind").GetString()} {r.GetProperty("failureKind").GetString()}: {r.GetProperty("errorSummary").GetString()}").ToList();
+            Assert.True(failed.Count == 0, $"{replicationName}: no run may end Failed, but:\n" + string.Join("\n", failed));
+            return load;
         }));
 
         foreach (var run in loadRuns)
         {
+            Assert.Equal("Succeeded", run.GetProperty("status").GetString());
             Assert.Equal(RowsPerTable, run.GetProperty("rowsRead").GetInt64());
             Assert.Equal(RowsPerTable, run.GetProperty("rowsWritten").GetInt64());
         }

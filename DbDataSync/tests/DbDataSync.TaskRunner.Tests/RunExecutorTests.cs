@@ -418,7 +418,7 @@ public sealed class RunExecutorTests : IDisposable
     /// nothing to race.
     /// </summary>
     [Fact]
-    public async Task ExecuteWorkerAsync_AManualTriggerWhileStillLoading_FailsCleanly_BeforeAnyConnectionIsOpened()
+    public async Task ExecuteWorkerAsync_AManualTriggerWhileStillLoading_EndsSucceededWithTheReason_BeforeAnyConnectionIsOpened()
     {
         SaveTask("crm-sync");
         _configRepository.SaveTableMapping("crm-sync", new TableMappingConfig
@@ -450,11 +450,18 @@ public sealed class RunExecutorTests : IDisposable
         var runId = await EnqueueAndDrainAsync("crm-sync", "orders");
 
         var run = _taskRunStore.GetRun(runId)!;
-        Assert.Equal(RunStatus.Failed, run.Status);
-        Assert.Equal("MappingStillLoading", run.FailureKind);
+        // Owner decision 2026-11-09: a pass that loses the initial-load race is not a failure. It ends
+        // Succeeded, moved nothing, and says why; no failure kind, so nothing counts it as one.
+        Assert.Equal(RunStatus.Succeeded, run.Status);
+        Assert.Null(run.FailureKind);
+        Assert.Equal(0, run.RowsWritten);
+        Assert.StartsWith("Not run:", run.ErrorSummary);
         Assert.Contains("still loading", run.ErrorSummary);
         // Not a connectivity failure — the whole point is that this never got as far as trying.
         Assert.DoesNotContain("Failed to open connection", run.ErrorSummary);
+        // The work item is done, not failed, and nothing was announced.
+        Assert.Empty(_taskRunStore.GetRunHistory("crm-sync", status: RunStatus.Failed));
+        Assert.Empty(new DbDataKit.State.NotificationFeedStore(_stateDatabase, SyncState.ServiceId).List());
     }
 
     /// <summary>

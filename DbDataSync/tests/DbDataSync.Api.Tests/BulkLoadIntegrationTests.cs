@@ -105,7 +105,7 @@ public sealed class BulkLoadIntegrationTests : IClassFixture<TestApiFactory>, IA
     /// subject of phase 143, not this test), and without a warm-up this test was quietly exercising it
     /// by accident: a brand-new mapping's first pass and an on-demand reload of the identical segment,
     /// not the already-bootstrapped-mapping-vs-reload coexistence this test's name and doc comment
-    /// actually describe. See <see cref="ARaceBetweenAConcurrentReloadAndAMappingsOwnFirstPass_TheLoserFailsCleanly_AndSelfHeals"/>
+    /// actually describe. See <see cref="ARaceBetweenAConcurrentReloadAndAMappingsOwnFirstPass_TheLoserSucceedsWithTheReason_AndSelfHeals"/>
     /// for that scenario, deliberately, instead.
     /// </para>
     /// </summary>
@@ -175,7 +175,7 @@ public sealed class BulkLoadIntegrationTests : IClassFixture<TestApiFactory>, IA
     /// </para>
     /// </summary>
     [Fact]
-    public async Task ARaceBetweenAConcurrentReloadAndAMappingsOwnFirstPass_TheLoserFailsCleanly_AndSelfHeals()
+    public async Task ARaceBetweenAConcurrentReloadAndAMappingsOwnFirstPass_TheLoserSucceedsWithTheReason_AndSelfHeals()
     {
         var primaryTask = _client.PostAsync(
             $"/api/replications/{_replicationName}/runs", new StringContent("", Encoding.UTF8, "application/json"));
@@ -198,20 +198,18 @@ public sealed class BulkLoadIntegrationTests : IClassFixture<TestApiFactory>, IA
         // are checked explicitly rather than assuming only the "lost" branch can happen.
         var map1Primary = Assert.Single(primaryRuns, r => r.GetProperty("mappingName").GetString() == "map-1");
         var map1Status = map1Primary.GetProperty("status").GetString();
-        if (map1Status == "Failed")
+        // Owner decision 2026-11-09: losing is not a failure. Either way the pass ends Succeeded; the loser
+        // says why in its summary and carries no failure kind.
+        Assert.Equal("Succeeded", map1Status);
+        Assert.Null(map1Primary.GetProperty("failureKind").GetString());
+        if (map1Primary.GetProperty("errorSummary").GetString() is { } map1Why)
         {
             // The intended branch: the auto-request found the explicit reload's row still there.
-            Assert.Equal("ConcurrentLoadInProgress", map1Primary.GetProperty("failureKind").GetString());
-            Assert.Contains("already in progress", map1Primary.GetProperty("errorSummary").GetString());
+            Assert.StartsWith("Not run:", map1Why);
+            Assert.Contains("already in progress", map1Why);
         }
-        else
-        {
-            // The explicit reload finished (enqueue *and* run) before the auto-request ever reached
-            // its own collision check — nothing left to collide with, so this is just an ordinary,
-            // non-colliding initial load. Equally correct; not the shape this test exists to name, but
-            // not a failure of anything this test is actually checking either.
-            Assert.Equal("Succeeded", map1Status);
-        }
+        // else: the explicit reload finished before the auto-request reached its collision check — nothing
+        // left to collide with, so this was an ordinary initial load. Equally correct.
 
         // map-2 was never part of the race — its own auto-trigger had nothing to collide with.
         var map2Primary = Assert.Single(primaryRuns, r => r.GetProperty("mappingName").GetString() == "map-2");
@@ -238,27 +236,22 @@ public sealed class BulkLoadIntegrationTests : IClassFixture<TestApiFactory>, IA
             var raceRuns = await Task.WhenAll(raceRunIds.Select(PollUntilTerminalAsync));
             var map2Race = Assert.Single(raceRuns, r => r.GetProperty("mappingName").GetString() == "map-2");
             var map2RaceStatus = map2Race.GetProperty("status").GetString();
-            if (map2RaceStatus == "Failed")
+            // Owner decision 2026-11-09: whichever way the race went, the run ends Succeeded and has no failure kind.
+            Assert.Equal("Succeeded", map2RaceStatus);
+            Assert.Null(map2Race.GetProperty("failureKind").GetString());
+            if (map2Race.GetProperty("errorSummary").GetString() is { } map2Why)
             {
                 // The intended branch: the retrigger's POST was served while the hold was still up.
-                Assert.Equal("MappingStillLoading", map2Race.GetProperty("failureKind").GetString());
-                Assert.Contains("still loading", map2Race.GetProperty("errorSummary").GetString());
+                Assert.StartsWith("Not run:", map2Why);
+                Assert.Contains("still loading", map2Why);
             }
-            else
-            {
-                // PollUntilHoldAsync only proves the hold was set at the moment it returned — map-2's own
-                // Bulk Load can still finish and clear it in the GET-then-POST gap before the retrigger's
-                // POST is served. Nothing left to collide with at that point, so this is just an ordinary,
-                // non-colliding run. Equally correct; not the shape this half of the test exists to name,
-                // but not a failure of anything it is actually checking either (mirrors the map-1 branch
-                // above, and see this test's own follow-up doc for why the branch can't be forced).
-                Assert.Equal("Succeeded", map2RaceStatus);
-            }
+            // else: PollUntilHoldAsync only proves the hold was set at the moment it returned — map-2's own
+            // Bulk Load can finish and clear it in the GET-then-POST gap, leaving nothing to lose to.
         }
         // Else: map-2's own load finished before this test could ever observe it Loading — the window
         // this half of the test exercises had already closed on its own, an environment-speed accident
         // rather than anything to assert about. Covered deterministically instead by
-        // RunExecutorTests.ExecuteWorkerAsync_AManualTriggerWhileStillLoading_FailsCleanly_BeforeAnyConnectionIsOpened,
+        // RunExecutorTests.ExecuteWorkerAsync_AManualTriggerWhileStillLoading_EndsSucceededWithTheReason_BeforeAnyConnectionIsOpened,
         // which sets the hold directly rather than racing a real Bulk Load for it.
 
         // Both of map-1's own explicit reload (asserted terminal at line 194) and map-2's real Bulk Load
@@ -309,8 +302,10 @@ public sealed class BulkLoadIntegrationTests : IClassFixture<TestApiFactory>, IA
         var primaryRuns = await Task.WhenAll(primaryRunIds.Select(PollUntilTerminalAsync));
 
         var map3Primary = Assert.Single(primaryRuns, r => r.GetProperty("mappingName").GetString() == "map-3");
-        Assert.Equal("Failed", map3Primary.GetProperty("status").GetString());
-        Assert.Equal("ConcurrentLoadInProgress", map3Primary.GetProperty("failureKind").GetString());
+        // Owner decision 2026-11-09: a pass that loses the initial-load race is not a failure.
+        Assert.Equal("Succeeded", map3Primary.GetProperty("status").GetString());
+        Assert.Null(map3Primary.GetProperty("failureKind").GetString());
+        Assert.StartsWith("Not run:", map3Primary.GetProperty("errorSummary").GetString());
 
         // The batch this attempt created is gone — not lingering as a permanently-Running row nobody
         // will ever finish. GetHistory(BulkLoad) for map-3 has nothing beyond the pre-seeded segment-2
