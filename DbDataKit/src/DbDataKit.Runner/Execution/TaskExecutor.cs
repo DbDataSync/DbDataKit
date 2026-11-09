@@ -120,7 +120,7 @@ public sealed class TaskExecutor : ITaskRunner
             IReadOnlyDictionary<string, string> injected = request.Slots.Count > 0 && _options.Slots is { } slots
                 ? await slots.EnvironmentAsync(request.ConnectionHandles, request.Slots, ct).ConfigureAwait(false)
                 : new Dictionary<string, string>();
-            token = _host.Register(new RunGrant(start, request.Chain, new RunnerEnvironment(_database, task.Package, task.Channel) { Service = _options.Service }, lifetime, _options.Slots));
+            token = _host.Register(new RunGrant(start, request.Chain, new RunnerEnvironment(_database, task.Package, task.Channel) { Service = _options.Service }, lifetime, _options.Slots, HostFinishesRun: true));
 
             var spec = BuildSpec(request, scratch, token, log, injected);
             child = ChildProcessHost.Launch(spec);
