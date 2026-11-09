@@ -116,6 +116,7 @@ The CI runners are small (two cores, Windows and Linux), run many jobs at once, 
 | Signature | Cause | Fix |
 | --- | --- | --- |
 | the container is "unhealthy"; log: `Could not load file or assembly 'Microsoft.Data.Sqlite'` | publish items for another program (the task host) were added **before** the SDK's file-conflict resolution, which saw two files of one name and dropped the console's | add such items with `AfterTargets="ComputeResolvedFilesToPublishList"` (`TaskHostIntoPublish`); check by publishing and listing the output |
+| `error IL3000: 'System.Reflection.Assembly.Location.get' always returns an empty string for assemblies embedded in a single-file app` in the Windows job (the Windows publish is single-file and warnings are errors) | code that finds its own program through `Assembly.Location` or `GetEntryAssembly().Location` (UC09's helper launcher did) | use `Environment.ProcessPath`, `AppContext.BaseDirectory` and, under `dotnet app.dll`, `Environment.GetCommandLineArgs()[0]`; before you push code that locates itself, `dotnet publish -r win-x64 -p:PublishSingleFile=true` the servers that mount it (the analyzers run on Linux too); `LauncherCommandTests` pins both layouts |
 
 ### Web code that runs under an app's policy
 
