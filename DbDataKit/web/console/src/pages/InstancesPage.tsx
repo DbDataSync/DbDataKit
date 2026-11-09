@@ -6,6 +6,7 @@ import { PendingServers } from './PendingServers'
 import { Link } from 'react-router-dom'
 import { ConsoleShell } from '../ConsoleShell'
 import { offersState } from '../stateApi'
+import { availableKey, upgradeApi } from '../upgradeApi'
 
 const COLUMNS = '1.4fr 1.4fr 1.8fr 2fr 1fr'
 
@@ -27,6 +28,8 @@ export function InstancesPage() {
   const queryClient = useQueryClient()
   // Asked again every few seconds, so a server that stops answering shows as unreachable without anyone pressing anything.
   const instances = useQuery({ queryKey: instancesKey, queryFn: consoleApi.instances.list, enabled: isAdmin, refetchInterval: 10_000 })
+  // the feed's newest release per server (plan 24a UC08), asked less often than the servers; a feed that cannot be read says nothing here (the Upgrades screen says why)
+  const available = useQuery({ queryKey: availableKey, queryFn: () => upgradeApi.available(false), enabled: isAdmin, refetchInterval: 60_000, retry: false })
   const [url, setUrl] = useState('')
   const [code, setCode] = useState('')
   const [name, setName] = useState('')
@@ -72,7 +75,7 @@ export function InstancesPage() {
         <PendingServers />
 
         <div className="page-note" style={{ marginBottom: 10 }}>
-          <Link to="/state/console" data-testid="console-state-link">This console&apos;s own state</Link> (read-only here: its move is the command line).
+          <Link to="/state/console" data-testid="console-state-link">This console&apos;s own state</Link> (read-only here: its move is the command line). <Link to="/upgrades" data-testid="upgrades-link">Upgrades</Link>: what is available and upgrading a server.
         </div>
 
         <div className="card flush" data-testid="instances-table">
@@ -87,7 +90,15 @@ export function InstancesPage() {
               <div key={instance.id} className="grid-row" style={{ gridTemplateColumns: COLUMNS, gap: 14 }} data-testid={`instance-row-${instance.name}`}>
                 <span>{instance.name}</span>
                 <span className="mono">{instance.product ?? '—'} {instance.version ?? ''}{instance.generation ? <span className="hint" data-testid="instance-generation"> generation {instance.generation}</span> : null}</span>
-                <span data-testid="instance-status" data-tone={status.tone}>{status.text}</span>
+                <span>
+                  <span data-testid="instance-status" data-tone={status.tone}>{status.text}</span>
+                  {(() => {
+                    const row = available.data?.servers.find((s) => s.id === instance.id)
+                    return row?.newerAvailable
+                      ? <div className="hint" data-testid="instance-newer" data-outside={row.outsideAfterRelease ? 'true' : 'false'}>Newer available: {row.newest}{row.outsideAfterRelease ? ' (outside N-1 after this release)' : ''}</div>
+                      : null
+                  })()}
+                </span>
                 <span className="mono">{instance.url}</span>
                 <span className="row" style={{ gap: 8 }}>
                   {instance.reachable && (instance.product === 'dbdatasync' || instance.product === 'dbdatabuild' || instance.product === 'dbdatagateway' || instance.product === 'dbdatarunner' || instance.product === 'dbdatakit-identity') && (

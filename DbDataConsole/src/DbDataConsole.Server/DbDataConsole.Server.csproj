@@ -24,6 +24,7 @@
     <DbDataKitReference Include="State.Cli" />   <!-- state show, test and grants; plan 29b, C01 -->
     <DbDataKitReference Include="State.Engines" />   <!-- SQLite, SQL Server or PostgreSQL for them, as the operator names; plan 13a, P11 -->
     <DbDataKitReference Include="Web" />
+    <DbDataKitReference Include="Upgrade" />   <!-- the release feed the console shows what is available from; plan 24a UC08 -->
     <DbDataKitReference Include="Runner.Abstractions" />   <!-- package/1 manifests: the console's system package; plan 28a R20 -->
     <DbDataKitReference Include="Runner" />   <!-- the engine the console hosts a copy of as its embedded runner; plan 28 section 6a -->
     <DbDataKitReference Include="Runner.Api" />   <!-- the runner's management API, served for the people signed in to the console -->

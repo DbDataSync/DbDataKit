@@ -9,6 +9,7 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 | Service | Object | Create | Edit | Delete | Other actions | Screens |
 | --- | --- | --- | --- | --- | --- | --- |
 | **Console** | Servers | Pair by announcement, or by address and code | – | Remove | Confirm or reject a waiting server | `InstancesPage.tsx`, `PendingServers.tsx`, `ServerModule.tsx` |
+| | Upgrades (`/upgrades`; plan 24a UC08): the versions the release feed offers per product, each paired server's current and newest version with the mark for a release outside N and N-1, "Newer available" on the Servers page | – | – | – | Ask the feed again; the release notes link | `UpgradesPage.tsx` |
 | | Users and invitations | Invite | Set roles and email | Yes | Redeem an invitation | `UsersPage.tsx`, `InvitePage.tsx` |
 | | Connections (Sync and Gateway, one list) | – | – | – | Copy between servers | `ConnectionsPage.tsx` |
 | | State databases (connections of kind `state`) | Yes | Yes | Yes | Test | `StateConnections.tsx` |

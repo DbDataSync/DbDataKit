@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>DbDataKit.Upgrade</PackageId>
+    <Description>Upgrades from the console (plan 24a UC08 and UC09): the release feed reader, and the endpoints every server's management API has to prepare an upgrade of itself, apply it (drain, swap with rollback, health) and report how it went. Reuses the pieces of DbDataKit.Update (signed release/1 manifest, downloader, swap with rollback) as code; the updater is not a product.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <Using Include="Microsoft.AspNetCore.Http" />
+    <ProjectReference Include="..\DbDataKit.Web\DbDataKit.Web.csproj" />
+    <ProjectReference Include="..\DbDataKit.Hosting.Abstractions\DbDataKit.Hosting.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Update\DbDataKit.Update.csproj" />
+    <ProjectReference Include="..\DbDataKit.Update.Service\DbDataKit.Update.Service.csproj" />
+    <ProjectReference Include="..\DbDataKit.Update.Detect\DbDataKit.Update.Detect.csproj" />
+  </ItemGroup>
+</Project>
