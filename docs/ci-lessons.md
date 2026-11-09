@@ -122,6 +122,14 @@ The CI runners are small (two cores, Windows and Linux), run many jobs at once, 
 | a file name with `#`, `?` or `%` is cut short or not found through the console's relay | the relay holds the decoded path and forwarded it as it was | the relay of a Workspace server escapes each part again (`ServerProducts.EscapedPath`); `ConsoleWorkspaceTests.A_file_name_with_characters_of_a_web_address_reaches_the_server_as_it_is` |
 | a test of a path with `./` or `../` in a URL passes for the wrong reason | `HttpClient` collapses dot segments before it sends | send the path in a JSON body (a move's `to`) or test the rule on `WorkspaceFiles.Normalize` directly |
 
+### App builds (Bun, the vendored package store)
+
+| Signature | Cause | Fix |
+| --- | --- | --- |
+| `the app store is required but could not be made: ... has no node_modules (run npm ci there)` in `AppsBuildTests` (Gateway Linux job) | the tests build the app template from the store `DbDataKit/web/app-store/build.mjs` makes from the web workspace's installed packages | the job runs `npm ci --ignore-scripts` in `DbDataKit/web` and sets `DBDATA_REQUIRE_APP_STORE=true` (`dbdatagateway-ci.yml`); locally the same, or point `DBDATA_APP_STORE` at a built store |
+| `npm ci` fails with "package.json and package-lock.json are not in sync" after a workspace was added | `DbDataKit/web/package.json` lists a new workspace and the lock file does not | `npm install --package-lock-only --ignore-scripts` in `DbDataKit/web` and commit the lock file |
+| a built app's page shows nothing; the browser console says a module script was blocked | the app's `index.html` loads `main.js` with `type="module"`; a sandboxed document has an opaque origin and a module script is fetched with CORS, which the host does not answer | a plain `<script src="main.js">`: the bundle of one entry carries no `import` or `export` (`AppsBuildTests` checks) |
+
 ### Console image / publish
 
 | Signature | Cause | Fix |

@@ -1,0 +1,14 @@
+{
+  "name": "app",
+  "private": true,
+  "type": "module",
+  "description": "The packages this app imports. `apps build` installs nothing: they come from the vendored store, and a package that is not in the default library set or the administrator's allow-list (apps.allowed_packages) is refused by name.",
+  "dependencies": {
+    "@dbdatakit/semantic-client": "*",
+    "@dbdatakit/store-ui": "*",
+    "@dbdatakit/view-app": "*",
+    "@dbdatakit/visuals": "*",
+    "react": "*",
+    "react-dom": "*"
+  }
+}

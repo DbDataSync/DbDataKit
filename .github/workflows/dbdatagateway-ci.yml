@@ -83,6 +83,19 @@ jobs:
           sudo dpkg -i packages-microsoft-prod.deb
           sudo apt-get update
           sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev
+      # The app template builds with the pinned Bun from the vendored package store (plan 22a GP32, GP33): the store is made from the web workspace's packages, so Node and
+      # `npm ci` are needed, and the tests that build apps fail rather than skip without them.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Fetch the pinned Bun and install the web workspace's packages
+        working-directory: .
+        run: |
+          scripts/fetch-bun.sh
+          echo "$GITHUB_WORKSPACE/.bun/linux-x64" >> "$GITHUB_PATH"
+          (cd DbDataKit/web && npm ci --ignore-scripts)
+          echo "DBDATA_REQUIRE_BUN=true" >> "$GITHUB_ENV"
+          echo "DBDATA_REQUIRE_APP_STORE=true" >> "$GITHUB_ENV"
       - run: dotnet build DbDataGateway.slnf -c Release
       - run: dotnet test --project tests/DbDataGateway.Tests -c Release --no-build --minimum-expected-tests 100
       - name: Stop the shared engines

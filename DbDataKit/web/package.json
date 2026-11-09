@@ -10,6 +10,7 @@
     "visuals",
     "views-editor",
     "store-ui",
+    "semantic-client",
     "view-app",
     "store",
     "runner",

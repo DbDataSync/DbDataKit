@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { appStoreClient, loadAll } from './data'
+import { appSemanticClient, appStoreClient, loadAll } from './data'
 import { rows } from './fixtures'
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -35,5 +35,16 @@ describe('reading through the app', () => {
     expect(capped.rows).toHaveLength(1000)
     expect(capped.truncated).toBe(true)
     expect((await loadAll(client, 'm', 'e', 1203)).truncated).toBe(false)
+  })
+
+  it('reaches the semantic client on the same route and token', async () => {
+    const seen: { url: string; auth: string | null }[] = []
+    const fake = (async (url: string, init?: RequestInit) => {
+      seen.push({ url, auth: new Headers(init?.headers).get('Authorization') })
+      return json({ status: 'ok', columns: [{ name: 'n', type: 'integer' }], rows: [[1]] })
+    }) as unknown as typeof fetch
+    const result = await appSemanticClient({ instance: 'tv', token: async () => 'tok' }, fake).query('sales', { measures: ['orders.n'], limit: 1 })
+    expect(result.rows).toEqual([{ n: 1 }])
+    expect(seen).toEqual([{ url: '/apps/tv/_data/api/v1/semantic/models/sales/query', auth: 'Bearer tok' }])
   })
 })
