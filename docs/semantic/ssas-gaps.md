@@ -1,6 +1,6 @@
 # What the SSAS (DAX) path lacks, and what was fixed
 
-Reviewed 2026-10-27 (plan 19 J22) by reading `DaxEmitter`, `SsasExecutor` and the catalog loader against the SQL emitter, and by sending probes to a real Analysis Services (`SsasProbe`, workflow `ssas_probe`; results below are measured, not read). [ssas.md](ssas.md) has the earlier findings (runs 1 to 12).
+Reviewed 2026-10-27 (J22) by reading `DaxEmitter`, `SsasExecutor` and the catalog loader against the SQL emitter, and by sending probes to a real Analysis Services (`SsasProbe`, workflow `ssas_probe`; results below are measured, not read). [ssas.md](ssas.md) has the earlier findings (runs 1 to 12).
 
 ## Fixed in J22
 

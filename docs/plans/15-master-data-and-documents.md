@@ -1,6 +1,6 @@
 # Plan 15: DbDataStore, what is left
 
-Status: **in progress**. What is built (the `model/1` format, rules, history, storage on SQL Server and PostgreSQL, the write path, change requests, publishing to the serving layer) is described in [DbDataStore/README.md](../../DbDataStore/README.md). This plan holds only unbuilt work and open questions. The slice list is plan 19's Z rows ([19-next-wave.md](19-next-wave.md)) and plan 20's `store` and `webdav` modules ([20-serving-layer.md](20-serving-layer.md)).
+Status: **in progress**. What is built (the `model/1` format, rules, history, storage on SQL Server and PostgreSQL, the write path, change requests, publishing to the serving layer) is described in [DbDataStore/README.md](../../DbDataStore/README.md). This plan holds only unbuilt work and open questions. The slices of the built lane (Z01 to Z14 but Z07's agent tools: the Store on SQL Server and PostgreSQL, instances, per-instance migration) are done and were plan 19's; what is left is below, with plan 20's `store` and `webdav` modules ([20-serving-layer.md](20-serving-layer.md)) and, for a draft layer and sandboxed writes, [plan 21](21-channels-and-previews.md) CH01. The agent tools row is the remainder of Z07 (server side built: an agent's write is a change request unless the model says `approval: {agents: direct}`; requests are approved or rejected over `POST .../requests/{id}/approve` and `/reject`, with the audit actor the approver).
 
 ## Not built, from the original goals
 

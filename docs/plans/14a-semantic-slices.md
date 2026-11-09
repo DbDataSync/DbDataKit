@@ -1,8 +1,8 @@
 # Plan 14a: the semantic layer, what is built and what is left, in slices
 
-Status: **proposed** (2026-11-09). [Plan 14](14-semantic-layer.md) says what is left of the semantic layer; this plan audits it against the code (section 1, every item with the file or test that shows it), slices what no slice owned (sections 6 and 7) and keeps the owner's deferral of 2026-11-09 visible: **MDX and XMLA for Excel PivotTables and every extra protocol (Postgres wire, Quack) are low priority, written here as slices that are not scheduled, and nothing else depends on them** (section 7). The slices that already exist stay where they are (plan 19's J rows, plan 20, plan 22a, 23a, 24a); section 2 maps each so nothing is sliced twice. The shape follows [28a](28a-runner-slices.md) and [23a](23a-first-run-and-quality-slices.md): one slice, one commit on the batch branch, `SLnn: ...`, its status in its row in the same commit; "done" is the test in the last column but one.
+Status: **proposed** (2026-11-09). [Plan 14](14-semantic-layer.md) says what is left of the semantic layer; this plan audits it against the code (section 1, every item with the file or test that shows it), slices what no slice owned (sections 6 and 7) and keeps the owner's deferral of 2026-11-09 visible: **MDX and XMLA for Excel PivotTables and every extra protocol (Postgres wire, Quack) are low priority, written here as slices that are not scheduled, and nothing else depends on them** (section 7). The slices that already exist stay where they are (the J rows, once plan 19's, now only in section 2; plan 20, plan 22a, 23a, 24a); section 2 maps each so nothing is sliced twice. The shape follows [28a](28a-runner-slices.md) and [23a](23a-first-run-and-quality-slices.md): one slice, one commit on the batch branch, `SLnn: ...`, its status in its row in the same commit; "done" is the test in the last column but one.
 
-Read on `origin/main` at `77692cdb` (2026-11-09) from the code, the tests and the plans' own status lines, not from plan prose alone. The product is the **Gateway** (it was the Proxy until batch 17); plans 14 and 19 still say Proxy in places.
+Read on `origin/main` at `77692cdb` (2026-11-09) from the code, the tests and the plans' own status lines, not from plan prose alone. The product is the **Gateway** (it was the Proxy until batch 17); plan 14 still says Proxy in places.
 
 ## 1. What is built, from the code
 
@@ -31,7 +31,7 @@ Plan 14's own table first (the rows "Left to build"), then what it does not list
 | **R2** SSAS as a supported source | built | `DbDataKit.Semantic.Ssas`, `SsasExecutorGuardTests`, `SsasModelTests`, the `semantic-ssas` CI job (`docs/semantic/ssas-ci.md`) | eight gaps listed in `docs/semantic/ssas-gaps.md`: SL28, SL29, D28 |
 | **R2** the combine under limits (J11) | built | `Sandbox.Limits`, `SandboxLimitTests` (rows and time; memory is DuckDB's own and untested), `semantic: combine:` | the child process is conditional (decided 2026-10-29): SL27 |
 | **R2** semantic state in the Gateway's store (ad hoc registrations, run records, clarify sessions) | not started (versions of a published model are in the state as published definitions; a person's saved queries are in it, above) | The Gateway keeps no run record and no registration; the architecture decision "ad hoc data and extraction are not in the first release" (`docs/semantic/architecture.md`) | SL23, SL25 (D21, D22, D23) |
-| **R2a leftovers**: a command-line form to publish a model; rollback from Build; a model on other engines | not started; on PostgreSQL built | `publish-model` is a management route and a Publish-tab button (`ModelPublish.tsx`), no command; Build does not call `.../rollback`. A model on PostgreSQL publishes: the Playwright story creates its data in PostgreSQL and `EmitDialects.Postgres` exists (J05). MySQL, Oracle: no emitter, and the Gateway has no source for them | J12b (plan 19, low priority, unchanged); other engines: D29 |
+| **R2a leftovers**: a command-line form to publish a model; rollback from Build; a model on other engines | not started; on PostgreSQL built | `publish-model` is a management route and a Publish-tab button (`ModelPublish.tsx`), no command; Build does not call `.../rollback`. A model on PostgreSQL publishes: the Playwright story creates its data in PostgreSQL and `EmitDialects.Postgres` exists (J05). MySQL, Oracle: no emitter, and the Gateway has no source for them | SL30 (was J12b, low priority); other engines: D29 |
 | **R5** the products read the engine registry; README support tables generated | partly | `DbDataKit.Connections.Descriptor` (nine `engines/*.engine.yaml`), `EngineRegistryTests`, `EngineSupportTableTests` generate `docs/engine-support.md`. No product references the registry: `DbDataKit/src` is its only user (`git grep EngineRegistry`), Sync keeps its own `DriverType` and its README table by hand. **Three statuses are older than the code:** `postgres` `gateway_source: no` (the Gateway has `engine: postgres`, `PostgresProvider`, README table), `semantic_emitter: planned` (J05 built it), `master_data_store: planned` (plan 15: SQL Server and PostgreSQL are built) | SL01 to SL05 |
 | **R6** semantic SQL (spec, translator, renderer, round trip) | built | `DbDataKit.Semantic/Sql`, `SemanticSqlTests` (305 fixtures), owner approval 2026-10-27 (`docs/semantic/semantic-sql.md`) | |
 | **R7** MDX and XMLA for Excel PivotTables | not started; the recording forwarder is built | `DbDataKit/tools/DbDataKit.Tools.XmlaForwarder` (12 tests, `ForwarderTests`), `SsasRecordingTests`; **never run against Excel**, and its CI step has not run | **deferred, low priority (owner, 2026-11-09)**: SL40 to SL47 |
@@ -50,21 +50,21 @@ Nothing below is sliced again; this is the map.
 
 | Slice | Where | State | Here |
 | --- | --- | --- | --- |
-| J01 to J05, J07, J09, J10 to J13, J15 (Gateway), J17 to J19, J21 to J24, J29 | plan 19 | built (J10, J11, J13, J15, J26, J27, J06: in part; the parts that are not built are in the rows below) | |
-| J06 remainder: the products read the registry | plan 19 | not done, no slice | SL01 to SL05 |
-| J08 remainder: metadata documents; J29 remainder: show the key origin | plan 19 | not done, no slice | SL10 |
-| J11 remainder: semantic state; the child process | plan 19 | not done | SL23, SL25; SL27 (conditional) |
-| J12b: command-line publish, rollback from Build | plan 19 | not started, low priority (owner, 2026-10-31) | unchanged; its open question stays D24's neighbour |
-| J13 remainder: check mapped columns; prune | plan 19 | not done | SL06, SL07 |
-| J14 console module | plan 19 | "waits on J28" | **split into SL12 to SL16** (J14's row says so) |
-| J15 remainder: Build mount; token | plan 19 | not done | SL21, SL22 |
-| J16, J22 (SSAS) gaps | plan 19, `ssas-gaps.md` | eight gaps listed | SL28, SL29, D28 |
-| J20 forwarder | plan 19 | built, never run | **deferred** with R7 (owner, 2026-11-09) |
-| J25 | plan 19 | built (five slices); leftover: none worth a slice | |
-| J26 leftovers: types in `describe`; naming another saved query; the final term; the Postgres-wire form | plan 19 | first slice built | SL08; the other two are the owner's (J26's "open for the owner"); the wire form is SL54 (deferred) |
-| J27 leftovers: the saving surface, promote, validate on save | plan 19 | store built | SL17 to SL19 |
-| J28 REST endpoint for saved queries and requests | plan 19 | decided 2026-11-02 (own listener, tokens, `limit` only, after the apps host); **the apps host is built (plan 26), so nothing waits for it any more** | unchanged; D18 |
-| J30 unify models and semantic models | plan 19 | proposal written, awaiting the owner (`docs/semantic/unifying-models-and-semantic-models.md`) | unchanged |
+| J01 to J05, J07, J09, J10 to J13, J15 (Gateway), J17 to J19, J21 to J24, J29 | J rows | built (J10, J11, J13, J15, J26, J27, J06: in part; the parts that are not built are in the rows below) | |
+| J06 remainder: the products read the registry | J rows | not done, no slice | SL01 to SL05 |
+| J08 remainder: metadata documents; J29 remainder: show the key origin | J rows | not done, no slice | SL10 |
+| J11 remainder: semantic state; the child process | J rows | not done | SL23, SL25; SL27 (conditional) |
+| J12b: command-line publish, rollback from Build | J rows | not started, low priority (owner, 2026-10-31) | **SL30** (moved here from plan 19, 2026-11-09) |
+| J13 remainder: check mapped columns; prune | J rows | not done | SL06, SL07 |
+| J14 console module | J rows | "waits on J28" | **split into SL12 to SL16** (J14's row says so) |
+| J15 remainder: Build mount; token | J rows | not done | SL21, SL22 |
+| J16, J22 (SSAS) gaps | J rows, `ssas-gaps.md` | eight gaps listed | SL28, SL29, D28 |
+| J20 forwarder | J rows | built, never run | **deferred** with R7 (owner, 2026-11-09) |
+| J25 | J rows | built (five slices); leftover: none worth a slice | |
+| J26 leftovers: types in `describe`; naming another saved query; the final term; the Postgres-wire form | J rows | first slice built | SL08; the other two are the owner's (J26's "open for the owner"); the wire form is SL54 (deferred) |
+| J27 leftovers: the saving surface, promote, validate on save | J rows | store built | SL17 to SL19 |
+| J28 REST endpoint for saved queries and requests | J rows | decided 2026-11-02 (own listener, tokens, `limit` only, after the apps host); **the apps host is built (plan 26), so nothing waits for it any more** | **SL31** (moved here from plan 19, 2026-11-09); D18 |
+| J30 unify models and semantic models | J rows | proposal written, awaiting the owner (`docs/semantic/unifying-models-and-semantic-models.md`) | D34 |
 | G11b `serves` edges | plan 18 | open | unchanged |
 | UC12 cache service, UC15 cache safety suite for the semantic module | plan 24a | open | unchanged |
 | FQ05 checks stored with the semantic package; FQ07 to FQ12 evaluating | plan 23a | FQ01 to FQ06 built | unchanged |
@@ -73,7 +73,7 @@ Nothing below is sliced again; this is the map.
 | O16 XMLA sign-in | plan 20 | open | **deferred** (owner, 2026-11-09); its row says so |
 | AP12 dashboard blocks from the semantic layer in a portal home | plan 26 | open | unchanged |
 | Descriptions on measures and attributes; verified queries | plan 27 | proposed | unchanged |
-| Plan 17 R1 (published semantic views in Build), R2 (feeds = J28), R3 (ODBC), R4 (Postgres wire), R5 (XMLA) | plan 17 | documented scenarios, "decided per route later" | R4 and R5 depend on deferred work; R1 is D31 |
+| Report-server routes R1 (published semantic views in Build), R2 (feeds = J28), R3 (ODBC), R4 (Postgres wire), R5 (XMLA) | `docs/bi-tools-on-semantic-models.md` (was plan 17) | R1 plain case works; R3 parked; R6 dropped | R2 is SL31; R4 and R5 depend on deferred work; R1 is D31 |
 
 ## 3. Decisions that bind these slices
 
@@ -89,10 +89,10 @@ Recorded decisions, treated as settled. Source in the last column.
 | D6 | **Postgres wire: semantic SQL only, not pass-through; every member also has a flat column name** (`customer_region`, separator configurable, `flat_name` to resolve collisions); the compatibility layer for tools' SQL is **separate from the semantic SQL spec**, versioned on its own, with every translated query shown as the canonical semantic SQL it became | plan 14 R8; plan 17 R4 (owner's condition) |
 | D7 | Quack waits for a published DuckDB server specification and a stability promise | plan 14 R8 |
 | D8 | `foreign_keys:` on built models (J29); relationships are read from keys; roles stay in the semantic file; unifying the two formats (J30) is the owner's to decide | plan 13c D12, owner 2026-10-31 |
-| D9 | Semantic SQL spec approved 2026-10-27; parameter spec approved 2026-10-29 (a parameter stands for a value, never a name; the empty list is refused unless `empty: matches_none`) | plan 19 J17, J25 |
-| D10 | A saved query is owned by a model (published with it, run as the caller) or by a person (in the Gateway's state database, scoped to the person, a group or everyone, with history and promote); the saving surface comes with the apps and J28, not before; a saved query is never a procedure | plan 19 J26, J27 (owner, 2026-10-30) |
-| D11 | REST is its own listener on the Gateway, off unless enabled, authenticated with the tokens the identity and apps modules mint; paging is `limit` only; Flight SQL keeps its own endpoints | plan 19 J28 (owner, 2026-11-02) |
-| D12 | `semantic` for agents is written once in a shared library and mounted in the Gateway first; the password is never a flag an agent would put in a tool call | plan 19 J15 (owner, 2026-10-31) |
+| D9 | Semantic SQL spec approved 2026-10-27; parameter spec approved 2026-10-29 (a parameter stands for a value, never a name; the empty list is refused unless `empty: matches_none`) | J17, J25 |
+| D10 | A saved query is owned by a model (published with it, run as the caller) or by a person (in the Gateway's state database, scoped to the person, a group or everyone, with history and promote); the saving surface comes with the apps and J28, not before; a saved query is never a procedure | J26, J27 (owner, 2026-10-30) |
+| D11 | REST is its own listener on the Gateway, off unless enabled, authenticated with the tokens the identity and apps modules mint; paging is `limit` only; Flight SQL keeps its own endpoints | J28 (owner, 2026-11-02) |
+| D12 | `semantic` for agents is written once in a shared library and mounted in the Gateway first; the password is never a flag an agent would put in a tool call | J15 (owner, 2026-10-31) |
 | D13 | Agents write requests, never plans; the planner makes the plan and `explain` shows it. Scopes: `session` and `personal` are per-user state, `shared` needs an owner's approval, `governed` means committed to the Build project | `docs/semantic/open-questions.md`, `architecture.md` |
 | D14 | Format 2 of the semantic package holds `cache` and `checks` only; `access` is deferred with the rule language | plan 24a UC03 (owner, 2026-11-07) |
 | D15 | Versions of a published definition are kept until an administrator prunes them through an API and a screen that show the current state | plan 30 decision 1 (owner, 2026-11-04) |
@@ -111,15 +111,16 @@ Recorded decisions, treated as settled. Source in the last column.
 | D28 (was Q12) | **Datetime on SSAS** (`ssas-gaps.md` item 1; 13c D15 "review later"): three ways, none chosen **Decided:** Leave unsupported until an SSAS user needs it | default taken (owner delegated, 2026-11-09) |
 | D29 (was Q13) | **Semantic emitters and Gateway sources for MySQL, MariaDB and Oracle** **Decided:** None until asked: the registry says `no`, and PostgreSQL is built | default taken (owner delegated, 2026-11-09) |
 | D30 (was Q14) | **Engine-level backlog** in `open-questions.md` (an "Other" bucket for `rank keep`, `base: first` for `index`, fixtures for `first`/`last`) **Decided:** Not sliced; a fixture and a case when a user asks | default taken (owner delegated, 2026-11-09) |
-| D31 (was Q15) | **Plan 17 R1** (a Build project names semantic queries to publish as SQL views for report servers; "mostly there already") **Decided:** Not sliced until a report-server user asks; plan 17 decides per route | default taken (owner delegated, 2026-11-09) |
+| D31 (was Q15) | **Report-server route R1** (`docs/bi-tools-on-semantic-models.md`, was plan 17): a Build project names semantic queries to publish as SQL views for report servers; "mostly there already" **Decided:** Not sliced until a report-server user asks; `docs/bi-tools-on-semantic-models.md` decides per route | default taken (owner delegated, 2026-11-09) |
 | D32 (was Q16) | **The deferred group** (section 7): which BI tool's Postgres introspection is catalogued first (plan 14's own open question); where the Excel VM recording goes **Decided:** When the owner un-defers: `psql` and a Python client first (they need the least of `pg_catalog`), then Power BI Desktop's PostgreSQL connector; the recording lands in `DbDataKit/tests/.../xmla/` as golden fixtures | default taken (owner delegated, 2026-11-09) |
 | D33 (was Q11) | **Decimals in the answer** (SL09): the answer's numbers are `double`; a decimal source column loses digits. **Decided:** a measure over a decimal source column keeps the source's type and scale in the answer (Arrow `decimal128` with the source's scale); integers stay `int64`; other numbers stay `double`; announced as a visible schema change in the release notes. | owner answered, 2026-11-09 |
+| D34 (was Q17) | **Unify models and semantic models** (was J30): `docs/semantic/unifying-models-and-semantic-models.md` weighs three options and recommends the cheap seam now (relationships from `foreign_keys:`, built as J29) and column-level `semantic:` later, not one merged format **Decided:** Keep the two formats; revisit after J29 has run on real projects. Not sliced | default taken (owner delegated, 2026-11-09) |
 
 Choices made while slicing (reversible, not owner decisions): the new slices use the prefix `SL`; every new screen is a page of the console's per-server screens or of the Gateway or Build modules, never an app of its own (the rule of `docs/ui-editors.md`); no new slice reads a protocol's code, so the deferred work stays deletable.
 
 ## 4. Questions for the owner
 
-None open. Every question of this plan is a decision in section 3 (D18 to D33, each with its old number).
+None open. Every question of this plan is a decision in section 3 (D18 to D34, each with its old number).
 
 ## 5. Stored formats and what the slices touch
 
@@ -149,6 +150,7 @@ Size: S under a day, M a few days, L about a week. **Format** says what a slice 
 | **SL-E: agents** | SL21, SL22 | the noun takes a token and is mounted in Build |
 | **SL-F: state and ad hoc** | SL23 to SL27 | run records and recent runs; ad hoc registrations and their review (SL25 and SL26 wait until an app or an agent needs them (D22), SL27 for evidence) |
 | **SL-G: SSAS** | SL28, SL29 | the DAX path caps rows and the executor is asynchronous with a timeout and a read-only role |
+| **SL-H: moved here from plan 19** | SL30, SL31 | a model is published and rolled back from Build's command line (low priority); saved queries and requests are served over REST, which also serves report servers and Power Query |
 | **Deferred** | SL40 to SL55 | not scheduled; no slice above depends on them |
 
 ### SL-A: the registry (R5)
@@ -215,6 +217,15 @@ Size: S under a day, M a few days, L about a week. **Format** says what a slice 
 | SL28 | **A row cap in the DAX text:** `TOPN ( n + 1, ... )` around the query when no `limit` is asked, so the server stops at the cap (gap 4) | J22 (built) | S | none | the `semantic-ssas` job: a query of a thousand-row table with `limit` 10 returns 10 and `truncated`; the DAX golden changes in the same commit |
 | SL29 | **The SSAS executor:** asynchronous (the executor interface), one connection per host source, the command timeout from the data source, and a read-only role named in the `ssas:` connection string and checked at start (gap 5) | J16, SL28 | M | none (`server.yaml` `semantic.ssas` strings; no registry entry) | `SsasExecutorGuardTests` (Linux) and the `semantic-ssas` job: a slow query is cancelled by the timeout, a connection whose role can write is refused at start with the role named |
 
+### SL-H: rows moved here when plan 19 was deleted (2026-11-09)
+
+| Slice | What | Needs | Size | Format | Done when |
+| --- | --- | --- | --- | --- | --- |
+| SL30 | **Publish and roll back a model from Build's command line (was J12b; low priority, owner 2026-10-31):** `dbdatabuild semantic publish <model> --gateway <paired name> [--channel c]` calls the Build server's `publish-model` route (built, J12) and `semantic rollback <model>` calls the Gateway's `POST /api/v1/semantic-models/{name}/rollback`, with the token of Q7 (never a flag); a model on PostgreSQL is a test case, the Gateway having the provider. **Editor:** none, the console's Models screen already publishes and retires (UE12) | SL21, SL22 | S | none (command specs and schemas only; the suite-wide spec test applies) | a Build test against a stand-in Gateway: publish and rollback by command; a call without a token is refused naming the variable; `commands.md` and the specs agree |
+| SL31 | **The REST listener (was J28; route R2 of `docs/bi-tools-on-semantic-models.md`):** a serving module (`feeds`) with its own listener, off unless enabled (`rest:` in `server.yaml`, strict parsing), authenticated by the tokens of the identity and apps modules (console token, personal access token, app token, D11); `GET` or `POST /api/v1/queries/{name}` runs a saved query with parameters and `POST /api/v1/query` a semantic request, answering JSON, CSV or Arrow IPC (`Accept` or `?format=`), as the caller with the access rules and limits of the other protocols, audited; paging is `limit` only; Flight SQL keeps its own endpoints. **Editor:** the `rest` section of SL11's `semantic:` and listener form | J26 (built), plan 26's apps host (built) | M | none (a settings section; additive routes: the compatibility generation check of plan 24a UC05 is in the tests) | the same saved query returns the same rows over Flight SQL and REST in JSON, CSV and Arrow IPC (tests); a token of another audience is refused; with REST off no listener is opened; a report-server fixture (XML, CSV) reads a feed |
+
+Default taken (owner delegated, 2026-11-09): SL31 is scheduled after SL12 to SL16 and not before them (Q1 stands: the explorer does not wait for it); Arrow over HTTP beyond IPC and XML output for SSRS stay out of the first slice; SL30 stays low priority.
+
 ## 7. Deferred: low priority, owner 2026-11-09
 
 **Deferred: low priority, owner 2026-11-09. Not scheduled. No slice outside this section depends on any slice in it, and none of them is on a milestone.** They are written down so the work is sliced when the owner un-defers it, in the order plan 14 gave (the Discover rowsets, then axes and values, then filters, then member search). They need the Excel VM recording (the owner's) before any code that talks to Excel.
@@ -249,17 +260,17 @@ Plan 20 O16 (XMLA sign-in over HTTPS) is the sign-in part and is deferred with t
 
 | Waiting work | Unblocked by |
 | --- | --- |
-| Plan 19 J14 | SL12 to SL16 (J14 is replaced by them) |
-| Plan 19 J27's saving surface; plan 32's "saved" query kind for a person's own queries | SL17, SL18 |
+| J14 | SL12 to SL16 (J14 is replaced by them) |
+| J27's saving surface; plan 32's "saved" query kind for a person's own queries | SL17, SL18 |
 | Plan 30's pruning of published definitions (the screen for models) | SL07 |
 | Plan 27's agents that run semantic queries from Build | SL21, SL22 |
 | The knowledge app's subject page for a model (27a KN27; 22a GP26 was dropped for it) | SL13 shows the same catalog |
 | Plan 24a UC15 (the semantic module in the cache safety suite) | none of these; it waits on UC12 |
-| Plan 17 R4, R5 | the deferred group (SL50 to SL53; SL40 to SL47) |
+| Plan 17's R4, R5 (now `docs/bi-tools-on-semantic-models.md`) | the deferred group (SL50 to SL53; SL40 to SL47) |
 
 ## 9. What can start now
 
-SL01, SL06, SL08, SL09, SL10, SL12, SL17, SL21, SL28 need nothing but built code. SL02 to SL05 follow SL01 and can run in parallel (three products, three owners; the shared descriptor change is SL01's). SL13 follows SL12; SL14 follows SL13 (D18). SL09 needs nothing but built code (D33). SL11 needs the Gateway's settings screen (built). SL25 to SL27 and everything in section 7 wait.
+SL01, SL06, SL08, SL09, SL10, SL12, SL17, SL21, SL28 and SL31 need nothing but built code (SL31 waits only for its turn, see its default). SL02 to SL05 follow SL01 and can run in parallel (three products, three owners; the shared descriptor change is SL01's). SL13 follows SL12; SL14 follows SL13 (D18). SL09 needs nothing but built code (D33). SL11 needs the Gateway's settings screen (built). SL25 to SL27 and everything in section 7 wait.
 
 ## 10. Risks
 

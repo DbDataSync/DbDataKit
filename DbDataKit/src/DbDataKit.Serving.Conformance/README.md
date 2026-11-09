@@ -1,6 +1,6 @@
 # DbDataKit.Serving.Conformance
 
-The conformance suite for the core services of the serving layer (plan 19, N03): what any host promises a protocol module, written once and run against every host.
+The conformance suite for the core services of the serving layer (N03): what any host promises a protocol module, written once and run against every host.
 
 Derive one class per host from `ServingServicesConformanceTests` and build a `ServingTarget` (the services, who can sign in, and a few requests whose answers every host gives the same way). The suite checks:
 

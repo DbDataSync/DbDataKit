@@ -1,6 +1,6 @@
 # DbDataKit.Store
 
-The write path of master data models (plan 19 Z04, plan 15 section 5), on the tables `DbDataKit.DataModel.Storage` creates (SQL Server and PostgreSQL).
+The write path of master data models (Z04, plan 15 section 5), on the tables `DbDataKit.DataModel.Storage` creates (SQL Server and PostgreSQL).
 
 `ModelWriter` applies a batch of `RowChange`s (insert, update, delete) in one transaction:
 

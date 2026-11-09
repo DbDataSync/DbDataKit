@@ -17,7 +17,7 @@ sources -> DbDataSync -> warehouse -> DbDataBuild -> marts + metadata -> semanti
 - **Compile checks it.** `project compile` validates the semantic files against the model graph (`DbDataBuild.Semantic/SemanticProject.cs`): a column renamed in a model breaks the compile at the semantic file's line.
 - **Data checks are Build tests.** `SemanticChecks` generates one SELECT per hierarchy level pair (a member with two parents) and two per relationship (orphan keys; a one side that is not unique), so a broken hierarchy shows when the data changes. A calendar is a Build template, not a hand-kept table.
 - **Measures stay in the semantic files.** Build validates them and does not own them. A source Build does not model (SSAS, a database nobody imported) may still be declared by hand in a semantic file.
-- A built model can declare `foreign_keys:` as a mapped model does; they are checked by a generated test and never created in the database, and the semantic model reads its relationships from them (plan 19 J29, decided by the owner).
+- A built model can declare `foreign_keys:` as a mapped model does; they are checked by a generated test and never created in the database, and the semantic model reads its relationships from them (J29, decided by the owner).
 
 ## Serving: the serving layer hosts, Build deploys (R2, R2a)
 

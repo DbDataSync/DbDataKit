@@ -92,7 +92,7 @@ Plan 14 deferred row-level security ("not needed now"). With one serving layer, 
 2. **Channels:** email (SMTP), Teams and Slack webhooks, and a generic signed webhook. Each channel is configured once per install,
    with its secrets in the secrets store.
 3. **Alerts** come from monitoring (plan 13 W10): failed runs, late data, approvals waiting, expiring previews.
-4. **Subscriptions** deliver a report or a view (plan 16 section 2a) on a schedule, through the shared scheduler (`DbDataKit.Scheduling`).
+4. **Subscriptions** deliver a report or a view (plan 32) on a schedule, through the shared scheduler (`DbDataKit.Scheduling`).
    They are rendered under the subscriber's own identity, so access rules (section 2) apply to what is sent.
 
 ### 6. External monitoring
@@ -254,7 +254,7 @@ Size: S under a day, M a few days, L about a week. **Format** says whether the s
 | Slice | What | Needs | Size | Format | Done when |
 | --- | --- | --- | --- | --- | --- |
 | GP16 | **Alerts:** the fixed set (failed runs, late data, approvals waiting, expiring previews; QG13) from `DbDataKit.Monitoring` and the notification feed, a cool-down per source, recipients per channel, run by a system task (D7) | GP07 to GP09, 28a R10 | M | **state** in the `delivery` module (last sent per source and recipient) | with a fake clock on three engines: a failed run sends once, not every minute; it sends again after the cool-down if still failing; a recovered job sends one "recovered"; an alert with no recipient is shown in the feed only |
-| GP17 | **Subscriptions:** a person subscribes to a report or a view on a schedule; it is rendered **as that person** (rules apply) and delivered to their address; a subscription of a person who loses access stops with a message to them and the owner | GP10 to GP13, GP07, plan 31 or plan 16 section 2a for the report, `chartToSvg` (built) | L | **state** in the `delivery` module (`subscription`, QG8) | on three engines: two subscribers of one view with different rules receive different rows (the outbox shows both bodies); a subscription whose person was removed from the group sends nothing and says why; the schedule is the runner's (two time zones across a daylight change) |
+| GP17 | **Subscriptions:** a person subscribes to a report or a view on a schedule; it is rendered **as that person** (rules apply) and delivered to their address; a subscription of a person who loses access stops with a message to them and the owner | GP10 to GP13, GP07, plan 32 (section 9e for catalogs) for the report, `chartToSvg` (built) | L | **state** in the `delivery` module (`subscription`, QG8) | on three engines: two subscribers of one view with different rules receive different rows (the outbox shows both bodies); a subscription whose person was removed from the group sends nothing and says why; the schedule is the runner's (two time zones across a daylight change) |
 | GP18 | **Console screens** for channels (test send), alerts (on or off, recipients) and subscriptions (mine, everyone's for an administrator) | GP08, GP09, GP16, GP17 | M | none | Playwright: configure a webhook, press test send, see it arrive at a local listener; subscribe to a view; remove the channel and see the subscription report the problem |
 
 ### G-E: backup and recovery (plan 22 section 4)
@@ -300,13 +300,13 @@ and everything in the apps libraries (manifest, bundler, instances, host, portal
 
 | Waiting work | Unblocked by |
 | --- | --- |
-| Plan 20 O13's outage tests with rules; plan 17's report servers (they read through the serving layer under rules) | GP14 |
+| Plan 20 O13's outage tests with rules; the report servers of `docs/bi-tools-on-semantic-models.md` (they read through the serving layer under rules) | GP14 |
 | Plan 23's blocking and warning alerts (FQ13), first-run's delivery item (FQ21) | GP07 to GP09, GP16 |
 | Plan 24's cache key with attributes (UC12) | GP10 |
 | Plan 23's setup checklist item "git remotes" | GP19 |
 | Plan 27 wave 1 (the back-end agent), wave 4 (integrations), wave 3 (knowledge editor needs rules and the glossary) | GP30, GP31 (waves 1 and 4); GP05 (dropped, under review) and GP11 (wave 3) |
 | Plan 26 AP12's declarative home views | GP06, GP34 |
-| Plan 31 report catalogs' subscriptions | GP17 |
+| Plan 32 section 9e report catalogs' subscriptions | GP17 |
 | Plan 18 G12 (DbDataStore and Workspace emitters) | GP03, GP31 |
 
 ## What can start now

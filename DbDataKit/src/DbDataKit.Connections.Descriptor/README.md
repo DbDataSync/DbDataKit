@@ -28,7 +28,7 @@ Rules enforced by `DescriptorLoader`:
 
 Not ported: type maps and catalog queries (the dialect owns types; catalogs are Plan 04), capability lists (Plan 07), JDBC and compiled-plugin `base` kinds.
 
-## The engine registry (plan 14 R5, plan 19 J06)
+## The engine registry (plan 14 R5, J06)
 
 `EngineRegistry.Builtin` is the suite's one list of engines: the `engines/*.engine.yaml` descriptors embedded in this assembly (`ansi`, `sqlserver`, `postgres`, `mysql`, `oracle`, `duckdb`, `fabric`, `odbc`, `flightsql`). A descriptor says, besides how to connect, what the suite knows about the engine: `aliases`, the `dialect` that writes its SQL, the `provider` (`DbDataKit.Connections`) and `catalog_reader` (`DbDataKit.Metadata`) that serve it, and a `roles` map with how far it is supported in each role of `EngineRoles` (Sync source and target, Build target and origin, Gateway source, semantic emitter, master data store): `supported`, `unverified`, `planned` or `no`, with a `note` that says why (required for `planned` and `unverified`).
 

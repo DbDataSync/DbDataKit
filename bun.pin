@@ -1,4 +1,4 @@
-# The Bun every build of an app's source uses (DbDataKit.Apps.Bundling, plan 19 AP01-AP02): a published release of https://github.com/oven-sh/bun.
+# The Bun every build of an app's source uses (DbDataKit.Apps.Bundling, plan 26 AP01-AP02): a published release of https://github.com/oven-sh/bun.
 # Read by scripts/fetch-bun.sh (KEY=value lines, nothing else is evaluated). Each archive is checked against the SHA-256 recorded here, and so is the program inside it.
 # The archive hashes were taken from the release's own SHASUMS256.txt and matched against the downloaded files. To move to a new release: set VERSION and BASE, then for
 # each platform the archive's SHA-256 and the program's, and run scripts/fetch-bun.sh all.

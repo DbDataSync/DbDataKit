@@ -39,7 +39,7 @@ A console calls servers and a server never calls a console. The serving layer is
 | `views` | published dashboards and reports over REST, rendered as the caller, audited, with drain and health (plan 32 DBR11); and a person's own dashboards and reports (`/api/v1/my/...`, state module `user_views`, DBR12) | built as a library with its own listener: `DbDataKit.Views.Hosting` (`ViewsModule`); **not yet a name in `modules:`**, the Gateway host does not load it (it needs a listener setting and an `IViewsCallers` over the identity home's tokens), see `docs/views.md` |
 | `pgwire` | Postgres wire for semantic SQL | not built; deferred, low priority (owner, 2026-11-09; plan 14a) |
 | `xmla` | XMLA and MDX for Excel PivotTables | not built (only the recording forwarder, `DbDataKit.Tools.XmlaForwarder`); deferred, low priority (owner, 2026-11-09; plan 14a) |
-| `feeds` | result feeds for report servers and tools | not built |
+| `feeds` | saved queries and semantic requests over REST (JSON, CSV, Arrow IPC), for report servers (`docs/bi-tools-on-semantic-models.md`), Power Query and scripts | not built; plan 14a SL31 (its own listener, off unless enabled) |
 | `webdav` | DbDataStore documents, with extraction on save | not built |
 | `mcp` | the agents' MCP endpoint, acting as the signed-in user with approvals | not built as a module (the Gateway's `ui mcp` offers the `semantic` noun to agents) |
 | `knowledge` | search, show and about over knowledge items, access-filtered; checks and embeds a knowledge project at staging and switches at activation (plan 27 sections 2.2, 2.6) | not built (plan 27a lane KN); no knowledge library, index or embedding connection exists, only the engine check for vector columns, see [knowledge.md](knowledge.md) |
