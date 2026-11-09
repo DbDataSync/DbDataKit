@@ -27,11 +27,21 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\DbDataSync.Cli\DbDataSync.Cli.csproj" />
+    <!-- a real dbdatarunner server, in process, that a replication set is published to (plan 28c, E08: PackagePublishOnRealRunnerTests) -->
+    <ProjectReference Include="..\..\..\DbDataRunner\src\DbDataRunner.Server\DbDataRunner.Server.csproj" />
     <Using Include="DbDataKit.State" />
     <Using Include="DbDataKit.Web.Auth" />
     <Using Include="DbDataKit.Monitoring" />   <!-- plan 13, U04 -->
     <Using Include="DbDataSync.State.StateDatabase" Alias="StateDatabase" />
   </ItemGroup>
+
+  <!-- the server's own build output, where the build put the task host beside the program (as DbDataRunner.Tests and Build's conformance tests do) -->
+  <Target Name="WriteServerOutput" AfterTargets="Build">
+    <MSBuild Projects="..\..\..\DbDataRunner\src\DbDataRunner.Server\DbDataRunner.Server.csproj" Targets="GetTargetPath">
+      <Output TaskParameter="TargetOutputs" PropertyName="_ServerDll" />
+    </MSBuild>
+    <WriteLinesToFile File="$(OutDir)server-output.txt" Lines="$([System.IO.Path]::GetDirectoryName('$(_ServerDll)'))" Overwrite="true" />
+  </Target>
 
   <ItemGroup>
     <!-- One scratch-database teardown for every test project that makes one; see its doc comment. -->
