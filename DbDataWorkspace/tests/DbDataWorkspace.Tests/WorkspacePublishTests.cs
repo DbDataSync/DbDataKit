@@ -34,6 +34,8 @@ public sealed class WorkspacePublishTests
     private static Task<(HttpResponseMessage Response, JsonNode? Body)> Approver(WorkspaceHarness server, string path, string json) =>
         server.Send("grace", ServerRole.Approver, HttpMethod.Post, path, json);
 
+    private static Task<(HttpResponseMessage Response, JsonNode? Body)> Approver2(WorkspaceHarness server, string path) => server.Send("grace", ServerRole.Approver, HttpMethod.Get, path);
+
     [Fact]
     public async Task A_key_is_paired_with_a_gateway_kept_in_the_secret_store_and_listed_only_as_a_reference()
     {
@@ -56,6 +58,11 @@ public sealed class WorkspacePublishTests
         Assert.DoesNotContain("seed", listed.Body.ToJsonString(), StringComparison.OrdinalIgnoreCase);
         Assert.Equal(reference, server.Store().PublisherKeys().Single().SecretRef);
         Assert.Contains(server.Audit(), a => a.Command == "publisher-key.pair" && a.Target!.StartsWith("edge", StringComparison.Ordinal) && a.Outcome == "ok");
+        // whoever publishes sees the targets (name and Gateway, never a reference); an author does not
+        var targets = await Approver2(server, "/api/v1/publish-targets");
+        Assert.Equal(("edge", true), ((string)targets.Body!["targets"]![0]!["name"]!, (bool)targets.Body["targets"]![0]!["can_publish"]!));
+        Assert.DoesNotContain("secret:", targets.Body.ToJsonString());
+        Assert.Equal(HttpStatusCode.Forbidden, (await server.AsAda(HttpMethod.Get, "/api/v1/publish-targets")).Response.StatusCode);
         // an administrator's: an author is refused, and a code that was used is refused in the Gateway's words
         Assert.Equal(HttpStatusCode.Forbidden, (await server.AsAda(HttpMethod.Get, "/api/v1/publisher-keys")).Response.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await server.AsAda(HttpMethod.Post, "/api/v1/publisher-keys/edge/pair", "{}")).Response.StatusCode);

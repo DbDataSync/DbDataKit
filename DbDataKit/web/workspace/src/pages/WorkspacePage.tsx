@@ -5,6 +5,7 @@ import { ApiError, CodeEditor, DiffViewer, ErrorBanner, Link, useIsAdmin, useNav
 import { workspaceApi, type Change } from '../api'
 import { commitState, conflictsOf, describeEvent, fileTree, languageOf, mergeState, pathProblem, saveState, statusWord, type TreeNode } from '../model'
 import { WorkspaceShell } from '../WorkspaceShell'
+import { BuildsPanel } from './BuildsPanel'
 
 const when = (iso: string) => (iso ? new Date(iso).toLocaleString() : '')
 
@@ -169,7 +170,7 @@ export function WorkspacePage() {
   const client = useQueryClient()
   const canWrite = useIsAdmin()
   const [selected, setSelected] = useState<string | null>(null)
-  const [tab, setTab] = useState<'changes' | 'history'>('changes')
+  const [tab, setTab] = useState<'changes' | 'history' | 'builds'>('changes')
   const [newPath, setNewPath] = useState('')
   const [asking, setAsking] = useState(false)
   const [merged, setMerged] = useState<{ sha: string | null } | null>(null)
@@ -247,11 +248,14 @@ export function WorkspacePage() {
                   : <FileEditor key={selected} project={project} id={id} path={selected} editable={editable} canWrite={canWrite} onGone={() => setSelected(null)} onRenamed={setSelected} />}
                 <div className="row" style={{ gap: 8, margin: '18px 0 8px' }} role="tablist">
                   <button type="button" role="tab" aria-selected={tab === 'changes'} className={`btn ${tab === 'changes' ? 'btn-primary' : ''}`} data-testid="wsp-tab-changes" onClick={() => setTab('changes')}>Changes</button>
+                  <button type="button" role="tab" aria-selected={tab === 'builds'} className={`btn ${tab === 'builds' ? 'btn-primary' : ''}`} data-testid="wsp-tab-builds" onClick={() => setTab('builds')}>Builds</button>
                   <button type="button" role="tab" aria-selected={tab === 'history'} className={`btn ${tab === 'history' ? 'btn-primary' : ''}`} data-testid="wsp-tab-history" onClick={() => setTab('history')}>History</button>
                 </div>
                 {tab === 'changes'
                   ? <ChangesPanel project={project} id={id} editable={editable} canWrite={canWrite} onMerged={(sha) => { setMerged({ sha }); void client.invalidateQueries({ queryKey: ['workspace', 'list', project] }) }} />
-                  : <HistoryPanel project={project} id={id} />}
+                  : tab === 'builds'
+                    ? <BuildsPanel project={project} id={id} canWrite={canWrite} />
+                    : <HistoryPanel project={project} id={id} />}
               </div>
             </div>
           </>

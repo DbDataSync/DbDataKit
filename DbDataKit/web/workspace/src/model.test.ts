@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { abandonState, commitState, conflictsOf, createState, describeEvent, fileTree, isName, languageOf, mergeState, nameProblem, pathProblem, saveState, statusWord } from './model'
+import { abandonState, buildBusy, buildButton, buildWord, commitState, diagnosticLine, notIsolated, pairProblem, publishButton, referenceProblem, conflictsOf, createState, describeEvent, fileTree, isName, languageOf, mergeState, nameProblem, pathProblem, saveState, statusWord } from './model'
 
 describe('names', () => {
   it('accepts what the server accepts and nothing else', () => {
@@ -95,5 +95,51 @@ describe('the buttons of a workspace', () => {
     expect(conflictsOf(null)).toEqual([])
     expect(conflictsOf({ conflicts: 'no' })).toEqual([])
     expect([statusWord('added'), statusWord('modified'), statusWord('deleted'), statusWord('Renamed'), statusWord('copied')]).toEqual(['added', 'changed', 'deleted', 'renamed', 'copied'])
+  })
+})
+
+describe('builds, preview and publish', () => {
+  const ready = { canWrite: true, ready: true, problems: [], busy: false }
+  it('a build needs the role, a server that can build and no build going', () => {
+    expect(buildButton(ready)).toEqual({ enabled: true, why: null })
+    expect(buildButton({ ...ready, canWrite: false }).why).toContain('author')
+    // a server that cannot build says the first thing it lacks, in its own sentence
+    expect(buildButton({ ...ready, ready: false, problems: ['No package store is set.', 'Bun is not installed.'] })).toEqual({ enabled: false, why: 'No package store is set.' })
+    expect(buildButton({ ...ready, busy: true }).why).toContain('already going')
+  })
+  it('knows a build that is still going, and says its status as a person does', () => {
+    expect(['queued', 'running', 'succeeded', 'failed'].map(buildBusy)).toEqual([true, true, false, false])
+    expect([buildWord('succeeded'), buildWord('queued'), buildWord('weird')]).toEqual(['built', 'waiting', 'weird'])
+  })
+  it('shows a diagnostic with its file and line when it has them', () => {
+    expect(diagnosticLine({ file: 'src/main.tsx', line: 3, message: "imports 'lodash'" })).toBe("src/main.tsx:3: imports 'lodash'")
+    expect(diagnosticLine({ message: 'The store does not match.' })).toBe('The store does not match.')
+  })
+  it('notices the note of a build that was not isolated', () => {
+    expect(notIsolated(['The bundler ran without network isolation: this Linux machine could not make a network namespace.'])).toBe(true)
+    expect(notIsolated(['The bundler ran in a network namespace with no route.'])).toBe(false)
+  })
+  it('publishing needs the role, a succeeded build and a key that can publish', () => {
+    const targets = [{ name: 'edge', can_publish: true }, { name: 'viewing', can_publish: false }]
+    const ok = { canWrite: true, status: 'succeeded', target: 'edge', targets, busy: false }
+    expect(publishButton(ok)).toEqual({ enabled: true, why: null })
+    expect(publishButton({ ...ok, canWrite: false }).why).toContain('approver')
+    expect(publishButton({ ...ok, status: 'failed' }).why).toContain('succeeded')
+    expect(publishButton({ ...ok, target: '', targets: [] }).why).toContain('Publisher keys')
+    expect(publishButton({ ...ok, target: '' })).toEqual({ enabled: false, why: null })
+    expect(publishButton({ ...ok, target: 'viewing' }).why).toContain('not paired with a Gateway that lets it publish')
+    expect(publishButton({ ...ok, busy: true }).enabled).toBe(false)
+  })
+  it('refuses a key typed where a reference goes', () => {
+    expect(referenceProblem('')).toBeNull()
+    expect(referenceProblem('secret:dbdata:workspace:publisher-key:edge')).toBeNull()
+    expect(referenceProblem('workspace-1a2b3c:c2VlZA')).toContain('"secret:"')
+    expect(referenceProblem('secret:a b')).toContain('no spaces')
+  })
+  it('checks the pair form as it is typed', () => {
+    expect(pairProblem({ name: '', url: '' })).toBeNull()
+    expect(pairProblem({ name: 'Edge', url: '' })).toContain('lower-case')
+    expect(pairProblem({ name: 'edge', url: 'http://gateway' })).toContain('https://')
+    expect(pairProblem({ name: 'edge', url: 'https://gateway:8443' })).toBeNull()
   })
 })

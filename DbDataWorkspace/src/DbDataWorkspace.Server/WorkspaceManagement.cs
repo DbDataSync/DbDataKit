@@ -16,7 +16,8 @@ namespace DbDataWorkspace.Server;
 /// <item><c>GET /api/v1/info</c>: who the server is (any role).</item>
 /// <item><c>GET /api/v1/projects</c> (viewer) and <c>POST /api/v1/projects</c> (admin, <c>{"id", "title"?, "kind"?}</c>): the projects hosted, and a new one.</item>
 /// <item>the workspace calls of <see cref="DbDataKit.Authoring.WorkspaceApi"/> (list, create, abandon, the files of a draft: list, read, write, move, delete; changes, history, commit, push, merge), the same as every kind of project has, and <c>GET /api/v1/projects/{project}/workspaces/{id}/events</c> (viewer): what happened to a draft, from the state module.</item>
-/// <item><c>GET /api/v1/publisher-keys</c>, <c>PUT|DELETE /api/v1/publisher-keys/{name}</c> (admin, <c>{"secret_ref"}</c>): the reference to the secret that holds the publisher's key for a target. A key itself is refused.</item>
+/// <item><c>GET /api/v1/app-build</c> (viewer): whether this server can build an app, and what it lacks. <c>POST .../workspaces/{id}/builds</c> (author) asks for a build of a draft; <c>GET .../builds</c>, <c>.../builds/{build}</c> and <c>.../builds/{build}/preview[/{path}]</c> (viewer) read them and show the built app, read only; <c>POST .../builds/{build}/publish</c> (approver, <c>{"target","note"?}</c>) sends a succeeded build to a paired Gateway (<see cref="WorkspaceBuilds"/>, <see cref="WorkspacePreview"/>, <see cref="WorkspacePublishing"/>).</item>
+/// <item><c>GET /api/v1/publisher-keys</c>, <c>PUT|DELETE /api/v1/publisher-keys/{name}</c> (admin, <c>{"secret_ref"}</c>): the reference to the secret that holds the publisher's key for a target. A key itself is refused. <c>POST /api/v1/publisher-keys/{name}/pair</c> (admin, <c>{"url","code"}</c>) makes the key and pairs it with a Gateway. <c>GET /api/v1/publish-targets</c> (approver): the targets a publish may name, with no reference.</item>
 /// </list>
 /// What happens to a draft is recorded in the state module as it happens; a record that cannot be written is logged and never turns a finished git operation into an error.
 /// </summary>
@@ -235,6 +236,23 @@ public static class WorkspaceManagement
         {
             if (ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Admin) is { Allowed: false } refused) return Refused(refused);
             return Results.Json(new JsonObject { ["keys"] = new JsonArray([.. store.PublisherKeys().Select(k => (JsonNode?)DescribeKey(k))]) });
+        });
+
+        // the targets a publish may name (their names and Gateways; no reference): for whoever publishes, who need not be an administrator
+        app.MapGet("/api/v1/publish-targets", (HttpContext context) =>
+        {
+            var token = context.ManagementToken();
+            var decision = ManagementAuthorization.Authorize(token, ServerRole.Approver);
+            if (!decision.Allowed && !token.Projects.Keys.Any(p => ManagementAuthorization.Authorize(token, ServerRole.Approver, p).Allowed)) return Refused(decision);
+            return Results.Json(new JsonObject
+            {
+                ["targets"] = new JsonArray([.. store.PublisherKeys().Select(k => (JsonNode?)new JsonObject
+                {
+                    ["name"] = k.Name,
+                    ["gateway"] = publishing.Find(k.Name)?.Url,
+                    ["can_publish"] = publishing.Find(k.Name) is { } t && ServerRoles.TryParse(t.Roles, out var held) && (ServerRoles.Allows(held, ServerRole.Publisher) || ServerRoles.Allows(held, ServerRole.Admin)),
+                })]),
+            });
         });
 
         app.MapPut("/api/v1/publisher-keys/{name}", async (string name, HttpContext context) =>

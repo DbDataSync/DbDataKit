@@ -118,3 +118,52 @@ export function statusWord(status: string): string {
   const map: Record<string, string> = { A: 'added', M: 'changed', D: 'deleted', R: 'renamed', added: 'added', modified: 'changed', deleted: 'deleted', renamed: 'renamed' }
   return map[status] ?? status.toLowerCase()
 }
+
+// ---- builds, preview and publish (plan 22a GP35b) ----
+
+const BUILD_WORDS: Record<string, string> = { queued: 'waiting', running: 'building', succeeded: 'built', failed: 'failed', canceled: 'canceled' }
+
+/** A build's status as a person reads it. */
+export const buildWord = (status: string) => BUILD_WORDS[status] ?? status
+
+/** Whether a build is still going (the list is polled while one is). */
+export const buildBusy = (status: string) => status === 'queued' || status === 'running'
+
+/** What the Build button is: the author role, a server that can build, and no build already going for this draft. */
+export function buildButton(input: { canWrite: boolean; ready: boolean; problems: readonly string[]; busy: boolean }): { enabled: boolean; why: string | null } {
+  if (!input.canWrite) return { enabled: false, why: 'Building needs the author or administrator role.' }
+  if (!input.ready) return { enabled: false, why: input.problems[0] ?? 'This server cannot build yet.' }
+  if (input.busy) return { enabled: false, why: 'A build of this workspace is already going.' }
+  return { enabled: true, why: null }
+}
+
+/** The note a build makes when it ran with no network isolation (see `WorkspaceAppSettings`): the screen says it in words of its own as well. */
+export const notIsolated = (notes: readonly string[]) => notes.some((n) => n.includes('without network isolation'))
+
+/** A diagnostic as one line: `src/main.tsx:3` and the reason, or only the reason. */
+export const diagnosticLine = (d: { file?: string; line?: number; message: string }) => (d.file ? `${d.file}${d.line ? `:${d.line}` : ''}: ${d.message}` : d.message)
+
+/** What the Publish button is: the approver role (the console's administrator holds it), a succeeded build and a target the server can publish to. */
+export function publishButton(input: { canWrite: boolean; status: string; target: string; targets: readonly { name: string; can_publish: boolean }[]; busy: boolean }): { enabled: boolean; why: string | null } {
+  if (!input.canWrite) return { enabled: false, why: 'Publishing needs the approver or administrator role.' }
+  if (input.status !== 'succeeded') return { enabled: false, why: 'Only a build that succeeded is published.' }
+  if (input.target.trim() === '') return { enabled: false, why: input.targets.length === 0 ? 'No publisher key is set up: an administrator adds one under Publisher keys.' : null }
+  const known = input.targets.find((t) => t.name === input.target.trim())
+  if (known && !known.can_publish) return { enabled: false, why: `The key ${known.name} is not paired with a Gateway that lets it publish.` }
+  return { enabled: !input.busy, why: null }
+}
+
+/** Why a reference to a secret would be refused, or null. The server says the same; a pasted key must not reach it. */
+export function referenceProblem(reference: string): string | null {
+  if (reference.trim() === '') return null
+  if (!reference.trim().startsWith('secret:')) return 'A reference starts with "secret:" and names a secret in the server\'s secret store; the key itself is never typed here.'
+  if (/\s/.test(reference.trim())) return 'A reference has no spaces.'
+  return null
+}
+
+/** What the pair form needs before it is sent: a name, and an address that starts with https://. */
+export function pairProblem(input: { name: string; url: string }): string | null {
+  if (input.name !== '' && !isName(input.name)) return 'A key\'s name is lower-case letters, digits, "-" and "_", starting with a letter or digit, at most 32.'
+  if (input.url.trim() !== '' && !/^https:\/\/\S+$/.test(input.url.trim())) return 'The Gateway\'s address starts with https://.'
+  return null
+}
