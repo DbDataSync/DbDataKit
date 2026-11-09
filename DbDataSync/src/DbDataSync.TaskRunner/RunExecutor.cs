@@ -1844,6 +1844,10 @@ public sealed class RunExecutor(
                 [DeleteGuardOption.OptionKey] = deleteGuardJson,
             };
 
+    /// <summary>A connection the drain's planner asks the source a question over (the polling gate's change counter, plan 28c E11): opened the way a pass opens its own, so a login, a library and a failure read the same.</summary>
+    public async Task<DbConnection> OpenPlanningConnectionAsync(string connectionName, CancellationToken cancellationToken) =>
+        (await OpenConnectionAsync(connectionName, cancellationToken)).Connection;
+
     private async Task<(DbConnection Connection, IDriver Driver)> OpenConnectionAsync(
         string connectionName, CancellationToken cancellationToken)
     {

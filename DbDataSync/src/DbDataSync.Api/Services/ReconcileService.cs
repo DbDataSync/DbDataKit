@@ -30,7 +30,7 @@ public sealed class ReconcileService(
     DriverConnectionFactory connections,
     WorkQueueStore workQueueStore,
     ProcessSupervisor supervisor,
-    CustomSegmentExpansion customSegments)
+    CustomSegmentExpansion customSegments) : IScheduledReconcileEnqueuer
 {
     private const string ReaderKind = "KeyReconcile";
     private const string CacheKind = "StagingTable";
@@ -158,6 +158,19 @@ public sealed class ReconcileService(
 
         var ensureResult = supervisor.EnsureWorkerRunning(replicationName);
         return ensureResult.Outcome == TriggerOutcome.FailedToStart ? ensureResult : TriggerResult.Started(runIds);
+    }
+
+    /// <summary>The planner's view of <see cref="EnqueueScheduledAsync(string, string, CancellationToken)"/> (plan 28c E11): the same call with the outcome in the planner's own words.</summary>
+    async Task<ScheduledReconcileResult> IScheduledReconcileEnqueuer.EnqueueScheduledAsync(string replication, string mapping, CancellationToken cancellationToken)
+    {
+        var result = await EnqueueScheduledAsync(replication, mapping, cancellationToken);
+        return result.Outcome switch
+        {
+            TriggerOutcome.Started => ScheduledReconcileResult.Queued,
+            TriggerOutcome.ReplicationNotFound => new ScheduledReconcileResult(ScheduledReconcileOutcome.NotFound, result.Reason),
+            TriggerOutcome.Invalid => new ScheduledReconcileResult(ScheduledReconcileOutcome.Invalid, result.Reason),
+            _ => new ScheduledReconcileResult(ScheduledReconcileOutcome.QueuedNotStarted, result.Reason),
+        };
     }
 
     /// <summary>Mirrors <see cref="BulkLoadService"/>'s own segment expansion, but the reader is always

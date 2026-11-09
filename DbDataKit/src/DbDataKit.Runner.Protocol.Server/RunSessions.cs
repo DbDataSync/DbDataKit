@@ -68,6 +68,14 @@ internal sealed class RunSession
 
     public InProcessRun Backend { get; }
 
+    private RunWork? _work;
+
+    /// <summary>The run's claim on the owner's engine work (plan 28c E11): made when first used, bound to this run's task and run id.</summary>
+    public RunWork Work => _work ??= new RunWork(Grant.Environment.Database, Identity);
+
+    /// <summary>Whether the run has used the queue (so its heartbeat and its end have claims to look after).</summary>
+    public bool WorkUsed => _work?.Used ?? false;
+
     public ProgressStore Progress { get; }
 
     public DateTimeOffset ExpiresAt { get; }

@@ -178,8 +178,19 @@ How it works now, and what to keep true when you add a job:
 | `checksum mismatch for ... in file://...` (a cached archive) followed by a download | the cache holds bytes that are not the pin's (a corrupt save); the copy is refused, the next source is used | none needed; delete the cache entry (`gh cache delete <key>`) if it repeats |
 | `COPY failed` or `not found` for `.duckdb-archives` in a Docker build | a `.dockerignore` excludes the folder, or the `COPY` lost the `.duckdb-archive[s]` pattern | keep the pattern and keep the folder out of the ignore list |
 | `check_duckdb_cache.py`: `job X, step N: ... but no step before it uses ./.github/actions/duckdb-cache` | a new job fetches DuckDB (or builds an image that does) on its own | add `- uses: ./.github/actions/duckdb-cache` before it (with `rids:` if it is not the host's platform) |
-
 | `ReplicationChecksIntegrationTests` ... `Collections differ ... [Pass, Pass, Fail]` (history of a check has one more entry than the test made) | the test host also evaluates checks on its clock (FQ10), so an evaluation with no run can fall between the test's own; read a check's history by what each entry is for (its run id), never by position |
+
+### Sync's planner and the runner's engine work (plan 28c E11)
+
+| Signature | Cause | Fix |
+| --- | --- | --- |
+| `error CS0246: The type or namespace name 'ChangePollingGate' (or `SchedulingEvaluator`, `TaskScheduling`, `ChangeSourceResolver`, `IChangeCounterSource`) could not be found` in a Sync test project or in the API | the planner types moved to `DbDataSync.Planning` (a library the API and the engine share); the API and `DbDataSync.Api.Tests` name them through a global `<Using Include="DbDataSync.Planning" />` in their `.csproj`, which keeps their sources as they were | add the same `<Using>` to the new test project's `.csproj`; do not copy the type back into the API |
+| `Grpc.Core.RpcException ... FailedPrecondition, Detail="The module 'scheduling' is not part of this database's layout (it has: payloads, runner_progress, runs)"` from `EnqueueWork`, `ClaimWork`, `StartWork`... | the runner's engine-work calls (`runner.work` service of the `scheduling` module's `work_item` table) need the module in the layout of the database the protocol host serves; a test harness that builds its layout by hand has none | add `DbDataKit.Scheduling.SchedulingModule.Module` to the layout (`KitEngines` does; a real runner always has it) |
+| `ProtocolCompatibilityTests.The_snapshot_lists_every_field_value_and_call_of_the_proto` fails after a call or message was added to `runner_v1.proto` | an addition is compatible but the checked-in snapshot must list it | `DBKIT_UPDATE_PROTOCOL_SNAPSHOT=1 DbDataKit/tests/DbDataKit.Runner.Kit.Tests/bin/Debug/net10.0/DbDataKit.Runner.Kit.Tests --filter-class '*ProtocolCompatibilityTests'`, build the test project again, review the diff (only added lines) and commit the file |
+| a `DrainLoopTests` test (or any test that iterates the claims of `DrainLoop` without running the items) never returns | the loop claims one item per free slot (`parallelism`) and waits for a slot before the next claim; a test that takes `parallelism` items and never finishes them (`PassFinished`) waits for ever | take at most `parallelism` items in the test, or finish each item as the real unit body does; the real loop frees a slot in the unit's `finally` |
+| a unit of a continuous drain is "skipped" and its item stays `Claimed` | a unit key that repeats (the mapping alone) is skipped by a retry of the attempt chain, and an item given back and claimed again is the same run id | the key of a pass is `mapping#<token of the claim>` (`PlannedPass.Key`); never key a unit of the drain by the mapping or by the item's run id alone |
+| `FirstFailedItem` of a drain is `main#1a2b3c4d`, not `main` | the failed item of a run is the key of the unit that failed, and the key carries the claim's token | match on the prefix (`StartsWith("main#")`); the console shows the mapping before the `#` |
+
 ### Infrastructure (not your change; re-run once, then look closer)
 
 | Signature | What it is |

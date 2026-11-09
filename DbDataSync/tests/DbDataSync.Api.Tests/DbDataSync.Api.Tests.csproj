@@ -55,6 +55,7 @@
     <ProjectReference Include="..\..\src\DbDataSync.TaskRunner\DbDataSync.TaskRunner.csproj" ReferenceOutputAssembly="false" Private="false" />
     <ProjectReference Include="..\..\src\DbDataSync.Cli\DbDataSync.Cli.csproj" ReferenceOutputAssembly="false" Private="false" />
     <Using Include="DbDataKit.State" />
+    <Using Include="DbDataSync.Planning" />   <!-- the planner library keeps the types the API used to hold (plan 28c E11); these tests name them as they always did -->
     <Using Include="DbDataKit.Web.Auth" />
     <Using Include="DbDataKit.Monitoring" />   <!-- plan 13, U04 -->
     <Using Include="DbDataSync.State.StateDatabase" Alias="StateDatabase" />

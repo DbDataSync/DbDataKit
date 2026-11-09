@@ -214,6 +214,51 @@ internal sealed class GrpcRunBackend : IRunBackend, IAsyncDisposable
 
     public Task SkipUnitAsync(string name, string key, CancellationToken ct) => EndUnitAsync(name, key, UnitOutcome.Skipped, null, null, ct);
 
+    // ---- engine work (plan 28c E11)
+
+    public async Task<Guid> EnqueueWorkAsync(string kind, string subject, string part, string resource, string lane, string? payload, CancellationToken ct)
+    {
+        var request = new EnqueueWorkRequest { Kind = kind, Subject = subject, Part = part ?? "", Resource = resource ?? "", Lane = lane ?? "", Payload = payload ?? "" };
+        var reply = await CallAsync(h => _client.EnqueueWorkAsync(request, h, cancellationToken: ct).ResponseAsync).ConfigureAwait(false);
+        return WireConvert.ParseId(reply.RunId, "work run id");
+    }
+
+    public async Task<RunnerWorkItem?> ClaimWorkAsync(string? lane, CancellationToken ct)
+    {
+        var reply = await CallAsync(h => _client.ClaimWorkAsync(new ClaimWorkRequest { Lane = lane ?? "" }, h, cancellationToken: ct).ResponseAsync).ConfigureAwait(false);
+        return reply.HasItem ? new RunnerWorkItem(reply.Id, reply.Kind, reply.Subject, reply.Part, reply.Resource, reply.Lane, WireConvert.ParseId(reply.RunId, "work run id"), reply.Payload.Length == 0 ? null : reply.Payload) : null;
+    }
+
+    public async Task<bool> StartWorkAsync(long id, CancellationToken ct) =>
+        (await CallAsync(h => _client.StartWorkAsync(new WorkItemRef { Id = id }, h, cancellationToken: ct).ResponseAsync).ConfigureAwait(false)).Applied;
+
+    public async Task<bool> FinishWorkAsync(long id, WorkFinish outcome, CancellationToken ct)
+    {
+        var request = new FinishWorkRequest
+        {
+            Id = id,
+            Outcome = outcome switch { WorkFinish.Done => WorkOutcome.Done, WorkFinish.Failed => WorkOutcome.Failed, _ => WorkOutcome.Cancelled },
+        };
+        return (await CallAsync(h => _client.FinishWorkAsync(request, h, cancellationToken: ct).ResponseAsync).ConfigureAwait(false)).Applied;
+    }
+
+    public async Task<bool> ReleaseWorkAsync(long id, CancellationToken ct) =>
+        (await CallAsync(h => _client.ReleaseWorkAsync(new WorkItemRef { Id = id }, h, cancellationToken: ct).ResponseAsync).ConfigureAwait(false)).Applied;
+
+    public async Task<bool> IsWorkCancelRequestedAsync(Guid itemRunId, CancellationToken ct) =>
+        (await CallAsync(h => _client.IsCancelRequestedAsync(new WorkRunRef { RunId = itemRunId.ToString("D") }, h, cancellationToken: ct).ResponseAsync).ConfigureAwait(false)).Requested;
+
+    public async Task<WorkSnapshot> WorkStateAsync(IReadOnlyList<string> kinds, CancellationToken ct)
+    {
+        var request = new WorkStateRequest();
+        request.Kinds.AddRange(kinds);
+        var reply = await CallAsync(h => _client.WorkStateAsync(request, h, cancellationToken: ct).ResponseAsync).ConfigureAwait(false);
+        var result = new Dictionary<string, IReadOnlyDictionary<string, WorkSubject>>(StringComparer.Ordinal);
+        foreach (var kind in reply.Kinds)
+            result[kind.Kind] = kind.Subjects.ToDictionary(s => s.Subject, s => new WorkSubject(DateTimeOffset.FromUnixTimeMilliseconds(s.LastEnqueuedUnixMs), s.InFlight), StringComparer.Ordinal);
+        return new WorkSnapshot(reply.Outstanding, result);
+    }
+
     // ---- files, inbox, dead letters
 
     public async Task<bool> ClaimFileAsync(string connection, string path, long size, DateTimeOffset modified, string hash, CancellationToken ct)

@@ -2,7 +2,7 @@ using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.Generic;
 
-namespace DbDataSync.Api.Services;
+namespace DbDataSync.Planning;
 
 /// <summary>
 /// Where one table mapping's incremental reads come from, and under what key its position is stored.

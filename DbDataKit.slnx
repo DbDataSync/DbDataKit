@@ -258,6 +258,7 @@
     <Project Path="DbDataSync/src/DbDataSync.Drivers.Postgres/DbDataSync.Drivers.Postgres.csproj" />
     <Project Path="DbDataSync/src/DbDataSync.Launcher/DbDataSync.Launcher.csproj" />
     <Project Path="DbDataSync/src/DbDataSync.Libraries/DbDataSync.Libraries.csproj" />
+    <Project Path="DbDataSync/src/DbDataSync.Planning/DbDataSync.Planning.csproj" />
     <Project Path="DbDataSync/src/DbDataSync.Scripting.Abstractions/DbDataSync.Scripting.Abstractions.csproj" />
     <Project Path="DbDataSync/src/DbDataSync.Scripting/DbDataSync.Scripting.csproj" />
     <Project Path="DbDataSync/src/DbDataSync.State/DbDataSync.State.csproj" />

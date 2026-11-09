@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataSync.Core\DbDataSync.Core.csproj" />
+    <ProjectReference Include="..\DbDataSync.Drivers.Abstractions\DbDataSync.Drivers.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataSync.Drivers.Generic\DbDataSync.Drivers.Generic.csproj" />
+    <ProjectReference Include="..\DbDataSync.Drivers.MsSql\DbDataSync.Drivers.MsSql.csproj" />   <!-- the change counters of CDC and Change Tracking the gate asks the source for -->
+    <ProjectReference Include="..\DbDataSync.State\DbDataSync.State.csproj" />
+    <DbDataKitReference Include="Scheduling" />   <!-- the schedule evaluator (Cronos comes with it); plan 13, M01 -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <Using Include="DbDataKit.State" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>What decides which mappings of a replication are due and queues them (plan 28c E11): the planner, the polling gate, the schedule evaluator. A library both Sync's API (its scheduler tick) and the engine (the start of each cycle of a drain on a runner) call.</Description>
+  </PropertyGroup>
+
+</Project>

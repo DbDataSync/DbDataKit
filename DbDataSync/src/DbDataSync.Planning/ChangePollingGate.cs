@@ -1,13 +1,14 @@
 using DbDataSync.Core.Config;
 using DbDataSync.State;
+using Microsoft.Extensions.Logging;
 
-namespace DbDataSync.Api.Services;
+namespace DbDataSync.Planning;
 
 /// <summary>
 /// Decides which of a tick's due CDC and Change-Tracking mappings actually have work waiting, so a
 /// quiet source database costs one round-trip per tick instead of one per mapping — see phase 75.
 /// <para>
-/// **A collaborator rather than more of <see cref="SchedulerService"/>.** The scheduler is a loop over
+/// **A collaborator rather than more of <c>SchedulerService</c>.** The scheduler is a loop over
 /// config and local state whose entire body is due-ness arithmetic; this is source I/O, grouping,
 /// per-mechanism comparison and a fail-open policy, none of which it previously had any of. Kept
 /// apart, the gate is testable without an API host and the scheduler still reads as the schedule it
@@ -27,13 +28,33 @@ namespace DbDataSync.Api.Services;
 /// round-trip.
 /// </para>
 /// </summary>
-public sealed class ChangePollingGate(
-    ChangeSourceResolver sources,
-    IChangeCounterSource counters,
-    ChangeWatermarkStore watermarks,
-    ChangeCheckStore checks,
-    ILogger<ChangePollingGate> logger)
+public sealed class ChangePollingGate
 {
+    private readonly ChangeSourceResolver _sources;
+    private readonly IChangeCounterSource _counters;
+    private readonly IChangeGateState _state;
+    private readonly ILogger _logger;
+
+    /// <summary>The gate over Sync's own state: the mapping's stored watermark and the audit table of what each check read.</summary>
+    public ChangePollingGate(
+        ChangeSourceResolver sources,
+        IChangeCounterSource counters,
+        ChangeWatermarkStore watermarks,
+        ChangeCheckStore checks,
+        ILogger<ChangePollingGate> logger)
+        : this(sources, counters, new StoreChangeGateState(watermarks, checks), logger)
+    {
+    }
+
+    /// <summary>The gate over any state that can answer a mapping's watermark and take the audit line: the engine of a drain on a runner (plan 28c E11) keeps the watermark as the run's checkpoint.</summary>
+    public ChangePollingGate(ChangeSourceResolver sources, IChangeCounterSource counters, IChangeGateState state, ILogger logger)
+    {
+        _sources = sources;
+        _counters = counters;
+        _state = state;
+        _logger = logger;
+    }
+
     /// <summary>A due mapping and the group its source round-trip belongs to.</summary>
     private sealed record Candidate(string MappingName, string WatermarkKey, string ReaderKind);
 
@@ -80,7 +101,7 @@ public sealed class ChangePollingGate(
             ChangeCounterReading reading;
             try
             {
-                reading = await counters.FetchAsync(
+                reading = await _counters.FetchAsync(
                     group.Connection, group.Database, group.Kind, cancellationToken);
             }
             catch (Exception ex)
@@ -88,7 +109,7 @@ public sealed class ChangePollingGate(
                 // Fail open, and only for this group. The scheduler had no source dependency before
                 // this phase, and an unreachable database must not become a way to stop replication
                 // being scheduled — including the replication of the databases that are still up.
-                logger.LogWarning(
+                _logger.LogWarning(
                     ex,
                     "Change poll for '{Connection}'/'{Database}' ({Kind}) failed; dispatching its " +
                     "{Count} due mapping(s) unfiltered.",
@@ -126,7 +147,7 @@ public sealed class ChangePollingGate(
         if (counter is null)
             return true;
 
-        var stored = watermarks.GetWatermark(taskName, member.MappingName, member.WatermarkKey);
+        var stored = _state.GetWatermark(taskName, member.MappingName, member.WatermarkKey);
         if (string.IsNullOrEmpty(stored))
             return true;
 
@@ -136,7 +157,7 @@ public sealed class ChangePollingGate(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(
+            _logger.LogWarning(
                 ex,
                 "Could not compare '{Mapping}''s stored watermark against the {Kind} counter; " +
                 "dispatching it.",
@@ -150,7 +171,7 @@ public sealed class ChangePollingGate(
     {
         try
         {
-            checks.Record(
+            _state.RecordCheck(
                 group.Connection, group.Database, group.Kind, reading.Value, reading.SourceTimeUtc);
         }
         catch (Exception ex)
@@ -158,7 +179,7 @@ public sealed class ChangePollingGate(
             // History, not mechanism: the dispatch decision this tick has already been made from the
             // fetched value itself, so a state database that is briefly locked costs an audit line
             // and a later lag figure's precision, never a mapping's pass.
-            logger.LogWarning(
+            _logger.LogWarning(
                 ex, "Could not record the change check for '{Connection}'/'{Database}' ({Kind}).",
                 group.Connection, group.Database, group.Kind);
         }
@@ -180,7 +201,7 @@ public sealed class ChangePollingGate(
 
         try
         {
-            if (sources.Describe(task, mappingName).Source is not { } source)
+            if (_sources.Describe(task, mappingName).Source is not { } source)
                 return false;
 
             group = (source.ConnectionName, source.SourceDatabase, source.ReaderKind);
@@ -189,10 +210,29 @@ public sealed class ChangePollingGate(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(
+            _logger.LogWarning(
                 ex, "Could not evaluate the change poll for '{Task}'/'{Mapping}'; dispatching it.",
                 task.Name, mappingName);
             return false;
         }
     }
+}
+
+/// <summary>What the gate needs of state: where a mapping's own position is (the comparison is against it, never against a remembered counter), and a place for the audit line of each check.</summary>
+public interface IChangeGateState
+{
+    /// <summary>The position stored for the mapping's source, or null when it has never read.</summary>
+    string? GetWatermark(string taskName, string mappingName, string watermarkKey);
+
+    /// <summary>History, not mechanism: what one group's check read.</summary>
+    void RecordCheck(string connection, string database, string readerKind, string? value, DateTimeOffset? sourceTimeUtc);
+}
+
+/// <summary>The gate's state in Sync's own state database.</summary>
+public sealed class StoreChangeGateState(ChangeWatermarkStore watermarks, ChangeCheckStore checks) : IChangeGateState
+{
+    public string? GetWatermark(string taskName, string mappingName, string watermarkKey) => watermarks.GetWatermark(taskName, mappingName, watermarkKey);
+
+    public void RecordCheck(string connection, string database, string readerKind, string? value, DateTimeOffset? sourceTimeUtc) =>
+        checks.Record(connection, database, readerKind, value, sourceTimeUtc);
 }
