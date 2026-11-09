@@ -87,7 +87,7 @@ public static class UpgradeSetup
     /// </summary>
     public static UpgradeService MapUpgrade(this WebApplication app, string product, string version, string serviceName, int port, IAuditLog audit, Func<IReadOnlyList<PeerGeneration>>? peers = null)
     {
-        var running = OperatingSystem.IsWindows() ? !Environment.UserInteractive : Environment.GetEnvironmentVariable("INVOCATION_ID") is not null;
+        var running = ServiceDetection.IsRunningAsService();
         var service = new UpgradeService(new UpgradeOptions
         {
             Product = product, Version = version, ProgramDirectory = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),

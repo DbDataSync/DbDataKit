@@ -62,7 +62,7 @@ public sealed class ProcessUpgradeLauncher : IUpgradeLauncher
         var copy = Path.Combine(invocation.Root, "helper-" + Guid.NewGuid().ToString("N")[..8]);
         CopyDirectory(invocation.ProgramDirectory, copy);
         var command = Command(invocation, copy, Environment.ProcessPath, Environment.GetCommandLineArgs().ElementAtOrDefault(0),
-            OperatingSystem.IsLinux() && Environment.GetEnvironmentVariable("INVOCATION_ID") is not null && File.Exists("/usr/bin/systemd-run"));
+            OperatingSystem.IsLinux() && ServiceDetection.IsRunningAsService() && File.Exists("/usr/bin/systemd-run"));
         var info = new ProcessStartInfo(command[0]) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = copy, RedirectStandardInput = true };
         foreach (var a in command.Skip(1)) info.ArgumentList.Add(a);
         Process.Start(info)?.Dispose();
