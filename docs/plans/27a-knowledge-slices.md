@@ -42,7 +42,7 @@ Status: **proposed** (2026-11-09). [Plan 27](27-knowledge-agents-integrations-wo
 | DbDataStore permissions with field and row conditions for an action principal; extension models; documents with extraction (WebDAV); drafts | 15, 21 | **not started** | `git grep -il "extension model"` is empty; the serving layer's `webdav` module is "not built" in `docs/serving-layer.md`; no Store draft layer found |
 | Apps: instances, trust, app approval of exact bytes, token broker, data route with scopes from the manifest | 26 | **built** | `docs/apps.md`; `GroupAppData`, `AppTokenBroker`, kind `app-approval` |
 | App assistant panel, app calling an action, apps' server-side logic | 26, 27 | **not started** | `git grep -i "assistant"` in `DbDataKit.Apps.*` is empty; the manifest has no `actions` key |
-| Shared authoring library; Workspace server; app workspace | 22a GP30 to GP36 | **not started** | no `DbDataKit.Authoring` and no `DbDataWorkspace` folder; Build has its own git workspaces (`DbDataBuild/src/DbDataBuild.Cli/Server/Workspaces.cs`, `DbDataKit.Config.Git/GitWorktrees.cs`) that GP30 would extract |
+| Shared authoring library; Workspace server; app workspace | 22a GP30 to GP36 | **GP30 and GP31 built, GP32 to GP36 not** (GP35, the people's workflow in the console, is what the **W** slices and the back-end agent wait for) | `DbDataKit.Authoring` (the workspace list, create, abandon and git calls for any project kind; Build serves them through it) and the `DbDataWorkspace` server with its `workspace` state module and the console's Workspaces screen; no builds, previews, editing screens or publishing yet |
 | Delivery service (mail, Teams, Slack, webhooks, subscriptions) | 22a GP07 to GP09 | **not started** | no `DbDataKit.Delivery`; `NotificationFeedStore` is the in-product feed only |
 | Report catalogs (31), dashboards and reports (32) | 31, 32 | 31 **not started**; 32 **in progress** | plan status lines; reports and dashboards are published kinds (`ViewDefinitions.cs`) |
 | Shared web packages | 16 section 2a, 19 lane Y | **built**: `shell`, `visuals`, `store-ui`, `views-editor`, `view-app` | `DbDataKit/web/*`; no `knowledge-ui`, no agent or chat package |
@@ -115,7 +115,7 @@ Status: **proposed** (2026-11-09). [Plan 27](27-knowledge-agents-integrations-wo
 | --- | --- | --- |
 | DbDataBacklog: `backlog` state module, serving module, app, links, automatic items, assistant (5.1 to 5.3) | **not started** | `git grep -il "backlog"` finds only Sync's change-backlog code and plans |
 | Custom attributes for any object type through DbDataStore extension models (5.4) | **not started** | |
-| One Workspace server (DbDataWorkspace) for app, agent, integration, skill and knowledge projects (6) | **not started** | plan 22a GP30 to GP36 |
+| One Workspace server (DbDataWorkspace) for app, agent, integration, skill and knowledge projects (6) | **partly built**: the shell, GP30 and GP31 (`DbDataWorkspace`, `DbDataKit.Authoring`); an `app` project kind only | plan 22a GP32 to GP36 are what is left |
 | Plan 27 section 10: the edits other plans were to receive | **not applied**, except two | plan 30 lists the kinds; plan 22a GP05 is dropped and GP03, GP10, GP23, GP24, GP26 are under review; plans 15, 16, 18, 20, 21, 25 and 26 have no mention of plan 27 (`git grep -c "plan 27"` is 0 in each) |
 
 ### Plan 27 section 8: the questions
@@ -361,7 +361,7 @@ Decision 61 is **proposed**, not decided. These rows exist so the editor-screen 
 | IX01 | AG05, KN05, every IX slice; plan 27's decision 15 (providers as connections) |
 | KN01 to KN03 | the back-end agent's bound knowledge (KN34), `knowledge check`, the knowledge editor |
 | KN07, KN11 | all search; the front-end agents' knowledge tools; the knowledge app |
-| GP31 (Workspace server) | KN20, KN30, AG16, AX13, IX20, BK06: the **W** slices |
+| GP31 (Workspace server, built; GP35 for the editors) | KN20, KN30, AG16, AX13, IX20, BK06: the **W** slices |
 | GP01 and GP11 to GP15 (deferred) | row and column filtering of knowledge (KN15), elevated reads of semantic models (not sliced) |
 | AX06 | actions in apps, agents and MCP being served; AX09 |
 
@@ -373,7 +373,7 @@ Nothing here needs a slice that is not built: **KN00, AG01, KN01, KN04, IX01, IX
 
 | Risk | What reduces it |
 | --- | --- |
-| The Workspace server (22a GP30 to GP36) is the long pole for seven slices | the **W** marking; the back-end agent waits for it (QK1, owner 2026-11-09) and the server comes first; knowledge collection (KN20) is the only knowledge slice that needs it |
+| The Workspace server (22a GP32 to GP36 are left; GP30 and GP31 are built) is the long pole for seven slices | the **W** marking; the back-end agent waits for it (QK1, owner 2026-11-09) and the server comes first; knowledge collection (KN20) is the only knowledge slice that needs it |
 | Access rules are deferred (22a QG2), so "an agent cannot learn through knowledge what its user could not query" holds only at object level at first | QK2's default; the fail-closed rule; KN15 (values) waits for column rules |
 | Native libraries on both OSes: ONNX Runtime (KN06) and `sqlite-vec` (KN08) | each slice's done-when runs on Windows and Linux CI; the built-in model and SQLite vectors are the two optional paths, hosted providers and server engines are not blocked by them |
 | Provider SDK maturity (Anthropic's `IChatClient` was described as beta) | AG04 records the choice and keeps recorded responses; a provider that fails its recording does not block the others |
@@ -404,7 +404,7 @@ Answer in one pass; each has a recommended default so work can go on. None reope
 
 | # | Question | Context | Recommended default |
 | --- | --- | --- | --- |
-| QK1 | **ANSWERED (owner, 2026-11-09).** Does the back-end agent (AG14) wait for the Workspace server and the shared authoring library (22a GP30 to GP36), or start on Build's own workspaces? | Plan 27 wave 1 says "needs shared authoring"; Build already has git workspaces (`DbDataBuild/src/DbDataBuild.Cli/Server/Workspaces.cs`) | **The agent waits.** The Workspace server and its UI (GP30 to GP36) have a higher priority than the agent; the back-end agent is built on them, in a workspace, and not on Build's own workspaces. The **W** slices wait for GP35. Was: start on Build's workspaces behind a narrow workspace interface |
+| QK1 | **ANSWERED (owner, 2026-11-09).** Does the back-end agent (AG14) wait for the Workspace server and the shared authoring library (22a GP30 to GP36), or start on Build's own workspaces? | Plan 27 wave 1 says "needs shared authoring"; Build already has git workspaces (`DbDataBuild/src/DbDataBuild.Cli/Server/Workspaces.cs`) | **The agent waits.** The Workspace server and its UI (GP30 to GP36; GP30 and GP31 are built, GP32 to GP36 are next) have a higher priority than the agent; the back-end agent is built on them, in a workspace, and not on Build's own workspaces. The **W** slices wait for GP35. Was: start on Build's workspaces behind a narrow workspace interface |
 | QK2 | What does "access-filtered" mean for knowledge until row and column rules exist (22a QG2 is deferred)? | Plan 27 section 2.2: an agent cannot learn what its user could not query; `access/1` is not built; directory attributes (GP04) are | **Object level, fail closed:** an item is visible to someone who may read its subject by role (may query the model, may read the Store model, has a role on the project); an item with no subject follows its `for`; an unknown or orphaned subject is hidden; hidden columns and column values (KN15) wait for column rules |
 | QK3 | Where are the grants of an elevated action stored (identity home, DbDataStore, or the action's file)? | Plan 27 section 4.5 says the action has a principal in the identity home and is "granted" entities and operations, approved by an administrator and the model's owner; it does not say where the grant lives. 22a QG5 (where access grants live) is under the owner's hold | **Declared in the action's file** (`grants:`, versioned with the code) and **effective only when approved for that exact version** by an administrator and the model's owner, the approvals kept as audited identity-module rows; if the owner moves access grants to the identity home on the 22a hold, action grants follow the same answer |
 | QK4 | The N-1 engine job (plan 29b U01: SQL Server 2022, PostgreSQL 16) cannot hold vectors on SQL Server 2022. What does it do for the knowledge module? | Plan 27 decided knowledge search needs SQL Server 2025 or later; the engine check and its message are built; PostgreSQL 16 has `pgvector` | The knowledge module is **not supported on SQL Server 2022**: `state test` refuses with the built message, the older-engine job asserts that refusal and runs the knowledge tests on PostgreSQL 16 only |

@@ -29,7 +29,7 @@ jobs:
   changes:
     uses: ./.github/workflows/_changes.yml
     with:
-      paths: '^(DbDataConsole/|DbDataKit/|DbDataBuild/|DbDataSync/|DbDataGateway/|DbDataStore/|dist/compose/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdataconsole-|_)|actions/setup-product))'
+      paths: '^(DbDataConsole/|DbDataKit/|DbDataBuild/|DbDataSync/|DbDataGateway/|DbDataStore/|DbDataWorkspace/|dist/compose/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdataconsole-|_)|actions/setup-product))'
 
   # The host, its sign-in and its command line run on both systems; the Windows service registration is only exercised here against fakes.
   test:
@@ -119,6 +119,10 @@ jobs:
       - name: Test the shared visuals
         working-directory: DbDataKit/web
         run: npm test -w @dbdatakit/visuals
+      # The Workspace screen's model: names, the create and abandon rules, the history line (plan 22a, GP31). Plain Node.
+      - name: Test the Workspace screens
+        working-directory: DbDataKit/web
+        run: npm test -w @dbdatakit/workspace
       # The Store's reusable controls (plan 19, Z06): field parsing, the client against a fake server, the views as markup. Plain Node.
       - name: Test the Store controls
         working-directory: DbDataKit/web
@@ -155,6 +159,10 @@ jobs:
       - name: Build a runner
         working-directory: DbDataRunner
         run: dotnet build src/DbDataRunner.Server -c Debug
+      # A real Workspace server, for the workspaces story (plan 22a, GP31): the console pairs with it, makes and abandons a workspace.
+      - name: Build a Workspace server
+        working-directory: DbDataWorkspace
+        run: dotnet build src/DbDataWorkspace.Server -c Debug
       - name: Install the browser
         working-directory: DbDataConsole/tests/DbDataConsole.Web.Tests
         run: |

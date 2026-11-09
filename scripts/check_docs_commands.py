@@ -3,7 +3,7 @@
 
 Three checks over the same files:
   1. the retired forms, listed in RETIRED with what replaced them;
-  2. every `dbdatasync|dbdatagateway|dbdatakit|dbdatastore|dbdatarunner|dbdatabuild <words>` that is typed must be a command that exists. The commands are read from the
+  2. every `dbdatasync|dbdatagateway|dbdatakit|dbdatastore|dbdatarunner|dbdataworkspace|dbdatabuild <words>` that is typed must be a command that exists. The commands are read from the
      sources, not listed by hand: the nouns and verbs of each product's command line (the shared ones in DbDataKit/src, the product's own under its src) and,
      for Build, its generated command reference (DbDataBuild/docs/commands.md, which a test keeps current);
   3. no DbDataSync document says its server serves a web app at its own address (SYNC_WEB_APP): since U11 the screens are the dbdatakit console's.
@@ -50,6 +50,7 @@ PRODUCTS = {
     "dbdatakit": "DbDataConsole",
     "dbdatastore": "DbDataStore",
     "dbdatarunner": "DbDataRunner",
+    "dbdataworkspace": "DbDataWorkspace",
     "dbdatabuild": "DbDataBuild",
 }
 NOUN_DEF = r'new(?:\s+Noun)?\(\s*"(?P<noun>[a-z][a-z-]*)"\s*,\s*"[^"]*"\s*,\s*\['      # a noun: its name, one line of help, then its verbs
@@ -228,7 +229,7 @@ def check_exist(root):
 
 
 # Products whose README is the whole command reference (they are small and new): every noun of their command line must appear in it.
-README_COMPLETE = ("dbdatakit", "dbdatastore", "dbdatarunner")
+README_COMPLETE = ("dbdatakit", "dbdatastore", "dbdatarunner", "dbdataworkspace")
 
 
 def check_readmes(root):

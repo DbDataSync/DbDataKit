@@ -129,7 +129,7 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
         var product = await ProductOfAsync(instance, context.RequestAborted);
         if (!ServerProducts.Relayable(product, context.Request.Method, path))
         {
-            await Refuse(context, StatusCodes.Status403Forbidden, $"{instance.Name} is a runner: the console relays only its management calls (status, instances, runs, tasks, packages and their life cycle).");
+            await Refuse(context, StatusCodes.Status403Forbidden, ServerProducts.RefusalFor(product, instance.Name));
             return;
         }
         // the person makes the call with their own roles (owner decision of 2026-11-08): a call the person's roles do not cover is refused here, before the runner is asked; the runner checks the same roles again from the token
@@ -140,6 +140,18 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
             {
                 var holds = held == ServerRole.None ? "nothing" : string.Join(" and ", ServerRoles.Names(ServerRoles.Close(held)));
                 await Refuse(context, StatusCodes.Status403Forbidden, $"This needs the {wanted.Needs} role on {instance.Name}, and you hold {holds} there.");
+                return;
+            }
+        }
+
+        // a Workspace server's routes each name the role they need: the relay checks it against what the person holds (in the route's project too) before forwarding, and the server checks it again
+        if (ServerProducts.RoleNeeded(product, context.Request.Method, path) is { } needed)
+        {
+            var (roles, projects) = HeldOn(instance, userId, role);
+            if (ServerProducts.ProjectOf(product, context.Request.Method, path) is { } project && projects?.TryGetValue(project, out var inProject) == true) roles |= inProject;
+            if (!ServerRoles.Allows(roles, needed))
+            {
+                await Refuse(context, StatusCodes.Status403Forbidden, $"This needs the {needed.ToString().ToLowerInvariant()} role.");
                 return;
             }
         }

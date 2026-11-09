@@ -4,8 +4,9 @@ using DbDataKit.Web.Trust;
 namespace DbDataConsole.Server;
 
 /// <summary>
-/// The kinds of server this console manages, as each reports itself (<c>/version</c>, <c>/api/v1/status</c>): what an announcement may name, and for a runner which of its calls the relay passes on. A runner's API has calls
+/// The kinds of server this console manages, as each reports itself (<c>/version</c>, <c>/api/v1/status</c>): what an announcement may name, and for a runner and a Workspace server which of their calls the relay passes on. A runner's API has calls
 /// that are for a product's reports and for the serving layer (a decision reported by a product, a webhook, a setting other than the one the Packages screen switches); a console is not their client, so the relay does not pass them, whoever signed in: the screens use the calls listed in <see cref="RunnerRoutes"/>, and only for a person who holds the role each asks for.
+/// A Workspace server's relay is a table, route by route (<see cref="WorkspaceRoutes"/>): each route a screen uses, with the role it needs, which the relay checks against what the signed-in person holds before it forwards (and the server checks again).
 /// </summary>
 public static class ServerProducts
 {
@@ -15,9 +16,11 @@ public static class ServerProducts
     public const string Store = "dbdatastore";
     /// <summary>The runner (plan 28): scheduled and batch work, the tasks of published packages.</summary>
     public const string Runner = "dbdatarunner";
+    /// <summary>The Workspace server (plan 22a GP31): projects and the git workspaces people author them in.</summary>
+    public const string Workspace = "dbdataworkspace";
 
     /// <summary>The products a server may announce itself as.</summary>
-    public static readonly IReadOnlyList<string> Announced = [Build, Sync, Gateway, Store, Runner];
+    public static readonly IReadOnlyList<string> Announced = [Build, Sync, Gateway, Store, Runner, Workspace];
 
     /// <summary>One call of a runner's API the relay may pass: the method, the route (the path without its query) and the role the runner asks of the caller. <see cref="Or"/> is the other role the runner accepts for the call (a publisher may upload and publish).</summary>
     public sealed record RunnerRoute(string Method, string Pattern, ServerRole Role, ServerRole Or = ServerRole.None)
@@ -84,5 +87,48 @@ public static class ServerProducts
     /// <summary>
     /// Whether the relay passes a call to a server of this product. Only a runner is limited: the rows of <see cref="RunnerRoutes"/>, each with the role the signed-in person must hold (the relay checks it and the runner checks it again).
     /// </summary>
-    public static bool Relayable(string? product, string method, string path) => product != Runner || RunnerRouteOf(method, path) is not null;
+    public static bool Relayable(string? product, string method, string path) =>
+        product == Workspace ? RoleNeeded(product, method, path) is not null : product != Runner || RunnerRouteOf(method, path) is not null;
+
+    /// <summary>
+    /// The relay's table for a Workspace server, route by route: what a screen calls, and the role the call needs. Only these pass; the rest of the server's API (commit, push, merge, a draft's changes and history, the publisher's key reference) is
+    /// not relayed until a screen uses it, and a call this table does not name is refused whoever signed in. <c>{p}</c> is a project and <c>{id}</c> a workspace.
+    /// </summary>
+    public static IReadOnlyList<(string Method, string Route, ServerRole Needed)> WorkspaceRoutes { get; } =
+    [
+        ("GET", "api/v1/projects", ServerRole.Viewer),
+        ("POST", "api/v1/projects", ServerRole.Admin),
+        ("GET", "api/v1/projects/{p}/workspaces", ServerRole.Viewer),
+        ("POST", "api/v1/projects/{p}/workspaces", ServerRole.Author),
+        ("DELETE", "api/v1/projects/{p}/workspaces/{id}", ServerRole.Author),
+        ("GET", "api/v1/projects/{p}/workspaces/{id}/events", ServerRole.Viewer),
+    ];
+
+    private static readonly IReadOnlyList<(string Method, Regex Pattern, ServerRole Needed)> WorkspaceTable =
+        [.. WorkspaceRoutes.Select(r => (r.Method, new Regex("^" + r.Route.Replace("{p}", "(?<p>[A-Za-z0-9._-]+)").Replace("{id}", "[A-Za-z0-9._-]+") + "/?$", RegexOptions.CultureInvariant), r.Needed))];
+
+    /// <summary>The role the relay requires of the signed-in person for a call to a server of this product, or null when the relay does not pass the call (or, for a product whose server alone decides, does not judge it).</summary>
+    public static ServerRole? RoleNeeded(string? product, string method, string path)
+    {
+        if (product != Workspace) return null;
+        var route = path.Split('?', 2)[0];
+        foreach (var (verb, pattern, needed) in WorkspaceTable)
+            if (string.Equals(verb, method, StringComparison.OrdinalIgnoreCase) && pattern.IsMatch(route)) return needed;
+        return null;
+    }
+
+    /// <summary>The project a Workspace route names, for the person's roles in that project; null for a route about the server.</summary>
+    public static string? ProjectOf(string? product, string method, string path)
+    {
+        if (product != Workspace) return null;
+        var route = path.Split('?', 2)[0];
+        foreach (var (verb, pattern, _) in WorkspaceTable)
+            if (string.Equals(verb, method, StringComparison.OrdinalIgnoreCase) && pattern.Match(route) is { Success: true } m && m.Groups["p"].Success) return m.Groups["p"].Value;
+        return null;
+    }
+
+    /// <summary>What the relay tells a person whose call it does not pass.</summary>
+    public static string RefusalFor(string? product, string name) => product == Workspace
+        ? $"{name} is a Workspace server: the console relays only the calls its screens make (projects, and making, listing and abandoning a workspace)."
+        : $"{name} is a runner: the console relays only its management calls (status, instances, runs, tasks, packages and their life cycle).";
 }
