@@ -65,4 +65,6 @@ The mechanism is built (`approval: none|steward|owner`, `agents: request|direct`
 - emergency edits (a way to write now and have it reviewed after, and how that is recorded);
 - what an approval records (who, when, the note, the version it applied to, and whether it is kept with the audit).
 
+**Owner decision (2026-11-09): the Store's approval stays as it is.** Change requests are **not required** (a model with `approval: none` writes directly), and approving **your own** request is **not blocked**: the Changes screen says "You proposed this request" beside the buttons and lets you decide it; a model that wants a second person says so with `approval: owner`. A rule against self-approval would be a different, future configuration, not a change to this default. No code change follows from this decision.
+
 Permissions per entity are not in `model/1`; they belong with this question and with plan 22's grants.
