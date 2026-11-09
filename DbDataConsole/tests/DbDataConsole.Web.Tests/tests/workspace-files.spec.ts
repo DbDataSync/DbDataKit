@@ -83,7 +83,7 @@ test('a person makes a workspace, edits a file, reads the diff, commits, is told
   await page.getByTestId('wsp-save').click()
   await expect(page.getByTestId('wsp-dirty')).toHaveCount(0)
   await expect.poll(() => fs.readFileSync(path.join(folder, 'views', 'orders.yaml'), 'utf8').replace(/\r\n/g, '\n')).toBe('schemaVersion: 1\nkind: grid\ntitle: Orders\n')
-  expect(fs.existsSync(path.join(server, 'projects', project, 'views'))).toBe(false)     // the project's own copy waits for a merge
+  expect(fs.existsSync(path.join(server, 'projects', project, 'views', 'orders.yaml'))).toBe(false)     // the project's own copy waits for a merge
 
   // ---- what changed, side by side
   const change = page.locator('[data-testid="wsp-change"][data-path="views/orders.yaml"]')

@@ -198,6 +198,8 @@ export function WorkspacePage() {
       <WorkspaceShell crumbs={crumbs}>
         <div className="pane" data-testid="wsp-merged">
           <div className="empty">Merged into {project}{merged.sha ? ` as ${merged.sha.slice(0, 8)}` : ''}. The workspace is finished and its folder is gone. <Link to="/" data-testid="wsp-back">Back to the workspaces</Link></div>
+          <div className="hint" style={{ margin: '12px 0 4px' }}>Its builds</div>
+          <BuildsPanel project={project} id={id} canWrite={canWrite} closed />
         </div>
       </WorkspaceShell>
     )

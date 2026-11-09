@@ -130,7 +130,8 @@ export const buildWord = (status: string) => BUILD_WORDS[status] ?? status
 export const buildBusy = (status: string) => status === 'queued' || status === 'running'
 
 /** What the Build button is: the author role, a server that can build, and no build already going for this draft. */
-export function buildButton(input: { canWrite: boolean; ready: boolean; problems: readonly string[]; busy: boolean }): { enabled: boolean; why: string | null } {
+export function buildButton(input: { canWrite: boolean; ready: boolean; problems: readonly string[]; busy: boolean; closed?: boolean }): { enabled: boolean; why: string | null } {
+  if (input.closed) return { enabled: false, why: 'This workspace was merged, so it cannot be built again; its builds can still be previewed and published.' }
   if (!input.canWrite) return { enabled: false, why: 'Building needs the author or administrator role.' }
   if (!input.ready) return { enabled: false, why: input.problems[0] ?? 'This server cannot build yet.' }
   if (input.busy) return { enabled: false, why: 'A build of this workspace is already going.' }
