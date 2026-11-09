@@ -479,6 +479,12 @@ the parent API when it spawns a runner, never something an operator sets by hand
 - `DBDATASYNC_STATE_ENDPOINT` — the loopback address of the process that owns the state store.
 - `DBDATASYNC_RUNNER_TOKEN` — the runner's auth token for that loopback connection.
 
+### The writer of `changeProcessing:` may be left out
+
+`changeProcessing.writer` is optional. A file that leaves it out gets `ChangeApply` behind an incremental reader (`MsSqlChangeTracking`, `MsSqlCdc`, `Watermark`, `TriggerAudit`, `PgLogicalSlot`,
+`OracleFlashback`) and `DeleteInsert` behind any other reader; the writer is named when the file is read, a table mapping that overrides the reader gets the default of its own reader, and saving the
+replication from a screen writes the name into the file. A writer that is named is never changed. See [ChangeApply](replication-concepts.md#changeapply-the-change-writer-of-every-engine).
+
 ### The Bulk Load pipeline (`task.yaml` `bulkLoad:`)
 
 A second pipeline beside `changeProcessing:`, used for an on-demand reload (what the
@@ -497,7 +503,8 @@ bulkLoad:
 - `cache` and `writer` default to unset (`null`) and, when unset, inherit the replication's resolved
   `changeProcessing.cache`/`changeProcessing.writer` — a bulk (re)load into the same target table
   naturally uses the same staging and write mechanism as change processing unless an operator wants
-  something different (typically an upsert-only writer for a first load).
+  something different (typically an upsert-only writer for a first load). When `changeProcessing.writer`
+  is itself left out, a bulk load uses `DeleteInsert`, not the change writer.
 - Same per-mapping override shape as `changeProcessing:` — a table mapping can set its own
   `bulkLoadReaderOverride`/`bulkLoadCacheOverride`/`bulkLoadWriterOverride`, each independent and each
   atomic (Kind and options together, never merged).

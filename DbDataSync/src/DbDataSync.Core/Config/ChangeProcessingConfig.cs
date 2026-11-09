@@ -29,7 +29,16 @@ public sealed class ChangeProcessingConfig
 {
     public required ReaderConfig Reader { get; set; }
     public required CacheConfig Cache { get; set; }
+    /// <summary>
+    /// The writer. A file may leave it out: <see cref="PipelineResolution.ApplyDefaults"/> then names the default for the reader (<c>ChangeApply</c> behind an incremental
+    /// reader, <c>DeleteInsert</c> behind a reload reader) and sets <see cref="WriterIsDefault"/>, so a mapping that overrides the reader gets the default for its own reader.
+    /// A writer that is named, even with the default's own name, is never changed. Saving a replication names it.
+    /// </summary>
     public required WriterConfig Writer { get; set; }
+
+    /// <summary>True when the file did not name a writer and <see cref="Writer"/> is the default for the reader; never written to a file or sent to a screen.</summary>
+    [YamlDotNet.Serialization.YamlIgnore, System.Text.Json.Serialization.JsonIgnore]
+    public bool WriterIsDefault { get; set; }
 
     /// <summary>
     /// How many of this replication's table mappings its worker's <b>change-processing lane</b>

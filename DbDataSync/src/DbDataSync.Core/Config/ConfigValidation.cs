@@ -241,6 +241,9 @@ public static class ConfigValidation
     /// fails the pass with the same advice, before anything is read or deleted).
     /// </para>
     /// </summary>
+    /// <summary>Whether the built-in reader Kind reads changes rather than the whole table (the list <see cref="ValidateIncrementalReconcilePairing"/> refuses reconciling writers behind).</summary>
+    public static bool IsIncrementalReader(string readerKind) => IncrementalReaderKinds.Contains(readerKind);
+
     public static void ValidateIncrementalReconcilePairing(TableMappingConfig mapping, string readerKind, string writerKind)
     {
         if (!IncrementalReaderKinds.Contains(readerKind) || !ReconcilingWriterKinds.Contains(writerKind))
@@ -253,8 +256,8 @@ public static class ConfigValidation
     public static string IncrementalReconcileMessage(string mappingName, string readerKind, string writerKind) =>
         $"Table mapping '{mappingName}' reads changes with '{readerKind}' and writes with '{writerKind}', which " +
         "replaces everything in its scope with the rows a pass staged. An incremental pass stages only what " +
-        "changed, so every other target row would be deleted. Use an upsert writer for change processing " +
-        "(MsSqlMerge on SQL Server, for example), and set this writer on the Bulk Load pipeline if full " +
+        "changed, so every other target row would be deleted. Use an upsert writer for change processing: ChangeApply " +
+        "(every engine; the default when no writer is named) or, on SQL Server, MsSqlMerge, and set this writer on the Bulk Load pipeline if full " +
         "reloads should use it; or read with a reload reader such as BatchReload.";
 
     /// <summary>

@@ -196,7 +196,7 @@ exposes one; the `mysql.generic` starter template is the closest fully worked ex
 | `dialect.defaultDatabase` | no (default `""`) | what to connect to before a mapping names one |
 | `dialect.connectionStringKeys` | no | override the connection-string key names (`host`/`port`/`database`/`username`/`password`/`connectTimeout`) if this provider spells them differently — defaults to `Microsoft.Data.SqlClient`-shaped names |
 | `typeMap` | no (default empty) | native type name (optionally parameterized, e.g. `"decimal(p,s)"`, `"varchar(n)"`) → a canonical kind, either a bare name (`datetime: Timestamp`) or an object (`{ kind: String, length: n, unicode: true }`). Anything not listed maps to `Unmappable`, which provisioning reports as unsupported rather than guessing. |
-| `capabilities.readers`/`.staging`/`.writers` | yes | which of `DbDataSync.Drivers.Generic`'s existing engine-neutral strategies (`Watermark`, `BatchReload`, `StagingTable`, `DeleteInsert`, ...) this driver offers — a descriptor can only opt into strategies that already exist, never introduce a new one |
+| `capabilities.readers`/`.staging`/`.writers` | yes | which of `DbDataSync.Drivers.Generic`'s existing engine-neutral strategies (`Watermark`, `BatchReload`, `StagingTable`, `DeleteInsert`, `ChangeApply`, ...) this driver offers — a descriptor can only opt into strategies that already exist, never introduce a new one |
 
 **A descriptor driver never auto-provisions a target table.** `RenderColumnType` — the DDL-generation
 path — deliberately throws rather than guess at a `CREATE TABLE` for an engine it only knows through a

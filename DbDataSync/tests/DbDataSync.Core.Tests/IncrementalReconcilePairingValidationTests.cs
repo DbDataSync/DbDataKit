@@ -54,6 +54,13 @@ public sealed class IncrementalReconcilePairingValidationTests : IDisposable
     [InlineData("MsSqlBatchReload", "MsSqlMergeReconcile")]
     [InlineData("BatchReload", "MsSqlBulkInsert")]
     [InlineData("KeyReconcile", "KeyReconcileDelete")]
+    // CW01: the change writer of every engine does not reconcile, so it is the one writer accepted behind every incremental reader
+    [InlineData("Watermark", "ChangeApply")]
+    [InlineData("TriggerAudit", "ChangeApply")]
+    [InlineData("MsSqlChangeTracking", "ChangeApply")]
+    [InlineData("MsSqlCdc", "ChangeApply")]
+    [InlineData("PgLogicalSlot", "ChangeApply")]
+    [InlineData("OracleFlashback", "ChangeApply")]
     public void AnyOtherPairing_IsNotThisChecksBusiness(string readerKind, string writerKind) =>
         ConfigValidation.ValidateIncrementalReconcilePairing(Mapping(), readerKind, writerKind);
 

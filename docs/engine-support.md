@@ -47,7 +47,7 @@ Generated from the engine registry (`DbDataKit/src/DbDataKit.Connections.Descrip
 `sqlserver` (also `mssql`, `sql-server`); dialect `sqlserver`; provider `sqlserver`; catalog reader `sqlserver`; port 1433
 
 - Sync source: yes. Change Tracking or CDC, or a watermark column; TriggerAudit as the portable option
-- Sync target: yes. Native bulk staging (SqlBulkCopy)
+- Sync target: yes. Native bulk staging (SqlBulkCopy); incremental passes apply with the change writer ChangeApply (the default; UPDATE, INSERT and DELETE, no MERGE) or MsSqlMerge, reloads with MsSqlMergeReconcile, DeleteInsert or MsSqlBulkInsert
 - Build target: yes. SQL Server 2022 in Build's real-engine suite
 - Build origin: yes. Project import reads keys, foreign keys and indexes from the live catalog
 - Gateway source: yes. Address, connection string or secret reference; pass-through identity
@@ -59,7 +59,7 @@ Generated from the engine registry (`DbDataKit/src/DbDataKit.Connections.Descrip
 `mysql`; dialect `mysql`; provider `mysql`; catalog reader `mysql`; port 3306
 
 - Sync source: yes. Watermark column; TriggerAudit. MariaDB is tested beside MySQL
-- Sync target: yes. Batched insert staging
+- Sync target: yes. Batched insert staging; incremental passes apply with the change writer ChangeApply (UPDATE, INSERT and DELETE against the staging table, no MERGE), reloads with DeleteInsert
 
 ### ODBC
 
@@ -73,14 +73,14 @@ Generated from the engine registry (`DbDataKit/src/DbDataKit.Connections.Descrip
 `oracle`; dialect `oracle`; provider `oracle`; catalog reader `oracle`; port 1521
 
 - Sync source: yes. Flashback Version Query, or a watermark column; TriggerAudit
-- Sync target: yes. Batched insert staging
+- Sync target: yes. Batched insert staging; incremental passes apply with the change writer ChangeApply (UPDATE, INSERT and DELETE against the staging table, no MERGE), reloads with DeleteInsert
 
 ### PostgreSQL
 
 `postgres` (also `postgresql`, `pgsql`, `pg`); dialect `postgres`; provider `postgres`; catalog reader `postgres`; port 5432
 
 - Sync source: yes. Native logical decoding, or a watermark column; TriggerAudit
-- Sync target: yes. Native binary COPY staging
+- Sync target: yes. Native binary COPY staging; incremental passes apply with the change writer ChangeApply (UPDATE, INSERT and DELETE against the staging table, no MERGE), reloads with DeleteInsert
 - Build target: yes. PostgreSQL 17 in Build's real-engine suite
 - Build origin: yes. Project import reads the live catalog
 - Gateway source: no. Only through ODBC; the gateway has no PostgreSQL provider of its own

@@ -9,7 +9,7 @@ provider: postgres
 catalog_reader: postgres
 roles:
   sync_source: { status: supported, note: "native logical decoding, or a watermark column; TriggerAudit" }
-  sync_target: { status: supported, note: "native binary COPY staging" }
+  sync_target: { status: supported, note: "native binary COPY staging; incremental passes apply with the change writer ChangeApply (UPDATE, INSERT and DELETE against the staging table, no MERGE), reloads with DeleteInsert" }
   build_target: { status: supported, note: "PostgreSQL 17 in Build's real-engine suite" }
   build_origin: { status: supported, note: "project import reads the live catalog" }
   gateway_source: { status: no, note: "only through ODBC; the gateway has no PostgreSQL provider of its own" }

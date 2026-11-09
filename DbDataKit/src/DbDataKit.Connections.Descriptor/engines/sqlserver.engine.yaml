@@ -9,7 +9,7 @@ provider: sqlserver
 catalog_reader: sqlserver
 roles:
   sync_source: { status: supported, note: "Change Tracking or CDC, or a watermark column; TriggerAudit as the portable option" }
-  sync_target: { status: supported, note: "native bulk staging (SqlBulkCopy)" }
+  sync_target: { status: supported, note: "native bulk staging (SqlBulkCopy); incremental passes apply with the change writer ChangeApply (the default; UPDATE, INSERT and DELETE, no MERGE) or MsSqlMerge, reloads with MsSqlMergeReconcile, DeleteInsert or MsSqlBulkInsert" }
   build_target: { status: supported, note: "SQL Server 2022 in Build's real-engine suite" }
   build_origin: { status: supported, note: "project import reads keys, foreign keys and indexes from the live catalog" }
   gateway_source: { status: supported, note: "address, connection string or secret reference; pass-through identity" }

@@ -10,7 +10,7 @@ import type {
   CacheConfig, ParameterDescriptor, ReaderConfig, ReadIntent, ReplicationTaskConfig, ResolvedRef,
   WriterConfig,
 } from '../../api/types'
-import { RECONCILE_ONLY_KINDS } from '../../api/types'
+import { RECONCILE_ONLY_KINDS, writerNote } from '../../api/types'
 import { NATURAL_KEY, versionsRows, withoutNaturalKey } from './naturalKey'
 import { offeredIntents } from './readIntent'
 
@@ -125,7 +125,7 @@ export function MappingPipelineCard({
     id === 'reader'
       ? (sourceCapabilities.data?.readers ?? []).filter((r) => !RECONCILE_ONLY_KINDS.has(r.kind)).map((r) => ({ kind: r.kind, note: readerNotes(r).join(' · ') || undefined }))
       : id === 'writer'
-        ? (targetCapabilities.data?.writers ?? []).filter((w) => !RECONCILE_ONLY_KINDS.has(w.kind)).map((w) => ({ kind: w.kind, note: w.supportsReconciliation ? 'reconciling' : 'upsert-only' }))
+        ? (targetCapabilities.data?.writers ?? []).filter((w) => !RECONCILE_ONLY_KINDS.has(w.kind)).map((w) => ({ kind: w.kind, note: writerNote(w) }))
         : (targetCapabilities.data?.stagingProviders ?? []).map((p) => ({ kind: p.kind, note: undefined }))
 
   const parametersFor = (id: Stage, kind: string): ParameterDescriptor[] =>
