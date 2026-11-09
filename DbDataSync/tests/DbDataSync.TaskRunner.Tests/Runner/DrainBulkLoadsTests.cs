@@ -99,7 +99,7 @@ public sealed class DrainBulkLoadsTests : IDisposable
     {
         public Func<IReadOnlyList<BatchReloadSegment>, IReadOnlyList<BatchReloadSegment>> Expand { get; set; } = s => s;
 
-        public Task<IReadOnlyList<BatchReloadSegment>> ExpandAsync(ReplicationTaskConfig task, TableMappingConfig mapping, IReadOnlyList<BatchReloadSegment> requested, CancellationToken cancellationToken) =>
+        public Task<IReadOnlyList<BatchReloadSegment>> ExpandAsync(ReplicationTaskConfig task, TableMappingConfig mapping, IReadOnlyList<BatchReloadSegment> requested, string? readerKind, CancellationToken cancellationToken) =>
             Task.FromResult(Expand(requested));
 
         public Task<(long? Rows, string? Caveat)> EstimateAsync(ReplicationTaskConfig task, TableMappingConfig mapping, CancellationToken cancellationToken) => Task.FromResult<(long?, string?)>((1000, null));
@@ -258,6 +258,10 @@ public sealed class DrainBulkLoadsTests : IDisposable
     private sealed class Outputs(List<VerificationResultRecord> sink) : IDrainOutputs
     {
         public void VerificationResult(VerificationResultRecord result) => sink.Add(result);
+
+        public void ChangeChecks(string replication, IReadOnlyList<ChangeCheckEntry> checks)
+        {
+        }
     }
 
     private static WorkItem Claim(ProtocolRunnerState state, FakeDrainQueue queue)

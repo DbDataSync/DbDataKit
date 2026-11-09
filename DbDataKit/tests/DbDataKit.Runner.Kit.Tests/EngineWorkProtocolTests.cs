@@ -201,6 +201,27 @@ public sealed class EngineWorkProtocolTests
 
     [Theory]
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
+    public void The_work_state_says_when_the_runs_task_is_paused_on_the_runner_and_not_for_another_task(string engine)
+    {
+        using var h = new Harness(engine, remote: true);
+        using var a = new RawClient(h.Host.Endpoint, h.Grant("replication-a"));
+        using var b = new RawClient(h.Host.Endpoint, h.Grant("replication-b"));
+        a.Start();
+        b.Start();
+        Assert.False(a.Client.WorkState(new WorkStateRequest(), a.Headers).Paused);
+
+        // the runner's scheduler keeps a pause under its own service, per package and channel and task
+        var pauses = new ModuleJobPauseStore(h.Database, "runner");
+        pauses.Set($"{Harness.Package}/{Harness.Channel}", "replication-a", "operator", DateTimeOffset.UtcNow);
+
+        Assert.True(a.Client.WorkState(new WorkStateRequest(), a.Headers).Paused);
+        Assert.False(b.Client.WorkState(new WorkStateRequest(), b.Headers).Paused);
+        pauses.Clear($"{Harness.Package}/{Harness.Channel}", "replication-a");
+        Assert.False(a.Client.WorkState(new WorkStateRequest(), a.Headers).Paused);
+    }
+
+    [Theory]
+    [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public void An_unknown_outcome_and_a_missing_name_are_refused(string engine)
     {
         using var h = new Harness(engine, remote: true);

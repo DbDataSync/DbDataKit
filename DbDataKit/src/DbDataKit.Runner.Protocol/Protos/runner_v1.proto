@@ -562,4 +562,5 @@ message WorkKindState {
 message WorkStateReply {
   bool outstanding = 1;                  // any item of the owner is pending, claimed or running
   repeated WorkKindState kinds = 2;      // one entry per kind asked for
+  bool paused = 3;                       // somebody paused the run's task on the runner (a run that is up keeps running; an engine that wants to stop at its next boundary looks here)
 }

@@ -121,6 +121,12 @@ public sealed record PlannedPass(string Mapping, WorkItem Item, string Token = "
     public string Key => $"{Mapping}#{(Token.Length > 0 ? Token : Item.RunId.ToString("N")[..8])}";
 }
 
+/// <summary>One check the polling gate made of a source: what its counter read (<c>sync_state.change_check</c>'s row, plan 28c E11b).</summary>
+public sealed record ChangeCheckEntry(string Connection, string Database, string ReaderKind, string? Value, DateTimeOffset? SourceTimeUtc, DateTimeOffset CheckedAtUtc);
+
+/// <summary>The checks of one cycle of a drain, an output of the run.</summary>
+public sealed record ChangeCheckBatch(string Replication, List<ChangeCheckEntry> Checks);
+
 /// <summary>What a pass reports of the target it provisioned (plan 28c ED9): the mapping and the columns of the target as the engine found or created it.</summary>
 public sealed record ProvisionedColumnsReport(string Replication, string Mapping, List<CachedColumn> Columns);
 
@@ -132,6 +138,10 @@ public static class DrainSteps
     /// </summary>
     public static readonly ValueStep<ProvisionedColumnsReport, ProvisionedColumnsReport> ProvisionedColumns =
         Step.Value<ProvisionedColumnsReport, ProvisionedColumnsReport>("provisioned-columns", r => r.Mapping);
+
+    /// <summary>The checks the polling gate made in one cycle (plan 28c E11b): the gate's history, written by the drain as an output of the run, keyed by replication and the time of the first check.</summary>
+    public static readonly ValueStep<ChangeCheckBatch, ChangeCheckBatch> ChangeChecks =
+        Step.Value<ChangeCheckBatch, ChangeCheckBatch>("change-checks", b => $"{b.Replication}/{b.Checks[0].CheckedAtUtc.UtcTicks}");
 
     /// <summary>A verification result (plan 28c E11b): the record the verification wrote, an output of the run keyed by mapping, check and time; the Sync back end reads it from the run for a runner-owned replication.</summary>
     public static readonly ValueStep<VerificationResultRecord, VerificationResultRecord> Verification =
@@ -173,19 +183,20 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
         var queue = new KitDrainQueue(Work);
         RunExecutor? made = null;
         var segments = new EngineSegments(new SegmentExpander(new CustomSegmentExpansion(new SegmentingStrategyRunner(engine.Scripts))), (name, token) => made!.OpenPlanningConnectionWithDriverAsync(name, token));
+        var outputs = new RunOutputs(this);
         var bulkLoads = new DrainBulkLoads(config, queue, checkpoints, segments, Run.Log);
-        var state = new ProtocolRunnerState(checkpoints, Run.Log, queue, bulkLoads, new RunOutputs(this));
+        var state = new ProtocolRunnerState(checkpoints, Run.Log, queue, bulkLoads, outputs);
         var executor = made = new RunExecutor(
             config, engine.Drivers, secrets, engine.Libraries, repoRoot, state, new RunOutputConfig(this), engine.Scripts, Path.Combine(scratch, "state.db"));
 
-        var plannerState = new ProtocolPlannerState(queue, checkpoints);
+        var plannerState = new ProtocolPlannerState(queue, checkpoints, checkpoints);
         var gate = new ChangePollingGate(
             new ChangeSourceResolver(config, engine.Drivers),
             new ConnectionChangeCounterSource((connection, token) => executor.OpenPlanningConnectionAsync(connection, token)),
             plannerState, Run.Log);
-        var planner = new ReplicationPlanner(config, plannerState, gate, engine.Drivers, new EngineReconcileEnqueuer(config, plannerState), Run.Log);
+        var planner = new ReplicationPlanner(config, plannerState, gate, engine.Drivers, new EngineReconcileEnqueuer(config, plannerState, segments), Run.Log);
 
-        var drain = new DrainLoop(Input.Replication, config, planner, plannerState, state, queue, Input.RunAll, Math.Max(1, Input.DegreeOfParallelism), Run.Log, Status);
+        var drain = new DrainLoop(Input.Replication, config, planner, plannerState, state, queue, Input.RunAll, Math.Max(1, Input.DegreeOfParallelism), Run.Log, Status, outputs: outputs);
         try
         {
             await drain.RunAsync(
@@ -370,13 +381,20 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
     {
         public void VerificationResult(VerificationResultRecord result) =>
             job.Step(DrainSteps.Verification, result).Repeatable().RunAsync(_ => Task.FromResult(result), CancellationToken.None).GetAwaiter().GetResult();
+
+        public void ChangeChecks(string replication, IReadOnlyList<ChangeCheckEntry> checks)
+        {
+            if (checks.Count == 0) return;
+            var batch = new ChangeCheckBatch(replication, [.. checks]);
+            job.Step(DrainSteps.ChangeChecks, batch).Repeatable().RunAsync(_ => Task.FromResult(batch), CancellationToken.None).GetAwaiter().GetResult();
+        }
     }
 
     /// <summary><see cref="SegmentExpander"/> over the engine's own way of opening a connection.</summary>
     private sealed class EngineSegments(SegmentExpander expander, OpenSegmentConnection open) : IDrainSegments
     {
-        public Task<IReadOnlyList<BatchReloadSegment>> ExpandAsync(ReplicationTaskConfig task, TableMappingConfig mapping, IReadOnlyList<BatchReloadSegment> requested, CancellationToken cancellationToken) =>
-            expander.ExpandAsync(task, mapping, requested, null, open, cancellationToken);
+        public Task<IReadOnlyList<BatchReloadSegment>> ExpandAsync(ReplicationTaskConfig task, TableMappingConfig mapping, IReadOnlyList<BatchReloadSegment> requested, string? readerKind, CancellationToken cancellationToken) =>
+            expander.ExpandAsync(task, mapping, requested, readerKind, open, cancellationToken);
 
         public Task<(long? Rows, string? Caveat)> EstimateAsync(ReplicationTaskConfig task, TableMappingConfig mapping, CancellationToken cancellationToken) =>
             SegmentExpander.EstimateRowsAsync(task, mapping, open, cancellationToken);

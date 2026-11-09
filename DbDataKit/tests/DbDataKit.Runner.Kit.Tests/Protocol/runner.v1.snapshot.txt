@@ -254,6 +254,7 @@ message WorkKindState field 2 = subjects repeated message:WorkSubjectState
 message WorkStateReply = present
 message WorkStateReply field 1 = outstanding bool
 message WorkStateReply field 2 = kinds repeated message:WorkKindState
+message WorkStateReply field 3 = paused bool
 enum EndState = present
 enum EndState value 0 = END_STATE_UNSPECIFIED
 enum EndState value 1 = END_STATE_SUCCEEDED

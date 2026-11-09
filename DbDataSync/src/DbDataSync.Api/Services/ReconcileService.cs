@@ -32,6 +32,8 @@ public sealed class ReconcileService(
     ProcessSupervisor supervisor,
     CustomSegmentExpansion customSegments) : IScheduledReconcileEnqueuer
 {
+    private readonly SegmentExpander expander = new(customSegments);
+
     private const string ReaderKind = "KeyReconcile";
     private const string CacheKind = "StagingTable";
 
@@ -173,53 +175,9 @@ public sealed class ReconcileService(
         };
     }
 
-    /// <summary>Mirrors <see cref="BulkLoadService"/>'s own segment expansion, but the reader is always
-    /// <c>KeyReconcile</c> — there is no per-request reader Kind to resolve.</summary>
-    private async Task<IReadOnlyList<BatchReloadSegment>> ExpandAsync(
+    /// <summary>The same segment expansion as <see cref="BulkLoadService"/> (<see cref="SegmentExpander"/>), but the reader is always <c>KeyReconcile</c> — there is no per-request reader Kind to resolve.</summary>
+    private Task<IReadOnlyList<BatchReloadSegment>> ExpandAsync(
         ReplicationTaskConfig task, TableMappingConfig mapping, IReadOnlyList<BatchReloadSegment> requested,
-        CancellationToken cancellationToken)
-    {
-        var needsAuto = requested.OfType<AutoSegment>().Any();
-        var needsCustom = requested.OfType<CustomSegment>().Any();
-        if (!needsAuto && !needsCustom)
-            return requested;
-
-        var source = EndpointResolution.ResolveSource(task, mapping.Sources[0]);
-
-        var (connection, driver) = await connections.OpenAsync(source.ConnectionName, cancellationToken);
-        await using (connection)
-        {
-            IReadOnlyList<BatchReloadSegment> segments = requested;
-
-            if (needsCustom)
-            {
-                var target = EndpointResolution.ResolveTarget(task, mapping.Targets[0]);
-                var (targetConnection, _) = await connections.OpenAsync(target.ConnectionName, cancellationToken);
-                await using (targetConnection)
-                {
-                    segments = await customSegments.ExpandAsync(
-                        task, mapping, segments,
-                        new SegmentingConnections(connection, targetConnection), cancellationToken);
-                }
-            }
-
-            if (!segments.OfType<AutoSegment>().Any())
-                return segments;
-
-            var reader = driver.Readers.FirstOrDefault(r => r.Kind == ReaderKind)
-                ?? throw new InvalidOperationException($"Source driver does not support reader kind '{ReaderKind}'.");
-
-            if (reader is not ISegmentExpandingReader expanding)
-                throw new InvalidOperationException(
-                    $"Reader '{ReaderKind}' cannot divide a column into buckets, so an Auto segment can't be used " +
-                    "with it. Specify explicit list/range segments instead.");
-
-            return await expanding.ExpandAutoSegmentsAsync(
-                connection, source, segments, mapping.SourceColumns, mapping.Name, mapping.ColumnMappings,
-                mapping.Relationships,
-                mapping.RelationshipColumns.ToDictionary(
-                    kv => kv.Key, IReadOnlyList<CachedColumn> (kv) => kv.Value, StringComparer.OrdinalIgnoreCase),
-                cancellationToken);
-        }
-    }
+        CancellationToken cancellationToken) =>
+        expander.ExpandAsync(task, mapping, requested, ReaderKind, connections.OpenAsync, cancellationToken);
 }
