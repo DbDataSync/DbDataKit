@@ -1,4 +1,4 @@
-import { request } from '@dbdatakit/shell'
+import { apiUrl, request } from '@dbdatakit/shell'
 
 /** A project the server hosts (`GET /api/v1/projects`): its kind (an app today) and how many workspaces it has now. */
 export interface ProjectSummary { id: string; kind: string; title: string | null; workspaces: number; created: string }
@@ -20,10 +20,34 @@ export interface Commit { sha: string; message: string; author: string; when: st
 export interface Pushed { pushed: boolean; branch: string; pull_request_url: string | null }
 export interface Merged { merged: boolean; sha: string | null; fast_forward: boolean }
 
+/** A build of a draft (`GET .../builds`): who asked, the commit it was made from, where it is and a sentence (why it failed, or what it made). */
+export interface BuildSummary { id: string; workspace: string; status: string; commit: string | null; requested_by: string; message: string | null; requested: string; started: string | null; finished: string | null }
+/** One line the bundler said: a file and a line when it names a place (a refused import), else only the reason. */
+export interface BuildDiagnostic { file?: string; line?: number; message: string }
+export interface BuildResult {
+  status: string; message: string; app: string | null; version: string | null; entry: string | null; files: number; bundled: string[]; notes: string[]; diagnostics: BuildDiagnostic[]
+  isolated: boolean; isolation_setting: string; uncommitted_changes: boolean; commit: string | null; seconds: number
+}
+/** What was published from a build: when, by whom, to which target, whether it worked and what the Gateway said. */
+export interface PublishRecord { at: string; by: string; target: string; ok: boolean; error?: string; answer?: { app?: string; version?: number; hash?: string; gateway?: string } }
+export interface BuildDetail { build: BuildSummary; result: BuildResult | null; publishes: PublishRecord[] }
+/** Whether the server can build, and what it lacks (`GET /api/v1/app-build`): each problem is a sentence that says what to set. */
+export interface BuildReadiness {
+  ready: boolean; problems: string[]
+  package_store: { folder: string; packages: number; files: number; digest: string; library: string[] } | null
+  bun: { path: string; source: string } | null
+  isolation: { setting: string; available: boolean }
+}
+export interface PublishTarget { name: string; gateway: string | null; can_publish: boolean }
+export interface PublishAnswer { steps: string[]; published: { app?: string; version?: number; hash?: string; target?: string; gateway?: string } }
+/** A target's publisher key as a person may see it: the reference to the secret, never the key, and the Gateway it is paired with. */
+export interface PublisherKey { name: string; secret_ref: string; updated: string; gateway: { url: string; roles: string[]; client_name: string; paired: string } | null }
+
 const enc = encodeURIComponent
 /** A file's path as it goes in an address: each part escaped, the `/` between them kept. */
 export const filePath = (path: string) => path.split('/').map(enc).join('/')
 const ws = (project: string, id: string) => `/api/v1/projects/${enc(project)}/workspaces/${enc(id)}`
+const builds = (project: string, id: string) => `${ws(project, id)}/builds`
 const json = (body: unknown): RequestInit => ({ method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } })
 
 /** The Workspace server's calls through the console's relay, as the signed-in person; the server checks the role on every call. */
@@ -43,5 +67,17 @@ export const workspaceApi = {
   commit: (project: string, id: string, message: string) => request<{ committed: boolean; sha: string | null }>(`${ws(project, id)}/commit`, json({ message })),
   push: (project: string, id: string) => request<Pushed>(`${ws(project, id)}/push`, { method: 'POST' }),
   merge: (project: string, id: string) => request<Merged>(`${ws(project, id)}/merge`, { method: 'POST' }),
+  readiness: () => request<BuildReadiness>('/api/v1/app-build'),
+  builds: (project: string, id: string) => request<{ builds: BuildSummary[] }>(builds(project, id)).then((r) => r.builds),
+  build: (project: string, id: string, build: string) => request<BuildDetail>(`${builds(project, id)}/${enc(build)}`),
+  requestBuild: (project: string, id: string) => request<BuildSummary>(builds(project, id), { method: 'POST' }),
+  /** Where a build's preview is served from (through the relay): a page for a frame, with no network and no data. */
+  previewUrl: (project: string, id: string, build: string) => apiUrl(`${builds(project, id)}/${enc(build)}/preview/`),
+  publishTargets: () => request<{ targets: PublishTarget[] }>('/api/v1/publish-targets').then((r) => r.targets),
+  publish: (project: string, id: string, build: string, target: string, note: string) => request<PublishAnswer>(`${builds(project, id)}/${enc(build)}/publish`, json(note ? { target, note } : { target })),
+  publisherKeys: () => request<{ keys: PublisherKey[] }>('/api/v1/publisher-keys').then((r) => r.keys),
+  pairKey: (name: string, url: string, code: string) => request<PublisherKey>(`/api/v1/publisher-keys/${enc(name)}/pair`, json({ url, code })),
+  setKey: (name: string, secretRef: string) => request<PublisherKey>(`/api/v1/publisher-keys/${enc(name)}`, { method: 'PUT', body: JSON.stringify({ secret_ref: secretRef }), headers: { 'Content-Type': 'application/json' } }),
+  removeKey: (name: string) => request<void>(`/api/v1/publisher-keys/${enc(name)}`, { method: 'DELETE' }),
   events: (project: string, id: string) => request<{ events: WorkspaceEvent[] }>(`/api/v1/projects/${enc(project)}/workspaces/${enc(id)}/events`).then((r) => r.events),
 }

@@ -81,6 +81,7 @@ public sealed class ConsoleWorkspaceTests : IAsyncLifetime
         workspace.MapGet("/api/v1/projects/{project}/workspaces/{id}/builds/{build}/preview", (HttpContext c) => Needs(c, ServerRole.Viewer, () => PreviewPage()));
         workspace.MapGet("/api/v1/projects/{project}/workspaces/{id}/builds/{build}/preview/{**path}", (HttpContext c) => Needs(c, ServerRole.Viewer, () => PreviewPage()));
         workspace.MapPost("/api/v1/projects/{project}/workspaces/{id}/builds/{build}/publish", (HttpContext c) => Needs(c, ServerRole.Approver, () => Results.Json(new { published = new { version = 1 } })));
+        workspace.MapGet("/api/v1/publish-targets", (HttpContext c) => Needs(c, ServerRole.Approver, () => Results.Json(new { targets = Array.Empty<object>() })));
         workspace.MapGet("/api/v1/publisher-keys", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { keys = Array.Empty<object>() })));
         workspace.MapPut("/api/v1/publisher-keys/{name}", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Ok()));
         workspace.MapPost("/api/v1/publisher-keys/{name}/pair", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { name = "edge" }, statusCode: 201)));
@@ -186,6 +187,7 @@ public sealed class ConsoleWorkspaceTests : IAsyncLifetime
         { "GET", "api/v1/projects/orders/workspaces/ada-draft/builds/" + Build + "/preview", "viewer", 200 },
         { "GET", "api/v1/projects/orders/workspaces/ada-draft/builds/" + Build + "/preview/main.js", "viewer", 200 },
         { "POST", "api/v1/projects/orders/workspaces/ada-draft/builds/" + Build + "/publish", "approver", 200 },
+        { "GET", "api/v1/publish-targets", "approver", 200 },
         { "GET", "api/v1/publisher-keys", "admin", 200 },
         { "PUT", "api/v1/publisher-keys/edge", "admin", 200 },
         { "POST", "api/v1/publisher-keys/edge/pair", "admin", 201 },
@@ -291,7 +293,7 @@ public sealed class ConsoleWorkspaceTests : IAsyncLifetime
         Assert.Null(ServerProducts.RoleNeeded("dbdatarunner", "GET", "api/v1/projects"));      // another product's table is its own
         Assert.True(ServerProducts.Relayable("dbdatabuild", "DELETE", "api/v1/projects/x"));   // a product with no table is not limited
         // every route of the table is a call a screen makes: the list is the whole of what passes
-        Assert.Equal(27, ServerProducts.WorkspaceRoutes.Count);
+        Assert.Equal(28, ServerProducts.WorkspaceRoutes.Count);
         Assert.All(ServerProducts.WorkspaceRoutes, r => Assert.True(ServerProducts.Relayable("dbdataworkspace", r.Method, r.Route.Replace("{p}", "orders").Replace("{id}", "ada-draft").Replace("{b}", Build).Replace("{name}", "edge").Replace("{path}", "views/orders.yaml"))));
     }
 }
