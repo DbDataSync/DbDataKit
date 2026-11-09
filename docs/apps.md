@@ -45,7 +45,31 @@ An app whose manifest names `views` and no `entry` is declarative: its package h
 | `@dbdatakit/semantic-client` | a typed client for semantic queries (`query(model, {measures, attributes, filters, order, limit})`, `catalog`, `models`) over a `fetch` the host supplies; the host's route for it is not built yet (plan 22a GP35) |
 | `@dbdatakit/view-app` | the app's connection to its host: `connectHost` (the shell's token and route messages), `appStoreClient`, `appSemanticClient` |
 
-`@dbdatakit/shell` is the console's shell (Monaco, router, query cache), not an app's: navigation belongs to the host's shell page (decision 2), so it is not in the default set. The packages come from a **vendored store** (`DbDataKit/web/app-store/build.mjs`), not from a registry.
+`@dbdatakit/shell` is the console's shell (Monaco, router, query cache), not an app's: navigation belongs to the host's shell page (decision 2), so it is not in the default set. The packages come from a **vendored store** (`DbDataKit/web/app-store/build.mjs`), not from a registry (next section).
+
+## Offline builds, the package store and the allow-list
+
+An app's packages are not fetched when it is built (plan 22a GP33, QG12). `apps build --store <folder>` (or `apps.packageStore` in `server.yaml`, so every build on that Gateway uses it) builds from a **vendored package store**: a folder with `node_modules/` and `store.json`, made on a machine with a network by `node DbDataKit/web/app-store/build.mjs --out <folder>` (the default library set and what it needs at run time; `--include <package>` adds another package that is installed in `DbDataKit/web`). `store.json` lists every file with its SHA-256, the packages with their versions, and the **library**: the names an app may import with nobody's permission (`react`, `react-dom`, `@dbdatakit/store-ui`, `@dbdatakit/visuals`, `@dbdatakit/semantic-client`, `@dbdatakit/view-app`). The administrator's **allow-list**, `apps.allowedPackages` in `server.yaml` (plan 22a calls it `apps.allowed_packages`; the file's keys are camel case), names further packages an app may import; a package is importable only if it is in the library or on the list **and** the store holds it. Nothing else is installed, ever.
+
+| Setting (`apps:` in `server.yaml`) | Meaning |
+| --- | --- |
+| `packageStore` | the store's folder; set, `apps build` builds from it (without it, a build installs the app's packages from a registry: a developer's own machine) |
+| `allowedPackages` | package names (`left-pad`, `@scope/name`) beyond the library that an app may import |
+| `packageStoreSha256` | optional: the SHA-256 of `store.json` (`apps store-verify` prints it), so a replaced manifest is refused too |
+
+What a build from the store does, in order:
+
+1. **The store is checked** against its manifest (`apps store-verify` does the same alone): a file that differs by hash, one that is not listed, a missing file, a link: each is a line naming the file, and nothing is built.
+2. **The source is checked**: every literal import (`import`, `export ... from`, `import()`, `require()`, CSS `@import`) and the `dependencies` of `package.json` must be a package in the library or on the list. A package that is not is refused **naming it, the file and the line** (`src/main.ts:3: imports 'lodash', which is not in the default library set (...) and not on the administrator's allow-list (apps.allowedPackages)`); a listed package the store does not hold says so. A path outside the source folder, an address on the network and a path into `node_modules` are refused the same way. `devDependencies` install nothing, so they are not checked.
+3. **The build gets its own copy** (a folder under the temporary directory, removed afterwards) of the source without its `node_modules`, hidden files (`.npmrc`) and `bunfig.toml`, and of the store, and **the copy of the store is checked again** before it is used. Bun is told not to auto-install (`install.auto = "disable"`).
+4. **Bun runs in a network namespace with no route** (Linux: `unshare --net`, with a user namespace when the caller is not root) with a cleared environment: no secrets of the server's, no proxy variables.
+
+**What the isolation guarantees, and what it does not.**
+
+* It guarantees, on Linux, that the bundler **cannot open a connection to anything**: the namespace has a loopback that is down and no route, so neither the internet nor a service on the machine (a database on 127.0.0.1, the Gateway's own listeners) is reachable. The tests prove it with a listener the process can reach outside the namespace and cannot reach inside it. A package's install scripts are never run (nothing is installed, and Bun is not asked to).
+* It does **not** make the build a sandbox for a hostile program. The bundler is a child process of the server **as the same operating-system user**: it can read the files that user can read and write where that user can write (the stage folder is its working directory, nothing stops it going further), and it is not limited in memory or processes beyond the timeout and the size limit of the bundle. The package store is the supply chain: a file in it is trusted as the administrator vendored it, and the hashes detect a change since, not a bad package to begin with. Keep the store's folder writable by the administrator only.
+* The import check reads **literal** specifiers. It is a policy and a courtesy (a named refusal before the build), not the barrier: what makes a package that is not in the store unreachable is that the build's `node_modules` is a copy of the store.
+* Where a machine cannot make a network namespace (Windows, macOS, a Linux without `unshare` or with user namespaces off) `--isolation auto` (the default) builds anyway and **says so** in the build's output; `--isolation required` refuses the build; `--isolation none` skips it. The Workspace server builds with `required`. Without a namespace the build is still given no installer, no proxy and a cleared environment, but the program could open a socket. On Ubuntu 24.04 and later unprivileged user namespaces are limited by AppArmor (`kernel.apparmor_restrict_unprivileged_userns`); CI turns that off for the job.
 
 ## Trust and egress
 

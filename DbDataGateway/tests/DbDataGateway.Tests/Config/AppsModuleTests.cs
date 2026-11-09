@@ -592,6 +592,27 @@ public sealed class AppsModuleTests : IAsyncLifetime
     }
 
     [Fact]
+    public void The_app_build_settings_read_from_server_yaml_and_the_allow_list_must_name_packages()
+    {
+        static (IReadOnlyList<DbDataKit.Config.Yaml.ConfigDiagnostic> Diagnostics, DbDataGateway.Server.Configuration.GatewayOptions? Options) Load(string yaml)
+        {
+            using var file = TempConfig.Create(("server.yaml", yaml));
+            var loaded = ConfigTestSupport.LoadDirectory(file.Directory);
+            return (loaded.Diagnostics, loaded.Value);
+        }
+
+        var ok = Load("apps:\n  allowedPackages: [left-pad, '@scope/name']\n  packageStore: /srv/app-store\n  packageStoreSha256: " + new string('a', 64) + "\n");
+        Assert.DoesNotContain(ok.Diagnostics, d => d.Severity == DbDataKit.Config.Yaml.ConfigSeverity.Error);
+        Assert.Equal(["left-pad", "@scope/name"], ok.Options!.Apps.AllowedPackages);
+        Assert.Equal("/srv/app-store", ok.Options.Apps.PackageStore);
+
+        Assert.Contains(Load("apps: { allowedPackages: [Left Pad, 'lodash@4', '../x'] }\n").Diagnostics, d => d.KeyPath == "Apps.AllowedPackages[0]");
+        Assert.Contains(Load("apps: { allowedPackages: ['lodash@4'] }\n").Diagnostics, d => d.KeyPath == "Apps.AllowedPackages[0]" && d.Message.Contains("not a package name"));
+        Assert.Contains(Load("apps: { allowedPackages: [lodash] }\n").Diagnostics, d => d.KeyPath == "Apps.AllowedPackages" && d.Severity == DbDataKit.Config.Yaml.ConfigSeverity.Warning);
+        Assert.Contains(Load("apps: { packageStore: /x, packageStoreSha256: nothex }\n").Diagnostics, d => d.KeyPath == "Apps.PackageStoreSha256");
+    }
+
+    [Fact]
     public void The_options_refuse_the_apps_host_without_tls_or_on_another_listeners_port()
     {
         static IReadOnlyList<DbDataKit.Config.Yaml.ConfigDiagnostic> Load(string yaml)
