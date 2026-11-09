@@ -213,7 +213,8 @@ public sealed class DrainPlanningGapsTests : IDisposable
         var gate = new ChangePollingGate(new ChangeSourceResolver(_config, _drivers), new Counting("v1"), plannerState, NullLogger.Instance);
         var planner = new ReplicationPlanner(_config, plannerState, gate, _drivers, new EngineReconcileEnqueuer(_config, plannerState), NullLogger.Instance);
         var loop = new DrainLoop(replication, _config, planner, plannerState, state, queue, runAll, 1, NullLogger.Instance,
-            cycleInterval: TimeSpan.FromMilliseconds(50), sweepInterval: TimeSpan.FromMilliseconds(10), outputs: outputs);
+            cycleInterval: TimeSpan.FromMilliseconds(50), sweepInterval: TimeSpan.FromMilliseconds(10), outputs: outputs,
+            requestItem: item => DrainRequests.ApplyItemAsync(item, replication, queue, ledger, ledger, NullLogger.Instance, CancellationToken.None));
         return (loop, queue, state, outputs, plannerState);
     }
 
@@ -252,6 +253,38 @@ public sealed class DrainPlanningGapsTests : IDisposable
 
         Assert.Equal(["Primary:orders"], ran);                  // what was queued still ran
         Assert.Single(queue.Rows);                              // and nothing was planned behind it
+    }
+
+    [Fact]
+    public async Task ARequestThatCameWhileTheDrainWasUp_IsAppliedInItsSweep_AndNeverRunAsAPass()
+    {
+        Save("req", new SchedulingConfig { Mode = ScheduleMode.Periodic, CronExpression = "0 0 1 1 *" }, null, ("orders", []));
+        var (loop, queue, state, _, _) = CreateLoop("req");
+        await queue.EnqueueAsync(DrainRequestText.ItemKind, "orders", "r1", "", "", DrainRequestText.SerializeOne(new DrainRequest(nameof(RunKind.Verification), "orders", Id: "r1")), CancellationToken.None);
+        var ran = new List<string>();
+
+        await loop.RunAsync(RunsAndFinishes(loop, state, ran), CancellationToken.None);
+
+        Assert.Contains("Verification:orders", ran);
+        Assert.DoesNotContain(ran, r => r.StartsWith(DrainRequestText.ItemKind));
+        Assert.Equal("Done", queue.Rows.Single(r => r.Kind == DrainRequestText.ItemKind).Status);
+    }
+
+    [Fact]
+    public async Task AContinuousDrain_StaysUpUntilThePause_ThenEndsOnceItsQueueIsEmpty()
+    {
+        Save("stays", new SchedulingConfig { Mode = ScheduleMode.Continuous, FrequencySeconds = 1, IdleTimeoutSeconds = 3600 }, null, ("orders", []));
+        var (loop, queue, state, _, _) = CreateLoop("stays");
+        var ran = new List<string>();
+        var run = loop.RunAsync(RunsAndFinishes(loop, state, ran), CancellationToken.None);
+
+        await Task.Delay(700);
+        Assert.False(run.IsCompleted, "a continuous drain stays up between passes");
+
+        queue.Paused = true;
+        var finished = await Task.WhenAny(run, Task.Delay(TimeSpan.FromSeconds(10)));
+        Assert.Same(run, finished);
+        await run;
     }
 
     [Fact]

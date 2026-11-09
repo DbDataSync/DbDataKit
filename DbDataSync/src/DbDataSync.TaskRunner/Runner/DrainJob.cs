@@ -103,6 +103,16 @@ public sealed class DrainProgress : Progress
 
     /// <summary>The rows read by a mapping's primary passes, per mapping (plan 28c E11b).</summary>
     public Keyed<ReadsProgress> Reads { get; } = new();
+
+    /// <summary>The requests of the API that were applied, per request id (plan 28c E12c): a retried run reads its input again and finds them applied.</summary>
+    public Keyed<AppliedRequestProgress> Requests { get; } = new();
+}
+
+/// <summary>One request of the API the drain applied; the key is the request's id.</summary>
+public sealed class AppliedRequestProgress
+{
+    [Checkpoint]
+    public DateTimeOffset? AppliedAt { get; set; }
 }
 
 public static class DrainCounters
@@ -199,7 +209,8 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
 
         await DrainRequests.ApplyAsync(Input.Requests, Input.Replication, queue, checkpoints, checkpoints, Run.Log, ct).ConfigureAwait(false);
 
-        var drain = new DrainLoop(Input.Replication, config, planner, plannerState, state, queue, Input.RunAll, Math.Max(1, Input.DegreeOfParallelism), Run.Log, Status, outputs: outputs);
+        var drain = new DrainLoop(Input.Replication, config, planner, plannerState, state, queue, Input.RunAll, Math.Max(1, Input.DegreeOfParallelism), Run.Log, Status, outputs: outputs,
+            requestItem: item => DrainRequests.ApplyItemAsync(item, Input.Replication, queue, checkpoints, checkpoints, Run.Log, ct));
         try
         {
             await drain.RunAsync(
@@ -367,6 +378,21 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
             item.EstimateCaveat = batch.EstimateCaveat;
             item.CreatedAt = batch.CreatedAt;
         });
+
+        public bool TryMarkApplied(string requestId)
+        {
+            var marked = false;
+            Locked(() =>
+            {
+                var item = job.Progress.Requests[requestId];
+                if (item.AppliedAt is not null) return;
+                item.AppliedAt = DateTimeOffset.UtcNow;
+                marked = true;
+            });
+            return marked;
+        }
+
+        public bool WasApplied(string requestId) => job.Progress.Requests[requestId].AppliedAt is not null;
 
         public void AddRowsRead(string mapping, long rows) => Locked(() => job.Progress.Reads[mapping].Total = (job.Progress.Reads[mapping].Total ?? 0) + rows);
 

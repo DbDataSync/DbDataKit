@@ -76,6 +76,9 @@ public sealed record ClientTaskSchedule(string Task, string Owner, string? Owner
 /// <summary>The position a product's scheduler hands to the runner with a task: scheduled times up to <paramref name="HandledUpTo"/> are dealt with, and its pause if it had one.</summary>
 public sealed record ClientSeed(DateTimeOffset HandledUpTo, string? PausedBy, DateTimeOffset? PausedAt);
 
+/// <summary>One item of a task's checkpoint as the runner has it (plan 28c E12c): its key, its version and its parts as text (times as ISO 8601 in UTC).</summary>
+public sealed record ClientCheckpointItem(string Key, long Version, IReadOnlyDictionary<string, string> Parts);
+
 /// <summary>How a task's last run on the runner ended, as the runner's status gives it (plan 28c E10).</summary>
 public sealed record ClientLastRun(string Id, string Outcome, DateTimeOffset Started, DateTimeOffset? Finished, int Attempt, long? Rows);
 
@@ -338,6 +341,26 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
         if (response.StatusCode == HttpStatusCode.Conflict) return null;
         if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to run {package}/{channel}/{task}", ct);
         return (string?)JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!["run_id"];
+    }
+
+    /// <summary>Puts an item in the task's own queue (<c>POST .../work</c>, the operator role): the way to hand work to a run that is up already. The id of the item's run.</summary>
+    public async Task<string> EnqueueWorkAsync(string server, string? code, string package, string channel, string task, string kind, string subject, string part, string? payload, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        var body = new JsonObject { ["kind"] = kind, ["subject"] = subject, ["part"] = part, ["payload"] = payload };
+        using var response = await link.SendAsync(HttpMethod.Post, TaskPath(package, channel, task) + "/work", new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"), ct);
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to queue work for {package}/{channel}/{task}", ct);
+        return (string)JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!["run_id"]!;
+    }
+
+    /// <summary>The items of the task's checkpoint <paramref name="name"/> as the runner holds them now: <c>GET .../checkpoints/{name}</c> (the operator role).</summary>
+    public async Task<IReadOnlyList<ClientCheckpointItem>> CheckpointAsync(string server, string? code, string package, string channel, string task, string name, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        using var response = await link.SendAsync(HttpMethod.Get, TaskPath(package, channel, task) + "/checkpoints/" + Uri.EscapeDataString(name), null, ct);
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to read the checkpoint {name} of {package}/{channel}/{task}", ct);
+        var items = (JsonArray)JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!["items"]!;
+        return [.. items.Select(i => new ClientCheckpointItem((string)i!["key"]!, (long)i["version"]!, ((JsonObject)i["parts"]!).ToDictionary(p => p.Key, p => p.Value?.ToString() ?? "")))];
     }
 
     /// <summary>The task's row of the runner's status (<c>GET /api/v1/status</c>: owner, next due, last run, running, queued, paused), or null when the runner lists no such task.</summary>

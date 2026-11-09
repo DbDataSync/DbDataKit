@@ -1,4 +1,5 @@
 using DbDataSync.Core.Config;
+using DbDataKit.Runner.Kit;
 using DbDataSync.State;
 using Microsoft.Extensions.Logging;
 
@@ -10,7 +11,45 @@ public static class DrainRequests
     internal static async Task ApplyAsync(string? text, string replication, IDrainQueue queue, IDrainCheckpoints checkpoints, IDrainLedger ledger, ILogger log, CancellationToken ct)
     {
         var requests = DrainRequestText.Parse(text);
+        var applied = 0;
         foreach (var request in requests)
+            if (await ApplyOneAsync(request, replication, queue, checkpoints, ledger, log, ct).ConfigureAwait(false)) applied++;
+        if (applied > 0)
+            log.LogInformation("{Count} request(s) of the API were queued before the first cycle.", applied);
+    }
+
+    /// <summary>A request that came as a work item of the queue: applied, and the item finished (a request that cannot be applied fails the item and says why in the log).</summary>
+    internal static async Task ApplyItemAsync(RunnerWorkItem item, string replication, IDrainQueue queue, IDrainCheckpoints checkpoints, IDrainLedger ledger, ILogger log, CancellationToken ct)
+    {
+        await queue.StartAsync(item.Id, CancellationToken.None).ConfigureAwait(false);
+        try
+        {
+            await ApplyOneAsync(DrainRequestText.ParseOne(item.Payload), replication, queue, checkpoints, ledger, log, ct).ConfigureAwait(false);
+            await queue.FinishAsync(item.Id, WorkFinish.Done, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException ex)
+        {
+            log.LogWarning("The request of the API for '{Mapping}' could not be applied: {Message}", item.Subject, ex.Message);
+            await queue.FinishAsync(item.Id, WorkFinish.Failed, CancellationToken.None).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Applies one request, once per id: false when it was applied already (a retried run reads its input again).</summary>
+    internal static async Task<bool> ApplyOneAsync(DrainRequest request, string replication, IDrainQueue queue, IDrainCheckpoints checkpoints, IDrainLedger ledger, ILogger log, CancellationToken ct)
+    {
+        if (request.Id is { Length: > 0 } id && ledger.WasApplied(id))
+        {
+            log.LogInformation("The request {Id} ({Kind} of '{Mapping}') was applied already: not applied again.", id, request.Kind, request.Mapping);
+            return false;
+        }
+
+        await ApplyAsyncCore(request, replication, queue, checkpoints, ledger, log, ct).ConfigureAwait(false);
+        if (request.Id is { Length: > 0 } mark) ledger.TryMarkApplied(mark);
+        return true;
+    }
+
+    private static async Task ApplyAsyncCore(DrainRequest request, string replication, IDrainQueue queue, IDrainCheckpoints checkpoints, IDrainLedger ledger, ILogger log, CancellationToken ct)
+    {
         {
             if (request.Kind == "Position")
             {
@@ -25,7 +64,7 @@ public static class DrainRequests
                     log.LogInformation("'{Mapping}' starts from the position the API handed over.", request.Mapping);
                 }
 
-                continue;
+                return;
             }
 
             if (request.Kind == "Resync")
@@ -36,16 +75,13 @@ public static class DrainRequests
                 checkpoints.WriteHold(request.SourceKey, ReadHold.None);
                 await EnqueueAsync(queue, replication, new DrainRequest(nameof(RunKind.Primary), request.Mapping), ct).ConfigureAwait(false);
                 log.LogInformation("Resync of '{Mapping}': its next pass is an initial load.", request.Mapping);
-                continue;
+                return;
             }
 
             if (request.Kind == nameof(RunKind.BulkLoad) && request.BatchId is { Length: > 0 } batchId && ledger.ReadBatch(batchId) is null)
                 ledger.WriteBatch(batchId, new BatchRecord(request.Mapping, "", request.BatchSegments ?? 1, 0, 0, 0, 0, request.EstimatedRows, request.EstimateCaveat, DateTimeOffset.UtcNow));
             await EnqueueAsync(queue, replication, request, ct).ConfigureAwait(false);
         }
-
-        if (requests.Count > 0)
-            log.LogInformation("{Count} request(s) of the API were queued before the first cycle.", requests.Count);
     }
 
     private static Task<Guid> EnqueueAsync(IDrainQueue queue, string replication, DrainRequest request, CancellationToken ct)

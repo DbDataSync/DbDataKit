@@ -97,6 +97,9 @@ public sealed class ReplicationOwnershipTests : IDisposable
 
         public bool RunnerPaused { get; set; }
 
+        /// <summary>The checkpoint items the runner holds, as a read answers them.</summary>
+        public List<ClientCheckpointItem> Items { get; } = [];
+
         private int _statusReads;
 
         public Task<ClientTaskSchedule> ScheduleOfAsync(string task, CancellationToken ct)
@@ -119,9 +122,24 @@ public sealed class ReplicationOwnershipTests : IDisposable
             return Task.FromResult(RunId);
         }
 
-        public Task PauseAsync(string task, CancellationToken ct) { Calls.Add("pause"); return Task.CompletedTask; }
+        public List<(string Kind, string Subject, string Part, string? Payload)> Work { get; } = [];
 
-        public Task ResumeAsync(string task, CancellationToken ct) { Calls.Add("resume"); return Task.CompletedTask; }
+        public Task EnqueueWorkAsync(string task, string kind, string subject, string part, string? payload, CancellationToken ct)
+        {
+            Calls.Add("work:" + kind);
+            Work.Add((kind, subject, part, payload));
+            return Task.CompletedTask;
+        }
+
+        public Task PauseAsync(string task, CancellationToken ct) { Calls.Add("pause"); RunnerPaused = true; return Task.CompletedTask; }
+
+        public Task ResumeAsync(string task, CancellationToken ct) { Calls.Add("resume"); RunnerPaused = false; return Task.CompletedTask; }
+
+        public Task<IReadOnlyList<ClientCheckpointItem>> CheckpointAsync(string task, string name, CancellationToken ct)
+        {
+            Calls.Add("checkpoint:" + name);
+            return Task.FromResult<IReadOnlyList<ClientCheckpointItem>>([.. Items]);
+        }
 
         public Task<ClientTaskStatus?> StatusAsync(string task, CancellationToken ct)
         {
@@ -213,6 +231,70 @@ public sealed class ReplicationOwnershipTests : IDisposable
         Assert.True(_taskRuns.GetPauseState(Replication).Paused);
     }
 
+    private ClientCheckpointItem RunnerPosition(string position, params (string Part, string Value)[] more) =>
+        new(KeyOfOrders(), 3, new Dictionary<string, string>(more.Select(m => KeyValuePair.Create(m.Part, m.Value))) { ["position"] = position, ["position_time"] = "2026-11-09T11:30:00.0000000Z" });
+
+    [Fact]
+    public async Task Rollback_CopiesThePositionTheDrainAdvanced_WithItsIntentAndHold_SoNoRowIsReadTwice()
+    {
+        _file.SetOwner(Replication, TaskOwners.Runner);
+        _watermarks.SetWatermark(Replication, "orders", KeyOfOrders(), "0x2A");     // where the cutover left it
+        _sync.Items.Add(RunnerPosition("0x9F", ("intent", nameof(ReadIntent.Changes)), ("hold", nameof(ReadHold.None))));
+        _sync.Busy = read => read < 1 ? (1, 0) : (0, 0);
+
+        var change = await Ownership().RollbackAsync(Replication, "ann", null, CancellationToken.None);
+
+        Assert.Equal(1, change.PositionsHandedOver);
+        var state = _watermarks.GetReadState(Replication, "orders", KeyOfOrders())!;
+        Assert.Equal(("0x9F", ReadIntent.Changes, ReadHold.None), (state.Watermark, state.Intent, state.Hold));
+        Assert.Equal(new DateTimeOffset(2026, 11, 9, 11, 30, 0, TimeSpan.Zero), state.WatermarkTimeUtc);
+        Assert.Equal(TaskOwners.Old, _file.OwnerOf(Replication));
+    }
+
+    [Fact]
+    public async Task Rollback_CarriesAResyncThatWasAskedOnTheRunner_AsTheIntent()
+    {
+        _file.SetOwner(Replication, TaskOwners.Runner);
+        _sync.Items.Add(RunnerPosition("0x9F", ("intent", nameof(ReadIntent.InitialLoad))));
+
+        await Ownership().RollbackAsync(Replication, "ann", null, CancellationToken.None);
+
+        Assert.Equal(ReadIntent.InitialLoad, _watermarks.GetReadState(Replication, "orders", KeyOfOrders())!.Intent);
+    }
+
+    [Fact]
+    public async Task Rollback_RefusesAMappingThatIsLoadingOnTheRunner_AndChangesNothing()
+    {
+        _file.SetOwner(Replication, TaskOwners.Runner);
+        _sync.Items.Add(RunnerPosition("0x9F", ("pending_position", "0xAA"), ("hold", nameof(ReadHold.Loading))));
+
+        var ex = await Assert.ThrowsAsync<OwnershipException>(() => Ownership().RollbackAsync(Replication, "ann", null, CancellationToken.None));
+
+        Assert.Contains("is loading on the runner", ex.Message);
+        Assert.Equal(TaskOwners.Runner, _file.OwnerOf(Replication));
+        Assert.DoesNotContain("owner:old", _sync.Calls);
+        Assert.DoesNotContain("pause", _sync.Calls);
+    }
+
+    [Fact]
+    public async Task Rollback_PausesTheDrainSoItEnds_AndResumesTheTaskAfterwards_UnlessItWasPausedBefore()
+    {
+        _file.SetOwner(Replication, TaskOwners.Runner);
+        _sync.Busy = read => read < 1 ? (1, 0) : (0, 0);
+        await Ownership().RollbackAsync(Replication, "ann", null, CancellationToken.None);
+        Assert.Equal(["checkpoint:watermark", "schedule", "pause", "owner:old"], _sync.Calls.Take(4));
+        Assert.Contains("resume", _sync.Calls);
+        Assert.False(_taskRuns.GetPauseState(Replication).Paused);
+
+        _sync.Calls.Clear();
+        _file.SetOwner(Replication, TaskOwners.Runner);
+        _sync.RunnerPaused = true;
+        await Ownership().RollbackAsync(Replication, "ann", null, CancellationToken.None);
+        Assert.DoesNotContain("pause", _sync.Calls);
+        Assert.DoesNotContain("resume", _sync.Calls);
+        Assert.True(_taskRuns.GetPauseState(Replication).Paused);
+    }
+
     [Fact]
     public async Task Rollback_ThatRunsOutOfWait_GivesTheScheduleBackToTheRunner()
     {
@@ -224,6 +306,7 @@ public sealed class ReplicationOwnershipTests : IDisposable
         Assert.Contains("still running on the runner", ex.Message);
         Assert.Equal(TaskOwners.Runner, _file.OwnerOf(Replication));
         Assert.Equal(["owner:old", "owner:runner"], _sync.Calls.Where(c => c.StartsWith("owner:")));
+        Assert.Contains("resume", _sync.Calls);      // the pause that made the drain end is lifted again
     }
 
     [Fact]
@@ -254,17 +337,23 @@ public sealed class ReplicationOwnershipTests : IDisposable
     }
 
     [Fact]
-    public async Task WhenADrainIsUpAlready_APlainRunNowIsDone_AndARequestThatCarriesWorkIsRefusedSayingWhy()
+    public async Task WhenADrainIsUpAlready_APlainRunNowIsDone_AndARequestThatCarriesWorkIsQueuedForIt_WithAnId()
     {
         _file.SetOwner(Replication, TaskOwners.Runner);
         _sync.RunId = null;
         var dispatch = new RunnerDispatch(new RunnerAccess(_file, _ => _sync));
 
         Assert.Equal(TriggerOutcome.Started, (await dispatch.SendAsync(Replication, [], runAll: true, CancellationToken.None)).Outcome);
-        var refused = await dispatch.SendAsync(Replication, [new DrainRequest(nameof(RunKind.Verification), "orders")], runAll: false, CancellationToken.None);
+        var queued = await dispatch.SendAsync(Replication, [new DrainRequest(nameof(RunKind.Verification), "orders")], runAll: false, CancellationToken.None);
 
-        Assert.Equal(TriggerOutcome.FailedToStart, refused.Outcome);
-        Assert.Contains("queued or running on the runner already", refused.Reason);
+        // not refused and not lost: an item of the task's own queue, which the drain that is up takes in its next sweep
+        Assert.Equal(TriggerOutcome.Started, queued.Outcome);
+        var item = Assert.Single(_sync.Work);
+        Assert.Equal((DrainRequestText.ItemKind, "orders"), (item.Kind, item.Subject));
+        var request = DrainRequestText.ParseOne(item.Payload);
+        Assert.Equal((nameof(RunKind.Verification), "orders"), (request.Kind, request.Mapping));
+        Assert.Equal(request.Id, item.Part);
+        Assert.False(string.IsNullOrEmpty(request.Id));
     }
 
     [Fact]

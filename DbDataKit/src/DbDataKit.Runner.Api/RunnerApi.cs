@@ -36,6 +36,45 @@ public static class RunnerApi
             return Results.Json(Status(state, engine(), instanceId, options));
         });
 
+        // a task's checkpoint as it stands (plan 28c E12c): what a product reads to take the position back when it schedules the task again (rollback). Operator, as the owner's move is.
+        app.MapGet($"{root}/tasks/{{package}}/{{channel}}/{{task}}/checkpoints/{{name}}", (string package, string channel, string task, string name, HttpContext context) =>
+        {
+            if (!ParseTask(package, channel, task, out var reference, out var bad)) return bad!;
+            if (Deny(context, ServerRole.Operator) is { } denied) return denied;
+            if (!PackageManifestValidator.NameRule.IsMatch(name)) return Results.BadRequest(new { error = $"'{name}' is not a checkpoint name." });
+            var store = new ProgressStore(state, new ProgressKey(package, channel, task));
+            var items = new JsonArray();
+            foreach (var key in store.ItemKeys(name))
+            {
+                if (store.GetCheckpoint(name, key) is not { } checkpoint) continue;
+                var parts = new JsonObject();
+                foreach (var (part, value) in checkpoint.Parts)
+                    parts[part] = value.Value switch { DateTimeOffset at => at.UtcDateTime.ToString("O"), IFormattable f => f.ToString(null, CultureInfo.InvariantCulture), var other => other.ToString() };
+                items.Add(new JsonObject { ["key"] = key, ["version"] = checkpoint.Version, ["parts"] = parts });
+            }
+
+            return Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["name"] = name, ["items"] = items });
+        });
+
+        // an item for the task's own queue, the one a run of the task claims from (plan 28c E12c): how a product hands work to a run that is up already, since a task runs one at a time and a second start is refused. Operator.
+        app.MapPost($"{root}/tasks/{{package}}/{{channel}}/{{task}}/work", async (string package, string channel, string task, HttpContext context) =>
+        {
+            if (!ParseTask(package, channel, task, out var reference, out var bad)) return bad!;
+            if (Deny(context, ServerRole.Operator) is { } denied) return denied;
+            using var reader = new StreamReader(context.Request.Body);
+            var text = await reader.ReadToEndAsync(context.RequestAborted);
+            if (text.Length > 1_000_000) return Results.BadRequest(new { error = "The body is larger than 1 MB." });
+            JsonObject? body;
+            try { body = JsonNode.Parse(text) as JsonObject; }
+            catch (System.Text.Json.JsonException) { return Results.BadRequest(new { error = "The body is not JSON." }); }
+            if (body is null) return Results.BadRequest(new { error = "The body is a JSON object with kind, subject and, optionally, part, resource, lane and payload." });
+            string? Field(string name) => body[name] is JsonValue v && v.TryGetValue<string>(out var t) ? t : null;
+            if (string.IsNullOrWhiteSpace(Field("kind")) || string.IsNullOrWhiteSpace(Field("subject"))) return Results.BadRequest(new { error = "A work item has a kind and a subject." });
+            var queue = new DbDataKit.Scheduling.ModuleWorkQueueStore(state, "runner.work");
+            var runId = queue.Enqueue($"{package}/{channel}/{task}", Field("kind")!, Field("subject")!, Field("part") ?? "", Field("resource") ?? "", Field("lane") ?? "", Field("payload"));
+            return Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["run_id"] = runId.ToString() }, statusCode: StatusCodes.Status202Accepted);
+        });
+
         app.MapGet($"{root}/runs", (HttpContext context) =>
         {
             if (Deny(context, ServerRole.Viewer) is { } denied) return denied;

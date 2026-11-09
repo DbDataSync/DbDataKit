@@ -21,6 +21,12 @@ public interface IRunnerSync
     Task ResumeAsync(string task, CancellationToken ct);
 
     Task<ClientTaskStatus?> StatusAsync(string task, CancellationToken ct);
+
+    /// <summary>The items of the task's checkpoint <paramref name="name"/> as the runner holds them (the drain's positions are the checkpoint <c>watermark</c>, one item per source table).</summary>
+    Task<IReadOnlyList<ClientCheckpointItem>> CheckpointAsync(string task, string name, CancellationToken ct);
+
+    /// <summary>Puts an item in the task's own queue, which a drain that is up takes in its next sweep (the runner starts one drain of a task at a time).</summary>
+    Task EnqueueWorkAsync(string task, string kind, string subject, string part, string? payload, CancellationToken ct);
 }
 
 /// <summary>The runner a <see cref="RunnerLink"/> names, spoken to through the paired client (the owner, run, pause and resume calls need the operator role of the pairing).</summary>
@@ -37,6 +43,11 @@ public sealed class ClientRunnerSync(RunnerPublishClient client, RunnerLink link
     public Task ResumeAsync(string task, CancellationToken ct) => client.ResumeAsync(link.Server, null, link.Package, link.Channel, task, null, ct);
 
     public Task<ClientTaskStatus?> StatusAsync(string task, CancellationToken ct) => client.TaskStatusAsync(link.Server, null, link.Package, link.Channel, task, null, ct);
+
+    public Task<IReadOnlyList<ClientCheckpointItem>> CheckpointAsync(string task, string name, CancellationToken ct) => client.CheckpointAsync(link.Server, null, link.Package, link.Channel, task, name, null, ct);
+
+    public async Task EnqueueWorkAsync(string task, string kind, string subject, string part, string? payload, CancellationToken ct) =>
+        await client.EnqueueWorkAsync(link.Server, null, link.Package, link.Channel, task, kind, subject, part, payload, null, ct);
 
     public static ClientRunnerSync For(RunnerLink link, Func<string, string?> environment) =>
         new(new RunnerPublishClient(new RunnerClientStore(link.ClientDirectory ?? RunnerClientStore.DefaultDirectory(environment)), environment), link);

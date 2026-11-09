@@ -55,6 +55,19 @@ public sealed class ReplicationOwnership(
         return new OwnerView(replication, owner, runner.Link, status, error);
     }
 
+    private readonly RunnerPositions positions = new(config, watermarks, drivers);
+
+    private static IReadOnlyList<CheckpointItem> Items(IReadOnlyList<ClientCheckpointItem> items) => [.. items.Select(i => new CheckpointItem(i.Key, i.Parts))];
+
+    /// <summary>A refusal of the hand-over as the move's own.</summary>
+    private static T Hand<T>(Func<T> step)
+    {
+        try { return step(); }
+        catch (PositionHandOverException ex) { throw new OwnershipException(ex.Message); }
+    }
+
+    private static void Hand(Action step) => Hand(() => { step(); return 0; });
+
     private ReplicationTaskConfig Load(string replication)
     {
         try { return config.LoadReplicationTask(replication); }
@@ -109,7 +122,7 @@ public sealed class ReplicationOwnership(
             var waited = await WaitForWorkerAsync(replication, wait ?? DefaultWait, ct).ConfigureAwait(false);
             if (workQueue.HasOutstandingWork(replication))
                 throw new OwnershipException($"'{replication}' has work left in this API's queue and no worker to run it; the owner is as it was. Run it (or cancel it) first.");
-            var seeds = Seeds(task, mappings);
+            var seeds = Hand(() => positions.SeedsFor(task, mappings));
             var handed = HandledUpTo(replication);
 
             // the first drain starts with the positions: the runner's schedule is not active yet, so nothing of its own can start one before them
@@ -135,8 +148,15 @@ public sealed class ReplicationOwnership(
         var taskName = RunnerAccess.TaskOf(replication);
         var waited = false;
         var runnerPaused = false;
+        var copied = 0;
         if (from == TaskOwners.Runner)
         {
+            // a load in progress on the runner cannot be handed back: refuse before anything is changed
+            var before = Items(await sync.CheckpointAsync(taskName, RunnerPositions.WatermarkCheckpoint, ct).ConfigureAwait(false));
+            Hand(() => RunnerPositions.RefuseLoading(before));
+            runnerPaused = (await sync.ScheduleOfAsync(taskName, ct).ConfigureAwait(false)).Paused;
+            // a continuous drain stays up until it is told otherwise: a pause is what makes it plan nothing new and end once its queue is empty
+            if (!runnerPaused) await sync.PauseAsync(taskName, ct).ConfigureAwait(false);
             await sync.SetOwnerAsync(taskName, TaskOwners.Old, $"rollback by {actor}", null, ct).ConfigureAwait(false);
             try
             {
@@ -149,11 +169,15 @@ public sealed class ReplicationOwnership(
                     await _delay(PollEvery, ct).ConfigureAwait(false);
                 }
 
-                runnerPaused = (await sync.ScheduleOfAsync(taskName, ct).ConfigureAwait(false)).Paused;
+                // the drain has ended: what it left is the position the mappings are at
+                var items = Items(await sync.CheckpointAsync(taskName, RunnerPositions.WatermarkCheckpoint, ct).ConfigureAwait(false));
+                copied = Hand(() => { RunnerPositions.RefuseLoading(items); return positions.CopyBack(config.LoadReplicationTask(replication), items); });
+                if (!runnerPaused) await sync.ResumeAsync(taskName, ct).ConfigureAwait(false);
             }
             catch
             {
                 await sync.SetOwnerAsync(taskName, TaskOwners.Runner, "rollback abandoned", null, CancellationToken.None).ConfigureAwait(false);
+                if (!runnerPaused) await sync.ResumeAsync(taskName, CancellationToken.None).ConfigureAwait(false);
                 throw;
             }
         }
@@ -165,7 +189,7 @@ public sealed class ReplicationOwnership(
         if (from == TaskOwners.Runner && runnerPaused != taskRuns.GetPauseState(replication).Paused)
             taskRuns.SetPaused(replication, runnerPaused, runnerPaused ? "paused on the runner" : "resumed on the runner", actor);
         runner.File.SetOwner(replication, TaskOwners.Old);
-        return new OwnershipChange(replication, from, TaskOwners.Old, taskName, 0, null, runnerPaused, waited);
+        return new OwnershipChange(replication, from, TaskOwners.Old, taskName, copied, null, runnerPaused, waited);
     }
 
     private async Task<bool> WaitForWorkerAsync(string replication, TimeSpan wait, CancellationToken ct)
@@ -181,27 +205,5 @@ public sealed class ReplicationOwnership(
         }
 
         return waited;
-    }
-
-    /// <summary>The positions this API holds for the mappings, as the requests that seed a drain that has none. A mapping that is held for a load (no position yet, or one in progress) is refused: its batch lives in this API's queue.</summary>
-    private List<DrainRequest> Seeds(ReplicationTaskConfig task, IReadOnlyList<string> mappings)
-    {
-        var seeds = new List<DrainRequest>();
-        foreach (var name in mappings)
-        {
-            var mapping = config.LoadTableMapping(task.Name, name);
-            if (mapping.Sources.Count != 1) continue;
-            var source = EndpointResolution.ResolveSource(task, mapping.Sources[0]);
-            var dialect = (drivers.Get(config.LoadConnection(source.ConnectionName).DriverType) as IDialectProvider)?.Dialect
-                ?? throw new OwnershipException($"The driver of the connection '{source.ConnectionName}' names no SQL dialect.");
-            var key = WatermarkKey.Build(source, dialect);
-            var state = watermarks.GetReadState(task.Name, name, key);
-            if (state?.Hold == ReadHold.Loading)
-                throw new OwnershipException($"The mapping '{name}' is loading (its initial load is a batch of this API's queue); let it finish before the move. The owner is as it was.");
-            if (state?.Watermark is { Length: > 0 } position)
-                seeds.Add(new DrainRequest("Position", name, SourceKey: key, Position: position, PositionTime: state.WatermarkTimeUtc, Intent: state.Intent.ToString(), Hold: state.Hold.ToString()));
-        }
-
-        return seeds;
     }
 }

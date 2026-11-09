@@ -228,10 +228,10 @@ public sealed class ProtocolRunnerStateTests
         var task = ManifestGenerator.TaskOf(typeof(DrainJob));
 
         Assert.Equal("drain", task.Name);
-        Assert.Equal(["replication", "degree_of_parallelism", "repo_dir", "run_all"], task.Inputs.Select(i => i.Name));
-        Assert.Equal([true, false, false, false], task.Inputs.Select(i => i.Required));
+        Assert.Equal(["replication", "degree_of_parallelism", "repo_dir", "run_all", "requests"], task.Inputs.Select(i => i.Name));
+        Assert.Equal([true, false, false, false, false], task.Inputs.Select(i => i.Required));
         // the position (the declared checkpoint of Sync's own state, part for part), the batches of initial loads and the rows each mapping read (plan 28c E11b)
-        Assert.Equal(["batch", "reads", "watermark"], task.Progress.Checkpoints.Select(c => c.Name).Order());
+        Assert.Equal(["batch", "reads", "requests", "watermark"], task.Progress.Checkpoints.Select(c => c.Name).Order());
         var checkpoint = task.Progress.Checkpoints.Single(c => c.Name == "watermark");
         Assert.Equal(WatermarkCheckpoint.Declaration.Parts.Keys.Order(), checkpoint.Parts.Keys.Order());
         Assert.Equal(WatermarkCheckpoint.Declaration.Parts.Select(p => (p.Key, p.Value.Type)).Order(), checkpoint.Parts.Select(p => (p.Key, p.Value.Type)).Order());
