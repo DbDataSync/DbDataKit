@@ -476,6 +476,29 @@ if (!isWorker) {
   fs.writeFileSync(path.join(scratchDirectory, 'workspace-edit-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
 
+// Plan 22a GP35b: the Workspace server of the publishing story (`workspace-publish.spec.ts`), port 8631 (a port table: 8631 this Workspace server, 8632 to 8634 the Gateway the story starts for it: 8632 the identity home,
+// 8633 the apps host, 8634 the management API; 8541 to 8544, 8551, 8561 and up, 8571 and up, 8581 to 8586, 8591, 8601 to 8603, 8611 and 8621 are other stories'). The project is `sales`, made from the app template by the server's own
+// command (the project's id is the app's name). The server's `apps:` section names the vendored package store, which the story makes with `app-store/build.mjs` before the first build (a build reads the settings again each time),
+// and sets `isolation: auto` so a runner that cannot make a network namespace still builds, visibly: the story reads the isolation line either way.
+export const workspacePublish = {
+  directory: path.join(os.tmpdir(), 'ddk-e2e-workspace-publish'),
+  port: 8631,
+  url: 'https://localhost:8631',
+  project: 'sales',
+  packageStore: path.join(os.tmpdir(), 'ddk-e2e-workspace-publish-store'),
+  gateway: { directory: path.join(os.tmpdir(), 'ddk-e2e-workspace-publish-gateway'), homePort: 8632, appsPort: 8633, managementPort: 8634 },
+  dll: workspaceServer.dll,
+}
+if (!isWorker) {
+  for (const directory of [workspacePublish.directory, workspacePublish.packageStore, workspacePublish.gateway.directory]) fs.rmSync(directory, { recursive: true, force: true })
+  fs.mkdirSync(workspacePublish.directory, { recursive: true })
+  execFileSync('dotnet', ['exec', workspacePublish.dll, 'project', 'create', workspacePublish.project, '--title', 'Sales', '--repo', workspacePublish.directory], { stdio: 'ignore' })
+  const made = execFileSync('dotnet', ['exec', workspacePublish.dll, 'server', 'pair', '--minutes', '120', '--repo', workspacePublish.directory, '--max-role', 'viewer,author,approver,admin'], { encoding: 'utf8' })
+  fs.writeFileSync(path.join(scratchDirectory, 'workspace-publish-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
+  const settings = path.join(workspacePublish.directory, 'server.yaml')
+  fs.appendFileSync(settings, `${fs.existsSync(settings) && !fs.readFileSync(settings, 'utf8').endsWith('\n') ? '\n' : ''}apps:\n  packageStore: '${workspacePublish.packageStore}'\n  isolation: auto\n  buildTimeoutSeconds: 240\n`)
+}
+
 // A passkey is bound to the host name and the port it was made on, and the server builds its list of allowed origins from the address it is told to listen on,
 // so the address is fixed here and the test opens exactly that.
 const port = 8481
@@ -631,6 +654,15 @@ export default defineConfig({
     {
       command: ['dotnet', 'exec', JSON.stringify(workspaceEditServer.dll), 'server', 'run', '--repo', JSON.stringify(workspaceEditServer.directory), '--listen', workspaceEditServer.url].join(' '),
       url: `${workspaceEditServer.url}/health/live`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(workspacePublish.dll), 'server', 'run', '--repo', JSON.stringify(workspacePublish.directory), '--listen', workspacePublish.url].join(' '),
+      url: `${workspacePublish.url}/health/live`,
       ignoreHTTPSErrors: true,
       reuseExistingServer: false,
       timeout: 60_000,

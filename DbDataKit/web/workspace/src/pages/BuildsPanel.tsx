@@ -129,8 +129,8 @@ function BuildDetailView({ project, id, buildId, canWrite }: { project: string; 
   )
 }
 
-/** The builds of a draft: build it, follow the build, read what it said, preview it (read only) and publish it to a Gateway. */
-export function BuildsPanel({ project, id, canWrite }: { project: string; id: string; canWrite: boolean }) {
+/** The builds of a draft: build it, follow the build, read what it said, preview it (read only) and publish it to a Gateway. A merged workspace (`closed`) keeps its builds: they can still be previewed and published. */
+export function BuildsPanel({ project, id, canWrite, closed = false }: { project: string; id: string; canWrite: boolean; closed?: boolean }) {
   const client = useQueryClient()
   const [selected, setSelected] = useState<string | null>(null)
   const readiness = useQuery({ queryKey: ['workspace', 'readiness'], queryFn: workspaceApi.readiness, staleTime: 10_000 })
@@ -144,14 +144,14 @@ export function BuildsPanel({ project, id, canWrite }: { project: string; id: st
     onSuccess: async (b) => { setSelected(b.id); await client.invalidateQueries({ queryKey: ['workspace', 'builds', project, id] }) },
   })
   const busy = (builds.data ?? []).some((b) => buildBusy(b.status)) || ask.isPending
-  const button = buildButton({ canWrite, ready: readiness.data?.ready ?? false, problems: readiness.data?.problems ?? [], busy })
+  const button = buildButton({ canWrite, ready: readiness.data?.ready ?? false, problems: readiness.data?.problems ?? [], busy, closed })
   const shown = selected ?? builds.data?.[0]?.id ?? null
   return (
     <div data-testid="wsp-builds">
       <Readiness />
       <div className="row" style={{ gap: 10, margin: '8px 0', alignItems: 'center', flexWrap: 'wrap' }}>
         <button type="button" className="btn btn-primary" disabled={!button.enabled} title={button.why ?? undefined} data-testid="wsp-build" onClick={() => ask.mutate()}>Build</button>
-        {button.why && !readiness.data?.problems.length && <span className="hint" data-testid="wsp-build-why">{button.why}</span>}
+        {button.why && (closed || !readiness.data?.problems.length) && <span className="hint" data-testid="wsp-build-why">{button.why}</span>}
         <span className="hint">Builds what is in this workspace now, committed or not. <Link to="/keys" data-testid="wsp-keys-link">Publisher keys</Link></span>
       </div>
       <ErrorBanner error={ask.error ?? builds.error} />

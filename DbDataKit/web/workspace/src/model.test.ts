@@ -106,6 +106,7 @@ describe('builds, preview and publish', () => {
     // a server that cannot build says the first thing it lacks, in its own sentence
     expect(buildButton({ ...ready, ready: false, problems: ['No package store is set.', 'Bun is not installed.'] })).toEqual({ enabled: false, why: 'No package store is set.' })
     expect(buildButton({ ...ready, busy: true }).why).toContain('already going')
+    expect(buildButton({ ...ready, closed: true }).why).toContain('merged')
   })
   it('knows a build that is still going, and says its status as a person does', () => {
     expect(['queued', 'running', 'succeeded', 'failed'].map(buildBusy)).toEqual([true, true, false, false])
