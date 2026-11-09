@@ -100,7 +100,12 @@ public sealed class SchedulerServiceReconcileTests(TestApiFactory factory) : ICl
     private void RecordPrimaryPass(string replicationName, string mappingName, long rowsRead)
     {
         var runId = _workQueueStore.Enqueue(replicationName, RunKind.Primary, mappingName);
+        // The pass is the test's own: its work item is claimed and finished here, so no queued item is left for a tick to start a real worker for. A worker that
+        // is up claims a queued item, cannot reach the database, and ends the run Failed after it was recorded Succeeded (the rows it read are then not counted:
+        // seen on a Windows runner twice, once from the first pass of this test and once from the second).
+        var item = _workQueueStore.TryClaimNext(replicationName, "test-recorded-pass", runId: runId) ?? throw new InvalidOperationException("The recorded pass was claimed by another worker.");
         _taskRunStore.CompleteRun(runId, RunStatus.Succeeded, rowsRead, rowsRead, errorSummary: null);
+        _workQueueStore.MarkDone(item.Id);
     }
 
     private int ReconcileRunCount(string replicationName, string mappingName) =>
