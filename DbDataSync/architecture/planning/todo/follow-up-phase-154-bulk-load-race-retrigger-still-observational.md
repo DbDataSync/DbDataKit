@@ -147,3 +147,9 @@ five times back to back against the real `dbdatasync-mssql-source`/`target` cont
 every other fix in this doc and its sibling SCD2 CDC doc, this environment's own idle containers never
 reproduced the original race even before the fix, so this proves no regression, not that the race is gone;
 the real proof is whether "is still loading" recurs at this specific call site on CI.
+
+## Overtaken by the owner decision of 2026-11-09
+
+A pass that loses the initial-load race no longer ends `Failed` (it ends `Succeeded` with a `Not run:` summary; see `architecture/planning/done/race-lost-runs-recorded-as-failed-should-not-be.md`),
+so the test's branches no longer differ in status: both outcomes are `Succeeded`, and what is left to assert is that a lost pass carries the reason and no failure kind. The test is now named
+`ARaceBetweenAConcurrentReloadAndAMappingsOwnFirstPass_TheLoserSucceedsWithTheReason_AndSelfHeals`. The race itself is unchanged and the test still cannot force which side wins; it no longer needs to.

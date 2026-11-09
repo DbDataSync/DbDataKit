@@ -270,7 +270,6 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
         if (outcome.Status != RunStatus.Succeeded)
         {
             var kind = outcome.Status == RunStatus.Cancelled ? TaskFailureKind.Cancelled
-                : outcome.FailureKind is RunFailureKinds.MappingStillLoading or RunFailureKinds.ConcurrentLoadInProgress ? TaskFailureKind.Temporary
                 : TaskFailureKind.Permanent;
             throw new TaskFailureException(kind, $"The pass over '{pass.Mapping}' ended {outcome.Status}: {outcome.Summary}", pass.Mapping);
         }

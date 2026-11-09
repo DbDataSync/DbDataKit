@@ -483,33 +483,23 @@ public sealed class RunExecutor(
             state.CompleteRun(item.RunId, RunStatus.Failed, 0, 0, shown, errorDetail: DriverFailures.Detail(ex));
             state.MarkFailed(item.Id);
         }
-        catch (WorkQueueCollisionException ex)
+        catch (Exception ex) when (ex is WorkQueueCollisionException or MappingLoadingException)
         {
-            // Phase 143: this pass's own auto-triggered initial load lost its race against other
-            // in-flight work for the same mapping+segment (an operator's own concurrent reload, most
-            // likely). Unlike PositionExpired/MetadataNotCached above, there is nothing for an operator
-            // to do — this mapping's own next scheduled pass retries on its own once the winner
-            // finishes — but it still gets its own FailureKind so the Runs tab can say that plainly
-            // rather than reading like an unexplained failure.
-            Log(item.RunId, LogSeverity.Error, ex.Message);
+            // A pass that lost the initial-load race did nothing wrong and leaves nothing to fix: an
+            // initial load for this mapping is already in flight (requested by another pass of the same
+            // mapping, or by an operator's reload), and the mapping's next ordinary pass runs once it
+            // completes. Recorded as a Succeeded pass that moved nothing — the same shape as the pass
+            // that wins the race, which also reads and writes nothing and ends Succeeded after asking
+            // for the load — with the reason in the summary, so Monitoring, notifications and the
+            // failure counts see no failure. Phase 143 recorded these as Failed with the kinds
+            // ConcurrentLoadInProgress / MappingStillLoading (kept in RunFailureKinds: old rows carry them).
+            var reason = ex is WorkQueueCollisionException
+                ? $"Not run: an initial load for mapping '{item.MappingName}' is already in progress, requested by another pass or a reload."
+                : $"Not run: mapping '{item.MappingName}' is still loading — an initial load is in flight and its watermark is not durable yet.";
+            Log(item.RunId, LogSeverity.Info, $"{reason} Nothing to do; the mapping's next pass runs once the load completes.");
             state.Flush();
-            state.CompleteRun(
-                item.RunId, RunStatus.Failed, 0, 0, ex.Message, RunFailureKinds.ConcurrentLoadInProgress,
-                errorDetail: ex.ToString());
-            state.MarkFailed(item.Id);
-        }
-        catch (MappingLoadingException ex)
-        {
-            // A manual "Run Now" landed on a mapping still ReadHold.Loading — see the exception's own
-            // doc comment. Same posture as WorkQueueCollisionException just above: nothing for an
-            // operator to do, the mapping's own next scheduled pass (or this load finishing) resolves
-            // it, but it still gets a named FailureKind instead of reading like a mystery.
-            Log(item.RunId, LogSeverity.Error, ex.Message);
-            state.Flush();
-            state.CompleteRun(
-                item.RunId, RunStatus.Failed, 0, 0, ex.Message, RunFailureKinds.MappingStillLoading,
-                errorDetail: ex.ToString());
-            state.MarkFailed(item.Id);
+            state.CompleteRun(item.RunId, RunStatus.Succeeded, 0, 0, errorSummary: reason);
+            state.MarkDone(item.Id);
         }
         // Deliberately not caught: the owner being gone is not this item failing. Recording it as
         // Failed would be this process asserting an outcome it is in no position to observe — and it

@@ -1,5 +1,7 @@
 # Phase 143 — a losing auto-triggered initial load fails cleanly instead of stranding `ReadHold`
 
+> **Superseded in one respect (2026-11-09):** the losing pass no longer ends `Failed` with `ConcurrentLoadInProgress` (or `MappingStillLoading`). It ends `Succeeded`, moved nothing, with `Not run: ...` and the reason as its summary; see `architecture/planning/done/race-lost-runs-recorded-as-failed-should-not-be.md`. Everything else here (the enqueue-before-`SetPendingLoad` order, the 409 across the HTTP boundary) is unchanged.
+
 **Status**: Complete. `dotnet-integration`'s last known failure — the intermittent
 `BulkLoadIntegrationTests` row-count flake phase 141 left open — is gone: it shared the fixture bug this
 phase found, not a separate cause. `TaskRunner.Tests` (32/32), `Api.Tests` (70/70 — up from 69, a new
