@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DbDataKit.Authoring\DbDataKit.Authoring.csproj" />
+    <PackageReference Include="LibGit2Sharp" />
+    <Using Include="Xunit" />
+  </ItemGroup>
+</Project>

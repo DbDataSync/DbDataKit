@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <DbDataKitReference Include="Cli" />
+    <DbDataKitReference Include="Authoring" />   <!-- the workspace list, create, abandon and git calls, the same for every project kind; plan 22a, GP30 -->
     <DbDataKitReference Include="Monitoring" />
     <DbDataKitReference Include="Scheduling" />   <!-- the schedule evaluator and the work queue the server runs plans from; plan 13, M08 -->
     <DbDataKitReference Include="State.Api" />   <!-- GET /api/v1/state and the maintenance mode; plan 29b, C05 -->

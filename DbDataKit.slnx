@@ -38,6 +38,7 @@
     <Project Path="DbDataKit/src/DbDataKit.Apps.Instances/DbDataKit.Apps.Instances.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Apps.Host/DbDataKit.Apps.Host.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Apps.Manifest/DbDataKit.Apps.Manifest.csproj" />
+    <Project Path="DbDataKit/src/DbDataKit.Authoring/DbDataKit.Authoring.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Config.Git/DbDataKit.Config.Git.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Config.Hosting/DbDataKit.Config.Hosting.csproj" />
     <Project Path="DbDataKit/src/DbDataKit.Config.Testing/DbDataKit.Config.Testing.csproj" />
@@ -139,6 +140,7 @@
     <Project Path="DbDataKit/tests/DbDataKit.Apps.Instances.Tests/DbDataKit.Apps.Instances.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Apps.Host.Tests/DbDataKit.Apps.Host.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Apps.Manifest.Tests/DbDataKit.Apps.Manifest.Tests.csproj" />
+    <Project Path="DbDataKit/tests/DbDataKit.Authoring.Tests/DbDataKit.Authoring.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Quality.Tests/DbDataKit.Quality.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Quality.Evaluation.Tests/DbDataKit.Quality.Evaluation.Tests.csproj" />
     <Project Path="DbDataKit/tests/DbDataKit.Quality.Runner.Tests/DbDataKit.Quality.Runner.Tests.csproj" />
