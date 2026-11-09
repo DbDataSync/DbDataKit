@@ -93,6 +93,10 @@ The API process is the only long-running server component in v1. It owns:
   connected SPA clients; the API polls the central SQLite `Logs`/`TaskRuns` tables (or is notified
   in-process by the supervisor for its own spawned processes) and republishes over the hub. A plain
   polling REST endpoint exists as a fallback/for non-realtime clients.
+  **The hub does not replay.** `RunHub.JoinRun` only adds the connection to the run's group: a client that joins after the monitor has already streamed some lines (a fast run, a
+  slow handshake) never receives them over SignalR. A client that needs every line reads the run's lines from `GET /api/runs/{id}/logs` and uses the hub only for what comes after (the
+  SPA's `useRunHub` does both). Tests therefore assert that what the hub delivered is a part of what the endpoint returns, never that the hub delivered a line (owner decision
+  2026-11-09: leave it so, replay on join is a product change to make if a screen shows lost lines).
 
 ### 3.2 React / TypeScript SPA (`DbDataSync.Web`)
 
