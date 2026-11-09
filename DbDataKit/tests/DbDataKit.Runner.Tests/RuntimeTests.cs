@@ -374,6 +374,30 @@ public sealed class RuntimeTests
         finally { ArtifactTestSupport.DeleteTree(root); }
     }
 
+    [Fact]
+    public async Task A_runtime_that_a_host_program_starts_has_a_view_of_copies_and_a_self_contained_one_of_links()
+    {
+        // plan 28c E12e: `dotnet {runtime}/bin/Engine.dll` resolves a link to the object it points at and looks for its runtime configuration beside that (exit code 131); the engine of Sync is such a runtime
+        var root = Directory.CreateTempSubdirectory("dbdatakit-sharedview-copies-").FullName;
+        try
+        {
+            var source = new MemorySource();
+            var file = source.Add("bin/Engine.dll", "engine");
+            var cache = new ArtifactCache(Path.Combine(root, "cache"), source);
+            var views = new SharedViewCache(cache);
+
+            using var copied = await views.AcquireAsync("hosted@1", [file], copies: true);
+            using var linked = await views.AcquireAsync("self-contained@1", [file], copies: false);
+
+            var copy = new FileInfo(Path.Combine(copied.Directory, "bin", "Engine.dll"));
+            var link = new FileInfo(Path.Combine(linked.Directory, "bin", "Engine.dll"));
+            Assert.Null(copy.LinkTarget);
+            Assert.Equal("engine", await File.ReadAllTextAsync(copy.FullName));
+            if (!OperatingSystem.IsWindows()) Assert.NotNull(link.LinkTarget);   // links are what Linux makes of a view otherwise
+        }
+        finally { ArtifactTestSupport.DeleteTree(root); }
+    }
+
     [Theory, MemberData(nameof(Engines))]
     public async Task Two_runtimes_sharing_a_file_store_it_once_and_eviction_keeps_the_files_of_the_active_and_previous_runtime(string engine)
     {

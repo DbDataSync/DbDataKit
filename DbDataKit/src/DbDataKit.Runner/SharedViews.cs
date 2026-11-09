@@ -18,14 +18,17 @@ public sealed class SharedViewCache(ArtifactCache cache)
     public int Built { get; private set; }
 
     /// <summary>Takes a share of the view of <paramref name="key"/> (a version key such as <c>dbdatabuild-runtime@3</c>), building it from <paramref name="files"/> when no run holds it.</summary>
-    public async Task<SharedView> AcquireAsync(string key, IReadOnlyCollection<ArtifactFile> files, CancellationToken ct = default)
+    public async Task<SharedView> AcquireAsync(string key, IReadOnlyCollection<ArtifactFile> files, CancellationToken ct = default) => await AcquireAsync(key, files, copies: false, ct).ConfigureAwait(false);
+
+    /// <summary>The same; <paramref name="copies"/> builds the view of copies, for a runtime that a host program starts (<see cref="ArtifactCache.MaterializeAsync(string, IReadOnlyCollection{ArtifactFile}, bool, CancellationToken)"/>).</summary>
+    public async Task<SharedView> AcquireAsync(string key, IReadOnlyCollection<ArtifactFile> files, bool copies, CancellationToken ct = default)
     {
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             if (!_entries.TryGetValue(key, out var entry))
             {
-                entry = new Entry(await cache.MaterializeAsync(key, files, ct).ConfigureAwait(false));
+                entry = new Entry(await cache.MaterializeAsync(key, files, copies, ct).ConfigureAwait(false));
                 _entries[key] = entry;
                 Built++;
             }
