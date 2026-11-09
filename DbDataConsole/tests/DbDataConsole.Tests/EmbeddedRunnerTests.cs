@@ -444,7 +444,8 @@ public sealed class EmbeddedRunnerTests : IDisposable
     private static string EmbeddedPath(ServerProducts.RunnerRoute route, Guid instance) =>
         "/relay/console-runner/" + route.Pattern.Replace("{name}", "etl").Replace("{sha}", new string('a', 64)).Replace("{id}", instance.ToString());
 
-    public static TheoryData<string> RouteRows => [.. ServerProducts.RunnerRoutes.Select(r => $"{r.Method} {r.Pattern}")];
+    /// <summary>Every route of the table but the upgrade of a server by itself (plan 24a UC09): the embedded runner is a part of the console and is upgraded with it, so only a standalone runner server mounts <c>api/v1/upgrade</c> (<c>DbDataRunner.Server</c>, through <c>UpgradeSetup</c>). No test yet pins the roles of that route to the table's (the runner test harness does not mount it): a follow-up.</summary>
+    public static TheoryData<string> RouteRows => [.. ServerProducts.RunnerRoutes.Where(r => r.Pattern != "api/v1/upgrade").Select(r => $"{r.Method} {r.Pattern}")];
 
     [Theory]
     [MemberData(nameof(RouteRows))]

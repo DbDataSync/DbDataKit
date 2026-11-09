@@ -25,6 +25,7 @@
     <DbDataKitReference Include="State.Cli" />   <!-- state show, test and grants; plan 29b, C01 -->
     <DbDataKitReference Include="State" />   <!-- the health rules (overdue, slow) every product shares; plan 13, M09 -->
     <DbDataKitReference Include="Web" />   <!-- the management API: pairing, tokens, roles; plan 13, R01 -->
+    <DbDataKitReference Include="Upgrade" />   <!-- the server upgrades itself when the console says so; plan 24a UC09 -->
     <DbDataKitReference Include="Hosting.Abstractions" />   <!-- the shared host: service and systemd modes, drain, /health and /version, limits; plan 13, R05 -->
     <DbDataKitReference Include="Hosting" />
     <DbDataKitReference Include="Hosting.Cli" />

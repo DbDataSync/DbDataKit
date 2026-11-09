@@ -59,6 +59,10 @@ public static class ArchiveExtractor
             using var src = e.Open();
             using var dst = File.Create(target);
             written += CopyBounded(src, dst, l.MaxTotalBytes - written);
+            dst.Dispose();
+            // a program file keeps its execute bit (the zip of a Linux release holds the host program): the permission bits sit in the upper half of the external attributes
+            if (!OperatingSystem.IsWindows() && ((e.ExternalAttributes >> 16) & 0x1FF) is var mode and not 0)
+                File.SetUnixFileMode(target, (UnixFileMode)mode);
         }
     }
 

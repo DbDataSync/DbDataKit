@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { Link } from 'react-router-dom'
 import { ConsoleShell } from '../ConsoleShell'
-import { availableKey, newestLine, upgradeApi } from '../upgradeApi'
+import { availableKey, upgradeApi } from '../upgradeApi'
+import { ServerUpgrade } from './UpgradeServer'
 
 /**
  * What is available and the upgrade of one server at a time (plan 24a UC08 and UC09): the versions the release feed offers per product, each paired server's current and newest version with the mark for a release outside N and N-1,
@@ -54,17 +55,7 @@ export function UpgradesPage() {
               ))}
             </div>
             <div style={{ marginTop: 16 }}>
-              {data.servers.map((row) => (
-                <div key={row.id} className="card" style={{ marginBottom: 12 }} data-testid={`upgrade-server-${row.name}`}>
-                  <div className="card-head">
-                    <span className="card-title">{row.name}</span>
-                    <span className="mono hint" data-testid={`upgrade-versions-${row.name}`}>{row.product ?? '—'} {row.version ?? ''}{row.generation ? ` (generation ${row.generation})` : ''}</span>
-                    <span data-testid={`upgrade-newest-${row.name}`} data-newer={row.newerAvailable ? 'true' : 'false'}>{newestLine(row)}</span>
-                    {row.notesUrl && <a href={row.notesUrl} target="_blank" rel="noreferrer" data-testid={`upgrade-notes-${row.name}`}>Release notes</a>}
-                  </div>
-                  {row.outsideAfterRelease && <div className="card-body hint" data-testid={`upgrade-outside-${row.name}`} data-tone="bad">Outside N and N-1 after this release: {row.outsideAfterRelease}</div>}
-                </div>
-              ))}
+              {data.servers.map((row) => <ServerUpgrade key={row.id} row={row} />)}
             </div>
           </>
         )}

@@ -7,7 +7,8 @@ import { fileURLToPath } from 'node:url'
 import { scratchDirectory, upgradeBuild } from '../playwright.config'
 
 // Plan 24a UC08 and UC09: the Upgrades screen. A mirror folder (written here, set in the console's settings.yaml: no internet) holds a newer release of the Build server; the Servers page says "Newer available" with the target version,
-// the Upgrades screen lists the versions per product and the server's current and newest, 
+// the Upgrades screen lists the versions per product and the server's current and newest, and Check says why this server (started by hand, not as a service) is not upgraded from the console and shows the command. The apply (drain,
+// swap, health, rollback) needs a service, so it is the library's tests (`DbDataKit.Upgrade.Tests`), not this story.
 // Sorts after `identity-home` (it invites an administrator, which uses the first-run invitation up): see docs/ci-lessons.md.
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
 const consoleDll = path.join(repoRoot, 'DbDataConsole/src/DbDataConsole.Server/bin/Debug/net10.0/dbdatakit.dll')
@@ -59,4 +60,11 @@ test('the Servers page and the Upgrades screen show what is available, and a ser
   await expect(page.getByTestId('upgrades-versions-dbdatabuild')).toContainText('2098.1.1.1000')
   await expect(page.getByTestId(`upgrade-newest-${serverName}`)).toHaveAttribute('data-newer', 'true')
   await expect(page.getByTestId(`upgrade-newest-${serverName}`)).toHaveText(`Newer available: ${newest}`)
+
+  // started by hand: not a service, so the console does not upgrade it, and Check shows the instruction instead of downloading anything
+  await expect(page.getByTestId(`upgrade-cannot-${serverName}`)).toContainText('not started as a Windows service or a systemd unit')
+  await page.getByTestId(`upgrade-check-${serverName}`).click()
+  await expect(page.getByTestId(`upgrade-report-${serverName}`)).toHaveAttribute('data-state', 'instructions')
+  await expect(page.getByTestId(`upgrade-command-${serverName}`)).toContainText(newest)
+  await expect(page.getByTestId(`upgrade-apply-${serverName}`)).toHaveCount(0)
 })

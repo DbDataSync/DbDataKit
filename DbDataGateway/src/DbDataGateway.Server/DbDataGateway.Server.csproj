@@ -45,6 +45,7 @@
     <DbDataKitReference Include="State.Cli" />   <!-- state show, test and grants; plan 29b, C01 -->
     <DbDataKitReference Include="State.Engines" />   <!-- SQLite, SQL Server or PostgreSQL for it, as the operator names; plan 13a, P11 -->   <!-- the gateway's state database; plan 13, P02 -->
     <DbDataKitReference Include="Web" />   <!-- the management API: pairing, tokens, roles; plan 13, P03 -->
+    <DbDataKitReference Include="Upgrade" />   <!-- the server upgrades itself when the console says so; plan 24a UC09 -->
     <DbDataKitReference Include="Apps.Bundling" />   <!-- apps build: the bundler behind a command line; plan 26, AP23 -->
     <DbDataKitReference Include="Views.Hosting" />   <!-- the views module: published dashboards and reports as the caller; plan 32, DBR11b -->
     <DbDataKitReference Include="Apps.Host" />   <!-- the apps module: published apps by subpath; plan 26, AP05 -->

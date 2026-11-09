@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using DbDataKit.Hosting;
 using DbDataKit.Hosting.Certificates;
 using DbDataKit.State.Api;
+using DbDataKit.Upgrade;
 using DbDataKit.Web.Trust;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -64,6 +65,8 @@ public static class StoreServer
         var maintenance = new MaintenanceGate();
         app.UseMaintenance(maintenance, context => context.ManagementTokenOrNull() is { } token && ManagementAuthorization.Authorize(token, ServerRole.Admin).Allowed);
         app.MapState(StateApi(settings, instanceId, maintenance));
+        // the server upgrades itself when the console says so (plan 24a UC09)
+        app.MapUpgrade(StoreSettings.Product, Version, StoreService.RegistrationName, settings.Listen.Port, new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), () => [.. clients.All().Select(c => new DbDataKit.Upgrade.PeerGeneration(c.Name, c.Generation))]);
         app.UseScopedTokens();
         app.UsePublishedModels(settings.Directory);
         Map(app, instanceId);
