@@ -94,6 +94,7 @@
     <Project Path="src/DbDataKit.Update.Tools/DbDataKit.Update.Tools.csproj" />
     <Project Path="src/DbDataKit.Update.Updater/DbDataKit.Update.Updater.csproj" />
     <Project Path="src/DbDataKit.Update/DbDataKit.Update.csproj" />
+    <Project Path="src/DbDataKit.Upgrade/DbDataKit.Upgrade.csproj" />
     <Project Path="src/DbDataKit.Views/DbDataKit.Views.csproj" />
     <Project Path="src/DbDataKit.Views.Export/DbDataKit.Views.Export.csproj" />
     <Project Path="src/DbDataKit.Views.Hosting/DbDataKit.Views.Hosting.csproj" />
@@ -185,6 +186,7 @@
     <Project Path="tests/DbDataKit.Update.Service.Tests/DbDataKit.Update.Service.Tests.csproj" />
     <Project Path="tests/DbDataKit.Update.Tests/DbDataKit.Update.Tests.csproj" />
     <Project Path="tests/DbDataKit.Update.Tools.Tests/DbDataKit.Update.Tools.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Upgrade.Tests/DbDataKit.Upgrade.Tests.csproj" />
     <Project Path="tests/DbDataKit.Views.Tests/DbDataKit.Views.Tests.csproj" />
     <Project Path="tests/DbDataKit.Views.Export.Tests/DbDataKit.Views.Export.Tests.csproj" />
     <Project Path="tests/DbDataKit.Views.Hosting.Tests/DbDataKit.Views.Hosting.Tests.csproj" />

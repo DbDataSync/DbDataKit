@@ -93,6 +93,7 @@ public static class ConsoleHost
         builder.Services.AddSingleton(sp => new ConsoleKeyStore(sp.GetRequiredService<EncryptedFileSecretStore>(), sp.GetRequiredService<EncryptedFileSecretStore>()));
         builder.Services.AddSingleton(_ => new InstanceRegistry(settings.InstancesPath));
         builder.Services.AddSingleton<ConsoleInstances>();
+        builder.Services.AddSingleton<ConsoleUpgrades>(sp => new ConsoleUpgrades(settings, sp.GetRequiredService<ConsoleInstances>()));
         // state databases as connections of kind state, and the move of a server's state onto one (plan 29b, C06)
         builder.Services.AddSingleton(settings);
         builder.Services.AddSingleton(sp => new ConsoleStateConnections(settings.Directory, sp.GetRequiredService<EncryptedFileSecretStore>()));

@@ -425,6 +425,16 @@ if (!isWorker) {
   code('publish-build-code.txt', execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--minutes', '120', '--repo', publishBuild.directory, '--max-role', 'viewer,author,operator,approver,admin'], { encoding: 'utf8' }))
 }
 
+// Plan 24a UC08 and UC09: a Build server for the upgrades story (`upgrades.spec.ts`), port 8591 (a port table: 8591 upgrades Build). It runs by hand, not as a service, so the console shows what is available for it and says why it is not
+// upgraded from here; a mirror folder (made by the story) stands in for the release feed. Its own directory and port, so nothing the other stories leave in the servers above is in its way.
+export const upgradeBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-upgrade-build'), port: 8591, mirror: path.join(os.tmpdir(), 'dbdatakit-console-e2e-upgrade-mirror') }
+if (!isWorker) {
+  fs.rmSync(upgradeBuild.directory, { recursive: true, force: true })
+  fs.mkdirSync(upgradeBuild.directory, { recursive: true })
+  const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--minutes', '120', '--repo', upgradeBuild.directory, '--max-role', 'viewer,author,operator,approver,admin'], { encoding: 'utf8' })
+  fs.writeFileSync(path.join(scratchDirectory, 'upgrade-build-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
+}
+
 // A passkey is bound to the host name and the port it was made on, and the server builds its list of allowed origins from the address it is told to listen on,
 // so the address is fixed here and the test opens exactly that.
 const port = 8481
@@ -611,6 +621,16 @@ export default defineConfig({
     {
       command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(monitorBuild.directory), '--listen', `https://localhost:${monitorBuild.port}`, '--scheduler'].join(' '),
       url: `https://localhost:${monitorBuild.port}/health/live`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(upgradeBuild.directory), '--listen', `https://localhost:${upgradeBuild.port}`].join(' '),
+      url: `https://localhost:${upgradeBuild.port}/health/live`,
+      env: { ...(process.env as Record<string, string>), DBDATA_UPGRADE_MIRROR: upgradeBuild.mirror },   // the server prepares its own upgrade from the same mirror folder the console reads
       ignoreHTTPSErrors: true,
       reuseExistingServer: false,
       timeout: 60_000,

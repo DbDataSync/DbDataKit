@@ -6,6 +6,7 @@ import { ConnectionsPage } from './pages/ConnectionsPage'
 import { DocsDirectoryPage, ModuleDocsPage } from './pages/DocsPages'
 import { HomePage } from './pages/HomePage'
 import { InstancesPage } from './pages/InstancesPage'
+import { UpgradesPage } from './pages/UpgradesPage'
 import { MonitoringPage } from './pages/MonitoringPage'
 import { ServerModule } from './pages/ServerModule'
 import { ServerStatePage } from './pages/ServerStatePage'
@@ -31,6 +32,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/instances" element={<InstancesPage />} />
+      <Route path="/upgrades" element={<UpgradesPage />} />
       <Route path="/state/:instance" element={<ServerStatePage />} />
       <Route path="/servers/:instance/*" element={<ServerModule />} />
       <Route path="/connections" element={<ConnectionsPage />} />

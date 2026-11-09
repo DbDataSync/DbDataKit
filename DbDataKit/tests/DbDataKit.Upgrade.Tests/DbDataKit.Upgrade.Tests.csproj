@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DbDataKit.Upgrade\DbDataKit.Upgrade.csproj" />
+    <Using Include="Xunit" />
+  </ItemGroup>
+</Project>

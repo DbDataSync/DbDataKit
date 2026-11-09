@@ -8,7 +8,7 @@ Read as of 2026-11-08 from the code of `DbDataKit/web/*`, `DbDataGateway/src/DbD
 
 **The rule.** A stored format registered in `docs/formats.json` must have a row here with a state. `scripts/check_ui_editors.py` fails, naming the format, when one has none, when a row names a format that is not registered, a `UEnn` that is not in plan 33, a screen file that does not exist, or a `Counts:` line that is wrong. A format that needs no editor gets the row and `none (reason)`.
 
-Counts: full 29, partial 13, view-only 0, none 4, planned 23.
+Counts: full 29, partial 13, view-only 1, none 4, planned 23.
 
 The table is sorted by what blocks "ready to test soon" (apps, dashboards, reports, quality, runner scheduling), then the other gaps, then the planned, then what is complete. The Format column is the id in `docs/formats.json`; `-` means the thing is not in the registry (see "Not in the registry" below).
 
@@ -83,6 +83,7 @@ The table is sorted by what blocks "ready to test soon" (apps, dashboards, repor
 | Sync connections, drivers, libraries | connection files, driver YAML, NuGet libraries | - | Sync `ConnectionEditPage.tsx`, `DriversPage.tsx`, `DriverEditPage.tsx`, `LibrariesPage.tsx` | full | |
 | Store rows of an entity | rows through `ModelWriter` | - | Store `EntityPage.tsx` with the controls of `@dbdatakit/store-ui` (`store-entity`, `sui-new`, `sui-field-<attribute>`, `sui-submit`, `sui-delete`, `sui-instance-select`); story `store-entity.spec.ts` | full | Create, edit, delete, history, instance picker, the Store's refusals against the attribute they name; a reader sees New disabled with the reason |
 | Console servers, users, invitations, state databases | pairing, `users`, invitations, state connections | - | Console `InstancesPage.tsx`, `PendingServers.tsx`, `UsersPage.tsx`, `InvitePage.tsx`, `StateConnections.tsx`, `ServerStatePage.tsx`; stories `pending-servers.spec.ts`, `state-move.spec.ts` | full | |
+| Upgrade feed (`upgrade.feed` of the console's `settings.yaml`; a server's `DBDATA_UPGRADE_MIRROR`, `_REPO`, `_CHANNEL`) | the file on the console's machine, the variables of a server's service | - | Console `UpgradesPage.tsx`: `upgrades-feed` (the source and channel in use), `upgrades-refresh`, `upgrades-products`, `upgrades-versions-<product>` | view-only (an administrator names a mirror or a repository in `settings.yaml` on the console's machine, as with the other settings of that file; the screen shows what is read and asks the feed again) | |
 
 ## Not in the registry
 
