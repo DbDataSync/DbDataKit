@@ -25,8 +25,8 @@ The four areas are mostly new *definitions* on machinery the suite has or has pl
 
 | Needed | Exists or planned | Gap this plan fills |
 | --- | --- | --- |
-| A tool for every feature | the command surface (`DbDataKit.Cli`: command specs, effect classes, JSON schemas, generated MCP tools; plan 13 W4a); "no feature without a command spec" (plan 16 section 1) | tools that are not commands: actions (section 4) |
-| An agent runtime | plan 16 section 1: `DbDataKit.Agents` on `Microsoft.Extensions.AI`, approvals, acting as the user, transcripts (**not built**); testing with a scripted fake and recordings (plan 25 section 2) | the **agent definition** as a versioned, published object (section 3) |
+| A tool for every feature | the command surface (`DbDataKit.Cli`: command specs, effect classes, JSON schemas, generated MCP tools; plan 13 W4a); "no feature without a command spec" (section 3.2 and 3.7 of plan 27) | tools that are not commands: actions (section 4) |
+| An agent runtime | section 3.2 and 3.7 of plan 27: `DbDataKit.Agents` on `Microsoft.Extensions.AI`, approvals, acting as the user, transcripts (**not built**); testing with a scripted fake and recordings (plan 25 section 2) | the **agent definition** as a versioned, published object (section 3) |
 | What agents know | catalog and glossary on the lineage graph (plan 22 section 3); semantic models (plan 14); Build metadata and `project agent-kit`; DbDataStore models (plan 15) | curated knowledge, verified queries, retrieval, and access rules on what an agent may read (section 2) |
 | Custom code | `DbDataKit.Scripting` (Roslyn `.csx` with `#r "nuget:"`, built, used by Sync's scripts, libraries and drivers) | integrations with outside systems as their own product, a shared script format for actions, and the runner (section 4, plan 28) |
 | Schedules, runs, alerts | `DbDataKit.Scheduling`, `DbDataKit.Monitoring` (plan 13 W10), the delivery service (plan 22 section 5) | the runner hosts them for integrations (plan 28) |
@@ -276,7 +276,7 @@ item's own setting wins.
 ### 2.9 Verified queries
 
 **Decided (owner, 2026-11-06).** A **verified query** is a question people ask, the query that answers it, and someone's word that the answer is
-right. It builds on what exists: saved queries in a semantic model's catalog (plan 19 J26) and people's own saved queries kept by the
+right. It builds on what exists: saved queries in a semantic model's catalog (J26) and people's own saved queries kept by the
 serving layer, with versions, shares and a promote-to-model action (J27).
 
 **1. The item.** Business knowledge, so it is a `knowledge: 1` file in a knowledge project (section 2.5), of the kind `verified-query`:
@@ -415,7 +415,7 @@ do they use the knowledge index?
 
 | What | In the knowledge index? | How it is searched |
 | --- | --- | --- |
-| **Definitions**: semantic models and their members, Build models and columns, DbDataStore models, data sources, apps, portals and navigation, agents, skills, saved queries, reports and dashboards (plan 16 section 2a), integrations | **yes, as generated knowledge** (section 2.7), one item per thing, access-filtered by who may use it | knowledge search |
+| **Definitions**: semantic models and their members, Build models and columns, DbDataStore models, data sources, apps, portals and navigation, agents, skills, saved queries, reports and dashboards (plan 32), integrations | **yes, as generated knowledge** (section 2.7), one item per thing, access-filtered by who may use it | knowledge search |
 | **Knowledge**: instructions, guardrails, references, verified queries | yes (sections 2.1 to 2.9) | knowledge search |
 | **Source code and files** in projects (models' SQL, actions, integration code, app source, configuration) | **no** | **workspace search** on the Workspace server: exact text and file names, per repository and branch, under the rights to that project; for developers, administrators and back-end agents (`workspace search` as a tool) |
 | **Data**: DbDataStore records, rows of a model | no | through the data's own reads: DbDataStore's search and filters, semantic queries; always under row and column rules |
@@ -451,12 +451,12 @@ in the console's chat, in an app's assistant panel, and for an outside client ov
 | Tools | an allow-list of commands and actions (section 4.4), named by spec, each with its prompting setting (section 3.3); never wider than its user's roles |
 | Model | a model **slot**, bound per channel to a provider connection and model (section 3.7) |
 | Limits | turns, tool calls, tokens and cost per conversation |
-| Output | which view kinds it may return (plan 16 section 2a: tables, matrix grids, Vega-Lite) |
+| Output | which view kinds it may return (plan 32: tables, matrix grids, Vega-Lite) |
 | Tests | scripted conversations and an evaluation set (section 3.4) |
 
 ### 3.2 Where it runs
 
-**Decided (owner, 2026-11-06)**, choosing what adds the least: one runtime library, `DbDataKit.Agents` (plan 16 section 1), loading a
+**Decided (owner, 2026-11-06)**, choosing what adds the least: one runtime library, `DbDataKit.Agents` (section 3.2 and 3.7 of plan 27), loading a
 published `agent/1` (a plan 30 kind), wherever the work is:
 
 | Agent | Runs in | Acts as |
@@ -736,7 +736,7 @@ Permissions are never instructions. An agent's reach is the **intersection** of:
 
 1. **the person's own access**: roles, and the row and column rules of plan 22 section 2 (an unattended agent: its service account's);
 2. **the agent's scopes**: the semantic models, DbDataStore entities and operations (read, write, change request) its definition names,
-   as an app's manifest does (plan 16, "Sign-in decisions" item 1: the token's scopes come from the definition);
+   as an app's manifest does (the identity home's sign-in decisions (`DbDataKit.Identity/README.md`) item 1: the token's scopes come from the definition);
 3. **the install policy**, which can narrow further (no data reads for agents on a cloud provider, for example).
 
 The serving layer enforces this on every call, through the token's audience and scopes, as it does for apps. The only way past the
@@ -748,6 +748,17 @@ person's own access is an **elevated action** (section 4.5), which holds its own
 its key as a secret reference, the models it allows and their prices, bound per channel. An agent names a model slot; each channel binds
 it, so a test channel can use a local or cheaper model. An install that must keep data in its tenant binds only Microsoft Foundry
 connections. Whether a provider is cloud or local is part of the connection, so the install policy can tell them apart (3.6, 3.3).
+
+**One provider abstraction (owner, 2026-10-24, folded from the old plan 16): `Microsoft.Extensions.AI`'s `IChatClient`**, as long as it covers the four provider kinds the owner needs (the Agent Framework documentation lists `IChatClient` implementations with function tools for each). The first slice of the runtime (27a AG03 and AG04) proves tool calls and streaming against each of the four with the same test, before anything is built on the abstraction. Tests run against recorded model responses, so CI needs no model API. Providers, their endpoints, keys (secret references), allowed models and limits on use and cost are set by an administrator, not by each user.
+
+| Provider | Package (pinned when built) | Notes |
+| --- | --- | --- |
+| OpenAI | `Microsoft.Extensions.AI.OpenAI` over the OpenAI SDK | |
+| Microsoft Foundry | the Azure OpenAI and Foundry SDKs | hosts OpenAI models and models of other providers; which a deployment uses is configuration |
+| Anthropic | the official Anthropic C# SDK (its `IChatClient` support was described as beta: check when built) | a community adapter exists as a fallback |
+| Local models | OllamaSharp (Ollama), Foundry Local | |
+
+The agent runtime is a shared library (`DbDataKit.Agents`): the provider abstraction, tool binding to command specs, confirmation, transcripts and limits. The console hosts it for its own chat and the serving layer for front-end agents; keys and model calls stay on the server, never in the browser.
 
 ### 3.7a Embedding models, including one on the local CPU
 
@@ -908,7 +919,7 @@ stops with a message; nothing is half-run, since tool calls only start after the
 | Surface | Agents | First? |
 | --- | --- | --- |
 | **The console's chat** | back-end agents, and agents for administrators | **yes**, with the back-end agent |
-| **An app's assistant panel** (plan 16 section 2) | front-end agents the app's manifest names | with the front-end agents |
+| **An app's assistant panel** (`docs/apps.md`) | front-end agents the app's manifest names | with the front-end agents |
 | **MCP, for outside clients** | the commands and actions as tools, as today; later, a published agent offered as one tool ("ask the sales agent") | tools now; agents later |
 | **Teams, Slack, email** | front-end agents, reached through an integration (section 4) | later |
 | **An Excel add-in** (section 3.16a, proposed) | published agents in a task pane, with data-source tools that put results into the workbook | with the front-end agents |
@@ -919,7 +930,7 @@ everywhere.
 ### 3.16a An Excel add-in
 
 Proposed (2026-11-06), from the owner: published agents may also need an Excel app that provides agent and data-source tools. Excel is
-already a client of the serving layer through WebDAV (documents), XMLA (PivotTables) and Power Query (feeds) (plan 16, "Sign-in decisions"
+already a client of the serving layer through WebDAV (documents), XMLA (PivotTables) and Power Query (feeds) (the identity home's sign-in decisions (`DbDataKit.Identity/README.md`)
 item 3); none of those gives a person an agent, or a way to pick a semantic model and drop its numbers into a sheet. An **Office add-in for
 Excel** would:
 
@@ -933,7 +944,7 @@ Excel** would:
 - **Served like any app:** the add-in's pages are an app of the serving layer (plan 26), and its manifest is what an administrator deploys
   to people's Excel (centrally, or by sideloading for a trial).
 - **Sign-in through the identity home:** the add-in opens the home's own sign-in page in Office's sign-in dialog and gets the same scoped
-  token an app gets (plan 16, "Sign-in decisions" item 1); where the install uses Entra, Office's single sign-on can be accepted the way
+  token an app gets (the identity home's sign-in decisions (`DbDataKit.Identity/README.md`) item 1); where the install uses Entra, Office's single sign-on can be accepted the way
   Power Query's Entra tokens are (item 3).
 - **The workbook is a surface, not a store:** what the add-in writes into a sheet is a copy at that moment; the rules and the data stay on
   the server.
@@ -949,7 +960,7 @@ Excel** would:
 - **Unreviewed sources stay references** (section 2.4) and are marked as such.
 - **What could do harm still asks**, whatever the content said: the prompting minimums of the install policy (section 3.3) are enforced by
   the runtime, so text that tells the agent to send, delete or publish something cannot skip the person.
-- **Answers are checked:** a view an agent returns must validate against its schema (plan 16 section 2a: inline data only, no URLs), and
+- **Answers are checked:** a view an agent returns must validate against its schema (plan 32: inline data only, no URLs), and
   links in an answer are shown, never fetched by the suite on the person's behalf.
 
 ## 4. Integrations, actions and the runner
@@ -1139,7 +1150,7 @@ Outside network access is the administrator's to configure, in the environment a
 what a runner can reach, and the console shows it. Actions in the serving layer have no outside access by default.
 
 An action called by a person runs **as that person**, so access rules apply to its reads, unless it is an elevated action (section 4.5).
-A scheduled integration task runs as a **service account** of the identity home (plan 16, "Sign-in decisions" item 2).
+A scheduled integration task runs as a **service account** of the identity home (the identity home's sign-in decisions (`DbDataKit.Identity/README.md`) item 2).
 
 **Channels (plan 21).** Writes are never inherited from production, and that matters more here than anywhere: an integration in a preview
 channel must not send production data to a real supplier or create real tickets by accident. By default, an outbound step in a
@@ -1358,10 +1369,10 @@ one branch `suite/<id>-<short-name>`, a "Done when" test, as in 13a):
 
 | Plan | Area | New slice letter (not yet used) |
 | --- | --- | --- |
-| [28](28-runner.md) | The runner (written at high level, 2026-11-04) | to choose when sliced (13a and plans 19 to 26 already use A B C D E F G H J K L M N O P Q R S T U V W X Y Z and AP; D and Q are decision and step numbers, the rest slices) |
+| [28](28-runner.md) | The runner (written at high level, 2026-11-04) | to choose when sliced (13a and plans 20 to 26 and the deleted plan 19 already use A B C D E F G H J K L M N O P Q R S T U V W X Y Z and AP; D and Q are decision and step numbers, the rest slices) |
 | [29](../../DbDataKit/src/DbDataKit.State/README.md) | One structure for the suite's state databases (built; now the State README, what is left is plan 29a) | |
 | [30](30-publishing.md) | One way to publish, to the serving layer and the runner (direction decided, 2026-11-04) | |
-| [31](31-report-catalogs.md) | Report catalogs, external (SSRS, PBIRS) and our own, in one place (written at high level, 2026-11-06) | |
+| 31 | Report catalogs, external (SSRS, PBIRS) and our own, in one place (folded into plan 32 section 9e, 2026-11-09) | |
 | [27a](27a-knowledge-slices.md) | This plan in slices: the audit of what is built and 120 slices (written 2026-11-09) | lanes AG, KN, AX, IX, BK, EA, XL (chosen: the single letters are all taken) |
 | later | Sync and Build on the runner (plan 28 section 8), after its state design | |
 
@@ -1369,8 +1380,8 @@ one branch `suite/<id>-<short-name>`, a "Done when" test, as in 13a):
 
 | Plan | Change |
 | --- | --- |
-| 16 section 1 | the agent runtime loads published `agent/1` definitions; approvals are refined per section 3.3 |
-| 16 section 2 (the app is untrusted UI) and "Sign-in decisions" item 1 (a token never wider than the person) | unchanged for an app's front end; a server-side elevated action holds its own grants on the data, people hold *run* on the action, and it validates each request before applying or rejecting it (section 4.5). The rule stays on the server, written in the action |
+| 16 section 1 (folded into 3.2 and 3.7) | the agent runtime loads published `agent/1` definitions; approvals are refined per section 3.3 |
+| 16 section 2 (the app is untrusted UI) and sign-in decisions item 1 (a token never wider than the person) | unchanged for an app's front end; a server-side elevated action holds its own grants on the data, people hold *run* on the action, and it validates each request before applying or rejecting it (section 4.5). The rule stays on the server, written in the action |
 | 15 (DbDataStore permissions) | grants to action principals, with field and row conditions; history and audit record the action, its version and the person who asked |
 | 20 section 4 | new modules: `knowledge` (reads), and action calls under `mcp` and `apps`; the runner (plan 28) as the scheduled and batch counterpart |
 | 13 W2, 13a S-series | Sync's script manifest becomes the shared script format, used by apps and agents too; an old manifest is refused with a message |

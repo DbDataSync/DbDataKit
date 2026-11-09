@@ -22,7 +22,7 @@ Status: **proposed** (2026-11-09). [Plan 27](27-knowledge-agents-integrations-wo
 | Item | Plan | Status | Evidence |
 | --- | --- | --- | --- |
 | Command surface: specs, effect classes, JSON Schemas, generated MCP tools | 13 W4a, C08 | **built** | `DbDataKit/src/DbDataKit.Cli/CommandSpec.cs` (`EffectClass`), `Noun.cs` (a verb without a schema is refused when the router is made), `Mcp.cs` (`McpServer`, `UiNoun`); tests `DbDataKit.Cli.Tests/McpServerTests.cs`, `CommandSpecTests.cs`; `ui mcp` in `DbDataSync/src/DbDataSync.Cli/SyncCli.cs` and `DbDataGateway/src/DbDataGateway.Server/Hosting/Cli.cs`; Build's own server `DbDataBuild/src/DbDataBuild.Cli/Mcp/McpServer.cs` |
-| "No feature without a command spec" as a suite-wide test (plan 16 section 1) | 16 | **partly** | the per-router schema rule above, and Build's own test (`DbDataBuild.Tests.Unit/CliTests.cs`); no test enumerates every product's router; the Store and the Console have verbs through their own hosts, not a common test |
+| "No feature without a command spec" as a suite-wide test (section 3.2 and 3.7 of plan 27) | 16 | **partly** | the per-router schema rule above, and Build's own test (`DbDataBuild.Tests.Unit/CliTests.cs`); no test enumerates every product's router; the Store and the Console have verbs through their own hosts, not a common test |
 | Agent tools for semantic queries | 19 J15 | **built** | `DbDataKit.Semantic.Cli/SemanticNoun.cs` (`describe`, `query`, `explain`, `members`), mounted in the Gateway and offered by `ui mcp`; `docs/semantic/architecture.md` |
 | Build's agent kit as a skill | Build | **built** | `DbDataBuild/src/DbDataBuild.Cli/AgentKit/SKILL.md`, `AgentKitCommand.cs`; `AgentKitTests.cs` (every command, option and code the skill names exists); `DbDataBuild/docs/agents.md` |
 | Plan file hash and a separate write login as guardrails outside the model | Build | **built** | `DbDataBuild/docs/agents.md` ("the plan file is the review gate"); `DbDataBuild.Tests.Unit` plan tests |
@@ -73,7 +73,7 @@ Status: **proposed** (2026-11-09). [Plan 27](27-knowledge-agents-integrations-wo
 
 | Item (section) | Status | Evidence |
 | --- | --- | --- |
-| `DbDataKit.Agents` on `Microsoft.Extensions.AI`, scripted fake chat client, provider proof against OpenAI, Foundry, Anthropic, Ollama (plan 16 section 1, 25 section 2, wave 0) | **not started** | `git grep -il "Microsoft.Extensions.AI"` outside plans is empty; `Directory.Packages.props` has no AI package |
+| `DbDataKit.Agents` on `Microsoft.Extensions.AI`, scripted fake chat client, provider proof against OpenAI, Foundry, Anthropic, Ollama (section 3.2 and 3.7 of plan 27, 25 section 2, wave 0) | **not started** | `git grep -il "Microsoft.Extensions.AI"` outside plans is empty; `Directory.Packages.props` has no AI package |
 | `agent/1` definition, agent as a git project, build checks, publish as the `agent` kind (3.1, 3.10) | **not started** | |
 | Where agents run: back end in the console, front end in the serving layer's `mcp` module, unattended in a task, evaluation on the embedded runner (3.2) | **not started** | no agent code in `DbDataConsole` or the Gateway (`GatewayModules.Known` is `flightsql, identity, apps, store, views`); the embedded runner exists (R20) |
 | Back-end agent first (3.2, wave 1) | **not started**; it waits for the Workspace server and its UI (SD8, owner 2026-11-09) | its parts exist: Build's skill, Build's MCP server, the console's relay to servers; it works in a workspace of the Workspace server (GP30 to GP36), not in Build's own git workspaces |
@@ -402,7 +402,7 @@ Nothing here needs a slice that is not built: **KN00, AG01, KN01, KN04, IX01, IX
 
 | Plan | Change | State |
 | --- | --- | --- |
-| 16 section 1 | the runtime loads published `agent/1`; approvals per traits | not applied (plan 16 does not mention plan 27); done in AG09 and AG07's commits (SD17) |
+| 16 section 1 (folded into 3.2 and 3.7) | the runtime loads published `agent/1`; approvals per traits | not applied (plan 16 does not mention plan 27); done in AG09 and AG07's commits (SD17) |
 | 15 | grants to action principals with field and row conditions; history and audit name the action; extension models | not applied; AX09, AX12, EA01 |
 | 18 | outside systems as lineage nodes | not applied; IX12 |
 | 20 section 4 | modules `knowledge`, action calls under `mcp` and `apps` | not applied to plan 20; `docs/serving-layer.md` now lists `knowledge` and `backlog` as not built; KN11, AX05, AG25, BK02 |

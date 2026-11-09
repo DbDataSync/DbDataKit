@@ -1,4 +1,4 @@
-# The lineage graph view: which library (plan 19, Y04)
+# The lineage graph view: which library (Y04)
 
 Measured on 2026-11-01 with the versions below, on one machine (Node, no browser). The graph is 500 nodes and 870 edges in eight layers, left to right, the shape of a lineage graph: many sources, a few sinks, nodes 180 × 40. The sizes are what a bundler (esbuild, minified) gives for what a page would load, gzipped, with React left out (the console has it already).
 

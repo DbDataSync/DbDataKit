@@ -370,7 +370,7 @@ rejected when the catalog loads (`segment_unknown_member`).
 
 ## Saved queries
 
-A model can offer named queries (plan 19, J26): a semantic SQL text or a request, and what its parameters are. A server that hosts the model (the Gateway) offers each as a **view** (no required parameter) or a **function** (parameters) on the model's source, and it runs as the caller like any query, so the caller's own access applies.
+A model can offer named queries (J26): a semantic SQL text or a request, and what its parameters are. A server that hosts the model (the Gateway) offers each as a **view** (no required parameter) or a **function** (parameters) on the model's source, and it runs as the caller like any query, so the caller's own access applies.
 
 ```yaml
 queries:

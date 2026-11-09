@@ -1,6 +1,6 @@
 # DbDataKit.Serving.Semantic
 
-The semantic module of the serving layer (plan 19, J10; plan 14 R2). A host that already serves SQL (`IServingServices`) gets semantic queries by wrapping its services:
+The semantic module of the serving layer (J10; plan 14 R2). A host that already serves SQL (`IServingServices`) gets semantic queries by wrapping its services:
 
 ```csharp
 var models = new SemanticModels().Add(Catalog.Load("sales.yaml"), sources: new() { ["warehouse"] = "dw", ["budget"] = "dw" });
@@ -13,7 +13,7 @@ IServingServices services = hostServices.WithSemantic(models);
 - **The catalog describes the model**: under `semantic:<model>` the dimensions, their attributes and the measures are listed as `Model`, `Dimension` and `Measure` objects.
 
 - **Other statements on a model source:** `{"kind":"describe"}` (dimensions, attributes, measures, saved queries), `{"kind":"members"}` (the distinct values of an attribute, under the caller's access; `search`, `limit`) and `EXPLAIN`; there is no custom Flight action.
-- **Parameters and prepared statements** (plan 19 J25): `{"param": ...}` in a JSON request, `?`, `$n`, `:name` and `IN :list` in semantic SQL; a prepared statement on a model answers its parameter schema (a field per parameter, `qis.for` in the metadata, lists as Arrow lists) and executes with the bound values; the rows and the request hash equal the literal form's.
+- **Parameters and prepared statements** (J25): `{"param": ...}` in a JSON request, `?`, `$n`, `:name` and `IN :list` in semantic SQL; a prepared statement on a model answers its parameter schema (a field per parameter, `qis.for` in the metadata, lists as Arrow lists) and executes with the bound values; the rows and the request hash equal the literal form's.
 - **Saved queries** (J26, J27): a catalog's `queries` and the caller's own or shared ones (`IUserSavedQueries`, the Gateway keeps them in its state database) are called as `SELECT * FROM name(args)`, run as the caller.
 - **SSAS** sources run in the executor `DbDataKit.Semantic.Ssas` on Windows (the Gateway hosts it); other systems answer `dax_execution_unavailable`.
 

@@ -1,6 +1,6 @@
 # DbDataKit.Semantic.Cli
 
-The `semantic` noun of a command line (plan 19, J15): written once, mounted by a product with the way it connects.
+The `semantic` noun of a command line (J15): written once, mounted by a product with the way it connects.
 
 ```
 semantic describe <model>

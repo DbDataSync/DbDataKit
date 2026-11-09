@@ -469,7 +469,7 @@ A **prepared statement** on a model source (Flight SQL) reads the text and repor
 
 **Finding the values** a parameter may take: `{"kind": "members", "attribute": "customers.region", "search": "ea", "limit": 50}` (sent as a statement on the model source, like a query) answers the distinct values of the attribute in one column, `member`: the catalog's list, or the dimension table it names, or the values in the first source that binds it, read as the caller. `search` keeps the members that contain it (any case); `limit` defaults to 100 and is at most 10,000, and `qis.truncated` in the schema metadata says whether more were left out. An unknown attribute is `unknown_attribute`; a caller without access to the source is refused as for any query.
 
-Not yet: `empty: matches_none`, and the range check of an argument's parameter (plan 19, J25).
+Not yet: `empty: matches_none`, and the range check of an argument's parameter (J25).
 
 ## Validation and canonicalization
 
