@@ -78,6 +78,28 @@ public static class PackageCommand
                     Console.WriteLine($"Bound {string.Join(", ", bindings.Keys.Order(StringComparer.Ordinal))} in {channel}.");
                 }
 
+                // plan 28c E09, ED6 (and E12e): a published replication is scheduled by this server until its owner is moved, so the runner is told so before the version can activate; a task the runner already has an owner for keeps it
+                var handedBack = new List<string>();
+                if (!CliOptions.Has(rest, "--runner-schedules"))
+                {
+                    foreach (var replication in built.Replications)
+                    {
+                        var known = await client.ScheduleOfAsync(server!, code, package, channel!, replication.Task, null);
+                        if (known.OwnerSetBy is not null) continue;
+                        try { await client.SetOwnerAsync(server!, code, package, channel!, replication.Task, DbDataKit.State.TaskOwners.Old, "published by `package publish`: the runner does not schedule it until its owner is moved to the runner", null); }
+                        catch (RunnerClientException ex)
+                        {
+                            Console.Error.WriteLine($"{ex.Message}\nThe runner is told that the replications stay with this server's scheduler until their owner is moved, which takes the operator role of this pairing. Pair with a code that allows it, or pass --runner-schedules to let the runner schedule the replications from the first activation.");
+                            Console.WriteLine("Nothing was sent.");
+                            return 1;
+                        }
+
+                        handedBack.Add(replication.Task);
+                    }
+
+                    if (handedBack.Count > 0) Console.WriteLine($"The runner leaves {string.Join(", ", handedBack)} to this server until the owner is moved (owner old).");
+                }
+
                 ReplicationSetPackage.Write(built, directory);
                 int? expected = int.TryParse(CliOptions.Read(rest, "--expected-version"), out var e) ? e : null;
                 var serve = CliOptions.Has(rest, "--serve");
