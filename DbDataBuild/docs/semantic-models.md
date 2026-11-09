@@ -1,0 +1,40 @@
+# Semantic models in a project
+
+A semantic model is the vocabulary people ask questions in: dimensions and attributes, measures, hierarchies, calendars, segments and saved queries, written over the tables the project builds. A model of the project is a table; a semantic model says what "net sales by customer region and month" means over those tables. Build authors it, checks it, and publishes it to a Gateway, which serves it (`docs/semantic/architecture.md` in the repository has the whole path; the formats are in `docs/semantic/catalog.md` and `docs/semantic/query.md`). This page is what Build does.
+
+## The files
+
+- A project's `semantic/` folder holds `semantic/**/*.yml`, one file per semantic model, validated by `schemas/semantic.schema.json` (editors that read the schema complete and check it; the Build workspace edits it as a form and as YAML).
+- A file is a catalog **written without its physical layer**. `table:` of a binding and `of:` of a measure name a **model of the project** (`marts.dim_customer`), and `column:` one of that model's declared columns. A binding's key (and a measure's `source:`) names a **connection** of the project; `default` is the project's default connection, so one file serves SQL Server and PostgreSQL alike. The templates `retail` and `calendar` have a working file each (`templates/retail/semantic/sales.yml`).
+- Writing `tables:`, or the `kind:` or `dialects:` of a source, is refused (DDB-610): the physical layer is **generated, never written**. For each model and connection Build generates a table (physical name = the model's, columns and logical types from its declaration, key = its `grain`) and instantiates the relationships per connection; the semantic engine's own loader then reads the result, so its validation is the project's.
+- **Relationships** come from two places. A semantic file may write `relationships:` between models (many-to-one, `to_columns` are the grain of the `to` model; `x_role` for a dimension reached twice, such as an order date and a ship date). A model may declare `foreign_keys:` (`columns`, `references: {table, columns}`, the same spelling as a mapped model); a key becomes a relationship in every semantic file that uses both models and writes none between them, named like the key. Where a key and a relationship say different joins the compile fails. Roles stay in the semantic file.
+- **Measures stay in the semantic files.** Build validates them and does not own them. A source Build does not model (an Analysis Services database, a database nobody imported) may be declared by hand in the semantic file.
+- `queries:` in a file are **saved queries** owned by the model: a stored request or semantic SQL with a signature (`parameters`). They are checked when the file compiles (one that does not translate is reported at its own line), and they publish, version and roll back with the model.
+- A file may carry `cache:` and `checks:` sections; a file that has either is format 2 of the semantic package (`docs/semantic/catalog.md`).
+
+## What Build checks
+
+| Where | What | How to run |
+| --- | --- | --- |
+| Compile | The file against the model graph: a renamed or removed model or column breaks the compile at the semantic file's line (DDB-611 unknown model, 612 model not on that connection, 613 unknown column, 614 type disagrees, 615 relationship not many-to-one by the grain, 616 not a source, 617 anything else; DDB-618 for `foreign_keys:`) | `dbdatabuild project compile` |
+| Offline | What is bound to what: the sources, the generated tables, relationships (and which came from keys is not yet said), hierarchies | `dbdatabuild project show semantic` |
+| Data | One SELECT per hierarchy level pair (a member with two parents), two per relationship (orphan keys; a one side that is not unique), two per declared foreign key and connection | `dbdatabuild connection check`; `dbdatabuild project tests list --kind semantic` lists them |
+
+A calendar is a Build template (`calendar`), not a table kept by hand.
+
+## Publishing to a Gateway
+
+A Build server publishes a semantic model to a paired Gateway; the console's Build workspace does it from the **Publish** tab (**Publish a semantic model**: the Gateway, the project's model, the connections it reads named, then the button), and `POST /api/v1/projects/{project}/proxies/{proxy}/publish-model` with `{"model": "<name>"}` does the same (the route still says `proxies`: plan 20 O14b renames it). It needs the **approver** role.
+
+- It publishes the connections the model reads first, then the model. What reaches the Gateway is the connection with **the read login only**, sent once over the paired, pinned TLS channel into the Gateway's own secret store, and the data source is written `access: readonly`. The write login never appears in a request (`BuildServerProxyTests` asserts it).
+- A data source of that name that the Gateway already has is **not taken over silently**: the publish stops and returns the call that adopts it (`POST /api/v1/data-sources/{name}/adopt`); after that Build manages its connection fields.
+- Ownership is split by concern: where the server is and how to read it belong to Build; the serving policy (`extensions.gateway`: limits, statement classifier, which identities, pass-through) belongs to the Gateway and a publish never touches it.
+- A Build server is a paired client of the Gateway with the fixed ceiling **Publisher**: it may create data sources and models, change or remove only those its server made, and map models only to data sources it made. The token names the person who asked and the Gateway's audit records them.
+- The Gateway loads the package, checks it (it has the catalog's name, every source maps to a data source that answers a test query and that can read every table the model names), writes a new version and switches to it in one step; a package that fails leaves the old version serving. Publishing what the Gateway already serves makes no new version (`"unchanged": true`). The Gateway's **Models** screen lists the versions, serves an earlier one and retires the model.
+- A model on PostgreSQL publishes the same way as one on SQL Server (the source's kind comes from the connection: D13 of plan 13c).
+
+Dashboards and reports of the project publish through the same pairing (`.../publish-view`; the **Views** tab); they depend on the model versions the Gateway serves.
+
+## What is not built
+
+Published from Build and not from the command line (a `project publish-model` form needs a sign-in the command line does not have: plan 19 J12b); rollback is the Gateway's (`POST /api/v1/semantic-models/{name}/rollback`, or its Models screen), not Build's; the `semantic` verbs for agents are mounted in the Gateway and not in Build; the project's metadata documents do not carry the semantic models yet; the checks that every mapped column exists on the Gateway's data source are not built (tables are). The slices for these are in plan 14a (`docs/plans/14a-semantic-slices.md`).
