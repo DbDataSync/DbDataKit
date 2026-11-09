@@ -47,5 +47,5 @@ All protocols are front ends to one query core: an adapter turns wire messages i
 ## Open questions
 
 - Whether the combine needs its child process (decided 2026-10-29: limits in process first; revisit if they prove too soft; SL27, conditional).
-- Which BI tools' Postgres introspection is catalogued first (plan 17 R4 says Power BI Report Server is not a Postgres-wire client). Deferred with R8; 14a Q16 has the recommended default.
-- The open questions of the audit, each with a recommended default, are in [14a](14a-semantic-slices.md) section 4.
+- Which BI tools' Postgres introspection is catalogued first (plan 17 R4 says Power BI Report Server is not a Postgres-wire client). Deferred with R8; 14a D32 has the recommended default.
+- One open question of the audit (decimals in the answer, Q11) is in [14a](14a-semantic-slices.md) section 4; the others were decided by default (owner delegated, 2026-11-09), D18 to D32 in section 3.
