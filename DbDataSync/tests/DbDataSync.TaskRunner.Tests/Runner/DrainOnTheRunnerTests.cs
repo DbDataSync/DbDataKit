@@ -356,10 +356,12 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
         // the row the console shows for the run (its activity list reads the shared runs): the failed item names the mapping and the failure says how it failed, in the message with the kind Sync classified when it did
         var row = rig.Run(failed.RunId).Run;
         Assert.StartsWith("main#", row.FailedItem, StringComparison.Ordinal);
-        Assert.Equal(RunOutcome.Failed, row.Outcome);
-        Assert.Equal("Permanent", row.Failure!.Kind);
-        Assert.Contains("The pass over 'main' ended Failed", row.Failure.Message, StringComparison.Ordinal);
-        if (record.FailureKind is { Length: > 0 } classified) Assert.Contains($"({classified})", row.Failure.Message, StringComparison.Ordinal);
+        Assert.Equal(RunOutcome.CompletedWithFailures, row.Outcome);      // a unit that throws is recorded failed and the drain goes on (the kit's default): a drain whose only pass failed ends completed with failures, never succeeded
+        Assert.Equal(TaskEndState.CompletedWithFailures, failed.End.State);
+        Assert.Equal(1, failed.End.FailedItems);
+        var said = rig.LogText(failed.RunId);
+        Assert.Contains("The pass over 'main' ended Failed", said, StringComparison.Ordinal);
+        if (record.FailureKind is { Length: > 0 } classified) Assert.Contains($"({classified})", said, StringComparison.Ordinal);
         var held = rig.Watermark(_watermarkKey)!.Value;
         Assert.Equal((start, 1L), (held.Position, held.Version));
 

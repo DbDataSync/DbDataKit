@@ -147,7 +147,7 @@ public sealed class RunnerRunSource(RunnerAccess runner) : IRunnerRunHistory
     private static TaskRunRecord? DrainRow(ClientRun drain, string replication, IReadOnlyList<PassRecord> passes)
     {
         if (drain.Outcome == "succeeded") return null;
-        if (drain.Outcome == "failed" && passes.Any(p => p.DrainRunId == drain.Id && p.Status == nameof(RunStatus.Failed))) return null;
+        if (drain.Outcome is "failed" or "completed_with_failures" && passes.Any(p => p.DrainRunId == drain.Id && p.Status == nameof(RunStatus.Failed))) return null;
         return ToRun(drain, replication);
     }
 
