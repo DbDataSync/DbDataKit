@@ -102,14 +102,15 @@ public sealed partial class ManagementTests
         foreach (var name in new[] { "by-hand", "theirs" })
         {
             Assert.Equal(HttpStatusCode.Forbidden, (await CallAsAsync(build1, first, HttpMethod.Get, $"/api/v1/data-sources/{name}", ServerRole.Publisher)).StatusCode);
-            Assert.Equal(HttpStatusCode.Forbidden, (await CallAsAsync(build1, first, HttpMethod.Put, $"/api/v1/data-sources/{name}", ServerRole.Publisher, Put(Plain(name), "0000"))).StatusCode);
+            // a write over a source made by hand is a 409 that says how to take it over (adopt: true); over another client's, a 403
+            Assert.Equal(name == "by-hand" ? HttpStatusCode.Conflict : HttpStatusCode.Forbidden, (await CallAsAsync(build1, first, HttpMethod.Put, $"/api/v1/data-sources/{name}", ServerRole.Publisher, Put(Plain(name), "0000"))).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await CallAsAsync(build1, first, HttpMethod.Delete, $"/api/v1/data-sources/{name}", ServerRole.Publisher)).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await CallAsAsync(build1, first, HttpMethod.Post, $"/api/v1/data-sources/{name}/test", ServerRole.Publisher)).StatusCode);
         }
         Assert.Equal(byHand, Before("by-hand"));
         Assert.Equal(theirs, Before("theirs"));
 
-        // the serving policy is an administrator's, even in a source the client makes; and a file cannot claim another owner
+        // allow_writes is not part of a definition, even in a source the client makes; and a file cannot claim another owner
         var policy = await CallAsAsync(build1, first, HttpMethod.Put, "/api/v1/data-sources/mine", ServerRole.Publisher, Put(Conn.Yaml("mine", "duckdb", "Data Source=:memory:", gateway: ["allow_writes: true"]), null));
         Assert.Equal(HttpStatusCode.Forbidden, policy.StatusCode);
         Assert.Contains("extensions.gateway", await policy.Content.ReadAsStringAsync());
@@ -230,12 +231,12 @@ public sealed partial class ManagementTests
     }
 
     [Fact]
-    public async Task A_data_source_with_a_serving_policy_is_not_adopted_because_the_clients_write_would_drop_the_policy()
+    public async Task A_data_source_with_a_serving_policy_is_handed_over_only_when_the_administrator_says_adopt_and_the_refusal_says_what_the_next_publish_does()
     {
         await StartAsync();
         var admin = await PairAsync();
         await PairPublisherAsync(build1);
-        await CallAsync(admin, HttpMethod.Put, "/api/v1/data-sources/limited", ServerRole.Admin, Put(Conn.Yaml("limited", "duckdb", "Data Source=:memory:", gateway: ["allow_writes: true"]), null));
+        File.WriteAllText(ConnectionFile("limited"), Conn.Yaml("limited", "duckdb", "Data Source=:memory:", gateway: ["allow_writes: true"]));   // set in the file, as an administrator does
         var before = File.ReadAllText(ConnectionFile("limited"));
 
         var refused = await CallAsync(admin, HttpMethod.Post, "/api/v1/data-sources/limited/adopt", ServerRole.Admin, AdoptBody("build-1"));

@@ -52,6 +52,7 @@ public static class ProjectConfigLoader
         private YamlMapping? connectionNodes;
         private IReadOnlyDictionary<string, DbDataKit.Connections.TlsSpec>? connectionTls;
         private IReadOnlyDictionary<string, DbDataKit.Connections.GrantsSpec>? connectionGrants;
+        private IReadOnlyDictionary<string, DbDataKit.Config.Yaml.YamlMapping>? connectionPolicy;
         private bool connectionsInText;
 
         private readonly Dictionary<string, int> lines = [];
@@ -88,6 +89,7 @@ public static class ProjectConfigLoader
                 connectionNodes = files.Connections;
                 connectionTls = files.Tls;
                 connectionGrants = files.Grants;
+                connectionPolicy = files.Policy;
             }
             else { connectionNodes = top.Get("connections") as YamlMapping; connectionsInText = top.Get("connections") is not null; }
             readOnlyConnections = ReadOnlyNames(connectionNodes);
@@ -518,7 +520,7 @@ public static class ProjectConfigLoader
                     if (mp is YamlScalar mps && int.TryParse(mps.Value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var cap) && cap is >= 1 and <= 64) maxParallel = cap;
                     else Add(DiagnosticCatalog.InvalidValue, mp, $"`connections.{name}.max_parallel` must be a whole number from 1 to 64.");
                 }
-                if (engine != null) result[name] = new ConnectionConfig(name, engine, version, e.Key.Line, parameters, ownTracking, allowCommands, ReadSemanticsOverride(settings, name), ReadLifecycleOverride(settings, $"connections.{name}"), ReadInfo(settings)) { Timezone = ReadTimezone(settings, $"`connections.{name}.timezone`"), MaxParallel = maxParallel, DeclaredKind = kind, Profile = ProfileOf(kind, dialects), Tls = connectionTls?.GetValueOrDefault(name), Grants = connectionGrants?.GetValueOrDefault(name) };
+                if (engine != null) result[name] = new ConnectionConfig(name, engine, version, e.Key.Line, parameters, ownTracking, allowCommands, ReadSemanticsOverride(settings, name), ReadLifecycleOverride(settings, $"connections.{name}"), ReadInfo(settings)) { Timezone = ReadTimezone(settings, $"`connections.{name}.timezone`"), MaxParallel = maxParallel, DeclaredKind = kind, Profile = ProfileOf(kind, dialects), Tls = connectionTls?.GetValueOrDefault(name), Grants = connectionGrants?.GetValueOrDefault(name), GatewayPolicy = connectionPolicy?.GetValueOrDefault(name) };
             }
             return result;
         }

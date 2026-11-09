@@ -23,7 +23,7 @@ public static class ProjectConnectionFiles
     private static readonly string[] Used = ["schema", "name", "engine", "dialect", "access", "tls", "grants", "extensions"];
 
     /// <summary>The connections read from the files (null when there is no folder or no file) and, for every node, the file it was read from.</summary>
-    public sealed record Loaded(YamlMapping? Connections, IReadOnlyDictionary<YamlNode, string> NodeFiles, IReadOnlyDictionary<string, TlsSpec> Tls, IReadOnlyDictionary<string, GrantsSpec>? Grants = null);
+    public sealed record Loaded(YamlMapping? Connections, IReadOnlyDictionary<YamlNode, string> NodeFiles, IReadOnlyDictionary<string, TlsSpec> Tls, IReadOnlyDictionary<string, GrantsSpec>? Grants = null, IReadOnlyDictionary<string, DbDataKit.Config.Yaml.YamlMapping>? Policy = null);
 
     public static Loaded Read(string projectRoot, List<Diagnostic> diags)
     {
@@ -31,7 +31,8 @@ public static class ProjectConnectionFiles
         var files = new Dictionary<YamlNode, string>(ReferenceEqualityComparer.Instance);
         var tls = new Dictionary<string, TlsSpec>(StringComparer.Ordinal);
         var grants = new Dictionary<string, GrantsSpec>(StringComparer.Ordinal);
-        if (!Directory.Exists(folder)) return new(null, files, tls, grants);
+        var policy = new Dictionary<string, DbDataKit.Config.Yaml.YamlMapping>(StringComparer.Ordinal);
+        if (!Directory.Exists(folder)) return new(null, files, tls, grants, policy);
         var entries = new List<YamlEntry>();
         foreach (var path in Directory.GetFiles(folder).OrderBy(p => p, StringComparer.Ordinal))
         {
@@ -44,13 +45,13 @@ public static class ProjectConnectionFiles
             string text;
             try { text = File.ReadAllText(path); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Report(diags, relative, 0, 0, "The file could not be read.", null); continue; }
-            if (ReadOne(text, relative, Path.GetFileNameWithoutExtension(path), diags, files, tls, grants) is { } entry) entries.Add(entry);
+            if (ReadOne(text, relative, Path.GetFileNameWithoutExtension(path), diags, files, tls, grants, policy) is { } entry) entries.Add(entry);
         }
-        return new(entries.Count == 0 ? null : Own(new YamlMapping(entries, 1, 1), null, files), files, tls, grants);
+        return new(entries.Count == 0 ? null : Own(new YamlMapping(entries, 1, 1), null, files), files, tls, grants, policy);
     }
 
     /// <summary>One file's text (for tests and for editors that hold the text): the entry the loader reads, or null with the problems in <paramref name="diags"/>.</summary>
-    public static YamlEntry? ReadOne(string text, string relative, string expectedName, List<Diagnostic> diags, IDictionary<YamlNode, string> files, IDictionary<string, TlsSpec>? tls = null, IDictionary<string, GrantsSpec>? grants = null)
+    public static YamlEntry? ReadOne(string text, string relative, string expectedName, List<Diagnostic> diags, IDictionary<YamlNode, string> files, IDictionary<string, TlsSpec>? tls = null, IDictionary<string, GrantsSpec>? grants = null, IDictionary<string, DbDataKit.Config.Yaml.YamlMapping>? policy = null)
     {
         var before = diags.Count;
         var result = ConnectionDefinitionLoader.Load(text, relative, addressRequired: false);
@@ -78,6 +79,19 @@ public static class ProjectConnectionFiles
             else Bad(own, "`extensions.build` must be a mapping of the tool's connection settings.");
         }
         if (build?.Get("engine") is { } dup) Bad(dup, "`engine` is a key of the file, not of `extensions.build`.");
+
+        // the Gateway's serving policy published with the definition (plan 13c D19, owner decision of 2026-11-09): `extensions.gateway`, every field of the Gateway's data source file except the two only an administrator sets, in the
+        // file on the Gateway's disk (`allow_writes`, `allowed_directories`), which a definition never carries; who may use the data source is `grants`
+        DbDataKit.Config.Yaml.YamlMapping? gateway = null;
+        if (root.Get("extensions") is YamlMapping ext && ext.Get(ServingPolicy.Key) is { } served)
+        {
+            if (served is not YamlMapping) Bad(served, "`extensions.gateway` must be a mapping of serving policy fields.");
+            else if (ServingPolicy.BlockOf(text) is { } policyBlock)
+            {
+                foreach (var problem in ServingPolicy.Check(policyBlock)) Report(diags, relative, problem.At.Line, problem.At.Column, problem.Message, problem.Fix);
+                gateway = policyBlock;
+            }
+        }
         if (diags.Count > before) return null;
 
         // `readonly flightsql clickhouse`: the words the project file always spelled in `engine`
@@ -93,6 +107,7 @@ public static class ProjectConnectionFiles
         if (root.Get("tls") is not null && tls is not null) tls[definition.Name] = definition.Tls;
         // who may use the data source once it is published (`schema: connection/2`, plan 22a GP03): the project's, published with the connection and replaced by the next publish
         if (definition.Grants is not null && grants is not null) grants[definition.Name] = definition.Grants;
+        if (gateway is not null && policy is not null) policy[definition.Name] = gateway;
         var entry = new YamlEntry(new YamlScalar(definition.Name, nameAt.Line, nameAt.Column), new YamlMapping(settings, nameAt.Line, 1));
         Own(entry.Key, relative, files); Own(entry.Value, relative, files);
         return entry;

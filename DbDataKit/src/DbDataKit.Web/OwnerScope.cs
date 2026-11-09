@@ -16,7 +16,8 @@ public sealed record ManagedObject(string? ManagedBy, bool IsServerPolicy = fals
 /// <summary>
 /// The owner rules of a server client that publishes into a server (plan 13, W12, "Ownership-scoped roles"). A client whose role is <see cref="ServerRole.Publisher"/> may create objects, each marked <c>managed_by: &lt;its client id&gt;</c>
 /// (<see cref="Stamp"/>), and may change or delete only the objects carrying its own id. It cannot touch an object made by hand or by another client, nor the server's policy. Taking an object over is an administrator's act on the server
-/// (<see cref="AuthorizeAdopt"/>, <c>--adopt</c>), never a Publisher's. The check is made by the server on every call, from the token, so a console cannot widen it and the called server needs no trust in the caller's own account.
+/// (<see cref="AuthorizeAdopt"/>, <c>--adopt</c>), never a Publisher's; the one exception is a Gateway data source made by hand, which a Publisher may replace by publishing over it with an explicit <c>adopt</c>
+/// (<see cref="AuthorizePublishingOver"/>, plan 13c D19: the Publisher role is high-trust, and what the publish replaces is recorded and answered). The check is made by the server on every call, from the token, so a console cannot widen it and the called server needs no trust in the caller's own account.
 /// <para>
 /// A caller whose effective roles include <see cref="ServerRole.Admin"/> is not limited by owner: that is a person with the server's own authority, and a server client's ceiling never holds it.
 /// </para>
@@ -47,6 +48,25 @@ public static class OwnerScope
         return string.Equals(target.ManagedBy, token.Client.Id, StringComparison.Ordinal)
             ? AuthorizationDecision.Allow(ServerRole.Publisher, effective)
             : AuthorizationDecision.Deny(ServerRole.Publisher, effective, "the object belongs to another client");
+    }
+
+    /// <summary>
+    /// A Publisher publishing over an object made by hand with an explicit <c>adopt</c> (plan 13c D19): allowed for the Publisher role (or admin) when nothing manages the object yet and it is not the server's own policy.
+    /// An object that belongs to a client, this one or another, is the ordinary rule's (<see cref="Authorize"/>): adopting never takes one from a client.
+    /// </summary>
+    public static AuthorizationDecision AuthorizePublishingOver(ValidatedToken token, ManagedObject target, string? project = null)
+    {
+        ArgumentNullException.ThrowIfNull(token);
+        ArgumentNullException.ThrowIfNull(target);
+        var effective = ManagementAuthorization.Effective(token, project);
+        if (effective.HasFlag(ServerRole.Admin)) return AuthorizationDecision.Allow(ServerRole.Admin, effective);
+        if (!effective.HasFlag(ServerRole.Publisher))
+            return AuthorizationDecision.Deny(ServerRole.Publisher, effective, "publishing needs the publisher role (or admin) and the call holds neither");
+        if (target.IsServerPolicy)
+            return AuthorizationDecision.Deny(ServerRole.Publisher, effective, "the server's own policy is not something a publisher changes");
+        if (!string.IsNullOrEmpty(target.ManagedBy))
+            return AuthorizationDecision.Deny(ServerRole.Publisher, effective, "the object belongs to a client, and adopting takes over only what was made by hand");
+        return AuthorizationDecision.Allow(ServerRole.Publisher, effective);
     }
 
     /// <summary>Taking an object over (<c>--adopt</c>): an administrator's act. A server client never has it, whatever its ceiling.</summary>

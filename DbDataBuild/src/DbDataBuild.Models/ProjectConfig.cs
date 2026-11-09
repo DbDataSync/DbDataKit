@@ -58,6 +58,9 @@ public sealed record ConnectionConfig(string Name, string Engine, int? Version =
     /// <summary>The connection file's `grants:` (home groups, or everyone; `schema: connection/2`): who may use the data source this connection is published as. Null when the file has none, which publishes a data source no home user may use. Published with the connection and replaced completely by the next publish (plan 22a GP03).</summary>
     public DbDataKit.Connections.GrantsSpec? Grants { get; init; }
 
+    /// <summary>The connection file's `extensions.gateway` (plan 13c D19): the Gateway's serving policy this connection is published with, as the file wrote it (never <c>allow_writes</c> or <c>allowed_directories</c>, which the loader refuses). Null when the file has none; a publish replaces the Gateway's policy completely.</summary>
+    public DbDataKit.Config.Yaml.YamlMapping? GatewayPolicy { get; init; }
+
     public ConnectionKind Kind => DeclaredKind ?? ConnectionKind.OfEngine(Engine);
 
     /// <summary>The project's own dialect profile (`dialects:`) that this connection's `engine` names; null when the dialect is a built-in.</summary>

@@ -66,7 +66,7 @@ public sealed partial class ManagementTests
         var admin = await PairAsync();   // the console, paired as a console
         await PairPublisherAsync(build1);
         await CallAsync(admin, HttpMethod.Put, "/api/v1/data-sources/by-hand", ServerRole.Admin, Put(Plain("by-hand"), null));
-        await CallAsync(admin, HttpMethod.Put, "/api/v1/data-sources/limited", ServerRole.Admin, Put(Conn.Yaml("limited", "duckdb", "Data Source=:memory:", gateway: ["allow_writes: true"]), null));
+        File.WriteAllText(ConnectionPath("limited"), Conn.Yaml("limited", "duckdb", "Data Source=:memory:", gateway: ["allow_writes: true"]));   // allow_writes is set in the file, never through the API (plan 13c D19)
         var handMade = File.ReadAllText(ConnectionPath("by-hand"));
         var limited = File.ReadAllText(ConnectionPath("limited"));
 

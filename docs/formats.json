@@ -17,7 +17,7 @@
       "current": 2,
       "previous": 1,
       "status": "open",
-      "note": "gains cache and checks, and grants (22a GP03: who may read the data source, part of the published definition); open until the first release that holds any of them (24a D5)",
+      "note": "gains cache and checks, and grants (22a GP03: who may read the data source, part of the published definition; the serving policy a definition carries is the existing `extensions.gateway`, so plan 13c D19 adds no key and no version); open until the first release that holds any of them (24a D5)",
       "version_source": { "file": "DbDataKit/src/DbDataKit.Connections.Abstractions/ConnectionDefinition.cs", "pattern": "public const int CurrentVersion = (\\d+);" },
       "files": [ { "path": "DbDataKit/src/DbDataKit.Connections.Abstractions/ConnectionDefinitionLoader.cs", "sha256": null } ]
     },

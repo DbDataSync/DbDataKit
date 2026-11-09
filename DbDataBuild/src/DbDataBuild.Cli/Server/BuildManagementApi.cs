@@ -525,16 +525,18 @@ internal static class BuildManagementApi
             var token = context.ManagementToken();
             if (!ManagementAuthorization.Authorize(token, ServerRole.Approver, hosted.Id).Allowed) return Results.Json(new { error = "This needs the approver role." }, statusCode: StatusCodes.Status403Forbidden);
             string? connection, dataSource;
+            var adopt = false;
             try
             {
                 var body = await JsonSerializer.DeserializeAsync<JsonObject>(context.Request.Body, cancellationToken: context.RequestAborted);
                 (connection, dataSource) = (body?["connection"]?.GetValue<string>(), body?["data_source"]?.GetValue<string>());
+                adopt = body?["adopt"]?.GetValue<bool>() == true;   // replace a data source made by hand (plan 13c D19): the Gateway keeps the old file and answers with what changed
             }
             catch (Exception ex) when (ex is JsonException or InvalidOperationException) { connection = dataSource = null; }
-            if (string.IsNullOrWhiteSpace(connection)) return Results.Json(new { error = "The body is a JSON object with the \"connection\" to publish (and, if it should be called otherwise on the proxy, a \"data_source\")." }, statusCode: StatusCodes.Status400BadRequest);
+            if (string.IsNullOrWhiteSpace(connection)) return Results.Json(new { error = "The body is a JSON object with the \"connection\" to publish (and, if it should be called otherwise on the proxy, a \"data_source\"; \"adopt\": true replaces a data source made by hand)." }, statusCode: StatusCodes.Status400BadRequest);
 
             var config = ProjectContext.Load(projects.RootOf(hosted)).Config;
-            var result = await publisher.PublishAsync(proxy, config, connection, string.IsNullOrWhiteSpace(dataSource) ? connection : dataSource, token, context.RequestAborted);
+            var result = await publisher.PublishAsync(proxy, config, connection, string.IsNullOrWhiteSpace(dataSource) ? connection : dataSource, token, context.RequestAborted, adopt);
             return Results.Json(result.Body, statusCode: result.Status);
         });
 

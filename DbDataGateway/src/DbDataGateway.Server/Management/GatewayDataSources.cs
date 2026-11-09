@@ -55,9 +55,16 @@ public sealed partial class GatewayDataSources(
         if (rest.Length == 2 && rest[1] == "adopt")
             return method == "POST" ? await AdoptAsync(name, body, caller, cancellationToken) : ManagementResult.Problem(405, "A data source is adopted with POST.");
 
-        // a publishing client reaches only the data sources it made (the owner rules, plan 13 W12); an administrator reaches all
+        // a publishing client reaches only the data sources it made (the owner rules, plan 13 W12); an administrator reaches all. The one exception (plan 13c D19) is a write that says `adopt: true` over a data source made by hand
         var action = method switch { "GET" or "POST" => ObjectAction.Change, "DELETE" => ObjectAction.Delete, _ => TextOf(name) is not null ? ObjectAction.Change : ObjectAction.Create };
-        if (Scope(caller, action, name) is { } refused) { Record(caller, $"data-source {method.ToLowerInvariant()}", name, "refused"); return refused; }
+        var adopting = method == "PUT" && ReadWrite(body)?.Adopt == true && !IsAdministrator(caller) && IsHandMade(name);
+        var refused = adopting ? AdoptScope(caller, name) : Scope(caller, action, name);
+        if (refused is not null)
+        {
+            Record(caller, $"data-source {method.ToLowerInvariant()}", name, "refused");
+            // a write over a data source made by hand, without adopt: not the client's to change, and the way to take it over is said
+            return method == "PUT" && IsHandMade(name) && !IsAdministrator(caller) ? ManagementResult.Problem(409, NotAdoptedSentence(name)) : refused;
+        }
 
         if (rest.Length == 2 && rest[1] == "test") return method == "POST" ? await TestAsync(name, cancellationToken) : ManagementResult.Problem(405, "A data source is tested with POST.");
         if (rest.Length != 1) return ManagementResult.Problem(404, "There is no such call.");
@@ -83,7 +90,7 @@ public sealed partial class GatewayDataSources(
                 {
                     ["name"] = Path.GetFileNameWithoutExtension(file), ["version"] = VersionOf(text), ["valid"] = loaded.Ok,
                     ["engine"] = loaded.Definition?.Engine, ["access"] = loaded.Definition?.Access.ToString().ToLowerInvariant(), ["managed_by"] = loaded.Definition?.ManagedBy,
-                    ["grants"] = GrantsView(loaded.Definition, group: false),
+                    ["grants"] = GrantsView(loaded.Definition, group: false), ["policy"] = PolicyView(loaded.Definition, text, group: false),
                 });
             }
         // the group's published data sources, after this instance's own (a name of its own wins)
@@ -96,7 +103,7 @@ public sealed partial class GatewayDataSources(
             items.Add(new JsonObject
             {
                 ["name"] = name, ["version"] = VersionOf(text), ["valid"] = loaded.Ok, ["engine"] = loaded.Definition?.Engine, ["access"] = loaded.Definition?.Access.ToString().ToLowerInvariant(),
-                ["managed_by"] = loaded.Definition?.ManagedBy, ["group"] = true, ["grants"] = GrantsView(loaded.Definition, group: true),
+                ["managed_by"] = loaded.Definition?.ManagedBy, ["group"] = true, ["grants"] = GrantsView(loaded.Definition, group: true), ["policy"] = PolicyView(loaded.Definition, text, group: true),
             });
         }
         return new JsonObject { ["data_sources"] = items };
@@ -110,7 +117,27 @@ public sealed partial class GatewayDataSources(
         {
             ["name"] = name, ["text"] = text, ["version"] = VersionOf(text), ["group"] = group,
             ["grants"] = GrantsView(DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, name + ".yaml").Definition, group),
+            ["policy"] = PolicyView(DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, name + ".yaml").Definition, text, group),
         });
+    }
+
+    /// <summary>
+    /// The serving policy of a data source and where it comes from, for a screen that shows it and changes nothing (plan 13c D19): <c>fields</c> are the fields of <c>extensions.gateway</c> that a definition carries (what a publish
+    /// replaces), <c>blocked</c> the two a definition never carries (<c>allow_writes</c>, <c>allowed_directories</c>), shown when a file made by hand has them; a publish replaces the whole file and they are gone. <c>origin</c> is <c>definition</c> when a client
+    /// publishes the data source (the group's, or one with a <c>managed_by</c>), else <c>file</c>. Null when the file did not load.
+    /// </summary>
+    internal static JsonObject? PolicyView(DbDataKit.Connections.ConnectionDefinition? definition, string text, bool group)
+    {
+        if (definition is null) return null;
+        var fields = new JsonObject();
+        var blocked = new JsonObject();
+        if (DbDataKit.Connections.ServingPolicy.BlockOf(text) is { } block)
+            foreach (var entry in block.Entries)
+            {
+                if (DbDataKit.Connections.ServingPolicy.GrantKeys.Contains(entry.Key.Value)) continue;   // who may use it is shown as grants
+                (DbDataKit.Connections.ServingPolicy.Blocked.Contains(entry.Key.Value) ? blocked : fields)[entry.Key.Value] = DbDataKit.Connections.ServingPolicy.Describe(entry.Value);
+            }
+        return new JsonObject { ["origin"] = group || !string.IsNullOrEmpty(definition.ManagedBy) ? "definition" : "file", ["fields"] = fields, ["blocked"] = blocked };
     }
 
     /// <summary>
@@ -133,7 +160,31 @@ public sealed partial class GatewayDataSources(
         return new JsonObject { ["groups"] = new JsonArray([.. groups.Select(g => (JsonNode?)JsonValue.Create(g))]), ["everyone"] = everyone, ["source"] = fromDefinition ? "definition" : "file" };
     }
 
-    private sealed record WriteRequest(string? Text, [property: System.Text.Json.Serialization.JsonPropertyName("expected_version")] string? ExpectedVersion);
+    private sealed record WriteRequest(
+        string? Text, [property: System.Text.Json.Serialization.JsonPropertyName("expected_version")] string? ExpectedVersion,
+        [property: System.Text.Json.Serialization.JsonPropertyName("adopt")] bool Adopt = false);
+
+    private static WriteRequest? ReadWrite(string? body)
+    {
+        try { return string.IsNullOrWhiteSpace(body) ? null : JsonSerializer.Deserialize<WriteRequest>(body, Json); }
+        catch (JsonException) { return null; }
+    }
+
+    /// <summary>Whether the data source exists and nothing manages it: made by hand, or by an administrator (no <c>managed_by</c>).</summary>
+    private bool IsHandMade(string name) =>
+        TextOf(name) is { } text && string.IsNullOrEmpty(DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, name + ".yaml").Definition?.ManagedBy);
+
+    private ManagementResult? AdoptScope(ManagementCaller caller, string name)
+    {
+        var decision = OwnerScope.AuthorizePublishingOver(caller.Token!, new ManagedObject(null));
+        return decision.Allowed ? null : ManagementResult.Problem(403, decision.Reason ?? "This client may not do this to that data source.");
+    }
+
+    private static string NotAdoptedSentence(string name) =>
+        $"The data source '{name}' was made by hand on this Gateway, so a publishing client does not replace it unasked: its file, serving policy included, would be gone. Publish again with \"adopt\": true to take it over (the replaced file is kept in the history, "
+        + "the answer lists every field the definition changed or dropped, and a file's allow_writes and allowed_directories are gone with it: a definition never carries them), or ask an administrator to hand it over.";
+
+    private static string Describe(IEnumerable<string> fields) => string.Join(", ", fields);
 
     private async Task<ManagementResult> WriteAsync(string name, string? body, ManagementCaller caller, CancellationToken cancellationToken)
     {
@@ -143,20 +194,22 @@ public sealed partial class GatewayDataSources(
         if (request?.Text is not { Length: > 0 } text)
             return ManagementResult.Problem(400, "The body is a JSON object with the file's text and the version it is based on: {\"text\": \"schema: connection/1 ...\", \"expected_version\": \"<hash>\" or null to create}.");
 
-        // The file as it would be, among the others: refused with the reasons if it would make the configuration invalid, before anything is written.
-        var candidate = validation.ValidateFiles(new Dictionary<string, string> { [$"connections/{name}.yaml"] = text });
-        if (candidate.Body["valid"]?.GetValue<bool>() != true)
-            return new ManagementResult(400, new JsonObject { ["error"] = "The data source is not valid, so nothing was written.", ["valid"] = false, ["diagnostics"] = candidate.Body["diagnostics"]!.DeepClone() });
-
-        if (!IsAdministrator(caller))
+        var existing = TextOf(name);
+        var publishing = !IsAdministrator(caller);
+        var adopting = publishing && request.Adopt && existing is not null && IsHandMade(name);
+        if (publishing)
         {
-            // what a publishing client may send: no serving policy (extensions.gateway), and the file says whose it is (stamped here when it does not)
+            // what a publishing client may send: the serving policy of the definition (plan 13c D19), but not allow_writes or allowed_directories, and the file says whose it is (stamped here when it does not)
             var sent = DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, $"{name}.yaml").Definition;
             var client = OwnerScope.Stamp(caller.Token!);
-            if (sent?.Extensions.Items.ContainsKey("gateway") == true)
+            if (DbDataKit.Connections.ServingPolicy.BlockOf(text) is { } block && DbDataKit.Connections.ServingPolicy.Check(block) is { Count: > 0 } problems)
             {
                 Record(caller, "data-source write", name, "refused");
-                return ManagementResult.Problem(403, "The server's own policy (extensions.gateway) is not something a publishing client sets; an administrator does.");
+                var blocked = problems.FirstOrDefault(p => p.IsBlocked);
+                if (blocked is not null)
+                    return ManagementResult.Problem(403, $"{blocked.Message.Replace("<name>", name, StringComparison.Ordinal)} It is on line {blocked.At.Line} of the data source text sent. {blocked.Fix}"
+                        + (problems.Count > 1 ? $" Other problems: {string.Join(" ", problems.Where(p => !p.IsBlocked).Select(p => $"{p.Message} (line {p.At.Line})"))}" : ""));
+                return ManagementResult.Problem(400, string.Join(" ", problems.Select(p => $"{p.Message} (line {p.At.Line}){(p.Fix is null ? "" : " " + p.Fix)}")));
             }
             if (!string.IsNullOrEmpty(sent?.ManagedBy) && sent.ManagedBy != client)
             {
@@ -166,6 +219,14 @@ public sealed partial class GatewayDataSources(
             if (string.IsNullOrEmpty(sent?.ManagedBy)) text = (text.EndsWith('\n') ? text : text + "\n") + $"managed_by: {client}\n";
         }
 
+        // The file as it would be, among the others: refused with the reasons if it would make the configuration invalid, before anything is written.
+        var candidate = validation.ValidateFiles(new Dictionary<string, string> { [$"connections/{name}.yaml"] = text });
+        if (candidate.Body["valid"]?.GetValue<bool>() != true)
+            return new ManagementResult(400, new JsonObject { ["error"] = "The data source is not valid, so nothing was written.", ["valid"] = false, ["diagnostics"] = candidate.Body["diagnostics"]!.DeepClone() });
+
+        var expectedVersion = adopting ? VersionOf(existing!) : request.ExpectedVersion;   // a publisher cannot read a file made by hand: adopting replaces the file it finds, and the answer says what that was
+        var changes = existing is null ? new JsonArray() : DefinitionChanges.Between(existing, text);
+
         if (ToGroup(name, caller))
         {
             // the group's: in the state, served here at once and by every other instance when it next looks (plan 20 O04b)
@@ -173,7 +234,7 @@ public sealed partial class GatewayDataSources(
             WriteResult<string> grouped;
             try
             {
-                grouped = await _guard.RunAsync(name, request.ExpectedVersion, () => Task.FromResult(published.Text(name) is { } now ? VersionOf(now) : null), () =>
+                grouped = await _guard.RunAsync(name, expectedVersion, () => Task.FromResult(published.Text(name) is { } now ? VersionOf(now) : null), () =>
                 {
                     published.Publish(name, text, Who(caller));
                     return Task.FromResult(VersionOf(text));
@@ -191,16 +252,19 @@ public sealed partial class GatewayDataSources(
                 return new ManagementResult(409, new JsonObject { ["error"] = "The data source changed since it was read; read it again and make the change on that.", ["current_version"] = grouped.CurrentVersion });
             }
             Record(caller, "data-source write", name, was is null ? "created" : "changed");
+            if (adopting) Record(caller, "data-source adopt", name, $"adopted by {OwnerScope.Stamp(caller.Token!)}");
             return ManagementResult.Ok(new JsonObject
             {
-                ["name"] = name, ["version"] = grouped.Value, ["created"] = was is null, ["group"] = true,
+                ["name"] = name, ["version"] = grouped.Value, ["created"] = was is null, ["group"] = true, ["adopted"] = adopting, ["changes"] = changes,
                 ["diagnostics"] = new JsonArray([.. candidate.Body["diagnostics"]!.AsArray().Select(d => d!.DeepClone())]),
             });
         }
 
         var file = FileOf(name);
         var created = !File.Exists(file);
-        var result = await _guard.RunAsync(name, request.ExpectedVersion, () => Task.FromResult(File.Exists(file) ? VersionOf(File.ReadAllText(file)) : null), () =>
+        // a file made by hand that a publisher replaces goes to the history as it was, whether or not anything had committed it before: nothing is lost
+        if (adopting && !created) Committed(caller, $"Data source {name} as it was before {OwnerScope.Stamp(caller.Token!)} adopted it", [file]);
+        var result = await _guard.RunAsync(name, expectedVersion, () => Task.FromResult(File.Exists(file) ? VersionOf(File.ReadAllText(file)) : null), () =>
         {
             Directory.CreateDirectory(Folder);
             // written beside and moved over, so a reader (the file watcher, the options monitor) never sees half a file
@@ -215,22 +279,23 @@ public sealed partial class GatewayDataSources(
             Record(caller, "data-source write", name, "stale");
             return new ManagementResult(409, new JsonObject { ["error"] = "The data source changed since it was read; read it again and make the change on that.", ["current_version"] = result.CurrentVersion });
         }
-        Committed(caller, $"{(created ? "Add" : "Change")} data source {name}", [file]);
+        Committed(caller, adopting ? $"Data source {name} adopted by {OwnerScope.Stamp(caller.Token!)}: the definition replaces the file made by hand" : $"{(created ? "Add" : "Change")} data source {name}", [file]);
         Record(caller, "data-source write", name, created ? "created" : "changed");
+        if (adopting) Record(caller, "data-source adopt", name, $"adopted by {OwnerScope.Stamp(caller.Token!)}");
         reload();
         return ManagementResult.Ok(new JsonObject
         {
-            ["name"] = name, ["version"] = result.Value, ["created"] = created,
+            ["name"] = name, ["version"] = result.Value, ["created"] = created, ["adopted"] = adopting, ["changes"] = changes,
             ["diagnostics"] = new JsonArray([.. candidate.Body["diagnostics"]!.AsArray().Select(d => d!.DeepClone())]),   // warnings, such as a certificate check turned off
         });
     }
 
-    private sealed record AdoptRequest(string? Client);
+    private sealed record AdoptRequest(string? Client, [property: System.Text.Json.Serialization.JsonPropertyName("adopt")] bool Adopt = false);
 
     /// <summary>
     /// <c>POST /api/v1/data-sources/{name}/adopt</c> (<c>{"client": "&lt;id of a paired server client&gt;"}</c>), plan 13 W12 and T12: a person with the admin role (a console's signed-in administrator, or the operating-system user on the local channel) makes a data source
     /// that was made by hand, or by another client, one that client manages: its file gets <c>managed_by: &lt;client&gt;</c>, and from then on the owner rules let that client change and remove it. A server client is refused whatever its ceiling, and what the file says
-    /// is otherwise not touched. A data source that carries a serving policy (<c>extensions.gateway</c>) is not adopted: a client writes the whole file, which would silently drop the policy, so the policy goes first (an administrator moves it out) and the source is adopted after.
+    /// is otherwise not touched. A data source that carries a serving policy (<c>extensions.gateway</c>) is handed over only with <c>"adopt": true</c> in the body (plan 13c D19): the client's next publish replaces the policy with its definition's, so the refusal says so rather than let that happen unasked, and the file goes to the history first. The source is adopted after.
     /// </summary>
     private async Task<ManagementResult> AdoptAsync(string name, string? body, ManagementCaller caller, CancellationToken cancellationToken)
     {
@@ -253,10 +318,12 @@ public sealed partial class GatewayDataSources(
         if (!File.Exists(file)) return ManagementResult.Problem(404, $"There is no data source '{name}'.");
         var text = File.ReadAllText(file);
         var current = DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, file).Definition;
-        if (current?.Extensions.Items.ContainsKey("gateway") == true)
+        var policyFields = DbDataKit.Connections.ServingPolicy.BlockOf(text)?.Entries.Select(e => e.Key.Value).ToList() ?? [];
+        if (policyFields.Count > 0 && request.Adopt != true)
         {
             Record(caller, "data-source adopt", name, "refused");
-            return ManagementResult.Problem(409, "The data source carries a serving policy (extensions.gateway), which a publishing client's write would drop. Move the policy out first, then adopt it.");
+            return ManagementResult.Problem(409, $"The data source carries a serving policy (extensions.gateway: {Describe(policyFields)}), which the client's next publish replaces with the policy of its definition (allow_writes and allowed_directories of the file go with it: the definition never carries them, so the data source is read-only afterwards). "
+                + "Say {\"adopt\": true} to hand it over knowing that (the file is kept in the history first), or let the client adopt it by publishing with \"adopt\": true, whose answer lists every field that changed or was dropped.");
         }
         if (string.Equals(current?.ManagedBy, client.Id, StringComparison.Ordinal))
             return ManagementResult.Ok(new JsonObject { ["name"] = name, ["managed_by"] = client.Id, ["adopted"] = false, ["version"] = VersionOf(text) });
@@ -266,6 +333,7 @@ public sealed partial class GatewayDataSources(
         if (candidate.Body["valid"]?.GetValue<bool>() != true)
             return new ManagementResult(400, new JsonObject { ["error"] = "The data source with that owner is not valid, so nothing was written.", ["valid"] = false, ["diagnostics"] = candidate.Body["diagnostics"]!.DeepClone() });
 
+        Committed(caller, $"Data source {name} as it was before {client.Name} ({client.Id}) adopted it", [file]);   // whether or not it was committed before, the file is in the history before it changes
         var result = await _guard.RunAsync(name, VersionOf(text), () => Task.FromResult(File.Exists(file) ? VersionOf(File.ReadAllText(file)) : null), () =>
         {
             var temp = file + ".tmp-" + Guid.NewGuid().ToString("N")[..8];
@@ -281,7 +349,11 @@ public sealed partial class GatewayDataSources(
         Committed(caller, $"Data source {name} adopted by {client.Name} ({client.Id})", [file]);
         Record(caller, "data-source adopt", name, $"adopted by {client.Id}");
         reload();
-        return ManagementResult.Ok(new JsonObject { ["name"] = name, ["managed_by"] = client.Id, ["adopted"] = true, ["previous_owner"] = current?.ManagedBy, ["version"] = result.Value });
+        return ManagementResult.Ok(new JsonObject
+        {
+            ["name"] = name, ["managed_by"] = client.Id, ["adopted"] = true, ["previous_owner"] = current?.ManagedBy, ["version"] = result.Value,
+            ["replaced_by_next_publish"] = new JsonArray([.. policyFields.Select(f => (JsonNode?)JsonValue.Create(f))]),
+        });
     }
 
     private async Task<ManagementResult> DeleteAsync(string name, string? expectedVersion, ManagementCaller caller, CancellationToken cancellationToken)

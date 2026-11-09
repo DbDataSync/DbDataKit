@@ -19,7 +19,7 @@ What is real today and what is not: the **model** is published by Build (it has 
 
 ## 2. Publish the model, then the dashboard
 
-1. **The model.** Build the retail project and publish its semantic model from the Build server (the Semantic screen's **Publish** to the paired Gateway, or `PUT /api/v1/semantic-models/retail_sales`). Its data source is created read-only on the Gateway. Give the data source a **home group** (`groups: [analysts]` under `extensions.gateway` in its connection file, or the data source screen): only that group may read it.
+1. **The model.** Build the retail project and publish its semantic model from the Build server (the Semantic screen's **Publish** to the paired Gateway, or `PUT /api/v1/semantic-models/retail_sales`). Its data source is created read-only on the Gateway. Give the data source a **home group** in the project's connection file (`grants: { groups: [analysts] }`, `schema: connection/2`, and publish again; plan 22a GP03): only that group may read it.
 2. **The dashboard**, from this repository:
 
    ```
