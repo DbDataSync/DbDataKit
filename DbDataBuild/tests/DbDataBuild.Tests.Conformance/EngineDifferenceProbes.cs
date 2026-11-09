@@ -118,6 +118,10 @@ public class EngineDifferenceProbes
         ["sqlserver:json_object_value"] = "fn.json_extract_string: JSON_VALUE gives NULL for an object or an array", ["postgres:json_object_value"] = "fn.json_extract_string: the text of an object keeps the document's spacing",
         ["sqlserver:json_array_length"] = "fn.json_array_length", ["sqlserver:json_valid"] = "fn.json_other", ["postgres:json_valid"] = "fn.json_other",
         ["sqlserver:re_full_match"] = "fn.regexp_full_match",
+        // A 2025 server at database compatibility level 160 has no REGEXP_LIKE (it needs level 170, version 17), and the tool writes regexp_matches as REGEXP_LIKE whatever the version: SqlException "'REGEXP_LIKE' is not a recognized built-in function name". The same answer as SQL Server 2022 gave (these three were documented as the plain `sqlserver` entries until the plain probe moved to 2025).
+        ["sqlserver2025-160:re_matches"] = "fn.regexp: REGEXP_LIKE needs compatibility level 170; at level 160 the engine says it is not a built-in function",
+        ["sqlserver2025-160:re_matches_inner"] = "fn.regexp: REGEXP_LIKE needs compatibility level 170; at level 160 the engine says it is not a built-in function",
+        ["sqlserver2025-160:re_matches_case"] = "fn.regexp: REGEXP_LIKE needs compatibility level 170; at level 160 the engine says it is not a built-in function",
         ["sqlserver:re_replace_global"] = "fn.regexp_replace", 
         ["sqlserver:re_replace_first_multi"] = "fn.regexp_replace", ["sqlserver:re_replace_global_multi"] = "fn.regexp_replace", ["sqlserver:re_extract_unmatched_group"] = "fn.regexp_extract", ["sqlserver:re_full_match_alt"] = "fn.regexp_full_match",
         ["sqlserver:re_extract_group"] = "fn.regexp_extract", ["sqlserver:re_extract_whole"] = "fn.regexp_extract", ["sqlserver:re_extract_none"] = "fn.regexp_extract",

@@ -262,6 +262,12 @@ How it works now, and what to keep true when you add a job:
 | a unit of a continuous drain is "skipped" and its item stays `Claimed` | a unit key that repeats (the mapping alone) is skipped by a retry of the attempt chain, and an item given back and claimed again is the same run id | the key of a pass is `mapping#<token of the claim>` (`PlannedPass.Key`); never key a unit of the drain by the mapping or by the item's run id alone |
 | `FirstFailedItem` of a drain is `main#1a2b3c4d`, not `main` | the failed item of a run is the key of the unit that failed, and the key carries the claim's token | match on the prefix (`StartsWith("main#")`); the console shows the mapping before the `#` |
 
+### Build conformance (nightly `dbdatabuild-conformance-full`)
+
+| Signature | Cause | Fix |
+| --- | --- | --- |
+| `EngineDifferenceProbes...(name: "sqlserver2025-160")`: `N undocumented difference(s): re_matches: engine-error ...` on the nightly only, the PR runs are green | the 2025 probes fall back to the documented differences of the plain `sqlserver` probe (`KnownKey`). Moving `mssql` to SQL Server 2025 made the plain probe agree with DuckDB, so its entries were deleted (cc41cf6e), and the level-160 run lost the entries it shared (REGEXP_LIKE does not exist below compatibility level 170). The PR jobs do not run the 2025 engine; only the nightly does | give the 160 run its own `sqlserver2025-160:<id>` entry with the reason. When an engine entry is deleted from `Known`, run the probe on every engine that falls back to it (`sqlserver2025-160`, locally with `DBDATABUILD_TEST_MSSQL2025` set to any SQL Server 2025) |
+
 ### Infrastructure (not your change; re-run once, then look closer)
 
 | Signature | What it is |
