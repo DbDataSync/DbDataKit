@@ -17,7 +17,7 @@ namespace DbDataKit.Runner.Api;
 /// <list type="bullet">
 /// <item><c>GET /api/v1/status</c>: the engine of the state, the channels served, what this machine reports (<c>LimitCapabilities</c>), this instance's id and every task's status: next due, last run, what is running or waiting, whether it is paused.</item>
 /// <item><c>GET /api/v1/runs[?package=&amp;channel=&amp;task=&amp;outcome=&amp;limit=&amp;before=]</c>: the run history, newest first; <c>task</c> needs the package and the channel.</item>
-/// <item><c>.../tasks/{package}/{channel}/{task}/steps/{name}[?limit=&amp;before=&amp;key=]</c>: the completed steps of that name across the task's runs, newest first (plan 28c E13). A viewer reads it.</item>
+/// <item><c>GET /api/v1/runs/{id}</c> and <c>.../runs/{id}/logs[?after=&amp;limit=]</c>: one run and its log in order, a page at a time by line id (plan 28c E13); <c>.../tasks/{package}/{channel}/{task}/steps/{name}[?limit=&amp;before=&amp;key=]</c>: the completed steps of that name across the task's runs, newest first. A viewer reads all three.</item>
 /// <item><c>.../tasks/{package}/{channel}/{task}/schedule</c>, <c>.../owner</c> and <c>.../decisions</c>: who schedules a task while a product's own scheduler is still in the picture (plan 28c E09), see <c>MapOwnership</c>.</item>
 /// <item><c>POST /api/v1/tasks/{package}/{channel}/{task}/run</c> with an optional <c>{"inputs": {"name": "value"}}</c>: queues a run now (202 with its run id; 409 when one is queued or running already). <c>.../pause</c> and <c>.../resume</c>.</item>
 /// </list>
@@ -106,6 +106,40 @@ public static class RunnerApi
             var job = task is null ? null : $"{package}/{channel}/{task}";
             var runs = new RunStore(state, RunnerNames.EngineService).Read(new RunQuery(RunnerNames.EngineService, job, outcome, StartedBefore: before, Limit: limit, Package: package, Channel: channel));
             return Results.Json(new JsonObject { ["runs"] = new JsonArray(runs.Select(r => (JsonNode)Run(r)).ToArray()) });
+        });
+
+        // one run and its log, by id (plan 28c E13): what a product's screen reads for a run of its own task, for the lines of a run that is still going and for the ones after it ended. Viewer, as the list is.
+        app.MapGet($"{root}/runs/{{id:guid}}", (Guid id, HttpContext context) =>
+        {
+            if (Deny(context, ServerRole.Viewer) is { } denied) return denied;
+            return new RunStore(state, RunnerNames.EngineService).Get(id) is { } run && run.Service == RunnerNames.EngineService ? Results.Json(Run(run)) : Results.NotFound(new { error = $"There is no run {id}." });
+        });
+
+        app.MapGet($"{root}/runs/{{id:guid}}/logs", (Guid id, HttpContext context) =>
+        {
+            if (Deny(context, ServerRole.Viewer) is { } denied) return denied;
+            var query = context.Request.Query;
+            long? after = null;
+            if (Text(query["after"]) is { } afterText)
+            {
+                if (!long.TryParse(afterText, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed)) return Results.BadRequest(new { error = "after is the id of the last line seen." });
+                after = parsed;
+            }
+
+            var limit = 200;
+            if (Text(query["limit"]) is { } limitText && (!int.TryParse(limitText, NumberStyles.None, CultureInfo.InvariantCulture, out limit) || limit is < 1 or > 1000))
+                return Results.BadRequest(new { error = "limit is a whole number from 1 to 1000." });
+            var runs = new RunStore(state, RunnerNames.EngineService);
+            if (runs.Get(id) is not { } found || found.Service != RunnerNames.EngineService) return Results.NotFound(new { error = $"There is no run {id}." });
+            var lines = runs.Logs(id, after, limit);
+            return Results.Json(new JsonObject
+            {
+                ["run"] = id.ToString(),
+                ["lines"] = new JsonArray(lines.Select(l => (JsonNode)new JsonObject
+                {
+                    ["id"] = l.Id, ["at"] = l.At.UtcDateTime.ToString("O"), ["level"] = l.Level, ["item"] = l.Item, ["message"] = l.Message,
+                }).ToArray()),
+            });
         });
 
         // what the runs of a task recorded as steps, newest first (plan 28c E13): the outputs a product keeps with its runs (Sync's pass records and polling checks). Viewer.

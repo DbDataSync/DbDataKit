@@ -6,6 +6,8 @@ using DbDataKit.Monitoring;
 using DbDataKit.State;
 using DbDataSync.Api.Runner;
 using DbDataSync.State;
+using Microsoft.AspNetCore.Http.Connections;
+using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
@@ -138,6 +140,96 @@ public sealed class RunnerOwnedRunsTests(RunnerOwnedApiFactory factory) : IClass
         var calls = factory.Runner.Calls;
         Assert.Null((await HistoryAsync("never-moved")).RunnerUnavailable);
         Assert.Equal(calls, factory.Runner.Calls);
+    }
+
+    [Fact]
+    public async Task The_runs_log_endpoint_serves_the_runners_lines_for_a_drain_and_for_a_pass_and_says_when_the_runner_is_down()
+    {
+        var name = NewName();
+        var task = DbDataSync.Api.Runner.RunnerAccess.TaskOf(name);
+        factory.RunnerOwns(name);
+        var started = DateTimeOffset.UtcNow.AddMinutes(-2);
+        var drain = factory.Runner.AddRun(task, "running", started);
+        var one = factory.Runner.Log(drain.Id, "line before the pass", started);
+        var inside = factory.Runner.Log(drain.Id, "line during the pass", started.AddSeconds(11));
+        factory.Runner.Log(drain.Id, "line long after the pass", started.AddSeconds(60));
+        var pass = Pass(name, "orders", "Succeeded", started.AddSeconds(10), drain.Id);
+        factory.Runner.AddPass(task, pass);
+
+        var all = await _client.GetFromJsonAsync<List<LogEntryRecord>>($"/api/runs/{drain.Id}/logs", JsonOptions);
+        var later = await _client.GetFromJsonAsync<List<LogEntryRecord>>($"/api/runs/{drain.Id}/logs?sinceId={one}", JsonOptions);
+        var ofPass = await _client.GetFromJsonAsync<List<LogEntryRecord>>($"/api/runs/{pass.RunId}/logs", JsonOptions);
+
+        Assert.Equal(["line before the pass", "line during the pass", "line long after the pass"], all!.Select(l => l.Message));
+        Assert.Equal(["line during the pass", "line long after the pass"], later!.Select(l => l.Message));
+        Assert.Equal(["line during the pass"], ofPass!.Select(l => l.Message));   // the drain's lines between the pass's start and end
+        Assert.Equal(inside, ofPass[0].Id);
+        Assert.All(all, l => Assert.Equal(drain.Id, l.RunId));
+
+        // and the run itself: a drain going is Running, a pass is what it recorded, an id nobody has is 404
+        var run = await _client.GetFromJsonAsync<TaskRunRecord>($"/api/runs/{drain.Id}", JsonOptions);
+        Assert.Equal((RunStatus.Running, name), (run!.Status, run.TaskName));
+        Assert.Equal(RunStatus.Succeeded, (await _client.GetFromJsonAsync<TaskRunRecord>($"/api/runs/{pass.RunId}", JsonOptions))!.Status);
+        Assert.Equal(HttpStatusCode.NotFound, (await _client.GetAsync($"/api/runs/{Guid.NewGuid()}")).StatusCode);
+
+        factory.Runner.Down = true;
+        try
+        {
+            var down = await _client.GetAsync($"/api/runs/{drain.Id}/logs");
+            Assert.Equal(HttpStatusCode.BadGateway, down.StatusCode);
+            Assert.Contains("could not be reached", await down.Content.ReadAsStringAsync());
+        }
+        finally
+        {
+            factory.Runner.Down = false;
+        }
+    }
+
+    [Fact]
+    public async Task A_line_of_a_run_on_the_runner_reaches_the_hub_within_a_second_of_being_written_and_the_end_follows()
+    {
+        var name = NewName();
+        var task = DbDataSync.Api.Runner.RunnerAccess.TaskOf(name);
+        factory.RunnerOwns(name);
+        var drain = factory.Runner.AddRun(task, "running", DateTimeOffset.UtcNow);
+        await using var hub = new HubConnectionBuilder()
+            .WithUrl($"{factory.Server.BaseAddress}hubs/run", options =>
+            {
+                options.HttpMessageHandlerFactory = _ => factory.Caller.Handler(UserRole.Admin, "test-admin", "Test Admin", factory.Server.CreateHandler());
+                options.Transports = HttpTransportType.LongPolling;
+            })
+            .Build();
+        var arrived = new System.Collections.Concurrent.ConcurrentDictionary<string, DateTimeOffset>();
+        var completed = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
+        hub.On<JsonElement>("logLine", entry => arrived.TryAdd(entry.GetProperty("message").GetString()!, DateTimeOffset.UtcNow));
+        hub.On<JsonElement>("runCompleted", payload => completed.TrySetResult(payload));
+        await hub.StartAsync();
+        await hub.InvokeAsync("JoinRun", drain.Id.ToString());
+
+        // lines written while the run goes, a few hundred milliseconds apart: each reaches the hub within a second
+        var written = new Dictionary<string, DateTimeOffset>();
+        for (var i = 1; i <= 4; i++)
+        {
+            var message = $"live line {i}";
+            written[message] = DateTimeOffset.UtcNow;
+            factory.Runner.Log(drain.Id, message);
+            await Task.Delay(700);
+        }
+
+        foreach (var (message, at) in written)
+        {
+            Assert.True(arrived.TryGetValue(message, out var seen), $"'{message}' never reached the hub");
+            Assert.True(seen - at < TimeSpan.FromSeconds(1), $"'{message}' took {(seen - at).TotalMilliseconds:0} ms");
+        }
+
+        factory.Runner.Log(drain.Id, "last line");
+        factory.Runner.Finish(drain.Id, "succeeded", DateTimeOffset.UtcNow, 9);
+        var end = await completed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(("Succeeded", 9), (end.GetProperty("status").GetString(), end.GetProperty("rowsWritten").GetInt32()));
+        Assert.Contains("last line", arrived.Keys);   // the lines that came last are sent before the end is announced
+        // a client that joins late reads the endpoint first: everything is there
+        var lines = await _client.GetFromJsonAsync<List<LogEntryRecord>>($"/api/runs/{drain.Id}/logs", JsonOptions);
+        Assert.Equal(5, lines!.Count);
     }
 
     [Fact]

@@ -9,6 +9,11 @@ public interface IRunnerRuns
     /// <summary>The runs of <paramref name="task"/>, or of every task of the link's package and channel when it is null, newest first.</summary>
     Task<IReadOnlyList<ClientRun>> RunsAsync(string? task, int limit, DateTimeOffset? before, string? outcome, CancellationToken ct);
 
+    Task<ClientRun?> RunAsync(Guid id, CancellationToken ct);
+
+    /// <summary>The lines of the run's log after <paramref name="after"/>; null when the runner has no such run.</summary>
+    Task<IReadOnlyList<ClientLogLine>?> LogsAsync(Guid id, long? after, int limit, CancellationToken ct);
+
     Task<IReadOnlyList<ClientStep>> StepsAsync(string task, string step, int limit, DateTimeOffset? before, string? key, CancellationToken ct);
 }
 
@@ -65,6 +70,77 @@ public sealed class RunnerRunSource(RunnerAccess runner) : IRunnerRunHistory
         {
             return new RunnerRunPage([], ex.Message);
         }
+    }
+
+    /// <summary>The replications the runner owns, by the name of the task each one is on the runner.</summary>
+    private IReadOnlyDictionary<string, string> OwnedTasks() =>
+        runner.File.Read().Owners.Where(o => o.Value == DbDataKit.State.TaskOwners.Runner).ToDictionary(o => RunnerAccess.TaskOf(o.Key), o => o.Key, StringComparer.Ordinal);
+
+    /// <summary>Whether any replication is the runner's (the live view and the other readers have nothing to ask a runner otherwise).</summary>
+    public bool AnyOwned => runner.File.Read().Owners.Any(o => o.Value == DbDataKit.State.TaskOwners.Runner);
+
+    /// <summary>The newest drains of the runner's replications, going or ended (one call: the runner lists the package's runs newest first), with the replication each one is of.</summary>
+    public async Task<IReadOnlyList<(string Replication, ClientRun Run)>> RecentDrainsAsync(CancellationToken ct)
+    {
+        var owned = OwnedTasks();
+        if (owned.Count == 0) return [];
+        var recent = await Require().RunsAsync(null, 200, null, null, ct).ConfigureAwait(false);
+        return [.. recent.Where(r => owned.ContainsKey(r.Task)).Select(r => (owned[r.Task], r))];
+    }
+
+    /// <summary>
+    /// The lines of a run's log after line <paramref name="after"/>, in the order they were written, for a run id the runner has: a drain's own, or a pass's, whose lines are the drain's between the pass's start and end
+    /// (the engine writes no pass id in a line, and passes of a drain overlap, so a pass shows what its drain said while it ran). Null when the runner has no run or pass of a replication it owns with that id.
+    /// </summary>
+    public async Task<IReadOnlyList<LogEntryRecord>?> LogLinesAsync(Guid runId, long? after, CancellationToken ct)
+    {
+        var owned = OwnedTasks();
+        if (owned.Count == 0) return null;
+        var runs = Require();
+        var run = await runs.RunAsync(runId, ct).ConfigureAwait(false);
+        var drain = run is not null && owned.ContainsKey(run.Task) ? runId : (Guid?)null;
+        DateTimeOffset? from = null, to = null;
+        if (drain is null)
+        {
+            foreach (var task in owned.Keys)
+            {
+                var step = (await runs.StepsAsync(task, PassRecordText.StepName, 1, null, runId.ToString("N"), ct).ConfigureAwait(false)).FirstOrDefault();
+                if (PassRecordText.TryParse(step?.Result) is not { } pass) continue;
+                (drain, from, to) = (pass.DrainRunId, pass.StartedAt.AddSeconds(-2), pass.EndedAt.AddSeconds(2));
+                break;
+            }
+        }
+
+        if (drain is null) return null;
+        var lines = await runs.LogsAsync(drain.Value, after, 1000, ct).ConfigureAwait(false);
+        if (lines is null) return null;
+        return [.. lines.Where(l => (from is null || l.At >= from) && (to is null || l.At <= to)).Select(l => new LogEntryRecord(l.Id, runId, l.At, LevelOf(l.Level), l.Message))];
+    }
+
+    private static LogSeverity LevelOf(string level) => level.ToLowerInvariant() switch
+    {
+        "trace" => LogSeverity.Trace,
+        "debug" => LogSeverity.Debug,
+        "warning" => LogSeverity.Warning,
+        "error" or "critical" => LogSeverity.Error,
+        _ => LogSeverity.Info,
+    };
+
+    /// <summary>One run of any replication the runner owns, by id (a pass record's or a drain's), with the replication it is of; null when the runner has none.</summary>
+    public async Task<TaskRunRecord?> FindAsync(Guid runId, CancellationToken ct)
+    {
+        var owned = OwnedTasks();
+        if (owned.Count == 0) return null;
+        var runs = Require();
+        // a drain's id is what the live view asks about, every 750 ms: one call
+        if (await runs.RunAsync(runId, ct).ConfigureAwait(false) is { } drain && owned.TryGetValue(drain.Task, out var of)) return ToRun(drain, of);
+        foreach (var task in owned.Keys)
+        {
+            var step = (await runs.StepsAsync(task, PassRecordText.StepName, 1, null, runId.ToString("N"), ct).ConfigureAwait(false)).FirstOrDefault();
+            if (PassRecordText.TryParse(step?.Result) is { } pass) return PassRecordText.ToRun(pass);
+        }
+
+        return null;
     }
 
     /// <summary>The runner's run as a row of the history: a drain that is going or did not succeed, unless a failed pass of it already says what went wrong.</summary>

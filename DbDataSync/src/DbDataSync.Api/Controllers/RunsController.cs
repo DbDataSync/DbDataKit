@@ -260,16 +260,41 @@ public sealed class RunsController(
 
     [Authorize(Policies.Viewer)]
     [HttpGet("runs/{runId:guid}")]
-    public ActionResult<TaskRunRecord> Get(Guid runId)
+    public async Task<ActionResult<TaskRunRecord>> Get(Guid runId, CancellationToken cancellationToken)
     {
         var run = taskRunStore.GetRun(runId);
-        return run is null ? NotFound() : Ok(run);
+        if (run is not null) return Ok(run);
+        if (!runnerRuns.AnyOwned) return NotFound();
+        try
+        {
+            return await runnerRuns.FindAsync(runId, cancellationToken) is { } remote ? Ok(remote) : NotFound();
+        }
+        catch (Exception ex) when (ex is DbDataSync.Api.Runner.RunnerUnavailableException or DbDataKit.Runner.Client.RunnerClientException)
+        {
+            return StatusCode(502, new { error = ex.Message });
+        }
     }
 
+    /// <summary>
+    /// A run's log lines after <paramref name="sinceId"/>, the endpoint a client reads first and then follows over the hub (which does not replay). A run of this server's own is read from its log; an id this server has no run
+    /// for is looked for on the runner of the replications it owns (plan 28c E13): a drain's own lines, or a pass's, which are its drain's lines from its start to its end. A runner that cannot be asked is a 502 naming why,
+    /// never an empty list.
+    /// </summary>
     [Authorize(Policies.Viewer)]
     [HttpGet("runs/{runId:guid}/logs")]
-    public ActionResult<IReadOnlyList<LogEntryRecord>> Logs(Guid runId, [FromQuery] long? sinceId = null) =>
-        Ok(logWriter.GetLogs(runId, sinceId));
+    public async Task<ActionResult<IReadOnlyList<LogEntryRecord>>> Logs(Guid runId, [FromQuery] long? sinceId = null, CancellationToken cancellationToken = default)
+    {
+        if (taskRunStore.GetRun(runId) is not null || !runnerRuns.AnyOwned)
+            return Ok(logWriter.GetLogs(runId, sinceId));
+        try
+        {
+            return await runnerRuns.LogLinesAsync(runId, sinceId, cancellationToken) is { } lines ? Ok(lines) : Ok(logWriter.GetLogs(runId, sinceId));
+        }
+        catch (Exception ex) when (ex is DbDataSync.Api.Runner.RunnerUnavailableException or DbDataKit.Runner.Client.RunnerClientException)
+        {
+            return StatusCode(502, new { error = ex.Message });
+        }
+    }
 
     /// <summary>
     /// Asks for a full reload of this run's mapping: sets <see cref="ReadIntent.InitialLoad"/> and

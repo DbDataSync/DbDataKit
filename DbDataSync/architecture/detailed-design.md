@@ -97,6 +97,11 @@ The API process is the only long-running server component in v1. It owns:
   slow handshake) never receives them over SignalR. A client that needs every line reads the run's lines from `GET /api/runs/{id}/logs` and uses the hub only for what comes after (the
   SPA's `useRunHub` does both). Tests therefore assert that what the hub delivered is a part of what the endpoint returns, never that the hub delivered a line (owner decision
   2026-11-09: leave it so, replay on join is a product change to make if a screen shows lost lines).
+  **A run on the runner (plan 28c E13).** For a replication the runner owns, `RunMonitorService` also asks the runner (every 400 ms, one request that lists the newest runs of the replications it owns and one per run going for the lines after the last
+  one sent; `RunnerRunStreamer`) and sends them to the group of the runner's run id as it does its own, then `runCompleted`; so a line is on the hub within a second of the runner's writing it. The hub still does not replay: `GET /api/runs/{id}/logs`
+  serves the runner's lines for an id this server has no run for (a drain's own lines, or a pass's, which are its drain's lines between its start and its end, because the engine writes no pass id in a line), and `GET /api/runs/{id}` the run; a
+  runner that cannot be asked is a 502 naming why, never an empty list. The run history of such a replication merges the runner's passes (the `pass-record` steps of its drains) and the drains that explain themselves no other way with this
+  server's own, and says when the runner could not be asked (`runnerUnavailable`).
 
 ### 3.2 React / TypeScript SPA (`DbDataSync.Web`)
 
