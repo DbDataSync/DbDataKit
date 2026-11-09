@@ -63,6 +63,7 @@ jobs:
         with:
           product: DbDataConsole
           global-json: DbDataConsole/global.json
+      - uses: ./.github/actions/native-cache
       - name: Build a Build server
         working-directory: DbDataBuild
         run: |
@@ -138,6 +139,7 @@ jobs:
           npm run build -w @dbdatakit/view-app
       - run: dotnet build DbDataConsole.slnf -c Debug
       # A real Build server for the console to pair with (the pairing, the version and the health the console shows are its own).
+      - uses: ./.github/actions/native-cache
       - name: Build a Build server
         working-directory: DbDataBuild
         run: |
@@ -218,6 +220,10 @@ jobs:
       - uses: actions/checkout@v7
       # the images of Build, Gateway and Sync fetch the DuckDB engine; .duckdb-archives/ is inside their build context
       - uses: ./.github/actions/duckdb-cache
+        with:
+          rids: linux-x64
+      # the Build image also fetches the polyglot library; .native-archives/ is inside its build context
+      - uses: ./.github/actions/native-cache
         with:
           rids: linux-x64
       - name: Build server and console

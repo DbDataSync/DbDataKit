@@ -1,0 +1,59 @@
+name: Cache the pinned polyglot library
+description: >
+  Puts the polyglot-sql FFI archives of DbDataBuild/scripts/polyglot.pin into .native-archives/ (restored from the Actions cache, keyed on the hash of
+  the pin, or downloaded once on a miss with retries and saved) and sets POLYGLOT_RELEASE_BASE=file://<that folder> for the rest of the job, so
+  DbDataBuild/scripts/fetch-native.sh reads the cache, hash-checked against the pin as ever. A Docker build sees the folder too: it is inside the build
+  context. Needs the repository checked out. GitHub's release downloads fail now and then (docs/ci-lessons.md, "GitHub release downloads fail").
+
+inputs:
+  rids:
+    description: The platforms whose archives are wanted, space separated (linux-x64 win-x64, or all). Empty is this runner's own.
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Work out the cache key
+      id: key
+      shell: bash
+      env:
+        RIDS: ${{ inputs.rids }}
+        PIN_HASH: ${{ hashFiles('DbDataBuild/scripts/polyglot.pin') }}
+      run: |
+        # the key names the platforms and the pin's hash: a changed pin is a miss, never a stale hit
+        rids="${RIDS:-host}"
+        echo "key=native-${RUNNER_OS}-${RUNNER_ARCH}-${rids// /+}-${PIN_HASH}" >> "$GITHUB_OUTPUT"
+        dir="$GITHUB_WORKSPACE/.native-archives"
+        if command -v cygpath >/dev/null 2>&1; then dir="$(cygpath -m "$dir")"; fi
+        echo "dir=$dir" >> "$GITHUB_OUTPUT"
+    - name: Restore the polyglot archives
+      id: restore
+      uses: actions/cache/restore@v4
+      with:
+        path: .native-archives
+        key: ${{ steps.key.outputs.key }}
+    - name: Download what the cache does not have
+      shell: bash
+      env:
+        POLYGLOT_CACHE_KEY: ${{ steps.key.outputs.key }}
+        RIDS: ${{ inputs.rids }}
+      working-directory: ${{ github.workspace }}
+      # on a hit every archive is hash-checked and found current, nothing is downloaded; on a miss each is downloaded with retries (curl
+      # --retry-all-errors, growing waits, three rounds) and the step fails with one message naming the URLs and the cache key
+      run: |
+        # shellcheck disable=SC2086
+        DbDataBuild/scripts/fetch-native.sh --archives .native-archives $RIDS
+    - name: Save the polyglot archives
+      if: ${{ steps.restore.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@v4
+      with:
+        path: .native-archives
+        key: ${{ steps.key.outputs.key }}
+    - name: Point the polyglot fetches at the archives
+      shell: bash
+      env:
+        DIR: ${{ steps.key.outputs.dir }}
+      run: |
+        # file:///home/runner/x on Linux, file:///D:/a/x on Windows
+        case "$DIR" in /*) base="file://$DIR" ;; *) base="file:///$DIR" ;; esac
+        echo "POLYGLOT_RELEASE_BASE=$base" >> "$GITHUB_ENV"

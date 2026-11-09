@@ -12,3 +12,4 @@ __pycache__/
 .chromium/
 .fonts/
 .duckdb-archives/
+.native-archives/

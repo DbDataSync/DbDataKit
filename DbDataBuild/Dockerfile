@@ -16,8 +16,10 @@ COPY scripts/fetch-duckdb.sh scripts/fetch-duckdb.sh
 # downloads from the pin's address (the pattern matches nothing then, and duckdb.pin alone is copied). An archive missing there is downloaded.
 COPY duckdb.pin .duckdb-archive[s] /duckdb-archives/
 RUN DUCKDB_RELEASE_BASE=file:///duckdb-archives scripts/fetch-duckdb.sh linux-x64
+# The same for the polyglot library (.native-archives/, filled by .github/actions/native-cache).
+COPY DbDataBuild/scripts/polyglot.pin .native-archive[s] /native-archives/
 WORKDIR /src/DbDataBuild
-RUN scripts/fetch-native.sh linux-x64
+RUN POLYGLOT_RELEASE_BASE=file:///native-archives scripts/fetch-native.sh linux-x64
 RUN dotnet publish src/DbDataBuild.Cli -c Release -r linux-x64 --self-contained false -p:DebugType=none -p:DebugSymbols=false -o /app
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0

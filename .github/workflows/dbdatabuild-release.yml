@@ -180,6 +180,9 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
+      - uses: ./.github/actions/native-cache
+        with:
+          rids: ${{ matrix.rid }}
       - name: Prebuilt polyglot library
         shell: bash
         env:

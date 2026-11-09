@@ -1,7 +1,7 @@
 name: Repository checks
 
 # Rules about the repository as a whole rather than one product: one version of each NuGet package (scripts/check_package_versions.py),
-# every job that needs the DuckDB engine reads it from the cache (scripts/check_duckdb_cache.py), one solution that lists every project and builds (DbDataKit.slnx, scripts/check_solution.py), no document or script that uses a retired command name or one that does not exist (scripts/check_docs_commands.py), and a UI coverage matrix (docs/ui-coverage.md) that names every screen file (scripts/check_ui_coverage.py), an editors table (docs/ui-editors.md) with a row for every registered stored format (scripts/check_ui_editors.py), and plans that are not left open after their work is done or linked after they are gone (scripts/check_plans.py), and formats that keep the freeze rule: a frozen format is not edited and a bumped version has its entry in docs/formats.json (scripts/check_formats.py).
+# every job that needs the DuckDB engine reads it from the cache (scripts/check_duckdb_cache.py), and so does every job that needs the Build native library (scripts/check_native_cache.py), one solution that lists every project and builds (DbDataKit.slnx, scripts/check_solution.py), no document or script that uses a retired command name or one that does not exist (scripts/check_docs_commands.py), and a UI coverage matrix (docs/ui-coverage.md) that names every screen file (scripts/check_ui_coverage.py), an editors table (docs/ui-editors.md) with a row for every registered stored format (scripts/check_ui_editors.py), and plans that are not left open after their work is done or linked after they are gone (scripts/check_plans.py), and formats that keep the freeze rule: a frozen format is not edited and a bumped version has its entry in docs/formats.json (scripts/check_formats.py).
 
 on:
   pull_request:
@@ -10,6 +10,8 @@ on:
       - '**/*.slnx'
       - '**/*.slnf'
       - 'duckdb.pin'
+      - 'DbDataBuild/scripts/polyglot.pin'
+      - 'DbDataBuild/scripts/fetch-native.sh'
       - 'chromium.pin'
       - 'fonts.pin'
       - 'licenses/fonts/**'
@@ -31,6 +33,8 @@ on:
       - '**/*.slnx'
       - '**/*.slnf'
       - 'duckdb.pin'
+      - 'DbDataBuild/scripts/polyglot.pin'
+      - 'DbDataBuild/scripts/fetch-native.sh'
       - 'chromium.pin'
       - 'fonts.pin'
       - 'licenses/fonts/**'
@@ -64,6 +68,7 @@ jobs:
       - run: python3 -I scripts/check_plans.py
       - run: python3 -I scripts/check_formats.py
       - run: python3 -I scripts/check_duckdb_cache.py
+      - run: python3 -I scripts/check_native_cache.py
 
   solution:
     runs-on: ubuntu-latest
@@ -107,6 +112,31 @@ jobs:
       - name: PowerShell 7 (a second run finds every library current)
         shell: pwsh
         run: ./scripts/fetch-duckdb.ps1 all
+
+  # The polyglot pin (DbDataBuild/scripts/polyglot.pin): both platforms' archives download (or come from the cache) and match their recorded hashes,
+  # and the library is installed from the cache folder (a file:// base; on Windows that is file:///D:/a/...).
+  native-pin-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/native-cache
+        with:
+          rids: all
+      - run: DbDataBuild/scripts/fetch-native.sh all
+      - run: DbDataBuild/scripts/fetch-native.sh all   # the second run finds every library current
+
+  native-pin-windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/native-cache
+        with:
+          rids: all
+      - name: Install from the cache folder (Git Bash)
+        shell: bash
+        run: DbDataBuild/scripts/fetch-native.sh all
 
   # The Chromium pin (chromium.pin, plan 32 DBR15a): both platforms' archives and executables download from Chrome for Testing and match their recorded
   # hashes, and the PowerShell script does the same on Windows, in Windows PowerShell 5.1 and in PowerShell 7.
