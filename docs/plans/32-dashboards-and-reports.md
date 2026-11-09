@@ -401,7 +401,7 @@ Goal (owner, 2026-11-06): apps we publish can **navigate, search and show** repo
 
 SSRS and PBIRS run on Windows only, so the shared Linux test engines cannot host them: the tests use recorded REST answers and a fake provider, and a real report server runs in the Windows job or machine the Excel and SSAS work already needs.
 
-Default taken (owner delegated, 2026-11-09): one parameters pane for every catalog; the catalogs after SSRS and PBIRS are decided when one is needed; no per-person data through Kerberos until someone asks. Lower priority than the DBR slices; no date set.
+Default taken (owner delegated, 2026-11-09): one parameters pane for every catalog; the catalogs after SSRS and PBIRS are decided when one is needed; no per-person data through Kerberos until someone asks. Lower priority than the DBR slices; **RC01 to RC05 (the report catalogs) have no date** (default taken, owner delegated, 2026-11-09).
 
 | Slice | What | Needs | Size | Format | Done when |
 | --- | --- | --- | --- | --- | --- |

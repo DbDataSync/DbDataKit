@@ -26,7 +26,7 @@ Editors: AP08 adds the row "App instance address bindings" and Z13b the row "Sto
 
 ## Decisions made in the audit
 
-1. **A sandboxed app cannot be given outside origins; only a trusted app can, with an approval.** The safer default stays (no outside requests for a sandboxed app). Default taken (owner delegated, 2026-11-09).
+1. **A sandboxed app cannot be given outside origins; only a trusted app can, with an approval.** The safer default stays: **sandboxed apps keep no outside origins**, and there is no slice that adds them. Default taken (owner delegated, 2026-11-09).
 2. **An app has no owner stamp: any publisher client may publish a new version of any app.** The Publisher role is high-trust (owner decision of 2026-11-09 on published data sources); an owner per app would need a role model. Not built, recorded in apps.md. Default taken (owner delegated, 2026-11-09).
 3. **The remaining verbs without a remote form** (`nav-save`, the removals, `approval-list`, `approval-revoke`) are not built: the Gateway's Apps screen and routes do all of them (AP24, `GatewayApps`). Default taken (owner delegated, 2026-11-09).
 4. **Mounting an app as a web component inside a portal's page is not planned** (it would give the app the portal's origin); several tenants in one app instance are not planned either (use an instance per tenant).
