@@ -9,7 +9,7 @@ for outside agents, Build's agent kit, the whole run-time side of integrations (
 environment that has vectors, the publishing library, the JSON query request, semantic SQL and saved queries. The built half is written as product documents:
 [`docs/agent-tools.md`](../agent-tools.md), [`docs/knowledge.md`](../knowledge.md) and the integrations section of
 [`DbDataRunner/README.md`](../../DbDataRunner/README.md). The slices (120, in lanes AG, KN, AX, IX, BK, EA and XL) and the sixteen points the decisions leave
-open (QK1 to QK16, each with a recommended default) are in 27a; the owner's questions of section 8 below stay as recorded.
+open (QK1 to QK16, each with a recommended default; QK1 is answered, owner 2026-11-09: the back-end agent waits for the Workspace server and its UI, which come first) are in 27a; the owner's questions of section 8 below stay as recorded.
 
 | Area | What it is for |
 | --- | --- |
@@ -1276,7 +1276,7 @@ of the architecture. Runtime stays elsewhere: the serving layer, the runner, the
 | Wave | What | Needs |
 | --- | --- | --- |
 | 0 | What plan 16's agents need: the suite-wide command spec test, `DbDataKit.Agents` with the scripted fake, the provider proof against the four providers | 13a W4a work; plan 25 section 2 |
-| 1 | `agent/1` and the **back-end agent** (owner, 2026-11-05): in the console, working in an authoring workspace on a Build project, with Build's agent kit as its instructions, prompting per action and the traits, context assembly from git files | wave 0; shared authoring (plan 22 section 1) |
+| 1 | `agent/1` and the **back-end agent** (owner, 2026-11-05): in the console, working in an authoring workspace on a Build project, with Build's agent kit as its instructions, prompting per action and the traits, context assembly from git files | wave 0; shared authoring and the Workspace server with its UI (plan 22 section 1, GP30 to GP36), which come first (owner, 2026-11-09) |
 | 2 | Actions: the shared script format; Sync's scripts move onto it; a `.csx` or SQL action as a tool of an agent and an endpoint for an app, in warm worker processes in the serving layer | wave 1; the serving contract (plan 20 section 10) |
 | 3 | Front-end agents in the serving layer; curated business knowledge in the Workspace server's knowledge editor (glossary, metrics, verified queries), drafts from agents, evaluation sets; embedding search if chosen | DbDataStore drafts (plan 21); access rules (plan 22 section 2) |
 | 3b | Elevated actions: action principals, grants to actions with field and row conditions, *run* grants to people, validate then apply or reject, the declarative form, audit of both identities | wave 2; DbDataStore permissions (plan 15); the identity home's service principals (13a U20) |
