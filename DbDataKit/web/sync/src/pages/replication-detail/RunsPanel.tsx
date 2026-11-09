@@ -1,3 +1,4 @@
+import { RunnerHistoryNotice } from './RunnerHistoryNotice'
 import { useEffect, useState } from 'react'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { RunDetailsDialog } from '../../components/RunDetailsDialog'
@@ -166,6 +167,7 @@ export function RunsPanel({ replicationName, command }: { replicationName: strin
   return (
     <>
       <ErrorBanner error={historyError ?? trigger.error ?? cancel.error ?? resync.error} />
+      <RunnerHistoryNotice unavailable={page?.runnerUnavailable} />
 
       {isWatching && (
         <div className="card flush" data-testid="live-run-panel">

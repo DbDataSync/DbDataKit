@@ -22,7 +22,7 @@ public sealed class ActivityController(StateDatabase state, ConsoleActivitySourc
         if (limit is < 1 or > 500) return BadRequest(new { error = "limit is between 1 and 500." });
         if (!source.Shared) return Ok(new { shared = false, runs = Array.Empty<object>() });
         var runs = new RunStore(state, ConsoleState.ServiceId).Read(new RunQuery(service, job, outcome, StartedBefore: before, Limit: limit));
-        return Ok(new { shared = true, runs = runs.Select(r => new { id = r.Id, service = r.Service, job = r.Run.JobId, started = r.Run.Started, finished = r.Run.Finished, outcome = r.Run.Outcome, rows = r.Run.Rows, failedItem = r.Run.FailedItem }) });
+        return Ok(new { shared = true, runs = runs.Select(r => new { id = r.Id, service = r.Service, job = r.Run.JobId, started = r.Run.Started, finished = r.Run.Finished, outcome = r.Run.Outcome, rows = r.Run.Rows, failedItem = r.Run.FailedItem, failureKind = r.Run.Failure?.Kind, failureMessage = r.Run.Failure?.Message }) });
     }
 
     [HttpGet("audit")]

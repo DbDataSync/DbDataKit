@@ -92,6 +92,9 @@ public sealed class ConsoleActivityTests : IAsyncLifetime
             var run = sync.Start("crm-to-dwh");
             sync.Finish(run, RunOutcome.Succeeded, rows: 12);
             build.Finish(build.Start("marts"), RunOutcome.Failed, failedItem: "dim_customer");
+            // a drain of a replication the runner owns that failed on a pass (plan 28c E13): the item is the unit of the pass (the mapping and a claim), the kind the runner's, the message what Sync classified
+            var drain = new RunStore(db, "runner.engine");
+            drain.Finish(drain.Start("sales-set/prod/orders-set"), RunOutcome.Failed, failedItem: "orders#1a2b3c4d", failure: new RunFailure("Permanent", "The pass over 'orders' ended Failed (PositionExpired): the source discarded the history"));
             new AuditLog(db, "dbdatasync").Record(new AuditEvent("user", "ana", "sync.run.start"));
             new AuditLog(db, "dbdatabuild").Record(new AuditEvent("user", "bo", "build.run.start"));
             new NotificationFeedStore(db, "dbdatasync").Raise("failure", "sync failed");
@@ -99,7 +102,11 @@ public sealed class ConsoleActivityTests : IAsyncLifetime
 
             var runs = (await Get(app, http, "/api/activity/runs", UserRole.Viewer)).Body;
             Assert.True((bool)runs["shared"]!);
-            Assert.Equal(["dbdatabuild", "dbdatasync"], runs["runs"]!.AsArray().Select(r => (string)r!["service"]!).Order().ToArray());
+            Assert.Equal(["dbdatabuild", "dbdatasync", "runner.engine"], runs["runs"]!.AsArray().Select(r => (string)r!["service"]!).Order().ToArray());
+            var failed = runs["runs"]!.AsArray().Single(r => (string)r!["service"]! == "runner.engine")!;
+            Assert.Equal(("failed", "orders#1a2b3c4d", "Permanent"), (((string)failed["outcome"]!).ToLowerInvariant(), (string)failed["failedItem"]!, (string)failed["failureKind"]!));
+            Assert.Contains("(PositionExpired)", (string)failed["failureMessage"]!);
+            Assert.Null(runs["runs"]!.AsArray().Single(r => (string)r!["service"]! == "dbdatasync")!["failureKind"]);
 
             var onlySync = (await Get(app, http, "/api/activity/runs?service=dbdatasync", UserRole.Viewer)).Body;
             Assert.Equal("crm-to-dwh", (string)onlySync["runs"]![0]!["job"]!);
