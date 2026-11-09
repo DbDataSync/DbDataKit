@@ -259,6 +259,13 @@ public static class DbDataSyncHost
         builder.Services.AddSingleton<ParameterCheck>();
         builder.Services.AddSingleton<PreviewService>();
         builder.Services.AddSingleton<ScriptTestService>();
+        // Plan 28c E12: who schedules each replication (the file beside the state), the runner it moves to, and what a request does for a replication the runner owns.
+        builder.Services.AddSingleton(sp => new DbDataSync.Api.Runner.RunnerOwnerFile(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(sp.GetRequiredService<ApiOptions>().StateDbPath))!, "runner-owners.json")));
+        builder.Services.AddSingleton(sp => new DbDataSync.Api.Runner.RunnerAccess(sp.GetRequiredService<DbDataSync.Api.Runner.RunnerOwnerFile>(), link => DbDataSync.Api.Runner.ClientRunnerSync.For(link, Environment.GetEnvironmentVariable)));
+        builder.Services.AddSingleton<DbDataSync.Api.Runner.RunnerDispatch>();
+        builder.Services.AddSingleton(sp => new DbDataSync.Api.Runner.ReplicationOwnership(
+            sp.GetRequiredService<ConfigRepository>(), sp.GetRequiredService<TaskRunStore>(), sp.GetRequiredService<WorkQueueStore>(), sp.GetRequiredService<ChangeWatermarkStore>(),
+            sp.GetRequiredService<DriverRegistry>(), name => sp.GetRequiredService<ProcessSupervisor>().DescribeStatus(name).Running, sp.GetRequiredService<DbDataSync.Api.Runner.RunnerAccess>(), TimeProvider.System));
         builder.Services.AddSingleton<ProcessSupervisor>();
 
         // Phase 159/196L: the Updates screen — releases, slots, and the commands to run on the server. The facts

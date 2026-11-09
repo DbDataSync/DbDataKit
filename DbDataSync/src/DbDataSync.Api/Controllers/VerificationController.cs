@@ -24,6 +24,7 @@ public sealed class VerificationController(
     ConfigRepository configRepository,
     WorkQueueStore workQueue,
     ProcessSupervisor supervisor,
+    DbDataSync.Api.Runner.RunnerDispatch runnerDispatch,
     VerificationResultStore results,
     ApiOptions options) : ControllerBase
 {
@@ -33,7 +34,7 @@ public sealed class VerificationController(
     /// for it on a schedule.
     /// </summary>
     [HttpPost("mappings/{mappingName}/verify")]
-    public IActionResult Verify(string replicationName, string mappingName)
+    public async Task<IActionResult> Verify(string replicationName, string mappingName, CancellationToken cancellationToken)
     {
         TableMappingConfig mapping;
         try
@@ -51,6 +52,12 @@ public sealed class VerificationController(
             {
                 error = $"Table mapping '{mappingName}' has no verification checks configured.",
             });
+        }
+
+        if (runnerDispatch.RunnerOwns(replicationName))
+        {
+            var sent = await runnerDispatch.SendAsync(replicationName, [new DrainRequest(nameof(RunKind.Verification), mappingName)], runAll: false, cancellationToken);
+            return sent.Outcome == TriggerOutcome.Started ? Accepted(new { runIds = sent.RunIds }) : StatusCode(409, new { error = sent.Reason });
         }
 
         var runId = workQueue.Enqueue(replicationName, RunKind.Verification, mappingName);

@@ -36,6 +36,7 @@ public sealed class SchedulerService : BackgroundService
     private readonly ProcessSupervisor _supervisor;
     private readonly IReplicationPlanner _planner;
     private readonly ILogger<SchedulerService> _logger;
+    private readonly DbDataSync.Api.Runner.RunnerOwnerFile? _owners;
 
     public SchedulerService(
         ConfigRepository configRepository,
@@ -46,12 +47,14 @@ public sealed class SchedulerService : BackgroundService
         ChangeWatermarkStore watermarks,
         DriverRegistry driverRegistry,
         ReconcileService reconcileService,
-        ILogger<SchedulerService> logger)
+        ILogger<SchedulerService> logger,
+        DbDataSync.Api.Runner.RunnerOwnerFile? owners = null)
     {
         _configRepository = configRepository;
         _taskRunStore = taskRunStore;
         _supervisor = supervisor;
         _logger = logger;
+        _owners = owners;
         _planner = new ReplicationPlanner(
             configRepository, new LocalPlannerState(taskRunStore, workQueueStore, watermarks), gate, driverRegistry, reconcileService, logger);
     }
@@ -67,6 +70,10 @@ public sealed class SchedulerService : BackgroundService
     {
         foreach (var name in _configRepository.ListReplications())
         {
+            // a replication the runner owns is planned by the runner's drain (plan 28c E12): this tick queues nothing for it, which is also the guard against both processing a mapping
+            if (_owners?.OwnerOf(name) == DbDataKit.State.TaskOwners.Runner)
+                continue;
+
             ReplicationTaskConfig task;
             List<string> mappingNames;
             try

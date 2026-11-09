@@ -319,10 +319,22 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
     }
 
     /// <summary>Queues a run of the task now, apart from its schedule: <c>POST .../run</c>. The id of the run, or null when one is queued or running already (409).</summary>
-    public async Task<string?> RunNowAsync(string server, string? code, string package, string channel, string task, Action<string>? log = null, CancellationToken ct = default)
+    public async Task<string?> RunNowAsync(string server, string? code, string package, string channel, string task, Action<string>? log = null, CancellationToken ct = default) =>
+        await RunNowAsync(server, code, package, channel, task, inputs: null, log, ct);
+
+    /// <summary>Queues a run of the task now with <paramref name="inputs"/> (names and text values, as the manifest declares them; the body is <c>{"inputs": {...}}</c>).</summary>
+    public async Task<string?> RunNowAsync(string server, string? code, string package, string channel, string task, IReadOnlyDictionary<string, string>? inputs, Action<string>? log = null, CancellationToken ct = default)
     {
         using var link = await OpenAsync(server, code, log, ct);
-        using var response = await link.SendAsync(HttpMethod.Post, TaskPath(package, channel, task) + "/run", new StringContent("{}", Encoding.UTF8, "application/json"), ct);
+        var body = new JsonObject();
+        if (inputs is { Count: > 0 })
+        {
+            var map = new JsonObject();
+            foreach (var (name, value) in inputs) map[name] = value;
+            body["inputs"] = map;
+        }
+
+        using var response = await link.SendAsync(HttpMethod.Post, TaskPath(package, channel, task) + "/run", new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"), ct);
         if (response.StatusCode == HttpStatusCode.Conflict) return null;
         if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to run {package}/{channel}/{task}", ct);
         return (string?)JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!["run_id"];

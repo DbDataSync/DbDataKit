@@ -14,9 +14,10 @@ namespace DbDataSync.TaskRunner.Runner;
 /// <summary>
 /// What the manifest's <c>inputs</c> say for the task <c>drain</c>: which replication of the definition to drain, how many passes at once, and where in the package the definition is (<c>repo_dir</c>, relative to the
 /// package's root: the directory that holds <c>config/</c> and <c>libraries/</c>). <c>run_all</c> is the API's "Run now": a pass for every mapping at once, whatever the schedule, the holds and the gate say (plan 28c E11; the
-/// default is to plan as the API's scheduler does).
+/// default is to plan as the API's scheduler does). <c>requests</c> is what an operator asked of the replication through the API (a bulk load, a reconcile sweep, a verification, a resync: <see cref="DrainRequest"/>, as a JSON
+/// list), queued before the first cycle (plan 28c E12).
 /// </summary>
-public sealed record DrainInput(string Replication, int DegreeOfParallelism = 4, string RepoDir = "repo", bool RunAll = false);
+public sealed record DrainInput(string Replication, int DegreeOfParallelism = 4, string RepoDir = "repo", bool RunAll = false, string Requests = "");
 
 /// <summary>One mapping's position: where its incremental read got to (<c>ChangeWatermarks.Watermark</c> and its time).</summary>
 public sealed class WatermarkProgress
@@ -195,6 +196,8 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
             new ConnectionChangeCounterSource((connection, token) => executor.OpenPlanningConnectionAsync(connection, token)),
             plannerState, Run.Log);
         var planner = new ReplicationPlanner(config, plannerState, gate, engine.Drivers, new EngineReconcileEnqueuer(config, plannerState, segments), Run.Log);
+
+        await DrainRequests.ApplyAsync(Input.Requests, Input.Replication, queue, checkpoints, checkpoints, Run.Log, ct).ConfigureAwait(false);
 
         var drain = new DrainLoop(Input.Replication, config, planner, plannerState, state, queue, Input.RunAll, Math.Max(1, Input.DegreeOfParallelism), Run.Log, Status, outputs: outputs);
         try

@@ -14,6 +14,7 @@ public sealed class ReplicationsController(
     ConfigRepository configRepository,
     ParameterCheck parameterCheck,
     ProcessSupervisor supervisor,
+    DbDataSync.Api.Runner.RunnerDispatch runnerDispatch,
     TaskRunStore taskRunStore,
     CurrentUser currentUser) : ControllerBase
 {
@@ -121,10 +122,20 @@ public sealed class ReplicationsController(
     /// </para>
     /// </summary>
     [HttpPut("{name}/paused")]
-    public ActionResult<ReplicationStatus> SetPaused(string name, [FromBody] SetPausedRequest request)
+    public async Task<ActionResult<ReplicationStatus>> SetPaused(string name, [FromBody] SetPausedRequest request, CancellationToken cancellationToken)
     {
         if (!configRepository.ListReplications().Contains(name, StringComparer.Ordinal))
             return NotFound();
+
+        // a replication the runner owns is paused on the runner (plan 28c E12, QE5): that stops the next start of its drain and a drain that is up plans nothing new; the pause is recorded here too, for the history
+        if (runnerDispatch.RunnerOwns(name))
+        {
+            try { await runnerDispatch.SetPausedAsync(name, request.Paused, cancellationToken); }
+            catch (Exception ex) when (ex is DbDataKit.Runner.Client.RunnerClientException or DbDataSync.Api.Runner.OwnershipException)
+            {
+                return StatusCode(409, new { error = $"The runner did not take the pause: {ex.Message}" });
+            }
+        }
 
         taskRunStore.SetPaused(name, request.Paused, request.Note, currentUser.Author.Name);
         return Status(name);
