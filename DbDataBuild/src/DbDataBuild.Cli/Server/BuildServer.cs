@@ -84,6 +84,8 @@ internal static class BuildServer
             "dbdatabuild", "dbdatabuild", "the server",
             () => state ?? DbDataKit.State.Cli.StateTarget.From(BuildState.Resolve(settings.Directory), BuildState.SqlitePath(settings.Directory), () => BuildState.Secrets(settings.Directory), BuildState.SettingsFile(settings.Directory)),
             BuildSchedulerSchema.Modules, BuildSchedulerSchema.Scope, maintenance, new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), instanceId, DbDataBuild.Core.ProductInfo.Version, Move: true)));
+        // the server upgrades itself when the console says so (plan 24a UC09)
+        DbDataKit.Upgrade.UpgradeSetup.MapUpgrade(app, "dbdatabuild", DbDataBuild.Core.ProductInfo.Version, BuildService.RegistrationName, settings.Listen.Port, new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), () => [.. clients.All().Select(c => new DbDataKit.Upgrade.PeerGeneration(c.Name, c.Generation))]);
         BuildManagementApi.Map(app, projects, commands, runner, surfaceFor, scheduler, new Workspaces(settings.Directory, TimeProvider.System), workspaceRunner, new ProxiesFile(settings.Directory), proxyPublisher, files.Codes(), $"Build server {instanceId}", new ProjectCreator(settings.Directory, projects), settings.Directory, runnerControl, new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), runnerSchedule, runnerClientDirectory);
         if (workspaceRunner is not null) app.Lifetime.ApplicationStopping.Register(workspaceRunner.Dispose);
         return app;

@@ -35,7 +35,7 @@ public static class ServerProducts
     }
 
     /// <summary>
-    /// The calls of a runner's API that a console relays, one row each (plan 33 UE06, UE08, UE10 and UE11 and the screens before them), with the role the runner itself asks for: owner decision of 2026-11-08, a console writes to a runner route by route
+    /// The calls of a runner's API that a console relays, one row each (plan 33 UE06, UE08, UE10 and UE11, plan 24a UC09 and the screens before them), with the role the runner itself asks for: owner decision of 2026-11-08, a console writes to a runner route by route
     /// and as the signed-in person, whose roles the relay checks before it forwards anything. Every other call of a runner (a product's report of its decisions, a webhook, any other write, any other method) is not a console's, whoever signed in.
     /// The roles are those of <c>DbDataKit.Runner.Api</c> (<c>RunnerApi</c>, <c>RunnerGroupApi</c>, <c>RunnerPublishApi</c>, <c>RunnerLineageApi</c>); a test pins each row to what the runner answers.
     /// </summary>
@@ -48,6 +48,7 @@ public static class ServerProducts
         new("GET", "api/v1/runs", ServerRole.Viewer),
         new("GET", "api/v1/settings", ServerRole.Viewer),
         new("GET", "api/v1/lineage", ServerRole.Viewer),
+        new("GET", "api/v1/upgrade", ServerRole.Viewer),                                                    // UC09: the status of its own upgrade
         new("GET", "api/v1/definitions/integration", ServerRole.Viewer),
         new("GET", "api/v1/definitions/integration/{name}", ServerRole.Viewer),
         new("GET", "api/v1/instances/{id}/labels", ServerRole.Viewer),                                      // UE11
@@ -70,6 +71,7 @@ public static class ServerProducts
         new("PUT", "api/v1/bindings/{name}/integration/{name}", ServerRole.Admin, ServerRole.Publisher),   // UE08
         new("PUT", "api/v1/settings/require_signatures", ServerRole.Admin),                                // UE08
         new("PUT", "api/v1/instances/{id}/labels", ServerRole.Admin),                                      // UE11
+        new("POST", "api/v1/upgrade", ServerRole.Admin),                                                   // UC09: prepare and apply its own upgrade
     ];
 
     /// <summary>The row of <see cref="RunnerRoutes"/> that a call matches, or null when a console does not relay that call to a runner.</summary>

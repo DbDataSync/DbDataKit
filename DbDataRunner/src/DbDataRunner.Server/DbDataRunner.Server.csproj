@@ -33,6 +33,7 @@
     <DbDataKitReference Include="Runner.Limits" />   <!-- what this machine can enforce, reported as capabilities -->
     <DbDataKitReference Include="Runner.Protocol.Server" />   <!-- the socket the task processes talk to -->
     <DbDataKitReference Include="Web" />   <!-- pairing, key rotation, the version header and the token check -->
+    <DbDataKitReference Include="Upgrade" />   <!-- the server upgrades itself when the console says so; plan 24a UC09 -->
   </ItemGroup>
   <ItemGroup Condition="'$(UseLocalDbDataKit)' == 'true'">
     <!-- Private=false: its apphost, deps.json and runtimeconfig.json are not copied to this program's output root. Built for its executable only; published, with its own dependencies, to taskhost/ beside this program (see the targets below) -->

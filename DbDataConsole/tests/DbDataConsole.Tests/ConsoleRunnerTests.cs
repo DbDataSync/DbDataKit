@@ -73,6 +73,9 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         server.MapGet("/api/v1/connections", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { connections = Array.Empty<object>() })));
         server.MapGet("/api/v1/settings", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { require_signatures = false })));
         server.MapGet("/api/v1/lineage", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { edges = Array.Empty<object>() })));
+        // a server upgrades itself when the console says so (plan 24a UC09): the status is a viewer's, prepare and apply an administrator's
+        server.MapGet("/api/v1/upgrade", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { state = "none" })));
+        server.MapPost("/api/v1/upgrade", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { state = "prepared" })));
         server.MapGet("/api/v1/instances/{id}/labels", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { labels = Array.Empty<object>() })));
         server.MapGet("/api/v1/tasks/{package}/{channel}/{task}/schedule", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { owner = "runner" })));
         server.MapGet("/api/v1/tasks/{package}/{channel}/{task}/decisions", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { decisions = Array.Empty<object>() })));
@@ -217,6 +220,7 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
     [
         ("GET", "api/v1/status", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/instances", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/connections", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/runs", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/settings", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/lineage", ServerRole.Viewer, ServerRole.None),
+        ("GET", "api/v1/upgrade", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/definitions/integration", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/definitions/integration/{name}", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/instances/{id}/labels", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/tasks/{name}/{name}/{name}/schedule", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/tasks/{name}/{name}/{name}/decisions", ServerRole.Viewer, ServerRole.None),
@@ -227,7 +231,7 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         ("POST", "api/v1/definitions/integration/{name}/rollback", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/definitions/integration/{name}/retire", ServerRole.Admin, ServerRole.None),
         ("PUT", "api/v1/artifacts/{sha}", ServerRole.Admin, ServerRole.Publisher), ("PUT", "api/v1/definitions/integration/{name}", ServerRole.Admin, ServerRole.Publisher),
         ("PUT", "api/v1/bindings/{name}/integration/{name}", ServerRole.Admin, ServerRole.Publisher), ("PUT", "api/v1/settings/require_signatures", ServerRole.Admin, ServerRole.None),
-        ("PUT", "api/v1/instances/{id}/labels", ServerRole.Admin, ServerRole.None),
+        ("PUT", "api/v1/instances/{id}/labels", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/upgrade", ServerRole.Admin, ServerRole.None),
     ];
 
     public static TheoryData<string> Rows => [.. ServerProducts.RunnerRoutes.Select(r => $"{r.Method} {r.Pattern}")];

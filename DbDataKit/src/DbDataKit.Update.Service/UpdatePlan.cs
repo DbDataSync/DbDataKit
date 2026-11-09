@@ -65,12 +65,12 @@ public static class PlanStore
         try
         {
             var p = JsonSerializer.Deserialize<UpdatePlan>(File.ReadAllBytes(layout.PlanPath), UpdatePlan.Json);
-            if (p is null || p.Schema != UpdatePlan.SchemaId) throw new UpdatePlanException("Plan schema is not supported.");
+            if (p is null || p.Schema != UpdatePlan.SchemaId) throw new UpdatePlanException($"{layout.PlanPath}: the journal's schema is '{p?.Schema}' and this program reads {UpdatePlan.SchemaId} only (a journal of a newer program: upgrade this one, or remove the file once no upgrade is running).");
             foreach (var n in Enum.GetValues<StepName>())
                 if (p.Steps.All(s => s.Name != n)) p.Steps.Add(new PlanStep { Name = n });
             return p;
         }
-        catch (JsonException ex) { throw new UpdatePlanException("Plan is not valid JSON: " + ex.Message); }
+        catch (JsonException ex) { throw new UpdatePlanException($"{layout.PlanPath}: the journal is not valid JSON: {ex.Message}"); }
     }
 
     /// <summary>Atomic write (temp + rename) so a power cut leaves either the old or the new journal, never a torn one.</summary>

@@ -156,6 +156,8 @@ public static class GatewayManagementHost
         app.AnnounceToConsole("dbdatagateway", instanceId, options.Management.Port, clients, files.Codes());
         app.MapKeyRotation(new KeyRotationService(instanceId, clients, new StateReplayCache(used, "key-rotation:" + instanceId)));
 
+        // the server upgrades itself when the console says so (plan 24a UC09); its own route wins over the catch-all below
+        DbDataKit.Upgrade.UpgradeSetup.MapUpgrade(app, "dbdatagateway", GatewayHost.Version, "DbDataGateway", options.Management.Port, audit, () => [.. clients.All().Select(c => new DbDataKit.Upgrade.PeerGeneration(c.Name, c.Generation))]);
         app.MapMethods($"{GatewayManagement.Prefix}/{{**rest}}", ["GET", "POST", "PUT", "DELETE"], async (HttpContext context) =>
         {
             var caller = new ManagementCaller(context.ManagementToken());

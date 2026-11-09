@@ -5,6 +5,8 @@ Console.OutputEncoding = utf8;
 Console.InputEncoding = utf8;
 Console.Out.NewLine = "\n";      // like everything the tool writes: the same bytes on every platform, so a captured run diffs cleanly
 Console.Error.NewLine = "\n";
+if (await DbDataKit.Upgrade.UpgradeHelperHost.TryRunAsync(args) is { } helperExit)
+    return helperExit;
 if (args is [DbDataBuild.Cli.Runner.RunnerHost.Argument])
     return await DbDataBuild.Cli.Runner.RunnerHost.RunAsync();
 if (args is [DbDataBuild.Cli.Server.SessionHost.Argument])

@@ -110,6 +110,26 @@
       "note": "frozen by its release; the strict reader is its definition",
       "version_source": { "file": "DbDataKit/src/DbDataKit.Runner.Abstractions/PackageManifest.cs", "pattern": "public const int FormatVersion = (\\d+);" },
       "files": [ { "path": "DbDataKit/src/DbDataKit.Runner.Abstractions/PackageManifestReader.cs", "sha256": "8b3716b715005e42c8dc0d62953c5f5db4136e262941f46501c34fc0a4ce1b3f" } ]
+    },
+    {
+      "id": "release",
+      "title": "Release manifest (schema: release/N, the staged release of an upgrade)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "plan 24a UC09: the server stages the release it checked as a release/1 manifest, signed with its own key, and the helper that swaps the program checks it again (the shelved updater's format, used as code); its schemaVersions carry the compatibility generation",
+      "version_source": { "file": "DbDataKit/src/DbDataKit.Update.Abstractions/ReleaseManifest.cs", "pattern": "public const string SchemaId = \"release/(\\d+)\";" },
+      "files": [ { "path": "DbDataKit/src/DbDataKit.Update.Abstractions/ReleaseManifest.cs", "sha256": null } ]
+    },
+    {
+      "id": "update-plan",
+      "title": "Upgrade journal (schema: update-plan/N, updates/update-plan.json in the upgrade area beside the program)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "plan 24a UC09: the journal of one upgrade, written by the server and moved on by the helper, read by the status endpoint; a journal of another schema is refused with its file named (PlanStore.Load)",
+      "version_source": { "file": "DbDataKit/src/DbDataKit.Update.Service/UpdatePlan.cs", "pattern": "public const string SchemaId = \"update-plan/(\\d+)\";" },
+      "files": [ { "path": "DbDataKit/src/DbDataKit.Update.Service/UpdatePlan.cs", "sha256": null } ]
     }
   ]
 }
