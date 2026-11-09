@@ -83,7 +83,14 @@ public sealed class ArtifactCache
     /// Makes sure every file's object is cached (downloading and verifying those that are not), then builds a new read-only view of them. Refuses, before any download, a path that
     /// could leave the view, a malformed hash, and paths that collide (also by case, or one a file and the other a directory).
     /// </summary>
-    public async Task<MaterializedVersion> MaterializeAsync(string versionKey, IReadOnlyCollection<ArtifactFile> files, CancellationToken cancellationToken = default)
+    public Task<MaterializedVersion> MaterializeAsync(string versionKey, IReadOnlyCollection<ArtifactFile> files, CancellationToken cancellationToken = default) =>
+        MaterializeAsync(versionKey, files, copies: false, cancellationToken);
+
+    /// <summary>
+    /// The same, and with <paramref name="copies"/> the view is made of copies whatever the link mode says. A runtime that a host program starts (<c>dotnet {runtime}/bin/Engine.dll</c>) needs it: the host resolves a link to the object it points at and
+    /// looks for the runtime configuration and the dependencies beside <i>that</i> (exit code 131, <c>hostpolicy</c> not found), so such a view cannot be made of links on Linux (plan 28c E12e).
+    /// </summary>
+    public async Task<MaterializedVersion> MaterializeAsync(string versionKey, IReadOnlyCollection<ArtifactFile> files, bool copies, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(versionKey);
         ArgumentNullException.ThrowIfNull(files);
@@ -100,7 +107,7 @@ public sealed class ArtifactCache
 
             var name = Sanitize(versionKey);
             view = Path.Combine(_views, $"{name}-{Guid.NewGuid():N}"[..(name.Length + 9)]);
-            BuildView(view, checkedFiles, cancellationToken);
+            BuildView(view, checkedFiles, copies, cancellationToken);
             return new MaterializedVersion(this, versionKey, view, checkedFiles, hashes);
         }
         catch
@@ -276,7 +283,7 @@ public sealed class ArtifactCache
         }
     }
 
-    private void BuildView(string view, List<ArtifactFile> files, CancellationToken cancellationToken)
+    private void BuildView(string view, List<ArtifactFile> files, bool copies, CancellationToken cancellationToken)
     {
         System.IO.Directory.CreateDirectory(view);
         var directories = new HashSet<string>(StringComparer.Ordinal) { view };
@@ -293,7 +300,7 @@ public sealed class ArtifactCache
 
             var objectPath = ObjectPath(file.Sha256);
             var linked = false;
-            if (_linkMode == ArtifactLinkMode.Auto && !OperatingSystem.IsWindows())
+            if (!copies && _linkMode == ArtifactLinkMode.Auto && !OperatingSystem.IsWindows())
             {
                 try
                 {
