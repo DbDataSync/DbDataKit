@@ -59,6 +59,17 @@ export function PackageIcon() {
   )
 }
 
+/** Runner — a box with an arrow leaving it: the replications are sent to a runner and run there. */
+export function RunnerIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" {...stroke} strokeLinejoin="round" strokeLinecap="round">
+      <path d="M2.5 9.5v3.5h11V9.5" />
+      <path d="M8 11V2.5" />
+      <path d="M5 5.5 8 2.5l3 3" />
+    </svg>
+  )
+}
+
 /** Connections — a database cylinder. */
 export function DatabaseIcon() {
   return (

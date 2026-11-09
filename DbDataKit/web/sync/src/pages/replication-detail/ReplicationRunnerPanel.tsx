@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { ErrorBanner, Field, useIsAdmin } from '@dbdatakit/shell'
-import { useReplicationOwner, useRunnerLink, useSaveRunnerLink, useSetReplicationOwner } from '../../api/hooks'
-import type { OwnerView, ReplicationOwner, RunnerLink } from '../../api/types'
+import { useReplicationOwner, useRunnerLink, useSetReplicationOwner } from '../../api/hooks'
+import type { OwnerView, ReplicationOwner } from '../../api/types'
+import { RunnerLinkCard } from '../RunnerLinkCard'
 import { OWNER_TEXT, movesFrom } from './runnerOwner'
 
 /** The runner's own row of the replication's task, or what is wrong with asking for it. */
@@ -32,12 +33,7 @@ export function ReplicationRunnerPanel({ replicationName }: { replicationName: s
   const isAdmin = useIsAdmin()
   const owner = useReplicationOwner(replicationName)
   const link = useRunnerLink()
-  const saveLink = useSaveRunnerLink()
   const move = useSetReplicationOwner(replicationName)
-  // null is "what the server has"; a link is an unsaved edit of it
-  const [edit, setEdit] = useState<RunnerLink | null>(null)
-  const draft: RunnerLink = edit ?? (link.data ? { ...link.data, clientDirectory: link.data.clientDirectory ?? '' } : { server: '', channel: '', package: '', clientDirectory: '' })
-  const setDraft = setEdit
   const [wait, setWait] = useState('')
   const [done, setDone] = useState<string | null>(null)
 
@@ -46,7 +42,6 @@ export function ReplicationRunnerPanel({ replicationName }: { replicationName: s
   const allowed = movesFrom(current)
   const linked = !!link.data
   const reason = !isAdmin ? 'Moving a replication needs the admin role.' : !linked ? 'Set the runner first.' : move.isPending ? 'A move is in progress.' : undefined
-  const complete = draft.server.trim() !== '' && draft.channel.trim() !== '' && draft.package.trim() !== ''
 
   const go = async (to: ReplicationOwner) => {
     setDone(null)
@@ -84,23 +79,7 @@ export function ReplicationRunnerPanel({ replicationName }: { replicationName: s
         </p>
       </div>
 
-      <div className="card">
-        <div className="card-head tight"><span className="card-title sm">The runner</span></div>
-        <p className="hint">The paired runner the replications are published to, the channel that serves them and the package they are in.</p>
-        <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-          <Field label="Server (name or address)"><input className="input" value={draft.server} onChange={(e) => setDraft({ ...draft, server: e.target.value })} data-testid="runner-link-server" /></Field>
-          <Field label="Channel"><input className="input" value={draft.channel} onChange={(e) => setDraft({ ...draft, channel: e.target.value })} data-testid="runner-link-channel" /></Field>
-          <Field label="Package"><input className="input" value={draft.package} onChange={(e) => setDraft({ ...draft, package: e.target.value })} data-testid="runner-link-package" /></Field>
-          <Field label="Client directory (optional)"><input className="input" value={draft.clientDirectory ?? ''} onChange={(e) => setDraft({ ...draft, clientDirectory: e.target.value })} data-testid="runner-link-client-dir" /></Field>
-        </div>
-        <div style={{ marginTop: 12 }}>
-          <button type="button" className="btn btn-sm" disabled={!isAdmin || !complete || saveLink.isPending} title={!isAdmin ? 'Setting the runner needs the admin role.' : !complete ? 'The server, channel and package are all needed.' : undefined}
-            onClick={() => saveLink.mutate({ ...draft, clientDirectory: draft.clientDirectory?.trim() ? draft.clientDirectory : null }, { onSuccess: () => setEdit(null) })} data-testid="runner-link-save">
-            Save the runner
-          </button>
-        </div>
-        {saveLink.error && <ErrorBanner error={saveLink.error} />}
-      </div>
+      <RunnerLinkCard />
     </div>
   )
 }

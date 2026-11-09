@@ -23,6 +23,7 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 | | Table mappings | Yes | Yes (columns, transforms, segmenting, provisioning, pipeline) | Yes (`delete-mapping-<name>`) | Verify, preview, diagnostics, history diff | `ReplicationDetailPage.tsx` |
 | | Runs | – | – | – | Start, cancel, resync, bulk load, reconcile | `ReplicationDetailPage.tsx` |
 | | Target provisioning | – | – | – | Plan and apply | `ReplicationDetailPage.tsx` |
+| | Runner (`/runner`; plan 28c E08): the replication set on the paired runner | – (the link: server, channel, package) | – | – | Check what a publish holds, stage or serve it, bind the channel's slots, read the served and staged version, the runners' progress and the slots; who runs each replication is its **Runner** tab | `RunnerPage.tsx` |
 | | Scripts | Yes | Yes | Yes | Compile, test | `ScriptsPage.tsx`, `ScriptEditPage.tsx` |
 | | Docs | – | – | – | Read the shipped documentation | `DocsPage.tsx` |
 | | Drivers, libraries, files, certificate, updates, configuration | Yes | Yes | Yes | Admin screens | `DriversPage.tsx`, `DriverEditPage.tsx`, `LibrariesPage.tsx`, `FilesPage.tsx`, `AdminCertificatePage.tsx`, `AdminUpdatesPage.tsx`, `AdminConfigPage.tsx` |

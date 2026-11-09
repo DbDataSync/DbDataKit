@@ -5,7 +5,7 @@ import { api } from './client'
 // Who the caller is and the notification feed are the shell's hooks, used by every product's console the same way.
 export { useAuthStatus, useMarkNotificationsSeen, useNotifications, useSignInWithWindows, useSignOut } from '@dbdatakit/shell'
 import type {
-  ReplicationOwner, RunnerLink,
+  ReplicationOwner, RunnerLink, PublishRunnerRequest,
   CheckForm,
   BulkCreateRequest,
   BulkLoadHistoryFilters,
@@ -67,6 +67,7 @@ const keys = {
   replicationChecks: (name: string) => ['replications', name, 'checks'] as const,
   replicationOwner: (name: string) => ['replications', name, 'owner'] as const,
   runnerLink: () => ['runner', 'link'] as const,
+  runnerPackage: () => ['runner', 'package'] as const,
   replicationCommitDiff: (name: string, sha: string) =>
     ['replications', name, 'history', sha, 'diff'] as const,
   replicationRestorePreview: (name: string, sha: string) =>
@@ -436,8 +437,44 @@ export function useSaveRunnerLink() {
     mutationFn: (link: RunnerLink) => api.runner.save(link),
     onSuccess: (saved) => {
       queryClient.setQueryData(keys.runnerLink(), saved)
+      queryClient.invalidateQueries({ queryKey: keys.runnerPackage() })
       queryClient.invalidateQueries({ queryKey: ['replications'] })
     },
+  })
+}
+
+/** The package as the linked runner holds it. Polled while a version is staged and not served yet: the runners prepare it and one of them activates it, and nobody here does anything. */
+export function useRunnerPackage() {
+  return useQuery({
+    queryKey: keys.runnerPackage(),
+    queryFn: () => api.runner.package(),
+    retry: false,
+    refetchInterval: (query) => (query.state.data?.staged != null ? 3_000 : 15_000),
+  })
+}
+
+/** What a publish would hold, or why it is refused (a mutation: it runs the verb, which reads the whole definition). */
+export function useCheckRunnerPackage() {
+  return useMutation({ mutationFn: () => api.runner.check() })
+}
+
+/** Stage or serve the replication set. The runner's package is read again, and the runner link's replications (their rows say whether the runner lists a task). */
+export function usePublishRunnerPackage() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: PublishRunnerRequest) => api.runner.publish(body),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: keys.runnerPackage() })
+      queryClient.invalidateQueries({ queryKey: ['replications'] })
+    },
+  })
+}
+
+export function useBindRunnerSlots() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (slots: Record<string, string>) => api.runner.bind(slots),
+    onSuccess: (view) => queryClient.setQueryData(keys.runnerPackage(), view),
   })
 }
 

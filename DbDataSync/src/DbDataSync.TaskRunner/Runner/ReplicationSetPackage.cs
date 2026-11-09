@@ -14,8 +14,8 @@ namespace DbDataSync.TaskRunner.Runner;
 /// <summary>One file of the package: where it goes inside it and where it is now.</summary>
 public sealed record SetPackageFile(string Path, string Source);
 
-/// <summary>One replication as the task it becomes: its name on the runner, how it is scheduled there and the connections it needs.</summary>
-public sealed record PublishedReplication(string Replication, string Task, string Mode, string? Cron, int? FrequencySeconds, IReadOnlyList<string> Slots, int Mappings);
+/// <summary>One replication as the task it becomes: its name on the runner, how it is scheduled there, the slots it needs and the Sync connection each slot is for (the connection of the runner it is bound to carries that name).</summary>
+public sealed record PublishedReplication(string Replication, string Task, string Mode, string? Cron, int? FrequencySeconds, IReadOnlyList<string> Slots, int Mappings, IReadOnlyDictionary<string, string>? SlotConnections = null);
 
 /// <summary>A replication set made into a `package/1` definition package: the manifest (text and model), the files of the definition and what each replication became.</summary>
 public sealed record BuiltReplicationSet(string Name, PackageManifest Manifest, string ManifestText, IReadOnlyList<SetPackageFile> Files, IReadOnlyList<PublishedReplication> Replications);
@@ -177,7 +177,7 @@ public static class ReplicationSetPackage
                 _ => i,
             }).ToList();
             tasks.Add(drain with { Name = taskName, Entry = new TaskEntry(), Schedule = schedule, Inputs = inputs, Connections = slots });   // no `concurrency`: it limits the runs of the whole package, which would serialize the replications of the set (and a continuous drain, which stays up, would starve the others); the queue already keeps one task from running twice
-            published.Add(new PublishedReplication(task.Name, taskName, task.Scheduling.Mode.ToString(), task.Scheduling.CronExpression, task.Scheduling.FrequencySeconds, [.. slots.Select(s => s.Name)], mappings.Count));
+            published.Add(new PublishedReplication(task.Name, taskName, task.Scheduling.Mode.ToString(), task.Scheduling.CronExpression, task.Scheduling.FrequencySeconds, [.. slots.Select(s => s.Name)], mappings.Count, new Dictionary<string, string>(slotNames, StringComparer.Ordinal)));
         }
 
         if (tasks.Count == 0 && problems.Count == before)
