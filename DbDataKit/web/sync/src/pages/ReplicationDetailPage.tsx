@@ -21,6 +21,7 @@ const TABS: { path: string; label: string; testId: string }[] = [
   { path: 'mappings', label: 'Table Mappings', testId: 'tab-mappings' },
   { path: 'monitoring', label: 'Monitoring', testId: 'tab-monitoring' },
   { path: 'checks', label: 'Quality Checks', testId: 'tab-checks' },
+  { path: 'runner', label: 'Runner', testId: 'tab-runner' },
   { path: 'history', label: 'Version Control', testId: 'tab-history' },
 ]
 

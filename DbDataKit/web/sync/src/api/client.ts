@@ -1,6 +1,7 @@
 import { adminApi } from '@dbdatakit/admin'
 import { ApiError, put, request, shellApi } from '@dbdatakit/shell'
 import type {
+  OwnerView, OwnershipChange, ReplicationOwner, RunnerLink,
   ReplicationChecks,
   CheckForm,
   ApplyResult,
@@ -165,6 +166,11 @@ export const api = {
     /** Replaces them; `version` is the one `checks` gave. A refusal carries the strict reader's diagnostics (400) or the current checks (409). */
     saveChecks: (name: string, checks: CheckForm[], version: string) =>
       put<ReplicationChecks>(`/api/replications/${encodeURIComponent(name)}/checks`, { checks, version }),
+    /** Who schedules the replication (`old`, `observe`, `runner`), the runner's own row of its task, and the link (plan 28c E12). */
+    owner: (name: string) => request<OwnerView>(`/api/replications/${encodeURIComponent(name)}/owner`),
+    /** Moves it: `observe`, `runner` (cutover) or `old` (rollback). A refusal is 409 with what was found, and the owner is as it was. */
+    setOwner: (name: string, owner: ReplicationOwner, waitSeconds?: number) =>
+      put<OwnershipChange>(`/api/replications/${encodeURIComponent(name)}/owner`, { owner, waitSeconds: waitSeconds ?? null }),
     history: (name: string) => request<CommitInfo[]>(`/api/replications/${encodeURIComponent(name)}/history`),
     /** The patch one commit made to this replication — phase 35's "View changes". Read-only. */
     commitDiff: (name: string, sha: string) =>
@@ -243,6 +249,11 @@ export const api = {
         `/api/replications/${encodeURIComponent(replicationName)}/table-mappings/${encodeURIComponent(mappingName)}/read-state`,
         { method: 'POST', body: JSON.stringify(body) },
       ),
+  },
+  /** The runner the replications move to (plan 28c E12). */
+  runner: {
+    get: () => request<RunnerLink | null>('/api/runner'),
+    save: (link: RunnerLink) => put<RunnerLink>('/api/runner', link),
   },
   provisioning: {
     get: (replicationName: string, mappingName: string) =>
