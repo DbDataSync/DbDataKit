@@ -248,6 +248,10 @@ export const modelsBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-consol
 // writes the data source file, and the project's connection `postgres` carries a read login that is never used to connect.
 export const grantsBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-grants-build'), port: 8581, project: 'grantsdemo', connection: 'postgres', projectDirectory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-grantsdemo-project') }
 export const grantsGateway = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-grants-gateway'), flightPort: 8582, managementPort: 8583 }
+// Plan 13c D19 (the owner's decision of 2026-11-09: the serving policy is part of the published definition; adopting a data source made by hand): a Build server and a Gateway for the serving policy story (`publish-policy.spec.ts`). Ports
+// 8584 to 8586 (a port table: 8584 policy Build, 8585 and 8586 the Gateway's Flight SQL and management listeners; 8581 to 8583 grants, 8541 to 8544, 8551, 8561 and up and 8571 and up belong to other stories). No PostgreSQL is needed.
+export const policyBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-policy-build'), port: 8584, project: 'policydemo', connection: 'postgres', projectDirectory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-policydemo-project') }
+export const policyGateway = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-policy-gateway'), flightPort: 8585, managementPort: 8586 }
 if (!isWorker) {
   const settings = (plan: string) => 'defaults: {connections: [postgres]}\ntracking: { connection: postgres }\nstring_semantics:\n  case: sensitive\n  trailing_space: significant\n  collations:\n    default: { duckdb: NFC, postgres: C }\n' + plan
   const makeProject = (directory: string, name: string, files: Record<string, string>, connectionFile = 'schema: connection/1\nname: postgres\nengine: postgres\ntls:\n  encrypt: false\n  trust_server_certificate: true\n') => {
@@ -306,6 +310,21 @@ if (!isWorker) {
   fs.writeFileSync(path.join(grantsGateway.directory, 'config', 'gateway', 'auth.yaml'), 'jwt:\n  signingKey: console-e2e-signing-key-0123456789abcdef\n  audience: api://console-e2e\n')
   const madeGrantsGateway = execFileSync('dotnet', ['exec', gatewayDll, 'server', 'pair', '--minutes', '120', '--repo', grantsGateway.directory, '--max-role', 'admin'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'grants-gateway-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeGrantsGateway)![1])
+  // the serving policy story: the project's connection carries the Gateway's serving policy (extensions.gateway), and the Gateway has a data source `erp` made by hand (with allow_writes) that the publish adopts
+  makeProject(policyBuild.directory, policyBuild.project, {
+    'dbdatabuild.yml': settings(''),
+    'models/sales/facts.yml': 'name: sales.facts\nkind: mapped\ngrain: [sale_id]\ncolumns:\n  - {name: sale_id, type: BIGINT, nullable: false}\n',
+  }, 'schema: connection/1\nname: postgres\nengine: postgres\ntls:\n  encrypt: false\n  trust_server_certificate: true\nextensions:\n  gateway:\n    batch_size: 500\n    classifier: warn\n')
+  pairBuild(policyBuild.directory, 'policy-build-pairing-code.txt')
+  execFileSync('dotnet', ['exec', buildDll, 'secret', 'set', 'dbdata:build:connection:postgres:read', '--stdin', '--repo', policyBuild.directory], { input: 'Host=localhost;Database=ledger;Username=reader;Password=not-used;SSL Mode=Disable\n', stdio: ['pipe', 'ignore', 'inherit'] })
+  fs.rmSync(policyGateway.directory, { recursive: true, force: true })
+  fs.mkdirSync(path.join(policyGateway.directory, 'config', 'gateway'), { recursive: true })
+  fs.mkdirSync(path.join(policyGateway.directory, 'config', 'connections'), { recursive: true })
+  fs.writeFileSync(path.join(policyGateway.directory, 'config', 'server.yaml'), 'schemaVersion: 2\ntls: { mode: selfSigned }\n')
+  fs.writeFileSync(path.join(policyGateway.directory, 'config', 'gateway', 'auth.yaml'), 'jwt:\n  signingKey: console-e2e-signing-key-0123456789abcdef\n  audience: api://console-e2e\n')
+  const madePolicyGateway = execFileSync('dotnet', ['exec', gatewayDll, 'server', 'pair', '--minutes', '120', '--repo', policyGateway.directory, '--max-role', 'admin'], { encoding: 'utf8' })
+  fs.writeFileSync(path.join(scratchDirectory, 'policy-gateway-pairing-code.txt'), /Pairing code: (\S+)/.exec(madePolicyGateway)![1])
+  fs.writeFileSync(path.join(policyGateway.directory, 'config', 'connections', 'erp.yaml'), "schema: connection/1\nname: erp\nengine: duckdb\nconnection_string: 'Data Source=:memory:'\nextensions:\n  gateway:\n    allow_writes: true\n    batch_size: 64\n    allowed_directories: ['/data']\n")
 
   fs.rmSync(modelsGateway.directory, { recursive: true, force: true })
   fs.mkdirSync(path.join(modelsGateway.directory, 'config', 'gateway'), { recursive: true })
@@ -514,6 +533,26 @@ export default defineConfig({
         `--Gateway:DataDirectory=${JSON.stringify(grantsGateway.directory)}`, '--Gateway:Listen:Address=127.0.0.1', `--Gateway:Listen:Port=${grantsGateway.flightPort}`,
         '--Gateway:Management:Enabled=true', '--Gateway:Management:Address=127.0.0.1', `--Gateway:Management:Port=${grantsGateway.managementPort}`].join(' '),
       url: `https://localhost:${grantsGateway.managementPort}/health/live`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(policyBuild.directory), '--listen', `https://localhost:${policyBuild.port}`].join(' '),
+      url: `https://localhost:${policyBuild.port}/health/live`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(gatewayDll), 'server', 'run',
+        `--Gateway:DataDirectory=${JSON.stringify(policyGateway.directory)}`, '--Gateway:Listen:Address=127.0.0.1', `--Gateway:Listen:Port=${policyGateway.flightPort}`,
+        '--Gateway:Management:Enabled=true', '--Gateway:Management:Address=127.0.0.1', `--Gateway:Management:Port=${policyGateway.managementPort}`].join(' '),
+      url: `https://localhost:${policyGateway.managementPort}/health/live`,
       ignoreHTTPSErrors: true,
       reuseExistingServer: false,
       timeout: 60_000,

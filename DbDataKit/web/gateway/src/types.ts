@@ -20,12 +20,14 @@ export interface Overview {
 
 /** Who may use a data source (plan 22a GP03): `definition` when a published definition says it (the project's grants, replaced by each publish), `file` for a file made by hand. Shown, never edited, on a published one. */
 export interface DataSourceGrants { groups: string[]; everyone: boolean; source: 'definition' | 'file' }
-export interface DataSourceSummary { name: string; version: string; valid: boolean; engine: string | null; access: string | null; managed_by?: string | null; grants?: DataSourceGrants | null }
+/** The serving policy of a data source and whose it is (plan 13c D19): `definition` when a client publishes it (the next publish replaces `fields` whole), `file` for a file made by hand. `blocked` holds `allow_writes` and `allowed_directories`, which only an administrator sets in the data source file on the Gateway's disk. Shown, never edited. */
+export interface DataSourcePolicy { origin: 'definition' | 'file'; fields: Record<string, string>; blocked: Record<string, string> }
+export interface DataSourceSummary { name: string; version: string; valid: boolean; engine: string | null; access: string | null; managed_by?: string | null; grants?: DataSourceGrants | null; policy?: DataSourcePolicy | null }
 /** A paired server client (a Build server) a data source can be handed to (T13). */
 export interface ServerClient { id: string; name: string }
 /** The gateway's answer to a hand-over: `adopted` is false when the data source already was the client's. */
 export interface AdoptAnswer { name: string; managed_by: string; adopted: boolean; previous_owner?: string | null }
-export interface DataSourceFile { name: string; text: string; version: string; grants?: DataSourceGrants | null }
+export interface DataSourceFile { name: string; text: string; version: string; grants?: DataSourceGrants | null; policy?: DataSourcePolicy | null }
 export interface Diagnostic { code: string; severity: string; key: string | null; file: string; line: number; column: number; message: string; fix: string | null }
 export interface WriteDataSourceResult { name: string; version: string; created: boolean; diagnostics: Diagnostic[] }
 export interface TestResult { ok: boolean; message?: string; kind?: string; code?: string; elapsed_ms?: number }

@@ -80,8 +80,8 @@ export const buildApi = {
   /** The proxies this server is paired with (T10); a connection of a project can be published to any of them. */
   proxies: () => request<{ proxies: PairedProxy[] }>('/api/v1/proxies').then((r) => r.proxies),
   /** Publishes a connection of a project to a paired proxy as a read-only data source (T10, T12): only its read login goes. The server needs the approver role for it; a proxy's refusal comes back in its own words. */
-  publish: (id: string, proxy: string, connection: string, dataSource?: string) =>
-    request<PublishAnswer>(`${project(id)}/proxies/${encodeURIComponent(proxy)}/publish`, { method: 'POST', body: JSON.stringify({ connection, ...(dataSource ? { data_source: dataSource } : {}) }) }),
+  publish: (id: string, proxy: string, connection: string, dataSource?: string, adopt?: boolean) =>
+    request<PublishAnswer>(`${project(id)}/proxies/${encodeURIComponent(proxy)}/publish`, { method: 'POST', body: JSON.stringify({ connection, ...(dataSource ? { data_source: dataSource } : {}), ...(adopt ? { adopt: true } : {}) }) }),
   /**
    * An administrator hands a data source of a paired proxy to this server (T13): the same call as the Proxy's own adopt, made through the console's relay for that proxy (`proxyInstance` is the id the console knows it by,
    * which is the instance id this server paired with), not through this server's, because this server cannot adopt for itself. The proxy decides what the person may do.

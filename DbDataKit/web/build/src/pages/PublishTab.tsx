@@ -51,6 +51,8 @@ export interface PublishViewProps {
   /** The last hand-over that was refused or failed. */
   adoptFailure: unknown
   onAdopt: (hint: AdoptHint) => void
+  /** Publishes again with `adopt`, replacing a data source made by hand (plan 13c D19). */
+  onPublishAdopt?: () => void
   onProxy: (name: string) => void
   onConnection: (name: string) => void
   onDataSource: (name: string) => void
@@ -99,6 +101,13 @@ export function PublishView(p: PublishViewProps) {
           {p.canAdopt
             ? <div style={{ marginTop: 8 }}><button type="button" className="btn" disabled={p.adopting} onClick={() => p.onAdopt(offer)} data-testid="build-publish-adopt-button">{p.adopting ? 'Handing over…' : 'Hand it to this server'}</button></div>
             : <div style={{ marginTop: 4 }} data-testid="build-publish-adopt-ask">Ask an administrator of the console to do it.</div>}
+          {offer.publish_adopt && p.onPublishAdopt && (
+            <div style={{ marginTop: 8 }} data-testid="build-publish-replace">
+              Or publish over it: the definition of this project replaces the whole file on the proxy, serving policy included; a <span className="mono">allow_writes</span> or <span className="mono">allowed_directories</span> in that file is gone with it (the data source is read-only afterwards).
+              The proxy keeps the file as it was in its history and the answer lists what changed.
+              <div style={{ marginTop: 6 }}><button type="button" className="btn" disabled={p.busy} onClick={p.onPublishAdopt} data-testid="build-publish-replace-button">{p.busy ? 'Publishing…' : 'Publish over it (adopt)'}</button></div>
+            </div>
+          )}
         </div>
       )}
       {p.adoptFailure != null && <div className="banner error" role="alert" data-testid="build-publish-adopt-failed"><span className="mark">!</span><span>{adoptFailureText(p.adoptFailure)}</span></div>}
@@ -107,6 +116,18 @@ export function PublishView(p: PublishViewProps) {
         <div className="card" data-testid="build-publish-done">
           <div className="card-body">
             <span className="mono">{p.done.data_source}</span> is {p.done.created ? 'now' : 'updated'} on <strong>{p.done.proxy}</strong>{p.done.created ? ' (new)' : ''}.
+            {p.done.adopted && <div className="hint" style={{ marginTop: 6 }} data-testid="build-publish-done-adopted">It was made by hand: this server manages it now, and the file it replaced is in the proxy’s history.</div>}
+            {(p.done.changes?.length ?? 0) > 0 && (
+              <div style={{ marginTop: 8 }} data-testid="build-publish-changes">
+                <div className="hint">What the definition changed or dropped:</div>
+                {p.done.changes!.map((c) => (
+                  <div key={c.field} className="row" style={{ gap: 8 }} data-testid={`build-publish-change-${c.field}`}>
+                    <span className="mono">{c.field}</span><span>{c.change}</span>
+                    {(c.before != null || c.after != null) && <span className="mono">{c.before ?? '—'} → {c.after ?? '—'}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -121,7 +142,7 @@ export function PublishTab() {
   const [connection, setConnection] = useState('')
   const [dataSource, setDataSource] = useState('')
   const proxies = useQuery({ queryKey: ['build', 'proxies'], queryFn: () => buildApi.proxies() })
-  const publish = useMutation({ mutationFn: () => buildApi.publish(project, proxy, connection.trim(), dataSource.trim() || undefined) })
+  const publish = useMutation({ mutationFn: (adoptIt: boolean) => buildApi.publish(project, proxy, connection.trim(), dataSource.trim() || undefined, adoptIt) })
   const isAdmin = useIsAdmin()
   const adopt = useMutation({
     mutationFn: (hint: AdoptHint) => buildApi.adoptOnProxy(proxies.data?.find((x) => x.name === proxy)?.instance_id ?? '', hint.data_source, hint.client),
@@ -137,7 +158,7 @@ export function PublishTab() {
         busy={publish.isPending} done={publish.data ?? null} failure={publish.error}
         canAdopt={isAdmin} adopting={adopt.isPending} adopted={adopt.data ?? null} adoptFailure={adopt.error} onAdopt={(hint) => adopt.mutate(hint)}
         onProxy={(v) => { setProxy(v); forget() }} onConnection={(v) => { setConnection(v); forget() }} onDataSource={(v) => { setDataSource(v); forget() }}
-        onPublish={() => { adopt.reset(); publish.mutate() }}
+        onPublish={() => { adopt.reset(); publish.mutate(false) }} onPublishAdopt={() => { adopt.reset(); publish.mutate(true) }}
       />
       <ModelPublish project={project} />
       <h3 className="page-title" style={{ fontSize: 15, margin: '24px 0 8px' }} data-testid="build-publish-runner-heading">To a runner</h3>

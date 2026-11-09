@@ -202,6 +202,18 @@ export interface PublishAnswer {
   data_source: string
   created: boolean
   version: string | null
+  /** True when the publish replaced a data source made by hand (`adopt`, plan 13c D19). */
+  adopted?: boolean
+  /** What the definition added, changed or dropped against the file it replaced, by field (the Gateway's answer). */
+  changes?: PolicyChange[]
+}
+
+/** One field the Gateway reports as changed by a publish: a dotted name of the data source file; the connection's own values are named, not repeated. */
+export interface PolicyChange {
+  field: string
+  change: 'added' | 'changed' | 'dropped'
+  before?: string | null
+  after?: string | null
 }
 
 /** What a refused publish carries when a person could settle it by taking the data source over on the proxy (T12): the client id to name and the call to make there. */
@@ -209,6 +221,8 @@ export interface AdoptHint {
   client: string
   data_source: string
   call: string
+  /** True when publishing again with `adopt` replaces the data source (plan 13c D19; the Gateway keeps the file it replaces). */
+  publish_adopt?: boolean
 }
 
 /** What the proxy answers when a data source is handed over (T13): `adopted` is false when it already was the client's. */

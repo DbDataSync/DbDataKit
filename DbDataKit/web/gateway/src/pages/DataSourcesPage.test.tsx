@@ -2,7 +2,7 @@ import { isValidElement, type ReactElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@dbdatakit/shell'
-import { GRANTED_BY_DEFINITION, GRANTED_BY_FILE, GrantsView, HandOverView, ownerLabel, type HandOverViewProps } from './DataSourcesPage'
+import { BLOCKED_NOTE, GRANTED_BY_DEFINITION, GRANTED_BY_FILE, GrantsView, HandOverView, ownerLabel, POLICY_BY_DEFINITION, POLICY_BY_FILE, PolicyView, type HandOverViewProps } from './DataSourcesPage'
 
 const build = { id: 'build-1', name: 'Build one' }
 
@@ -82,5 +82,38 @@ describe('who may use a data source', () => {
   it('shows nothing for a file that did not load', () => {
     expect(renderToStaticMarkup(GrantsView({ grants: null }))).toBe('')
     expect(renderToStaticMarkup(GrantsView({ grants: undefined }))).toBe('')
+  })
+})
+
+describe('how a data source is served', () => {
+  it('shows a published definition’s policy read-only and says a publish replaces it whole', () => {
+    const view = PolicyView({ policy: { origin: 'definition', fields: { batch_size: '1000', classifier: 'strict' }, blocked: {} } })
+    const text = renderToStaticMarkup(view)
+    expect(text).toContain('data-testid="data-source-policy-batch_size"')
+    expect(text).toContain('1000')
+    expect(text).toContain(POLICY_BY_DEFINITION)
+    expect(find(view, 'data-source-policy-origin')?.props['data-origin']).toBe('definition')
+    // read-only: no input, no button
+    expect(text).not.toContain('<input')
+    expect(text).not.toContain('<button')
+  })
+
+  it('says a hand-made file’s policy is the file’s, and says when the policy is empty', () => {
+    expect(renderToStaticMarkup(PolicyView({ policy: { origin: 'file', fields: { batch_size: '64' }, blocked: {} } }))).toContain(POLICY_BY_FILE)
+    expect(renderToStaticMarkup(PolicyView({ policy: { origin: 'definition', fields: {}, blocked: {} } }))).toContain('No serving policy is set')
+  })
+
+  it('shows allow_writes and the trusted directories as the file’s, with the sentence that a published definition never carries them', () => {
+    const text = renderToStaticMarkup(PolicyView({ policy: { origin: 'file', fields: {}, blocked: { allow_writes: 'true', allowed_directories: '[/data]' } } }))
+    expect(text).toContain('data-testid="data-source-policy-blocked-allow_writes"')
+    expect(text).toContain('[/data]')
+    expect(text).toContain('in the file')
+    expect(text).toContain(BLOCKED_NOTE.replace('<name>', '&lt;name&gt;'))
+    expect(renderToStaticMarkup(PolicyView({ policy: { origin: 'file', fields: {}, blocked: {} } }))).toContain('data-testid="data-source-policy-blocked-none"')
+  })
+
+  it('shows nothing for a file that did not load', () => {
+    expect(renderToStaticMarkup(PolicyView({ policy: null }))).toBe('')
+    expect(renderToStaticMarkup(PolicyView({ policy: undefined }))).toBe('')
   })
 })
