@@ -166,6 +166,7 @@ them one bump.
   has a Playwright test (`DbDataConsole/tests/DbDataConsole.Web.Tests`); a library has unit tests.
 - New state is a **state module with a declared retention rule** (29a Q05); scheduled work is a **runner task** of a system package (28a, `ConsoleSystemTasks`);
   published definitions go through the **publish API** of plan 30.
+- **The editor screen for access rules.** `access/1` is a stored format a person authors; it is not finished until a screen edits it (the rule in `CLAUDE.md`, the row "Access rules" of `docs/ui-editors.md`, state `planned`). GP15's rules and grants screen is the viewer and explainer; the **editor** of a rule document (form and YAML, the loader's diagnostics as you type, save quoting the version, remove) is a slice to add here when GP01 is built, with the row's change to `partial` or `full` in the same commit. The same for the glossary: no slice until the owner's hold of 2026-11-08 ends.
 
 ## Decisions made while planning (change them in the slice that is wrong)
 
