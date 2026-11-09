@@ -9,6 +9,8 @@ using DbDataSync.Drivers.Generic;
 using DbDataSync.Libraries;
 using DbDataSync.State;
 using DbDataSync.TaskRunner;
+using DbDataKit.Runner;
+using DbDataSync.TaskRunner.Tests.Runner;
 using LibGit2Sharp;
 using Microsoft.Data.SqlClient;
 using Xunit;
@@ -27,8 +29,20 @@ namespace DbDataSync.TaskRunner.Tests;
 /// when to extract a shared test-support project instead).
 /// </summary>
 [Trait("Category", "Integration")]
-public sealed class RunExecutorIntegrationTests : IAsyncLifetime
+public sealed class RunExecutorIntegrationTests : IAsyncLifetime, IDisposable
 {
+    /// <summary>
+    /// Who runs a replication (plan 28c E12, "two modes"): the supervisor's worker (<see cref="RunExecutor"/> over Sync's own state) or a runner's drain (the engine started by the runner's executor from a read-only view of the
+    /// published definition, the position kept in the runner's state). The tests that take it as an argument say what a replication run is, and pass in both.
+    /// </summary>
+    public enum RunMode
+    {
+        Supervisor,
+        Runner,
+    }
+
+    public static TheoryData<RunMode> Modes => new() { RunMode.Supervisor, RunMode.Runner };
+
     private static readonly GitAuthor Author = new("Test", "test@example.com");
     private static string ServerConnectionString =>
         Environment.GetEnvironmentVariable("DBDATASYNC_TEST_MSSQL_SERVER")
@@ -50,6 +64,9 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime
     private ChangeWatermarkStore _watermarkStore = null!;
     private LogWriter _logWriter = null!;
     private SqlConnection _adminConnection = null!;
+    private SecretStore _secrets = null!;
+    private RunnerRig? _rig;
+    private string? _packageSource;
 
     public async Task InitializeAsync()
     {
@@ -78,7 +95,7 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime
             CREATE TABLE dbo.[{_reloadTargetTable}] (Id INT NOT NULL PRIMARY KEY, Name NVARCHAR(50) NOT NULL);
             """);
 
-        var secretStore = SecretStore.ForProviders([new InMemorySecretProvider()]);
+        var secretStore = _secrets = SecretStore.ForProviders([new InMemorySecretProvider()]);
         var stateDatabase = new StateDatabase(Path.Combine(_repoRoot, "state.db"));
         var driverRegistry = new DriverRegistry();
         driverRegistry.Register(new MsSqlDriver());
@@ -105,8 +122,17 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime
         await SetUpConfigAsync();
     }
 
+    public void Dispose() => _rig?.Dispose();
+
+    private static void Delete(string? directory)
+    {
+        if (directory is not null) try { GitTempDirectory.DeleteRecursively(directory); } catch (Exception) { /* a temporary directory left behind is untidy, not wrong */ }
+    }
+
     public async Task DisposeAsync()
     {
+        _rig?.Dispose();
+        Delete(_packageSource);
         _adminConnection.Dispose();
 
         await using var bootstrap = new SqlConnection(ServerConnectionString);
@@ -253,6 +279,30 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// One pass of the replication by whoever <paramref name="mode"/> says, to its end: the supervisor's worker drains a queued pass of the mapping; the runner's drain is asked to run now (<c>run_all</c>: a cron's next
+    /// occurrence is not for minutes) and ends when its queue is empty. The mapping's first pass captures its position and queues its initial load, which the same worker or drain runs.
+    /// </summary>
+    private async Task<RunStatus> RunPassAsync(RunMode mode, string taskName = "e2e-sync")
+    {
+        if (mode == RunMode.Supervisor) return (await EnqueueAndDrainAsync(taskName)).Status;
+        if (_rig is null)
+        {
+            _packageSource = await RunnerPackageSource.CreateAsync(_repoRoot, DriverIds.MsSql);
+            _rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, new[] { "src-conn", "tgt-conn" }.Select(name => _configRepository.LoadConnection(name).CredentialSecretRef!)
+                .ToDictionary(reference => _secrets.EnvName(reference), reference => _secrets.Resolve(reference)));
+        }
+
+        var request = await _rig.DrainRequestAsync(_packageSource!, taskName, runId: Guid.CreateVersion7(), chain: Guid.CreateVersion7().ToString(), runAll: true);
+        var result = await _rig.Executor.RunAsync(request);
+        return result.End.State == TaskEndState.Succeeded && result.ExitCode == 0 ? RunStatus.Succeeded : RunStatus.Failed;
+    }
+
+    /// <summary>The position of the mapping <c>main</c> of the default replication as the mode keeps it: Sync's own state, or the runner's checkpoint.</summary>
+    private string? PositionFor(RunMode mode, string table) => mode == RunMode.Supervisor
+        ? WatermarkFor(table)
+        : _rig?.Watermark(WatermarkKey.Build(new SourceTableRef { ConnectionName = "src-conn", Database = _databaseName, Schema = "dbo", Table = table }, MsSqlDialect.Instance))?.Position;
+
+    /// <summary>
     /// Phase 134: a mapping whose reader captures its own position (<c>IPositionCapturing</c> — Change
     /// Tracking, CDC, TriggerAudit) never loads on its *own* first Primary pass any more — that pass
     /// only captures a position and requests a Bulk Load, which runs concurrently on the worker's other
@@ -347,24 +397,24 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime
         Assert.Equal(new Dictionary<int, string> { [1] = "Alice", [2] = "Bob" }, await GetTargetRowsAsync());
     }
 
-    [Fact]
-    public async Task FullPipeline_FullLoadThenIncrementalRun_ReplicatesAndRecordsState()
+    [Theory]
+    [MemberData(nameof(Modes))]
+    public async Task FullPipeline_FullLoadThenIncrementalRun_ReplicatesAndRecordsState(RunMode mode)
     {
         await ExecuteAsync(_adminConnection, $"INSERT INTO dbo.[{_sourceTable}] (Id, Name) VALUES (1, 'Alice'), (2, 'Bob');");
 
-        var firstRun = await EnqueueAndDrainAsync();
-
-        Assert.Equal(RunStatus.Succeeded, firstRun.Status);
+        Assert.Equal(RunStatus.Succeeded, await RunPassAsync(mode));
         Assert.Equal(new Dictionary<int, string> { [1] = "Alice", [2] = "Bob" }, await GetTargetRowsAsync());
+        var position = PositionFor(mode, _sourceTable);
+        Assert.NotNull(position);
 
         await ExecuteAsync(_adminConnection, $"INSERT INTO dbo.[{_sourceTable}] (Id, Name) VALUES (3, 'Carol');");
         await ExecuteAsync(_adminConnection, $"UPDATE dbo.[{_sourceTable}] SET Name = 'Robert' WHERE Id = 2;");
         await ExecuteAsync(_adminConnection, $"DELETE FROM dbo.[{_sourceTable}] WHERE Id = 1;");
 
-        var secondRun = await EnqueueAndDrainAsync();
-
-        Assert.Equal(RunStatus.Succeeded, secondRun.Status);
+        Assert.Equal(RunStatus.Succeeded, await RunPassAsync(mode));
         Assert.Equal(new Dictionary<int, string> { [2] = "Robert", [3] = "Carol" }, await GetTargetRowsAsync());
+        Assert.NotEqual(position, PositionFor(mode, _sourceTable));
     }
 
     /// <summary>
@@ -613,28 +663,27 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime
     /// rows are skipped by every pass afterwards and the two sides silently diverge, with nothing
     /// left to notice it by.
     /// </summary>
-    [Fact]
-    public async Task AFailedWrite_LeavesTheWatermarkWhereItWas_SoTheChangesAreNotSkipped()
+    [Theory]
+    [MemberData(nameof(Modes))]
+    public async Task AFailedWrite_LeavesTheWatermarkWhereItWas_SoTheChangesAreNotSkipped(RunMode mode)
     {
         await ExecuteAsync(_adminConnection, $"INSERT INTO dbo.[{_sourceTable}] (Id, Name) VALUES (1, 'Alice');");
-        Assert.Equal(RunStatus.Succeeded, (await EnqueueAndDrainAsync()).Status);
-        var watermarkBefore = WatermarkFor(_sourceTable);
+        Assert.Equal(RunStatus.Succeeded, await RunPassAsync(mode));
+        var watermarkBefore = PositionFor(mode, _sourceTable);
 
         // Changes the pass will read, and a target it cannot write them to. The read succeeds, so the
         // watermark this pass *would* record is a real, later one.
         await ExecuteAsync(_adminConnection, $"INSERT INTO dbo.[{_sourceTable}] (Id, Name) VALUES (2, 'Bob');");
         await ExecuteAsync(_adminConnection, $"DROP TABLE dbo.[{_targetTable}];");
 
-        var failed = await EnqueueAndDrainAsync();
-
-        Assert.Equal(RunStatus.Failed, failed.Status);
-        Assert.Equal(watermarkBefore, WatermarkFor(_sourceTable));
+        Assert.Equal(RunStatus.Failed, await RunPassAsync(mode));
+        Assert.Equal(watermarkBefore, PositionFor(mode, _sourceTable));
 
         // And the proof that it matters: with the target back, the next pass still sees Bob.
         await ExecuteAsync(_adminConnection,
             $"CREATE TABLE dbo.[{_targetTable}] (Id INT NOT NULL PRIMARY KEY, Name NVARCHAR(50) NOT NULL);");
 
-        Assert.Equal(RunStatus.Succeeded, (await EnqueueAndDrainAsync()).Status);
+        Assert.Equal(RunStatus.Succeeded, await RunPassAsync(mode));
 
         // Bob, and only Bob: Alice went with the dropped table, and the watermark correctly says she
         // was already delivered, so an incremental pass has no reason to send her again. Bob is the

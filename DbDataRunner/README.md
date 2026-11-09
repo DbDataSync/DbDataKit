@@ -60,6 +60,8 @@ A publisher owns the packages it creates (the first publisher of a name owns it,
 
 **Signatures (plan 30 section 6.2) are not built yet.** Every version is recorded as `unsigned` (in the audit and in the publish answer). The seam is `IVersionSignatureVerifier` (the default checks nothing); the administrator's setting `require_signatures` (`package require-signatures on`, or `PUT /api/v1/settings/require_signatures`) refuses a version that is not verified, naming the missing signature, so with the setting on and no verifier every publish is refused.
 
+A runtime package (plan 28c E04) is run from a read-only view shared by the runs that use it; the view is made of links, except for a runtime that a host program starts (`dotnet {runtime}/bin/Engine.dll`, as Sync's engine is), which gets copies, because the host looks for its runtime configuration beside the object a link points at.
+
 After a publish with `serve` (the default until staging activates by itself, slice R17), an activation, a switch or a rollback, the runner rebuilds the task schedule of that package and channel, so the scheduler runs the version the channel serves; a retire removes the schedule.
 
 ## Packages: `package install` is the development path

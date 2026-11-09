@@ -136,6 +136,57 @@ public sealed class SchedulerServiceHoldTests(TestApiFactory factory) : IClassFi
     /// Plan 28c E12d, the guard against both paths processing a mapping: a replication the runner owns is planned by the runner's drain only. A tick of this API's scheduler queues nothing for it (and so starts no worker),
     /// and the supervisor refuses to start one if something asks. A mapping that has never run is due at once, so without the guard this tick would queue a pass for it.
     /// </summary>
+    /// <summary>The real supervisor with its one decision to start a worker recorded and not carried out: what a tick asks for, without a process (plan 28c E12e).</summary>
+    private sealed class SpySupervisor(IServiceProvider services) : ProcessSupervisor(
+        services.GetRequiredService<DbDataSync.Api.Configuration.ApiOptions>(), services.GetRequiredService<ConfigRepository>(), services.GetRequiredService<TaskRunStore>(), services.GetRequiredService<RunLockStore>(),
+        services.GetRequiredService<WorkQueueStore>(), services.GetRequiredService<DbDataSync.Api.State.RunnerToken>(), services.GetRequiredService<DbDataSync.Api.State.StateHost>(),
+        services.GetRequiredService<DbDataSync.Api.State.JournalRecovery>(), NullLogger<ProcessSupervisor>.Instance, services.GetRequiredService<DbDataSync.Api.Runner.RunnerOwnerFile>())
+    {
+        public List<string> Asked { get; } = [];
+
+        public override TriggerResult EnsureWorkerRunning(string taskName)
+        {
+            Asked.Add(taskName);
+            // the real refusal for a replication the runner owns (it starts nothing); for any other the request is all that happens
+            return services.GetRequiredService<DbDataSync.Api.Runner.RunnerOwnerFile>().OwnerOf(taskName) == DbDataKit.State.TaskOwners.Runner ? base.EnsureWorkerRunning(taskName) : TriggerResult.Started([]);
+        }
+    }
+
+    private SchedulerService SchedulerWith(ProcessSupervisor supervisor) => new(
+        factory.Services.GetRequiredService<ConfigRepository>(), factory.Services.GetRequiredService<TaskRunStore>(), factory.Services.GetRequiredService<WorkQueueStore>(),
+        supervisor, factory.Services.GetRequiredService<ChangePollingGate>(), factory.Services.GetRequiredService<ChangeWatermarkStore>(),
+        factory.Services.GetRequiredService<DriverRegistry>(), factory.Services.GetRequiredService<ReconcileService>(), NullLogger<SchedulerService>.Instance,
+        factory.Services.GetRequiredService<DbDataSync.Api.Runner.RunnerOwnerFile>());
+
+    /// <summary>
+    /// The control for <see cref="RunnerOwned_NotPlannedByTick_NoWorker"/> (plan 28c E12e): the same replication, the same tick, with the owner <c>old</c>, plans the mapping's pass and asks the supervisor for a worker, so the
+    /// guard is what stops it and not something else about the set-up. The supervisor is a spy: the request is recorded and no process starts.
+    /// </summary>
+    [Fact]
+    public async Task OwnerOld_IsPlanned_RunnerOwned_IsNot()
+    {
+        var (task, _) = await SetUpHeldMappingAsync();
+        var owners = factory.Services.GetRequiredService<DbDataSync.Api.Runner.RunnerOwnerFile>();
+        var queue = factory.Services.GetRequiredService<WorkQueueStore>();
+        var spy = new SpySupervisor(factory.Services);
+
+        owners.SetOwner(task.Name, DbDataKit.State.TaskOwners.Runner);
+        try
+        {
+            await TickAsync(SchedulerWith(spy));
+            Assert.DoesNotContain(task.Name, spy.Asked);
+            Assert.False(queue.HasOutstandingWork(task.Name));
+        }
+        finally
+        {
+            owners.SetOwner(task.Name, DbDataKit.State.TaskOwners.Old);
+        }
+
+        await TickAsync(SchedulerWith(spy));
+        Assert.True(queue.HasOutstandingWork(task.Name), "the tick queued nothing for a replication whose owner is old");
+        Assert.Contains(task.Name, spy.Asked);
+    }
+
     [Fact]
     public async Task RunnerOwned_NotPlannedByTick_NoWorker()
     {
