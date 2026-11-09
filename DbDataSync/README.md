@@ -17,6 +17,7 @@ PostgreSQL target, for example. Support varies by engine:
 | Source (read from)            | Yes                             | Yes                        | Yes                         | Yes                                  | Yes (query only) |
 | Target (write to)             | Yes                             | Yes                        | Yes                         | Yes                                  | No               |
 | Incremental sync              | Native (Change Tracking / CDC)  | Native (logical decoding)  | Watermark column             | Native (Flashback Version Query)    | N/A              |
+| Change writer for an incremental pass (inserts, updates, deletes) | `ChangeApply` (default) or `MsSqlMerge` | `ChangeApply` (default)    | `ChangeApply` (default)      | `ChangeApply` (default)             | N/A              |
 | Backfill / batch reload       | Yes                             | Yes                        | Yes                         | Yes                                  | N/A              |
 | Bulk staging                  | Native (SqlBulkCopy)            | Native (binary COPY)       | Generic (batched insert)     | Generic (batched insert)            | N/A              |
 | Direct bulk load (no staging) | Yes (`PassThrough` + `MsSqlBulkInsert`) | Not yet                    | Not yet                      | Not yet                             | N/A              |

@@ -22,8 +22,40 @@ public static class PipelineResolution
     public static CacheConfig Cache(ReplicationTaskConfig task, TableMappingConfig? mapping) =>
         mapping?.CacheOverride ?? task.ChangeProcessing.Cache;
 
+    /// <summary>The change writer of every engine (<c>ChangeApplyWriter</c>): the default behind an incremental reader when no writer is named.</summary>
+    public const string ChangeWriterKind = "ChangeApply";
+
+    /// <summary>The reload writer every engine has (<c>DeleteInsertWriter</c>): the default behind a reload reader, and for a Bulk Load, when no writer is named.</summary>
+    public const string ReloadWriterKind = "DeleteInsert";
+
+    /// <summary>
+    /// The writer a pipeline gets when no writer is named: <see cref="ChangeWriterKind"/> behind an incremental reader (Change Tracking, CDC, watermark, trigger audit,
+    /// logical slot, Flashback), <see cref="ReloadWriterKind"/> behind any other. A default is never silent: it is in the release notes and in the docs
+    /// (Sync "Staging and writers"), and a test pins it.
+    /// </summary>
+    public static string DefaultWriterKind(string readerKind) =>
+        ConfigValidation.IsIncrementalReader(readerKind) ? ChangeWriterKind : ReloadWriterKind;
+
+    /// <summary>
+    /// Names the writer of a replication whose file leaves it out (<see cref="DefaultWriterKind"/> for its reader) and marks it as the default, so everything that
+    /// reads the task sees a writer. Called wherever a task is read from a file.
+    /// </summary>
+    public static ReplicationTaskConfig ApplyDefaults(ReplicationTaskConfig task)
+    {
+        var cp = task.ChangeProcessing;
+        if (cp.Writer is null)
+        {
+            cp.Writer = new WriterConfig { Kind = DefaultWriterKind(cp.Reader.Kind) };
+            cp.WriterIsDefault = true;
+        }
+        return task;
+    }
+
     public static WriterConfig Writer(ReplicationTaskConfig task, TableMappingConfig? mapping) =>
-        mapping?.WriterOverride ?? task.ChangeProcessing.Writer;
+        mapping?.WriterOverride
+        ?? (task.ChangeProcessing.WriterIsDefault
+            ? new WriterConfig { Kind = DefaultWriterKind(Reader(task, mapping).Kind) }
+            : task.ChangeProcessing.Writer);
 
     /// <summary>
     /// The Kind a pass actually runs, most specific first.
@@ -62,7 +94,9 @@ public static class PipelineResolution
         mapping?.BulkLoadCacheOverride ?? task.BulkLoad.Cache ?? Cache(task, mapping);
 
     public static WriterConfig BulkLoadWriter(ReplicationTaskConfig task, TableMappingConfig? mapping) =>
-        mapping?.BulkLoadWriterOverride ?? task.BulkLoad.Writer ?? Writer(task, mapping);
+        mapping?.BulkLoadWriterOverride ?? task.BulkLoad.Writer
+        // a writer nobody named reloads: the change writer is for the change feed, a Bulk Load reads the whole table and wants the reconciling one
+        ?? (mapping?.WriterOverride is null && task.ChangeProcessing.WriterIsDefault ? new WriterConfig { Kind = ReloadWriterKind } : Writer(task, mapping));
 
     public static string BulkLoadReaderKind(string? workItemKind, ReplicationTaskConfig task, TableMappingConfig? mapping) =>
         workItemKind ?? BulkLoadReader(task, mapping).Kind;

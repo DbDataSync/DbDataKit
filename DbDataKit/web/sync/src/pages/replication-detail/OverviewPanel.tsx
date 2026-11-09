@@ -19,7 +19,7 @@ import { offeredIntents } from './readIntent'
 import { versionsRows, withoutNaturalKey } from './naturalKey'
 import { useConnections, useReplication, useReplicationCapabilities, useScripts, useTableMappings } from '../../api/hooks'
 import type { ParameterDescriptor, ProvisioningConfig, ReplicationTaskConfig } from '../../api/types'
-import { RECONCILE_ONLY_KINDS } from '../../api/types'
+import { RECONCILE_ONLY_KINDS, writerForReader, writerNote } from '../../api/types'
 
 type Stage = 'reader' | 'cache' | 'writer'
 
@@ -123,13 +123,27 @@ export function PipelineTab() {
   const setStageValue = (id: Stage, patch: object) =>
     setDraft({ ...draft, changeProcessing: { ...draft.changeProcessing, [id]: { ...draft.changeProcessing[id], ...patch } } })
 
+  // Choosing a reader that reads changes while the writer is one that reconciles would be refused at save: offer the change writer (ChangeApply) in its place.
+  // The operator can still pick another; a writer that does not reconcile is never touched.
+  const setReaderKind = (kind: string) => {
+    const writer = writerForReader(kind, capabilities.readers, capabilities.writers, draft.changeProcessing.writer.kind)
+    setDraft({
+      ...draft,
+      changeProcessing: {
+        ...draft.changeProcessing,
+        reader: { ...draft.changeProcessing.reader, kind },
+        ...(writer ? { writer: { kind: writer, options: {} } } : {}),
+      },
+    })
+  }
+
   // KeyReconcile/KeyReconcileDelete (phase 124) exist only for the delete-diff sweep's own trigger —
   // never a Kind an ordinary Change Processing pipeline picks.
   const kindsFor = (id: Stage) =>
     id === 'reader'
       ? capabilities.readers.filter((r) => !RECONCILE_ONLY_KINDS.has(r.kind)).map((r) => ({ kind: r.kind, note: readerNotes(r).join(' · ') || undefined }))
     : id === 'writer'
-      ? capabilities.writers.filter((w) => !RECONCILE_ONLY_KINDS.has(w.kind)).map((w) => ({ kind: w.kind, note: w.supportsReconciliation ? 'reconciling' : 'upsert-only' }))
+      ? capabilities.writers.filter((w) => !RECONCILE_ONLY_KINDS.has(w.kind)).map((w) => ({ kind: w.kind, note: writerNote(w) }))
     : capabilities.stagingProviders.map((p) => ({ kind: p.kind, note: undefined }))
 
   /** What the chosen Kind says it takes. Declared by the component that reads them, so choosing a
@@ -187,7 +201,7 @@ export function PipelineTab() {
               <select
                 className="select"
                 value={current.kind}
-                onChange={(e) => setStageValue(stage, { kind: e.target.value })}
+                onChange={(e) => (stage === 'reader' ? setReaderKind(e.target.value) : setStageValue(stage, { kind: e.target.value }))}
                 data-testid={`${stage}-kind-select`}
               >
                 {!known && current.kind && <option value={current.kind}>{current.kind} — not offered by this driver</option>}

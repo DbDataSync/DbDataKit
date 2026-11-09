@@ -11,7 +11,7 @@ import {
 } from '../../api/hooks'
 import { resolveSide } from '../../api/resolveEndpoint'
 import type { BatchReloadSegment, SegmentMode } from '../../api/types'
-import { RECONCILE_ONLY_KINDS, runsAgainstAConnection } from '../../api/types'
+import { RECONCILE_ONLY_KINDS, runsAgainstAConnection, writerNote } from '../../api/types'
 import { readerNotes } from '../../api/readerNotes'
 
 /**
@@ -351,7 +351,7 @@ export function BulkLoadForm({ replicationName, onQueued, onClose }: {
           <Field label="Writer">
             <select className="select" value={selectedWriter} onChange={(e) => setWriterKind(e.target.value)} data-testid="bulk-load-writer-select">
               {availableWriters.map((w) => (
-                <option key={w.kind} value={w.kind}>{w.supportsReconciliation ? `${w.kind} — reconciling` : `${w.kind} — upsert-only`}</option>
+                <option key={w.kind} value={w.kind}>{`${w.kind} — ${writerNote(w)}`}</option>
               ))}
             </select>
           </Field>

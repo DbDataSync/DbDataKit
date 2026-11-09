@@ -116,12 +116,46 @@ anywhere including ODBC/JDBC).
 
 | Writer | Reconciles? | Does |
 | --- | --- | --- |
-| `MsSqlMerge` | No | A single `MERGE` — inserts, updates, applies explicit deletes the change set names. A target row the change set simply doesn't mention is left alone: exactly right for an incremental feed. |
+| `ChangeApply` | No | **The change writer of every engine, and the default behind an incremental reader** (SQL Server, PostgreSQL, MySQL, MariaDB, Oracle, and descriptor drivers that offer it). Loads nothing itself: the staged rows (with the operation marker I/U/D and their arrival order) are collapsed to the last change per key, then one transaction runs a `DELETE`, an `UPDATE` and an `INSERT` against the target. No `MERGE`, `ON CONFLICT` or `ON DUPLICATE KEY`; the `UPDATE` uses each engine's own join form. See [ChangeApply](#changeapply-the-change-writer-of-every-engine). |
+| `MsSqlMerge` | No | A single `MERGE` — inserts, updates, applies explicit deletes the change set names. A target row the change set simply doesn't mention is left alone: exactly right for an incremental feed. SQL Server only; a replication that names it keeps it. |
 | `Snapshot` | No — can't | Appends every staged row, timestamped. No comparison, no delete — for a target whose whole job is keeping what used to be there. |
 | `Scd2` | No — deliberately not | The historized writer: keeps every version of every key rather than just the current one, via `DS_ValidFrom`/`DS_ValidTo`/`DS_IsCurrent`. Needs a reader that reports deletes to ever close a version for a deleted key — paired with one that doesn't, a deleted source row just stays current forever, which the writer picker says plainly. |
 | `MsSqlMergeReconcile` / `MergeReconcile` | **Yes** | Inserts, updates, *and* deletes target rows in scope but absent from the change set — what lets a `BatchReload` converge. |
 | `MsSqlBulkInsert` | **Yes** | Loads straight into the target with `SqlBulkCopy` — nothing staged. Paired with the `PassThrough` cache; see [Loading straight into the target](#loading-straight-into-the-target). |
 | `MsSqlDeleteInsert` / `DeleteInsert` | **Yes** | Delete everything in scope, insert the staged set. No primary key needed — nothing is joined row by row. The portable option: what makes `Watermark` mode useful even on an engine with no delete-aware change source, when paired with a segmented reload. |
+
+#### ChangeApply, the change writer of every engine
+
+An incremental pass stages only what changed, so the writer must add, change and remove rows by key and must never remove a row the pass does not mention. Every engine can do that
+with three plain statements; only the `MERGE`/upsert spellings differ, and `ChangeApply` does not use one. In one transaction on the target:
+
+1. **Collapse.** The staging table keeps the last row per key (the highest arrival ordinal) and drops the rest. Several changes to one key in one pass are normal for a logical slot
+   and for CDC's all-changes mode: *insert then update* is an insert of the final values, *insert then delete* is a delete of a key that is not there (nothing), *update then delete*
+   is a delete, *delete then insert* is an update to the final values. Change Tracking, net-changes CDC, `TriggerAudit` and `Watermark` already hand over one row per key.
+2. **Delete** the target rows whose key has a delete-marked staged row.
+3. **Update** the non-key columns of the target rows whose key the stage holds, in the engine's own form: SQL Server `UPDATE t SET .. FROM t JOIN s`, PostgreSQL `UPDATE t SET .. FROM s WHERE ..`,
+   MySQL and MariaDB `UPDATE t JOIN s ON .. SET ..`, Oracle a correlated `UPDATE t SET (..) = (SELECT ..) WHERE EXISTS (..)`.
+4. **Insert** the staged rows (not delete-marked) whose key the target does not hold, `INSERT .. SELECT` with an anti-join.
+
+The delete runs first, so a unique value that moves from a deleted row to an inserted one never collides.
+
+- **Replay is safe.** The statements converge on the final state and count nothing: a delete of a key that is gone deletes nothing, the update sets final values, the insert only adds keys the
+  target lacks. A pass applied twice (a retry, or a crash after the target committed and before the position was saved) leaves the same target. A pass is one transaction, so it is applied
+  whole or not at all (`applyBatchSize` still splits each statement into slices of staged rows, inside that one transaction).
+- **The key is the target's primary key**, and the mapping must write it. A target without one is refused with a message that says so; read the whole table with `BatchReload` and write with
+  `DeleteInsert` for a keyless table. A key column is NOT NULL, as a primary key is.
+- **A key change** reaches the writer as a delete of the old key and an insert of the new row. Change Tracking, CDC and the logical-slot reader say it so. `TriggerAudit` and `Watermark` cannot:
+  a trigger records the new key of an update only, and a watermark scan sees only rows that exist, so after a primary key update at the source the old key stays in the target until a reload or the
+  delete-reconcile sweep removes it (the same with `MsSqlMerge`).
+- **Generated (identity) columns** that are not part of the key are written on insert and never updated.
+- It does not reconcile: a target row the stage does not mention is left alone, which is why it is accepted behind every incremental reader, where a reconciling writer is refused.
+- It needs a staging cache (`StagingTable`, `MsSqlStagingTable`, `PgCopyStaging`); it is refused behind `PassThrough`, which stages nothing.
+
+**The default.** When a replication's `changeProcessing.writer` is left out of `task.yaml`, Sync names one when it reads the file: `ChangeApply` behind an incremental reader (`MsSqlChangeTracking`,
+`MsSqlCdc`, `Watermark`, `TriggerAudit`, `PgLogicalSlot`, `OracleFlashback`), `DeleteInsert` behind any other reader, as the Add replication screen always started. A table mapping that overrides the reader
+gets the default for its own reader while the replication's writer is unnamed, and a Bulk Load of an unnamed writer reloads with `DeleteInsert`. **A writer that is named is never changed**: every
+existing `MsSqlMerge` (or any other) configuration keeps running as written. Choosing an incremental reader on the Pipeline screen offers `ChangeApply` for the writer when the writer was a reconciling one.
+Saving a replication writes the writer into the file. This default is in the [release notes](../../docs/release-notes/sync-change-apply.md).
 
 #### Loading straight into the target
 
@@ -169,8 +203,8 @@ reader that reads the whole scope (`BatchReload`, or a Bulk Load). Behind an inc
 (`Watermark`, `TriggerAudit`, Change Tracking, CDC, a logical slot, Flashback) a pass stages only what
 changed, and the writer would delete every other target row. Saving a mapping with that pairing for change
 processing is refused, and a mapping that reaches it anyway (saved before the rule, or its replication's
-writer changed since) fails its incremental pass before anything is read. Use an upsert writer such as
-`MsSqlMerge` for change processing, and set the reconciling writer on the Bulk Load pipeline if full
+writer changed since) fails its incremental pass before anything is read. Use an upsert writer for change processing — `ChangeApply` on every engine
+(the default when no writer is named), or `MsSqlMerge` on SQL Server — and set the reconciling writer on the Bulk Load pipeline if full
 reloads should use it.
 
 ## Bulk loading (backfill)

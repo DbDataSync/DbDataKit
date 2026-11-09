@@ -1034,6 +1034,30 @@ export type RunKind = 'Primary' | 'BulkLoad' | 'ReconcileDeletes'
  * the same pair's ending for a mapping whose own writer is `Scd2` — exist only for a delete-diff
  * sweep, never offered in an ordinary Change Processing or Bulk Load reader/writer picker, which is
  * what every `capabilities.readers`/`.writers` list gets filtered against before rendering one. */
+/** The change writer of every engine (`ChangeApplyWriter`): collapses the staged rows to the last change per key, then a DELETE, an UPDATE and an INSERT, no MERGE.
+ * The default behind an incremental reader when no writer is named (plan 28c, CW01). */
+export const CHANGE_WRITER_KIND = 'ChangeApply'
+
+/** What the writer pickers say next to a writer's kind. */
+export function writerNote(w: WriterCapability): string {
+  if (w.supportsReconciliation) return 'reconciling'
+  return w.kind === CHANGE_WRITER_KIND ? 'change writer, default' : 'upsert-only'
+}
+
+/**
+ * The writer to offer when the reader changes to `readerKind`: the change writer, when the reader reads changes (it declares `Changes`), the target has it and the writer in place is one
+ * that reconciles (which would be refused behind that reader). Null: leave the writer alone, which is every other case, and always a writer the operator chose that does not reconcile.
+ */
+export function writerForReader(
+  readerKind: string, readers: ReaderCapability[], writers: WriterCapability[], currentWriterKind: string,
+): string | null {
+  const reader = readers.find((r) => r.kind === readerKind)
+  if (!reader?.supportedIntents.includes('Changes')) return null
+  if (!writers.some((w) => w.kind === CHANGE_WRITER_KIND)) return null
+  const current = writers.find((w) => w.kind === currentWriterKind)
+  return current?.supportsReconciliation ? CHANGE_WRITER_KIND : null
+}
+
 export const RECONCILE_ONLY_KINDS: ReadonlySet<string> = new Set([
   'KeyReconcile',
   'KeyReconcileDelete',

@@ -315,7 +315,7 @@ public sealed class ConfigRepository
         var text = TryReadAllTextAllowingConcurrentReplace(path)
             ?? throw new FileNotFoundException($"Replication task '{replicationName}' was not found.", path);
 
-        var task = StrictConfigFile.Load(text, path, YamlConfigSerializer.Deserialize<ReplicationTaskConfig>);
+        var task = PipelineResolution.ApplyDefaults(StrictConfigFile.Load(text, path, YamlConfigSerializer.Deserialize<ReplicationTaskConfig>));
         task.Checks = ReplicationChecks.Read(text, path);
         return task;
     }
@@ -558,7 +558,7 @@ public sealed class ConfigRepository
                 $"The config at commit '{sha}' has no {taskPath}, so replication '{replicationName}' " +
                 "cannot be rebuilt from it.");
 
-        var task = YamlConfigSerializer.Deserialize<ReplicationTaskConfig>(taskYaml);
+        var task = PipelineResolution.ApplyDefaults(YamlConfigSerializer.Deserialize<ReplicationTaskConfig>(taskYaml));
         if (!string.Equals(task.Name, replicationName, StringComparison.Ordinal))
             throw new ConfigValidationException(
                 $"The task.yaml at commit '{sha}' is for replication '{task.Name}', not " +
