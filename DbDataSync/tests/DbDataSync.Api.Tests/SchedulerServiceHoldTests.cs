@@ -132,6 +132,42 @@ public sealed class SchedulerServiceHoldTests(TestApiFactory factory) : IClassFi
     [Fact]
     public void BuildScheduler_ResolvesEveryDependency() => Assert.NotNull(BuildScheduler());
 
+    /// <summary>
+    /// Plan 28c E12d, the guard against both paths processing a mapping: a replication the runner owns is planned by the runner's drain only. A tick of this API's scheduler queues nothing for it (and so starts no worker),
+    /// and the supervisor refuses to start one if something asks. A mapping that has never run is due at once, so without the guard this tick would queue a pass for it.
+    /// </summary>
+    [Fact]
+    public async Task RunnerOwned_NotPlannedByTick_NoWorker()
+    {
+        var (task, mapping) = await SetUpHeldMappingAsync();
+        var owners = factory.Services.GetRequiredService<DbDataSync.Api.Runner.RunnerOwnerFile>();
+        owners.SetOwner(task.Name, DbDataKit.State.TaskOwners.Runner);
+        try
+        {
+            var scheduler = new SchedulerService(
+                factory.Services.GetRequiredService<ConfigRepository>(), factory.Services.GetRequiredService<TaskRunStore>(), factory.Services.GetRequiredService<WorkQueueStore>(),
+                factory.Services.GetRequiredService<ProcessSupervisor>(), factory.Services.GetRequiredService<ChangePollingGate>(), factory.Services.GetRequiredService<ChangeWatermarkStore>(),
+                factory.Services.GetRequiredService<DriverRegistry>(), factory.Services.GetRequiredService<ReconcileService>(), NullLogger<SchedulerService>.Instance, owners);
+
+            await TickAsync(scheduler);
+            await TickAsync(scheduler);
+
+            var queue = factory.Services.GetRequiredService<WorkQueueStore>();
+            Assert.False(queue.HasOutstandingWork(task.Name), "the tick queued work for a replication the runner owns");
+            Assert.Empty(factory.Services.GetRequiredService<TaskRunStore>().GetRunHistory(task.Name, RunKind.Primary));
+            var supervisor = factory.Services.GetRequiredService<ProcessSupervisor>();
+            var asked = supervisor.EnsureWorkerRunning(task.Name);
+            Assert.Equal(TriggerOutcome.FailedToStart, asked.Outcome);
+            Assert.Contains("owned by the runner", asked.Reason);
+            Assert.False(supervisor.DescribeStatus(task.Name).Running);
+            Assert.Equal(mapping.Name, Assert.Single(factory.Services.GetRequiredService<ConfigRepository>().ListTableMappings(task.Name)));
+        }
+        finally
+        {
+            owners.SetOwner(task.Name, DbDataKit.State.TaskOwners.Old);
+        }
+    }
+
     [Fact]
     public async Task AHeldMapping_IsNotDispatchedOnTheNextTick()
     {
