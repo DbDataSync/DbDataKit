@@ -1190,6 +1190,12 @@ export interface RunHistoryFilters {
 export interface RunHistoryPage {
   runs: TaskRunRecord[]
   nextCursor: string | null
+  /**
+   * Set when the replication is the runner's (plan 28c E13) and the runner could not be asked: the runs listed are
+   * this server's own, and the ones the runner holds are missing for the reason given. Said on the screen, so a
+   * history that lacks them is never mistaken for one that is complete.
+   */
+  runnerUnavailable?: string | null
 }
 
 /**
