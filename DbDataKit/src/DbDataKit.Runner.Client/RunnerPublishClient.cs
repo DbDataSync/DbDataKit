@@ -92,6 +92,9 @@ public sealed record ClientRun(Guid Id, string Task, int Attempt, string Outcome
         (string?)r["failure"]?["kind"], (string?)r["failure"]?["message"], (string?)r["package_version"]);
 }
 
+/// <summary>One line of a run's log as the runner holds it.</summary>
+public sealed record ClientLogLine(long Id, DateTimeOffset At, string Level, string? Item, string Message);
+
 /// <summary>A completed step of a task's run: its key, when it started and completed, and its result as JSON text (null for a step that has none).</summary>
 public sealed record ClientStep(string Key, DateTimeOffset Started, DateTimeOffset? Completed, string? Result);
 
@@ -395,6 +398,26 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
         using var response = await link.SendAsync(HttpMethod.Get, "api/v1/runs?" + query, null, ct);
         if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to list the runs of {package}/{channel}" + (task is null ? "" : "/" + task), ct);
         return [.. JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!["runs"]!.AsArray().Select(r => ClientRun.From(r!))];
+    }
+
+    /// <summary>One run by id (<c>GET /api/v1/runs/{id}</c>), or null when the runner has none.</summary>
+    public async Task<ClientRun?> RunAsync(string server, string? code, Guid id, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        using var response = await link.SendAsync(HttpMethod.Get, $"api/v1/runs/{id}", null, ct);
+        if (response.StatusCode == HttpStatusCode.NotFound) return null;
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to read the run {id}", ct);
+        return ClientRun.From(JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!);
+    }
+
+    /// <summary>The lines of a run's log after line <paramref name="after"/> (<c>GET /api/v1/runs/{id}/logs</c>, the viewer role); null when the runner has no such run.</summary>
+    public async Task<IReadOnlyList<ClientLogLine>?> RunLogsAsync(string server, string? code, Guid id, long? after = null, int limit = 200, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        using var response = await link.SendAsync(HttpMethod.Get, $"api/v1/runs/{id}/logs?limit={limit}" + (after is { } a ? $"&after={a}" : ""), null, ct);
+        if (response.StatusCode == HttpStatusCode.NotFound) return null;
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to read the log of the run {id}", ct);
+        return [.. JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!["lines"]!.AsArray().Select(l => new ClientLogLine((long)l!["id"]!, Time(l["at"])!.Value, (string)l["level"]!, (string?)l["item"], (string)l["message"]!))];
     }
 
     /// <summary>The completed steps named <paramref name="step"/> across the runs of a task, newest first (<c>GET .../steps/{name}</c>, the viewer role), their results as JSON text.</summary>

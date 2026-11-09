@@ -22,7 +22,9 @@ public sealed class RunMonitorService(
     ProcessSupervisor supervisor,
     TaskRunStore taskRunStore,
     LogWriter logWriter,
-    IHubContext<RunHub> hub) : BackgroundService
+    IHubContext<RunHub> hub,
+    DbDataSync.Api.Runner.RunnerRunStreamer runnerStream,
+    ILogger<RunMonitorService> logger) : BackgroundService
 {
     private static readonly TimeSpan TickInterval = TimeSpan.FromSeconds(1);
     // Wider than TickInterval so a "recently ended" run is never missed due to ordinary tick jitter —
@@ -38,7 +40,32 @@ public sealed class RunMonitorService(
     // "notified" flag on TaskRuns itself.
     private readonly HashSet<Guid> _notified = new();
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    /// <summary>
+    /// How often the runs of the replications a runner owns are looked at (plan 28c E13): faster than this server's own tick, because the lines are asked of another process over HTTP and the live view is meant to show a
+    /// line within a second of its being written. One request lists the runs; a request per run going reads its new lines.
+    /// </summary>
+    private static readonly TimeSpan RunnerTickInterval = TimeSpan.FromMilliseconds(400);
+
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) => Task.WhenAll(StreamOwnRunsAsync(stoppingToken), StreamRunnerRunsAsync(stoppingToken));
+
+    private async Task StreamRunnerRunsAsync(CancellationToken stoppingToken)
+    {
+        using var timer = new PeriodicTimer(RunnerTickInterval);
+        while (await timer.WaitForNextTickAsync(stoppingToken))
+        {
+            try
+            {
+                await runnerStream.Tick(stoppingToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // the runner's side of the live view is never allowed to end this service: the lines of this server's own runs go on
+                logger.LogWarning(ex, "The live view of the runner's runs failed; it is tried again.");
+            }
+        }
+    }
+
+    private async Task StreamOwnRunsAsync(CancellationToken stoppingToken)
     {
         supervisor.ReconcileOrphanedRuns();
 

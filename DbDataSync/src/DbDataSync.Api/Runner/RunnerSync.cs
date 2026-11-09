@@ -34,6 +34,10 @@ public sealed class ClientRunnerSync(RunnerPublishClient client, RunnerLink link
 {
     public Task<IReadOnlyList<ClientRun>> RunsAsync(string? task, int limit, DateTimeOffset? before, string? outcome, CancellationToken ct) => client.RunsAsync(link.Server, null, link.Package, link.Channel, task, limit, before, outcome, null, ct);
 
+    public Task<ClientRun?> RunAsync(Guid id, CancellationToken ct) => client.RunAsync(link.Server, null, id, null, ct);
+
+    public Task<IReadOnlyList<ClientLogLine>?> LogsAsync(Guid id, long? after, int limit, CancellationToken ct) => client.RunLogsAsync(link.Server, null, id, after, limit, null, ct);
+
     public Task<IReadOnlyList<ClientStep>> StepsAsync(string task, string step, int limit, DateTimeOffset? before, string? key, CancellationToken ct) => client.StepsAsync(link.Server, null, link.Package, link.Channel, task, step, limit, before, key, null, ct);
 
     public Task<ClientTaskSchedule> ScheduleOfAsync(string task, CancellationToken ct) => client.ScheduleOfAsync(link.Server, null, link.Package, link.Channel, task, null, ct);

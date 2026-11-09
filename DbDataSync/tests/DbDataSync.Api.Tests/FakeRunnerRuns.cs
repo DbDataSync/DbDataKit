@@ -12,7 +12,9 @@ public sealed class FakeRunnerRuns : IRunnerSync, IRunnerRuns
 {
     private readonly object _gate = new();
     private readonly List<ClientRun> _runs = [];
+    private readonly Dictionary<Guid, List<ClientLogLine>> _logs = [];
     private readonly List<(string Task, string Step, ClientStep Entry)> _steps = [];
+    private long _line;
 
     public bool Down { get; set; }
 
@@ -25,6 +27,25 @@ public sealed class FakeRunnerRuns : IRunnerSync, IRunnerRuns
         var run = new ClientRun(id ?? Guid.NewGuid(), task, 1, outcome, started, finished, rows, failedItem, kind, message, "1");
         lock (_gate) _runs.Add(run);
         return run;
+    }
+
+    public void Finish(Guid id, string outcome, DateTimeOffset at, long? rows = null)
+    {
+        lock (_gate)
+        {
+            var at0 = _runs.FindIndex(r => r.Id == id);
+            _runs[at0] = _runs[at0] with { Outcome = outcome, Finished = at, Rows = rows };
+        }
+    }
+
+    public long Log(Guid run, string message, DateTimeOffset? at = null, string level = "Information")
+    {
+        lock (_gate)
+        {
+            if (!_logs.TryGetValue(run, out var lines)) _logs[run] = lines = [];
+            lines.Add(new ClientLogLine(++_line, at ?? DateTimeOffset.UtcNow, level, null, message));
+            return _line;
+        }
     }
 
     public void AddStep(string task, string step, string key, string resultJson, DateTimeOffset started)
@@ -45,6 +66,19 @@ public sealed class FakeRunnerRuns : IRunnerSync, IRunnerRuns
         Enter();
         lock (_gate)
             return Task.FromResult<IReadOnlyList<ClientRun>>([.. _runs.Where(r => (task is null || r.Task == task) && (before is null || r.Started < before) && (outcome is null || r.Outcome == outcome)).OrderByDescending(r => r.Started).Take(limit)]);
+    }
+
+    public Task<ClientRun?> RunAsync(Guid id, CancellationToken ct)
+    {
+        Enter();
+        lock (_gate) return Task.FromResult(_runs.FirstOrDefault(r => r.Id == id));
+    }
+
+    public Task<IReadOnlyList<ClientLogLine>?> LogsAsync(Guid id, long? after, int limit, CancellationToken ct)
+    {
+        Enter();
+        lock (_gate)
+            return Task.FromResult<IReadOnlyList<ClientLogLine>?>(_runs.All(r => r.Id != id) ? null : [.. (_logs.GetValueOrDefault(id) ?? []).Where(l => after is null || l.Id > after).Take(limit)]);
     }
 
     public Task<IReadOnlyList<ClientStep>> StepsAsync(string task, string step, int limit, DateTimeOffset? before, string? key, CancellationToken ct)
