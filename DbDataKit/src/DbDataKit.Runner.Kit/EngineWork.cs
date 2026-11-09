@@ -22,8 +22,8 @@ public enum WorkFinish
 /// <summary>What the queue knows of one subject for one kind of work: when it was last queued (among the rows retention keeps) and whether an item of it is in flight now.</summary>
 public sealed record WorkSubject(DateTimeOffset LastEnqueued, bool InFlight);
 
-/// <summary>The queue of the run's owner, for the kinds asked: whether anything at all is in flight, and per kind the subjects the queue knows.</summary>
-public sealed record WorkSnapshot(bool Outstanding, IReadOnlyDictionary<string, IReadOnlyDictionary<string, WorkSubject>> Kinds)
+/// <summary>The queue of the run's owner, for the kinds asked: whether anything at all is in flight, and per kind the subjects the queue knows; and whether the run's task is paused on the runner (a pause stops the next start, a run that is up looks here to see it).</summary>
+public sealed record WorkSnapshot(bool Outstanding, IReadOnlyDictionary<string, IReadOnlyDictionary<string, WorkSubject>> Kinds, bool Paused = false)
 {
     /// <summary>The subjects of one kind (empty when the kind was not asked for or has none).</summary>
     public IReadOnlyDictionary<string, WorkSubject> Of(string kind) => Kinds.TryGetValue(kind, out var subjects) ? subjects : new Dictionary<string, WorkSubject>();

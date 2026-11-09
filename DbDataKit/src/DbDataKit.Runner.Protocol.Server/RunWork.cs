@@ -14,6 +14,10 @@ internal sealed class RunWork(StateDatabase database, RunIdentity identity, Time
     /// <summary>The service name of engines' work in the queue: not the runner's own (<c>runner</c>), so the runner's loop never sees these rows and an engine never sees the runner's.</summary>
     public const string Service = "runner.work";
 
+    /// <summary>The service name the runner's own scheduler keeps its job state and pauses under (<c>RunnerNames.EngineService</c>, which this project does not reference); a task paused there is paused for a run that asks.</summary>
+    public const string SchedulerService = "runner";
+
+    private readonly ModuleJobPauseStore _pauses = new(database, SchedulerService);
     private readonly ModuleWorkQueueStore _queue = new(database, Service) { LeaseDuration = lease ?? ModuleWorkQueueStore.DefaultLease };
     private int _used;
 
@@ -86,7 +90,7 @@ internal sealed class RunWork(StateDatabase database, RunIdentity identity, Time
         var result = new Dictionary<string, IReadOnlyDictionary<string, WorkSubject>>(StringComparer.Ordinal);
         foreach (var kind in kinds.Distinct(StringComparer.Ordinal))
             result[kind] = _queue.SubjectsOf(Owner, kind).ToDictionary(s => s.Key, s => new WorkSubject(s.Value.LastEnqueued, s.Value.InFlight), StringComparer.Ordinal);
-        return new WorkSnapshot(_queue.HasOutstandingWork(Owner), result);
+        return new WorkSnapshot(_queue.HasOutstandingWork(Owner), result, _pauses.IsPaused($"{identity.Task.Package}/{identity.Task.Channel}", identity.Task.Task));
     }
 
     /// <summary>The run is alive: every claim it holds lasts another lease.</summary>

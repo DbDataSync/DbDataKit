@@ -610,7 +610,7 @@ internal sealed class RunnerProtocolService(RunSessions sessions) : RunnerApi.Ru
     public override Task<WorkStateReply> WorkState(WorkStateRequest request, ServerCallContext context) => Guard(() =>
     {
         var snapshot = Started(context).Work.State([.. request.Kinds]);
-        var reply = new WorkStateReply { Outstanding = snapshot.Outstanding };
+        var reply = new WorkStateReply { Outstanding = snapshot.Outstanding, Paused = snapshot.Paused };
         foreach (var (kind, subjects) in snapshot.Kinds)
         {
             var state = new WorkKindState { Kind = kind };

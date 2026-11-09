@@ -41,12 +41,16 @@ internal interface IDrainLedger
 internal interface IDrainOutputs
 {
     void VerificationResult(VerificationResultRecord result);
+
+    /// <summary>The checks the polling gate made in a cycle (the gate's history, written by the drain; see <see cref="ProtocolPlannerState.TakeChecks"/>).</summary>
+    void ChangeChecks(string replication, IReadOnlyList<ChangeCheckEntry> checks);
 }
 
 /// <summary>What a drain needs to divide segments and to estimate a table: a connection to the source or the target, which only the engine has (<see cref="DbDataSync.Scripting.SegmentExpander"/> over the engine's way of opening one).</summary>
 internal interface IDrainSegments
 {
-    Task<IReadOnlyList<BatchReloadSegment>> ExpandAsync(ReplicationTaskConfig task, TableMappingConfig mapping, IReadOnlyList<BatchReloadSegment> requested, CancellationToken cancellationToken);
+    /// <param name="readerKind">The reader whose buckets divide an automatic segment, or null for the mapping's bulk load reader (a reconcile sweep names <c>KeyReconcile</c>).</param>
+    Task<IReadOnlyList<BatchReloadSegment>> ExpandAsync(ReplicationTaskConfig task, TableMappingConfig mapping, IReadOnlyList<BatchReloadSegment> requested, string? readerKind, CancellationToken cancellationToken);
 
     Task<(long? Rows, string? Caveat)> EstimateAsync(ReplicationTaskConfig task, TableMappingConfig mapping, CancellationToken cancellationToken);
 }
@@ -76,7 +80,7 @@ internal sealed class DrainBulkLoads(ConfigRepository config, IDrainQueue queue,
         var task = config.LoadReplicationTask(taskName);
         var mapping = config.LoadTableMapping(taskName, mappingName);
         IReadOnlyList<BatchReloadSegment> requested = mapping.DefaultSegmenting.Count == 0 ? [new FullSegment()] : mapping.DefaultSegmenting;
-        var expanded = segments.ExpandAsync(task, mapping, requested, CancellationToken.None).GetAwaiter().GetResult();
+        var expanded = segments.ExpandAsync(task, mapping, requested, null, CancellationToken.None).GetAwaiter().GetResult();
         var batchId = Guid.NewGuid().ToString("N");
         var (rows, caveat) = segments.EstimateAsync(task, mapping, CancellationToken.None).GetAwaiter().GetResult();
         ledger.WriteBatch(batchId, new BatchRecord(mappingName, sourceKey, expanded.Count, 0, 0, 0, 0, rows, caveat, DateTimeOffset.UtcNow));

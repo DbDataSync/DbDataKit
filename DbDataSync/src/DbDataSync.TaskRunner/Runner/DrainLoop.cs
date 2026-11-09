@@ -29,7 +29,8 @@ internal sealed class DrainLoop(
     ILogger log,
     Action<string>? status = null,
     TimeSpan? cycleInterval = null,
-    TimeSpan? sweepInterval = null)
+    TimeSpan? sweepInterval = null,
+    IDrainOutputs? outputs = null)
 {
     /// <summary>Sweeps that find nothing to claim, with nothing of ours in flight, before a periodic drain ends (the worker's <c>EmptyPollsBeforeExit</c>).</summary>
     public const int EmptySweepsBeforeExit = 5;
@@ -50,6 +51,9 @@ internal sealed class DrainLoop(
     {
         if (outcome.RowsRead > 0 && item.RunKind == RunKind.Primary)
             Interlocked.Exchange(ref _lastProductiveTicks, DateTimeOffset.UtcNow.UtcTicks);
+        // what an after-change reconcile strategy reacts to: the rows a mapping's successful primary passes read
+        if (item.RunKind == RunKind.Primary && outcome.Status == RunStatus.Succeeded)
+            plannerState.NoteRowsRead(item.MappingName, outcome.RowsRead);
     }
 
     /// <summary>An item is over, however it ended: its slot is free for the next claim and it is not the drain's to give back.</summary>
@@ -69,6 +73,7 @@ internal sealed class DrainLoop(
         var continuous = task.Scheduling.Mode == ScheduleMode.Continuous;
         var emptySweeps = 0;
         var first = true;
+        var pausedSaid = false;
 
         while (!ct.IsCancellationRequested)
         {
@@ -76,8 +81,9 @@ internal sealed class DrainLoop(
             task = config.LoadReplicationTask(replication);
             var mappings = config.ListTableMappings(replication).Order(StringComparer.Ordinal).ToList();
 
-            // The runner's pause stops the next start, so a drain that is running is not paused; Enabled is the definition's own (the manifest's schedule being active is the runner's).
-            if (TaskScheduling.ShouldRun(task.Enabled, paused: false) && mappings.Count > 0)
+            // A pause on the runner stops the next start of a drain, and a drain that is up sees it here: it plans nothing new (what is queued still runs, as on the worker, whose scheduler is what a pause stops), and
+            // "Run now" still queues its passes (an operator asked). Enabled is the definition's own (the manifest's schedule being active is the runner's).
+            if (task.Enabled && mappings.Count > 0)
             {
                 await plannerState.RefreshAsync(ct).ConfigureAwait(false);
                 if (runAll && first)
@@ -86,10 +92,18 @@ internal sealed class DrainLoop(
                         plannerState.EnqueuePrimary(replication, mapping);
                     log.LogInformation("Run all: a pass is queued for each of the {Count} mapping(s) of '{Replication}'.", mappings.Count, replication);
                 }
-                else
+                else if (TaskScheduling.ShouldRun(task.Enabled, plannerState.Paused))
                 {
                     await planner.PlanAsync(replication, task, mappings, ct).ConfigureAwait(false);
+                    outputs?.ChangeChecks(replication, plannerState.TakeChecks());
                 }
+                else if (!pausedSaid)
+                {
+                    pausedSaid = true;
+                    log.LogInformation("'{Replication}' is paused on the runner: this drain plans nothing new until it is resumed.", replication);
+                }
+
+                if (!plannerState.Paused) pausedSaid = false;
             }
 
             first = false;

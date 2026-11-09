@@ -256,7 +256,7 @@ internal sealed class GrpcRunBackend : IRunBackend, IAsyncDisposable
         var result = new Dictionary<string, IReadOnlyDictionary<string, WorkSubject>>(StringComparer.Ordinal);
         foreach (var kind in reply.Kinds)
             result[kind.Kind] = kind.Subjects.ToDictionary(s => s.Subject, s => new WorkSubject(DateTimeOffset.FromUnixTimeMilliseconds(s.LastEnqueuedUnixMs), s.InFlight), StringComparer.Ordinal);
-        return new WorkSnapshot(reply.Outstanding, result);
+        return new WorkSnapshot(reply.Outstanding, result, reply.Paused);
     }
 
     // ---- files, inbox, dead letters

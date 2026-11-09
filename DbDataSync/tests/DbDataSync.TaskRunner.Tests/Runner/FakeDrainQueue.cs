@@ -34,6 +34,9 @@ internal sealed class FakeDrainQueue : IDrainQueue
     /// <summary>When set, claims are refused after this many (the runner told the run to stop).</summary>
     public bool Stopped { get; set; }
 
+    /// <summary>What the runner says of the task being paused (a pause stops the next start; a drain that is up looks at it).</summary>
+    public bool Paused { get; set; }
+
     public Action<Row>? OnClaim { get; set; }
 
     private static bool InFlight(Row r) => r.Status is "Pending" or "Claimed" or "Running";
@@ -99,7 +102,7 @@ internal sealed class FakeDrainQueue : IDrainQueue
                 kind => kind,
                 kind => (IReadOnlyDictionary<string, WorkSubject>)Rows.Where(r => r.Kind == kind).GroupBy(r => r.Subject)
                     .ToDictionary(g => g.Key, g => new WorkSubject(g.Max(r => r.EnqueuedAt), g.Any(InFlight))));
-            return Task.FromResult(new WorkSnapshot(Rows.Any(InFlight), result));
+            return Task.FromResult(new WorkSnapshot(Rows.Any(InFlight), result, Paused));
         }
     }
 }
