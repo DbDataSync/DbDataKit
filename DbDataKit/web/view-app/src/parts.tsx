@@ -119,7 +119,7 @@ export function formAttributes(spec: FormSpec, entity: EntitySchema, isNew: bool
 export function FormFields({ spec, entity, row, text, onText, problems = {}, violations = [], error, busy, saved, onSubmit }: FormFieldsProps) {
   const fields = formAttributes(spec, entity, row === null)
   return (
-    <form className="sui-form va-form" data-testid="va-form" onSubmit={(e) => { e.preventDefault(); onSubmit?.() }}>
+    <form className="sui-form va-form" data-testid="va-form" noValidate onSubmit={(e) => { e.preventDefault(); onSubmit?.() }}>
       {fields.map(({ attribute, help, readOnly }) => (
         <div key={attribute.name}>
           <FieldView attribute={attribute} value={text[attribute.name] ?? ''} onChange={(v) => onText?.(attribute.name, v)} disabled={busy || readOnly} problem={problems[attribute.name]} />

@@ -1,4 +1,4 @@
-import { MINIMUMS } from '../views/document'
+import { MINIMUMS } from '../views/limits'
 import type { Box, WidgetOptionsDoc, WidgetType } from '../views/model'
 
 /**

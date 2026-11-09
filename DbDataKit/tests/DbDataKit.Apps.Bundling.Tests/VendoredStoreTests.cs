@@ -325,6 +325,31 @@ public sealed class VendoredStoreTests : IDisposable
         Assert.Contains(result.Notes!, n => n.Contains("without network isolation"));
     }
 
+    [Fact]
+    public async Task A_generated_file_is_in_the_bundle_and_never_written_to_the_source_folder_with_or_without_a_store()
+    {
+        NeedBun();
+        Write("src/main.ts", "import views from './views.generated.json';\nimport { greeting } from 'lib';\ndocument.title = greeting(views.title);\n");
+        var generated = new Dictionary<string, byte[]> { ["src/views.generated.json"] = Encoding.UTF8.GetBytes("{\"title\":\"Generated title\"}") };
+
+        var withStore = await new BunAppBundler().BundleAsync(new AppBundleRequest(Source, "src/main.ts", Output, PackageStore: Open(), GeneratedFiles: generated));
+        Assert.True(withStore.Succeeded, string.Join("; ", withStore.Diagnostics.Select(d => d.Message)));
+        Assert.Contains("Generated title", File.ReadAllText(Path.Combine(Output, "main.js")));
+
+        // without a store the source's own node_modules is what resolves `lib` (a copy of it is in the build's working folder)
+        Directory.CreateSymbolicLink(Path.Combine(Source, "node_modules"), Path.Combine(Store, "node_modules"));
+        Write("package.json", "{\"dependencies\":{\"lib\":\"*\"}}");
+        var legacy = await new BunAppBundler().BundleAsync(new AppBundleRequest(Source, "src/main.ts", Path.Combine(root, "out2"), Offline: true, GeneratedFiles: generated));
+        Assert.True(legacy.Succeeded, string.Join("; ", legacy.Diagnostics.Select(d => d.Message)));
+        Assert.Contains("Generated title", File.ReadAllText(Path.Combine(root, "out2", "main.js")));
+
+        Assert.False(File.Exists(Path.Combine(Source, "src", "views.generated.json")));
+        // a generated path that leaves the source folder is refused, not written
+        var outside = await Assert.ThrowsAsync<ArgumentException>(() => new BunAppBundler().BundleAsync(new AppBundleRequest(Source, "src/main.ts", Path.Combine(root, "out3"), PackageStore: Open(), GeneratedFiles: new Dictionary<string, byte[]> { ["../escape.json"] = [1] })));
+        Assert.Contains("outside the app's source folder", outside.Message);
+        Assert.False(File.Exists(Path.Combine(root, "escape.json")));
+    }
+
     // ---- the namespace ----
 
     [Fact]

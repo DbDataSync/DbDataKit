@@ -171,6 +171,12 @@ jobs:
       - name: Build a Workspace server
         working-directory: DbDataWorkspace
         run: dotnet build src/DbDataWorkspace.Server -c Debug
+      # The app authoring story (plan 22a GP34) builds an app from the template with the pinned Bun, from the package store made out of the web workspace's packages (the `npm ci` above).
+      - name: Fetch the pinned Bun
+        working-directory: .
+        run: |
+          scripts/fetch-bun.sh
+          echo "$GITHUB_WORKSPACE/.bun/linux-x64" >> "$GITHUB_PATH"
       - name: Install the browser
         working-directory: DbDataConsole/tests/DbDataConsole.Web.Tests
         run: |

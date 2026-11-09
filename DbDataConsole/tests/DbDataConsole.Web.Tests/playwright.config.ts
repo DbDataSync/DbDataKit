@@ -395,6 +395,7 @@ export const publishRunner = {
   clientDirectory: path.join(os.tmpdir(), 'ddk-e2e-pubrunner-sample-client'),
   dll: path.join(repoRoot, 'DbDataRunner/src/DbDataRunner.Server/bin/Debug/net10.0/dbdatarunner.dll'),
 }
+// Plan 22a GP34: `apps-authoring.spec.ts` starts a Gateway of its own on 8601 (identity home), 8602 (apps host) and 8603 (management); no entry here, the story spawns it.
 export const publishBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-publish-build'), port: 8504, project: 'orders', clientDirectory: path.join(os.tmpdir(), 'ddk-e2e-pubbuild-client') }
 if (!isWorker) {
   for (const directory of [publishRunner.directory, publishRunner.clientDirectory, publishBuild.directory, publishBuild.clientDirectory]) {

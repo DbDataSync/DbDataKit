@@ -5,6 +5,7 @@ import { NAME, VIEW, ajv, classifiers, defs, isObject, join, at, part, pathOf, p
 import type { Area, Json, ViewsIssue } from './common'
 import { checkWidgets } from './widgets'
 import type { Context, DrillTarget, WidgetInfo } from './widgets'
+import { MINIMUMS } from './limits'
 
 /**
  * The validators of `dashboard/1` and `report/1` (plan 32 section 3, DBR02): the same checks, codes and paths as the .NET loaders of `DbDataKit.Views`, from the same JSON Schemas (`core`, `dashboard`,
@@ -44,7 +45,7 @@ const LAYOUT_COMMON = LAYOUT_KEYS.reflow!.filter((k) => LAYOUT_KEYS.canvas!.incl
 const WIDGET_OWN_KEYS = ['type', 'title', 'encodings', 'query', 'format', 'formats', 'parameter', 'parameters', 'mark', 'columns', 'text', 'hash', 'label', 'values', 'control']
 /** The tokens header and footer text may hold (plus `{params.name}` of a declared parameter). */
 export const RUNNING_TOKENS = ['title', 'page', 'pages', 'asof', 'viewer']
-export const MINIMUMS: Record<string, [number, number]> = { metric: [160, 88], text: [160, 56], control: [180, 56], chart: [280, 180], table: [320, 200], matrix: [360, 220] }
+export { MINIMUMS }
 const EPSILON = 1e-9
 const TOKEN = /\{([^{}]*)\}/g
 

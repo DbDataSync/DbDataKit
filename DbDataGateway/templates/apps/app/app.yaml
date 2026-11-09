@@ -1,9 +1,10 @@
 schemaVersion: 1
 name: app
 title: App
-description: A code app on the default library set (React, the Store controls, the visuals and the typed clients), bundled by `apps build` from a vendored package store with no network.
+description: A code app on the default library set (React, the Store controls, the visuals and the typed clients). Its screens are view-spec/1 files in views/, drawn by the library's components; a page of code can sit beside them (src/pages).
 version: 1.0.0
 entry: index.html
+views: [views/territories.yaml, views/dashboard.yaml, views/edit.yaml]
 roles: [viewer, author]
 models:
   - model: territories

@@ -282,7 +282,9 @@ public sealed class AppsBuildTests : IDisposable
         Assert.Contains("name: sales-app", File.ReadAllText(Path.Combine(source, "app.yaml")));
 
         // 1. through IAppBundler, the way the apps host and the Workspace server build: the packages are the store's, nothing is installed
-        var bundled = await new BunAppBundler(bun.Path!).BundleAsync(new AppBundleRequest(source, "src/main.tsx", Folder("template-bundle"), PackageStore: VendoredPackageStore.Load(store)));
+        var manifest = DbDataKit.Apps.AppManifestLoader.Load(File.ReadAllText(Path.Combine(source, "app.yaml"))).Manifest!;
+        var specs = DbDataKit.Apps.ViewsApp.Generated(manifest, file => File.Exists(Path.Combine(source, file)) ? File.ReadAllBytes(Path.Combine(source, file)) : null);
+        var bundled = await new BunAppBundler(bun.Path!).BundleAsync(new AppBundleRequest(source, "src/main.tsx", Folder("template-bundle"), PackageStore: VendoredPackageStore.Load(store), GeneratedFiles: specs));
         Assert.True(bundled.Succeeded, string.Join("; ", bundled.Diagnostics.Select(d => d.Message)));
         Assert.Contains("main.js", bundled.Files);
         Assert.Contains("main.css", bundled.Files);
@@ -296,8 +298,13 @@ public sealed class AppsBuildTests : IDisposable
         Assert.True(result.Exit == 0, result.Error + result.Out);
         Assert.Contains("nothing was installed", result.Out);
         var files = Directory.EnumerateFiles(built, "*", SearchOption.AllDirectories).Select(f => Path.GetRelativePath(built, f).Replace('\\', '/')).Order(StringComparer.Ordinal).ToList();
-        Assert.Equal(["app.yaml", "index.html", "main.css", "main.js"], files);
+        // the view files are served as they are (validate and publish read them); the script and the stylesheet are the bundle; the specs the script draws came from the host's own loader
+        Assert.Equal(["app.yaml", "index.html", "main.css", "main.js", "views/dashboard.yaml", "views/edit.yaml", "views/territories.yaml"], files);
+        var script = File.ReadAllText(Path.Combine(built, "main.js"));
+        Assert.Contains("Largest quotas", script);
+        Assert.Contains("view-spec/1", script);
         Assert.Equal(0, (await CommandAsync("apps", "validate", "--dir", built)).Exit);
+        Assert.False(File.Exists(Path.Combine(source, "src", "views.generated.json")));   // made for the build, not in the source
     }
 
     [Fact]

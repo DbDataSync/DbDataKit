@@ -52,7 +52,7 @@ public static class ViewsApp
 
     /// <summary>
     /// The generated document. Everything named in it is a fixed path under the instance's bundle folder. The specs are in the page itself: a sandboxed document has an opaque origin, so a <c>fetch</c> of <c>views.json</c> would be a
-    /// cross-origin read this host does not answer with CORS headers. <paramref name="views"/> is <see cref="Json"/>; its angle brackets are escaped by the serializer, and again here, so it cannot end the element.
+    /// cross-origin read this host does not answer with CORS headers. <paramref name="views"/> is <see cref="Json(ResolvedInstance)"/>; its angle brackets are escaped by the serializer, and again here, so it cannot end the element.
     /// </summary>
     public static byte[] Document(string title, string basePath, bool style, byte[] views) => Encoding.UTF8.GetBytes($$"""
         <!doctype html>
@@ -66,15 +66,31 @@ public static class ViewsApp
         </body></html>
         """);
 
+    /// <summary>Where a source tree finds the specs of its <c>views</c> list when it is built (<c>import views from './views.generated.json'</c> in <c>src/</c>).</summary>
+    public const string GeneratedPath = "src/views.generated.json";
+
+    /// <summary>
+    /// What a build of a code app with view specs gives the bundler as <c>AppBundleRequest.GeneratedFiles</c> (DbDataKit.Apps.Bundling) (plan 22a GP34): the specs as <see cref="GeneratedPath"/>, read by the host's own loader. Whoever builds an app (<c>apps build</c>,
+    /// the Workspace server) calls this, so a bundle draws what the loader checked. <paramref name="read"/> answers a source file's bytes (null when it is not there).
+    /// </summary>
+    public static IReadOnlyDictionary<string, byte[]> Generated(AppManifest manifest, Func<string, byte[]?> read) =>
+        new Dictionary<string, byte[]> { [GeneratedPath] = Json(manifest, read, "", manifest.Title ?? manifest.Name) };
+
     /// <summary>The app's specs as the runtime reads them: the file names in the manifest's order (the first is the home view), and each spec by its file name. A file that does not read is listed under <c>problems</c> with its diagnostics.</summary>
-    public static byte[] Json(ResolvedInstance instance)
+    public static byte[] Json(ResolvedInstance instance) =>
+        Json(instance.Manifest, file => instance.Package.Files.TryGetValue(file, out var bytes) ? bytes : null, instance.Instance.Name, instance.Instance.Title ?? instance.Manifest.Title ?? instance.Instance.Name);
+
+    /// <summary>
+    /// The same document for a source tree that is not published yet (plan 22a GP34): <c>apps build</c> makes it from the manifest and the spec files and gives it to the bundler as <c>src/views.generated.json</c>, so a code app can
+    /// draw its spec files with the same components the host does and the bundle holds what was checked. <paramref name="read"/> answers a file's bytes (null when the package does not hold it).
+    /// </summary>
+    public static byte[] Json(AppManifest manifest, Func<string, byte[]?> read, string instance, string title)
     {
-        var manifest = instance.Manifest;
         var views = new JsonObject();
         var problems = new JsonArray();
         foreach (var file in manifest.Views)
         {
-            if (!instance.Package.Files.TryGetValue(file, out var bytes)) { problems.Add($"{file}: the package does not hold this file."); continue; }
+            if (read(file) is not { } bytes) { problems.Add($"{file}: the package does not hold this file."); continue; }
             var loaded = ViewSpecLoader.Load(Encoding.UTF8.GetString(bytes), file, manifest.Name);
             if (loaded.Spec is { } spec && loaded.Ok) views[file] = Spec(spec);
             else foreach (var d in loaded.Diagnostics) problems.Add($"{d.Path}:{d.Line}:{d.Column}: {d.Message}");
@@ -83,8 +99,8 @@ public static class ViewsApp
         {
             ["format"] = ViewSpec.FormatId,
             ["app"] = manifest.Name,
-            ["instance"] = instance.Instance.Name,
-            ["title"] = instance.Instance.Title ?? manifest.Title ?? instance.Instance.Name,
+            ["instance"] = instance,
+            ["title"] = title,
             ["home"] = manifest.Views.Count > 0 ? manifest.Views[0] : null,
             ["files"] = new JsonArray([.. manifest.Views.Select(f => (JsonNode)f)]),
             ["views"] = views,

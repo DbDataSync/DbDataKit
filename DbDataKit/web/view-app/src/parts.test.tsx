@@ -4,9 +4,10 @@ import { StoreError } from '@dbdatakit/store-ui'
 import { doc, grid, rows, territory } from './fixtures'
 import { DashboardBoard, DetailPage, FormFields, GridTable } from './parts'
 import type { DashboardSpec, DetailSpec, FormSpec } from './spec'
-import { ViewApp } from './screens'
+import { ViewApp, menuOf } from './screens'
 
 const go = () => {}
+const doc2 = { ...doc, files: ['views/grid.yaml', 'views/other.yaml'], views: { ...doc.views, 'views/other.yaml': { ...grid, title: 'Other' } } }
 
 describe('the grid', () => {
   it('draws the columns under the spec labels, a link on each row, escapes values, and pages by the spec size', () => {
@@ -115,5 +116,38 @@ describe('the app', () => {
     const html = renderToStaticMarkup(<ViewApp doc={{ ...doc, format: 'view-spec/2' }} client={client} host={host} />)
     expect(html).toContain('view-spec/1')
     expect(html).toContain('view-spec/2')
+  })
+})
+
+describe('code pages beside the spec files', () => {
+  const host = { route: () => {}, onNavigate: () => () => {} }
+  const client = {} as never
+  const Overview = ({ params }: { params: Record<string, string> }) => <section data-testid="code-overview">{`code page, region ${params.region ?? 'all'}`}</section>
+  const pages = { 'pages/overview': { title: 'Overview (code)', component: Overview } }
+
+  it('an app can be only spec files: the menu is the specs and nothing else', () => {
+    expect(menuOf(doc2, {})).toEqual([{ key: 'views/grid.yaml', title: 'Territories' }, { key: 'views/other.yaml', title: 'Other' }])
+  })
+
+  it('a code page is a menu entry after the specs, and the home is the first spec while there is one', () => {
+    expect(menuOf(doc2, pages)).toEqual([{ key: 'views/grid.yaml', title: 'Territories' }, { key: 'views/other.yaml', title: 'Other' }, { key: 'pages/overview', title: 'Overview (code)' }])
+    const html = renderToStaticMarkup(<ViewApp doc={doc2} client={client} host={host} pages={pages} />)
+    expect(html).toContain('href="#/pages/overview"')
+    expect(html).toContain('href="#/views/other.yaml"')
+    expect(html).not.toContain('code-overview')   // the home is the first spec, which is loading
+  })
+
+  it('a code page with the key of a spec takes its place in the menu, and an app of one page of code and no spec shows it as the home', () => {
+    expect(menuOf(doc2, { 'views/other.yaml': pages['pages/overview'] }).map((m) => m.key)).toEqual(['views/grid.yaml', 'views/other.yaml'])
+    expect(menuOf(doc2, { 'views/other.yaml': pages['pages/overview'] })[1].title).toBe('Overview (code)')
+    const alone = { ...doc, home: null, files: [], views: {} }
+    const html = renderToStaticMarkup(<ViewApp doc={alone} client={client} host={host} pages={pages} />)
+    expect(html).toContain('code page, region all')
+    expect(html).toContain('<h2 class="va-title">Overview (code)</h2>')
+    expect(html).not.toContain('class="va-menu"')   // one entry is not a menu
+  })
+
+  it('without specs or pages the app says it has no view', () => {
+    expect(renderToStaticMarkup(<ViewApp doc={{ ...doc, home: null, files: [], views: {} }} client={client} host={host} />)).toContain('This app has no view')
   })
 })
