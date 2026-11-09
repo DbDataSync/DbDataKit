@@ -4,7 +4,7 @@ Status: **proposed** (2026-11-07). This file is plans 22 and 22a in one: the **d
 
 A slice is one branch, one pull request, "done" is the test in the last column but one, and the status goes in the slice's row in the same change (the shape of [28a](28a-runner-slices.md) and [29a](29a-state-slices.md)).
 
-> **Decided (the owner, 2026-11-08), in two parts.** The glossary is **not** a DbDataStore entity: it is business knowledge per [plan 27](27-knowledge-agents-integrations-work.md) decisions 35 and 36 (git, `knowledge: 1`), so **GP05 is dropped**. **Where the data grants live: in the published definition, with no merge** (decision D9): the grants of a data source (which people and groups may read it) are the `grants` section of the definition Build publishes (`connection/2`); a republish replaces them completely; the Gateway has no grants of its own to add and enforces exactly what the definition says. That is **GP03**, built (below). It closes the open question 'groups on Build-published data sources' (plan 20 task 13: the policy no longer disappears at a republish, because the policy is the definition's). Still under review: GP23, GP24, GP26 (rows that use the glossary entity), and **GP10**, whose grants half (attribute values per person, row rules) is **not** what the owner's decision covers (see GP03's note). Rows are kept, not deleted.
+> **Decided (the owner, 2026-11-08), in two parts.** The glossary is **not** a DbDataStore entity: it is business knowledge per [plan 27](27-knowledge-agents-integrations-work.md) decisions 35 and 36 (git, `knowledge: 1`), so **GP05 is dropped**. **Where the data grants live: in the published definition, with no merge** (decision D9): the grants of a data source (which people and groups may read it) are the `grants` section of the definition Build publishes (`connection/2`); a republish replaces them completely; the Gateway has no grants of its own to add and enforces exactly what the definition says. That is **GP03**, built (below). It closes the open question 'groups on Build-published data sources' (plan 20 task 13: the policy no longer disappears at a republish, because the policy is the definition's). **2026-11-09 (the owner):** GP24, GP25 and GP26 (the catalog index, `catalog search` and `catalog show`, the console's catalog page) are **deleted**, because the knowledge plan builds that search ([27a](27a-knowledge-slices.md) KN07, KN11, KN16, KN24 to KN27, decision SD23); **GP23** (descriptions and owners from the definitions) is kept. Still under review: **GP10**, whose grants half (attribute values per person, row rules) is **not** what the owner's decision covers (see GP03's note). Rows are kept, not deleted, except the three above.
 
 ## Direction (decided by the owner, 2026-10-27)
 
@@ -74,7 +74,7 @@ Plan 14 deferred row-level security ("not needed now"). With one serving layer, 
    member descriptions, app manifests. Nothing is typed twice.
 3. **The glossary is a DbDataStore entity** (**dropped: the glossary is business knowledge per plan 27 decisions 35/36, git `knowledge: 1`; under the owner's 2026-11-08 hold**): terms, definitions, owners and links to nodes, with history and approval like any
    managed data.
-4. **Agents use the same search** through the command surface (`catalog search`, `catalog show`), so "which table has customer
+4. **Agents use the same search** through the command surface (the `knowledge` commands of plan 27a KN16, which replace `catalog search` and `catalog show`), so "which table has customer
    churn" is a tool call.
 
 ### 4. Backup and recovery
@@ -211,7 +211,7 @@ None blocks GP01 to GP06. Each has a default, so work continues.
 | **G-C: access rules enforced** | GP10 to GP15 | every serving module applies rules and masks, and a person can ask why |
 | **G-D: alerts and subscriptions** | GP16 to GP18 | |
 | **G-E: backup and recovery** | GP19 to GP22 | |
-| **G-F: catalog** | GP23 to GP26 | |
+| **G-F: catalog** | GP23 | |
 | **G-G: monitoring** | GP27 to GP29 | |
 | **G-H: app authoring** | GP30 to GP36 | |
 
@@ -266,14 +266,11 @@ Size: S under a day, M a few days, L about a week. **Format** says whether the s
 | GP21 | **The secrets key:** `secret key backup` (the key under a passphrase, same format family as `secret export`), `secret key restore`, and the documented re-key on a machine where a DPAPI-bound key cannot be read; never in git | none | M | **new file format** `secret-key/1` | unit tests: backup and restore give the same secrets, a wrong passphrase is refused, a restore on another user or machine of a protected key fails with the re-key message; on Windows (CI) a DPAPI key restored to a new machine is re-keyed |
 | GP22 | **Recovery drill and its documents:** one console page and one document (`docs/backup-and-recovery.md` plus the console's docs) with the table of plan 22 section 4; backup state (last backup, remote push state) in `health`; an end-to-end test of the drill | GP19 to GP21, 29b U03 | S | none | CI: install, create data, back up, destroy, restore, start, sign in, read the data; the docs test (links resolve) and `health` shows "no backup in N days" as a warning |
 
-### G-F: catalog and search (plan 22 section 3)
+### G-F: catalog (plan 22 section 3)
 
 | Slice | What | Needs | Size | Format | Done when |
 | --- | --- | --- | --- | --- | --- |
-| GP23 | **Under review, see plan 27 decisions 35/36 and the owner's 2026-11-08 hold.** **Descriptions and owners from the definitions:** each lineage emitter writes `description` and `owner` into the node's `Properties` (Build's model and column descriptions, DbDataStore model text, semantic member descriptions, app manifests, glossary links from GP05) | G05, G07, G11 (built), GP05 | M | none (the `Properties` map exists; the names are fixed here) | per emitter a test that the text typed once in the definition appears on the node and nowhere else needs typing; a node without a description says so (`description: null`), never an empty string |
-| GP24 | **Under review, see plan 27 decisions 35/36 and the owner's 2026-11-08 hold.** **The catalog index:** a search over the joined graph (names, descriptions, owners, glossary terms), ranked, with the caller's rules applied (a hidden column is not found) | GP23, G09, GP13 | M | none (the index is rebuilt, not stored) | tests: a search for "churn" finds the column whose description says it, a column hidden for the caller is not in the result, a rebuild after a changed description finds the new text |
-| GP25 | **`catalog search` and `catalog show`** on the shared command surface with JSON schemas, so an agent's "which table has customer churn" is a tool call | GP24, plan 13 C01 | S | none | command tests: documents validate against their schemas; the command spec test (suite-wide) lists both |
-| GP26 | **Under review, see plan 27 decisions 35/36 and the owner's 2026-11-08 hold.** **The console's catalog page:** search, a node's page (description, owner, glossary terms, lineage link, later: its checks, FQ17) | GP24, G10 (built) | M | none | Playwright: type a word, open a node, follow the link into the lineage graph, edit a glossary term through its link |
+| GP23 | **Descriptions and owners from the definitions:** each lineage emitter writes `description` and `owner` into the node's `Properties` (Build's model and column descriptions, DbDataStore model text, semantic member descriptions, app manifests, glossary links from GP05) | G05, G07, G11 (built), GP05 | M | none (the `Properties` map exists; the names are fixed here) | per emitter a test that the text typed once in the definition appears on the node and nowhere else needs typing; a node without a description says so (`description: null`), never an empty string |
 
 ### G-G: external monitoring (plan 22 section 6)
 

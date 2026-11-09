@@ -173,7 +173,7 @@ Size: S under a day, M a few days, L about a week. **Format** says whether the s
 | Plan 22 section 2's console "who can see what" (nothing here), plan 24's publish refusal reasons | FQ14 adds a refusal; UC01 defines the others |
 | Plan 22a GP16 alerts for failed checks | FQ13 uses it (the other direction: GP16 does not wait for FQ) |
 | Plan 24 UC13 (cache invalidation on data change) | FQ09 and FQ10 emit the "data changed" moment the invalidation also needs (a shared event, see UC13) |
-| Plan 18's catalog node page (22a GP26) | FQ16 adds check status to nodes |
+| Plan 18's lineage node page (the console's Lineage page; 22a's catalog page GP26 was dropped for the knowledge app, 27a KN27) | FQ16 adds check status to nodes |
 | Plan 28's evaluation runs (plan 27) | FQ08 shows a second system task on the runner |
 | Plan 21's promotion gates | FQ14 (a promotion refused by a check) |
 
