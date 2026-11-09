@@ -1,6 +1,6 @@
 # What an agent knows: instructions, guardrails and knowledge
 
-> **Design, not built yet.** This page explains the design in [plan 27](../plans/27-knowledge-agents-integrations-work.md), sections
+> **Design, not built yet** (sliced in [plan 27a](../plans/27a-knowledge-slices.md); what exists today is in [agent-tools.md](../agent-tools.md)). This page explains the design in [plan 27](../plans/27-knowledge-agents-integrations-work.md), sections
 > 3.5 and 3.5a. Parts of it are still proposals there; where knowledge is stored is not decided. When agents are built, this page becomes
 > part of their help.
 
