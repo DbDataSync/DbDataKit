@@ -5,7 +5,7 @@ name: DbDataKit tests
 #
 # Linux needs unixODBC for DbDataKit.Odbc.Metadata's tests. The live database tests are gated on environment variables and skip
 # unless the shared engines are provided: with `engines` on, the Linux job starts SQL Server and PostgreSQL from testenv/
-# (docs/plans/11-ci-and-testing.md), installs the SQL Server ODBC driver, and the live tests run and fail if the servers do not
+# (docs/ci-and-testing.md), installs the SQL Server ODBC driver, and the live tests run and fail if the servers do not
 # answer. Windows cannot run Linux containers, so the Windows leg never starts engines; its live tests skip.
 
 on:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The shared test engines (docs/plans/11-ci-and-testing.md): start, stop, and print the connection variables every suite needs.
+# The shared test engines (docs/ci-and-testing.md): start, stop, and print the connection variables every suite needs.
 #
 #   testenv/testenv.sh up mssql postgres         start the engines and wait until they are healthy (`up` alone: the seven everyday ones;
 #                                                `up all`: also the slow ones, mssql2025 spark bigquery flight flight-tls, and the
