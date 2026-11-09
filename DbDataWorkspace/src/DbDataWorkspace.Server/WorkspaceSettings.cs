@@ -11,6 +11,9 @@ public sealed record WorkspaceSettings(string Directory, Uri Listen)
     /// <summary>Where each of those settings came from (a flag, the environment, <c>server.yaml</c>, the default), for <c>GET /api/v1/state</c>; null: the server was not started by <c>server run</c> and the files and the environment say.</summary>
     public DbDataKit.State.StateSources? StateSources { get; init; }
 
+    /// <summary>How apps are built (the <c>apps:</c> section of <c>server.yaml</c>), when something other than the file says (tests); null: the file is read for every build.</summary>
+    public WorkspaceAppSettings? Apps { get; init; }
+
     public const string Product = "dbdataworkspace";
     public const string DefaultListen = "https://127.0.0.1:8495";
 

@@ -116,7 +116,7 @@ public sealed class WorkspaceServerTests : IAsyncLifetime
     {
         Assert.Contains("hosts no project", Run("project", "list"));
         Assert.Contains("Made the app project orders", Run("project", "create", "orders", "--title", "Orders"));
-        Assert.True(File.Exists(Path.Combine(server.Directory, "projects", "orders", "README.md")));
+        Assert.True(File.Exists(Path.Combine(server.Directory, "projects", "orders", "app.yaml")));
         Assert.True(Directory.Exists(Path.Combine(server.Directory, "projects", "orders", ".git")));
 
         var existing = Path.Combine(server.Directory, "elsewhere");

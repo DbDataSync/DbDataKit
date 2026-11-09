@@ -32,13 +32,6 @@ public static class AppsBuild
     private const string ResourcePrefix = "apps-templates/";
 
 
-    /// <summary>Where the entry of a source tree is looked for when <c>--entry</c> is not given.</summary>
-    private static readonly string[] EntryConventions = ["src/main.tsx", "src/main.ts", "src/main.jsx", "src/main.js", "src/index.tsx", "src/index.ts", "src/index.jsx", "src/index.js"];
-
-    private static readonly string[] SourceExtensions = [".ts", ".tsx", ".mts", ".cts", ".jsx", ".map"];
-
-    private static readonly string[] ToolingFiles = ["package.json", "tsconfig.json", "bun.lock", "bun.lockb", "package-lock.json", "yarn.lock", "pnpm-lock.yaml"];
-
     // ---- init ----
 
     public static async Task<int> InitAsync(string[] args, CliContext context)
@@ -90,7 +83,7 @@ public static class AppsBuild
         foreach (var (path, bytes) in files.OrderBy(f => f.Key, StringComparer.Ordinal))
         {
             var content = bytes;
-            if (path == "app.yaml" && name2 is { Length: > 0 }) content = Encoding.UTF8.GetBytes(Rename(Encoding.UTF8.GetString(bytes), name2));
+            if (path == "app.yaml" && name2 is { Length: > 0 }) content = Encoding.UTF8.GetBytes(AppTemplate.Rename(Encoding.UTF8.GetString(bytes), name2));
             var target = Path.Combine(folder, path.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             await File.WriteAllBytesAsync(target, content, context.Cancellation);
@@ -110,6 +103,7 @@ public static class AppsBuild
     /// <summary>The template's files by path (relative, with <c>/</c>), read from the program.</summary>
     internal static IReadOnlyDictionary<string, byte[]> ReadTemplate(string template)
     {
+        if (template == NewTemplate) return AppTemplate.Files();   // the app template is in the shared library (the Workspace server makes apps from it too)
         var assembly = typeof(AppsBuild).Assembly;
         var prefix = ResourcePrefix + template + "/";
         var files = new Dictionary<string, byte[]>(StringComparer.Ordinal);
@@ -123,13 +117,6 @@ public static class AppsBuild
             files[name[prefix.Length..]] = memory.ToArray();
         }
         return files.Count > 0 ? files : throw new InvalidOperationException($"The template '{template}' is not in this program.");
-    }
-
-    private static string Rename(string manifest, string name)
-    {
-        var title = char.ToUpperInvariant(name[0]) + name[1..].Replace('-', ' ').Replace('_', ' ');
-        manifest = Regex.Replace(manifest, @"^name:.*$", $"name: {name}", RegexOptions.Multiline | RegexOptions.CultureInvariant);
-        return Regex.Replace(manifest, @"^title:.*$", $"title: {title}", RegexOptions.Multiline | RegexOptions.CultureInvariant);
     }
 
     // ---- build ----
@@ -153,28 +140,6 @@ public static class AppsBuild
             await context.Error.WriteLineAsync(usage);
             return CliExit.Usage;
         }
-        var source = Path.GetFullPath(src);
-        var output = Path.GetFullPath(outArg);
-        var manifestPath = parsed.Get("manifest") is { Length: > 0 } m ? Path.GetFullPath(m) : Path.Combine(source, "app.yaml");
-        if (!Directory.Exists(source)) { await context.Error.WriteLineAsync($"{source} is not a folder."); return CliExit.Failure; }
-        if (!File.Exists(manifestPath)) { await context.Error.WriteLineAsync($"{manifestPath} does not exist: an app's manifest is app.yaml in its source folder, or name it with --manifest."); return CliExit.Failure; }
-        if (output == source || IsUnder(source, output))
-        {
-            await context.Error.WriteLineAsync($"The build folder {output} is the source folder or holds it; a build replaces its folder, so name another one.");
-            return CliExit.Failure;
-        }
-        if (Directory.Exists(output) && Directory.EnumerateFileSystemEntries(output).Any() && !File.Exists(Path.Combine(output, "app.yaml")))
-        {
-            await context.Error.WriteLineAsync($"{output} is not empty and holds no app.yaml, so it does not look like an earlier build. A build replaces its folder; name a new or an empty one.");
-            return CliExit.Failure;
-        }
-
-        // the manifest first: it is cheap, and its diagnostics name the line
-        var manifestText = await File.ReadAllTextAsync(manifestPath, context.Cancellation);
-        var load = AppManifestLoader.Load(manifestText, Path.GetFileName(manifestPath));
-        foreach (var d in load.Diagnostics) await (d.Severity == ConfigSeverity.Error ? context.Error : context.Out).WriteLineAsync(d.ToString());
-        if (!load.Ok) return CliExit.Failure;
-
         // the package store (plan 22a GP33): --store, or apps.packageStore of the Gateway's server.yaml; with one the build installs nothing and reaches no network
         VendoredPackageStore? store = null;
         IReadOnlyList<string>? allowed = null;
@@ -203,90 +168,26 @@ public static class AppsBuild
         catch (VendoredStoreException e) { await context.Error.WriteLineAsync(e.Message); return CliExit.Failure; }
         catch (GatewayConfigException e) { await context.Error.WriteLineAsync(e.Message); return CliExit.Failure; }
 
-        var entry = parsed.Get("entry") is { Length: > 0 } named ? named.Replace('\\', '/') : EntryConventions.FirstOrDefault(c => File.Exists(Path.Combine(source, c.Replace('/', Path.DirectorySeparatorChar))));
-        if (entry is null) await context.Out.WriteLineAsync("No script entry (src/main.ts, src/main.js...) and no --entry: the files are copied as they are, nothing is bundled.");
-
-        // an app with a script and view specs draws the specs with the library's components (plan 22a GP34): the specs, read by the host's own loader, go into the bundle as `src/views.generated.json`
-        IReadOnlyDictionary<string, byte[]>? generated = null;
-        if (entry is not null && load.Manifest!.Views.Count > 0)
-            generated = ViewsApp.Generated(load.Manifest, file => File.Exists(Path.Combine(source, file.Replace('/', Path.DirectorySeparatorChar))) ? File.ReadAllBytes(Path.Combine(source, file.Replace('/', Path.DirectorySeparatorChar))) : null);
-
-        var temporary = Path.Combine(Path.GetTempPath(), "dbdata-apps-build-" + Guid.NewGuid().ToString("N")[..12]);
-        try
-        {
-            var bundled = new List<string>();
-            if (entry is not null)
+        var outcome = await AppSourceBuilder.BuildAsync(
+            new AppBuildOptions(src, outArg, parsed.Get("entry"), parsed.Get("manifest"), Minify: !parsed.Has("no-minify"), Timeout: seconds is { } s ? TimeSpan.FromSeconds(s) : null, Offline: parsed.Has("offline"), Store: store, Allowed: allowed, Isolation: isolation),
+            entry =>
             {
-                if (bundler is null)
-                {
-                    var found = (locate ?? (explicitPath => BunLocator.Locate(explicitPath)))(parsed.Get("bun"));
-                    if (!found.Found) { await context.Error.WriteLineAsync(found.Problem!); return CliExit.Failure; }
-                    await context.Out.WriteLineAsync($"Bundling {entry} with Bun ({found.Source}); package install scripts are not run.");
-                    bundler = new BunAppBundler(found.Path!);
-                }
-                var result = await bundler.BundleAsync(new AppBundleRequest(source, entry, temporary, Minify: !parsed.Has("no-minify"), Timeout: seconds is { } s ? TimeSpan.FromSeconds(s) : null, Offline: parsed.Has("offline"), PackageStore: store, AllowedPackages: allowed, Isolation: isolation, GeneratedFiles: generated), context.Cancellation);
-                if (!result.Succeeded)
-                {
-                    await context.Error.WriteLineAsync("The build failed:");
-                    foreach (var d in result.Diagnostics) await context.Error.WriteLineAsync("  " + d.Message);
-                    return CliExit.Failure;
-                }
-                bundled.AddRange(result.Files);
-                foreach (var note in result.Notes ?? []) await context.Out.WriteLineAsync(note);
-            }
+                if (bundler is not null) return new AppBundlerChoice(bundler);
+                var found = (locate ?? (explicitPath => BunLocator.Locate(explicitPath)))(parsed.Get("bun"));
+                return found.Found ? new AppBundlerChoice(new BunAppBundler(found.Path!), null, $"Bundling {entry} with Bun ({found.Source}); package install scripts are not run.") : new AppBundlerChoice(null, found.Problem);
+            }, context.Cancellation);
+        foreach (var line in outcome.Lines) await (line.Error ? context.Error : context.Out).WriteLineAsync(line.Text);
+        if (!outcome.Succeeded) return CliExit.Failure;
 
-            // assemble: the app's own files that are not source, the manifest as app.yaml, and the bundle
-            if (Directory.Exists(output)) Directory.Delete(output, true);
-            Directory.CreateDirectory(output);
-            var entryTop = entry is not null && entry.Contains('/') ? entry[..entry.IndexOf('/')] : null;
-            var copied = 0;
-            foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
-            {
-                var relative = Path.GetRelativePath(source, file).Replace(Path.DirectorySeparatorChar, '/');
-                if (Path.GetFullPath(file) == manifestPath || IsUnder(output, file) || IsSource(relative, entry, entryTop)) continue;
-                var target = Path.Combine(output, relative.Replace('/', Path.DirectorySeparatorChar));
-                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                File.Copy(file, target);
-                copied++;
-            }
-            foreach (var path in bundled)
-            {
-                var target = Path.Combine(output, path.Replace('/', Path.DirectorySeparatorChar));
-                if (File.Exists(target))
-                {
-                    await context.Error.WriteLineAsync($"The bundle writes {path}, and the app already has a file of that name outside its source folder; rename one of them.");
-                    return CliExit.Failure;
-                }
-                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                File.Copy(Path.Combine(temporary, path.Replace('/', Path.DirectorySeparatorChar)), target);
-            }
-            await File.WriteAllTextAsync(Path.Combine(output, "app.yaml"), manifestText, new UTF8Encoding(false), context.Cancellation);
-
-            // the built-in checks, on the result: what `apps validate` and `apps publish` will see
-            var validation = AppValidator.Validate(output, output);
-            var errors = validation.Diagnostics.Where(d => d.Severity == ConfigSeverity.Error).ToList();
-            foreach (var d in validation.Diagnostics) await (d.Severity == ConfigSeverity.Error ? context.Error : context.Out).WriteLineAsync(d.ToString());
-            if (!validation.Ok)
-            {
-                await context.Error.WriteLineAsync($"{errors.Count} error(s) in the built folder {output}.");
-                return CliExit.Failure;
-            }
-            var total = Directory.EnumerateFiles(output, "*", SearchOption.AllDirectories).Count();
-            var manifest = validation.Manifest!;
-            await context.Out.WriteLineAsync($"Built {manifest.Name} {manifest.Version} into {output}: {total} files ({copied} copied, {bundled.Count} bundled).");
-            await context.Out.WriteLineAsync($"Next: apps validate --dir {outArg}, then apps publish --dir {outArg}.");
-            context.Data["app"] = manifest.Name;
-            context.Data["out"] = output;
-            context.Data["files"] = total;
-            context.Data["bundled"] = bundled;
-            return CliExit.Ok;
-        }
-        finally
-        {
-            try { if (Directory.Exists(temporary)) Directory.Delete(temporary, true); }
-            catch (IOException) { /* a temporary folder left behind is the system's to clean */ }
-            catch (UnauthorizedAccessException) { /* the same */ }
-        }
+        var output = Path.GetFullPath(outArg);
+        var manifest = outcome.Manifest!;
+        await context.Out.WriteLineAsync($"Built {manifest.Name} {manifest.Version} into {output}: {outcome.Files} files ({outcome.Copied} copied, {outcome.Bundled.Count} bundled).");
+        await context.Out.WriteLineAsync($"Next: apps validate --dir {outArg}, then apps publish --dir {outArg}.");
+        context.Data["app"] = manifest.Name;
+        context.Data["out"] = output;
+        context.Data["files"] = outcome.Files;
+        context.Data["bundled"] = outcome.Bundled;
+        return CliExit.Ok;
     }
 
     // ---- store-verify ----
@@ -331,18 +232,5 @@ public static class AppsBuild
         }
         catch (VendoredStoreException e) { await context.Error.WriteLineAsync(e.Message); return CliExit.Failure; }
         catch (GatewayConfigException e) { await context.Error.WriteLineAsync(e.Message); return CliExit.Failure; }
-    }
-
-    private static bool IsUnder(string folder, string path) => path.StartsWith(folder + Path.DirectorySeparatorChar, StringComparison.Ordinal);
-
-    /// <summary>A file of the source tree that is not part of what is served: hidden and tooling files, TypeScript and maps, the entry and the folder it lives in.</summary>
-    private static bool IsSource(string relative, string? entry, string? entryTop)
-    {
-        var parts = relative.Split('/');
-        if (parts.Any(p => p.StartsWith('.') || p == "node_modules")) return true;
-        if (parts.Length == 1 && ToolingFiles.Contains(parts[0], StringComparer.OrdinalIgnoreCase)) return true;
-        if (SourceExtensions.Contains(Path.GetExtension(relative), StringComparer.OrdinalIgnoreCase)) return true;
-        if (entry is not null && string.Equals(relative, entry, StringComparison.Ordinal)) return true;
-        return entryTop is not null && parts.Length > 1 && parts[0] == entryTop;
     }
 }

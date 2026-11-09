@@ -46,6 +46,7 @@
     <DbDataKitReference Include="State.Engines" />   <!-- SQLite, SQL Server or PostgreSQL for it, as the operator names; plan 13a, P11 -->   <!-- the gateway's state database; plan 13, P02 -->
     <DbDataKitReference Include="Web" />   <!-- the management API: pairing, tokens, roles; plan 13, P03 -->
     <DbDataKitReference Include="Upgrade" />   <!-- the server upgrades itself when the console says so; plan 24a UC09 -->
+    <DbDataKitReference Include="Apps.Build" />   <!-- the app template and the build both `apps new` and the Workspace server use; plan 22a GP35 -->
     <DbDataKitReference Include="Apps.Bundling" />   <!-- apps build: the bundler behind a command line; plan 26, AP23 -->
     <DbDataKitReference Include="Views.Hosting" />   <!-- the views module: published dashboards and reports as the caller; plan 32, DBR11b -->
     <DbDataKitReference Include="Apps.Host" />   <!-- the apps module: published apps by subpath; plan 26, AP05 -->
@@ -63,7 +64,6 @@
     <EmbeddedResource Include="..\..\templates\apps\territory-notes-src\**\*" LogicalName="apps-templates/territory-notes-src/%(RecursiveDir)%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\..\templates\apps\front-portal\**\*" LogicalName="apps-templates/front-portal/%(RecursiveDir)%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\..\templates\apps\territory-views\**\*" LogicalName="apps-templates/territory-views/%(RecursiveDir)%(Filename)%(Extension)" />
-    <EmbeddedResource Include="..\..\templates\apps\app\**\*" LogicalName="apps-templates/app/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
   <!--
     The runtime that draws an app of views only (plan 26, AP25) is the web build of DbDataKit/web/view-app. A build copies it next to the program when it exists (so a developer who built it sees it run); publish builds it, unless

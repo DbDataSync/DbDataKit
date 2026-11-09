@@ -35,6 +35,7 @@ public static class WorkspaceCli
             .With([.. PairingVerbs.Create(args => WorkspaceState.Pairing(DirectoryOf(args, environment), environment))]),
         WorkspaceAdminCommand.Project(environment),
         WorkspaceAdminCommand.Workspace(environment),
+        WorkspaceAdminCommand.Publisher(environment),
         StateNoun(environment),
         // the store is opened (and its key made on first use) only for the secret verbs
         .. invocation is ["secret", ..] ? new[] { SecretVerbs(invocation) } : Array.Empty<Noun>(),

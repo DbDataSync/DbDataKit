@@ -29,7 +29,7 @@ jobs:
   changes:
     uses: ./.github/workflows/_changes.yml
     with:
-      paths: '^(DbDataWorkspace/|DbDataKit/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdataworkspace-|_)|actions/setup-product))'
+      paths: '^(DbDataWorkspace/|DbDataKit/|DbDataGateway/tests/DbDataGateway\.Tests/Support/AppStoreSupport\.cs|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdataworkspace-|_)|actions/setup-product))'
 
   # The server, its pairing and its command line run on both systems; the Windows service registration is only exercised here against fakes.
   test:
@@ -48,6 +48,22 @@ jobs:
           product: DbDataWorkspace
           global-json: DbDataWorkspace/global.json
           duckdb: 'false'
+      # The build, preview and publish tests (plan 22a GP35b) build the app template with the pinned Bun from the vendored package store, in a network namespace: Node, `npm ci`,
+      # Bun and user namespaces are needed, and the tests fail rather than skip without them (Linux only; the Windows job skips them).
+      - uses: actions/setup-node@v7
+        if: runner.os == 'Linux'
+        with:
+          node-version: 24
+      - name: Fetch the pinned Bun, install the web workspace's packages and allow user namespaces
+        if: runner.os == 'Linux'
+        working-directory: .
+        run: |
+          scripts/fetch-bun.sh
+          echo "$GITHUB_WORKSPACE/.bun/linux-x64" >> "$GITHUB_PATH"
+          (cd DbDataKit/web && npm ci --ignore-scripts)
+          echo "DBDATA_REQUIRE_BUN=true" >> "$GITHUB_ENV"
+          echo "DBDATA_REQUIRE_APP_STORE=true" >> "$GITHUB_ENV"
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
       - run: dotnet build DbDataWorkspace.slnf -c Release
       - run: dotnet test --project tests/DbDataWorkspace.Tests -c Release --no-build --minimum-expected-tests 12
 
@@ -70,5 +86,19 @@ jobs:
           testenv/testenv.sh up mssql postgres
           testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
           echo "DBDATA_REQUIRE_POSTGRES=true" >> "$GITHUB_ENV"
+      # The build, preview and publish tests (plan 22a GP35b) build the app template with the pinned Bun from the vendored package store, in a network namespace: Node, `npm ci`,
+      # Bun and user namespaces are needed, and the tests fail rather than skip without them (Linux only; the Windows job skips them).
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Fetch the pinned Bun, install the web workspace's packages and allow user namespaces
+        working-directory: .
+        run: |
+          scripts/fetch-bun.sh
+          echo "$GITHUB_WORKSPACE/.bun/linux-x64" >> "$GITHUB_PATH"
+          (cd DbDataKit/web && npm ci --ignore-scripts)
+          echo "DBDATA_REQUIRE_BUN=true" >> "$GITHUB_ENV"
+          echo "DBDATA_REQUIRE_APP_STORE=true" >> "$GITHUB_ENV"
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
       - run: dotnet build DbDataWorkspace.slnf -c Release
       - run: dotnet test --project tests/DbDataWorkspace.Tests -c Release --no-build --minimum-expected-tests 17

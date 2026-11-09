@@ -51,7 +51,7 @@ test('a person makes a workspace, edits a file, reads the diff, commits, is told
   // ---- its page: the files of the draft, the editor empty until a file is picked, a commit not yet possible
   await expect(page.getByTestId('wsp-page')).toBeVisible()
   await expect(page.getByTestId('wsp-title')).toHaveText('edit-orders')
-  await expect(page.locator('[data-testid="wsp-file"][data-path="README.md"]')).toBeVisible()
+  await expect(page.locator('[data-testid="wsp-file"][data-path="app.yaml"]')).toBeVisible()
   await expect(page.getByTestId('wsp-pick')).toBeVisible()
   await expect(page.getByTestId('wsp-changes-none')).toBeVisible()
   await expect(page.getByTestId('wsp-commit')).toBeDisabled()

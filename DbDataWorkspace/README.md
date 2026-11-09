@@ -1,7 +1,7 @@
 # DbDataWorkspace
 
 The server where people (and, later, agents) author projects in git workspaces (plan 22a GP31, decision D8; plan 27). A project is a git repository of some kind (an app today; plan 27 adds agent, integration, skill and knowledge projects); a **workspace** is one person's draft of it, a git worktree on its own branch in a folder the server owns, so a draft never changes what is published. The server lists, creates and abandons workspaces, shows their changes, commits, pushes and merges them (the shared library `DbDataKit.Authoring`, which Build serves its workspaces with too), and keeps a record of what was done in its state database. It has no web page of its own: a console pairs with it and shows its screens (Servers, then the Workspace server, then Workspaces).
-**Not built yet:** builds, previews and publishing (GP32 to GP34, GP35b); editing a draft's files, commit, push and merge are built (GP35a); the app template (GP32). The `build` table and the publisher's key reference are in the state module so those slices add no second break.
+**Built:** editing a draft's files, commit, push and merge (GP35a); an app project starts as the app template (GP32); builds from a vendored package store, a read-only preview and publishing to a paired Gateway (GP35b, below). **Not built:** a preview with live data (the semantic route and the apps host's preview channel), a git remote for a project. The `build` table and the publisher's key reference are in the state module; the builds write the one and publishing reads the other.
 
 ```
 dbdataworkspace server run [--repo <server directory>] [--listen https://127.0.0.1:8495] [--state-engine sqlite|mssql|postgres --state-connection <connection string>]
@@ -11,6 +11,8 @@ dbdataworkspace project create <id> [--title <text>] [--kind app] [--repo <serve
 dbdataworkspace project add <id> --path <repository folder> [--title <text>] [--kind app] [--repo <server directory>]   # host a repository that is already on this machine, in place
 dbdataworkspace project list [--repo <server directory>]
 dbdataworkspace workspace list [--project <id>] [--repo <server directory>]
+dbdataworkspace publisher pair <name> --url <https address of a Gateway's management API> --code <pairing code> [--client-name <text>] [--repo <server directory>]   # make the key for a target and pair it with a Gateway (the code: `server pair --max-role publisher` there)
+dbdataworkspace publisher list [--repo <server directory>]   # each target's key reference (never the key) and its Gateway
 dbdataworkspace service install|uninstall|status|start|stop|restart|doctor|unit
 dbdataworkspace state init --topology service|group|install [--engine mssql|postgres --connection <connection with Password=secret:NAME or env:NAME>] [--login <role or user> [--migrate]] [--admin-connection <reference> --apply] [--group <name>] [--settings <file>] [--repo <server directory>]   # writes the state section of server.yaml (a SQLite file per service is the default)
 dbdataworkspace state show [--offline] [--engine mssql|postgres] [--repo <server directory>]      # the state database: engine, where each setting came from, namespaces, module versions, pending migrations; creates nothing
@@ -28,10 +30,12 @@ dbdataworkspace health check [--url <url>]
 
 | Path | What |
 | --- | --- |
-| `server.yaml` | the `state:` section (engine and connection); nothing else is settings yet |
+| `server.yaml` | the `state:` section (engine and connection) and the `apps:` section (how an app is built: `packageStore`, `allowedPackages`, `packageStoreSha256`, `isolation: required\|auto`, `buildTimeoutSeconds`, `bun`; a server with no `packageStore` does not build) |
 | `state.db` | the state database on SQLite (the default); `DBDATAWORKSPACE_STATE_ENGINE` and `DBDATAWORKSPACE_STATE_CONNECTION`, or the `state:` section, name SQL Server or PostgreSQL |
 | `projects/<id>/` | a project the server made (a git repository); a project added by path stays where it is |
 | `workspaces/<project>/<id>/` and `<id>.json` | a workspace's worktree and the record that says whose it is (the layout Build's server has always had; `DbDataKit.Authoring`) |
+| `builds/<project>/<id>/` | a build: `app/` (the built folder), `result.json`, `publishes.jsonl` |
+| `publish-targets.json` | the Gateway each publisher key is paired with (address, instance id, pinned fingerprint, roles; never a key) |
 | `management-audit.log` | who made a project or changed a publisher's key reference, never a value |
 
 `DBDATAWORKSPACE_SERVER_DIR` names the directory for every command.

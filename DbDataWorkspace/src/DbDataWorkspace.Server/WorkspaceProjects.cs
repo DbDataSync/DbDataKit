@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using DbDataKit.Apps;
 using DbDataKit.Authoring;
 using DbDataKit.Config.Git;
 using DbDataKit.State;
@@ -33,7 +34,7 @@ public sealed partial class WorkspaceProjects(string directory, WorkspaceStore s
 
     /// <summary>
     /// Makes a new project: the folder <c>projects/&lt;id&gt;</c> becomes a git repository with a first commit in the person's name, and is hosted from then on. Nothing is overwritten: an id that is taken, or a folder that is already
-    /// there and not empty, is refused. The app template arrives with plan 22a GP32; until then the first commit holds a README and the attributes file.
+    /// there and not empty, is refused. An app project starts as the app template (plan 22a GP32, `DbDataKit.Apps.AppTemplate`), any other kind with a README; the attributes file is in both.
     /// </summary>
     public WorkspaceProjectRow Create(string id, string kind, string? title, GitAuthor author, string createdBy)
     {
@@ -47,7 +48,18 @@ public sealed partial class WorkspaceProjects(string directory, WorkspaceStore s
             try
             {
                 Directory.CreateDirectory(folder);
-                File.WriteAllText(Path.Combine(folder, "README.md"), $"# {title ?? id}\n\nAn {kind} project of the Workspace server. Edit it in a workspace; a merge changes this copy.\n");
+                if (kind == "app")
+                {
+                    // an app project starts as the app template (plan 22a GP32), named for the project: app.yaml, index.html, package.json, src/ and the three view specs
+                    foreach (var (path, bytes) in AppTemplate.Files(id, title))
+                    {
+                        var target = Path.Combine(folder, path.Replace('/', Path.DirectorySeparatorChar));
+                        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                        File.WriteAllBytes(target, bytes);
+                    }
+                    File.WriteAllText(Path.Combine(folder, ".gitignore"), "node_modules/\ndist/\n");
+                }
+                else File.WriteAllText(Path.Combine(folder, "README.md"), $"# {title ?? id}\n\nAn {kind} project of the Workspace server. Edit it in a workspace; a merge changes this copy.\n");
                 File.WriteAllText(Path.Combine(folder, ".gitattributes"), "* text=auto eol=lf\n");
                 LibGit2Sharp.Repository.Init(folder);
                 GitWorkspaceOperations.Commit(folder, $"New {kind} project", author);

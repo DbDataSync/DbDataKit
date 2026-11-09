@@ -184,6 +184,16 @@ The CI runners are small (two cores, Windows and Linux), run many jobs at once, 
 | a new product's `dotnet build DbDataKit.slnx` fails to find a project, or `check_solution.py` names it | the product's projects are in no `<Folder>` of `DbDataKit.slnx`, or not in `DbDataKit.Shared.slnx` (a shared library and its tests) | add both projects of the product to `DbDataKit.slnx` and the product's `.slnf`; a library and its tests to `DbDataKit/DbDataKit.Shared.slnx` as well |
 | two Playwright servers fail to start, one with `address already in use` | a new fixture server took a port another story has (the table is in the comments of `playwright.config.ts`) | search the config and the other open branches for the port before you take it; the Workspace server is 8611 |
 
+### Workspace builds (Bun, the vendored store, the network namespace)
+
+| Signature | Cause | Fix |
+| --- | --- | --- |
+| `the app store is required but could not be made` or a skipped `WorkspaceBuildTests` / `WorkspacePublishTests` in the Workspace job | these tests build the app template through the Workspace server, from the store `DbDataKit/web/app-store/build.mjs` makes (the helper is the Gateway's `AppStoreSupport`, linked into the test project) | the Linux job of `dbdataworkspace-ci.yml` installs Node, runs `npm ci --ignore-scripts` in `DbDataKit/web`, fetches the pinned Bun and sets `DBDATA_REQUIRE_APP_STORE` and `DBDATA_REQUIRE_BUN`; the Windows job skips them on purpose |
+| a build row is `failed` with `The build must run with no network and this Linux machine could not make a network namespace` (or the screen says builds are refused for that reason) | the Workspace server's default is `apps.isolation: required` and the runner restricts user namespaces (Ubuntu 24.04: `kernel.apparmor_restrict_unprivileged_userns`) | CI jobs run `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`; a story that must not depend on it starts the server with `apps: { isolation: auto }`, and the build then says `isolated: false` (what the screen shows as "not isolated") |
+| the console's relay answers a preview page but the browser shows no policy, or the preview's script is blocked | the relay forwards only the response headers it lists (`ForwardedResponseHeaders`); the preview's `Content-Security-Policy` is one of them since GP35b | add a new header the page needs to that list and to `ConsoleWorkspaceTests.A_preview_reaches_the_browser_with_the_policy_the_server_gave_it` |
+| a preview shows an empty frame, and its script was loaded as a second request | a sandboxed document (`allow-scripts` without `allow-same-origin`) sends no cookie, and the console's relay needs the session cookie, so a second request is refused | the Workspace server inlines the entry document's script and style (`WorkspacePreview.Inline`); an app's other files are not reachable from a preview |
+| a minimal-API lambda `async ctx => await handler(ctx)` in a test fake answers 200 with an empty body whatever the handler returned | the handler returned an `IResult` from a `Task<IResult>` method that the lambda's inferred type did not execute | the fake writes its answer itself (`context.Response.WriteAsJsonAsync`); see `FakeGateway` |
+
 ### Merging `main` into a branch
 
 | Signature | Cause | Fix |

@@ -31,6 +31,55 @@ public static class WorkspaceAdminCommand
             DataSchemas.Object([("workspaces", DataSchemas.ListOf(DataSchemas.Object([("project", DataSchemas.String), ("id", DataSchemas.String), ("owner", DataSchemas.String), ("branch", DataSchemas.String)], "project", "id", "owner", "branch")))], "workspaces")),
     ]);
 
+    public static Noun Publisher(Func<string, string?>? environment) => new("publisher", "The keys this server publishes with: a key for a target, paired with a Gateway",
+    [
+        new Verb("pair", "Make the key for a target and pair it with a Gateway (a single-use code made there with `server pair --max-role publisher`); the key stays in this server's secret store and a reference to it is recorded", EffectClass.RepoFilesOnly,
+            $"<name> --url <https address of the Gateway's management API> --code <pairing code> [--client-name <text>] {Where}", (args, context) => PairAsync(args, context, environment),
+            DataSchemas.Object([("name", DataSchemas.String), ("url", DataSchemas.String), ("secret_ref", DataSchemas.String)], "name", "url", "secret_ref")),
+        new Verb("list", "The targets: the reference to each one's key (never the key) and the Gateway it is paired with", EffectClass.OfflineOnly, Where,
+            (args, context) => ListKeysAsync(args, context, environment), DataSchemas.Object([("keys", DataSchemas.ListOf(DataSchemas.Object([("name", DataSchemas.String), ("secret_ref", DataSchemas.String), ("url", DataSchemas.String)], "name", "secret_ref")))], "keys")),
+    ]);
+
+    private static async Task<int> PairAsync(string[] args, CliContext context, Func<string, string?>? environment)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "url", "code", "client-name", "repo" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count != 1 || parsed.Get("url") is not { Length: > 0 } url || parsed.Get("code") is not { Length: > 0 } code || !Uri.TryCreate(url, UriKind.Absolute, out var address))
+        {
+            await context.Error.WriteLineAsync($"Usage: publisher pair <name> --url <https address of the Gateway's management API> --code <pairing code> [--client-name <text>] {Where}");
+            return CliExit.Usage;
+        }
+        var directory = DirectoryOf(parsed, environment);
+        try
+        {
+            var (store, _) = Open(directory, environment);
+            var target = await new WorkspacePublishing(directory, store).PairAsync(parsed.Words[0], address, code, parsed.Get("client-name"), Operator, context.Cancellation);
+            await context.Out.WriteLineAsync($"Paired the publisher key {target.Name} with {target.Url} as '{target.ClientName}' with the roles {string.Join(", ", target.Roles)}; its certificate is pinned: {target.Fingerprint}. The key is in this server's secret store: {WorkspacePublishing.ReferenceFor(target.Name)}.");
+            context.Data["name"] = target.Name;
+            context.Data["url"] = target.Url;
+            context.Data["secret_ref"] = WorkspacePublishing.ReferenceFor(target.Name);
+            return CliExit.Ok;
+        }
+        catch (WorkspacePublishException ex)
+        {
+            await context.Error.WriteLineAsync(ex.Message);
+            return ex.Status == 400 ? CliExit.Usage : CliExit.Failure;
+        }
+    }
+
+    private static async Task<int> ListKeysAsync(string[] args, CliContext context, Func<string, string?>? environment)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0) { await context.Error.WriteLineAsync($"Usage: publisher list {Where}"); return CliExit.Usage; }
+        var directory = DirectoryOf(parsed, environment);
+        var (store, _) = Open(directory, environment);
+        var publishing = new WorkspacePublishing(directory, store);
+        var keys = store.PublisherKeys();
+        foreach (var k in keys) await context.Out.WriteLineAsync($"{k.Name}  {k.SecretRef}  {publishing.Find(k.Name)?.Url ?? "(no Gateway paired)"}");
+        if (keys.Count == 0) await context.Out.WriteLineAsync("There is no publisher key. Make one with: publisher pair <name> --url <gateway> --code <code>");
+        context.Data["keys"] = keys.Select(k => new Dictionary<string, object?> { ["name"] = k.Name, ["secret_ref"] = k.SecretRef, ["url"] = publishing.Find(k.Name)?.Url ?? "" }).ToList();
+        return CliExit.Ok;
+    }
+
     private static string Operator => "local:" + Environment.UserName;
 
     private static string DirectoryOf(CliArgs parsed, Func<string, string?>? environment) =>
