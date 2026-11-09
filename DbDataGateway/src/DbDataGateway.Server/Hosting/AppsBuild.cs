@@ -22,7 +22,11 @@ public static class AppsBuild
         ["territory-notes-src"] = "the same code app as a source tree (TypeScript in src/): `apps build` bundles it",
         ["front-portal"] = "a declared portal: views of data the host renders, no script",
         ["territory-views"] = "an app of views only: grid, form, detail and dashboard (view-spec/1) the host draws, no script",
+        [NewTemplate] = "the app template: a code app on the default library set (React, the Store controls, the visuals, the typed clients); `apps build` bundles it from the vendored package store",
     };
+
+    /// <summary>The template <c>apps new</c> makes an app from (plan 22a GP32).</summary>
+    public const string NewTemplate = "app";
 
     private const string ResourcePrefix = "apps-templates/";
 
@@ -45,12 +49,28 @@ public static class AppsBuild
             foreach (var (name, what) in Templates) await context.Error.WriteLineAsync($"  {name}: {what}");
             return CliExit.Usage;
         }
+        return await MakeAsync(template, dir, parsed.Get("name"), context);
+    }
+
+    /// <summary><c>apps new</c>: <c>apps init</c> with the app template, which is the one a new app starts from (plan 22a GP32).</summary>
+    public static async Task<int> NewAsync(string[] args, CliContext context)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "dir", "name" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("dir") is not { Length: > 0 } dir)
+        {
+            await context.Error.WriteLineAsync("Usage: apps new --dir <new folder> [--name <app name>]");
+            return CliExit.Usage;
+        }
+        return await MakeAsync(NewTemplate, dir, parsed.Get("name"), context);
+    }
+
+    private static async Task<int> MakeAsync(string template, string dir, string? name2, CliContext context)
+    {
         if (!Templates.ContainsKey(template))
         {
             await context.Error.WriteLineAsync($"There is no template '{template}'. The templates are: {string.Join(", ", Templates.Keys)}.");
             return CliExit.Usage;
         }
-        var name2 = parsed.Get("name");
         if (name2 is { Length: > 0 } && !AppManifestLoader.NameRule.IsMatch(name2))
         {
             await context.Error.WriteLineAsync($"An app's name is lower-case letters, digits, '-' and '_', starting with a letter or digit; '{name2}' is not.");
@@ -74,7 +94,7 @@ public static class AppsBuild
             await File.WriteAllBytesAsync(target, content, context.Cancellation);
             written.Add(path);
         }
-        var built = template.EndsWith("-src", StringComparison.Ordinal);
+        var built = template.EndsWith("-src", StringComparison.Ordinal) || files.ContainsKey("package.json");   // a source tree (the `-src` sample, the app template) is built; the others are published as they are
         await context.Out.WriteLineAsync($"Made {folder} from the template {template} ({written.Count} files): {string.Join(", ", written)}.");
         await context.Out.WriteLineAsync(built
             ? $"Next: apps build --src {dir} --out <build folder>, then apps validate --dir <build folder> and apps publish --dir <build folder>."

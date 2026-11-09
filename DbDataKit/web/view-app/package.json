@@ -3,7 +3,11 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "The runtime of an app of views only (plan 26, AP25): reads the views.json the apps host makes from the app's view-spec/1 files and draws each view with the shared controls and renderers.",
+  "description": "The runtime of an app of views only (plan 26, AP25) and the library an app's code builds on (plan 22a GP32, GP34): the host connection, the app's data clients, and the components that draw view-spec/1 files with the shared controls and renderers.",
+  "exports": {
+    ".": "./src/lib.ts",
+    "./styles.css": "./src/styles.css"
+  },
   "scripts": {
     "build": "tsc -p . && vite build",
     "lint": "oxlint --ignore-pattern dist",
@@ -11,6 +15,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@dbdatakit/semantic-client": "*",
     "@dbdatakit/store-ui": "*",
     "@dbdatakit/visuals": "*",
     "react": "^19.2.8",

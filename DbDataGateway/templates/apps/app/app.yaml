@@ -1,0 +1,10 @@
+schemaVersion: 1
+name: app
+title: App
+description: A code app on the default library set (React, the Store controls, the visuals and the typed clients), bundled by `apps build` from a vendored package store with no network.
+version: 1.0.0
+entry: index.html
+roles: [viewer, author]
+models:
+  - model: territories
+    entities: {territory: [read, write]}

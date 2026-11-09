@@ -1,0 +1,21 @@
+{
+  "name": "@dbdatakit/semantic-client",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "A typed client for semantic queries (plan 22a GP32): a request in catalog terms in, a typed result out, through a fetch the host supplies. No host, no framework.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "oxlint",
+    "typecheck": "tsc -p .",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "oxlint": "^1.79.0",
+    "typescript": "~6.0.2",
+    "vitest": "^5.0.1"
+  }
+}

@@ -33,6 +33,20 @@ An app whose manifest names `views` and no `entry` is declarative: its package h
 - **What each kind does.** *Grid*: columns under their labels, a text filter per `filters` attribute, a click on a sortable header sorts, `pageSize` rows a page, `links` (per row or of the page). *Form*: the spec's fields drawn with the model's own control for each (type, length, allowed values), `required`, `readonly` and `help` from the spec; a create form inserts, an edit form (`key` names the parameter that carries the row's key) updates on the version it read; a Store refusal (422) is drawn against the attribute it names, a conflict (409) says to reload. *Detail*: the sections' attributes of one row. *Dashboard*: `metric` (a figure), `bar` (the greatest `limit` groups), `line` (the first `limit` in order), `table`. A detail or edit view is addressed by one key attribute; an entity with a composite key is refused with that said.
 - **Routes.** The shell keeps the address after `#` (`/views/detail.yaml?code=NA`): the runtime tells it the view the person moves to and follows it when the address or the back button changes, the same `route` and `navigate` messages a code app uses.
 
+## Starting an app: the template and the library set
+
+`apps new --dir <folder> [--name <app>]` makes a code app from the template (`DbDataGateway/templates/apps/app`, inside the program): `app.yaml`, `index.html`, `package.json` and `src/` with a React entry that draws the Store's own grid and form and the file that connects the app to its host. `apps build` bundles it (Bun) and `apps validate` and `apps publish` take the folder it makes. What an app imports without asking anyone is the **default library set**:
+
+| Package | What it gives an app |
+| --- | --- |
+| `react`, `react-dom` | the framework the libraries below draw with |
+| `@dbdatakit/store-ui` | the Store's controls: a grid of an entity's rows, a form made from the model, history, field controls, the Store client; the server's refusals are shown against the field they name |
+| `@dbdatakit/visuals` | the renderers: `VegaChart`, `DataTable`, the dashboard and view components |
+| `@dbdatakit/semantic-client` | a typed client for semantic queries (`query(model, {measures, attributes, filters, order, limit})`, `catalog`, `models`) over a `fetch` the host supplies; the host's route for it is not built yet (plan 22a GP35) |
+| `@dbdatakit/view-app` | the app's connection to its host: `connectHost` (the shell's token and route messages), `appStoreClient`, `appSemanticClient` |
+
+`@dbdatakit/shell` is the console's shell (Monaco, router, query cache), not an app's: navigation belongs to the host's shell page (decision 2), so it is not in the default set. The packages come from a **vendored store** (`DbDataKit/web/app-store/build.mjs`), not from a registry.
+
 ## Trust and egress
 
 Two settings, not the same thing.

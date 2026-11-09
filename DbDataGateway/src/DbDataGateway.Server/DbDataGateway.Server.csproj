@@ -63,6 +63,7 @@
     <EmbeddedResource Include="..\..\templates\apps\territory-notes-src\**\*" LogicalName="apps-templates/territory-notes-src/%(RecursiveDir)%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\..\templates\apps\front-portal\**\*" LogicalName="apps-templates/front-portal/%(RecursiveDir)%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\..\templates\apps\territory-views\**\*" LogicalName="apps-templates/territory-views/%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\templates\apps\app\**\*" LogicalName="apps-templates/app/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
   <!--
     The runtime that draws an app of views only (plan 26, AP25) is the web build of DbDataKit/web/view-app. A build copies it next to the program when it exists (so a developer who built it sees it run); publish builds it, unless

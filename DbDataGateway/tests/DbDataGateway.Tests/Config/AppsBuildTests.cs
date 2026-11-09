@@ -4,6 +4,7 @@ using DbDataKit.Apps.Bundling;
 using DbDataKit.Cli;
 using DbDataGateway.Server.Configuration;
 using DbDataGateway.Server.Hosting;
+using DbDataGateway.Tests.Support;
 
 namespace DbDataGateway.Tests.Config;
 
@@ -259,6 +260,55 @@ public sealed class AppsBuildTests : IDisposable
         var broken = await RunAsync(AppsBuild.BuildAsync, "--src", source, "--out", Folder("real-broken"), "--bun", bun.Path!);
         Assert.Equal(1, broken.Exit);
         Assert.Contains("main.ts", broken.Error);
+    }
+
+    [Fact]
+    public async Task The_app_template_builds_through_the_bundler_with_the_default_library_set_and_validates()
+    {
+        var bun = BunLocator.Locate();
+        if (!bun.Found)
+        {
+            Assert.False(string.Equals(Environment.GetEnvironmentVariable("DBDATA_REQUIRE_BUN"), "true", StringComparison.OrdinalIgnoreCase), "bun is required but was not found: " + bun.Problem);
+            Assert.Skip("bun is not installed");
+        }
+        var store = AppStoreSupport.Require();
+        var source = Folder("template");
+        var made = await RunAsync(AppsBuild.NewAsync, "--dir", source, "--name", "sales-app");
+        Assert.True(made.Exit == 0, made.Error);
+        Assert.Contains("name: sales-app", File.ReadAllText(Path.Combine(source, "app.yaml")));
+        // the packages the template imports are the store's (no network, nothing installed)
+        Directory.CreateSymbolicLink(Path.Combine(source, "node_modules"), Path.Combine(store, "node_modules"));
+
+        // 1. through IAppBundler, the way the apps host and the Workspace server build
+        var bundled = await new BunAppBundler(bun.Path!).BundleAsync(new AppBundleRequest(source, "src/main.tsx", Folder("template-bundle"), Offline: true));
+        Assert.True(bundled.Succeeded, string.Join("; ", bundled.Diagnostics.Select(d => d.Message)));
+        Assert.Contains("main.js", bundled.Files);
+        Assert.Contains("main.css", bundled.Files);
+        // a plain script in a sandboxed document: no module syntax
+        Assert.DoesNotContain("\nexport ", File.ReadAllText(Path.Combine(Folder("template-bundle"), "main.js")));
+
+        // 2. through `apps build`, which then runs the checks `apps validate` and `apps publish` make
+        var built = Folder("template-built");
+        var result = await RunAsync(AppsBuild.BuildAsync, "--src", source, "--out", built, "--offline", "--bun", bun.Path!);
+        Assert.True(result.Exit == 0, result.Error + result.Out);
+        var files = Directory.EnumerateFiles(built, "*", SearchOption.AllDirectories).Select(f => Path.GetRelativePath(built, f).Replace('\\', '/')).Order(StringComparer.Ordinal).ToList();
+        Assert.Equal(["app.yaml", "index.html", "main.css", "main.js"], files);
+        Assert.Equal(0, (await CommandAsync("apps", "validate", "--dir", built)).Exit);
+    }
+
+    [Fact]
+    public async Task New_makes_the_app_template_and_refuses_what_init_refuses()
+    {
+        var app = Folder("new-app");
+        var made = await RunAsync(AppsBuild.NewAsync, "--dir", app);
+        Assert.Equal(0, made.Exit);
+        Assert.True(File.Exists(Path.Combine(app, "src", "main.tsx")));
+        Assert.Contains("apps build --src", made.Out);
+        Assert.Contains("--dir <new folder>", (await RunAsync(AppsBuild.NewAsync)).Error);
+        Assert.Equal(2, (await RunAsync(AppsBuild.NewAsync, "--dir", Folder("x"), "--name", "Bad Name")).Exit);
+        Assert.Equal(1, (await RunAsync(AppsBuild.NewAsync, "--dir", app)).Exit);   // not empty
+        Assert.Equal(2, (await RunAsync(AppsBuild.NewAsync, "--dir", Folder("y"), "--template", "territory-notes")).Exit);   // `new` has no template option
+        Assert.Equal(0, (await CommandAsync("apps", "validate", "--dir", app)).Exit);
     }
 
     private static Task<(int Exit, string Out, string Error)> RunBuild(IAppBundler bundler, params string[] args) =>

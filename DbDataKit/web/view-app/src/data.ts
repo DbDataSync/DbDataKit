@@ -1,3 +1,4 @@
+import { createSemanticClient, type SemanticClient } from '@dbdatakit/semantic-client'
 import { createStoreClient, type Fetcher, type StoreClient } from '@dbdatakit/store-ui'
 import type { StoredRow } from '@dbdatakit/store-ui'
 
@@ -62,12 +63,21 @@ export function connectHost(win: Window = window): Host {
   }
 }
 
-/** The Store client of an app: every call goes to the host's data route for the instance, with the shell's token. The route answers rows, one row, changes and the schema of the entities the manifest lists. */
-export function appStoreClient(host: Pick<Host, 'instance' | 'token'>, fetchImpl: typeof fetch = (...a) => fetch(...a)): StoreClient {
-  const fetcher: Fetcher = async (path, init) => {
+/** How an app reaches the host's data route for its instance: every call carries the shell's token. Paths are relative to the route (`/api/v1/models/...`). */
+export function appFetcher(host: Pick<Host, 'instance' | 'token'>, fetchImpl: typeof fetch = (...a) => fetch(...a)): Fetcher {
+  return async (path, init) => {
     const headers = new Headers(init?.headers)
     headers.set('Authorization', `Bearer ${await host.token()}`)
     return fetchImpl(`/apps/${encodeURIComponent(host.instance)}/_data${path}`, { ...init, headers })
   }
-  return createStoreClient(fetcher)
+}
+
+/** The Store client of an app: every call goes to the host's data route for the instance, with the shell's token. The route answers rows, one row, changes and the schema of the entities the manifest lists. */
+export function appStoreClient(host: Pick<Host, 'instance' | 'token'>, fetchImpl?: typeof fetch): StoreClient {
+  return createStoreClient(appFetcher(host, fetchImpl))
+}
+
+/** The semantic client of an app, on the same route and token. The host's semantic route is not built yet (plan 22a GP35 needs it); until then every call answers what the host answers (404). */
+export function appSemanticClient(host: Pick<Host, 'instance' | 'token'>, fetchImpl?: typeof fetch): SemanticClient {
+  return createSemanticClient(appFetcher(host, fetchImpl))
 }
