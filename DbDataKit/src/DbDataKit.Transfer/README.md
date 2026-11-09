@@ -67,9 +67,20 @@ Statement log (`StatementLogDetail`): default `HashAndTypes` = statement hash, p
 
 `SourceInvariants` is the reusable form of Build's `GateInvariantTests`: `FindOffenders(sourceRoot, SourceInvariants.DriverCalls, allowedPaths)` lists source files outside the allow list that create or run driver commands or bulk routes (comments and string literals are ignored). `InvariantTests` and `GateInvariantTests` apply it to the Transfer packages and to DbDataBuild's `src` (the gate invariant of plan 13, B06: one rule, run from the shared suite and from Build's own); Sync calls it over its own `src`.
 
+## Rules both products keep
+
+The write gate is the one choke point for database writes. These rules hold for every product that writes through it (Build does; Sync adopts it in plan 07 TR04):
+
+- Writes go only through the gate, and a source-scanning test (`SourceInvariants`, Build's `GateInvariantTests` pattern) proves no command object is created elsewhere.
+- The gate enforces `access: readonly`, the per-target app lock (`sp_getapplock`, `pg_try_advisory_lock`; shared for refresh, exclusive for deploy), transaction control and the retry classification (`ConnectionFailure`).
+- The statement log is written before execution; an unwritable log aborts the statement; dry-run runs the checks and the log and executes nothing.
+- The log holds the statement's text hash and the parameter types by default, values only by opt-in, redacted through `IRedactor`, in a file with a restricted access list.
+- Every strategy has a conformance test against the DuckDB reference, including rerun idempotency, on every engine fixture; a strategy that is not idempotent is labelled. Fabric stays unverified: never mark a strategy verified for an engine this repository did not run.
+- Performance: every extraction of a hot path is gated by a benchmark, with no regression against the current bulk paths (`DbDataKit/benchmarks/DbDataKit.Transfer.Benchmarks`).
+
 ## Not done
 
-Arrow-first/Parquet staging, MySQL/Oracle bulk writers, `ITransferVerifier` implementation, segmenter/worker lanes, SCD2/Snapshot, Windows ACL on the statement log, Sync/Build adoption.
+Owned by [plan 07](../../../docs/plans/07-data-transfer.md) (slices TR01 to TR08): the `ITransferVerifier` implementation, Arrow-first and Parquet staging (after a benchmark), Sync's adoption of the gate, the MySQL and Oracle bulk writers, SCD2 and Snapshot as shared strategies, segmenting and worker lanes in a shared package, and the Windows ACL on the statement log.
 
 ## Strategy semantics in Sync and in Build
 

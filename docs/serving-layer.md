@@ -45,7 +45,7 @@ A console calls servers and a server never calls a console. The serving layer is
 | `knowledge` | search, show and about over knowledge items, access-filtered; checks and embeds a knowledge project at staging and switches at activation (plan 27 sections 2.2, 2.6) | not built (plan 27a lane KN); no knowledge library, index or embedding connection exists, only the engine check for vector columns, see [knowledge.md](knowledge.md) |
 | `backlog` | the API of DbDataBacklog: work items, sprints, boards, over its own state module (plan 27 section 5.1) | not built (plan 27a lane BK) |
 
-Health per module is not wired into the host's `/health`: `IServingModule.Health()` exists; the `views` module reports its own at its listener's `/health`.
+Health per module is not wired into the host's `/health`: `IServingModule.Health()` exists; the `views` module reports its own at its listener's `/health` (plan 20 O18).
 
 ## What keeps working when a back-end is down
 
@@ -57,7 +57,7 @@ Health per module is not wired into the host's `/health`: `IServingModule.Health
 | The console | everything an end user does | administration, approvals made in the console, monitoring views |
 | A serving instance | the others behind the load balancer | nothing, if the group has more than one instance |
 
-Tests for each row with the back-end stopped are in plan 20 (O13); several of the rows are exercised by `GroupStateTests`, which run a done-when with no Store server or no Build.
+Tests for each row with the back-end stopped are not written yet (plan 20 O13); several of the rows are exercised by `GroupStateTests`, which run a done-when with no Store server or no Build.
 
 ## High availability, groups and identity
 
@@ -74,6 +74,19 @@ Tests for each row with the back-end stopped are in plan 20 (O13); several of th
 3. Approving a data change request is a runtime action in the serving layer, like the write; approving a structure change stays in DbDataStore's server.
 4. **The rename is DbDataGateway**, done by `scripts/rename_proxy_to_gateway.py` in batch 17 (plan 20 O14) as a clean break.
 5. Publishing is the one act that makes a model available (plan 20 O10b): a model being worked on reaches no group until it is published.
+6. **Who may read a published data source is the published definition's `grants` section** (owner, 2026-11-08; `connection/2`, authored in Build's connection file). A republish replaces it completely; the Gateway adds none, enforces what the definition says, and its data source screen shows the grants read-only. A publish that contradicts the Gateway's own settings is not rejected (deferred on purpose).
+7. **The same definition carries the Gateway's serving policy** (owner, 2026-11-09): `extensions.gateway` (`pass_through`, `bitness`, `classifier`, `metadata`, the limits, `batch_size`, `compression`), replaced whole by a republish. `allow_writes` and `allowed_directories` are not part of a definition: a publish that carries either is refused, and editing a published data source on the Gateway is not supported. A publisher adopts a data source made by hand with `adopt: true`; the replaced file goes to the history and the answer lists what changed or was dropped. The Publisher role is high-trust.
+
+## Known limits of what is built
+
+What a reader of the code should not assume; each is either a deliberate limit or owned by a slice of [plan 20](plans/20-serving-layer.md).
+
+- **Modules** (O01): only `flightsql` implements `IServingModule`; the identity home, the apps host and the store module are hosted web applications on their own listeners. Health per module is not on `/health` (O18).
+- **Identity keys** (O02b): `dbdatakit identity run` protects its signing keys with ASP.NET data protection keys in its own directory, so a group of those homes needs the folder copied (O06b). Entra's group overage (more than 200 groups) gives no groups; Windows on Linux with a keytab is built but untested, there being no KDC in the test environment; `identity run` does not offer the upstreams yet (O06b).
+- **Definitions** (O03): a request is not pinned to one version while it runs and its answer does not name the version; `expected_version` is checked per instance, so two publishes through two instances at once can both pass it (O19).
+- **Groups** (O04): Build, Sync and Store run once, they are not groups. Adopting a hand-made data source on a group keeps it the instance's own file. The console shows a group's data sources as the instance it reaches lists them (O20).
+- **Store publishing** (O10, O10b): permissions are not in `model/1` (row and column rules are plan 22a's access rules); publishing is a command, not the Store's management API or screens, and a model with instances cannot be published yet (the group serves a model's own copy only) (O10c).
+- **Semantic** (plan 14a): the combine runs in process under limits, not in a child process (SL27, conditional); semantic state is not in the Gateway's store (SL23, SL25).
 
 ## The contract
 

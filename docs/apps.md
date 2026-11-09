@@ -132,6 +132,21 @@ For the organisation's own portal (SharePoint, Teams, an intranet): a stable lau
 
 Routes are `/api/v1/models/{m}/instances/{i}/...`; the old paths mean `default`; an administrator registers and forgets instances (forgetting keeps the data). A saved model text is kept under its SHA-256, so a copy runs the version it was made or last migrated at (`GET .../migrations`: `current`, `behind`, `unknown`) and `POST .../migrate` adds what the new version needs and nothing else (see DbDataStore). The Store controls (`@dbdatakit/store-ui`: `StoreClient.withInstance`, `instances`, `InstancePicker`, `EntityEditor instance`) take an instance. A model with instances cannot be published to a group yet (the group serves a model's own copy only).
 
+## Known limits of what is built
+
+Each is a deliberate limit, a gap a slice of [plan 26](plans/26-app-publishing.md) owns (named), or both.
+
+- **Addresses and origins**: no subdomain or custom-domain bindings, so `origin: own` is not served (AP08). A sandboxed app cannot be given outside origins, only a trusted app can (decision, plan 26). An app on its own origin cannot call the storage API directly (AP08).
+- **Sessions** are in memory per instance: a person signs in again at another instance of a group; a trusted portal carries its own shell script, the host gives it no shared one (AP29). The storage cap of 50 MB is a constant, not a setting (AP29). Previews' throwaway copy of storage waits for plan 21.
+- **Third-party cookies**: a browser that blocks them makes a framed instance ask the person to sign in inside the frame, which the home refuses to frame; a portal on such a browser links with `?launch`.
+- **Shared controls**: `@dbdatakit/store-ui` does not apply the shell's `theme` message (a Playwright app applies it by hand), and charts follow the person's colour scheme only; the portal header's switcher and search parts are drawn as nothing; the shell fixes the slot sizes (declared sizes would be a manifest addition, not planned) (AP28).
+- **Portal home blocks** from the semantic layer, images, tables and per-block roles are not built (the loader refuses a `dashboard` key); `slots.home` cannot combine with a view (AP30).
+- **Trust**: the instance's page lists what the manifest asks, not what is approved; the approval label is on the audit row of a write but not on a change request a trusted app proposes; `--hash` cannot check that the app asked to be trusted (the gate at run still allows only what the manifest asks) (AP31). An app has no owner: any publisher client may publish a new version of any app.
+- **Remote command line**: `nav-save`, the removals, `approval-list` and `approval-revoke` have no `--to` form; the person of a signed-in console is not passed to a remote verb (the token names the paired client). The Gateway's Apps screen does all of them.
+- **Views apps**: reads are up to 2000 rows an entity, with filter, sort and paging in the browser until the Store has a query; a detail or edit view addresses a row by one key attribute; semantic-layer widgets are not built; the Playwright story (list, edit, a refused row) is not written (AP27, AP28).
+- **Store instances**: `scope: shared` entities in `column` mode, a token scoped to instances, per-instance roles for the Store and moving a model between instance modes are not built (Z12b); the migration does the expand step only, no NOT NULL, drop or retype (Z13b). A model with instances cannot be published to a group yet (plan 20 O10c).
+- **Tests**: the Playwright story of `apps-host.spec.ts` (an unapproved fallback with its reason, an approved portal on the host origin with the `_audit` row, a revoked one falls back) is written and has not been run; it needs PostgreSQL, the built Gateway and Store and `npm ci` (AP27).
+
 ## Decisions
 
 1. The default for a code app is a sandboxed document under the host's shell page, not a separate origin; because the sandbox has no browser storage, **the host provides app storage**. Sandboxing is a default, not a rule.
