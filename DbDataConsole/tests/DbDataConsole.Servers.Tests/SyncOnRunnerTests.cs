@@ -42,8 +42,9 @@ public sealed class SyncOnRunnerTests : IAsyncLifetime
     private Task<JsonNode> RunNow(string replication) => Ok(h.Sync(HttpMethod.Post, $"/api/replications/{replication}/runs"), $"run now {replication}", HttpStatusCode.Accepted);
 
     /// <summary>The runs Sync's own history holds for the replication (every kind): what this API's scheduler and workers made.</summary>
+    /// <summary>The runs this server's own workers made (they carry the worker's process id); the history of a replication the runner owns also lists the runner's passes and drains (plan 28c E13a), which have none.</summary>
     private async Task<List<JsonNode>> SyncRuns(string replication) =>
-        [.. (await Ok(h.Sync(HttpMethod.Get, $"/api/replications/{replication}/runs?limit=200"), $"runs of {replication}"))["runs"]!.AsArray().Select(r => r!)];
+        [.. (await Ok(h.Sync(HttpMethod.Get, $"/api/replications/{replication}/runs?limit=200"), $"runs of {replication}"))["runs"]!.AsArray().Select(r => r!).Where(r => r["pid"] is not null)];
 
     private async Task<bool> WorkerRunning(string replication) => (bool)(await Ok(h.Sync(HttpMethod.Get, $"/api/replications/{replication}/status"), $"status of {replication}"))["running"]!;
 

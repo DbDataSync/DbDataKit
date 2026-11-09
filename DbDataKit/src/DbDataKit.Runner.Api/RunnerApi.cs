@@ -17,6 +17,7 @@ namespace DbDataKit.Runner.Api;
 /// <list type="bullet">
 /// <item><c>GET /api/v1/status</c>: the engine of the state, the channels served, what this machine reports (<c>LimitCapabilities</c>), this instance's id and every task's status: next due, last run, what is running or waiting, whether it is paused.</item>
 /// <item><c>GET /api/v1/runs[?package=&amp;channel=&amp;task=&amp;outcome=&amp;limit=&amp;before=]</c>: the run history, newest first; <c>task</c> needs the package and the channel.</item>
+/// <item><c>.../tasks/{package}/{channel}/{task}/steps/{name}[?limit=&amp;before=&amp;key=]</c>: the completed steps of that name across the task's runs, newest first (plan 28c E13). A viewer reads it.</item>
 /// <item><c>.../tasks/{package}/{channel}/{task}/schedule</c>, <c>.../owner</c> and <c>.../decisions</c>: who schedules a task while a product's own scheduler is still in the picture (plan 28c E09), see <c>MapOwnership</c>.</item>
 /// <item><c>POST /api/v1/tasks/{package}/{channel}/{task}/run</c> with an optional <c>{"inputs": {"name": "value"}}</c>: queues a run now (202 with its run id; 409 when one is queued or running already). <c>.../pause</c> and <c>.../resume</c>.</item>
 /// </list>
@@ -105,6 +106,36 @@ public static class RunnerApi
             var job = task is null ? null : $"{package}/{channel}/{task}";
             var runs = new RunStore(state, RunnerNames.EngineService).Read(new RunQuery(RunnerNames.EngineService, job, outcome, StartedBefore: before, Limit: limit, Package: package, Channel: channel));
             return Results.Json(new JsonObject { ["runs"] = new JsonArray(runs.Select(r => (JsonNode)Run(r)).ToArray()) });
+        });
+
+        // what the runs of a task recorded as steps, newest first (plan 28c E13): the outputs a product keeps with its runs (Sync's pass records and polling checks). Viewer.
+        app.MapGet($"{root}/tasks/{{package}}/{{channel}}/{{task}}/steps/{{name}}", (string package, string channel, string task, string name, HttpContext context) =>
+        {
+            if (!ParseTask(package, channel, task, out var reference, out var bad)) return bad!;
+            if (Deny(context, ServerRole.Viewer) is { } denied) return denied;
+            if (!PackageManifestValidator.NameRule.IsMatch(name)) return Results.BadRequest(new { error = $"'{name}' is not a step name." });
+            var query = context.Request.Query;
+            var limit = 100;
+            if (Text(query["limit"]) is { } limitText && (!int.TryParse(limitText, NumberStyles.None, CultureInfo.InvariantCulture, out limit) || limit is < 1 or > 500))
+                return Results.BadRequest(new { error = "limit is a whole number from 1 to 500." });
+            DateTimeOffset? before = null;
+            if (Text(query["before"]) is { } beforeText)
+            {
+                if (!DateTimeOffset.TryParse(beforeText, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var at)) return Results.BadRequest(new { error = "before is a time, such as 2026-11-07T12:00:00Z." });
+                before = at;
+            }
+
+            var steps = new StepStore(state, new ProgressKey(package, channel, task)).Recent(name, limit, before, Text(query["key"]));
+            return Results.Json(new JsonObject
+            {
+                ["task"] = reference!.ToString(),
+                ["step"] = name,
+                ["steps"] = new JsonArray(steps.Select(step => (JsonNode)new JsonObject
+                {
+                    ["key"] = step.Key, ["started"] = step.StartedAt.UtcDateTime.ToString("O"), ["completed"] = step.CompletedAt?.UtcDateTime.ToString("O"),
+                    ["result"] = step.ResultJson is { } json ? JsonNode.Parse(json) : null,
+                }).ToArray()),
+            });
         });
 
         app.MapPost($"{root}/tasks/{{package}}/{{channel}}/{{task}}/run", async (string package, string channel, string task, HttpContext context) =>

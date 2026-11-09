@@ -347,6 +347,19 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
         Assert.StartsWith("main#", failed.End.FirstFailedItem, StringComparison.Ordinal);      // the unit of the pass: the mapping and the claim
         Assert.Equal("Failed", Assert.Single(rig.Work.ListAll(RunnerRig.WorkOwner)).Status.ToString());
         Assert.NotEqual(RunOutcome.Succeeded, rig.Run(failed.RunId).Run.Outcome);
+        // the failed pass is a record of the run, with what the engine classified (the run's own failure says only Permanent), before it failed the run (plan 28c E13)
+        var record = PassRecordText.TryParse(Assert.Single(new DbDataKit.State.StepStore(rig.Database, new DbDataKit.State.ProgressKey(RunnerRig.Package, RunnerRig.Channel, "drain")).Recent(PassRecordText.StepName)).ResultJson)!;
+        Assert.Equal(("Failed", "main", failed.RunId), (record.Status, record.Mapping, record.DrainRunId));
+        Assert.False(string.IsNullOrEmpty(record.Summary));
+        Assert.StartsWith("main#", failed.End.FirstFailedItem, StringComparison.Ordinal);
+        Assert.Equal("main", PassRecordText.MappingOf(failed.End.FirstFailedItem));
+        // the row the console shows for the run (its activity list reads the shared runs): the failed item names the mapping and the failure says how it failed, in the message with the kind Sync classified when it did
+        var row = rig.Run(failed.RunId).Run;
+        Assert.StartsWith("main#", row.FailedItem, StringComparison.Ordinal);
+        Assert.Equal(RunOutcome.Failed, row.Outcome);
+        Assert.Equal("Permanent", row.Failure!.Kind);
+        Assert.Contains("The pass over 'main' ended Failed", row.Failure.Message, StringComparison.Ordinal);
+        if (record.FailureKind is { Length: > 0 } classified) Assert.Contains($"({classified})", row.Failure.Message, StringComparison.Ordinal);
         var held = rig.Watermark(_watermarkKey)!.Value;
         Assert.Equal((start, 1L), (held.Position, held.Version));
 
@@ -502,6 +515,20 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
         Assert.All(units, u => Assert.Equal("completed", u.State));
         Assert.Equal(oldRun.RowsWritten + 10, units.Sum(u => u.Counts["rows"]));
         Assert.NotEqual(oldWatermark, rig.Watermark(_watermarkKey)!.Value.Position);
+
+        // plan 28c E13: what the API shows of this drain is the run's own output. Each pass is a record (the row of Sync's run history: mapping, kind, rows, times, the drain it ran in), and the gate's checks of the source are steps
+        // (what the lag of the mapping is measured against); both are read back as the runner's steps endpoint gives them, newest first, through the types the API reads them with.
+        var steps = new DbDataKit.State.StepStore(rig.Database, new DbDataKit.State.ProgressKey(RunnerRig.Package, RunnerRig.Channel, "drain"));
+        var passes = steps.Recent(PassRecordText.StepName).Select(step => PassRecordText.TryParse(step.ResultJson) ?? throw new InvalidOperationException(step.ResultJson)).ToList();
+        Assert.Equal(rows.Count, passes.Count);
+        Assert.All(passes, p => Assert.Equal(("Succeeded", "Primary", "main", "runner-live", result.RunId), (p.Status, p.Kind, p.Mapping, p.Replication, p.DrainRunId)));
+        Assert.All(passes, p => Assert.True(p.EndedAt >= p.StartedAt && p.StartedAt >= DateTimeOffset.UtcNow.AddMinutes(-5)));
+        Assert.Equal(oldRun.RowsWritten + 10, passes.Sum(p => p.RowsWritten));
+        Assert.Equal(passes.Select(p => p.RunId).Order(), rows.Select(r => r.RunId).Order());
+        var checks = steps.Recent(ChangeCheckText.StepName).Select(step => ChangeCheckText.TryParse(step.ResultJson) ?? throw new InvalidOperationException(step.ResultJson)).SelectMany(b => b.Checks).ToList();
+        Assert.NotEmpty(checks);
+        Assert.All(checks, c => Assert.Equal(("src-conn", _databaseName), (c.Connection, c.Database)));
+        Assert.Contains(checks, c => c.Value is { Length: > 0 });
     }
 
     /// <summary>A mapping of its own over a source table with Change Tracking and a target table, for a replication that has several; its position key and both table names.</summary>

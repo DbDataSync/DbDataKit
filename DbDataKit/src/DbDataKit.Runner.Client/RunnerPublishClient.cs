@@ -85,6 +85,16 @@ public sealed record ClientLastRun(string Id, string Outcome, DateTimeOffset Sta
 /// <summary>A task as the runner's status lists it: who schedules it, the next time it is due, its last run, what is running or waiting there and whether it is paused (plan 28c E10).</summary>
 public sealed record ClientTaskStatus(string Task, string Owner, DateTimeOffset? NextDue, ClientLastRun? LastRun, int Running, int Queued, bool Paused, string? PausedBy);
 
+/// <summary>A run of a task as the runner lists it (plan 28c E13): its id, task, attempt, outcome (lower case), times, the rows it moved, the item it failed on and how it failed (kind and message).</summary>
+public sealed record ClientRun(Guid Id, string Task, int Attempt, string Outcome, DateTimeOffset Started, DateTimeOffset? Finished, long? Rows, string? FailedItem, string? FailureKind, string? FailureMessage, string? PackageVersion)
+{
+    internal static ClientRun From(JsonNode r) => new(Guid.Parse((string)r["id"]!), (string)r["task"]!, (int?)r["attempt"] ?? 1, (string)r["outcome"]!, RunnerPublishClient.Time(r["started"])!.Value, RunnerPublishClient.Time(r["finished"]), (long?)r["rows"], (string?)r["failed_item"],
+        (string?)r["failure"]?["kind"], (string?)r["failure"]?["message"], (string?)r["package_version"]);
+}
+
+/// <summary>A completed step of a task's run: its key, when it started and completed, and its result as JSON text (null for a step that has none).</summary>
+public sealed record ClientStep(string Key, DateTimeOffset Started, DateTimeOffset? Completed, string? Result);
+
 /// <summary>One scheduling decision of an observed task: <paramref name="Source"/> is <c>runner</c> (would have queued) or <c>old</c> (the product queued).</summary>
 public sealed record ClientDecision(string Source, DateTimeOffset At, int Missed, bool Paused);
 
@@ -269,7 +279,7 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
 
     private static string TaskPath(string package, string channel, string task) => $"api/v1/tasks/{Uri.EscapeDataString(package)}/{Uri.EscapeDataString(channel)}/{Uri.EscapeDataString(task)}";
 
-    private static DateTimeOffset? Time(JsonNode? node) => node is JsonValue v && v.TryGetValue<string>(out var text) ? DateTimeOffset.Parse(text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal) : null;
+    internal static DateTimeOffset? Time(JsonNode? node) => node is JsonValue v && v.TryGetValue<string>(out var text) ? DateTimeOffset.Parse(text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal) : null;
 
     /// <summary>Who schedules the task on the runner, its position and pause, and whether anything of it is running or waiting there: <c>GET .../tasks/{package}/{channel}/{task}/schedule</c>.</summary>
     public async Task<ClientTaskSchedule> ScheduleOfAsync(string server, string? code, string package, string channel, string task, Action<string>? log = null, CancellationToken ct = default)
@@ -374,6 +384,27 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
         if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to read the checkpoint {name} of {package}/{channel}/{task}", ct);
         var items = (JsonArray)JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!["items"]!;
         return [.. items.Select(i => new ClientCheckpointItem((string)i!["key"]!, (long)i["version"]!, ((JsonObject)i["parts"]!).ToDictionary(p => p.Key, p => p.Value?.ToString() ?? "")))];
+    }
+
+    /// <summary>The runs of a task, newest first (<c>GET /api/v1/runs</c>, the viewer role); <paramref name="before"/> pages by the start of the last run seen, <paramref name="outcome"/> narrows to one outcome (<c>running</c>, <c>failed</c>), a null <paramref name="task"/> reads every task of the package and channel.</summary>
+    public async Task<IReadOnlyList<ClientRun>> RunsAsync(string server, string? code, string package, string channel, string? task, int limit = 100, DateTimeOffset? before = null, string? outcome = null, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        var query = $"package={Uri.EscapeDataString(package)}&channel={Uri.EscapeDataString(channel)}&limit={limit}" + (task is null ? "" : $"&task={Uri.EscapeDataString(task)}")
+            + (before is { } b ? $"&before={Uri.EscapeDataString(b.UtcDateTime.ToString("O"))}" : "") + (outcome is null ? "" : $"&outcome={Uri.EscapeDataString(outcome)}");
+        using var response = await link.SendAsync(HttpMethod.Get, "api/v1/runs?" + query, null, ct);
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to list the runs of {package}/{channel}" + (task is null ? "" : "/" + task), ct);
+        return [.. JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!["runs"]!.AsArray().Select(r => ClientRun.From(r!))];
+    }
+
+    /// <summary>The completed steps named <paramref name="step"/> across the runs of a task, newest first (<c>GET .../steps/{name}</c>, the viewer role), their results as JSON text.</summary>
+    public async Task<IReadOnlyList<ClientStep>> StepsAsync(string server, string? code, string package, string channel, string task, string step, int limit = 100, DateTimeOffset? before = null, string? key = null, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        var query = $"limit={limit}" + (before is { } b ? $"&before={Uri.EscapeDataString(b.UtcDateTime.ToString("O"))}" : "") + (key is null ? "" : $"&key={Uri.EscapeDataString(key)}");
+        using var response = await link.SendAsync(HttpMethod.Get, TaskPath(package, channel, task) + "/steps/" + Uri.EscapeDataString(step) + "?" + query, null, ct);
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to read the steps {step} of {package}/{channel}/{task}", ct);
+        return [.. JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!["steps"]!.AsArray().Select(s => new ClientStep((string)s!["key"]!, Time(s["started"])!.Value, Time(s["completed"]), s["result"]?.ToJsonString()))];
     }
 
     /// <summary>The task's row of the runner's status (<c>GET /api/v1/status</c>: owner, next due, last run, running, queued, paused), or null when the runner lists no such task.</summary>

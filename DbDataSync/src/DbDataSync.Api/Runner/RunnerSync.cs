@@ -30,8 +30,12 @@ public interface IRunnerSync
 }
 
 /// <summary>The runner a <see cref="RunnerLink"/> names, spoken to through the paired client (the owner, run, pause and resume calls need the operator role of the pairing).</summary>
-public sealed class ClientRunnerSync(RunnerPublishClient client, RunnerLink link) : IRunnerSync
+public sealed class ClientRunnerSync(RunnerPublishClient client, RunnerLink link) : IRunnerSync, IRunnerRuns
 {
+    public Task<IReadOnlyList<ClientRun>> RunsAsync(string? task, int limit, DateTimeOffset? before, string? outcome, CancellationToken ct) => client.RunsAsync(link.Server, null, link.Package, link.Channel, task, limit, before, outcome, null, ct);
+
+    public Task<IReadOnlyList<ClientStep>> StepsAsync(string task, string step, int limit, DateTimeOffset? before, string? key, CancellationToken ct) => client.StepsAsync(link.Server, null, link.Package, link.Channel, task, step, limit, before, key, null, ct);
+
     public Task<ClientTaskSchedule> ScheduleOfAsync(string task, CancellationToken ct) => client.ScheduleOfAsync(link.Server, null, link.Package, link.Channel, task, null, ct);
 
     public Task SetOwnerAsync(string task, string owner, string? reason, ClientSeed? seed, CancellationToken ct) => client.SetOwnerAsync(link.Server, null, link.Package, link.Channel, task, owner, reason, seed, null, ct);
@@ -61,6 +65,9 @@ public sealed class RunnerAccess(RunnerOwnerFile file, Func<RunnerLink, IRunnerS
     public RunnerLink? Link => file.Read().Link;
 
     public IRunnerSync? Open() => Link is { } link ? open(link) : null;
+
+    /// <summary>What the runner of the link says of the runs of a replication (plan 28c E13), or null while no link is set or the opened runner cannot be asked (a test's fake that only moves owners).</summary>
+    public IRunnerRuns? OpenRuns() => Open() as IRunnerRuns;
 
     public IRunnerSync Require() => Open() ?? throw new OwnershipException($"No runner is linked: set the runner (server, channel and package) before a replication is moved ({file.Path}).");
 

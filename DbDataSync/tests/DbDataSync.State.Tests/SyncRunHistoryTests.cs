@@ -88,4 +88,53 @@ public sealed class SyncRunHistoryTests : IDisposable
 
         Assert.Equal([HealthRule.Lagging], health.Single().Findings.Select(f => f.Rule));
     }
+
+    private sealed class FakeRunnerHistory(bool owns, RunRecord? last, bool down = false) : IRunnerRunHistory
+    {
+        public int Asked { get; private set; }
+
+        public bool Owns(string jobId) => owns;
+
+        public Task<RunRecord?> LastRunAsync(string jobId, CancellationToken ct)
+        {
+            Asked++;
+            return down ? throw new InvalidOperationException("The runner could not be reached.") : Task.FromResult(last);
+        }
+    }
+
+    private static RunRecord OnRunner(DateTimeOffset started, RunOutcome outcome = RunOutcome.Succeeded) =>
+        new("crm", Guid.NewGuid().ToString(), started, started.AddSeconds(2), outcome, 3, outcome == RunOutcome.Failed ? "orders" : null, outcome == RunOutcome.Failed ? new RunFailure(RunFailureKinds.PositionExpired, "history discarded") : null);
+
+    [Fact]
+    public async Task For_a_replication_a_runner_owns_the_last_run_is_the_later_of_this_servers_and_the_runners()
+    {
+        var own = Run("orders", RunStatus.Succeeded);
+        var ownRecord = (await new SyncRunHistory(_runs).LastRunAsync("crm"))!;
+
+        var later = OnRunner(ownRecord.Started.AddMinutes(5), RunOutcome.Failed);
+        var earlier = OnRunner(ownRecord.Started.AddMinutes(-5));
+
+        // the runner's run is later: it is the last, with its mapping and the failure Sync classified
+        var last = (await new SyncRunHistory(_runs, runner: new FakeRunnerHistory(true, later)).LastRunAsync("crm"))!;
+        Assert.Equal((later.RunId, RunOutcome.Failed, "orders"), (last.RunId, last.Outcome, last.FailedItem));
+        Assert.Equal(RunFailureKinds.PositionExpired, last.Failure!.Kind);
+        // from before the move, this server's own is the last
+        Assert.Equal(own.ToString(), (await new SyncRunHistory(_runs, runner: new FakeRunnerHistory(true, earlier)).LastRunAsync("crm"))!.RunId);
+        // nothing there yet: what this server has
+        Assert.Equal(own.ToString(), (await new SyncRunHistory(_runs, runner: new FakeRunnerHistory(true, null)).LastRunAsync("crm"))!.RunId);
+        // a replication this server owns never asks the runner
+        var asked = new FakeRunnerHistory(false, later);
+        Assert.Equal(own.ToString(), (await new SyncRunHistory(_runs, runner: asked).LastRunAsync("crm"))!.RunId);
+        Assert.Equal(0, asked.Asked);
+    }
+
+    [Fact]
+    public async Task A_runner_that_cannot_be_asked_is_an_error_and_not_the_older_run_of_this_server()
+    {
+        Run("orders", RunStatus.Succeeded);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => new SyncRunHistory(_runs, runner: new FakeRunnerHistory(true, null, down: true)).LastRunAsync("crm"));
+
+        Assert.Contains("could not be reached", ex.Message);
+    }
 }

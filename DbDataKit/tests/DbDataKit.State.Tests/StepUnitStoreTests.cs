@@ -46,6 +46,32 @@ public sealed class StepUnitStoreTests : IDisposable
 
     [Theory]
     [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
+    public void The_completed_steps_of_a_name_are_read_across_chains_newest_first_by_key_and_by_start(string engine)
+    {
+        var steps = new StepStore(Open(engine), Key);
+        foreach (var (chain, key) in new[] { (Chain, "k1"), (Chain, "k2"), ("another-chain", "k3") })
+        {
+            steps.Begin(chain, "pass-record", key, 1);
+            steps.CompleteValue(chain, "pass-record", key, 1, $"\"{key}\"");
+            _clock.Advance(TimeSpan.FromSeconds(1));
+        }
+
+        steps.Begin(Chain, "pass-record", "unfinished", 1);          // started, never completed: not a result
+        steps.Begin(Chain, "other", "k4", 1);
+        steps.CompleteValue(Chain, "other", "k4", 1, "4");
+        new StepStore(Open(engine), Key with { Task = "another-task" }).Begin(Chain, "pass-record", "k5", 1);
+
+        var all = steps.Recent("pass-record");
+
+        Assert.Equal(["k3", "k2", "k1"], all.Select(s => s.Key));
+        Assert.Equal(["\"k3\""], steps.Recent("pass-record", 1).Select(s => s.ResultJson));
+        Assert.Equal(["k2"], steps.Recent("pass-record", stepKey: "k2").Select(s => s.Key));
+        Assert.Equal(["k2", "k1"], steps.Recent("pass-record", startedBefore: all[0].StartedAt).Select(s => s.Key));
+        Assert.Empty(steps.Recent("nothing"));
+    }
+
+    [Theory]
+    [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
     public void A_different_chain_does_not_reuse_results(string engine)
     {
         var steps = new StepStore(Open(engine), Key);
