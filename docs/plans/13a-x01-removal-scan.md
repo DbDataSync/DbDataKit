@@ -43,7 +43,7 @@ Method: every `DbDataKit/src/*` project, counted for `DbDataKitReference Include
 | Package | Production consumers on main | Verdict |
 | --- | --- | --- |
 | `Connections.Libraries` | removed | gone (X02) |
-| `Connections.Descriptor` | none besides its tests | planned consumer, kept: the engine registry of plan 14 R5 (J06), with the generated `docs/engine-support.md` and `EngineSupportTableTests`, as A20 found |
+| `Connections.Descriptor` | none besides its tests | planned consumer, kept: the engine registry of plan 14 R5 (J06; the products' reading of it is plan 14a SL01 to SL05), with the generated `docs/engine-support.md` and `EngineSupportTableTests`, as A20 found |
 | `Dialect.Arrow` | `Transfer.Abstractions` (and through it Transfer, Build, Sync, Proxy) | consumer, as A20 found |
 | `Secrets.Cli` | `DbDataBuild.Cli`, `DbDataProxy.Server` (Sync uses its own `SecretCommand`) | consumer, as A20 found |
 | `Update.*` (Update, Abstractions, Detect, Service, Tools, Updater) | `Update.Updater` has none; the others reference each other | shelved by decision, left |
