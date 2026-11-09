@@ -52,6 +52,8 @@ jobs:
 
   # The real programs in one run (plan 13a, T12; E05 adds a Sync server): a Build server and a Gateway started from their built output, a console in the test between them. A Build server publishes and updates its own data source on the Gateway, is refused on
   # one made by hand and on extensions.gateway, cannot adopt for itself, and the Gateway's audit names the person and the Build server. The second test (J12) publishes a project's semantic model and queries it, so a SQL Server from testenv/ is up for that job.
+  # The fourth (plan 28c E12e) is a Sync replication that really is owned by a runner: a Sync server and a runner (both programs) with the engine as the runtime package, the replication set published with `dbdatasync package publish`,
+  # and a continuous and a periodic replication moved to the runner and back, SQL Server to PostgreSQL (and one SQL Server to SQL Server); it needs the PostgreSQL of testenv/ as well, and takes about five minutes.
   servers:
     needs: changes
     if: ${{ needs.changes.outputs.build == 'true' }}
@@ -74,14 +76,17 @@ jobs:
         run: dotnet build src/DbDataGateway.Server -c Debug
       - name: Build a Sync server
         working-directory: DbDataSync
-        run: dotnet build src/DbDataSync.Cli -c Debug
+        run: dotnet build src/DbDataSync.Cli -c Debug   # builds the engine (the TaskRunner) too: the runtime package of the runner story
+      - name: Build a runner
+        working-directory: DbDataRunner
+        run: dotnet build src/DbDataRunner.Server -c Debug
       - run: dotnet build tests/DbDataConsole.Servers.Tests -c Debug
-      - name: Start the test SQL Server
+      - name: Start the test SQL Server and PostgreSQL
         working-directory: .
         run: |
-          testenv/testenv.sh up mssql
+          testenv/testenv.sh up mssql postgres
           testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
-      - run: dotnet test --project tests/DbDataConsole.Servers.Tests -c Debug --no-build --minimum-expected-tests 3
+      - run: dotnet test --project tests/DbDataConsole.Servers.Tests -c Debug --no-build --minimum-expected-tests 4
 
   # The web app in a real browser against a real console: the first-run invitation, a passkey made in a virtual authenticator, signing out and back in with it, the users list,
   # pairing a real Build server, and (M12) the Monitoring page across a Build server that runs a failing schedule, a Sync replication that lags and a Gateway that locked a user out.
