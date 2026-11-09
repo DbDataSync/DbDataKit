@@ -53,6 +53,7 @@ The CI runners are small (two cores, Windows and Linux), run many jobs at once, 
 | Signature | Cause | Fix |
 | --- | --- | --- |
 | a task of a runtime started as `dotnet {runtime}/bin/Engine.dll` ends in 15 ms with `The process exited with code 131 without sending the end message` (the .NET host's `hostpolicy` not found) | the runner's views are made of symbolic links on Linux, and the host resolves a link to the object it points at and looks for the runtime configuration and the dependencies beside **that**; a self-contained executable (Build's) does not care | a runtime that a host program starts is materialized as copies (`ArtifactCache.MaterializeAsync(..., copies: true)`, chosen by `RunnerScheduler` when the runtime's launch command is not a file of the package); a test that builds such a view itself uses `ArtifactLinkMode.Copy` |
+| right after `dbdatasync package publish`, the runner shows runs of the published replications while Sync's owner is still `old` (both paths process the mappings) | a task with no recorded owner is the runner's (`TaskOwners.Runner`), and the publish activates its schedule | the verb records `old` for each task before the version can activate, as Build's `project publish` does (a task that has an owner keeps it; `--runner-schedules` opts out) |
 
 ### Playwright (console)
 
