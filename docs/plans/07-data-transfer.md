@@ -25,4 +25,4 @@ Non-goals: a scheduler, a change-data-capture framework for every engine (stays 
 
 1. **Reader-shaped interchange stays the default; Arrow-first is a measured option** (TR02), the direction the plan always held. Default taken (owner delegated, 2026-11-09).
 2. **MySQL, Oracle, SCD2, Snapshot and segmenting move to the shared packages only when a second product needs them**, as before; they are parked, not forgotten. Default taken (owner delegated, 2026-11-09).
-3. **Sync adopting the gate (TR04) comes before any other move,** because the other moves (TR05, TR07) must go through the gate to be shared. Default taken (owner delegated, 2026-11-09).
+3. **Sync adopting the gate (TR04) comes before any other move,** because the other moves (TR05, TR07) must go through the gate to be shared, **and it comes after Sync is operational on the runner** (plan 28c): the gate is not threaded through the engine twice, once in the old worker and again in the runner's drain. Default taken (owner delegated, 2026-11-09).

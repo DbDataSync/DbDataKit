@@ -27,4 +27,4 @@ Prefix `CH`. Size S under a day, M a few days, L about a week. **Format** says w
 
 Order: CH03 and CH02 first (they unblock tests of the other plans), CH01 beside them, then CH04 to CH07. CH01 is also what plans 25, 27a (QK14) and 27 section 4.5 wait on for "the preview's draft layer".
 
-Default taken (owner delegated, 2026-11-09): the reconciliation of inherit and refuse in CH03; the 30-day idle preview stays; a `trial` run is a record flag, not a new run kind.
+Default taken (owner delegated, 2026-11-09): **CH01 (the draft layer) is built before any agent or knowledge feature writes in a preview** (plans 27 and 27a wait on it, as above); the reconciliation of inherit and refuse in CH03; the 30-day idle preview stays; a `trial` run is a record flag, not a new run kind.
