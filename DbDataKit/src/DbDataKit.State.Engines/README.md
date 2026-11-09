@@ -14,7 +14,7 @@ var state = StateOpener.Open(new StateSettings(engine, connectionString), Path.C
 
 * `sqlite` (the default) is a file in the product's own directory.
 * `mssql` and `postgres` are a database on a server the operator names. The connection string may carry its password as a secret reference (`Password=secret:state-db`); a literal one works but is the operator's choice.
-* The engine is chosen once: the schema is created on first open and there is no migration between engines (changing the engine starts an empty store).
+* Changing the engine in the settings alone starts an empty store. To move the state, use `state move` (or `state export` and `state import`), offline, which is verified and leaves the old database untouched (`DbDataKit.State` README, "Moving state between engines").
 * **Where the tables are** is configurable per module (a schema and a prefix, `{module}` and `{scope}` usable in both); the defaults are the schema `dbdatakit_<module>` on SQL Server and PostgreSQL and the prefix `dbdatakit_<module>_` on SQLite. Services that share one database find each other's modules through the registry table (`dbdatakit.modules`, `dbdatakit_modules` on SQLite). Changing a setting for a module that already exists is refused rather than creating a second set of tables.
 * **The old structure is not converted.** A database made with one schema version for the whole database is refused with a message naming it; point the service at a new database and set it up again.
 * The `state:` section:
