@@ -383,7 +383,7 @@ export function AppsPage() {
   const navigation = useQuery({ queryKey: ['gateway', 'app-navigation'], queryFn: gatewayApi.apps.navigation })
   const approvals = useQuery({ queryKey: ['gateway', 'app-approvals'], queryFn: gatewayApi.apps.approvals, refetchInterval: 10_000 })
   const [selected, setSelected] = useState<string | null>(null)
-  const detail = useQuery({ queryKey: ['gateway', 'apps', selected], queryFn: () => gatewayApi.apps.detail(selected!), enabled: selected !== null })
+  const detail = useQuery({ queryKey: ['gateway', 'apps', selected], queryFn: () => gatewayApi.apps.detail(selected!), enabled: selected !== null, refetchOnMount: 'always' })
   const [chosen, setChosen] = useState<Record<string, string>>({})
   const [confirming, setConfirming] = useState<string | null>(null)
   const [approving, setApproving] = useState<number | null>(null)

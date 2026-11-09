@@ -70,7 +70,7 @@ export function BindingsCard({ detail, channel, canEdit }: { detail: DefinitionD
   const [saved, setSaved] = useState<string[] | null>(null)
   const rows = slotRows(detail, channel)
   // the names the runner's channels bind already; a runner too old to answer leaves the list out
-  const connections = useQuery({ queryKey: ['runner', 'connections'], queryFn: runnerApi.connections, retry: false, enabled: canEdit })
+  const connections = useQuery({ queryKey: ['runner', 'connections'], queryFn: runnerApi.connections, retry: false, enabled: canEdit, refetchOnMount: 'always' })
   const save = useMutation({
     mutationFn: (request: BindRequest) => runnerApi.bind(detail.name, channel, request),
     onSuccess: (_answer, request) => {
