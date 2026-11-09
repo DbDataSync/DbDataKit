@@ -78,7 +78,7 @@ and the freeze of formats, are what lets the rules (22a), the checks (23a) and t
 
 ## Rules for every slice
 
-- The rules of [13a](13a-suite-slices.md) and [22a](22a-gap-slices.md) apply: one small pull request, "done" is the test, CI green and independently revertable, behaviour changes
+- The rules of `CLAUDE.md` ("Making changes") and [22a](22a-gap-slices.md) apply: one slice, one commit in a batch, "done" is the test, CI green and independently revertable, behaviour changes
   named, docs and the status line in the same change; **a wave 1 slice names the formats it touches in the first line of its pull request**; a changed format is a clean break with a message naming the file.
 - State runs on **SQLite, SQL Server and PostgreSQL**; a screen has a Playwright test; a library has unit tests; a CI job has a test of the job itself (a deliberately broken input makes it fail).
 

@@ -1,7 +1,7 @@
 # Plan 28a: the runner in slices
 
 Status: **proposed** (2026-11-07). [Plan 28](28-runner.md) says *what* the runner is and what the owner decided; this plan says *in what
-pieces* it is built, what exists to build on, and what test proves each piece. It follows the shape of [13a](13a-suite-slices.md) and
+pieces* it is built, what exists to build on, and what test proves each piece. It follows the shape of the suite slices (`CLAUDE.md`, "Making changes") and
 [29a](29a-state-slices.md): one slice, one branch `suite/r<nn>-<short-name>`, one pull request, "done" is the test in the last column,
 and the status goes in the slice's row in the same change.
 

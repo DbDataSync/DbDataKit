@@ -28,6 +28,9 @@ directory holding the actual restored assemblies. `LibraryRegistry` reads every 
 arms an `AssemblyLoadContext.Default.Resolving` hook, so the real assembly loads the first time
 something actually asks for it rather than being loaded — or shipped — up front.
 
+The `lib/` directory is a local store, not configuration: when a library is installed into a git repository, `libraries/*/lib/` is added to its
+`.gitignore` (`LibraryPaths.EnsureStoreGitignored`, tested in `LibraryStoreGitignoreTests`), so the extracted DLLs are never committed beside `library.lock`.
+
 ### The bundled catalog
 
 A curated starter set of eight, each with a short id and a pinned starter version — `TryGetById`/`TryGet`

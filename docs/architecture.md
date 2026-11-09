@@ -78,6 +78,24 @@ is not ours to break and is outside this rule. (CLAUDE.md states the working rul
 | D19 | A Build server's projects come from a local path or a git remote and branch it clones and pulls before each scheduled run. | Both ways of working exist. |
 | D20 | One identity home per install, amended by plan 20: hosted by the serving layer by default. | End users must sign in without reaching the console; one list of people, roles assigned once. |
 
+### Decisions recorded after plan 13
+
+Decided by the owner after the table above was closed. The numbers are the ones the follow-up list (`docs/plans/13c-follow-ups.md`) gave them and that source comments cite as `13c D<n>`; the details are in the README named in the last column.
+
+| # | Decision | Why | Details |
+| --- | --- | --- | --- |
+| 13c D12 | Relationships between built models are written as `foreign_keys:` on the model; semantic relationships are read from them. | One spelling for a foreign key in both formats. Whether models and semantic models become one format is a proposal (plan 19 J30). | `docs/semantic/models-and-semantic-models.md` |
+| 13c D20 | Sync has no sign-in of its own: it accepts a console's token and its task runner's token and answers `/api/health`. A `server.yaml` that sets `Auth:Windows` or `Auth:Network` is refused with a message naming the file. | One place to sign in (the console, or the identity home behind it); nothing to secure twice. | `DbDataSync/docs` |
+| 13c D22 | Installing a library adds `libraries/*/lib/` to the config repository's `.gitignore` (`LibraryPaths.EnsureStoreGitignored`). | The extracted packages are a local store; their DLLs must not be committed beside `library.lock`. | `DbDataSync/docs/drivers-and-libraries.md` |
+| 13c D24 | A person's external (Entra, Windows) groups count until their next sign-in through that source: no expiry, and signing out does not clear them. | The home records what the last sign-in carried; a person removed from a group at the provider loses the role at the next sign-in. A lifetime can be added if a tenant needs one. | `DbDataKit/src/DbDataKit.Identity/README.md` |
+| 13c D25 | Entra's group overage (more than 200 groups, no `groups` claim) is left to the tenant: its administrator limits the groups with `groupMembershipClaims`; the home calls no Microsoft Graph. | Graph needs a credential and a permission of its own. Revisit if a tenant cannot limit its groups. | `DbDataKit/src/DbDataKit.Identity/README.md` |
+| 13c D26 | An Entra sign-in links to an existing account on the token's UPN (preferred) or email, trusted (`trustEmail`); other OpenID sources link only on a verified address. | An Entra id token has no `email_verified`; a tenant that lets people set their own mail attribute must not be trusted, so it is a setting. | `DbDataKit/src/DbDataKit.Identity/README.md` |
+| 13c D27 | Copying a connection to another server never copies a secret value: the copy names the reference the target must hold (for a Sync target the person types the password, sent to that server only). | The console never reads a secret. | `DbDataConsole/README.md` |
+| 13c D28 | Sync's `extensions.sync` keys use the shared snake_case names (`segment_order`, `test_query`, `connect_timeout_seconds`, `command_timeout_seconds`), and its connection file API takes `{text, expected_version, password}` and answers a conflict with `current_version`, as the Gateway's data-source API does. | One spelling and one shape for the pair of file APIs the console copies between. | `DbDataSync/docs/configuration.md` |
+| 13c D29 | The slow test engines' images (BigQuery emulator, sqlflite, SQL Server 2025, Spark) are pinned by digest in `testenv/docker-compose.yml`; the file says how to move one. | A moving tag can turn the nightly run red without a change of ours. | `testenv/docker-compose.yml` |
+| 13c D30 | The identity home's admin API is the management API of whatever hosts the home; the console's screens use it through its relay and the commands stay. | One admin surface per host, no screens of the home's own. | `DbDataKit/src/DbDataKit.Identity/README.md` |
+| 13c D31 | A home that runs on its own keeps the framework key ring in its `dataprotection/` directory (a backup holds the state and that directory); the serving layer's home protects its signing keys with `KeySigningKeyProtector` and a key in its secret store. | Simple for one home; a group of homes on one shared state needs the same key everywhere. | `DbDataConsole/README.md`, `DbDataKit/src/DbDataKit.Identity/README.md` |
+
 ## Why the design is safe
 
 | Risk | Answer |

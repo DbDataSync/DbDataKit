@@ -127,7 +127,7 @@ its routes, the roles it needs, and for a code app its content security policy.
 
 **Decided direction (owner):** Windows authentication, OpenID Connect, and Microsoft Entra ID, with **the console acting as an OpenID
 Connect provider**. **Settled (owner, 2026-11-02):** the topics below were the design conversation; what was decided is in "Sign-in
-decisions" below (and 13a U13 to U18, 13c D24 to D31). Kept as the record of what was asked:
+decisions" below (and 13a U13 to U18, D24 to D31 of `docs/architecture.md`). Kept as the record of what was asked:
 
 1. ~~Who the users are~~: **decided (owner)**: app users are **console users who administer nothing**: they sign in like any console
    user, hold app roles only, and never see the console's administration. Open with it: whether identity stays inside the console or

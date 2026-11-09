@@ -157,7 +157,7 @@ them one bump.
 
 ## Rules for every slice
 
-- The rules of [13a](13a-suite-slices.md) apply: one small pull request, "done" is the test, CI green and independently revertable, behaviour changes named, docs and
+- The rules of `CLAUDE.md` ("Making changes") apply: one slice, one commit in a batch, "done" is the test, CI green and independently revertable, behaviour changes named, docs and
   the status line in the same change. A changed stored format is a **clean break** (plan 13 section 3): the old file or database is refused with a message that
   names it, never converted, and a test says so.
 - **Wave 1 slices change a definition or a stored structure; their pull request says so in its first line** and lists the format ids it touches, so the owner sees
