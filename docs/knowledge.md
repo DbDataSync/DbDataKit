@@ -24,5 +24,5 @@
 | The serving layer's `knowledge` module, suggestions and approvals at the edge, the knowledge app, `@dbdatakit/knowledge-ui` | not started |
 | Verified queries (`verified-query` items, "Verify this answer", re-verification when a model changes) | not started; saved queries and the JSON request are the pieces they pin |
 | Access-filtered search | not started; the identity home maps directory groups to attributes (plan 22a GP04, built), but the row and column rules a search would apply are not (GP01 and GP11 to GP15 wait for the rule language, QG2) |
-| `catalog search` and `catalog show` (plan 22a GP25) | not started; plan 27 decision 42 makes the catalog search over generated knowledge, so [27a](plans/27a-knowledge-slices.md) proposes that the knowledge commands replace them |
+| `catalog search` and `catalog show` (were plan 22a GP25) | dropped (owner, 2026-11-09): the `knowledge` commands of [27a](plans/27a-knowledge-slices.md) KN16 are the search over generated knowledge |
 | Workspace search (exact text in a project's files) | not started; needs the Workspace server (plan 22a GP31) |

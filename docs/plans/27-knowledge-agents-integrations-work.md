@@ -9,7 +9,7 @@ for outside agents, Build's agent kit, the whole run-time side of integrations (
 environment that has vectors, the publishing library, the JSON query request, semantic SQL and saved queries. The built half is written as product documents:
 [`docs/agent-tools.md`](../agent-tools.md), [`docs/knowledge.md`](../knowledge.md) and the integrations section of
 [`DbDataRunner/README.md`](../../DbDataRunner/README.md). The slices (120, in lanes AG, KN, AX, IX, BK, EA and XL) and the sixteen points the decisions leave
-open (QK1 to QK16 of 27a are decided as SD8 to SD22 there, except QK11, which stays open; QK1 and QK2 were answered by the owner on 2026-11-09, the rest took the recommended default by delegation) are in 27a; the owner's questions of section 8 below stay as recorded.
+open (QK1 to QK16 of 27a are all decided, as SD8 to SD23 there; QK1, QK2 and QK11 were answered by the owner on 2026-11-09, the rest took the recommended default by delegation) are in 27a; the owner's questions of section 8 below stay as recorded.
 
 | Area | What it is for |
 | --- | --- |
