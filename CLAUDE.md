@@ -38,7 +38,7 @@ project reference in this repository, a package reference otherwise). Do not cop
 ```
 dotnet build DbDataKit.slnx                                   # everything
 python3 -I -m unittest discover -s scripts/tests              # the repository checks
-python3 -I scripts/check_package_versions.py && python3 -I scripts/check_solution.py && python3 -I scripts/check_plans.py && python3 -I scripts/check_formats.py && python3 -I scripts/check_ui_editors.py
+python3 -I scripts/check_package_versions.py && python3 -I scripts/check_solution.py && python3 -I scripts/check_duckdb_cache.py && python3 -I scripts/check_native_cache.py && python3 -I scripts/check_plans.py && python3 -I scripts/check_formats.py && python3 -I scripts/check_ui_editors.py
 ```
 
 Per product, from its folder: `dotnet build`, then the suites below. Run the suites a change can affect; CI runs the rest on the pull request.
@@ -71,6 +71,7 @@ Test engines:
   Run one stack at a time on a machine: the ports are fixed.
 - The DuckDB engine (`duckdb.pin`): `scripts/fetch-duckdb.sh` (or `.ps1`) downloads and hash-checks it. They read `DUCKDB_RELEASE_BASE` (a `file://` folder or an https address) before the pin's address and retry a failed download; CI fills a folder from the Actions cache with
   `.github/actions/duckdb-cache`, so a GitHub release outage does not fail runs (`scripts/check_duckdb_cache.py` makes a new job use it; `docs/ci-lessons.md`).
+- The Build native library (`DbDataBuild/scripts/polyglot.pin`, the polyglot-sql FFI release): `DbDataBuild/scripts/fetch-native.sh` downloads it and checks the archive against the hash in the repository. It reads `POLYGLOT_RELEASE_BASE` (a `file://` folder or an https address) before upstream's address and retries; CI fills the folder `.native-archives/` with `.github/actions/native-cache`, and `scripts/check_native_cache.py` makes every job or Dockerfile that fetches the library use it.
 - Tests with ODBC data sources (Gateway's SQL Server tests, Kit's ODBC projects) need unixODBC and Microsoft's "ODBC Driver 18 for SQL
   Server" installed on the machine. In a cloud session run `scripts/install-odbc.sh` (Debian/Ubuntu; it is the CI install, safe to repeat).
 

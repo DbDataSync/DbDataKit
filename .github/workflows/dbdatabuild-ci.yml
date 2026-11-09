@@ -53,6 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/duckdb-cache
+      - uses: ./.github/actions/native-cache
       - name: Build the image
         run: docker build -f DbDataBuild/Dockerfile -t dbdatabuild:ci .
       - name: Start it and wait for its health check
@@ -91,6 +92,7 @@ jobs:
         with:
           product: DbDataBuild
           duckdb: 'false'
+      - uses: ./.github/actions/native-cache
       - name: Prebuilt polyglot library
         shell: bash
         env:
@@ -125,6 +127,9 @@ jobs:
         with:
           product: DbDataBuild
           duckdb: 'false'
+      - uses: ./.github/actions/native-cache
+        with:
+          rids: ${{ matrix.rid }}
       - name: Prebuilt polyglot library
         shell: bash
         env:
@@ -158,6 +163,7 @@ jobs:
         with:
           product: DbDataBuild
           duckdb: 'false'
+      - uses: ./.github/actions/native-cache
       - name: Prebuilt polyglot library
         shell: bash
         env:
@@ -203,6 +209,7 @@ jobs:
         with:
           product: DbDataBuild
           duckdb: 'false'
+      - uses: ./.github/actions/native-cache
       - name: Prebuilt polyglot library
         env:
           GH_TOKEN: ${{ github.token }}
@@ -248,6 +255,7 @@ jobs:
         with:
           product: DbDataBuild
           duckdb: 'false'
+      - uses: ./.github/actions/native-cache
       - name: Prebuilt polyglot library
         env:
           GH_TOKEN: ${{ github.token }}

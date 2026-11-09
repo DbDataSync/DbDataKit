@@ -256,6 +256,10 @@ jobs:
         uses: ./.github/actions/duckdb-cache
         with:
           rids: linux-x64
+      - if: ${{ hashFiles('.github/actions/native-cache/action.yml') != '' }}
+        uses: ./.github/actions/native-cache
+        with:
+          rids: linux-x64
       - name: Build
         run: docker build -f "${{ matrix.dockerfile }}" -t "${{ matrix.image }}:release" .
       # The container must come up healthy before it is pushed (the products whose container needs configuration to start are only built).

@@ -57,6 +57,7 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
+      - uses: ./.github/actions/native-cache
       - name: Prebuilt polyglot library
         env:
           GH_TOKEN: ${{ github.token }}
