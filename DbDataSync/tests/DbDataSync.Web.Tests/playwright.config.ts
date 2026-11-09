@@ -54,6 +54,15 @@ export const syncRunner = {
   url: 'https://localhost:8641',
   dll: path.join(kitRoot, 'DbDataRunner/src/DbDataRunner.Server/bin/Debug/net10.0/dbdatarunner.dll'),
 }
+// The runner's own commands, run before any test: a failure says what the command printed (a bare "status 129" hid a runner that was never built in CI).
+function runnerCommand(args: string[]): string {
+  try {
+    return execFileSync('dotnet', ['exec', syncRunner.dll, ...args], { encoding: 'utf8', stdio: 'pipe' })
+  } catch (e) {
+    const failure = e as { status?: number; stdout?: string; stderr?: string }
+    throw new Error(`dbdatarunner ${args.slice(0, 2).join(' ')} failed (status ${failure.status}; is ${syncRunner.dll} built?)\nstdout: ${failure.stdout ?? ''}\nstderr: ${failure.stderr ?? ''}`)
+  }
+}
 if (!isWorker) {
   for (const directory of [syncRunner.directory, syncRunner.clientDirectory, syncRunner.runtime]) {
     fs.rmSync(directory, { recursive: true, force: true })
@@ -65,8 +74,8 @@ if (!isWorker) {
   fs.mkdirSync(path.join(syncRunner.runtime, 'files', 'bin'), { recursive: true })
   fs.writeFileSync(path.join(syncRunner.runtime, 'files', 'bin', 'DbDataSync.TaskRunner.dll'), 'stand-in for the engine')
   fs.writeFileSync(path.join(syncRunner.runtime, 'package.yaml'), execFileSync('bash', [path.join(repoRoot, 'scripts/runtime-manifest.sh'), rid, `${line}.1`], { encoding: 'utf8' }))
-  execFileSync('dotnet', ['exec', syncRunner.dll, 'package', 'install', path.join(syncRunner.runtime, 'package.yaml'), path.join(syncRunner.runtime, 'files'), '--channel', 'prod', '--repo', syncRunner.directory], { stdio: 'ignore' })
-  const made = execFileSync('dotnet', ['exec', syncRunner.dll, 'server', 'pair', '--minutes', '120', '--repo', syncRunner.directory, '--max-role', 'viewer,operator,publisher,admin'], { encoding: 'utf8' })
+  runnerCommand(['package', 'install', path.join(syncRunner.runtime, 'package.yaml'), path.join(syncRunner.runtime, 'files'), '--channel', 'prod', '--repo', syncRunner.directory])
+  const made = runnerCommand(['server', 'pair', '--minutes', '120', '--repo', syncRunner.directory, '--max-role', 'viewer,operator,publisher,admin'])
   fs.writeFileSync(path.join(consoleScratch, 'sync-runner-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
 
