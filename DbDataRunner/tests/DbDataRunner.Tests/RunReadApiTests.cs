@@ -49,6 +49,40 @@ public sealed class RunReadApiTests
     }
 
     [Fact]
+    public async Task A_run_that_is_finished_has_all_its_lines_and_a_page_is_never_longer_than_its_limit()
+    {
+        await using var h = new RunnerHarness(StateEngineIds.Sqlite);
+        h.Install(SamplePackage.Task("ok"));
+        await h.StartAsync();
+        var (_, started) = await h.PostAsync("/api/v1/tasks/sample/dev/ok/run");
+        var runId = Text(started, "run_id");
+        await h.WaitAsync(async () => (await h.RunsAsync("?package=sample&channel=dev&task=ok")).FirstOrDefault(r => Text(r, "id") == runId && r!["finished"] is not null), "the run to end");
+
+        // the moment the run is finished its log is complete: the runner's note on the process's exit, which it writes after the process has gone, is there, and nothing is added later
+        var (_, first) = await h.GetAsync($"/api/v1/runs/{runId}/logs", ServerRole.Viewer);
+        var ids = first!["lines"]!.AsArray().Select(l => (long)l!["id"]!).ToList();
+        Assert.Contains(first["lines"]!.AsArray(), l => Text(l, "message").StartsWith("The process exited with code", StringComparison.Ordinal));
+        await Task.Delay(1500);
+        var (_, later) = await h.GetAsync($"/api/v1/runs/{runId}/logs", ServerRole.Viewer);
+        Assert.Equal(ids, later!["lines"]!.AsArray().Select(l => (long)l!["id"]!).ToList());
+
+        // a page is at most `limit` lines, the next page starts after the last id of this one, and the pages together are the whole log
+        var seen = new List<long>();
+        long? cursor = null;
+        for (var page = 0; page < 20; page++)
+        {
+            var (_, got) = await h.GetAsync($"/api/v1/runs/{runId}/logs?limit=2" + (cursor is { } c ? $"&after={c}" : ""), ServerRole.Viewer);
+            var pageIds = got!["lines"]!.AsArray().Select(l => (long)l!["id"]!).ToList();
+            Assert.InRange(pageIds.Count, 0, 2);
+            if (pageIds.Count == 0) break;
+            seen.AddRange(pageIds);
+            cursor = pageIds[^1];
+        }
+
+        Assert.Equal(ids, seen);
+    }
+
+    [Fact]
     public async Task The_lines_of_a_run_that_is_still_going_are_there_while_it_goes_and_a_client_that_follows_gets_each_once()
     {
         await using var h = new RunnerHarness(StateEngineIds.Sqlite);

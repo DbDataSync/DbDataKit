@@ -184,7 +184,8 @@ internal sealed class RunnerProtocolService(RunSessions sessions) : RunnerApi.Ru
     {
         var session = Started(context);
         var end = EndOf(session, request.End);
-        await session.Backend.FinishAsync(end, CancellationToken.None).ConfigureAwait(false);
+        // the run is finished by the host after the process has exited and the log is complete, when the host says so (a finished run has all its lines); otherwise here
+        if (!session.Grant.HostFinishesRun) await session.Backend.FinishAsync(end, CancellationToken.None).ConfigureAwait(false);
         session.RecordEnd(end);
         ReleaseWork(session);
         Ended(session);

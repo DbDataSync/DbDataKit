@@ -15,8 +15,9 @@ namespace DbDataKit.Runner.Protocol.Server;
 /// <param name="Chain">The attempt chain: a retry of a work item passes the same chain, so its steps and units answer from memory.</param>
 /// <param name="Environment">The state database the run's progress, steps, units, payloads and log live in, with the package and channel they are kept under.</param>
 /// <param name="Lifetime">How long the token works if the run does not end first; null takes the host's default.</param>
+/// <param name="HostFinishesRun">True when the host that started the process finishes the run record itself, after the process has exited and the run's log is complete (the runner's executor does): the task's end message is then recorded but does not finish the run, so a run that is finished has all its lines. False for a host that has no one else to finish it.</param>
 /// <param name="Slots">Turns a slot of the run into the connection and login it is bound to (<c>ResolveConnection</c>); null: the runner has no connection bindings, and the call is refused.</param>
-public sealed record RunGrant(TaskStart Start, string Chain, RunnerEnvironment Environment, TimeSpan? Lifetime = null, ISlotResolver? Slots = null);
+public sealed record RunGrant(TaskStart Start, string Chain, RunnerEnvironment Environment, TimeSpan? Lifetime = null, ISlotResolver? Slots = null, bool HostFinishesRun = false);
 
 /// <summary>One line of lineage a task reported.</summary>
 public sealed record LineageEntry(IReadOnlyList<string> Reads, IReadOnlyList<string> Writes);
