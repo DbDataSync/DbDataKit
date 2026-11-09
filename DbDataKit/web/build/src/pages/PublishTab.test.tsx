@@ -121,4 +121,30 @@ describe('publishing a connection to a proxy', () => {
     expect(adoptFailureText(refusal(403, 'This call needs the admin role.'))).toBe('The proxy refused: This call needs the admin role.')
     expect(adoptFailureText(new TypeError('failed to fetch'))).toBe('The proxy did not answer. Try again.')
   })
+
+  it('offers to publish over a data source made by hand, and presses that as an adopt publish (plan 13c D19)', () => {
+    const offered = refusal(403, 'The proxy refused reading the data source: the object was not made by a publisher.', {
+      error: 'x', adopt: { client: 'build-1', data_source: 'erp', call: 'POST /api/v1/data-sources/erp/adopt', body: { client: 'build-1' }, publish_adopt: true },
+    })
+    const onPublishAdopt = vi.fn()
+    const view = PublishView(props({ failure: offered, canAdopt: false, onPublishAdopt }))
+    expect(JSON.stringify(find(view, 'build-publish-replace')?.props.children)).toMatch(/allow_writes/)
+    find(view, 'build-publish-replace-button')!.props.onClick?.()
+    expect(onPublishAdopt).toHaveBeenCalledOnce()
+    expect(find(PublishView(props({ failure: handMade, onPublishAdopt })), 'build-publish-replace')).toBeUndefined()   // an older proxy's refusal carries no such offer
+  })
+
+  it('lists what the proxy says the definition changed or dropped', () => {
+    const text = html({
+      done: {
+        proxy: 'edge', data_source: 'erp', created: false, version: 'v2', adopted: true,
+        changes: [{ field: 'extensions.gateway.classifier', change: 'dropped', before: 'strict', after: null }, { field: 'extensions.gateway.batch_size', change: 'changed', before: '64', after: '128' }],
+      },
+    })
+    expect(text).toContain('data-testid="build-publish-done-adopted"')
+    expect(text).toContain('data-testid="build-publish-change-extensions.gateway.classifier"')
+    expect(text).toContain('strict → —')
+    expect(text).toContain('64 → 128')
+        expect(html({ done: { proxy: 'edge', data_source: 'erp', created: true, version: 'v1' } })).not.toContain('build-publish-changes')
+  })
 })

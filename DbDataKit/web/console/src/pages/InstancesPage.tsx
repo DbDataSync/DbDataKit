@@ -128,6 +128,7 @@ export function InstancesPage() {
             <div className="card-head"><span className="card-title">Link a Build server to a gateway</span></div>
             <div className="card-body">
               <span className="hint">Lets the Build server publish to the gateway. The console makes the pairing code and hands it over; nobody types it.</span>
+              <span className="hint" style={{ display: 'block', marginTop: 4 }} data-testid="link-trust">The Publisher role is high-trust: a linked Build server chooses the serving policy of the data sources it publishes (pass-through login, limits, statement check, batch size, compression), everything except <span className="mono">allow_writes</span> and <span className="mono">allowed_directories</span>, which a published definition never carries (a published data source is read-only). Link only a Build server whose operators you trust with that.</span>
               <ErrorBanner error={link.error} />
               <Field label="Build server">
                 <select className="input" value={linkFrom} onChange={(e) => { setLinkFrom(e.target.value); link.reset() }} data-testid="link-from-select">

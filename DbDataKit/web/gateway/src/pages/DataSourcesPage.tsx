@@ -4,7 +4,7 @@ import { ApiError, ErrorBanner, Link, useIsAdmin, useNavigate } from '@dbdatakit
 import { gatewayApi } from '../api'
 import { GatewayShell } from '../GatewayShell'
 import { passwordLine } from '../secrets'
-import type { AdoptAnswer, DataSourceGrants, Diagnostic, ServerClient } from '../types'
+import type { AdoptAnswer, DataSourceGrants, DataSourcePolicy, Diagnostic, ServerClient } from '../types'
 
 const COLUMNS = '1.6fr 0.9fr 0.8fr 0.6fr 1.2fr 2.2fr'
 
@@ -23,6 +23,32 @@ export function GrantsView({ grants }: { grants: DataSourceGrants | null | undef
         {!grants.everyone && grants.groups.length === 0 && <div className="hint" data-testid="data-source-grants-none">No group is granted: no user of the identity home may use this data source.</div>}
         {!grants.everyone && grants.groups.map((g) => <div key={g} className="mono" data-testid={`data-source-grants-group-${g}`}>{g}</div>)}
         <div className="hint" style={{ marginTop: 6 }} data-testid="data-source-grants-source">{grants.source === 'definition' ? GRANTED_BY_DEFINITION : GRANTED_BY_FILE}</div>
+      </div>
+    </div>
+  )
+}
+
+export const POLICY_BY_DEFINITION = 'Set by the published definition; change it in the project and publish again. A publish replaces these fields whole.'
+export const POLICY_BY_FILE = 'Set by this data source’s file (`extensions.gateway`); change it in the text above.'
+export const BLOCKED_NOTE = 'A published definition never carries these: a data source a client publishes is read-only and reads no directories outside its database. Editing a published data source here is not supported; the next publish replaces the whole file.'
+
+/** The serving policy, read-only: the fields and where they come from, and the two that only the file on disk sets. Nothing here changes them. */
+export function PolicyView({ policy }: { policy: DataSourcePolicy | null | undefined }) {
+  if (!policy) return null
+  const fields = Object.entries(policy.fields)
+  const blocked = Object.entries(policy.blocked)
+  return (
+    <div className="card" style={{ marginTop: 16 }} data-testid="data-source-policy">
+      <div className="card-head"><span className="card-title">How it is served</span></div>
+      <div className="card-body">
+        {fields.length === 0 && <div className="hint" data-testid="data-source-policy-none">No serving policy is set: the Gateway’s defaults apply.</div>}
+        {fields.map(([key, value]) => <div key={key} className="row" style={{ gap: 10 }} data-testid={`data-source-policy-${key}`}><span className="mono">{key}</span><span className="mono">{value}</span></div>)}
+        <div className="hint" style={{ marginTop: 6 }} data-testid="data-source-policy-origin" data-origin={policy.origin}>{policy.origin === 'definition' ? POLICY_BY_DEFINITION : POLICY_BY_FILE}</div>
+        <div style={{ marginTop: 10 }} data-testid="data-source-policy-blocked">
+          {blocked.length === 0 && <div className="hint" data-testid="data-source-policy-blocked-none">allow_writes and allowed_directories are not set in the file: the data source reads only, and may read no files outside its database.</div>}
+          {blocked.map(([key, value]) => <div key={key} className="row" style={{ gap: 10 }} data-testid={`data-source-policy-blocked-${key}`}><span className="mono">{key}</span><span className="mono">{value}</span><span className="hint">in the file</span></div>)}
+          <div className="hint" style={{ marginTop: 6 }} data-testid="data-source-policy-blocked-note">{BLOCKED_NOTE}</div>
+        </div>
       </div>
     </div>
   )
@@ -204,6 +230,7 @@ export function DataSourceEditPage({ name, isNew }: { name: string; isNew: boole
           {!isNew && <button type="button" className="btn" disabled={remove.isPending || !file.data} onClick={() => remove.mutate()} data-testid="data-source-remove">Remove</button>}
         </div>
         <GrantsView grants={file.data?.grants} />
+        <PolicyView policy={file.data?.policy} />
         <SecretReferences />
         {test.data && (
           <div className="hint" style={{ marginTop: 10 }} data-testid="data-source-test-result" data-ok={test.data.ok ? 'true' : 'false'}>

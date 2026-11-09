@@ -5,6 +5,7 @@ import { CodeEditor, ErrorBanner, Link, SchemaForm, SchemaSet, schemaFor, type E
 import { buildApi } from '../api'
 import { CompilePanel } from './CompilePanel'
 import { ConnectionGrantsEditor, isConnectionFile } from './ConnectionGrants'
+import { ConnectionPolicyEditor } from './ConnectionPolicy'
 import { DefinitionPanel } from './DefinitionPanel'
 import { GitPanel } from './GitPanel'
 import { ImportPanel } from './ImportPanel'
@@ -219,6 +220,7 @@ export function EditTab() {
                   </div>
                 )}
                 {isConnectionFile(open) && <ConnectionGrantsEditor key={open} text={text} onText={setText} readOnly={!canAuthor} />}
+                {isConnectionFile(open) && <ConnectionPolicyEditor key={`policy-${open}`} text={text} onText={setText} readOnly={!canAuthor} />}
                 {association && schemaSet && mode === 'form'
                   ? <SchemaForm schemas={schemaSet} schema={association.schema} text={text} onText={setText} />
                   : <CodeEditor value={text} language={languageOf(open)} onChange={setText} diagnostics={markersFor(open, diagnostics)} minLines={12} maxLines={32} testId="build-edit-editor" />}
