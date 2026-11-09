@@ -254,6 +254,12 @@ jobs:
         # (tests/DbDataSync.Web.Tests/fixtures.ts). `dotnet exec` on the built console DLL, as for the API above.
         working-directory: DbDataConsole
         run: dotnet build src/DbDataConsole.Server
+      - name: Build the runner
+        # The Runner screen's story (runner-publish.spec.ts, plan 28c E08) needs a real runner: playwright.config.ts installs a stand-in
+        # runtime package on it and starts it with `dotnet exec` on this Debug build (a missing build is a status 129 from `package install`
+        # before any test runs). Its task host is built with it.
+        working-directory: DbDataRunner
+        run: dotnet build src/DbDataRunner.Server
       - name: Install the web workspace's dependencies
         working-directory: DbDataKit/web
         run: npm ci
