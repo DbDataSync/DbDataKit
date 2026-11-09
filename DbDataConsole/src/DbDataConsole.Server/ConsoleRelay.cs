@@ -168,7 +168,9 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
             return;
         }
 
-        using var request = new HttpRequestMessage(new HttpMethod(context.Request.Method), new Uri(instance.Url, path + context.Request.QueryString));
+        // a Workspace route names files: the decoded path goes on with each part escaped again
+        var forwarded = product == ServerProducts.Workspace ? ServerProducts.EscapedPath(path) : path;
+        using var request = new HttpRequestMessage(new HttpMethod(context.Request.Method), new Uri(instance.Url, forwarded + context.Request.QueryString));
         request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, token);
         foreach (var name in ForwardedRequestHeaders.Where(n => n != "Content-Type"))
             if (context.Request.Headers.TryGetValue(name, out var values)) request.Headers.TryAddWithoutValidation(name, (IEnumerable<string>)values.ToArray()!);

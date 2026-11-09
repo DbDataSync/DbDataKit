@@ -1,7 +1,7 @@
 # DbDataWorkspace
 
 The server where people (and, later, agents) author projects in git workspaces (plan 22a GP31, decision D8; plan 27). A project is a git repository of some kind (an app today; plan 27 adds agent, integration, skill and knowledge projects); a **workspace** is one person's draft of it, a git worktree on its own branch in a folder the server owns, so a draft never changes what is published. The server lists, creates and abandons workspaces, shows their changes, commits, pushes and merges them (the shared library `DbDataKit.Authoring`, which Build serves its workspaces with too), and keeps a record of what was done in its state database. It has no web page of its own: a console pairs with it and shows its screens (Servers, then the Workspace server, then Workspaces).
-**Not built yet:** builds, previews and publishing (GP32 to GP35); the app template (GP32). The `build` table and the publisher's key reference are in the state module so those slices add no second break.
+**Not built yet:** builds, previews and publishing (GP32 to GP34, GP35b); editing a draft's files, commit, push and merge are built (GP35a); the app template (GP32). The `build` table and the publisher's key reference are in the state module so those slices add no second break.
 
 ```
 dbdataworkspace server run [--repo <server directory>] [--listen https://127.0.0.1:8495] [--state-engine sqlite|mssql|postgres --state-connection <connection string>]
@@ -50,13 +50,14 @@ Every call needs a token a paired console issued; the roles are the suite's (`Db
 | `GET /api/v1/projects` | viewer (a token scoped to some projects lists those) |
 | `POST /api/v1/projects` `{id, title?, kind?}` | admin |
 | `GET\|POST /api/v1/projects/{project}/workspaces`, `DELETE .../{id}` | viewer; author to make one; the owner abandons theirs |
-| `GET .../{id}/changes`, `GET .../{id}/history`, `GET .../{id}/events` | viewer |
+| `GET .../{id}/files`, `GET .../{id}/files/{path}`, `GET .../{id}/changes`, `GET .../{id}/history`, `GET .../{id}/events` | viewer |
+| `PUT .../{id}/files/{path}` `{content}`, `DELETE .../{id}/files/{path}`, `POST .../{id}/move` `{from, to}` | author, the owner (text files of at most 1 MiB; a path stays inside the draft and never names `.git`; saves are not history, the commit is) |
 | `POST .../{id}/commit`, `POST .../{id}/push` | author, the owner |
 | `POST .../{id}/merge` | approver (a project that follows a git remote is pushed to, never merged here) |
 | `GET /api/v1/publisher-keys`, `PUT\|DELETE /api/v1/publisher-keys/{name}` `{secret_ref}` | admin |
 | `GET /api/v1/state` and the maintenance calls | the shared state API (`DbDataKit.State.Api`) |
 
-The console relays an explicit list of these (`ServerProducts.Relayable` in `DbDataConsole.Server`), not the whole API.
+The console relays an explicit table of these (`ServerProducts.WorkspaceRoutes` in `DbDataConsole.Server`: 16 routes, each with its role, checked at the relay against what the person holds, in the route's project too, and by the server again), not the whole API; the publisher's key reference is not relayed.
 
 ## Build and test
 

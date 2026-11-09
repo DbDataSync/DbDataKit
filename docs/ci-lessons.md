@@ -114,6 +114,14 @@ The CI runners are small (two cores, Windows and Linux), run many jobs at once, 
 | `DBD-CONN-009` ``grants` is a section of format 2`, or a Build connection file refused with `DDB-620` naming `connections/<name>.yaml` | the file says `schema: connection/1` and has `grants` | write `schema: connection/2` (Build's editor does it when it adds the first group and goes back to `connection/1` when the last is removed) |
 | a Gateway refuses a data source file: ``grants` and `extensions.gateway.groups` both say who may use the data source` | the definition names the people in two places | keep `grants`; a hand-made file uses one place or the other, never both |
 
+### Console screens with an editor
+
+| Signature | Cause | Fix |
+| --- | --- | --- |
+| a screen with the shell's `CodeEditor` shows "not saved" again right after Save, or the text goes back to what it was | the editor's `setValue` (a new `value` prop) fires its change event, so clearing the draft while the loaded text is still the old one makes the old text the draft again | on success put the saved text into the query (`setQueryData`) **before** the draft is cleared (`WorkspacePage.tsx`, `FileEditor`) |
+| a file name with `#`, `?` or `%` is cut short or not found through the console's relay | the relay holds the decoded path and forwarded it as it was | the relay of a Workspace server escapes each part again (`ServerProducts.EscapedPath`); `ConsoleWorkspaceTests.A_file_name_with_characters_of_a_web_address_reaches_the_server_as_it_is` |
+| a test of a path with `./` or `../` in a URL passes for the wrong reason | `HttpClient` collapses dot segments before it sends | send the path in a JSON body (a move's `to`) or test the rule on `WorkspaceFiles.Normalize` directly |
+
 ### Console image / publish
 
 | Signature | Cause | Fix |

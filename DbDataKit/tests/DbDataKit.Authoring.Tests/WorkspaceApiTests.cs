@@ -15,7 +15,7 @@ namespace DbDataKit.Authoring.Tests;
 /// The workspace calls on a project kind that is not Build's (plan 22a, GP30): a fake app project, served by a bare host that knows only its project folder. The tests are the ones Build's server tests run (plan 13, W02, W08, W09:
 /// made, listed and abandoned by the owner, a draft that never moves the checkout, changes, commit, merge by an approver, a conflict, a push to a remote), so one behaviour serves every kind.
 /// </summary>
-public sealed class WorkspaceApiTests : IAsyncLifetime
+public sealed partial class WorkspaceApiTests : IAsyncLifetime
 {
     private const string InstanceId = "app-server-1";
     private readonly string root = Directory.CreateTempSubdirectory("authoring-").FullName;

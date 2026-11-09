@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
+import { ErrorBanner, Link, useIsAdmin } from '@dbdatakit/shell'
 import { workspaceApi, type ProjectSummary, type WorkspaceSummary } from '../api'
 import { abandonState, createState, describeEvent } from '../model'
 import { WorkspaceShell } from '../WorkspaceShell'
@@ -37,6 +37,7 @@ function WorkspaceRow({ project, workspace, canWrite }: { project: string; works
       <td>{when(workspace.created)}</td>
       <td>
         <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <Link to={`/${encodeURIComponent(project)}/${encodeURIComponent(workspace.id)}`} className="btn btn-primary" data-testid={`ws-open-${workspace.id}`}>Open</Link>
           <button type="button" className="btn" data-testid={`ws-history-toggle-${workspace.id}`} onClick={() => setShowHistory((v) => !v)}>{showHistory ? 'Hide history' : 'History'}</button>
           {!asking && <button type="button" className="btn" disabled={!can.enabled} title={can.why ?? undefined} data-testid={`ws-abandon-${workspace.id}`} onClick={() => setAsking(true)}>Abandon</button>}
           {asking && (
