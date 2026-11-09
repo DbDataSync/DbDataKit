@@ -15,7 +15,7 @@ namespace DbDataWorkspace.Server;
 /// <list type="bullet">
 /// <item><c>GET /api/v1/info</c>: who the server is (any role).</item>
 /// <item><c>GET /api/v1/projects</c> (viewer) and <c>POST /api/v1/projects</c> (admin, <c>{"id", "title"?, "kind"?}</c>): the projects hosted, and a new one.</item>
-/// <item>the workspace calls of <see cref="DbDataKit.Authoring.WorkspaceApi"/> (list, create, abandon, changes, history, commit, push, merge), the same as every kind of project has, and <c>GET /api/v1/projects/{project}/workspaces/{id}/events</c> (viewer): what happened to a draft, from the state module.</item>
+/// <item>the workspace calls of <see cref="DbDataKit.Authoring.WorkspaceApi"/> (list, create, abandon, the files of a draft: list, read, write, move, delete; changes, history, commit, push, merge), the same as every kind of project has, and <c>GET /api/v1/projects/{project}/workspaces/{id}/events</c> (viewer): what happened to a draft, from the state module.</item>
 /// <item><c>GET /api/v1/publisher-keys</c>, <c>PUT|DELETE /api/v1/publisher-keys/{name}</c> (admin, <c>{"secret_ref"}</c>): the reference to the secret that holds the publisher's key for a target. A key itself is refused.</item>
 /// </list>
 /// What happens to a draft is recorded in the state module as it happens; a record that cannot be written is logged and never turns a finished git operation into an error.
@@ -94,6 +94,8 @@ public static class WorkspaceManagement
                     case "merged" or "abandoned":
                         store.RecordEnded(change.Workspace.Project, change.Workspace.Id, change.Kind, change.ActorId, change.ActorName, change.Detail);
                         break;
+                    case "file-written" or "file-moved" or "file-deleted":
+                        break;      // a save is not history: the commit that takes it is (the module's kinds are the git ones)
                     default:
                         store.RecordEvent(change.Workspace.Project, change.Workspace.Id, change.Kind, change.ActorId, change.ActorName, change.Detail);
                         break;

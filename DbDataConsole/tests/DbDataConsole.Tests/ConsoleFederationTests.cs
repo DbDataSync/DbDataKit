@@ -7,6 +7,8 @@ using DbDataKit.State;
 using DbDataKit.Web.Trust;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using DbDataKit.Web.Auth;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -202,6 +204,43 @@ public sealed class ConsoleFederationTests : IAsyncLifetime
 
         // the home says admin on server B; the second console may grant only viewer there
         Assert.Equal(["viewer"], Roles(await Echo(consoleB, sessionB!, ServerBId)));
+    }
+
+    [Fact]
+    public async Task A_workspace_servers_relay_checks_the_roles_the_home_gives_there_and_in_a_project_not_the_consoles_own()
+    {
+        var reached = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        await using var workspace = await PairableServer.StartAsync(instanceId: "workspace-a", product: ServerProducts.Workspace, map: (app, _, _) =>
+        {
+            IResult Needs(HttpContext c, string project, ServerRole role)
+            {
+                reached.Enqueue($"{c.Request.Method} {c.Request.Path}");
+                return ManagementAuthorization.Authorize(c.ManagementToken(), role, project).Allowed ? Results.Ok() : Results.Json(new { error = "the server refused" }, statusCode: 403);
+            }
+            app.MapPost("/api/v1/projects", (HttpContext c) => Needs(c, "", ServerRole.Admin));
+            app.MapPost("/api/v1/projects/{project}/workspaces", (string project, HttpContext c) => Needs(c, project, ServerRole.Author));
+            app.MapPost("/api/v1/projects/{project}/workspaces/{id}/merge", (string project, HttpContext c) => Needs(c, project, ServerRole.Approver));
+        });
+        await appA.Services.GetRequiredService<ConsoleInstances>().PairAsync(workspace.Url, workspace.NewCodeWith(ServerRole.Admin | ServerRole.Author | ServerRole.Approver), "Workspaces", default);
+        var adaSubject = AssignmentSubject.User(ada.Id);
+        directory.Assign(adaSubject, "workspace-a", ServerRole.Author);                              // an author on the server ...
+        directory.Assign(adaSubject, "workspace-a", ServerRole.Approver, project: "orders");         // ... and an approver in one project
+        var (session, _) = await SignIn(consoleA, ada.Id);       // her role in this console is administrator; the home's word is what the relay uses
+
+        async Task<HttpStatusCode> Call(HttpMethod method, string path)
+        {
+            var request = new HttpRequestMessage(method, $"/relay/workspace-a/{path}") { Content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json") };
+            request.Headers.Add("Cookie", $"{ConsoleHost.Auth.SessionCookie}={session}");
+            return (await consoleA.SendAsync(request)).StatusCode;
+        }
+
+        Assert.Equal(HttpStatusCode.OK, await Call(HttpMethod.Post, "api/v1/projects/orders/workspaces"));
+        Assert.Equal(HttpStatusCode.OK, await Call(HttpMethod.Post, "api/v1/projects/other/workspaces"));
+        Assert.Equal(HttpStatusCode.OK, await Call(HttpMethod.Post, "api/v1/projects/orders/workspaces/ada-x/merge"));          // approver in that project
+        var before = reached.Count;
+        Assert.Equal(HttpStatusCode.Forbidden, await Call(HttpMethod.Post, "api/v1/projects/other/workspaces/ada-x/merge"));    // not in this one
+        Assert.Equal(HttpStatusCode.Forbidden, await Call(HttpMethod.Post, "api/v1/projects"));                                  // the home gave no administrator role there
+        Assert.Equal(before, reached.Count);                                                                                      // the server was not asked
     }
 
     [Fact]

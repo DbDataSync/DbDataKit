@@ -32,7 +32,7 @@ public interface IAuthoringProjects
 public sealed record WorkspaceApiOptions(string MailDomain, Action<string>? Ending = null, Action<WorkspaceChange>? Changed = null);
 
 /// <summary>Something that happened to a workspace, as a host that keeps a history is told.</summary>
-/// <param name="Kind"><c>created</c>, <c>committed</c>, <c>pushed</c>, <c>merged</c> or <c>abandoned</c>.</param>
+/// <param name="Kind"><c>created</c>, <c>committed</c>, <c>pushed</c>, <c>merged</c>, <c>abandoned</c>, or for a file command (GP35a) <c>file-written</c>, <c>file-moved</c> or <c>file-deleted</c> (the detail is the path, <c>from -&gt; to</c> for a move).</param>
 /// <param name="Workspace">The workspace it happened to (for <c>abandoned</c> and <c>merged</c>, as it was).</param>
 /// <param name="ActorId">Who did it, as the token carries them.</param>
 /// <param name="ActorName">Their name as people read it.</param>
@@ -42,6 +42,7 @@ public sealed record WorkspaceChange(string Kind, Workspace Workspace, string Ac
 /// <summary>
 /// The workspace calls of a server's management API (plan 13, W02 and W08; plan 22a, GP30), the same for every kind of project:
 /// <c>GET|POST /api/v1/projects/{project}/workspaces</c> and <c>DELETE .../workspaces/{id}</c> (listing is a viewer's; making one and abandoning one needs the author role, and only the owner abandons theirs),
+/// <c>GET .../files</c> (the list) and <c>GET .../files/{**path}</c> (a file's text) are a viewer's; <c>PUT .../files/{**path}</c> (<c>{"content"}</c>), <c>DELETE .../files/{**path}</c> and <c>POST .../move</c> (<c>{"from","to"}</c>) are the owner's, author role, and are limited by <see cref="WorkspaceFiles"/> (inside the folder, no <c>.git</c>, text of at most 1 MiB),
 /// <c>GET .../changes</c> and <c>.../history</c> (a viewer's), <c>POST .../commit</c> and <c>.../push</c> (the owner, author role) and <c>POST .../merge</c> (the approver role, because it changes what the scheduler and the deploys read).
 /// A project with a git remote is pushed to (a branch, for a pull request opened where the remote lives) and never merged inside the server, since the server's copy of a remote is reset to the remote's branch; a project without one is
 /// merged inside the server, in the author's name. A merge that conflicts changes nothing and answers 409 with the files. A merged workspace is abandoned.
@@ -114,6 +115,79 @@ public static class WorkspaceApi
             catch (GitWorktreeException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
             options.Changed?.Invoke(new WorkspaceChange("abandoned", workspace, token.SubjectId, token.SubjectName ?? token.SubjectId, workspace.Branch));
             return Results.NoContent();
+        });
+
+        static IResult FileFailed(WorkspaceFileException ex) => Results.Json(new { error = ex.Message }, statusCode: ex.Status);
+        static async Task<JsonObject?> BodyOf(HttpContext context)
+        {
+            try { return await JsonSerializer.DeserializeAsync<JsonObject>(context.Request.Body, cancellationToken: context.RequestAborted); }
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException) { return null; }
+        }
+        static string? Text(JsonObject? body, string name)
+        {
+            try { return body?[name]?.GetValue<string>(); }
+            catch (InvalidOperationException) { return null; }
+        }
+        void Told(HttpContext context, Workspace workspace, string kind, string detail)
+        {
+            var who = context.ManagementToken();
+            options.Changed?.Invoke(new WorkspaceChange(kind, workspace, who.SubjectId, who.SubjectName ?? who.SubjectId, detail));
+        }
+
+        app.MapGet("/api/v1/projects/{project}/workspaces/{id}/files", (string project, string id, HttpContext context) =>
+        {
+            if (Resolve(project, id, context, ServerRole.Viewer, false, out _, out var workspace) is { } refused) return refused;
+            var files = WorkspaceFiles.List(workspaces.RootOf(workspace));
+            return Results.Json(new { files = files.Select(f => new { path = f.Path, size = f.Size }), truncated = files.Count >= WorkspaceFiles.MaxFiles, max_file_bytes = WorkspaceFiles.MaxFileBytes });
+        });
+
+        app.MapGet("/api/v1/projects/{project}/workspaces/{id}/files/{**path}", (string project, string id, string path, HttpContext context) =>
+        {
+            if (Resolve(project, id, context, ServerRole.Viewer, false, out _, out var workspace) is { } refused) return refused;
+            try { return Results.Json(new { path = WorkspaceFiles.Normalize(path), content = WorkspaceFiles.Read(workspaces.RootOf(workspace), path) }); }
+            catch (WorkspaceFileException ex) { return FileFailed(ex); }
+        });
+
+        app.MapPut("/api/v1/projects/{project}/workspaces/{id}/files/{**path}", async (string project, string id, string path, HttpContext context) =>
+        {
+            if (Resolve(project, id, context, ServerRole.Author, true, out _, out var workspace) is { } refused) return refused;
+            // a body past the limit is refused before it is read whole
+            if (context.Request.ContentLength > WorkspaceFiles.MaxFileBytes * 4L) return Results.Json(new { error = $"A file is at most {WorkspaceFiles.MaxFileBytes} bytes." }, statusCode: StatusCodes.Status413PayloadTooLarge);
+            var content = Text(await BodyOf(context), "content");
+            if (content is null) return Results.Json(new { error = "The body is a JSON object with the file's \"content\" (text)." }, statusCode: StatusCodes.Status400BadRequest);
+            try
+            {
+                var made = WorkspaceFiles.Write(workspaces.RootOf(workspace), path, content);
+                Told(context, workspace, "file-written", WorkspaceFiles.Normalize(path));
+                return Results.Json(new { path = WorkspaceFiles.Normalize(path), created = made, size = System.Text.Encoding.UTF8.GetByteCount(content) }, statusCode: made ? StatusCodes.Status201Created : StatusCodes.Status200OK);
+            }
+            catch (WorkspaceFileException ex) { return FileFailed(ex); }
+        });
+
+        app.MapDelete("/api/v1/projects/{project}/workspaces/{id}/files/{**path}", (string project, string id, string path, HttpContext context) =>
+        {
+            if (Resolve(project, id, context, ServerRole.Author, true, out _, out var workspace) is { } refused) return refused;
+            try
+            {
+                WorkspaceFiles.Delete(workspaces.RootOf(workspace), path);
+                Told(context, workspace, "file-deleted", WorkspaceFiles.Normalize(path));
+                return Results.NoContent();
+            }
+            catch (WorkspaceFileException ex) { return FileFailed(ex); }
+        });
+
+        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/move", async (string project, string id, HttpContext context) =>
+        {
+            if (Resolve(project, id, context, ServerRole.Author, true, out _, out var workspace) is { } refused) return refused;
+            var body = await BodyOf(context);
+            if (Text(body, "from") is not { } from || Text(body, "to") is not { } to) return Results.Json(new { error = "The body is a JSON object with the file's \"from\" and \"to\" paths." }, statusCode: StatusCodes.Status400BadRequest);
+            try
+            {
+                WorkspaceFiles.Move(workspaces.RootOf(workspace), from, to);
+                Told(context, workspace, "file-moved", $"{WorkspaceFiles.Normalize(from)} -> {WorkspaceFiles.Normalize(to)}");
+                return Results.Json(new { from = WorkspaceFiles.Normalize(from), to = WorkspaceFiles.Normalize(to) });
+            }
+            catch (WorkspaceFileException ex) { return FileFailed(ex); }
         });
 
         app.MapGet("/api/v1/projects/{project}/workspaces/{id}/changes", (string project, string id, HttpContext context) =>

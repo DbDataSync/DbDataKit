@@ -91,7 +91,7 @@ public static class ServerProducts
         product == Workspace ? RoleNeeded(product, method, path) is not null : product != Runner || RunnerRouteOf(method, path) is not null;
 
     /// <summary>
-    /// The relay's table for a Workspace server, route by route: what a screen calls, and the role the call needs. Only these pass; the rest of the server's API (commit, push, merge, a draft's changes and history, the publisher's key reference) is
+    /// The relay's table for a Workspace server, route by route: what a screen calls, and the role the call needs. Only these pass; the rest of the server's API (the publisher's key reference) is
     /// not relayed until a screen uses it, and a call this table does not name is refused whoever signed in. <c>{p}</c> is a project and <c>{id}</c> a workspace.
     /// </summary>
     public static IReadOnlyList<(string Method, string Route, ServerRole Needed)> WorkspaceRoutes { get; } =
@@ -102,10 +102,21 @@ public static class ServerProducts
         ("POST", "api/v1/projects/{p}/workspaces", ServerRole.Author),
         ("DELETE", "api/v1/projects/{p}/workspaces/{id}", ServerRole.Author),
         ("GET", "api/v1/projects/{p}/workspaces/{id}/events", ServerRole.Viewer),
+        // GP35a: the files of a draft, what changed in it, its history, and the git steps; the server limits a path again (inside the draft, no .git, text of at most 1 MiB)
+        ("GET", "api/v1/projects/{p}/workspaces/{id}/files", ServerRole.Viewer),
+        ("GET", "api/v1/projects/{p}/workspaces/{id}/files/{path}", ServerRole.Viewer),
+        ("PUT", "api/v1/projects/{p}/workspaces/{id}/files/{path}", ServerRole.Author),
+        ("DELETE", "api/v1/projects/{p}/workspaces/{id}/files/{path}", ServerRole.Author),
+        ("POST", "api/v1/projects/{p}/workspaces/{id}/move", ServerRole.Author),
+        ("GET", "api/v1/projects/{p}/workspaces/{id}/changes", ServerRole.Viewer),
+        ("GET", "api/v1/projects/{p}/workspaces/{id}/history", ServerRole.Viewer),
+        ("POST", "api/v1/projects/{p}/workspaces/{id}/commit", ServerRole.Author),
+        ("POST", "api/v1/projects/{p}/workspaces/{id}/push", ServerRole.Author),
+        ("POST", "api/v1/projects/{p}/workspaces/{id}/merge", ServerRole.Approver),
     ];
 
     private static readonly IReadOnlyList<(string Method, Regex Pattern, ServerRole Needed)> WorkspaceTable =
-        [.. WorkspaceRoutes.Select(r => (r.Method, new Regex("^" + r.Route.Replace("{p}", "(?<p>[A-Za-z0-9._-]+)").Replace("{id}", "[A-Za-z0-9._-]+") + "/?$", RegexOptions.CultureInvariant), r.Needed))];
+        [.. WorkspaceRoutes.Select(r => (r.Method, new Regex("^" + r.Route.Replace("{p}", "(?<p>[A-Za-z0-9._-]+)").Replace("{id}", "[A-Za-z0-9._-]+").Replace("{path}", ".+") + "/?$", RegexOptions.CultureInvariant), r.Needed))];
 
     /// <summary>The role the relay requires of the signed-in person for a call to a server of this product, or null when the relay does not pass the call (or, for a product whose server alone decides, does not judge it).</summary>
     public static ServerRole? RoleNeeded(string? product, string method, string path)
@@ -129,6 +140,9 @@ public static class ServerProducts
 
     /// <summary>What the relay tells a person whose call it does not pass.</summary>
     public static string RefusalFor(string? product, string name) => product == Workspace
-        ? $"{name} is a Workspace server: the console relays only the calls its screens make (projects, and making, listing and abandoning a workspace)."
+        ? $"{name} is a Workspace server: the console relays only the calls its screens make (projects, workspaces and their files, changes, history, commit, push and merge)."
         : $"{name} is a runner: the console relays only its management calls (status, instances, runs, tasks, packages and their life cycle).";
+
+    /// <summary>A relayed path as it goes to the server: each part escaped, because the relay holds the decoded one and a file name may hold <c>#</c>, <c>?</c> or <c>%</c>.</summary>
+    public static string EscapedPath(string path) => string.Join('/', path.Split('/').Select(Uri.EscapeDataString));
 }

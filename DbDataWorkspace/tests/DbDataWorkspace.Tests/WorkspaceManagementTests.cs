@@ -74,6 +74,29 @@ public sealed class WorkspaceManagementTests
     }
 
     [Fact]
+    public async Task The_files_of_a_draft_are_edited_through_the_server_and_a_commit_is_what_the_history_records()
+    {
+        await using var server = await WorkspaceHarness.StartAsync();
+        await server.AsAdmin(HttpMethod.Post, "/api/v1/projects", Orders);
+        var id = (string)(await server.AsAda(HttpMethod.Post, "/api/v1/projects/orders/workspaces", """{"name":"draft"}""")).Body!["id"]!;
+        var files = $"/api/v1/projects/orders/workspaces/{id}/files";
+
+        Assert.Equal(["README.md"], (await server.Send("vic", ServerRole.Viewer, HttpMethod.Get, files)).Body!["files"]!.AsArray().Select(f => (string)f!["path"]!).Where(p => p != ".gitattributes"));
+        Assert.Equal(HttpStatusCode.Created, (await server.AsAda(HttpMethod.Put, files + "/views/orders.yaml", """{"content":"kind: grid\n"}""")).Response.StatusCode);
+        Assert.Equal("kind: grid\n", (string)(await server.Send("vic", ServerRole.Viewer, HttpMethod.Get, files + "/views/orders.yaml")).Body!["content"]!);
+        Assert.Equal(HttpStatusCode.Forbidden, (await server.Send("vic", ServerRole.Viewer, HttpMethod.Put, files + "/x.yaml", """{"content":"x"}""")).Response.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await server.AsAda(HttpMethod.Put, files + "/.git/config", """{"content":"x"}""")).Response.StatusCode);
+        Assert.False(File.Exists(Path.Combine(server.Directory, "projects", "orders", "views", "orders.yaml")));       // the project's own copy is untouched until a merge
+
+        await server.AsAda(HttpMethod.Post, $"/api/v1/projects/orders/workspaces/{id}/commit", """{"message":"Add the orders view"}""");
+        await server.Send("ann", ServerRole.Approver, HttpMethod.Post, $"/api/v1/projects/orders/workspaces/{id}/merge");
+
+        Assert.True(File.Exists(Path.Combine(server.Directory, "projects", "orders", "views", "orders.yaml")));
+        Assert.Equal(["merged", "committed", "created"], server.Store().Events("orders", id).Select(e => e.Kind));     // saves are not history; the commit is
+        Assert.DoesNotContain(server.Log, l => l.Contains("could not be written", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Making_a_project_is_an_administrators_and_is_checked_and_audited()
     {
         await using var server = await WorkspaceHarness.StartAsync();

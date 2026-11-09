@@ -62,12 +62,18 @@ public sealed class ConsoleWorkspaceTests : IAsyncLifetime
         workspace.MapPost("/api/v1/projects/{project}/workspaces", (HttpContext c) => Needs(c, ServerRole.Author, () => Results.Json(new { id = "ada-draft" }, statusCode: 201)));
         workspace.MapDelete("/api/v1/projects/{project}/workspaces/{id}", (HttpContext c) => Needs(c, ServerRole.Author, () => Results.NoContent()));
         workspace.MapGet("/api/v1/projects/{project}/workspaces/{id}/events", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { events = Array.Empty<object>() })));
-        // what a console does not call yet (plan 22a GP35 gives them screens), and what is for the publisher
+        // the files of a draft and the git steps (plan 22a GP35a), each with the server's own role rule and each recording the path it was called with
+        workspace.MapGet("/api/v1/projects/{project}/workspaces/{id}/files", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { files = Array.Empty<object>() })));
+        workspace.MapGet("/api/v1/projects/{project}/workspaces/{id}/files/{**path}", (string path, HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { path })));
+        workspace.MapPut("/api/v1/projects/{project}/workspaces/{id}/files/{**path}", (string path, HttpContext c) => Needs(c, ServerRole.Author, () => Results.Json(new { path })));
+        workspace.MapDelete("/api/v1/projects/{project}/workspaces/{id}/files/{**path}", (HttpContext c) => Needs(c, ServerRole.Author, () => Results.NoContent()));
+        workspace.MapPost("/api/v1/projects/{project}/workspaces/{id}/move", (HttpContext c) => Needs(c, ServerRole.Author, () => Results.Ok()));
         workspace.MapGet("/api/v1/projects/{project}/workspaces/{id}/changes", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Ok()));
         workspace.MapGet("/api/v1/projects/{project}/workspaces/{id}/history", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Ok()));
         workspace.MapPost("/api/v1/projects/{project}/workspaces/{id}/commit", (HttpContext c) => Needs(c, ServerRole.Author, () => Results.Ok()));
         workspace.MapPost("/api/v1/projects/{project}/workspaces/{id}/push", (HttpContext c) => Needs(c, ServerRole.Author, () => Results.Ok()));
         workspace.MapPost("/api/v1/projects/{project}/workspaces/{id}/merge", (HttpContext c) => Needs(c, ServerRole.Approver, () => Results.Ok()));
+        // what a console does not call (plan 22a GP35 gives the publisher's key a screen with the publish step)
         workspace.MapGet("/api/v1/publisher-keys", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Ok()));
         workspace.MapPut("/api/v1/publisher-keys/{name}", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Ok()));
     }
@@ -135,16 +141,73 @@ public sealed class ConsoleWorkspaceTests : IAsyncLifetime
         Assert.DoesNotContain(reached, r => r.StartsWith("POST", StringComparison.Ordinal));
     }
 
+    /// <summary>Every route of the table, each with the role it needs; the person's own role is the second item (what an administrator and a viewer hold here).</summary>
+    public static TheoryData<string, string, string, int> Routes => new()
+    {
+        { "GET", "api/v1/projects/orders/workspaces/ada-draft/files", "viewer", 200 },
+        { "GET", "api/v1/projects/orders/workspaces/ada-draft/files/views/orders.yaml", "viewer", 200 },
+        { "PUT", "api/v1/projects/orders/workspaces/ada-draft/files/views/orders.yaml", "author", 200 },
+        { "DELETE", "api/v1/projects/orders/workspaces/ada-draft/files/views/orders.yaml", "author", 204 },
+        { "POST", "api/v1/projects/orders/workspaces/ada-draft/move", "author", 200 },
+        { "GET", "api/v1/projects/orders/workspaces/ada-draft/changes", "viewer", 200 },
+        { "GET", "api/v1/projects/orders/workspaces/ada-draft/history", "viewer", 200 },
+        { "POST", "api/v1/projects/orders/workspaces/ada-draft/commit", "author", 200 },
+        { "POST", "api/v1/projects/orders/workspaces/ada-draft/push", "author", 200 },
+        { "POST", "api/v1/projects/orders/workspaces/ada-draft/merge", "approver", 200 },
+    };
+
     [Theory]
-    [InlineData("GET", "api/v1/projects/orders/workspaces/ada-draft/changes")]
-    [InlineData("GET", "api/v1/projects/orders/workspaces/ada-draft/history")]
-    [InlineData("POST", "api/v1/projects/orders/workspaces/ada-draft/commit")]
-    [InlineData("POST", "api/v1/projects/orders/workspaces/ada-draft/push")]
-    [InlineData("POST", "api/v1/projects/orders/workspaces/ada-draft/merge")]
+    [MemberData(nameof(Routes))]
+    public async Task Each_route_of_a_draft_passes_for_the_role_it_needs_and_a_viewer_is_refused_at_the_relay_with_the_server_never_called(string method, string path, string needed, int ok)
+    {
+        var body = method is "PUT" or "POST" ? "{}" : null;
+
+        var allowed = await Send(new HttpMethod(method), Relay(path), admin, body);
+        Assert.Equal(ok, (int)allowed.StatusCode);
+        Assert.Contains(reached, r => r.StartsWith(method + " /" + path, StringComparison.Ordinal) && r.EndsWith("by Admin person", StringComparison.Ordinal));
+
+        var calls = reached.Count;
+        var viewed = await Send(new HttpMethod(method), Relay(path), viewer, body);
+        if (needed == "viewer") Assert.Equal(ok, (int)viewed.StatusCode);
+        else
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, viewed.StatusCode);
+            Assert.Equal($"This needs the {needed} role.", (string)JsonNode.Parse(await viewed.Content.ReadAsStringAsync())!["error"]!);
+            Assert.Equal(calls, reached.Count);          // refused at the relay: the server was not asked
+        }
+    }
+
+    [Fact]
+    public async Task A_file_name_with_characters_of_a_web_address_reaches_the_server_as_it_is()
+    {
+        var name = "views/a b#c?d%e.yaml";
+        var response = await Send(HttpMethod.Get, Relay("api/v1/projects/orders/workspaces/ada-draft/files/" + string.Join('/', name.Split('/').Select(Uri.EscapeDataString))), viewer);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(name, (string)JsonNode.Parse(await response.Content.ReadAsStringAsync())!["path"]!);
+    }
+
+    [Theory]
+    [InlineData("GET", "api/v1/projects/orders/workspaces/ada-draft/files/../../publisher-keys")]
+    [InlineData("GET", "api/v1/projects/orders/workspaces/ada-draft/files/%2e%2e/%2e%2e/%2e%2e/publisher-keys")]
+    public async Task A_file_path_cannot_climb_out_of_the_route_at_the_relay(string method, string path)
+    {
+        var response = await Send(new HttpMethod(method), Relay(path), admin, method == "PUT" ? "{}" : null);
+
+        Assert.True(response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Forbidden or HttpStatusCode.NotFound, response.StatusCode.ToString());
+        Assert.Empty(reached);
+    }
+
+    [Theory]
     [InlineData("GET", "api/v1/publisher-keys")]
     [InlineData("PUT", "api/v1/publisher-keys/main-group")]
     [InlineData("DELETE", "api/v1/projects/orders")]
     [InlineData("PUT", "api/v1/projects/orders/workspaces")]
+    [InlineData("POST", "api/v1/projects/orders/workspaces/ada-draft/files/x.yaml")]
+    [InlineData("PATCH", "api/v1/projects/orders/workspaces/ada-draft/commit")]
+    [InlineData("DELETE", "api/v1/projects/orders/workspaces/ada-draft/merge")]
+    [InlineData("GET", "api/v1/projects/orders/workspaces/ada-draft/move")]
+    [InlineData("POST", "api/v1/projects/orders/workspaces/ada-draft/build")]
     [InlineData("GET", "hubs/echo")]
     public async Task Only_the_calls_in_the_table_are_relayed_even_for_an_administrator(string method, string path)
     {
@@ -163,12 +226,14 @@ public sealed class ConsoleWorkspaceTests : IAsyncLifetime
         Assert.Equal(ServerRole.Author, ServerProducts.RoleNeeded("dbdataworkspace", "DELETE", "api/v1/projects/orders/workspaces/ada-draft"));
         Assert.Equal("orders", ServerProducts.ProjectOf("dbdataworkspace", "GET", "api/v1/projects/orders/workspaces/ada-draft/events"));
         Assert.Null(ServerProducts.ProjectOf("dbdataworkspace", "GET", "api/v1/projects"));
-        Assert.Null(ServerProducts.RoleNeeded("dbdataworkspace", "POST", "api/v1/projects/orders/workspaces/ada-draft/merge"));
+        Assert.Equal(ServerRole.Approver, ServerProducts.RoleNeeded("dbdataworkspace", "POST", "api/v1/projects/orders/workspaces/ada-draft/merge"));
+        Assert.Equal(ServerRole.Author, ServerProducts.RoleNeeded("dbdataworkspace", "PUT", "api/v1/projects/orders/workspaces/ada-draft/files/views/orders.yaml"));
+        Assert.Null(ServerProducts.RoleNeeded("dbdataworkspace", "GET", "api/v1/publisher-keys"));
         Assert.Null(ServerProducts.RoleNeeded("dbdataworkspace", "GET", "api/v1/projects/orders/workspaces/a/b/events"));
         Assert.Null(ServerProducts.RoleNeeded("dbdatarunner", "GET", "api/v1/projects"));      // another product's table is its own
         Assert.True(ServerProducts.Relayable("dbdatabuild", "DELETE", "api/v1/projects/x"));   // a product with no table is not limited
         // every route of the table is a call a screen makes: the list is the whole of what passes
-        Assert.Equal(6, ServerProducts.WorkspaceRoutes.Count);
-        Assert.All(ServerProducts.WorkspaceRoutes, r => Assert.True(ServerProducts.Relayable("dbdataworkspace", r.Method, r.Route.Replace("{p}", "orders").Replace("{id}", "ada-draft"))));
+        Assert.Equal(16, ServerProducts.WorkspaceRoutes.Count);
+        Assert.All(ServerProducts.WorkspaceRoutes, r => Assert.True(ServerProducts.Relayable("dbdataworkspace", r.Method, r.Route.Replace("{p}", "orders").Replace("{id}", "ada-draft").Replace("{path}", "views/orders.yaml"))));
     }
 }

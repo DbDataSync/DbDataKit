@@ -16,7 +16,7 @@ The Workspace server (`dbdataworkspace`): plan 22a GP31 and decision D8, with pl
 
 - **The state module is `workspace`** (`DbDataKit.State`, `WorkspaceModule` and `WorkspaceStore`), kept per service. Migrations are appended, never edited once released. A change to a draft and its event are written in one transaction; a record that fails to write is logged and never turns a finished git operation into an error.
 - **The publisher's key is a reference.** `publisher_key` holds `secret:...`, never a key; a value that is not a reference is refused and is never written to a row or the audit log.
-- **Roles are the server's.** Making a project is an administrator's; making and abandoning a workspace needs the author role and only the owner abandons or commits their own; merging needs the approver role. The console's relay is an explicit table (`ServerProducts.Relayable`), and the server checks the role again on every call.
+- **Roles are the server's.** Making a project is an administrator's; making and abandoning a workspace needs the author role and only the owner abandons or commits their own; merging needs the approver role. The console's relay is an explicit table (`ServerProducts.WorkspaceRoutes`, each route with its role), and the server checks the role again on every call. A file command takes a path inside the draft (`WorkspaceFiles`), and a save is not history: only the commit is.
 - **A project kind is a row, not a code path.** `WorkspaceModule.ProjectKinds` lists the kinds (`app`); plan 27 adds the others there. The server does not interpret a project's files (builds are GP32 to GP35).
 - **A clean break is allowed, never a silent one**: a changed file format fails with a message naming the file.
 

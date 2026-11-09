@@ -458,6 +458,23 @@ if (!isWorker) {
   fs.writeFileSync(path.join(scratchDirectory, 'workspace-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
 
+// Plan 22a GP35a: a second Workspace server for the editing story (`workspace-files.spec.ts`), port 8621 (a port table: 8611 the first Workspace server, 8621 this one; 8541 to 8544, 8551, 8561 and up, 8571 and up, 8581 to 8586 and 8591 are other
+// stories'). It has its own directory so the first story's server is left as it was. One project, `orders`, from the server's own command; the story makes a workspace, writes a file, commits and merges, so it needs the approver role.
+export const workspaceEditServer = {
+  directory: path.join(os.tmpdir(), 'ddk-e2e-workspace-edit'),
+  port: 8621,
+  url: 'https://localhost:8621',
+  project: 'orders',
+  dll: workspaceServer.dll,
+}
+if (!isWorker) {
+  fs.rmSync(workspaceEditServer.directory, { recursive: true, force: true })
+  fs.mkdirSync(workspaceEditServer.directory, { recursive: true })
+  execFileSync('dotnet', ['exec', workspaceEditServer.dll, 'project', 'create', workspaceEditServer.project, '--title', 'Orders', '--repo', workspaceEditServer.directory], { stdio: 'ignore' })
+  const made = execFileSync('dotnet', ['exec', workspaceEditServer.dll, 'server', 'pair', '--minutes', '120', '--repo', workspaceEditServer.directory, '--max-role', 'viewer,author,approver,admin'], { encoding: 'utf8' })
+  fs.writeFileSync(path.join(scratchDirectory, 'workspace-edit-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
+}
+
 // A passkey is bound to the host name and the port it was made on, and the server builds its list of allowed origins from the address it is told to listen on,
 // so the address is fixed here and the test opens exactly that.
 const port = 8481
@@ -604,6 +621,15 @@ export default defineConfig({
     {
       command: ['dotnet', 'exec', JSON.stringify(workspaceServer.dll), 'server', 'run', '--repo', JSON.stringify(workspaceServer.directory), '--listen', workspaceServer.url].join(' '),
       url: `${workspaceServer.url}/health/live`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
+    },
+    {
+      command: ['dotnet', 'exec', JSON.stringify(workspaceEditServer.dll), 'server', 'run', '--repo', JSON.stringify(workspaceEditServer.directory), '--listen', workspaceEditServer.url].join(' '),
+      url: `${workspaceEditServer.url}/health/live`,
       ignoreHTTPSErrors: true,
       reuseExistingServer: false,
       timeout: 60_000,
