@@ -30,7 +30,8 @@ public sealed class BulkLoadService(
     BulkLoadBatchStore batchStore,
     TaskRunStore taskRunStore,
     ProcessSupervisor supervisor,
-    CustomSegmentExpansion customSegments) : IInitialLoadEnqueuer
+    CustomSegmentExpansion customSegments,
+    DbDataSync.Api.Runner.RunnerDispatch runnerDispatch) : IInitialLoadEnqueuer
 {
     private readonly SegmentExpander expander = new(customSegments);
 
@@ -73,6 +74,18 @@ public sealed class BulkLoadService(
         }
 
         var kinds = new WorkItemKinds(request.ReaderKind, request.CacheKind, request.WriterKind);
+
+        if (runnerDispatch.RunnerOwns(replicationName))
+        {
+            // the runner owns the drain: the reload is a request of the run of its drain (plan 28c E12), with its batch as the drain's own record
+            var order = SegmentOrderResolution.Resolve(request.SegmentOrder, TargetConnection(task, mapping), task, mapping);
+            var (rows, caveat) = await SegmentExpander.EstimateRowsAsync(task, mapping, connections.OpenAsync, cancellationToken);
+            var batch = Guid.NewGuid().ToString("N");
+            var requests = segments.Select(s => new DrainRequest(
+                nameof(RunKind.BulkLoad), mappingName, s.Describe(), SegmentSerializer.Serialize(s), request.ReaderKind, request.CacheKind, request.WriterKind,
+                OneAtATime: order == SegmentOrder.OneAtATime, BatchId: batch, BatchSegments: segments.Count, EstimatedRows: rows, EstimateCaveat: caveat)).ToList();
+            return await runnerDispatch.SendAsync(replicationName, requests, runAll: false, cancellationToken);
+        }
 
         // One id for the whole reload, minted here and carried onto every segment's run, so the
         // Monitoring screen can add the segments back up.

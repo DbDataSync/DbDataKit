@@ -12,6 +12,7 @@ namespace DbDataSync.Api.Controllers;
 [Route("api")]
 public sealed class RunsController(
     ProcessSupervisor supervisor,
+    DbDataSync.Api.Runner.RunnerDispatch runnerDispatch,
     BulkLoadService bulkLoadService,
     ReconcileService reconcileService,
     TaskRunStore taskRunStore,
@@ -23,9 +24,12 @@ public sealed class RunsController(
     LogWriter logWriter) : ControllerBase
 {
     [HttpPost("replications/{name}/runs")]
-    public IActionResult Trigger(string name)
+    public async Task<IActionResult> Trigger(string name, CancellationToken cancellationToken)
     {
-        var result = supervisor.TriggerReplication(name);
+        // "Run now" of a replication the runner owns is a run of its drain with run_all (plan 28c E12)
+        var result = runnerDispatch.RunnerOwns(name)
+            ? await runnerDispatch.SendAsync(name, [], runAll: true, cancellationToken)
+            : supervisor.TriggerReplication(name);
         return result.Outcome switch
         {
             TriggerOutcome.Started => Accepted(new { runIds = result.RunIds }),

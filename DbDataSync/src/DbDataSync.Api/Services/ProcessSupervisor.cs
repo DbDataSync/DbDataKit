@@ -26,7 +26,8 @@ public sealed class ProcessSupervisor(
     RunnerToken runnerToken,
     StateHost stateHost,
     JournalRecovery journalRecovery,
-    ILogger<ProcessSupervisor> logger)
+    ILogger<ProcessSupervisor> logger,
+    DbDataSync.Api.Runner.RunnerOwnerFile? runnerOwners = null)
 {
     private readonly ConcurrentDictionary<string, Process> _workers = new();
 
@@ -76,6 +77,10 @@ public sealed class ProcessSupervisor(
     /// callers enqueue work first (cheap, a few SQLite writes) and call this after.</summary>
     public TriggerResult EnsureWorkerRunning(string taskName)
     {
+        // the guard of plan 28c E12: a replication the runner owns is drained by the runner, and a worker of this API beside it would process the same mappings twice
+        if (runnerOwners?.OwnerOf(taskName) == DbDataKit.State.TaskOwners.Runner)
+            return TriggerResult.FailedToStart($"'{taskName}' is owned by the runner: this API starts no worker for it (roll it back to this API to run it here).");
+
         if (_workers.TryGetValue(taskName, out var existing) && !existing.HasExited)
             return TriggerResult.Started([]);
 

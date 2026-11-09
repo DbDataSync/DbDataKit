@@ -30,7 +30,8 @@ public sealed class ReconcileService(
     DriverConnectionFactory connections,
     WorkQueueStore workQueueStore,
     ProcessSupervisor supervisor,
-    CustomSegmentExpansion customSegments) : IScheduledReconcileEnqueuer
+    CustomSegmentExpansion customSegments,
+    DbDataSync.Api.Runner.RunnerDispatch runnerDispatch) : IScheduledReconcileEnqueuer
 {
     private readonly SegmentExpander expander = new(customSegments);
 
@@ -80,6 +81,11 @@ public sealed class ReconcileService(
         // that fallback exists only for a work item nothing here wrote (there is none any more).
         var guard = request.OverrideGuard ? new NoneDeleteGuard() : PipelineResolution.Reconcile(task, mapping).DeleteGuard;
         var guardJson = DeleteGuardOption.Serialize(guard);
+
+        if (runnerDispatch.RunnerOwns(replicationName))
+            return await runnerDispatch.SendAsync(replicationName,
+                [.. segments.Select(s => new DrainRequest(nameof(RunKind.ReconcileDeletes), mappingName, s.Describe(), SegmentSerializer.Serialize(s), kinds.ReaderKind, kinds.CacheKind, kinds.WriterKind, DeleteGuardJson: guardJson))],
+                runAll: false, cancellationToken);
 
         var runIds = segments
             .Select(segment => workQueueStore.Enqueue(

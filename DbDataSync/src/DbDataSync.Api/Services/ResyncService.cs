@@ -32,7 +32,8 @@ public sealed class ResyncService(
     TaskRunStore taskRunStore,
     ChangeWatermarkStore watermarks,
     WorkQueueStore workQueueStore,
-    ProcessSupervisor supervisor)
+    ProcessSupervisor supervisor,
+    DbDataSync.Api.Runner.RunnerDispatch runnerDispatch)
 {
     public async Task<TriggerResult> ResyncAsync(Guid runId, CancellationToken cancellationToken)
     {
@@ -71,6 +72,10 @@ public sealed class ResyncService(
                 $"The '{sourceConnectionConfig.DriverType}' driver does not name a SQL dialect.");
 
         var watermarkKey = WatermarkKey.Build(source, sourceDialect);
+
+        // the position of a replication the runner owns is the drain's progress: the resync is a request of its next run (plan 28c E12)
+        if (runnerDispatch.RunnerOwns(run.TaskName))
+            return await runnerDispatch.SendAsync(run.TaskName, [new DrainRequest("Resync", run.MappingName, SourceKey: watermarkKey)], runAll: false, cancellationToken);
 
         // Both in the one write: an intent set without clearing the hold, or a hold cleared under the
         // old intent, are each a state an operator constructing this by hand could land in and a single
