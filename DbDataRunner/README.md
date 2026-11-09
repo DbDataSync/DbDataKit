@@ -1,6 +1,6 @@
 # DbDataRunner
 
-The runner: it schedules and runs the tasks of published packages, each in a process of its own, with retries, time and memory limits, a run history, logs and the progress a task keeps between runs (plan 28). A package is a manifest (`package/1`: its tasks, schedules, inputs and limits) and its code; the first kind it runs is a compiled .NET project, started through the task host. This is the single-runner host (slice R10): the engine in `DbDataKit.Runner`, a management API a console pairs with, its own state database and its command line. Groups of runners that share a state, the publish API and the console screens are the slices that follow (plan 28a).
+The runner: it schedules and runs the tasks of published packages, each in a process of its own, with retries, time and memory limits, a run history, logs and the progress a task keeps between runs. A package is a manifest (`package/1`: its tasks, schedules, inputs and limits) and its code; the first kind it runs is a compiled .NET project, started through the task host. This is the runner's host: the engine is the library `DbDataKit.Runner` (its README has the rules the engine keeps), the host adds a management API a console pairs with, its own state database, the publish API and its command line. Groups of runners share one state database; the console hosts a copy of the engine too (below).
 
 ```
 dbdatarunner server run [--repo <server directory>] [--listen https://127.0.0.1:8495] [--channels prod,dev] [--group main]
@@ -50,7 +50,7 @@ The task host, `dbdatakit-taskhost`, is published into `taskhost/` beside the pr
 
 SQLite in `state.db` by default, and on a server engine when the environment names one: `DBDATARUNNER_STATE_ENGINE` (`mssql` or `postgres`) and `DBDATARUNNER_STATE_CONNECTION` (the connection string; a `secret:` reference in it is looked up in `DBDATA_SECRET_*` variables, so the password need not be written down). Every verb reads the same two variables, so `tasks`, `runs` and `package` work on the state the server uses. `state show` and `state test` say what the runner would open and whether it can; `state grants` prints what a database login needs. The tables are the modules `runner` (instances, capabilities, the task schedule), `runs` (history and logs), `runner_progress`, `scheduling` (the work queue, leases, job state and pauses), `definitions` and `payloads` (the published versions and their files), `audit`, `notifications` and `trust` (the instance id, the paired clients and the pairing codes).
 
-## Publishing packages (plan 30, slice R16)
+## Publishing packages
 
 A publisher is another program or a person's machine paired with the runner as a **Publisher**: the administrator makes a single-use code with `dbdatarunner server pair --max-role publisher`, and the publisher runs `dbdatarunner package pair https://<runner>:8495 --code <code>` (or gives `--code` to its first `package publish`). The certificate is pinned; the signing key is kept in the encrypted secret store of the client directory (`--client-dir`, `DBDATARUNNER_CLIENT_DIR`).
 
@@ -62,7 +62,7 @@ A publisher owns the packages it creates (the first publisher of a name owns it,
 
 A runtime package (plan 28c E04) is run from a read-only view shared by the runs that use it; the view is made of links, except for a runtime that a host program starts (`dotnet {runtime}/bin/Engine.dll`, as Sync's engine is), which gets copies, because the host looks for its runtime configuration beside the object a link points at.
 
-After a publish with `serve` (the default until staging activates by itself, slice R17), an activation, a switch or a rollback, the runner rebuilds the task schedule of that package and channel, so the scheduler runs the version the channel serves; a retire removes the schedule.
+After a publish with `serve` (the default of a published version is `stage`; `package install` serves), an activation, a switch or a rollback, the runner rebuilds the task schedule of that package and channel, so the scheduler runs the version the channel serves; a retire removes the schedule.
 
 ## Packages: `package install` is the development path
 
@@ -95,6 +95,24 @@ The runner serves the channels `prod` and `dev` by default (`--channels`, or `DB
 
 `tasks run|pause|resume` do the same from the command line, on the same state, and are audited the same way; what `tasks run` queues, a running server starts within a few seconds.
 
+## What a package can be
+
+A **package** is a manifest (`package/1`, see `DbDataKit.Runner.Abstractions`) and its code, versioned and published per channel; the runner switches to a new version atomically and keeps the last good one. The runner starts two things: a **.NET assembly** through the task host (a compiled project, or a `.csx` script published compiled: the runner never compiles) and an **executable** (any language; it speaks the runner protocol, `DbDataKit.Runner.Protocol`, or only exits, and an executable inside a package names an interpreter). A **runtime package** (`runtime: true`) is an engine published once that definition packages name in `launch.runtime`; Sync's and Build's engines run this way (plan 28c). A notebook kind (a .NET notebook over a project, run headless) is not built.
+
+## The security posture
+
+The suite gives simple options, guardrails and secure defaults, and **administrators decide**: it does not refuse a configuration because it could be a security concern, it makes the choice explicit, and every loosened default is a recorded choice (who, when, what changes). One kind of runner: any runner can run any task, and an administrator may label runners and route packages by label (`requires`). The environment is the administrator's: the runner reports what the machine can enforce and reach (`os`, `network`, `memory_limit`, `cpu_limit`) and enforces no network policy of its own. The defaults: every task in its own process, under the runner's low-privilege service account, with time and memory limits and packages only from published, hash-verified artifacts. A package that asks for more (run in process, longer limits, a more privileged account, a recompile on the instance) gets it only through a posture choice. A runner's own write logins are acceptable by design: Build's write login leaving Build is no concern, as DbDataStore's data write login already lives outside its server.
+
+## The console's embedded runner
+
+The console hosts a copy of the engine (`RunnerHost`) as a group of one instance named `console`, with its state in the console's state database (scope `console`); its screens are the runner screens, reached at `/relay/console-runner/api/v1/...` and `/api/embedded-runner/...`. It exists for evaluation runs (plan 27), system tasks of the console and the install (retention of the console's own state; `state-retention` is a task of it) and development packages, so a single-machine install has a working runner with nothing more to install.
+
+* It accepts by default **only non-production channels and the console's own task kinds**. An administrator can let it run production packages as an explicit, recorded choice (`AcceptProductionOnConsoleRunner`), and the console then warns that production schedules stop when the console does.
+* The same isolation as any runner: a process per task, time and memory limits, and a low-privilege account that is not the console's own. Because no account switch exists yet, `account_separate` is always false and `console_runner.require_separate_account: true` refuses every package of its own (system tasks only).
+* A cap on what it runs at once (`max_concurrent`), so a heavy run cannot slow the console's screens; stopping the console cancels the running tasks within the grace period and leaves no run running.
+* Its version is the console's, so a package it accepts must be compatible with the console's release (N and N-1). A product's own housekeeping stays with the product: retention of a serving group's or a server's state runs in that server, so it keeps running while the console is down.
+* `evaluation` is a placeholder until plan 27 builds evaluation runs.
+
 ## What the process does
 
 At start it listens on the socket its tasks use, registers an instance in the `runner` module with what the machine can enforce, marks the runs a dead process left behind as interrupted, and starts the scheduler on the channels it serves. It renews its registration every 30 seconds (the lease is 90 seconds; both are settings). At stop (Ctrl+C, SIGTERM, the service manager's stop) it cancels the running tasks and gives them their grace period (30 seconds, then the process tree is killed), puts their work items back in the queue, marks the instance gone and closes the socket: no run is left running.
@@ -103,7 +121,7 @@ At start it listens on the socket its tasks use, registers an instance in the `r
 
 `dbdatarunner service install` registers `server run` with Windows (as `NT SERVICE\DbDataRunner`, the low-privilege account every task then runs as) or prints a hardened systemd unit with `service unit`; its directory is then `%ProgramData%\DbDataRunner\server`. `dbdatarunner server pair --max-role admin` makes the code a console pairs with.
 
-## Groups, labels and routing (slices R11, R12)
+## Groups, labels and routing
 
 Runners that share one SQL Server or PostgreSQL state database and one group name (`--group`, or `DBDATARUNNER_GROUP`; default `main`) are a **group**: any runner takes any task. SQLite is for one runner: a second server on the same SQLite state refuses to start and names the first (its instance id, host, start and last heartbeat). Every process has one row in the group's instances, renewed every 30 seconds. A row that stops being renewed lapses after the lease (90 seconds); the work items its runner held go to another runner then. A runner that comes back after its items were taken is told so in its log, cancels the local task and does not record its result: its late finish is refused. A crashed process's row is removed when the next process starts on that machine, or by retention.
 
@@ -111,11 +129,11 @@ Runners that share one SQL Server or PostgreSQL state database and one group nam
 
 A **label** is `name` or `name:value`. The runner reports what it finds as read-only labels (`network:outside`, `os:linux`, `memory_limit:enforced|watched`); an administrator adds others with `label add`, for one instance (an id from `label list`, or `this` for the live runner on this machine; a restarted runner keeps its administrator's labels). A task lists the labels it needs in its manifest (`requires: [network:outside, gpu]`); a work item is claimed only by a runner that has every one. A task whose label no live runner has stays pending, and the `waiting_reason` of its entry in the status call (and `tasks list`) names the label; once a runner has the label it starts within a tick. A version whose required label no live runner has must not activate (`RoutingCheck.CanActivate`, used by staging in plan 30).
 
-## Integrations with outside systems (plan 27 section 4): what is built and what is not
+## Integrations with outside systems: what is built and what is not
 
 An **integration** is a package of the kind `integration` (the kind every package here is published as): a manifest of tasks, schedules, triggers and the connection slots each needs, with ordinary code. The runner is the whole run-time side of plan 27's DbDataIntegration, and it is built and tested as described above. What the plan adds around it for talking to **systems that are not databases** is **not built**, and [plan 27a](../docs/plans/27a-knowledge-slices.md) (lane IX) slices it:
 
-| Built (plan 28a, with the tests named there) | Not built |
+| Built (with the tests in `DbDataRunner.Tests` and the `DbDataKit.Runner*` test projects) | Not built |
 | --- | --- |
 | The kit a .NET job writes against (`DbDataKit.Runner.Kit`: typed progress, steps and units, connection slots, cancellation, logs with secrets redacted) and its test harness (`DbDataKit.Runner.Kit.Testing`, `RunSimulator`) | Clients as libraries: HTTP with sign-in and paging, SFTP and SCP, FTPS, SMB; readers and writers for CSV, JSON Lines, XML, fixed width, Excel, compressed and encrypted files |
 | Checkpoints, a ledger of processed files, idempotency keys, a store for refused records, retries with back-off for temporary failures, concurrency limits per package and per connection | Connection kinds for outside systems in `connection/1` (API key, basic, OAuth 2, client certificates, SSH keys, Windows SMB): a task's slots bind suite connections only; the file trigger's seam (`IFileSource`) has a local folder as its only source |

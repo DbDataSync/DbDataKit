@@ -1,6 +1,6 @@
 # DbDataKit.Runner.Abstractions
 
-What the runner and the people who publish to it share (plan 28, slice R01 of plan 28a). So far: the **`package/1` manifest** and the **task and run model** (R02, below).
+What the runner and the people who publish to it share (the runner's package model). It holds the **`package/1` manifest** and the **task and run model** (below).
 
 A package is described by `package.yaml`. The first key is the format id, `schema: package/1`; a file in another format, or another version of this one, is refused with a message naming the file.
 
@@ -21,13 +21,13 @@ tasks:
       - manual: true
     inputs:      [ { name: since, type: date, default: "2024-01-01" } ]
     connections: [ { name: inbox, kind: folder } ]         # every slot a trigger uses is declared here
-    progress:                                              # plan 29 section 4.3
+    progress:                                              # see the DbDataKit.State README, progress across versions
       checkpoints: [ { name: orders, per: [customer], parts: [ { name: modified, type: time }, { name: id, type: int } ] } ]
       state:       [ { name: last_file, type: text } ]
     limits: { timeout: 30m, memory_mb: 512, cpu: 1.5, concurrency: 2, attempts: 3, backoff: 30s, max_backoff: 10m }
     requires: [network:outside]
     capabilities: [network]
-    steps:    [ { name: download, kind: stream, input: DateOnly }, { name: archive, input: DateOnly, result: ArchiveReceipt } ]   # R03a: for the console; kind is value (default) or stream
+    steps:    [ { name: download, kind: stream, input: DateOnly }, { name: archive, input: DateOnly, result: ArchiveReceipt } ]   # for the console; kind is value (default) or stream
     units:    [ { name: customer, item: Customer } ]
     counters: [rows]
 ```
@@ -60,9 +60,9 @@ The runner starts the runtime's executable with the definition's directory as th
 * `steps`, `units` and `counters` list what the task declares so the console can show them before a run; none is required. For a .NET job they are generated from the C# declarations by `DbDataKit.Runner.Kit`'s `ManifestGenerator`.
 * Durations are a number and a unit (`500ms`, `30s`, `5m`, `2h`, `1d`).
 
-## The task and run model (R02)
+## The task and run model
 
-Plain records and pure mappings, no I/O; the protocol (R03) and the executor (R06) share them.
+Plain records and pure mappings, no I/O; the protocol (`DbDataKit.Runner.Protocol`) and the executor (`DbDataKit.Runner`) share them.
 
 * `TaskRef(package, channel, task)`: names follow the manifest's name rule; string form `orders-sync/stable/extract`, `TaskRef.Parse` / `TryParse` read it back.
 * `TaskStart`: run id, attempt (first is 1), package version, inputs, connection handles (names only, never a secret), progress snapshot reference, cancellation grace, protocol version (`dbdatakit.runner.v1`).

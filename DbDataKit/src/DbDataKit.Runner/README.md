@@ -1,8 +1,55 @@
 # DbDataKit.Runner
 
-The runner's engine (plan 28, slices R05 onward of plan 28a). So far: the **artifact cache**, which materializes a published version ("what runs is what was approved", decision DR13).
+The runner's engine: it schedules and runs the tasks of published packages, each in a process of its own, and gives every task what a scheduled task needs so no product writes it again. It is a library because two hosts embed it: `dbdatarunner` (the product, `DbDataRunner/README.md`) and the console's embedded runner; Sync and Build run on it as packages (plan 28c). The parts: the **artifact cache** (below), the **executor**, the **scheduler loop and retries**, the **trigger engine**, **staging and activation**, and the **host**. What a package is (`package/1`) is in the `DbDataKit.Runner.Abstractions` README, what a job writes in `DbDataKit.Runner.Kit`, how a task's process talks to the runner in `DbDataKit.Runner.Protocol`, the process limits in `DbDataKit.Runner.Limits`.
 
-A version is a list of files (`ArtifactFile`: path, SHA-256, size, media type, payload id). An `IArtifactSource` lists them and opens one as a stream; `PayloadArtifactSource` is the implementation over `PayloadStore` (plan 29 section 3.6), and plan 30's `version_artifact` table can implement the same interface later.
+## Rules the engine keeps
+
+* **Two ways to start a task:** a .NET assembly through the task host (`dbdatakit-taskhost`), or an executable (a command and arguments; an executable inside a package names an interpreter, `command: sh`, args `{package}/run.sh`, because the cache keeps files read-only without an execute bit). A `.csx` script and a compiled project are both published as compiled assemblies, so on the runner they are one kind: the runner never compiles. A notebook kind is not built (it waits for a maintained headless kernel).
+* **One task, one process, by default.** The runner is one kind: any runner can run any task. Administrators decide the security posture: the suite does not refuse a configuration because it could be a security concern; it makes the choice explicit, defaults to secure, and records who loosened a default (posture choices, below).
+* **Triggers write work items; none runs a task directly.** Schedule, after-run, webhook, file arrival and by hand all enqueue, so the lease, the pool limits, the run lock and the retry policy apply to every start.
+* **The scheduler reads only the task projection** (a `task_projection` row per package, channel and task, rebuilt from the active manifest at activation: schedule, triggers, limits, required labels), never manifests, so a bad manifest cannot stop the loop; staging validates once. A broken row is skipped and reported in the status.
+* **Concurrency limits are claims, not counters:** a package's `concurrency` is a pooled `Resource` on the work item (`ModuleWorkQueueStore.Enqueue(..., resourceLimit: N)`, checked in the select and again in the claiming update; a limit of 1 is plain exclusion), so there is no second source of truth to drift from the leases.
+* **Retries are runs of the same work item**, one run record per attempt with the attempt number; back-off for a failure a connection classifies as temporary, none for a permanent one; a retry never runs on another package version than the first attempt unless the first never started.
+* **A task reads its progress once at start and writes at commit points through the protocol** (`Advance` with the outcome). The process never holds a connection to the runner's state, so state credentials stay with the runner.
+* **A task's account** is the runner's low-privilege account by default (`NT SERVICE\DbDataRunner` on Windows). A per-package account and the other loosened defaults are posture choices.
+* **What the `runner` module holds is about runners** (instances, labels, capabilities, posture choices, projections, trigger state); package versions, artifacts, bindings and per-instance status are the `definitions` module's.
+* **Packages are published to the runner, not installed from it:** artifacts are payloads by hash (the publisher uploads only a changed file), a version is staged, prepared by every instance and activated; the suite's one publish model (stage, then activate, bindings per channel, each instance's status).
+
+## The executor
+
+`TaskExecutor.RunAsync(TaskRunRequest, ct)` (namespace `DbDataKit.Runner.Execution`) records the run (`RunStore.Start` with package, version, channel, attempt), makes a scratch directory `<data>/scratch/<run>` (mode 0700, the process's working directory and `TMPDIR`, size checked after the run, removed afterwards), starts the process through `ChildProcessHost` with the endpoint and a per-run token in the environment (never argv), applies the limits, and reconciles the process with the end message:
+
+* A process that exits without an end message is `Failed` (exit code 0 is a `ProtocolViolation`, non-zero is `ProcessExited`); one that sent its end and then crashed keeps its outcome; an end message that arrived wins also over a kill by the executor (a process that ended its run and hangs is killed after 10 s).
+* A time limit is a hard stop (kill, no grace: the end would otherwise be the task's own `Stopped`, which is not `TimedOut`); only a cancel gets the grace period (asked through the protocol, killed after the grace plus 500 ms).
+* The run record is finished exactly once; an executor crash finishes it `Failed` and rethrows; a start failure (task host missing, bad path) is a failed run, not a throw.
+* At the start of a retry the started steps of the dead run are marked in doubt (`InDoubtReconciler`) before the job begins.
+* The task host exits 0 when the end message was sent, 64 for a bad environment, 65 for a package failure, 66 when the runner is unreachable or refused, 67 when the parent is gone (parent-death monitor), 68 when asked to stop, 1 otherwise. It loads the package into its own `AssemblyLoadContext` (dependencies through the package's `deps.json`, or by file name beside it); everything the host, the kit and the protocol reference comes from the host's own context, so a copy of the kit inside a package is never loaded.
+
+Not enforced: the scratch size limit during the run (checked after it). Output lines are counted and bounded; stdout and stderr reach the run's log.
+
+## Triggers
+
+`TriggerEngine` (namespace `DbDataKit.Runner.Triggers`) runs once per scheduler tick, before the claim, and queues through the scheduler's own enqueue.
+
+* **After-run:** `after: {task, package}` with an outcome filter (`on: [any]` is every outcome). The cursor in `trigger_state` is the end time and id of the last finished run handled; moving it is a compare-and-set in the same transaction as the work item insert, so two runners that see one run queue it once and a crash cannot lose it. A failed attempt that a retry follows is not an end. Chains across packages on one channel work; `TriggerGraph.FindCycle` and `ProjectionDocuments.RequireNoCycle` refuse a loop at publish naming it, and `TriggerOptions.MaxChainDepth` (16) is the runtime guard.
+* **Webhook:** `IWebhookReceiver` stores the body as a payload and an inbox item, which a task takes exactly once even with several runners. The runner's endpoint is `POST /api/v1/webhooks/{package}/{channel}/{source}` (trusted caller, or an HMAC `X-Signature` under the trigger's `secret`). The serving layer is the public endpoint and is meant to verify the signature and hand the body to the inbox; that end is not built (plan 20).
+* **File arrival:** the `IFileSource` seam polls a connection's folder (interval from the manifest, default 30 s, files younger than 2 s skipped), hashes with one 80 KiB buffer, asks the ledger, and records the file and queues the item in one transaction: a file seen twice, or a copy under another name, runs once; changed content runs again. The only source is a local directory (`LocalFileSources`); there is no file or SFTP connection kind in `DbDataKit.Connections` yet.
+* **By hand:** `RunnerControl.RunNow`, audited. **A DbDataStore change** is accepted in a manifest and reported as `waiting for a change source (not built)`; it never fires.
+
+## Limits and posture
+
+`DbDataKit.Runner.Limits` applies memory and CPU limits (Windows job object, Linux cgroup v2 when the runner's account has a delegated subtree, otherwise a watchdog that samples resident memory every 250 ms and kills the process) and reports what the machine can enforce as capabilities (`memory_limit`, `cpu_limit`, `os`, `network`), which become read-only labels. The runner reports, it does not refuse and does not enforce a network policy: whether a runner can reach outside hosts is its network's business.
+
+Loosened defaults are **posture choices** (`PostureGuard`, `PostureSetting`: run in process, longer limits, a more privileged account, recompile on instance, a per-package account, accepting production on the console's runner). Each one needs a confirmation that names the effect, writes audit and shows in the status; `Require` throws `PostureRefusedException` naming the setting, the effect and how an administrator confirms it. A default never needs one.
+
+## Routing
+
+A label is `name` or `name:value`. A task's `requires` list rides in the projection; the scheduler excludes the tasks whose labels its instance lacks (the items stay pending, with a `waiting_reason` naming the missing label), and `RoutingCheck.CanActivate` makes a version whose required label no live runner has not activatable, saying which. Groups, leases and the instance heartbeat are in the `DbDataRunner` README.
+
+
+## The artifact cache
+
+A version is a list of files (`ArtifactFile`: path, SHA-256, size, media type, payload id). An `IArtifactSource` lists them and opens one as a stream; `PayloadArtifactSource` is the implementation over `PayloadStore` (`DbDataKit.State` README, payloads), and the definitions module's artifact table can implement the same interface later.
 
 ```csharp
 var cache = new ArtifactCache("/var/lib/dbdatarunner/cache", source);
@@ -16,17 +63,17 @@ await cache.EvictAsync(hashesOfEveryServedVersion, ct);                        /
 - **Paths are checked before anything is fetched.** `..`, `.`, empty segments, absolute paths, drive letters, backslashes, reserved device names (`CON`, `NUL`, `LPT1`...), characters Windows refuses, a duplicate (also one that differs only in case), and a file that is also a directory are refused with a message naming the path.
 - **Eviction** takes the set of hashes still needed. A hash held by a live view of this process stays (the result counts them); a second process using the same directory is not protected.
 
-## The scheduler loop and retries (R08, R09)
+## The scheduler loop and retries
 
 `RunnerScheduler` (namespace `DbDataKit.Runner.Scheduler`) reads the `task_projection` rows of the channels it serves, queues what is due on the shared work queue, claims items with a lease and runs each through an `ITaskRunner` (`TaskExecutor`) from a version materialized by the artifact cache. `RunAsync(ct)` is the loop; `TickAsync` is one pass (tests drive it with the state database's clock); `RunNow`, `Pause`, `Resume` and `Status()` are the by-hand surface.
 
-Settings (`RunnerSchedulerOptions`), with their defaults: `Tick` 5 s, `Heartbeat` 30 s, `Lease` 90 s (plan 28a QR3; the lease has to be longer than the heartbeat), `MaxConcurrentRuns` 4, `CancellationGrace` 30 s, `RetryDefaults` 30 s back-off up to 10 min with 20 % jitter, `StartFailureAttempts` 3. A package's `concurrency` is a pooled resource on the queue and applies across loops. Every tick renews the leases of the items the loop itself is running before it gives up the leases that ran out, so a process that stalled for longer than the lease (a starved machine) does not take back, as a second attempt, a run that is going on here; only an item another runner took, or a loop that stopped renewing for real, is lost.
+Settings (`RunnerSchedulerOptions`), with their defaults: `Tick` 5 s, `Heartbeat` 30 s, `Lease` 90 s (the lease has to be longer than the heartbeat; a runner silent for longer loses its leases), `MaxConcurrentRuns` 4, `CancellationGrace` 30 s, `RetryDefaults` 30 s back-off up to 10 min with 20 % jitter, `StartFailureAttempts` 3. A package's `concurrency` is a pooled resource on the queue and applies across loops. Every tick renews the leases of the items the loop itself is running before it gives up the leases that ran out, so a process that stalled for longer than the lease (a starved machine) does not take back, as a second attempt, a run that is going on here; only an item another runner took, or a loop that stopped renewing for real, is lost.
 
 Retries (`RetryPolicy`, `RetryPlanner`, `WorkItemRetries`): a retryable failure puts the same work item back with a new run id, a not-before time and the next attempt number, on the same chain and, once an attempt had started, the same version. A projection row's `schedule` and `limits` are the small JSON documents `ProjectionDocuments` reads and writes. `IVersionSource` is where versions come from: `DefinitionVersionSource` (kind `integration`) or `InMemoryVersionSource`.
 
-## Staging and activation (R17, R18)
+## Staging and activation
 
-`StagingFollower` (namespace `DbDataKit.Runner.Staging`, one per instance) prepares every STAGED version of an `integration` and reports `preparing`, then `ready` or `failed`, in `InstanceStatusStore`: the files through the artifact cache (every hash verified), the contracts the package was built against (`StagingOptions.Contracts`), the manifest again (R01), `RoutingCheck.CanActivate` for each task's required labels, and the **dry run** of the progress migration (`ProgressMigration.DryRun`) against the progress stored now. The plan and its losses are the status's `note` (`has_losses` marks it); a conversion that fails is the status's `error`. `PackageActivator` then activates:
+`StagingFollower` (namespace `DbDataKit.Runner.Staging`, one per instance) prepares every STAGED version of an `integration` and reports `preparing`, then `ready` or `failed`, in `InstanceStatusStore`: the files through the artifact cache (every hash verified), the contracts the package was built against (`StagingOptions.Contracts`), the manifest again, `RoutingCheck.CanActivate` for each task's required labels, and the **dry run** of the progress migration (`ProgressMigration.DryRun`) against the progress stored now. The plan and its losses are the status's `note` (`has_losses` marks it); a conversion that fails is the status's `error`. `PackageActivator` then activates:
 
 - `ActivationMode.Automatic` (what the follower asks for): only when every live instance is `ready` and no dry run lists losses; atomic and once (`DefinitionPublisher.ActivateIfAllReady`), so the runner that sees it first does it and the others find it done.
 - `Administrator`: the same conditions; losses need `ConfirmLosses`. `Anyway`: a recorded choice that goes ahead although instances failed or have not reported; the event names who and what stood in the way.
@@ -34,6 +81,6 @@ Retries (`RetryPolicy`, `RetryPlanner`, `WorkItemRetries`): a retryable failure 
 - Then, in ONE transaction (`DefinitionChange` handed to `DefinitionPublisher`): the pointer moves (an update that finds it moved changes nothing, which is how two activations at once migrate once), each task's progress is migrated (`ProgressStore.Within`, history kept in `checkpoint_history` and, for state values, `state_history`, under the actor `migration:<package>@<from>-><to>#<id>`) and the task projection is rebuilt.
 - `RollbackAsync` restores what that migration changed from the history, in one transaction with the pointer and the projection; `SwitchAsync` migrates by the plan, like an activation.
 
-## Hosting the engine (R20)
+## Hosting the engine
 
 `RunnerHost` (namespace `DbDataKit.Runner`, with `RunnerHostSettings`) is what `dbdatarunner` and the console's embedded runner both host: it finds the task host (`RunnerTaskHost`), listens on the protocol socket, registers the instance with what the machine can enforce, marks the runs a dead process left as interrupted, runs the scheduler loop and the staging follower, renews the registration, and at `StopAsync` ends the loop with its grace period and marks the instance gone. `RunnerHostSettings.Channels` may be a collection that changes while the host runs (the console's embedded runner starts serving production once an administrator chose it), `MaxConcurrentRuns` is the cap, `WrapRunner` lets a host run some tasks itself (the console's system tasks) and hand the rest to the executor. `RunnerControl` (run now, pause, resume, audited), `RunnerPackages` (the `integration` kind), `RunnerContracts` and `RunnerNames` are here too; the management API over them is the library `DbDataKit.Runner.Api`.

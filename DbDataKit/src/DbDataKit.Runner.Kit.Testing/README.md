@@ -1,6 +1,6 @@
 # DbDataKit.Runner.Kit.Testing
 
-Test a runner job without a runner (plan 28b section 10). `RunSimulator<TJob>` runs a job in memory over the **real stores** (progress, steps, units, payloads, runs) on a temporary SQLite database, so the
+Test a runner job without a runner (the kit's design is in the `DbDataKit.Runner.Kit` README). `RunSimulator<TJob>` runs a job in memory over the **real stores** (progress, steps, units, payloads, runs) on a temporary SQLite database, so the
 semantics a test sees are the kit's own: steps answer from memory, finished units are skipped, a checkpoint moves only with the run's outcome, and an in-doubt step is recovered the way the job said.
 
 The simulator keeps one **attempt chain**: every `RunAsync()` is the next attempt, so a retry finds what the earlier attempts left. A crash is an attempt's outcome, not an exception: its run is recorded
@@ -14,7 +14,7 @@ A file that disappears from the server when it is downloaded, a crash after the 
 var sim = new RunSimulator<DailyDrop>(input: new DailyDropInput(new DateOnly(2026, 11, 7)), slots: world.Opener);
 sim.FailAfterBody(DailyDropSteps.Download, times: 1);          // the in-doubt case; typed, so a renamed step breaks the test at compile time
 await sim.RunAsync();                                          // the first attempt crashes after the body, before its result is stored
-await sim.RunAsync();                                          // the retry finds the complete payload and adopts it (28b K14)
+await sim.RunAsync();                                          // the retry finds the complete payload and adopts it (see the Kit README, "A streaming step in doubt adopts a complete payload first")
 
 Assert.Equal(1, sim.Executions(DailyDropSteps.Download));      // the body ran once
 Assert.Equal(StepStatus.Recovered, sim.StatusOf(DailyDropSteps.Download));

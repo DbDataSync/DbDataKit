@@ -8,8 +8,8 @@ of it too (plan 28 section 6a): keep the engine there and only the host here. Do
 | --- | --- |
 | `RunnerCli.cs` | the command line: the router, `server run`, the local verbs (`runs list`, `tasks ...`, `package install`) |
 | `RunnerServer.cs` | the web host: Kestrel, pairing, the token check, the management API, the engine as a hosted service |
-| `RunnerApi.cs` (now in `DbDataKit.Runner.Api`, R20) | the management API (`/api/v1/status`, `/runs`, `/tasks/.../run|pause|resume`) and its roles |
-| `RunnerEngine.cs` | the hosted service, a thin wrapper over `RunnerHost` (`DbDataKit.Runner`, which the console hosts too, R20): task host, protocol socket, executor, scheduler, the staging follower (`DbDataKit.Runner.Staging`), instance registration and heartbeat, graceful stop |
+| `RunnerApi.cs` (now in `DbDataKit.Runner.Api`) | the management API (`/api/v1/status`, `/runs`, `/tasks/.../run|pause|resume`) and its roles |
+| `RunnerEngine.cs` | the hosted service, a thin wrapper over `RunnerHost` (`DbDataKit.Runner`, which the console hosts too): task host, protocol socket, executor, scheduler, the staging follower (`DbDataKit.Runner.Staging`), instance registration and heartbeat, graceful stop |
 | `RunnerGroupApi.cs` (in `DbDataKit.Runner.Api`), `RunnerLabelVerbs.cs` | the group view (`/api/v1/instances`) and `label add|remove|list` |
 | `RunnerWebhooks.cs` | `POST /api/v1/webhooks/{package}/{channel}/{source}`: a trusted client or an HMAC signature, the body into the inbox, audited without the body |
 | `RunnerControl.cs` (in `DbDataKit.Runner`) | run now, pause, resume and their audit, shared by the API and the command line |
