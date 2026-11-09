@@ -22,6 +22,7 @@ public sealed class WorkspaceApiTests : IAsyncLifetime
     private readonly ConsoleSigningKey key = ConsoleSigningKey.Generate();
     private readonly Dictionary<string, AuthoringProject> served = [];
     private readonly List<string> ending = [];
+    private readonly List<WorkspaceChange> changes = [];
     private WebApplication app = null!;
     private HttpClient http = null!;
     private string app1 = null!;
@@ -66,7 +67,7 @@ public sealed class WorkspaceApiTests : IAsyncLifetime
         var clients = new PairedClientsFile(Path.Combine(ServerDir, "server.yaml"));
         clients.Upsert(new PairedClient("console-1", "Console", key.PublicKey, ServerRoles.Close(ServerRole.Approver | ServerRole.Author)));
         app.UseManagementAuthentication(new ConsoleTokenValidator(InstanceId, clients, new MemoryReplayCache()));
-        WorkspaceApi.Map(app, new FakeApps(served), new Workspaces(ServerDir, TimeProvider.System), new WorkspaceApiOptions("dbdataworkspace.local", ending.Add));
+        WorkspaceApi.Map(app, new FakeApps(served), new Workspaces(ServerDir, TimeProvider.System), new WorkspaceApiOptions("dbdataworkspace.local", ending.Add, changes.Add));
         await app.StartAsync();
         http = new HttpClient { BaseAddress = new Uri(app.Urls.First()) };
     }
@@ -275,5 +276,21 @@ public sealed class WorkspaceApiTests : IAsyncLifetime
         var id = await Draft();
         Assert.Equal(HttpStatusCode.OK, (await AsAda(HttpMethod.Get, $"/api/v1/projects/orders/workspaces/{id}/history")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await AsAda(HttpMethod.Get, $"/api/v1/projects/other/workspaces/{id}/history")).StatusCode);   // a workspace belongs to its project
+    }
+
+    [Fact]
+    public async Task A_host_that_keeps_a_history_is_told_what_happened_and_by_whom()
+    {
+        var id = await Draft();
+        File.AppendAllText(Path.Combine(FolderOf(id), "views", "orders.yaml"), "title: Told\n");
+        await AsAda(HttpMethod.Post, $"/api/v1/projects/orders/workspaces/{id}/commit", """{"message":"Say it"}""");
+        await AsAda(HttpMethod.Post, $"/api/v1/projects/orders/workspaces/{id}/commit", """{"message":"nothing to commit"}""");     // takes nothing: no event
+        await Send("ann", ServerRole.Approver, HttpMethod.Post, $"/api/v1/projects/orders/workspaces/{id}/merge");
+        var second = await Draft("again");
+        await AsAda(HttpMethod.Delete, $"/api/v1/projects/orders/workspaces/{second}");
+
+        Assert.Equal([("created", "ada", id, "ws/" + id), ("committed", "ada", id, "Say it"), ("merged", "ann", id, null), ("created", "ada", second, "ws/" + second), ("abandoned", "ada", second, "ws/" + second)],
+            changes.Select(c => (c.Kind, c.ActorId, c.Workspace.Id, c.Kind == "merged" ? null : c.Detail)));
+        Assert.NotNull(changes[2].Detail);      // the commit a merge made
     }
 }

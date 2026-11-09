@@ -28,7 +28,16 @@ public interface IAuthoringProjects
 
 /// <param name="MailDomain">The domain of the address a commit carries for a person who has none of their own (<c>ada@dbdatabuild.local</c>).</param>
 /// <param name="Ending">Told before a workspace's folder goes (abandoned or merged): a process that has it open (a warm session) lets go first.</param>
-public sealed record WorkspaceApiOptions(string MailDomain, Action<string>? Ending = null);
+/// <param name="Changed">Told after something happened to a workspace (see <see cref="WorkspaceChange"/>): a server that keeps a record of them writes it here. What it throws is the host's to catch; the git work is done by then.</param>
+public sealed record WorkspaceApiOptions(string MailDomain, Action<string>? Ending = null, Action<WorkspaceChange>? Changed = null);
+
+/// <summary>Something that happened to a workspace, as a host that keeps a history is told.</summary>
+/// <param name="Kind"><c>created</c>, <c>committed</c>, <c>pushed</c>, <c>merged</c> or <c>abandoned</c>.</param>
+/// <param name="Workspace">The workspace it happened to (for <c>abandoned</c> and <c>merged</c>, as it was).</param>
+/// <param name="ActorId">Who did it, as the token carries them.</param>
+/// <param name="ActorName">Their name as people read it.</param>
+/// <param name="Detail">A sentence: the branch made, the commit message, the commit a merge made. Never file content.</param>
+public sealed record WorkspaceChange(string Kind, Workspace Workspace, string ActorId, string ActorName, string? Detail);
 
 /// <summary>
 /// The workspace calls of a server's management API (plan 13, W02 and W08; plan 22a, GP30), the same for every kind of project:
@@ -85,6 +94,7 @@ public static class WorkspaceApi
             try
             {
                 var made = workspaces.Create(hosted.Id, hosted.Root, token.SubjectId, token.SubjectName ?? token.SubjectId, name);
+                options.Changed?.Invoke(new WorkspaceChange("created", made, token.SubjectId, token.SubjectName ?? token.SubjectId, made.Branch));
                 return Results.Json(Describe(made, token.SubjectId), statusCode: StatusCodes.Status201Created);
             }
             catch (ArgumentException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest); }
@@ -102,6 +112,7 @@ public static class WorkspaceApi
             options.Ending?.Invoke(workspaces.RootOf(workspace));    // its process has the folder open
             try { workspaces.Abandon(workspace, hosted.Root); }
             catch (GitWorktreeException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
+            options.Changed?.Invoke(new WorkspaceChange("abandoned", workspace, token.SubjectId, token.SubjectName ?? token.SubjectId, workspace.Branch));
             return Results.NoContent();
         });
 
@@ -133,7 +144,9 @@ public static class WorkspaceApi
             if (string.IsNullOrWhiteSpace(message)) return Results.Json(new { error = "The body is a JSON object with a \"message\"." }, statusCode: StatusCodes.Status400BadRequest);
             try
             {
-                var sha = GitWorkspaceOperations.Commit(workspaces.RootOf(workspace), message, AuthorOf(context.ManagementToken(), options.MailDomain));
+                var token = context.ManagementToken();
+                var sha = GitWorkspaceOperations.Commit(workspaces.RootOf(workspace), message, AuthorOf(token, options.MailDomain));
+                if (sha is not null) options.Changed?.Invoke(new WorkspaceChange("committed", workspace, token.SubjectId, token.SubjectName ?? token.SubjectId, message));
                 return Results.Json(new { committed = sha is not null, sha });
             }
             catch (GitOperationException ex) { return Failed(ex); }
@@ -147,6 +160,8 @@ public static class WorkspaceApi
             {
                 var root = workspaces.RootOf(workspace);
                 GitWorkspaceOperations.Push(root, workspace.Branch, projects.CredentialFor(hosted));
+                var pusher = context.ManagementToken();
+                options.Changed?.Invoke(new WorkspaceChange("pushed", workspace, pusher.SubjectId, pusher.SubjectName ?? pusher.SubjectId, workspace.Branch));
                 // where the person opens the pull request: a link built from the remote's address (GitHub, Azure DevOps, GitLab), null for any other remote
                 return Results.Json(new { pushed = true, branch = workspace.Branch, pull_request_url = GitPullRequestLink.For(hosted.RemoteUrl, workspace.Branch) });
             }
@@ -160,10 +175,12 @@ public static class WorkspaceApi
             if (hosted.IsRemote) return Results.Json(new { error = "This project follows a git remote, so its changes go there: push the workspace and merge it where the remote lives." }, statusCode: StatusCodes.Status409Conflict);
             try
             {
-                var merged = GitWorkspaceOperations.Merge(hosted.Root, workspace.Branch, AuthorOf(context.ManagementToken(), options.MailDomain));
+                var approver = context.ManagementToken();
+                var merged = GitWorkspaceOperations.Merge(hosted.Root, workspace.Branch, AuthorOf(approver, options.MailDomain));
                 if (!merged.Merged) return Results.Json(new { error = "The workspace conflicts with the project's branch; nothing was merged.", conflicts = merged.Conflicts }, statusCode: StatusCodes.Status409Conflict);
                 options.Ending?.Invoke(workspaces.RootOf(workspace));
                 workspaces.Abandon(workspace, hosted.Root);
+                options.Changed?.Invoke(new WorkspaceChange("merged", workspace, approver.SubjectId, approver.SubjectName ?? approver.SubjectId, merged.Sha));
                 return Results.Json(new { merged = true, sha = merged.Sha, fast_forward = merged.FastForward });
             }
             catch (GitOperationException ex) { return Failed(ex); }

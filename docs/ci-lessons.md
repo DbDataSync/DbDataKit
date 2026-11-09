@@ -147,6 +147,17 @@ The CI runners are small (two cores, Windows and Linux), run many jobs at once, 
 | `Not a semantic version: '2026.11.9.0900'` or a CalVer tag is skipped by the feed | the fourth number of a suite version has no leading zero (`suite-release.yml` writes `$((10#$hm))`), and `ReleaseVersion` reads `YYYY.M.D.N` with a plain number | write test versions as `2026.11.9.900`; never zero-pad the fourth number |
 | `prepare` says "may not change its own program folder" on a real install | the service's account cannot write the parent of its program folder (the generated layouts give it `ReadExecute`, a hardened unit has a dynamic user), and the helper runs with the service's rights | upgrade that install with the install script or the installer; the status shows the command. Do not loosen the layout for a test: the `UpgradeTests` run on a folder the test owns |
 
+### New state modules and servers
+
+| Signature | Cause | Fix |
+| --- | --- | --- |
+| `The module 'workspace' is kept per service, and no service name was given.` in a test that opens the module | a module of `StateScopeKind.Service` (or `Group`) needs the scope that names the service; `Open(modules)` has none | open it with `StateScope.Standalone` (a store test) or the product's own `Scope` (`WorkspaceState.Scope`) |
+| a store test's "newest first" list comes back in the wrong order on one engine | two rows written in one tick of the test clock have the same time, and the v7 ids of one instant do not order | `clock.Advance` between the writes the test orders; never assume the id breaks a tie |
+| a server test's call as an author or approver gets `401` with no body, though the role is claimed | the pairing code was made with `ServerRoles.Close(ServerRole.Admin)`, which holds no Author or Approver; a token claiming more than the pairing allows is refused | pair the test console with `Admin \| Author \| Approver` (`WorkspaceHarness`) |
+| `error CS1573: Parameter 'X' has no matching param tag` in a new public library | a documentation file is generated and warnings are errors: a `<param>` for one parameter of a record needs one for all | write a `<param>` for every parameter of a public record |
+| a new product's `dotnet build DbDataKit.slnx` fails to find a project, or `check_solution.py` names it | the product's projects are in no `<Folder>` of `DbDataKit.slnx`, or not in `DbDataKit.Shared.slnx` (a shared library and its tests) | add both projects of the product to `DbDataKit.slnx` and the product's `.slnf`; a library and its tests to `DbDataKit/DbDataKit.Shared.slnx` as well |
+| two Playwright servers fail to start, one with `address already in use` | a new fixture server took a port another story has (the table is in the comments of `playwright.config.ts`) | search the config and the other open branches for the port before you take it; the Workspace server is 8611 |
+
 ### Merging `main` into a branch
 
 | Signature | Cause | Fix |

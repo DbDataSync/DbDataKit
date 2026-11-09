@@ -1,0 +1,9 @@
+{
+  "solution": {
+    "path": "../DbDataKit.slnx",
+    "projects": [
+      "DbDataWorkspace/src/DbDataWorkspace.Server/DbDataWorkspace.Server.csproj",
+      "DbDataWorkspace/tests/DbDataWorkspace.Tests/DbDataWorkspace.Tests.csproj"
+    ]
+  }
+}

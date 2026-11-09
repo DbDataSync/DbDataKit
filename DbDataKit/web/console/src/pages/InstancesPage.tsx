@@ -101,7 +101,7 @@ export function InstancesPage() {
                 </span>
                 <span className="mono">{instance.url}</span>
                 <span className="row" style={{ gap: 8 }}>
-                  {instance.reachable && (instance.product === 'dbdatasync' || instance.product === 'dbdatabuild' || instance.product === 'dbdatagateway' || instance.product === 'dbdatarunner' || instance.product === 'dbdatakit-identity') && (
+                  {instance.reachable && (instance.product === 'dbdatasync' || instance.product === 'dbdatabuild' || instance.product === 'dbdatagateway' || instance.product === 'dbdatarunner' || instance.product === 'dbdataworkspace' || instance.product === 'dbdatakit-identity') && (
                     <Link to={`/servers/${instance.id}`} className="btn btn-primary" data-testid="instance-open-link">Open</Link>
                   )}
                   {instance.reachable && offersState(instance.product) && (

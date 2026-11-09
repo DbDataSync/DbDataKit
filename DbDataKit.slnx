@@ -239,6 +239,12 @@
   <Folder Name="/DbDataRunner/tests/">
     <Project Path="DbDataRunner/tests/DbDataRunner.Tests/DbDataRunner.Tests.csproj" />
   </Folder>
+  <Folder Name="/DbDataWorkspace/src/">
+    <Project Path="DbDataWorkspace/src/DbDataWorkspace.Server/DbDataWorkspace.Server.csproj" />
+  </Folder>
+  <Folder Name="/DbDataWorkspace/tests/">
+    <Project Path="DbDataWorkspace/tests/DbDataWorkspace.Tests/DbDataWorkspace.Tests.csproj" />
+  </Folder>
   <Folder Name="/DbDataStore/src/">
     <Project Path="DbDataStore/src/DbDataStore.Server/DbDataStore.Server.csproj" />
   </Folder>

@@ -1,0 +1,74 @@
+name: DbDataWorkspace CI
+
+# DbDataWorkspace on the trunk model (docs/releases.md): a pull request into `main` runs this.
+# A `changes` job skips the suite when nothing of the workspace server's, of the shared DbDataKit/ code it builds against, or of the build
+# settings changed; the run then still reports success. The shared libraries' own suite is dbdatakit-ci.yml, run once, not per product.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  # Everything, whatever changed.
+  workflow_dispatch:
+  workflow_call:
+
+# A newer push to a PR supersedes the older run; runs on main always complete.
+concurrency:
+  group: dbdataworkspace-ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: DbDataWorkspace
+
+jobs:
+  changes:
+    uses: ./.github/workflows/_changes.yml
+    with:
+      paths: '^(DbDataWorkspace/|DbDataKit/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdataworkspace-|_)|actions/setup-product))'
+
+  # The server, its pairing and its command line run on both systems; the Windows service registration is only exercised here against fakes.
+  test:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-product
+        with:
+          product: DbDataWorkspace
+          global-json: DbDataWorkspace/global.json
+          duckdb: 'false'
+      - run: dotnet build DbDataWorkspace.slnf -c Release
+      - run: dotnet test --project tests/DbDataWorkspace.Tests -c Release --no-build --minimum-expected-tests 12
+
+  # The state module and the server over a real PostgreSQL and a real SQL Server (plan 22a, GP31): the same suite with both test engines up, so the tests that skip without one run (and fail, not skip, if one is missing).
+  engines:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-product
+        with:
+          product: DbDataWorkspace
+          global-json: DbDataWorkspace/global.json
+          duckdb: 'false'
+      - name: Start the test engines
+        working-directory: .
+        run: |
+          testenv/testenv.sh up mssql postgres
+          testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
+          echo "DBDATA_REQUIRE_POSTGRES=true" >> "$GITHUB_ENV"
+      - run: dotnet build DbDataWorkspace.slnf -c Release
+      - run: dotnet test --project tests/DbDataWorkspace.Tests -c Release --no-build --minimum-expected-tests 17
