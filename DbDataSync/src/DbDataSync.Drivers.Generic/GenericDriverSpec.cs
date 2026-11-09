@@ -102,7 +102,7 @@ public sealed record GenericDriverSpec(
             new InformationSchemaQueries(dialect),
             Readers: [GenericDriverKinds.Watermark, GenericDriverKinds.BatchReload, GenericDriverKinds.TriggerAudit],
             Staging: [GenericDriverKinds.StagingTable],
-            Writers: [GenericDriverKinds.DeleteInsert, GenericDriverKinds.Snapshot, GenericDriverKinds.Scd2],
+            Writers: [GenericDriverKinds.DeleteInsert, GenericDriverKinds.ChangeApply, GenericDriverKinds.Snapshot, GenericDriverKinds.Scd2],
             ConnectionStringKeys: new GenericConnectionStringKeys(),
             DefaultDatabase: defaultDatabase,
             DefaultPort: defaultPort);

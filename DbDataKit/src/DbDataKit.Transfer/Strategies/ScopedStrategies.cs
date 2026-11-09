@@ -20,6 +20,7 @@ internal static class ScopedStrategyHelpers
             Ordinal = o.Ordinal,
             Override = o.Override,
             DeleteUnmatchedInScope = o.DeleteUnmatchedInScope,
+            SequenceColumn = o.SequenceColumn,
         };
         return (o.Syntax ?? StatementSyntax.From(d), spec);
     }
@@ -89,5 +90,38 @@ public sealed class MergeStagedChangesStrategy : IApplyStrategy
         return new StatementSet(Name,
             [ScopedStrategyHelpers.ToStatement(ScopedStatements.Merge(syntax, spec), $"{Name}:merge", StrategyHelpers.Intent(Name, "merge", kind, r, risk), r)],
             true, Notes: notes);
+    }
+}
+
+/// <summary>
+/// Applies the stage as a change set by key with no MERGE: the stage is collapsed to its last row per key (arrival order), then three statements run in one
+/// transaction. Delete-marked keys are deleted from the target, the other keys are updated where the target holds them and inserted where it does not.
+/// Replaying the same stage gives the same target, and any engine can run it (the UPDATE's join is spelled per engine, see <see cref="UpdateStyle"/>). The key must
+/// be a primary key or at least free of NULLs and unique in the target: a row without a complete key matches nothing. A key change reaches the stage as a delete of
+/// the old key and an insert of the new one (the readers say so); the DELETE runs first so a unique value that moves between rows never collides.
+/// </summary>
+public sealed class ApplyStagedChangesStrategy : IApplyStrategy
+{
+    public string Name => StrategyNames.ApplyStagedChanges;
+    public StrategyCaps Needs => StrategyCaps.Transaction | StrategyCaps.KeyColumns;
+
+    public StatementSet Build(ApplyRequest r, ISqlDialect d)
+    {
+        var (syntax, spec) = ScopedStrategyHelpers.Spec(r, d, needsKeys: true, Name);
+        // a change set always says what each row is for: without a marker of its own the stage's `__Operation` column (`D` deletes) is meant
+        spec = spec with { Marker = spec.Marker ?? new OperationMarker() };
+        var statements = new List<SqlStatement>
+        {
+            ScopedStrategyHelpers.ToStatement(ScopedStatements.CollapseStage(syntax, spec), $"{Name}:collapse",
+                new WriteIntent($"{Name}:collapse", WriteKind.Delete, r.Stage.ToString()), r),
+            ScopedStrategyHelpers.ToStatement(ScopedStatements.StagedDelete(syntax, spec), $"{Name}:delete",
+                StrategyHelpers.Intent(Name, "delete", WriteKind.Delete, r, WriteRisk.Risky), r),
+        };
+        if (ScopedStatements.StagedUpdate(syntax, spec) is { } update)
+            statements.Add(ScopedStrategyHelpers.ToStatement(update, $"{Name}:update", StrategyHelpers.Intent(Name, "update", WriteKind.Update, r), r));
+        statements.Add(ScopedStrategyHelpers.ToStatement(ScopedStatements.StagedInsert(syntax, spec), $"{Name}:insert", StrategyHelpers.Intent(Name, "insert", WriteKind.Insert, r), r));
+        var notes = new List<string> { "stage rows are collapsed to the last per key first; the key must be NOT NULL and unique in the target" };
+        if (spec.Override == GeneratedColumnOverride.Bracketed) notes.Add("the caller brackets the insert with its engine's generated-column override");
+        return new StatementSet(Name, statements, true, Notes: notes);
     }
 }

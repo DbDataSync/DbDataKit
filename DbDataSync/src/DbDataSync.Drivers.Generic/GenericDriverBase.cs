@@ -90,6 +90,7 @@ public abstract class GenericDriverBase<TSpec>(TSpec spec, ISegmentValueBinder b
     private static readonly Dictionary<string, Func<TSpec, ISegmentValueBinder, IChangeWriter>> WriterFactories = new()
     {
         [GenericDriverKinds.DeleteInsert] = (spec, binder) => new DeleteInsertWriter(spec.Dialect, spec.Catalog, binder),
+        [GenericDriverKinds.ChangeApply] = (spec, binder) => new ChangeApplyWriter(spec.Dialect, spec.Catalog, binder),
         [GenericDriverKinds.KeyReconcileDelete] = (spec, binder) => new KeyReconcileDeleteWriter(spec.Dialect, spec.Catalog, binder),
         [GenericDriverKinds.Snapshot] = (spec, _) => new SnapshotWriter(spec.Dialect, spec.Catalog),
         [GenericDriverKinds.Scd2] = (spec, _) => new Scd2Writer(spec.Dialect, spec.Catalog),

@@ -27,4 +27,8 @@
     <ProjectReference Include="..\..\src\DbDataSync.Drivers.Oracle\DbDataSync.Drivers.Oracle.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\Shared\ChangeApplyTestsBase.cs" Link="Shared\ChangeApplyTestsBase.cs" />
+  </ItemGroup>
+
 </Project>

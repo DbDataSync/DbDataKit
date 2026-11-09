@@ -220,6 +220,15 @@ The CI runners are small (two cores, Windows and Linux), run many jobs at once, 
 | a preview shows an empty frame, and its script was loaded as a second request | a sandboxed document (`allow-scripts` without `allow-same-origin`) sends no cookie, and the console's relay needs the session cookie, so a second request is refused | the Workspace server inlines the entry document's script and style (`WorkspacePreview.Inline`); an app's other files are not reachable from a preview |
 | a minimal-API lambda `async ctx => await handler(ctx)` in a test fake answers 200 with an empty body whatever the handler returned | the handler returned an `IResult` from a `Task<IResult>` method that the lambda's inferred type did not execute | the fake writes its answer itself (`context.Response.WriteAsJsonAsync`); see `FakeGateway` |
 
+### Engine statements (ChangeApply, staging)
+
+| Signature | Cause | Fix |
+| --- | --- | --- |
+| `ORA-01790: expression must have same datatype as corresponding expression` in a staging insert on Oracle, only when a pass holds a delete (or any NULL cell) beside rows with a value | Oracle's multi-row staging insert is `SELECT .. FROM dual UNION ALL SELECT ..`; a NULL bound as a parameter is typed text and clashes with a number in another branch | `SqlDialect.InlineNullsInStagingInserts` (Oracle): a NULL cell is the literal `NULL`, no parameter; every other dialect still binds it |
+| `ORA-00918: NULL: column ambiguously specified` right after that fix | two literal `NULL`s in the first branch name two columns `NULL` | `OracleDialect.RenderMultiRowInsert` aliases the first branch's expressions (`AS c0, c1, ..`) |
+| `MySQL error 1093: You can't specify target table '..' for update in FROM clause` | a `DELETE` whose subquery reads the table it deletes from (the collapse of a staged change set) | group inside a derived table (`NOT IN (SELECT last_seq FROM (SELECT MAX(..) .. GROUP BY key) latest)`), as `ScopedStatements.CollapseStage` does; never `NOT EXISTS (SELECT .. FROM the same table)` |
+| a new strategy fails on SQL Server with `Incorrect syntax near 'tgt'` in an `UPDATE` | `UPDATE t tgt SET ..` is not T-SQL; the join form is `UPDATE tgt SET .. FROM t tgt JOIN ..` | `StatementSyntax.UpdateStyle` picks the form per engine; a caller's own `StatementSyntax` must set it (the SQL Server and PostgreSQL conformance classes do) or it gets the correlated form |
+
 ### Merging `main` into a branch
 
 | Signature | Cause | Fix |
@@ -323,6 +332,7 @@ How it works now, and what to keep true when you add a job:
 
 - A Build test or project fails with `DDB-620` naming `connections/<name>.yaml` and "`extensions.gateway.allow_writes` is not something a definition carries": a project's connection file never carries `allow_writes` or `allowed_directories` (a publish replaces the whole file on the Gateway, those two included; plan 13c D19). Take the line out of the connection file; the same goes for `groups` and `everyone` inside `extensions.gateway` (they are `grants`). A Gateway test that needs a writable data source writes the file by hand on disk.
 - A fresh `git worktree` cannot build the Gateway or Build: `DuckDB.Native.targets ... libduckdb.so is missing` (link or copy the main checkout's `.duckdb` folder to the worktree root; it is ignored by git) and `libpolyglot_sql_ffi.so` missing for Build (`DbDataBuild/native/linux-x64/`, from `scripts/fetch-native.sh` or a copy of the main checkout's folder; `cp -r .../native/* native/` into a missing folder copies the content, not the folder).
+- `--artifacts-path /dev/shm/..` keeps the disk free, but a few tests find the repository by walking up from the test binary (`CommandTimeoutChokepointTests`, the `InvariantTests` of `DbDataKit.Transfer.Tests`): they fail only there, run them from an in-tree build.
 - `dotnet test --project ...` can fail with `Handshake failures` here: run the built executable instead. Microsoft.Testing.Platform projects take `--filter-class "*Name"` and `--filter-method "*Name*"`; the xunit v3 in-process runner takes `-class` and `-method`.
 - Never chain `sleep` in a command; wait with a `Monitor` until-loop.
 - A job that reports "failed with 1 error(s)" has an error line named `failed` above it; search for the test name, not for "error".

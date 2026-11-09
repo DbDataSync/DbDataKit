@@ -99,7 +99,7 @@ public class PostgresLiveTests
 
     /// <summary>The scope-shaped cases, which are the ones that take a caller's own syntax.</summary>
     public static IEnumerable<TheoryDataRow<string>> ScopedNames() =>
-        StrategyCases.All.Where(c => c.AppliesTo(EngineId.Postgres) && c.Strategy is StrategyNames.DeleteInsertByScope or StrategyNames.MergeStagedChanges)
+        StrategyCases.All.Where(c => c.AppliesTo(EngineId.Postgres) && c.Strategy is StrategyNames.DeleteInsertByScope or StrategyNames.MergeStagedChanges or StrategyNames.ApplyStagedChanges)
             .Select(c => new TheoryDataRow<string>(c.Name));
 
     /// <summary>Not the dialect's text: named <c>@p_name</c> markers where the shared dialect numbers them (<c>$1</c>), and the caller's own quoting function (Sync's PostgreSQL dialect does the same).</summary>
@@ -108,6 +108,7 @@ public class PostgresLiveTests
         QuoteIdentifier = id => "\"" + id.Replace("\"", "\"\"") + "\"",
         ParameterReference = (_, name) => "@p_" + name,
         ParameterStyle = ParameterStyle.NamedAt,
+        UpdateStyle = UpdateStyle.UpdateFrom,
     };
 
     [Theory]

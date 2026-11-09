@@ -181,7 +181,7 @@ public class SqlServerLiveTests
 
     /// <summary>The scope-shaped cases, which are the ones that take a caller's own syntax.</summary>
     public static IEnumerable<TheoryDataRow<string>> ScopedNames() =>
-        StrategyCases.All.Where(c => c.AppliesTo(EngineId.SqlServer) && c.Strategy is StrategyNames.DeleteInsertByScope or StrategyNames.MergeStagedChanges)
+        StrategyCases.All.Where(c => c.AppliesTo(EngineId.SqlServer) && c.Strategy is StrategyNames.DeleteInsertByScope or StrategyNames.MergeStagedChanges or StrategyNames.ApplyStagedChanges)
             .Select(c => new TheoryDataRow<string>(c.Name));
 
     /// <summary>Not the dialect's text: ANSI double-quoted identifiers (SqlClient runs with QUOTED_IDENTIFIER ON) and prefixed parameter names.</summary>
@@ -191,6 +191,7 @@ public class SqlServerLiveTests
         ParameterReference = (_, name) => "@p_" + name,
         ParameterStyle = ParameterStyle.NamedAt,
         TransactSql = true,
+        UpdateStyle = UpdateStyle.FromJoin,
     };
 
     [Theory]

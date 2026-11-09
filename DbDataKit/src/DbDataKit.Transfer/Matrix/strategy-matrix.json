@@ -88,6 +88,17 @@
         "oracle":    { "status": "unsupported", "note": "MERGE has no WHEN NOT MATCHED BY TARGET and no matched-delete condition in this form" },
         "fabric":    { "status": "unverified" }
       }
+    },
+    "apply_staged_changes": {
+      "needs": ["transaction", "key_columns"],
+      "engines": {
+        "duckdb":    { "status": "reference", "note": "collapse to the last stage row per key, then DELETE, UPDATE ... FROM and INSERT of the keys the target lacks; no MERGE" },
+        "sqlserver": { "status": "reference", "note": "UPDATE ... FROM ... JOIN; Sync ChangeApply" },
+        "postgres":  { "status": "reference", "note": "UPDATE ... FROM, any version; Sync ChangeApply" },
+        "mysql":     { "status": "product-verified", "note": "UPDATE ... JOIN ... SET (MySQL 9 and MariaDB 11); Sync ChangeApply" },
+        "oracle":    { "status": "product-verified", "note": "correlated UPDATE with EXISTS, no MERGE; Sync ChangeApply" },
+        "fabric":    { "status": "unverified", "note": "T-SQL form as SQL Server, untested on Fabric" }
+      }
     }
   },
   "aliases": {
@@ -98,6 +109,7 @@
     "MsSqlDeleteInsert": "delete_insert_by_scope",
     "Merge": "merge_by_key",
     "KeyReconcileDelete": "key_reconcile_delete",
-    "Watermark": "watermark_append"
+    "Watermark": "watermark_append",
+    "ChangeApply": "apply_staged_changes"
   }
 }

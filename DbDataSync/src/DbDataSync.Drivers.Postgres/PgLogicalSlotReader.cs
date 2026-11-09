@@ -214,7 +214,7 @@ public sealed class PgLogicalSlotReader(SqlDialect dialect) : IChangeReader, IPo
         {
             var lsn = reader.GetString(0);
             using var document = JsonDocument.Parse(reader.GetString(1));
-            if (ToChangeRow(document.RootElement, schema, typeByColumn, lsn, qualifiedTable) is { } row)
+            foreach (var row in ToChangeRows(document.RootElement, schema, typeByColumn, lsn, qualifiedTable))
                 yield return row;
         }
     }
@@ -228,7 +228,7 @@ public sealed class PgLogicalSlotReader(SqlDialect dialect) : IChangeReader, IPo
     /// a row, and it must not stop the pass either.
     /// </para>
     /// </summary>
-    private static ChangeRow? ToChangeRow(
+    internal static IEnumerable<ChangeRow> ToChangeRows(
         JsonElement change,
         ChangeSchema schema,
         IReadOnlyDictionary<string, string> typeByColumn,
@@ -236,7 +236,7 @@ public sealed class PgLogicalSlotReader(SqlDialect dialect) : IChangeReader, IPo
         string qualifiedTable)
     {
         if (!change.TryGetProperty("action", out var action) || action.GetString() is not { } verb)
-            return null;
+            yield break;
 
         var operation = verb switch
         {
@@ -246,18 +246,42 @@ public sealed class PgLogicalSlotReader(SqlDialect dialect) : IChangeReader, IPo
             _ => (ChangeOperation?)null,
         };
         if (operation is not { } op)
-            return null;
+            yield break;
 
         // A delete carries only `identity` — the REPLICA IDENTITY columns, which for the default is the
         // primary key. Its non-key values are genuinely gone, and a null for them is the same
         // convention every other delete-reporting reader here uses.
-        var values = new object?[schema.Count];
-        if (change.TryGetProperty("identity", out var identity))
-            Fill(values, identity, schema, typeByColumn, lsn, qualifiedTable);
+        var oldKey = new object?[schema.Count];
+        var hasIdentity = change.TryGetProperty("identity", out var identity);
+        if (hasIdentity)
+            Fill(oldKey, identity, schema, typeByColumn, lsn, qualifiedTable);
+
+        var values = (object?[])oldKey.Clone();
         if (op != ChangeOperation.Delete && change.TryGetProperty("columns", out var columns))
             Fill(values, columns, schema, typeByColumn, lsn, qualifiedTable);
 
-        return new ChangeRow(op, schema, values);
+        // An update that changes the key carries the old key as `identity` and the new row as `columns`.
+        // Handed over as one update it would be a change to a key the target does not hold, and the
+        // old row would stay behind; a change feed says it the way Change Tracking and CDC do: the old
+        // key is deleted and the new row is inserted. A writer that applies a key at a time (ChangeApply)
+        // then needs no special case.
+        if (op == ChangeOperation.Update && hasIdentity && KeyChanged(oldKey, values))
+        {
+            yield return new ChangeRow(ChangeOperation.Delete, schema, oldKey);
+            yield return new ChangeRow(ChangeOperation.Insert, schema, values);
+            yield break;
+        }
+
+        yield return new ChangeRow(op, schema, values);
+    }
+
+    /// <summary>Whether any column the identity carried has another value in the new row.</summary>
+    private static bool KeyChanged(object?[] oldKey, object?[] newRow)
+    {
+        for (var i = 0; i < oldKey.Length; i++)
+            if (oldKey[i] is { } before && !before.Equals(newRow[i]))
+                return true;
+        return false;
     }
 
     /// <summary>

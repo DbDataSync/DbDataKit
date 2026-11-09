@@ -12,6 +12,7 @@ public static class StrategyNames
     public const string KeyReconcileDelete = "key_reconcile_delete";
     public const string DeleteInsertByScope = "delete_insert_by_scope";
     public const string MergeStagedChanges = "merge_staged_changes";
+    public const string ApplyStagedChanges = "apply_staged_changes";
 }
 
 /// <summary>The built-in strategies by shared name. Names from the products resolve through <see cref="StrategyMatrix.Resolve"/>.</summary>
@@ -21,7 +22,7 @@ public static class StrategyCatalog
     [
         new FullReplaceStrategy(), new DeleteInsertByKeyStrategy(), new MergeByKeyStrategy(),
         new DeleteInsertByRangeStrategy(), new WatermarkAppendStrategy(), new KeyReconcileDeleteStrategy(),
-        new DeleteInsertByScopeStrategy(), new MergeStagedChangesStrategy(),
+        new DeleteInsertByScopeStrategy(), new MergeStagedChangesStrategy(), new ApplyStagedChangesStrategy(),
     ];
 
     public static IReadOnlyList<IApplyStrategy> Strategies => All;

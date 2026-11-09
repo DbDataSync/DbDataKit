@@ -22,5 +22,18 @@ public static class SharedStatementSyntax
         ParameterReference = (_, name) => dialect.ParameterReference(name),
         ParameterStyle = ParameterStyle.NamedAt,
         InsertInto = dialect.RenderInsertInto,
+        UpdateStyle = UpdateStyleOf(dialect),
+    };
+
+    /// <summary>
+    /// How this engine writes an UPDATE from another table (<see cref="UpdateStyle"/>; the <c>ChangeApply</c> writer's UPDATE): the engine's own join form where it has
+    /// one, the correlated subquery (Oracle's only form, and the one every engine accepts) for Oracle and for any dialect not named here, ODBC and JDBC descriptors included.
+    /// </summary>
+    public static UpdateStyle UpdateStyleOf(SqlDialect dialect) => dialect switch
+    {
+        Core.Sql.MsSqlDialect => UpdateStyle.FromJoin,
+        Core.Sql.PostgresDialect or Core.Sql.DuckDbDialect => UpdateStyle.UpdateFrom,
+        Core.Sql.MySqlDialect => UpdateStyle.JoinSet,
+        _ => UpdateStyle.Correlated,
     };
 }
