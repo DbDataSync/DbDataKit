@@ -162,7 +162,9 @@ test.describe.serial('golden path: define, configure, and run a replication end-
     await page.getByTestId('reader-kind-select').selectOption('MsSqlChangeTracking')
 
     await page.getByTestId('stage-writer').click()
-    await expect(page.getByTestId('writer-kind-select')).toHaveValue('DeleteInsert')
+    // Changing the reader to one that reads changes moves the unnamed writer to the default for it, ChangeApply (CW01);
+    // the generic DeleteInsert was the default behind the BatchReload reader the replication started on.
+    await expect(page.getByTestId('writer-kind-select')).toHaveValue('ChangeApply')
     await page.getByTestId('writer-kind-select').selectOption('MsSqlMerge')
 
     await saveSettings(page, REPLICATION_NAME)
