@@ -18,8 +18,10 @@ namespace DbDataConsole.Server;
 /// (<see cref="ServerProducts.RunnerRoutes"/>): only the routes of its table pass, and only for a person who holds the role the runner asks for there; a product's reports and a webhook are not a console's to make.
 /// </para>
 /// </summary>
-public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore keys, CurrentUser current, ILogger<ConsoleRelay> log, DbDataKit.Identity.FederatedUsers? federated = null)
+public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore keys, CurrentUser current, ILogger<ConsoleRelay> log, DbDataKit.Identity.FederatedUsers? federated = null, RelayTimeouts? timeouts = null)
 {
+    private readonly RelayTimeouts _timeouts = timeouts ?? RelayTimeouts.Default;
+
     public const string Prefix = "/relay";
 
     private static readonly string[] ForwardedRequestHeaders = ["Accept", "Accept-Language", "If-Match", "If-None-Match", "Content-Type"];
@@ -158,6 +160,9 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
 
         // a file of a package (plan 33, UE10) can be larger than Kestrel's default limit on a request body and takes longer than a call: the runner has its own size cap and answers 413 past it
         var upload = path.StartsWith("api/v1/artifacts/", StringComparison.Ordinal) && context.Request.Method == HttpMethods.Put;
+        // a move of a replication's owner (plan 28c E12) waits at Sync for the worker and its queue, up to 30 minutes by default: the relay waits longer than Sync does, so the console does not answer an error while the move goes on
+        var ownerMove = IsOwnerMove(context.Request.Method, path);
+        var kind = ownerMove ? RelayCall.OwnerMove : upload ? RelayCall.Upload : RelayCall.Call;
         if (upload) context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>()?.MaxRequestBodySize = null;
 
         var token = await TokenForAsync(instance, userId, current.Name, role, context.RequestAborted);
@@ -182,7 +187,7 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
 
         try
         {
-            using var response = await ClientFor(instance, upload).SendAsync(request, HttpCompletionOption.ResponseHeadersRead, context.RequestAborted);
+            using var response = await ClientFor(instance, kind).SendAsync(request, HttpCompletionOption.ResponseHeadersRead, context.RequestAborted);
             context.Response.StatusCode = (int)response.StatusCode;
             foreach (var name in ForwardedResponseHeaders)
                 if (response.Headers.TryGetValues(name, out var values) || response.Content.Headers.TryGetValues(name, out values)) context.Response.Headers[name] = values.ToArray();
@@ -196,6 +201,13 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !context.RequestAborted.IsCancellationRequested)
         {
             log.LogWarning("{Server} did not answer a relayed {Method} {Path}: {Reason}", instance.Name, context.Request.Method, path, ex.GetType().Name);
+            if (ownerMove && ex is TaskCanceledException)
+            {
+                // the call timed out, not the server: the move may still be going on there, so say that and not that the server failed (the screen shows "in progress" and reads the owner again)
+                context.Response.StatusCode = StatusCodes.Status504GatewayTimeout;
+                await context.Response.WriteAsJsonAsync(new { error = $"{instance.Name} is still moving the replication; it has not answered yet. Look at the owner again in a few minutes.", inProgress = true });
+                return;
+            }
             await Refuse(context, StatusCodes.Status502BadGateway, $"{instance.Name} did not answer.");
         }
     }
@@ -248,15 +260,31 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
         }
     }
 
-    private HttpClient ClientFor(RegisteredInstance instance, bool upload = false) =>
-        _clients.GetOrAdd(upload ? "upload:" + instance.CertificateFingerprint : instance.CertificateFingerprint,
-            _ => new HttpClient(PairingClient.Pinned(instance.CertificateFingerprint)) { Timeout = upload ? TimeSpan.FromMinutes(30) : TimeSpan.FromMinutes(2) });
+    /// <summary><c>PUT api/replications/{name}/owner</c>: Sync's observe, cutover and rollback, which wait for work in flight (30 minutes by default) before they answer.</summary>
+    public static bool IsOwnerMove(string method, string path)
+    {
+        if (!string.Equals(method, HttpMethods.Put, StringComparison.OrdinalIgnoreCase)) return false;
+        var parts = path.TrimEnd('/').Split('/');
+        return parts.Length == 4 && parts[0] == "api" && parts[1] == "replications" && parts[2].Length > 0 && parts[3] == "owner";
+    }
+
+    private HttpClient ClientFor(RegisteredInstance instance, RelayCall kind = RelayCall.Call) =>
+        _clients.GetOrAdd(kind == RelayCall.Call ? instance.CertificateFingerprint : kind + ":" + instance.CertificateFingerprint,
+            _ => new HttpClient(PairingClient.Pinned(instance.CertificateFingerprint)) { Timeout = kind switch { RelayCall.Upload => _timeouts.Upload, RelayCall.OwnerMove => _timeouts.OwnerMove, _ => _timeouts.Call } });
+
+    private enum RelayCall { Call, Upload, OwnerMove }
 
     private static async Task Refuse(HttpContext context, int status, string error)
     {
         context.Response.StatusCode = status;
         await context.Response.WriteAsJsonAsync(new { error });
     }
+}
+
+/// <summary>How long the relay waits for a server: an ordinary call, a file upload, and the move of a replication's owner (longer than the 30 minutes Sync itself waits for work in flight).</summary>
+public sealed record RelayTimeouts(TimeSpan Call, TimeSpan Upload, TimeSpan OwnerMove)
+{
+    public static readonly RelayTimeouts Default = new(TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(30), TimeSpan.FromMinutes(35));
 }
 
 public static class ConsoleRelayEndpoints

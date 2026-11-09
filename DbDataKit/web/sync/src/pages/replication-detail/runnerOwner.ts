@@ -1,4 +1,5 @@
 import type { ReplicationOwner } from '../../api/types'
+import { ApiError } from '../../api/client'
 
 /** What each owner means, in the words the screen shows beside it. */
 export const OWNER_TEXT: Record<ReplicationOwner, string> = {
@@ -11,3 +12,12 @@ export const OWNER_TEXT: Record<ReplicationOwner, string> = {
 export function movesFrom(owner: ReplicationOwner): { observe: boolean; cutover: boolean; rollback: boolean } {
   return { observe: owner === 'old', cutover: owner !== 'runner', rollback: owner !== 'old' }
 }
+
+/**
+ * A move that the console's relay stopped waiting for (it answers 504 with `inProgress`): Sync keeps moving and the owner shown here is the answer, so this is not an error to show. Any other failure is.
+ */
+export function isMoveInProgress(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 504 && (error.body as { inProgress?: boolean } | null | undefined)?.inProgress === true
+}
+
+export const MOVE_IN_PROGRESS_TEXT = 'The move is in progress. The server is still waiting for work in flight and has not answered yet; the owner above changes when it finishes.'

@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { RunnerRow } from './ReplicationRunnerPanel'
-import { OWNER_TEXT, movesFrom } from './runnerOwner'
+import { OWNER_TEXT, isMoveInProgress, movesFrom } from './runnerOwner'
+import { ApiError } from '../../api/client'
 import type { OwnerView } from '../../api/types'
 
 const view = (patch: Partial<OwnerView>): OwnerView => ({ replication: 'sales', owner: 'runner', link: { server: 'r1', channel: 'prod', package: 'sales-set' }, runner: null, runnerError: null, ...patch })
@@ -44,5 +45,15 @@ describe('the runner\'s row of the task', () => {
     expect(html).toContain('yes, by ann')
     expect(html).toContain('Succeeded')
     expect(html).toContain('40 rows')
+  })
+})
+
+describe('a move the console stopped waiting for', () => {
+  it('is in progress, and nothing else that fails is', () => {
+    expect(isMoveInProgress(new ApiError(504, 'still moving', { inProgress: true }))).toBe(true)
+    expect(isMoveInProgress(new ApiError(504, 'gateway timeout'))).toBe(false)
+    expect(isMoveInProgress(new ApiError(502, 'did not answer', { inProgress: true }))).toBe(false)
+    expect(isMoveInProgress(new ApiError(409, 'refused', { error: 'a mapping is loading' }))).toBe(false)
+    expect(isMoveInProgress(new Error('network'))).toBe(false)
   })
 })
