@@ -83,7 +83,7 @@ public sealed class ReplicationSetPackageTests : IDisposable
         Assert.All(orders.Connections, c => Assert.Equal(SlotEnvironmentFormats.SyncSecret, c.Env));
         Assert.Equal("orders", orders.Inputs.Single(i => i.Name == "replication").Default);
         Assert.Equal(ReplicationSetPackage.RepoDir, orders.Inputs.Single(i => i.Name == "repo_dir").Default);
-        Assert.Equal(1, orders.Limits.Concurrency);
+        Assert.Null(orders.Limits.Concurrency);   // plan 28c E12e: a package-wide limit would serialize the replications of the set, and a continuous drain would starve the others
         Assert.Equal((ReplicationSetPackage.RuntimeName, "2026.11.x"), (built.Manifest.Launch.Runtime!.Name, built.Manifest.Launch.Runtime.Range));
 
         // the checkpoint of the drain is declared, once per task, as the engine keeps it
