@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ErrorBanner, Field, useIsAdmin } from '@dbdatakit/shell'
 import { consoleApi, instancesKey, type InstanceSummary } from '../api'
@@ -30,6 +30,9 @@ export function InstancesPage() {
   const instances = useQuery({ queryKey: instancesKey, queryFn: consoleApi.instances.list, enabled: isAdmin, refetchInterval: 10_000 })
   // the feed's newest release per server (plan 24a UC08), asked less often than the servers; a feed that cannot be read says nothing here (the Upgrades screen says why)
   const available = useQuery({ queryKey: availableKey, queryFn: () => upgradeApi.available(false), enabled: isAdmin, refetchInterval: 60_000, retry: false })
+  // the feed is read per product the servers report: a server just paired (or one that has just started to answer) changes what is asked, so ask again then, not a minute later
+  const servers = (instances.data ?? []).map((i) => `${i.id}:${i.product ?? ''}:${i.version ?? ''}`).join('|')
+  useEffect(() => { if (isAdmin && servers) void queryClient.invalidateQueries({ queryKey: availableKey }) }, [servers, isAdmin, queryClient])
   const [url, setUrl] = useState('')
   const [code, setCode] = useState('')
   const [name, setName] = useState('')
