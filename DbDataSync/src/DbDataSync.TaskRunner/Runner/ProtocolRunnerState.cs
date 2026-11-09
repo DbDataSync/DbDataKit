@@ -33,13 +33,13 @@ internal sealed record PassOutcome(Guid RunId, RunStatus Status, long RowsRead, 
 /// log. The run lock is the runner's (it keeps two drains of one replication apart); a mapping's lock is held here, in memory, and keeps two passes of one mapping apart within the drain. Nothing here carries rows (ED5):
 /// what crosses the socket is claims, positions, counts, outcomes and log lines.
 /// <para>
-/// What is not served, and throws <see cref="NotSupportedException"/> naming the member and what is missing: <see cref="RequestInitialLoad"/> and <see cref="RequestSegmentedLoad"/> (a bulk load is a batch with a
-/// <c>BulkLoadBatchStore</c> row and segments computed against the source, which stay in the Sync back end until E12) and <see cref="RecordVerificationResult"/> (a verification result is a payload of a verify task, E14).
-/// A replication that needs one of them fails at that call with a message that says what is missing, and not by doing something a little different.
+/// Bulk loads (<see cref="RequestInitialLoad"/>, <see cref="RequestSegmentedLoad"/>) are <see cref="DrainBulkLoads"/>'s, over the same queue, and a verification result is a recorded output of the run
+/// (<see cref="IDrainOutputs"/>). A state made without them (a test of something else) throws <see cref="NotSupportedException"/> naming the member and what is missing, and does not do something a little different.
 /// </para>
 /// </summary>
-internal sealed class ProtocolRunnerState(IDrainCheckpoints checkpoints, ILogger log, IDrainQueue? queue = null) : IRunnerState
+internal sealed class ProtocolRunnerState(IDrainCheckpoints checkpoints, ILogger log, IDrainQueue? queue = null, DrainBulkLoads? bulkLoads = null, IDrainOutputs? outputs = null) : IRunnerState
 {
+    private readonly ConcurrentDictionary<Guid, string> _batchOfRun = new();
     private readonly ConcurrentDictionary<(RunKind Kind, string Mapping), Guid> _locks = new();
     private readonly ConcurrentDictionary<Guid, PassOutcome> _outcomes = new();
     private readonly ConcurrentDictionary<long, WorkItemStatus> _items = new();
@@ -83,6 +83,8 @@ internal sealed class ProtocolRunnerState(IDrainCheckpoints checkpoints, ILogger
         var claimed = WorkQueueStore.FromQueue(item.Id, taskName, item.Kind, item.Subject, item.Part, item.RunId, nameof(WorkItemStatus.Claimed), item.Payload);
         _items[item.Id] = WorkItemStatus.Claimed;
         _mappingsOfItems[item.Id] = item.Subject;
+        if (claimed.BulkLoadBatchId is { } batch)
+            _batchOfRun[item.RunId] = batch;
         return claimed;
     }
 
@@ -100,11 +102,14 @@ internal sealed class ProtocolRunnerState(IDrainCheckpoints checkpoints, ILogger
     /// <summary>Names the one segment a pass reads inline: cosmetic (a line of the run's log says it, with the pass's run id).</summary>
     public void SetRunSegment(Guid runId, string label) => log.LogInformation("Run {RunId} reads segment {Segment}.", runId, label);
 
+    /// <summary>A mapping with no position: its initial load is a batch of this replication's own queue and the captured position waits for it (<see cref="DrainBulkLoads.RequestInitialLoad"/>).</summary>
     public void RequestInitialLoad(string taskName, string mappingName, string sourceTable, string capturedPosition, DateTimeOffset? capturedPositionTimeUtc) =>
-        throw Unsupported(nameof(RequestInitialLoad), $"'{mappingName}' has no position yet and would start with an initial load, which is a bulk load batch with segments computed against the source, kept by the Sync back end until E12. Give it a position first (an initial load on the old path, or a checkpoint set by an administrator).");
+        (bulkLoads ?? throw Unsupported(nameof(RequestInitialLoad), $"'{mappingName}' has no position yet and would start with an initial load, which needs the drain's bulk loads (a state made without them)."))
+            .RequestInitialLoad(taskName, mappingName, sourceTable, capturedPosition, capturedPositionTimeUtc);
 
     public string? RequestSegmentedLoad(string taskName, string mappingName, string segmentsJson) =>
-        throw Unsupported(nameof(RequestSegmentedLoad), $"'{mappingName}' resolved to segments, which run as a bulk load batch that the Sync back end keeps until E12.");
+        (bulkLoads ?? throw Unsupported(nameof(RequestSegmentedLoad), $"'{mappingName}' resolved to segments, which run as a bulk load batch of the drain's queue (a state made without bulk loads)."))
+            .RequestSegmentedLoad(taskName, mappingName, segmentsJson);
 
     // ---- Outcomes
 
@@ -139,6 +144,8 @@ internal sealed class ProtocolRunnerState(IDrainCheckpoints checkpoints, ILogger
         string? failureKind = null, RunTiming? timing = null, string? previousWatermark = null, string? newWatermark = null, string? errorDetail = null)
     {
         _outcomes[runId] = new PassOutcome(runId, status, rowsRead, rowsWritten, errorSummary, failureKind, errorDetail);
+        if (_batchOfRun.TryGetValue(runId, out var batchId))
+            bulkLoads?.SegmentFinished(runId, batchId, status == RunStatus.Succeeded, rowsRead, rowsWritten);
         if (newWatermark is not null) log.LogInformation("Position moved from {Previous} to {New}.", previousWatermark ?? "<none>", newWatermark);
     }
 
@@ -152,7 +159,10 @@ internal sealed class ProtocolRunnerState(IDrainCheckpoints checkpoints, ILogger
     /// <summary>Why the next pass is not to run, beside the position (the checkpoint's <c>hold</c>): the planner leaves a held mapping out of what it queues, as the API's scheduler does.</summary>
     public void SetReadHold(string taskName, string mappingName, string sourceTable, ReadHold hold) => checkpoints.WriteHold(sourceTable, hold);
 
-    public void RecordVerificationResult(VerificationResultRecord result) => throw Unsupported(nameof(RecordVerificationResult), "a verification result is a payload of a verify task (E06, E14).");
+    /// <summary>A verification result is an output of the run (a step's value, stored with the run): the Sync back end reads it from the run when it lists results for a runner-owned replication.</summary>
+    public void RecordVerificationResult(VerificationResultRecord result) =>
+        (outputs ?? throw Unsupported(nameof(RecordVerificationResult), "a verification result is a recorded output of the run, and this state has nowhere to record it."))
+            .VerificationResult(result);
 
     public void Log(Guid runId, LogSeverity level, string message) =>
         log.Log(level switch

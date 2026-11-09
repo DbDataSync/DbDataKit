@@ -220,7 +220,6 @@ public sealed class ProtocolRunnerStateTests
         Assert.Contains("IRunnerState", thrown.Message);
         if (member is not (nameof(IRunnerState.TryClaimNext) or nameof(IRunnerState.HasOutstandingWork)))
             Assert.Contains($"IRunnerState.{member}", thrown.Message);
-        if (member == nameof(IRunnerState.RequestInitialLoad)) Assert.Contains("E12", thrown.Message);
     }
 
     [Fact]
@@ -231,9 +230,11 @@ public sealed class ProtocolRunnerStateTests
         Assert.Equal("drain", task.Name);
         Assert.Equal(["replication", "degree_of_parallelism", "repo_dir", "run_all"], task.Inputs.Select(i => i.Name));
         Assert.Equal([true, false, false, false], task.Inputs.Select(i => i.Required));
-        var checkpoint = Assert.Single(task.Progress.Checkpoints);
-        Assert.Equal("watermark", checkpoint.Name);
-        Assert.Equal(["hold", "intent", "position", "position_time"], checkpoint.Parts.Keys.Order());
+        // the position (the declared checkpoint of Sync's own state, part for part), the batches of initial loads and the rows each mapping read (plan 28c E11b)
+        Assert.Equal(["batch", "reads", "watermark"], task.Progress.Checkpoints.Select(c => c.Name).Order());
+        var checkpoint = task.Progress.Checkpoints.Single(c => c.Name == "watermark");
+        Assert.Equal(WatermarkCheckpoint.Declaration.Parts.Keys.Order(), checkpoint.Parts.Keys.Order());
+        Assert.Equal(WatermarkCheckpoint.Declaration.Parts.Select(p => (p.Key, p.Value.Type)).Order(), checkpoint.Parts.Select(p => (p.Key, p.Value.Type)).Order());
         Assert.Equal(["mapping"], task.Units!.Select(u => u.Name));
         Assert.Equal(["rows", "rows_read"], task.Counters!.Order());
 

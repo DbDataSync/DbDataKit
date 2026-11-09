@@ -358,18 +358,38 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
     }
 
     [Fact]
-    public async Task AMappingWithNoPosition_FailsNamingTheMemberItNeeds_AndDoesNotInventAPosition()
+    public async Task AMappingWithNoPosition_RunsItsInitialLoadOnTheRunner_HoldsItWhileTheBatchRuns_AndPromotesTheCapturedPosition()
     {
+        // plan 28c E11b: no position, so the first pass captures the source's position and queues the mapping's initial load as a batch of the replication's own queue; the same drain runs it, and the position is
+        // the captured one when the last segment is done (the supervisor path's rule, LocalRunnerState)
+        var before = await CurrentVersionAsync();
         await InsertRowsAsync(3);
         var source = await PackageSourceAsync();
         using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
+        Assert.Null(rig.Watermark(_watermarkKey));
 
         var result = await rig.Executor.RunAsync(await rig.DrainRequestAsync(source, "runner-sync"));
 
-        Assert.NotEqual(TaskEndState.Succeeded, result.End.State);
-        Assert.True(rig.LogText(result.RunId).Contains("IRunnerState.RequestInitialLoad", StringComparison.Ordinal), Describe(rig, result));
-        Assert.Null(rig.Watermark(_watermarkKey));
-        Assert.Equal(0, (await TargetFingerprintAsync(_runnerTarget)).Count);
+        Assert.True(result.End.State == TaskEndState.Succeeded && result.ExitCode == 0, Describe(rig, result));
+        Assert.Equal(3, (await TargetFingerprintAsync(_runnerTarget)).Count);
+        var position = rig.Watermark(_watermarkKey);
+        Assert.NotNull(position);
+        Assert.True(long.Parse(position!.Value.Position, CultureInfo.InvariantCulture) >= long.Parse(before, CultureInfo.InvariantCulture), $"position {position.Value.Position}, before {before}");
+        var bulk = Assert.Single(rig.Work.ListAll(RunnerRig.WorkOwner), r => r.Kind == nameof(RunKind.BulkLoad));
+        Assert.Equal(DbDataKit.Scheduling.WorkItemStatus.Done, bulk.Status);
+        var progress = new DbDataKit.State.ProgressStore(rig.Database, new DbDataKit.State.ProgressKey(RunnerRig.Package, RunnerRig.Channel, "drain"));
+        var batchId = Assert.Single(progress.ItemKeys("batch"));
+        var batch = progress.GetCheckpoint("batch", batchId)!;
+        Assert.Equal((1L, 0L, 3L), (batch.Parts["succeeded"].AsInt, batch.Parts.TryGetValue("failed", out var failed) ? failed.AsInt : 0, batch.Parts["rows_written"].AsInt));
+        var held = progress.GetCheckpoint("watermark", _watermarkKey)!;
+        Assert.False(held.Parts.ContainsKey("pending_position"));
+        Assert.Equal("None", held.Parts["hold"].AsText);
+
+        // changes after the load are the next drain's, from the promoted position
+        await InsertRowsAsync(2, from: 4);
+        var again = await rig.Executor.RunAsync(await rig.DrainRequestAsync(source, "runner-sync", runId: Guid.CreateVersion7(), runAll: true));
+        Assert.True(again.End.State == TaskEndState.Succeeded, Describe(rig, again));
+        Assert.Equal(5, (await TargetFingerprintAsync(_runnerTarget)).Count);
     }
 
     /// <summary>The names and contents of everything under a directory, to say afterwards that nothing in it was written, added or removed.</summary>

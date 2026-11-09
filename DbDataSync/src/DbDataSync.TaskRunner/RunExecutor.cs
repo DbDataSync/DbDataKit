@@ -1848,6 +1848,10 @@ public sealed class RunExecutor(
     public async Task<DbConnection> OpenPlanningConnectionAsync(string connectionName, CancellationToken cancellationToken) =>
         (await OpenConnectionAsync(connectionName, cancellationToken)).Connection;
 
+    /// <summary>A connection and the driver that speaks to it, for what divides a segment or estimates a table (plan 28c E11b): the same way a pass opens one.</summary>
+    public Task<(DbConnection Connection, IDriver Driver)> OpenPlanningConnectionWithDriverAsync(string connectionName, CancellationToken cancellationToken) =>
+        OpenConnectionAsync(connectionName, cancellationToken);
+
     private async Task<(DbConnection Connection, IDriver Driver)> OpenConnectionAsync(
         string connectionName, CancellationToken cancellationToken)
     {

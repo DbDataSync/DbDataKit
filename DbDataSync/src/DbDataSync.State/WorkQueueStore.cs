@@ -27,7 +27,11 @@ public sealed record WorkItem(
     /// <summary>Phase 124: a serialized <c>DeleteGuard</c> override for this
     /// <see cref="RunKind.ReconcileDeletes"/> item — null for every other kind, and null for a
     /// reconcile item that didn't override the writer's configured/default guard.</summary>
-    string? DeleteGuardJson = null);
+    string? DeleteGuardJson = null,
+    /// <summary>Plan 28c E11b: the bulk-load batch a <see cref="RunKind.BulkLoad"/> item belongs to and how many segments the batch has, for a queue that has no run record to carry them (the runner's): null for any
+    /// other item, and for an item of Sync's own queue, whose run row names its batch.</summary>
+    string? BulkLoadBatchId = null,
+    int? BatchSegments = null);
 
 /// <summary>
 /// Which reader/cache/writer this unit of work should use, when that isn't simply the replication's
@@ -73,16 +77,16 @@ public sealed class WorkQueueStore(StateDatabase database)
     /// </summary>
     public static QueueShape Describe(
         string taskName, RunKind runKind, string mappingName, string segmentLabel = NoSegment, string? segmentJson = null, WorkItemKinds? kinds = null,
-        string? deleteGuardJson = null, SegmentOrder segments = SegmentOrder.OneAtATime)
+        string? deleteGuardJson = null, SegmentOrder segments = SegmentOrder.OneAtATime, string? bulkLoadBatchId = null, int? batchSegments = null)
     {
-        var payload = JsonSerializer.Serialize(new Payload(segmentJson, kinds?.ReaderKind, kinds?.CacheKind, kinds?.WriterKind, deleteGuardJson));
+        var payload = JsonSerializer.Serialize(new Payload(segmentJson, kinds?.ReaderKind, kinds?.CacheKind, kinds?.WriterKind, deleteGuardJson, bulkLoadBatchId, batchSegments));
         // Segments of one kind on one mapping take turns by sharing a resource: the queue lets a different part run beside another, so the turn-taking has to be asked for.
         var resource = segments == SegmentOrder.OneAtATime && segmentLabel != NoSegment ? $"{taskName}/{mappingName}/{runKind}" : "";
         return new QueueShape(taskName, runKind.ToString(), mappingName, segmentLabel, resource, RunLanes.LaneFor(runKind).ToString(), payload);
     }
 
     /// <summary>What the shared queue holds for Sync besides the keys: everything the worker needs that the queue does not look at.</summary>
-    private sealed record Payload(string? SegmentJson, string? ReaderKind, string? CacheKind, string? WriterKind, string? DeleteGuardJson);
+    private sealed record Payload(string? SegmentJson, string? ReaderKind, string? CacheKind, string? WriterKind, string? DeleteGuardJson, string? BatchId = null, int? BatchSegments = null);
 
     /// <summary>
     /// Enqueues one unit of work and its corresponding Queued TaskRuns row in one transaction, so a
@@ -290,6 +294,8 @@ public sealed class WorkQueueStore(StateDatabase database)
             runId,
             Enum.Parse<WorkItemStatus>(status),
             new WorkItemKinds(payload?.ReaderKind, payload?.CacheKind, payload?.WriterKind),
-            payload?.DeleteGuardJson);
+            payload?.DeleteGuardJson,
+            payload?.BatchId,
+            payload?.BatchSegments);
     }
 }

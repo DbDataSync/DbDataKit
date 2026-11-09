@@ -32,6 +32,8 @@ public sealed class BulkLoadService(
     ProcessSupervisor supervisor,
     CustomSegmentExpansion customSegments) : IInitialLoadEnqueuer
 {
+    private readonly SegmentExpander expander = new(customSegments);
+
     public async Task<TriggerResult> EnqueueAsync(
         string replicationName, string mappingName, BulkLoadRequest request, CancellationToken cancellationToken)
     {
@@ -169,7 +171,7 @@ public sealed class BulkLoadService(
         bool throwOnCollision, SegmentOrder? requestedOrder, CancellationToken cancellationToken)
     {
         var order = SegmentOrderResolution.Resolve(requestedOrder, TargetConnection(task, mapping), task, mapping);
-        var (estimatedRows, estimateCaveat) = await EstimateRowsAsync(task, mapping, cancellationToken);
+        var (estimatedRows, estimateCaveat) = await SegmentExpander.EstimateRowsAsync(task, mapping, connections.OpenAsync, cancellationToken);
         batchStore.CreateBatch(batchId, replicationName, mappingName, segments.Count, estimatedRows, estimateCaveat);
 
         // Enqueued one at a time, not via a single LINQ projection, so a later segment's collision can
@@ -230,105 +232,11 @@ public sealed class BulkLoadService(
     }
 
     /// <summary>
-    /// A whole-table row count from the source engine's catalog statistics (<c>sys.partitions</c>,
-    /// <c>pg_class.reltuples</c>) — a best-effort denominator, not a fact a decision hangs on, so any
-    /// failure here just yields <c>(null, null)</c> and the card shows "Unknown".
-    /// <para>
-    /// Deliberately the whole table even when the mapping has a row <see cref="SourceTableSpec.Filter"/>:
-    /// catalog stats can't answer a predicate, and a scaled guess would be worse than an honest
-    /// overcount with the caveat attached. Null table (a query source) or a driver with no catalog
-    /// (ODBC) → no estimate.
-    /// </para>
+    /// Resolves <see cref="AutoSegment"/>s and <see cref="CustomSegment"/>s into concrete segments (<see cref="SegmentExpander"/>, shared with a drain on a runner). Done here, once, rather than in the
+    /// worker: the bounds come from the source's real MIN/MAX, and each resulting range has to become its own queue row so segments can be scheduled, retried and observed independently.
     /// </summary>
-    private async Task<(long? Rows, string? Caveat)> EstimateRowsAsync(
-        ReplicationTaskConfig task, TableMappingConfig mapping, CancellationToken cancellationToken)
-    {
-        var source = EndpointResolution.ResolveSource(task, mapping.Sources[0]);
-        if (string.IsNullOrWhiteSpace(source.Table))
-            return (null, null);
-
-        try
-        {
-            var (connection, driver) = await connections.OpenAsync(source.ConnectionName, cancellationToken);
-            await using (connection)
-            {
-                if (driver is not ITableRowEstimator estimator)
-                    return (null, null);
-
-                var rows = await estimator.EstimateRowCountAsync(connection, source, cancellationToken);
-                var caveat = rows is not null && !string.IsNullOrWhiteSpace(source.Filter)
-                    ? "ignores row filter"
-                    : null;
-                return (rows, caveat);
-            }
-        }
-        catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException)
-        {
-            return (null, null);
-        }
-    }
-
-    /// <summary>
-    /// Resolves <see cref="AutoSegment"/>s into concrete ranges. Done here, once, rather than in the
-    /// worker: the bounds come from the source's real MIN/MAX, and each resulting range has to become
-    /// its own queue row so segments can be scheduled, retried and observed independently.
-    /// <para>
-    /// Takes a plain segment list rather than a <see cref="BulkLoadRequest"/> so <see cref="EnqueueForInitialLoadAsync"/>
-    /// can share it too — that path has no operator-provided request, only the mapping's own
-    /// <see cref="TableMappingConfig.DefaultSegmenting"/>. <paramref name="readerKindOverride"/> is the
-    /// request's own optional override where there is a request, and null (resolve the mapping's
-    /// configured Bulk Load reader) where there is none.
-    /// </para>
-    /// </summary>
-    private async Task<IReadOnlyList<BatchReloadSegment>> ExpandAsync(
+    private Task<IReadOnlyList<BatchReloadSegment>> ExpandAsync(
         ReplicationTaskConfig task, TableMappingConfig mapping, IReadOnlyList<BatchReloadSegment> requested,
-        string? readerKindOverride, CancellationToken cancellationToken)
-    {
-        var needsAuto = requested.OfType<AutoSegment>().Any();
-        var needsCustom = requested.OfType<CustomSegment>().Any();
-        if (!needsAuto && !needsCustom)
-            return requested;
-
-        var source = EndpointResolution.ResolveSource(task, mapping.Sources[0]);
-        var readerKind = PipelineResolution.BulkLoadReaderKind(readerKindOverride, task, mapping);
-
-        var (connection, driver) = await connections.OpenAsync(source.ConnectionName, cancellationToken);
-        await using (connection)
-        {
-            IReadOnlyList<BatchReloadSegment> segments = requested;
-
-            if (needsCustom)
-            {
-                // The target only when something might read it — a strategy that segments from a
-                // control table needs the connection, and one that generates months from the calendar
-                // should not make anyone open one.
-                var target = EndpointResolution.ResolveTarget(task, mapping.Targets[0]);
-                var (targetConnection, _) = await connections.OpenAsync(target.ConnectionName, cancellationToken);
-                await using (targetConnection)
-                {
-                    segments = await customSegments.ExpandAsync(
-                        task, mapping, segments,
-                        new SegmentingConnections(connection, targetConnection), cancellationToken);
-                }
-            }
-
-            if (!segments.OfType<AutoSegment>().Any())
-                return segments;
-
-            var reader = driver.Readers.FirstOrDefault(r => r.Kind == readerKind)
-                ?? throw new InvalidOperationException($"Source driver does not support reader kind '{readerKind}'.");
-
-            if (reader is not ISegmentExpandingReader expanding)
-                throw new InvalidOperationException(
-                    $"Reader '{readerKind}' cannot divide a column into buckets, so an Auto segment can't be used with " +
-                    "it. Pick a reader that supports segmentation, or specify explicit list/range segments.");
-
-            return await expanding.ExpandAutoSegmentsAsync(
-                connection, source, segments, mapping.SourceColumns, mapping.Name, mapping.ColumnMappings,
-                mapping.Relationships,
-                mapping.RelationshipColumns.ToDictionary(
-                    kv => kv.Key, IReadOnlyList<CachedColumn> (kv) => kv.Value, StringComparer.OrdinalIgnoreCase),
-                cancellationToken);
-        }
-    }
+        string? readerKindOverride, CancellationToken cancellationToken) =>
+        expander.ExpandAsync(task, mapping, requested, readerKindOverride, connections.OpenAsync, cancellationToken);
 }

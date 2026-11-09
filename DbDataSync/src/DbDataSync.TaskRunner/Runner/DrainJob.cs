@@ -35,12 +35,73 @@ public sealed class WatermarkProgress
     /// <summary>Why the next pass is not to run (<c>ReadHold</c> as text); unset is <c>None</c>.</summary>
     [Checkpoint]
     public string? Hold { get; set; }
+
+    /// <summary>A position captured for an initial load that has not finished (<c>pending_position</c> of the declared checkpoint, <see cref="WatermarkCheckpoint"/>): it becomes the position when the batch of <see cref="PendingBatch"/> completes.</summary>
+    [Checkpoint]
+    public string? PendingPosition { get; set; }
+
+    [Checkpoint]
+    public DateTimeOffset? PendingPositionTime { get; set; }
+
+    [Checkpoint]
+    public string? PendingBatch { get; set; }
+}
+
+/// <summary>The bulk load batch of an initial load as the run's progress (plan 28c E11b): what <c>BulkLoadBatchStore</c> keeps for the API's own path, counted from the segments' outcomes as they end.</summary>
+public sealed class BatchProgress
+{
+    [Checkpoint]
+    public string? Mapping { get; set; }
+
+    /// <summary>The watermark key of the mapping's source: where the position waiting on this batch is.</summary>
+    [Checkpoint]
+    public string? SourceKey { get; set; }
+
+    [Checkpoint]
+    public long? Segments { get; set; }
+
+    [Checkpoint]
+    public long? Succeeded { get; set; }
+
+    [Checkpoint]
+    public long? Failed { get; set; }
+
+    [Checkpoint]
+    public long? RowsRead { get; set; }
+
+    [Checkpoint]
+    public long? RowsWritten { get; set; }
+
+    [Checkpoint]
+    public long? EstimatedRows { get; set; }
+
+    [Checkpoint]
+    public string? EstimateCaveat { get; set; }
+
+    [Checkpoint]
+    public DateTimeOffset? CreatedAt { get; set; }
+}
+
+/// <summary>The rows a mapping's successful primary passes have read, and how many of them a reconcile sweep already accounts for: the input of an after-change reconcile strategy.</summary>
+public sealed class ReadsProgress
+{
+    [Checkpoint]
+    public long? Total { get; set; }
+
+    [Checkpoint]
+    public long? AtSweep { get; set; }
 }
 
 /// <summary>The checkpoint <c>watermark</c> per mapping and source table (plan 28c section 5.1, reduced to two parts); the key is the engine's watermark key.</summary>
 public sealed class DrainProgress : Progress
 {
     public Keyed<WatermarkProgress> Watermark { get; } = new();
+
+    /// <summary>The batches of initial loads, per batch id (plan 28c E11b).</summary>
+    public Keyed<BatchProgress> Batch { get; } = new();
+
+    /// <summary>The rows read by a mapping's primary passes, per mapping (plan 28c E11b).</summary>
+    public Keyed<ReadsProgress> Reads { get; } = new();
 }
 
 public static class DrainCounters
@@ -71,6 +132,10 @@ public static class DrainSteps
     /// </summary>
     public static readonly ValueStep<ProvisionedColumnsReport, ProvisionedColumnsReport> ProvisionedColumns =
         Step.Value<ProvisionedColumnsReport, ProvisionedColumnsReport>("provisioned-columns", r => r.Mapping);
+
+    /// <summary>A verification result (plan 28c E11b): the record the verification wrote, an output of the run keyed by mapping, check and time; the Sync back end reads it from the run for a runner-owned replication.</summary>
+    public static readonly ValueStep<VerificationResultRecord, VerificationResultRecord> Verification =
+        Step.Value<VerificationResultRecord, VerificationResultRecord>("verification-result", r => $"{r.MappingName}/{r.CheckName}/{r.CompletedAtUtc.UtcTicks}");
 }
 
 public static class DrainUnits
@@ -106,8 +171,11 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
 
         var checkpoints = new Checkpoints(this);
         var queue = new KitDrainQueue(Work);
-        var state = new ProtocolRunnerState(checkpoints, Run.Log, queue);
-        var executor = new RunExecutor(
+        RunExecutor? made = null;
+        var segments = new EngineSegments(new SegmentExpander(new CustomSegmentExpansion(new SegmentingStrategyRunner(engine.Scripts))), (name, token) => made!.OpenPlanningConnectionWithDriverAsync(name, token));
+        var bulkLoads = new DrainBulkLoads(config, queue, checkpoints, segments, Run.Log);
+        var state = new ProtocolRunnerState(checkpoints, Run.Log, queue, bulkLoads, new RunOutputs(this));
+        var executor = made = new RunExecutor(
             config, engine.Drivers, secrets, engine.Libraries, repoRoot, state, new RunOutputConfig(this), engine.Scripts, Path.Combine(scratch, "state.db"));
 
         var plannerState = new ProtocolPlannerState(queue, checkpoints);
@@ -184,7 +252,7 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
     }
 
     /// <summary>The position of a mapping as the run's checkpoint: read from the progress the run started with, written and saved at once, one save at a time (a save writes everything changed, and two at once would conflict with each other).</summary>
-    private sealed class Checkpoints(DrainJob job) : IDrainCheckpoints
+    private sealed class Checkpoints(DrainJob job) : IDrainCheckpoints, IDrainLedger
     {
         public (string Position, DateTimeOffset? Time)? Read(string key)
         {
@@ -220,12 +288,14 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
             Save(key, item => item.Hold = hold.ToString());
         }
 
-        private void Save(string key, Action<WatermarkProgress> change)
+        private void Save(string key, Action<WatermarkProgress> change) => Locked(() => change(job.Progress.Watermark[key]));
+
+        private void Locked(Action change)
         {
             job._save.Wait();
             try
             {
-                change(job.Progress.Watermark[key]);
+                change();
                 job.SaveProgressAsync(CancellationToken.None).GetAwaiter().GetResult();
             }
             finally
@@ -233,6 +303,83 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
                 job._save.Release();
             }
         }
+
+        public void SetPendingLoad(string key, string position, DateTimeOffset? time, string batchId) => Save(key, item =>
+        {
+            item.Hold = nameof(ReadHold.Loading);
+            item.PendingPosition = position;
+            item.PendingPositionTime = time;
+            item.PendingBatch = batchId;
+        });
+
+        public bool PromotePendingLoad(string key)
+        {
+            var promoted = false;
+            Save(key, item =>
+            {
+                if (item.Hold != nameof(ReadHold.Loading) || item.PendingPosition is null)
+                    return;
+                item.Position = item.PendingPosition;
+                item.PositionTime = item.PendingPositionTime;
+                item.Intent = nameof(ReadIntent.Changes);
+                item.Hold = nameof(ReadHold.None);
+                item.PendingPosition = null;
+                item.PendingPositionTime = null;
+                item.PendingBatch = null;
+                promoted = true;
+            });
+            return promoted;
+        }
+
+        public BatchRecord? ReadBatch(string batchId)
+        {
+            var item = job.Progress.Batch[batchId];
+            return item.Segments is not { } segments
+                ? null
+                : new BatchRecord(item.Mapping ?? "", item.SourceKey ?? "", (int)segments, (int)(item.Succeeded ?? 0), (int)(item.Failed ?? 0), item.RowsRead ?? 0, item.RowsWritten ?? 0, item.EstimatedRows, item.EstimateCaveat, item.CreatedAt ?? DateTimeOffset.UtcNow);
+        }
+
+        public void WriteBatch(string batchId, BatchRecord batch) => Locked(() =>
+        {
+            var item = job.Progress.Batch[batchId];
+            item.Mapping = batch.Mapping;
+            item.SourceKey = batch.SourceKey;
+            item.Segments = batch.Segments;
+            item.Succeeded = batch.Succeeded;
+            item.Failed = batch.Failed;
+            item.RowsRead = batch.RowsRead;
+            item.RowsWritten = batch.RowsWritten;
+            item.EstimatedRows = batch.EstimatedRows;
+            item.EstimateCaveat = batch.EstimateCaveat;
+            item.CreatedAt = batch.CreatedAt;
+        });
+
+        public void AddRowsRead(string mapping, long rows) => Locked(() => job.Progress.Reads[mapping].Total = (job.Progress.Reads[mapping].Total ?? 0) + rows);
+
+        public long RowsReadSinceSweep(string mapping)
+        {
+            var item = job.Progress.Reads[mapping];
+            return (item.Total ?? 0) - (item.AtSweep ?? 0);
+        }
+
+        public void MarkSweep(string mapping) => Locked(() => job.Progress.Reads[mapping].AtSweep = job.Progress.Reads[mapping].Total ?? 0);
+    }
+
+    /// <summary>What a pass reports that belongs to the run, not to state: a verification result is a step of the run (its value stored with the run, repeatable: a result reported again is the same result).</summary>
+    private sealed class RunOutputs(DrainJob job) : IDrainOutputs
+    {
+        public void VerificationResult(VerificationResultRecord result) =>
+            job.Step(DrainSteps.Verification, result).Repeatable().RunAsync(_ => Task.FromResult(result), CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    /// <summary><see cref="SegmentExpander"/> over the engine's own way of opening a connection.</summary>
+    private sealed class EngineSegments(SegmentExpander expander, OpenSegmentConnection open) : IDrainSegments
+    {
+        public Task<IReadOnlyList<BatchReloadSegment>> ExpandAsync(ReplicationTaskConfig task, TableMappingConfig mapping, IReadOnlyList<BatchReloadSegment> requested, CancellationToken cancellationToken) =>
+            expander.ExpandAsync(task, mapping, requested, null, open, cancellationToken);
+
+        public Task<(long? Rows, string? Caveat)> EstimateAsync(ReplicationTaskConfig task, TableMappingConfig mapping, CancellationToken cancellationToken) =>
+            SegmentExpander.EstimateRowsAsync(task, mapping, open, cancellationToken);
     }
 
     /// <summary>The one config write a pass can make, its provisioning report, is a step of the run (ED9): the result is stored with the run, the definition is not touched.</summary>
