@@ -43,11 +43,20 @@ internal sealed class RealInitialLoadEnqueuer(
         // might already be enqueuing this mapping's segments (an explicit Bulk Load trigger racing this
         // mapping's own auto-triggered load, say), so a collision must not be silently attached to it.
         // Mirrors BulkLoadService.EnqueueForInitialLoadAsync's own use of the same throwing variant.
-        foreach (var segment in segments)
+        try
         {
-            workQueueStore.EnqueueOrThrow(
-                replicationName, RunKind.BulkLoad, mappingName, segment.Describe(),
-                SegmentSerializer.Serialize(segment), WorkItemKinds.FromConfig, batchId);
+            foreach (var segment in segments)
+            {
+                workQueueStore.EnqueueOrThrow(
+                    replicationName, RunKind.BulkLoad, mappingName, segment.Describe(),
+                    SegmentSerializer.Serialize(segment), WorkItemKinds.FromConfig, batchId);
+            }
+        }
+        catch (WorkQueueCollisionException)
+        {
+            // as BulkLoadService does: a losing attempt leaves no batch behind
+            batchStore.DeleteBatch(batchId);
+            throw;
         }
 
         return Task.CompletedTask;

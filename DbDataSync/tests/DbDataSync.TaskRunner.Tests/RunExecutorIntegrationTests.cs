@@ -368,6 +368,45 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// Owner decision 2026-11-09: a pass that loses the initial-load race does not end Failed. An operator's reload of the mapping's
+    /// segment is in flight (claimed by another worker, so it stays in flight), the mapping's own first pass captures its position and
+    /// asks for the same load, and loses: that pass ends Succeeded, moves nothing, says why, and neither a failure kind, a failed run,
+    /// a notification nor a Monitoring finding results. Exactly one load exists (the operator's), and the lost request left no pending
+    /// position behind, so the mapping is not held for a load that will never run.
+    /// </summary>
+    [Fact]
+    public async Task APassThatLosesTheInitialLoadRace_EndsSucceededWithTheReason_AndLeavesExactlyOneLoad()
+    {
+        await ExecuteAsync(_adminConnection, $"INSERT INTO dbo.[{_sourceTable}] (Id, Name) VALUES (1, 'Alice');");
+        var segment = new FullSegment();
+        var batchId = Guid.NewGuid().ToString("N");
+        _batchStore.CreateBatch(batchId, "e2e-sync", "main", 1, estimatedRows: null, estimateCaveat: null);
+        _workQueueStore.Enqueue("e2e-sync", RunKind.BulkLoad, "main", segment.Describe(), SegmentSerializer.Serialize(segment), WorkItemKinds.FromConfig, batchId);
+        var reload = _workQueueStore.TryClaimNext("e2e-sync", "operator-reload", RunLane.BulkLoad);
+        Assert.NotNull(reload);
+
+        var lost = await EnqueueAndDrainAsync();
+
+        Assert.Equal(RunStatus.Succeeded, lost.Status);
+        Assert.Null(lost.FailureKind);
+        Assert.Equal(0, lost.RowsWritten);
+        Assert.StartsWith("Not run:", lost.ErrorSummary);
+        Assert.Contains("already in progress", lost.ErrorSummary);
+        Assert.Empty(_taskRunStore.GetRunHistory("e2e-sync", status: RunStatus.Failed));
+        Assert.Single(_batchStore.GetHistory("e2e-sync").Batches);
+        Assert.Empty(await GetTargetRowsAsync());
+        var read = _watermarkStore.GetReadState("e2e-sync", "main", WatermarkKey.Build(
+            new SourceTableRef { ConnectionName = "src-conn", Database = _databaseName, Schema = "dbo", Table = _sourceTable }, MsSqlDialect.Instance));
+        Assert.True(read is null || read.Hold != ReadHold.Loading, "the lost request must not leave the mapping held");
+
+        var last = await new SyncRunHistory(_taskRunStore).LastRunAsync("e2e-sync");
+        Assert.Equal(DbDataKit.Monitoring.RunOutcome.Succeeded, last!.Outcome);
+        Assert.True(new DbDataKit.Monitoring.HealthEvaluator().Evaluate(new DbDataKit.Monitoring.JobExpectation("e2e-sync"), last).Healthy);
+
+        _workQueueStore.MarkDone(reload!.Id);
+    }
+
+    /// <summary>
     /// Phase 71's history, end to end. ChangeWatermarks says only where a mapping is *now*; these two
     /// columns on each run are the only record of how it got there, and each row has to be readable on
     /// its own — hence recording where the pass started as well as where it ended.
