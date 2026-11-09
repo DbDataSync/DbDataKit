@@ -10,5 +10,6 @@
     <PackageReference Include="Grpc.AspNetCore.Server" />
     <ProjectReference Include="..\DbDataKit.Runner.Protocol\DbDataKit.Runner.Protocol.csproj" />
     <ProjectReference Include="..\DbDataKit.Runner.Kit\DbDataKit.Runner.Kit.csproj" />
+    <ProjectReference Include="..\DbDataKit.Scheduling\DbDataKit.Scheduling.csproj" />
   </ItemGroup>
 </Project>

@@ -65,6 +65,11 @@ internal sealed class RunnerRig : IDisposable
 
     public RunnerEnvironment Environment => new(Database, Package, Channel);
 
+    /// <summary>The runner's queue of the engine's own items (plan 28c E11), and the owner a drain's items are under: the package, the channel and the task.</summary>
+    public DbDataKit.Scheduling.ModuleWorkQueueStore Work => new(Database, "runner.work");
+
+    public const string WorkOwner = $"{Package}/{Channel}/drain";
+
     /// <summary>The engines this machine has: SQLite always, the others when their variable is set.</summary>
     public static TheoryData<string> Engines
     {
@@ -162,7 +167,7 @@ internal sealed class RunnerRig : IDisposable
     /// read-only view the task runs from, like a published version. The view is made of copies, not links: the .NET host resolves a link to the file it points at and looks for the runtime configuration and the
     /// dependencies beside <i>that</i>, so <c>dotnet engine.dll</c> does not start from a view of links (what Windows gets anyway; plan 28c E04 and E05 meet it again).
     /// </summary>
-    public async Task<TaskRunRequest> DrainRequestAsync(string source, string replication, int degreeOfParallelism = 1, Guid? runId = null, string chain = Chain, string? runtimeSource = null)
+    public async Task<TaskRunRequest> DrainRequestAsync(string source, string replication, int degreeOfParallelism = 1, Guid? runId = null, string chain = Chain, string? runtimeSource = null, bool runAll = false, TimeSpan? cancellationGrace = null)
     {
         var cacheRoot = Directory.CreateTempSubdirectory("dbdatasync-e03-cache-").FullName;
         _cleanups.Add(() => Rewritable(cacheRoot));
@@ -179,12 +184,14 @@ internal sealed class RunnerRig : IDisposable
                 ? new PackageLaunch(LaunchKind.Executable, Command: "dotnet", Args: ["{package}/engine/DbDataSync.TaskRunner.dll", "--runner"])
                 : new PackageLaunch(LaunchKind.Executable, Command: "dotnet", Args: ["{runtime}/bin/DbDataSync.TaskRunner.dll", "--runner"]),
             RuntimeDirectory = runtime?.Directory,
+            CancellationGrace = cancellationGrace ?? TimeSpan.FromSeconds(30),
             RunId = runId ?? Database.NewId(),
             Chain = chain,
             Inputs = new Dictionary<string, string>
             {
                 ["replication"] = replication,
                 ["degree_of_parallelism"] = degreeOfParallelism.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["run_all"] = runAll ? "true" : "false",
             },
         };
     }

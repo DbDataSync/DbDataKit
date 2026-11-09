@@ -51,6 +51,9 @@ public abstract class RunnerJob<TInput, TProgress, TSlots> : RunnerJobBase
     /// <summary>The file ledger (plan 28b section 7).</summary>
     protected Files Files => new(Context);
 
+    /// <summary>The runner's durable queue of this task's own items (plan 28c E11): claims, marks and releases bound to the run, for work that outlives a process.</summary>
+    protected EngineWork Work => new(Context);
+
     private RunContext Context => _context ?? throw new InvalidOperationException("The job is not running: start it with JobRunner.RunAsync.");
 
     protected abstract Task RunAsync(CancellationToken ct);

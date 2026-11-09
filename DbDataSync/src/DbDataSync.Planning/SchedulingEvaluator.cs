@@ -1,7 +1,7 @@
 using DbDataKit.Scheduling;
 using DbDataSync.Core.Config;
 
-namespace DbDataSync.Api.Services;
+namespace DbDataSync.Planning;
 
 /// <summary>Pure due-ness calculation, kept separate from SchedulerService's polling loop so it's
 /// directly unit-testable without a background service or real clock. The calculation itself is

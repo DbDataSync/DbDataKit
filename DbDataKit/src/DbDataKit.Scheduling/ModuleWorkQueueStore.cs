@@ -298,6 +298,22 @@ public sealed class ModuleWorkQueueStore(StateDatabase database, string service)
             return (IReadOnlyList<QueuedWork>)list;
         });
 
+    /// <summary>Every item of an owner in any status (until retention removes it), oldest first: what a test or a status view that wants the finished work too asks.</summary>
+    public IReadOnlyList<WorkItem> ListAll(string owner) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, """
+                SELECT id, service, owner, kind, subject, part, resource, lane, run_id, status, priority, payload
+                FROM {table:work_item} WHERE service = $service AND owner = $owner ORDER BY enqueued_at ASC, id ASC;
+                """);
+            cmd.Bind(database, "service", service).Bind(database, "owner", owner);
+            using var reader = cmd.ExecuteReader();
+            var list = new List<WorkItem>();
+            while (reader.Read()) list.Add(Read(reader));
+            return (IReadOnlyList<WorkItem>)list;
+        });
+
     /// <summary>How many items each claimer holds (Claimed or Running), by the claimer's name: the group view's "running" count.</summary>
     public IReadOnlyDictionary<string, int> HeldCounts() =>
         database.Retry(() =>
@@ -323,6 +339,56 @@ public sealed class ModuleWorkQueueStore(StateDatabase database, string service)
             cmd.Bind(database, "service", service).Bind(database, "run_id", runId);
             using var reader = cmd.ExecuteReader();
             return reader.Read() ? Read(reader) : null;
+        });
+
+    /// <summary>The item with this id in any status (until retention removes it), or null: for a caller that must check whose item it is before it acts on it by id (plan 28c E11).</summary>
+    public WorkItem? Get(long id) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, """
+                SELECT id, service, owner, kind, subject, part, resource, lane, run_id, status, priority, payload
+                FROM {table:work_item} WHERE service = $service AND id = $id;
+                """);
+            cmd.Bind(database, "service", service).Bind(database, "id", id);
+            using var reader = cmd.ExecuteReader();
+            return reader.Read() ? Read(reader) : null;
+        });
+
+    /// <summary>
+    /// When each subject of an owner was last queued for one kind of work (the newest <c>enqueued_at</c> among the rows retention has not removed), and whether it has an item in flight now: what a planner that lives in
+    /// a work loop asks to decide what is due (plan 28c E11).
+    /// </summary>
+    public IReadOnlyDictionary<string, (DateTimeOffset LastEnqueued, bool InFlight)> SubjectsOf(string owner, string kind) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, $$"""
+                SELECT subject, status, enqueued_at FROM {table:work_item}
+                WHERE service = $service AND owner = $owner AND kind = $kind;
+                """);
+            cmd.Bind(database, "service", service).Bind(database, "owner", owner).Bind(database, "kind", kind);
+            using var reader = cmd.ExecuteReader();
+            var map = new Dictionary<string, (DateTimeOffset, bool)>(StringComparer.Ordinal);
+            while (reader.Read())
+            {
+                var subject = reader.GetString(0);
+                var inFlight = reader.GetString(1) is "Pending" or "Claimed" or "Running";
+                var at = reader.Time(2);
+                map[subject] = map.TryGetValue(subject, out var known) ? (known.Item1 > at ? known.Item1 : at, known.Item2 || inFlight) : (at, inFlight);
+            }
+
+            return (IReadOnlyDictionary<string, (DateTimeOffset LastEnqueued, bool InFlight)>)map;
+        });
+
+    /// <summary>Renews the lease of every item <paramref name="workerId"/> holds (a worker that is alive says so once for all of them). The count renewed.</summary>
+    public int RenewClaimsBy(string workerId, TimeSpan? lease = null) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, $"UPDATE {{table:work_item}} SET lease_expires_at = $lease WHERE service = $service AND claimed_by = $worker AND {Held};");
+            cmd.Bind(database, "lease", Now() + (lease ?? LeaseDuration)).Bind(database, "service", service).Bind(database, "worker", workerId);
+            return cmd.ExecuteNonQuery();
         });
 
     public int ReleaseClaimsForOwner(string owner) => Release("owner = $key", owner);

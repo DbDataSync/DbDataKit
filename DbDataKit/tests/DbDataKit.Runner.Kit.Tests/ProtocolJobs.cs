@@ -69,3 +69,22 @@ public enum Flavor
 
 /// <summary>Every kind of input the binder reads from text.</summary>
 public sealed record AllInputs(string Name, int Count, long Big, decimal Price, bool Flag, DateOnly Day, DateTimeOffset At, Guid Id, Flavor Flavor, int[] Numbers, string? Note = null, int Retries = 3, TimeSpan? Wait = null);
+
+/// <summary>Plan 28c E11: a job that uses the runner's queue of its own items: queues three, claims each, starts it, does it and finishes it.</summary>
+[RunnerTask("queue-worker")]
+public sealed class QueueWorker : RunnerJob<NoInput, NoProgress, NoSlots>
+{
+    public static readonly System.Collections.Concurrent.ConcurrentQueue<string> Done = new();
+
+    protected override async Task RunAsync(CancellationToken ct)
+    {
+        foreach (var subject in new[] { "a", "b", "c" })
+            await Work.EnqueueAsync("pass", subject, lane: "changes", payload: "{\"n\":1}", ct: ct);
+        while (await Work.ClaimAsync("changes", ct) is { } item)
+        {
+            if (!await Work.StartAsync(item.Id, ct)) throw new InvalidOperationException("lost the claim");
+            Done.Enqueue($"{item.Kind}/{item.Subject}/{item.Payload}");
+            await Work.FinishAsync(item.Id, WorkFinish.Done, ct);
+        }
+    }
+}

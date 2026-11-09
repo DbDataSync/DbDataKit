@@ -60,6 +60,15 @@ service RunnerApi {
 
   // ---- connections (plan 28c E02)
   rpc ResolveConnection(ResolveConnectionRequest) returns (ResolveConnectionReply);
+
+  // ---- engine work (plan 28c E11): the durable queue of an engine's own items, bound to the run's own owner (the run's package, channel and task)
+  rpc EnqueueWork(EnqueueWorkRequest) returns (EnqueueWorkReply);
+  rpc ClaimWork(ClaimWorkRequest) returns (ClaimWorkReply);
+  rpc StartWork(WorkItemRef) returns (WorkReply);
+  rpc FinishWork(FinishWorkRequest) returns (WorkReply);
+  rpc ReleaseWork(WorkItemRef) returns (WorkReply);
+  rpc IsCancelRequested(WorkRunRef) returns (CancelRequestedReply);
+  rpc WorkState(WorkStateRequest) returns (WorkStateReply);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
@@ -470,4 +479,87 @@ message ResolveConnectionReply {
   optional string password = 11;
   optional string connection_string_secret = 12;
   optional string token = 13;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+// engine work (added to v1 by plan 28c E11: additive, new calls and new messages)
+
+// The queue a run may use is its owner's: the owner is the run's own package, channel and task, never a field of a request, so a token for one task cannot name another's items. An item is claimed by the run
+// that took it (its lease is renewed by the run's heartbeat and given back when the run ends), and only that run can start, finish or release it.
+
+message EnqueueWorkRequest {
+  string kind = 1;
+  string subject = 2;
+  string part = 3;       // empty for none
+  string resource = 4;   // what two running items must not share; empty for none
+  string lane = 5;
+  string payload = 6;    // opaque to the runner; empty for none
+}
+
+message EnqueueWorkReply {
+  string run_id = 1;     // the new item's run id, or the run id of the equal item already in flight
+}
+
+message ClaimWorkRequest {
+  string lane = 1;       // empty: any lane
+}
+
+message ClaimWorkReply {
+  bool has_item = 1;
+  int64 id = 2;
+  string kind = 3;
+  string subject = 4;
+  string part = 5;
+  string resource = 6;
+  string lane = 7;
+  string run_id = 8;
+  string payload = 9;
+}
+
+message WorkItemRef {
+  int64 id = 1;
+}
+
+enum WorkOutcome {
+  WORK_OUTCOME_UNSPECIFIED = 0;
+  WORK_OUTCOME_DONE = 1;
+  WORK_OUTCOME_FAILED = 2;
+  WORK_OUTCOME_CANCELLED = 3;
+}
+
+message FinishWorkRequest {
+  int64 id = 1;
+  WorkOutcome outcome = 2;
+}
+
+message WorkReply {
+  bool applied = 1;      // false: the run no longer holds the item (its lease ran out and the item went back to the queue)
+}
+
+message WorkRunRef {
+  string run_id = 1;     // the run id of an item of this owner
+}
+
+message CancelRequestedReply {
+  bool requested = 1;
+}
+
+message WorkStateRequest {
+  repeated string kinds = 1;
+}
+
+message WorkSubjectState {
+  string subject = 1;
+  int64 last_enqueued_unix_ms = 2;
+  bool in_flight = 3;
+}
+
+message WorkKindState {
+  string kind = 1;
+  repeated WorkSubjectState subjects = 2;
+}
+
+message WorkStateReply {
+  bool outstanding = 1;                  // any item of the owner is pending, claimed or running
+  repeated WorkKindState kinds = 2;      // one entry per kind asked for
 }

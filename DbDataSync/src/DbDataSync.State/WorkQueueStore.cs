@@ -64,6 +64,23 @@ public sealed class WorkQueueStore(StateDatabase database)
 
     private readonly DbDataKit.Scheduling.ModuleWorkQueueStore _queue = new(database, Service);
 
+    /// <summary>One unit of Sync work as the shared queue holds it: the keys, the resource that makes segments take turns, the lane, and the payload.</summary>
+    public sealed record QueueShape(string Owner, string Kind, string Subject, string Part, string Resource, string Lane, string Payload);
+
+    /// <summary>
+    /// How a unit of work is written into the shared queue (the owner is the replication, the kind the run kind, the subject the mapping, the part the segment; what only the worker needs travels in the payload).
+    /// Public so that a queue that is not Sync's own state database (the runner's, plan 28c E11) holds exactly the rows this one does: the same keys, the same lane, the same payload.
+    /// </summary>
+    public static QueueShape Describe(
+        string taskName, RunKind runKind, string mappingName, string segmentLabel = NoSegment, string? segmentJson = null, WorkItemKinds? kinds = null,
+        string? deleteGuardJson = null, SegmentOrder segments = SegmentOrder.OneAtATime)
+    {
+        var payload = JsonSerializer.Serialize(new Payload(segmentJson, kinds?.ReaderKind, kinds?.CacheKind, kinds?.WriterKind, deleteGuardJson));
+        // Segments of one kind on one mapping take turns by sharing a resource: the queue lets a different part run beside another, so the turn-taking has to be asked for.
+        var resource = segments == SegmentOrder.OneAtATime && segmentLabel != NoSegment ? $"{taskName}/{mappingName}/{runKind}" : "";
+        return new QueueShape(taskName, runKind.ToString(), mappingName, segmentLabel, resource, RunLanes.LaneFor(runKind).ToString(), payload);
+    }
+
     /// <summary>What the shared queue holds for Sync besides the keys: everything the worker needs that the queue does not look at.</summary>
     private sealed record Payload(string? SegmentJson, string? ReaderKind, string? CacheKind, string? WriterKind, string? DeleteGuardJson);
 
@@ -135,10 +152,10 @@ public sealed class WorkQueueStore(StateDatabase database)
         SegmentOrder segments,
         bool throwOnCollision)
     {
-        var payload = JsonSerializer.Serialize(new Payload(segmentJson, kinds?.ReaderKind, kinds?.CacheKind, kinds?.WriterKind, deleteGuardJson));
-        // Segments of one kind on one mapping take turns by sharing a resource: the queue lets a different part run beside another, so the turn-taking has to be asked for.
-        var resource = segments == SegmentOrder.OneAtATime && segmentLabel != NoSegment ? $"{taskName}/{mappingName}/{runKind}" : "";
-        var lane = RunLanes.LaneFor(runKind).ToString();
+        var shape = Describe(taskName, runKind, mappingName, segmentLabel, segmentJson, kinds, deleteGuardJson, segments);
+        var payload = shape.Payload;
+        var resource = shape.Resource;
+        var lane = shape.Lane;
 
         void WriteRun(DbConnection connection, DbTransaction transaction, Guid runId) =>
             // EnqueuedAt, and nothing else: a queued run has not been claimed and has not started, so claimed_at and began_at stay null until the moments they name actually happen (phase 73).
@@ -257,18 +274,21 @@ public sealed class WorkQueueStore(StateDatabase database)
     public bool HasInFlightBulkLoad(string taskName, string mappingName) =>
         _queue.HasInFlight(taskName, RunKind.BulkLoad.ToString(), mappingName);
 
-    private static WorkItem ToSyncItem(DbDataKit.Scheduling.WorkItem item)
+    private static WorkItem ToSyncItem(DbDataKit.Scheduling.WorkItem item) => FromQueue(item.Id, item.Owner, item.Kind, item.Subject, item.Part, item.RunId, item.Status.ToString(), item.PayloadJson);
+
+    /// <summary>Sync's item from the fields of a row of a shared queue (the runner's claim hands them out as strings, plan 28c E11).</summary>
+    public static WorkItem FromQueue(long id, string owner, string kind, string subject, string part, Guid runId, string status, string? payloadJson)
     {
-        var payload = item.PayloadJson is null ? null : JsonSerializer.Deserialize<Payload>(item.PayloadJson);
+        var payload = payloadJson is null ? null : JsonSerializer.Deserialize<Payload>(payloadJson);
         return new WorkItem(
-            item.Id,
-            item.Owner,
-            Enum.Parse<RunKind>(item.Kind),
-            item.Subject,
-            item.Part,
+            id,
+            owner,
+            Enum.Parse<RunKind>(kind),
+            subject,
+            part,
             payload?.SegmentJson,
-            item.RunId,
-            Enum.Parse<WorkItemStatus>(item.Status.ToString()),
+            runId,
+            Enum.Parse<WorkItemStatus>(status),
             new WorkItemKinds(payload?.ReaderKind, payload?.CacheKind, payload?.WriterKind),
             payload?.DeleteGuardJson);
     }

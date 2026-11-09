@@ -38,6 +38,10 @@ internal sealed class RunnerProtocolService(RunSessions sessions) : RunnerApi.Ru
         {
             throw;
         }
+        catch (WorkNotOwnedException ex)
+        {
+            throw Refuse(StatusCode.PermissionDenied, ex.Message);
+        }
         catch (StepResultTooLargeException ex)
         {
             throw Refuse(StatusCode.ResourceExhausted, ex.Message);
@@ -182,9 +186,16 @@ internal sealed class RunnerProtocolService(RunSessions sessions) : RunnerApi.Ru
         var end = EndOf(session, request.End);
         await session.Backend.FinishAsync(end, CancellationToken.None).ConfigureAwait(false);
         session.RecordEnd(end);
+        ReleaseWork(session);
         Ended(session);
         return new EndReply();
     });
+
+    /// <summary>What the run still holds of its owner's work goes back to the queue (plan 28c E11): a run that ended did not finish it.</summary>
+    private static void ReleaseWork(RunSession session)
+    {
+        if (session.WorkUsed) session.Work.ReleaseAll();
+    }
 
     /// <summary>The run is over: its token stops working now (after this reply, a call with it is refused).</summary>
     private void Ended(RunSession session) => sessions.Revoke(session.Token, "The run has ended, and its token no longer works.");
@@ -218,6 +229,7 @@ internal sealed class RunnerProtocolService(RunSessions sessions) : RunnerApi.Ru
         if (applied && end is not null)
         {
             session.RecordEnd(end);
+            ReleaseWork(session);
             Ended(session);
         }
         return new AdvanceReply { Applied = applied };
@@ -515,6 +527,7 @@ internal sealed class RunnerProtocolService(RunSessions sessions) : RunnerApi.Ru
         var session = Started(context);
         session.LastHeartbeat = session.Time.GetUtcNow();
         var cancelled = session.CancelSignal.Task.IsCompleted;
+        if (session.WorkUsed) session.Work.Renew();      // the claims of a run that is alive last another lease (plan 28c E11)
         return Task.FromResult(new HeartbeatReply { CancelRequested = cancelled, CancelReason = session.CancelReason ?? "" });
     });
 
@@ -548,6 +561,65 @@ internal sealed class RunnerProtocolService(RunSessions sessions) : RunnerApi.Ru
         if (grant.ConnectionStringSecret is not null) reply.ConnectionStringSecret = grant.ConnectionStringSecret;
         if (grant.Token is not null) reply.Token = grant.Token;
         return reply;
+    });
+
+    // ---- engine work (plan 28c E11): the owner's queue, for the owner this run's token names
+
+    public override Task<EnqueueWorkReply> EnqueueWork(EnqueueWorkRequest request, ServerCallContext context) => Guard(() =>
+    {
+        var session = Started(context);
+        var runId = session.Work.Enqueue(request.Kind, request.Subject, request.Part, request.Resource, request.Lane, request.Payload);
+        return Task.FromResult(new EnqueueWorkReply { RunId = runId.ToString("D") });
+    });
+
+    public override Task<ClaimWorkReply> ClaimWork(ClaimWorkRequest request, ServerCallContext context) => Guard(() =>
+    {
+        var session = Started(context);
+        if (session.CancelSignal.Task.IsCompleted) return Task.FromResult(new ClaimWorkReply());      // a run that was told to stop takes nothing more
+        if (session.Work.Claim(request.Lane) is not { } item) return Task.FromResult(new ClaimWorkReply());
+        return Task.FromResult(new ClaimWorkReply
+        {
+            HasItem = true, Id = item.Id, Kind = item.Kind, Subject = item.Subject, Part = item.Part, Resource = item.Resource, Lane = item.Lane, RunId = item.RunId.ToString("D"), Payload = item.Payload ?? "",
+        });
+    });
+
+    public override Task<WorkReply> StartWork(WorkItemRef request, ServerCallContext context) => Guard(() =>
+        Task.FromResult(new WorkReply { Applied = Started(context).Work.Start(request.Id) }));
+
+    public override Task<WorkReply> FinishWork(FinishWorkRequest request, ServerCallContext context) => Guard(() =>
+    {
+        var outcome = request.Outcome switch
+        {
+            WorkOutcome.Done => WorkFinish.Done,
+            WorkOutcome.Failed => WorkFinish.Failed,
+            WorkOutcome.Cancelled => WorkFinish.Cancelled,
+            _ => throw Refuse(StatusCode.InvalidArgument, "An item is finished as done, failed or cancelled."),
+        };
+        return Task.FromResult(new WorkReply { Applied = Started(context).Work.Finish(request.Id, outcome) });
+    });
+
+    public override Task<WorkReply> ReleaseWork(WorkItemRef request, ServerCallContext context) => Guard(() =>
+        Task.FromResult(new WorkReply { Applied = Started(context).Work.Release(request.Id) }));
+
+    public override Task<CancelRequestedReply> IsCancelRequested(WorkRunRef request, ServerCallContext context) => Guard(() =>
+    {
+        var session = Started(context);
+        return Task.FromResult(new CancelRequestedReply { Requested = session.Work.IsCancelRequested(WireConvert.ParseId(request.RunId, "work run id")) });
+    });
+
+    public override Task<WorkStateReply> WorkState(WorkStateRequest request, ServerCallContext context) => Guard(() =>
+    {
+        var snapshot = Started(context).Work.State([.. request.Kinds]);
+        var reply = new WorkStateReply { Outstanding = snapshot.Outstanding };
+        foreach (var (kind, subjects) in snapshot.Kinds)
+        {
+            var state = new WorkKindState { Kind = kind };
+            foreach (var (subject, known) in subjects)
+                state.Subjects.Add(new WorkSubjectState { Subject = subject, LastEnqueuedUnixMs = known.LastEnqueued.ToUnixTimeMilliseconds(), InFlight = known.InFlight });
+            reply.Kinds.Add(state);
+        }
+
+        return Task.FromResult(reply);
     });
 
     public override async Task WatchCancel(WatchCancelRequest request, IServerStreamWriter<CancelNotice> responseStream, ServerCallContext context)

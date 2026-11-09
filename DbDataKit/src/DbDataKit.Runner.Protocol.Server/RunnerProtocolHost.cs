@@ -158,7 +158,24 @@ public sealed class RunnerProtocolHost : IAsyncDisposable
     /// The runner is done with a token (the process is gone, or the runner gave up on it): a live token stops working and an ended one is forgotten, with what it reported. Calls with it are refused from now on. False
     /// when the token was neither.
     /// </summary>
-    public bool Unregister(string token) => _sessions.Forget(token, "The run token was withdrawn by the runner.");
+    public bool Unregister(string token)
+    {
+        // a process that died holding claims on its owner's work: they go back to the queue now, so the owner's next run finds them without waiting out the lease (plan 28c E11)
+        var session = _sessions.FindEvenIfEnded(token);
+        if (session is { WorkUsed: true })
+        {
+            try
+            {
+                session.Work.ReleaseAll();
+            }
+            catch (Exception)
+            {
+                // best effort: the lease runs out and the next claim releases what is left
+            }
+        }
+
+        return _sessions.Forget(token, "The run token was withdrawn by the runner.");
+    }
 
     /// <summary>Asks the run to stop: pushed to a task that is watching, and answered to its next heartbeat. The task has the grant's cancellation grace to finish. False when the token is not live.</summary>
     public bool Cancel(string token, string? reason = null) => _sessions.Find(token)?.RequestCancel(reason ?? "The runner asked this task to stop.") ?? false;

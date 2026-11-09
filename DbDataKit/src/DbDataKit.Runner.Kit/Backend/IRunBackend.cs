@@ -83,6 +83,21 @@ internal interface IRunBackend
 
     void Log(string level, string message, string? item = null);
 
+    // ---- engine work (EnqueueWork, ClaimWork, StartWork, FinishWork, ReleaseWork, IsCancelRequested, WorkState; plan 28c E11): the owner's queue, for the run's own owner only
+    Task<Guid> EnqueueWorkAsync(string kind, string subject, string part, string resource, string lane, string? payload, CancellationToken ct);
+
+    Task<RunnerWorkItem?> ClaimWorkAsync(string? lane, CancellationToken ct);
+
+    Task<bool> StartWorkAsync(long id, CancellationToken ct);
+
+    Task<bool> FinishWorkAsync(long id, WorkFinish outcome, CancellationToken ct);
+
+    Task<bool> ReleaseWorkAsync(long id, CancellationToken ct);
+
+    Task<bool> IsWorkCancelRequestedAsync(Guid itemRunId, CancellationToken ct);
+
+    Task<WorkSnapshot> WorkStateAsync(IReadOnlyList<string> kinds, CancellationToken ct);
+
     // ---- one-way (the protocol batches them): counts, the status line, lineage
     void Count(string name, long n);
 

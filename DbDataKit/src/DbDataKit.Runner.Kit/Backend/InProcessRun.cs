@@ -180,6 +180,24 @@ internal sealed class InProcessRun : IRunBackend
 
     public void Log(string level, string message, string? item = null) => _runs.Log(Identity.RunId, level, message, item);
 
+    // ---- engine work: the queue is the runner's (the scheduling module and the claim bound to a run's token live in the protocol host), so an in-process run has none
+
+    private static NotSupportedException NoWork() => new("An engine's work queue is the runner's: a run in this process (the in-process kit) has none. Run the job through a runner, or take the queue's calls out of the test.");
+
+    public Task<Guid> EnqueueWorkAsync(string kind, string subject, string part, string resource, string lane, string? payload, CancellationToken ct) => throw NoWork();
+
+    public Task<RunnerWorkItem?> ClaimWorkAsync(string? lane, CancellationToken ct) => throw NoWork();
+
+    public Task<bool> StartWorkAsync(long id, CancellationToken ct) => throw NoWork();
+
+    public Task<bool> FinishWorkAsync(long id, WorkFinish outcome, CancellationToken ct) => throw NoWork();
+
+    public Task<bool> ReleaseWorkAsync(long id, CancellationToken ct) => throw NoWork();
+
+    public Task<bool> IsWorkCancelRequestedAsync(Guid itemRunId, CancellationToken ct) => throw NoWork();
+
+    public Task<WorkSnapshot> WorkStateAsync(IReadOnlyList<string> kinds, CancellationToken ct) => throw NoWork();
+
     // counts, the status line and lineage have no place in the state database yet (the lineage slice gives them one); the protocol server keeps them in memory for the runner
     public void Count(string name, long n)
     {

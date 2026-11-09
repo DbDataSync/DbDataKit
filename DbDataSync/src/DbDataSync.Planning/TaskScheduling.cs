@@ -1,6 +1,6 @@
 using DbDataKit.Scheduling;
 
-namespace DbDataSync.Api.Services;
+namespace DbDataSync.Planning;
 
 /// <summary>
 /// Whether a replication is allowed to run at all, from the two independent gates that decide it.
