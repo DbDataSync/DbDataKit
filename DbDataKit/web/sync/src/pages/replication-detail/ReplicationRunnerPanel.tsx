@@ -53,7 +53,7 @@ export function ReplicationRunnerPanel({ replicationName }: { replicationName: s
     const seconds = wait.trim() === '' ? undefined : Number(wait)
     try {
       const change = await move.mutateAsync({ owner: to, waitSeconds: Number.isFinite(seconds) ? seconds : undefined })
-      setDone(`${change.from} to ${change.to}${change.positionsHandedOver > 0 ? `; ${change.positionsHandedOver} position(s) handed over` : ''}${change.waited ? '; waited for work in flight' : ''}.`)
+      setDone(`${change.from} to ${change.to}${change.positionsHandedOver > 0 ? `; ${change.positionsHandedOver} position(s) handed ${change.to === 'old' ? 'back' : 'over'}` : ''}${change.waited ? '; waited for work in flight' : ''}.`)
     } catch { /* shown below, in the server's words */ }
   }
 
@@ -78,8 +78,9 @@ export function ReplicationRunnerPanel({ replicationName }: { replicationName: s
         {done && <div className="hint" data-testid="runner-done">{done}</div>}
         {move.error && <ErrorBanner error={move.error} />}
         <p className="hint" style={{ marginTop: 12 }}>
-          A cutover waits for the worker here and its queue, hands the mappings' positions to the runner's first drain, and then lets the runner schedule. A rollback waits for the runner's drain, copies its pause back and lets this server
-          schedule again; the positions the drain advanced on the runner are not copied back, so the next worker here reads again from the positions of the cutover.
+          A cutover waits for the worker here and its queue, hands the mappings' positions to the runner's first drain, and then lets the runner schedule. A rollback pauses the runner's drain so that it ends, waits for it, copies the positions it
+          advanced (with each mapping's intent and hold) and the pause back, and lets this server schedule again, so the next worker here reads on from where the drain stopped. A mapping that is loading on the runner refuses the rollback; work asked of
+          a replication while its drain is up is queued for that drain.
         </p>
       </div>
 

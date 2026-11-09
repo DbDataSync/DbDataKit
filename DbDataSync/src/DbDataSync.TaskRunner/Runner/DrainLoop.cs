@@ -30,7 +30,8 @@ internal sealed class DrainLoop(
     Action<string>? status = null,
     TimeSpan? cycleInterval = null,
     TimeSpan? sweepInterval = null,
-    IDrainOutputs? outputs = null)
+    IDrainOutputs? outputs = null,
+    Func<DbDataKit.Runner.Kit.RunnerWorkItem, Task>? requestItem = null)
 {
     /// <summary>Sweeps that find nothing to claim, with nothing of ours in flight, before a periodic drain ends (the worker's <c>EmptyPollsBeforeExit</c>).</summary>
     public const int EmptySweepsBeforeExit = 5;
@@ -133,6 +134,14 @@ internal sealed class DrainLoop(
                 continue;
             }
 
+            // A pause ends a continuous drain once nothing of ours is left (plan 28c E12c): it plans nothing new while paused, so it would only wait out its idle timeout. This is how a rollback stops it, and a pause that is lifted
+            // starts the next drain by the runner's own schedule.
+            if (plannerState.Paused && !await plannerState.RefreshAsync(ct).ConfigureAwait(false))
+            {
+                log.LogInformation("'{Replication}' is paused on the runner and its queue is empty: this drain ends.", replication);
+                break;
+            }
+
             // Continuous: an empty queue is the normal state between passes, not a reason to go. The drain leaves only once it has gone a whole idle timeout without a primary pass reading anything.
             if (IdleFor() >= task.Scheduling.IdleTimeout)
             {
@@ -181,6 +190,15 @@ internal sealed class DrainLoop(
             {
                 _slots.Release();
                 yield break;
+            }
+
+            if (item.Kind == DrainRequestText.ItemKind)
+            {
+                // a request of the API that came while this drain was up (plan 28c E12c): applied here, in the drain that owns the replication's progress, and not run as a pass
+                _slots.Release();
+                if (requestItem is not null) await requestItem(item).ConfigureAwait(false);
+                else await queue.ReleaseAsync(item.Id, CancellationToken.None).ConfigureAwait(false);
+                continue;
             }
 
             var claimed = state.Claimed(replication, item);

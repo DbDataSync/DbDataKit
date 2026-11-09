@@ -109,7 +109,7 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
     private Task CreateTargetAsync(string table) =>
         ExecuteAsync(_admin, $"CREATE TABLE dbo.[{table}] (Id INT NOT NULL PRIMARY KEY, Name NVARCHAR(50) NOT NULL);");
 
-    private async Task SaveReplicationAsync(string name, string targetTable, bool provision = false, SchedulingConfig? scheduling = null)
+    private async Task SaveReplicationAsync(string name, string targetTable, bool provision = false, SchedulingConfig? scheduling = null, string writer = MsSqlDriverKinds.Merge)
     {
         _config.SaveReplicationTask(new ReplicationTaskConfig
         {
@@ -119,7 +119,7 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
             {
                 Reader = new ReaderConfig { Kind = MsSqlDriverKinds.ChangeTracking },
                 Cache = new CacheConfig { Kind = MsSqlDriverKinds.StagingTable },
-                Writer = new WriterConfig { Kind = MsSqlDriverKinds.Merge },
+                Writer = new WriterConfig { Kind = writer },
             },
         }, Author);
         var mapping = new TableMappingConfig
@@ -170,10 +170,10 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
     }
 
     /// <summary>The replication drained by <see cref="RunExecutor"/> over Sync's own state, as the supervisor's worker does: the comparison for what the runner does.</summary>
-    private async Task<(TaskRunRecord Run, string? Watermark, IReadOnlyList<DbDataKit.Scheduling.WorkItem> Rows)> DrainOnTheOldPathAsync(string startPosition, string replication = "old-sync")
+    private async Task<(TaskRunRecord Run, string? Watermark, IReadOnlyList<DbDataKit.Scheduling.WorkItem> Rows)> DrainOnTheOldPathAsync(string? startPosition, string replication = "old-sync", string? stateDirectoryGiven = null)
     {
-        var stateDirectory = Directory.CreateTempSubdirectory("dbdatasync-drain-old-state-").FullName;
-        _directories.Add(stateDirectory);
+        var stateDirectory = stateDirectoryGiven ?? Directory.CreateTempSubdirectory("dbdatasync-drain-old-state-").FullName;
+        if (stateDirectoryGiven is null) _directories.Add(stateDirectory);
         var stateDatabase = new StateDatabase(Path.Combine(stateDirectory, "state.db"));
         var runs = new TaskRunStore(stateDatabase);
         var queue = new WorkQueueStore(stateDatabase);
@@ -187,8 +187,11 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
                 new Lazy<IInitialLoadEnqueuer>(() => new RealInitialLoadEnqueuer(_config, queue, batches))),
             new LocalRunnerConfig(_config, Author), Scripting.ForTests(_config, _repoRoot), Path.Combine(stateDirectory, "state.db"));
 
-        watermarks.SetWatermark(replication, "main", _watermarkKey, startPosition);
-        watermarks.SetReadIntent(replication, "main", _watermarkKey, ReadIntent.Changes);
+        if (startPosition is not null)
+        {
+            watermarks.SetWatermark(replication, "main", _watermarkKey, startPosition);
+            watermarks.SetReadIntent(replication, "main", _watermarkKey, ReadIntent.Changes);
+        }
 
         // what the API's scheduler does at its tick: the planner decides what is due and queues it in Sync's own queue (the same library the drain on the runner calls)
         var planner = new ReplicationPlanner(
@@ -627,6 +630,161 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
         var bytes = long.Parse(traffic.Groups[1].Value, CultureInfo.InvariantCulture) + long.Parse(traffic.Groups[2].Value, CultureInfo.InvariantCulture);
         output.WriteLine($"{bytes} bytes crossed the runner's socket for a bulk load of 1,000,000 rows ({traffic.Value}); start {start}.");
         Assert.True(bytes < 1024 * 1024, $"{bytes} bytes crossed the runner's socket for a bulk load of 1,000,000 rows; the bound is 1 MiB.");
+    }
+
+    /// <summary>The drain's checkpoint <c>watermark</c> as the runner's endpoint gives it (<c>GET .../checkpoints/watermark</c>): one item per source table, the parts as text.</summary>
+    private static IReadOnlyList<DbDataSync.Planning.CheckpointItem> RunnerWatermarks(RunnerRig rig)
+    {
+        var progress = new DbDataKit.State.ProgressStore(rig.Database, new DbDataKit.State.ProgressKey(RunnerRig.Package, RunnerRig.Channel, "drain"));
+        return [.. progress.ItemKeys("watermark").Select(key => new DbDataSync.Planning.CheckpointItem(key, progress.GetCheckpoint("watermark", key)!.Parts.ToDictionary(
+            p => p.Key, p => p.Value.Value is DateTimeOffset at ? at.UtcDateTime.ToString("O") : Convert.ToString(p.Value.Value, CultureInfo.InvariantCulture)!)))];
+    }
+
+    /// <summary>
+    /// Plan 28c E12c, 7.3: a rollback hands the position the drain advanced back to Sync's state, so the supervisor's worker reads on from there and delivers no row twice. The control is the same rollback without the copy: the worker
+    /// starts from the position of the cutover and reads the 100 rows the drain delivered again. A merge writer makes that a no-op in the target and an append writer would duplicate them (Sync refuses an append writer for an
+    /// incremental reader, so the duplicates cannot be shown in a target here; the re-delivery is what is asserted, by the rows the worker read).
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ARollback_CopiesThePositionBack_SoTheSupervisorsWorkerReadsOnAndDeliversNoRowTwice(bool copyBack)
+    {
+        var replication = copyBack ? "rollback-copied" : "rollback-control";
+        var target = $"RbTgt_{Guid.NewGuid():N}";
+        await CreateTargetAsync(target);
+        await SaveReplicationAsync(replication, target);
+        var start = await CurrentVersionAsync();
+        await InsertRowsAsync(100);
+        var source = await PackageSourceAsync();
+        using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
+        rig.SeedWatermark(_watermarkKey, start);
+
+        var onTheRunner = await rig.Executor.RunAsync(await rig.DrainRequestAsync(source, replication));
+        Assert.True(onTheRunner.End.State == TaskEndState.Succeeded && onTheRunner.ExitCode == 0, Describe(rig, onTheRunner));
+        Assert.Equal(100, (await TargetFingerprintAsync(target)).Count);
+        var runnerPosition = rig.Watermark(_watermarkKey)!.Value.Position;
+        Assert.NotEqual(start, runnerPosition);
+
+        // Sync's own state holds the position of the cutover; the rollback copies what the runner holds (or, in the control, does not)
+        var stateDirectory = Directory.CreateTempSubdirectory("dbdatasync-rollback-state-").FullName;
+        _directories.Add(stateDirectory);
+        var local = new StateDatabase(Path.Combine(stateDirectory, "state.db"));
+        var watermarks = new ChangeWatermarkStore(local);
+        watermarks.SetWatermark(replication, "main", _watermarkKey, start);
+        watermarks.SetReadIntent(replication, "main", _watermarkKey, ReadIntent.Changes);
+        if (copyBack)
+        {
+            var drivers = new DriverRegistry();
+            drivers.Register(new MsSqlDriver());
+            var copied = new DbDataSync.Planning.RunnerPositions(_config, watermarks, drivers).CopyBack(_config.LoadReplicationTask(replication), RunnerWatermarks(rig));
+            Assert.Equal(1, copied);
+            Assert.Equal(runnerPosition, watermarks.GetWatermark(replication, "main", _watermarkKey));
+        }
+
+        // then the supervisor's worker, on Sync's own state, with changes that came after
+        await InsertRowsAsync(50, from: 101);
+        var (run, _, _) = await DrainOnTheOldPathAsync(null, replication, stateDirectory);
+
+        Assert.Equal(RunStatus.Succeeded, run.Status);
+        Assert.Equal(150, (await TargetFingerprintAsync(target)).Count);          // the merge writer's target is right either way
+        Assert.Equal(copyBack ? 50 : 150, run.RowsRead);                          // but only the copy reads on from where the drain stopped
+    }
+
+    /// <summary>The runner's pause, as the runner's own scheduler sets it: what a drain that is up reads (<c>WorkState.paused</c>).</summary>
+    private static void PauseOnTheRunner(RunnerRig rig) =>
+        new DbDataKit.Scheduling.ModuleJobPauseStore(rig.Database, "runner").Set($"{RunnerRig.Package}/{RunnerRig.Channel}", "drain", "test", DateTimeOffset.UtcNow);
+
+    /// <summary>
+    /// Plan 28c E12c: a continuous replication is really the runner's: its drain stays up between passes, takes a request of the API that comes while it is up (an item of kind <c>Request</c> in the task's queue, what the runner's
+    /// work endpoint writes) and runs it, and ends on a pause, not on its own.
+    /// </summary>
+    [Fact]
+    public async Task AContinuousDrainThatIsUp_TakesARequestOfTheApi_RunsIt_AndEndsOnlyWhenTheRunnerPausesIt()
+    {
+        var replication = "stays-up";
+        await SaveReplicationAsync(replication, _runnerTarget, scheduling: new SchedulingConfig { Mode = ScheduleMode.Continuous, FrequencySeconds = 1, IdleTimeoutSeconds = 3600 });
+        var start = await CurrentVersionAsync();
+        await InsertRowsAsync(20);
+        var now = await CurrentVersionAsync();
+        var source = await PackageSourceAsync();
+        using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
+        rig.SeedWatermark(_watermarkKey, now);
+        var drain = rig.Executor.RunAsync(await rig.DrainRequestAsync(source, replication));
+
+        await Task.Delay(TimeSpan.FromSeconds(8));
+        Assert.False(drain.IsCompleted, "a continuous drain stays up between passes, however long it has nothing to do");
+
+        // the API's request arrives while the drain is up: a reload of the mapping as one Full segment
+        var full = new FullSegment();
+        var request = new DbDataSync.State.DrainRequest(nameof(RunKind.BulkLoad), "main", full.Describe(), SegmentSerializer.Serialize(full), BatchId: "b-up", BatchSegments: 1, Id: "r-up");
+        rig.Work.Enqueue(RunnerRig.WorkOwner, DbDataSync.State.DrainRequestText.ItemKind, "main", "r-up", "", "", DbDataSync.State.DrainRequestText.SerializeOne(request));
+        await UntilAsync(() => rig.Work.ListAll(RunnerRig.WorkOwner).Any(r => r.Kind == nameof(RunKind.BulkLoad) && r.Status == DbDataKit.Scheduling.WorkItemStatus.Done), "the reload to be done", drain);
+        Assert.Equal(20, (await TargetFingerprintAsync(_runnerTarget)).Count);
+        Assert.Equal(DbDataKit.Scheduling.WorkItemStatus.Done, rig.Work.ListAll(RunnerRig.WorkOwner).Single(r => r.Kind == DbDataSync.State.DrainRequestText.ItemKind).Status);
+        Assert.False(drain.IsCompleted, "the drain is still up after the request");
+
+        PauseOnTheRunner(rig);
+        var ended = await Task.WhenAny(drain, Task.Delay(TimeSpan.FromSeconds(60)));
+        Assert.Same(drain, ended);
+        var result = await drain;
+        Assert.True(result.End.State == TaskEndState.Succeeded && result.ExitCode == 0, Describe(rig, result));
+        Assert.Contains("is paused on the runner and its queue is empty", rig.LogText(result.RunId));
+    }
+
+    /// <summary>
+    /// Plan 28c acceptance: a bulk load of 20 segments that is stopped after segment 12 resumes at 13 through the retry chain (attempt 2 of the same chain). The request is the API's (<c>requests</c> input): the retry reads it
+    /// again, finds it applied by its id, and does not queue the 20 segments a second time.
+    /// </summary>
+    [Fact]
+    public async Task ABulkLoadOfTwentySegments_StoppedAfterTwelve_ResumesAtThirteen_InTheNextAttemptOfTheChain_AndTheRequestIsNotAppliedTwice()
+    {
+        var replication = "runner-seg";
+        await SaveReplicationAsync(replication, _runnerTarget);
+        var start = await CurrentVersionAsync();
+        await InsertRowsAsync(20_000);
+        var now = await CurrentVersionAsync();
+        var requests = Enumerable.Range(0, 20).Select(i =>
+        {
+            var segment = new RangeSegment("Id", (i * 1_000 + 1).ToString(CultureInfo.InvariantCulture), ((i + 1) * 1_000 + 1).ToString(CultureInfo.InvariantCulture));
+            return new DbDataSync.State.DrainRequest(nameof(RunKind.BulkLoad), "main", segment.Describe(), SegmentSerializer.Serialize(segment), BatchId: "b20", BatchSegments: 20, Id: $"seg-{i:D2}");
+        }).ToList();
+        var inputs = DbDataSync.State.DrainRequestText.Serialize(requests);
+        var source = await PackageSourceAsync();
+        using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
+        rig.SeedWatermark(_watermarkKey, now);
+        var chain = "0197f0e0-0000-7000-8000-00000000e12c";
+        var first = await rig.DrainRequestAsync(source, replication, chain: chain);
+        first = first with { Inputs = new Dictionary<string, string>(first.Inputs) { ["requests"] = inputs } };
+        using var cts = new CancellationTokenSource();
+        var drain = rig.Executor.RunAsync(first, cts.Token);
+
+        await UntilAsync(() => rig.Work.ListAll(RunnerRig.WorkOwner).Count(r => r.Kind == nameof(RunKind.BulkLoad) && r.Status == DbDataKit.Scheduling.WorkItemStatus.Done) >= 12, "twelve segments to be done", drain);
+        await cts.CancelAsync();
+        var stopped = await drain;
+        Assert.NotEqual(TaskEndState.Succeeded, stopped.End.State);
+        var done = rig.Work.ListAll(RunnerRig.WorkOwner).Count(r => r.Status == DbDataKit.Scheduling.WorkItemStatus.Done);
+        output.WriteLine($"stopped with {done} of 20 segments done");
+        Assert.InRange(done, 12, 19);
+        Assert.Equal(20, rig.Work.ListAll(RunnerRig.WorkOwner).Count);
+
+        // the retry: the next attempt of the chain, the same input
+        var retry = await rig.DrainRequestAsync(source, replication, chain: chain);
+        retry = retry with { Attempt = 2, Inputs = new Dictionary<string, string>(retry.Inputs) { ["requests"] = inputs } };
+        var resumed = await rig.Executor.RunAsync(retry);
+
+        Assert.True(resumed.End.State == TaskEndState.Succeeded && resumed.ExitCode == 0, Describe(rig, resumed));
+        Assert.Equal(2, rig.Run(resumed.RunId).Attempt);
+        var rows = rig.Work.ListAll(RunnerRig.WorkOwner);
+        Assert.Equal(20, rows.Count);                                                    // not queued a second time
+        Assert.All(rows, r => Assert.Equal(DbDataKit.Scheduling.WorkItemStatus.Done, r.Status));
+        Assert.Equal(20_000, (await TargetFingerprintAsync(_runnerTarget)).Count);
+        Assert.Contains("was applied already", rig.LogText(resumed.RunId));
+        var progress = new DbDataKit.State.ProgressStore(rig.Database, new DbDataKit.State.ProgressKey(RunnerRig.Package, RunnerRig.Channel, "drain"));
+        var batch = progress.GetCheckpoint("batch", "b20")!;
+        Assert.Equal(20L, batch.Parts["succeeded"].AsInt);
+        Assert.Equal(20_000L, batch.Parts["rows_written"].AsInt);
+        Assert.Equal(20, progress.ItemKeys("requests").Count);
     }
 
     private static async Task UntilAsync(Func<bool> condition, string what, Task<TaskRunResult>? running = null)

@@ -90,6 +90,40 @@ public sealed class DrainRequestsTests
     }
 
     [Fact]
+    public async Task ARequestOfOneId_IsAppliedOnce_HoweverOftenTheInputIsRead()
+    {
+        var queue = new FakeDrainQueue();
+        var ledger = new FakeLedger();
+        var text = DrainRequestText.Serialize([new DrainRequest(nameof(RunKind.Verification), "orders", Id: "r1"), new DrainRequest("Resync", "orders", SourceKey: "k", Id: "r2")]);
+
+        await Apply(text, queue, ledger);
+        ledger.Write("k", "0x10", null);
+        ledger.WriteIntent("k", ReadIntent.Changes);
+        await Apply(text, queue, ledger);          // a retried run reads its input again
+
+        Assert.Equal(2, queue.Rows.Count);         // one verification and the resync's primary pass, not four
+        Assert.Equal(ReadIntent.Changes, ledger.ReadIntentAndHold("k").Intent);    // and the resync did not set the intent a second time
+        Assert.Equal(["r1", "r2"], ledger.Applied.Order());
+    }
+
+    [Fact]
+    public async Task ARequestThatCameAsAWorkItem_IsAppliedByTheDrain_AndTheItemIsFinished()
+    {
+        var queue = new FakeDrainQueue();
+        var ledger = new FakeLedger();
+        var request = new DrainRequest(nameof(RunKind.Verification), "orders", Id: "r9");
+        var id = await queue.EnqueueAsync(DrainRequestText.ItemKind, "orders", "r9", "", "", DrainRequestText.SerializeOne(request), CancellationToken.None);
+        var item = await queue.ClaimAsync(null, CancellationToken.None);
+
+        await DrainRequests.ApplyItemAsync(item!, "sales", queue, ledger, ledger, NullLogger.Instance, CancellationToken.None);
+
+        Assert.Equal("Done", queue.Rows.Single(r => r.Kind == DrainRequestText.ItemKind).Status);
+        Assert.Single(queue.Rows, r => r.Kind == nameof(RunKind.Verification));
+        Assert.Contains("r9", ledger.Applied);
+        Assert.NotEqual(Guid.Empty, id);
+    }
+
+    [Fact]
     public void NoRequests_IsNoText_AndNoTextIsNoRequests()
     {
         Assert.Equal("", DrainRequestText.Serialize([]));

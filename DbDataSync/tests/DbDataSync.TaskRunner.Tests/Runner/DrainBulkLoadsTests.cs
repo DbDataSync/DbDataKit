@@ -52,6 +52,12 @@ internal sealed class FakeLedger : IDrainLedger, IDrainCheckpoints
 
     public long RowsReadSinceSweep(string mapping) => Reads.GetValueOrDefault(mapping).Total - Reads.GetValueOrDefault(mapping).AtSweep;
 
+    public HashSet<string> Applied { get; } = [];
+
+    public bool TryMarkApplied(string requestId) => Applied.Add(requestId);
+
+    public bool WasApplied(string requestId) => Applied.Contains(requestId);
+
     public void MarkSweep(string mapping) => Reads[mapping] = (Reads.GetValueOrDefault(mapping).Total, Reads.GetValueOrDefault(mapping).Total);
 }
 

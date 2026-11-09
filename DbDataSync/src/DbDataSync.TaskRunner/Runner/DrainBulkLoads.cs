@@ -35,6 +35,11 @@ internal interface IDrainLedger
 
     /// <summary>A sweep was queued for the mapping: what was read so far is accounted for.</summary>
     void MarkSweep(string mapping);
+
+    /// <summary>Records that the request of the API with this id was applied; false when it was recorded already (a retried run reads its input again).</summary>
+    bool TryMarkApplied(string requestId);
+
+    bool WasApplied(string requestId);
 }
 
 /// <summary>Where a drain's results that belong to the run go, as the run's recorded output rather than as state: a verification result, the checks the polling gate made.</summary>
