@@ -176,7 +176,7 @@ public static class ReplicationSetPackage
                 "repo_dir" => i with { Default = RepoDir },
                 _ => i,
             }).ToList();
-            tasks.Add(drain with { Name = taskName, Entry = new TaskEntry(), Schedule = schedule, Inputs = inputs, Connections = slots, Limits = drain.Limits with { Concurrency = 1 } });
+            tasks.Add(drain with { Name = taskName, Entry = new TaskEntry(), Schedule = schedule, Inputs = inputs, Connections = slots });   // no `concurrency`: it limits the runs of the whole package, which would serialize the replications of the set (and a continuous drain, which stays up, would starve the others); the queue already keeps one task from running twice
             published.Add(new PublishedReplication(task.Name, taskName, task.Scheduling.Mode.ToString(), task.Scheduling.CronExpression, task.Scheduling.FrequencySeconds, [.. slots.Select(s => s.Name)], mappings.Count));
         }
 
