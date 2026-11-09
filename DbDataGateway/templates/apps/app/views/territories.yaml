@@ -1,0 +1,14 @@
+schemaVersion: 1
+kind: grid
+title: Territories
+model: territories
+entity: territory
+columns:
+  - {attribute: code, sortable: true}
+  - {attribute: name, label: Territory, sortable: true}
+  - {attribute: quota, sortable: true}
+filters: [name]
+sort: [{attribute: code, direction: asc}]
+pageSize: 25
+links:
+  - {label: Edit, to: views/edit.yaml, row: true, with: {code: $code}}

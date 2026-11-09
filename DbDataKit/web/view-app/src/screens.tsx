@@ -1,5 +1,5 @@
 import { ErrorNote, StoreClientProvider, StoreError, draftChange, toInput, useLoad, type ModelSchema, type StoreClient, type StoredRow, type Violation } from '@dbdatakit/store-ui'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ComponentType } from 'react'
 import { loadAll } from './data'
 import { DashboardBoard, DetailPage, FormFields, GridTable, Links, formAttributes } from './parts'
 import { nextSort, shapeRows, type SortState } from './shape'
@@ -113,38 +113,62 @@ export function Problems({ items }: { items: string[] }) {
   return <div className="sui-error" role="alert"><b>These view files do not read:</b><ul>{items.map((p, i) => <li key={i}>{p}</li>)}</ul></div>
 }
 
-export interface ViewAppProps { doc: ViewsDoc; client: StoreClient; host: Pick<Host, 'route' | 'onNavigate'> }
+/** What a code page is given: the Store client, the parameters its route carried (the query after `?`), and `go` to move to another view or page (`/views/grid.yaml`, `/pages/overview?code=NA`). */
+export interface PageProps { client: StoreClient; params: Record<string, string>; go: (route: string) => void }
 
-/** The app: the view the route names (the first one by default), a menu of the views that need no parameter, and the view's own screen. Moving between views tells the shell, so the address and the back button follow. */
-export function ViewApp({ doc, client, host }: ViewAppProps) {
+/** A page written as code, shown beside the spec files (plan 22a GP34): its title is the menu's entry. Its key is its route (`pages/overview` is `/pages/overview`). A key that is also a spec file of the manifest draws the page **in place of** that spec. */
+export interface CodePage { title: string; component: ComponentType<PageProps> }
+
+export type CodePages = Record<string, CodePage>
+
+export interface ViewAppProps {
+  doc: ViewsDoc
+  client: StoreClient
+  host: Pick<Host, 'route' | 'onNavigate'>
+  /** Pages of code. An app can be only spec files (none here); one page can be code and the rest stay specs. */
+  pages?: CodePages
+}
+
+/** The views and pages a person can open from the menu: the spec files that need no parameter, in the manifest's order (a code page with the key of a spec takes its place), then the other code pages in key order. */
+export function menuOf(doc: ViewsDoc, pages: CodePages = {}): { key: string; title: string }[] {
+  const specs = doc.files.flatMap((f) => pages[f] ? [{ key: f, title: pages[f].title }] : doc.views[f] && doc.views[f].params.every((p) => !p.required) ? [{ key: f, title: doc.views[f].title }] : [])
+  return [...specs, ...Object.keys(pages).filter((k) => !doc.files.includes(k)).sort().map((k) => ({ key: k, title: pages[k].title }))]
+}
+
+/** The app: the view or page the route names (the first one by default), a menu of the views that need no parameter and the pages, and the screen. Moving between them tells the shell, so the address and the back button follow. */
+export function ViewApp({ doc, client, host, pages = {} }: ViewAppProps) {
   const [route, setRoute] = useState('/')
   useEffect(() => host.onNavigate((p) => setRoute(p)), [host])
   const go = (r: string) => { setRoute(r); host.route(r) }
   if (doc.format !== SUPPORTED_FORMAT) return <div className="sui-error" role="alert">{`This host reads ${SUPPORTED_FORMAT}; the app's views are ${doc.format}.`}</div>
   const { file, query } = parseRoute(route)
-  const current = file ?? doc.home
-  const spec = current ? doc.views[current] : undefined
-  const menu = doc.files.filter((f) => doc.views[f] && doc.views[f].params.every((p) => !p.required))
+  const menu = menuOf(doc, pages)
+  const current = file ?? doc.home ?? menu[0]?.key ?? null
+  const page = current ? pages[current] : undefined
+  const spec = current && !page ? doc.views[current] : undefined
   let body
-  if (doc.problems.length > 0) body = <Problems items={doc.problems} />
+  if (page) body = <page.component key={current + route} client={client} params={Object.fromEntries(Object.entries(query))} go={go} />
+  else if (doc.problems.length > 0) body = <Problems items={doc.problems} />
   else if (!spec || !current) body = <div className="sui-error" role="alert">{`This app has no view '${current ?? ''}'.`}</div>
   else {
     const resolved = resolveParams(spec.params, query)
     if (resolved.errors.length > 0) body = <div className="sui-error" role="alert">{resolved.errors.map((e) => <p key={e}>{e}</p>)}</div>
     else {
-      const props = { client, params: resolved.values, go, key: current + route }
-      body = spec.kind === 'grid' ? <GridScreen spec={spec} {...props} /> : spec.kind === 'form' ? <FormScreen spec={spec} {...props} /> : spec.kind === 'detail' ? <DetailScreen spec={spec} {...props} /> : <DashboardScreen spec={spec} {...props} />
+      const props = { client, params: resolved.values, go }
+      const key = current + route   // a new route starts the screen again (React takes a key as a prop of its own, never in a spread)
+      body = spec.kind === 'grid' ? <GridScreen key={key} spec={spec} {...props} /> : spec.kind === 'form' ? <FormScreen key={key} spec={spec} {...props} /> : spec.kind === 'detail' ? <DetailScreen key={key} spec={spec} {...props} /> : <DashboardScreen key={key} spec={spec} {...props} />
     }
   }
+  const titleOf = page?.title ?? spec?.title ?? doc.title
   return (
     <StoreClientProvider client={client}>
       <div className="va-app">
         {menu.length > 1 && (
           <nav className="va-menu" aria-label="Views">
-            {menu.map((f) => <a key={f} href={`#/${f}`} aria-current={f === current ? 'page' : undefined} onClick={(e) => { e.preventDefault(); go(`/${f}`) }}>{doc.views[f].title}</a>)}
+            {menu.map((m) => <a key={m.key} href={`#/${m.key}`} aria-current={m.key === current ? 'page' : undefined} onClick={(e) => { e.preventDefault(); go(`/${m.key}`) }}>{m.title}</a>)}
           </nav>
         )}
-        <h2 className="va-title">{spec?.title ?? doc.title}</h2>
+        <h2 className="va-title">{titleOf}</h2>
         {body}
         {spec && (spec.kind === 'grid' || spec.kind === 'dashboard') && <Links links={spec.links} row={null} params={resolveParams(spec.params, query).values} go={go} only={spec.kind === 'grid' ? 'page' : 'all'} />}
       </div>

@@ -1,16 +1,14 @@
 import '@dbdatakit/store-ui/styles.css'
 import '@dbdatakit/visuals/styles.css'
+import '@dbdatakit/view-app/styles.css'
 import './app.css'
-import { EntityEditor, StoreClientProvider } from '@dbdatakit/store-ui'
+import { ViewApp } from '@dbdatakit/view-app'
 import { createRoot } from 'react-dom/client'
-import { store } from './clients'
+import { host, store } from './clients'
+import { pages } from './pages'
+import views from './views.generated.json'
 
-// The Store's own controls over the entity the manifest lists: a grid, a form made from the model, history. The server decides what a person may do and says why when it refuses.
-createRoot(document.getElementById('root')!).render(
-  <StoreClientProvider client={store}>
-    <main className="app">
-      <h1>Territories</h1>
-      <EntityEditor model="territories" entity="territory" />
-    </main>
-  </StoreClientProvider>,
-)
+// The screens are the files in views/ (view-spec/1: a grid, a form, a detail page, a dashboard over the entities of a Store model). `apps build` reads them with the host's own loader and puts
+// them in the bundle as views.generated.json, so what is drawn is what `apps validate` checked. The library's components draw them with the Store controls and the visuals. A page of code
+// (src/pages) sits beside them in the same menu.
+createRoot(document.getElementById('root')!).render(<ViewApp doc={views} client={store} host={host} pages={pages} />)

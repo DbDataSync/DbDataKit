@@ -5,7 +5,7 @@ namespace DbDataKit.Apps.Bundling;
 
 /// <summary>
 /// Bundles with <c>bun</c> run as a child process: <c>bun install</c> first when the source has a <c>package.json</c> with dependencies (Bun does not run a dependency's install scripts unless the package
-/// lists it as trusted, and <c>--ignore-scripts</c> is passed besides), then <c>bun build</c> for the browser as ES modules with code splitting. The child gets a minimal environment (no secrets of the server's), the source
+/// lists it as trusted, and <c>--ignore-scripts</c> is passed besides), then <c>bun build</c> for the browser as one script per entry: no code splitting, because the page is a sandboxed document with an opaque origin and a script that imports another file (a chunk, a dynamic <c>import()</c>) is fetched with CORS, which the host does not answer; a dynamic import is bundled in place. The child gets a minimal environment (no secrets of the server's), the source
 /// folder as its working directory, and is stopped when the timeout passes. The entry point must be inside the source folder.
 /// <para>With <see cref="AppBundleRequest.PackageStore"/> the build is the one of plan 22a GP33: a copy of the source and of a vendored store (checked against the store's hashes) in a folder of its own, no install, no registry settings, and the
 /// child process in a network namespace with no route where the machine can make one.</para>
@@ -30,9 +30,19 @@ public sealed class BunAppBundler(string bunPath = "bun") : IAppBundler
 
         using var timeout = new CancellationTokenSource(request.Timeout ?? DefaultTimeout);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
+        string? generatedStage = null;
         try
         {
             if (request.PackageStore is not null) return await BundleFromStoreAsync(request, source, output, started, linked.Token);
+            if (request.GeneratedFiles is { Count: > 0 })
+            {
+                // the build works on a copy that holds the generated files; the source folder is never written to
+                generatedStage = Path.Combine(Path.GetTempPath(), "dbdata-appbuild-" + Guid.NewGuid().ToString("N")[..12]);
+                CopySource(source, generatedStage, output, isolate: false);
+                WriteGenerated(generatedStage, request.GeneratedFiles);
+                source = generatedStage;
+                entry = Path.GetFullPath(Path.Combine(source, request.EntryPoint));
+            }
             if (HasDependencies(Path.Combine(source, "package.json")))
             {
                 if (request.Offline)
@@ -46,8 +56,8 @@ public sealed class BunAppBundler(string bunPath = "bun") : IAppBundler
                     if (install.ExitCode != 0) return Failure(started, "Installing the app's packages failed.", install);
                 }
             }
-            var arguments = new List<string> { "build", entry, "--outdir", output, "--target", "browser", "--format", "esm", "--splitting", "--entry-naming", "[name].[ext]" };
-            if (request.Minify) arguments.Add("--minify");
+            var arguments = new List<string> { "build", entry, "--outdir", output, "--target", "browser", "--format", "esm", "--entry-naming", "[name].[ext]" };
+            if (request.Minify) arguments.AddRange(["--minify", "--define", "process.env.NODE_ENV=\"production\""]);   // a deployed build is the libraries' production build
             var build = await RunAsync(arguments, source, linked.Token);
             if (build.ExitCode != 0) return Failure(started, "The bundler refused the source.", build);
 
@@ -65,6 +75,29 @@ public sealed class BunAppBundler(string bunPath = "bun") : IAppBundler
         catch (System.ComponentModel.Win32Exception)
         {
             return AppBundleResult.Failed(started.Elapsed, $"The bundler '{bunPath}' could not be started: it is not installed or not on the path.");
+        }
+        finally
+        {
+            if (generatedStage is not null) DeleteQuietly(generatedStage);
+        }
+    }
+
+    private static void DeleteQuietly(string folder)
+    {
+        try { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
+        catch (IOException) { /* a temporary folder left behind is the system's to clean */ }
+        catch (UnauthorizedAccessException) { /* the same */ }
+    }
+
+    /// <summary>Writes the generated files into the copy; a path that leaves it is refused.</summary>
+    private static void WriteGenerated(string stage, IReadOnlyDictionary<string, byte[]> files)
+    {
+        foreach (var (relative, bytes) in files)
+        {
+            var target = Path.GetFullPath(Path.Combine(stage, relative.Replace('/', Path.DirectorySeparatorChar)));
+            if (!target.StartsWith(stage + Path.DirectorySeparatorChar, StringComparison.Ordinal)) throw new ArgumentException($"The generated file {relative} is outside the app's source folder.");
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.WriteAllBytes(target, bytes);
         }
     }
 
@@ -84,14 +117,15 @@ public sealed class BunAppBundler(string bunPath = "bun") : IAppBundler
         var stage = Path.Combine(Path.GetTempPath(), "dbdata-appbuild-" + Guid.NewGuid().ToString("N")[..12]);
         try
         {
-            CopySource(source, stage, output);
+            CopySource(source, stage, output, isolate: true);
+            if (request.GeneratedFiles is { Count: > 0 }) WriteGenerated(stage, request.GeneratedFiles);
             store.CopyTo(stage);
             var copied = store.Verify(stage);   // the copy is what runs, so the copy is what is checked
             if (copied.Count > 0) return AppBundleResult.Failed(started.Elapsed, [$"The copy of the package store made for this build does not match {VendoredPackageStore.ManifestName}; nothing was built.", .. copied]);
             await File.WriteAllTextAsync(Path.Combine(stage, "bunfig.toml"), "[install]\nauto = \"disable\"\n", cancellationToken);
 
-            var arguments = new List<string> { "build", Path.Combine(stage, request.EntryPoint.Replace('/', Path.DirectorySeparatorChar)), "--outdir", output, "--target", "browser", "--format", "esm", "--splitting", "--entry-naming", "[name].[ext]" };
-            if (request.Minify) arguments.Add("--minify");
+            var arguments = new List<string> { "build", Path.Combine(stage, request.EntryPoint.Replace('/', Path.DirectorySeparatorChar)), "--outdir", output, "--target", "browser", "--format", "esm", "--entry-naming", "[name].[ext]" };
+            if (request.Minify) arguments.AddRange(["--minify", "--define", "process.env.NODE_ENV=\"production\""]);   // a deployed build is the libraries' production build
             var isolated = request.Isolation != NetworkIsolation.None && NetworkIsolator.IsAvailable;
             var build = await RunAsync(arguments, stage, cancellationToken, isolated);
             if (build.ExitCode != 0) return Failure(started, "The bundler refused the source.", build);
@@ -116,15 +150,16 @@ public sealed class BunAppBundler(string bunPath = "bun") : IAppBundler
         }
     }
 
-    /// <summary>Copies the source without what would change the build's reach: <c>node_modules</c>, hidden files and folders (<c>.npmrc</c>, <c>.git</c>), <c>bunfig.toml</c> and the output folder.</summary>
-    private static void CopySource(string source, string stage, string output)
+    /// <summary>Copies the source. With <paramref name="isolate"/> (a build from a package store) without what would change the build's reach: <c>node_modules</c>, hidden files and folders (<c>.npmrc</c>), <c>bunfig.toml</c>; always without <c>.git</c> and the output folder.</summary>
+    private static void CopySource(string source, string stage, string output, bool isolate)
     {
         Directory.CreateDirectory(stage);
         foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
         {
             var relative = Path.GetRelativePath(source, file);
             var parts = relative.Split(Path.DirectorySeparatorChar);
-            if (parts.Any(p => p.StartsWith('.') || p == "node_modules") || parts[^1].Equals("bunfig.toml", StringComparison.OrdinalIgnoreCase) || Path.GetFullPath(file).StartsWith(output + Path.DirectorySeparatorChar, StringComparison.Ordinal)) continue;
+            if (Path.GetFullPath(file).StartsWith(output + Path.DirectorySeparatorChar, StringComparison.Ordinal) || parts.Contains(".git")) continue;
+            if (isolate && (parts.Any(p => p.StartsWith('.') || p == "node_modules") || parts[^1].Equals("bunfig.toml", StringComparison.OrdinalIgnoreCase))) continue;
             var target = Path.Combine(stage, relative);
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.Copy(file, target);

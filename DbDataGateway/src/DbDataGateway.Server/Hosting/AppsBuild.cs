@@ -31,6 +31,7 @@ public static class AppsBuild
 
     private const string ResourcePrefix = "apps-templates/";
 
+
     /// <summary>Where the entry of a source tree is looked for when <c>--entry</c> is not given.</summary>
     private static readonly string[] EntryConventions = ["src/main.tsx", "src/main.ts", "src/main.jsx", "src/main.js", "src/index.tsx", "src/index.ts", "src/index.jsx", "src/index.js"];
 
@@ -205,6 +206,11 @@ public static class AppsBuild
         var entry = parsed.Get("entry") is { Length: > 0 } named ? named.Replace('\\', '/') : EntryConventions.FirstOrDefault(c => File.Exists(Path.Combine(source, c.Replace('/', Path.DirectorySeparatorChar))));
         if (entry is null) await context.Out.WriteLineAsync("No script entry (src/main.ts, src/main.js...) and no --entry: the files are copied as they are, nothing is bundled.");
 
+        // an app with a script and view specs draws the specs with the library's components (plan 22a GP34): the specs, read by the host's own loader, go into the bundle as `src/views.generated.json`
+        IReadOnlyDictionary<string, byte[]>? generated = null;
+        if (entry is not null && load.Manifest!.Views.Count > 0)
+            generated = ViewsApp.Generated(load.Manifest, file => File.Exists(Path.Combine(source, file.Replace('/', Path.DirectorySeparatorChar))) ? File.ReadAllBytes(Path.Combine(source, file.Replace('/', Path.DirectorySeparatorChar))) : null);
+
         var temporary = Path.Combine(Path.GetTempPath(), "dbdata-apps-build-" + Guid.NewGuid().ToString("N")[..12]);
         try
         {
@@ -218,7 +224,7 @@ public static class AppsBuild
                     await context.Out.WriteLineAsync($"Bundling {entry} with Bun ({found.Source}); package install scripts are not run.");
                     bundler = new BunAppBundler(found.Path!);
                 }
-                var result = await bundler.BundleAsync(new AppBundleRequest(source, entry, temporary, Minify: !parsed.Has("no-minify"), Timeout: seconds is { } s ? TimeSpan.FromSeconds(s) : null, Offline: parsed.Has("offline"), PackageStore: store, AllowedPackages: allowed, Isolation: isolation), context.Cancellation);
+                var result = await bundler.BundleAsync(new AppBundleRequest(source, entry, temporary, Minify: !parsed.Has("no-minify"), Timeout: seconds is { } s ? TimeSpan.FromSeconds(s) : null, Offline: parsed.Has("offline"), PackageStore: store, AllowedPackages: allowed, Isolation: isolation, GeneratedFiles: generated), context.Cancellation);
                 if (!result.Succeeded)
                 {
                     await context.Error.WriteLineAsync("The build failed:");
