@@ -42,6 +42,34 @@ if (!isWorker) {
   fs.writeFileSync(path.join(consoleScratch, 'sync-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
 
+// Plan 28c E08: a real runner for the Runner screen's story (`runner-publish.spec.ts`), port 8641 (a port table: 8641 the Sync runner story; 8541 to 8544, 8551, 8561 and up, 8571 and up, 8581 to 8586, 8591, 8601 to 8603, 8611, 8621 and 8631 to 8634 belong to the
+// console's stories, 8491 and 8493 to this suite's console and Sync server). The runtime package `dbdatasync-runtime` a replication set runs on is installed on it before it starts as a stand-in (the manifest `scripts/runtime-manifest.sh` writes, a placeholder for its command),
+// so a staged version can be prepared and served: what is proved is the publish, the staging and the screen, not a drain (E06d, E12). The Sync server finds its pairing in `client directory` (the story's link names it), made by the runner's own command once the runner runs.
+// The directories are short: the runner's task socket lives in its own.
+export const syncRunner = {
+  directory: path.join(os.tmpdir(), 'ddk-e2e-syncrunner'),
+  clientDirectory: path.join(os.tmpdir(), 'ddk-e2e-syncrunner-client'),
+  runtime: path.join(os.tmpdir(), 'ddk-e2e-syncrunner-runtime'),
+  port: 8641,
+  url: 'https://localhost:8641',
+  dll: path.join(kitRoot, 'DbDataRunner/src/DbDataRunner.Server/bin/Debug/net10.0/dbdatarunner.dll'),
+}
+if (!isWorker) {
+  for (const directory of [syncRunner.directory, syncRunner.clientDirectory, syncRunner.runtime]) {
+    fs.rmSync(directory, { recursive: true, force: true })
+    fs.mkdirSync(directory, { recursive: true })
+  }
+  // the stand-in runtime, of a version in the line of the Sync build that publishes (`2026.11.x`: the first two numbers of its version)
+  const line = execFileSync('dotnet', ['exec', syncDll, 'version'], { encoding: 'utf8' }).trim().split('.').slice(0, 2).join('.')
+  const rid = process.platform === 'win32' ? 'win-x64' : 'linux-x64'
+  fs.mkdirSync(path.join(syncRunner.runtime, 'files', 'bin'), { recursive: true })
+  fs.writeFileSync(path.join(syncRunner.runtime, 'files', 'bin', 'DbDataSync.TaskRunner.dll'), 'stand-in for the engine')
+  fs.writeFileSync(path.join(syncRunner.runtime, 'package.yaml'), execFileSync('bash', [path.join(repoRoot, 'scripts/runtime-manifest.sh'), rid, `${line}.1`], { encoding: 'utf8' }))
+  execFileSync('dotnet', ['exec', syncRunner.dll, 'package', 'install', path.join(syncRunner.runtime, 'package.yaml'), path.join(syncRunner.runtime, 'files'), '--channel', 'prod', '--repo', syncRunner.directory], { stdio: 'ignore' })
+  const made = execFileSync('dotnet', ['exec', syncRunner.dll, 'server', 'pair', '--minutes', '120', '--repo', syncRunner.directory, '--max-role', 'viewer,operator,publisher,admin'], { encoding: 'utf8' })
+  fs.writeFileSync(path.join(consoleScratch, 'sync-runner-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
+}
+
 // The environment variables the spawned worker's secret store falls back to (this sandbox has no OS keychain): the connection passwords the specs save, for the spawned worker to resolve.
 const secretEnv = {
   DBDATA_SECRET_DBDATA_SYNC_CONNECTION_PLAYWRIGHT_SRC: SA_PASSWORD,
@@ -99,6 +127,16 @@ export default defineConfig({
         Kestrel__Certificates__Default__Path: certificate,
         Kestrel__Certificates__Default__Password: certificatePassword,
       },
+    },
+    {
+      // the runner of the Runner screen's story (`runner-publish.spec.ts`), on its own port and directory
+      command: ['dotnet', 'exec', JSON.stringify(syncRunner.dll), 'server', 'run', '--repo', JSON.stringify(syncRunner.directory), '--listen', syncRunner.url, '--channels', 'prod'].join(' '),
+      url: `${syncRunner.url}/health/live`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 90_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
     },
   ],
 })

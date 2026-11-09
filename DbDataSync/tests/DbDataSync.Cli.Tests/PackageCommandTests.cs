@@ -32,6 +32,7 @@ public sealed class PackageCommandTests : IDisposable
         Assert.Equal(["customers", "events", "orders"], doc["replications"]!.AsArray().Select(r => r!["task"]!.GetValue<string>()).Order());
         var orders = doc["replications"]!.AsArray().Single(r => r!["task"]!.GetValue<string>() == "orders")!;
         Assert.Equal(["crm_src", "dwh"], orders["slots"]!.AsArray().Select(s => s!.GetValue<string>()));
+        Assert.Equal("crm-src", orders["slotConnections"]!["crm_src"]!.GetValue<string>());     // the connection each slot is for: the runner's connection bound to it carries this name
         Assert.Equal("*/15 * * * *", orders["cron"]!.GetValue<string>());
         Assert.Equal(2, orders["mappings"]!.GetValue<int>());
         Assert.DoesNotContain("secret-pw", output);

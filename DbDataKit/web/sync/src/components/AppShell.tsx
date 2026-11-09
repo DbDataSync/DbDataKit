@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Shell, type Crumb, type RailItem } from '@dbdatakit/shell'
-import { BookIcon, CodeIcon, DatabaseIcon, FlowIcon, GearIcon, GridIcon, LogoIcon, PackageIcon } from './icons'
+import { BookIcon, CodeIcon, DatabaseIcon, FlowIcon, GearIcon, GridIcon, LogoIcon, PackageIcon, RunnerIcon } from './icons'
 
 export type { Crumb }
 
@@ -13,6 +13,7 @@ const rail: RailItem[] = [
   { to: '/replications', title: 'Replications', icon: <FlowIcon />, testId: 'rail-replications' },
   { to: '/connections', title: 'Connections', icon: <DatabaseIcon />, testId: 'rail-connections' },
   { to: '/scripts', title: 'Scripts', icon: <CodeIcon />, testId: 'rail-scripts' },
+  { to: '/runner', title: 'Runner', icon: <RunnerIcon />, testId: 'rail-runner' },
   { to: '/drivers', title: 'Drivers', icon: <PackageIcon />, testId: 'rail-drivers', adminOnly: true },
   { title: 'Overview', icon: <GridIcon />, inert: true },
   { to: '/docs', title: 'Docs', icon: <BookIcon />, testId: 'rail-docs' },

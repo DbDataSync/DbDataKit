@@ -7,6 +7,7 @@ import { SignInScreen, Navigate } from '@dbdatakit/shell'
 import { ConnectionEditPage } from './pages/ConnectionEditPage'
 import { ConnectionsPage } from './pages/ConnectionsPage'
 import { ReplicationsPage } from './pages/ReplicationsPage'
+import { RunnerPage } from './pages/RunnerPage'
 import { ScriptEditPage } from './pages/ScriptEditPage'
 import { ScriptsPage } from './pages/ScriptsPage'
 import { ReplicationDetailPage } from './pages/ReplicationDetailPage'
@@ -84,6 +85,9 @@ export function SyncRoutes() {
       {/* The docs the build shipped (phase 160): an index, and one route per page. */}
       <Route path="/docs" element={<DocsPage />} />
       <Route path="/docs/:page" element={<DocsPage />} />
+
+      {/* The replication set on the paired runner (plan 28c E08): publish it, see the version the channel serves and what is staged. */}
+      <Route path="/runner" element={<RunnerPage />} />
 
       <Route path="/replications" element={<ReplicationsPage />} />
       <Route path="/replications/:name" element={<ReplicationDetailPage />}>

@@ -12,8 +12,8 @@ namespace DbDataSync.Api.Runner;
 /// <summary>A publish that was refused, or that could not be finished: the message is the words of whoever refused it (the verb's, for a mapping whose column cache is missing or two replications that make one task name; the runner's, for an unbound slot), unchanged.</summary>
 public sealed class ReplicationSetRefusedException(string message) : InvalidOperationException(message);
 
-/// <summary>What one replication became in the package.</summary>
-public sealed record PublishedReplicationView(string Replication, string Task, string Mode, string? Cron, int? FrequencySeconds, IReadOnlyList<string> Slots, int Mappings);
+/// <summary>What one replication became in the package: its task, schedule, the slots it needs and the Sync connection each slot is for.</summary>
+public sealed record PublishedReplicationView(string Replication, string Task, string Mode, string? Cron, int? FrequencySeconds, IReadOnlyList<string> Slots, int Mappings, IReadOnlyDictionary<string, string>? SlotConnections = null);
 
 /// <summary>What a publish (or a check) built and, for a publish, what the runner answered: the version and how many files had to go.</summary>
 public sealed record ReplicationSetPublication(string Package, string? Channel, string Mode, int? Version, bool? Changed, int? Uploaded, int? Skipped, int Files, IReadOnlyList<string> Bound, IReadOnlyList<PublishedReplicationView> Replications);

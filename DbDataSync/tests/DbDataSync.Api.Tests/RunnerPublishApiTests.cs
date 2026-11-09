@@ -72,7 +72,7 @@ public sealed class RunnerPublishApiTests : IDisposable
         }
     }
 
-    private const string Result = """{"package":"sales-set","channel":"prod","mode":"stage","version":3,"changed":true,"uploaded":12,"skipped":4,"files":16,"bound":["crm_src"],"replications":[{"replication":"orders","task":"orders","mode":"Periodic","cron":"*/15 * * * *","slots":["crm_src","dwh"],"mappings":2}]}""";
+    private const string Result = """{"package":"sales-set","channel":"prod","mode":"stage","version":3,"changed":true,"uploaded":12,"skipped":4,"files":16,"bound":["crm_src"],"replications":[{"replication":"orders","task":"orders","mode":"Periodic","cron":"*/15 * * * *","slots":["crm_src","dwh"],"mappings":2,"slotConnections":{"crm_src":"crm-src","dwh":"dwh"}}]}""";
 
     private async Task<HttpClient> LinkedAsync(UserRole role)
     {
@@ -101,6 +101,7 @@ public sealed class RunnerPublishApiTests : IDisposable
         Assert.Equal("stage", body["mode"]!.GetValue<string>());
         Assert.Equal(12, body["uploaded"]!.GetValue<int>());
         Assert.Equal(["crm_src", "dwh"], body["replications"]![0]!["slots"]!.AsArray().Select(s => s!.GetValue<string>()));
+        Assert.Equal("crm-src", body["replications"]![0]!["slotConnections"]!["crm_src"]!.GetValue<string>());
     }
 
     [Fact]

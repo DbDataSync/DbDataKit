@@ -150,6 +150,6 @@ public static class PackageCommand
             skipped = published?.Skipped,
             files = built.Files.Count,
             bound = bound?.Order(StringComparer.Ordinal).ToArray(),
-            replications = built.Replications.Select(r => new { replication = r.Replication, task = r.Task, mode = r.Mode, cron = r.Cron, frequencySeconds = r.FrequencySeconds, slots = r.Slots, mappings = r.Mappings }),
+            replications = built.Replications.Select(r => new { replication = r.Replication, task = r.Task, mode = r.Mode, cron = r.Cron, frequencySeconds = r.FrequencySeconds, slots = r.Slots, mappings = r.Mappings, slotConnections = r.SlotConnections }),
         }, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web) { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull });
 }

@@ -1523,3 +1523,93 @@ export interface OwnershipChange {
   paused: boolean
   waited: boolean
 }
+
+// ---- publishing the replication set to the runner (plan 28c E08)
+
+/** One connection slot of the package in the linked channel: what the manifests declare and what it is bound to on the runner (null: unbound, and the runner will not activate a version that declares it). */
+export interface RunnerSlotView {
+  slot: string
+  kind: string
+  tasks: string[]
+  versions: number[]
+  boundTo: string | null
+  revision: number | null
+}
+
+/** How far the runners are with the staged version. */
+export interface RunnerStagingView {
+  version: number
+  allReady: boolean
+  summary: string
+  failed: string[]
+  needsConfirmation: boolean
+  losses: string[]
+}
+
+export interface RunnerInstanceView {
+  instance: string
+  version: number
+  state: string
+  error: string | null
+  note: string | null
+  gone: boolean
+  at: string | null
+}
+
+export interface RunnerEventView {
+  action: string
+  channel: string | null
+  version: number | null
+  actor: string | null
+  at: string | null
+  note: string | null
+}
+
+/** The package as the linked runner holds it, narrowed to the link's channel. `linked` is false while no runner is set, `published` while the runner has no such package. */
+export interface RunnerPackageView {
+  linked: boolean
+  server: string | null
+  channel: string | null
+  package: string | null
+  published: boolean
+  latest: number | null
+  active: number | null
+  previous: number | null
+  staged: number | null
+  staging: RunnerStagingView | null
+  slots: RunnerSlotView[]
+  instances: RunnerInstanceView[]
+  events: RunnerEventView[]
+}
+
+/** What one replication becomes in the package: its task, schedule, the slots it needs and the Sync connection each slot is for. */
+export interface PublishedReplicationView {
+  replication: string
+  task: string
+  mode: string
+  cron: string | null
+  frequencySeconds: number | null
+  slots: string[]
+  mappings: number
+  slotConnections: Record<string, string> | null
+}
+
+/** What a publish (or a check) built and, for a publish, the version the runner gave it. */
+export interface ReplicationSetPublication {
+  package: string
+  channel: string | null
+  mode: 'check' | 'stage' | 'serve'
+  version: number | null
+  changed: boolean | null
+  uploaded: number | null
+  skipped: number | null
+  files: number
+  bound: string[] | null
+  replications: PublishedReplicationView[]
+}
+
+export interface PublishRunnerRequest {
+  mode: 'stage' | 'serve'
+  bind?: Record<string, string>
+  expectedVersion?: number | null
+}

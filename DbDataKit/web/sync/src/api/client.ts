@@ -1,7 +1,7 @@
 import { adminApi } from '@dbdatakit/admin'
 import { ApiError, put, request, shellApi } from '@dbdatakit/shell'
 import type {
-  OwnerView, OwnershipChange, ReplicationOwner, RunnerLink,
+  OwnerView, OwnershipChange, ReplicationOwner, RunnerLink, RunnerPackageView, ReplicationSetPublication, PublishRunnerRequest,
   ReplicationChecks,
   CheckForm,
   ApplyResult,
@@ -254,6 +254,14 @@ export const api = {
   runner: {
     get: () => request<RunnerLink | null>('/api/runner'),
     save: (link: RunnerLink) => put<RunnerLink>('/api/runner', link),
+    /** The package as the linked runner holds it: the version served, the staged one, the slots and their bindings (plan 28c E08). */
+    package: () => request<RunnerPackageView>('/api/runner/package'),
+    /** What a publish would hold, or why it is refused (409, in the verb's words); restores nothing and sends nothing. */
+    check: () => request<ReplicationSetPublication>('/api/runner/package/check', { method: 'POST' }),
+    /** Publishes the replications to the runner: staged (the runners activate it when every one has it ready) or served at once. A refusal is 409 in the words of the verb or the runner. */
+    publish: (body: PublishRunnerRequest) => request<ReplicationSetPublication>('/api/runner/package/publish', { method: 'POST', body: JSON.stringify(body) }),
+    /** Binds the channel's slots to connections of the runner; answers the package as it is then. */
+    bind: (slots: Record<string, string>) => put<RunnerPackageView>('/api/runner/package/bindings', { slots }),
   },
   provisioning: {
     get: (replicationName: string, mappingName: string) =>
