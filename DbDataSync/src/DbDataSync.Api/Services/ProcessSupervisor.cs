@@ -17,7 +17,7 @@ namespace DbDataSync.Api.Services;
 /// (see architecture/implementation/done/phase-008-work-queue-schema.md — a replication can have hundreds of
 /// mappings, and spawning per mapping/trigger would be far too heavy at that scale).
 /// </summary>
-public sealed class ProcessSupervisor(
+public class ProcessSupervisor(
     ApiOptions options,
     ConfigRepository configRepository,
     TaskRunStore taskRunStore,
@@ -75,7 +75,7 @@ public sealed class ProcessSupervisor(
     /// <summary>Idempotent: no-op if a live worker process is already tracked for this replication.
     /// Spawning a process is comparatively slow and never has to be on a request's critical path —
     /// callers enqueue work first (cheap, a few SQLite writes) and call this after.</summary>
-    public TriggerResult EnsureWorkerRunning(string taskName)
+    public virtual TriggerResult EnsureWorkerRunning(string taskName)
     {
         // the guard of plan 28c E12: a replication the runner owns is drained by the runner, and a worker of this API beside it would process the same mappings twice
         if (runnerOwners?.OwnerOf(taskName) == DbDataKit.State.TaskOwners.Runner)

@@ -98,6 +98,18 @@ internal static class Programs
 
     public static string Sync => Built("DbDataSync/src/DbDataSync.Cli", "DbDataSync.Cli.dll");
 
+    public static string Runner => Built("DbDataRunner/src/DbDataRunner.Server", "dbdatarunner.dll");
+
+    /// <summary>The Sync engine as built (the TaskRunner's output folder), the files of the runtime package <c>dbdatasync-runtime</c> in the tests.</summary>
+    public static string EngineBuildOutput
+    {
+        get
+        {
+            Built("DbDataSync/src/DbDataSync.TaskRunner", "DbDataSync.TaskRunner.dll");
+            return Path.Combine(RepositoryRoot, "DbDataSync/src/DbDataSync.TaskRunner", "bin", Configuration, "net10.0");
+        }
+    }
+
     private static readonly HashSet<int> Issued = [];
 
     /// <summary>

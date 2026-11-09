@@ -13,6 +13,7 @@
     <Using Include="Xunit" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Npgsql" />
     <ProjectReference Include="..\..\src\DbDataConsole.Server\DbDataConsole.Server.csproj" />
     <ProjectReference Include="..\..\..\DbDataGateway\src\DbDataGateway.Core\DbDataGateway.Core.csproj" />   <!-- the Flight client (a library; the Gateway itself is still the program) -->
     <DbDataKitReference Include="Secrets" />
