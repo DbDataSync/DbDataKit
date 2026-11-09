@@ -180,8 +180,8 @@ export function ModelsPage() {
   const [notice, setNotice] = useState<{ text: string; bad: boolean } | null>(null)
   const semantic = useQuery({ queryKey: ['gateway', 'models', 'semantic'], queryFn: () => gatewayApi.models.semantic.list(), refetchOnMount: 'always', refetchInterval: 10_000 })
   const entity = useQuery({ queryKey: ['gateway', 'models', 'entity'], queryFn: () => gatewayApi.models.entity.list(), refetchOnMount: 'always', refetchInterval: 10_000 })
-  const semanticDetail = useQuery({ queryKey: ['gateway', 'models', 'semantic', opened], queryFn: () => gatewayApi.models.semantic.read(opened!), enabled: opened !== null })
-  const entityDetail = useQuery({ queryKey: ['gateway', 'models', 'entity', openedEntity], queryFn: () => gatewayApi.models.entity.read(openedEntity!), enabled: openedEntity !== null })
+  const semanticDetail = useQuery({ queryKey: ['gateway', 'models', 'semantic', opened], queryFn: () => gatewayApi.models.semantic.read(opened!), enabled: opened !== null, refetchOnMount: 'always' })
+  const entityDetail = useQuery({ queryKey: ['gateway', 'models', 'entity', openedEntity], queryFn: () => gatewayApi.models.entity.read(openedEntity!), enabled: openedEntity !== null, refetchOnMount: 'always' })
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['gateway', 'models'] })
   const failed = (e: unknown) => setNotice({ text: e instanceof Error ? e.message : 'The Gateway did not answer.', bad: true })
   const serve = useMutation({

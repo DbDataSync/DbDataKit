@@ -88,8 +88,8 @@ function HandOver({ name, managedBy, clients }: { name: string; managedBy: strin
 export function DataSourcesPage() {
   const isAdmin = useIsAdmin()
   const navigate = useNavigate()
-  const sources = useQuery({ queryKey: keys.list, queryFn: gatewayApi.dataSources.list, enabled: isAdmin })
-  const clients = useQuery({ queryKey: ['gateway', 'clients'], queryFn: gatewayApi.clients, enabled: isAdmin })
+  const sources = useQuery({ queryKey: keys.list, queryFn: gatewayApi.dataSources.list, enabled: isAdmin, refetchOnMount: 'always', refetchInterval: 10_000 })   // a publish by a client changes the list and the grants
+  const clients = useQuery({ queryKey: ['gateway', 'clients'], queryFn: gatewayApi.clients, enabled: isAdmin, refetchOnMount: 'always' })
   const [name, setName] = useState('')
   if (!isAdmin) return <GatewayShell crumbs={[{ label: 'Data sources', heading: true }]}><div className="pane"><div className="empty">This screen is for administrators.</div></div></GatewayShell>
   return (
@@ -165,7 +165,7 @@ function SecretReferences() {
 export function DataSourceEditPage({ name, isNew }: { name: string; isNew: boolean }) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  const file = useQuery({ queryKey: keys.one(name), queryFn: () => gatewayApi.dataSources.read(name), enabled: !isNew })
+  const file = useQuery({ queryKey: keys.one(name), queryFn: () => gatewayApi.dataSources.read(name), enabled: !isNew, refetchOnMount: 'always' })   // a republish replaces the grants: the screen opened again inside the 5 s of the query cache must not show the first publish's
   const [draft, setDraft] = useState<string | null>(null)
   const text = draft ?? file.data?.text ?? (isNew ? TEMPLATE(name) : '')
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([])
