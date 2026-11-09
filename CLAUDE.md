@@ -96,9 +96,11 @@ The rule is about that, not about branches or merge style.
 - **A finished plan becomes a product doc.** When the last slice of a plan lands, the same commit turns what is still true and useful (how it works,
   its rules and conventions, the decisions and why, how to use or operate it) into documentation beside the code it describes (a package or product README,
   `docs/<topic>.md`, a help page), written as how it is, not as a plan, and deletes the plan. History, rationale about abandoned options and status
-  narrative are not carried over; git keeps them. Open decisions and unbuilt work move to the plan that owns them. Never leave a plan whose status says
+  narrative are not carried over; git keeps them. Open decisions and unbuilt work move to the plan that owns them. **The same goes for a plan that is
+  closed, dropped or superseded**: it is deleted, never kept with a status that says so; if it holds anything useful (what exists, rules in force) that becomes
+  documentation, and the plans README row goes or points at that document. Never leave a plan whose status says
   proposed or in progress while all its rows are done, and never link to a plan that does not exist. `scripts/check_plans.py` checks this (links between
-  plans, the numbers the index names, the index itself, open status with every row done); what it tolerates today is in `scripts/plan_check_baseline.txt`,
+  plans, the numbers the index names, the index itself, open status with every row done, a status that says closed, dropped or superseded); what it tolerates today is in `scripts/plan_check_baseline.txt`,
   which only shrinks.
 - **Done means its test passes:** a slice's "Done when" is a test run in CI, or it says what is checked by hand and why.
 - **Adapter first, delete second:** a slice that replaces code keeps the old tests passing unchanged; deleting the old code is its own slice, or the last step when the tests already pass.

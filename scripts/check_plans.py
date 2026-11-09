@@ -7,6 +7,8 @@ is gone (CLAUDE.md, "Making changes"). Checks, on docs/plans/*.md:
   finished a plan whose status line says proposed / in progress / being worked, and whose slice table has rows that are ALL marked done
            or built, is flagged: delete it or cut it to an "as built" note (a row counts as slice row when its first cell is an id such
            as R01, DR1, CI03; a row is done when it says `Status: done` or `Status: built`; a plan with no such row is never flagged)
+  closed   a plan whose status line says closed / dropped / superseded / marked for deletion is flagged: a plan that is over is deleted, and what is
+           still useful in it becomes documentation (CLAUDE.md, "A finished plan becomes a product doc"); it is never kept with a status that says so
   index    README.md lists every plan file and links to no plan file that is missing
            (a row whose link goes to a document that is not that plan's own file, such as `../releases.md` or the merged `22a-gap-slices.md` for
            plan 22, is a pointer: its number stays known, so "plan 9" in a source comment or in the index still resolves)
@@ -24,6 +26,7 @@ LINK = re.compile(r"\]\(([^)\s#]+\.md)(?:#[^)]*)?\)")
 SLICE_ROW = re.compile(r"^\|\s*\**([A-Z]{1,3}\d+[a-z]?)\**\s*\|")
 DONE = re.compile(r"status:?\**:?\s*\**(done|built)\b", re.I)
 OPEN_STATUS = re.compile(r"^\**status:?\**:?\s*\**\s*(proposed|in progress|being worked)\b", re.I)
+OVER_STATUS = re.compile(r"^\**status:?\**:?\s*\**\s*(closed|dropped|superseded|marked for deletion|to be deleted)\b", re.I)
 PLAN_REF = re.compile(r"\bplans?\s+(\d{1,2}[a-z]?)((?:\s*(?:,|and|to)\s*\d{1,2}[a-z]?\b)*)", re.I)
 INDEX_ROW = re.compile(r"^\|\s*(\d\d[a-z]?)\s*\|[^|]*\]\(([^)]*\.md)\)", re.M)
 BASELINE = "scripts/plan_check_baseline.txt"
@@ -65,6 +68,8 @@ def violations(root):
             if not os.path.exists(os.path.normpath(os.path.join(plans_dir, target))):
                 add(name, "links", f"links to {target}, which does not exist")
         status = next((l for l in text.splitlines() if re.match(r"\**status\b", l, re.I)), "")
+        if PLAN_FILE.match(name) and OVER_STATUS.match(status.strip()):
+            add(name, "closed", "its status says the plan is over: delete it and turn what is still useful into documentation")
         if PLAN_FILE.match(name) and OPEN_STATUS.match(status.strip()):
             rows = [l for l in text.splitlines() if SLICE_ROW.match(l)]
             if rows and all(DONE.search(l) for l in rows):

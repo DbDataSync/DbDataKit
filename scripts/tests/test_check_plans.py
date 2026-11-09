@@ -89,6 +89,13 @@ class CheckPlans(unittest.TestCase):
         self.assertEqual(1, len(problems))
         self.assertIn("all 2 slice rows are done", problems[0])
 
+    def test_a_plan_that_says_it_is_closed_dropped_or_superseded_is_flagged(self):
+        for status in ("**closed (owner, 2026-11-09)**.", "Dropped.", "Superseded by plan 01.", "**Marked for deletion**."):
+            files = dict(GOOD, **{"docs/plans/02-b.md": f"# B\n\nStatus: {status}\n"})
+            problems, _ = self.problems(files)
+            self.assertEqual(1, len(problems), status)
+            self.assertIn("delete it", problems[0])
+
     def test_an_open_plan_with_a_row_left_is_fine(self):
         files = dict(GOOD, **{"docs/plans/02-b.md": "# B\n\nStatus: in progress.\n\n" + table("Status: done", "not built")})
         self.assertEqual(([], []), self.problems(files))
@@ -97,8 +104,8 @@ class CheckPlans(unittest.TestCase):
         files = dict(GOOD, **{"docs/plans/02-b.md": "# B\n\nStatus: proposed.\n\n| Q | question |\n|---|---|\n| a question | Status: done |\n"})
         self.assertEqual(([], []), self.problems(files))
 
-    def test_a_closed_plan_with_every_row_done_is_fine(self):
-        files = dict(GOOD, **{"docs/plans/02-b.md": "# B\n\nStatus: **closed**.\n\n" + table("Status: done")})
+    def test_a_plan_that_is_done_is_not_flagged_for_its_status_alone(self):
+        files = dict(GOOD, **{"docs/plans/02-b.md": "# B\n\nStatus: done.\n\n" + table("Status: done")})
         self.assertEqual(([], []), self.problems(files))
 
     def test_the_baseline_turns_a_violation_into_a_warning(self):
