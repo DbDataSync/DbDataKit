@@ -96,12 +96,19 @@ public sealed class OracleDialect : SqlDialect
     /// sequential values for every row in one statement, which <c>INSERT ALL</c> never did.
     /// </para>
     /// </summary>
+    /// <inheritdoc cref="SqlDialect.InlineNullsInStagingInserts"/>
+    public override bool InlineNullsInStagingInserts => true;
+
     public override string RenderMultiRowInsert(string qualifiedTable, string columnList, IReadOnlyList<string> rowValueTuples)
     {
         // Each tuple arrives as "(v0, v1, …)"; the outer parens are stripped rather than trimmed
         // character-by-character, since a value itself could legitimately end in ')' (a function call)
         // and Trim('(', ')') would eat that too.
-        var rows = rowValueTuples.Select(tuple => $"SELECT {tuple[1..^1]} FROM dual");
+        // The first branch names the view's columns, so each expression of it gets its own alias: two literal NULLs (a delete's non-key columns, see
+        // InlineNullsInStagingInserts) would otherwise both be a column called NULL, which Oracle rejects as ambiguous (ORA-00918).
+        var rows = rowValueTuples.Select((tuple, i) => i == 0
+            ? $"SELECT {string.Join(", ", SplitTopLevel(tuple[1..^1]).Select((expression, c) => $"{expression} AS c{c}"))} FROM dual"
+            : $"SELECT {tuple[1..^1]} FROM dual");
         return $"""
             INSERT INTO {qualifiedTable} ({columnList})
             SELECT * FROM (
@@ -170,4 +177,25 @@ public sealed class OracleDialect : SqlDialect
                 ? "Oracle has no native TIME-only type; stored as TIMESTAMP, whose date portion is meaningless."
                 : $"{type.SourceNote} Oracle has no native TIME-only type; stored as TIMESTAMP, whose date portion is meaningless.")
         : SharedTypes.Render(Shared, type);
+    /// <summary>The comma-separated expressions of a tuple body, split at the commas that are not inside parentheses or a quoted string.</summary>
+    private static IEnumerable<string> SplitTopLevel(string body)
+    {
+        var depth = 0;
+        var quote = false;
+        var start = 0;
+        for (var i = 0; i < body.Length; i++)
+        {
+            var ch = body[i];
+            if (ch == '\'') quote = !quote;
+            else if (quote) continue;
+            else if (ch == '(') depth++;
+            else if (ch == ')') depth--;
+            else if (ch == ',' && depth == 0)
+            {
+                yield return body[start..i].Trim();
+                start = i + 1;
+            }
+        }
+        yield return body[start..].Trim();
+    }
 }

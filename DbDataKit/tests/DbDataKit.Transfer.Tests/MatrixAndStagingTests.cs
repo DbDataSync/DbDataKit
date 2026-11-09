@@ -15,7 +15,7 @@ public class MatrixTests
         foreach (var s in M.Strategies)
             foreach (var e in new[] { "duckdb", "sqlserver", "postgres", "mysql", "oracle", "fabric" })
                 Assert.NotNull(M.Entry(s, new EngineId(e)));
-        Assert.Equal(8, StrategyCatalog.Strategies.Count);
+        Assert.Equal(9, StrategyCatalog.Strategies.Count);
         Assert.Equal(M.Strategies.Order(), StrategyCatalog.Strategies.Select(s => s.Name).Order());
     }
 

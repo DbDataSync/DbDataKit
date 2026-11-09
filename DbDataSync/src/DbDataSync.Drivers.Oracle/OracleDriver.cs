@@ -52,6 +52,7 @@ public sealed class OracleDriver : IDriver, IConnectionTester, IDialectProvider,
 
     public IReadOnlyList<IChangeWriter> Writers { get; } =
     [
+        new ChangeApplyWriter(OracleDialect.Instance, OracleCatalog.Instance, OracleValueBinding.Instance),
         new DeleteInsertWriter(OracleDialect.Instance, OracleCatalog.Instance, OracleValueBinding.Instance),
         new KeyReconcileDeleteWriter(OracleDialect.Instance, OracleCatalog.Instance, OracleValueBinding.Instance),
         new KeyReconcileScd2CloseWriter(OracleDialect.Instance, OracleCatalog.Instance, OracleValueBinding.Instance),

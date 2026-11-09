@@ -250,6 +250,14 @@ public abstract class SqlDialect
     public virtual string RenderStagingOrdinalColumn(string column) =>
         $"{QuoteIdentifier(column)} BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY";
 
+    /// <summary>
+    /// Whether the staging provider writes a NULL as the literal <c>NULL</c> in its multi-row insert instead of binding a NULL parameter. Oracle needs it: its
+    /// rows are <c>SELECT ... FROM dual UNION ALL SELECT ...</c> branches, a NULL bound as a parameter is typed text, and a branch with <c>NULL</c> for a number column
+    /// then fails with ORA-01790 against another branch's number. A literal <c>NULL</c> takes the type of the other branches. A delete in a change set carries NULL in
+    /// every non-key column, so any pass with a delete and an insert hits this. No value is ever put into the text: only the absence of one.
+    /// </summary>
+    public virtual bool InlineNullsInStagingInserts => false;
+
     /// <summary>Renders a multi-row insert. The <c>VALUES (…), (…)</c> form works on SQL Server 2008+,
     /// Postgres and MySQL; Oracle's <c>INSERT ALL</c> is a different statement entirely, which is why
     /// this is a hook rather than a format string.</summary>

@@ -28,6 +28,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\Shared\ChangeApplyTestsBase.cs" Link="Shared\ChangeApplyTestsBase.cs" />
     <Compile Include="..\Shared\StagingMatrix.cs" Link="Shared\StagingMatrix.cs" />
     <Compile Include="..\Shared\ReaderTypeProbe.cs" Link="Shared\ReaderTypeProbe.cs" />
   </ItemGroup>

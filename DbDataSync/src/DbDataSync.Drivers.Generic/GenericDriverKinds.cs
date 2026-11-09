@@ -20,6 +20,13 @@ public static class GenericDriverKinds
     public const string PassThrough = "PassThrough";
     public const string DeleteInsert = "DeleteInsert";
 
+    /// <summary>
+    /// The change writer of every engine: the staged rows are collapsed to the last change per key, then a DELETE, an UPDATE and an INSERT run against the target in one
+    /// transaction (no MERGE, ON CONFLICT or ON DUPLICATE KEY). Needs a target primary key; not reconciling, so it is the writer behind an incremental reader, and the
+    /// default there.
+    /// </summary>
+    public const string ChangeApply = "ChangeApply";
+
     /// <summary>Reads only a source table's primary-key values — phase 124's cheap delete-diff sweep.
     /// Always paired with <see cref="KeyReconcileDelete"/>; reconcile-only, never offered in the
     /// ordinary Change Processing reader picker.</summary>

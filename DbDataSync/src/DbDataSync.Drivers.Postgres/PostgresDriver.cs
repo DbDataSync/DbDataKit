@@ -74,6 +74,7 @@ public sealed class PostgresDriver : IDriver, IConnectionTester, IDialectProvide
 
     public IReadOnlyList<IChangeWriter> Writers { get; } =
     [
+        new ChangeApplyWriter(PostgresDialect.Instance, PostgresCatalog.Instance, PostgresValueBinding.Instance),
         new DeleteInsertWriter(PostgresDialect.Instance, PostgresCatalog.Instance, PostgresValueBinding.Instance),
         new KeyReconcileDeleteWriter(PostgresDialect.Instance, PostgresCatalog.Instance, PostgresValueBinding.Instance),
         new KeyReconcileScd2CloseWriter(PostgresDialect.Instance, PostgresCatalog.Instance, PostgresValueBinding.Instance),

@@ -50,6 +50,7 @@ public sealed class MySqlDriver : IDriver, IConnectionTester, IDialectProvider, 
 
     public IReadOnlyList<IChangeWriter> Writers { get; } =
     [
+        new ChangeApplyWriter(MySqlDialect.Instance, MySqlCatalog.Instance, MySqlValueBinding.Instance),
         new DeleteInsertWriter(MySqlDialect.Instance, MySqlCatalog.Instance, MySqlValueBinding.Instance),
         new KeyReconcileDeleteWriter(MySqlDialect.Instance, MySqlCatalog.Instance, MySqlValueBinding.Instance),
         new KeyReconcileScd2CloseWriter(MySqlDialect.Instance, MySqlCatalog.Instance, MySqlValueBinding.Instance),

@@ -45,15 +45,45 @@ public sealed record StatementSyntax
     /// </summary>
     public bool QuoteBookkeepingColumns { get; init; } = true;
 
+    /// <summary>
+    /// How an UPDATE that takes its values from the stage is written (<see cref="UpdateStyle"/>). Engines spell the join differently and no one spelling runs on all
+    /// of them; the default is the correlated form, which every engine accepts.
+    /// </summary>
+    public UpdateStyle UpdateStyle { get; init; } = UpdateStyle.Correlated;
+
+    /// <summary>The UPDATE spelling an engine takes: its own join form where it has one, the correlated subquery otherwise (Oracle and any engine not listed).</summary>
+    public static UpdateStyle UpdateStyleOf(EngineId engine) =>
+        engine == EngineId.SqlServer || engine == EngineId.Fabric ? UpdateStyle.FromJoin
+        : engine == EngineId.Postgres || engine == EngineId.DuckDb ? UpdateStyle.UpdateFrom
+        : engine == EngineId.MySql ? UpdateStyle.JoinSet
+        : UpdateStyle.Correlated;
+
     /// <summary>The syntax of a shared dialect. T-SQL spelling for SQL Server and Fabric.</summary>
     public static StatementSyntax From(ISqlDialect dialect) => new()
     {
+        UpdateStyle = UpdateStyleOf(dialect.Id),
         QuoteIdentifier = dialect.Quote,
         ParameterReference = dialect.ParameterName,
         ParameterStyle = dialect.ParameterStyle,
         QuoteQualified = dialect.QuoteQualified,
         TransactSql = dialect.Id == EngineId.SqlServer || dialect.Id == EngineId.Fabric,
     };
+}
+
+/// <summary>
+/// The spellings of an UPDATE whose new values come from another table (the stage). Each engine's own join form where it has one, and the correlated
+/// subquery (what Oracle needs, and what runs everywhere) where it does not.
+/// </summary>
+public enum UpdateStyle
+{
+    /// <summary><c>UPDATE tgt SET tgt.c = src.c FROM target tgt JOIN stage src ON ...</c> (SQL Server, Fabric).</summary>
+    FromJoin,
+    /// <summary><c>UPDATE target tgt SET c = src.c FROM stage src WHERE ...</c> (PostgreSQL, DuckDB).</summary>
+    UpdateFrom,
+    /// <summary><c>UPDATE target tgt JOIN stage src ON ... SET tgt.c = src.c</c> (MySQL, MariaDB).</summary>
+    JoinSet,
+    /// <summary><c>UPDATE target tgt SET (c1, c2) = (SELECT ... WHERE key) WHERE EXISTS (...)</c> (Oracle; no MERGE and no join form).</summary>
+    Correlated,
 }
 
 /// <summary>A table or view as a statement refers to it: a name the syntax quotes, or text the caller already rendered (a temp table, a placeholder in a preview).</summary>
@@ -161,6 +191,11 @@ public sealed record ScopedApplySpec
     public OperationMarker? Marker { get; init; }
     public OrdinalRange? Ordinal { get; init; }
     public GeneratedColumnOverride Override { get; init; }
+    /// <summary>
+    /// The staged column that holds a row's arrival order (the per-pass ordinal), for the collapse of a staged change set (<c>ScopedStatements.CollapseStage</c>): of several staged rows
+    /// with one key the highest is the last change and the others are dropped. Null: the <see cref="Ordinal"/> column, else <c>__Ordinal</c>.
+    /// </summary>
+    public string? SequenceColumn { get; init; }
     /// <summary>Merge only: target rows in <see cref="Scope"/> that the stage does not mention are deleted (SQL Server: the scope is a CTE that is the MERGE target).</summary>
     public bool DeleteUnmatchedInScope { get; init; }
 }
@@ -176,6 +211,8 @@ public sealed record ScopedOptions
     public OrdinalRange? Ordinal { get; init; }
     public GeneratedColumnOverride Override { get; init; }
     public bool DeleteUnmatchedInScope { get; init; }
+    /// <summary>The staged column holding the arrival order; see <see cref="ScopedApplySpec.SequenceColumn"/>.</summary>
+    public string? SequenceColumn { get; init; }
     /// <summary>The caller's quoting and placeholder text. Null: the dialect's (<see cref="StatementSyntax.From"/>).</summary>
     public StatementSyntax? Syntax { get; init; }
 }

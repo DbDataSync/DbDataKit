@@ -38,6 +38,28 @@ public static class StrategyCases
 
     private static readonly string[] SqlServerOnly = ["sqlserver"];
 
+    private static readonly TransferSchema Pairs = new(
+    [
+        new TransferColumn("a", CanonicalType.Of(CanonicalKind.Int32), Nullable: false, IsKey: true),
+        new TransferColumn("b", CanonicalType.Of(CanonicalKind.Int32), Nullable: false, IsKey: true),
+        new TransferColumn("v", CanonicalType.String(50)),
+    ]);
+
+    private static readonly TransferSchema KeysOnly = new(
+    [
+        new TransferColumn("id", CanonicalType.Of(CanonicalKind.Int32), Nullable: false, IsKey: true),
+    ]);
+
+    private static object?[] N(int id, string? name, decimal? amount) => [id, name, amount];
+    private static object?[] P(int a, int b, string? v) => [a, b, v];
+    private static object?[] SP(int a, int b, string? v, string op, long ordinal) => [a, b, v, op, ordinal];
+    private static object?[] SN(int id, string? name, decimal? amount, string op, long ordinal) => [id, name, amount, op, ordinal];
+    private static object?[] K(int id) => [id];
+    private static object?[] SK(int id, string op, long ordinal) => [id, op, ordinal];
+
+    /// <summary>The options every apply_staged_changes case has: the operation marker (the stage rows' own, 'D' deletes).</summary>
+    private static ApplyRequest Staged(ApplyRequest r) => r with { Scoped = new ScopedOptions { Marker = new OperationMarker() } };
+
     private static object?[] I(int? id, string name, decimal amount) => [id, name, amount];
     private static object?[] D(int id, int day, string note) => [id, new DateOnly(2024, 1, day), note];
     private static object?[] E(int id, int hour, string note) => [id, new DateTime(2024, 1, 1, hour, 0, 0, DateTimeKind.Unspecified), note];
@@ -184,6 +206,81 @@ public static class StrategyCases
             StageExtraColumns = Bookkeeping,
             Configure = r => r with { Scoped = new ScopedOptions { Marker = new OperationMarker(), Scope = ScopeFilter.Range("id", 2, 5), DeleteUnmatchedInScope = true } },
         },
+        // ---- apply_staged_changes: a stage collapsed to its last row per key, then DELETE, UPDATE and INSERT; no MERGE. A stage row is listed in an order of
+        // its own (not by ordinal) in several cases: the ordinal, not the physical order, says which change is last.
+
+        new("apply_staged_changes inserts, updates and deletes, and leaves other rows alone", StrategyNames.ApplyStagedChanges, Items,
+            [I(1, "a", 1m), I(2, "b", 2m), I(3, "c", 3m), I(7, "g", 7m)],
+            [S(2, "b2", 20m, "U", 1), S(3, "c", 3m, "D", 2), S(4, "d", 4m, "I", 3), S(5, "e", 5m, "D", 4)],
+            [I(1, "a", 1m), I(2, "b2", 20m), I(4, "d", 4m), I(7, "g", 7m)])
+        { UniqueKeyOnTarget = true, StageExtraColumns = Bookkeeping, Configure = Staged },
+
+        new("apply_staged_changes: insert then update is an insert of the final values", StrategyNames.ApplyStagedChanges, Items,
+            [I(1, "a", 1m)],
+            [S(5, "five-final", 55m, "U", 2), S(5, "five", 5m, "I", 1)],
+            [I(1, "a", 1m), I(5, "five-final", 55m)])
+        { UniqueKeyOnTarget = true, StageExtraColumns = Bookkeeping, Configure = Staged },
+
+        new("apply_staged_changes: insert then delete leaves nothing", StrategyNames.ApplyStagedChanges, Items,
+            [I(1, "a", 1m)],
+            [S(5, "five", 5m, "I", 1), S(5, "five", 5m, "D", 2)],
+            [I(1, "a", 1m)])
+        { UniqueKeyOnTarget = true, StageExtraColumns = Bookkeeping, Configure = Staged },
+
+        new("apply_staged_changes: update then delete deletes", StrategyNames.ApplyStagedChanges, Items,
+            [I(1, "a", 1m), I(2, "b", 2m)],
+            [S(2, "b2", 20m, "U", 1), S(2, "b2", 20m, "D", 2)],
+            [I(1, "a", 1m)])
+        { UniqueKeyOnTarget = true, StageExtraColumns = Bookkeeping, Configure = Staged },
+
+        new("apply_staged_changes: repeated updates end at the last one by arrival order", StrategyNames.ApplyStagedChanges, Items,
+            [I(1, "a", 1m), I(2, "b", 2m)],
+            [S(2, "third", 30m, "U", 3), S(2, "first", 10m, "U", 1), S(2, "second", 20m, "U", 2)],
+            [I(1, "a", 1m), I(2, "third", 30m)])
+        { UniqueKeyOnTarget = true, StageExtraColumns = Bookkeeping, Configure = Staged },
+
+        new("apply_staged_changes: delete then insert of one key is an update to the final values", StrategyNames.ApplyStagedChanges, Items,
+            [I(1, "a", 1m), I(2, "b", 2m)],
+            [S(2, "b", 2m, "D", 1), S(2, "reborn", 22m, "I", 2)],
+            [I(1, "a", 1m), I(2, "reborn", 22m)])
+        { UniqueKeyOnTarget = true, StageExtraColumns = Bookkeeping, Configure = Staged },
+
+        new("apply_staged_changes: a key change arrives as a delete of the old key and an insert of the new one", StrategyNames.ApplyStagedChanges, Items,
+            [I(1, "a", 1m), I(2, "b", 2m)],
+            [S(1, "a", 1m, "D", 1), S(10, "a", 1m, "I", 2)],
+            [I(2, "b", 2m), I(10, "a", 1m)])
+        { UniqueKeyOnTarget = true, StageExtraColumns = Bookkeeping, Configure = Staged },
+
+        new("apply_staged_changes carries NULLs in non-key columns both ways", StrategyNames.ApplyStagedChanges, Items,
+            [I(1, "a", 1m), N(2, null, null)],
+            [SN(1, null, null, "U", 1), SN(2, "named", 5m, "U", 2), SN(3, null, 3m, "I", 3)],
+            [N(1, null, null), I(2, "named", 5m), N(3, null, 3m)])
+        { UniqueKeyOnTarget = true, StageExtraColumns = Bookkeeping, Configure = Staged },
+
+        new("apply_staged_changes with a composite key matches on both columns", StrategyNames.ApplyStagedChanges, Pairs,
+            [P(1, 1, "a"), P(1, 2, "b"), P(2, 1, "c")],
+            [SP(1, 2, "b2", "U", 1), SP(2, 1, "c", "D", 2), SP(2, 2, "d", "I", 3), SP(2, 2, "d2", "U", 4), SP(1, 3, "e", "I", 5)],
+            [P(1, 1, "a"), P(1, 2, "b2"), P(1, 3, "e"), P(2, 2, "d2")])
+        { UniqueKeyOnTarget = true, StageExtraColumns = Bookkeeping, Configure = Staged },
+
+        new("apply_staged_changes on a table of key columns only inserts and deletes", StrategyNames.ApplyStagedChanges, KeysOnly,
+            [K(1), K(2), K(3)],
+            [SK(2, "D", 1), SK(4, "I", 2), SK(1, "U", 3)],
+            [K(1), K(3), K(4)])
+        { UniqueKeyOnTarget = true, StageExtraColumns = Bookkeeping, Configure = Staged },
+
+        new("apply_staged_changes with an empty stage changes nothing", StrategyNames.ApplyStagedChanges, Items,
+            [I(1, "a", 1m)], [], [I(1, "a", 1m)])
+        { UniqueKeyOnTarget = true, StageExtraColumns = Bookkeeping, Configure = Staged },
+
+        new("apply_staged_changes applies one ordinal slice of the stage, collapsing over all of it", StrategyNames.ApplyStagedChanges, Items,
+            [I(1, "a", 1m), I(2, "b", 2m), I(3, "c", 3m)],
+            [S(2, "b-mid", 20m, "U", 1), S(2, "b2", 21m, "U", 2), S(3, "c2", 30m, "U", 3), S(4, "d", 4m, "I", 4)],
+            [I(1, "a", 1m), I(2, "b2", 21m), I(3, "c2", 30m)])
+        {
+            UniqueKeyOnTarget = true,
+            StageExtraColumns = Bookkeeping,
+            Configure = r => r with { Scoped = new ScopedOptions { Marker = new OperationMarker(), Ordinal = new OrdinalRange(0, 3) } },
+        },
     ];
 }
-

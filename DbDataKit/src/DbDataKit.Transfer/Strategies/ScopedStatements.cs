@@ -197,4 +197,117 @@ public static class ScopedStatements
 
         return new BuiltStatement(string.Join("\n", lines) + Terminator(syntax), slots.Slots, s.Override == GeneratedColumnOverride.Bracketed);
     }
+    // ---- staged changes: after the collapse one stage row per key is left, and separate DELETE, UPDATE and INSERT statements apply it. No MERGE, no
+    // ON CONFLICT, no ON DUPLICATE KEY: the three statements are the same idea on every engine, only the UPDATE's join is spelled differently.
+
+    private static string SequenceOf(StatementSyntax syntax, ScopedApplySpec s) => Bookkeeping(syntax, s.SequenceColumn ?? s.Ordinal?.Column ?? "__Ordinal");
+
+    private static OperationMarker RequireMarker(ScopedApplySpec s) =>
+        s.Marker ?? throw new ArgumentException("applying staged changes needs the operation marker: it says which stage rows delete");
+
+    private static void RequireKeys(ScopedApplySpec s)
+    {
+        if (s.KeyColumns.Count == 0) throw new ArgumentException("applying staged changes needs at least one key column");
+    }
+
+    private static string KeyMatch(StatementSyntax syntax, ScopedApplySpec s, string left, string right) =>
+        string.Join(" AND ", s.KeyColumns.Select(k => $"{left}.{syntax.QuoteIdentifier(k)} = {right}.{syntax.QuoteIdentifier(k)}"));
+
+    /// <summary>The ordinal slice of the stage rows under <paramref name="alias"/> as extra predicate lines (empty when the apply is not chunked).</summary>
+    private static string Slice(StatementSyntax syntax, ScopedApplySpec s, SlotCollector slots, string alias)
+    {
+        if (s.Ordinal is not { } o) return "";
+        var ordinal = $"{alias}.{Bookkeeping(syntax, o.Column)}";
+        var after = slots.Add(AfterOrdinalName, ParameterRole.OrdinalAfter, null, o.After);
+        var upTo = slots.Add(UpToOrdinalName, ParameterRole.OrdinalUpTo, null, o.UpTo);
+        return $"\n  AND {ordinal} > {after}\n  AND {ordinal} <= {upTo}";
+    }
+
+    /// <summary>
+    /// Leaves one stage row per key: the one with the highest arrival order, which is the key's last change. Insert then update is then an insert of the
+    /// final values, insert then delete a delete of a row that is not there, update then delete a delete. The stage is scratch space of the apply, so the
+    /// rows dropped here are not anyone's data; the apply that follows sees one row per key and needs no ordering of its own. The key is grouped inside a
+    /// derived table because MySQL refuses a DELETE whose subquery reads the table it deletes from.
+    /// </summary>
+    public static BuiltStatement CollapseStage(StatementSyntax syntax, ScopedApplySpec s)
+    {
+        RequireKeys(s);
+        var seq = SequenceOf(syntax, s);
+        var stage = s.Stage.Render(syntax);
+        var keys = string.Join(", ", s.KeyColumns.Select(syntax.QuoteIdentifier));
+        return new BuiltStatement(
+            $"DELETE FROM {stage}\nWHERE {seq} NOT IN (SELECT last_seq FROM (SELECT MAX({seq}) AS last_seq FROM {stage} GROUP BY {keys}) latest){Terminator(syntax)}", []);
+    }
+
+    /// <summary><c>DELETE FROM target WHERE EXISTS (a delete-marked stage row with the key)</c>. A key the target does not hold deletes nothing, which is what makes a replay a no-op.</summary>
+    public static BuiltStatement StagedDelete(StatementSyntax syntax, ScopedApplySpec s)
+    {
+        RequireKeys(s);
+        var m = RequireMarker(s);
+        var slots = new SlotCollector(syntax);
+        var target = s.Target.Render(syntax);
+        // the target is referenced by its own qualified name so the correlated predicate resolves on every engine (single-table DELETE takes no alias before MySQL 8.0.16)
+        var text = $"DELETE FROM {target}\nWHERE EXISTS (SELECT 1 FROM {s.Stage.Render(syntax)} src\n  WHERE src.{Bookkeeping(syntax, m.Column)} = {Literal(m.DeleteValue)}\n  AND {KeyMatch(syntax, s, "src", target)}";
+        text += Slice(syntax, s, slots, "src") + ")" + Terminator(syntax);
+        return new BuiltStatement(text, slots.Slots);
+    }
+
+    /// <summary>
+    /// Updates the non-key columns of the target rows whose key the stage holds (not delete-marked), in the engine's own join form (<see cref="StatementSyntax.UpdateStyle"/>).
+    /// Null when every written column is a key column: there is nothing to update.
+    /// </summary>
+    public static BuiltStatement? StagedUpdate(StatementSyntax syntax, ScopedApplySpec s)
+    {
+        RequireKeys(s);
+        var m = RequireMarker(s);
+        var nonKeys = s.Columns.Where(c => !s.KeyColumns.Contains(c, StringComparer.OrdinalIgnoreCase)).ToList();
+        if (nonKeys.Count == 0) return null;
+
+        var q = syntax.QuoteIdentifier;
+        var slots = new SlotCollector(syntax);
+        var target = s.Target.Render(syntax);
+        var stage = s.Stage.Render(syntax);
+        var live = $"src.{Bookkeeping(syntax, m.Column)} <> {Literal(m.DeleteValue)}";
+        string text;
+        switch (syntax.UpdateStyle)
+        {
+            case UpdateStyle.FromJoin:
+                text = $"UPDATE tgt SET {string.Join(", ", nonKeys.Select(c => $"tgt.{q(c)} = src.{q(c)}"))}\nFROM {target} tgt\nJOIN {stage} src ON {KeyMatch(syntax, s, "tgt", "src")}\nWHERE {live}{Slice(syntax, s, slots, "src")}";
+                break;
+            case UpdateStyle.UpdateFrom:
+                text = $"UPDATE {target} tgt SET {string.Join(", ", nonKeys.Select(c => $"{q(c)} = src.{q(c)}"))}\nFROM {stage} src\nWHERE {KeyMatch(syntax, s, "tgt", "src")}\n  AND {live}{Slice(syntax, s, slots, "src")}";
+                break;
+            case UpdateStyle.JoinSet:
+                text = $"UPDATE {target} tgt\nJOIN {stage} src ON {KeyMatch(syntax, s, "tgt", "src")}\nSET {string.Join(", ", nonKeys.Select(c => $"tgt.{q(c)} = src.{q(c)}"))}\nWHERE {live}{Slice(syntax, s, slots, "src")}";
+                break;
+            default:
+            {
+                var pick = $"SELECT {string.Join(", ", nonKeys.Select(c => $"src.{q(c)}"))} FROM {stage} src\n    WHERE {KeyMatch(syntax, s, "src", "tgt")}\n  AND {live}";
+                var set = nonKeys.Count == 1
+                    ? $"{q(nonKeys[0])} = ({pick}{Slice(syntax, s, slots, "src")})"
+                    : $"({string.Join(", ", nonKeys.Select(q))}) = ({pick}{Slice(syntax, s, slots, "src")})";
+                text = $"UPDATE {target} tgt\nSET {set}\nWHERE EXISTS (SELECT 1 FROM {stage} src\n  WHERE {KeyMatch(syntax, s, "src", "tgt")}\n  AND {live}{Slice(syntax, s, slots, "src")})";
+                break;
+            }
+        }
+        return new BuiltStatement(text + Terminator(syntax), slots.Slots);
+    }
+
+    /// <summary><c>INSERT INTO target (cols) SELECT cols FROM stage</c> for the stage rows (not delete-marked) whose key the target does not hold: an anti-join, so a replay inserts nothing twice.</summary>
+    public static BuiltStatement StagedInsert(StatementSyntax syntax, ScopedApplySpec s)
+    {
+        RequireKeys(s);
+        var m = RequireMarker(s);
+        var slots = new SlotCollector(syntax);
+        var cols = ColumnList(syntax, s);
+        var target = s.Target.Render(syntax);
+        var overrideGenerated = s.Override == GeneratedColumnOverride.Clause;
+        if (overrideGenerated && syntax.InsertInto is null)
+            throw new ArgumentException("a clause override needs the caller to render the INSERT head (StatementSyntax.InsertInto)");
+        var head = syntax.InsertInto is { } insertInto ? insertInto(target, cols, overrideGenerated) : $"INSERT INTO {target} ({cols})";
+        var select = string.Join(", ", s.Columns.Select(c => $"src.{syntax.QuoteIdentifier(c)}"));
+        var text = $"{head}\nSELECT {select} FROM {s.Stage.Render(syntax)} src\nWHERE src.{Bookkeeping(syntax, m.Column)} <> {Literal(m.DeleteValue)}{Slice(syntax, s, slots, "src")}" +
+                   $"\n  AND NOT EXISTS (SELECT 1 FROM {target} tgt WHERE {KeyMatch(syntax, s, "tgt", "src")}){Terminator(syntax)}";
+        return new BuiltStatement(text, slots.Slots, s.Override == GeneratedColumnOverride.Bracketed);
+    }
 }

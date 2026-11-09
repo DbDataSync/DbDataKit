@@ -217,12 +217,16 @@ public sealed class BatchInsertStagingProvider(SqlDialect dialect, ITableCatalog
         CancellationToken cancellationToken)
     {
         using var cmd = connection.CreateTimedCommand();
-        cmd.CommandText = StagingStatement.BuildInsert(dialect, stagingTable, mappedTargetColumns, batch.Count, includeChangeOrdering);
+        var inlineNulls = dialect.InlineNullsInStagingInserts;
+        cmd.CommandText = StagingStatement.BuildInsert(dialect, stagingTable, mappedTargetColumns, batch.Count, includeChangeOrdering, inlineNulls ? batch : null);
 
         for (var r = 0; r < batch.Count; r++)
         {
             for (var v = 0; v < batch[r].Length; v++)
+            {
+                if (inlineNulls && batch[r][v] is null or DBNull) continue;
                 cmd.AddParameter(dialect.ParameterName(StagingStatement.ParameterName(r, v)), batch[r][v]);
+            }
         }
 
         await cmd.ExecuteNonQueryAsync(cancellationToken);
@@ -276,9 +280,13 @@ public static class StagingStatement
                $"{dialect.RenderStagingOrdinalColumn(BatchInsertStagingProvider.OrdinalColumn)})";
     }
 
+    /// <param name="rows">
+    /// The rows of the statement, only for a dialect that writes a NULL as the literal <c>NULL</c> (<see cref="SqlDialect.InlineNullsInStagingInserts"/>): a null cell then has
+    /// no parameter. Null: every cell is a parameter.
+    /// </param>
     public static string BuildInsert(
         SqlDialect dialect, string qualifiedTable, IReadOnlyList<string> columns, int rowCount,
-        bool includeChangeOrdering = false)
+        bool includeChangeOrdering = false, IReadOnlyList<object?[]>? rows = null)
     {
         var allColumns = new List<string>(columns);
         if (includeChangeOrdering)
@@ -294,7 +302,7 @@ public static class StagingStatement
         var valuesPerRow = allColumns.Count + 1;
         var tuples = Enumerable.Range(0, rowCount)
             .Select(r => "(" + string.Join(", ",
-                Enumerable.Range(0, valuesPerRow).Select(v => dialect.ParameterReference(ParameterName(r, v)))) + ")")
+                Enumerable.Range(0, valuesPerRow).Select(v => rows is not null && rows[r][v] is null or DBNull ? "NULL" : dialect.ParameterReference(ParameterName(r, v)))) + ")")
             .ToList();
 
         return dialect.RenderMultiRowInsert(qualifiedTable, columnList, tuples);
