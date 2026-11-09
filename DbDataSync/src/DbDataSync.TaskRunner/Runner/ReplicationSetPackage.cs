@@ -57,11 +57,7 @@ public static class ReplicationSetPackage
     }
 
     /// <summary>A name as the runner's name rule (lower-case letters, digits, <c>-</c> and <c>_</c>, starting with a letter or digit) writes it: what is not allowed becomes <c>-</c>.</summary>
-    public static string NameOf(string text)
-    {
-        var name = Regex.Replace(text.ToLowerInvariant(), "[^a-z0-9_-]", "-").TrimStart('-', '_');
-        return name.Length > 64 ? name[..64] : name;
-    }
+    public static string NameOf(string text) => DbDataSync.State.RunnerTaskNames.Of(text);
 
     /// <summary>The slot a connection becomes: its name in the identifier alphabet (lower-case letters, digits and <c>_</c>, starting with a letter).</summary>
     public static string SlotNameOf(string connection)
@@ -204,7 +200,7 @@ public static class ReplicationSetPackage
         return new BuiltReplicationSet(package, manifest, text, Files(repoRoot), published);
     }
 
-    /// <summary>The schedule a replication has on the runner: a periodic one its cron expression (UTC, as the Sync scheduler reads it), a continuous one its frequency (a drain every frequency until the planner's loop moves to the runner, E11).</summary>
+    /// <summary>The schedule a replication has on the runner: a periodic one its cron expression (UTC, as the Sync scheduler reads it: its drain plans once, runs what is queued and ends), a continuous one its frequency as the schedule that starts the drain again when it has ended (a continuous drain stays up and plans between passes itself, with the planner of the API, until its idle timeout; plan 28c E11, E12). Who schedules the replication is its owner (`old`, `observe`, `runner`), which a publish does not change.</summary>
     public static Schedule ScheduleOf(SchedulingConfig scheduling, string replication) => scheduling.Mode switch
     {
         ScheduleMode.Periodic when string.IsNullOrWhiteSpace(scheduling.CronExpression) => throw new InvalidOperationException($"Replication '{replication}' is periodic and has no cron expression."),

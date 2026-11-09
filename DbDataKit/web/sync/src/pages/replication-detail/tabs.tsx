@@ -5,6 +5,7 @@ import { TableMappingsPanel } from './TableMappingsPanel'
 import { HistoryPanel } from './HistoryPanel'
 import { MonitoringSection } from './MonitoringPanel'
 import { ReplicationChecksPanel } from './ReplicationChecksPanel'
+import { ReplicationRunnerPanel } from './ReplicationRunnerPanel'
 
 /**
  * The four routed tabs, each a thin adapter that takes the replication name from the layout route's
@@ -35,6 +36,11 @@ export function MonitoringTab() {
 /** The quality checks stored with the replication (plan 33 UE07); beside Monitoring, whose verification checks compare source and target. */
 export function ChecksTab() {
   return <ReplicationChecksPanel replicationName={useReplicationName()} />
+}
+
+/** Who schedules the replication, and the runner it moves to (plan 28c E12). */
+export function RunnerTab() {
+  return <ReplicationRunnerPanel replicationName={useReplicationName()} />
 }
 
 export function HistoryTab() {

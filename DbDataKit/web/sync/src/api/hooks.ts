@@ -5,6 +5,7 @@ import { api } from './client'
 // Who the caller is and the notification feed are the shell's hooks, used by every product's console the same way.
 export { useAuthStatus, useMarkNotificationsSeen, useNotifications, useSignInWithWindows, useSignOut } from '@dbdatakit/shell'
 import type {
+  ReplicationOwner, RunnerLink,
   CheckForm,
   BulkCreateRequest,
   BulkLoadHistoryFilters,
@@ -64,6 +65,8 @@ const keys = {
   replication: (name: string) => ['replications', name] as const,
   replicationHistory: (name: string) => ['replications', name, 'history'] as const,
   replicationChecks: (name: string) => ['replications', name, 'checks'] as const,
+  replicationOwner: (name: string) => ['replications', name, 'owner'] as const,
+  runnerLink: () => ['runner', 'link'] as const,
   replicationCommitDiff: (name: string, sha: string) =>
     ['replications', name, 'history', sha, 'diff'] as const,
   replicationRestorePreview: (name: string, sha: string) =>
@@ -396,6 +399,44 @@ export function useSaveReplicationChecks(name: string) {
     onSuccess: (saved) => {
       queryClient.setQueryData(keys.replicationChecks(name), saved)
       queryClient.invalidateQueries({ queryKey: keys.replicationHistory(name) })
+    },
+  })
+}
+
+/** Who schedules the replication and the runner's row of its task; polled while the page is open, since a drain on the runner changes it without anyone here doing anything. */
+export function useReplicationOwner(name: string | undefined) {
+  return useQuery({
+    queryKey: keys.replicationOwner(name ?? ''),
+    queryFn: () => api.replications.owner(name!),
+    enabled: !!name,
+    refetchInterval: 10_000,
+    retry: false,
+  })
+}
+
+/** Observe, cut over or roll back (plan 28c E12). The status and the replication's pause are read again: a rollback copies the runner's pause here. */
+export function useSetReplicationOwner(name: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ owner, waitSeconds }: { owner: ReplicationOwner; waitSeconds?: number }) => api.replications.setOwner(name, owner, waitSeconds),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: keys.replicationOwner(name) })
+      queryClient.invalidateQueries({ queryKey: ['replications', name] })
+    },
+  })
+}
+
+export function useRunnerLink() {
+  return useQuery({ queryKey: keys.runnerLink(), queryFn: () => api.runner.get(), retry: false })
+}
+
+export function useSaveRunnerLink() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (link: RunnerLink) => api.runner.save(link),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(keys.runnerLink(), saved)
+      queryClient.invalidateQueries({ queryKey: ['replications'] })
     },
   })
 }

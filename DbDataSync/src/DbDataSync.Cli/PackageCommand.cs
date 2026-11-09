@@ -83,7 +83,8 @@ public static class PackageCommand
                 var serve = CliOptions.Has(rest, "--serve");
                 var result = await client.PublishAsync(server!, code, Path.Combine(directory, "package.yaml"), Path.Combine(directory, "files"), channel!, stage: !serve, expected, Console.WriteLine);
                 Console.WriteLine($"{(result.Mode == "stage" ? "Staged" : "Published")} {package} on {result.Channel}: version {result.Version}{(result.Changed ? "" : " (the same content as before, nothing changed)")}, {result.Uploaded} file(s) uploaded, {result.Skipped} already there."
-                    + (result.Mode == "stage" ? " Runners prepare it and activate it once every runner of the group has it ready." : ""));
+                    + (result.Mode == "stage" ? " Runners prepare it and activate it once every runner of the group has it ready." : "")
+                    + $" A replication runs on the runner when its owner is `runner` (a continuous one as a drain that stays up and plans on the runner; a periodic one as a drain per cron time): observe or cut it over with `PUT /api/replications/<name>/owner` or on its Runner tab, and until then this server's scheduler and workers run it.");
                 return 0;
             }
             catch (RunnerClientException ex)

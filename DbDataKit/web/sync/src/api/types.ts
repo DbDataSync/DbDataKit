@@ -1480,3 +1480,46 @@ export interface ChecksFault {
   fix?: string | null
   keyPath?: string | null
 }
+
+// ---- who schedules a replication and the runner it moves to (plan 28c E12)
+
+/** `old`: this server's scheduler and workers; `observe`: the same, and the runner records what it would have queued; `runner`: the runner's drain. */
+export type ReplicationOwner = 'old' | 'observe' | 'runner'
+
+export interface RunnerLink {
+  server: string
+  channel: string
+  package: string
+  clientDirectory?: string | null
+}
+
+/** The runner's own row of the replication's task. */
+export interface RunnerTaskRow {
+  task: string
+  owner: string
+  nextDue: string | null
+  lastRun: { id: string; outcome: string; started: string; finished: string | null; attempt: number; rows: number | null } | null
+  running: number
+  queued: number
+  paused: boolean
+  pausedBy: string | null
+}
+
+export interface OwnerView {
+  replication: string
+  owner: ReplicationOwner
+  link: RunnerLink | null
+  runner: RunnerTaskRow | null
+  runnerError: string | null
+}
+
+export interface OwnershipChange {
+  replication: string
+  from: ReplicationOwner
+  to: ReplicationOwner
+  task: string
+  positionsHandedOver: number
+  handledUpTo: string | null
+  paused: boolean
+  waited: boolean
+}
