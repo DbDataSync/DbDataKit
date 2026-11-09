@@ -10,7 +10,7 @@ public static class RunnerTaskHost
     public const string Name = "dbdatakit-taskhost";
 
     /// <summary>The directory the program is in.</summary>
-    public static string ProgramDirectory => Path.GetDirectoryName(typeof(RunnerTaskHost).Assembly.Location) is { Length: > 0 } here ? here : AppContext.BaseDirectory;
+    public static string ProgramDirectory => AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);   // not Assembly.Location: it is empty in a single-file app (IL3000)
 
     /// <summary>The task host beside <paramref name="programDirectory"/>, or null. The <c>.dll</c> (started through <c>dotnet</c>) is preferred to the apphost: it needs no more than the runtime the program itself runs on.</summary>
     public static string? Find(string? programDirectory = null)

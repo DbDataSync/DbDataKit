@@ -61,20 +61,32 @@ public sealed class ProcessUpgradeLauncher : IUpgradeLauncher
     {
         var copy = Path.Combine(invocation.Root, "helper-" + Guid.NewGuid().ToString("N")[..8]);
         CopyDirectory(invocation.ProgramDirectory, copy);
-        var entry = System.Reflection.Assembly.GetEntryAssembly()?.Location ?? throw new InvalidOperationException("The entry assembly of the program is not known.");
-        var processPath = Environment.ProcessPath ?? throw new InvalidOperationException("The program's own path is not known.");
-        var relativeEntry = Path.GetRelativePath(invocation.ProgramDirectory, entry);
-        var viaDotnet = Path.GetFileNameWithoutExtension(processPath).Equals("dotnet", StringComparison.OrdinalIgnoreCase);
-        var command = new List<string>();
-        if (OperatingSystem.IsLinux() && Environment.GetEnvironmentVariable("INVOCATION_ID") is not null && File.Exists("/usr/bin/systemd-run"))
-            command.AddRange(["/usr/bin/systemd-run", "--quiet", "--collect", "--unit=" + invocation.ServiceName + "-upgrade-" + Path.GetFileName(copy)]);
-        if (viaDotnet) command.AddRange([processPath, Path.Combine(copy, relativeEntry)]);
-        else command.Add(Path.Combine(copy, Path.GetRelativePath(invocation.ProgramDirectory, processPath)));
-        command.AddRange(invocation.ToArguments());
+        var command = Command(invocation, copy, Environment.ProcessPath, Environment.GetCommandLineArgs().ElementAtOrDefault(0),
+            OperatingSystem.IsLinux() && Environment.GetEnvironmentVariable("INVOCATION_ID") is not null && File.Exists("/usr/bin/systemd-run"));
         var info = new ProcessStartInfo(command[0]) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = copy, RedirectStandardInput = true };
         foreach (var a in command.Skip(1)) info.ArgumentList.Add(a);
         Process.Start(info)?.Dispose();
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// The command that runs the copy of the program: its own executable (a single-file app or an apphost), or <c>dotnet app.dll</c> for a framework-dependent install, where the entry dll is the first command-line argument.
+    /// <c>Assembly.Location</c> is empty in a single-file app (IL3000), so it is not used.
+    /// </summary>
+    public static List<string> Command(HelperInvocation invocation, string copy, string? processPath, string? commandLine0, bool systemd)
+    {
+        if (processPath is null) throw new InvalidOperationException("The program's own path is not known.");
+        var viaDotnet = Path.GetFileNameWithoutExtension(processPath).Equals("dotnet", StringComparison.OrdinalIgnoreCase);
+        var command = new List<string>();
+        if (systemd) command.AddRange(["/usr/bin/systemd-run", "--quiet", "--collect", "--unit=" + invocation.ServiceName + "-upgrade-" + Path.GetFileName(copy)]);
+        if (viaDotnet)
+        {
+            if (string.IsNullOrEmpty(commandLine0)) throw new InvalidOperationException("The entry assembly of the program is not known.");
+            command.AddRange([processPath, Path.Combine(copy, Path.GetRelativePath(invocation.ProgramDirectory, Path.GetFullPath(commandLine0)))]);
+        }
+        else command.Add(Path.Combine(copy, Path.GetRelativePath(invocation.ProgramDirectory, processPath)));
+        command.AddRange(invocation.ToArguments());
+        return command;
     }
 
     private static void CopyDirectory(string source, string destination)
