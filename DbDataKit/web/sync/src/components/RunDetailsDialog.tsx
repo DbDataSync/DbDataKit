@@ -105,6 +105,12 @@ export function RunDetailsDialog({ run, times, onClose, onCancelRun }: {
             </span>
           )}
 
+          {/* A pass that did not run because an initial load for its mapping was already in flight ends
+              Succeeded with the reason as its summary; a succeeded run otherwise has none. */}
+          {!failed && run.status === 'Succeeded' && run.errorSummary && (
+            <span className="hint" data-testid="run-details-dialog-note">{run.errorSummary}</span>
+          )}
+
           {/* Only a traced pass has one. Here as well as under the row's own chevron, because
               somebody who opened this to ask how long the run took is already asking the question
               the trace breaks down. */}

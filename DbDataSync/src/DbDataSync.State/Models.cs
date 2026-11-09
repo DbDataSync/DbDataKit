@@ -240,13 +240,14 @@ public static class RunFailureKinds
     /// for the same mapping+segment (an operator's own concurrent reload, most likely) — see
     /// <c>WorkQueueCollisionException</c>. Unlike the two kinds above, the fix is not an operator action:
     /// the mapping's own next scheduled pass retries this on its own once the winner finishes — phase
-    /// 143.</summary>
+    /// 143. No longer recorded: such a pass now ends Succeeded with the reason in its summary (see
+    /// <c>RunExecutor</c>); the constant stays because history written before that carries it.</summary>
     public const string ConcurrentLoadInProgress = "ConcurrentLoadInProgress";
 
     /// <summary>A manual "Run Now" landed on a mapping still <c>ReadHold.Loading</c> — see
     /// <c>MappingLoadingException</c>. Like <see cref="ConcurrentLoadInProgress"/>, not an operator
     /// action: the initial load already in flight will clear the hold itself, and this mapping's next
-    /// scheduled pass runs normally once it does.</summary>
+    /// scheduled pass runs normally once it does. No longer recorded, like <see cref="ConcurrentLoadInProgress"/>.</summary>
     public const string MappingStillLoading = "MappingStillLoading";
 }
 
