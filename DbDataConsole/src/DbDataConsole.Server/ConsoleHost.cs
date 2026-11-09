@@ -98,6 +98,7 @@ public static class ConsoleHost
         builder.Services.AddSingleton(settings);
         builder.Services.AddSingleton(sp => new ConsoleStateConnections(settings.Directory, sp.GetRequiredService<EncryptedFileSecretStore>()));
         builder.Services.AddSingleton(_ => new PendingInstances(settings.PendingPath));
+        builder.Services.AddSingleton(RelayTimeouts.Default);
         builder.Services.AddSingleton<ConsoleRelay>();
         builder.Services.AddSingleton<ConsoleLineage>();
         builder.Services.AddSingleton<ConsoleQuality>();

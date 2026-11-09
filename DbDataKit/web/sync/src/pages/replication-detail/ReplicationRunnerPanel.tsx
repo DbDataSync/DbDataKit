@@ -3,7 +3,7 @@ import { ErrorBanner, Field, useIsAdmin } from '@dbdatakit/shell'
 import { useReplicationOwner, useRunnerLink, useSetReplicationOwner } from '../../api/hooks'
 import type { OwnerView, ReplicationOwner } from '../../api/types'
 import { RunnerLinkCard } from '../RunnerLinkCard'
-import { OWNER_TEXT, movesFrom } from './runnerOwner'
+import { MOVE_IN_PROGRESS_TEXT, OWNER_TEXT, isMoveInProgress, movesFrom } from './runnerOwner'
 
 /** The runner's own row of the replication's task, or what is wrong with asking for it. */
 export function RunnerRow({ view }: { view: OwnerView }) {
@@ -71,7 +71,8 @@ export function ReplicationRunnerPanel({ replicationName }: { replicationName: s
           </Field>
         </div>
         {done && <div className="hint" data-testid="runner-done">{done}</div>}
-        {move.error && <ErrorBanner error={move.error} />}
+        {move.error && isMoveInProgress(move.error) && <div className="hint" data-testid="runner-in-progress">{MOVE_IN_PROGRESS_TEXT}</div>}
+        {move.error && !isMoveInProgress(move.error) && <ErrorBanner error={move.error} />}
         <p className="hint" style={{ marginTop: 12 }}>
           A cutover waits for the worker here and its queue, hands the mappings' positions to the runner's first drain, and then lets the runner schedule. A rollback pauses the runner's drain so that it ends, waits for it, copies the positions it
           advanced (with each mapping's intent and hold) and the pause back, and lets this server schedule again, so the next worker here reads on from where the drain stopped. A mapping that is loading on the runner refuses the rollback; work asked of
