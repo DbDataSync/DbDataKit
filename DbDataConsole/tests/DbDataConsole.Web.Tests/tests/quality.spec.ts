@@ -61,7 +61,7 @@ test('the Quality page shows a blocked dataset with its history and sample keys,
 
   // the replication that holds the check: its target is a port nothing listens on, so an evaluation cannot reach it
   const put = async (url: string, body: unknown) => { const r = await request.put(`${relay}${url}`, { data: body }); expect(r.ok(), `${url}: ${r.status()} ${await r.text()}`).toBe(true) }
-  await put('/connections/orders-db', { name: 'orders-db', driverType: 'MsSql', host: '127.0.0.1', port: 1, database: 'Orders', properties: { TrustServerCertificate: 'true', 'Connect Timeout': '2' }, authMode: 'SqlAuth', userId: 'sa', password: 'unused' })
+  await put('/connections/orders-db', { name: 'orders-db', driverType: 'MsSql', host: '127.0.0.1', port: 1, database: 'Orders', properties: { TrustServerCertificate: 'true', 'Connect Timeout': '2', 'Connect Retry Count': '0' }, authMode: 'SqlAuth', userId: 'sa', password: 'unused' })
   await put(`/replications/${replication}`, {
     name: replication, enabled: false,
     endpoints: { source: { connectionName: 'orders-db', database: 'Src' }, target: { connectionName: 'orders-db', database: 'Orders' } },
@@ -96,7 +96,8 @@ test('the Quality page shows a blocked dataset with its history and sample keys,
   const runButton = page.locator('[data-testid^="quality-run-"]').filter({ hasText: 'Evaluate on Quality sync' })
   await expect(runButton).toBeEnabled()
   await runButton.click()
-  await expect(page.getByTestId('quality-run-result')).toContainText('1 could not run')
+  // the page waits for the server's answer: the connection to the dead target is tried once (no `Connect Retry Count`: SqlClient's default tries again after 10 s, which made the answer take 15 s and the 5 s expectation fail in batches 19, 20 and 21)
+  await expect(page.getByTestId('quality-run-result')).toContainText('1 could not run', { timeout: 30_000 })
   await expect(page.getByTestId(`quality-status-${checkId}`)).toContainText('error')
   await expect(check).toHaveAttribute('data-blocking', 'true')
   // the open history is read again after an evaluation

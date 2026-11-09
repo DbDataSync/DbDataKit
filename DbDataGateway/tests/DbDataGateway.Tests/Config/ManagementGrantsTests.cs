@@ -111,7 +111,7 @@ public sealed partial class ManagementTests
         Assert.Equal(HttpStatusCode.BadRequest, twice.StatusCode);
         var body = await twice.Content.ReadAsStringAsync();
         Assert.Contains("`grants` and `extensions.gateway.groups` both say who may use the data source", body);
-        Assert.Contains("connections/twice.yaml", body.Replace('\\', '/'));
+        Assert.Contains("connections/twice.yaml", body.Replace("\\\\", "/").Replace('\\', '/'));      // the body is JSON: a Windows path comes in as connections\\twice.yaml
         Assert.False(File.Exists(Path.Combine(ConfigDirectory, "connections", "twice.yaml")));
 
         // grants in a connection/1 file: the stored-format refusal names the file, the key and the fix
