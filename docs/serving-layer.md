@@ -42,6 +42,8 @@ A console calls servers and a server never calls a console. The serving layer is
 | `feeds` | result feeds for report servers and tools | not built |
 | `webdav` | DbDataStore documents, with extraction on save | not built |
 | `mcp` | the agents' MCP endpoint, acting as the signed-in user with approvals | not built as a module (the Gateway's `ui mcp` offers the `semantic` noun to agents) |
+| `knowledge` | search, show and about over knowledge items, access-filtered; checks and embeds a knowledge project at staging and switches at activation (plan 27 sections 2.2, 2.6) | not built (plan 27a lane KN); no knowledge library, index or embedding connection exists, only the engine check for vector columns, see [knowledge.md](knowledge.md) |
+| `backlog` | the API of DbDataBacklog: work items, sprints, boards, over its own state module (plan 27 section 5.1) | not built (plan 27a lane BK) |
 
 Health per module is not wired into the host's `/health`: `IServingModule.Health()` exists; the `views` module reports its own at its listener's `/health`.
 

@@ -1,6 +1,6 @@
 # The model's space and the instruction budget
 
-> **Design, not built yet.** This page explains the design in [plan 27](../plans/27-knowledge-agents-integrations-work.md), section
+> **Design, not built yet** (sliced in [plan 27a](../plans/27a-knowledge-slices.md); what exists today is in [agent-tools.md](../agent-tools.md)). This page explains the design in [plan 27](../plans/27-knowledge-agents-integrations-work.md), section
 > 3.5b. When agents are built, this page becomes part of their help.
 
 ## The context window
