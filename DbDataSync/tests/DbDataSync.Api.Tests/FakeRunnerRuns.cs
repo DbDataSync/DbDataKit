@@ -1,0 +1,76 @@
+using DbDataKit.Runner.Client;
+using DbDataSync.Api.Runner;
+using DbDataSync.State;
+
+namespace DbDataSync.Api.Tests;
+
+/// <summary>
+/// A runner that answers what the Sync API reads of the runs of a task (plan 28c E13), scripted by a test: its runs, the lines of each one's log, the steps its runs recorded and the checkpoint it holds. <see cref="Down"/> makes every
+/// call fail as an unreachable runner does. The calls are counted, so a test can say how many a poll made.
+/// </summary>
+public sealed class FakeRunnerRuns : IRunnerSync, IRunnerRuns
+{
+    private readonly object _gate = new();
+    private readonly List<ClientRun> _runs = [];
+    private readonly List<(string Task, string Step, ClientStep Entry)> _steps = [];
+
+    public bool Down { get; set; }
+
+    public int Calls { get; private set; }
+
+    public List<ClientCheckpointItem> Checkpoint { get; } = [];
+
+    public ClientRun AddRun(string task, string outcome, DateTimeOffset started, DateTimeOffset? finished = null, long? rows = null, string? failedItem = null, string? kind = null, string? message = null, Guid? id = null)
+    {
+        var run = new ClientRun(id ?? Guid.NewGuid(), task, 1, outcome, started, finished, rows, failedItem, kind, message, "1");
+        lock (_gate) _runs.Add(run);
+        return run;
+    }
+
+    public void AddStep(string task, string step, string key, string resultJson, DateTimeOffset started)
+    {
+        lock (_gate) _steps.Add((task, step, new ClientStep(key, started, started, resultJson)));
+    }
+
+    public void AddPass(string task, PassRecord pass) => AddStep(task, PassRecordText.StepName, pass.RunId.ToString("N"), PassRecordText.Serialize(pass), pass.StartedAt);
+
+    private void Enter()
+    {
+        lock (_gate) Calls++;
+        if (Down) throw new RunnerClientException("https://runner.test:8495 could not be reached (connection refused).");
+    }
+
+    public Task<IReadOnlyList<ClientRun>> RunsAsync(string? task, int limit, DateTimeOffset? before, string? outcome, CancellationToken ct)
+    {
+        Enter();
+        lock (_gate)
+            return Task.FromResult<IReadOnlyList<ClientRun>>([.. _runs.Where(r => (task is null || r.Task == task) && (before is null || r.Started < before) && (outcome is null || r.Outcome == outcome)).OrderByDescending(r => r.Started).Take(limit)]);
+    }
+
+    public Task<IReadOnlyList<ClientStep>> StepsAsync(string task, string step, int limit, DateTimeOffset? before, string? key, CancellationToken ct)
+    {
+        Enter();
+        lock (_gate)
+            return Task.FromResult<IReadOnlyList<ClientStep>>([.. _steps.Where(s => s.Task == task && s.Step == step && (before is null || s.Entry.Started < before) && (key is null || s.Entry.Key == key)).Select(s => s.Entry).OrderByDescending(s => s.Started).Take(limit)]);
+    }
+
+    public Task<IReadOnlyList<ClientCheckpointItem>> CheckpointAsync(string task, string name, CancellationToken ct)
+    {
+        Enter();
+        return Task.FromResult<IReadOnlyList<ClientCheckpointItem>>([.. Checkpoint]);
+    }
+
+    public Task<ClientTaskSchedule> ScheduleOfAsync(string task, CancellationToken ct) => throw new NotSupportedException();
+
+    public Task SetOwnerAsync(string task, string owner, string? reason, ClientSeed? seed, CancellationToken ct) => throw new NotSupportedException();
+
+    public Task<string?> RunNowAsync(string task, IReadOnlyDictionary<string, string>? inputs, CancellationToken ct) => throw new NotSupportedException();
+
+    public Task PauseAsync(string task, CancellationToken ct) => throw new NotSupportedException();
+
+    public Task ResumeAsync(string task, CancellationToken ct) => throw new NotSupportedException();
+
+    public Task<ClientTaskStatus?> StatusAsync(string task, CancellationToken ct) => throw new NotSupportedException();
+
+    public Task EnqueueWorkAsync(string task, string kind, string subject, string part, string? payload, CancellationToken ct) => throw new NotSupportedException();
+}

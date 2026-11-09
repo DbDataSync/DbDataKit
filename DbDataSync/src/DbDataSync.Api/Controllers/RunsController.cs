@@ -21,6 +21,7 @@ public sealed class RunsController(
     SegmentingPreviewService segmentingPreview,
     ConfigRepository configRepository,
     RunWatermarkTimeService watermarkTimes,
+    DbDataSync.Api.Runner.RunnerRunSource runnerRuns,
     LogWriter logWriter) : ControllerBase
 {
     [HttpPost("replications/{name}/runs")]
@@ -176,19 +177,41 @@ public sealed class RunsController(
     /// different filters is treated the same as no cursor at all rather than rejected outright.
     /// </para>
     /// </summary>
+    /// <summary>How many more of the runner's runs than a page are read, for the ones that started at the instant of the page's last run.</summary>
+    private const int TieSlack = 8;
+
     [Authorize(Policies.Viewer)]
     [HttpGet("replications/{name}/runs")]
-    public ActionResult<RunHistoryResponse> History(
+    public async Task<ActionResult<RunHistoryResponse>> History(
         string name, [FromQuery] RunKind? kind = null, [FromQuery] string? mappingName = null,
-        [FromQuery] RunStatus? status = null, [FromQuery] string? cursor = null, [FromQuery] int limit = 50)
+        [FromQuery] RunStatus? status = null, [FromQuery] string? cursor = null, [FromQuery] int limit = 50, CancellationToken cancellationToken = default)
     {
         var decodedCursor = RunHistoryCursorCodec.Decode(cursor, name, kind, mappingName, status);
         var page = taskRunStore.GetRunHistory(name, kind, mappingName, status, decodedCursor, limit);
-        var nextCursor = page.NextCursor is { } next
-            ? RunHistoryCursorCodec.Encode(next, name, kind, mappingName, status)
-            : null;
+        // a replication the runner owns has the runs it ran there as well (plan 28c E13): its passes and its drains, merged with what this server holds from before it was moved
+        if (!runnerRuns.RunnerOwns(name))
+        {
+            var nextCursor = page.NextCursor is { } next
+                ? RunHistoryCursorCodec.Encode(next, name, kind, mappingName, status)
+                : null;
+            return Ok(new RunHistoryResponse(page, nextCursor));
+        }
 
-        return Ok(new RunHistoryResponse(page, nextCursor));
+        var size = Math.Clamp(limit, 1, 200);
+        // asked a little over a page, and from the cursor's own instant: runs that started at the same instant as the last one shown are not skipped, and the filter below drops the ones already seen
+        var asked = size + 1 + TieSlack;
+        var remote = await runnerRuns.PageAsync(name, asked, decodedCursor?.EnqueuedAtUtc.AddTicks(1), cancellationToken);
+        var remoteRuns = remote.Runs
+            .Where(r => (kind is null || r.RunKind == kind) && (mappingName is null || r.MappingName == mappingName) && (status is null || r.Status == status))
+            .Where(r => decodedCursor is not { } c || r.EnqueuedAtUtc < c.EnqueuedAtUtc || (r.EnqueuedAtUtc == c.EnqueuedAtUtc && r.RunId.CompareTo(c.RunId) < 0))
+            .ToList();
+        var merged = page.Concat(remoteRuns).OrderByDescending(r => r.EnqueuedAtUtc).ThenByDescending(r => r.RunId).ToList();
+        var more = merged.Count > size || page.NextCursor is not null || remote.Runs.Count >= asked;
+        var shown = merged.Take(size).ToList();
+        var mergedCursor = more && shown.Count > 0 && shown[^1].EnqueuedAtUtc is { } at
+            ? RunHistoryCursorCodec.Encode(new RunHistoryCursor(at, shown[^1].RunId), name, kind, mappingName, status)
+            : null;
+        return Ok(new RunHistoryResponse(shown, mergedCursor, remote.Unavailable));
     }
 
     /// <summary>

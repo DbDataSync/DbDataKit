@@ -132,12 +132,6 @@ public sealed record PlannedPass(string Mapping, WorkItem Item, string Token = "
     public string Key => $"{Mapping}#{(Token.Length > 0 ? Token : Item.RunId.ToString("N")[..8])}";
 }
 
-/// <summary>One check the polling gate made of a source: what its counter read (<c>sync_state.change_check</c>'s row, plan 28c E11b).</summary>
-public sealed record ChangeCheckEntry(string Connection, string Database, string ReaderKind, string? Value, DateTimeOffset? SourceTimeUtc, DateTimeOffset CheckedAtUtc);
-
-/// <summary>The checks of one cycle of a drain, an output of the run.</summary>
-public sealed record ChangeCheckBatch(string Replication, List<ChangeCheckEntry> Checks);
-
 /// <summary>What a pass reports of the target it provisioned (plan 28c ED9): the mapping and the columns of the target as the engine found or created it.</summary>
 public sealed record ProvisionedColumnsReport(string Replication, string Mapping, List<CachedColumn> Columns);
 
@@ -152,7 +146,11 @@ public static class DrainSteps
 
     /// <summary>The checks the polling gate made in one cycle (plan 28c E11b): the gate's history, written by the drain as an output of the run, keyed by replication and the time of the first check.</summary>
     public static readonly ValueStep<ChangeCheckBatch, ChangeCheckBatch> ChangeChecks =
-        Step.Value<ChangeCheckBatch, ChangeCheckBatch>("change-checks", b => $"{b.Replication}/{b.Checks[0].CheckedAtUtc.UtcTicks}");
+        Step.Value<ChangeCheckBatch, ChangeCheckBatch>(ChangeCheckText.StepName, b => $"{b.Replication}/{b.Checks[0].CheckedAtUtc.UtcTicks}");
+
+    /// <summary>One pass as the run's own output (plan 28c E13): Sync's row of the run history for a replication the runner owns (<see cref="PassRecord"/>), keyed by the pass's run id. The API reads it through the runner's steps endpoint.</summary>
+    public static readonly ValueStep<PassRecord, PassRecord> Pass =
+        Step.Value<PassRecord, PassRecord>(PassRecordText.StepName, r => r.RunId.ToString("N"));
 
     /// <summary>A verification result (plan 28c E11b): the record the verification wrote, an output of the run keyed by mapping, check and time; the Sync back end reads it from the run for a runner-owned replication.</summary>
     public static readonly ValueStep<VerificationResultRecord, VerificationResultRecord> Verification =
@@ -243,6 +241,7 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
 
     private async Task RunClaimedAsync(RunExecutor executor, ProtocolRunnerState state, DrainLoop drain, PlannedPass pass)
     {
+        var startedAt = DateTimeOffset.UtcNow;
         try
         {
             await executor.RunPlannedItemAsync(pass.Item, CancellationToken.None).ConfigureAwait(false);
@@ -267,12 +266,30 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
         Count(DrainCounters.RowsRead, outcome.RowsRead);
         Count(DrainCounters.Rows, outcome.RowsWritten);
         drain.NotePass(pass.Item, outcome);
+        RecordPass(pass, outcome, startedAt);
         if (outcome.Status != RunStatus.Succeeded)
         {
             var kind = outcome.Status == RunStatus.Cancelled ? TaskFailureKind.Cancelled
                 : TaskFailureKind.Permanent;
-            throw new TaskFailureException(kind, $"The pass over '{pass.Mapping}' ended {outcome.Status}: {outcome.Summary}", pass.Mapping);
+            // the run's own classification is only Permanent or Cancelled: what Sync classified (PositionExpired, MetadataNotCached, ...) is said in the message, which is what the console's row of the run shows
+            var classified = outcome.FailureKind is { Length: > 0 } sync ? $" ({sync})" : "";
+            throw new TaskFailureException(kind, $"The pass over '{pass.Mapping}' ended {outcome.Status}{classified}: {outcome.Summary}", pass.Mapping);
         }
+    }
+
+    /// <summary>
+    /// The pass as a record of the run (plan 28c E13), written whatever the outcome, before a failed pass fails the run: the pass's mapping, kind, rows, timings, the failure kind the engine classified and the summary (a pass that
+    /// lost the initial-load race ends <c>Succeeded</c> and says <c>Not run: ...</c>). The summary of a pass that did not fail is also a line of the run's log, which the engine does not write itself on this path.
+    /// </summary>
+    private void RecordPass(PlannedPass pass, PassOutcome outcome, DateTimeOffset startedAt)
+    {
+        if (outcome.Status == RunStatus.Succeeded && !string.IsNullOrEmpty(outcome.Summary))
+            Run.Log.LogInformation("Pass over '{Mapping}' ({Kind}): {Summary}", pass.Mapping, pass.Item.RunKind, outcome.Summary);
+        var record = new PassRecord(
+            pass.Item.RunId, Run.Id, Input.Replication, pass.Item.RunKind.ToString(), pass.Mapping,
+            pass.Item.SegmentLabel == WorkQueueStore.NoSegment ? null : pass.Item.SegmentLabel, outcome.Status.ToString(), startedAt, DateTimeOffset.UtcNow,
+            outcome.RowsRead, outcome.RowsWritten, outcome.Summary, outcome.FailureKind, outcome.Detail, pass.Item.BulkLoadBatchId);
+        Step(DrainSteps.Pass, record).Repeatable().RunAsync(_ => Task.FromResult(record), CancellationToken.None).GetAwaiter().GetResult();
     }
 
     /// <summary>The position of a mapping as the run's checkpoint: read from the progress the run started with, written and saved at once, one save at a time (a save writes everything changed, and two at once would conflict with each other).</summary>

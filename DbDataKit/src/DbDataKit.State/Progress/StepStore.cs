@@ -326,6 +326,27 @@ public sealed class StepStore(StateDatabase database, ProgressKey key, StepOptio
             return (IReadOnlyList<StepRecord>)steps;
         });
 
+    /// <summary>
+    /// The completed steps of this task named <paramref name="name"/> across every attempt chain, newest first (plan 28c E13): what a product reads to take the outputs of a task's runs (a drain's pass records and gate checks)
+    /// without knowing the chains. <paramref name="stepKey"/> narrows to one key, <paramref name="startedBefore"/> pages by the start of the last step seen.
+    /// </summary>
+    public IReadOnlyList<StepRecord> Recent(string name, int limit = 100, DateTimeOffset? startedBefore = null, string? stepKey = null) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection,
+                $"SELECT {Columns} FROM {{table:step_result}} WHERE package = $package AND channel = $channel AND task = $task AND step_name = $step_name AND state = 'completed'" +
+                (stepKey is null ? "" : " AND step_key = $step_key") + (startedBefore is null ? "" : " AND started_at < $before") + $" ORDER BY started_at DESC, id DESC {database.Limit("limit")};");
+            cmd.Bind(database, "package", key.Package).Bind(database, "channel", key.Channel).Bind(database, "task", key.Task).Bind(database, "step_name", name);
+            if (stepKey is not null) cmd.Bind(database, "step_key", stepKey);
+            if (startedBefore is { } before) cmd.Bind(database, "before", before);
+            cmd.Bind(database, "limit", (long)Math.Clamp(limit, 1, 1000));
+            using var reader = cmd.ExecuteReader();
+            var steps = new List<StepRecord>();
+            while (reader.Read()) steps.Add(Map(reader));
+            return (IReadOnlyList<StepRecord>)steps;
+        });
+
     private StepRecord? Read(DbConnection connection, DbTransaction? transaction, string chain, string name, string stepKey)
     {
         using var cmd = database.Command(Module, connection, transaction, $"SELECT {Columns} FROM {{table:step_result}} WHERE {Where};");

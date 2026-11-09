@@ -6,19 +6,27 @@ namespace DbDataSync.State;
 /// because that is what "the replication ran" means for a schedule. Reloads, verifications and delete sweeps are on demand and say nothing about being overdue.
 /// </summary>
 /// <param name="runs">Sync's run history.</param>
+/// <param name="runner">The runs of the replications a runner owns (plan 28c E13), or null when none can be: a replication it owns has its last run there and, from before it was moved, in <paramref name="runs"/>; the later of the two is the last.</param>
 /// <param name="lag">How far behind its source a replication is, or null when its readers cannot say; Sync computes it from positions, so it stays Sync's to compute.</param>
-public sealed class SyncRunHistory(TaskRunStore runs, Func<string, LagReading?>? lag = null) : IRunHistory
+public sealed class SyncRunHistory(TaskRunStore runs, Func<string, LagReading?>? lag = null, IRunnerRunHistory? runner = null) : IRunHistory
 {
     /// <summary>How many recent runs are looked through for the latest one that started; queued runs have not and are skipped.</summary>
     private const int Look = 20;
 
-    public Task<RunRecord?> LastRunAsync(string jobId, CancellationToken ct = default)
+    /// <summary>
+    /// The last ordinary pass that started. For a replication a runner owns it is the later of this server's own and the runner's; a runner that cannot be asked <b>throws</b> (<see cref="IRunnerRunHistory"/>), because
+    /// answering with the older run of this server would say a replication is healthy that nobody could look at.
+    /// </summary>
+    public async Task<RunRecord?> LastRunAsync(string jobId, CancellationToken ct = default)
     {
         var latest = runs.GetRunHistory(jobId, RunKind.Primary, limit: Look)
             .Where(r => r.StartedAtUtc is not null)
             .OrderByDescending(r => r.StartedAtUtc)
             .FirstOrDefault();
-        return Task.FromResult(latest is null ? null : ToRecord(latest));
+        var own = latest is null ? null : ToRecord(latest);
+        if (runner is null || !runner.Owns(jobId)) return own;
+        var remote = await runner.LastRunAsync(jobId, ct).ConfigureAwait(false);
+        return remote is not null && (own is null || remote.Started >= own.Started) ? remote : own;
     }
 
     public Task<LagReading?> LagAsync(string jobId, CancellationToken ct = default) => Task.FromResult(lag?.Invoke(jobId));
@@ -39,4 +47,14 @@ public sealed class SyncRunHistory(TaskRunStore runs, Func<string, LagReading?>?
         run.RowsWritten,
         run.Status == RunStatus.Failed ? run.MappingName : null,
         run.Status == RunStatus.Failed ? new RunFailure(run.FailureKind ?? "Error", run.ErrorSummary ?? "The run failed.") : null);
+}
+
+/// <summary>The runs of the replications a runner owns, as the shared monitoring model needs them (plan 28c E13).</summary>
+public interface IRunnerRunHistory
+{
+    /// <summary>Whether the runner owns the replication.</summary>
+    bool Owns(string jobId);
+
+    /// <summary>The newest ordinary pass of the replication the runner holds; throws when the runner could not be asked (the reason is the message).</summary>
+    Task<RunRecord?> LastRunAsync(string jobId, CancellationToken ct);
 }

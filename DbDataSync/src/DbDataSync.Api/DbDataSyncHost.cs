@@ -268,6 +268,10 @@ public static class DbDataSyncHost
         builder.Services.AddSingleton(sp => new DbDataSync.Api.Runner.ReplicationSetPublishing(sp.GetRequiredService<DbDataSync.Api.Runner.RunnerAccess>(), sp.GetRequiredService<DbDataSync.Api.Runner.IPackageLauncher>(),
             link => DbDataSync.Api.Runner.ClientRunnerPackages.For(link, Environment.GetEnvironmentVariable),
             new DbDataKit.Web.Trust.FileAuditLog(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(sp.GetRequiredService<ApiOptions>().StateDbPath))!, "management-audit.log")), TimeProvider.System));
+        // what the runner holds of the replications it owns (plan 28c E13): their runs and logs, and the inputs of their lag, kept fresh by the refresher so that describing lag never asks a runner
+        builder.Services.AddSingleton<DbDataSync.Api.Runner.RunnerRunSource>();
+        builder.Services.AddSingleton<DbDataSync.Api.Runner.RunnerLagInputs>();
+        builder.Services.AddHostedService<DbDataSync.Api.Runner.RunnerLagRefresher>();
         builder.Services.AddSingleton(sp => new DbDataSync.Api.Runner.ReplicationOwnership(
             sp.GetRequiredService<ConfigRepository>(), sp.GetRequiredService<TaskRunStore>(), sp.GetRequiredService<WorkQueueStore>(), sp.GetRequiredService<ChangeWatermarkStore>(),
             sp.GetRequiredService<DriverRegistry>(), name => sp.GetRequiredService<ProcessSupervisor>().DescribeStatus(name).Running, sp.GetRequiredService<DbDataSync.Api.Runner.RunnerAccess>(), TimeProvider.System));
@@ -310,7 +314,7 @@ public static class DbDataSyncHost
         builder.Services.AddSingleton<ReaderLagService>();
         // Sync's runs and lag as the shared monitoring model (plan 13, M06), for the health rules of DbDataKit.Monitoring.
         builder.Services.AddSingleton<IRunHistory>(sp => new SyncRunHistory(sp.GetRequiredService<TaskRunStore>(),
-            job => ReplicationLagReading.For(sp.GetRequiredService<ReaderLagService>(), sp.GetRequiredService<ConfigRepository>(), job)));
+            job => ReplicationLagReading.For(sp.GetRequiredService<ReaderLagService>(), sp.GetRequiredService<ConfigRepository>(), job), sp.GetRequiredService<DbDataSync.Api.Runner.RunnerRunSource>()));
 
         // Dating a run's stored watermarks reads the same polling history through the same
         // resolution, for the same reason — see phase 88.

@@ -113,8 +113,14 @@ public sealed class ReaderLagService(
     ChangeSourceResolver sources,
     ChangeWatermarkStore watermarks,
     ChangeCheckStore checks,
-    ILogger<ReaderLagService> logger)
+    ILogger<ReaderLagService> logger,
+    DbDataSync.Api.Runner.RunnerLagInputs? runner = null)
 {
+    private readonly DbDataSync.Api.Runner.ILagInputs _own = new DbDataSync.Api.Runner.StoreLagInputs(watermarks, checks);
+
+    /// <summary>Where this replication's positions and checks are: this server's state, or, for a replication the runner owns (plan 28c E13), what the runner last said of them. Everything below is computed the same way from either.</summary>
+    private DbDataSync.Api.Runner.ILagInputs InputsOf(string replication) => runner is not null && runner.Owns(replication) ? runner.For(replication) : _own;
+
     /// <summary>
     /// **Synchronous, and that is the phase 87 property stated in the signature.** Every value this
     /// reads is a row in the state database, which every store here reads synchronously; there is no
@@ -143,7 +149,8 @@ public sealed class ReaderLagService(
         if (source is null)
             return new ReaderLag(readerKind, Supported: false);
 
-        var applied = watermarks.GetAppliedPosition(task.Name, mappingName, source.WatermarkKey);
+        var inputs = InputsOf(task.Name);
+        var applied = inputs.GetAppliedPosition(task.Name, mappingName, source.WatermarkKey);
 
         // No stored position at all: the mapping has never completed a pass, so there is nothing to
         // measure from. Null rather than a large number — "unknown" and "far behind" are different
@@ -153,9 +160,9 @@ public sealed class ReaderLagService(
 
         return readerKind switch
         {
-            MsSqlDriverKinds.Cdc => CdcLag(readerKind, source, applied),
+            MsSqlDriverKinds.Cdc => CdcLag(inputs, readerKind, source, applied),
 
-            MsSqlDriverKinds.ChangeTracking => ChangeTrackingLag(readerKind, source, applied),
+            MsSqlDriverKinds.ChangeTracking => ChangeTrackingLag(inputs, readerKind, source, applied),
 
             _ => new ReaderLag(readerKind, Supported: false),
         };
@@ -174,7 +181,7 @@ public sealed class ReaderLagService(
     /// just come back after an outage — is exactly the one that should not be adding load.
     /// </para>
     /// </summary>
-    private ReaderLag CdcLag(string readerKind, ChangeSource source, AppliedPosition applied)
+    private ReaderLag CdcLag(DbDataSync.Api.Runner.ILagInputs checks, string readerKind, ChangeSource source, AppliedPosition applied)
     {
         // Deliberately the latest row that *has* a time rather than the latest row: a group whose
         // most recent poll found no position at all (the capture job stopped) still has an earlier
@@ -230,7 +237,7 @@ public sealed class ReaderLagService(
     /// </para>
     /// </summary>
     private ReaderLag ChangeTrackingLag(
-        string readerKind, ChangeSource source, AppliedPosition applied)
+        DbDataSync.Api.Runner.ILagInputs checks, string readerKind, ChangeSource source, AppliedPosition applied)
     {
         if (!long.TryParse(applied.Watermark, out var appliedVersion))
             return new ReaderLag(readerKind, Supported: true);
