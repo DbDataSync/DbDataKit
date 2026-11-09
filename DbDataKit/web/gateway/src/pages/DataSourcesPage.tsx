@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
-import { ApiError, ErrorBanner, useIsAdmin, useNavigate } from '@dbdatakit/shell'
+import { ApiError, ErrorBanner, Link, useIsAdmin, useNavigate } from '@dbdatakit/shell'
 import { gatewayApi } from '../api'
 import { GatewayShell } from '../GatewayShell'
 import { passwordLine } from '../secrets'

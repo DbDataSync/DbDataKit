@@ -149,6 +149,13 @@ test('the console pairs with a runner, runs, pauses and resumes a task, shows a 
   await page.getByTestId('rail-tasks').click()
   await expect(task(page, 'sample/dev/tally')).toContainText('2', { timeout: 30_000 })
 
-  // and only the documented calls of the runner are reachable through the relay: a publisher's upload is not
-  expect((await request.put(`/relay/${id}/api/v1/artifacts/${'0'.repeat(64)}`, { data: 'x' })).status()).toBe(403)
+  // and only the listed calls of the runner are reachable through the relay (plan 33, "The relay to a runner"):
+  // the artifact upload is listed (admin or publisher), so it reaches the runner, which refuses this body itself (400, not the relay's 403)
+  expect((await request.put(`/relay/${id}/api/v1/artifacts/${'0'.repeat(64)}`, { data: 'x' })).status()).toBe(400)
+  // a call that is not listed is refused by the relay, in its words, and never reaches the runner
+  for (const [method, path] of [['PUT', 'api/v1/status'], ['DELETE', 'api/v1/artifacts/' + '0'.repeat(64)], ['POST', 'api/v1/artifacts/' + '0'.repeat(64)], ['PUT', 'api/v1/settings/other']] as const) {
+    const refused = await request.fetch(`/relay/${id}/${path}`, { method, data: 'x' })
+    expect(refused.status(), `${method} ${path}`).toBe(403)
+    expect(await refused.text()).toContain('relays only its management calls')
+  }
 })
