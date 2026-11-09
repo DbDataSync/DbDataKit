@@ -197,7 +197,12 @@ public sealed class RunLifecycleIntegrationTests : IClassFixture<TestApiFactory>
 
         Assert.NotNull(completedPayload);
         Assert.Equal("Succeeded", completedPayload!.Value.GetProperty("status").GetString());
-        Assert.NotEmpty(logLines);
+
+        // What the run logged is read back from the run's log endpoint, so this assertion does not depend on timing: the hub does not replay, and the run's id is known only after the trigger, so a
+        // monitor tick (once a second) that streams the lines between the trigger and JoinRun reaches nobody (runCompleted still arrives). Whatever did reach this connection must be what the run logged.
+        var logged = (await _client.GetFromJsonAsync<JsonElement>($"/api/runs/{runId}/logs")).EnumerateArray().Select(e => e.GetProperty("message").GetString() ?? "").ToList();
+        Assert.NotEmpty(logged);
+        Assert.All(logLines.ToArray(), line => Assert.Contains(line, logged));
 
         var runDetail = await _client.GetFromJsonAsync<JsonElement>($"/api/runs/{runId}");
         Assert.Equal("Succeeded", runDetail.GetProperty("status").GetString());
