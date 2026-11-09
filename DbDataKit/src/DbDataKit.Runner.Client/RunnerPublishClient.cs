@@ -227,6 +227,19 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
     }
 
     /// <summary>
+    /// What the runner holds of <paramref name="package"/>: <c>GET /api/v1/definitions/integration/{name}</c> as the runner answers it (versions, what each channel serves and has staged, the staging progress, the slots the manifests declare, the
+    /// bindings, what each instance reports and the latest events), or null when the runner has no such package. A viewer's call.
+    /// </summary>
+    public async Task<JsonNode?> DescribeAsync(string server, string? code, string package, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        using var response = await link.SendAsync(HttpMethod.Get, $"api/v1/definitions/integration/{Uri.EscapeDataString(package)}", null, ct);
+        if (response.StatusCode == HttpStatusCode.NotFound) return null;
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to describe {package}", ct);
+        return JsonNode.Parse(await response.Content.ReadAsStringAsync(ct));
+    }
+
+    /// <summary>
     /// Promotes the version <paramref name="from"/> serves to <paramref name="to"/> (plan 21, plan 30): the same stored version, not a copy, by <c>POST /api/v1/definitions/integration/{name}/switch</c>, which is an administrator's call
     /// on the runner (a pairing whose roles do not include it is refused with the runner's own words). The connection slots of <paramref name="to"/> are its own: bind them first (<see cref="BindAsync"/>), or the runner refuses naming the slot and the channel.
     /// </summary>

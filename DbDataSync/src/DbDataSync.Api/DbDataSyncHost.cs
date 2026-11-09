@@ -263,6 +263,11 @@ public static class DbDataSyncHost
         builder.Services.AddSingleton(sp => new DbDataSync.Api.Runner.RunnerOwnerFile(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(sp.GetRequiredService<ApiOptions>().StateDbPath))!, "runner-owners.json")));
         builder.Services.AddSingleton(sp => new DbDataSync.Api.Runner.RunnerAccess(sp.GetRequiredService<DbDataSync.Api.Runner.RunnerOwnerFile>(), link => DbDataSync.Api.Runner.ClientRunnerSync.For(link, Environment.GetEnvironmentVariable)));
         builder.Services.AddSingleton<DbDataSync.Api.Runner.RunnerDispatch>();
+        // the publish action of plan 28c E08: the verb `package publish` as a child process with the stored link, the runner's package read and bound through the paired client, every call audited beside the state
+        builder.Services.AddSingleton<DbDataSync.Api.Runner.IPackageLauncher>(sp => new DbDataSync.Api.Runner.CliPackageLauncher(sp.GetRequiredService<ApiOptions>()));
+        builder.Services.AddSingleton(sp => new DbDataSync.Api.Runner.ReplicationSetPublishing(sp.GetRequiredService<DbDataSync.Api.Runner.RunnerAccess>(), sp.GetRequiredService<DbDataSync.Api.Runner.IPackageLauncher>(),
+            link => DbDataSync.Api.Runner.ClientRunnerPackages.For(link, Environment.GetEnvironmentVariable),
+            new DbDataKit.Web.Trust.FileAuditLog(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(sp.GetRequiredService<ApiOptions>().StateDbPath))!, "management-audit.log")), TimeProvider.System));
         builder.Services.AddSingleton(sp => new DbDataSync.Api.Runner.ReplicationOwnership(
             sp.GetRequiredService<ConfigRepository>(), sp.GetRequiredService<TaskRunStore>(), sp.GetRequiredService<WorkQueueStore>(), sp.GetRequiredService<ChangeWatermarkStore>(),
             sp.GetRequiredService<DriverRegistry>(), name => sp.GetRequiredService<ProcessSupervisor>().DescribeStatus(name).Running, sp.GetRequiredService<DbDataSync.Api.Runner.RunnerAccess>(), TimeProvider.System));
