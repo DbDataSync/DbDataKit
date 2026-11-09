@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>DbDataKit.Authoring</PackageId>
+    <RootNamespace>DbDataKit.Authoring</RootNamespace>
+    <Description>Authoring workspaces for any project kind (plan 22a GP30): one git worktree per person and name, listed, created and abandoned by its owner, and the calls of a server's management API that show, commit, push and merge it, over a host that says which projects there are. Build's projects are the first kind, an app project the second.</Description>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\DbDataKit.Config.Git\DbDataKit.Config.Git.csproj" />
+    <ProjectReference Include="..\DbDataKit.Web\DbDataKit.Web.csproj" />
+  </ItemGroup>
+</Project>

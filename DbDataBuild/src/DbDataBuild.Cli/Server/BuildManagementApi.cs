@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using DbDataBuild.Cli.Mcp;
 using DbDataBuild.Tui.Model;
+using DbDataKit.Authoring;
 using DbDataBuild.Cli.Runner;
 using DbDataKit.Scheduling;
 using DbDataKit.State;
@@ -43,7 +44,7 @@ internal static class BuildManagementApi
     /// <param name="projects">The projects served, read again on every call so one added or removed is served or gone at once.</param>
     /// <param name="commands">All the commands there are; each project is offered the read-only ones.</param>
     /// <param name="surfaceFor">Which of them a project is offered and how their inputs are checked; the read-only rules unless a test or a later slice says otherwise.</param>
-    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, Workspaces? workspaces = null, WarmSessionRunner? workspaceRunner = null, ProxiesFile? proxies = null, ProxyPublisher? publisher = null, IPairingCodeStore? pairingCodes = null, string? clientName = null, ProjectCreator? creator = null, string? serverDirectory = null, Func<ScheduleRunnerLink, DbDataBuild.Cli.Runner.IRunnerTaskControl>? runnerControl = null, IAuditLog? audit = null, Func<ScheduleRunnerLink, DbDataBuild.Cli.Runner.IRunnerSchedule>? runnerSchedule = null, string? runnerClientDirectory = null)
+    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, DbDataKit.Authoring.Workspaces? workspaces = null, WarmSessionRunner? workspaceRunner = null, ProxiesFile? proxies = null, ProxyPublisher? publisher = null, IPairingCodeStore? pairingCodes = null, string? clientName = null, ProjectCreator? creator = null, string? serverDirectory = null, Func<ScheduleRunnerLink, DbDataBuild.Cli.Runner.IRunnerTaskControl>? runnerControl = null, IAuditLog? audit = null, Func<ScheduleRunnerLink, DbDataBuild.Cli.Runner.IRunnerSchedule>? runnerSchedule = null, string? runnerClientDirectory = null)
     {
         surfaceFor ??= FullSurface;
         var specs = CommandSpecs.All.ToDictionary(s => s.Name);
@@ -423,51 +424,12 @@ internal static class BuildManagementApi
     /// <c>GET|POST /api/v1/projects/{project}/workspaces</c> and <c>DELETE .../workspaces/{id}</c> (plan 13, W02). Listing is a viewer's; making one and abandoning one needs the author role, and only the owner abandons theirs.
     /// A command runs in a workspace when the call says <c>?workspace=&lt;id&gt;</c>, and only for its owner; without it the command runs in the project's own checkout, which is what the scheduler reads.
     /// </summary>
-    private static void MapWorkspaces(IEndpointRouteBuilder app, ProjectsFile projects, Workspaces workspaces, WarmSessionRunner? sessions)
+    private static void MapWorkspaces(IEndpointRouteBuilder app, ProjectsFile projects, DbDataKit.Authoring.Workspaces workspaces, WarmSessionRunner? sessions)
     {
-        static object Describe(Workspace w, string? caller) => new { id = w.Id, name = w.Name, owner = w.OwnerName, mine = w.Owner == caller, branch = w.Branch, @base = w.Base, created = w.Created };
-        static IResult Refused(AuthorizationDecision decision) => Results.Json(new { error = $"This needs the {decision.Needed.ToString().ToLowerInvariant()} role." }, statusCode: StatusCodes.Status403Forbidden);
+        static IResult Refused(AuthorizationDecision decision) => WorkspaceApi.Refused(decision);
 
-        app.MapGet("/api/v1/projects/{project}/workspaces", (string project, HttpContext context) =>
-        {
-            if (projects.Find(project) is not { } hosted) return Results.NotFound();
-            var token = context.ManagementToken();
-            var decision = ManagementAuthorization.Authorize(token, ServerRole.Viewer, hosted.Id);
-            return decision.Allowed ? Results.Json(new { workspaces = workspaces.List(hosted.Id).Select(w => Describe(w, token.SubjectId)) }) : Refused(decision);
-        });
-
-        app.MapPost("/api/v1/projects/{project}/workspaces", async (string project, HttpContext context) =>
-        {
-            if (projects.Find(project) is not { } hosted) return Results.NotFound();
-            var token = context.ManagementToken();
-            var decision = ManagementAuthorization.Authorize(token, ServerRole.Author, hosted.Id);
-            if (!decision.Allowed) return Refused(decision);
-            string? name;
-            try { name = (await JsonSerializer.DeserializeAsync<JsonObject>(context.Request.Body, cancellationToken: context.RequestAborted))?["name"]?.GetValue<string>(); }
-            catch (Exception ex) when (ex is JsonException or InvalidOperationException) { name = null; }
-            if (name is null) return Results.Json(new { error = "The body is a JSON object with a \"name\"." }, statusCode: StatusCodes.Status400BadRequest);
-            try
-            {
-                var made = workspaces.Create(hosted.Id, projects.RootOf(hosted), token.SubjectId, token.SubjectName ?? token.SubjectId, name);
-                return Results.Json(Describe(made, token.SubjectId), statusCode: StatusCodes.Status201Created);
-            }
-            catch (ArgumentException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest); }
-            catch (DbDataKit.Config.Git.GitWorktreeException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
-        });
-
-        app.MapDelete("/api/v1/projects/{project}/workspaces/{id}", (string project, string id, HttpContext context) =>
-        {
-            if (projects.Find(project) is not { } hosted) return Results.NotFound();
-            var token = context.ManagementToken();
-            var decision = ManagementAuthorization.Authorize(token, ServerRole.Author, hosted.Id);
-            if (!decision.Allowed) return Refused(decision);
-            if (workspaces.Find(hosted.Id, id) is not { } workspace) return Results.NotFound();
-            if (workspace.Owner != token.SubjectId) return Results.Json(new { error = "A workspace is abandoned by its owner." }, statusCode: StatusCodes.Status403Forbidden);
-            sessions?.End(workspaces.RootOf(workspace));    // its process has the folder open
-            try { workspaces.Abandon(workspace, projects.RootOf(hosted)); }
-            catch (DbDataKit.Config.Git.GitWorktreeException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
-            return Results.NoContent();
-        });
+        // list, create, abandon, changes, history, commit, push and merge are the library's, the same for every kind of project (plan 22a, GP30)
+        WorkspaceApi.Map(app, new BuildAuthoringProjects(projects), workspaces, new WorkspaceApiOptions("dbdatabuild.local", root => sessions?.End(root)));
 
         // the catalog of a semantic model of the draft (plan 32 DBR29): what the dashboard editor's field wells offer, from the model as the compiler reads it in the person's own workspace
         app.MapGet("/api/v1/projects/{project}/workspaces/{id}/models/{model}/catalog", (string project, string id, string model, HttpContext context) =>
@@ -484,7 +446,6 @@ internal static class BuildManagementApi
             return Results.Json(new { model = file.Name, catalog = JsonNode.Parse(ProjectViews.CatalogOf(file).ToJsonString()) });
         });
 
-        MapWorkspaceGit(app, projects, workspaces, sessions);
     }
 
     /// <summary>
@@ -589,98 +550,6 @@ internal static class BuildManagementApi
                 return Results.Json(new { error = $"{file.Path} has {problems.Count} problem(s), so it was not published: {problems[0].Code} {problems[0].Message}", diagnostics = problems.Select(d => new { code = d.Code, message = d.Message, file = d.Path, line = d.Line, column = d.Column }) }, statusCode: StatusCodes.Status409Conflict);
             var result = await publisher.PublishViewAsync(proxy, kindText!, name, text, expected, note, token, context.RequestAborted);
             return Results.Json(result.Body, statusCode: result.Status);
-        });
-    }
-
-    /// <summary>
-    /// Git for a workspace (plan 13, W08, D15): <c>GET .../changes</c> (what differs from where the draft started, with patches and, for a text file, both whole texts) and <c>GET .../history</c> are a viewer's; <c>POST .../commit</c> (<c>{"message"}</c>) and <c>POST .../push</c> (which answers <c>pull_request_url</c> for a remote at GitHub, Azure DevOps or GitLab, and presents the project's <c>git_credential</c>, W12) are the owner's and need the
-    /// author role; <c>POST .../merge</c> needs the approver role, because it changes what the scheduler and the deploys read. A project with a git remote is pushed to (a branch, for a pull request opened where the remote lives) and never merged inside
-    /// the server, since the server's copy of a remote is reset to the remote's branch; a project without one is merged inside the server, in the author's name. A merge that conflicts changes nothing and answers 409 with the files. A merged workspace is abandoned.
-    /// </summary>
-    private static void MapWorkspaceGit(IEndpointRouteBuilder app, ProjectsFile projects, Workspaces workspaces, WarmSessionRunner? sessions)
-    {
-        static DbDataKit.Config.Git.GitAuthor AuthorOf(ValidatedToken token) => new(token.SubjectName ?? token.SubjectId, $"{token.SubjectId}@dbdatabuild.local");
-
-        // the project, the workspace, and whether this caller may do this to it; the failure is the answer
-        IResult? Resolve(string project, string id, HttpContext context, ServerRole needed, bool ownerOnly, out HostedProject hosted, out Workspace workspace)
-        {
-            hosted = null!;
-            workspace = null!;
-            if (projects.Find(project) is not { } found) return Results.NotFound();
-            hosted = found;
-            var token = context.ManagementToken();
-            var decision = ManagementAuthorization.Authorize(token, needed, hosted.Id);
-            if (!decision.Allowed) return Results.Json(new { error = $"This needs the {decision.Needed.ToString().ToLowerInvariant()} role." }, statusCode: StatusCodes.Status403Forbidden);
-            if (workspaces.Find(hosted.Id, id) is not { } w) return Results.NotFound();
-            workspace = w;
-            return ownerOnly && w.Owner != token.SubjectId ? Results.Json(new { error = "A workspace is its owner's." }, statusCode: StatusCodes.Status403Forbidden) : null;
-        }
-
-        static IResult Failed(DbDataKit.Config.Git.GitOperationException ex) => Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict);
-
-        app.MapGet("/api/v1/projects/{project}/workspaces/{id}/changes", (string project, string id, HttpContext context) =>
-        {
-            if (Resolve(project, id, context, ServerRole.Viewer, false, out _, out var workspace) is { } refused) return refused;
-            try
-            {
-                var root = workspaces.RootOf(workspace);
-                var changes = DbDataKit.Config.Git.GitWorkspaceOperations.Changes(root, workspace.Base).Select(c => new { path = c.Path, status = c.Status, patch = c.Patch, before = c.Before, after = c.After, sides = c.Sides }).ToList();
-                // whether a commit has not taken some of them yet: a merge takes what is committed
-                return Results.Json(new { changes, uncommitted = DbDataKit.Config.Git.GitWorkspaceOperations.HasUncommitted(root) });
-            }
-            catch (DbDataKit.Config.Git.GitOperationException ex) { return Failed(ex); }
-        });
-
-        app.MapGet("/api/v1/projects/{project}/workspaces/{id}/history", (string project, string id, HttpContext context) =>
-        {
-            if (Resolve(project, id, context, ServerRole.Viewer, false, out _, out var workspace) is { } refused) return refused;
-            return Results.Json(new { commits = DbDataKit.Config.Git.GitWorkspaceOperations.History(workspaces.RootOf(workspace), workspace.Base).Select(c => new { sha = c.Sha, message = c.Message, author = c.AuthorName, when = c.WhenUtc }) });
-        });
-
-        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/commit", async (string project, string id, HttpContext context) =>
-        {
-            if (Resolve(project, id, context, ServerRole.Author, true, out _, out var workspace) is { } refused) return refused;
-            string? message;
-            try { message = (await JsonSerializer.DeserializeAsync<JsonObject>(context.Request.Body, cancellationToken: context.RequestAborted))?["message"]?.GetValue<string>(); }
-            catch (Exception ex) when (ex is JsonException or InvalidOperationException) { message = null; }
-            if (string.IsNullOrWhiteSpace(message)) return Results.Json(new { error = "The body is a JSON object with a \"message\"." }, statusCode: StatusCodes.Status400BadRequest);
-            try
-            {
-                var sha = DbDataKit.Config.Git.GitWorkspaceOperations.Commit(workspaces.RootOf(workspace), message, AuthorOf(context.ManagementToken()));
-                return Results.Json(new { committed = sha is not null, sha });
-            }
-            catch (DbDataKit.Config.Git.GitOperationException ex) { return Failed(ex); }
-        });
-
-        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/push", (string project, string id, HttpContext context) =>
-        {
-            if (Resolve(project, id, context, ServerRole.Author, true, out var hosted, out var workspace) is { } refused) return refused;
-            if (!hosted.IsRemote) return Results.Json(new { error = "This project has no git remote to push to; merge it inside the server instead." }, statusCode: StatusCodes.Status409Conflict);
-            try
-            {
-                var root = workspaces.RootOf(workspace);
-                DbDataKit.Config.Git.GitWorkspaceOperations.Push(root, workspace.Branch, projects.CredentialFor(hosted));
-                // where the person opens the pull request: a link built from the remote's address (GitHub, Azure DevOps, GitLab), null for any other remote
-                return Results.Json(new { pushed = true, branch = workspace.Branch, pull_request_url = DbDataKit.Config.Git.GitPullRequestLink.For(hosted.Git, workspace.Branch) });
-            }
-            catch (DbDataKit.Config.Git.GitOperationException ex) { return Failed(ex); }
-            catch (DbDataKit.Config.Git.GitRemoteException ex) { return Failed(new DbDataKit.Config.Git.GitOperationException(ex.Message, ex)); }
-        });
-
-        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/merge", (string project, string id, HttpContext context) =>
-        {
-            if (Resolve(project, id, context, ServerRole.Approver, false, out var hosted, out var workspace) is { } refused) return refused;
-            if (hosted.IsRemote) return Results.Json(new { error = "This project follows a git remote, so its changes go there: push the workspace and merge it where the remote lives." }, statusCode: StatusCodes.Status409Conflict);
-            try
-            {
-                var merged = DbDataKit.Config.Git.GitWorkspaceOperations.Merge(projects.RootOf(hosted), workspace.Branch, AuthorOf(context.ManagementToken()));
-                if (!merged.Merged) return Results.Json(new { error = "The workspace conflicts with the project's branch; nothing was merged.", conflicts = merged.Conflicts }, statusCode: StatusCodes.Status409Conflict);
-                sessions?.End(workspaces.RootOf(workspace));
-                workspaces.Abandon(workspace, projects.RootOf(hosted));
-                return Results.Json(new { merged = true, sha = merged.Sha, fast_forward = merged.FastForward });
-            }
-            catch (DbDataKit.Config.Git.GitOperationException ex) { return Failed(ex); }
-            catch (DbDataKit.Config.Git.GitWorktreeException ex) { return Failed(new DbDataKit.Config.Git.GitOperationException(ex.Message, ex)); }
         });
     }
 }

@@ -2,21 +2,25 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using DbDataKit.Config.Git;
 
-namespace DbDataBuild.Cli.Server;
+namespace DbDataKit.Authoring;
 
 /// <summary>One person's draft of a project: a git worktree on a branch of its own, in a folder the server owns.</summary>
 /// <param name="Id">What the API calls it: the owner and the name, <c>ada-new-orders</c>.</param>
+/// <param name="Project">The project it is a draft of (the id the server serves it under).</param>
 /// <param name="Owner">The owner's id as the token carries it; only they run commands in it.</param>
 /// <param name="Branch">The branch the draft is committed on, <c>ws/&lt;id&gt;</c>.</param>
+/// <param name="OwnerName">The owner as people read them.</param>
+/// <param name="Name">The name the owner gave it.</param>
 /// <param name="Base">The commit the draft started at.</param>
-internal sealed record Workspace(string Id, string Project, string Owner, string OwnerName, string Name, string Branch, string Base, DateTimeOffset Created);
+/// <param name="Created">When it was made.</param>
+public sealed record Workspace(string Id, string Project, string Owner, string OwnerName, string Name, string Branch, string Base, DateTimeOffset Created);
 
 /// <summary>
-/// Workspaces on a Build server (plan 13, W02): authoring happens in a git worktree per person and name, never in the checkout the scheduler and the deploys read, so a draft cannot change what runs. A workspace starts at the
-/// commit the project's checkout is at; it is listed, and abandoned (the worktree and its branch removed) by its owner. What is in <c>workspaces/&lt;project&gt;/</c> of the server's directory: the worktree folder <c>&lt;id&gt;</c> and
-/// a record <c>&lt;id&gt;.json</c> beside it that says whose it is.
+/// Workspaces of a server (plan 13, W02; plan 22a, GP30): authoring happens in a git worktree per person and name, never in the checkout the scheduler and the deploys read, so a draft cannot change what runs. A workspace
+/// starts at the commit the project's checkout is at; it is listed, and abandoned (the worktree and its branch removed) by its owner. What is in <c>workspaces/&lt;project&gt;/</c> of the server's directory: the worktree
+/// folder <c>&lt;id&gt;</c> and a record <c>&lt;id&gt;.json</c> beside it that says whose it is. The store knows nothing of what a project is (a Build project, an app, an agent); it needs a git repository and a folder.
 /// </summary>
-internal sealed partial class Workspaces(string serverDirectory, TimeProvider clock)
+public sealed partial class Workspaces(string serverDirectory, TimeProvider clock)
 {
     [GeneratedRegex("^[a-z0-9][a-z0-9_-]{0,31}$")]
     private static partial Regex NamePattern();
