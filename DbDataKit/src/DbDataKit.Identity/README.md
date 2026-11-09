@@ -24,3 +24,11 @@ The identity home (plan 13a U13): who people are and what they may do, for every
 A group of homes on one SQL Server or PostgreSQL state (plan 20 O02b) works behind any balancer: an Entra sign-in in progress, a passkey ceremony's challenge and the management tokens used are in the state (`OneTimeValues`), each used once.
 
 Entra's group overage (more than 200 groups: the token has no `groups` claim) is left to the tenant: its administrator limits what the app registration sends with `groupMembershipClaims`, and the home calls no Microsoft Graph (13c D25). Not here yet: the serving layer forwarding a home that runs on its own (O07).
+
+**Decisions that shape what a person holds** (the owner's, 2026-10-31; `docs/architecture.md`, 13c D24 to D26, D30, D31):
+
+- A person's external groups (Entra, Windows) are the groups of their **last sign-in through that source** and count until the next one: nothing expires and signing out does not clear them, so a person removed from an Entra group keeps the mapped role until they sign in through Entra again (their session's refresh asks the home, which still has the old groups). A lifetime can be added if a tenant needs one.
+- An Entra sign-in links to an existing account on the token's UPN (preferred, it is usually the canonical address) or `email`, because the Entra source is built with `trustEmail: true`; every other OpenID source links only on a verified address (U16's rule). A tenant that lets people set their own mail attribute must not be trusted that way.
+- The admin API is the management API of whatever hosts the home (the console's screens through its relay; `dbdatakit identity run`'s commands stay).
+- Signing keys: a home that runs on its own keeps the framework key ring in its `dataprotection/` directory, so a backup or a move takes the state **and** that directory (a copy without it fails to start with a cryptographic error). The serving layer's home protects the keys with `KeySigningKeyProtector` and a key in its secret store (`dbdata:gateway:identity:signing-keys`), because the instances of a group share one state. `ISigningKeyProtector` is where a key from outside would go.
+

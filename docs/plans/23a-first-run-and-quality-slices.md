@@ -74,7 +74,7 @@ slices FQ01 to FQ06 are wave 1 (stored formats), FQ07 onward wave 3. Plan 23 has
 
 ## Rules for every slice
 
-- The rules of [13a](13a-suite-slices.md) and [22a](22a-gap-slices.md) apply: one small pull request, "done" is the test, CI green and independently revertable, behaviour changes
+- The rules of `CLAUDE.md` ("Making changes") and [22a](22a-gap-slices.md) apply: one slice, one commit in a batch, "done" is the test, CI green and independently revertable, behaviour changes
   named, docs and the status line in the same change; **a wave 1 slice names the formats it touches in the first line of its pull request**; a changed format is a clean break with a message naming the file.
 - State runs on **SQLite, SQL Server and PostgreSQL**; check evaluation runs on the data engines of `testenv/` (SQL Server and PostgreSQL always; DuckDB where Build uses it);
   a screen has a Playwright test; a library has unit tests.

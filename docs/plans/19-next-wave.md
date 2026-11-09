@@ -1,9 +1,8 @@
 # Plan 19: the next wave, in parallel lanes
 
-Status: **proposed** (2026-10-26). Turns plans 14, 15, 16 (visuals) and 18 into slices, and groups them, together with what is left of
-plan 13a, into **lanes** that separate agents can work at the same time without stepping on each other.
+Status: **proposed** (2026-10-26). Turns plans 14, 15, 16 (visuals) and 18 into slices, and groups them, into **lanes** that separate agents can work at the same time without stepping on each other.
 
-Same rules as plan 13a: one slice, one branch `suite/<id>-<short-name>`, one pull request, a "Done when" test, the status set in this file
+Same rules as `CLAUDE.md` ("Making changes"): one slice, one commit on the batch branch, a "Done when" test, the status set in this file
 in the same change. Slice letters are new (13a uses F K V S A B C T U E P R M W L X): **J** semantic layer, **H** schema, **N** serving,
 **Y** visuals, **Z** DbDataStore, **G** lineage (plan 18). Plan 14's steps (Q1-Q14) and plan 15's (M1-M9) are the order; the slices
 below are those steps cut small, and each row names the step it belongs to.
@@ -43,20 +42,7 @@ land, so two lanes that touch the same area are sequenced (section 4) instead of
 | **Z** DbDataStore | Z01-Z07 | new `DbDataStore/` product folder | Z01-Z02 now; Z03 after H03 |
 | **G** lineage | G01-G12 (plan 18) | new `DbDataKit.Lineage`; then each product's server | G01-G03 now; G05-G08 after G04 |
 
-Plan 13a's remaining slices are lanes of their own, already in flight; this plan does not change them:
-
-| 13a lane | Slices | Touches |
-| --- | --- | --- |
-| Scripting | S01-S11 | Sync's libraries, drivers and scripts; new `DbDataKit.Scripting` |
-| Transfer | A14-A16, B08 | Sync staging and merge; Build copies |
-| Build on shared libraries | B01, B02, B04-B07, A19 | Build's quoting, logins, catalog reads, write gate |
-| Formats | E01, E03-E05 | connection files in Sync and Build |
-| Proxy management | P05, P09 | Proxy's client identities and its console module |
-| Trust and identity | T04, T10, T11, U13-U15 | pairing, tokens, the identity home |
-| Console | U08, U11, M11, R06, R08, R09 | the relay, monitoring view, Build module |
-| Authoring | W02-W10 | Build workspaces and the console editor |
-| CI and packaging | F10, F12, L01, L03-L06 | workflows, images, MSIs |
-| Cleanup | A11, A20, X01-X03 | removals at the end |
+The slices of the old plan 13a are built; what is left of them is in [13c](13c-follow-ups.md).
 
 ## 3. Slices
 
@@ -107,7 +93,7 @@ Plan 13a's remaining slices are lanes of their own, already in flight; this plan
 - **What J03 and J04 stand on.** `DbDataKit.Connections*` (the executor) and `DbDataKit.Dialect*` (emitters on `ISqlDialect`; `DialectCatalog.For(EngineId)`). Neither changed in wave 0. Two shared changes from this session are on `main`: `connection/1` has an optional `managed_by` key, and `DbDataKit.Metadata` gained `ICatalogReader.ReadSchemaAsync`, richer `IndexInfo` and a fix that keeps CLR-typed SQL Server columns (geography and the like) in a column list.
 - **What J10 stands on.** The semantic data source in Proxy is written against `IServingHost` (`DbDataKit.Serving.Abstractions`, N01). N01's interface is the small first version; **N02 (moving Flight SQL out of Proxy) is deliberately not started** and will probably widen the interface (sessions, prepared statements, metadata calls, compression). Write J10's host-facing code behind a small adapter of your own so a wider interface is a change in one place. Do not edit Proxy's Flight code (`DbDataProxy.Server/Flight`) from lane J before N02.
 - **Do not reference products.** `DbDataKit.Semantic*` must not reference `DbDataProxy`, `DbDataBuild` or `DbDataSync`; the products reference it (plan 14 R3). Lineage (`DbDataKit.Lineage`, G01-G03) is a sibling: a semantic member is a lineage node kind (`SemanticMember`), and lineage identity (`LineageIdentity`) already names datasets and columns the way the semantic layer's physical bindings will need to; use it rather than a second scheme. Engine defaults there are a small table until J06.
-- **Rules that apply to every slice** (plan 13a): one slice, one branch `suite/<id>-<short-name>` (bundling several related slices on one branch and PR is fine and wanted), the status written in the slice's row in the same change, a "Done when" test, commit and push often, CI on the pull request runs the engine suites, and a flaky or timing test is fixed or removed, never re-run.
+- **Rules that apply to every slice** (`CLAUDE.md`, "Making changes"): one slice, one commit on the batch branch, the status written in the slice's row in the same change, a "Done when" test, commit and push often, CI on the pull request runs the engine suites, and a flaky or timing test is fixed or removed, never re-run.
 
 ### H: `DbDataKit.Schema` (plan 15 M3)
 

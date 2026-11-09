@@ -1,6 +1,6 @@
 # Models and semantic models: what overlaps and what differs
 
-Written for the D12 decision (decided: `foreign_keys:` on built models, built as J29; the options below are kept as the record) (`docs/plans/13c-follow-ups.md`: should relationships be declared on models as `references:`?). It is read from `DbDataBuild/schemas/model.schema.json`, `DbDataBuild/DESIGN.md` (sections 5 and 9.11), `docs/semantic/catalog.md`, `DbDataBuild/templates/retail/semantic/sales.yml` and `DbDataBuild/src/DbDataBuild.Semantic/ProjectPhysicalLayer.cs`.
+Written for the D12 decision (decided: `foreign_keys:` on built models, built as J29; the options below are kept as the record) (should relationships be declared on models as `references:`? `docs/architecture.md`, 13c D12). It is read from `DbDataBuild/schemas/model.schema.json`, `DbDataBuild/DESIGN.md` (sections 5 and 9.11), `docs/semantic/catalog.md`, `DbDataBuild/templates/retail/semantic/sales.yml` and `DbDataBuild/src/DbDataBuild.Semantic/ProjectPhysicalLayer.cs`.
 
 ## 1. Two different things
 

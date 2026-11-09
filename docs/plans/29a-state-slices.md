@@ -1,13 +1,13 @@
 # Plan 29a: the slices of plan 29 (the state database rework)
 
 Status: **proposed, being worked** (2026-11-06). This breaks [plan 29](29-unified-state.md) into pull requests, in the shape of
-[plan 13a](13a-suite-slices.md): plan 29 says *why* and *what*; this says *in what pieces*, in what order, and what test proves each one.
+the suite slices (`CLAUDE.md`, "Making changes"): plan 29 says *why* and *what*; this says *in what pieces*, in what order, and what test proves each one.
 The owner allowed breaking changes (2026-11-06), so every conversion is a **clean break** (plan 13 section 3): a database written by the
 old structure is refused with a message naming it, never converted.
 
 ## Rules for every slice
 
-- The rules of 13a apply: one small pull request, "done" is the test in the last column, CI green and independently revertable,
+- The rules of `CLAUDE.md` ("Making changes") apply: one slice, one commit in a batch, "done" is the test in the last column, CI green and independently revertable,
   behaviour changes named, docs and the status line in the same change.
 - **Branch name** `suite/q<nn>-<short-name>`. (The first slices were worked on one session branch; the status column says where.)
 - **Every slice runs on all three engines.** SQLite always; PostgreSQL and SQL Server through `testenv/` (`up mssql postgres`, then
