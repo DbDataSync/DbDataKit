@@ -266,7 +266,7 @@ public sealed partial class ManagementTests : IAsyncLifetime
 
     // ---- data sources (P04) ----
 
-    private static string Scratch(string name) => Conn.Yaml(name, "duckdb", "Data Source=:memory:", gateway: ["allow_writes: true"]);
+    private static string Scratch(string name) => Conn.Yaml(name, "duckdb", "Data Source=:memory:", gateway: ["batch_size: 1000"]);
 
     private static string Put(string text, string? expected) => JsonSerializer(new { text, expected_version = expected });
 
@@ -296,7 +296,7 @@ public sealed partial class ManagementTests : IAsyncLifetime
         Assert.Equal(Scratch("scratch"), (string)read["text"]!);
 
         // a change, based on the version just read
-        var changed = Conn.Yaml("scratch", "duckdb", "Data Source=:memory:", gateway: ["allow_writes: true", "batch_size: 500"]);
+        var changed = Conn.Yaml("scratch", "duckdb", "Data Source=:memory:", gateway: ["batch_size: 500"]);
         var second = await CallAsync(server, HttpMethod.Put, "/api/v1/data-sources/scratch", ServerRole.Admin, Put(changed, version));
         Assert.Equal(HttpStatusCode.OK, second.StatusCode);
         Assert.Equal(500, Options.CurrentValue.DataSources["scratch"].BatchSize);

@@ -213,6 +213,70 @@
               }
             }
           }
+        },
+        "gateway": {
+          "description": "The Gateway's serving policy for this connection once it is published as a data source (plan 13c D19, owner decision of 2026-11-09): a publish sends it and the Gateway replaces its own with exactly this, no merge. `allow_writes` and `allowed_directories` are not part of a definition and are refused: a publish replaces the whole data source file on the Gateway, so what it publishes is read-only and reads no directories outside its database. Who may use the data source is `grants`, not `groups` or `everyone` here.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pass_through": {
+              "description": "Connect with the caller's own credentials (the database decides who may read).",
+              "type": "boolean"
+            },
+            "bitness": {
+              "description": "`x64` (in-process, the default) or `x86` (through the 32-bit worker; ODBC only).",
+              "type": "string",
+              "enum": [
+                "x64",
+                "x86"
+              ]
+            },
+            "classifier": {
+              "description": "What to do with statement text that is not a single plain SELECT on a read-only data source: `warn`, `strict` (refuse) or `off`.",
+              "type": "string",
+              "enum": [
+                "warn",
+                "strict",
+                "off"
+              ]
+            },
+            "metadata": {
+              "description": "How catalog metadata is read: `auto`, `odbc` or `informationschema`.",
+              "type": "string"
+            },
+            "default": {
+              "description": "The data source a home user gets when the client names none (at most one data source of a Gateway).",
+              "type": "boolean"
+            },
+            "max_concurrent_queries": {
+              "description": "Most queries running at once on the data source; 0 is no limit.",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            "max_concurrent_queries_per_user": {
+              "description": "Most queries one user may have running at once; 0 is no limit.",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            "acquire_timeout_seconds": {
+              "description": "How long a request waits for a free slot when a limit is set.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3600
+            },
+            "batch_size": {
+              "description": "Rows per Arrow batch.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000
+            },
+            "compression": {
+              "description": "Overrides the Gateway's compression settings for this data source (the Gateway validates the keys).",
+              "type": "object"
+            }
+          }
         }
       }
     }

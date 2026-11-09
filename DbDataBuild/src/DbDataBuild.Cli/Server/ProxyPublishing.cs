@@ -77,7 +77,7 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
         return (proxy, paired.Ceiling);
     }
 
-    public async Task<PublishResult> PublishAsync(string proxyName, ProjectConfig project, string connection, string dataSource, ValidatedToken person, CancellationToken ct)
+    public async Task<PublishResult> PublishAsync(string proxyName, ProjectConfig project, string connection, string dataSource, ValidatedToken person, CancellationToken ct, bool adopt = false)
     {
         if (proxies.Find(proxyName) is not { } proxy) return Fail(404, $"This server is not paired with a proxy called '{proxyName}'.");
         if (!project.Connections.TryGetValue(connection, out var config)) return Fail(404, $"The project has no connection '{connection}'.");
@@ -146,6 +146,8 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
                     version = (string?)found?["version"];
                     current = (string?)found?["text"];
                 }
+                // a data source made by hand is not the publisher's to read; with `adopt` the publish goes on and replaces it (the Gateway records the file it replaces and answers with what changed)
+                else if (existing.StatusCode == System.Net.HttpStatusCode.Forbidden && adopt) { }
                 else if (existing.StatusCode != System.Net.HttpStatusCode.NotFound) return await Refused(existing, "reading the data source", AdoptHint(self.Id, dataSource));
             }
 
@@ -169,8 +171,8 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
                 (storedNew, replaced) = (!exists, exists);
             }
 
-            var text = DataSourceText(dataSource, engine, reference!, config.Grants);
-            using var written = await Send(HttpMethod.Put, $"/api/v1/data-sources/{Uri.EscapeDataString(dataSource)}", new { text, expected_version = version });
+            var text = DataSourceText(dataSource, engine, reference!, config.Grants, config.GatewayPolicy);
+            using var written = await Send(HttpMethod.Put, $"/api/v1/data-sources/{Uri.EscapeDataString(dataSource)}", new { text, expected_version = version, adopt });
             if (!written.IsSuccessStatusCode) return await Undone(await Refused(written, "writing the data source", AdoptHint(self.Id, dataSource)));
             var answer = JsonNode.Parse(await written.Content.ReadAsStringAsync(ct))!;
 
@@ -179,7 +181,7 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
                 notStored.Body["error"] = $"{(string?)notStored.Body["error"]} The data source was written and keeps using the login it already had.";
                 return notStored;
             }
-            return new PublishResult(200, new JsonObject { ["proxy"] = proxyName, ["data_source"] = dataSource, ["created"] = (bool?)answer["created"] ?? version is null, ["version"] = (string?)answer["version"] });
+            return new PublishResult(200, new JsonObject { ["proxy"] = proxyName, ["data_source"] = dataSource, ["created"] = (bool?)answer["created"] ?? version is null, ["version"] = (string?)answer["version"], ["adopted"] = (bool?)answer["adopted"] ?? false, ["changes"] = answer["changes"]?.DeepClone(), ["kept"] = answer["kept"]?.DeepClone() });
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IncompatibleServerException)
         {
@@ -191,15 +193,17 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
     /// The data source file a publish sends. Without grants it is the <c>connection/1</c> file it always was, so a group whose instances read only format 1 still takes it; with the connection's <c>grants</c> (plan 22a GP03) it is
     /// <c>connection/2</c> and carries them: the Gateway serves exactly these grants, and the next publish replaces them (a connection whose grants were removed publishes a file with none).
     /// </summary>
-    internal static string DataSourceText(string dataSource, string engine, string reference, GrantsSpec? grants)
+    internal static string DataSourceText(string dataSource, string engine, string reference, GrantsSpec? grants, DbDataKit.Config.Yaml.YamlMapping? policy = null)
     {
         var text = $"schema: connection/{(grants is null ? 1 : 2)}\nname: {dataSource}\nengine: {engine}\naccess: readonly\nconnection_string_secret: '{reference}'\n";
-        if (grants is null) return text;
+        // the serving policy of the definition (plan 13c D19): the Gateway replaces its own with exactly this, and a definition without any publishes none
+        var policyText = policy is { Entries.Count: > 0 } ? ServingPolicy.Emit(policy) : "";
+        if (grants is null) return text + policyText;
         text += "grants:\n";
         if (grants.Everyone) text += "  everyone: true\n";
         if (grants.Groups.Count > 0) text += "  groups: [" + string.Join(", ", grants.Groups.Select(g => "'" + g.Replace("'", "''", StringComparison.Ordinal) + "'")) + "]\n";
         if (!grants.Everyone && grants.Groups.Count == 0) text += "  groups: []\n";
-        return text;
+        return text + policyText;
     }
 
     /// <summary>The reference a data source file's <c>connection_string_secret</c> holds when it names the secret <paramref name="secretName"/> (references end in the secret's name), else null.</summary>
@@ -290,7 +294,7 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
     /// What a person can do about a data source this server may not touch (plan 13, T12): taking it over is an administrator's act on the proxy (<c>POST /api/v1/data-sources/{name}/adopt</c>, never a server client's, so Build cannot do it for them), which needs
     /// this server's client id on the proxy. The id and the call are returned with the refusal.
     /// </summary>
-    private static JsonObject AdoptHint(string clientId, string dataSource) => new() { ["client"] = clientId, ["data_source"] = dataSource, ["call"] = $"POST /api/v1/data-sources/{dataSource}/adopt", ["body"] = new JsonObject { ["client"] = clientId } };
+    private static JsonObject AdoptHint(string clientId, string dataSource) => new() { ["client"] = clientId, ["data_source"] = dataSource, ["call"] = $"POST /api/v1/data-sources/{dataSource}/adopt", ["body"] = new JsonObject { ["client"] = clientId }, ["publish_adopt"] = true };
 
     /// <summary>The proxy's refusal, in its own words (they name the rule), under the status it gave.</summary>
     private static async Task<PublishResult> Refused(HttpResponseMessage response, string step, JsonObject? adopt = null)

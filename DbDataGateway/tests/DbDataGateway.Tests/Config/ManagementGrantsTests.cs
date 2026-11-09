@@ -93,18 +93,21 @@ public sealed partial class ManagementTests
     }
 
     [Fact]
-    public async Task A_client_cannot_send_the_gateways_own_policy_with_the_grants_and_a_definition_cannot_say_who_in_two_places()
+    public async Task A_definition_says_who_in_grants_alone_and_never_in_two_places()
     {
         await StartAsync();
         var admin = await PairAsync();
         var publisher = await PairPublisherAsync(build1);
 
-        // the grants are the definition's; the serving policy (extensions.gateway) stays the administrator's
+        // the grants are the definition's, and so is the serving policy (plan 13c D19); who may use the data source is `grants`, never groups of extensions.gateway
         var both = Published("mixed", "grants:\n  groups: [a]\nextensions:\n  gateway:\n    batch_size: 10\n");
-        var refused = await CallAsAsync(build1, publisher, HttpMethod.Put, "/api/v1/data-sources/mixed", ServerRole.Publisher, Put(both, null));
-        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
-        Assert.Contains("extensions.gateway", await refused.Content.ReadAsStringAsync());
-        Assert.False(File.Exists(Path.Combine(ConfigDirectory, "connections", "mixed.yaml")));
+        Assert.Equal(HttpStatusCode.OK, (await CallAsAsync(build1, publisher, HttpMethod.Put, "/api/v1/data-sources/mixed", ServerRole.Publisher, Put(both, null))).StatusCode);
+        Assert.Equal(10, Options.CurrentValue.DataSources["mixed"].BatchSize);
+        var groups = Published("grouped", "extensions:\n  gateway:\n    groups: [a]\n");
+        var refused = await CallAsAsync(build1, publisher, HttpMethod.Put, "/api/v1/data-sources/grouped", ServerRole.Publisher, Put(groups, null));
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Contains("says who may use the data source; a definition says it in `grants`", await refused.Content.ReadAsStringAsync());
+        Assert.False(File.Exists(Path.Combine(ConfigDirectory, "connections", "grouped.yaml")));
 
         // grants and extensions.gateway.groups in one file: refused naming the file's line, and nothing is written
         var twice = await CallAsync(admin, HttpMethod.Put, "/api/v1/data-sources/twice", ServerRole.Admin, Put(Published("twice", "grants:\n  groups: [a]\nextensions:\n  gateway:\n    groups: [b]\n"), null));
