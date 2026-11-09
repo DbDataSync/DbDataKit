@@ -30,7 +30,7 @@ public sealed class EmbeddedRunnerTests : IDisposable
     {
         foreach (var host in _hosts) host.DisposeAsync().AsTask().GetAwaiter().GetResult();
         foreach (var database in _databases) database.Dispose();
-        foreach (var directory in _directories) try { Directory.Delete(directory, true); } catch (IOException) { }
+        foreach (var directory in _directories) try { Directory.Delete(directory, true); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }   // the artifact store's files are read-only on Windows
     }
 
     /// <summary>Stands in for the executor: records what it ran and when, and runs for <see cref="Duration"/> (or until it is cancelled).</summary>
@@ -407,7 +407,10 @@ public sealed class EmbeddedRunnerTests : IDisposable
         Assert.Equal("stage", (string)published.Body!["mode"]!);
         Assert.Equal(1, (int)published.Body["version"]!);
         var (_, detail) = await rig.Call(HttpMethod.Get, "/relay/console-runner/api/v1/definitions/integration/etl2", rig.Viewer);
-        Assert.Equal(1, (int)detail!["channels"]![0]!["staged"]!);
+        // the runner's own staging follower looks every few moments and activates a staged version nobody objects to (no run in flight, no losses): on a slow machine (Windows CI) the GET comes after that,
+        // so the channel holds version 1 either as staged or, when the follower was first, as active
+        var channel = detail!["channels"]![0]!;
+        Assert.True(channel["staged"] is { } staged ? (int)staged == 1 : (int?)channel["active"] == 1, $"version 1 is neither staged nor active: {channel}");
 
         var audit = new AuditLog(rig.State, "dbdatakit").Read(new AuditQuery(VerbPrefix: "runner."));
         Assert.Contains(audit, r => r.Entry.Verb == RunnerPublishing.UploadVerb && r.Entry.Outcome == AuditEvent.Ok && r.Entry.ViaKind == "console");

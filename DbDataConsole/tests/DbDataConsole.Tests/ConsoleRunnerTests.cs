@@ -46,7 +46,7 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         await app.StopAsync();
         await app.DisposeAsync();
         await runner.DisposeAsync();
-        try { Directory.Delete(directory, true); } catch (IOException) { }
+        try { Directory.Delete(directory, true); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }   // the artifact store's files are read-only on Windows
     }
 
     /// <summary>The management calls of a runner as the screens use them, with its role rules, and the calls a console must never reach (they record that they were reached).</summary>
