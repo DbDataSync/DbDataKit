@@ -55,6 +55,7 @@ public sealed class FlightSqlDialect(SqlDialect inner, char quoteOpen = '"', cha
     public override string ChangedAtColumnType => inner.ChangedAtColumnType;
     public override RowLimitStyle RowLimitStyle => inner.RowLimitStyle;
     public override bool SupportsTieSafeRowLimit => inner.SupportsTieSafeRowLimit;
+    public override bool InlineNullsInStagingInserts => inner.InlineNullsInStagingInserts;
 
     public override (string Prefix, string Suffix) RenderTieSafeRowLimit(string parameterName) =>
         inner.RenderTieSafeRowLimit(parameterName);
