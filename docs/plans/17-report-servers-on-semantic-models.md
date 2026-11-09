@@ -5,6 +5,8 @@ can be decided when the time comes; section 2a has the owner's assessment of eac
 is our own visual format plus SSRS and Power BI Report Server on a separate server (plan 16 section 2a). This plan is how those report
 servers **pull data from the semantic models** (plan 14) served by DbDataProxy. **Not part of plan 13's work list.**
 
+**2026-11-09:** routes R4 (Postgres wire) and R5 (XMLA, MDX) depend on work the owner deferred as low priority (plan 14a SL40 to SL55); R2 (feeds) is plan 19 J28; R1 is question Q15 of plan 14a. Nothing here is scheduled.
+
 ## 1. What the report servers can read
 
 Two kinds of report live on these servers, and each reads data differently.

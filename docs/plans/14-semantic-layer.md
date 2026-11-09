@@ -1,21 +1,25 @@
 # Plan 14: the semantic layer, what is left
 
-Status: **in progress**. What is built (semantic models in Build projects, deploy and hosting through the Proxy, the packages, the engine registry, semantic SQL) is described in [docs/semantic/architecture.md](../semantic/architecture.md). This plan holds only the unbuilt parts. The slice list is plan 19's J rows ([19-next-wave.md](19-next-wave.md)); the mapping from the old Q steps is in the rows' "Q" column.
+Status: **in progress** (audited 2026-11-09). What is built (semantic models in Build projects, publishing to a Gateway and hosting there, the packages, the engine registry, semantic SQL, parameters, saved queries of a model, SSAS) is described in [docs/semantic/architecture.md](../semantic/architecture.md), [DbDataBuild/docs/semantic-models.md](../../DbDataBuild/docs/semantic-models.md) and the Gateway's README ("Semantic queries"). This plan holds the unbuilt parts, **checked against the code on 2026-11-09 in [plan 14a](14a-semantic-slices.md)**, which has every item's evidence, the slices and the questions. **MDX and XMLA for Excel PivotTables and the extra protocols (Postgres wire, Quack) are low priority and deferred (owner, 2026-11-09): sliced as SL40 to SL55 in 14a, not scheduled, and nothing else depends on them.** The old slice list, plan 19's J rows ([19-next-wave.md](19-next-wave.md)), still holds what was built; the J rows with work left point at 14a.
 
 ## Left to build
 
-| Item | What is left | Where it is sliced |
-| --- | --- | --- |
-| R4 console | the semantic module of the console: model browser (cubes, dimensions, measures with lineage back to Build columns), query explorer with explain, matrix and chart views from the presentation specs, review of ad hoc maps proposed for promotion. The console reaches a Proxy only through its management API; queries run over Flight SQL, which its back end does not speak | plan 19 J14 (waits on J28) |
-| R4 agents in Build | mounting the `semantic` noun in Build (its own connection to a Proxy); a token from an identity provider instead of a password | plan 19 J15 |
-| R1 gaps | `references:` on built models is `foreign_keys:` (J29); the metadata documents do not carry the semantic models or the physical name per connection; a check that every mapped table and column exists when a package is served (today a test query per data source); pruning old versions | plan 19 J08, J13, J29 |
-| R2 state | semantic state in the Proxy's store (ad hoc registrations, run records, clarify sessions); the child process for the combine if the in-process limits prove too soft | plan 19 J11 |
-| R2a leftovers | a command-line form to publish a model, rollback from Build, a model on engines other than SQL Server | plan 19 J12b (low priority) |
-| R5 | the products read the engine registry (Sync's `DriverType`, Build's `engine` keywords, the Proxy's `Provider`) and their README support tables are generated from it | plan 19 J06 |
-| R7 | MDX and XMLA for Excel PivotTables (below) | plan 19 J20; plan 20 `xmla` module, O16 |
-| R8 | more protocols (below) | plan 20 `pgwire` module; plan 17 R4 |
+| Item | What is left | Status (2026-11-09) | Where it is sliced |
+| --- | --- | --- | --- |
+| R4 console | the semantic module of the console: model browser (cubes, dimensions, measures with lineage back to Build columns), query explorer with explain, matrix and chart views from the presentation specs, review of ad hoc maps proposed for promotion | not started; the Gateway's Models screen lists published models and versions only. The explorer can run requests through the views module's preview, so it need not wait for J28 (question Q1 of 14a) | 14a SL12 to SL16 (J14 split), SL25 and SL26 for the review |
+| R4 agents in Build | mounting the `semantic` noun in Build (its own connection to a Gateway); a token instead of a password | not started; the noun is mounted in the Gateway only | 14a SL21, SL22 |
+| R1 gaps | `references:` on built models is `foreign_keys:` (J29, **built**); the metadata documents do not carry the semantic models or the physical name per connection; a check that every mapped table and column exists when a package is served (**tables are checked, columns are not**); pruning old versions | partly | 14a SL10 (metadata, key origin), SL06 (columns), SL07 (pruning) |
+| R2 state | semantic state in the Gateway's store (ad hoc registrations, run records, clarify sessions); the child process for the combine if the in-process limits prove too soft | not started (a person's saved queries and the versions of a model are in the state; clarify needs none) | 14a SL23 to SL27 (SL25 to SL27 wait for the owner, Q5; SL27 is conditional) |
+| R2a leftovers | a command-line form to publish a model, rollback from Build, a model on engines other than SQL Server | not started (low priority); a model on PostgreSQL is built | plan 19 J12b (low priority, unchanged); other engines: 14a Q13 |
+| R5 | the products read the engine registry (Sync's `DriverType`, Build's `engine` keywords, the Gateway's engine names) and their README support tables are generated from it | partly: the registry and `docs/engine-support.md` are built; no product reads it, and three role statuses are older than the code | 14a SL01 to SL05 |
+| R7 | MDX and XMLA for Excel PivotTables (below) | **deferred, low priority (owner, 2026-11-09)**; only the recording forwarder is built, never run against Excel | 14a SL40 to SL47; plan 20 O16 |
+| R8 | more protocols (below) | **deferred, low priority (owner, 2026-11-09)** | 14a SL50 to SL55; plan 17 R4 |
+
+Also found by the audit (not in this table before): the descriptors' statuses (SL01), types in `describe` and decimals in the answer (SL08, SL09), a form for the `semantic:` settings (SL11), saved queries of a person by API and screen (SL17 to SL20) and the SSAS executor's gaps (SL28, SL29).
 
 ## R7. MDX, enough for Excel PivotTables
+
+**Deferred: low priority, owner 2026-11-09.** The decisions below stand; nothing is scheduled (slices SL40 to SL47 of [14a](14a-semantic-slices.md)).
 
 An Excel PivotTable on an OLAP source connects with the Analysis Services provider over **XMLA** (SOAP over HTTP or HTTPS): `Discover` for schema rowsets, `Execute` for MDX, sessions, cell sets. Excel generates a narrow, recognizable set of MDX shapes (`NON EMPTY Hierarchize(AddCalculatedMembers(DrilldownLevel({...})))` on axes with `DIMENSION PROPERTIES`, filters as a sub-select or a `WHERE` slicer, drill-down, member searches). No .NET XMLA server exists to reuse.
 
@@ -30,6 +34,8 @@ Decided: **translate that MDX into semantic requests; do not build a general MDX
 
 ## R8. More protocols
 
+**Deferred: low priority, owner 2026-11-09.** The decisions below stand; nothing is scheduled (slices SL50 to SL55 of [14a](14a-semantic-slices.md)).
+
 All protocols are front ends to one query core: an adapter turns wire messages into a SQL pass-through query, a semantic request or an MDX request, maps its authentication onto the serving layer's identities, and returns rows. It never opens a connection, applies a limit or formats an error itself. The adapters are shared code (`DbDataKit.Serving.*`) written against the host interface; the layer is in plan 20.
 
 | Protocol | Decision |
@@ -40,5 +46,6 @@ All protocols are front ends to one query core: an adapter turns wire messages i
 
 ## Open questions
 
-- Whether the combine needs its child process (decided 2026-10-29: limits in process first; revisit if they prove too soft).
-- Which BI tools' Postgres introspection is catalogued first (plan 17 R4 says Power BI Report Server is not a Postgres-wire client).
+- Whether the combine needs its child process (decided 2026-10-29: limits in process first; revisit if they prove too soft; SL27, conditional).
+- Which BI tools' Postgres introspection is catalogued first (plan 17 R4 says Power BI Report Server is not a Postgres-wire client). Deferred with R8; 14a Q16 has the recommended default.
+- The open questions of the audit, each with a recommended default, are in [14a](14a-semantic-slices.md) section 4.
