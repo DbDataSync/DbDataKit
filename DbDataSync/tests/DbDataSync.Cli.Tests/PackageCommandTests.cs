@@ -55,12 +55,14 @@ public sealed class PackageCommandTests : IDisposable
     [Fact]
     public async Task TwoReplicationsThatMakeOneTaskNameAreRefusedNamingBoth()
     {
-        _repo.Replication("Orders", DbDataSync.Core.Config.ScheduleMode.Periodic, cron: "0 3 * * *");
+        // names that differ by punctuation, not case: a case-insensitive file system (Windows) makes two folders that differ only by case one folder
+        _repo.Replication("sales.orders", DbDataSync.Core.Config.ScheduleMode.Periodic, cron: "0 3 * * *");
+        _repo.Replication("sales-orders", DbDataSync.Core.Config.ScheduleMode.Periodic, cron: "0 3 * * *");
 
         var (exit, _, error) = await RunAsync("--to", "runner", "--check", "--json", "--repo", _repo.Root);
 
         Assert.Equal(1, exit);
-        Assert.Contains("both make the task `orders`", error);
+        Assert.Contains("both make the task `sales-orders`", error);
     }
 
     [Fact]
