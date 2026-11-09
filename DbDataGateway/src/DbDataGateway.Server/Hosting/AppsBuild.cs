@@ -5,6 +5,7 @@ using DbDataKit.Apps;
 using DbDataKit.Apps.Bundling;
 using DbDataKit.Cli;
 using DbDataKit.Config.Yaml;
+using DbDataGateway.Server.Configuration;
 
 namespace DbDataGateway.Server.Hosting;
 
@@ -138,8 +139,8 @@ public static class AppsBuild
     /// <param name="locate">Finds Bun when <paramref name="bundler"/> is null (tests replace it).</param>
     internal static async Task<int> BuildAsync(string[] args, CliContext context, IAppBundler? bundler, Func<string?, BunLocation>? locate)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string> { "no-minify", "offline" }, new HashSet<string> { "src", "out", "entry", "manifest", "bun", "timeout" });
-        const string usage = "Usage: apps build --src <app source folder> --out <build folder> [--entry <script, default src/main.ts...>] [--manifest <file, default <src>/app.yaml>] [--no-minify] [--offline] [--bun <path>] [--timeout <seconds>]";
+        var parsed = CliArgs.Parse(args, new HashSet<string> { "no-minify", "offline" }, new HashSet<string> { "src", "out", "entry", "manifest", "bun", "timeout", "store", "allow", "isolation", "repo" });
+        const string usage = "Usage: apps build --src <app source folder> --out <build folder> [--entry <script, default src/main.ts...>] [--manifest <file, default <src>/app.yaml>] [--no-minify] [--offline] [--store <package store folder>] [--allow <package>[,<package>...]] [--isolation <auto|required|none>] [--repo <data directory>] [--bun <path>] [--timeout <seconds>]";
         int? seconds = null;
         if (parsed.Get("timeout") is { Length: > 0 } timeoutText)
         {
@@ -173,6 +174,34 @@ public static class AppsBuild
         foreach (var d in load.Diagnostics) await (d.Severity == ConfigSeverity.Error ? context.Error : context.Out).WriteLineAsync(d.ToString());
         if (!load.Ok) return CliExit.Failure;
 
+        // the package store (plan 22a GP33): --store, or apps.packageStore of the Gateway's server.yaml; with one the build installs nothing and reaches no network
+        VendoredPackageStore? store = null;
+        IReadOnlyList<string>? allowed = null;
+        var isolation = NetworkIsolation.IfAvailable;
+        switch (parsed.Get("isolation"))
+        {
+            case null or "auto": break;
+            case "required": isolation = NetworkIsolation.Required; break;
+            case "none": isolation = NetworkIsolation.None; break;
+            case var other: await context.Error.WriteLineAsync($"--isolation is auto, required or none, not '{other}'."); return CliExit.Usage;
+        }
+        try
+        {
+            var explicitStore = parsed.Get("store") is { Length: > 0 } given ? Path.GetFullPath(given) : null;
+            // the Gateway's settings are read only when something needs them: the store's folder, or the allow-list
+            var settings = explicitStore is null || parsed.Get("allow") is null
+                ? GatewayConfiguration.LoadOptions(parsed.Get("repo") is { Length: > 0 } repo ? Path.GetFullPath(repo) : null).Apps
+                : null;
+            var folder = explicitStore ?? (settings?.PackageStore is { Length: > 0 } fromSettings ? Path.GetFullPath(fromSettings) : null);
+            if (folder is not null)
+            {
+                store = VendoredPackageStore.Load(folder, explicitStore is null ? settings?.PackageStoreSha256 : null);
+                allowed = parsed.Get("allow") is { Length: > 0 } list ? list.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) : settings?.AllowedPackages ?? [];
+            }
+        }
+        catch (VendoredStoreException e) { await context.Error.WriteLineAsync(e.Message); return CliExit.Failure; }
+        catch (GatewayConfigException e) { await context.Error.WriteLineAsync(e.Message); return CliExit.Failure; }
+
         var entry = parsed.Get("entry") is { Length: > 0 } named ? named.Replace('\\', '/') : EntryConventions.FirstOrDefault(c => File.Exists(Path.Combine(source, c.Replace('/', Path.DirectorySeparatorChar))));
         if (entry is null) await context.Out.WriteLineAsync("No script entry (src/main.ts, src/main.js...) and no --entry: the files are copied as they are, nothing is bundled.");
 
@@ -189,7 +218,7 @@ public static class AppsBuild
                     await context.Out.WriteLineAsync($"Bundling {entry} with Bun ({found.Source}); package install scripts are not run.");
                     bundler = new BunAppBundler(found.Path!);
                 }
-                var result = await bundler.BundleAsync(new AppBundleRequest(source, entry, temporary, Minify: !parsed.Has("no-minify"), Timeout: seconds is { } s ? TimeSpan.FromSeconds(s) : null, Offline: parsed.Has("offline")), context.Cancellation);
+                var result = await bundler.BundleAsync(new AppBundleRequest(source, entry, temporary, Minify: !parsed.Has("no-minify"), Timeout: seconds is { } s ? TimeSpan.FromSeconds(s) : null, Offline: parsed.Has("offline"), PackageStore: store, AllowedPackages: allowed, Isolation: isolation), context.Cancellation);
                 if (!result.Succeeded)
                 {
                     await context.Error.WriteLineAsync("The build failed:");
@@ -197,6 +226,7 @@ public static class AppsBuild
                     return CliExit.Failure;
                 }
                 bundled.AddRange(result.Files);
+                foreach (var note in result.Notes ?? []) await context.Out.WriteLineAsync(note);
             }
 
             // assemble: the app's own files that are not source, the manifest as app.yaml, and the bundle
@@ -251,6 +281,50 @@ public static class AppsBuild
             catch (IOException) { /* a temporary folder left behind is the system's to clean */ }
             catch (UnauthorizedAccessException) { /* the same */ }
         }
+    }
+
+    // ---- store-verify ----
+
+    /// <summary><c>apps store-verify</c>: checks a package store's files against its <c>store.json</c> and prints what an app may import from it (the library and the allow-list's packages the store holds) and the manifest's digest, which <c>apps.packageStoreSha256</c> can pin.</summary>
+    public static async Task<int> StoreVerifyAsync(string[] args, CliContext context)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "store", "repo" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0)
+        {
+            await context.Error.WriteLineAsync("Usage: apps store-verify [--store <package store folder>] [--repo <data directory>]");
+            return CliExit.Usage;
+        }
+        try
+        {
+            var settings = GatewayConfiguration.LoadOptions(parsed.Get("repo") is { Length: > 0 } repo ? Path.GetFullPath(repo) : null).Apps;
+            var folder = parsed.Get("store") is { Length: > 0 } given ? Path.GetFullPath(given) : settings.PackageStore is { Length: > 0 } configured ? Path.GetFullPath(configured) : null;
+            if (folder is null)
+            {
+                await context.Error.WriteLineAsync("There is no package store: name one with --store, or set apps.packageStore in server.yaml.");
+                return CliExit.Usage;
+            }
+            var store = VendoredPackageStore.Load(folder);
+            var problems = store.Verify();
+            foreach (var problem in problems) await context.Error.WriteLineAsync(problem);
+            var importable = AppPackagePolicy.Importable(store, settings.AllowedPackages).Order(StringComparer.Ordinal).ToList();
+            var missing = settings.AllowedPackages.Where(n => !store.Packages.ContainsKey(n)).ToList();
+            foreach (var name in missing) await context.Error.WriteLineAsync($"apps.allowedPackages lists {name}, which is not in the store.");
+            if (problems.Count > 0 || missing.Count > 0)
+            {
+                await context.Error.WriteLineAsync($"The package store {folder} is not as {VendoredPackageStore.ManifestName} says: {problems.Count} file problem(s), {missing.Count} allowed package(s) missing.");
+                return CliExit.Failure;
+            }
+            await context.Out.WriteLineAsync($"The package store {folder} is as {VendoredPackageStore.ManifestName} says: {store.Packages.Count} packages, {store.FileCount} files.");
+            await context.Out.WriteLineAsync($"An app may import: {string.Join(", ", importable)}.");
+            await context.Out.WriteLineAsync($"Digest of {VendoredPackageStore.ManifestName} (apps.packageStoreSha256): {store.Digest}");
+            context.Data["store"] = folder;
+            context.Data["packages"] = store.Packages.Count;
+            context.Data["files"] = store.FileCount;
+            context.Data["digest"] = store.Digest;
+            return CliExit.Ok;
+        }
+        catch (VendoredStoreException e) { await context.Error.WriteLineAsync(e.Message); return CliExit.Failure; }
+        catch (GatewayConfigException e) { await context.Error.WriteLineAsync(e.Message); return CliExit.Failure; }
     }
 
     private static bool IsUnder(string folder, string path) => path.StartsWith(folder + Path.DirectorySeparatorChar, StringComparison.Ordinal);

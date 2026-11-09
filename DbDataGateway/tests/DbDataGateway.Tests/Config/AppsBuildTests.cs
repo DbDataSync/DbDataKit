@@ -262,38 +262,114 @@ public sealed class AppsBuildTests : IDisposable
         Assert.Contains("main.ts", broken.Error);
     }
 
-    [Fact]
-    public async Task The_app_template_builds_through_the_bundler_with_the_default_library_set_and_validates()
+    private static BunLocation NeedBun()
     {
         var bun = BunLocator.Locate();
-        if (!bun.Found)
-        {
-            Assert.False(string.Equals(Environment.GetEnvironmentVariable("DBDATA_REQUIRE_BUN"), "true", StringComparison.OrdinalIgnoreCase), "bun is required but was not found: " + bun.Problem);
-            Assert.Skip("bun is not installed");
-        }
+        if (bun.Found) return bun;
+        Assert.False(string.Equals(Environment.GetEnvironmentVariable("DBDATA_REQUIRE_BUN"), "true", StringComparison.OrdinalIgnoreCase), "bun is required but was not found: " + bun.Problem);
+        Assert.Skip("bun is not installed");
+        return bun;
+    }
+
+    [Fact]
+    public async Task The_app_template_builds_through_the_bundler_from_the_vendored_store_with_the_default_library_set_and_validates()
+    {
+        var bun = NeedBun();
         var store = AppStoreSupport.Require();
         var source = Folder("template");
         var made = await RunAsync(AppsBuild.NewAsync, "--dir", source, "--name", "sales-app");
         Assert.True(made.Exit == 0, made.Error);
         Assert.Contains("name: sales-app", File.ReadAllText(Path.Combine(source, "app.yaml")));
-        // the packages the template imports are the store's (no network, nothing installed)
-        Directory.CreateSymbolicLink(Path.Combine(source, "node_modules"), Path.Combine(store, "node_modules"));
 
-        // 1. through IAppBundler, the way the apps host and the Workspace server build
-        var bundled = await new BunAppBundler(bun.Path!).BundleAsync(new AppBundleRequest(source, "src/main.tsx", Folder("template-bundle"), Offline: true));
+        // 1. through IAppBundler, the way the apps host and the Workspace server build: the packages are the store's, nothing is installed
+        var bundled = await new BunAppBundler(bun.Path!).BundleAsync(new AppBundleRequest(source, "src/main.tsx", Folder("template-bundle"), PackageStore: VendoredPackageStore.Load(store)));
         Assert.True(bundled.Succeeded, string.Join("; ", bundled.Diagnostics.Select(d => d.Message)));
         Assert.Contains("main.js", bundled.Files);
         Assert.Contains("main.css", bundled.Files);
         // a plain script in a sandboxed document: no module syntax
         Assert.DoesNotContain("\nexport ", File.ReadAllText(Path.Combine(Folder("template-bundle"), "main.js")));
+        Assert.False(Directory.Exists(Path.Combine(source, "node_modules")));
 
-        // 2. through `apps build`, which then runs the checks `apps validate` and `apps publish` make
+        // 2. through `apps build`, which then runs the checks `apps validate` and `apps publish` make (the network namespace where the machine can make one)
         var built = Folder("template-built");
-        var result = await RunAsync(AppsBuild.BuildAsync, "--src", source, "--out", built, "--offline", "--bun", bun.Path!);
+        var result = await RunAsync(AppsBuild.BuildAsync, "--src", source, "--out", built, "--store", store, "--bun", bun.Path!, "--isolation", NetworkIsolator.IsAvailable ? "required" : "auto");
         Assert.True(result.Exit == 0, result.Error + result.Out);
+        Assert.Contains("nothing was installed", result.Out);
         var files = Directory.EnumerateFiles(built, "*", SearchOption.AllDirectories).Select(f => Path.GetRelativePath(built, f).Replace('\\', '/')).Order(StringComparer.Ordinal).ToList();
         Assert.Equal(["app.yaml", "index.html", "main.css", "main.js"], files);
         Assert.Equal(0, (await CommandAsync("apps", "validate", "--dir", built)).Exit);
+    }
+
+    [Fact]
+    public async Task A_build_from_the_store_refuses_a_package_that_is_not_listed_naming_it_and_builds_it_once_the_allow_list_has_it()
+    {
+        var bun = NeedBun();
+        var store = AppStoreSupport.Require();
+        var source = Folder("allow");
+        Assert.Equal(0, (await RunAsync(AppsBuild.NewAsync, "--dir", source)).Exit);
+        // `yaml` is in the store (the visuals need it) but is not in the default library set
+        File.WriteAllText(Path.Combine(source, "src", "main.tsx"), File.ReadAllText(Path.Combine(source, "src", "main.tsx")) + "\nimport { parse } from 'yaml'\nconsole.log(parse('a: 1'))\n");
+
+        var refused = await RunAsync(AppsBuild.BuildAsync, "--src", source, "--out", Folder("allow-out"), "--store", store, "--bun", bun.Path!);
+        Assert.Equal(1, refused.Exit);
+        Assert.Contains("imports 'yaml'", refused.Error);
+        Assert.Contains("src/main.tsx", refused.Error);
+        Assert.Contains("apps.allowedPackages", refused.Error);
+        Assert.False(Directory.Exists(Folder("allow-out")));
+
+        var allowed = await RunAsync(AppsBuild.BuildAsync, "--src", source, "--out", Folder("allow-out"), "--store", store, "--allow", "yaml", "--bun", bun.Path!);
+        Assert.True(allowed.Exit == 0, allowed.Error + allowed.Out);
+        Assert.Contains("a: 1".Length > 0 ? "main.js" : "", string.Join(' ', Directory.EnumerateFiles(Folder("allow-out")).Select(Path.GetFileName)));
+
+        // the same list from the Gateway's settings (`apps.allowedPackages`, `apps.packageStore`), read from the data directory
+        File.WriteAllText(Path.Combine(GatewayConfigFile.DirectoryIn(DataDirectory), "server.yaml"), $"schemaVersion: 2\ntls: {{ mode: selfSigned }}\napps:\n  packageStore: '{store.Replace("'", "''")}'\n  allowedPackages: [yaml]\n");
+        var fromSettings = await RunAsync(AppsBuild.BuildAsync, "--src", source, "--out", Folder("settings-out"), "--repo", DataDirectory, "--bun", bun.Path!);
+        Assert.True(fromSettings.Exit == 0, fromSettings.Error + fromSettings.Out);
+        File.WriteAllText(Path.Combine(GatewayConfigFile.DirectoryIn(DataDirectory), "server.yaml"), $"schemaVersion: 2\ntls: {{ mode: selfSigned }}\napps:\n  packageStore: '{store.Replace("'", "''")}'\n");
+        var notListed = await RunAsync(AppsBuild.BuildAsync, "--src", source, "--out", Folder("settings-out2"), "--repo", DataDirectory, "--bun", bun.Path!);
+        Assert.Equal(1, notListed.Exit);
+        Assert.Contains("imports 'yaml'", notListed.Error);
+
+        // a store manifest that is not the one the administrator pinned (`apps.packageStoreSha256`) is refused before anything is read from the store
+        File.WriteAllText(Path.Combine(GatewayConfigFile.DirectoryIn(DataDirectory), "server.yaml"), $"schemaVersion: 2\ntls: {{ mode: selfSigned }}\napps:\n  packageStore: '{store.Replace("'", "''")}'\n  packageStoreSha256: '{new string('0', 64)}'\n");
+        var pinned = await RunAsync(AppsBuild.BuildAsync, "--src", source, "--out", Folder("settings-out3"), "--repo", DataDirectory, "--bun", bun.Path!);
+        Assert.Equal(1, pinned.Exit);
+        Assert.Contains("apps.packageStoreSha256", pinned.Error);
+    }
+
+    [Fact]
+    public async Task A_changed_vendored_file_stops_the_build_and_store_verify_names_it()
+    {
+        var store = AppStoreSupport.Require();
+        // a copy of the store, so the shared one stays whole
+        var copy = Folder("store-copy");
+        foreach (var file in Directory.EnumerateFiles(store, "*", SearchOption.AllDirectories))
+        {
+            var target = Path.Combine(copy, Path.GetRelativePath(store, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target);
+        }
+        var ok = await RunAsync(AppsBuild.StoreVerifyAsync, "--store", copy);
+        Assert.True(ok.Exit == 0, ok.Error);
+        Assert.Contains("An app may import: @dbdatakit/semantic-client", ok.Out);
+        Assert.Matches("Digest of store.json .*: [0-9a-f]{64}", ok.Out);
+
+        var changed = Path.Combine(copy, "node_modules", "react", "index.js");
+        File.AppendAllText(changed, "\n// changed\n");
+        var source = Folder("changed");
+        Assert.Equal(0, (await RunAsync(AppsBuild.NewAsync, "--dir", source)).Exit);
+        var verify = await RunAsync(AppsBuild.StoreVerifyAsync, "--store", copy);
+        Assert.Equal(1, verify.Exit);
+        Assert.Contains("node_modules/react/index.js", verify.Error);
+        var build = await RunAsync((a, c) => AppsBuild.BuildAsync(a, c, new BunAppBundler("no-such-bun"), null), "--src", source, "--out", Folder("changed-out"), "--store", copy);
+        Assert.Equal(1, build.Exit);
+        Assert.Contains("node_modules/react/index.js", build.Error);
+        Assert.Contains("nothing was built", build.Error);
+
+        // a store folder that is not there is refused naming it
+        var wrong = await RunAsync((a, c) => AppsBuild.BuildAsync(a, c, new BunAppBundler("no-such-bun"), null), "--src", source, "--out", Folder("pinned-out"), "--store", Folder("nowhere"));
+        Assert.Equal(1, wrong.Exit);
+        Assert.Contains("does not exist", wrong.Error);
     }
 
     [Fact]

@@ -926,6 +926,52 @@
       "if": {
         "properties": {
           "command": {
+            "const": "apps store-verify"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_apps_store_verify"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "apps store-verify"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_apps_store_verify_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "apps validate"
           },
           "ok": {
@@ -4155,6 +4201,48 @@
     "data_apps_store_remove": {
       "type": "object",
       "additionalProperties": false
+    },
+    "data_apps_store_verify": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "store": {
+          "type": "string"
+        },
+        "packages": {
+          "type": "integer"
+        },
+        "files": {
+          "type": "integer"
+        },
+        "digest": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "store",
+        "packages",
+        "files",
+        "digest"
+      ]
+    },
+    "data_apps_store_verify_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "store": {
+          "type": "string"
+        },
+        "packages": {
+          "type": "integer"
+        },
+        "files": {
+          "type": "integer"
+        },
+        "digest": {
+          "type": "string"
+        }
+      }
     },
     "data_apps_validate": {
       "type": "object",

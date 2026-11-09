@@ -7,6 +7,8 @@ namespace DbDataKit.Apps.Bundling;
 /// Bundles with <c>bun</c> run as a child process: <c>bun install</c> first when the source has a <c>package.json</c> with dependencies (Bun does not run a dependency's install scripts unless the package
 /// lists it as trusted, and <c>--ignore-scripts</c> is passed besides), then <c>bun build</c> for the browser as ES modules with code splitting. The child gets a minimal environment (no secrets of the server's), the source
 /// folder as its working directory, and is stopped when the timeout passes. The entry point must be inside the source folder.
+/// <para>With <see cref="AppBundleRequest.PackageStore"/> the build is the one of plan 22a GP33: a copy of the source and of a vendored store (checked against the store's hashes) in a folder of its own, no install, no registry settings, and the
+/// child process in a network namespace with no route where the machine can make one.</para>
 /// </summary>
 public sealed class BunAppBundler(string bunPath = "bun") : IAppBundler
 {
@@ -30,6 +32,7 @@ public sealed class BunAppBundler(string bunPath = "bun") : IAppBundler
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
         try
         {
+            if (request.PackageStore is not null) return await BundleFromStoreAsync(request, source, output, started, linked.Token);
             if (HasDependencies(Path.Combine(source, "package.json")))
             {
                 if (request.Offline)
@@ -65,6 +68,69 @@ public sealed class BunAppBundler(string bunPath = "bun") : IAppBundler
         }
     }
 
+    private async Task<AppBundleResult> BundleFromStoreAsync(AppBundleRequest request, string source, string output, Stopwatch started, CancellationToken cancellationToken)
+    {
+        var store = request.PackageStore!;
+        if (request.Isolation == NetworkIsolation.Required && !NetworkIsolator.IsAvailable)
+            return AppBundleResult.Failed(started.Elapsed, $"The build must run with no network and {NetworkIsolator.WhyNot}.");
+
+        // the store itself first (a changed file is named before any work is done), then the source's imports
+        var damaged = store.Verify();
+        if (damaged.Count > 0) return AppBundleResult.Failed(started.Elapsed, [$"The package store {store.Folder} does not match its {VendoredPackageStore.ManifestName}; nothing was built.", .. damaged]);
+        var violations = AppPackagePolicy.Check(source, store, request.AllowedPackages);
+        if (violations.Count > 0) return AppBundleResult.Failed(started.Elapsed, ["The source imports packages that are not allowed; nothing was built.", .. violations.Select(v => v.Message)]);
+
+        // the build gets a copy of both, in a folder of its own: the source's node_modules, .npmrc and bunfig.toml are not in it, and nothing the build writes reaches the source or the store
+        var stage = Path.Combine(Path.GetTempPath(), "dbdata-appbuild-" + Guid.NewGuid().ToString("N")[..12]);
+        try
+        {
+            CopySource(source, stage, output);
+            store.CopyTo(stage);
+            var copied = store.Verify(stage);   // the copy is what runs, so the copy is what is checked
+            if (copied.Count > 0) return AppBundleResult.Failed(started.Elapsed, [$"The copy of the package store made for this build does not match {VendoredPackageStore.ManifestName}; nothing was built.", .. copied]);
+            await File.WriteAllTextAsync(Path.Combine(stage, "bunfig.toml"), "[install]\nauto = \"disable\"\n", cancellationToken);
+
+            var arguments = new List<string> { "build", Path.Combine(stage, request.EntryPoint.Replace('/', Path.DirectorySeparatorChar)), "--outdir", output, "--target", "browser", "--format", "esm", "--splitting", "--entry-naming", "[name].[ext]" };
+            if (request.Minify) arguments.Add("--minify");
+            var isolated = request.Isolation != NetworkIsolation.None && NetworkIsolator.IsAvailable;
+            var build = await RunAsync(arguments, stage, cancellationToken, isolated);
+            if (build.ExitCode != 0) return Failure(started, "The bundler refused the source.", build);
+
+            var files = Directory.EnumerateFiles(output, "*", SearchOption.AllDirectories).Select(f => Path.GetRelativePath(output, f).Replace('\\', '/')).Order(StringComparer.Ordinal).ToList();
+            var total = files.Sum(f => new FileInfo(Path.Combine(output, f)).Length);
+            if (total > request.MaxBundleBytes) return AppBundleResult.Failed(started.Elapsed, $"The bundle is {total:N0} bytes, over the {request.MaxBundleBytes:N0} allowed.");
+            var notes = new List<string>
+            {
+                $"Built from the package store {store.Folder} ({store.Packages.Count} packages, {VendoredPackageStore.ManifestName} {store.Digest[..12]}); nothing was installed.",
+                isolated ? "The bundler ran in a network namespace with no route." : $"The bundler ran without network isolation: {NetworkIsolator.WhyNot}. Nothing is installed and no proxy is configured, but the program could open a socket.",
+            };
+            return files.Count == 0
+                ? AppBundleResult.Failed(started.Elapsed, "The bundler wrote nothing.")
+                : new AppBundleResult(true, files, total, [], started.Elapsed, notes);
+        }
+        finally
+        {
+            try { if (Directory.Exists(stage)) Directory.Delete(stage, true); }
+            catch (IOException) { /* a temporary folder left behind is the system's to clean */ }
+            catch (UnauthorizedAccessException) { /* the same */ }
+        }
+    }
+
+    /// <summary>Copies the source without what would change the build's reach: <c>node_modules</c>, hidden files and folders (<c>.npmrc</c>, <c>.git</c>), <c>bunfig.toml</c> and the output folder.</summary>
+    private static void CopySource(string source, string stage, string output)
+    {
+        Directory.CreateDirectory(stage);
+        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(source, file);
+            var parts = relative.Split(Path.DirectorySeparatorChar);
+            if (parts.Any(p => p.StartsWith('.') || p == "node_modules") || parts[^1].Equals("bunfig.toml", StringComparison.OrdinalIgnoreCase) || Path.GetFullPath(file).StartsWith(output + Path.DirectorySeparatorChar, StringComparison.Ordinal)) continue;
+            var target = Path.Combine(stage, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target);
+        }
+    }
+
     private static bool HasDependencies(string packageJson)
     {
         if (!File.Exists(packageJson)) return false;
@@ -79,10 +145,11 @@ public sealed class BunAppBundler(string bunPath = "bun") : IAppBundler
     private static AppBundleResult Failure(Stopwatch started, string headline, (int ExitCode, string Output) run) =>
         new(false, [], 0, [new AppBundleDiagnostic(headline), .. run.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Take(40).Select(l => new AppBundleDiagnostic(l))], started.Elapsed);
 
-    private async Task<(int ExitCode, string Output)> RunAsync(IReadOnlyList<string> arguments, string workingDirectory, CancellationToken cancellationToken)
+    private async Task<(int ExitCode, string Output)> RunAsync(IReadOnlyList<string> arguments, string workingDirectory, CancellationToken cancellationToken, bool isolated = false)
     {
-        var info = new ProcessStartInfo(bunPath) { WorkingDirectory = workingDirectory, RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true, UseShellExecute = false, CreateNoWindow = true };
-        foreach (var argument in arguments) info.ArgumentList.Add(argument);
+        var wrapped = isolated ? NetworkIsolator.Wrap(bunPath, arguments) : null;
+        var info = new ProcessStartInfo(wrapped?.FileName ?? bunPath) { WorkingDirectory = workingDirectory, RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true, UseShellExecute = false, CreateNoWindow = true };
+        foreach (var argument in wrapped?.Arguments ?? arguments) info.ArgumentList.Add(argument);
         // only what a build needs: the server's own environment (tokens, secrets, connection strings) stays out of the child
         info.Environment.Clear();
         foreach (var name in new[] { "PATH", "HOME", "USERPROFILE", "TEMP", "TMP", "TMPDIR", "SystemRoot", "LOCALAPPDATA", "APPDATA" })

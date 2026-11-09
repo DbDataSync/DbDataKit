@@ -85,6 +85,13 @@ jobs:
           scripts/fetch-bun.sh
           echo "$GITHUB_WORKSPACE/.bun/linux-x64" >> "$GITHUB_PATH"
           echo "DBDATA_REQUIRE_BUN=true" >> "$GITHUB_ENV"
+      # The app build's tests (plan 22a GP33) run the bundler in a network namespace with no route; Ubuntu 24.04 limits unprivileged user namespaces, so the job allows them and requires the tests.
+      - name: Allow user namespaces (network namespaces for the app build tests)
+        if: runner.os == 'Linux'
+        working-directory: .
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          echo "DBDATA_REQUIRE_NETNS=true" >> "$GITHUB_ENV"
 
       - name: Restore
         run: dotnet restore DbDataKit.Shared.slnx
