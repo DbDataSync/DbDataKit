@@ -427,6 +427,12 @@ if (!isWorker) {
 
 // Plan 24a UC08 and UC09: a Build server for the upgrades story (`upgrades.spec.ts`), port 8591 (a port table: 8591 upgrades Build). It runs by hand, not as a service, so the console shows what is available for it and says why it is not
 // upgraded from here; a mirror folder (made by the story) stands in for the release feed. Its own directory and port, so nothing the other stories leave in the servers above is in its way.
+// a server started by hand, as a person types it: a CI runner agent is a systemd unit and its children inherit these, which says nothing about the child
+function byHandEnvironment() {
+  const env = { ...(process.env as Record<string, string>) }
+  for (const name of ['INVOCATION_ID', 'JOURNAL_STREAM', 'SYSTEMD_EXEC_PID']) delete env[name]
+  return env
+}
 export const upgradeBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-upgrade-build'), port: 8591, mirror: path.join(os.tmpdir(), 'dbdatakit-console-e2e-upgrade-mirror') }
 if (!isWorker) {
   fs.rmSync(upgradeBuild.directory, { recursive: true, force: true })
@@ -656,7 +662,7 @@ export default defineConfig({
     {
       command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(upgradeBuild.directory), '--listen', `https://localhost:${upgradeBuild.port}`].join(' '),
       url: `https://localhost:${upgradeBuild.port}/health/live`,
-      env: { ...(process.env as Record<string, string>), DBDATA_UPGRADE_MIRROR: upgradeBuild.mirror },   // the server prepares its own upgrade from the same mirror folder the console reads
+      env: { ...byHandEnvironment(), DBDATA_UPGRADE_MIRROR: upgradeBuild.mirror },   // the server prepares its own upgrade from the same mirror folder the console reads
       ignoreHTTPSErrors: true,
       reuseExistingServer: false,
       timeout: 60_000,
