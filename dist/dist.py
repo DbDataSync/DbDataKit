@@ -195,7 +195,9 @@ def suite_notes(members):
 
 
 def suite_manifest(members, version, repo, sums):
-    """One manifest for all members: url, hash, extract_to and bin are lists in member order. Packaging only: no script keys."""
+    """One manifest for all members: url, hash, extract_to and bin are lists in member order. Packaging only: the one script it carries is the members' own
+    `globalEnv` (machine variables after `scoop install -g`, removed on uninstall), so a command an administrator runs by hand reads the folder the service uses.
+    No service is registered, nothing is started and nothing is paired."""
     urls, hashes, folders, bins = [], [], [], []
     missing = []
     for meta, folder in members:
@@ -219,6 +221,12 @@ def suite_manifest(members, version, repo, sums):
         "bin": bins,
         "notes": suite_notes(members),
     }
+    env = [e for m, _ in members for e in (m.get("globalEnv") or [])]
+    if env:
+        manifest["post_install"] = _global_env_set(env)
+        manifest["pre_uninstall"] = _global_env_unset(env)
+        listed = ", ".join(f"{e['name']}={_program_data_text(e)}" for e in env)
+        manifest["notes"] += f"\nA global install (scoop install -g) also sets, for the machine: {listed}. Open a new terminal to see it, so the commands above read the folders the services use."
     if any(m.get("requiresVcRuntime") for m, _ in members):
         manifest["suggest"] = {"Visual C++ Redistributable": ["extras/vcredist2022"]}
     return manifest
