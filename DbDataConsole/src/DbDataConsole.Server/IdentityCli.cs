@@ -46,7 +46,7 @@ public static class IdentityCli
         }
         if (!Uri.TryCreate(parsed.Get("listen") ?? IdentityHostSettings.DefaultListen, UriKind.Absolute, out var listen) || listen.Scheme != Uri.UriSchemeHttps)
         {
-            await context.Error.WriteLineAsync("--listen is an https address, such as https://localhost:8490.");
+            await context.Error.WriteLineAsync("--listen is an https address, such as https://localhost:8482.");
             return CliExit.Usage;
         }
         Uri? publicUrl = null;

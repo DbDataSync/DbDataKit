@@ -15,7 +15,7 @@ public sealed record WorkspaceSettings(string Directory, Uri Listen)
     public WorkspaceAppSettings? Apps { get; init; }
 
     public const string Product = "dbdataworkspace";
-    public const string DefaultListen = "https://127.0.0.1:8495";
+    public const string DefaultListen = "https://127.0.0.1:8471";
 
     /// <summary>The service's name in the suite's folders and variables (<see cref="DbDataKit.State.SuiteEnvironment"/>): <c>workspace</c>.</summary>
     public const string ServiceName = "workspace";

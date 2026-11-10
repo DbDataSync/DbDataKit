@@ -200,7 +200,7 @@ _MANAGEMENT_ADDRESS = {
     "dbdatarunner": "https://127.0.0.1:8495",
     "dbdatabuild": "https://127.0.0.1:8470",
     "dbdatastore": "https://127.0.0.1:8490",
-    "dbdataworkspace": "https://127.0.0.1:8495",
+    "dbdataworkspace": "https://127.0.0.1:8471",
 }
 
 

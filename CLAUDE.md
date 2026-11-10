@@ -38,7 +38,7 @@ project reference in this repository, a package reference otherwise). Do not cop
 ```
 dotnet build DbDataKit.slnx                                   # everything
 python3 -I -m unittest discover -s scripts/tests              # the repository checks
-python3 -I scripts/check_package_versions.py && python3 -I scripts/check_solution.py && python3 -I scripts/check_duckdb_cache.py && python3 -I scripts/check_native_cache.py && python3 -I scripts/check_plans.py && python3 -I scripts/check_formats.py && python3 -I scripts/check_ui_editors.py && python3 -I scripts/check_env_names.py
+python3 -I scripts/check_package_versions.py && python3 -I scripts/check_solution.py && python3 -I scripts/check_duckdb_cache.py && python3 -I scripts/check_native_cache.py && python3 -I scripts/check_plans.py && python3 -I scripts/check_formats.py && python3 -I scripts/check_ui_editors.py && python3 -I scripts/check_env_names.py && python3 -I scripts/check_default_ports.py
 ```
 
 Per product, from its folder: `dotnet build`, then the suites below. Run the suites a change can affect; CI runs the rest on the pull request.

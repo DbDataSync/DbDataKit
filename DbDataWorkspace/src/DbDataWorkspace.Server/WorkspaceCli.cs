@@ -14,7 +14,7 @@ public static class WorkspaceCli
     public const string Program = "dbdataworkspace";
 
     /// <summary>Where <c>health check</c> asks by default: the server's own address, as a container sees it.</summary>
-    public const string HealthUrl = "https://localhost:8495/health/live";
+    public const string HealthUrl = "https://localhost:8471/health/live";
 
     public static Task<int> RunAsync(string[] args) => RunAsync(args, CliContext.Console());
 
@@ -109,7 +109,7 @@ public static class WorkspaceCli
         }
         if (!Uri.TryCreate(parsed.Get("listen") ?? WorkspaceSettings.DefaultListen, UriKind.Absolute, out var listen) || listen.Scheme != Uri.UriSchemeHttps)
         {
-            await context.Error.WriteLineAsync("--listen is an https address, such as https://127.0.0.1:8495.");
+            await context.Error.WriteLineAsync("--listen is an https address, such as https://127.0.0.1:8471.");
             return CliExit.Usage;
         }
 

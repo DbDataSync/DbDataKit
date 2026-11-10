@@ -79,6 +79,7 @@ jobs:
       - run: python3 -I scripts/check_duckdb_cache.py
       - run: python3 -I scripts/check_native_cache.py
       - run: python3 -I scripts/check_env_names.py
+      - run: python3 -I scripts/check_default_ports.py
 
   solution:
     runs-on: ubuntu-latest

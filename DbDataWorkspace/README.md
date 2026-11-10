@@ -4,7 +4,7 @@ The server where people (and, later, agents) author projects in git workspaces (
 **Built:** editing a draft's files, commit, push and merge (GP35a); an app project starts as the app template (GP32); builds from a vendored package store, a read-only preview and publishing to a paired Gateway (GP35b, below). **Not built:** a preview with live data (the semantic route and the apps host's preview channel), a git remote for a project. The `build` table and the publisher's key reference are in the state module; the builds write the one and publishing reads the other.
 
 ```
-dbdataworkspace server run [--repo <server directory>] [--listen https://127.0.0.1:8495] [--state-engine sqlite|mssql|postgres --state-connection <connection string>]
+dbdataworkspace server run [--repo <server directory>] [--listen https://127.0.0.1:8471] [--state-engine sqlite|mssql|postgres --state-connection <connection string>]
 dbdataworkspace server pair --max-role <roles> [--repo <server directory>]
 dbdataworkspace server clients | unpair <client> [--repo <server directory>]
 dbdataworkspace project create <id> [--title <text>] [--kind app] [--repo <server directory>]   # a git repository in projects/<id> with a first commit
