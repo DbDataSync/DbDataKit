@@ -1,7 +1,7 @@
 namespace DbDataKit.Runner;
 
 /// <summary>
-/// Read-only views shared by every run that needs them (plan 28c E04): a runtime package's files are the engine and its natives, often 100 MB and more, so a view per run would copy them per run on Windows. The first run of a
+/// Read-only views shared by every run that needs them (plan 28c E04): a runtime package's files are the engine and its natives, often 100 MB and more, so a view per run would copy them per run wherever a link is refused. The first run of a
 /// version builds the view, the runs that start while it is in use share it, and the last one to finish removes it; the objects stay in the artifact cache either way. A definition's own view stays per run.
 /// </summary>
 public sealed class SharedViewCache(ArtifactCache cache)
@@ -18,17 +18,14 @@ public sealed class SharedViewCache(ArtifactCache cache)
     public int Built { get; private set; }
 
     /// <summary>Takes a share of the view of <paramref name="key"/> (a version key such as <c>dbdatabuild-runtime@3</c>), building it from <paramref name="files"/> when no run holds it.</summary>
-    public async Task<SharedView> AcquireAsync(string key, IReadOnlyCollection<ArtifactFile> files, CancellationToken ct = default) => await AcquireAsync(key, files, copies: false, ct).ConfigureAwait(false);
-
-    /// <summary>The same; <paramref name="copies"/> builds the view of copies, for a runtime that a host program starts (<see cref="ArtifactCache.MaterializeAsync(string, IReadOnlyCollection{ArtifactFile}, bool, CancellationToken)"/>).</summary>
-    public async Task<SharedView> AcquireAsync(string key, IReadOnlyCollection<ArtifactFile> files, bool copies, CancellationToken ct = default)
+    public async Task<SharedView> AcquireAsync(string key, IReadOnlyCollection<ArtifactFile> files, CancellationToken ct = default)
     {
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             if (!_entries.TryGetValue(key, out var entry))
             {
-                entry = new Entry(await cache.MaterializeAsync(key, files, copies, ct).ConfigureAwait(false));
+                entry = new Entry(await cache.MaterializeAsync(key, files, ct).ConfigureAwait(false));
                 _entries[key] = entry;
                 Built++;
             }

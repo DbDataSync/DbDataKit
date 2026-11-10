@@ -352,8 +352,8 @@ public sealed class TaskExecutor : ITaskRunner
     }
 
     /// <summary>
-    /// A file of a package view is a link to a stored object with mode 0444 (no artifact says it is a program), so a launch command that is a file of the package would be refused with "permission denied". The object it
-    /// names is made executable (0555) before the start; every view that links the same bytes sees it, which is harmless for a file nobody runs by that name. Only on a system with Unix modes.
+    /// A file of a package view is a hard link to (the same file as) a stored object with mode 0444 (no artifact says it is a program), so a launch command that is a file of the package would be refused with "permission denied". The object it
+    /// names is made executable (0555) before the start; every view that links the same file sees it, which is harmless for a file nobody runs by that name. Only on a system with Unix modes.
     /// </summary>
     internal static void MakeExecutable(string path)
     {

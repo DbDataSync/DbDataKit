@@ -6,7 +6,7 @@ namespace DbDataKit.Runner;
 /// <summary>How a run's view refers to the cached objects.</summary>
 public enum ArtifactLinkMode
 {
-    /// <summary>Symbolic links to the cached objects where the OS allows them without privileges (Linux, macOS), copies otherwise (Windows without the symlink right, or any failure to link).</summary>
+    /// <summary>Hard links to the cached objects (<see cref="FileLinks"/>: no privilege on any system, the file is an ordinary file at its path in the view), a copy of the file where a link is refused (another volume, a file system without links, the limit on the links to one file).</summary>
     Auto,
 
     /// <summary>Always copies.</summary>
@@ -26,8 +26,9 @@ public sealed record ArtifactEviction(int Removed, long RemovedBytes, int KeptIn
 /// another) leave one object. Memory use is one copy buffer, whatever the size of the files.
 /// </summary>
 /// <remarks>
-/// A view's files are symbolic links to objects (or copies, see <see cref="ArtifactLinkMode"/>); the objects are mode 0444 and the view's directories 0555 on Linux, and carry the
-/// read-only attribute on Windows, where directories stay writable in practice and the file attribute is what stops a plain write. Which hashes a live view needs is tracked in
+/// A view's files are hard links to objects (or copies, see <see cref="ArtifactLinkMode"/>); the objects are mode 0444 and the view's directories 0555 on Linux, and carry the
+/// read-only attribute on Windows, where directories stay writable in practice and the file attribute is what stops a plain write. A link and its object are one file, so the mode or attribute of one is
+/// the other's: a write through a view is refused for the same reason a write to the object is. Which hashes a live view needs is tracked in
 /// this process only: a second process evicting from the same directory is not protected against.
 /// </remarks>
 public sealed class ArtifactCache
@@ -40,6 +41,7 @@ public sealed class ArtifactCache
 
     private readonly IArtifactSource _source;
     private readonly ArtifactLinkMode _linkMode;
+    private readonly Func<string, string, bool> _createLink;
     private readonly string _objects;
     private readonly string _temp;
     private readonly string _views;
@@ -47,13 +49,18 @@ public sealed class ArtifactCache
     private readonly Dictionary<string, int> _liveHashes = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _gates = new(StringComparer.Ordinal);
 
-    public ArtifactCache(string directory, IArtifactSource source, ArtifactLinkMode linkMode = ArtifactLinkMode.Auto)
+    /// <param name="directory">The cache's directory; objects, partial files and views live under it, so all of them are on one volume.</param>
+    /// <param name="source">Where the files come from.</param>
+    /// <param name="linkMode">Hard links or copies.</param>
+    /// <param name="createLink">How a hard link is made: <c>(link, existing)</c>, true when it was made. Defaults to <see cref="FileLinks.TryCreateHardLink"/>; tests pass one that refuses, to see the copy that follows.</param>
+    public ArtifactCache(string directory, IArtifactSource source, ArtifactLinkMode linkMode = ArtifactLinkMode.Auto, Func<string, string, bool>? createLink = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(directory);
         ArgumentNullException.ThrowIfNull(source);
         Directory = Path.GetFullPath(directory);
         _source = source;
         _linkMode = linkMode;
+        _createLink = createLink ?? FileLinks.TryCreateHardLink;
         _objects = Path.Combine(Directory, "objects");
         _temp = Path.Combine(Directory, "tmp");
         _views = Path.Combine(Directory, "views");
@@ -83,14 +90,7 @@ public sealed class ArtifactCache
     /// Makes sure every file's object is cached (downloading and verifying those that are not), then builds a new read-only view of them. Refuses, before any download, a path that
     /// could leave the view, a malformed hash, and paths that collide (also by case, or one a file and the other a directory).
     /// </summary>
-    public Task<MaterializedVersion> MaterializeAsync(string versionKey, IReadOnlyCollection<ArtifactFile> files, CancellationToken cancellationToken = default) =>
-        MaterializeAsync(versionKey, files, copies: false, cancellationToken);
-
-    /// <summary>
-    /// The same, and with <paramref name="copies"/> the view is made of copies whatever the link mode says. A runtime that a host program starts (<c>dotnet {runtime}/bin/Engine.dll</c>) needs it: the host resolves a link to the object it points at and
-    /// looks for the runtime configuration and the dependencies beside <i>that</i> (exit code 131, <c>hostpolicy</c> not found), so such a view cannot be made of links on Linux (plan 28c E12e).
-    /// </summary>
-    public async Task<MaterializedVersion> MaterializeAsync(string versionKey, IReadOnlyCollection<ArtifactFile> files, bool copies, CancellationToken cancellationToken = default)
+    public async Task<MaterializedVersion> MaterializeAsync(string versionKey, IReadOnlyCollection<ArtifactFile> files, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(versionKey);
         ArgumentNullException.ThrowIfNull(files);
@@ -107,7 +107,7 @@ public sealed class ArtifactCache
 
             var name = Sanitize(versionKey);
             view = Path.Combine(_views, $"{name}-{Guid.NewGuid():N}"[..(name.Length + 9)]);
-            BuildView(view, checkedFiles, copies, cancellationToken);
+            BuildView(view, checkedFiles, cancellationToken);
             return new MaterializedVersion(this, versionKey, view, checkedFiles, hashes);
         }
         catch
@@ -174,7 +174,10 @@ public sealed class ArtifactCache
                 MakeDirectoryWritable(directory);
             if (OperatingSystem.IsWindows())
                 foreach (var file in System.IO.Directory.EnumerateFiles(view, "*", SearchOption.AllDirectories))
-                    File.SetAttributes(file, FileAttributes.Normal);
+                {
+                    // a file of a view may be a hard link of a cached object, and the read-only attribute is the file's, not the name's: the delete ignores it where Windows can, and only otherwise clears it
+                    if (!FileLinks.TryDeleteIgnoringReadOnly(file)) File.SetAttributes(file, FileAttributes.Normal);
+                }
             System.IO.Directory.Delete(view, recursive: true);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -283,7 +286,7 @@ public sealed class ArtifactCache
         }
     }
 
-    private void BuildView(string view, List<ArtifactFile> files, bool copies, CancellationToken cancellationToken)
+    private void BuildView(string view, List<ArtifactFile> files, CancellationToken cancellationToken)
     {
         System.IO.Directory.CreateDirectory(view);
         var directories = new HashSet<string>(StringComparer.Ordinal) { view };
@@ -300,17 +303,11 @@ public sealed class ArtifactCache
 
             var objectPath = ObjectPath(file.Sha256);
             var linked = false;
-            if (!copies && _linkMode == ArtifactLinkMode.Auto && !OperatingSystem.IsWindows())
+            if (_linkMode == ArtifactLinkMode.Auto)
             {
-                try
-                {
-                    File.CreateSymbolicLink(target, objectPath);
-                    linked = true;
-                }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
-                {
-                    // fall back to a copy
-                }
+                // the link is the object under another name (same mode, same attributes); a refusal of any kind (volume, file system, link count) means a copy
+                try { linked = _createLink(target, objectPath); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
             }
 
             if (!linked)
