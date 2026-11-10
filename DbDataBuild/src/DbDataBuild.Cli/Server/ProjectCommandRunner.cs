@@ -16,7 +16,7 @@ internal interface IProjectCommandRunner
 /// <summary>
 /// Starts this same executable as a child with the command's arguments and <c>--format json</c>, and reads its standard output and error. When the running program is not <c>dbdatabuild</c> itself (a test host, <c>dotnet</c> running the assembly) it runs the assembly with <c>dotnet exec</c> instead, like Sync's workers. A command that runs longer than <c>timeout</c> is killed with its children and reports exit 124.
 /// <para>
-/// The child gets the server's environment plus the logins <paramref name="logins"/> supplies (the server's stored secrets as the <c>DBDATA_BUILD_&lt;CONNECTION&gt;_&lt;READ|WRITE&gt;</c> variables, see <see cref="ServerSecrets"/>), read afresh for every command
+/// The child gets the server's environment plus the logins <paramref name="logins"/> supplies (the server's stored secrets as the <c>DBDATAKIT_BUILD_&lt;CONNECTION&gt;_&lt;READ|WRITE&gt;</c> variables, see <see cref="ServerSecrets"/>), read afresh for every command
 /// so a secret set while the server runs applies to the next command. A login from the store replaces a variable of the same name the server was started with.
 /// </para>
 /// <para>

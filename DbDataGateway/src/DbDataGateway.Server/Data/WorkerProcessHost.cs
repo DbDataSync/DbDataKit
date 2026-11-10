@@ -71,7 +71,7 @@ public sealed class WorkerProcessHost(IOptionsMonitor<GatewayOptions> options, I
                 FileName = path,
                 WorkingDirectory = Path.GetDirectoryName(path)!,
                 Arguments = ["--port", port.ToString(), "--parent", Environment.ProcessId.ToString()],
-                Environment = new Dictionary<string, string> { ["DBGATEWAY_WORKER_SECRET"] = _secret },
+                Environment = new Dictionary<string, string> { ["DBDATAKIT_GATEWAY_WORKER_SECRET"] = _secret },
                 Transport = ChildEndpointKind.None,
                 OnOutputLine = line => log.LogDebug("worker: {Line}", line),
                 OnErrorLine = line => log.LogWarning("worker: {Line}", line),

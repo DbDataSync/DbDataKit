@@ -133,24 +133,91 @@ public static class SuiteEnvironment
 
         yield return new("DBGATEWAY_Gateway__State__Engine", StateEngineVariableOf("gateway"));
         yield return new("DBGATEWAY_Gateway__State__Connection", StateConnectionVariableOf("gateway"));
+
+        // SC31a: announcing and pairing (the last two lose CONSOLE; DBDATAKIT_ADVERTISE_URL and DBDATAKIT_INSTANCE_NAME stay)
+        yield return new("DBDATAKIT_CONSOLE_URL", "DBDATAKIT_URL");
+        yield return new("DBDATAKIT_CONSOLE_ANNOUNCE_URL", "DBDATAKIT_ANNOUNCE_URL");
+        yield return new("DBDATAKIT_CONSOLE_ANNOUNCE_LISTEN", "DBDATAKIT_ANNOUNCE_LISTEN");
+        // keys, passwords and upgrade (the DBDATA_SECRET_<NAME> variables are a prefix rule, below)
+        yield return new("DBDATA_SECRETS_KEY_FILE", "DBDATAKIT_SECRETS_KEY_FILE");
+        yield return new("DBDATA_SIGNING_KEY", "DBDATAKIT_SIGNING_KEY");
+        yield return new("DBGATEWAY_PASSWORD", "DBDATAKIT_GATEWAY_PASSWORD");
+        yield return new("DBGATEWAY_WORKER_SECRET", "DBDATAKIT_GATEWAY_WORKER_SECRET");
+        foreach (var setting in new[] { "CHANNEL", "MIRROR", "REPO" })
+            yield return new($"DBDATA_UPGRADE_{setting}", $"DBDATAKIT_UPGRADE_{setting}");
+        // a setting of one service: DBDATAKIT_<SERVICE>_<NAME>
+        foreach (var setting in new[] { "CHANNELS", "GROUP", "MAX_ARTIFACT_BYTES", "ACTIVATION_MAX_WAIT_SECONDS", "TASK_ENVIRONMENT", "CLIENT_DIR" })
+            yield return new($"DBDATARUNNER_{setting}", $"DBDATAKIT_RUNNER_{setting}");
+        yield return new("DBDATAGATEWAY_CLIENT_DIR", "DBDATAKIT_GATEWAY_CLIENT_DIR");
+        foreach (var setting in new[] { "API_URL", "RUNNER_TOKEN", "STATE_ENDPOINT" })
+            yield return new($"DBDATASYNC_{setting}", $"DBDATAKIT_SYNC_{setting}");
+        foreach (var setting in new[] { "ACTOR", "CHECK_RESULTS", "DUCKDB_CLOCK_OVERRIDES", "POLYGLOT_PATH", "STATEMENT_LOG_DIR" })
+            yield return new($"DBDATABUILD_{setting}", $"DBDATAKIT_BUILD_{setting}");
     }
+
+    /// <summary>A family of variables of an earlier release that share a prefix: the prefix becomes <see cref="NewPrefix"/> and the rest of the name stays (<c>DBGATEWAY_Gateway__Listen__Port</c> is <c>DBDATAKIT_Gateway__Listen__Port</c>).</summary>
+    /// <param name="Prefix">The old prefix, matched without regard to case (a Windows environment has none).</param>
+    /// <param name="NewPrefix">What replaces it.</param>
+    /// <param name="Except">Names (after the prefix) the rule leaves alone: the variables of tests and harnesses, which plan 33 SC31b renames; empty once it has.</param>
+    /// <param name="Rename">The rest of the name in the new spelling, when more than the prefix changed.</param>
+    public sealed record OldPrefix(string Prefix, string NewPrefix, Func<string, bool>? Except = null, Func<string, string>? Rename = null)
+    {
+        /// <summary>The replacement for a variable that has this prefix.</summary>
+        public string Replacement(string name)
+        {
+            var rest = name[Prefix.Length..];
+            return NewPrefix + (Rename?.Invoke(rest) ?? rest);
+        }
+
+        /// <summary>True when the variable belongs to this family and is not one of the exceptions.</summary>
+        public bool Matches(string name) => name.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase) && name.Length > Prefix.Length && Except?.Invoke(name[Prefix.Length..]) != true;
+    }
+
+    // SC31b renames these (the variables of tests, harnesses and CI); until then a prefix rule does not refuse them
+    private static bool IsTestOrHarness(string rest) =>
+        rest.StartsWith("TEST_", StringComparison.OrdinalIgnoreCase) || rest.StartsWith("E2E_", StringComparison.OrdinalIgnoreCase) || rest.StartsWith("REQUIRE_", StringComparison.OrdinalIgnoreCase) ||
+        rest.StartsWith("LIVE_", StringComparison.OrdinalIgnoreCase) || rest.StartsWith("UPDATE_", StringComparison.OrdinalIgnoreCase) || rest.StartsWith("ADMIN_TESTS", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Every family of earlier variables that is refused by prefix, after <see cref="OldNames"/> has had its say. This is the one list.</summary>
+    public static IReadOnlyList<OldPrefix> OldPrefixes { get; } =
+    [
+        new("DBDATA_SECRET_", "DBDATAKIT_SECRET_"),
+        new("DBDATA_BUILD_", "DBDATAKIT_BUILD_"),
+        new("DBGATEWAY_", "DBDATAKIT_", IsTestOrHarness),
+        new("DBPROXY_", "DBDATAKIT_", IsTestOrHarness, rest => rest.StartsWith("Proxy__", StringComparison.OrdinalIgnoreCase) ? "Gateway__" + rest["Proxy__".Length..] : rest),
+    ];
 
     /// <summary>Every variable of an earlier release that is refused, with the one that replaces it. This is the one list.</summary>
     public static IReadOnlyList<OldName> OldNames { get; } = [.. OldNameList()];
 
-    /// <summary>The message for the first old variable that is set (to anything, an empty value included, since a script that sets it means it), or null when none is. It names both variables and says there is no alias.</summary>
-    public static string? OldNameProblem(Func<string, string?>? environment = null)
+    private static string Message(string old, string replacement) =>
+        $"The environment variable {old} is no longer read: it was renamed to {replacement}, and there is no alias for the old name. Set {replacement} (and unset {old}) and start again.";
+
+    /// <summary>
+    /// The message for the first old variable that is set (to anything, an empty value included, since a script that sets it means it), or null when none is. It names both variables and says there is no alias.
+    /// The exact names of <see cref="OldNames"/> are asked of <paramref name="environment"/>; the families of <see cref="OldPrefixes"/> need the names that are set, which are
+    /// <paramref name="names"/>, or those of the process when no <paramref name="environment"/> is given (an injected environment that cannot list its names is checked for the exact names only).
+    /// </summary>
+    public static string? OldNameProblem(Func<string, string?>? environment = null, Func<IEnumerable<string>>? names = null)
     {
+        names ??= environment is null ? ProcessNames : null;
         environment ??= Environment.GetEnvironmentVariable;
         foreach (var (old, replacement) in OldNames)
             if (environment(old) is not null)
-                return $"The environment variable {old} is no longer read: it was renamed to {replacement}, and there is no alias for the old name. Set {replacement} (and unset {old}) and start again.";
+                return Message(old, replacement);
+        if (names is not null)
+            foreach (var name in names().Order(StringComparer.Ordinal))
+                foreach (var rule in OldPrefixes)
+                    if (rule.Matches(name) && environment(name) is not null)
+                        return Message(name, rule.Replacement(name));
         return null;
     }
 
+    private static IEnumerable<string> ProcessNames() => Environment.GetEnvironmentVariables().Keys.OfType<string>().ToList();
+
     /// <summary>Stops with <see cref="SuiteEnvironmentException"/> when a variable of an earlier release is set (<see cref="OldNameProblem"/>). Every server's <c>server run</c> and every command that takes <c>--repo</c> calls it first.</summary>
-    public static void RefuseOldNames(Func<string, string?>? environment = null)
+    public static void RefuseOldNames(Func<string, string?>? environment = null, Func<IEnumerable<string>>? names = null)
     {
-        if (OldNameProblem(environment) is { } problem) throw new SuiteEnvironmentException(problem);
+        if (OldNameProblem(environment, names) is { } problem) throw new SuiteEnvironmentException(problem);
     }
 }

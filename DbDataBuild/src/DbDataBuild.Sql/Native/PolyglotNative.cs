@@ -28,7 +28,7 @@ internal static class PolyglotNative
 
     static PolyglotNative() => NativeLibrary.SetDllImportResolver(typeof(PolyglotNative).Assembly, Resolve);
 
-    /// <summary>Probe order: DBDATABUILD_POLYGLOT_PATH, next to the application (the extraction directory of a single-file app), runtimes/&lt;rid&gt;/native, then the OS default.</summary>
+    /// <summary>Probe order: DBDATAKIT_BUILD_POLYGLOT_PATH, next to the application (the extraction directory of a single-file app), runtimes/&lt;rid&gt;/native, then the OS default.</summary>
     private static IntPtr Resolve(string name, Assembly asm, DllImportSearchPath? path)
     {
         if (name != Library) return IntPtr.Zero;
@@ -38,7 +38,7 @@ internal static class PolyglotNative
         var dir = AppContext.BaseDirectory;     // not Assembly.Location: that is empty inside a single-file app
         var candidates = new[]
         {
-            Environment.GetEnvironmentVariable("DBDATABUILD_POLYGLOT_PATH"),
+            Environment.GetEnvironmentVariable("DBDATAKIT_BUILD_POLYGLOT_PATH"),
             Path.Combine(dir, file),
             Path.Combine(dir, "runtimes", rid, "native", file),
         };

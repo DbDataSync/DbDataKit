@@ -57,13 +57,13 @@ machine-wide (`%ProgramData%`) rather than the account's own profile.
 
 ### Docker image and docs
 
-- `Dockerfile` — `ENV DBDATASYNC_HOME=/var/lib/dbdatasync` (never read by anything) → `ENV
+- `Dockerfile` — `ENV DBDATAKIT_SYNC_HOME=/var/lib/dbdatasync` (never read by anything) → `ENV
   DbDataSync__RepoRoot=/var/lib/dbdatasync` (now genuinely honoured by the resolver above); the
   redundant `CMD ["--repo", "/var/lib/dbdatasync"]` removed. Verified by building the image and
   running it: `serve` resolved `/var/lib/dbdatasync` from the env var alone, `/api/health` returned
   200, `FIRST-RUN.txt` was written, and `dbdatasync health` inside the container exited 0.
 - `CONFIG.md` — "Repo root resolution" section rewritten for the new four-step chain and the
-  platform table; the container-image section's stale `DBDATASYNC_HOME`/`CMD` note replaced; the
+  platform table; the container-image section's stale `DBDATAKIT_SYNC_HOME`/`CMD` note replaced; the
   `service install` flag table's default corrected.
 
 ### Tests

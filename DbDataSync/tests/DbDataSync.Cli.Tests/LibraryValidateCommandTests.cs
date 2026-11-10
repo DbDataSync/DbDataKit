@@ -34,7 +34,7 @@ public sealed class LibraryValidateCommandTests : IDisposable
 
     private static void ExposeCredential(string connectionName, string password) =>
         Environment.SetEnvironmentVariable(
-            $"DBDATA_SECRET_DBDATA_SYNC_CONNECTION_{connectionName.Replace('-', '_').ToUpperInvariant()}",
+            $"DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_{connectionName.Replace('-', '_').ToUpperInvariant()}",
             password);
 
     [Fact]

@@ -48,7 +48,7 @@ public class FuzzTests
     {
         var accepted = FuzzHelper.ForBuilder<ProxyConfig>(Sample, 20261002, 800, b => b
             .AddDefaults("timeout: 1\n")
-            .AddEnvironment("PROXY", env: new Dictionary<string, string?> { ["DBDATA_PROXY__LISTEN__PORT"] = "1" }));
+            .AddEnvironment("PROXY", env: new Dictionary<string, string?> { ["DBDATAKIT_PROXY__LISTEN__PORT"] = "1" }));
         Assert.True(accepted > 0);
     }
 

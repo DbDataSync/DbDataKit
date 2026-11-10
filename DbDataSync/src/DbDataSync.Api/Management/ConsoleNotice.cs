@@ -7,7 +7,7 @@ namespace DbDataSync.Api.Management;
 public static class ConsoleNotice
 {
     public const string ConfigurationKey = "DbDataSync:Console:Url";
-    public const string EnvironmentVariable = "DBDATAKIT_CONSOLE_URL";
+    public const string EnvironmentVariable = "DBDATAKIT_URL";
 
     /// <summary>The console's address as configured, or null when none was given or it is not an http or https address.</summary>
     public static Uri? Address(string? configured)

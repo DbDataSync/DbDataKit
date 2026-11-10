@@ -70,7 +70,7 @@ keys, cross reference, XDBC type info, bulk ingest, transactions, cancel.
 * **Catalogs**: not a stored concept. Flight SQL catalog/schema/table listings are derived live from the backend
   (INFORMATION_SCHEMA or the ODBC catalog API, `UseCatalogApi`, `ProxyFlightServer.Metadata.cs:~334`).
 * **Definition/config format.** Single JSON config `appsettings.json` beside the exe (section `Proxy`), plus env
-  (`DBPROXY_Proxy__...`) and CLI overrides (`ProxyHost.cs:29`). `appsettings.example.json` documents every option. Users,
+  (`DBDATAKIT_Gateway__...`) and CLI overrides (`ProxyHost.cs:29`). `appsettings.example.json` documents every option. Users,
   data sources, compression and auth reload live via `IOptionsMonitor`; listener/cert need a restart. Users:
   `UserOptions` (`ProxyOptions.cs:141`) {Name, AuthType Password|Windows, PasswordHash, DataSources[], DefaultDataSource}.
   No separate "definition" files, no schema/versioning field, no include mechanism.
@@ -129,7 +129,7 @@ Every column is declared nullable (`Make`, `:190`); catalog nullability is overl
   primary keys and dialect; `ForeignKeysAsync`/`IndexesAsync` are implemented and tested but unused by the proxy (it
   returns Unimplemented for imported/exported keys, `Unsupported.cs:17-36`).
 * 32-bit: `WorkerProcessHost` (`Server/Data/WorkerProcessHost.cs`) lazily spawns `worker\DbDataProxy.Worker.exe`
-  (`--port N --parent PID`, secret in env `DBPROXY_WORKER_SECRET`, lines 47-91), plain-HTTP/2 loopback gRPC, restarts when
+  (`--port N --parent PID`, secret in env `DBDATAKIT_GATEWAY_WORKER_SECRET`, lines 47-91), plain-HTTP/2 loopback gRPC, restarts when
   `HasExited`, kills the tree on stop. Single worker process shared by all 32-bit sources; the connection string
   (including pass-through credentials) is re-sent in every `WorkerRequest` (`Core/Worker/WorkerProtocol.cs:27`) as JSON
   in the Flight ticket/action body. Worker actions: `execute-nonquery`, `list-tables`, `dialect`, `list-columns`,
@@ -145,9 +145,9 @@ Every column is declared nullable (`Make`, `:190`); catalog nullability is overl
 | `Tls:CertificatePassword` | config plaintext (`ProxyOptions.cs:49`) | none; default is null password, so the self-signed PFX `dbdataproxy-selfsigned.pfx` is written with an **empty password** (`CertificateProvider.cs:59`) |
 | JWT HMAC `SigningKey` | config plaintext base64 (`JwtOptions.cs`) | none |
 | Pass-through client credentials | in memory in `ProxyPrincipal.Credentials` for session lifetime (up to 12 h); sent to the x86 worker in clear over loopback HTTP/2 inside each request | never put in the bearer token (design note in `SessionStore.cs:~6`); session dictionary keyed by SHA-256 of token (`:Key`) |
-| Worker secret | 24 random bytes hex, env var `DBPROXY_WORKER_SECRET` of the child, `x-worker-secret` header, compared `FixedTimeEquals` (`WorkerFlightServer` ~`Authorize`, `WorkerSecret`) | adequate for same-host defence; a same-user local process can read the child env |
+| Worker secret | 24 random bytes hex, env var `DBDATAKIT_GATEWAY_WORKER_SECRET` of the child, `x-worker-secret` header, compared `FixedTimeEquals` (`WorkerFlightServer` ~`Authorize`, `WorkerSecret`) | adequate for same-host defence; a same-user local process can read the child env |
 | Service account password | `DbDataProxy install --account A --password P` -> `sc.exe create ... password= P` (`ServiceInstaller.cs:24-28`) | visible in the process command line during install |
-| Client smoke command | `DbDataProxy query --password P` (`QueryCommand.cs`) or env `DBPROXY_PASSWORD` | visible in process list/history (env fallback exists) |
+| Client smoke command | `DbDataProxy query --password P` (`QueryCommand.cs`) or env `DBDATAKIT_GATEWAY_PASSWORD` | visible in process list/history (env fallback exists) |
 
 **Logging.** `LogSql` defaults **true** and logs up to 200 chars of every statement with the user name
 (`ProxyFlightServer.cs:108,215-218`); SQL literals can be sensitive. Passwords are never logged; handshake failures log
@@ -193,7 +193,7 @@ is not possible, only `.*` expansions).
   No backup/rollback of the previous version, no config-migration step, no `web.config`/ACL setup, no data-dir creation.
 * **Service:** `ServiceInstaller` shells out to `sc.exe` using `ArgumentList` (no shell injection), auto-start,
   restart-on-failure. No `--account` -> **LocalSystem**. Firewall rule is left to the operator.
-* **Other hosting:** `Dockerfile` (aspnet:10.0 + unixodbc, runs as root, `0.0.0.0`, env `DBPROXY_Proxy__...`), systemd
+* **Other hosting:** `Dockerfile` (aspnet:10.0 + unixodbc, runs as root, `0.0.0.0`, env `DBDATAKIT_Gateway__...`), systemd
   via `AddSystemd()`; neither is exercised in CI.
 * **CI:** `.github/workflows/ci.yml`: Windows job (build, tests with `--minimum-expected-tests 100` / `25`, package smoke
   test) and Ubuntu job with a SQL Server 2022 container.

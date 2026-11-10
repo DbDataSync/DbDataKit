@@ -20,13 +20,13 @@ declare global {
  */
 window.MonacoEnvironment = { getWorker: () => new EditorWorker() }
 
-export const DBDATASYNC_THEME = 'dbdatasync'
+export const DBDATAKIT_SYNC_THEME = 'dbdatasync'
 
 /**
  * Built from the app's own tokens rather than Monaco's stock `vs`, which is a cold grey-blue against a
  * warm off-white palette and reads as an embedded IDE rather than part of the application.
  */
-monaco.editor.defineTheme(DBDATASYNC_THEME, {
+monaco.editor.defineTheme(DBDATAKIT_SYNC_THEME, {
   base: 'vs',
   inherit: true,
   rules: [

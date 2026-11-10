@@ -24,7 +24,7 @@ public sealed record LoadResult(string Name, string State, string? Detail, long 
 /// <summary>
 /// One refresh plan as a runner task (plan 28c E01): runs `connection refresh &lt;connection&gt; &lt;plan&gt; --project &lt;package directory&gt;` in this process through <see cref="CliApp"/>, so the rows written to the target
 /// and the tracking rows are exactly what the same command gives, and maps the command's document onto the run's end: no failed load is `Succeeded`, some failed loads with others done (`on_failure: continue`) is `CompletedWithFailures`,
-/// and a refused or failed plan is `Failed` with the diagnostic code or the load named. The logins come from `DBDATA_BUILD_&lt;CONNECTION&gt;_&lt;READ|WRITE&gt;` in the environment, as for the command.
+/// and a refused or failed plan is `Failed` with the diagnostic code or the load named. The logins come from `DBDATAKIT_BUILD_&lt;CONNECTION&gt;_&lt;READ|WRITE&gt;` in the environment, as for the command.
 /// </summary>
 [RunnerTask("refresh")]
 public sealed class RefreshJob : RunnerJob<RefreshInput, NoProgress, NoSlots>

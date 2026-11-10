@@ -58,7 +58,7 @@ Rules:
 
 `readonly` means: no `_WRITE` login is ever read; the connection cannot be `tracking.connection`, a destination of a model or a copy, or a deploy or refresh target (DDB code, new); `connection inspect`, `status` of structure and `project import` work on it. A copy, a mapped model, a `source` resolver and a native query may name it as an origin. `readonly` also works on the engines the tool builds on, so the fan-in template's shop systems become `readonly postgres`.
 
-The login is `DBDATABUILD_<NAME>_READ`, as now. Its value is whatever the driver takes: an ODBC connection string (or DSN), the path of a DuckDB file (opened `READ_ONLY`), a Flight SQL URI such as `grpc+tls://host:31337` with credentials as parts of the value.
+The login is `DBDATAKIT_BUILD_<NAME>_READ`, as now. Its value is whatever the driver takes: an ODBC connection string (or DSN), the path of a DuckDB file (opened `READ_ONLY`), a Flight SQL URI such as `grpc+tls://host:31337` with credentials as parts of the value.
 
 ## 4. Drivers
 

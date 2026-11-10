@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { DBDATASYNC_THEME, monaco } from './monacoSetup'
+import { DBDATAKIT_SYNC_THEME, monaco } from './monacoSetup'
 import type { CodeEditorProps } from '../CodeEditor'
 
 /** Where a diagnostic with no position is anchored, so it is still visible rather than silently
@@ -26,7 +26,7 @@ export default function MonacoEditor({
     const instance = monaco.editor.create(host.current, {
       value,
       language,
-      theme: DBDATASYNC_THEME,
+      theme: DBDATAKIT_SYNC_THEME,
       readOnly,
       automaticLayout: true,
       minimap: { enabled: false },

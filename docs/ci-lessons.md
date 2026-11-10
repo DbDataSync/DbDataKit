@@ -10,7 +10,7 @@ The CI runners are small (two cores, Windows and Linux), run many jobs at once, 
 3. Think Windows: does the test delete a directory that holds read-only files (cache, artifact views)? does it read a file a running server still has open? does it use `/` or `:` in a path? See the Windows section.
 4. If you touched `Directory.Packages.props`, a `.csproj`, a publish target or the Dockerfile: `dotnet publish` the console and start it (`dotnet dbdatakit.dll server run --listen https://localhost:<port>` must print "The console is on").
 5. If you added a Playwright spec: the specs run **one at a time in the order of their file names**; see the Playwright section.
-6. `python3 -I -m unittest discover -s scripts/tests` and the `scripts/check_*.py` (`check_duckdb_cache.py` and `check_native_cache.py` among them: a job or Dockerfile that needs DuckDB uses the cache, see "GitHub release downloads fail") (agent worktrees under `.claude/worktrees` make two of those fail on a machine that has them; that is not a CI problem).
+6. `python3 -I -m unittest discover -s scripts/tests` and the `scripts/check_*.py` (`check_duckdb_cache.py` and `check_native_cache.py` among them: a job or Dockerfile that needs DuckDB uses the cache, see "GitHub release downloads fail"; `check_env_names.py`: every environment variable name starts `DBDATAKIT_`) (agent worktrees under `.claude/worktrees` make two of those fail on a machine that has them; that is not a CI problem).
 7. Delete your `bin`/`obj` (and any `node_modules`) when you finish: the disk of a session is small and a full disk fails builds in confusing ways.
 
 ## Recognise it, fix it

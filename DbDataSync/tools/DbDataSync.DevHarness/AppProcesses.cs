@@ -66,7 +66,7 @@ public sealed class AppProcesses : IAsyncDisposable
         // Plan 13a, X06: the API keeps no sign-in and no network trust (`Auth:Network:*` is refused at startup), so every /api call here needs a console's signed token.
         // This harness sends none: its scenario calls answer 401 until it is given a paired console (`dbdatasync server pair`). Nothing is set here to open the API.
 
-        // The spawned TaskRunner inherits these. SecretStore falls back to DBDATA_SECRET_* variables when its encrypted store
+        // The spawned TaskRunner inherits these. SecretStore falls back to DBDATAKIT_SECRET_* variables when its encrypted store
         // has no password — without them a run fails to resolve the connection password. Same workaround the Playwright
         // suite and the integration tests use.
         foreach (var name in new[] { Scenario.SourceConnectionName, Scenario.TargetConnectionName })
@@ -89,7 +89,7 @@ public sealed class AppProcesses : IAsyncDisposable
         startInfo.WorkingDirectory = webRoot;
         startInfo.RedirectStandardOutput = true;
         startInfo.RedirectStandardError = true;
-        startInfo.Environment["DBDATASYNC_API_URL"] = $"http://127.0.0.1:{apiPort}";
+        startInfo.Environment["DBDATAKIT_SYNC_API_URL"] = $"http://127.0.0.1:{apiPort}";
 
         Start(startInfo, "spa");
     }

@@ -49,7 +49,7 @@ A `dbdatabuild mcp` command would speak MCP over stdio from the same executable:
   class mapped to the tool annotations (read-only for the offline and target-read-only classes, destructive for `apply`).
 - **Resources:** the schemas, `explain` for every diagnostic, the agent kit (the skill the tool already installs), the rendered files, the metadata documents, the plan reports.
 - **Prompts:** the workflows in the skill (add a model, change a model, review a plan).
-- **Project root** from the host's roots, or a `--project` argument in the server configuration. **Credentials** stay in the server's environment (`DBDATABUILD_<TARGET>_<READ|WRITE>`), set in the host's
+- **Project root** from the host's roots, or a `--project` argument in the server configuration. **Credentials** stay in the server's environment (`DBDATAKIT_BUILD_<TARGET>_<READ|WRITE>`), set in the host's
   server configuration, never in a tool argument or a conversation.
 
 ### The UI extension (MCP Apps)

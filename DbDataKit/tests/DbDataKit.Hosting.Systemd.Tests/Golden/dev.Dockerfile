@@ -4,7 +4,7 @@ WORKDIR /app
 COPY --chown=1654:1654 publish/ /app/
 ENV ASPNETCORE_URLS=http://+:5080 \
     DOTNET_gcServer=0 \
-    DBDATA_DATA_DIR=/data
+    DBDATAKIT_DATA=/data
 VOLUME ["/data"]
 EXPOSE 5080
 USER 1654:1654

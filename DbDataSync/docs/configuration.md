@@ -31,7 +31,7 @@ the console's web app reach the API" confusion:
 | `dbdatasync server run` | `5080` |
 | the Docker image | `8443` (https) |
 
-The dev-server proxy of the Sync screens (`DBDATASYNC_API_URL`, below) defaults to `5183` — i.e. it assumes the raw
+The dev-server proxy of the Sync screens (`DBDATAKIT_SYNC_API_URL`, below) defaults to `5183` — i.e. it assumes the raw
 `dotnet run` dev loop, not a CLI-launched backend. Point it at `5080` if you're running against
 `dbdatasync server run` instead.
 
@@ -113,7 +113,7 @@ Starts the API and the scheduler in one process. The server serves no web app: i
 dbdatakit console's, paired with the server once (`dbdatasync server pair`, see
 [Installing → Connecting a console](install.md#connecting-a-console)). A browser pointed at the server's address gets a plain-text
 message saying so, and naming the console when `DbDataSync:Console:Url` (environment `DbDataSync__Console__Url`, or
-`DBDATAKIT_CONSOLE_URL`) holds its address.
+`DBDATAKIT_URL`) holds its address.
 
 | flag | default |
 | --- | --- |
@@ -457,7 +457,7 @@ argument parser; an unrecognized flag is a hard error, not a silent ignore.
 | `--replication <name>` | yes | — |
 | `--degree-of-parallelism <n>` | no | `4` |
 | `--bulk-load-parallelism <n>` | no | `4` |
-| `--state-endpoint <url>` | no | falls back to the `DBDATASYNC_STATE_ENDPOINT` environment variable |
+| `--state-endpoint <url>` | no | falls back to the `DBDATAKIT_SYNC_STATE_ENDPOINT` environment variable |
 | `--state-grace-seconds <n>` | no | `60` |
 
 The worker runs **two independent lanes**, each with its own bounded queue and its own
@@ -477,8 +477,8 @@ concurrency ceiling for the replication is the two added.
 Two more environment variables exist here, but they're **internal, process-to-process only** — set by
 the parent API when it spawns a runner, never something an operator sets by hand:
 
-- `DBDATASYNC_STATE_ENDPOINT` — the loopback address of the process that owns the state store.
-- `DBDATASYNC_RUNNER_TOKEN` — the runner's auth token for that loopback connection.
+- `DBDATAKIT_SYNC_STATE_ENDPOINT` — the loopback address of the process that owns the state store.
+- `DBDATAKIT_SYNC_RUNNER_TOKEN` — the runner's auth token for that loopback connection.
 
 ### The writer of `changeProcessing:` may be left out
 
@@ -625,11 +625,11 @@ connection inventory (`GET /api/v1/connections`) lists both references (`secret_
 ### On a runner
 
 A runner never has the read login. A replication set published to a runner declares a slot per connection; the administrator of the runner binds each slot to a connection of the runner's own (`PUT /api/runner/package/bindings`, the Runner screen), and the runner puts
-that connection's login in the engine's environment under both `DBDATA_SECRET_DBDATA_SYNC_CONNECTION_<NAME>` and `DBDATA_SECRET_DBDATA_SYNC_CONNECTION_<NAME>_RUN` (the engine reads whichever its connection names; it opens with the run role only). Today the
+that connection's login in the engine's environment under both `DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_<NAME>` and `DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_<NAME>_RUN` (the engine reads whichever its connection names; it opens with the run role only). Today the
 value reaches the runner's machine by hand, which is the one manual step left; there is no command that sends it yet (plan 28c, E20d). On the runner's machine, for each connection of the set:
 
 1. Write `<runner directory>/connections/<name>.yaml`, a `connection/1` file of the same name as the Sync connection, whose login is the run login: `auth: {mode: sql, user: <run user>, password_secret: env:<NAME>_RUN_PASSWORD}` (or
-   `secret:dbdata:sync:connection:<name>:run`, which the runner reads from its environment as `DBDATA_SECRET_DBDATA_SYNC_CONNECTION_<NAME>_RUN`, or from a file of that name in `CREDENTIALS_DIRECTORY`).
+   `secret:dbdata:sync:connection:<name>:run`, which the runner reads from its environment as `DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_<NAME>_RUN`, or from a file of that name in `CREDENTIALS_DIRECTORY`).
 2. Put the password where that reference looks: in the environment of the runner's service (a systemd unit's `LoadCredential=` and `CREDENTIALS_DIRECTORY`, or an `EnvironmentFile=` readable by the service account only; on Windows the service's environment), never in the file and never on a
    command line. Restart the runner after setting an environment variable; a credentials file is read at each run.
 3. Bind the slot to that connection (the Runner screen, or `dbdatarunner` bindings) and check it: a run whose login is not found fails naming the slot, the connection and the reference, and never falls back to another login.
@@ -640,7 +640,7 @@ See the runner's README ("Logins of a Sync replication set") for the same steps 
 
 Connection credentials and the state database's password are in an **encrypted store** under the repository root: `secrets/secrets.yaml`,
 each value AES-256-GCM encrypted under a key that is protected by DPAPI on Windows and kept in a file readable only by its owner
-(`secrets/keys`, created on first use) elsewhere. `DBDATA_SECRETS_KEY_FILE` names a key file kept somewhere else, such as a mounted secret.
+(`secrets/keys`, created on first use) elsewhere. `DBDATAKIT_SECRETS_KEY_FILE` names a key file kept somewhere else, such as a mounted secret.
 `secrets/` is added to the repository's `.gitignore` when the store is first opened. The same store is the one every DbData product uses
 (`DbDataKit.Secrets.Store`); back up `secrets/` together with its key, or the values cannot be read again.
 
@@ -650,14 +650,14 @@ secret. The names from before the store (`dbdatasync:connection:...`) are **not 
 or save the connection with its password), and `dbdatasync secret set` with an old-form name is refused with the form to use.
 
 When the store has no value, the environment answers: the name upper-cased, every character other than a letter or digit replaced by `_`,
-prefixed `DBDATA_SECRET_`. A connection named `orders-db` resolves to `DBDATA_SECRET_DBDATA_SYNC_CONNECTION_ORDERS_DB`. A file named after the secret in
+prefixed `DBDATAKIT_SECRET_`. A connection named `orders-db` resolves to `DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_ORDERS_DB`. A file named after the secret in
 the directory `CREDENTIALS_DIRECTORY` names (systemd `LoadCredential=`, a container secret mount) is the last place looked.
 
 ## Sync screens' dev server (`DbDataKit/web/sync`)
 
 | env var | default | meaning |
 | --- | --- | --- |
-| `DBDATASYNC_API_URL` | `http://localhost:5183` | target for Vite's `/api` and `/hubs` dev-server proxy |
+| `DBDATAKIT_SYNC_API_URL` | `http://localhost:5183` | target for Vite's `/api` and `/hubs` dev-server proxy |
 
 No `.env` files ship with the project — this is the only variable Vite itself reads. The server serves no web app, so this dev server is a developer's way to work on the
 Sync screens against a running API; the product's screens are the console's (`DbDataKit/web/console`, whose own dev server proxies to a console).

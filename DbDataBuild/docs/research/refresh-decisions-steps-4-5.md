@@ -61,10 +61,10 @@ The deploy would have said `DDB-230` before touching anything.
 **Built.** A deploy refuses the whole plan before its first statement when any origin cannot be reached or has no read login. A refresh checks each origin when the copy's turn comes, under the load lock, before anything is written to the destination:
 
 ```
-connection refresh sqlserver hourly       (DBDATABUILD_STORE_WEST_READ is not set)
+connection refresh sqlserver hourly       (DBDATAKIT_BUILD_STORE_WEST_READ is not set)
 
 load 2/3: warehouse.orders
-failed: origin store_west: DBDATABUILD_STORE_WEST_READ is not set
+failed: origin store_west: DBDATAKIT_BUILD_STORE_WEST_READ is not set
 skipped: marts.daily_sales (upstream failed: warehouse.orders)
 
 outcome: completed_with_failures        (exit 1)

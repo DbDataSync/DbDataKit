@@ -91,7 +91,7 @@ public class RunnerHost(RunnerHostSettings settings, StateDatabase state, ILogge
             var first = others[0];
             throw new SecondInstanceException(
                 $"Another runner instance ({first.Instance.Id}, host {first.Instance.Host}, started {first.Instance.StartedAt:u}, last heartbeat {first.Instance.HeartbeatAt:u}) is running against this state database, which is SQLite: one runner may use it. " +
-                "Stop that one, or run a group of runners against a SQL Server or PostgreSQL state (DBDATARUNNER_STATE_ENGINE and DBDATARUNNER_STATE_CONNECTION).");
+                "Stop that one, or run a group of runners against a SQL Server or PostgreSQL state (DBDATAKIT_STATE_RUNNER_ENGINE and DBDATAKIT_STATE_RUNNER_CONNECTION).");
         }
 
         _host = await RunnerProtocolHost.StartAsync(new RunnerProtocolHostOptions { Directory = settings.SocketDirectory }, cancellationToken).ConfigureAwait(false);

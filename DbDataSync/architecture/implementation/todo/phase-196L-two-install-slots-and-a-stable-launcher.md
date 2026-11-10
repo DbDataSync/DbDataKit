@@ -176,7 +176,7 @@ Ordinary swaps never touch the launcher.
 - `internal apply-update`. It stays as a **no-op that exits 0**, because an old unit's `ExecStartPre=-+` may
   still call it until the unit is rewritten. `UpdateApplier`'s pending/confirm/applied records, the kept
   rollback package and the privileged directory all go (the doc's `UpdateApplier.cs:233-239,291-340,372-390`).
-- The systemd unit's `ExecStartPre` step, `DBDATASYNC_SELF_UPDATE`, and `SuccessExitStatus/RestartForceExitStatus=75`.
+- The systemd unit's `ExecStartPre` step, `DBDATAKIT_SYNC_SELF_UPDATE`, and `SuccessExitStatus/RestartForceExitStatus=75`.
   `service install --self-update` prints that it is no longer needed. The `config check` finding about a unit
   without the apply step goes.
 - `DbDataSync:Updates:DrainTimeoutSeconds` and `ConfirmAfterSeconds` leave the config catalog.

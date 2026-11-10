@@ -15,8 +15,8 @@ public sealed class RenamedFromTests : IDisposable
 
     public void Dispose() { try { Directory.Delete(root, true); } catch (IOException) { } }
 
-    private IReadOnlyList<string> Problems(string[]? args = null, Dictionary<string, string?>? env = null) =>
-        RenamedFrom.Problems(args ?? [], env ?? [], Data, Common);
+    private IReadOnlyList<string> Problems(string[]? args = null) =>
+        RenamedFrom.Problems(args ?? [], Data, Common);
 
     private void Write(string relative, string text)
     {
@@ -30,16 +30,7 @@ public sealed class RenamedFromTests : IDisposable
     {
         Write("config/server.yaml", "schemaVersion: 2\n");
         Write("config/connections/erp.yaml", "schema: connection/1\nextensions:\n  gateway:\n    access: readonly\n");
-        Assert.Empty(Problems(["server", "run", "--Gateway:Listen:Port=9000"], new() { ["DBGATEWAY_Gateway__Listen__Port"] = "9000", ["PATH"] = "x" }));
-    }
-
-    [Fact]
-    public void An_old_environment_variable_is_refused_and_names_its_new_spelling()
-    {
-        var problem = Assert.Single(Problems(env: new() { ["DBPROXY_Proxy__Listen__Port"] = "9000" }));
-        Assert.Contains("DBPROXY_Proxy__Listen__Port", problem);
-        Assert.Contains("DBGATEWAY_Gateway__Listen__Port", problem);
-        Assert.Contains("DbDataProxy is now DbDataGateway", problem);
+        Assert.Empty(Problems(["server", "run", "--Gateway:Listen:Port=9000"]));
     }
 
     [Fact]

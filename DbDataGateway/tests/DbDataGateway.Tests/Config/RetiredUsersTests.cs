@@ -75,7 +75,7 @@ public sealed class RetiredUsersTests
         Directory.CreateDirectory(dir);
         try
         {
-            using var env = new EnvScope(("DBGATEWAY_Gateway__Users__0__Name", "bob"), ("DBGATEWAY_Gateway__Users__0__PasswordHash", "h"));
+            using var env = new EnvScope(("DBDATAKIT_Gateway__Users__0__Name", "bob"), ("DBDATAKIT_Gateway__Users__0__PasswordHash", "h"));
             var ex = Assert.Throws<GatewayConfigException>(() => GatewayHost.Build([$"--Gateway:DataDirectory={dir}", "--Gateway:Listen:Port=0", "--Gateway:Tls:Mode=None"]));
             Assert.Contains("Gateway:Users", ex.Message);
             Assert.Contains("is retired", ex.Message);

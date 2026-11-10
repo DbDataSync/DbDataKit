@@ -11,12 +11,12 @@ public sealed class StoreConnectionException(string message) : Exception(message
 
 /// <summary>
 /// Opens the connection a model names in <c>storage.connection</c> (plan 19, Z09): <c>connections/&lt;name&gt;.yaml</c> in the server's directory, a <c>connection/1</c> file, logged in with its write login
-/// (<c>write_login</c>, then <c>DBDATA_DBDATASTORE_&lt;NAME&gt;_WRITE</c>, then <c>auth</c>), secrets through <c>env:</c> and <c>file:</c> references. SQL Server and PostgreSQL only, the engines the storage is written for.
+/// (<c>write_login</c>, then <c>DBDATAKIT_STORE_&lt;NAME&gt;_WRITE</c>, then <c>auth</c>), secrets through <c>env:</c> and <c>file:</c> references. SQL Server and PostgreSQL only, the engines the storage is written for.
 /// </summary>
 public sealed class StoreConnections(string directory, ISecretResolver? secrets = null)
 {
     public const string Folder = "connections";
-    public const string Application = "dbdatastore";
+    public const string Application = "store";
 
     private readonly ProviderRegistry providers = new ProviderRegistry().Register(new SqlServerProvider()).Register(new PostgresProvider());
     private readonly ISecretResolver secretResolver = secrets ?? new SecretResolverChain([new EnvSecretProvider(), new FileSecretProvider()]);
@@ -51,7 +51,7 @@ public sealed class StoreConnections(string directory, ISecretResolver? secrets 
         try
         {
             using var login = await new LoginResolver(secretResolver, Application).ResolveAsync(definition, LoginRole.Write, cancellationToken).ConfigureAwait(false)
-                ?? throw new StoreConnectionException($"{name}.yaml has no login for the server to write with: give it a write_login or an auth, or set DBDATA_DBDATASTORE_{name.ToUpperInvariant().Replace('-', '_')}_WRITE.");
+                ?? throw new StoreConnectionException($"{name}.yaml has no login for the server to write with: give it a write_login or an auth, or set DBDATAKIT_STORE_{name.ToUpperInvariant().Replace('-', '_')}_WRITE.");
             return (provider.Engine.Value, provider.Composer.Compose(new ConnectionContext { Definition = definition, Login = login, Role = LoginRole.Write }));
         }
         catch (SecretNotFoundException ex) { throw new StoreConnectionException($"{name}.yaml needs a secret the server cannot find: {ex.Message}"); }
@@ -64,7 +64,7 @@ public sealed class StoreConnections(string directory, ISecretResolver? secrets 
         try
         {
             using var login = await new LoginResolver(secretResolver, Application).ResolveAsync(definition, LoginRole.Write, cancellationToken).ConfigureAwait(false)
-                ?? throw new StoreConnectionException($"{name}.yaml has no login for the server to write with: give it a write_login or an auth, or set DBDATA_DBDATASTORE_{name.ToUpperInvariant().Replace('-', '_')}_WRITE.");
+                ?? throw new StoreConnectionException($"{name}.yaml has no login for the server to write with: give it a write_login or an auth, or set DBDATAKIT_STORE_{name.ToUpperInvariant().Replace('-', '_')}_WRITE.");
             return await provider.OpenAsync(new ConnectionContext { Definition = definition, Login = login, Role = LoginRole.Write }, cancellationToken).ConfigureAwait(false);
         }
         catch (ConnectionFailureException ex) { throw new StoreConnectionException($"The server could not connect with {name}.yaml ({ex.Failure.Kind})."); }

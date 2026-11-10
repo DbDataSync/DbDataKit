@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { DBDATASYNC_THEME, monaco } from './monacoSetup'
+import { DBDATAKIT_SYNC_THEME, monaco } from './monacoSetup'
 import type { DiffViewerProps } from '../DiffViewer'
 
 /**
@@ -20,7 +20,7 @@ export default function MonacoDiff({ before, after, language = 'yaml', height = 
     if (!host.current) return
 
     const instance = monaco.editor.createDiffEditor(host.current, {
-      theme: DBDATASYNC_THEME,
+      theme: DBDATAKIT_SYNC_THEME,
       // The whole thing is a view of something already committed. Nothing here edits config; the
       // Pipeline and Columns tabs are where a mapping is changed.
       readOnly: true,

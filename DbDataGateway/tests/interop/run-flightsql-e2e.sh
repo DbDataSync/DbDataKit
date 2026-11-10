@@ -32,18 +32,18 @@ cleanup() {
 }
 trap cleanup EXIT
 
-export DBGATEWAY_Gateway__SchemaVersion=2
+export DBDATAKIT_Gateway__SchemaVersion=2
 export DBDATAKIT_DATA_GATEWAY="$tmp"
-export DBGATEWAY_Gateway__Listen__Address=127.0.0.1
-export DBGATEWAY_Gateway__Listen__Port="$port"
-export DBGATEWAY_Gateway__DataSources__duck__Provider=duckdb
-export DBGATEWAY_Gateway__DataSources__duck__ConnectionString="Data Source=$tmp/e2e.duckdb"
-export DBGATEWAY_Gateway__DataSources__duck__AllowWrites=true
+export DBDATAKIT_Gateway__Listen__Address=127.0.0.1
+export DBDATAKIT_Gateway__Listen__Port="$port"
+export DBDATAKIT_Gateway__DataSources__duck__Provider=duckdb
+export DBDATAKIT_Gateway__DataSources__duck__ConnectionString="Data Source=$tmp/e2e.duckdb"
+export DBDATAKIT_Gateway__DataSources__duck__AllowWrites=true
 # who may use a data source is a matter of the identity home's groups (P13); the e2e user is a service account of the home, so the sources are open to everyone
-export DBGATEWAY_Gateway__DataSources__duck__Everyone=true
-export DBGATEWAY_Gateway__DataSources__mssql__Everyone=true
-export DBGATEWAY_Gateway__DataSources__mssql__Provider=sqlserver
-export DBGATEWAY_Gateway__DataSources__mssql__ConnectionString="$DBKIT_TEST_MSSQL"
+export DBDATAKIT_Gateway__DataSources__duck__Everyone=true
+export DBDATAKIT_Gateway__DataSources__mssql__Everyone=true
+export DBDATAKIT_Gateway__DataSources__mssql__Provider=sqlserver
+export DBDATAKIT_Gateway__DataSources__mssql__ConnectionString="$DBKIT_TEST_MSSQL"
 
 # the e2e user: a service account of the identity home (in the gateway's state, under the data directory) and its personal access token, which is the password
 dotnet "$dll" identity service-account-add --name "$user" --repo "$tmp" >/dev/null

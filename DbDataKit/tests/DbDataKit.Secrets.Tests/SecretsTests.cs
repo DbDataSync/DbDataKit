@@ -9,7 +9,7 @@ public class ProviderTests
 {
     [Fact]
     public void VariableNameFor_MatchesTheDefaultMapping() =>
-        Assert.Equal("DBDATA_SECRET_DBDATA_PROXY_DATASOURCE_ERP", EnvSecretProvider.VariableNameFor("dbdata:proxy:datasource:erp"));
+        Assert.Equal("DBDATAKIT_SECRET_DBDATA_PROXY_DATASOURCE_ERP", EnvSecretProvider.VariableNameFor("dbdata:proxy:datasource:erp"));
 
     private static Func<string, string?> Env(params (string, string)[] vars)
     {
@@ -20,7 +20,7 @@ public class ProviderTests
     [Fact]
     public async Task Env_ResolvesEnvRef_AndSecretViaDefaultMapping()
     {
-        var p = new EnvSecretProvider(Env(("MY_VAR", "v1"), ("DBDATA_SECRET_DBDATA_SYNC_CONNECTION_ERP", "v2")));
+        var p = new EnvSecretProvider(Env(("MY_VAR", "v1"), ("DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_ERP", "v2")));
         Assert.Equal("v1", (await p.TryResolveAsync(SecretRef.Parse("env:MY_VAR")))!.RevealString());
         Assert.Equal("v2", (await p.TryResolveAsync(SecretRef.Parse("secret:dbdata:sync:connection:erp")))!.RevealString());
         Assert.Null(await p.TryResolveAsync(SecretRef.Parse("env:NOPE")));

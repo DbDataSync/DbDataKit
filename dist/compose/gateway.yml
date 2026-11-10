@@ -5,7 +5,7 @@
 # Run from the repository root.
 name: dbdatakit-gateway
 x-announce: &announce
-  DBDATAKIT_CONSOLE_ANNOUNCE_URL: http://console:8481
+  DBDATAKIT_ANNOUNCE_URL: http://console:8481
 services:
   console:
     build:
@@ -24,9 +24,9 @@ services:
     hostname: gateway
     environment:
       <<: *announce
-      DBGATEWAY_Gateway__Management__Enabled: "true"
-      DBGATEWAY_Gateway__Management__Address: 0.0.0.0
-      DBGATEWAY_Gateway__Management__Port: "8816"
+      DBDATAKIT_Gateway__Management__Enabled: "true"
+      DBDATAKIT_Gateway__Management__Address: 0.0.0.0
+      DBDATAKIT_Gateway__Management__Port: "8816"
       # the console reaches the management API here, by name, whatever address the container gets
       DBDATAKIT_ADVERTISE_URL: https://gateway:8816
       DBDATAKIT_INSTANCE_NAME: dbdatagateway

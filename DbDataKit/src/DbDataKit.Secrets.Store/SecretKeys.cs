@@ -4,7 +4,7 @@ namespace DbDataKit.Secrets.Store;
 public sealed record SecretKeyOptions
 {
     /// <summary>The environment variable that names a key file provided from outside (it takes the place of <c>secrets.keyFile</c> when that is empty).</summary>
-    public const string KeyFileVariable = "DBDATA_SECRETS_KEY_FILE";
+    public const string KeyFileVariable = "DBDATAKIT_SECRETS_KEY_FILE";
 
     /// <summary>A key file provided by the platform (<c>secrets.keyFile</c> in <c>server.yaml</c>); empty means the key ring under the data directory.</summary>
     public string? KeyFile { get; init; }

@@ -24,7 +24,7 @@ dbdatabuild is a .NET 10 CLI that builds analytics tables and views on **SQL Ser
 
 The command list is `dbdatabuild --help` (every command declares an effect class, printed in its header).
 
-To try it by hand: `scripts/fetch-native.sh`, `dotnet build`, `scripts/test-engines.sh up` and `eval "$(scripts/test-engines.sh env)"` (see `CLAUDE.md`); a project needs `DBDATABUILD_<CONNECTION>_READ` and `_WRITE` connection strings, then `init --apply`, `render --write`, `plan`, `apply <plan> --dry-run`, `apply <plan>`.
+To try it by hand: `scripts/fetch-native.sh`, `dotnet build`, `scripts/test-engines.sh up` and `eval "$(scripts/test-engines.sh env)"` (see `CLAUDE.md`); a project needs `DBDATAKIT_BUILD_<CONNECTION>_READ` and `_WRITE` connection strings, then `init --apply`, `render --write`, `plan`, `apply <plan> --dry-run`, `apply <plan>`.
 
 ## Decisions to look at
 

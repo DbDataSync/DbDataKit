@@ -4,7 +4,7 @@ COPY --chown=1654:1654 publish/ /app/
 RUN mkdir -p /data && chown 1654:1654 /data
 ENV ASPNETCORE_URLS=http://+:8080 \
     DOTNET_gcServer=0 \
-    DBDATA_DATA_DIR=/data
+    DBDATAKIT_DATA=/data
 VOLUME ["/data"]
 EXPOSE 8080
 USER 1654:1654

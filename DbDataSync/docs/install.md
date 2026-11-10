@@ -227,7 +227,7 @@ dbdatakit instance add https://sync.example:5080 --code <code>     # or the cons
 Pairing needs the server to listen on **HTTPS** (a certificate of its own: see [Certificates](certificates.md)), because the console pins the certificate the server
 presents. Behind a proxy that ends TLS, bind plain HTTP as described under [Plain HTTP and reverse proxies](configuration.md#plain-http-and-reverse-proxies) and give the
 server the fingerprint of the certificate the proxy presents in `DbDataSync:Management:CertificateFingerprint`. A person who opens the server's own address in a browser gets a message
-saying so; set `DbDataSync:Console:Url` (environment `DbDataSync__Console__Url`, or `DBDATAKIT_CONSOLE_URL`) to the console's address and the message names it.
+saying so; set `DbDataSync:Console:Url` (environment `DbDataSync__Console__Url`, or `DBDATAKIT_URL`) to the console's address and the message names it.
 
 ## Running in a container
 

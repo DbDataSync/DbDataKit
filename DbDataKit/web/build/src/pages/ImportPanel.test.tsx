@@ -84,12 +84,12 @@ describe('Import from a connection', () => {
 })
 
 describe('when the connection cannot be read', () => {
-  const missing: Diagnostic = { code: 'DDB-501', severity: 'error', title: 'Login not configured', location: { file: 'env:DBDATA_BUILD_SQLSERVER_READ', line: 0, column: 0 }, found: 'The read login for connection `sqlserver` is not configured: environment variable `DBDATA_BUILD_SQLSERVER_READ` is not set.', supported: '', fix: '' }
+  const missing: Diagnostic = { code: 'DDB-501', severity: 'error', title: 'Login not configured', location: { file: 'env:DBDATAKIT_BUILD_SQLSERVER_READ', line: 0, column: 0 }, found: 'The read login for connection `sqlserver` is not configured: environment variable `DBDATAKIT_BUILD_SQLSERVER_READ` is not set.', supported: '', fix: '' }
 
   it('says there is no login on the server, naming the variable and no value', () => {
     const text = importFailure({ exit: 1, text: null, document: { ok: false, data: {} as never, diagnostics: [missing] } })
     expect(text).toContain('no read login on the server')
-    expect(text).toContain('DBDATA_BUILD_SQLSERVER_READ')
+    expect(text).toContain('DBDATAKIT_BUILD_SQLSERVER_READ')
   })
 
   it('gives the first sentence of anything else, never a trace, and nothing for a list', () => {

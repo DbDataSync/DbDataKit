@@ -185,7 +185,7 @@ public sealed class SemanticFlightTests : IAsyncLifetime
 
     private async Task<(int Code, string Out, string Error, CliContext Context)> SemanticCli(params string[] args)
     {
-        Environment.SetEnvironmentVariable("DBGATEWAY_PASSWORD", _tokens["alice"]);
+        Environment.SetEnvironmentVariable("DBDATAKIT_GATEWAY_PASSWORD", _tokens["alice"]);
         var (output, error) = (new StringWriter(), new StringWriter());
         var context = new CliContext(output, error, TextReader.Null);
         var code = await DbDataGateway.Server.Hosting.Cli.RunAsync(["semantic", .. args, "--address", _address, "--user", "alice"], context);

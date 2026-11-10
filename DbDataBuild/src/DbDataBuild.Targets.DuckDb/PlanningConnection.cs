@@ -30,7 +30,7 @@ public sealed record PlanningStatus(bool Folds, bool Registered, string? Problem
 public static class PlanningConnection
 {
     /// <summary>Set to <c>always</c> or <c>never</c> to override the automatic choice (for tests and for finding a problem); anything else is automatic.</summary>
-    public const string ModeVariable = "DBDATABUILD_DUCKDB_CLOCK_OVERRIDES";
+    public const string ModeVariable = "DBDATAKIT_BUILD_DUCKDB_CLOCK_OVERRIDES";
 
     private static readonly AsyncLocal<ClockOverrideMode?> Scoped = new();
 

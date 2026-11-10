@@ -22,7 +22,7 @@ namespace DbDataRunner.Server;
 /// <list type="bullet">
 /// <item><b>A client</b> with a management token whose roles include operator (or administrator) or publisher: the caller is trusted to have checked the signature (the serving layer's call), and the body is delivered as verified.</item>
 /// <item><b>A signature</b>: no token, and an <c>X-Signature: sha256=&lt;hex&gt;</c> header, the HMAC-SHA256 of the body with the secret the task's webhook trigger names (<c>secret:</c> in the manifest, looked up in the runner's secret store, for
-/// example the variable <c>DBDATA_SECRET_SHOP_HOOK</c> for <c>shop_hook</c>). A signature that does not hold is answered <b>401</b>, and the body is kept as an inbox record with <c>signature_ok</c> false that no run can take.</item>
+/// example the variable <c>DBDATAKIT_SECRET_SHOP_HOOK</c> for <c>shop_hook</c>). A signature that does not hold is answered <b>401</b>, and the body is kept as an inbox record with <c>signature_ok</c> false that no run can take.</item>
 /// </list>
 /// The body (up to 1 MiB) becomes an inbox item of every task that has a webhook trigger for the source, and the task is queued once (<see cref="WebhookReceiver"/>): 202 with the items. 404 when no task listens for the source.
 /// Every receipt is in the audit log (<c>runner.webhook.receive</c>: who, which source, the signature result, the tasks, the size) and <b>never the body</b>.

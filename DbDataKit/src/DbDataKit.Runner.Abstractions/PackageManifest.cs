@@ -97,10 +97,10 @@ public sealed record ConnectionSlot(string Name, string Kind, string? Env = null
 /// </summary>
 public static class SlotEnvironmentFormats
 {
-    /// <summary>Sync: one <c>DBDATA_SECRET_&lt;NAME&gt;</c> per connection, the variable the engine's secret store reads for <c>dbdata:sync:connection:&lt;name&gt;</c>.</summary>
+    /// <summary>Sync: one <c>DBDATAKIT_SECRET_&lt;NAME&gt;</c> per connection, the variable the engine's secret store reads for <c>dbdata:sync:connection:&lt;name&gt;</c>.</summary>
     public const string SyncSecret = "sync-secret";
 
-    /// <summary>Build: <c>DBDATA_BUILD_&lt;CONNECTION&gt;_READ</c> and <c>_WRITE</c>, one per login role the connection has (<c>LoginEnvironment.Name</c>).</summary>
+    /// <summary>Build: <c>DBDATAKIT_BUILD_&lt;CONNECTION&gt;_READ</c> and <c>_WRITE</c>, one per login role the connection has (<c>LoginEnvironment.Name</c>).</summary>
     public const string BuildLogin = "build-login";
 
     public static IReadOnlyList<string> All { get; } = [SyncSecret, BuildLogin];

@@ -35,7 +35,7 @@ public sealed class BuildServerSecretsTests : IDisposable
 
         var logins = await ServerSecrets.LoginsAsync(ServerSecrets.Open(serverDir), CancellationToken.None);
 
-        Assert.Equal(["DBDATA_BUILD_MY_DW_WRITE=w1", "DBDATA_BUILD_SQLSERVER_READ=r1"], logins.Select(l => $"{l.Key}={l.Value}").Order().ToList());
+        Assert.Equal(["DBDATAKIT_BUILD_MY_DW_WRITE=w1", "DBDATAKIT_BUILD_SQLSERVER_READ=r1"], logins.Select(l => $"{l.Key}={l.Value}").Order().ToList());
     }
 
     [Fact]
@@ -46,13 +46,13 @@ public sealed class BuildServerSecretsTests : IDisposable
 
     private async Task<JsonNode> Status(Func<CancellationToken, Task<IReadOnlyDictionary<string, string>>> logins)
     {
-        Assert.Null(Environment.GetEnvironmentVariable("DBDATA_BUILD_SQLSERVER_READ"));    // a developer's own login would hide what this tests
+        Assert.Null(Environment.GetEnvironmentVariable("DBDATAKIT_BUILD_SQLSERVER_READ"));    // a developer's own login would hide what this tests
         var result = await new ChildProcessCommandRunner(logins: logins).RunAsync(["connection", "status", "--project", project], project, CancellationToken.None);
         return JsonNode.Parse(result.Out)!;
     }
 
     private static bool MissingRead(JsonNode document) =>
-        document["diagnostics"]!.AsArray().Any(d => (string)d!["code"]! == "DDB-501" && ((string)d["found"]!).Contains("DBDATA_BUILD_SQLSERVER_READ"));
+        document["diagnostics"]!.AsArray().Any(d => (string)d!["code"]! == "DDB-501" && ((string)d["found"]!).Contains("DBDATAKIT_BUILD_SQLSERVER_READ"));
 
     [Fact]
     public async Task A_command_logs_in_with_the_stored_secret()
@@ -87,6 +87,6 @@ public sealed class BuildServerSecretsTests : IDisposable
 
         Assert.Contains("dbdata:build:connection:sqlserver:read", o.ToString());
         Assert.DoesNotContain("s3cret-value", o.ToString() + e);
-        Assert.Equal("s3cret-value", (await ServerSecrets.LoginsAsync(ServerSecrets.Open(serverDir), CancellationToken.None))["DBDATA_BUILD_SQLSERVER_READ"]);
+        Assert.Equal("s3cret-value", (await ServerSecrets.LoginsAsync(ServerSecrets.Open(serverDir), CancellationToken.None))["DBDATAKIT_BUILD_SQLSERVER_READ"]);
     }
 }

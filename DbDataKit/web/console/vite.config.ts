@@ -5,7 +5,7 @@ import { moduleDocs } from './build/moduleDocsPlugin.mjs'
 
 // Proxies API calls to the console host's dev port, so the app can call relative /api paths in dev without a CORS setup.
 // The host serves HTTPS with a certificate of its own making, which the dev proxy accepts (secure: false) for this address only.
-const apiTarget = process.env.DBDATAKIT_CONSOLE_URL ?? 'https://localhost:8480'
+const apiTarget = process.env.DBDATAKIT_URL ?? 'https://localhost:8480'
 
 export default defineConfig({
   // Every module's docs, generated from the module's own docs folder into /docs/<module>/ (plan 13a, U11).

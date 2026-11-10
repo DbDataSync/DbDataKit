@@ -35,9 +35,9 @@ public sealed record UpgradeFeedSettings
 
     public Update.Channel ParsedChannel => Channel switch { "stable" => Update.Channel.Stable, "beta" => Update.Channel.Beta, "snapshot" => Update.Channel.Snapshot, _ => Update.Channel.Stable };
 
-    public const string MirrorVariable = "DBDATA_UPGRADE_MIRROR";
-    public const string RepoVariable = "DBDATA_UPGRADE_REPO";
-    public const string ChannelVariable = "DBDATA_UPGRADE_CHANNEL";
+    public const string MirrorVariable = "DBDATAKIT_UPGRADE_MIRROR";
+    public const string RepoVariable = "DBDATAKIT_UPGRADE_REPO";
+    public const string ChannelVariable = "DBDATAKIT_UPGRADE_CHANNEL";
 
     /// <summary>
     /// The feed a server reads when it prepares its own upgrade: <see cref="MirrorVariable"/>, <see cref="RepoVariable"/> and <see cref="ChannelVariable"/> (set in the service or the unit), else the default. A server's files are read strictly by the

@@ -137,7 +137,7 @@ DuckDB (query-only source), plus anything reachable through descriptor + ADO.NET
 ## 4. Secrets handling
 
 - **Store**: external package `ClrKernel.Core.Secrets` 0.11.0 (`new SecretStore("DbDataSync", true)`, `DbDataSyncHost.cs:97`). OS keyring (Windows Credential Manager, macOS Keychain, Linux Secret Service) with env-var fallback
-  `DBDATASYNC_SECRET_<REF_UPPERCASED>` (`docs/configuration.md` "Secrets" ~line 511). Internals (fallback encryption/memory handling) are outside this repo and were not reviewed. This is clearly the author's shared library and the obvious shared-secrets anchor across the three siblings.
+  `DBDATAKIT_SECRET_<REF_UPPERCASED>` (`docs/configuration.md` "Secrets" ~line 511). Internals (fallback encryption/memory handling) are outside this repo and were not reviewed. This is clearly the author's shared library and the obvious shared-secrets anchor across the three siblings.
 - **Refs** (`Core/Secrets/SecretRefs.cs`): `dbdatasync:connection:<name>`; `dbdatasync:config:<key>` for app settings (only `stateConnectionString`).
 - **Write path**: `ConfigRepository.SaveConnection` (`Core/Config/ConfigRepository.cs:31-95`) stores `ConnectionInput.Password` in the store and serializes only `CredentialSecretRef`. Embedded-credential keys
   (`password|pwd|passwd|secret|accountkey|apikey`) in `ConnectionString` are rejected before any side effect (`ConfigValidation.cs:55-120`); the same check guards `State:ConnectionString`. Delete removes the secret (line 110).

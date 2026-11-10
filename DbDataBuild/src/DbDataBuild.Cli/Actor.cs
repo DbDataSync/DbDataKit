@@ -7,7 +7,7 @@ namespace DbDataBuild.Cli;
 /// </summary>
 public static class Actor
 {
-    public const string Variable = "DBDATABUILD_ACTOR";
+    public const string Variable = "DBDATAKIT_BUILD_ACTOR";
 
     /// <summary>The name to record: the actor the server named, else <paramref name="fallback"/>.</summary>
     public static string Of(Func<string, string?> env, string fallback) => env(Variable) is { Length: > 0 } actor ? actor : fallback;

@@ -38,7 +38,7 @@ export const connectionPath = (form: ConnectionForm) => `connections/${form.name
 
 /**
  * The `connection/1` file for the form (one file per connection, named like it). A Build connection file names the engine and how the connection is secured and nothing else: where the database is and who logs in are the
- * server's own (`DBDATA_BUILD_<NAME>_READ` and `_WRITE`, an address and a login in one string), so the file can be committed and reviewed.
+ * server's own (`DBDATAKIT_BUILD_<NAME>_READ` and `_WRITE`, an address and a login in one string), so the file can be committed and reviewed.
  */
 export function connectionYaml(form: ConnectionForm): string {
   if (isOrigin(form)) return ['schema: connection/1', `name: ${form.name}`, `engine: ${form.engine}`, 'access: readonly', ''].join('\n')
@@ -82,7 +82,7 @@ export function NewConnectionView(p: NewConnectionViewProps) {
           <button type="button" className="btn btn-primary" disabled={!connectionReady(form) || p.busy} onClick={p.onCreate} data-testid="build-new-connection-create">{p.busy ? 'Making…' : 'Make the connection'}</button>
           <button type="button" className="btn" onClick={p.onCancel} data-testid="build-new-connection-cancel">Cancel</button>
         </div>
-        <div className="hint" style={{ marginTop: 6 }}>The file holds no address and no login: the server holds them, in one string for each of the read and the write login, in its own secrets or environment (<span className="mono">DBDATA_BUILD_{(form.name || 'NAME').toUpperCase()}_READ</span> and <span className="mono">_WRITE</span>), {engine?.origin ? <> For a DuckDB file the login is the path of the file.</> : null} The file can be reviewed and committed.</div>
+        <div className="hint" style={{ marginTop: 6 }}>The file holds no address and no login: the server holds them, in one string for each of the read and the write login, in its own secrets or environment (<span className="mono">DBDATAKIT_BUILD_{(form.name || 'NAME').toUpperCase()}_READ</span> and <span className="mono">_WRITE</span>), {engine?.origin ? <> For a DuckDB file the login is the path of the file.</> : null} The file can be reviewed and committed.</div>
         {problem && <div className="hint" style={{ marginTop: 6 }} data-testid="build-new-connection-problem">{problem}</div>}
         {p.failure && <div className="banner error" role="alert" style={{ marginTop: 10 }} data-testid="build-new-connection-failed"><span className="mark">!</span><span>{p.failure}</span></div>}
       </div>

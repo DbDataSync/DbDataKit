@@ -14,7 +14,7 @@ proposal; where the scenario table below speaks of links or DuckDB, the directio
 ## Words
 
 Today three things are the same place, the **target**: where a model's query *runs* (compute), where its result *lives* (store), and where its inputs live (sources). A target is an engine kind
-(`sqlserver`, `postgres`, `fabric`) with one read login and one write login in the environment (`DBDATABUILD_<TARGET>_<READ|WRITE>`), so two servers of one engine cannot even be told apart.
+(`sqlserver`, `postgres`, `fabric`) with one read login and one write login in the environment (`DBDATAKIT_BUILD_<TARGET>_<READ|WRITE>`), so two servers of one engine cannot even be told apart.
 Cross-server work pulls those three apart.
 
 ## What the code already has, and what stands in the way
@@ -67,7 +67,7 @@ Scenarios 1 to 3 and 6 are out by the owner's direction (links, same-server cros
 
 | Term | Means |
 |---|---|
-| **Connection** | A named database endpoint: an engine and a login (`DBDATABUILD_<NAME>_<READ\|WRITE>`). Data lives only on connections. A connection with no write login can only be read. |
+| **Connection** | A named database endpoint: an engine and a login (`DBDATAKIT_BUILD_<NAME>_<READ\|WRITE>`). Data lives only on connections. A connection with no write login can only be read. |
 | **Engine** | The SQL dialect of a connection (`sqlserver`, `postgres`, `fabric`). The matrix, the rules and the type mapping are per engine. This is what the old word "target" mostly meant. |
 | **Model** | One named thing in the project, with declared columns, that lives on a connection (or on several: below). Every kind below is a model. |
 | **Kinds that build from SQL** | `view`, `full`, `incremental_by_unique_key`, `incremental_by_time_range`, as today: SQL in DuckDB's dialect, run on the model's connection. |
@@ -189,7 +189,7 @@ slice: { column: store_id, value: "${origin.store_id}" }     # which rows are th
   every row of an origin's extract carries that origin's value is made before the swap: an origin cannot write into another's slice.
 - **Version skew**: `plan` compares each origin's live table with the declaration and reports every origin that differs, by name; `on_mismatch: fail | skip` (default `fail`) decides, never silently.
   Each origin's last good run is recorded in the tracking tables, and a skipped or failed origin shows in `report`.
-- Credentials are per connection (`DBDATABUILD_STORE_017_READ`), fine for tens of systems; hundreds is a later problem.
+- Credentials are per connection (`DBDATAKIT_BUILD_STORE_017_READ`), fine for tens of systems; hundreds is a later problem.
 
 ## Tracking
 
@@ -238,7 +238,7 @@ extended to the new statement; there is still no other write path.
 | Today | Becomes |
 |---|---|
 | `targets:`, `default_targets:` | `connection(s):` on a model; `defaults: { connection: ... }` |
-| target = engine kind; one read and one write login per engine | named connections, each with its engine; `DBDATABUILD_<CONNECTION>_<READ\|WRITE>` |
+| target = engine kind; one read and one write login per engine | named connections, each with its engine; `DBDATAKIT_BUILD_<CONNECTION>_<READ\|WRITE>` |
 | `sources/` directory, source descriptors, `import-sources` | `mapped` models anywhere under `models/`; `import` generates mapped models from a connection's catalog |
 | `--target`, `rendered/<engine>/`, `plans/<engine>/` | `--connection`, `rendered/<connection>/`, `plans/<connection>/` |
 | the matrix per target | the matrix per engine (unchanged), looked up through the connection's engine |

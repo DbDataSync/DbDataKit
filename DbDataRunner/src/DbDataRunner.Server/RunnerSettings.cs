@@ -28,22 +28,22 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
     public static string StateConnectionVariable => SuiteEnvironment.StateConnectionVariableOf(ServiceName);
 
     /// <summary>The channels the runner serves, separated by commas; default <see cref="DefaultChannels"/>.</summary>
-    public const string ChannelsVariable = "DBDATARUNNER_CHANNELS";
+    public const string ChannelsVariable = "DBDATAKIT_RUNNER_CHANNELS";
 
     /// <summary>The size cap of one uploaded file, in bytes (<see cref="RunnerPublishing.DefaultMaxArtifactBytes"/> when unset).</summary>
-    public const string MaxArtifactBytesVariable = "DBDATARUNNER_MAX_ARTIFACT_BYTES";
+    public const string MaxArtifactBytesVariable = "DBDATAKIT_RUNNER_MAX_ARTIFACT_BYTES";
 
     /// <summary>The longest an activation waits for the runs in flight of a package, in seconds (default 600: ten minutes); after it the activation is not applied, names the busy tasks and is tried again.</summary>
-    public const string ActivationMaxWaitVariable = "DBDATARUNNER_ACTIVATION_MAX_WAIT_SECONDS";
+    public const string ActivationMaxWaitVariable = "DBDATAKIT_RUNNER_ACTIVATION_MAX_WAIT_SECONDS";
 
     /// <summary>The runner group's name (the state's <c>StateScope.Group</c>): servers that share a database and a group name are one group. Default <see cref="RunnerState.DefaultGroup"/>.</summary>
-    public const string GroupVariable = "DBDATARUNNER_GROUP";
+    public const string GroupVariable = "DBDATAKIT_RUNNER_GROUP";
 
     /// <summary>
     /// Names of variables of the runner's own environment that task processes also see, separated by commas (test grade: how the logins of a Build refresh reach it before the runner resolves connection slots, plan 28c E02).
     /// They are visible to every task of the runner; never in a package, argv or a file.
     /// </summary>
-    public const string TaskEnvironmentVariable = "DBDATARUNNER_TASK_ENVIRONMENT";
+    public const string TaskEnvironmentVariable = "DBDATAKIT_RUNNER_TASK_ENVIRONMENT";
 
     public static IReadOnlyList<string> DefaultChannels { get; } = ["prod", "dev"];
 
@@ -68,7 +68,7 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
     /// <summary>Checks the signature of a published version (plan 30 section 6.2); null: the default, which finds every version unsigned.</summary>
     public IVersionSignatureVerifier? SignatureVerifier { get; init; }
 
-    /// <summary>Where the secrets a manifest names are looked up (a webhook trigger's <c>secret</c>); null: the environment (<c>DBDATA_SECRET_&lt;NAME&gt;</c>).</summary>
+    /// <summary>Where the secrets a manifest names are looked up (a webhook trigger's <c>secret</c>); null: the environment (<c>DBDATAKIT_SECRET_&lt;NAME&gt;</c>).</summary>
     public DbDataKit.Secrets.ISecretResolver? Secrets { get; init; }
 
     /// <summary>Variables of the runner's environment a task process sees in addition to the executor's default list (<see cref="TaskEnvironmentVariable"/>).</summary>

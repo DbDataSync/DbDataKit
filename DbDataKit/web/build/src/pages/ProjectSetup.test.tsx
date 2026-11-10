@@ -89,7 +89,7 @@ describe('New connection', () => {
 
   it('offers the engines the tool builds on and a DuckDB origin, and names the variable the login comes from', () => {
     expect(CONNECTION_ENGINES.map((e) => e.key)).toEqual(['sqlserver', 'postgres', 'fabric', 'duckdb'])
-    expect(renderToStaticMarkup(view(form()))).toContain('DBDATA_BUILD_WAREHOUSE_READ')
+    expect(renderToStaticMarkup(view(form()))).toContain('DBDATAKIT_BUILD_WAREHOUSE_READ')
     expect(find(view(form({ name: '' })), 'build-new-connection-create')?.props.disabled).toBe(true)
     expect(find(view(form()), 'build-new-connection-create')?.props.disabled).toBe(false)
   })

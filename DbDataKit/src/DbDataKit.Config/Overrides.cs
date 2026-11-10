@@ -9,11 +9,11 @@ public sealed record OverrideEntry(IReadOnlyList<string> Segments, string Value,
     public string Path => string.Concat(Segments.Select((s, i) => int.TryParse(s, out var n) ? $"[{n}]" : (i == 0 ? s : "." + s)));
 }
 
-/// <summary>A legacy environment prefix kept for compatibility (<c>DBPROXY_</c> with section <c>Proxy</c>, or <c>DbDataSync__</c>).</summary>
+/// <summary>A legacy environment prefix kept for compatibility (a prefix such as <c>OLDAPP_</c> with section <c>App</c>, or <c>DbDataSync__</c>), supplied by the caller.</summary>
 public sealed record EnvAlias(string Prefix, string? StripSection = null);
 
 /// <summary>
-/// Environment source. Canonical form is <c>DBDATA_&lt;APP&gt;__A__B</c> (double underscore separates levels; a numeric level indexes a list).
+/// Environment source. Canonical form is <c>DBDATAKIT_&lt;APP&gt;__A__B</c> (double underscore separates levels; a numeric level indexes a list).
 /// Names are matched case-insensitively. Legacy aliases are applied first, so the canonical name wins when both are set.
 /// </summary>
 public static class EnvironmentSource
@@ -24,7 +24,7 @@ public static class EnvironmentSource
         var result = new List<OverrideEntry>();
         foreach (var alias in legacy ?? [])
             Collect(env, alias.Prefix, alias.StripSection, result);
-        Collect(env, $"DBDATA_{app}__", null, result);
+        Collect(env, $"DBDATAKIT_{app}__", null, result);
         return result;
     }
 

@@ -13,16 +13,27 @@ public sealed class ConfigStartupTests
     private static readonly string DataDir = Path.Combine(Path.GetTempPath(), "dbgateway-cfg-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public async Task Environment_overrides_keep_working_with_and_without_the_DBGATEWAY_prefix()
+    public async Task Environment_overrides_keep_working_with_and_without_the_DBDATAKIT_prefix()
     {
         Directory.CreateDirectory(DataDir);
         GatewayConfigFile.EnsureStarter(DataDir);
         using var env = new EnvScope(
-            ("DBGATEWAY_Gateway__Listen__Port", "0"),            // prefixed, as documented
+            ("DBDATAKIT_Gateway__Listen__Port", "0"),            // prefixed, as documented
             ("Gateway__Tls__Mode", "None"),                    // the stock unprefixed spelling
-            ("DBGATEWAY_Gateway__Listen__Address", "127.0.0.1"),
+            ("DBDATAKIT_Gateway__Listen__Address", "127.0.0.1"),
             ("DBDATAKIT_DATA_GATEWAY", DataDir),
-            ("DBGATEWAY_Gateway__Auth__AllowPassThrough", "False"));   // capitalised boolean, as the stock binder accepted
+            // the other DBDATAKIT_* variables of the suite are visible to the configuration too (prefix DBDATAKIT_): none of them is under the Gateway section, so none is an unknown key
+            ("DBDATAKIT_DATA", Path.Combine(DataDir, "root")),
+            ("DBDATAKIT_URL", "https://localhost:8480"),
+            ("DBDATAKIT_ANNOUNCE_URL", "http://localhost:8481"),
+            ("DBDATAKIT_ANNOUNCE_LISTEN", "http://127.0.0.1:0"),
+            ("DBDATAKIT_ADVERTISE_URL", "https://gw.example:8815"),
+            ("DBDATAKIT_INSTANCE_NAME", "gw-1"),
+            ("DBDATAKIT_SECRET_DBDATA_GATEWAY_DATASOURCE_ERP", "x"),
+            ("DBDATAKIT_GATEWAY_PASSWORD", "x"),
+            ("DBDATAKIT_UPGRADE_CHANNEL", "stable"),
+            ("DBDATAKIT_STATE_ENGINE", "sqlite"),
+            ("DBDATAKIT_Gateway__Auth__AllowPassThrough", "False"));   // capitalised boolean, as the stock binder accepted
         await using var app = GatewayHost.Build([]);
         var o = app.Services.GetRequiredService<IOptionsMonitor<GatewayOptions>>().CurrentValue;
         Assert.Equal(0, o.Listen.Port);
@@ -68,7 +79,7 @@ public sealed class ConfigStartupTests
             Assert.Equal(0, app.Services.GetRequiredService<IOptionsMonitor<GatewayOptions>>().CurrentValue.Listen.Port);
         }
 
-        using (new EnvScope(("DBDATAKIT_DATA_GATEWAY", dir), ("DBGATEWAY_Gateway__Listen__Port", "0")))
+        using (new EnvScope(("DBDATAKIT_DATA_GATEWAY", dir), ("DBDATAKIT_Gateway__Listen__Port", "0")))
         {
             await using var app = GatewayHost.Build([]);
             Assert.Equal(0, app.Services.GetRequiredService<IOptionsMonitor<GatewayOptions>>().CurrentValue.Listen.Port);
@@ -170,11 +181,11 @@ public sealed class ConfigStartupTests
     [Fact]
     public void A_misspelt_environment_override_stops_startup_naming_the_variable()
     {
-        using var env = new EnvScope(("DBGATEWAY_Gateway__Listen__Prot", "9000"));
+        using var env = new EnvScope(("DBDATAKIT_Gateway__Listen__Prot", "9000"));
         var ex = Assert.Throws<GatewayConfigException>(() => GatewayHost.Build([]));
         Assert.Contains("Gateway:Listen:Prot", ex.Message);
         Assert.Contains("Did you mean `Port`?", ex.Message);
-        Assert.Contains("env:DBGATEWAY_Gateway__Listen__Prot", ex.Message);
+        Assert.Contains("env:DBDATAKIT_Gateway__Listen__Prot", ex.Message);
     }
 
     [Fact]

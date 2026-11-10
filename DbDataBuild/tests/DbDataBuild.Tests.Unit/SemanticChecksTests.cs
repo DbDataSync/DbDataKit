@@ -111,7 +111,7 @@ public class SemanticChecksTests : IDisposable
         var (exit, _, err) = Run("connection", "check", "--project", dir);
         Assert.Equal(CliApp.ExitFindings, exit);
         Assert.Contains("DDB-501", err);
-        Assert.Contains("DBDATA_BUILD_SQLSERVER_READ", err);
+        Assert.Contains("DBDATAKIT_BUILD_SQLSERVER_READ", err);
 
         Directory.Delete(Path.Combine(dir, "semantic"), recursive: true);
         var (noneExit, noneOut, _) = Run("connection", "check", "--project", dir);

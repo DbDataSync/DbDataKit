@@ -49,3 +49,41 @@ public sealed class SuiteEnvironmentRefusalTests
         Assert.NotEqual(CliExit.Ok, usage);
     }
 }
+
+/// <summary>The settings of the earlier Gateway spellings are a prefix (plan 33 SC31a): the process environment is listed for them, which an injected lookup cannot do.</summary>
+[Collection(ProcessStateCollection.Name)]
+public sealed class GatewayPrefixRefusalTests
+{
+    private static async Task<(int Exit, string Error)> RunWithProcessEnvironment(params string[] args)
+    {
+        var (output, error) = (new StringWriter(), new StringWriter());
+        var exit = await Cli.Router().RunAsync(args, new CliContext(output, error, TextReader.Null));
+        return (exit, error.ToString());
+    }
+
+    [Theory]
+    [InlineData("DBGATEWAY_Gateway__Management__Port", "DBDATAKIT_Gateway__Management__Port")]
+    [InlineData("DBPROXY_Proxy__Listen__Port", "DBDATAKIT_Gateway__Listen__Port")]
+    public async Task A_setting_with_an_old_prefix_stops_the_gateway_naming_the_new_name(string old, string replacement)
+    {
+        using var env = new EnvScope((old, "9000"));
+
+        var (exit, error) = await RunWithProcessEnvironment("state", "show", "--repo", Path.GetTempPath());
+
+        Assert.Equal(CliExit.Failure, exit);
+        Assert.Contains(old, error);
+        Assert.Contains(replacement, error);
+        Assert.Contains("no alias", error);
+    }
+
+    [Fact]
+    public async Task The_other_DBDATAKIT_variables_of_the_suite_are_not_refused()
+    {
+        using var env = new EnvScope(("DBDATAKIT_Gateway__Management__Port", "9000"), ("DBDATAKIT_DATA", Path.GetTempPath()), ("DBDATAKIT_URL", "https://localhost:8480"), ("DBDATAKIT_STATE_ENGINE", "sqlite"));
+
+        var (exit, _) = await RunWithProcessEnvironment("help");
+
+        Assert.Equal(CliExit.Ok, exit);
+    }
+}
+

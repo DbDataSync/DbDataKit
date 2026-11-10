@@ -21,7 +21,7 @@ public sealed record PairedGatewayServer(string Name, string Url, string Instanc
 /// </summary>
 public sealed class AppsClientStore(string directory)
 {
-    public const string DirectoryVariable = "DBDATAGATEWAY_CLIENT_DIR";
+    public const string DirectoryVariable = "DBDATAKIT_GATEWAY_CLIENT_DIR";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
 

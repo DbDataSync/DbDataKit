@@ -8,10 +8,10 @@ public sealed record ChildLaunchInfo(string Token, ChildEndpoint Endpoint, int P
 
 public static class ChildEnvironment
 {
-    public const string TokenVariable = "DBDATA_CHILD_TOKEN";
-    public const string EndpointVariable = "DBDATA_CHILD_ENDPOINT";
-    public const string ParentPidVariable = "DBDATA_PARENT_PID";
-    public const string ParentStartVariable = "DBDATA_PARENT_START";
+    public const string TokenVariable = "DBDATAKIT_CHILD_TOKEN";
+    public const string EndpointVariable = "DBDATAKIT_CHILD_ENDPOINT";
+    public const string ParentPidVariable = "DBDATAKIT_PARENT_PID";
+    public const string ParentStartVariable = "DBDATAKIT_PARENT_START";
 
     public static string NewToken() =>
         Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');

@@ -129,7 +129,7 @@ public sealed class ConnectionTestIntegrationTests(TestApiFactory factory) : ICl
         Assert.Equal($"dbdata:sync:connection:{name}", source!.SecretRef);
         // the environment variable that answers for the connection when the store has no password: the name, upper-cased
         Assert.Equal(
-            $"DBDATA_SECRET_DBDATA_SYNC_CONNECTION_{name.Replace('-', '_').ToUpperInvariant()}",
+            $"DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_{name.Replace('-', '_').ToUpperInvariant()}",
             source.EnvironmentVariable);
         Assert.True(source.RequiresCredential);
     }

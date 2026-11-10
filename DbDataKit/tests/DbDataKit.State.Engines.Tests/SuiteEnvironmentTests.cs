@@ -126,11 +126,70 @@ public sealed class SuiteEnvironmentTests
             "DBDATAKIT_CONSOLE_STATE_ENGINE", "DBDATAKIT_CONSOLE_STATE_CONNECTION", "DBDATAKIT_IDENTITY_STATE_ENGINE", "DBDATAKIT_IDENTITY_STATE_CONNECTION",
             "DBDATARUNNER_STATE_ENGINE", "DBDATARUNNER_STATE_CONNECTION", "DBDATASTORE_STATE_ENGINE", "DBDATASTORE_STATE_CONNECTION",
             "DBDATAWORKSPACE_STATE_ENGINE", "DBDATAWORKSPACE_STATE_CONNECTION", "DBDATABUILD_STATE_ENGINE", "DBDATABUILD_STATE_CONNECTION",
+            // SC31a
+            "DBDATAKIT_CONSOLE_URL", "DBDATAKIT_CONSOLE_ANNOUNCE_URL", "DBDATAKIT_CONSOLE_ANNOUNCE_LISTEN",
+            "DBDATA_SECRETS_KEY_FILE", "DBDATA_SIGNING_KEY", "DBGATEWAY_PASSWORD", "DBGATEWAY_WORKER_SECRET",
+            "DBDATA_UPGRADE_CHANNEL", "DBDATA_UPGRADE_MIRROR", "DBDATA_UPGRADE_REPO",
+            "DBDATARUNNER_CHANNELS", "DBDATARUNNER_GROUP", "DBDATARUNNER_MAX_ARTIFACT_BYTES", "DBDATARUNNER_ACTIVATION_MAX_WAIT_SECONDS", "DBDATARUNNER_TASK_ENVIRONMENT", "DBDATARUNNER_CLIENT_DIR",
+            "DBDATAGATEWAY_CLIENT_DIR", "DBDATASYNC_API_URL", "DBDATASYNC_RUNNER_TOKEN", "DBDATASYNC_STATE_ENDPOINT",
+            "DBDATABUILD_ACTOR", "DBDATABUILD_CHECK_RESULTS", "DBDATABUILD_DUCKDB_CLOCK_OVERRIDES", "DBDATABUILD_POLYGLOT_PATH", "DBDATABUILD_STATEMENT_LOG_DIR",
         ];
         Assert.Equal(expectedOld.Order(), SuiteEnvironment.OldNames.Select(o => o.Old).Order());
         var news = SuiteEnvironment.OldNames.Select(o => o.New).ToHashSet();
         Assert.DoesNotContain(SuiteEnvironment.OldNames, o => news.Contains(o.Old));
         // a new name is never refused
         foreach (var name in news) Assert.Null(SuiteEnvironment.OldNameProblem(Env((name, "x"))));
+    }
+
+    [Theory]
+    [InlineData("DBDATA_SECRET_DBDATA_SYNC_CONNECTION_ORDERS", "DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_ORDERS")]
+    [InlineData("DBDATA_BUILD_WAREHOUSE_READ", "DBDATAKIT_BUILD_WAREHOUSE_READ")]
+    [InlineData("DBGATEWAY_Gateway__Management__Port", "DBDATAKIT_Gateway__Management__Port")]
+    [InlineData("DBPROXY_Proxy__Listen__Port", "DBDATAKIT_Gateway__Listen__Port")]
+    [InlineData("DBPROXY_Other", "DBDATAKIT_Other")]
+    [InlineData("dbgateway_Gateway__Listen__Port", "DBDATAKIT_Gateway__Listen__Port")]
+    public void Each_old_prefix_that_is_set_stops_the_service_naming_the_new_name(string old, string replacement)
+    {
+        var environment = Env((old, "anything"));
+        Func<IEnumerable<string>> names = () => [old, "PATH"];
+
+        var problem = SuiteEnvironment.OldNameProblem(environment, names);
+
+        Assert.NotNull(problem);
+        Assert.Contains(old, problem);
+        Assert.Contains(replacement, problem);
+        Assert.Contains("no alias", problem);
+        Assert.Equal(problem, Assert.Throws<SuiteEnvironmentException>(() => SuiteEnvironment.RefuseOldNames(environment, names)).Message);
+        // an environment that cannot list its names is checked for the exact names only
+        Assert.Null(SuiteEnvironment.OldNameProblem(environment));
+    }
+
+    [Fact]
+    public void The_prefix_rules_are_the_four_of_plan_33_and_leave_the_variables_of_tests_to_SC31b()
+    {
+        Assert.Equal(["DBDATA_SECRET_", "DBDATA_BUILD_", "DBGATEWAY_", "DBPROXY_"], SuiteEnvironment.OldPrefixes.Select(r => r.Prefix));
+        foreach (var rule in SuiteEnvironment.OldPrefixes) Assert.StartsWith("DBDATAKIT_", rule.NewPrefix);
+
+        foreach (var test in new[] { "DBGATEWAY_TEST_SQLSERVER", "DBGATEWAY_E2E_ADDRESS", "DBGATEWAY_REQUIRE_POSTGRES", "DBGATEWAY_LIVE_USER", "DBGATEWAY_UPDATE_GOLDEN", "DBGATEWAY_ADMIN_TESTS", "DBPROXY_TEST_SQLSERVER_PASSWORD" })
+            Assert.Null(SuiteEnvironment.OldNameProblem(Env((test, "x")), () => [test]));
+        // the prefix alone is not a variable of the family, and a name that only contains it is not one
+        Assert.Null(SuiteEnvironment.OldNameProblem(Env(("DBGATEWAY_", "x"), ("X_DBGATEWAY_Y", "x")), () => ["DBGATEWAY_", "X_DBGATEWAY_Y"]));
+        // the new spellings are never refused
+        Assert.Null(SuiteEnvironment.OldNameProblem(Env(("DBDATAKIT_Gateway__Listen__Port", "1"), ("DBDATAKIT_SECRET_X", "1"), ("DBDATAKIT_BUILD_X_READ", "1")), () => ["DBDATAKIT_Gateway__Listen__Port", "DBDATAKIT_SECRET_X", "DBDATAKIT_BUILD_X_READ"]));
+    }
+
+    [Fact]
+    public void The_process_environment_is_listed_when_none_is_injected()
+    {
+        const string name = "DBGATEWAY_Gateway__Sc31aRefusalProbe";
+        Environment.SetEnvironmentVariable(name, "x");
+        try
+        {
+            var problem = SuiteEnvironment.OldNameProblem();
+            Assert.NotNull(problem);
+            Assert.Contains(name, problem);
+            Assert.Contains("DBDATAKIT_Gateway__Sc31aRefusalProbe", problem);
+        }
+        finally { Environment.SetEnvironmentVariable(name, null); }
     }
 }

@@ -121,7 +121,7 @@ public sealed class StateVerbsTests : IDisposable
 
         // the password a reference: shown as the reference, resolved only to connect
         var reference = engine == StateEngineIds.MsSql ? new SqlConnectionStringBuilder(db.Target) { UserID = login, Password = "secret:state-db" }.ConnectionString : new NpgsqlConnectionStringBuilder(db.Target) { Username = login, Password = "secret:state-db" }.ConnectionString;
-        var resolver = new SecretResolverChain([new EnvSecretProvider(name => name == "DBDATA_SECRET_STATE_DB" ? Password : null)]);
+        var resolver = new SecretResolverChain([new EnvSecretProvider(name => name == "DBDATAKIT_SECRET_STATE_DB" ? Password : null)]);
         var viaReference = Context(db, [Module("alpha")], reference, secrets: () => resolver);
         foreach (var verb in new[] { "show", "test" })
         {

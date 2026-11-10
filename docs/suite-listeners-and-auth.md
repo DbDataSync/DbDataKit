@@ -58,7 +58,7 @@ Columns: **Con** console; **Home** identity home on its own; **Px-F** Gateway Fl
 | **JWT bearer / OIDC token** | `authorization: Bearer <jwt>` on each call, validated against an authority's keys or a shared HMAC key; `Mappings` turn claims into data-source access | | | yes | | | | | | |
 | **Network trust fallback** | With no cookie, a request from loopback is an administrator and one from the network a viewer, only when the network-trust settings (`Admin`, `Viewer`; both off by default) say so | | | | | yes (the shared session handler; both off by default) | | | | |
 | **Runner token + loopback** | A random token this process made for its children, and a loopback-only check, on `/runner-state` | | | | | yes | | | | yes |
-| **Per-launch worker secret** | A random secret handed to the 32-bit worker in `DBGATEWAY_WORKER_SECRET` | | | | | | | | yes | |
+| **Per-launch worker secret** | A random secret handed to the 32-bit worker in `DBDATAKIT_GATEWAY_WORKER_SECRET` | | | | | | | | yes | |
 | **Page token + loopback** | A random token in the page `web` serves | | | | | | | | | yes (Build `web`) |
 | **Operating-system access** | File mode or pipe access list on the local channel, a pipe or socket to a child, standard input of an MCP server, the terminal | | | | | | | | | yes |
 
@@ -72,7 +72,7 @@ Servers a console manages use one set of five roles, carried in the console toke
 | --- | --- | --- |
 | Gateway | the databases | the data source's connection (mapped account, pass-through, integrated, token) with secrets resolved through `secret:` references |
 | Sync | the databases, and a Gateway | the connection's own login; a Gateway as an Arrow Flight SQL source with the Flight handshake |
-| Build | the databases, and a Gateway | the `DBDATA_BUILD_<TARGET>_<READ|WRITE>` logins; publishing to a Gateway as a paired client |
+| Build | the databases, and a Gateway | the `DBDATAKIT_BUILD_<TARGET>_<READ|WRITE>` logins; publishing to a Gateway as a paired client |
 | Console | every paired server | its signing key (kept in the secret store) and the server's pinned certificate |
 | Console | an identity home | the client id and secret of its OpenID client, over the home's HTTPS |
 

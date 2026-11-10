@@ -126,7 +126,7 @@ public class HostingTests
     {
         var r = new ConfigBuilder<HostOpts>()
             .AddText("proj.yml", "name: demo\npassword: hunter2\nusers:\n  - name: a\n")
-            .AddEnvironment("HOST", env: new Dictionary<string, string?> { ["DBDATA_HOST__PORT"] = "9000" })
+            .AddEnvironment("HOST", env: new Dictionary<string, string?> { ["DBDATAKIT_HOST__PORT"] = "9000" })
             .Build();
         Assert.True(r.Ok, string.Join("\n", r.Diagnostics));
         var o = ShowOrigin.From(r);

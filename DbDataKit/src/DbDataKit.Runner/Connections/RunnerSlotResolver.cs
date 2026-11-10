@@ -12,8 +12,8 @@ namespace DbDataKit.Runner.Connections;
 /// secrets are references into the runner's secret store (<see cref="ISecretResolver"/>): a package never holds a value. Three uses:
 /// <list type="bullet">
 /// <item><see cref="Handles"/>, when a run starts: slot to connection name from the task's own channel (never another channel's binding); a slot with no binding is refused naming the slot and the channel.</item>
-/// <item><see cref="EnvironmentAsync"/>, for the slots that declare an injection form: the variables of <see cref="SlotEnvironmentFormats"/> (<c>sync-secret</c>: <c>DBDATA_SECRET_&lt;NAME&gt;</c>; <c>build-login</c>:
-/// <c>DBDATA_BUILD_&lt;CONNECTION&gt;_READ|WRITE</c>), written by the runner into the child's environment and nowhere else. Every value is registered with the redactor.</item>
+/// <item><see cref="EnvironmentAsync"/>, for the slots that declare an injection form: the variables of <see cref="SlotEnvironmentFormats"/> (<c>sync-secret</c>: <c>DBDATAKIT_SECRET_&lt;NAME&gt;</c>; <c>build-login</c>:
+/// <c>DBDATAKIT_BUILD_&lt;CONNECTION&gt;_READ|WRITE</c>), written by the runner into the child's environment and nowhere else. Every value is registered with the redactor.</item>
 /// <item><see cref="ResolveAsync"/>, for a task that asks through the protocol: a <see cref="ConnectionGrant"/> for one role. A read request never gets the write login, and a write request on a read-only connection is refused.</item>
 /// </list>
 /// A secret that is not in the store is a <see cref="SlotResolutionException"/> naming the slot, the connection and the reference, never a fallback to another role.

@@ -19,7 +19,7 @@ The shared secret store (plan 13, W13): secrets encrypted in a file, with the ke
 | --- | --- |
 | Windows | DPAPI (`DbDataKit.Secrets.Windows.DpapiKeyProtector`, per-product entropy, machine scope for a service) in `<data>/secrets/keys/<id>.key`, the directory restricted by access list to the service account, SYSTEM and Administrators |
 | Linux, macOS | the raw key in `<data>/secrets/keys/<id>.key`, mode 0600 in a 0700 directory, **owned by the user the server runs as** |
-| From outside | `secrets.keyFile` in `server.yaml`, or the environment variable `DBDATA_SECRETS_KEY_FILE`: a key the platform provides (a Docker or Kubernetes secret, a systemd credential), as 32 raw bytes or base64 or hex text. Images never contain a key. The file's permissions are not judged: a mounted secret is the platform's |
+| From outside | `secrets.keyFile` in `server.yaml`, or the environment variable `DBDATAKIT_SECRETS_KEY_FILE`: a key the platform provides (a Docker or Kubernetes secret, a systemd credential), as 32 raw bytes or base64 or hex text. Images never contain a key. The file's permissions are not judged: a mounted secret is the platform's |
 
 `KeyRing` refuses to read a key file or directory that others can reach (`KeyPermissionException`, which names the path and the `chmod` that fixes it), the way ssh refuses a private key;
 `SecretKeys.Open` checks the whole ring at start-up. A key has an id, kept beside every value it encrypts, so an old key stays until the last value has moved to a new one.

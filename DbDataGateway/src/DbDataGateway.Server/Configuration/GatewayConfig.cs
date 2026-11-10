@@ -336,9 +336,9 @@ public static class GatewayConfig
 
         private static string EnvironmentVariableName(string key, string? value)
         {
-            // The stock provider hides the prefix; find the variable by its two usual spellings (the DBGATEWAY_ prefix wins over the plain name).
+            // The stock provider hides the prefix; find the variable by its two usual spellings (the DBDATAKIT_ prefix wins over the plain name).
             string flat = key.Replace(":", "__");
-            foreach (var candidate in new[] { "DBGATEWAY_" + flat, flat })
+            foreach (var candidate in new[] { GatewayConfigFile.EnvironmentPrefix + flat, flat })
             {
                 foreach (System.Collections.DictionaryEntry e in Environment.GetEnvironmentVariables())
                     if (e.Key is string name && string.Equals(name, candidate, StringComparison.OrdinalIgnoreCase) && string.Equals(e.Value as string, value, StringComparison.Ordinal))

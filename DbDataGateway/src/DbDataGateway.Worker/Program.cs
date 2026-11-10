@@ -3,13 +3,13 @@ using System.Net;
 using DbDataGateway.WorkerHost;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 
-// dbdatagateway-worker.exe --port <n> [--parent <pid>]; the shared secret arrives in DBGATEWAY_WORKER_SECRET.
+// dbdatagateway-worker.exe --port <n> [--parent <pid>]; the shared secret arrives in DBDATAKIT_GATEWAY_WORKER_SECRET.
 // Published as a 32-bit process so the gateway can reach 32-bit-only ODBC drivers through it.
 
 int port = ArgValue(args, "--port") is { } p ? int.Parse(p) : 0;
 int? parentPid = ArgValue(args, "--parent") is { } pp ? int.Parse(pp) : null;
-string secret = Environment.GetEnvironmentVariable("DBGATEWAY_WORKER_SECRET")
-    ?? throw new InvalidOperationException("DBGATEWAY_WORKER_SECRET is not set; the worker is started by the gateway.");
+string secret = Environment.GetEnvironmentVariable("DBDATAKIT_GATEWAY_WORKER_SECRET")
+    ?? throw new InvalidOperationException("DBDATAKIT_GATEWAY_WORKER_SECRET is not set; the worker is started by the gateway.");
 
 var builder = WebApplication.CreateSlimBuilder(args);
 builder.Logging.AddSimpleConsole();

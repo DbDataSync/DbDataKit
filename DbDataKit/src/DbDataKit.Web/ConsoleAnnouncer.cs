@@ -21,7 +21,7 @@ public sealed record Announcement(string Product, string InstanceId, string Name
 /// </summary>
 public sealed class ConsoleAnnouncer(string product, string instanceId, string name, Func<int?> port, Uri? advertise, Uri console, IPairedClientStore clients, IPairingCodeStore codes, TimeProvider? clock = null, string? hostName = null)
 {
-    public const string UrlVariable = "DBDATAKIT_CONSOLE_ANNOUNCE_URL";
+    public const string UrlVariable = "DBDATAKIT_ANNOUNCE_URL";
     public const string AdvertiseVariable = "DBDATAKIT_ADVERTISE_URL";
     public const string NameVariable = "DBDATAKIT_INSTANCE_NAME";
     public const string Path = "/announce";

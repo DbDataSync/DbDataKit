@@ -43,7 +43,7 @@ on Unix, bitness from the library path when it says). Registry and file access g
   SQLProcedures, SQLProcedureColumns, the cap and sessions. Not verified on Linux/macOS (unixODBC naming, UTF-32 detection) or
   with drivers that reject `SQL_ATTR_QUERY_TIMEOUT`; those paths are covered by fakes only.
 * Integration tests skip when no server is reachable: `DBDATA_TEST_SQLSERVER` (default `.\SQLEXPRESS`), `_USER`, `_PASSWORD`,
-  `DBDATA_REQUIRE_SQLSERVER=true` to fail instead of skip (the `DBGATEWAY_` names also work).
+  `DBDATA_REQUIRE_SQLSERVER=true` to fail instead of skip (the Gateway-prefixed spellings of these test variables also work until SC31b).
 
 Public API is tracked with `Microsoft.CodeAnalysis.PublicApiAnalyzers` (`PublicAPI.Shipped.txt`).
 

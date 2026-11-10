@@ -16,7 +16,7 @@ Typed, strict, layered configuration on top of `DbDataKit.Config.Yaml`. No YamlD
 - `IConfigValidator<T>` + `ConfigValidationContext`: whole-document cross-reference checks; `Error(path, message)` is located at the bound node (or nearest parent).
 - `ConfigBuilder<T>`: `AddDefaults`, `AddText`, `AddFile(path, optional)` (file layers in the order added, lowest first), `AddEnvironment(app, legacyAliases)`, `AddCommandLine(args)`, `AddValidator`, `Build() -> ConfigResult<T>` (`Value`, `Diagnostics`, `Merged.Origins()`, `ValueOrThrow()`).
   Precedence: defaults < file layers < environment < command line. File layers use the Build merge operators (`key=`, `key-`, `key+`; lists append). Environment and CLI override single values (lists by index, or a comma list for lists of scalars).
-- Environment: `DBDATA_<APP>__A__B` (case-insensitive; keys match existing/schema keys ignoring case, `_`, `-`; numeric level indexes a list). `EnvAlias("DBGATEWAY_", "Gateway")` and `EnvAlias("DbDataSync__")` keep legacy names working; the canonical name wins when both are set.
+- Environment: `DBDATAKIT_<APP>__A__B` (case-insensitive; keys match existing/schema keys ignoring case, `_`, `-`; numeric level indexes a list). `EnvAlias("OLDGATEWAY_", "Gateway")` and `EnvAlias("DbDataSync__")` keep legacy names working; the canonical name wins when both are set.
 - CLI: `--set a.b=value`, `--a.b=value`, `--a.b value` (options with a dot in the name); the rest is returned untouched.
 - Versioning: a missing version key means 1. A version newer than the schema/engine knows is refused (`DBD-110`) with an upgrade message.
 - Migrations: `IConfigMigration { Kind, From, To, Apply(YamlDocument, IMigrationLog) }` (must advance by exactly 1). `MigrationEngine.Plan` (dry-run: new text, unified diff, log, questions; also in-memory migrate-on-read via `MigrateOnRead`), `Apply(kind, path)` writes `name.bak` (then `.bak.1`, ...) first and replaces atomically. The engine writes the new version key (inserted at the top, below the header comments, when absent). `log.Ask(id, question, options)` implements the answer-file model: an unanswered question fails the run, nothing is guessed. `YamlDocument` edits through `YamlEditor`, so comments/ordering survive; `RenameKey` is provided. No down migrations: restore the backup.
@@ -26,7 +26,7 @@ Typed, strict, layered configuration on top of `DbDataKit.Config.Yaml`. No YamlD
 
 - Key naming: per-schema policy (default camelCase, Sync's convention; Build uses `SnakeCase`). Existing keys are never renamed; use `[ConfigKey("name")]`.
 - Version key name: `schemaVersion` (integer). The `schema: <kind>/<int>` header is accepted as an alternative on versioned schemas (binder, builder, migration engine, JSON Schema `schema` property with a `^kind/N$` pattern); the migration engine keeps whichever form the file uses, and refuses a file that has both, a wrong kind, or a newer version. `SchemaHeader.TryParse/Format`.
-- Env prefix: `DBDATA_<APP>__...`. Legacy aliases are caller supplied.
+- Env prefix: `DBDATAKIT_<APP>__...`. Legacy aliases are caller supplied.
 - Migrations live in the product that owns the file kind; the engine is shared (plan recommendation).
 - Git-commit-instead-of-.bak is not implemented (only `.bak`).
 - JSON input: files named `*.json` (via `AddFile`/`AddText`, and the MEC provider) go through `JsonInput` in `DbDataKit.Config.Yaml`: JSON check (comments and trailing commas allowed, like appsettings.json), then the same strict node tree with line/column. Test helpers live in `DbDataKit.Config.Testing`.

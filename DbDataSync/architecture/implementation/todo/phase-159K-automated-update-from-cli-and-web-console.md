@@ -320,7 +320,7 @@ Nothing of this repository was involved — it tests systemd's sequencing, the p
    `SelfUpdateConfirmAfterSeconds`) on the Configuration screen and in `docs/configuration.md`,
    `UpdateConfirmationService`. The service now stages nothing. `HealthTimeoutSeconds` was not needed: on the
    service path systemd's start timeout and the confirmation grace period do that job.
-7. **Unit template** — done, opt-in: `service install --self-update` adds `Environment=DBDATASYNC_SELF_UPDATE=1`,
+7. **Unit template** — done, opt-in: `service install --self-update` adds `Environment=DBDATAKIT_SYNC_SELF_UPDATE=1`,
    `ExecStartPre=-+…apply-update`, `SuccessExitStatus=75`, `RestartForceExitStatus=75`; an ordinary unit is
    unchanged. `config check` warns when `SelfUpdateEnabled` is on and the unit lacks the marker.
 8. **SPA** — done: Admin → Updates (`AdminUpdatesPage`), driven in a real browser by

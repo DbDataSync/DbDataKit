@@ -1,5 +1,5 @@
 # Copy this folder to <data directory>/config (%ProgramData%\DbDataKit\gateway\config by default) and keep the parts you need.
-# Settings can also come from environment variables (DBGATEWAY_Gateway__Listen__Port=9000) or the command line (--Gateway:Listen:Port=9000).
+# Settings can also come from environment variables (DBDATAKIT_Gateway__Listen__Port=9000) or the command line (--Gateway:Listen:Port=9000).
 #
 # Configuration schema version (optional; absent means 1). 2 makes each data source's classifier default to "strict" instead of "warn".
 # Keys are case-insensitive. A misspelt or unknown key stops the service at startup with exit code 2
@@ -24,7 +24,7 @@ tls:
   mode: selfSigned
   hostnames: [gateway.example.com]
   # mode: store, certificateThumbprint: <thumbprint>  (or certificateSubject: gateway.example.com; storeLocation: localMachine or currentUser)
-  # mode: file, certificatePath: C:\certs\gateway.pfx, certificatePassword: env:DBGATEWAY_PFX_PASSWORD
+  # mode: file, certificatePath: C:\certs\gateway.pfx, certificatePassword: env:DBDATAKIT_GATEWAY_PFX_PASSWORD
   # The generated PFX gets a random password kept in a protected file beside it; leave certificatePassword unset.
 
 # hosting: { maxConcurrentRequests: 1000, drainSeconds: 30 }

@@ -11,7 +11,7 @@ public class LoginTlsTests
     private static LoginSettings Sql(TlsSpec? tls, string text = Weak)
     {
         var connection = new DbDataBuild.Models.ConnectionConfig("warehouse", "sqlserver") { Tls = tls };
-        var (settings, error) = LoginSettings.FromEnvironment(connection, Login.Read, name => name == "DBDATA_BUILD_WAREHOUSE_READ" ? text : null);
+        var (settings, error) = LoginSettings.FromEnvironment(connection, Login.Read, name => name == "DBDATAKIT_BUILD_WAREHOUSE_READ" ? text : null);
         Assert.Null(error);
         return settings!;
     }
@@ -47,7 +47,7 @@ public class LoginTlsTests
     public void A_postgres_read_login_gets_the_read_only_session_option()
     {
         var connection = new DbDataBuild.Models.ConnectionConfig("dw", "postgres");
-        var (settings, _) = LoginSettings.FromEnvironment(connection, Login.Read, name => name == "DBDATA_BUILD_DW_READ" ? "Host=h;Username=u;Password=p;SSL Mode=Disable" : null);
+        var (settings, _) = LoginSettings.FromEnvironment(connection, Login.Read, name => name == "DBDATAKIT_BUILD_DW_READ" ? "Host=h;Username=u;Password=p;SSL Mode=Disable" : null);
 
         var composed = new Npgsql.NpgsqlConnectionStringBuilder(settings!.ComposedConnectionString());
 

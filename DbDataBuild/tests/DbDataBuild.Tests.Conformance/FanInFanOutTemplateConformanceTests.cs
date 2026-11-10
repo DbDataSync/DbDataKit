@@ -29,10 +29,10 @@ public partial class FanInFanOutTemplateConformanceTests
         var dir = Path.Combine(Path.GetTempPath(), "ddb-stores-" + Guid.NewGuid().ToString("N"));
         string? Env(string v) => v switch
         {
-            "DBDATA_BUILD_STORE_EAST_READ" or "DBDATA_BUILD_STORE_EAST_WRITE" => east.ConnectionString,
-            "DBDATA_BUILD_STORE_WEST_READ" or "DBDATA_BUILD_STORE_WEST_WRITE" => west.ConnectionString,
-            "DBDATA_BUILD_SQLSERVER_READ" or "DBDATA_BUILD_SQLSERVER_WRITE" => warehouse.ConnectionString,
-            "DBDATA_BUILD_POSTGRES_READ" or "DBDATA_BUILD_POSTGRES_WRITE" => reporting.ConnectionString,
+            "DBDATAKIT_BUILD_STORE_EAST_READ" or "DBDATAKIT_BUILD_STORE_EAST_WRITE" => east.ConnectionString,
+            "DBDATAKIT_BUILD_STORE_WEST_READ" or "DBDATAKIT_BUILD_STORE_WEST_WRITE" => west.ConnectionString,
+            "DBDATAKIT_BUILD_SQLSERVER_READ" or "DBDATAKIT_BUILD_SQLSERVER_WRITE" => warehouse.ConnectionString,
+            "DBDATAKIT_BUILD_POSTGRES_READ" or "DBDATAKIT_BUILD_POSTGRES_WRITE" => reporting.ConnectionString,
             _ => null,
         };
         (int Exit, string Out, string Err) Cli(params string[] args)
@@ -130,7 +130,7 @@ public partial class FanInFanOutTemplateConformanceTests
 
             // a shop that cannot be reached fails the copy (`failed: origin`) and the report that reads it is skipped; the rest of the plan goes on
             await east.ExecAsync("INSERT INTO pos.orders VALUES (1001, '2024-03-21', 'web', 10.00)");
-            string? Broken(string v) => v == "DBDATA_BUILD_STORE_WEST_READ" ? null : Env(v);
+            string? Broken(string v) => v == "DBDATAKIT_BUILD_STORE_WEST_READ" ? null : Env(v);
             var o = new StringWriter(); var e = new StringWriter();
             var exit = CliApp.Run(["connection", "refresh", "sqlserver", "hourly", "--project", dir], o, e, environment: Broken);
             Assert.Equal(1, exit);

@@ -480,7 +480,7 @@ public sealed class SecretsOptions
 {
     /// <summary>
     /// A key file the platform provides (a Docker or Kubernetes secret, a systemd credential): 32 raw bytes, or the key as base64 or hex text. Empty (the default) keeps the key in
-    /// <c>&lt;DataDirectory&gt;/secrets/keys</c>, protected by DPAPI on Windows and by file permissions elsewhere. The environment variable <c>DBDATA_SECRETS_KEY_FILE</c> does the same.
+    /// <c>&lt;DataDirectory&gt;/secrets/keys</c>, protected by DPAPI on Windows and by file permissions elsewhere. The environment variable <c>DBDATAKIT_SECRETS_KEY_FILE</c> does the same.
     /// </summary>
     public string? KeyFile { get; set; }
 }
