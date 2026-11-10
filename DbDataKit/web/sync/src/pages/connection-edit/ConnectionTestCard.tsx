@@ -174,6 +174,17 @@ function CredentialSourceFields({ connectionName }: { connectionName: string | u
           data-testid="credential-env-var"
         />
       </Field>
+      {data.runEnvironmentVariable && (
+        <Field label="Run login resolves as">
+          <input
+            className="input"
+            readOnly
+            value={data.runEnvironmentVariable}
+            style={{ background: 'var(--sunken)', borderColor: '#f0eee8', color: 'var(--ink-3)' }}
+            data-testid="credential-run-env-var"
+          />
+        </Field>
+      )}
     </>
   )
 }

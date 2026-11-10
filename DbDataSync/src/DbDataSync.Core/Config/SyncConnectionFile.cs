@@ -28,6 +28,14 @@ public sealed class SyncConnectionExtension
     public Dictionary<string, List<HookConfig>?>? Hooks { get; set; }
     [YamlMember(Alias = "test_query", ApplyNamingConventions = false)]
     public string? TestQuery { get; set; }
+
+    /// <summary>The user of the <c>run</c> login (plan 28c, E20) when it is not <c>auth.user</c>. Additive: a file without it is read as before.</summary>
+    [YamlMember(Alias = "run_user", ApplyNamingConventions = false)]
+    public string? RunUser { get; set; }
+
+    /// <summary>The second secret (plan 28c, E20): the password of the <c>run</c> login, <c>secret:dbdata:sync:connection:&lt;name&gt;:run</c>. <c>auth.password_secret</c> is the <c>read</c> login's and serves both roles when this is absent.</summary>
+    [YamlMember(Alias = "run_password_secret", ApplyNamingConventions = false)]
+    public string? RunPasswordSecret { get; set; }
 }
 
 /// <summary>
@@ -83,6 +91,8 @@ internal static partial class SyncConnectionFile
             Scripts = c.Scripts.Count == 0 ? null : c.Scripts,
             Hooks = c.Hooks.Count == 0 ? null : c.Hooks,
             TestQuery = c.TestQuery,
+            RunUser = c.AuthMode == AuthMode.SqlAuth && c.HasRunLogin && !string.IsNullOrWhiteSpace(c.RunUserId) ? c.RunUserId : null,
+            RunPasswordSecret = c.AuthMode == AuthMode.SqlAuth && c.HasRunLogin ? SecretPrefix + c.RunCredentialSecretRef : null,
         };
 
         var (engine, dialect) = EngineFor(c.DriverType);
@@ -116,7 +126,7 @@ internal static partial class SyncConnectionFile
 
     private static bool IsEmpty(SyncConnectionExtension e) =>
         e.Database is null && e.ConnectTimeoutSeconds is null && e.CommandTimeoutSeconds is null && e.SegmentOrder is null
-        && e.Properties is null && e.Scripts is null && e.Hooks is null && e.TestQuery is null;
+        && e.Properties is null && e.Scripts is null && e.Hooks is null && e.TestQuery is null && e.RunUser is null && e.RunPasswordSecret is null;
 
     internal static (string Engine, string? Dialect) EngineFor(string driverType)
     {
@@ -183,6 +193,17 @@ internal static partial class SyncConnectionFile
         }
         ext ??= new SyncConnectionExtension();
 
+        if (ext.RunPasswordSecret is { } runSecret)
+        {
+            var at = (map.Get("extensions") as YamlMapping)?.GetEntry("sync");
+            if (auth is not { Mode: DbDataKit.Connections.AuthMode.Sql })
+                Error("`extensions.sync.run_password_secret` is the password of a second login, and the connection does not log in with a user and a password (`auth.mode: sql`).", "extensions.sync.run_password_secret", at);
+            else if (!runSecret.StartsWith(SecretPrefix, StringComparison.OrdinalIgnoreCase))
+                Error("`extensions.sync.run_password_secret` must be `secret:dbdata:sync:connection:<name>:run`, a reference into Sync's secret store.", "extensions.sync.run_password_secret", at);
+        }
+        else if (ext.RunUser is not null)
+            Error("`extensions.sync.run_user` names the user of a second login, and there is no `extensions.sync.run_password_secret` for it.", "extensions.sync.run_user", (map.Get("extensions") as YamlMapping)?.GetEntry("sync"), "Add `run_password_secret`, or remove `run_user`.");
+
         if (hasHost && ext.Database is not null)
             Error("`extensions.sync.database` is for a connection with a `connection_string`; with an `address` the database is `address.database`.", "extensions.sync.database", (map.Get("extensions") as YamlMapping)?.GetEntry("sync"));
 
@@ -205,6 +226,8 @@ internal static partial class SyncConnectionFile
             },
             UserId = auth?.Mode == DbDataKit.Connections.AuthMode.Sql ? auth.User : null,
             CredentialSecretRef = credentialRef,
+            RunUserId = ext.RunPasswordSecret is null ? null : ext.RunUser,
+            RunCredentialSecretRef = ext.RunPasswordSecret is { } run && run.StartsWith(SecretPrefix, StringComparison.OrdinalIgnoreCase) ? run[SecretPrefix.Length..] : null,
             ConnectTimeoutSeconds = ext.ConnectTimeoutSeconds ?? (timeouts?.Get("connect_s") is not null ? d.Timeouts.ConnectS : null),
             CommandTimeoutSeconds = ext.CommandTimeoutSeconds ?? (timeouts?.Get("command_s") is not null ? d.Timeouts.CommandS : null),
             SegmentOrder = ext.SegmentOrder,
@@ -231,6 +254,17 @@ internal static partial class SyncConnectionFile
         catch (YamlDotNet.Core.YamlException) { return null; }
     }
 
+    /// <summary>The run login's secret a connection file names (<c>extensions.sync.run_password_secret</c>), read as leniently as <see cref="TryReadCredentialRef"/>.</summary>
+    public static string? TryReadRunCredentialRef(string text)
+    {
+        try
+        {
+            var secret = YamlConfigSerializer.Deserialize<Envelope>(text)?.Extensions?.Sync?.RunPasswordSecret;
+            return secret is not null && secret.StartsWith(SecretPrefix, StringComparison.OrdinalIgnoreCase) ? secret[SecretPrefix.Length..] : null;
+        }
+        catch (YamlDotNet.Core.YamlException) { return null; }
+    }
+
     private static Dictionary<string, string> WithAll(this Dictionary<string, string> target, Dictionary<string, string> more)
     {
         foreach (var (k, v) in more) target[k] = v;
@@ -244,7 +278,7 @@ internal static partial class SyncConnectionFile
         DefaultDiagnosticCatalog.Instance.Create(SharedCodes.SchemaVersionInvalid, path, 1, 1,
             $"'{name}.yaml' is a connection in the form of earlier releases (it has `driverType` or `schemaVersion` and no `schema: connection/1`), which Sync no longer reads.",
             "Rewrite it as a connection/1 file: `schema: connection/1`, `name`, `engine` (sqlserver, postgres, mysql, oracle, duckdb, flightsql, or a driver id), `address: {host, port, database}` or `connection_string`, " +
-            $"`auth: {{mode: sql, user, password_secret: 'secret:dbdata:sync:connection:{name}'}}` (or `mode: integrated` / `none`), `timeouts: {{connect_s, command_s}}`, and `extensions.sync` for `segment_order`, `properties`, `scripts`, `hooks`, `test_query` and, with a `connection_string`, `database`. " +
+            $"`auth: {{mode: sql, user, password_secret: 'secret:dbdata:sync:connection:{name}'}}` (or `mode: integrated` / `none`), `timeouts: {{connect_s, command_s}}`, and `extensions.sync` for `segment_order`, `properties`, `scripts`, `hooks`, `test_query`, a second login (`run_user`, `run_password_secret`) and, with a `connection_string`, `database`. " +
             "The password stays in the secret store; see docs/configuration.md.", keyPath: null);
 
     private static (string? Driver, string? Error) DriverFor(ConnectionDefinition d)

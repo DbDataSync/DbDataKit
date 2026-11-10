@@ -58,8 +58,8 @@ public sealed class PreviewService(
         DbConnection? targetConnection = null;
         try
         {
-            (sourceConnection, var sourceDriver) = await connections.OpenAsync(source.ConnectionName, cancellationToken);
-            (targetConnection, var targetDriver) = await connections.OpenAsync(target.ConnectionName, cancellationToken);
+            (sourceConnection, var sourceDriver) = await connections.OpenAsync(source.ConnectionName, CredentialRole.Read, cancellationToken);
+            (targetConnection, var targetDriver) = await connections.OpenAsync(target.ConnectionName, CredentialRole.Read, cancellationToken);
 
             var sourceConnectionConfig = configRepository.LoadConnection(source.ConnectionName);
             var targetConnectionConfig = configRepository.LoadConnection(target.ConnectionName);

@@ -5,7 +5,7 @@ namespace DbDataSync.Core.Config;
 
 /// <summary>
 /// The connections of a Sync server and who uses them (plan 28c ED17, E23): the server itself (its metadata browsing, tests and previews need the <c>read</c> login) and every replication that names the connection as a source or a target (a drain needs the
-/// <c>run</c> login). A connection is reported with its engine, host (or none, for one addressed by a connection string, which is not echoed) and database and the secret <i>reference</i> of its credential, never a value.
+/// <c>run</c> login). A connection is reported with its engine, host (or none, for one addressed by a connection string, which is not echoed) and database and the secret <i>reference</i> of its credential, never a value; a connection with a second login also reports the reference of the run login (E20).
 /// </summary>
 public static class SyncConnectionInventory
 {
@@ -18,7 +18,7 @@ public static class SyncConnectionInventory
         {
             var list = new List<ConnectionUse> { new(ProcessKinds.Server, ServerName, UseRoles.Read) };
             if (uses.TryGetValue(c.Name, out var found)) list.AddRange(found);
-            return new InventoryConnection(c.Name, "sync", c.DriverType, c.Host is { Length: > 0 } h ? c.Port is { } p ? $"{h}:{p}" : h : null, c.Database, ReferenceOf(c.CredentialSecretRef), list);
+            return new InventoryConnection(c.Name, "sync", c.DriverType, c.Host is { Length: > 0 } h ? c.Port is { } p ? $"{h}:{p}" : h : null, c.Database, ReferenceOf(c.CredentialSecretRef), list, c.HasRunLogin ? ReferenceOf(c.RunCredentialSecretRef) : null);
         })];
     }
 

@@ -410,6 +410,40 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
         Assert.Equal(5, (await TargetFingerprintAsync(_runnerTarget)).Count);
     }
 
+    [Fact]
+    public async Task AConnectionWithTwoLogins_DrainsOnTheRunnerWithTheRunLogin_AndTheReadLoginIsNeitherGivenToTheRunnerNorNeeded()
+    {
+        // plan 28c E20: the connections' read login is one that cannot log in at all, and the runner is given the run secrets only (what the runner's slot resolver injects: the run login's password under the run secret's name).
+        // A pass that succeeds therefore connected with the run login, and nothing of the read login was in its environment.
+        const string readPassword = "the-read-password-stays-in-sync";
+        foreach (var name in new[] { "src-conn", "tgt-conn" })
+            _config.SaveConnection(new ConnectionInput
+            {
+                DriverType = DriverIds.MsSql, Host = "localhost", Port = TestSupport.TestEngines.MsSql.Port,
+                Properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true" }, Database = _databaseName,
+                AuthMode = AuthMode.SqlAuth, UserId = "nobody_can_read", Password = readPassword,
+                RunLogin = new RunLoginInput { UserId = "sa", Password = TestSupport.TestEngines.MsSql.Password },
+                Name = name,
+            }, Author);
+        var logins = new[] { "src-conn", "tgt-conn" }.Select(name => DbDataSync.Core.Secrets.SecretRefs.ForConnectionRun(name))
+            .ToDictionary(reference => _secrets.EnvName(reference), reference => _secrets.Resolve(reference));
+        Assert.DoesNotContain(logins.Values, v => v == readPassword);
+        Assert.DoesNotContain(logins.Keys, k => k == _secrets.EnvName(DbDataSync.Core.Secrets.SecretRefs.ForConnection("src-conn")));
+
+        var start = await CurrentVersionAsync();
+        await InsertRowsAsync(5);
+        var source = await PackageSourceAsync();
+        using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, logins);
+        rig.SeedWatermark(_watermarkKey, start);
+
+        var result = await rig.Executor.RunAsync(await rig.DrainRequestAsync(source, "runner-sync"));
+
+        Assert.True(result.End.State == TaskEndState.Succeeded && result.ExitCode == 0, Describe(rig, result));
+        Assert.Equal(5, (await TargetFingerprintAsync(_runnerTarget)).Count);
+        Assert.DoesNotContain(readPassword, rig.LogText(result.RunId));
+        Assert.DoesNotContain(TestSupport.TestEngines.MsSql.Password, rig.LogText(result.RunId));
+    }
+
     /// <summary>The names and contents of everything under a directory, to say afterwards that nothing in it was written, added or removed.</summary>
     private static SortedDictionary<string, string> Snapshot(string directory) =>
         new(Directory.EnumerateFileSystemEntries(directory, "*", SearchOption.AllDirectories).ToDictionary(

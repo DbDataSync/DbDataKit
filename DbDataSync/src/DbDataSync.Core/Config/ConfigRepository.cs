@@ -74,6 +74,28 @@ public sealed class ConfigRepository
             }
         }
 
+        // The second login (plan 28c, E20): a name of its own in the store, `...:<name>:run`. It is stored or checked before anything is written, like the first.
+        string? runSecretRef = null, runUserId = null;
+        if (input.RunLogin is { } runLogin)
+        {
+            if (input.AuthMode != AuthMode.SqlAuth)
+                throw new ConfigValidationException("A second (run) login is a user and a password, so it needs AuthMode SqlAuth.");
+            runSecretRef = SecretRefs.ForConnectionRun(input.Name);
+            runUserId = string.IsNullOrWhiteSpace(runLogin.UserId) ? null : runLogin.UserId;
+            if (runLogin.Password is not null)
+                _secrets.Store(runSecretRef, runLogin.Password);
+            else if (!_secrets.TryResolve(runSecretRef, out _))
+                throw new ConfigValidationException(
+                    $"No password was provided for the run login and none is stored for connection '{input.Name}' " +
+                    $"(secret ref '{runSecretRef}', environment variable '{_secrets.EnvName(runSecretRef)}').");
+        }
+        else if (File.Exists(ConfigPaths.ConnectionFile(_configRoot, input.Name)))
+        {
+            // the run login was taken away: its stored password goes with it
+            var before = SyncConnectionFile.TryReadRunCredentialRef(ReadAllTextAllowingConcurrentReplace(ConfigPaths.ConnectionFile(_configRoot, input.Name)));
+            if (before is not null) _secrets.Delete(before);
+        }
+
         var config = new ConnectionConfig
         {
             Name = input.Name,
@@ -85,6 +107,8 @@ public sealed class ConfigRepository
             AuthMode = input.AuthMode,
             UserId = input.UserId,
             CredentialSecretRef = secretRef,
+            RunUserId = runUserId,
+            RunCredentialSecretRef = runSecretRef,
             ConnectTimeoutSeconds = input.ConnectTimeoutSeconds,
             CommandTimeoutSeconds = input.CommandTimeoutSeconds,
             SegmentOrder = input.SegmentOrder,
@@ -144,14 +168,17 @@ public sealed class ConfigRepository
     /// A <c>connection/1</c> file read as a save of the connection called <paramref name="name"/> (plan 13, E05): the same strict reading a file on disk gets (<see cref="ConfigFileException"/> naming each fault with its line), and the checks a save makes.
     /// The password is never in a file; a login names <c>secret:dbdata:sync:connection:&lt;name&gt;</c>, the one reference Sync reads, so a file naming another connection's secret is refused rather than saved under the wrong one.
     /// </summary>
-    public ConnectionInput ConnectionInputFromFile(string text, string name, string? password)
+    public ConnectionInput ConnectionInputFromFile(string text, string name, string? password, string? runPassword = null)
     {
         SyncConnectionFile.ValidateName(name);
         var config = SyncConnectionFile.Read(text, ConfigPaths.ConnectionFile(_configRoot, name), name);
         if (config.CredentialSecretRef is { } secretRef && secretRef != SecretRefs.ForConnection(name))
             throw new ConfigValidationException($"`auth.password_secret` is `secret:{secretRef}`; Sync keeps this connection's password as `secret:{SecretRefs.ForConnection(name)}`.");
+        if (config.RunCredentialSecretRef is { } runRef && runRef != SecretRefs.ForConnectionRun(name))
+            throw new ConfigValidationException($"`extensions.sync.run_password_secret` is `secret:{runRef}`; Sync keeps this connection's run password as `secret:{SecretRefs.ForConnectionRun(name)}`.");
         return new ConnectionInput
         {
+            RunLogin = config.HasRunLogin ? new RunLoginInput { UserId = config.RunUserId, Password = runPassword } : null,
             Name = config.Name,
             DriverType = config.DriverType,
             Host = config.Host,
@@ -184,6 +211,8 @@ public sealed class ConfigRepository
         var credentialRef = SyncConnectionFile.TryReadCredentialRef(ReadAllTextAllowingConcurrentReplace(path));
         if (credentialRef is not null)
             _secrets.Delete(credentialRef);
+        if (SyncConnectionFile.TryReadRunCredentialRef(ReadAllTextAllowingConcurrentReplace(path)) is { } runRef)
+            _secrets.Delete(runRef);
 
         File.Delete(path);
         Git.CommitChanges([path], $"Delete connection '{name}'", author);

@@ -1,3 +1,4 @@
+using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.Generic;
 using DbDataSync.Scripting;
@@ -37,7 +38,7 @@ public sealed class MetadataService(DriverConnectionFactory connections, Scripte
 {
     public async Task<IReadOnlyList<string>> ListDatabasesAsync(string connectionName, CancellationToken cancellationToken)
     {
-        var (connection, driver) = await connections.OpenAsync(connectionName, cancellationToken);
+        var (connection, driver) = await connections.OpenAsync(connectionName, CredentialRole.Read, cancellationToken);
         await using (connection)
             return await scriptedMetadata.ListDatabasesAsync(
                 connectionName, connection, driver, DialectFor(driver), cancellationToken);
@@ -45,7 +46,7 @@ public sealed class MetadataService(DriverConnectionFactory connections, Scripte
 
     public async Task<IReadOnlyList<TableMetadata>> ListTablesAsync(string connectionName, string database, CancellationToken cancellationToken)
     {
-        var (connection, driver) = await connections.OpenAsync(connectionName, cancellationToken);
+        var (connection, driver) = await connections.OpenAsync(connectionName, CredentialRole.Read, cancellationToken);
         await using (connection)
             return await scriptedMetadata.ListTablesAsync(
                 connectionName, connection, driver, DialectFor(driver), database, cancellationToken);
@@ -54,7 +55,7 @@ public sealed class MetadataService(DriverConnectionFactory connections, Scripte
     public async Task<IReadOnlyList<ColumnMetadata>> ListColumnsAsync(
         string connectionName, string database, string schema, string table, CancellationToken cancellationToken)
     {
-        var (connection, driver) = await connections.OpenAsync(connectionName, cancellationToken);
+        var (connection, driver) = await connections.OpenAsync(connectionName, CredentialRole.Read, cancellationToken);
         await using (connection)
             return await scriptedMetadata.ListColumnsAsync(
                 connectionName, connection, driver, DialectFor(driver), database, schema, table, cancellationToken);

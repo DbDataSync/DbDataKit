@@ -115,7 +115,9 @@ public sealed class ConnectionSlotTests : IDisposable
         Assert.Equal(SrcSecret, environ["DBDATA_SECRET_DBDATA_SYNC_CONNECTION_SRC_DB"]);
         Assert.Equal(DstRead, environ["DBDATA_BUILD_DST_DB_READ"]);
         Assert.Equal(DstWrite, environ["DBDATA_BUILD_DST_DB_WRITE"]);
-        Assert.Equal(["DBDATA_BUILD_DST_DB_READ", "DBDATA_BUILD_DST_DB_WRITE", "DBDATA_SECRET_DBDATA_SYNC_CONNECTION_SRC_DB"], environ.Keys.Where(k => k.StartsWith("DBDATA_SECRET_", StringComparison.Ordinal) || k.StartsWith("DBDATA_BUILD_", StringComparison.Ordinal)).Order(StringComparer.Ordinal));
+        // Sync's second login (plan 28c E20): the runner's one login for the connection is given under the plain name and under the run name, and nothing else
+        Assert.Equal(SrcSecret, environ["DBDATA_SECRET_DBDATA_SYNC_CONNECTION_SRC_DB_RUN"]);
+        Assert.Equal(["DBDATA_BUILD_DST_DB_READ", "DBDATA_BUILD_DST_DB_WRITE", "DBDATA_SECRET_DBDATA_SYNC_CONNECTION_SRC_DB", "DBDATA_SECRET_DBDATA_SYNC_CONNECTION_SRC_DB_RUN"], environ.Keys.Where(k => k.StartsWith("DBDATA_SECRET_", StringComparison.Ordinal) || k.StartsWith("DBDATA_BUILD_", StringComparison.Ordinal)).Order(StringComparer.Ordinal));
 
         // not in argv, not in any file of the scratch directory or the package
         var cmdline = await File.ReadAllTextAsync($"/proc/{pid}/cmdline");
@@ -253,8 +255,8 @@ public sealed class ConnectionSlotTests : IDisposable
             return [.. h.Log(run.Id).Where(l => l.Message.StartsWith("var: ", StringComparison.Ordinal)).Select(l => l.Message[5..])];
         }
 
-        Assert.Equal(["DBDATA_SECRET_DBDATA_SYNC_CONNECTION_A_DB"], Vars("prod"));
-        Assert.Equal(["DBDATA_SECRET_DBDATA_SYNC_CONNECTION_B_DB"], Vars("staging"));
+        Assert.Equal(["DBDATA_SECRET_DBDATA_SYNC_CONNECTION_A_DB", "DBDATA_SECRET_DBDATA_SYNC_CONNECTION_A_DB_RUN"], Vars("prod").Order(StringComparer.Ordinal));
+        Assert.Equal(["DBDATA_SECRET_DBDATA_SYNC_CONNECTION_B_DB", "DBDATA_SECRET_DBDATA_SYNC_CONNECTION_B_DB_RUN"], Vars("staging").Order(StringComparer.Ordinal));
     }
 
     [Theory, MemberData(nameof(Engines))]

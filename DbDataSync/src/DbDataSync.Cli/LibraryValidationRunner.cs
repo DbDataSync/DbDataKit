@@ -57,6 +57,8 @@ public static class LibraryValidationRunner
         DbConnection dbConnection;
         try
         {
+            // the check creates and drops tables of its own: the run login writes (plan 28c, E20)
+            connection = connection.ForRole(DbDataSync.Core.Config.CredentialRole.Run);
             var credential = connection.AuthMode == AuthMode.SqlAuth
                 ? secretStore.Resolve(connection.CredentialSecretRef!)
                 : null;

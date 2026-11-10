@@ -40,7 +40,7 @@ public sealed record ConnectionUse(string Process, string Name, string Role, str
 /// One connection of one product, as its management API reports it (<c>GET /api/v1/connections</c>). It carries where the connection goes and the <b>reference</b> to its secret, never a value: <see cref="ConnectionInventoryJson"/> drops anything that is not
 /// a reference.
 /// </summary>
-public sealed record InventoryConnection(string Name, string Kind, string? Engine, string? Host, string? Database, string? SecretRef, IReadOnlyList<ConnectionUse> UsedBy)
+public sealed record InventoryConnection(string Name, string Kind, string? Engine, string? Host, string? Database, string? SecretRef, IReadOnlyList<ConnectionUse> UsedBy, string? RunSecretRef = null)
 {
     /// <summary>The roles any use needs, in the order read, run, write.</summary>
     public IReadOnlyList<string> Roles => [.. UseRoles.All.Where(r => UsedBy.Any(u => u.Role == r))];
@@ -59,7 +59,15 @@ public static class ConnectionInventoryJson
         ["connections"] = new JsonArray([.. connections.OrderBy(c => c.Name, StringComparer.Ordinal).Select(c => (JsonNode)Connection(c))]),
     };
 
-    private static JsonObject Connection(InventoryConnection c) => new()
+    private static JsonObject Connection(InventoryConnection c)
+    {
+        var node = ConnectionBody(c);
+        // a second login (Sync's run role, plan 28c E20) is reported as its own key, only when there is one: the answer of a connection with one login is what it was
+        if (Reference(c.RunSecretRef) is { } run) node["run_secret_ref"] = run;
+        return node;
+    }
+
+    private static JsonObject ConnectionBody(InventoryConnection c) => new()
     {
         ["name"] = c.Name,
         ["kind"] = c.Kind,
@@ -94,7 +102,7 @@ public static class ConnectionInventoryJson
         {
             var uses = (node["used_by"] as JsonArray ?? []).OfType<JsonObject>()
                 .Select(u => new ConnectionUse(Text(u, "process") ?? "", Text(u, "name") ?? "", Text(u, "role") ?? "", Text(u, "version"), Text(u, "group"), Text(u, "instance"), Text(u, "channel"))).ToList();
-            found.Add(new InventoryConnection(Text(node, "name") ?? "", Text(node, "kind") ?? "", Text(node, "engine"), Text(node, "host"), Text(node, "database"), Text(node, "secret_ref"), uses));
+            found.Add(new InventoryConnection(Text(node, "name") ?? "", Text(node, "kind") ?? "", Text(node, "engine"), Text(node, "host"), Text(node, "database"), Text(node, "secret_ref"), uses, Text(node, "run_secret_ref")));
         }
 
         return found;

@@ -99,6 +99,20 @@ The runner serves the channels `prod` and `dev` by default (`--channels`, or `DB
 
 A **package** is a manifest (`package/1`, see `DbDataKit.Runner.Abstractions`) and its code, versioned and published per channel; the runner switches to a new version atomically and keeps the last good one. The runner starts two things: a **.NET assembly** through the task host (a compiled project, or a `.csx` script published compiled: the runner never compiles) and an **executable** (any language; it speaks the runner protocol, `DbDataKit.Runner.Protocol`, or only exits, and an executable inside a package names an interpreter). A **runtime package** (`runtime: true`) is an engine published once that definition packages name in `launch.runtime`; Sync's and Build's engines run this way (plan 28c). A notebook kind (a .NET notebook over a project, run headless) is not built.
 
+## Logins of a Sync replication set
+
+A replication set (plan 28c) runs with the **run** login of each of its connections and never sees the read login Sync's own screens use (Sync's docs, "Two logins: read and run"). The run login is put on the runner's machine by hand today (no command sends it yet,
+plan 28c E20d), for each connection of the set:
+
+1. `<runner directory>/connections/<name>.yaml`, a `connection/1` file named like the Sync connection, with `auth: {mode: sql, user: <run user>, password_secret: env:<NAME>_RUN_PASSWORD}`; `secret:dbdata:sync:connection:<name>:run` works too (the environment variable
+   `DBDATA_SECRET_DBDATA_SYNC_CONNECTION_<NAME>_RUN`, or a file of that name in `CREDENTIALS_DIRECTORY`).
+2. The password in the runner service's environment (systemd `LoadCredential=` or an `EnvironmentFile=` only the service account reads; the Windows service's environment): never in a file of the package or on a command line. An environment variable needs a restart of the runner;
+   a file in the credentials directory is read at each run.
+3. The slot bound to that connection in the channel (`PUT /api/v1/bindings/<channel>/integration/<name>`, or Sync's Runner screen).
+
+The runner hands the engine the value as `DBDATA_SECRET_DBDATA_SYNC_CONNECTION_<NAME>` and `..._<NAME>_RUN` (it cannot tell which of the two a connection reads), registers it with the log redactor and writes it nowhere else. A login that is missing fails the run naming the slot, the
+connection and the reference.
+
 ## The security posture
 
 The suite gives simple options, guardrails and secure defaults, and **administrators decide**: it does not refuse a configuration because it could be a security concern, it makes the choice explicit, and every loosened default is a recorded choice (who, when, what changes). One kind of runner: any runner can run any task, and an administrator may label runners and route packages by label (`requires`). The environment is the administrator's: the runner reports what the machine can enforce and reach (`os`, `network`, `memory_limit`, `cpu_limit`) and enforces no network policy of its own. The defaults: every task in its own process, under the runner's low-privilege service account, with time and memory limits and packages only from published, hash-verified artifacts. A package that asks for more (run in process, longer limits, a more privileged account, a recompile on the instance) gets it only through a posture choice. A runner's own write logins are acceptable by design: Build's write login leaving Build is no concern, as DbDataStore's data write login already lives outside its server.

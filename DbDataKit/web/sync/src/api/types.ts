@@ -75,6 +75,10 @@ export interface ConnectionConfig {
   authMode: AuthMode
   userId: string | null
   credentialSecretRef: string | null
+  /** The second login (plan 28c, E20), the one a replication pass connects with: its user (null: the same as `userId`) and the secret of its password. Null when one login serves both roles. */
+  runUserId?: string | null
+  runCredentialSecretRef?: string | null
+  hasRunLogin?: boolean
   /** Seconds to wait for the connection to open. Null means the default (30); 0 means no limit. */
   connectTimeoutSeconds: number | null
   /** Seconds any one query may run. Null means the default (1800); 0 means no limit. */
@@ -87,6 +91,12 @@ export interface ConnectionConfig {
   testQuery?: string | null
 }
 
+/** The login a connection's run role uses when it is not the read login's (plan 28c, E20). */
+export interface RunLoginInput {
+  userId?: string | null
+  password?: string | null
+}
+
 export interface ConnectionInput {
   name: string
   driverType: DriverType
@@ -97,6 +107,8 @@ export interface ConnectionInput {
   authMode: AuthMode
   userId?: string | null
   password?: string | null
+  /** The second (run) login, E20: null or absent when one login serves both roles. A blank `password` keeps the one stored. */
+  runLogin?: RunLoginInput | null
   connectTimeoutSeconds?: number | null
   commandTimeoutSeconds?: number | null
   properties?: Record<string, string>
@@ -826,6 +838,9 @@ export interface CredentialSource {
   secretRef: string
   environmentVariable: string
   requiresCredential: boolean
+  /** The run login's reference and the variable it resolves as (E20); null with one login. */
+  runSecretRef?: string | null
+  runEnvironmentVariable?: string | null
 }
 
 export interface StagingCapability {

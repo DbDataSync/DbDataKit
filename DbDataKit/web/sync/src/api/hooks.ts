@@ -802,6 +802,11 @@ export function useTestConnection() {
   return useMutation({ mutationFn: (name: string) => api.connections.test(name) })
 }
 
+/** E20: the same test with the connection's run login. */
+export function useTestRunLogin() {
+  return useMutation({ mutationFn: (name: string) => api.connections.test(name, 'run') })
+}
+
 /** Phase 109j item 4: the deep, connection-scoped check — a separate mutation from `useTestConnection`
  * since it's slower (a real child process, a real scratch table) and needs DDL rights. */
 export function useValidateLibrary() {

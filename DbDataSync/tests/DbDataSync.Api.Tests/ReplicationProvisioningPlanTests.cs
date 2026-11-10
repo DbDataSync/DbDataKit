@@ -319,6 +319,30 @@ public sealed class ReplicationProvisioningPlanTests : IDisposable
         Assert.False(manualStep.Automatic);
     }
 
+    // ---- Credential roles (plan 28c, E20): planning reads with the read login, an apply writes with the run login ----
+
+    [Fact]
+    public async Task Planning_opens_every_endpoint_with_the_read_login_and_an_apply_writes_with_the_run_login()
+    {
+        var sourceDriver = SatisfiedTargetDriver();
+        var targetDriver = CreateTableTargetDriver();
+        var factory = new FakeConnectionFactory(connectionName => connectionName == "src" ? sourceDriver : targetDriver);
+        SaveMapping("a", "src", "Sales", "Orders", "tgt", "DW", "Orders");
+
+        var service = CreateService(factory);
+        var plan = await service.GetReplicationPlanAsync(Replication, CancellationToken.None);
+        Assert.All(factory.OpenedAs, o => Assert.Equal(CredentialRole.Read, o.Role));
+        Assert.Contains(factory.OpenedAs, o => o.Connection == "tgt");
+
+        var step = Assert.Single(Assert.Single(plan.Groups, g => g.Side == ProvisioningEndpointSide.Target).Steps);
+        factory.OpenedAs.Clear();
+        await service.ApplyReplicationPlanAsync(Replication, [step.Id], CancellationToken.None);
+
+        // the fresh plan an apply makes reads; the one connection the DDL runs on is the run login's
+        Assert.Contains(("tgt", CredentialRole.Run), factory.OpenedAs);
+        Assert.DoesNotContain(factory.OpenedAs, o => o.Role == CredentialRole.Run && o.Connection == "src");
+    }
+
     // ---- Apply: subset, no-longer-needed, stop-at-first-failure, prerequisite warning -------------
 
     [Fact]
@@ -513,12 +537,14 @@ public sealed class ReplicationProvisioningPlanTests : IDisposable
     {
         public int OpenCount { get; private set; }
         public List<string> Opened { get; } = [];
+        public List<(string Connection, CredentialRole Role)> OpenedAs { get; } = [];
 
         public Task<(DbConnection Connection, IDriver Driver)> OpenAsync(
-            string connectionName, CancellationToken cancellationToken)
+            string connectionName, CredentialRole role, CancellationToken cancellationToken)
         {
             OpenCount++;
             Opened.Add(connectionName);
+            OpenedAs.Add((connectionName, role));
             DbConnection connection = connectionFor?.Invoke(connectionName) ?? new FakeDbConnection();
             return Task.FromResult((connection, driverFor(connectionName)));
         }

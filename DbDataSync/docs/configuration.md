@@ -580,7 +580,7 @@ extensions:
     test_query: select 1
 ```
 
-`extensions.sync` also holds `scripts` and `hooks` (the bindings of a connection), `database` (for a connection with a `connection_string`; with an `address` the
+`extensions.sync` also holds `run_user` and `run_password_secret` (a second login, see "Two logins: read and run" below), `scripts` and `hooks` (the bindings of a connection), `database` (for a connection with a `connection_string`; with an `address` the
 database is `address.database`) and a `connect_timeout_seconds` or `command_timeout_seconds` the shared `timeouts` cannot say (`0` for unlimited, or more than a day).
 The password is never in the file: `password_secret` is the reference `secret:dbdata:sync:connection:<name>` to the encrypted store (see "Secrets").
 Unknown keys are errors with their position; `tls`, `read_login`, `write_login`, `connection_string_secret`, `access` and `managed_by` are refused because Sync
@@ -597,6 +597,44 @@ connections fail with a message naming each such file and this form (`dbdatasync
 or delete each (the Connections page can delete a connection it cannot read) and create it again. The passwords in the secret store keep their names, so the
 `password_secret` of a rewritten file needs no new `secret set`.
 
+## Two logins: read and run
+
+A connection has one login by default, and it does everything. It may have **two**, because the person who looks after a database may want a replication to use a login that can write where the screens that browse and preview use one that can only read
+(plan 28c, E20):
+
+| Login | What uses it | Where it is kept |
+| --- | --- | --- |
+| **read** (`auth.user`, `auth.password_secret`) | this server's own use of the connection: browsing metadata, **Test connection**, previews, a provisioning plan's reading, segment bounds and counts | the encrypted store, `dbdata:sync:connection:<name>` |
+| **run** (`extensions.sync.run_user`, `extensions.sync.run_password_secret`) | what a replication does: reading the source and writing the target in a pass, and the steps a provisioning **apply** runs; the login a runner is given | the encrypted store, `dbdata:sync:connection:<name>:run` (on a runner, see below) |
+
+Without a run login the read login serves both, exactly as before. `run_user` is optional (the read user when absent); `run_password_secret` is `secret:dbdata:sync:connection:<name>:run`, and a file that names another connection's secret is refused.
+
+```yaml
+auth: { mode: sql, user: sync_read, password_secret: secret:dbdata:sync:connection:orders }
+extensions:
+  sync:
+    run_user: sync_run
+    run_password_secret: secret:dbdata:sync:connection:orders:run
+```
+
+The Connections page shows both: tick **Use a different login for replications (run)**, give the user (blank: the read user) and the password (blank keeps the stored one), and **Test run login** tries it. **Test connection** tries the read login. A file with a
+misspelled key (`run_pasword_secret`) is refused naming the file, the line and the right key; a file written before this setting loads as it did (the keys are optional, so `connection/1` itself is unchanged). A connection with a run login has two secrets; the API's
+connection inventory (`GET /api/v1/connections`) lists both references (`secret_ref`, `run_secret_ref`) and never a value, and deleting the connection deletes both.
+
+### On a runner
+
+A runner never has the read login. A replication set published to a runner declares a slot per connection; the administrator of the runner binds each slot to a connection of the runner's own (`PUT /api/runner/package/bindings`, the Runner screen), and the runner puts
+that connection's login in the engine's environment under both `DBDATA_SECRET_DBDATA_SYNC_CONNECTION_<NAME>` and `DBDATA_SECRET_DBDATA_SYNC_CONNECTION_<NAME>_RUN` (the engine reads whichever its connection names; it opens with the run role only). Today the
+value reaches the runner's machine by hand, which is the one manual step left; there is no command that sends it yet (plan 28c, E20d). On the runner's machine, for each connection of the set:
+
+1. Write `<runner directory>/connections/<name>.yaml`, a `connection/1` file of the same name as the Sync connection, whose login is the run login: `auth: {mode: sql, user: <run user>, password_secret: env:<NAME>_RUN_PASSWORD}` (or
+   `secret:dbdata:sync:connection:<name>:run`, which the runner reads from its environment as `DBDATA_SECRET_DBDATA_SYNC_CONNECTION_<NAME>_RUN`, or from a file of that name in `CREDENTIALS_DIRECTORY`).
+2. Put the password where that reference looks: in the environment of the runner's service (a systemd unit's `LoadCredential=` and `CREDENTIALS_DIRECTORY`, or an `EnvironmentFile=` readable by the service account only; on Windows the service's environment), never in the file and never on a
+   command line. Restart the runner after setting an environment variable; a credentials file is read at each run.
+3. Bind the slot to that connection (the Runner screen, or `dbdatarunner` bindings) and check it: a run whose login is not found fails naming the slot, the connection and the reference, and never falls back to another login.
+
+See the runner's README ("Logins of a Sync replication set") for the same steps from the runner's side.
+
 ## Secrets
 
 Connection credentials and the state database's password are in an **encrypted store** under the repository root: `secrets/secrets.yaml`,
@@ -605,7 +643,7 @@ each value AES-256-GCM encrypted under a key that is protected by DPAPI on Windo
 `secrets/` is added to the repository's `.gitignore` when the store is first opened. The same store is the one every DbData product uses
 (`DbDataKit.Secrets.Store`); back up `secrets/` together with its key, or the values cannot be read again.
 
-Names are `dbdata:sync:<kind>:<name>`: a connection named `<name>` has its password at `dbdata:sync:connection:<name>`, and the state
+Names are `dbdata:sync:<kind>:<name>`: a connection named `<name>` has its password at `dbdata:sync:connection:<name>` (its second, run login's at `dbdata:sync:connection:<name>:run`), and the state
 database's at `dbdata:sync:config:stateConnectionString`. Names are lower-cased, so two connections whose names differ only by case share a
 secret. The names from before the store (`dbdatasync:connection:...`) are **not read**: the secrets are set again (`dbdatasync secret set`,
 or save the connection with its password), and `dbdatasync secret set` with an old-form name is refused with the form to use.
