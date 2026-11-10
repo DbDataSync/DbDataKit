@@ -62,6 +62,20 @@ try {
   if (Get-Service $ServiceName -ErrorAction SilentlyContinue) { throw 'The service still exists after uninstall.' }
   Write-Host 'Service end-to-end: OK'
 }
+catch {
+  # A service that fails to start says why only in the Windows event log (error 1053 from the service manager says nothing else): print it.
+  Write-Host "--- failure: $($_.Exception.Message) ---"
+  Write-Host '--- service state ---'; & sc.exe query $ServiceName
+  Write-Host '--- recent Application and System log ---'
+  foreach ($log in 'Application', 'System') {
+    Get-WinEvent -FilterHashtable @{ LogName = $log; StartTime = (Get-Date).AddMinutes(-10) } -ErrorAction SilentlyContinue |
+      Where-Object { $_.ProviderName -like '*DbDataSync*' -or $_.ProviderName -like '*.NET*' -or $_.ProviderName -like 'Service Control Manager' -or $_.ProviderName -like 'Application Error' } |
+      Select-Object -First 15 |
+      ForEach-Object { Write-Host ("{0} {1} {2}: {3}" -f $_.TimeCreated.ToString('HH:mm:ss'), $log, $_.ProviderName, ($_.Message -replace '\s+', ' ')) }
+  }
+  Write-Host "--- $Repo ---"; Get-ChildItem -Recurse -Force $Repo -ErrorAction SilentlyContinue | Select-Object -First 40 | ForEach-Object { Write-Host $_.FullName }
+  throw
+}
 finally {
   # Leave nothing behind on a failure.
   if (Get-Service $ServiceName -ErrorAction SilentlyContinue) {
