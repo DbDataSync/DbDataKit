@@ -149,7 +149,8 @@ public sealed class CredentialRolesTests : IDisposable
         var path = FileOf("orders");
         var original = File.ReadAllText(path);
 
-        File.WriteAllText(path, original.Replace("run_password_secret: secret:dbdata:sync:connection:orders:run\n", ""));
+        // The file is written with the platform's line ending (CRLF on Windows), so drop the line by pattern, not by text.
+        File.WriteAllText(path, System.Text.RegularExpressions.Regex.Replace(original, @"^[ \t]*run_password_secret:.*\r?\n", "", System.Text.RegularExpressions.RegexOptions.Multiline));
         Assert.Contains("run_user", Assert.Throws<ConfigFileException>(() => _repository.LoadConnection("orders")).Message);
 
         File.WriteAllText(path, original.Replace("secret:dbdata:sync:connection:orders:run", "hunter2"));
