@@ -2,6 +2,9 @@
   <PropertyGroup>
     <AssemblyName>dbdatakit</AssemblyName>
     <Description>The dbdatakit console: the one web interface for the DbData servers (plan 13, U07).</Description>
+    <!-- The reference only orders the build (ReferenceOutputAssembly=false) and the task host is always published framework-dependent below. Under PublishSingleFile=true this program is self-contained
+         while the task host, reached with other global properties, may not be (NETSDK1150/NETSDK1151 depending on the order MSBuild evaluates them; seen on Windows CI), so the SDK's check is off. -->
+    <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />

@@ -171,7 +171,7 @@ public sealed class GroupTests
         var instances = new RunnerInstances(h.State);
         var crashed = h.Engine.InstanceId!.Value;
         instances.SetLabel(crashed, "gpu", InstanceLabel.Admin);
-        var (exit, _, error) = await Label(h, "remove", "os:linux", crashed);
+        var (exit, _, error) = await Label(h, "remove", $"os:{LimitCapabilities.Detect()[LimitCapabilities.Os]}", crashed);
         Assert.NotEqual(0, exit);                                                                            // a reported label is read-only
         Assert.Contains("reported by the runner", error);
         await h.StopAsync();                                                                                 // marks it gone
