@@ -138,7 +138,7 @@ both installers against a local fake of the GitHub releases API (`dist-ci.yml`).
 `suite-release.yml` is the one release of everything from one commit: it builds the console's zips, MSI and image, calls the six product release workflows (build, gateway, runner, store, workspace, sync), and builds and pushes the images (`ghcr.io/<owner>/dbdatakit|dbdatabuild|dbdatagateway`; DbDataSync's image keeps `dbdatasync-publish-image.yml`). `-f dry_run=true` builds all of it, keeps each product's files as the run's `release-<product>` artifacts, checks every one has its zips, MSI and a verifying `SHA256SUMS`, and tags and pushes nothing. Every product of one suite release gets the same version string (the product workflows take it as their `version` input). Each product workflow still releases on its own.
 
 If a `<product>/dist` release is deleted or loses its files, run the `dist-republish.yml` workflow for that product
-(`gh workflow run dist-republish.yml --ref main -f product=dbdatagateway`): it re-binds the files for the newest stable release and uploads them.
+(`gh workflow run dist-republish.yml --ref main -f product=dbdatagateway`): it re-binds the files for the newest stable release and uploads them. `-f product=dbdatakit-full` binds the single-server Scoop manifest again with the generator of the ref it runs on, for the suite version in `-f version=...` (any channel; empty means the newest stable) from each member's release, and replaces the asset of that channel's fixed `dbdatakit-full` release: for a changed manifest without a new release of every product.
 
 ## The Windows installer (MSI)
 
