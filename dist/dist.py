@@ -9,6 +9,12 @@ products live in <Product>/dist.json; this script turns the generic templates in
 
 writes out/<product>.json (Scoop), out/install.ps1 and out/install.sh (each only if the product has a platform it applies to). With no
 --version/--sums (the installers only), the Scoop manifest is skipped: a manifest pins one release.
+
+    dist.py bind --suite dist/suite.json --version 2026.10.19.1200 --sums out/*/SHA256SUMS --out out/
+
+writes out/dbdatakit-full.json, one Scoop manifest for every member product of a suite release (plan 33 section 6a): the members' zips as
+`url`/`hash` lists, one `extract_to` folder and one `bin` alias each. It installs programs only (no post_install, no installer scripts).
+`--sums` takes one SHA256SUMS per member, or one file that covers all of them.
 """
 import argparse
 import json
@@ -124,6 +130,115 @@ def scoop_manifest(meta, version, repo, sums):
     return manifest
 
 
+SUITE_PRODUCT = "dbdatakit-full"
+
+
+def load_suite(path, root):
+    """The members in start order: [(meta, folder)]. A member's dist.json that is missing, or has no win-x64 platform, is an error naming it."""
+    suite = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+    members = []
+    seen = set()
+    for m in suite.get("members") or []:
+        product, rel, folder = m.get("product"), m.get("meta"), m.get("folder")
+        if not (product and rel and folder):
+            raise SystemExit(f"{path}: every member needs 'product', 'meta' and 'folder' ({m})")
+        if folder in seen or not re.fullmatch(r"[a-z][a-z0-9]*", folder):
+            raise SystemExit(f"{path}: folder '{folder}' of {product} is repeated or not a lowercase name")
+        seen.add(folder)
+        meta_path = pathlib.Path(root) / rel
+        if not meta_path.is_file():
+            raise SystemExit(f"suite member {product}: {rel} does not exist")
+        meta = load_meta(meta_path)
+        if meta["product"] != product:
+            raise SystemExit(f"suite member {product}: {rel} describes '{meta['product']}'")
+        if "win-x64" not in meta["platforms"]:
+            raise SystemExit(f"suite member {product} has no win-x64 platform in {rel}")
+        members.append((meta, folder))
+    if not members:
+        raise SystemExit(f"{path}: no members")
+    return members
+
+
+def _alias(meta):
+    return meta["platforms"]["win-x64"]["exe"].removesuffix(".exe")
+
+
+# The ceiling a console administrator may use on each server (plans 13 W12, 28a R19): what the pairing allows, never what anyone holds.
+_PAIR_ROLES = {"dbdatastore": "viewer,operator,author,approver,admin", "dbdataworkspace": "viewer,operator,author,admin"}
+_PAIR_ROLES_DEFAULT = "viewer,operator,admin"
+
+
+def suite_notes(members):
+    """What an administrator runs by hand after the install, in member order (this first release registers and pairs nothing itself)."""
+    lines = [
+        "This package installs the programs and nothing else: no service is registered, nothing is started and nothing is paired.",
+        "Use one install route per machine: do not mix it with a product's own MSI, install.ps1 or Scoop manifest (they share the program folders and the service names).",
+        "Run these by hand, in an elevated prompt, in this order:",
+    ]
+    n = 0
+    for meta, _ in members:
+        service = meta.get("service")
+        if service:
+            n += 1
+            register = service["register"].replace("{name}", service["name"])
+            lines.append(f"{n}. {_alias(meta)} {register}")
+    console = _alias(members[0][0])
+    n += 1
+    lines.append(f"{n}. Start the console: {console} server run (or start its service).")
+    for meta, _ in members[1:]:
+        n += 1
+        lines.append(
+            f"{n}. Pair {_alias(meta)}: run '{_alias(meta)} server pair --max-role {_PAIR_ROLES.get(meta['product'], _PAIR_ROLES_DEFAULT)}' (it prints a single-use code), then "
+            f"'{console} instance add <https address of that server> --code <code>'."
+        )
+    return "\n".join(lines)
+
+
+def suite_manifest(members, version, repo, sums):
+    """One manifest for all members: url, hash, extract_to and bin are lists in member order. Packaging only: no script keys."""
+    urls, hashes, folders, bins = [], [], [], []
+    missing = []
+    for meta, folder in members:
+        name = zip_name(meta["product"], version, "win-x64")
+        if name not in sums:
+            missing.append(f"{meta['product']} ({name})")
+            continue
+        urls.append(f"https://github.com/{repo}/releases/download/{meta['product']}/v{version}/{name}")
+        hashes.append(sums[name])
+        folders.append(folder)
+        bins.append([f"{folder}\\{meta['platforms']['win-x64']['exe']}", _alias(meta)])
+    if missing:
+        raise SystemExit("SHA256SUMS does not list the win-x64 zip of suite member " + ", ".join(missing))
+    manifest = {
+        "version": version,
+        "description": "DbDataKit, every member product on one server: " + ", ".join(m["product"] for m, _ in members) + ". Installs the programs only.",
+        "homepage": members[0][0]["homepage"],
+        "license": members[0][0]["license"],
+        "architecture": {"64bit": {"url": urls, "hash": hashes}},
+        "extract_to": folders,
+        "bin": bins,
+        "notes": suite_notes(members),
+    }
+    if any(m.get("requiresVcRuntime") for m, _ in members):
+        manifest["suggest"] = {"Visual C++ Redistributable": ["extras/vcredist2022"]}
+    return manifest
+
+
+def bind_suite(args):
+    if not (args.version and args.sums):
+        raise SystemExit("--suite needs --version and --sums")
+    members = load_suite(args.suite, args.root)
+    sums = {}
+    for path in args.sums:
+        sums.update(parse_sums(pathlib.Path(path).read_text(encoding="utf-8")))
+    manifest = suite_manifest(members, args.version, args.repo, sums)
+    out = pathlib.Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    target = out / f"{SUITE_PRODUCT}.json"
+    target.write_text(json.dumps(manifest, indent=4) + "\n", encoding="utf-8", newline="\n")
+    print(f"bound {SUITE_PRODUCT}: {target.name} ({len(members)} members)")
+
+
 def _replace_block(template, begin_comment, body):
     """Swaps everything between the BEGIN and END marker lines (the markers stay)."""
     lines = template.splitlines()
@@ -175,6 +290,10 @@ def bind_sh(template, meta, repo):
 
 
 def bind(args):
+    if args.suite:
+        return bind_suite(args)
+    if not args.meta:
+        raise SystemExit("--meta (or --suite) is required")
     meta = load_meta(args.meta)
     out = pathlib.Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -183,7 +302,7 @@ def bind(args):
     if args.version:
         if not args.sums:
             raise SystemExit("--sums is required with --version")
-        sums = parse_sums(pathlib.Path(args.sums).read_text(encoding="utf-8"))
+        sums = parse_sums(pathlib.Path(args.sums[0]).read_text(encoding="utf-8"))
         manifest = scoop_manifest(meta, args.version, args.repo, sums)
         if manifest:
             target = out / f"{meta['product']}.json"
@@ -208,9 +327,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
     b = sub.add_parser("bind", help="write a product's Scoop manifest and installers")
-    b.add_argument("--meta", required=True, help="path to <Product>/dist.json")
+    b.add_argument("--meta", help="path to <Product>/dist.json")
+    b.add_argument("--suite", help="path to dist/suite.json: bind the suite manifest dbdatakit-full.json instead of one product")
+    b.add_argument("--root", default=str(HERE.parent), help="with --suite: the folder the members' dist.json paths are relative to (the repository root)")
     b.add_argument("--version", help="the release version (no leading v); needed for the Scoop manifest")
-    b.add_argument("--sums", help="the release's SHA256SUMS; needed with --version")
+    b.add_argument("--sums", nargs="+", help="the release's SHA256SUMS; needed with --version (with --suite, one per member or one for all)")
     b.add_argument("--repo", default=DEFAULT_REPO)
     b.add_argument("--out", required=True)
     b.set_defaults(func=bind)

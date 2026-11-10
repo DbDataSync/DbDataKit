@@ -326,6 +326,26 @@ jobs:
           fi
 
   # The dry run's answer: every product kept its package, and its checksums list what is in it.
+  suite-manifest:
+    # The one Scoop manifest for every member (plan 33 section 6a, SC11); it pins each member's zip and hash, so it needs every member's release to exist.
+    if: ${{ !inputs.dry_run }}
+    needs: [guard, console, build, gateway, runner, store, workspace, sync]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.guard.outputs.sha }}
+      - uses: ./.github/actions/publish-suite-dist
+        with:
+          version: ${{ needs.guard.outputs.version }}
+          prerelease: ${{ needs.guard.outputs.prerelease }}
+          sha: ${{ needs.guard.outputs.sha }}
+
   verify:
     # The images job is skipped for a snapshot, so this cannot rely on the default (every need succeeded).
     if: ${{ inputs.dry_run && !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
