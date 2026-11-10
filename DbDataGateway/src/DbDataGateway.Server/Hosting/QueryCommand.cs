@@ -17,7 +17,7 @@ public static class QueryCommand
     {
         string? address = Option(args, "--address") ?? "https://localhost:8815";
         string? user = Option(args, "--user");
-        string? password = Option(args, "--password") ?? Environment.GetEnvironmentVariable("DBGATEWAY_PASSWORD");
+        string? password = Option(args, "--password") ?? Environment.GetEnvironmentVariable("DBDATAKIT_GATEWAY_PASSWORD");
         string? sql = Option(args, "--sql");
         if (user is null || password is null || sql is null)
         {

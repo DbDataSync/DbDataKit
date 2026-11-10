@@ -12,7 +12,7 @@ namespace DbDataSync.Core.Secrets;
 /// <c>dbdata:sync:...</c>.
 /// <para>
 /// The store lives in <c>secrets/</c> under a data directory (the repository root for the API and the CLI, a directory a runner gives the engine otherwise: never a read-only package view, plan 28c ED8), its key in <c>secrets/keys</c> (DPAPI on Windows, a 0600 file elsewhere, created on first use)
-/// or in the key file <c>DBDATA_SECRETS_KEY_FILE</c> names. Nothing here ever logs or prints a value.
+/// or in the key file <c>DBDATAKIT_SECRETS_KEY_FILE</c> names. Nothing here ever logs or prints a value.
 /// </para>
 /// </summary>
 public sealed class SecretStore
@@ -32,7 +32,7 @@ public sealed class SecretStore
     }
 
     /// <summary>
-    /// The store in <c>secrets/</c> under <paramref name="dataDirectory"/>, then the environment (<c>DBDATA_SECRET_...</c>) and the credentials directory. It creates the store's directory and key there and writes nothing else:
+    /// The store in <c>secrets/</c> under <paramref name="dataDirectory"/>, then the environment (<c>DBDATAKIT_SECRET_...</c>) and the credentials directory. It creates the store's directory and key there and writes nothing else:
     /// in particular it never touches a <c>.gitignore</c> (ED8: the directory may be beside a read-only package view). A directory that is a git working tree is opened with <see cref="OpenInRepository"/>.
     /// </summary>
     public static SecretStore Open(string dataDirectory, Func<string, string?>? environment = null)

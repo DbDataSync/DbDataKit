@@ -44,7 +44,7 @@ public sealed class RunnerHarness : IAsyncDisposable
             Channels = channels ?? ["dev"],
             TaskHostPath = ServerBuild.TaskHost,
             MaxArtifactBytes = maxArtifactBytes ?? RunnerPublishing.DefaultMaxArtifactBytes,
-            Secrets = new DbDataKit.Secrets.SecretResolverChain([new DbDataKit.Secrets.EnvSecretProvider(k => k == "DBDATA_SECRET_SHOP_HOOK" ? WebhookSecret : null)]),
+            Secrets = new DbDataKit.Secrets.SecretResolverChain([new DbDataKit.Secrets.EnvSecretProvider(k => k == "DBDATAKIT_SECRET_SHOP_HOOK" ? WebhookSecret : null)]),
             InstanceLeaseOverride = lease,
             Staging = staging,
             StagingContracts = stagingContracts,

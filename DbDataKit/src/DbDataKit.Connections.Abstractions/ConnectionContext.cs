@@ -7,7 +7,7 @@ public sealed class ResolvedLogin(LoginRole role, AuthMode mode, string source) 
 {
     public LoginRole Role { get; } = role;
     public AuthMode Mode { get; } = mode;
-    /// <summary>Where it came from, for audit (names only, e.g. <c>env:DBDATA_BUILD_WH_READ</c>).</summary>
+    /// <summary>Where it came from, for audit (names only, e.g. <c>env:DBDATAKIT_BUILD_WH_READ</c>).</summary>
     public string Source { get; } = source;
     public string? UserName { get; init; }
     public SecretValue? Password { get; init; }

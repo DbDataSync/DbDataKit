@@ -7,19 +7,19 @@ using Grpc.Net.Client;
 namespace DbDataGateway.Server.Hosting;
 
 /// <summary>
-/// The Gateway's way of connecting for the <c>semantic</c> noun (plan 19, J15): a Flight SQL session as a user of a running gateway. The password is read from <c>DBGATEWAY_PASSWORD</c> (or <c>--password</c>, which no usage advertises), so an agent that
+/// The Gateway's way of connecting for the <c>semantic</c> noun (plan 19, J15): a Flight SQL session as a user of a running gateway. The password is read from <c>DBDATAKIT_GATEWAY_PASSWORD</c> (or <c>--password</c>, which no usage advertises), so an agent that
 /// is offered these commands never puts it in a tool call. The statement goes to the model's source, <c>semantic:&lt;model&gt;</c>, and runs as that user.
 /// </summary>
 internal sealed class GatewaySemanticSession(GatewayFlightClient client) : ISemanticSession
 {
-    public const string Usage = "[--address URL] --user U [--insecure]   (the password is DBGATEWAY_PASSWORD)";
+    public const string Usage = "[--address URL] --user U [--insecure]   (the password is DBDATAKIT_GATEWAY_PASSWORD)";
     public static readonly string[] Options = ["address", "user", "password"];
     public static readonly string[] Flags = ["insecure"];
 
     public static async Task<ISemanticSession> ConnectAsync(CliArgs arguments, CliContext context)
     {
         var user = arguments.Get("user") ?? throw new InvalidOperationException("--user names the gateway account to run as.");
-        var password = arguments.Get("password") ?? Environment.GetEnvironmentVariable("DBGATEWAY_PASSWORD") ?? throw new InvalidOperationException("The password is the DBGATEWAY_PASSWORD environment variable.");
+        var password = arguments.Get("password") ?? Environment.GetEnvironmentVariable("DBDATAKIT_GATEWAY_PASSWORD") ?? throw new InvalidOperationException("The password is the DBDATAKIT_GATEWAY_PASSWORD environment variable.");
         var handler = new SocketsHttpHandler();
         if (arguments.Has("insecure")) handler.SslOptions.RemoteCertificateValidationCallback = (_, _, _, _) => true;
         var client = new GatewayFlightClient(arguments.Get("address") ?? "https://localhost:8815", new GrpcChannelOptions { HttpHandler = handler });

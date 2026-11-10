@@ -13,7 +13,7 @@ import pg from 'pg'
 // publishing the model `territories` to its group, a PostgreSQL (`DBDATA_E2E_PG`, an Npgsql connection string), Bun and Node (the store is made from the web workspace's packages: `npm ci` in DbDataKit/web).
 //
 // Ports (a port table: 8601 the identity home, 8602 the apps host, 8603 the management API). The story starts its own servers, so the config has no webServer for it; it needs no console and sorts anywhere.
-// `DBDATA_E2E_GATEWAY_DLL` and `DBDATA_E2E_STORE_DLL` name builds that are not in the products' own bin folders; `DBDATA_BUN` names Bun when it is not on the PATH.
+// `DBDATA_E2E_GATEWAY_DLL` and `DBDATA_E2E_STORE_DLL` name builds that are not in the products' own bin folders; `DBDATAKIT_BUN` names Bun when it is not on the PATH.
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '../../../..')
@@ -71,7 +71,7 @@ function runPlain(args: string[]): string {
 }
 
 function bunPath() {
-  if (process.env.DBDATA_BUN) return process.env.DBDATA_BUN
+  if (process.env.DBDATAKIT_BUN) return process.env.DBDATAKIT_BUN
   return execFileSync('which', ['bun'], { encoding: 'utf8' }).trim()
 }
 

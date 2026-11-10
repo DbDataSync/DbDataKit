@@ -36,7 +36,7 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=build /app .
 ENV DBDATAKIT_DATA_GATEWAY=/data \
-    DBGATEWAY_Gateway__Listen__Address=0.0.0.0
+    DBDATAKIT_Gateway__Listen__Address=0.0.0.0
 VOLUME /data
 EXPOSE 8815
 ENTRYPOINT ["dotnet", "dbdatagateway.dll", "server", "run"]

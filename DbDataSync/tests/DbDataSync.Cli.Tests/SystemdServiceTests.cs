@@ -122,7 +122,7 @@ public sealed class SystemdServiceTests : IDisposable
 
         Assert.DoesNotContain("ExecStartPre", unit);
         Assert.DoesNotContain("apply-update", unit);
-        Assert.DoesNotContain("DBDATASYNC_SELF_UPDATE", unit);
+        Assert.DoesNotContain("DBDATAKIT_SYNC_SELF_UPDATE", unit);
         Assert.DoesNotContain("SuccessExitStatus", unit);
         Assert.DoesNotContain("RestartForceExitStatus", unit);
     }
@@ -275,7 +275,7 @@ public sealed class SystemdServiceTests : IDisposable
 
         Assert.Equal(0, exitCode);
         Assert.DoesNotContain("ExecStartPre", env.WrittenUnit!.Value.Content);
-        Assert.DoesNotContain("DBDATASYNC_SELF_UPDATE", env.WrittenUnit.Value.Content);
+        Assert.DoesNotContain("DBDATAKIT_SYNC_SELF_UPDATE", env.WrittenUnit.Value.Content);
         Assert.Contains("--self-update is no longer needed", output.ToString());
     }
 

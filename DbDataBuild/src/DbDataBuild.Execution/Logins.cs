@@ -47,7 +47,7 @@ public sealed class LoginSettings
         Dialect = DialectProfiles.OfEngine(engine) ?? DialectProfiles.Ansi;
     }
 
-    /// <summary>`DBDATA_BUILD_SQLSERVER_READ`, `DBDATA_BUILD_WAREHOUSE_WRITE` and so on: the connection's name in capitals, anything but a letter or digit as an underscore (the rule every product shares).</summary>
+    /// <summary>`DBDATAKIT_BUILD_SQLSERVER_READ`, `DBDATAKIT_BUILD_WAREHOUSE_WRITE` and so on: the connection's name in capitals, anything but a letter or digit as an underscore (the rule every product shares).</summary>
     public static string VariableName(string connection, Login login) =>
         LoginEnvironment.Name("build", connection, login == Login.Read ? LoginRole.Read : LoginRole.Write);
 

@@ -97,11 +97,11 @@ public sealed class BuildServerWarmSessionTests : IDisposable
     [Fact]
     public async Task What_one_call_hands_the_child_is_gone_for_the_next()
     {
-        Assert.Null(Environment.GetEnvironmentVariable("DBDATA_BUILD_SQLSERVER_READ"));    // a developer's own login would hide what this tests
+        Assert.Null(Environment.GetEnvironmentVariable("DBDATAKIT_BUILD_SQLSERVER_READ"));    // a developer's own login would hide what this tests
         using var runner = new WarmSessionRunner(logins: _ => Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>()));
-        using var withLogin = new WarmSessionRunner(logins: _ => Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string> { ["DBDATA_BUILD_SQLSERVER_READ"] = "not-a-connection-string" }));
+        using var withLogin = new WarmSessionRunner(logins: _ => Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string> { ["DBDATAKIT_BUILD_SQLSERVER_READ"] = "not-a-connection-string" }));
         string[] status = ["connection", "status", "--project", project];
-        static bool MissingRead(string json) => JsonNode.Parse(json)!["diagnostics"]!.AsArray().Any(d => (string)d!["code"]! == "DDB-501" && ((string)d["found"]!).Contains("DBDATA_BUILD_SQLSERVER_READ"));
+        static bool MissingRead(string json) => JsonNode.Parse(json)!["diagnostics"]!.AsArray().Any(d => (string)d!["code"]! == "DDB-501" && ((string)d["found"]!).Contains("DBDATAKIT_BUILD_SQLSERVER_READ"));
 
         Assert.True(MissingRead((await runner.RunAsync(status, project, CancellationToken.None)).Out));
         Assert.False(MissingRead((await withLogin.RunAsync(status, project, CancellationToken.None)).Out));

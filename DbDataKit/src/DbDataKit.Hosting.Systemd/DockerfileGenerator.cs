@@ -75,7 +75,7 @@ public static partial class DockerfileGenerator
 
         Line($"ENV ASPNETCORE_URLS=http://+:{o.Port} \\");
         Line($"    DOTNET_gcServer=0 \\");
-        Line($"    DBDATA_DATA_DIR={o.DataDir}");
+        Line($"    DBDATAKIT_DATA={o.DataDir}");
         Line($"VOLUME [\"{o.DataDir}\"]");
         Line($"EXPOSE {o.Port}");
         Line($"USER {o.Uid}:{o.Uid}");

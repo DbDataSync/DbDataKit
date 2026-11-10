@@ -11,6 +11,6 @@ Microsoft.Extensions.Configuration / Options integration for `DbDataKit.Config`.
 
 ## Notes
 
-- Environment variables with the `DBDATA_<APP>__` scheme and legacy aliases are handled by `DbDataKit.Config`'s `ConfigBuilder`; with plain MEC use the stock `AddEnvironmentVariables("DBDATA_PROXY__")`.
+- Environment variables with the `DBDATAKIT_<APP>__` scheme and legacy aliases are handled by `DbDataKit.Config`'s `ConfigBuilder`; with plain MEC use the stock `AddEnvironmentVariables("DBDATAKIT_PROXY__")`.
 - JSON as an input format behind the same tree is not implemented (use the stock JSON provider).
 - Warnings from validators do not fail startup.

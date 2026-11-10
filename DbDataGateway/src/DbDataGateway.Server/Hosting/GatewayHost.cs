@@ -30,7 +30,7 @@ public static class GatewayHost
     public const string RegistrationName = "dbdatagateway";
 
     /// <summary>
-    /// The web application builder with the gateway's configuration sources (the data directory's config folder, DBGATEWAY_ environment variables, command line).
+    /// The web application builder with the gateway's configuration sources (the data directory's config folder, DBDATAKIT_ environment variables, command line).
     /// A configuration file that cannot be parsed surfaces as <see cref="GatewayConfigException"/>.
     /// </summary>
     public static WebApplicationBuilder CreateBuilder(string[] args)

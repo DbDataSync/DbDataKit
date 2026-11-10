@@ -4,7 +4,7 @@
 # Run from the repository root.
 name: dbdatakit-sync
 x-announce: &announce
-  DBDATAKIT_CONSOLE_ANNOUNCE_URL: http://console:8481
+  DBDATAKIT_ANNOUNCE_URL: http://console:8481
 services:
   console:
     build:

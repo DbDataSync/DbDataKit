@@ -35,7 +35,7 @@ public static class RunnerState
 
     public static bool IsGroup(StateDatabase state) => DbDataKit.Runner.RunnerNames.IsGroup(state);
 
-    /// <summary>Opens the state (and makes or migrates it). A server engine's connection string may name secrets, looked up in the environment (<c>DBDATA_SECRET_*</c>).</summary>
+    /// <summary>Opens the state (and makes or migrates it). A server engine's connection string may name secrets, looked up in the environment (<c>DBDATAKIT_SECRET_*</c>).</summary>
     public static StateDatabase Open(string directory, StateSettings? settings = null, Func<string, string?>? environment = null, string? group = null, TimeProvider? time = null)
     {
         Directory.CreateDirectory(directory);

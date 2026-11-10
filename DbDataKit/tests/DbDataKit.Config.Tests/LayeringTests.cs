@@ -37,7 +37,7 @@ public class LayeringTests
     [Fact]
     public void Environment_beats_files_and_cli_beats_environment()
     {
-        var env = Env(("DBDATA_PROXY__TIMEOUT", "30"), ("DBDATA_PROXY__Listen__Port", "4000"), ("DBDATA_OTHER__TIMEOUT", "99"), ("UNRELATED", "x"));
+        var env = Env(("DBDATAKIT_PROXY__TIMEOUT", "30"), ("DBDATAKIT_PROXY__Listen__Port", "4000"), ("DBDATAKIT_OTHER__TIMEOUT", "99"), ("UNRELATED", "x"));
         var r = Base().AddEnvironment("PROXY", env: env).Build();
         Assert.True(r.Ok, string.Join("\n", r.Diagnostics));
         Assert.Equal(30, r.Value!.Timeout);
@@ -51,7 +51,7 @@ public class LayeringTests
     [Fact]
     public void Environment_names_match_keys_ignoring_case_underscores_and_dashes()
     {
-        var env = Env(("DBDATA_PROXY__DATASOURCES__ERP__CONNECT_TIMEOUT", "77"));
+        var env = Env(("DBDATAKIT_PROXY__DATASOURCES__ERP__CONNECT_TIMEOUT", "77"));
         var r = Base().AddEnvironment("PROXY", env: env).Build();
         Assert.True(r.Ok, string.Join("\n", r.Diagnostics));
         Assert.Equal(77, r.Value!.DataSources["erp"].ConnectTimeout);
@@ -60,7 +60,7 @@ public class LayeringTests
     [Fact]
     public void Environment_can_index_lists_and_split_scalar_lists()
     {
-        var env = Env(("DBDATA_PROXY__USERS__0__NAME", "zed"), ("DBDATA_PROXY__USERS__1__NAME", "bob"), ("DBDATA_PROXY__TAGS", "x, y"));
+        var env = Env(("DBDATAKIT_PROXY__USERS__0__NAME", "zed"), ("DBDATAKIT_PROXY__USERS__1__NAME", "bob"), ("DBDATAKIT_PROXY__TAGS", "x, y"));
         var r = Base().AddEnvironment("PROXY", env: env).Build();
         Assert.True(r.Ok, string.Join("\n", r.Diagnostics));
         Assert.Equal(["zed", "bob"], r.Value!.Users.Select(u => u.Name));
@@ -71,29 +71,29 @@ public class LayeringTests
     [Fact]
     public void Legacy_aliases_map_and_canonical_wins()
     {
-        var env = Env(("DBPROXY_Proxy__Timeout", "11"), ("DbDataSync__Listen__Port", "2222"), ("DBDATA_PROXY__Timeout", "12"));
-        var r = Base().AddEnvironment("PROXY", [new EnvAlias("DBPROXY_", "Proxy"), new EnvAlias("DbDataSync__")], env).Build();
+        var env = Env(("OLDPROXY_Proxy__Timeout", "11"), ("DbDataSync__Listen__Port", "2222"), ("DBDATAKIT_PROXY__Timeout", "12"));
+        var r = Base().AddEnvironment("PROXY", [new EnvAlias("OLDPROXY_", "Proxy"), new EnvAlias("DbDataSync__")], env).Build();
         Assert.True(r.Ok, string.Join("\n", r.Diagnostics));
         Assert.Equal(12, r.Value!.Timeout);
         Assert.Equal(2222, r.Value.Listen.Port);
-        var only = Base().AddEnvironment("PROXY", [new EnvAlias("DBPROXY_", "Proxy")], Env(("DBPROXY_Proxy__Timeout", "11"))).Build();
+        var only = Base().AddEnvironment("PROXY", [new EnvAlias("OLDPROXY_", "Proxy")], Env(("OLDPROXY_Proxy__Timeout", "11"))).Build();
         Assert.Equal(11, only.Value!.Timeout);
     }
 
     [Fact]
     public void Unknown_environment_key_is_a_strict_error_with_the_origin()
     {
-        var r = Base().AddEnvironment("PROXY", env: Env(("DBDATA_PROXY__TIMEUOT", "5"))).Build();
+        var r = Base().AddEnvironment("PROXY", env: Env(("DBDATAKIT_PROXY__TIMEUOT", "5"))).Build();
         Assert.False(r.Ok);
-        Assert.Contains(r.Diagnostics, d => d.Code == "DBD-104" && d.Path == "env:DBDATA_PROXY__TIMEUOT");
+        Assert.Contains(r.Diagnostics, d => d.Code == "DBD-104" && d.Path == "env:DBDATAKIT_PROXY__TIMEUOT");
     }
 
     [Fact]
     public void Origins_say_which_layer_set_each_value()
     {
-        var r = Base().AddEnvironment("PROXY", env: Env(("DBDATA_PROXY__Listen__Port", "4000"))).Build();
+        var r = Base().AddEnvironment("PROXY", env: Env(("DBDATAKIT_PROXY__Listen__Port", "4000"))).Build();
         var o = r.Merged.Origins();
-        Assert.Equal("env:DBDATA_PROXY__Listen__Port", o.First(x => x.Path == "listen.port").File);
+        Assert.Equal("env:DBDATAKIT_PROXY__Listen__Port", o.First(x => x.Path == "listen.port").File);
         Assert.Equal("1.1.1.1", o.First(x => x.Path == "listen.address").Value);
         Assert.Equal("defaults", o.First(x => x.Path == "listen.address").File);
         Assert.Equal("folder.yml", o.First(x => x.Path == "timeout").File);

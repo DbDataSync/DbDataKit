@@ -22,7 +22,7 @@ internal sealed record ModelQualityOutcome(string RunId, string ResultsIn, Quali
 internal static class ModelQuality
 {
     /// <summary>The environment variable that names the results directory when <c>--check-results</c> is not given (a runner task has no flags of its own).</summary>
-    public const string ResultsVariable = "DBDATABUILD_CHECK_RESULTS";
+    public const string ResultsVariable = "DBDATAKIT_BUILD_CHECK_RESULTS";
 
     /// <summary>The datasets of the models in <paramref name="models"/> that carry checks and are built on <paramref name="connection"/>.</summary>
     public static (IQualitySource Source, IReadOnlyDictionary<string, string> ModelOfIdentity) Source(ProjectContext ctx, string connection, LoginSettings read, IReadOnlySet<string> models, DateTimeOffset loadedAt, Func<string, string?> env, List<string> notes)

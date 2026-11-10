@@ -22,10 +22,10 @@ public static class StateProtocol
     /// argument, because on Linux `/proc/&lt;pid&gt;/cmdline` is world-readable and
     /// `/proc/&lt;pid&gt;/environ` is not. A token on the command line would be visible to every local
     /// user through `ps`, which is precisely the threat it exists to answer.</summary>
-    public const string TokenEnvironmentVariable = "DBDATASYNC_RUNNER_TOKEN";
+    public const string TokenEnvironmentVariable = "DBDATAKIT_SYNC_RUNNER_TOKEN";
 
     /// <summary>The environment variable carrying the loopback base address of the state endpoint.</summary>
-    public const string EndpointEnvironmentVariable = "DBDATASYNC_STATE_ENDPOINT";
+    public const string EndpointEnvironmentVariable = "DBDATAKIT_SYNC_STATE_ENDPOINT";
 }
 
 // ---- Requests. One record per operation, so the controller is a switch and not a parser. ----

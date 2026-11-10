@@ -4,7 +4,7 @@ namespace DbDataKit.Connections;
 
 /// <summary>
 /// Turns a definition and a role into a <see cref="ResolvedLogin"/> using the Plan 02 resolver.
-/// Order for <see cref="LoginRole.Read"/>: <c>read_login</c>, then the env var <c>DBDATA_&lt;APP&gt;_&lt;CONN&gt;_READ</c>, then <c>auth</c>. Write is the same with <c>write_login</c>/<c>_WRITE</c>. A read request never looks at
+/// Order for <see cref="LoginRole.Read"/>: <c>read_login</c>, then the env var <c>DBDATAKIT_&lt;APP&gt;_&lt;CONN&gt;_READ</c>, then <c>auth</c>. Write is the same with <c>write_login</c>/<c>_WRITE</c>. A read request never looks at
 /// anything write: no fallback from read to write. A write request on a read-only connection is refused.
 /// The env var holds a whole connection string (the Build convention).
 /// </summary>

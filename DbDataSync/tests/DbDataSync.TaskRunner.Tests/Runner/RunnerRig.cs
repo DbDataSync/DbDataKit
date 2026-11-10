@@ -97,7 +97,7 @@ internal sealed class RunnerRig : IDisposable
     };
 
     /// <param name="engine">The runner's state engine.</param>
-    /// <param name="taskEnvironment">What the executor adds to the engine process's environment (the logins, <c>DBDATA_SECRET_...</c>, as ED11 has them); never argv.</param>
+    /// <param name="taskEnvironment">What the executor adds to the engine process's environment (the logins, <c>DBDATAKIT_SECRET_...</c>, as ED11 has them); never argv.</param>
     public static async Task<RunnerRig> StartAsync(string engine, IReadOnlyDictionary<string, string> taskEnvironment)
     {
         var cleanups = new List<Action>();

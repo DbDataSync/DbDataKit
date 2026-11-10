@@ -20,12 +20,12 @@ $db = Join-Path $tmp 'interop.duckdb'
 & $Python (Join-Path $PSScriptRoot 'seed.py') $db
 
 $env:DBDATAKIT_DATA_GATEWAY = $tmp
-$env:DBGATEWAY_Gateway__Listen__Port = "$Port"
-$env:DBGATEWAY_Gateway__DataSources__duck__Provider = 'duckdb'
-$env:DBGATEWAY_Gateway__DataSources__duck__ConnectionString = "Data Source=$db"
-$env:DBGATEWAY_Gateway__DataSources__duck__AllowWrites = 'true'
+$env:DBDATAKIT_Gateway__Listen__Port = "$Port"
+$env:DBDATAKIT_Gateway__DataSources__duck__Provider = 'duckdb'
+$env:DBDATAKIT_Gateway__DataSources__duck__ConnectionString = "Data Source=$db"
+$env:DBDATAKIT_Gateway__DataSources__duck__AllowWrites = 'true'
 # who may use a data source is a matter of the identity home's groups (P13); the client is a service account of the home, so the source is open to everyone
-$env:DBGATEWAY_Gateway__DataSources__duck__Everyone = 'true'
+$env:DBDATAKIT_Gateway__DataSources__duck__Everyone = 'true'
 & $exe identity service-account-add --name py --repo $tmp | Out-Null
 $made = (& $exe identity token-create --account py --name interop --repo $tmp | Out-String)
 $token = [regex]::Match($made, 'ddk_[A-Za-z0-9_-]+').Value

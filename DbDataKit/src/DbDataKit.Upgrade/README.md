@@ -16,7 +16,7 @@ upgrade:
     channel: stable            # stable (default), beta or snapshot
 ```
 
-A mirror folder is laid out `<product>/v<version>/` with the release's files in it (the zips, the MSI, `SHA256SUMS`), or holds a `releases.json` (what `GET /repos/<repo>/releases` answers, saved) with the files beside it; a mirror address serves that `releases.json`. A key that is not a setting, a folder not named for a version, a `SHA256SUMS` line that is not a checksum, or a `releases.json` that is not a list is refused with the file's name (and the line). A server reads its own feed from the variables `DBDATA_UPGRADE_MIRROR`, `DBDATA_UPGRADE_REPO` and `DBDATA_UPGRADE_CHANNEL` (set them in its service or unit), because a product reads its own files strictly.
+A mirror folder is laid out `<product>/v<version>/` with the release's files in it (the zips, the MSI, `SHA256SUMS`), or holds a `releases.json` (what `GET /repos/<repo>/releases` answers, saved) with the files beside it; a mirror address serves that `releases.json`. A key that is not a setting, a folder not named for a version, a `SHA256SUMS` line that is not a checksum, or a `releases.json` that is not a list is refused with the file's name (and the line). A server reads its own feed from the variables `DBDATAKIT_UPGRADE_MIRROR`, `DBDATAKIT_UPGRADE_REPO` and `DBDATAKIT_UPGRADE_CHANNEL` (set them in its service or unit), because a product reads its own files strictly.
 
 The console's **Upgrades** screen (`/upgrades`) lists the versions available per product and each paired server's current and newest, with "Newer available" on the Servers page, and marks a release built outside N and N-1 of the console ("outside N-1 after this release", with both versions and generations and the side to upgrade).
 

@@ -186,7 +186,7 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
             ?? throw new InvalidOperationException($"{RunnerProtocolNames.ScratchVariable} is not set: the runner tells a task where it may write.");
         var repoRoot = Path.GetFullPath(Path.Combine(package, Input.RepoDir));
 
-        // The definition is read, never written (ED8): logins come from the environment the runner set (DBDATA_SECRET_..., ED11), so no secret store file or key is created; the configuration is the read-only
+        // The definition is read, never written (ED8): logins come from the environment the runner set (DBDATAKIT_SECRET_..., ED11), so no secret store file or key is created; the configuration is the read-only
         // repository (no git service, no directory created in the view); the engine's own caches go to the scratch directory.
         var secrets = SecretStore.ForProviders();
         var config = ConfigRepository.ReadOnly(Path.Combine(repoRoot, "config"), secrets);

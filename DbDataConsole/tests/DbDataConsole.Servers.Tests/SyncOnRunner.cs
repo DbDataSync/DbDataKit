@@ -20,7 +20,7 @@ namespace DbDataConsole.Servers.Tests;
 /// <item>a <b>Sync server</b> (<c>DbDataSync.Cli server run</c>, its own directory; its supervisor starts real workers) and a <b>runner</b> (<c>dbdatarunner server run</c>, its own directory), both processes;</item>
 /// <item>the engine as the runtime package <c>dbdatasync-runtime</c>, installed and active in the channel (the TaskRunner's build output with the manifest <c>scripts/runtime-manifest.sh</c> prints);</item>
 /// <item>the replication set published with the real <c>dbdatasync package publish --to runner</c>, its slots bound to the connections the runner knows: <c>connection/1</c> files in the runner's <c>connections</c> directory and the
-/// logins as <c>DBDATA_SECRET_*</c> in the runner's environment (plan 28c E02);</item>
+/// logins as <c>DBDATAKIT_SECRET_*</c> in the runner's environment (plan 28c E02);</item>
 /// <item>the Sync API called as Sync's screens call it: through a <b>console</b> in this process that is paired with both servers (<c>PUT /api/runner</c>, <c>PUT /api/replications/{name}/owner</c>), because the API takes the console's signed token and a
 /// real server is what the move has to be proved against; the runner is read the same way.</item>
 /// </list>

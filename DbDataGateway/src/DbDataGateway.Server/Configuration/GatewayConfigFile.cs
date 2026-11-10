@@ -11,6 +11,9 @@ namespace DbDataGateway.Server.Configuration;
 /// </summary>
 public static class GatewayConfigFile
 {
+    /// <summary>The prefix of the environment variables that are the gateway's settings (plan 33 section 6c): <c>DBDATAKIT_Gateway__Management__Port</c> is <c>Gateway:Management:Port</c>. The other <c>DBDATAKIT_*</c> variables (<c>DBDATAKIT_DATA</c>, <c>DBDATAKIT_STATE_*</c>, <c>DBDATAKIT_URL</c>) become top-level keys that are not under <c>Gateway</c>, which the strict binder never sees.</summary>
+    public const string EnvironmentPrefix = "DBDATAKIT_";
+
     public const string DirectoryName = "config";
     public const string ServerFileName = "server.yaml";
 
@@ -27,7 +30,7 @@ public static class GatewayConfigFile
 
     /// <summary>
     /// The data directory, known before any file is read (the files live in it, so a file cannot say where it is): <c>Gateway:DataDirectory</c> from
-    /// the command line or <c>DBGATEWAY_</c>/plain environment variables, else the default.
+    /// the command line or <c>DBDATAKIT_</c>/plain environment variables, else the default.
     /// </summary>
     public static string ResolveDataDirectory(IEnumerable<string>? args = null)
     {
@@ -37,7 +40,7 @@ public static class GatewayConfigFile
             var early = new ConfigurationBuilder()
                 .AddEnvironmentVariables()
                 .AddCommandLine((args ?? []).ToArray())
-                .AddEnvironmentVariables("DBGATEWAY_")
+                .AddEnvironmentVariables(EnvironmentPrefix)
                 .Build();
             configured = early["Gateway:DataDirectory"];
         }
@@ -73,9 +76,9 @@ public static class GatewayConfigFile
         configuration.Add(new GatewayConfigDirectorySource(DirectoryIn(dataDirectory)));
         // the state database the install's variables name (DBDATAKIT_STATE_GATEWAY_*, else DBDATAKIT_STATE_*) is above the file and below the Gateway's own spellings
         configuration.Add(new SuiteStateConfigurationSource());
-        // lowest first, as the README says: the files, the plain variables, the DBGATEWAY_ ones, the command line (the command line used to come before DBGATEWAY_, so a DBGATEWAY_ variable beat it; plan 29b C07 makes the flag win)
+        // lowest first, as the README says: the files, the plain variables, the DBDATAKIT_ ones, the command line (plan 29b C07: the flag wins)
         configuration.AddEnvironmentVariables();
-        configuration.AddEnvironmentVariables("DBGATEWAY_");
+        configuration.AddEnvironmentVariables(EnvironmentPrefix);
         configuration.AddCommandLine(args);
     }
 

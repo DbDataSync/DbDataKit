@@ -62,7 +62,7 @@ if (!isWorker && warehouseConnection) {
     .replace('tracking: { connection: sqlserver }', 'tracking: { connection: postgres }')
     .replace('trailing_space: ignored', 'trailing_space: significant')
     .replace('default: { duckdb: NFC, sqlserver: Latin1_General_100_CS_AS }', 'default: { duckdb: NFC, postgres: C }'))
-  const logins = { ...process.env, DBDATA_BUILD_POSTGRES_READ: warehouseConnection, DBDATA_BUILD_POSTGRES_WRITE: warehouseConnection }
+  const logins = { ...process.env, DBDATAKIT_BUILD_POSTGRES_READ: warehouseConnection, DBDATAKIT_BUILD_POSTGRES_WRITE: warehouseConnection }
   execFileSync('dotnet', ['exec', buildDll, 'project', 'compile'], { cwd: project, stdio: 'ignore' })
   execFileSync('dotnet', ['exec', buildDll, 'connection', 'init', 'postgres', '--apply'], { cwd: project, env: logins, stdio: 'ignore' })
   execFileSync('dotnet', ['exec', buildDll, 'connection', 'seed', 'postgres', '--apply'], { cwd: project, env: logins, stdio: 'ignore' })   // the raw tables the models read
@@ -541,7 +541,7 @@ export default defineConfig({
       timeout: 60_000,
       stdout: 'pipe',
       stderr: 'pipe',
-      env: warehouseConnection ? { DBDATA_BUILD_POSTGRES_READ: warehouseConnection, DBDATA_BUILD_POSTGRES_WRITE: warehouseConnection } : {},
+      env: warehouseConnection ? { DBDATAKIT_BUILD_POSTGRES_READ: warehouseConnection, DBDATAKIT_BUILD_POSTGRES_WRITE: warehouseConnection } : {},
     },
     {
       command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(authoringBuild.directory), '--listen', `https://localhost:${authoringBuild.port}`].join(' '),
@@ -560,7 +560,7 @@ export default defineConfig({
       timeout: 60_000,
       stdout: 'pipe' as const,
       stderr: 'pipe' as const,
-      env: warehouseConnection ? { DBDATA_BUILD_POSTGRES_READ: warehouseConnection, DBDATA_BUILD_POSTGRES_WRITE: warehouseConnection } : {},
+      env: warehouseConnection ? { DBDATAKIT_BUILD_POSTGRES_READ: warehouseConnection, DBDATAKIT_BUILD_POSTGRES_WRITE: warehouseConnection } : {},
     },
     {
       command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(refreshBuild.directory), '--listen', `https://localhost:${refreshBuild.port}`].join(' '),
@@ -570,7 +570,7 @@ export default defineConfig({
       timeout: 60_000,
       stdout: 'pipe' as const,
       stderr: 'pipe' as const,
-      env: warehouseConnection ? { DBDATA_BUILD_POSTGRES_READ: warehouseConnection, DBDATA_BUILD_POSTGRES_WRITE: warehouseConnection } : {},
+      env: warehouseConnection ? { DBDATAKIT_BUILD_POSTGRES_READ: warehouseConnection, DBDATAKIT_BUILD_POSTGRES_WRITE: warehouseConnection } : {},
     },
     {
       command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(modelsBuild.directory), '--listen', `https://localhost:${modelsBuild.port}`].join(' '),
@@ -580,7 +580,7 @@ export default defineConfig({
       timeout: 60_000,
       stdout: 'pipe' as const,
       stderr: 'pipe' as const,
-      env: warehouseConnection ? { DBDATA_BUILD_POSTGRES_READ: warehouseConnection, DBDATA_BUILD_POSTGRES_WRITE: warehouseConnection } : {},
+      env: warehouseConnection ? { DBDATAKIT_BUILD_POSTGRES_READ: warehouseConnection, DBDATAKIT_BUILD_POSTGRES_WRITE: warehouseConnection } : {},
     },
     {
       command: ['dotnet', 'exec', JSON.stringify(gatewayDll), 'server', 'run',
@@ -686,7 +686,7 @@ export default defineConfig({
       timeout: 60_000,
       stdout: 'pipe' as const,
       stderr: 'pipe' as const,
-      env: { DBDATARUNNER_CLIENT_DIR: publishBuild.clientDirectory },
+      env: { DBDATAKIT_RUNNER_CLIENT_DIR: publishBuild.clientDirectory },
     },
     ...announcers.map((announcer) => ({
       command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(announcer.directory), '--listen', `https://localhost:${announcer.port}`].join(' '),
@@ -696,7 +696,7 @@ export default defineConfig({
       timeout: 60_000,
       stdout: 'pipe' as const,
       stderr: 'pipe' as const,
-      env: { DBDATAKIT_CONSOLE_ANNOUNCE_URL: announceListen, DBDATAKIT_ADVERTISE_URL: `https://localhost:${announcer.port}`, DBDATAKIT_INSTANCE_NAME: announcer.name },
+      env: { DBDATAKIT_ANNOUNCE_URL: announceListen, DBDATAKIT_ADVERTISE_URL: `https://localhost:${announcer.port}`, DBDATAKIT_INSTANCE_NAME: announcer.name },
     })),
     {
       command: ['dotnet', 'exec', JSON.stringify(gatewayDll), 'server', 'run',
@@ -721,7 +721,7 @@ export default defineConfig({
     {
       command: ['dotnet', 'exec', JSON.stringify(buildDll), 'server', 'run', '--repo', JSON.stringify(upgradeBuild.directory), '--listen', `https://localhost:${upgradeBuild.port}`].join(' '),
       url: `https://localhost:${upgradeBuild.port}/health/live`,
-      env: { ...byHandEnvironment(), DBDATA_UPGRADE_MIRROR: upgradeBuild.mirror },   // the server prepares its own upgrade from the same mirror folder the console reads
+      env: { ...byHandEnvironment(), DBDATAKIT_UPGRADE_MIRROR: upgradeBuild.mirror },   // the server prepares its own upgrade from the same mirror folder the console reads
       ignoreHTTPSErrors: true,
       reuseExistingServer: false,
       timeout: 60_000,

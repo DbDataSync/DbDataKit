@@ -7,7 +7,7 @@ namespace DbDataGateway.Server.Configuration;
 
 /// <summary>
 /// The Gateway's <c>state:</c> section, read through the shared <see cref="StateSettingsReader"/> like every product's (plan 29b C07): <c>engine</c>, <c>connection</c>, <c>registry</c>, <c>namespaces</c> and <c>retention</c> in <c>server.yaml</c>. The Gateway's own
-/// layers decide which value wins, as they always have (a file in the configuration folder, then <c>DBGATEWAY_</c> and plain environment variables, then the command line), and the result says which layer gave the engine and the connection.
+/// layers decide which value wins, as they always have (a file in the configuration folder, then <c>DBDATAKIT_</c> and plain environment variables, then the command line), and the result says which layer gave the engine and the connection.
 /// The keys of the earlier release (<c>connectionString</c> and <c>definitionPollSeconds</c> under <c>state:</c>) are refused with a message that names the file and shows the new shape.
 /// </summary>
 public static class GatewayStateConfig
@@ -153,9 +153,9 @@ public static class GatewayStateConfig
     private static string EnvironmentName(string key, string value)
     {
         var flat = key.Replace(":", "__");
-        foreach (var candidate in new[] { "DBGATEWAY_" + flat, flat })
+        foreach (var candidate in new[] { GatewayConfigFile.EnvironmentPrefix + flat, flat })
             foreach (System.Collections.DictionaryEntry e in Environment.GetEnvironmentVariables())
                 if (e.Key is string name && string.Equals(name, candidate, StringComparison.OrdinalIgnoreCase) && string.Equals(e.Value as string, value, StringComparison.Ordinal)) return name;
-        return "DBGATEWAY_" + flat;
+        return GatewayConfigFile.EnvironmentPrefix + flat;
     }
 }

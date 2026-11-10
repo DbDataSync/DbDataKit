@@ -16,7 +16,7 @@ public sealed record BunLocation(string? Path, string? Source, string? Problem)
 /// </summary>
 public static class BunLocator
 {
-    public const string EnvironmentVariable = "DBDATA_BUN";
+    public const string EnvironmentVariable = "DBDATAKIT_BUN";
 
     /// <summary>The .NET runtime identifier the pin names this platform by (<c>linux-x64</c>, <c>win-x64</c>, <c>osx-arm64</c>...).</summary>
     public static string CurrentRid()

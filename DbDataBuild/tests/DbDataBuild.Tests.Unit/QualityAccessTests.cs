@@ -8,7 +8,7 @@ public class QualityAccessTests
     [Fact]
     public void The_evaluator_is_given_a_connection_of_the_read_login_only()
     {
-        var env = (string name) => name is "DBDATA_BUILD_WAREHOUSE_READ" or "DBDATA_BUILD_WAREHOUSE_WRITE" ? "Host=localhost;Database=x" : null;
+        var env = (string name) => name is "DBDATAKIT_BUILD_WAREHOUSE_READ" or "DBDATAKIT_BUILD_WAREHOUSE_WRITE" ? "Host=localhost;Database=x" : null;
         var (read, _) = LoginSettings.FromEnvironment("warehouse", "postgres", Login.Read, env);
         var (write, _) = LoginSettings.FromEnvironment("warehouse", "postgres", Login.Write, env);
 

@@ -62,7 +62,7 @@ public sealed class SecretsRuntime
 
     /// <summary>
     /// The encrypted secret store of this installation: <c>&lt;DataDirectory&gt;/secrets/secrets.yaml</c>, its key in <c>secrets/keys</c> (DPAPI on Windows, a 0600 file elsewhere, created on first use)
-    /// or the key file the options or <c>DBDATA_SECRETS_KEY_FILE</c> name. Refuses a key file that others can read.
+    /// or the key file the options or <c>DBDATAKIT_SECRETS_KEY_FILE</c> name. Refuses a key file that others can read.
     /// </summary>
     public static EncryptedFileSecretStore OpenStore(GatewayOptions options, Func<string, string?>? environment = null)
     {

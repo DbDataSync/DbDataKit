@@ -7,16 +7,16 @@ public delegate string? EnvMapping(string secretTarget);
 
 /// <summary>
 /// <c>env:NAME</c> always; <c>secret:&lt;name&gt;</c> via an optional mapping (default
-/// <c>DBDATA_SECRET_&lt;NAME&gt;</c> with every non-alphanumeric character replaced by '_', upper-cased).
+/// <c>DBDATAKIT_SECRET_&lt;NAME&gt;</c> with every non-alphanumeric character replaced by '_', upper-cased).
 /// </summary>
-public sealed class EnvSecretProvider(Func<string, string?>? env = null, string? secretPrefix = "DBDATA_SECRET_", EnvMapping? mapping = null)
+public sealed class EnvSecretProvider(Func<string, string?>? env = null, string? secretPrefix = "DBDATAKIT_SECRET_", EnvMapping? mapping = null)
     : ISecretProvider
 {
     private readonly Func<string, string?> _env = env ?? Environment.GetEnvironmentVariable;
     private readonly EnvMapping? _mapping = mapping ?? (secretPrefix is null ? null : t => secretPrefix + EnvNames.Sanitize(t));
 
     /// <summary>The variable a <c>secret:&lt;target&gt;</c> reference reads with the default mapping, for docs and tooling.</summary>
-    public static string VariableNameFor(string secretTarget, string prefix = "DBDATA_SECRET_") => prefix + EnvNames.Sanitize(secretTarget);
+    public static string VariableNameFor(string secretTarget, string prefix = "DBDATAKIT_SECRET_") => prefix + EnvNames.Sanitize(secretTarget);
 
     public string Name => "env";
 

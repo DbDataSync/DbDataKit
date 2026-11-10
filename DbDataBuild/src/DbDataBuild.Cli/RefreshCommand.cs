@@ -362,7 +362,7 @@ internal static class RefreshCommand
     }
 
     /// <summary>
-    /// The checks stored with the models that loaded, run when the loads have ended (plan 23a FQ09), when a results directory is given (`--check-results`, else `DBDATABUILD_CHECK_RESULTS`) and the run is not a dry run. Only models whose load ended
+    /// The checks stored with the models that loaded, run when the loads have ended (plan 23a FQ09), when a results directory is given (`--check-results`, else `DBDATAKIT_BUILD_CHECK_RESULTS`) and the run is not a dry run. Only models whose load ended
     /// `done` are evaluated: a model that failed, was skipped or did not run was not refreshed, so its data says nothing about this run. The run id is the refresh's tracking id.
     /// </summary>
     private static Func<RefreshSummary, ModelQualityOutcome?>? ChecksAfter(string root, string connection, LoginSettings read, string runId, bool dryRun, string? resultsDirectory, Func<string, string?> env) =>
@@ -627,7 +627,7 @@ internal static class RefreshCommand
 }
 
 /// <summary>
-/// How a refresh reaches the origins of its copies: each by its connection name, on its read login from the environment (`DBDATA_BUILD_&lt;ORIGIN&gt;_READ`), through <see cref="ReadSession"/> only. A failure is described by its
+/// How a refresh reaches the origins of its copies: each by its connection name, on its read login from the environment (`DBDATAKIT_BUILD_&lt;ORIGIN&gt;_READ`), through <see cref="ReadSession"/> only. A failure is described by its
 /// type and error number, never by the driver's message.
 /// </summary>
 internal sealed record OriginAccess(ProjectConfig Config, Func<string, string?> Env, SessionLimits? Limits = null, SessionOpener? Open = null)

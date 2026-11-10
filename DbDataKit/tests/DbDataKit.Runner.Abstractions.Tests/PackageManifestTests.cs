@@ -340,7 +340,7 @@ public sealed class PackageManifestTests
     [Fact]
     public void An_injection_form_the_runner_does_not_know_is_refused_naming_the_slot_and_the_forms()
     {
-        AssertRefused(Edited("      - { name: inbox, kind: folder }\n", "      - { name: inbox, kind: folder, env: DBDATA_ANYTHING }\n"), "tasks[0].connections[1].env", "sync-secret, build-login");
+        AssertRefused(Edited("      - { name: inbox, kind: folder }\n", "      - { name: inbox, kind: folder, env: DBDATAKIT_ANYTHING }\n"), "tasks[0].connections[1].env", "sync-secret, build-login");
 
         var task = new PackageTask("pull", new TaskEntry()) { Connections = [new ConnectionSlot("db", "postgres", "free-text")] };
         var manifest = new PackageManifest("p", null, new PackageLaunch(LaunchKind.Executable, Command: "x"), new BuiltAgainst(null, null, "dbdatakit.runner.v1"), [task]);

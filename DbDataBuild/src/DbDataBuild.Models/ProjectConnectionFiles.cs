@@ -8,7 +8,7 @@ namespace DbDataBuild.Models;
 /// <summary>
 /// The connections a project declares, as files: <c>connections/&lt;name&gt;.yaml</c>, each a <c>connection/1</c> document (plan 13, E03; <c>connection/2</c> when it has <c>grants</c>, plan 22a GP03), the format the console, Sync and Proxy read. The shared loader checks the
 /// document (unknown keys, a wrong <c>schema</c>, plaintext credentials); this class adds what is Build's: the file is named for the connection, it carries no address, login, TLS or timeout setting (the login is the
-/// environment variable <c>DBDATA_BUILD_&lt;NAME&gt;_&lt;READ|WRITE&gt;</c>), <c>engine</c> is the driver alone (<c>access: readonly</c> and <c>dialect</c> say the rest) and everything of Build's own is under
+/// environment variable <c>DBDATAKIT_BUILD_&lt;NAME&gt;_&lt;READ|WRITE&gt;</c>), <c>engine</c> is the driver alone (<c>access: readonly</c> and <c>dialect</c> say the rest) and everything of Build's own is under
 /// <c>extensions.build</c>.
 /// <para>
 /// What comes out is the mapping that <see cref="ProjectConfigLoader"/> reads connections from (name to settings, the settings being <c>engine</c> as a keyword string and the keys of <c>extensions.build</c>), with each node
@@ -68,7 +68,7 @@ public static class ProjectConnectionFiles
             Bad(root.Get("name") ?? root, $"The file is `{relative}` but `name` is `{definition.Name}`.", $"Name the file `{definition.Name}.yaml`, or set `name: {expectedName}`: the file name is the connection's name.");
         foreach (var e in root.Entries.Where(e => !Used.Contains(e.Key.Value)))
             Bad(e.Key, $"`{e.Key.Value}` is not used in a connection file of this tool.",
-                "A project's connection holds no address, login or timeout setting: the login is the environment variable `" + $"DBDATA_BUILD_{LoginEnvironment.Sanitize(definition.Name)}_<READ|WRITE>`, and the tool's own settings are under `extensions.build`.");
+                "A project's connection holds no address, login or timeout setting: the login is the environment variable `" + $"DBDATAKIT_BUILD_{LoginEnvironment.Sanitize(definition.Name)}_<READ|WRITE>`, and the tool's own settings are under `extensions.build`.");
         if (root.Get("engine") is YamlScalar engine && engine.Value.Any(char.IsWhiteSpace))
             Bad(engine, "`engine` is the driver alone.", "Write `access: readonly` for a read-only connection and `dialect: <name>` for the SQL dialect, each on its own line.");
 

@@ -420,7 +420,7 @@ Usage: `dbdatabuild project publish [options]`
 |---|---|
 | `--bind` `<text ...>` | `slot=connection`: bind a connection slot of the package in the channel (the slots are the project's connection names; repeatable). A channel's bindings are its own |
 | `--channel` `<text>` | The channel the version goes to |
-| `--client-dir` `<text>` | Where this machine's pairings with runners are kept (default: DBDATARUNNER_CLIENT_DIR, else a folder under the user's local application data) |
+| `--client-dir` `<text>` | Where this machine's pairings with runners are kept (default: DBDATAKIT_RUNNER_CLIENT_DIR, else a folder under the user's local application data) |
 | `--code` `<text>` | The single-use pairing code (from `dbdatarunner server pair --max-role publisher`), when this machine is not paired with the runner yet |
 | `--expected-version` `<number>` | The highest version the package has, as you saw it (0 for a first publish); a newer one is refused |
 | `--out` `<text>` | Write the package (package.yaml and files/) to this directory and send nothing |
@@ -551,7 +551,7 @@ Usage: `dbdatabuild connection refresh [connection] [plan] [selectors]... [optio
 |---|---|
 | `--allow-dirty` | Run from a working tree with uncommitted changes (recorded) |
 | `--check` `<text>` | The safety check before the loads, instead of the project's `refresh.check`: none (nothing; the engine's errors are the check), project (this project was deployed here), objects (each object against what was last deployed), live (each object against the catalog now) |
-| `--check-results` `<path>` | Evaluate the data quality checks stored with the models that loaded, after the loads, and record the results in the state database of this server directory (the one `server run` uses; default: the environment variable DBDATABUILD_CHECK_RESULTS, else the checks are not evaluated). The results carry the refresh's id; a failed check is reported and does not change how the loads ended |
+| `--check-results` `<path>` | Evaluate the data quality checks stored with the models that loaded, after the loads, and record the results in the state database of this server directory (the one `server run` uses; default: the environment variable DBDATAKIT_BUILD_CHECK_RESULTS, else the checks are not evaluated). The results carry the refresh's id; a failed check is reported and does not change how the loads ended |
 | `--dry-run` | Run every check and print every statement; execute nothing |
 | `--input` `<text ...>` | `[model.]name=value`: the value of an input of a load to run, instead of its default or the plan's (repeatable); it replaces a resolver, which is then not run, and is recorded as coming from the flag. `model.name` is needed when more than one load has the input |
 | `--on-fail` `<text>` | What a failed check does, instead of the project's `refresh.on_fail`: block (stop before anything runs) or warn (report and run) |

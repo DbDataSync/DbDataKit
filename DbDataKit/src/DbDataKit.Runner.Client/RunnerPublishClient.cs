@@ -28,7 +28,7 @@ public sealed record ClientPublished(string Package, string Channel, int Version
 /// </summary>
 public sealed class RunnerClientStore(string directory)
 {
-    public const string DirectoryVariable = "DBDATARUNNER_CLIENT_DIR";
+    public const string DirectoryVariable = "DBDATAKIT_RUNNER_CLIENT_DIR";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
 

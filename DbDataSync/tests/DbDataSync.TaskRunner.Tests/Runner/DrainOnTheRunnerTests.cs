@@ -274,7 +274,7 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
         }
     }
 
-    /// <summary>What the runner puts in the engine's environment so it can log in (ED11): one <c>DBDATA_SECRET_...</c> per connection of the replication.</summary>
+    /// <summary>What the runner puts in the engine's environment so it can log in (ED11): one <c>DBDATAKIT_SECRET_...</c> per connection of the replication.</summary>
     private IReadOnlyDictionary<string, string> Logins() =>
         new[] { "src-conn", "tgt-conn" }.Select(name => _config.LoadConnection(name).CredentialSecretRef!)
             .ToDictionary(reference => _secrets.EnvName(reference), reference => _secrets.Resolve(reference));

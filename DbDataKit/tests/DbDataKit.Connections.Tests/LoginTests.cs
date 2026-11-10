@@ -14,26 +14,26 @@ public class LoginTests
     [Fact]
     public void Env_names_follow_the_convention()
     {
-        Assert.Equal("DBDATA_BUILD_WAREHOUSE_READ", LoginResolver.EnvName("build", "warehouse", LoginRole.Read));
-        Assert.Equal("DBDATA_SYNC_MY_DW_1_WRITE", LoginResolver.EnvName("sync", "my-dw.1", LoginRole.Write));
-        Assert.Equal("DBDATA_PROXY_X", LoginResolver.EnvName("proxy", "x", LoginRole.Default));
+        Assert.Equal("DBDATAKIT_BUILD_WAREHOUSE_READ", LoginResolver.EnvName("build", "warehouse", LoginRole.Read));
+        Assert.Equal("DBDATAKIT_SYNC_MY_DW_1_WRITE", LoginResolver.EnvName("sync", "my-dw.1", LoginRole.Write));
+        Assert.Equal("DBDATAKIT_PROXY_X", LoginResolver.EnvName("proxy", "x", LoginRole.Default));
     }
 
     [Fact]
     public async Task Read_login_comes_from_the_read_env_var()
     {
-        var r = new LoginResolver(Env.Chain(new() { ["DBDATA_BUILD_WAREHOUSE_READ"] = "Server=h;User Id=ro;Password=ropw" }), "build");
+        var r = new LoginResolver(Env.Chain(new() { ["DBDATAKIT_BUILD_WAREHOUSE_READ"] = "Server=h;User Id=ro;Password=ropw" }), "build");
         using var login = await r.ResolveAsync(Def(), LoginRole.Read);
         Assert.NotNull(login);
         Assert.Equal("Server=h;User Id=ro;Password=ropw", login!.ConnectionString!.RevealString());
-        Assert.Equal("env:DBDATA_BUILD_WAREHOUSE_READ", login.Source);
+        Assert.Equal("env:DBDATAKIT_BUILD_WAREHOUSE_READ", login.Source);
         Assert.DoesNotContain("ropw", login.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task Read_never_falls_back_to_the_write_env_var_or_write_login()
     {
-        var r = new LoginResolver(Env.Chain(new() { ["DBDATA_BUILD_WAREHOUSE_WRITE"] = "Server=h;User Id=rw;Password=rwpw" }), "build");
+        var r = new LoginResolver(Env.Chain(new() { ["DBDATAKIT_BUILD_WAREHOUSE_WRITE"] = "Server=h;User Id=rw;Password=rwpw" }), "build");
         Assert.Null(await r.ResolveAsync(Def(), LoginRole.Read));
 
         var withWriteLogin = Def(d => d.WriteLogin = new LoginSpec { User = "rw", PasswordSecret = "env:RW" });
@@ -42,21 +42,9 @@ public class LoginTests
     }
 
     [Fact]
-    public async Task The_old_DBDATABUILD_names_are_not_read()
-    {
-        var r = new LoginResolver(Env.Chain(new() { ["DBDATA_BUILD_WAREHOUSE_READ"] = "new", ["DBDATABUILD_WAREHOUSE_READ"] = "old" }), "build");
-        using var login = await r.ResolveAsync(Def(), LoginRole.Read);
-        Assert.Equal("new", login!.ConnectionString!.RevealString());
-
-        // and with only the old name set, nothing resolves
-        var onlyOld = new LoginResolver(Env.Chain(new() { ["DBDATABUILD_WAREHOUSE_READ"] = "old" }), "build");
-        Assert.Null(await onlyOld.ResolveAsync(Def(), LoginRole.Read));
-    }
-
-    [Fact]
     public async Task Write_on_a_readonly_connection_is_refused()
     {
-        var r = new LoginResolver(Env.Chain(new() { ["DBDATA_BUILD_WAREHOUSE_WRITE"] = "x" }), "build");
+        var r = new LoginResolver(Env.Chain(new() { ["DBDATAKIT_BUILD_WAREHOUSE_WRITE"] = "x" }), "build");
         await Assert.ThrowsAsync<ConnectionPolicyException>(async () => await r.ResolveAsync(Def(d => d.Access = AccessMode.Readonly), LoginRole.Write));
     }
 

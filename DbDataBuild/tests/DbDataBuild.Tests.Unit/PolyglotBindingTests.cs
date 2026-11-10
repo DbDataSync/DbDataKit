@@ -6,7 +6,7 @@ namespace DbDataBuild.Tests.Unit;
 public class PolyglotBindingTests
 {
     public PolyglotBindingTests() =>
-        Assert.True(Polyglot.IsAvailable(), "Native polyglot library not found. Run scripts/fetch-native.sh (or set DBDATABUILD_POLYGLOT_PATH).");
+        Assert.True(Polyglot.IsAvailable(), "Native polyglot library not found. Run scripts/fetch-native.sh (or set DBDATAKIT_BUILD_POLYGLOT_PATH).");
 
     [Fact]
     public void Pinned_commit_matches_the_pin_file()

@@ -20,7 +20,7 @@ public sealed class ServiceCliEnvironment
 
     public required string BinaryPath { get; init; }
 
-    /// <summary>Data directory when <c>--data-dir</c> is not given (from the settings files and DBGATEWAY_ variables).</summary>
+    /// <summary>Data directory when <c>--data-dir</c> is not given (from the settings files and DBDATAKIT_ variables).</summary>
     public required Func<string> DefaultDataDirectory { get; init; }
 
     /// <summary>Writes the starter settings file into the data directory after an install when it has none; null does nothing (tests).</summary>
@@ -361,7 +361,7 @@ public static class GatewayConfiguration
         // The same layers as the host: the data directory's config folder, then the environment.
         new ConfigurationBuilder()
             .Add(new GatewayConfigDirectorySource(GatewayConfigFile.DirectoryIn(dataDirectory ?? GatewayConfigFile.ResolveDataDirectory())))
-            .AddEnvironmentVariables("DBGATEWAY_")
+            .AddEnvironmentVariables(GatewayConfigFile.EnvironmentPrefix)
             .Build();
 
     /// <summary>The options. A state section with a key of the earlier release, or a setting that is not one, stops with a message naming the file (<see cref="GatewayConfigException"/>).</summary>

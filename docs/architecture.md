@@ -48,7 +48,7 @@ because source comments cite them). Where each part is described in detail: the 
 
 The new releases start from nothing. No migration, import, upgrade path or compatibility reader is written for existing configs, scripts, libraries,
 drivers, secrets, users, sessions or state databases, and no legacy names are kept (old CLI forms, old environment variable names such as
-`DBDATA_BUILD_*` and `DBDATASYNC_SECRET_*`). Instead, a server or CLI that finds a file in an old format (no `schemaVersion`, an older one,
+`DBDATAKIT_BUILD_*` and `DBDATAKIT_SECRET_*`). Instead, a server or CLI that finds a file in an old format (no `schemaVersion`, an older one,
 `appsettings.json` where `server.yaml` belongs, a `.cs` script, a `library.json`) **refuses to start or to load it, with a message naming the file and
 pointing to the documentation**. Release notes say plainly that an existing install is set up again. Users' own data (their databases and DuckDB files)
 is not ours to break and is outside this rule. (CLAUDE.md states the working rule: never silent, and a test says so.)

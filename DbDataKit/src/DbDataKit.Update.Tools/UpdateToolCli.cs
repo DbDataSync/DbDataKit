@@ -4,13 +4,13 @@ namespace DbDataKit.Update.Tools;
 
 /// <summary>
 /// <c>dbdata-update</c>: keys generate | keys rotate | manifest create | manifest sign | manifest verify.
-/// The private key is a base64 32-byte ed25519 seed, read from <c>--key-file</c> or the env var <c>DBDATA_SIGNING_KEY</c>
+/// The private key is a base64 32-byte ed25519 seed, read from <c>--key-file</c> or the env var <c>DBDATAKIT_SIGNING_KEY</c>
 /// (so CI can inject it from a protected environment secret without writing it to disk).
 /// Exit codes: 0 ok, 1 verification/usage failure, 2 unexpected error.
 /// </summary>
 public static class UpdateToolCli
 {
-    public const string SigningKeyEnv = "DBDATA_SIGNING_KEY";
+    public const string SigningKeyEnv = "DBDATAKIT_SIGNING_KEY";
 
     private sealed class Opts
     {

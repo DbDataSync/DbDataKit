@@ -92,7 +92,7 @@ public sealed class SecretStoreTests : IDisposable
         var store = SecretStore.OpenInRepository(_root, name => name == SecretStoreName("erp") ? "from-env" : null);
 
         Assert.Equal("from-env", store.Resolve(SecretRefs.ForConnection("erp")));
-        Assert.StartsWith("DBDATA_SECRET_DBDATA_SYNC_CONNECTION_ERP", store.EnvName(SecretRefs.ForConnection("erp")));
+        Assert.StartsWith("DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_ERP", store.EnvName(SecretRefs.ForConnection("erp")));
     }
 
     [Fact]

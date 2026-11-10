@@ -30,7 +30,7 @@ wasn't guessed:
   not something to fix.
 - Confirmed the doubled-prefix composition empirically rather than asserting it: a store built with
   prefix `"DbDataSync"` resolving ref `dbdatasync:connection:foo` (from `SecretRefs.ForConnection`)
-  computes `EnvName` as `DBDATASYNC_SECRET_DBDATASYNC_CONNECTION_FOO`. Expected and not a bug — see
+  computes `EnvName` as `DBDATAKIT_SECRET_DBDATASYNC_CONNECTION_FOO`. Expected and not a bug — see
   `SecretStorePrefixTests.EnvName_ForAConnectionSecretRef_ComposesBothPrefixesWithoutConflatingThem`.
 
 ## What was built
@@ -85,14 +85,14 @@ fixed here rather than deferred:
   `SecretRefs.EnvironmentVariableFor` used to do, hardcoded to `CLRKERNEL_SECRET_`, to preset the
   environment variable the harness's spawned API/TaskRunner processes read their scenario credentials
   from. Left alone, `dbdatasync-dev-harness up` would have silently broken for any SqlAuth scenario the
-  moment the package bump landed — the spawned process would look for `DBDATASYNC_SECRET_*` and find
+  moment the package bump landed — the spawned process would look for `DBDATAKIT_SECRET_*` and find
   nothing, since the harness had set `CLRKERNEL_SECRET_*`. Replaced the hand-rolled folding with a
   prefix-only `SecretStore.ForProviders("DbDataSync", [])` used solely to compute the name via the real
   `EnvName`, so this can never drift from the app's actual prefix again.
 - Two Playwright fixtures had the same hardcoded name baked in for the same reason (presetting an env var
   for a spawned process to find): `tests/DbDataSync.Web.Tests/playwright.config.ts`'s `secretEnv` and
   `tests/DbDataSync.Web.Tests/tests/golden-path.spec.ts`'s assertion on the `credential-env-var` field.
-  Both updated to `DBDATASYNC_SECRET_*`.
+  Both updated to `DBDATAKIT_SECRET_*`.
 - `README.md` and `CONFIG.md` documented the old `CLRKERNEL_SECRET_*` fallback name and didn't mention
   the store's prefix being configured at all; both updated, and CONFIG.md's "Secrets" section now
   explains the prefix/ref-namespacing distinction so a reader doesn't have to rediscover it the way this
@@ -102,7 +102,7 @@ fixed here rather than deferred:
 
 - **New**: `tests/DbDataSync.Core.Tests/SecretStorePrefixTests.cs` — four tests: both real construction
   sites' literal expression (`new SecretStore("DbDataSync", true)`) reports `Prefix == "DbDataSync"`;
-  `EnvName` starts with `DBDATASYNC_SECRET_` and contains no `CLRKERNEL` (an explicit assertion, not one
+  `EnvName` starts with `DBDATAKIT_SECRET_` and contains no `CLRKERNEL` (an explicit assertion, not one
   that would pass by accident); the two-prefix composition case; and the `ForProviders` overload tests
   use carries the prefix too.
 - **Extended**: `ConfigRepositoryTests` (+1, the message-content test above);

@@ -5,7 +5,7 @@
 # (or in the web app). Run from the repository root. Another server is another service with `environment: *announce`.
 name: dbdatakit-build
 x-announce: &announce
-  DBDATAKIT_CONSOLE_ANNOUNCE_URL: http://console:8481
+  DBDATAKIT_ANNOUNCE_URL: http://console:8481
 services:
   console:
     build:

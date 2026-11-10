@@ -14,7 +14,7 @@ internal static class InitCommand
     public const string StatementLogDir = ".dbdatabuild/statement-log";
 
     /// <summary>Where a refresh writes its statement log instead of the project folder (a runner gives a task a read-only view of the project and a scratch directory; plan 28c E01). Unset: under the project, as always.</summary>
-    public const string StatementLogVariable = "DBDATABUILD_STATEMENT_LOG_DIR";
+    public const string StatementLogVariable = "DBDATAKIT_BUILD_STATEMENT_LOG_DIR";
 
     public static string StatementLogPath(string root, Func<string, string?> env) => env(StatementLogVariable) is { Length: 0 } or null ? Path.Combine(root, StatementLogDir) : env(StatementLogVariable)!;
 

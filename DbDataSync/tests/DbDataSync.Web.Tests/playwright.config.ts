@@ -81,8 +81,8 @@ if (!isWorker) {
 
 // The environment variables the spawned worker's secret store falls back to (this sandbox has no OS keychain): the connection passwords the specs save, for the spawned worker to resolve.
 const secretEnv = {
-  DBDATA_SECRET_DBDATA_SYNC_CONNECTION_PLAYWRIGHT_SRC: SA_PASSWORD,
-  DBDATA_SECRET_DBDATA_SYNC_CONNECTION_PLAYWRIGHT_TGT: SA_PASSWORD,
+  DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_PLAYWRIGHT_SRC: SA_PASSWORD,
+  DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_PLAYWRIGHT_TGT: SA_PASSWORD,
 }
 
 export default defineConfig({
