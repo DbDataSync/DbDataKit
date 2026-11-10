@@ -3,6 +3,8 @@
 # the tasks it starts run as that account). Run from an elevated prompt, as a windows-latest runner is. Plan 28a R27.
 # Usage: pwsh service-e2e.ps1 -Exe <path to the published dbdatarunner.exe>
 # The directory the exe is in gets the install ACL (administrators and SYSTEM full, the service read and run): give it a copy, not the build output.
+# The install keeps what the directory inherits (as under Program Files, where Users may only read), and `service doctor` fails a binary directory that Users can write. A hosted runner's temp
+# folder gives Users write access, so the script first does what Program Files does for a real install: cuts the inheritance and leaves Users read and run.
 param([Parameter(Mandatory)][string]$Exe)
 
 $ErrorActionPreference = 'Stop'
@@ -21,6 +23,7 @@ function Run([string[]]$cliArgs, [int[]]$ok = @(0)) {
 function Diagnose {
   Write-Host '--- service state ---'; & sc.exe query $ServiceName
   Write-Host '--- service configuration ---'; & sc.exe qc $ServiceName
+  Write-Host '--- the install directory ---'; & icacls.exe (Split-Path $Exe)
   Write-Host '--- the data directory ---'
   if (Test-Path $Data) { Get-ChildItem $Data -Force | Format-Table Name, Length, LastWriteTime | Out-String | Write-Host; & icacls.exe $Data }
   Write-Host '--- recent Application and System log ---'
@@ -49,6 +52,10 @@ function RunsAs {
 
 if (-not (Test-Path $Exe)) { throw "No executable at $Exe." }
 if (-not (Test-Path (Join-Path (Split-Path $Exe) 'taskhost\dbdatakit-taskhost.dll'))) { throw 'The published program has no taskhost\dbdatakit-taskhost.dll beside it.' }
+
+$InstallDir = Split-Path $Exe
+& icacls.exe $InstallDir /inheritance:r /grant:r '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' | Out-Host
+if ($LASTEXITCODE -ne 0) { throw "icacls could not lock down $InstallDir (exit $LASTEXITCODE)." }
 
 try {
   Run @('service', 'status') @(1)                       # nothing installed yet

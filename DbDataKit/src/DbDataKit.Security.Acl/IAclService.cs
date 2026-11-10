@@ -98,13 +98,24 @@ public sealed class FileSystemAclService : IAclService
     }
 
     [SupportedOSPlatform("windows")]
-    internal static AccessRights FromFileSystemRights(FileSystemRights r)
+    internal static AccessRights FromFileSystemRights(FileSystemRights r) => FromMask((int)r);
+
+    // The access mask bits of FileSystemRights (the Win32 file access rights), as numbers so the mapping runs and is tested on every platform.
+    private const int ExecuteMask = 0x20;
+    private const int DeleteMask = 0x10000 | 0x40;
+    private const int ChangePermissionsMask = 0x40000;
+    private const int TakeOwnershipMask = 0x80000;
+
+    internal static AccessRights FromMask(int r)
     {
         var a = AccessRights.None;
-        if ((r & (FileSystemRights.ReadData | FileSystemRights.ListDirectory)) != 0) a |= AccessRights.Read;
-        if ((r & FileSystemRights.ExecuteFile) != 0) a |= AccessRights.Execute;
-        if ((r & (FileSystemRights.WriteData | FileSystemRights.AppendData | FileSystemRights.CreateFiles | FileSystemRights.CreateDirectories)) != 0) a |= AccessRights.Write;
-        if ((r & (FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles)) != 0) a |= AccessRights.Delete;
+        if ((r & 0x1) != 0) a |= AccessRights.Read;                                   // ReadData, ListDirectory
+        if ((r & ExecuteMask) != 0) a |= AccessRights.Execute;                        // ExecuteFile, Traverse
+        if ((r & (0x2 | 0x4)) != 0) a |= AccessRights.Write;              // WriteData/CreateFiles, AppendData/CreateDirectories
+        if ((r & DeleteMask) != 0) a |= AccessRights.Delete;                          // Delete, DeleteSubdirectoriesAndFiles
+        // What Full has beyond Modify (bit 16): change the permissions and take ownership. Without it an Administrators or SYSTEM ACE of FullControl reads back as Modify, and the service
+        // doctor reported "lacks 16" for a directory the install had just locked correctly.
+        if ((r & (ChangePermissionsMask | TakeOwnershipMask)) == (ChangePermissionsMask | TakeOwnershipMask)) a |= AccessRights.Full & ~AccessRights.Modify;
         return a;
     }
 }
