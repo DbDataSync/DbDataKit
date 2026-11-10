@@ -172,8 +172,8 @@ class ShippedGlobalEnvTests(unittest.TestCase):
         self.assertIn("DbDataSync__App__RepoRoot", cli)
 
 
-    def test_the_store_manifest_names_the_folder_its_service_uses(self):
-        for folder, program, var in (("DbDataStore", "DbDataStore", "DBDATASTORE_SERVER_DIR"),):
+    def test_the_store_and_workspace_manifests_name_the_folder_their_service_uses(self):
+        for folder, program, var in (("DbDataStore", "DbDataStore", "DBDATASTORE_SERVER_DIR"), ("DbDataWorkspace", "DbDataWorkspace", "DBDATAWORKSPACE_SERVER_DIR")):
             env = self.meta(f"{folder}/dist.json")["globalEnv"]
             self.assertEqual(env, [{"name": var, "programData": f"{program}\\server"}])
             settings = (REPO_ROOT / f"{folder}/src/{folder}.Server/{program[6:]}Settings.cs").read_text(encoding="utf-8")

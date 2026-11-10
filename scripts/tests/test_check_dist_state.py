@@ -17,7 +17,7 @@ def tree(notes):
     return root
 
 
-GOOD = {"DbDataConsole": "see dbdatakit state init", "DbDataGateway": "dbdatagateway state init", "DbDataBuild": "run dbdatabuild state init", "DbDataRunner": "dbdatarunner state init", "DbDataStore": "dbdatastore state init"}
+GOOD = {"DbDataConsole": "see dbdatakit state init", "DbDataGateway": "dbdatagateway state init", "DbDataBuild": "run dbdatabuild state init", "DbDataRunner": "dbdatarunner state init", "DbDataStore": "dbdatastore state init", "DbDataWorkspace": "dbdataworkspace state init"}
 
 
 class CheckDistState(unittest.TestCase):
