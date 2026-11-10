@@ -16,7 +16,7 @@ REPO = "acme/kit"
 VERSION = "2026.2.2.0200"
 
 
-def member(product, exe=None, service=None, vc=False, win=True):
+def member(product, exe=None, service=None, vc=False, win=True, env=None):
     meta = {
         "product": product,
         "displayName": product,
@@ -31,13 +31,15 @@ def member(product, exe=None, service=None, vc=False, win=True):
         meta["service"] = service
     if vc:
         meta["requiresVcRuntime"] = True
+    if env:
+        meta["globalEnv"] = env
     return meta
 
 
 MEMBERS = [
-    ("dbdatakit", "console", member("dbdatakit", service={"name": "KitConsole", "register": "service install"})),
+    ("dbdatakit", "console", member("dbdatakit", service={"name": "KitConsole", "register": "service install"}, env=[{"name": "KIT_DIR", "programData": "Kit\\console"}])),
     ("dbdatagateway", "gateway", member("dbdatagateway", service={"name": "gw", "register": "service install --name {name}"}, vc=True)),
-    ("dbdatabuild", "build", member("dbdatabuild")),          # no service: it is paired but not registered
+    ("dbdatabuild", "build", member("dbdatabuild", env=[{"name": "BUILD_DIR", "programData": "Kit\\build"}])),          # no service: it is paired but not registered
 ]
 
 
@@ -117,11 +119,36 @@ class SuiteManifestTests(unittest.TestCase):
     def test_per_member_sums_files_give_the_same_manifest(self):
         self.assertEqual(self.manifest(split=True), self.manifest(split=False))
 
-    def test_it_only_packages(self):
+    def test_it_installs_programs_and_sets_the_machine_variables_only(self):
         m = self.manifest()
-        for key in ("post_install", "pre_uninstall", "installer", "uninstaller", "persist"):
+        for key in ("installer", "uninstaller", "persist"):
             self.assertNotIn(key, m)
-        self.assertEqual(sorted(m), ["architecture", "bin", "description", "extract_to", "homepage", "license", "notes", "suggest", "version"])
+        # The one script: the members' own globalEnv, for a global install only, removed on uninstall (as each product's own manifest does).
+        script = "\n".join(m["post_install"]) + "\n" + "\n".join(m["pre_uninstall"])
+        self.assertIn("if ($global)", script)
+        self.assertIn("SetEnvironmentVariable", script)
+        for word in ("service install", "server pair", "instance add", "Start-Service", "sc.exe", "New-Service"):
+            self.assertNotIn(word, script)
+        self.assertEqual(sorted(m), ["architecture", "bin", "description", "extract_to", "homepage", "license", "notes", "post_install", "pre_uninstall", "suggest", "version"])
+
+    def test_the_variables_are_every_members_global_env_in_order(self):
+        m = self.manifest()
+        script = "\n".join(m["post_install"])
+        self.assertLess(script.index("KIT_DIR"), script.index("BUILD_DIR"))
+        self.assertIn("Kit\\console", script)
+        self.assertIn("Kit\\build", script)
+        undo = "\n".join(m["pre_uninstall"])
+        self.assertIn("KIT_DIR", undo)
+        self.assertIn("BUILD_DIR", undo)
+        self.assertIn("Open a new terminal", m["notes"])
+
+    def test_a_suite_with_no_global_env_has_no_scripts(self):
+        self.suite = lay_out(self.tmp, members=[(p, f, member(p)) for p, f, _ in MEMBERS])
+        r, path = self.bind()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads(path.read_text())
+        self.assertNotIn("post_install", m)
+        self.assertNotIn("pre_uninstall", m)
 
     def test_the_notes_name_each_service_and_each_pairing_by_hand(self):
         notes = self.manifest()["notes"]
