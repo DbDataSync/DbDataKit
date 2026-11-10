@@ -233,6 +233,12 @@ The CI runners are small (two cores, Windows and Linux), run many jobs at once, 
 | `A secure connection could not be established. [postgres AuthenticationException]` (also mysql) in a Sync test that runs a replication against a `testenv` engine | Sync's drivers verify the server certificate by default (SSL Mode VerifyFull); the testenv containers have no TLS | the connection's `Properties`: `SSL Mode: Disable` (PostgreSQL), `SslMode: None` (MySQL, MariaDB), `Encrypt: false` (Oracle), `TrustServerCertificate: true` (SQL Server); `ChangeApplyTargets` has all four |
 | a test that starts the engine as a runner process fails with `The engine's build output was not found above ...` | `EngineBuildOutput` walks up from the test binary to `src/DbDataSync.TaskRunner/bin/<configuration>/<framework>`; under `--artifacts-path` there is none | build the test project in the tree (no `--artifacts-path`) for the runner-path tests, and delete `bin`/`obj` afterwards |
 
+### Git in tests and scripts
+
+| Signature | Cause | Fix |
+| --- | --- | --- |
+| `fatal: this operation must be run in a work tree` in every worktree of a machine, the stop hook fails, and `git -C <main repo> config core.bare` says `true` (reset with `git config --local core.bare false`, it comes back); first seen during `git rebase -x <checks>` that ran `python3 -I -m unittest discover -s scripts/tests`, and `test_rename_proxy_to_gateway` errors with `git add -A ... exit status 128` | `git rebase -x` (and hooks) run the command with `GIT_DIR`, `GIT_WORK_TREE` and `GIT_INDEX_FILE` set. The test's `git -C <tmp> init` therefore did not make a repository in the temporary folder: `git init` reinitialised the repository `GIT_DIR` names and, with the work tree not agreed, wrote `core.bare = true` into it. From a linked worktree that is the main repository's shared `.git/config`. Reproduced with a test run under `git rebase -x` in a linked worktree | every test or script that runs git on a repository of its own uses `scripts/tests/gitenv.py` (`run_git`, `clean_env`, which drop `GIT_DIR` and its siblings) or, in a script, removes them itself (`rename_proxy_to_gateway.git`); `test_zz_git_config_untouched.py` fails the suite when any test changes the checkout's `.git/config`. Also unset `GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE` at the top of a `git rebase -x` check script |
+
 ### Merging `main` into a branch
 
 | Signature | Cause | Fix |

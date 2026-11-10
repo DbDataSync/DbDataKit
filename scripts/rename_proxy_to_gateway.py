@@ -26,6 +26,7 @@ The script is idempotent: a second run finds no old path and no old name outside
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -202,7 +203,9 @@ def transform(path: str, text: str, identifiers: dict[str, str]) -> str:
 # ---- the run -----------------------------------------------------------------------------------------------------------------------------
 
 def git(root: Path, *args: str, check: bool = True) -> str:
-    result = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, check=check)
+    # `-C root` names the repository; a GIT_DIR, GIT_WORK_TREE or GIT_INDEX_FILE inherited from `git rebase -x` or a hook would override it (and `git init` would rewrite that repository's config).
+    env = {k: v for k, v in os.environ.items() if k not in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_PREFIX", "GIT_OBJECT_DIRECTORY", "GIT_NAMESPACE")}
+    result = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, check=check, env=env)
     return result.stdout
 
 
