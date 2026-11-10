@@ -232,7 +232,7 @@ public sealed class ReplicationOwnershipTests : IDisposable
     }
 
     private ClientCheckpointItem RunnerPosition(string position, params (string Part, string Value)[] more) =>
-        new(KeyOfOrders(), 3, new Dictionary<string, string>(more.Select(m => KeyValuePair.Create(m.Part, m.Value))) { ["position"] = position, ["position_time"] = "2026-11-09T11:30:00.0000000Z" });
+        new(WatermarkCheckpoint.ItemKey("orders", KeyOfOrders()), 3, new Dictionary<string, string>(more.Select(m => KeyValuePair.Create(m.Part, m.Value))) { ["position"] = position, ["position_time"] = "2026-11-09T11:30:00.0000000Z" });
 
     [Fact]
     public async Task Rollback_CopiesThePositionTheDrainAdvanced_WithItsIntentAndHold_SoNoRowIsReadTwice()

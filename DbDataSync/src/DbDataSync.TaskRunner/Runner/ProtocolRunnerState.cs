@@ -91,9 +91,9 @@ internal sealed class ProtocolRunnerState(IDrainCheckpoints checkpoints, ILogger
     /// <summary>The runner's run lock keeps two drains of one replication apart; this keeps two passes of one mapping apart within the drain.</summary>
     public bool TryAcquireLock(string taskName, RunKind runKind, string mappingName, Guid runId) => _locks.TryAdd((runKind, mappingName), runId);
 
-    public string? GetWatermark(string taskName, string mappingName, string sourceTable) => checkpoints.Read(sourceTable)?.Position;
+    public string? GetWatermark(string taskName, string mappingName, string sourceTable) => checkpoints.Read(WatermarkCheckpoint.ItemKey(mappingName, sourceTable))?.Position;
 
-    public MappingReadState? GetReadState(string taskName, string mappingName, string sourceTable) => ProtocolPlannerState.ReadState(checkpoints, sourceTable);
+    public MappingReadState? GetReadState(string taskName, string mappingName, string sourceTable) => ProtocolPlannerState.ReadState(checkpoints, WatermarkCheckpoint.ItemKey(mappingName, sourceTable));
 
     public void BeginRun(Guid runId, int? pid)
     {
@@ -151,13 +151,13 @@ internal sealed class ProtocolRunnerState(IDrainCheckpoints checkpoints, ILogger
 
     /// <summary>Only ever called after the target write has committed, so the checkpoint moves only then.</summary>
     public void SetWatermark(string taskName, string mappingName, string sourceTable, string watermark, DateTimeOffset? watermarkTimeUtc = null) =>
-        checkpoints.Write(sourceTable, watermark, watermarkTimeUtc);
+        checkpoints.Write(WatermarkCheckpoint.ItemKey(mappingName, sourceTable), watermark, watermarkTimeUtc);
 
     /// <summary>What the next pass is meant to do, beside the position (the checkpoint's <c>intent</c>); <see cref="ReadIntent.Changes"/> is what a checkpoint with a position and no intent already means.</summary>
-    public void SetReadIntent(string taskName, string mappingName, string sourceTable, ReadIntent intent) => checkpoints.WriteIntent(sourceTable, intent);
+    public void SetReadIntent(string taskName, string mappingName, string sourceTable, ReadIntent intent) => checkpoints.WriteIntent(WatermarkCheckpoint.ItemKey(mappingName, sourceTable), intent);
 
     /// <summary>Why the next pass is not to run, beside the position (the checkpoint's <c>hold</c>): the planner leaves a held mapping out of what it queues, as the API's scheduler does.</summary>
-    public void SetReadHold(string taskName, string mappingName, string sourceTable, ReadHold hold) => checkpoints.WriteHold(sourceTable, hold);
+    public void SetReadHold(string taskName, string mappingName, string sourceTable, ReadHold hold) => checkpoints.WriteHold(WatermarkCheckpoint.ItemKey(mappingName, sourceTable), hold);
 
     /// <summary>A verification result is an output of the run (a step's value, stored with the run): the Sync back end reads it from the run when it lists results for a runner-owned replication.</summary>
     public void RecordVerificationResult(VerificationResultRecord result) =>

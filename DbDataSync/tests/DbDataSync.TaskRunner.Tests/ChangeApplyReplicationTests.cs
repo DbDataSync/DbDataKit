@@ -350,12 +350,12 @@ public sealed class ChangeApplyReplicationTests : IAsyncLifetime
 
         using (var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins()))
         {
-            rig.SeedWatermark(_watermarkKey, start);
+            rig.SeedWatermark("main", _watermarkKey, start);
             await DrainOnTheRunnerAsync(rig, package);
             var afterOne = await SourceRowsAsync();
             Assert.Equal(afterOne, await TargetRowsAsync());
             Assert.Contains("50|five|5.00", afterOne);
-            Assert.NotEqual(start, rig.Watermark(_watermarkKey)!.Value.Position);
+            Assert.NotEqual(start, rig.Watermark("main", _watermarkKey)!.Value.Position);
 
             await ChangesTwoAsync();
             await DrainOnTheRunnerAsync(rig, package);
@@ -366,7 +366,7 @@ public sealed class ChangeApplyReplicationTests : IAsyncLifetime
         // position delivers everything since once more, and the target, which has it all, stays the same
         var expected = await SourceRowsAsync();
         using var again = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
-        again.SeedWatermark(_watermarkKey, start);
+        again.SeedWatermark("main", _watermarkKey, start);
         await DrainOnTheRunnerAsync(again, package);
         Assert.Equal(expected, await TargetRowsAsync());
         Assert.Equal(expected, await SourceRowsAsync());

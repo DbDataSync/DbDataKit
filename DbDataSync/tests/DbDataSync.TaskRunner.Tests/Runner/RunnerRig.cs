@@ -167,7 +167,7 @@ internal sealed class RunnerRig : IDisposable
     /// read-only view the task runs from, like a published version. The view is made of copies, not links: the .NET host resolves a link to the file it points at and looks for the runtime configuration and the
     /// dependencies beside <i>that</i>, so <c>dotnet engine.dll</c> does not start from a view of links (what Windows gets anyway; plan 28c E04 and E05 meet it again).
     /// </summary>
-    public async Task<TaskRunRequest> DrainRequestAsync(string source, string replication, int degreeOfParallelism = 1, Guid? runId = null, string chain = Chain, string? runtimeSource = null, bool runAll = false, TimeSpan? cancellationGrace = null)
+    public async Task<TaskRunRequest> DrainRequestAsync(string source, string replication, int degreeOfParallelism = 1, Guid? runId = null, string chain = Chain, string? runtimeSource = null, bool runAll = false, TimeSpan? cancellationGrace = null, string? requests = null)
     {
         var cacheRoot = Directory.CreateTempSubdirectory("dbdatasync-e03-cache-").FullName;
         _cleanups.Add(() => Rewritable(cacheRoot));
@@ -192,6 +192,8 @@ internal sealed class RunnerRig : IDisposable
                 ["replication"] = replication,
                 ["degree_of_parallelism"] = degreeOfParallelism.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 ["run_all"] = runAll ? "true" : "false",
+                // what an operator asked of the replication through the API (a verification, a reconcile, a bulk load), as the drain input says
+                ["requests"] = requests ?? "",
             },
         };
     }
@@ -207,22 +209,22 @@ internal sealed class RunnerRig : IDisposable
         return manifest with { Tasks = [.. manifest.Tasks.Where(t => t.Name == "drain").Select(t => t with { Entry = new TaskEntry() })] };
     }
 
-    /// <summary>The checkpoint of a mapping as the runner's progress store has it now.</summary>
-    public (string Position, DateTimeOffset? Time, long Version)? Watermark(string key)
+    /// <summary>The checkpoint of a mapping (the item of the mapping and its source's watermark key) as the runner's progress store has it now.</summary>
+    public (string Position, DateTimeOffset? Time, long Version)? Watermark(string mapping, string key)
     {
-        var checkpoint = new DbDataKit.State.ProgressStore(Database, new DbDataKit.State.ProgressKey(Package, Channel, "drain")).GetCheckpoint("watermark", key);
+        var checkpoint = new DbDataKit.State.ProgressStore(Database, new DbDataKit.State.ProgressKey(Package, Channel, "drain")).GetCheckpoint("watermark", DbDataSync.State.WatermarkCheckpoint.ItemKey(mapping, key));
         if (checkpoint is null || !checkpoint.Parts.TryGetValue("position", out var position)) return null;
         DateTimeOffset? time = checkpoint.Parts.TryGetValue("position_time", out var at) ? at.AsTime : null;
         return (position.AsText, time, checkpoint.Version);
     }
 
     /// <summary>Stores a position for a mapping, as a publisher or an administrator would before the first drain (the engine cannot start a replication that has none: its initial load is not on the runner yet).</summary>
-    public void SeedWatermark(string key, string position)
+    public void SeedWatermark(string mapping, string key, string position)
     {
         var store = new DbDataKit.State.ProgressStore(Database, new DbDataKit.State.ProgressKey(Package, Channel, "drain"));
         var parts = new Dictionary<string, DbDataKit.State.ProgressValue> { ["position"] = DbDataKit.State.ProgressValue.OfText(position) };
-        if (!store.Advance("watermark", parts, expectedVersion: 0, itemKey: key, actor: "test"))
-            throw new InvalidOperationException($"The checkpoint for '{key}' was already there.");
+        if (!store.Advance("watermark", parts, expectedVersion: 0, itemKey: DbDataSync.State.WatermarkCheckpoint.ItemKey(mapping, key), actor: "test"))
+            throw new InvalidOperationException($"The checkpoint for '{mapping}' on '{key}' was already there.");
     }
 
     public StoredRun Run(Guid runId) => Runs.Get(runId) ?? throw new InvalidOperationException($"No run {runId}.");

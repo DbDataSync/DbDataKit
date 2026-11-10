@@ -88,7 +88,7 @@ public sealed class RunnerLagTests(TestApiFactory factory) : IClassFixture<TestA
         {
             var parts = new Dictionary<string, string> { ["position"] = position };
             if (positionTime is { } at) parts["position_time"] = at.UtcDateTime.ToString("O");
-            runner.Checkpoint.Add(new ClientCheckpointItem(pair.WatermarkKey, 2, parts));
+            runner.Checkpoint.Add(new ClientCheckpointItem(WatermarkCheckpoint.ItemKey("orders", pair.WatermarkKey), 2, parts));
         }
 
         // a drain records the checks of each cycle as a step; two cycles, to show the readings are read across them

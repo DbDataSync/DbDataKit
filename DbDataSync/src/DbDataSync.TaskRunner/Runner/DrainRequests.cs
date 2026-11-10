@@ -55,12 +55,13 @@ public static class DrainRequests
             {
                 if (string.IsNullOrEmpty(request.SourceKey) || string.IsNullOrEmpty(request.Position))
                     throw new InvalidOperationException($"The position request of '{request.Mapping}' has no source key or no position.");
-                // a position the mapping has is the run's own progress and wins: the seed is only for the mapping that has none
-                if (checkpoints.Read(request.SourceKey) is null)
+                // the checkpoint is the mapping's own (a table replicated by two mappings has a position for each); a position the mapping has is the run's own progress and wins: the seed is only for the mapping that has none
+                var item = WatermarkCheckpoint.ItemKey(request.Mapping, request.SourceKey);
+                if (checkpoints.Read(item) is null)
                 {
-                    checkpoints.Write(request.SourceKey, request.Position, request.PositionTime);
-                    if (Enum.TryParse<ReadIntent>(request.Intent, out var intent)) checkpoints.WriteIntent(request.SourceKey, intent);
-                    if (Enum.TryParse<ReadHold>(request.Hold, out var hold)) checkpoints.WriteHold(request.SourceKey, hold);
+                    checkpoints.Write(item, request.Position, request.PositionTime);
+                    if (Enum.TryParse<ReadIntent>(request.Intent, out var intent)) checkpoints.WriteIntent(item, intent);
+                    if (Enum.TryParse<ReadHold>(request.Hold, out var hold)) checkpoints.WriteHold(item, hold);
                     log.LogInformation("'{Mapping}' starts from the position the API handed over.", request.Mapping);
                 }
 
@@ -71,8 +72,9 @@ public static class DrainRequests
             {
                 if (string.IsNullOrEmpty(request.SourceKey))
                     throw new InvalidOperationException($"The resync request of '{request.Mapping}' has no source key.");
-                checkpoints.WriteIntent(request.SourceKey, ReadIntent.InitialLoad);
-                checkpoints.WriteHold(request.SourceKey, ReadHold.None);
+                var resyncItem = WatermarkCheckpoint.ItemKey(request.Mapping, request.SourceKey);
+                checkpoints.WriteIntent(resyncItem, ReadIntent.InitialLoad);
+                checkpoints.WriteHold(resyncItem, ReadHold.None);
                 await EnqueueAsync(queue, replication, new DrainRequest(nameof(RunKind.Primary), request.Mapping), ct).ConfigureAwait(false);
                 log.LogInformation("Resync of '{Mapping}': its next pass is an initial load.", request.Mapping);
                 return;

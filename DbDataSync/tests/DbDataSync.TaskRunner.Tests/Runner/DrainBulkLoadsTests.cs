@@ -140,7 +140,7 @@ public sealed class DrainBulkLoadsTests : IDisposable
         var read = state.GetReadState("repl", "big", "src/App/big")!;
         Assert.Equal(ReadHold.Loading, read.Hold);
         Assert.Null(read.Watermark);
-        Assert.Equal("0x42", ledger.Items["src/App/big"].PendingPosition);
+        Assert.Equal("0x42", ledger.Items[WatermarkCheckpoint.ItemKey("big", "src/App/big")].PendingPosition);
     }
 
     [Fact]
@@ -175,7 +175,7 @@ public sealed class DrainBulkLoadsTests : IDisposable
         var after = state.GetReadState("repl", "big", "k")!;
         Assert.Equal(ReadHold.None, after.Hold);
         Assert.Equal(ReadIntent.Changes, after.Intent);
-        Assert.Null(ledger.Items["k"].PendingPosition);
+        Assert.Null(ledger.Items[WatermarkCheckpoint.ItemKey("big", "k")].PendingPosition);
         Assert.Equal((2, 0, 15L, 15L), (ledger.Batches.Single().Value.Succeeded, ledger.Batches.Single().Value.Failed, ledger.Batches.Single().Value.RowsRead, ledger.Batches.Single().Value.RowsWritten));
     }
 
