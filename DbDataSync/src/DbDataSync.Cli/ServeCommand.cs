@@ -45,10 +45,7 @@ public static class ServeCommand
             // DbDataSync:* key (see DbDataSyncHost.InsertConfigFile) — the file is read here, rather
             // than through DbDataSyncHost.Build's own configuration chain, because the translation to
             // --urls, below, has to happen before that chain exists.
-            var url = CliOptions.Read(args, "--url")
-                ?? Environment.GetEnvironmentVariable("DbDataSync__App__Url")
-                ?? DbDataSyncConfigFile.Read(root).GetValueOrDefault("DbDataSync:App:Url")
-                ?? ApiOptions.DefaultUrl;
+            var url = ResolveUrl(args, root, Environment.GetEnvironmentVariable);
 
             try
             {
@@ -97,6 +94,16 @@ public static class ServeCommand
             return Fail(ex, null);
         }
     }
+
+    /// <summary>
+    /// The address to serve: <c>--url</c>, else <c>DbDataSync__App__Url</c>, else <c>DbDataSync:App:Url</c> of the file, else <see cref="ApiOptions.DefaultUrl"/>,
+    /// which is https (plan 33, SC41): plain http is served only when one of those names an <c>http://</c> address.
+    /// </summary>
+    internal static string ResolveUrl(string[] args, string root, Func<string, string?> environment) =>
+        CliOptions.Read(args, "--url")
+            ?? environment("DbDataSync__App__Url")
+            ?? DbDataSyncConfigFile.Read(root).GetValueOrDefault("DbDataSync:App:Url")
+            ?? ApiOptions.DefaultUrl;
 
     /// <summary>
     /// Where a startup failure actually goes: the Windows Event Log under a real service (nothing else
@@ -186,7 +193,7 @@ public static class ServeCommand
         {
             using var certificate = ManagedSelfSignedCertificate.LoadOrRenew(root, address.Host, ManagedSelfSignedCertificate.DefaultValidityDays, out _);
             CertCommand.BindManagedFile(root, address.Host);
-            Console.WriteLine($"  certificate        {path} (self-signed, made for {address.Host})");
+            Console.WriteLine($"  certificate        {path} (self-signed, made for {address.Host}; the public copy to trust is {Path.ChangeExtension(path, ".cer")})");
             return null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException or LibGit2SharpException or ArgumentException)

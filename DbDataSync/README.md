@@ -72,6 +72,9 @@ Then open the server on the console's **Servers** page (`/servers/<id>`). People
 **Docs** (`/docs/sync`) and at each Sync screen's **Docs** link; the pages in this folder are the same files. The server must be reachable over
 HTTPS for the console to pair with it (see [Install](docs/install.md#connecting-a-console)).
 
+Sync serves **https by default**, on `https://localhost:5080`: with no certificate configured, the first start makes a self-signed one in `tls/` of its data folder and prints
+where. Plain http is served only with `--url http://...`; a client that used `http://localhost:5080` is refused.
+
 ## Next steps
 
 - [**Configuration**](docs/configuration.md) —

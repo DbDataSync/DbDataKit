@@ -5,6 +5,12 @@ reaches the server has to be told to trust it once (the console, when it pairs w
 
 There are two places the certificate can live.
 
+## The default: made on the first start
+
+Sync serves https on `https://localhost:5080` by default. When no certificate is configured, `dbdatasync server run` (and the registered service) makes this file certificate itself on its first start and prints where it wrote it
+(`certificate  <repo>/tls/dbdatasync.pfx (self-signed, made for localhost; the public copy to trust is <repo>/tls/dbdatasync.cer)`). A certificate that is configured wins and nothing is generated; with an explicit `--url http://...`
+nothing is generated and nothing is served over https. `dbdatasync health check` trusts that `dbdatasync.cer` for an address of the same machine.
+
 ## A file (any platform)
 
 ```

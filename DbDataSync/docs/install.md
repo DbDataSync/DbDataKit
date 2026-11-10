@@ -224,6 +224,11 @@ dbdatasync server pair                      # on the server: a single-use code, 
 dbdatakit instance add https://sync.example:5080 --code <code>     # or the console's Servers page
 ```
 
+Sync serves **https by default**: `https://localhost:5080`. Earlier releases served plain `http://localhost:5080`; a client that still uses that address is refused.
+With no certificate configured, the first start makes a self-signed one in `<repo>/tls` (`dbdatasync.pfx`, and `dbdatasync.cer` beside it, for the machine's name and `localhost`), prints where it wrote it, and the renewal service keeps it. A certificate you configure
+(`dbdatasync cert use-pem`, `use-pfx`, the Windows store) is used instead and nothing is generated. Plain http is served only when you ask for it with `--url http://...` (or `DbDataSync:App:Url`), and then no certificate is made.
+`dbdatasync health check` with no flags checks the default address and trusts the generated `dbdatasync.cer` for it.
+
 Pairing needs the server to listen on **HTTPS** (a certificate of its own: see [Certificates](certificates.md)), because the console pins the certificate the server
 presents. Behind a proxy that ends TLS, bind plain HTTP as described under [Plain HTTP and reverse proxies](configuration.md#plain-http-and-reverse-proxies) and give the
 server the fingerprint of the certificate the proxy presents in `DbDataSync:Management:CertificateFingerprint`. A person who opens the server's own address in a browser gets a message

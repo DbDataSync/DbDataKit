@@ -22,7 +22,13 @@ namespace DbDataSync.Cli;
 /// </summary>
 internal sealed class HealthProbeClient : IDisposable
 {
-    public HealthProbeClient(TimeSpan timeout)
+    /// <param name="timeout">How long one request may take.</param>
+    /// <param name="pinned">The public certificate the server made for itself (<c>tls/dbdatasync.cer</c>): the one
+    /// certificate that is trusted on top of the machine's own trust, and only when the server presents exactly it.
+    /// Null trusts nothing extra.</param>
+    /// <param name="strict">When true a certificate that neither validates nor is the pinned one fails the request
+    /// (<see cref="HttpRequestException"/>), as an ordinary client would; the update and readiness probes leave it false.</param>
+    public HealthProbeClient(TimeSpan timeout, X509Certificate2? pinned = null, bool strict = false)
     {
         var handler = new SocketsHttpHandler
         {
@@ -30,8 +36,18 @@ internal sealed class HealthProbeClient : IDisposable
             {
                 RemoteCertificateValidationCallback = (_, certificate, _, errors) =>
                 {
+                    if (pinned is not null && certificate is not null
+                        && string.Equals(certificate.GetCertHashString(System.Security.Cryptography.HashAlgorithmName.SHA256),
+                            pinned.GetCertHashString(System.Security.Cryptography.HashAlgorithmName.SHA256), StringComparison.OrdinalIgnoreCase)
+                        && (errors & SslPolicyErrors.RemoteCertificateNotAvailable) == 0)
+                    {
+                        // The very certificate the server wrote for itself: the chain and the name are not asked about it.
+                        CertificateProblem = null;
+                        return true;
+                    }
+
                     CertificateProblem = Describe(certificate, errors);
-                    return true;
+                    return !strict || errors == SslPolicyErrors.None;
                 },
             },
         };
@@ -46,6 +62,35 @@ internal sealed class HealthProbeClient : IDisposable
     public string? CertificateProblem { get; private set; }
 
     public void Dispose() => Client.Dispose();
+
+    /// <summary>
+    /// The probe <c>dbdatasync health check</c> uses. An https address on this machine (loopback) trusts the certificate the server
+    /// wrote in <paramref name="root"/> (<c>tls/dbdatasync.cer</c>) and nothing else is switched off: a server presenting another
+    /// certificate there is reported as before (it answers, the certificate is named), because it is this machine's own port.
+    /// An https address anywhere else gets normal validation and fails on a certificate that does not validate.
+    /// </summary>
+    public static HealthProbeClient ForCheck(string url, string root, TimeSpan timeout)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var address) || address.Scheme != Uri.UriSchemeHttps)
+            return new HealthProbeClient(timeout);
+
+        if (!address.IsLoopback)
+            return new HealthProbeClient(timeout, pinned: null, strict: true);
+
+        X509Certificate2? pinned = null;
+        try
+        {
+            var file = Path.ChangeExtension(DbDataSync.Certificates.ManagedSelfSignedCertificate.PfxPath(root), ".cer");
+            if (File.Exists(file))
+                pinned = X509CertificateLoader.LoadCertificateFromFile(file);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
+        {
+            // an unreadable copy pins nothing; the probe then reports the certificate as it always did
+        }
+
+        return new HealthProbeClient(timeout, pinned);
+    }
 
     private static string? Describe(X509Certificate? certificate, SslPolicyErrors errors)
     {

@@ -565,7 +565,7 @@ public class UpdateCommandTests : IDisposable
 
         Assert.Equal(0, exit);
         Assert.Equal("", error);
-        Assert.Equal([InstallIntoB(), "service stop", "service start", "health http://localhost:5080 90s"], _events);
+        Assert.Equal([InstallIntoB(), "service stop", "service start", "health https://localhost:5080 90s"], _events);
         Assert.Equal("b", Layout.Current);
         Assert.Equal("2026.9.16.1005", Layout.Slot("a").Version);
         Assert.Contains("Updated to 2026.9.18.1918. The service is answering.", output);
@@ -579,10 +579,10 @@ public class UpdateCommandTests : IDisposable
         var (exit, output, error) = await RunAsync(Apply("--yes", "--health-timeout", "5"), SlotEnv(service: Systemd, healthy: false), Network());
 
         Assert.Equal(1, exit);
-        Assert.Contains("did not answer at http://localhost:5080 within 5 seconds", output);
+        Assert.Contains("did not answer at https://localhost:5080 within 5 seconds", output);
         Assert.Contains("Switched back: 2026.9.16.1005 is running again", error);
         Assert.Equal(
-            [InstallIntoB(), "service stop", "service start", "health http://localhost:5080 5s", "service stop", "service start"],
+            [InstallIntoB(), "service stop", "service start", "health https://localhost:5080 5s", "service stop", "service start"],
             _events);
         Assert.Equal("a", Layout.Current);
         Assert.Equal("2026.9.18.1918", Layout.Slot("b").Version);
@@ -646,7 +646,7 @@ public class UpdateCommandTests : IDisposable
 
         Assert.Equal(0, exit);
         Assert.Contains("Slot b already holds 2026.9.18.1918", output);
-        Assert.Equal(["service stop", "service start", "health http://localhost:5080 90s"], _events);
+        Assert.Equal(["service stop", "service start", "health https://localhost:5080 90s"], _events);
         Assert.Equal("b", Layout.Current);
     }
 
@@ -665,7 +665,7 @@ public class UpdateCommandTests : IDisposable
         Assert.Empty(network.Requested);
         Assert.DoesNotContain("Downloading", output);
         Assert.Contains($"Slot b already holds {pruned}", output);
-        Assert.Equal(["service stop", "service start", "health http://localhost:5080 90s"], _events);
+        Assert.Equal(["service stop", "service start", "health https://localhost:5080 90s"], _events);
         Assert.Equal("b", Layout.Current);
     }
 
@@ -698,7 +698,7 @@ public class UpdateCommandTests : IDisposable
         var (exit, _, _) = await RunAsync(Apply("--yes"), SlotEnv(service: windowsService, windows: true), Network());
 
         Assert.Equal(0, exit);
-        Assert.Equal([InstallIntoB(), "service stop", "service start", "health http://localhost:5080 90s"], _events);
+        Assert.Equal([InstallIntoB(), "service stop", "service start", "health https://localhost:5080 90s"], _events);
         Assert.Equal("b", Layout.Current);
     }
 
@@ -814,7 +814,7 @@ public class UpdateCommandTests : IDisposable
         Assert.EndsWith("--version 2026.9.16.1005", _events[0]);
         // dbdatasync.exe on Windows: the launcher's apphost carries the platform's extension, like the shim it replaces.
         Assert.Equal($"rebind dbdatasync -> {LauncherSetup.LauncherPath(ToolRoot)}", _events[1]);
-        Assert.Equal([InstallIntoB(), "service stop", "service start", "health http://localhost:5080 90s"], _events[2..]);
+        Assert.Equal([InstallIntoB(), "service stop", "service start", "health https://localhost:5080 90s"], _events[2..]);
         Assert.Equal("b", Layout.Current);
         Assert.Equal("launcher", File.ReadAllText(Path.Combine(ToolRoot, "dbdatasync")));
     }
@@ -856,7 +856,7 @@ public class UpdateCommandTests : IDisposable
         Assert.Equal(0, exit);
         Assert.Contains("Switch to   2026.9.11.532  (slot b)", output);
         Assert.Contains("Rolled back to 2026.9.11.532.", output);
-        Assert.Equal(["service stop", "service start", "health http://localhost:5080 90s"], _events);
+        Assert.Equal(["service stop", "service start", "health https://localhost:5080 90s"], _events);
         Assert.Equal("b", Layout.Current);
     }
 

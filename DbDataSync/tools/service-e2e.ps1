@@ -6,7 +6,7 @@ param([Parameter(Mandatory)][string]$Exe)
 $ErrorActionPreference = 'Stop'
 $ServiceName = 'DbDataSync'
 $Repo = Join-Path ($env:RUNNER_TEMP ?? $env:TEMP) 'dbdatasync-service-e2e'
-$Url = 'http://localhost:5080'
+$Url = 'https://localhost:5080'   # the default: the service makes a self-signed certificate in $Repo\tls on its first start
 
 function Run([string[]]$cliArgs, [int[]]$ok = @(0)) {
   Write-Host "> dbdatasync $($cliArgs -join ' ')"
@@ -20,8 +20,9 @@ function WaitHealthy([int]$seconds = 180) {
   $deadline = (Get-Date).AddSeconds($seconds)
   while ((Get-Date) -lt $deadline) {
     try {
-      $r = Invoke-WebRequest -Uri "$Url/api/health" -UseBasicParsing -TimeoutSec 5
-      if ($r.StatusCode -eq 200) { Write-Host "  healthy: $($r.Content)"; return }
+      # the tool's own check, which trusts the certificate file the server wrote and nothing else
+      & $Exe health check --repo $Repo
+      if ($LASTEXITCODE -eq 0) { Write-Host "  healthy: $Url"; return }
     } catch { }
     Start-Sleep -Seconds 2
   }

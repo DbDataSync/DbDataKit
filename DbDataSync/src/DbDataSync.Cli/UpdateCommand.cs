@@ -1,3 +1,4 @@
+using DbDataSync.Api.Configuration;
 using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
@@ -437,7 +438,7 @@ public static class UpdateCommand
     private static string HealthUrl(Options options, string root) =>
         options.Url
         ?? DbDataSyncConfigFile.Read(root).GetValueOrDefault("DbDataSync:App:Url")
-        ?? "http://localhost:5080";
+        ?? ApiOptions.DefaultUrl;
 
     private static string Elevation(UpdateEnvironment env) =>
         env.IsWindows ? "Run it from an elevated prompt (Run as administrator)." : "Run it with sudo.";

@@ -1,3 +1,4 @@
+using DbDataSync.Api.Configuration;
 using DbDataKit.Hosting.Certificates.Windows;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
@@ -720,7 +721,7 @@ public static class CertCommand
     {
         var url = CliOptions.Read(args, "--url")
             ?? DbDataSyncConfigFile.Read(root).GetValueOrDefault("DbDataSync:App:Url")
-            ?? "http://localhost:5080";
+            ?? ApiOptions.DefaultUrl;
         return Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.Host : "localhost";
     }
 

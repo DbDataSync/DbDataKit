@@ -1,3 +1,4 @@
+using DbDataSync.Api.Configuration;
 using DbDataSync.Cli.Tui.Tabs;
 using DbDataSync.Libraries;
 using Terminal.Gui.App;
@@ -56,7 +57,7 @@ internal static class SetupScreen
             tabs.InsertTab(nextIndex++, service);
         tabs.InsertTab(nextIndex, certificate);
 
-        var savedUrl = "http://localhost:5080";
+        var savedUrl = ApiOptions.DefaultUrl;
         var startRequested = false;
         var exitCode = 0;
 

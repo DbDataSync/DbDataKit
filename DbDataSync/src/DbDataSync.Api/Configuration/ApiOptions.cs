@@ -25,7 +25,7 @@ public sealed class ApiOptions
     // Named so the admin config screen's "Reset" action (phase 81 follow-up) can offer exactly the
     // literal FromConfiguration falls back to, rather than a second copy of these numbers that could
     // drift from the one actually applied.
-    public const string DefaultUrl = "http://localhost:5080";
+    public const string DefaultUrl = "https://localhost:5080";
     public const string DefaultStateEngine = StateEngineIds.Sqlite;
     public const int DefaultStatePort = 0;
     public const int DefaultRunRetentionDays = 30;

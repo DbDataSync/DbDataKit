@@ -1,3 +1,4 @@
+using DbDataSync.Api.Configuration;
 using DbDataSync.Api.Services;
 using DbDataSync.Core.Config;
 using Microsoft.Extensions.Configuration;
@@ -19,7 +20,7 @@ internal sealed class GeneralTab : View
     private readonly Label _portLabel = new() { X = 1, Y = 3, Text = "Port:" };
     private readonly TextField _port = new() { X = 14, Y = 3, Width = 10, Text = "5080" };
     private readonly Label _urlLabel = new() { X = 1, Y = 2, Text = "Console URL:" };
-    private readonly TextField _url = new() { X = 14, Y = 2, Width = 40, Text = "http://localhost:5080" };
+    private readonly TextField _url = new() { X = 14, Y = 2, Width = 40, Text = ApiOptions.DefaultUrl };
 
     /// <summary>Phase 161: whether Notes render with the full Markdown renderer. The warning under it is the catalog's own text
     /// (the Admin screen shows the same words), shown whether the box is ticked or not — it is what someone deciding needs to

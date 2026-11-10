@@ -413,7 +413,7 @@ public static class DbDataSyncConfigFile
         """
         # DbDataSync:
         #   App:
-        #     Url: http://localhost:5080
+        #     Url: https://localhost:5080
         #   State:
         #     Engine: MsSql
         #     # Connection string only - never a password. Set the password with:

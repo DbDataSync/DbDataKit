@@ -88,7 +88,7 @@ configuration). `server run` reads this file and nothing else: no `appsettings.j
 ```yaml
 DbDataSync:
   App:
-    Url: http://localhost:5080
+    Url: https://localhost:5080
   State:
     Engine: MsSql
     ConnectionString: "Server=sql01;Database=DbDataSyncState;"
@@ -119,7 +119,7 @@ message saying so, and naming the console when `DbDataSync:Console:Url` (environ
 | --- | --- |
 | `--repo <path>` | see "Repo root resolution," above |
 | `--state-db <path>` | `<repo>/state.db` |
-| `--url <url>` | `--url` flag, else `DbDataSync__App__Url` env var, else the resolved config's `DbDataSync:App:Url`, else `http://localhost:5080` |
+| `--url <url>` | `--url` flag, else `DbDataSync__App__Url` env var, else the resolved config's `DbDataSync:App:Url`, else `https://localhost:5080` (https by default: with no certificate configured the server makes a self-signed one on its first start; `--url http://...` is the way to plain http) |
 
 `--repo` git-inits the config repository if it isn't one already. Internally the resolved values
 become `--DbDataSync:App:RepoRoot`, `--DbDataSync:State:DbPath` and `--urls`, so it's the exact same
@@ -134,7 +134,7 @@ Windows or Linux (systemd); `install` needs an elevated prompt (Windows) or root
 | flag | applies to | default |
 | --- | --- | --- |
 | `--repo <path>` | `install` | `CliOptions.DefaultRoot` — **not** the walk-up resolver; see above |
-| `--url <url>` | `install` | `http://localhost:5080` |
+| `--url <url>` | `install` | `https://localhost:5080` |
 | `--account <account>` (Windows) | `install` | `LocalSystem`; also `NT SERVICE\DbDataSync`, `DOMAIN\gmsa$`, or `DOMAIN\user` |
 | `--password-stdin` (Windows) | `install` | none; the password of a named user account is read from standard input, never from the command line |
 | `--user <user>` (Linux) | `install` | `dbdatasync` — created as a system user if it doesn't exist |
@@ -202,11 +202,15 @@ process is using (the **Running** column of that screen compares the two).
 | flag | default |
 | --- | --- |
 | `--repo <path>` | see "Repo root resolution," above — used only to find a config file's `DbDataSync:App:Url`, nothing else |
-| `--url <url>` | `--url` flag, else the resolved config's `DbDataSync:App:Url`, else `http://127.0.0.1:8080` (not `serve`'s 5080; the container's health check passes `--url https://127.0.0.1:8443` itself) |
+| `--url <url>` | `--url` flag, else the resolved config's `DbDataSync:App:Url`, else `https://localhost:5080`, the same default `server run` serves (the container's health check passes `--url https://127.0.0.1:8443` itself) |
 
 Hits `{url}/api/health`; exits `0` on success, `1` otherwise. This is what the container's
 `HEALTHCHECK` runs — inside the image there's no config file to find, so it always falls through to
-the hardcoded default unless `--url` is passed (which the image's own `HEALTHCHECK` does).
+the default address unless `--url` is passed (which the image's own `HEALTHCHECK` does).
+
+The certificate is validated, not waved through. On an https address of this machine (`localhost`, `127.0.0.1`, `::1`) the check trusts the one certificate the server wrote for itself, the public copy
+`<repo>/tls/dbdatasync.cer`, when the server presents exactly that certificate; a server that presents another certificate on a loopback address still answers, and the check says on standard error that the certificate did not validate.
+On an https address anywhere else the certificate must validate as it would for any client, and a self-signed one fails the check (there is no switch that turns this off; install the certificate in the machine's trusted store).
 
 ### `dbdatasync secret set|list|remove`
 
@@ -252,7 +256,7 @@ setting to grow a third state without another schema change. Releases before pla
 | key | env var | default | notes |
 | --- | --- | --- | --- |
 | `App:RepoRoot` | `DBDATAKIT_DATA_SYNC` (or `DBDATAKIT_DATA`; `DbDataSync__App__RepoRoot` is refused) | `<cwd>/dbdatasync-repo` under raw `dotnet run`; the CLI's `--repo` default under `dbdatasync server run` | git-tracked config store root |
-| `App:Url` | `DbDataSync__App__Url` | `http://localhost:5080` | `dbdatasync server run`/`dbdatasync health check` read this themselves (see above) and translate it to `--urls`/Kestrel's bind address |
+| `App:Url` | `DbDataSync__App__Url` | `https://localhost:5080` | `dbdatasync server run`/`dbdatasync health check` read this themselves (see above) and translate it to `--urls`/Kestrel's bind address |
 | `App:Server` | `DbDataSync__App__Server` | `kestrel` | `kestrel` or `httpsys`. `httpsys` is Windows-only and exists so the port can be shared with other processes — see "Sharing a port with HTTP.sys," below. Anything else refuses to start. Takes effect on restart |
 | `App:TrustedProxies` | `DbDataSync__App__TrustedProxies` | none | proxies (IP addresses or CIDR ranges such as `10.0.0.0/8`, comma- or semicolon-separated) whose `X-Forwarded-For` and `X-Forwarded-Proto` headers are believed. Set it when a TLS-terminating reverse proxy sits in front of a plain-HTTP bind; see [Plain HTTP](#plain-http-and-reverse-proxies) |
 | `App:AllowInsecureHttp` | `DbDataSync__App__AllowInsecureHttp` | `false` | serve plain HTTP to every client. Credentials and data then cross the network in clear text |

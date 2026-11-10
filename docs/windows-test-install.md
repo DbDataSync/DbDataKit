@@ -87,7 +87,7 @@ dbdatasync server run --repo C:\ProgramData\DbDataKit\sync --url https://test-sy
 ```
 
 Because the URL is `https://` and no certificate is configured, Sync makes a self-signed one in `tls\dbdatasync.pfx` under the
-folder and binds it. (Sync's default address is plain `http://localhost:5080`, which a console cannot pair with.) Browsing to Sync's
+folder and binds it. (Sync's default address is `https://localhost:5080` and it makes the same kind of certificate there; plain `http://` is served only with an explicit `--url http://...`, and a console cannot pair with that.) Browsing to Sync's
 own address now gives a plain-text message: Sync has no web app, its screens are the console's.
 
 ## 4. Pair them

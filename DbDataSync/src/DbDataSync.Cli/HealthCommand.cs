@@ -1,3 +1,4 @@
+using DbDataSync.Api.Configuration;
 using DbDataSync.Core.Config;
 
 namespace DbDataSync.Cli;
@@ -25,17 +26,17 @@ public static class HealthCommand
             return 2;
         }
         var args = verbAndArgs[1..];
-        // Falls back to a resolved config's DbDataSync:App:Url before the hardcoded container default, so
+        // Falls back to a resolved config's DbDataSync:App:Url before the default address (https://localhost:5080), so
         // `dbdatasync health check` against a config-backed install doesn't need --url repeated on every call.
         // The container's own HEALTHCHECK always passes --url explicitly (no config file to find inside
         // the image's working directory), so it is unaffected either way.
         var root = DbDataSyncRoot.Resolve(args);
         var url = CliOptions.Read(args, "--url")
             ?? DbDataSyncConfigFile.Read(root).GetValueOrDefault("DbDataSync:App:Url")
-            ?? "http://127.0.0.1:8080";
+            ?? ApiOptions.DefaultUrl;
         var endpoint = $"{url.TrimEnd('/')}/api/health";
 
-        using var probe = new HealthProbeClient(TimeSpan.FromSeconds(5));
+        using var probe = HealthProbeClient.ForCheck(url, root, TimeSpan.FromSeconds(5));
         try
         {
             var response = await probe.Client.GetAsync(endpoint);
@@ -53,7 +54,8 @@ public static class HealthCommand
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            Console.Error.WriteLine($"{endpoint} did not answer: {ex.Message}");
+            var certificate = probe.CertificateProblem is { } problem ? $" ({problem})" : "";
+            Console.Error.WriteLine($"{endpoint} did not answer: {ex.Message}{certificate}");
             return 1;
         }
     }

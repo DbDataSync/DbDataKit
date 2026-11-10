@@ -1,3 +1,5 @@
+using DbDataSync.Api.Configuration;
+
 namespace DbDataSync.Cli;
 
 public static class Help
@@ -13,7 +15,7 @@ public static class Help
 
               dbdatasync server run [--repo <path>] [--state-db <path>] [--url <url>]
                   Starts the API and the scheduler in one process (what the service runs); its screens are the dbdatakit console's.
-                  Defaults: --repo {CliOptions.DefaultRoot}, --url http://localhost:5080
+                  Defaults: --repo {CliOptions.DefaultRoot}, --url {ApiOptions.DefaultUrl}
 
               dbdatasync service install|uninstall|status|start|stop|restart|doctor [--repo <path>] [--url <url>] [--account <account>] [--password-stdin]
                   On Windows: registers this tool as a Windows service (install again to update it), and starts,
