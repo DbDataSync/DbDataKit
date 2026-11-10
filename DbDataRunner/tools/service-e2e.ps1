@@ -4,7 +4,7 @@
 # Usage: pwsh service-e2e.ps1 -Exe <path to the published dbdatarunner.exe>
 # The directory the exe is in gets the install ACL (administrators and SYSTEM full, the service read and run): give it a copy, not the build output.
 # The install keeps what the directory inherits (as under Program Files, where Users may only read), and `service doctor` fails a binary directory that Users can write. A hosted runner's temp
-# folder gives Users write access, so the script first does what Program Files does for a real install: cuts the inheritance and leaves Users read and run.
+# folder gives Users write access, so the script does what Program Files does for a real install, right before each doctor call: cuts the inheritance and leaves Users read and run.
 param([Parameter(Mandatory)][string]$Exe)
 
 $ErrorActionPreference = 'Stop'
@@ -35,6 +35,12 @@ function Diagnose {
 }
 
 # `health check` is the program's own client of its own address (https://localhost:8495/health/live, a self-signed certificate accepted on the loopback).
+# `service install` applies its directory specs again and puts the inheritance back, so the folder is locked down right before each doctor call, not before the install.
+function LockDownInstallDir {
+  & icacls.exe $InstallDir /inheritance:r /grant:r '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' | Out-Host
+  if ($LASTEXITCODE -ne 0) { throw "icacls could not lock down $InstallDir (exit $LASTEXITCODE)." }
+}
+
 function WaitHealthy([int]$seconds = 120) {
   $deadline = (Get-Date).AddSeconds($seconds)
   while ((Get-Date) -lt $deadline) {
@@ -54,8 +60,6 @@ if (-not (Test-Path $Exe)) { throw "No executable at $Exe." }
 if (-not (Test-Path (Join-Path (Split-Path $Exe) 'taskhost\dbdatakit-taskhost.dll'))) { throw 'The published program has no taskhost\dbdatakit-taskhost.dll beside it.' }
 
 $InstallDir = Split-Path $Exe
-& icacls.exe $InstallDir /inheritance:r /grant:r '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' | Out-Host
-if ($LASTEXITCODE -ne 0) { throw "icacls could not lock down $InstallDir (exit $LASTEXITCODE)." }
 
 try {
   Run @('service', 'status') @(1)                       # nothing installed yet
@@ -64,6 +68,7 @@ try {
   Run @('service', 'install')
   Run @('service', 'install')                           # again: harmless
   Run @('service', 'status')
+  LockDownInstallDir
   Run @('service', 'doctor')
   $qc = & sc.exe qc $ServiceName | Out-String
   Write-Host $qc
@@ -73,6 +78,7 @@ try {
   Run @('service', 'start')
   WaitHealthy
   Run @('service', 'status')
+  LockDownInstallDir
   Run @('service', 'doctor')
   Run @('service', 'restart')
   WaitHealthy
