@@ -20,6 +20,7 @@ public sealed class ConfigStartupTests
         using var env = new EnvScope(
             ("DBDATAKIT_Gateway__Listen__Port", "0"),            // prefixed, as documented
             ("Gateway__Tls__Mode", "None"),                    // the stock unprefixed spelling
+            ("Gateway__Management__Enabled", "false"),         // https only, on by default (plan 33 D15)
             ("DBDATAKIT_Gateway__Listen__Address", "127.0.0.1"),
             ("DBDATAKIT_DATA_GATEWAY", DataDir),
             // the other DBDATAKIT_* variables of the suite are visible to the configuration too (prefix DBDATAKIT_): none of them is under the Gateway section, so none is an unknown key
@@ -55,7 +56,7 @@ public sealed class ConfigStartupTests
         return dir;
     }
 
-    private const string FileSettings = "schemaVersion: 2\nlisten: { address: 127.0.0.1, port: 1234 }\ntls: { mode: none }\n";
+    private const string FileSettings = "schemaVersion: 2\nlisten: { address: 127.0.0.1, port: 1234 }\ntls: { mode: none }\nmanagement: { enabled: false }\n";
 
     [Fact]
     public async Task The_data_directory_file_supplies_settings_and_the_command_line_overrides_it()
@@ -92,7 +93,7 @@ public sealed class ConfigStartupTests
         foreach (string? settings in new string?[] { null, "# no settings\n" })
         {
             string dir = NewDataDirectory(settings);
-            await using var app = GatewayHost.Build([$"--Gateway:DataDirectory={dir}", "--Gateway:Listen:Port=0", "--Gateway:Tls:Mode=None"]);
+            await using var app = GatewayHost.Build([$"--Gateway:DataDirectory={dir}", "--Gateway:Listen:Port=0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"]);
             var o = app.Services.GetRequiredService<IOptionsMonitor<GatewayOptions>>().CurrentValue;
             Assert.Equal(1, o.SchemaVersion);
             Assert.Equal("0.0.0.0", o.Listen.Address);
@@ -118,7 +119,7 @@ public sealed class ConfigStartupTests
         string old = Path.Combine(folder, "appsettings.json");
         File.WriteAllText(old, """{ "Gateway": { "Listen": { "Port": 1234 } } }""");
 
-        var ex = Assert.Throws<GatewayConfigException>(() => GatewayHost.Build([$"--Gateway:DataDirectory={dir}", "--Gateway:Listen:Port=0", "--Gateway:Tls:Mode=None"]));
+        var ex = Assert.Throws<GatewayConfigException>(() => GatewayHost.Build([$"--Gateway:DataDirectory={dir}", "--Gateway:Listen:Port=0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"]));
         Assert.Contains(old, ex.Message);
         Assert.Contains("server.yaml", ex.Message);
         Assert.Contains("no longer read", ex.Message);
@@ -174,7 +175,7 @@ public sealed class ConfigStartupTests
     public async Task Command_line_overrides_use_the_colon_syntax()
     {
         using var env = new EnvScope(("DBDATAKIT_DATA_GATEWAY", DataDir));
-        await using var app = GatewayHost.Build(["--Gateway:Listen:Port=0", "--Gateway:Tls:Mode=None"]);
+        await using var app = GatewayHost.Build(["--Gateway:Listen:Port=0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"]);
         Assert.Equal(0, app.Services.GetRequiredService<IOptionsMonitor<GatewayOptions>>().CurrentValue.Listen.Port);
     }
 
@@ -217,7 +218,7 @@ public sealed class ConfigStartupTests
         Console.SetError(stderr);
         try
         {
-            int code = await Cli.RunAsync(["server", "run", "--Gateway:Listen:Port=0", "--Gateway:Tls:Mode=None", "--Gateway:RequireReferencedSecrets=true",
+            int code = await Cli.RunAsync(["server", "run", "--Gateway:Listen:Port=0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false", "--Gateway:RequireReferencedSecrets=true",
                 "--Gateway:DataSources:x:Provider=sqlserver", "--Gateway:DataSources:x:ConnectionString=Server=a;Password=LitSecret-77"]);
             Assert.Equal(2, code);
         }
@@ -366,7 +367,7 @@ public sealed class ConfigCommandTests
     public void Show_without_origin_prints_env_style_keys()
     {
         using var c = TempConfig.Create(
-            ("server.yaml", "listen: { address: 127.0.0.1, port: 9000 }\ntls: { mode: none }\n"),
+            ("server.yaml", "listen: { address: 127.0.0.1, port: 9000 }\ntls: { mode: none }\nmanagement: { enabled: false }\n"),
             ("connections/erp.yaml", Conn.Yaml("erp", connectionString: "Server=x;Database=y", auth: "auth: { mode: sql, user: u, password_secret: 'env:ERP_PW' }", gateway: ["groups: [finance]"])));
         var r = Run("show", "--file", c.Directory);
         Assert.Equal(0, r.Code);

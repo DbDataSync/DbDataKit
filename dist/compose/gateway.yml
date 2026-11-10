@@ -1,6 +1,6 @@
 # The console and a Gateway, paired by announcement (see build.yml for the mechanism; the commands are the same with `-f dist/compose/gateway.yml`):
 #   docker compose -f dist/compose/gateway.yml exec console dotnet /app/dbdatakit.dll instance confirm dbdatagateway
-# The Gateway's management API is off by default and, when on, listens on the loopback address; here it is on, on every address of the container (port 8816, not
+# The Gateway's management API is on by default and listens on the loopback address; here it listens on every address of the container (port 8816, not
 # published: only the console, on this network, reaches it) and the address the console is told to use is fixed in this file. The Flight port (8815) is published for clients.
 # Run from the repository root.
 name: dbdatakit-gateway
@@ -24,7 +24,6 @@ services:
     hostname: gateway
     environment:
       <<: *announce
-      DBDATAKIT_Gateway__Management__Enabled: "true"
       DBDATAKIT_Gateway__Management__Address: 0.0.0.0
       DBDATAKIT_Gateway__Management__Port: "8816"
       # the console reaches the management API here, by name, whatever address the container gets

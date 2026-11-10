@@ -3,6 +3,7 @@
   "gateway": {
     "listen": { "address": "127.0.0.1", "port": 9000, },
     "tls": { "mode": "none" },
+    "management": { "enabled": false },
     "datasources": { "erp": { "provider": "SqlServer", "connectionstring": "Server=x;Database=y;Password=env:ERP_PW", "groups": [ "Finance" ], "default": true }, },
   },
 }

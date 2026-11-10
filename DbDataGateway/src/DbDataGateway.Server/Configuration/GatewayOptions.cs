@@ -235,12 +235,12 @@ public sealed class PairedClientOptions
 
 /// <summary>
 /// The management API (plan 13, P03): HTTPS on a port of its own, never the Flight port, with the pairing every product has and the console's signed token on every call; and, if asked for, a local channel for the
-/// command line on this machine. Off unless <see cref="Enabled"/>: a gateway nobody manages from a console opens nothing new.
+/// command line on this machine. On by default (plan 33 D15): https on the loopback address with the generated self-signed certificate, so a console on this machine can pair with a fresh install; <c>enabled: false</c> turns it off.
 /// </summary>
 [ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class ManagementOptions
 {
-    public bool Enabled { get; set; }
+    public bool Enabled { get; set; } = true;
 
     /// <summary>Where it listens. The loopback address by default: a console on another machine needs an address that is reachable, chosen on purpose.</summary>
     public string Address { get; set; } = "127.0.0.1";

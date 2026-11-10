@@ -193,6 +193,15 @@ def _alias(meta):
 # The ceiling a console administrator may use on each server (plans 13 W12, 28a R19): what the pairing allows, never what anyone holds.
 _PAIR_ROLES = {"dbdatastore": "viewer,operator,author,approver,admin", "dbdataworkspace": "viewer,operator,author,admin"}
 _PAIR_ROLES_DEFAULT = "viewer,operator,admin"
+# The address a console pairs with, as each product's README gives its default listen address (the Gateway's is its management API, on by default and on this machine only, plan 33 D15).
+# A product not listed has no default this file can name (Sync's address is its `Url` setting), so its line stays generic.
+_MANAGEMENT_ADDRESS = {
+    "dbdatagateway": "https://localhost:8816",
+    "dbdatarunner": "https://127.0.0.1:8495",
+    "dbdatabuild": "https://127.0.0.1:8470",
+    "dbdatastore": "https://127.0.0.1:8490",
+    "dbdataworkspace": "https://127.0.0.1:8495",
+}
 
 
 def suite_notes(members):
@@ -214,9 +223,12 @@ def suite_notes(members):
     lines.append(f"{n}. Start the console: {console} server run (or start its service).")
     for meta, _ in members[1:]:
         n += 1
+        address = _MANAGEMENT_ADDRESS.get(meta["product"])
+        target = address or "<https address of that server>"
+        note = " (its default management address; change it with the server's own setting and give that address instead)" if address else ""
         lines.append(
             f"{n}. Pair {_alias(meta)}: run '{_alias(meta)} server pair --max-role {_PAIR_ROLES.get(meta['product'], _PAIR_ROLES_DEFAULT)}' (it prints a single-use code), then "
-            f"'{console} instance add <https address of that server> --code <code>'."
+            f"'{console} instance add {target} --code <code>'{note}."
         )
     return "\n".join(lines)
 

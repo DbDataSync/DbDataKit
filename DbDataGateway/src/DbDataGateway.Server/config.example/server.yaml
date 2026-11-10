@@ -33,9 +33,10 @@ tls:
 # Clients can override per call with the "x-compression" header (none, gzip, zstd, lz4) unless disabled here.
 compression: { mode: arrow, codec: zstd, level: 3, allowClientOverride: true }
 
-# The management API a console uses (off unless asked for): https on a port of its own, never the Flight port, with the pairing every DbData server has.
+# The management API a console uses (on by default, on this machine only): https on a port of its own, never the Flight port, with the pairing every DbData server has.
 # Pair a console with:  dbdatagateway server pair   (it prints a single-use code); list and remove pairings with  server clients  and  server unpair.
 # The localChannel is for the command line on this machine only: a named pipe (Windows) or a Unix socket reachable by the service's account and administrators.
+# The defaults are shown; `enabled: false` turns it off, and `address: 0.0.0.0` lets a console on another machine reach it. With `tls.mode: none` set `enabled: false` (the API is https only).
 # management: { enabled: true, address: 127.0.0.1, port: 8816, localChannel: false }
 
 # The identity home (off unless asked for): the OpenID Connect provider every console and app signs people in through, with passkeys and invitations, on an https port of its own.

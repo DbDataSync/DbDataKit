@@ -95,7 +95,7 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
         if (!IPAddress.TryParse(o.Management.Address, out _))
             cx.Error("Management.Address", $"`Address` is `{o.Management.Address}`, which is not an IP address.", "Use an IP address such as 127.0.0.1 or 0.0.0.0.");
         if (o.Tls.Mode == TlsMode.None)
-            cx.Error("Management.Enabled", "The management API is https only, and `Tls.Mode` is None.", "Use SelfSigned, File or Store, or leave the management API off.");
+            cx.Error("Management.Enabled", "The management API is https only, and `Tls.Mode` is None.", "Choose another TLS mode (SelfSigned, File or Store), or set `management.enabled: false`.");
         if (o.Management.Port == o.Listen.Port && o.Listen.Port != 0)
             cx.Error("Management.Port", "The management API has its own port; it is the Flight port here.", $"Choose another port than {o.Listen.Port}.");
     }

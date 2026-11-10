@@ -39,7 +39,7 @@ public static class Cli
 
     private static NounRouter Build(Func<NounRouter> self, Func<string, string?>? environment) => new(Program,
     [
-        ServerNoun.Create(RunServerAsync).With([.. PairingVerbs.Create(PairingFilesOf)]),
+        ServerNoun.Create(RunServerAsync).With([.. PairingVerbs.Create(PairingFilesOf).Select(WarnWhenManagementIsOff)]),
         ServiceNoun(),
         CertNoun(),
         SecretNoun(),
@@ -68,6 +68,37 @@ public static class Cli
         options.DataDirectory = dataDirectory;
         var group = options.State.ToSettings().IsSqlite ? null : IdentityCommand.OpenState(options);
         return new PairingFiles(GatewayConfigFile.PathIn(dataDirectory), Path.Combine(dataDirectory, "pairing-codes.json"), group);
+    }
+
+    /// <summary>
+    /// <c>server pair</c> makes a code a console redeems at the management address; with the management API off (<c>management.enabled: false</c>, or <c>Tls.Mode</c> None, which the validator refuses with it on) no console can
+    /// reach this gateway, so the verb says so before it prints a code (plan 33 SC40). The code is still made: the setting may be changed before the code expires.
+    /// </summary>
+    private static Verb WarnWhenManagementIsOff(Verb verb)
+    {
+        if (verb.Name != "pair") return verb;
+        return verb with
+        {
+            Run = (args, context) =>
+            {
+                try
+                {
+                    var at = Array.LastIndexOf(args, "--repo");
+                    var dataDirectory = at >= 0 && at + 1 < args.Length ? Path.GetFullPath(args[at + 1]) : GatewayConfigFile.ResolveDataDirectory();
+                    var options = GatewayConfiguration.LoadOptions(dataDirectory);
+                    if (!options.Management.Enabled)
+                        context.Error.WriteLine("Warning: the management API is off here (`management.enabled: false`), so no console can reach this gateway: a pairing made now cannot be used. "
+                            + "Remove that setting or set `management.enabled: true` (https on the management port, 8816 by default) and restart the gateway, then pair.");
+                    else if (options.Tls.Mode == TlsMode.None)
+                        context.Error.WriteLine("Warning: `tls.mode` is None, and the management API is https only, so no console can reach this gateway: a pairing made now cannot be used. Choose another TLS mode (SelfSigned, File or Store).");
+                }
+                catch (Exception ex) when (ex is GatewayConfigException or IOException)
+                {
+                    // the pairing itself reports an unreadable configuration
+                }
+                return verb.Run(args, context);
+            },
+        };
     }
 
     private static async Task<int> RunServerAsync(string[] args, CliContext context)

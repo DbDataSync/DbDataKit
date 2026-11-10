@@ -50,6 +50,7 @@ public sealed class GatewayFixture : IAsyncLifetime
             ["Gateway:Listen:Address"] = "127.0.0.1",
             ["Gateway:Listen:Port"] = "0",
             ["Gateway:Tls:Mode"] = "None",
+            ["Gateway:Management:Enabled"] = "false",   // the management API is https only and on by default (plan 33 D15); not the subject here
             ["Gateway:DataDirectory"] = _dir,
             ["Gateway:Compression:Mode"] = "None",
             // Explicit schema 1: these tests exercise its defaults (Classifier warn).
