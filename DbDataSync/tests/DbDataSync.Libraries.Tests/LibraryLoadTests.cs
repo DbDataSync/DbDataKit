@@ -58,7 +58,9 @@ public sealed class LibraryLoadTests : IAsyncLifetime
         // types, plan 13 A09), all ExcludeAssets="runtime" so the assembly still isn't physically shipped by them
         // (loadable only through an installed library's armed resolver — BuiltInDriverLibraries, phase
         // 144); and that driver's own test project, which needs the real runtime assembly directly to
-        // exercise it and carries no such exclusion.
+        // exercise it and carries no such exclusion; and the runner tests' project, which opens MySQL and MariaDB
+        // connections itself to set up and compare the tables of ChangeApplyReplicationTests (CW01c), the same
+        // way it already does for SQL Server and PostgreSQL.
         var referencingProjects = new List<string>();
         foreach (var path in csprojFiles)
         {
@@ -69,7 +71,7 @@ public sealed class LibraryLoadTests : IAsyncLifetime
             var fileName = Path.GetFileName(path);
             referencingProjects.Add(fileName);
 
-            if (fileName != "DbDataSync.Drivers.MySql.Tests.csproj")
+            if (fileName is not ("DbDataSync.Drivers.MySql.Tests.csproj" or "DbDataSync.TaskRunner.Tests.csproj"))
                 Assert.Contains("ExcludeAssets=\"runtime\"", content, StringComparison.Ordinal);
         }
 
@@ -78,6 +80,7 @@ public sealed class LibraryLoadTests : IAsyncLifetime
             {
                 "DbDataSync.Drivers.MySql.csproj", "DbDataSync.Drivers.MySql.Tests.csproj",
                 "DbDataSync.Api.csproj", "DbDataSync.TaskRunner.csproj", "DbDataSync.Cli.csproj",
+                "DbDataSync.TaskRunner.Tests.csproj",
             },
             referencingProjects.ToHashSet());
     }
