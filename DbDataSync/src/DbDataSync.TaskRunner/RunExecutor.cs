@@ -1865,6 +1865,8 @@ public sealed class RunExecutor(
         // for it first. See BuiltInDriverLibraries's own doc comment.
         await BuiltInDriverLibraries.EnsureInstalledAsync(libraryRegistry, repoRoot, config.DriverType, cancellationToken);
 
+        // A pass reads the source and writes the target with the connection's run login (plan 28c, E20); the read login is the server's own, for browsing, and a runner never holds it.
+        config = config.ForRole(CredentialRole.Run);
         var credential = config.AuthMode == AuthMode.SqlAuth
             ? secretStore.Resolve(config.CredentialSecretRef!)
             : null;

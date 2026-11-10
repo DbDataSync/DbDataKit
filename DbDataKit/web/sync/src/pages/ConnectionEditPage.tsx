@@ -6,9 +6,10 @@ import { Field } from '@dbdatakit/shell'
 import { ParameterForm } from '../components/ParameterForm'
 import {
   useCapabilities, useConnectionParameters, useConnections, useDeleteConnection, useDriverStatus, useDrivers,
-  useTestConnection, useUpsertConnection, useValidateLibrary,
+  useTestConnection, useTestRunLogin, useUpsertConnection, useValidateLibrary,
 } from '../api/hooks'
 import { ConnectionTestCard } from './connection-edit/ConnectionTestCard'
+import { RunLoginCard } from './connection-edit/RunLoginCard'
 import { ScriptBindingsCard } from '../components/ScriptBindings'
 import type { AuthMode, ConnectionInput, DriverType, ParameterDescriptor } from '../api/types'
 
@@ -123,6 +124,7 @@ export function ConnectionEditPage() {
   const upsert = useUpsertConnection()
   const del = useDeleteConnection()
   const test = useTestConnection()
+  const testRunLogin = useTestRunLogin()
   const validateLibrary = useValidateLibrary()
   // A saved connection only: testing an unsaved draft would test whatever is on disk under that name,
   // or nothing at all.
@@ -188,6 +190,8 @@ export function ConnectionEditPage() {
       // Never pre-filled, because the server never sends one back — blank keeps the stored credential.
       // That is the Secret parameter type's contract now, not this screen's special case.
       password: '',
+      // the second login, when there is one: its password is never sent back either
+      runLogin: existing.runCredentialSecretRef ? { userId: existing.runUserId ?? '', password: '' } : null,
       properties: { ...existing.properties },
       scripts: structuredClone(existing.scripts ?? {}),
       testQuery: existing.testQuery ?? null,
@@ -201,7 +205,14 @@ export function ConnectionEditPage() {
   const save = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!draft) return
-    await upsert.mutateAsync({ name: draft.name, input: { ...draft, password: draft.password || undefined } })
+    await upsert.mutateAsync({ name: draft.name, input: {
+      ...draft,
+      password: draft.password || undefined,
+      // only with a user and password login; blank user is "the read user", blank password "keep the stored one"
+      runLogin: draft.authMode === 'SqlAuth' && draft.runLogin
+        ? { userId: draft.runLogin.userId || null, password: draft.runLogin.password || null }
+        : null,
+    } })
     navigate('/connections')
   }
 
@@ -381,6 +392,18 @@ export function ConnectionEditPage() {
               />
             )}
           </div>
+
+            {driverRegistered && draft.authMode === 'SqlAuth' && (
+              <RunLoginCard
+                draft={draft}
+                onChange={setDraft}
+                existing={existing}
+                testReport={testRunLogin.data}
+                testPending={testRunLogin.isPending}
+                testError={testRunLogin.error}
+                onTest={!isNew && existing?.hasRunLogin ? () => testRunLogin.mutate(name!) : undefined}
+              />
+            )}
 
             {!isNew && (
               <ScriptBindingsCard

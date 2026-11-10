@@ -16,8 +16,12 @@ namespace DbDataSync.Api.Services;
 /// </summary>
 public interface IConnectionFactory
 {
+    /// <summary>Opens the connection with its <see cref="CredentialRole.Read"/> login: what the server does for itself (browsing, tests, previews, planning). A write is <see cref="OpenAsync(string, CredentialRole, CancellationToken)"/> with <see cref="CredentialRole.Run"/> (plan 28c, E20).</summary>
     Task<(DbConnection Connection, IDriver Driver)> OpenAsync(
-        string connectionName, CancellationToken cancellationToken);
+        string connectionName, CancellationToken cancellationToken) => OpenAsync(connectionName, CredentialRole.Read, cancellationToken);
+
+    Task<(DbConnection Connection, IDriver Driver)> OpenAsync(
+        string connectionName, CredentialRole role, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -34,10 +38,14 @@ public sealed class DriverConnectionFactory(
     LibraryRegistry libraryRegistry,
     ApiOptions apiOptions) : IConnectionFactory
 {
+    public Task<(DbConnection Connection, IDriver Driver)> OpenAsync(
+        string connectionName, CancellationToken cancellationToken) => OpenAsync(connectionName, CredentialRole.Read, cancellationToken);
+
     public async Task<(DbConnection Connection, IDriver Driver)> OpenAsync(
-        string connectionName, CancellationToken cancellationToken)
+        string connectionName, CredentialRole role, CancellationToken cancellationToken)
     {
-        var config = configRepository.LoadConnection(connectionName);
+        // the connection as this role opens it: that role's user and secret (one login serves both when the connection has only one)
+        var config = configRepository.LoadConnection(connectionName).ForRole(role);
         var driver = driverRegistry.Get(config.DriverType);
 
         await EnsureLibraryInstalledAsync(config.DriverType, cancellationToken);

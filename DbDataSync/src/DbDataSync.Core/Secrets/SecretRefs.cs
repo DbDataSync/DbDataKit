@@ -8,6 +8,11 @@ public static class SecretRefs
 {
     public static string ForConnection(string connectionName) => $"dbdata:sync:connection:{connectionName}";
 
+    /// <summary>The password of a connection's <c>run</c> login, when it has a second one (plan 28c, E20): the secret name of <see cref="ForConnection"/> with the part <c>run</c>.</summary>
+    public static string ForConnectionRun(string connectionName) => $"{ForConnection(connectionName)}:{RunPart}";
+
+    public const string RunPart = "run";
+
     /// <summary>
     /// The secret ref for a <c>DbDataSync:*</c> app setting that must never be written into
     /// <c>server.yaml</c> itself — <c>StateConnectionString</c>'s password, so far, the only

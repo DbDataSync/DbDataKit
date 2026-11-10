@@ -97,8 +97,9 @@ export const api = {
     delete: (name: string) => request<void>(`/api/connections/${encodeURIComponent(name)}`, { method: 'DELETE' }),
     capabilities: (name: string) =>
       request<DriverCapabilities>(`/api/connections/${encodeURIComponent(name)}/capabilities`),
-    test: (name: string) =>
-      request<ConnectionTestReport>(`/api/connections/${encodeURIComponent(name)}/test`, { method: 'POST' }),
+    /** `role: 'run'` tests the run login (E20), the one a replication pass connects with; the default is the read login the server itself uses. */
+    test: (name: string, role?: 'read' | 'run') =>
+      request<ConnectionTestReport>(`/api/connections/${encodeURIComponent(name)}/test${role ? `?role=${role}` : ''}`, { method: 'POST' }),
     /** Phase 109j item 4: the deep, connection-scoped check — spawns a real child process, creates a
      * real scratch table, stages and writes a few synthetic rows through the driver's own real
      * pipeline, and drops it again. Slower than `test` and needs DDL rights; a deliberately separate

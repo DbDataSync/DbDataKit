@@ -22,6 +22,9 @@ public sealed class RunnerSlotResolver(DefinitionPublisher publisher, IConnectio
 {
     public const string SyncSecretPrefix = "dbdata:sync:connection:";
 
+    /// <summary>The part of Sync's secret name for the run login of a connection that has a second one (<c>dbdata:sync:connection:&lt;name&gt;:run</c>, plan 28c E20).</summary>
+    public const string SyncRunPart = "run";
+
     public IReadOnlyDictionary<string, string> Handles(TaskRef task, IReadOnlyList<ConnectionSlot> slots)
     {
         var handles = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -47,7 +50,10 @@ public sealed class RunnerSlotResolver(DefinitionPublisher publisher, IConnectio
                     {
                         var value = await PrimarySecretAsync(slot.Name, connection, LoginRole.Default, ct).ConfigureAwait(false)
                             ?? throw new SlotResolutionException($"The connection '{connection}' bound to the slot '{slot.Name}' has no login to put in the environment.");
+                        // The login the runner holds for the connection is its run login (Sync keeps the read login to itself, and it is never on a runner). A Sync connection with one login reads its secret under the plain name, one with a second
+                        // login under the run name (E20); the runner does not know which, so the same value is given under both names. The read secret has no name here at all.
                         variables[EnvSecretProvider.VariableNameFor(SyncSecretPrefix + connection)] = value;
+                        variables[EnvSecretProvider.VariableNameFor($"{SyncSecretPrefix}{connection}:{SyncRunPart}")] = value;
                         break;
                     }
 

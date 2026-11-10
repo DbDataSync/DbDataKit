@@ -178,8 +178,12 @@ public sealed class ConnectionsController(
     /// </para>
     /// </summary>
     [HttpPost("{name}/test")]
-    public async Task<ActionResult<ConnectionTestReport>> Test(string name, CancellationToken cancellationToken)
+    public async Task<ActionResult<ConnectionTestReport>> Test(string name, CancellationToken cancellationToken, [FromQuery] string? role = null)
     {
+        // `?role=run` tests the connection's run login (plan 28c, E20), the one a drain connects with; the default is the read login the server itself uses
+        if (role is not (null or "read" or "run"))
+            return BadRequest(new { error = $"The role is 'read' or 'run', not '{role}'." });
+        var credentialRole = role == "run" ? CredentialRole.Run : CredentialRole.Read;
         ConnectionConfig connection;
         try
         {
@@ -200,7 +204,7 @@ public sealed class ConnectionsController(
         // — that method doesn't hand the credential back to its caller, and this is the one value
         // ConnectionDiagnostics.Redact needs to scrub it from a preview or an error message.
         var credential = connection.AuthMode == AuthMode.SqlAuth
-            ? secrets.Resolve(connection.CredentialSecretRef!)
+            ? secrets.Resolve(connection.ForRole(credentialRole).CredentialSecretRef!)
             : null;
 
         var started = Stopwatch.GetTimestamp();
@@ -212,7 +216,7 @@ public sealed class ConnectionsController(
             // the identical check and report it through the catch below anyway.
             var preview = driver is IConnectionPreviewer previewer ? previewer.PreviewConnection(connection) : null;
 
-            (open, _) = await connectionFactory.OpenAsync(name, cancellationToken);
+            (open, _) = await connectionFactory.OpenAsync(name, credentialRole, cancellationToken);
             var connectMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
 
             var probe = await tester.TestAsync(open, cancellationToken);
@@ -358,7 +362,9 @@ public sealed class ConnectionsController(
             Store: "Environment / OS keyring",
             secretRef,
             secrets.EnvName(secretRef),
-            RequiresCredential: connection.AuthMode == AuthMode.SqlAuth));
+            RequiresCredential: connection.AuthMode == AuthMode.SqlAuth,
+            RunSecretRef: connection.RunCredentialSecretRef,
+            RunEnvironmentVariable: connection.RunCredentialSecretRef is { } run ? secrets.EnvName(run) : null));
     }
 
     [HttpPut("{name}")]
@@ -411,7 +417,7 @@ public sealed class ConnectionsController(
             if ((current is null ? null : ConnectionFileVersion.Of(current)) != input.ExpectedVersion)
                 return Conflict(new { error = current is null ? $"There is no connection '{name}' to change." : "The connection changed since it was read; read it again and make the change on that.", current_version = current is null ? null : ConnectionFileVersion.Of(current) });
 
-            var parsed = configRepository.ConnectionInputFromFile(input.Text, name, input.Password);
+            var parsed = configRepository.ConnectionInputFromFile(input.Text, name, input.Password, input.RunPassword);
             parameterCheck.ThrowIfInvalid(parsed);
             configRepository.SaveConnection(parsed, currentUser.Author);
             var saved = configRepository.ReadConnectionFileText(name)!;
@@ -487,7 +493,7 @@ public sealed class ConnectionsController(
 public sealed record ConnectionFileAnswer(string Name, string Text, string Version);
 
 /// <summary>A write of a connection's file: the text, the version it is based on (null to create) and, for a login with a password, the password.</summary>
-public sealed record ConnectionFileInput(string? Text, [property: System.Text.Json.Serialization.JsonPropertyName("expected_version")] string? ExpectedVersion, string? Password);
+public sealed record ConnectionFileInput(string? Text, [property: System.Text.Json.Serialization.JsonPropertyName("expected_version")] string? ExpectedVersion, string? Password, [property: System.Text.Json.Serialization.JsonPropertyName("run_password")] string? RunPassword = null);
 
 /// <summary>The version of a connection file: the SHA-256 of its text, the form a Proxy's data sources use.</summary>
 internal static class ConnectionFileVersion
@@ -528,7 +534,8 @@ public sealed record ConnectionTestReport(
     IReadOnlyDictionary<string, string>? OutsideProperties = null,
     QueryPreviewResult? TestQueryResult = null);
 
-public sealed record CredentialSource(string Store, string SecretRef, string EnvironmentVariable, bool RequiresCredential);
+/// <summary>Where a connection's login is looked up. <paramref name="RunSecretRef"/> and <paramref name="RunEnvironmentVariable"/> are the second login's (plan 28c, E20), null for a connection with one login that serves both roles.</summary>
+public sealed record CredentialSource(string Store, string SecretRef, string EnvironmentVariable, bool RequiresCredential, string? RunSecretRef = null, string? RunEnvironmentVariable = null);
 
 /// <summary>Phase 109j item 4's result — <paramref name="Output"/> is the spawned CLI child process's
 /// own stdout (on success) or its own specific failure message (on stderr, or stdout if the process

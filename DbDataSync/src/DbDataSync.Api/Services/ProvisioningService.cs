@@ -34,13 +34,14 @@ public sealed class ProvisioningService(
         // reading the source's columns — the redundant second source connection this used to open per
         // GET is exactly the cost phase 105 §5 asks to stop paying, and it disappears here for free
         // once both planners take a connection rather than opening their own.
-        var (sourceConnection, sourceDriver) = await connections.OpenAsync(source.ConnectionName, cancellationToken);
+        // planning only reads, with the read login (plan 28c, E20)
+        var (sourceConnection, sourceDriver) = await connections.OpenAsync(source.ConnectionName, CredentialRole.Read, cancellationToken);
         try
         {
             var sourcePlan = await PlanEnableSourceChangeCaptureAsync(
                 task, mapping, source, sourceConnection, sourceDriver, cancellationToken);
 
-            var (targetConnection, targetDriver) = await connections.OpenAsync(target.ConnectionName, cancellationToken);
+            var (targetConnection, targetDriver) = await connections.OpenAsync(target.ConnectionName, CredentialRole.Read, cancellationToken);
             try
             {
                 var targetPlan = await PlanTargetAsync(
@@ -66,7 +67,7 @@ public sealed class ProvisioningService(
 
         if (action == ProvisioningActions.EnableSourceChangeCapture)
         {
-            var (sourceConnection, sourceDriver) = await connections.OpenAsync(source.ConnectionName, cancellationToken);
+            var (sourceConnection, sourceDriver) = await connections.OpenAsync(source.ConnectionName, CredentialRole.Run, cancellationToken);
             try
             {
                 var plan = await PlanEnableSourceChangeCaptureAsync(
@@ -86,10 +87,11 @@ public sealed class ProvisioningService(
 
         if (action is ProvisioningActions.CreateTargetTable or ProvisioningActions.AlterTargetTable)
         {
-            var (sourceConnection, sourceDriver) = await connections.OpenAsync(source.ConnectionName, cancellationToken);
+            // the source is only read to work out the target's DDL; the target is written (plan 28c, E20)
+            var (sourceConnection, sourceDriver) = await connections.OpenAsync(source.ConnectionName, CredentialRole.Read, cancellationToken);
             try
             {
-                var (targetConnection, targetDriver) = await connections.OpenAsync(target.ConnectionName, cancellationToken);
+                var (targetConnection, targetDriver) = await connections.OpenAsync(target.ConnectionName, CredentialRole.Run, cancellationToken);
                 try
                 {
                     var plan = await PlanTargetAsync(
@@ -185,7 +187,7 @@ public sealed class ProvisioningService(
         var mappingNames = configRepository.ListTableMappings(replicationName);
 
         var builder = new ReplicationPlanBuilder();
-        await using var cache = new ConnectionCache(connections);
+        await using var cache = new ConnectionCache(connections, CredentialRole.Read);
 
         foreach (var mappingName in mappingNames)
         {
@@ -275,7 +277,8 @@ public sealed class ProvisioningService(
         var results = new List<ReplicationProvisioningStepResult>();
         var stopped = false;
 
-        await using var cache = new ConnectionCache(connections);
+        // the steps are executed: the run login (plan 28c, E20); the plan above was made with the read login
+        await using var cache = new ConnectionCache(connections, CredentialRole.Run);
         foreach (var group in plan.Groups)
         {
             var selectedInGroup = group.Steps.Where(s => selected.Contains(s.Id)).ToList();
@@ -380,7 +383,7 @@ public sealed class ProvisioningService(
     /// here to pin the guarantee, since it is otherwise invisible in behaviour and would regress
     /// silently.
     /// </summary>
-    private sealed class ConnectionCache(IConnectionFactory connections) : IAsyncDisposable
+    private sealed class ConnectionCache(IConnectionFactory connections, CredentialRole role) : IAsyncDisposable
     {
         private readonly Dictionary<(string ConnectionName, string Database), (DbConnection Connection, IDriver Driver)>
             _opened = [];
@@ -392,7 +395,7 @@ public sealed class ProvisioningService(
             if (_opened.TryGetValue(key, out var existing))
                 return existing;
 
-            var opened = await connections.OpenAsync(connectionName, cancellationToken);
+            var opened = await connections.OpenAsync(connectionName, role, cancellationToken);
             _opened[key] = opened;
             return opened;
         }
@@ -516,7 +519,7 @@ public sealed class ProvisioningService(
     {
         var (_, _, source, target) = LoadMapping(replicationName, mappingName);
 
-        var (sourceConnection, sourceDriver) = await connections.OpenAsync(source.ConnectionName, cancellationToken);
+        var (sourceConnection, sourceDriver) = await connections.OpenAsync(source.ConnectionName, CredentialRole.Read, cancellationToken);
         IReadOnlyList<ColumnMetadata> sourceColumns;
         try
         {
@@ -556,7 +559,7 @@ public sealed class ProvisioningService(
     {
         var (_, mapping, source, _) = LoadMapping(replicationName, mappingName);
 
-        var (sourceConnection, sourceDriver) = await connections.OpenAsync(source.ConnectionName, cancellationToken);
+        var (sourceConnection, sourceDriver) = await connections.OpenAsync(source.ConnectionName, CredentialRole.Read, cancellationToken);
         IReadOnlyList<ColumnMetadata> sourceColumns;
         try
         {

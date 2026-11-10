@@ -115,6 +115,36 @@ public sealed class ConnectionConfig
     public string? CredentialSecretRef { get; set; }
 
     /// <summary>
+    /// The login of the <see cref="CredentialRole.Run"/> role (plan 28c, E20), when the connection has a second one: the user it connects as (null: the same <see cref="UserId"/>) and the secret that holds its password (<c>dbdata:sync:connection:&lt;name&gt;:run</c>).
+    /// <see cref="UserId"/> and <see cref="CredentialSecretRef"/> are the <see cref="CredentialRole.Read"/> login and serve the run role as well when no second login is set, so a connection with one login is what it always was.
+    /// </summary>
+    public string? RunUserId { get; set; }
+
+    /// <inheritdoc cref="RunUserId"/>
+    public string? RunCredentialSecretRef { get; set; }
+
+    /// <summary>True when the connection has a login of its own for the run role.</summary>
+    public bool HasRunLogin => RunCredentialSecretRef is not null;
+
+    /// <summary>
+    /// This connection as <paramref name="role"/> opens it: a copy whose <see cref="UserId"/> and <see cref="CredentialSecretRef"/> are that role's login (the run role without a second login of its own is the read login: one secret serves both).
+    /// Everything that connects takes the copy, so which login is used is decided in one place and a caller cannot take the other role's secret by mistake.
+    /// </summary>
+    public ConnectionConfig ForRole(CredentialRole role)
+    {
+        var copy = (ConnectionConfig)MemberwiseClone();
+        if (role == CredentialRole.Run && HasRunLogin)
+        {
+            copy.UserId = string.IsNullOrWhiteSpace(RunUserId) ? UserId : RunUserId;
+            copy.CredentialSecretRef = RunCredentialSecretRef;
+        }
+
+        copy.RunUserId = null;
+        copy.RunCredentialSecretRef = null;
+        return copy;
+    }
+
+    /// <summary>
     /// How long to wait for the connection itself to open, in seconds. <c>null</c> means the default
     /// (<see cref="ConnectionTimeouts.DefaultConnectSeconds"/>); <c>0</c> means unlimited; a positive
     /// value is seconds.
@@ -186,6 +216,9 @@ public sealed class ConnectionInput
     /// <summary>Plaintext password. Null when not changing an existing SqlAuth connection's credential, or when AuthMode is IntegratedAuth.</summary>
     public string? Password { get; set; }
 
+    /// <summary>The second login (plan 28c, E20), the one a drain uses: null when the connection has one login for both roles. With a login, a null <see cref="RunLoginInput.UserId"/> is the user of the first, and a null <see cref="RunLoginInput.Password"/> keeps the password already stored. Only with <see cref="AuthMode.SqlAuth"/>.</summary>
+    public RunLoginInput? RunLogin { get; set; }
+
     /// <inheritdoc cref="ConnectionConfig.ConnectTimeoutSeconds"/>
     public int? ConnectTimeoutSeconds { get; set; }
 
@@ -205,4 +238,18 @@ public sealed class ConnectionInput
 
     /// <inheritdoc cref="ConnectionConfig.TestQuery"/>
     public string? TestQuery { get; set; }
+}
+
+/// <summary>The login a connection's run role uses when it is not the one of the read role (plan 28c, E20). Plaintext password: like <see cref="ConnectionInput.Password"/>, never serialized to a file.</summary>
+public sealed class RunLoginInput
+{
+    public string? UserId { get; set; }
+    public string? Password { get; set; }
+}
+
+/// <summary>Which of a connection's logins is used (plan 28c, E20). <see cref="Read"/> is what the server itself does with a connection (browsing metadata, tests, previews, planning what a provisioning step would do); <see cref="Run"/> is what a replication does (reading the source and writing the target in a pass, and the steps a provisioning apply writes). The runner holds the run login only.</summary>
+public enum CredentialRole
+{
+    Read,
+    Run,
 }
