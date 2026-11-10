@@ -31,7 +31,7 @@ jobs:
     with:
       paths: '^(DbDataRunner/|DbDataKit/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdatarunner-|_)|actions/setup-product))'
 
-  # The server, its management API, the scheduler and real task processes, on SQLite (the engines job adds PostgreSQL and SQL Server). Linux only for now: the Windows job comes with the runner's Windows packaging.
+  # The server, its management API, the scheduler and real task processes, on SQLite (the engines job adds PostgreSQL and SQL Server). The `windows` job below runs the same on Windows.
   test:
     needs: changes
     if: ${{ needs.changes.outputs.build == 'true' }}
@@ -69,3 +69,59 @@ jobs:
           echo "DBDATA_REQUIRE_SQLSERVER=true" >> "$GITHUB_ENV"
       - run: dotnet build DbDataRunner.slnf -c Release
       - run: dotnet test --project tests/DbDataRunner.Tests -c Release --no-build --minimum-expected-tests 27
+
+  # The runner on Windows (plan 28a R27): the hosts the Linux jobs cannot prove. The server and its real task processes on SQLite; the shared libraries' runner suites (the artifact cache's hard-link views and
+  # their long paths, the job object limits, the executor's task host); the program published as it ships (framework-dependent, and once single-file, the layout the IL3000 analyzer checks), and the real Service
+  # Control Manager through `service install|start|restart|stop|uninstall` under the virtual account NT SERVICE\DbDataRunner (DbDataRunner/tools/service-e2e.ps1, the runner's counterpart of Sync's).
+  # Not here: a replication on the runner (SyncOnRunner needs SQL Server and PostgreSQL, which a Windows runner has no container for; plan 28a R27d).
+  windows:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-product
+        with:
+          product: DbDataRunner
+          global-json: DbDataRunner/global.json
+          duckdb: 'false'
+      # the shared libraries' runner tests link the DuckDB engine (the quality system task)
+      - uses: ./.github/actions/duckdb-cache
+      - name: Fetch the pinned DuckDB engine
+        working-directory: .
+        shell: pwsh
+        run: ./scripts/fetch-duckdb.ps1
+      - name: Build the runner
+        run: dotnet build DbDataRunner.slnf -c Release
+      - name: Server tests (real servers and task processes, SQLite)
+        run: dotnet test --project tests/DbDataRunner.Tests -c Release --no-build --minimum-expected-tests 12
+      # The shared libraries have their own global.json (the Microsoft Testing Platform runner), so these run from their folder, one project per step so a failure names its suite.
+      - name: Engine tests (artifact cache and hard-link views, scheduler, runtimes)
+        if: ${{ !cancelled() }}
+        working-directory: DbDataKit
+        run: dotnet test --project tests/DbDataKit.Runner.Tests -c Release --minimum-expected-tests 50
+      - name: Executor tests (the task host, real processes)
+        if: ${{ !cancelled() }}
+        working-directory: DbDataKit
+        run: dotnet test --project tests/DbDataKit.Runner.Execution.Tests -c Release --minimum-expected-tests 15
+      - name: Limit tests (job object, watchdog)
+        if: ${{ !cancelled() }}
+        working-directory: DbDataKit
+        run: dotnet test --project tests/DbDataKit.Runner.Limits.Tests -c Release --minimum-expected-tests 10
+      - name: Publish the program as it ships (framework-dependent, win-x64)
+        if: ${{ !cancelled() }}
+        run: dotnet publish src/DbDataRunner.Server -c Release -r win-x64 --self-contained false -p:DebugType=none -p:DebugSymbols=false -o "$env:RUNNER_TEMP\runner-install"
+      # Warnings are errors, and the single-file analyzers (IL3000: a program that finds itself by Assembly.Location) only run when the publish is single-file.
+      - name: Publish single-file (the analyzers for code that locates itself)
+        if: ${{ !cancelled() }}
+        run: dotnet publish src/DbDataRunner.Server -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:DebugType=none -p:DebugSymbols=false -o "$env:RUNNER_TEMP\runner-single"
+      - name: The program starts and finds its task host
+        if: ${{ !cancelled() }}
+        run: |
+          & "$env:RUNNER_TEMP\runner-install\dbdatarunner.exe" help
+          if (-not (Test-Path "$env:RUNNER_TEMP\runner-install\taskhost\dbdatakit-taskhost.dll")) { throw 'the published program has no taskhost\dbdatakit-taskhost.dll' }
+      - name: Service end-to-end (install, start, restart, stop, uninstall, as NT SERVICE\DbDataRunner)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: ./tools/service-e2e.ps1 -Exe "$env:RUNNER_TEMP\runner-install\dbdatarunner.exe"
