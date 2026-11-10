@@ -135,7 +135,7 @@ runs the whole install on the machine.
 
 **In the repository:** the top-level `DbDataKit/` folder (the shared libraries) becomes **`Shared/`**, and then `DbDataConsole/` becomes **`DbDataKit/`**, so the folder of the same name as the product is the product. The packages keep their names (`DbDataKit.*`, they are the libraries of the suite); the product's projects and namespaces `DbDataConsole.*` become `DbDataKit.Server*` (a name that does not collide with a library package is checked by the build), and `DbDataKit.slnx` keeps its name. The order is fixed: `DbDataKit/` to `Shared/` first, so the second move never meets an existing `DbDataKit/`. About 166 files mention the path `DbDataKit/` and 144 mention `DbDataConsole` (15 of them workflows), so this is a scripted change like the Proxy to Gateway rename (`scripts/rename_proxy_to_gateway.py`), done alone in a batch with nothing else in flight, because every open branch would conflict with it.
 
-**On the machine:** one folder under one root for every service **or module** (a module is a part of a service that keeps files of its own, the Workspace being the case), named for it. Windows `%ProgramData%\DbDataKit\<service>`, Linux `/var/lib/dbdatakit/<service>`, with the layout `DbDataKit.Hosting.WindowsService.DirectoryLayout` already has inside it (`config`, `data`, `secrets`, `certs`, `logs`):
+**On the machine:** one folder under one root for every service **or module** (a module is a part of a service that keeps files of its own, the Workspace being the case), named for it. Windows `%ProgramData%\DbDataKit\<service or module>`, Linux `/var/lib/dbdatakit/<service or module>`, with the layout `DbDataKit.Hosting.WindowsService.DirectoryLayout` already has inside it (`config`, `data`, `secrets`, `certs`, `logs`):
 
 | Service | Today (Windows) | New |
 | --- | --- | --- |
@@ -145,7 +145,7 @@ runs the whole install on the machine.
 | Sync | `DbDataSync` | `DbDataKit\sync` |
 | Build | (a project folder, set by hand) | `DbDataKit\build` |
 | Store | `DbDataStore\server` | `DbDataKit\store` |
-| Workspace | `DbDataWorkspace\server` `DbDataKit\workspace`, the same before and after it folds into DbDataKit (then a module of that service, with its own setting `DBDATAKIT_WORKSPACE_DIR`) |
+| Workspace | `DbDataWorkspace\server` | `DbDataKit\workspace`, the same before and after it folds into DbDataKit (then a module of that service, with its own setting `DBDATAKIT_WORKSPACE_DIR`) |
 
 The Workspace folder (`projects/`, `workspaces/` with a git worktree per draft, `builds/`) is the one most likely to be moved on its own, to a bigger or faster volume, so it has a setting of its own (`DBDATAKIT_WORKSPACE_DIR`) and nothing outside it refers to its path: the service's state keeps project ids and relative names, never the folder. One root setting (`DBDATAKIT_DATA`, default the root above) moves them all; each product's own variable (`DBDATARUNNER_SERVER_DIR`, `DBDATAGATEWAY_...`, and so on) still wins for that one service, and `globalEnv` in each `dist.json` is rewritten to the new names. The container images keep their `/data` volumes, which is not a path this plan changes.
 
