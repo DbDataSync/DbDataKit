@@ -1,5 +1,4 @@
 """The O14 rename script: moves with git, rewrites names, leaves history and HTTP proxies alone, dry run touches nothing, a second run does nothing."""
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -7,6 +6,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import rename_proxy_to_gateway as rename  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from gitenv import run_git  # noqa: E402
 
 FILES = {
     "DbDataProxy/DbDataProxy.slnf": '{"solution": {"projects": ["src\\\\DbDataProxy.Server\\\\DbDataProxy.Server.csproj"]}}\n',
@@ -28,7 +30,7 @@ FILES = {
 
 
 def git(root: Path, *args: str) -> str:
-    return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, check=True).stdout
+    return run_git(root, *args)
 
 
 class RenameTests(unittest.TestCase):
