@@ -151,3 +151,6 @@ suite/e23-connection-inventory
 suite/e24-deployment-lineage
 suite/needs-review-studio
 claude/wonderful-dirac-o0g74c
+
+# --- group 5: abandoned by this session (2026-11-10): batch 31 was re-cut as suite/batch-32 on the merged main
+suite/batch-31
