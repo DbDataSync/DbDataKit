@@ -190,7 +190,7 @@ jobs:
         run: scripts/fetch-native.sh ${{ matrix.rid }}
       - uses: ./.github/actions/duckdb-cache
         with:
-        rids: ${{ matrix.rid }}
+          rids: ${{ matrix.rid }}
       - name: Pinned DuckDB engine
         shell: bash
         working-directory: .
