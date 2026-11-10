@@ -80,6 +80,21 @@ public class AclHelperWindowsTests
         Assert.Equal("S-1-5-19", AclHelper.ResolveIdentity("S-1-5-19").Value);
     }
 
+    [Theory]
+    [InlineData("LocalSystem", "S-1-5-18")]
+    [InlineData("NT AUTHORITY\\LocalSystem", "S-1-5-18")]
+    [InlineData("LocalService", "S-1-5-19")]
+    [InlineData("NT AUTHORITY\\Local Service", "S-1-5-19")]
+    [InlineData("NetworkService", "S-1-5-20")]
+    [InlineData("NT AUTHORITY\\Network Service", "S-1-5-20")]
+    public void ResolveIdentity_knows_the_names_a_service_registration_gives_its_account(string name, string sid)
+    {
+        // `sc qc` says LocalSystem for a service that runs as SYSTEM, and the account database does not translate that name: a service that
+        // restricted its own files to "its account" (the certificate of Sync's first https start) died with IdentityNotMappedException
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows only");
+        Assert.Equal(sid, AclHelper.ResolveIdentity(name).Value);
+    }
+
     [Fact]
     public void Restrict_Missing_Throws_AndEmptyIdentitiesRejected()
     {

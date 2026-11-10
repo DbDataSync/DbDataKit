@@ -196,7 +196,7 @@ public static class ServeCommand
             Console.WriteLine($"  certificate        {path} (self-signed, made for {address.Host}; the public copy to trust is {Path.ChangeExtension(path, ".cer")})");
             return null;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException or LibGit2SharpException or ArgumentException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException or LibGit2SharpException or ArgumentException or System.Security.Principal.IdentityNotMappedException)
         {
             return $"DbDataSync is asked to serve {url}, which needs a certificate, and none is configured. Making one at '{path}' failed: {ex.Message} " +
                    "Fix that file or its directory, point Kestrel:Certificates:Default:Path at a certificate of your own (`dbdatasync cert use-pfx`), or serve plain http behind a proxy that ends TLS (see docs/configuration.md).";

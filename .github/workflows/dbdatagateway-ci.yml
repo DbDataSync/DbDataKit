@@ -56,7 +56,7 @@ jobs:
           dotnet test --project tests/DbDataGateway.Tests -c Release --no-build --minimum-expected-tests 100 2>&1 | Tee-Object -FilePath gateway-tests.log
           $code = $LASTEXITCODE
           Write-Host '--- failed tests ---'
-          Select-String -Path gateway-tests.log -Pattern 'failed DbDataGateway' -Context 0,6 | ForEach-Object { Write-Host $_.Line; $_.Context.PostContext | ForEach-Object { Write-Host "    $_" } }
+          Select-String -Path gateway-tests.log -Pattern 'failed.*DbDataGateway\.Tests' -Context 0,6 | ForEach-Object { Write-Host $_.Line; $_.Context.PostContext | ForEach-Object { Write-Host "    $_" } }
           exit $code
       - name: Package (smoke test)
         run: ./build/package.ps1 -Version 0.0.0-ci
@@ -114,7 +114,7 @@ jobs:
           dotnet test --project tests/DbDataGateway.Tests -c Release --no-build --minimum-expected-tests 100 2>&1 | tee gateway-tests.log
           code=${PIPESTATUS[0]}
           echo '--- failed tests ---'
-          grep -A6 'failed DbDataGateway' gateway-tests.log || true
+          grep -A6 -E 'failed.*DbDataGateway\.Tests' gateway-tests.log || true
           exit $code
       - name: Stop the shared engines
         if: always()

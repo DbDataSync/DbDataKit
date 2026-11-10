@@ -35,6 +35,10 @@ public static class AclHelper
         {
             case "SYSTEM" or "NT AUTHORITY\\SYSTEM": return new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
             case "ADMINISTRATORS" or "BUILTIN\\ADMINISTRATORS": return new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+            // the names a service registration gives its account (`sc qc` says LocalSystem): the account database does not know them, so a translation would throw
+            case "LOCALSYSTEM" or "NT AUTHORITY\\LOCALSYSTEM": return new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
+            case "LOCALSERVICE" or "NT AUTHORITY\\LOCALSERVICE" or "NT AUTHORITY\\LOCAL SERVICE": return new SecurityIdentifier(WellKnownSidType.LocalServiceSid, null);
+            case "NETWORKSERVICE" or "NT AUTHORITY\\NETWORKSERVICE" or "NT AUTHORITY\\NETWORK SERVICE": return new SecurityIdentifier(WellKnownSidType.NetworkServiceSid, null);
             case "CURRENTUSER": return WindowsIdentity.GetCurrent().User!;
         }
         return (SecurityIdentifier)new NTAccount(id).Translate(typeof(SecurityIdentifier));

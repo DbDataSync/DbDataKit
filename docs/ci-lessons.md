@@ -336,6 +336,12 @@ How it works now, and what to keep true when you add a job:
 | --- | --- | --- |
 | Gateway tests fail on the Windows job (and only there, where the engine-gated group tests run) with `Now listening on: https://127.0.0.1:8816` in several hosts and `SecondInstanceException` or `address already in use` | the management API is on by default (plan 33 SC40), so every test host that starts and does not say otherwise binds 8816; two hosts in one process, or two tests in parallel, collide | a test host builder that is not about management passes `--Gateway:Management:Enabled=false` (before any argument that enables it), and one that is passes its own free `Management:Port`; never rely on the default port in a test |
 
+### Windows services
+
+| Signature | Cause | Fix |
+| --- | --- | --- |
+| `service start` fails at once with `Service Control Manager: start '<name>' failed (Win32 1053)` (and `net start` says error 2186: the same code, "did not respond in a timely fashion"), and the Application log has `<Product>: IdentityNotMappedException: Some or all identity references could not be translated.` | the process died during startup, before it connected to the service manager: it restricted its own files (the certificate it makes on its first https start) to "the account the service runs as", and `sc qc` says that account is `LocalSystem`, a name the account database does not translate (`NT AUTHORITY\SYSTEM` is) | `AclHelper.ResolveIdentity` knows `LocalSystem`, `LocalService` and `NetworkService`; a startup step that can fail on an account name reports it in words (`EnsureCertificate`); `DbDataSync/tools/service-e2e.ps1` prints the event log, the service state and the console start of the same command when a step fails |
+
 ### Infrastructure (not your change; re-run once, then look closer)
 
 | Signature | What it is |
