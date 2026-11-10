@@ -251,9 +251,21 @@ public static class RunFailureKinds
     public const string MappingStillLoading = "MappingStillLoading";
 }
 
-/// <param name="ResultPath">Where the parquet is. The index says where; the file says what.</param>
+/// <param name="ResultPath">Where the parquet is. The index says where; the file says what. On a runner the file is a payload of the run (<see cref="VerificationResultPayload"/>): the path is then <c>payload:</c> and the payload's id.</param>
 /// <param name="SourceReadAtUtc">When each side was read. The gap between them is what tells an
 /// operator whether a difference is drift or a defect.</param>
+/// <summary>The result file of a verification that ran on a runner: kept as a payload of the run, so it lives as long as the run's retention says and the runner's scratch directory can be deleted at the run's end.</summary>
+public static class VerificationResultPayload
+{
+    public const string Prefix = "payload:";
+
+    public static string PathFor(Guid payloadId) => Prefix + payloadId.ToString("N");
+
+    /// <summary>The payload a result path names, or null when it is a file on disk (a result of the supervisor's worker).</summary>
+    public static Guid? IdOf(string resultPath) =>
+        resultPath.StartsWith(Prefix, StringComparison.Ordinal) && Guid.TryParseExact(resultPath.AsSpan(Prefix.Length), "N", out var id) ? id : null;
+}
+
 public sealed record VerificationResultRecord(
     long Id,
     Guid RunId,

@@ -54,7 +54,7 @@ public sealed class BatchProgress
     [Checkpoint]
     public string? Mapping { get; set; }
 
-    /// <summary>The watermark key of the mapping's source: where the position waiting on this batch is.</summary>
+    /// <summary>The checkpoint item of the mapping (<see cref="WatermarkCheckpoint.ItemKey"/>: the mapping and its source's watermark key): where the position waiting on this batch is.</summary>
     [Checkpoint]
     public string? SourceKey { get; set; }
 
@@ -93,7 +93,7 @@ public sealed class ReadsProgress
     public long? AtSweep { get; set; }
 }
 
-/// <summary>The checkpoint <c>watermark</c> per mapping and source table (plan 28c section 5.1, reduced to two parts); the key is the engine's watermark key.</summary>
+/// <summary>The checkpoint <c>watermark</c> per mapping and source table (plan 28c section 5.1); the item key is <see cref="WatermarkCheckpoint.ItemKey"/>: the mapping and the engine's watermark key of its source.</summary>
 public sealed class DrainProgress : Progress
 {
     public Keyed<WatermarkProgress> Watermark { get; } = new();
@@ -152,7 +152,11 @@ public static class DrainSteps
     public static readonly ValueStep<PassRecord, PassRecord> Pass =
         Step.Value<PassRecord, PassRecord>(PassRecordText.StepName, r => r.RunId.ToString("N"));
 
-    /// <summary>A verification result (plan 28c E11b): the record the verification wrote, an output of the run keyed by mapping, check and time; the Sync back end reads it from the run for a runner-owned replication.</summary>
+    /// <summary>The file of a verification result (plan 28c E06d): the parquet the check wrote into the run's scratch, streamed into a payload of the run (under the run's retention) before the scratch is deleted; the record of <see cref="Verification"/> names it.</summary>
+    public static readonly StreamStep<VerificationResultRecord> VerificationFile =
+        Step.Stream<VerificationResultRecord>("verification-file", r => $"{r.MappingName}/{r.CheckName}/{r.CompletedAtUtc.UtcTicks}", "application/vnd.apache.parquet");
+
+    /// <summary>A verification result (plan 28c E11b): the record the verification wrote, an output of the run keyed by mapping, check and time; the Sync back end reads it from the run for a runner-owned replication. Its path is the payload of <see cref="VerificationFile"/>.</summary>
     public static readonly ValueStep<VerificationResultRecord, VerificationResultRecord> Verification =
         Step.Value<VerificationResultRecord, VerificationResultRecord>("verification-result", r => $"{r.MappingName}/{r.CheckName}/{r.CompletedAtUtc.UtcTicks}");
 }
@@ -424,8 +428,19 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
     /// <summary>What a pass reports that belongs to the run, not to state: a verification result is a step of the run (its value stored with the run, repeatable: a result reported again is the same result).</summary>
     private sealed class RunOutputs(DrainJob job) : IDrainOutputs
     {
-        public void VerificationResult(VerificationResultRecord result) =>
-            job.Step(DrainSteps.Verification, result).Repeatable().RunAsync(_ => Task.FromResult(result), CancellationToken.None).GetAwaiter().GetResult();
+        public void VerificationResult(VerificationResultRecord result)
+        {
+            // the file is in the run's scratch, which is deleted when the run ends: it goes into a payload of the run first, and the record names the payload (a retry of the attempt chain answers from the stored step)
+            var file = job.Step(DrainSteps.VerificationFile, result).Repeatable().StreamAsync(async (stream, ct) =>
+            {
+                await using var source = File.OpenRead(result.ResultPath);
+                await source.CopyToAsync(stream, ct).ConfigureAwait(false);
+            }, CancellationToken.None).GetAwaiter().GetResult();
+            var recorded = result with { ResultPath = VerificationResultPayload.PathFor(file.Id) };
+            job.Step(DrainSteps.Verification, recorded).Repeatable().RunAsync(_ => Task.FromResult(recorded), CancellationToken.None).GetAwaiter().GetResult();
+            try { File.Delete(result.ResultPath); }
+            catch (IOException) { /* the scratch is deleted with the run */ }
+        }
 
         public void ChangeChecks(string replication, IReadOnlyList<ChangeCheckEntry> checks)
         {

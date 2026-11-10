@@ -13,6 +13,7 @@ using DbDataSync.Drivers.Postgres;
 using DbDataSync.TaskRunner.Tests.Runner;
 using DbDataSync.Libraries;
 using DbDataSync.State;
+using DbDataSync.Verification;
 using LibGit2Sharp;
 using Xunit;
 using RunMode = DbDataSync.TaskRunner.Tests.RunExecutorIntegrationTests.RunMode;
@@ -365,5 +366,68 @@ public sealed class ReplicationPairsTests : IAsyncLifetime
         Assert.Equal(expected, await SecondTargetRowsAsync());
         Assert.Equal(_version.ToString(CultureInfo.InvariantCulture), Position(mode, "main"));
         Assert.Equal(_version.ToString(CultureInfo.InvariantCulture), Position(mode, "second"));
+    }
+
+    /// <summary>
+    /// A verification pass of the mapping, by the supervisor's worker and by a drain on the runner (plan 28c E06d): the check compares the two sides group by group (here one group per key, and one key only the target has) and writes
+    /// a parquet file. On the supervisor path that is a file beside Sync's state; on the runner it is written into the run's scratch, streamed into a payload of the run before the scratch is deleted, and the result the run
+    /// records names the payload. Nothing is left in the runner's data directory.
+    /// </summary>
+    [Theory]
+    [InlineData(RunMode.Supervisor)]
+    [InlineData(RunMode.Runner)]
+    public async Task AVerification_WritesItsResultFile_OnTheRunnerAsAPayloadOfTheRun_AndTheScratchIsDeleted(RunMode mode)
+    {
+        await SetUpAsync("mysql", "postgres", verify: true);
+        await InsertAsync(1, "one", 1m);
+        await InsertAsync(2, "two", 2m);
+        await InsertAsync(3, "three", 3m);
+        await DrainAsync(mode);
+        Assert.Equal(await SourceRowsAsync(), await TargetRowsAsync());
+        await using (var c = _target.Open())
+            await ChangeApplyTargets.ExecuteAsync(c, $"INSERT INTO {_target.Qualified(_targetTable)} ({_target.Q(_target.Column("id"))}, {_target.Q(_target.Column("name"))}) VALUES (99, 'only-here')");
+
+        string recordedPath;
+        int groups, differing;
+        VerificationResultHeader header;
+        if (mode == RunMode.Supervisor)
+        {
+            var runId = _queue.Enqueue(Replication, RunKind.Verification, "main");
+            await _executor.ExecuteWorkerAsync(Replication, WorkerLanes.Uniform(1), CancellationToken.None);
+            Assert.Equal(RunStatus.Succeeded, _runs.GetRun(runId)!.Status);
+            var record = Assert.Single(new VerificationResultStore(new StateDatabase(Path.Combine(_repoRoot, "state.db"))).List(Replication, "main", 10));
+            (recordedPath, groups, differing) = (record.ResultPath, record.GroupsCompared, record.DifferingGroups);
+            Assert.Null(VerificationResultPayload.IdOf(recordedPath));
+            Assert.True(File.Exists(recordedPath));
+            header = await VerificationResultFile.ReadHeaderAsync(recordedPath, CancellationToken.None);
+        }
+        else
+        {
+            var chain = Guid.CreateVersion7().ToString();
+            var request = await _rig!.DrainRequestAsync(_package!, Replication, runId: Guid.CreateVersion7(), chain: chain,
+                requests: DrainRequestText.Serialize([new DbDataSync.State.DrainRequest(nameof(RunKind.Verification), "main")]));
+            var result = await _rig.Executor.RunAsync(request);
+            Assert.True(result.End.State == TaskEndState.Succeeded && result.ExitCode == 0, _rig.LogText(result.RunId));
+
+            var steps = new DbDataKit.State.StepStore(_rig.Database, new DbDataKit.State.ProgressKey(RunnerRig.Package, RunnerRig.Channel, "drain")).List(chain);
+            var recorded = System.Text.Json.JsonSerializer.Deserialize<VerificationResultRecord>(Assert.Single(steps, s => s.Name == "verification-result").ResultJson!, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
+            var fileStep = Assert.Single(steps, s => s.Name == "verification-file");
+            (recordedPath, groups, differing) = (recorded.ResultPath, recorded.GroupsCompared, recorded.DifferingGroups);
+            Assert.Equal(fileStep.ResultPayload, VerificationResultPayload.IdOf(recordedPath));
+
+            // the file is the payload: read back out of the runner's state, it is the parquet the check wrote
+            var copy = Path.Combine(_repoRoot, "from-payload.parquet");
+            await using (var payload = new DbDataKit.State.PayloadStore(_rig.Database).OpenRead(fileStep.ResultPayload!.Value))
+            await using (var target = File.Create(copy))
+                await payload.CopyToAsync(target);
+            header = await VerificationResultFile.ReadHeaderAsync(copy, CancellationToken.None);
+
+            // and nothing of it is left where the run wrote it
+            Assert.Empty(Directory.EnumerateFiles(_rig.DataDirectory, "*.parquet", SearchOption.AllDirectories));
+        }
+
+        Assert.Equal("counts", header.CheckName);
+        Assert.Equal(4, groups);        // the three keys both sides have, and 99
+        Assert.Equal(1, differing);     // 99 is only at the target
     }
 }
