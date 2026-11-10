@@ -1,0 +1,29 @@
+{
+  "product": "dbdatastore",
+  "displayName": "DbDataStore",
+  "description": "The store: master data models kept in your own SQL Server or PostgreSQL databases, with validated writes, history and audit, over a management API a console pairs with. Needs the .NET 10 runtime (ASP.NET Core).",
+  "homepage": "https://github.com/DbDataSync/DbDataKit/tree/main/DbDataStore",
+  "license": "MIT",
+  "platforms": {
+    "win-x64": {
+      "exe": "dbdatastore.exe"
+    },
+    "linux-x64": {
+      "exe": "dbdatastore"
+    }
+  },
+  "windowsScope": "machine",
+  "globalEnv": [
+    { "name": "DBDATASTORE_SERVER_DIR", "programData": "DbDataStore\\server" }
+  ],
+  "service": {
+    "name": "DbDataStore",
+    "register": "service install",
+    "unregister": "service uninstall"
+  },
+  "requiresDotnet": "10.0",
+  "notes": "The server's state, certificate and models live in the server's data directory, away from the program files. The state database is a SQLite file in that directory; to put it in a database shared by a group or the install run: dbdatastore state init. Start it with: dbdatastore server run. Pair a console with it: dbdatastore server pair --max-role admin. A model's own tables are made on a SQL Server or PostgreSQL connection of the server's, not on SQLite.",
+  "msi": {
+    "upgradeCode": "EE2FB839-0034-4DB5-9514-13ACCBF068D5"
+  }
+}
