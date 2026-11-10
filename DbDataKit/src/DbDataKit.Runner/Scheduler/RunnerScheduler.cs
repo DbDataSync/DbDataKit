@@ -606,10 +606,7 @@ public sealed partial class RunnerScheduler
                 {
                     try
                     {
-                        // a runtime that a host program starts (`dotnet {runtime}/bin/Engine.dll`) is run from a view of copies: the host looks beside the object a link points at, not beside the link; a self-contained executable of the view is fine as a link
-                        var command = runtime.Content.Manifest.Launch.Command;
-                        var copies = command is null || !runtime.Content.Files.Any(f => string.Equals(f.Path, command, StringComparison.Ordinal));
-                        runtimeView = await _runtimeViews.AcquireAsync($"{runtime.Package}@{runtime.Version}", runtime.Content.Files, copies, runCts.Token).ConfigureAwait(false);
+                        runtimeView = await _runtimeViews.AcquireAsync($"{runtime.Package}@{runtime.Version}", runtime.Content.Files, runCts.Token).ConfigureAwait(false);
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {
