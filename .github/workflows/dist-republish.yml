@@ -11,7 +11,7 @@ on:
       product:
         description: The product whose install files to republish.
         type: choice
-        options: [dbdatakit, dbdatabuild, dbdatasync, dbdatagateway]
+        options: [dbdatakit, dbdatabuild, dbdatasync, dbdatagateway, dbdatarunner]
         required: true
 
 permissions:
@@ -37,6 +37,7 @@ jobs:
             dbdatabuild) meta=DbDataBuild/dist.json ;;
             dbdatasync)  meta=DbDataSync/dist.json ;;
             dbdatagateway) meta=DbDataGateway/dist.json ;;
+            dbdatarunner) meta=DbDataRunner/dist.json ;;
           esac
           tag=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
             --jq "[.[] | select(.draft == false and .prerelease == false and (.tag_name | startswith(\"$PRODUCT/v\")))][0].tag_name")

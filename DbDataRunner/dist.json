@@ -22,7 +22,7 @@
     "unregister": "service uninstall"
   },
   "requiresDotnet": "10.0",
-  "notes": "The state, certificate, package cache and scratch space live in the server's data directory, away from the program files; the task host is installed in the taskhost folder beside the program. Start it with: dbdatarunner server run. Pair a console with it: dbdatarunner server pair --max-role admin. Put a package in for development with: dbdatarunner package install <manifest.yaml> <directory>.",
+  "notes": "The state, certificate, package cache and scratch space live in the server's data directory, away from the program files; the task host is installed in the taskhost folder beside the program. The state database is a SQLite file in that directory (one runner); for a group of runners sharing one database run: dbdatarunner state init. Start it with: dbdatarunner server run. Pair a console with it: dbdatarunner server pair --max-role admin. Put a package in for development with: dbdatarunner package install <manifest.yaml> <directory>.",
   "msi": {
     "upgradeCode": "0F7142E4-5444-4E14-95AB-7AF46EE02CB4"
   }

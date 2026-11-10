@@ -16,7 +16,7 @@ truth; their header comments say how to dispatch them. What a release contains a
   and publishes a GitHub Release in this repository.
 - **One version scheme: CalVer `YYYY.M.D.HHmm`** from the UTC clock, for every product. A `-beta` suffix is a beta and `-snapshot.g<sha>` a
   snapshot; both are prereleases.
-- **Names are per product.** Tags are `<product>/v<version>` (`dbdatabuild/`, `dbdatasync/`, `dbdatagateway/`, `dbdatakit/` for the console).
+- **Names are per product.** Tags are `<product>/v<version>` (`dbdatabuild/`, `dbdatasync/`, `dbdatagateway/`, `dbdatarunner/`, `dbdatakit/` for the console).
   Container images are `ghcr.io/<owner>/<product>`, tagged with the version (a stable release also moves `latest`).
   Releases are created with `--latest=false`: GitHub's "latest" is one marker per repository, not per product.
 - **NuGet publishing is paused.** No release workflow has a nuget.org push step today. Bringing it back needs a new step and a new Trusted
@@ -55,7 +55,7 @@ gh workflow run suite-release.yml --ref main -f sha=<older commit on main>
 gh workflow run suite-release.yml --ref <branch> -f snapshot=true  # a snapshot of any branch
 ```
 
-**Each product release is still dispatchable alone** (`dbdatabuild-release.yml`, `dbdatagateway-release.yml`, `dbdatasync-release.yml`, same
+**Each product release is still dispatchable alone** (`dbdatabuild-release.yml`, `dbdatagateway-release.yml`, `dbdatarunner-release.yml`, `dbdatasync-release.yml`, same
 inputs; an empty `version` means the clock now).
 
 **The guard.** Unless it is a snapshot, a release refuses to run when dispatched against anything but `main`, and when the commit (the tip, or

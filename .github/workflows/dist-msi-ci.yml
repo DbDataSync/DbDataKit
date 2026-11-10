@@ -9,6 +9,7 @@ on:
       - 'dist/msi.py'
       - 'dist/tests/**'
       - 'DbDataConsole/scripts/**'
+      - 'DbDataRunner/scripts/**'
       - '**/dist.json'
       - '.github/workflows/dist-msi-ci.yml'
   workflow_dispatch:
@@ -38,14 +39,17 @@ jobs:
       - name: Build two MSIs per product from the newest published package
         run: |
           set -euo pipefail
-          declare -A META=( [dbdatagateway]=DbDataGateway [dbdatasync]=DbDataSync [dbdatabuild]=DbDataBuild [dbdatakit]=DbDataConsole )
-          # The console has no published release before its first one, so its package is built here from this commit.
-          mkdir -p work/dbdatakit out/dbdatakit
+          declare -A META=( [dbdatagateway]=DbDataGateway [dbdatasync]=DbDataSync [dbdatabuild]=DbDataBuild [dbdatakit]=DbDataConsole [dbdatarunner]=DbDataRunner )
+          # The console and the runner have no published release before their first one, so their packages are built here from this commit.
+          mkdir -p work/dbdatakit out/dbdatakit work/dbdatarunner out/dbdatarunner
           DbDataConsole/scripts/package.sh win-x64 2026.1.1.0 "$PWD/work/dbdatakit"
-          for product in dbdatagateway dbdatasync dbdatabuild dbdatakit; do
+          DbDataRunner/scripts/package.sh win-x64 2026.1.1.0 "$PWD/work/dbdatarunner"
+          for product in dbdatagateway dbdatasync dbdatabuild dbdatakit dbdatarunner; do
             work="work/$product"; mkdir -p "$work" "out/$product"
             if [ "$product" = dbdatakit ]; then
               unzip -q "$work/dbdatakit-v2026.1.1.0-win-x64.zip" -d "$work/payload"
+            elif [ "$product" = dbdatarunner ]; then
+              unzip -q "$work/dbdatarunner-v2026.1.1.0-win-x64.zip" -d "$work/payload"
             else
               # Transitional (O14): the Gateway has no release of its own yet, so its newest published package is the last one of its former name.
               # Delete this mapping, and the rename below, once a dbdatagateway/v release exists.
@@ -89,11 +93,12 @@ jobs:
           - { product: dbdatasync,  display: DbDataSync,  exe: dbdatasync.exe,  service: DbDataSync,  runs: false, path: true }
           - { product: dbdatabuild, display: DbDataBuild, exe: dbdatabuild.exe, service: '',          runs: false, path: true }
           - { product: dbdatakit,   display: DbDataKit,   exe: dbdatakit.exe,   service: DbDataKitConsole, runs: false, path: false }
+          - { product: dbdatarunner, display: DbDataRunner, exe: dbdatarunner.exe, service: DbDataRunner, runs: false, path: false }
     name: windows (${{ matrix.product }})
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
-        if: matrix.product == 'dbdatasync' || matrix.product == 'dbdatakit'
+        if: matrix.product == 'dbdatasync' || matrix.product == 'dbdatakit' || matrix.product == 'dbdatarunner'
         with:
           dotnet-version: '10.0.x'
       - uses: actions/download-artifact@v8
