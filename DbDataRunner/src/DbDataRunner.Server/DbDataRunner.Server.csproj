@@ -55,7 +55,8 @@
     <MSBuild Projects="$(DbDataKitRoot)src\DbDataKit.Runner.TaskHost\DbDataKit.Runner.TaskHost.csproj" Targets="Publish"
              Properties="NoBuild=true;PublishDir=$(_TaskHostDir);SelfContained=false" />
   </Target>
-  <Target Name="TaskHostIntoPublish" BeforeTargets="ComputeResolvedFilesToPublishList" DependsOnTargets="CopyTaskHost" Condition="'$(UseLocalDbDataKit)' == 'true'">
+  <!-- AFTER the list is computed: added before it, the SDK's file-conflict resolution saw two Microsoft.Data.Sqlite.dll (this program's and the task host's) and dropped this program's, so a published runner failed at start with FileNotFoundException (seen in the Windows service e2e; the console had the same bug) -->
+  <Target Name="TaskHostIntoPublish" AfterTargets="ComputeResolvedFilesToPublishList" DependsOnTargets="CopyTaskHost" Condition="'$(UseLocalDbDataKit)' == 'true'">
     <ItemGroup>
       <_TaskHostFile Include="$(_TaskHostDir)**\*" />
       <ResolvedFileToPublish Include="@(_TaskHostFile)" RelativePath="taskhost\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />

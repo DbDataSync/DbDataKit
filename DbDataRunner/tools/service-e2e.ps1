@@ -57,6 +57,7 @@ function RunsAs {
 }
 
 if (-not (Test-Path $Exe)) { throw "No executable at $Exe." }
+if (-not (Test-Path (Join-Path (Split-Path $Exe) 'Microsoft.Data.Sqlite.dll'))) { throw 'The published program has no Microsoft.Data.Sqlite.dll beside it (the task host files were added to the publish list too early and the SDK dropped it).' }
 if (-not (Test-Path (Join-Path (Split-Path $Exe) 'taskhost\dbdatakit-taskhost.dll'))) { throw 'The published program has no taskhost\dbdatakit-taskhost.dll beside it.' }
 
 $InstallDir = Split-Path $Exe
