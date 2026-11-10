@@ -4,6 +4,10 @@ name: Republish install files
 # `<product>/dist` release: for when that release was deleted or lost its files. It changes nothing else; the versioned release's own
 # assets are untouched apart from re-attaching install.ps1 / install.sh to it. Run it by hand:
 #   gh workflow run dist-republish.yml --ref main -f product=dbdatagateway
+# `dbdatakit-full` is the one Scoop manifest for every member (dist/suite.json): it is bound again from the members' own SHA256SUMS at one
+# suite version, with the generator of the ref this is run against, and replaces the asset of the fixed release of that version's channel
+# (dbdatakit-full/dist, dist-beta or dist-snapshot). `version` names the suite version (default: the newest stable dbdatakit release's):
+#   gh workflow run dist-republish.yml --ref main -f product=dbdatakit-full -f version=2026.11.10.1900-snapshot.gabcdef1
 
 on:
   workflow_dispatch:
@@ -11,14 +15,20 @@ on:
       product:
         description: The product whose install files to republish.
         type: choice
-        options: [dbdatakit, dbdatabuild, dbdatasync, dbdatagateway, dbdatarunner]
+        options: [dbdatakit, dbdatabuild, dbdatasync, dbdatagateway, dbdatarunner, dbdatakit-full]
         required: true
+      version:
+        description: Only for dbdatakit-full - the suite version to bind (a stable, -beta or -snapshot.g<sha> version); empty means the newest stable dbdatakit release's.
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: write
 
 jobs:
   republish:
+    if: ${{ inputs.product != 'dbdatakit-full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -63,3 +73,54 @@ jobs:
           prerelease: 'false'
           sums: ${{ steps.release.outputs.sums }}
           sha: ${{ steps.release.outputs.sha }}
+
+  republish-suite:
+    if: ${{ inputs.product == 'dbdatakit-full' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      SUITE_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Pick the suite version and check every member has it
+        id: pick
+        run: |
+          set -euo pipefail
+          version="$SUITE_VERSION"
+          if [ -z "$version" ]; then
+            tag=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              --jq '[.[] | select(.draft == false and .prerelease == false and (.tag_name | startswith("dbdatakit/v")))][0].tag_name')
+            if [ -z "$tag" ] || [ "$tag" = null ]; then
+              echo "::error::No stable dbdatakit release was found; pass version=<a suite version>."
+              exit 1
+            fi
+            version="${tag#dbdatakit/v}"
+          fi
+          case "$version" in
+            *-snapshot|*-snapshot.*|*-beta) prerelease=true ;;
+            *) prerelease=false ;;
+          esac
+          # Each member's release of that version is the source of its zip and hash, so every one must exist.
+          missing=""
+          for member in $(python3 -I -c "import json; print(' '.join(m['product'] for m in json.load(open('dist/suite.json'))['members']))"); do
+            gh release view "$member/v$version" >/dev/null 2>&1 || missing="$missing $member"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::No release $version for:$missing"
+            exit 1
+          fi
+          {
+            echo "version=$version"
+            echo "prerelease=$prerelease"
+            echo "sha=$(git rev-list -n 1 "refs/tags/dbdatakit/v$version")"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/publish-suite-dist
+        with:
+          version: ${{ steps.pick.outputs.version }}
+          prerelease: ${{ steps.pick.outputs.prerelease }}
+          sha: ${{ steps.pick.outputs.sha }}
