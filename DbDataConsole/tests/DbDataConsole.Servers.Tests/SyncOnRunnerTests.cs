@@ -125,11 +125,16 @@ public sealed class SyncOnRunnerTests : IAsyncLifetime
         var before = (await SyncRuns("inc")).Select(r => Text(r, "runId")).ToHashSet();
         await h.InsertAsync("inc", 100_271, 10);
         total = await h.SourceCountAsync("inc");
-        await WaitForRows("inc", total, "moved by the supervisor's worker again");
+        // A continuous run records its counts when it ends (after its idle timeout), not while it runs: the target has the rows before the run says it read them. Wait for the runs added since to end.
+        List<JsonNode> added = [];
+        await h.WaitAsync(async () =>
+        {
+            added = [.. (await SyncRuns("inc")).Where(r => !before.Contains(Text(r, "runId")))];
+            return added.Count > 0 && added.All(r => Text(r, "status") != "Running");
+        }, "the runs of the supervisor's worker since the rollback have ended");
         var after = await SyncRuns("inc");
-        var added = after.Where(r => !before.Contains(Text(r, "runId"))).ToList();
-        Assert.NotEmpty(added);
         Assert.Equal(10, added.Sum(r => (long?)r["rowsRead"] ?? 0));   // not the 100,000 rows the runner moved: its positions came back
+        Assert.True(10 == added.Sum(r => (long?)r["rowsRead"] ?? 0), "DIAG added=" + string.Join(" ; ", added.Select(r => r.ToJsonString())) + " beforeCount=" + before.Count);
         foreach (var id in oldRuns["inc"]) Assert.Contains(after, r => Text(r, "runId") == id);   // the history is intact
         var (rows, distinct) = await h.TargetAsync("inc");
         Assert.Equal((total, total), (rows, distinct));
