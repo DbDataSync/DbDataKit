@@ -42,8 +42,13 @@ public sealed class RunnerServerTests
         Assert.Equal(HttpStatusCode.BadRequest, (await h.GetAsync("/api/v1/runs?task=ok")).Status);   // a task needs its package and channel
         Assert.NotEmpty(await h.RunsAsync("?package=sample&channel=dev&task=ok&limit=1"));
 
-        var (_, status) = await h.GetAsync("/api/v1/status");
-        var task = Assert.Single(status!["tasks"]!.AsArray());
+        // The task is due every second, so a single read of the status can land while the next run is already going (last_run says running; seen on Windows CI): take a snapshot between runs.
+        var status = await h.WaitAsync(async () =>
+        {
+            var (_, s) = await h.GetAsync("/api/v1/status");
+            return s!["tasks"]!.AsArray() is [var only] && only!["last_run"] is { } last && Text(last, "outcome") == "succeeded" ? s : null;
+        }, "a status snapshot whose last run has finished");
+        var task = Assert.Single(status["tasks"]!.AsArray());
         Assert.Equal(("sample", "dev", "ok", "1"), (Text(task, "package"), Text(task, "channel"), Text(task, "task"), Text(task, "version")));
         Assert.Equal("succeeded", Text(task!["last_run"], "outcome"));
         Assert.NotNull(task["next_due"]);
