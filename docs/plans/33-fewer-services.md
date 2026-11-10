@@ -41,7 +41,7 @@ shared libraries (`DbDataKit.Authoring` is used by Build and Workspace; `DbDataK
 | The build has no secrets | Bun runs in a network namespace with a cleared environment (`WorkspaceBuilds`) | the child's environment is built from an allow-list, not inherited from the console, so it never holds the console's data protection key ring, signing key, session secrets or any `DBDATAKIT_*` variable |
 | The publishing key is separate | one key per Gateway target, held by reference in the secret store; the host reads it only to publish | stays a reference in the **secret store under a name of its own**; only the publish step reads it; it is never in the build child's environment or reachable from a console screen (people see the reference, never the key) |
 | Roles are separate | the roles of the Workspace's own pairing with a console (`server pair --max-role`) | a **`workspace` role namespace** next to the console's: console administrator does not imply workspace author or publisher; the two are granted separately, and the publish act needs its own role |
-| Folders are separate | one server directory (`projects/`, workspaces, builds) | one folder `workspace/` under the console's directory, outside the console's own state and key ring, owned by the same service account, with the build child unable to read above its own workspace |
+| Folders are separate | one server directory (`projects/`, workspaces, builds) | one folder `workspace/` under the service's directory (`DbDataKit\\server\\workspace`, section 6b), outside the console's own state and key ring, owned by the same service account, with the build child unable to read above its own workspace |
 | State is separate | module `workspace` in its own state database | module `workspace` in the console's state database (modules never share tables; the retention and layout tests already enforce it) |
 | Audit | the Workspace audits and names the person | the same events in the console's audit, with the module named |
 
@@ -129,6 +129,28 @@ replaces the files and starts them again without unregistering them or pairing t
 **Not the same as SC10.** SC10 makes separately installed products join by announcement, where nobody has typed a code. The suite package pairs with codes because one administrator
 runs the whole install on the machine.
 
+## 6b. Names and folders (owner, 2026-11-10)
+
+**The product is DbDataKit.** "DbDataConsole" and "DbDataKitConsole" go: the program is already `dbdatakit`, the release tag prefix, the package and the image are already `dbdatakit`, and the Workspace folds into it (section 3), so the one service that holds the sign-in, the pairing, the screens, the embedded runner and the workspaces is **DbDataKit**. "The console" may stay in prose as a plain noun for the web app; it is not a product, folder, project or service name.
+
+**In the repository:** the top-level `DbDataKit/` folder (the shared libraries) becomes **`Shared/`**, and then `DbDataConsole/` becomes **`DbDataKit/`**, so the folder of the same name as the product is the product. The packages keep their names (`DbDataKit.*`, they are the libraries of the suite); the product's projects and namespaces `DbDataConsole.*` become `DbDataKit.Server*` (a name that does not collide with a library package is checked by the build), and `DbDataKit.slnx` keeps its name. The order is fixed: `DbDataKit/` to `Shared/` first, so the second move never meets an existing `DbDataKit/`. About 166 files mention the path `DbDataKit/` and 144 mention `DbDataConsole` (15 of them workflows), so this is a scripted change like the Proxy to Gateway rename (`scripts/rename_proxy_to_gateway.py`), done alone in a batch with nothing else in flight, because every open branch would conflict with it.
+
+**On the machine:** one folder under one root for every service, named for the service. Windows `%ProgramData%\DbDataKit\<service>`, Linux `/var/lib/dbdatakit/<service>`, with the layout `DbDataKit.Hosting.WindowsService.DirectoryLayout` already has inside it (`config`, `data`, `secrets`, `certs`, `logs`):
+
+| Service | Today (Windows) | New |
+| --- | --- | --- |
+| DbDataKit (the console and the Workspace) | `DbDataKit\console` | `DbDataKit\server` (default; see D9) |
+| Gateway | `DbDataGateway` | `DbDataKit\gateway` |
+| Runner | `DbDataRunner\server` | `DbDataKit\runner` |
+| Sync | `DbDataSync` | `DbDataKit\sync` |
+| Build | (a project folder, set by hand) | `DbDataKit\build` |
+| Store | `DbDataStore\server` | `DbDataKit\store` |
+| Workspace | `DbDataWorkspace\server` | inside DbDataKit's own folder once it is folded (`DbDataKit\server\workspace`); `DbDataKit\workspace` while it is its own service |
+
+One root setting (`DBDATAKIT_DATA`, default the root above) moves them all; each product's own variable (`DBDATARUNNER_SERVER_DIR`, `DBDATAGATEWAY_...`, and so on) still wins for that one service, and `globalEnv` in each `dist.json` is rewritten to the new names. The container images keep their `/data` volumes, which is not a path this plan changes.
+
+**The transition, never silent.** A service that finds its old folder and no new one **does not start**: it exits with a message naming both folders and the command that moves it, `<program> data move` (stop the service, rename the folder on the same volume so the ACLs and the key ring go with it, write a `MOVED-TO.txt` in the old place, restart; on another volume it copies, verifies and only then removes). `service install` offers the move, and the MSI and Scoop upgrade run it for a service that was running. An environment variable that still names the old variable is refused with a message naming the new one. The Windows service for the console is renamed `DbDataKitConsole` to `DbDataKit`: `service install` (and the MSI upgrade, whose upgrade code never changes) finds the old registration, keeps its account, removes it and registers the new name, and says so. Docs and screens say DbDataKit; a check fails on `DbDataConsole` and `DbDataKitConsole` outside the history lines it allows.
+
 ## 7. Decisions (defaults taken; change any)
 
 | # | Decision | Default taken (recommendation) |
@@ -140,6 +162,10 @@ runs the whole install on the machine.
 | D6 | The suite package's name, place and members | `dbdatakit-full`, its own fixed releases (`dbdatakit-full/dist`, `dist-beta`, `dist-snapshot`), members from `dist/suite.json`: Console, Gateway, Runner, Sync, Build, Store and Workspace at first, fewer as they fold |
 | D7 | Pairing inside the suite package | codes, by an elevated administrator at install time, never stored (section 6a); announcement stays for separate installs (SC10) |
 | D8 | Uninstall | unregisters and unpairs the services, keeps settings and data; an update never unregisters |
+| D9 | The folder name of the DbDataKit service itself under `DbDataKit\` | `server`. The others are named for their product (`gateway`, `runner`, `sync`, `build`, `store`), and the product this one is named for is the root. `console` (today's folder, so existing installs move nothing) and `kit` are the alternatives; only the name changes, not the mechanism |
+| D10 | Product name | DbDataKit (owner, 2026-11-10): the service, its Windows service and its folder; the program, tag, package and image already are |
+| D11 | Repository folders | `DbDataKit/` to `Shared/`, then `DbDataConsole/` to `DbDataKit/`, in one scripted batch with nothing else open (owner, 2026-11-10) |
+| D12 | Existing installs | a clean break with a message and a `data move` command, never an automatic move at start and never a silent new empty folder |
 | D5 | The Gateway on Linux | the zip and `install.sh` and a systemd unit; the Windows-only features refuse on Linux with a message |
 
 ## 8. Slices
@@ -163,11 +189,15 @@ runs the whole install on the machine.
 | SC13 | **Uninstall and update**: `pre_uninstall` unregisters and unpairs only on a real uninstall; an update stops, replaces and starts without unregistering or re-pairing | SC12 | M | a Windows test: after uninstall no member service exists and the console lists none, `%ProgramData%` settings remain; after an update to a second version the services run from the new files, still paired |
 | SC14 | **The whole thing in CI on Windows**: install Scoop on the runner, install the suite manifest from the dry-run artifacts, update, uninstall, and a per-user install and an install over a registered service are refused | SC12, SC13 | M | `dist-msi-ci` (or a job of its own) runs it; this is the first test of Scoop's own `post_install`, `pre_uninstall` and update behaviour in this repository |
 | SC15 | Docs: `dist/README.md` (the suite route, what it changes on the machine, one route per machine), the single-server install as one command, release notes | SC12 | S | `check_docs_commands.py` passes |
+| SC30 | **Rename the repository folders**: `DbDataKit/` to `Shared/`, then `DbDataConsole/` to `DbDataKit/`; the product's projects and namespaces to `DbDataKit.Server*`; `DbDataKit.slnx`, every `.slnf`, `Directory.Build.targets` (how `DbDataKitReference` finds a library), the npm workspace path, Dockerfile contexts, the 15 workflows, `CLAUDE.md`, plans and docs; a script like `scripts/rename_proxy_to_gateway.py` with a test | none (a batch of its own, nothing else in flight) | L | a full build and every product's tests green on Windows and Linux; every `scripts/check_*.py`; the packages built before and after list the same files; `git log --follow` still shows a moved file's history |
+| SC31 | **One data root and a folder per service**: `DBDATAKIT_DATA`, each service's default under it, the layout of `DirectoryLayout`, `globalEnv` and the notes of every `dist.json`, the MSI and Scoop defaults, the Linux units (`/var/lib/dbdatakit/<service>`) | SC30 | M | each service started with no settings creates its folder under the root and nothing else; the per-product variable still overrides; `dist/tests` checks every `globalEnv` against the source |
+| SC32 | **`data move` and the refusal**: the verb on every product (one shared implementation in `DbDataKit.Hosting`), the start refusal naming both folders, the offer in `service install`, `MOVED-TO.txt`, same-volume rename and cross-volume copy-verify-delete, old variable names refused with the new name | SC31 | M | a test per product: an old folder is refused at start with the message, `data move` brings the service up with its state, key ring and secrets intact (a secret resolves, a pairing still holds), the old folder holds only `MOVED-TO.txt`; the same on a second volume |
+| SC33 | **The service and the words**: the Windows service `DbDataKitConsole` to `DbDataKit` with its account kept (in `service install` and the MSI upgrade), the CLI help, screens, docs and plans say DbDataKit; a check that fails on `DbDataConsole` and `DbDataKitConsole` outside a baseline that only shrinks | SC30, SC32 | M | the Windows service test installs over an old registration and ends with one service of the new name, started, paired; the check passes |
 | SC20 | Build authoring (project kind, publishing as package and as `connection/2`) | SC05, plan 28c | placeholder | its own slice list, written when SC05 is built |
 | SC21 | Store authoring (model project kind, approvals in the console) | SC05 | placeholder | as above |
 | SC22 | Sync authoring (replication project kind, publishing the runtime package) | SC05, plan 28c | placeholder | as above |
 
-**Order, quickest first (the testers' package):** SC11, SC16, SC17 and SC18 start (two agents at a time) (no two touch the same files except `suite-release.yml`, which one commit owns), then SC12, SC13, SC14 and SC15. That is the whole path to a `dbdatakit-full` package. In parallel and independent: SC01 to SC03 (Linux Gateway) and SC04 (the fold's security review). **After it, in any order:** SC05 to SC08 (the Workspace into the console) and the authoring moves; each removes a member line. SC10 can run beside them. No more than two agents at a time.
+**Order, quickest first (the testers' package):** SC11, SC16, SC17 and SC18 start (two agents at a time) (no two touch the same files except `suite-release.yml`, which one commit owns), then SC12, SC13, SC14 and SC15. That is the whole path to a `dbdatakit-full` package. In parallel and independent: SC01 to SC03 (Linux Gateway) and SC04 (the fold's security review). **Then the rename, alone:** SC30 in a batch of its own as soon as the packages are tested and nothing else is open (so it should come before SC05 to SC08, which edit the same files), then SC31 to SC33. **After it, in any order:** SC05 to SC08 (the Workspace into the console) and the authoring moves; each removes a member line. SC10 can run beside them. No more than two agents at a time.
 
 ## 9. Not verified
 
