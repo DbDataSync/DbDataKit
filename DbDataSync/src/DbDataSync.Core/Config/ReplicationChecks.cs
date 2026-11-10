@@ -78,4 +78,10 @@ internal static class ReplicationChecks
         if (section.Length == 0) return kept;
         return (kept.Length == 0 ? "" : kept + nl) + section.Replace("\n", nl);
     }
+
+    /// <summary>
+    /// <paramref name="text"/> with its top-level <c>schemaVersion:</c> line set to the current format of a task file, the rest as written (a save writes the current format, plan 33 6d). A text with no such line is unchanged.
+    /// </summary>
+    public static string WithCurrentVersion(string text) =>
+        System.Text.RegularExpressions.Regex.Replace(text, @"^schemaVersion:[ \t]*\d+", $"schemaVersion: {ConfigSchema.TaskCurrent}", System.Text.RegularExpressions.RegexOptions.Multiline, TimeSpan.FromSeconds(1));
 }

@@ -240,6 +240,7 @@ public sealed class ConfigRepository
         var codePath = ConfigPaths.ScriptCodeFile(_configRoot, script.Manifest.Name, script.Manifest.Language);
         Directory.CreateDirectory(ConfigPaths.ScriptsDir(_configRoot));
 
+        script.Manifest.SchemaVersion = ConfigSchema.ScriptCurrent;   // a save writes the current format, never the one that was read (plan 33 6d)
         WriteAtomically(manifestPath, YamlConfigSerializer.Serialize(script.Manifest));
         WriteAtomically(codePath, script.Code);
 
@@ -329,6 +330,7 @@ public sealed class ConfigRepository
 
         var path = ConfigPaths.TaskFile(_configRoot, task.Name);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        task.SchemaVersion = ConfigSchema.TaskCurrent;   // a save writes the current format, never the one that was read (plan 33 6d)
         var yaml = YamlConfigSerializer.Serialize(task);
         // the checks section is not part of the model a screen edits: what the file has is kept as written (FQ04)
         if (TryReadAllTextAllowingConcurrentReplace(path) is { } existing) yaml = ReplicationChecks.Carry(existing, yaml);
@@ -375,7 +377,7 @@ public sealed class ConfigRepository
         if (!string.Equals(ReplicationChecks.Version(previous), version, StringComparison.Ordinal))
             throw new ReplicationChecksConflictException(ReplicationChecksDocument.Of(previous, path));
 
-        var text = ReplicationChecks.Replace(previous, CheckForms.ToYaml(checks));
+        var text = ReplicationChecks.WithCurrentVersion(ReplicationChecks.Replace(previous, CheckForms.ToYaml(checks)));
         // the strict check of the whole file: a bad check, a task that no longer reads
         StrictConfigFile.Load(text, path, YamlConfigSerializer.Deserialize<ReplicationTaskConfig>);
         var saved = ReplicationChecksDocument.Of(text, path);
@@ -427,6 +429,7 @@ public sealed class ConfigRepository
 
         var path = ConfigPaths.TableMappingFile(_configRoot, replicationName, mapping.Name);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        mapping.SchemaVersion = ConfigSchema.MappingCurrent;   // a save writes the current format, never the one that was read (plan 33 6d)
         WriteAtomically(path, YamlConfigSerializer.Serialize(mapping));
         Git.CommitChanges([path], $"Save table mapping '{mapping.Name}' on replication '{replicationName}'", author);
 

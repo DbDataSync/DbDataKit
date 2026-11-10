@@ -543,11 +543,12 @@ checks:
     severity: block          # warn (the default) tells the owner; block stops what depends on the dataset
 ```
 
-- **A replication's `schemaVersion` is 2; table-mapping and script-manifest files stay 1.** Format 2 of `task.yaml` only adds the optional `checks:` section, so only a replication file that wants checks needs editing. A `task.yaml` with
-  `schemaVersion: 1` is refused, naming the file and the line:
-  "The file is format 1, which this version of Sync no longer reads (current: 2). Format 2 only adds the optional checks: section to a replication's task.yaml; nothing else in the files changed. Review the file, then set schemaVersion: 2."
-  A release that reads format 1 refuses a `task.yaml` of format 2 as well ("The file is format 2; this version of Sync reads format 1."), and this one refuses a table mapping or script manifest of format 2 as newer. Nothing converts a file and
-  nothing reads half of one: change the number in each `task.yaml` when you update.
+- **A replication's `schemaVersion` is 2; table-mapping and script-manifest files stay 1.** Format 2 of `task.yaml` only adds the optional `checks:` section. Sync reads a `task.yaml` of format 1 or 2, as it is (a format 1 file is not checked for the
+  section: one edited by hand to hold it is read as written), and **every save writes the current format**: a file loaded as 1 and saved by Sync (a screen, the API, the checks tab) says `schemaVersion: 2` afterwards, whatever it said before.
+  A file of format 0 (or a value that is not a whole number) is refused naming the file and the line, and so is one newer than this Sync reads:
+  "The file is format 3, which is newer than this version of Sync reads (format 2). Update Sync; it does not read part of a newer file."
+  A file older than the range a kind reads is refused by name ("... no longer reads (current: N). Review the file against the current format, then set schemaVersion: N."); no kind has one today. A release that reads only format 1 refuses a `task.yaml`
+  of format 2, and this one refuses a table mapping or script manifest of format 2 as newer. Nothing converts a file in the background and nothing reads half of one.
 - **Only the replication has `checks`.** A table mapping or script manifest that has the key is refused as an unknown key. A connection file's own `checks` (the serving data source's) is not this section.
 - **Strict, with the line.** A bad check (an unknown kind, a `range` with `min` above `max`, a freshness check with no `max_age`, a repeated id) is refused with the file, the line and column, and a suggestion for a near key or kind
   (`chekcs` is answered with "Did you mean `checks`?", `freshnes` with "Did you mean `freshness`?"). Codes `DBD-QLT-001` to `006`.

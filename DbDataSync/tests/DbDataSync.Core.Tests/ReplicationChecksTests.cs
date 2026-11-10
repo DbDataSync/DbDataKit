@@ -160,18 +160,96 @@ public sealed class ReplicationChecksTests : IDisposable
         Assert.Contains(ex.Diagnostics, d => d.Message.Contains("max_age"));
     }
 
-    [Fact]
-    public void A_task_file_of_format_1_is_refused_with_the_clean_break_message_naming_the_file()
+    private void WriteTaskAsFormat1(string? section = null)
     {
         _config.SaveReplicationTask(Task(), Author);
-        File.WriteAllText(TaskPath, File.ReadAllText(TaskPath).Replace("schemaVersion: 2", "schemaVersion: 1"));
+        var text = File.ReadAllText(TaskPath).Replace("schemaVersion: 2", "schemaVersion: 1");
+        File.WriteAllText(TaskPath, section is null ? text : text.TrimEnd() + "\n\n" + section);
+    }
 
-        var ex = Assert.Throws<ConfigFileException>(() => _config.LoadReplicationTask("sales"));
+    [Fact]
+    public void A_task_file_of_format_1_is_read_as_it_is()
+    {
+        WriteTaskAsFormat1();
 
-        var d = Assert.Single(ex.Diagnostics);
-        Assert.Contains("is format 1, which this version of Sync no longer reads (current: 2)", d.Message);
-        Assert.Contains("only adds the optional checks: section", d.Message);
-        Assert.StartsWith("task.yaml cannot be read:", ex.Message);
+        var task = _config.LoadReplicationTask("sales");
+
+        Assert.Equal("sales", task.Name);
+        Assert.Empty(task.Checks);
+    }
+
+    [Fact]
+    public void A_task_file_of_format_1_with_a_checks_section_is_read_as_it_is()
+    {
+        WriteTaskAsFormat1(Section);
+
+        var task = _config.LoadReplicationTask("sales");
+
+        Assert.Equal("orders_fresh", task.Checks[0].Id);
+    }
+
+    [Fact]
+    public void A_task_file_loaded_as_format_1_is_saved_as_format_2_and_otherwise_unchanged()
+    {
+        WriteTaskAsFormat1(Section);
+        var before = File.ReadAllText(TaskPath);
+
+        _config.SaveReplicationTask(_config.LoadReplicationTask("sales"), Author);
+
+        var after = File.ReadAllText(TaskPath);
+        Assert.Contains("schemaVersion: 2", after);
+        Assert.DoesNotContain("schemaVersion: 1", after);
+        static string Lines(string text) => string.Join("\n", text.Replace("\r\n", "\n").Split('\n').Where(l => l.Length > 0));
+        Assert.Equal(Lines(before.Replace("schemaVersion: 1", "schemaVersion: 2")), Lines(after));
+        Assert.Equal("orders_fresh", _config.LoadReplicationTask("sales").Checks[0].Id);
+    }
+
+    [Fact]
+    public void Saving_the_checks_of_a_format_1_task_file_writes_format_2()
+    {
+        WriteTaskAsFormat1();
+        var doc = _config.LoadReplicationChecks("sales");
+
+        _config.SaveReplicationChecks("sales", [new CheckForm { Id = "orders_fresh", Kind = "freshness", Dataset = "dbo.Orders", MaxAge = "6h", Severity = "block" }], doc.Version, Author);
+
+        Assert.Contains("schemaVersion: 2", File.ReadAllText(TaskPath));
+        Assert.DoesNotContain("schemaVersion: 1", File.ReadAllText(TaskPath));
+        Assert.Equal("orders_fresh", Assert.Single(_config.LoadReplicationTask("sales").Checks).Id);
+    }
+
+    [Fact]
+    public void A_task_file_of_format_0_is_refused()
+    {
+        _config.SaveReplicationTask(Task(), Author);
+        File.WriteAllText(TaskPath, File.ReadAllText(TaskPath).Replace("schemaVersion: 2", "schemaVersion: 0"));
+
+        var d = Assert.Single(Assert.Throws<ConfigFileException>(() => _config.LoadReplicationTask("sales")).Diagnostics);
+
+        Assert.Equal(SharedCodes.SchemaVersionInvalid, d.Code);
+        Assert.Contains("`schemaVersion` must be a positive whole number.", d.Message);
+    }
+
+    [Fact]
+    public void A_table_mapping_and_a_script_manifest_of_format_1_load_and_are_saved_as_format_1()
+    {
+        _config.SaveReplicationTask(Task(), Author);
+        var mapping = Path.Combine(_root, "config", "replications", "sales", "table-mappings", "m1.yaml");
+        Directory.CreateDirectory(Path.GetDirectoryName(mapping)!);
+        File.WriteAllText(mapping, "schemaVersion: 1\nname: m1\nsources:\n- { connectionName: s, database: d, schema: dbo, table: T }\ntargets:\n- { connectionName: t, database: d, schema: dbo, table: T }\n");
+        var script = Path.Combine(_root, "config", "scripts", "s1.yaml");
+        _config.SaveScript(new ScriptDefinition { Manifest = new ScriptConfig { Name = "s1", Kind = "hook", Language = ScriptLanguage.Sql }, Code = "SELECT 1;" }, Author);
+
+        var m = _config.LoadTableMapping("sales", "m1");
+        var sc = _config.LoadScript("s1").Manifest;
+        Assert.Equal(1, m.SchemaVersion);
+        Assert.Equal(1, sc.SchemaVersion);
+        m.SchemaVersion = 7;   // what a caller holds is never what is written
+        sc.SchemaVersion = 7;
+        _config.SaveTableMapping("sales", m, Author);
+        _config.SaveScript(new ScriptDefinition { Manifest = sc, Code = "SELECT 1;" }, Author);
+
+        Assert.Contains("schemaVersion: 1", File.ReadAllText(mapping));
+        Assert.Contains("schemaVersion: 1", File.ReadAllText(script));
     }
 
     [Fact]

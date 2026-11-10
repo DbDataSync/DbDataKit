@@ -39,7 +39,8 @@ internal static class StrictConfigFile
 
     private static void CheckSchemaVersion(YamlNode root, Type type, string file, List<ConfigDiagnostic> diagnostics)
     {
-        var current = ConfigSchema.For(type);
+        var reads = ConfigSchema.ReadsOf(type);
+        var current = reads.Current;
         var catalog = DefaultDiagnosticCatalog.Instance;
         if (root is not YamlMapping map) return;
         if (map.GetEntry("schemaVersion") is not { } entry)
@@ -53,7 +54,7 @@ internal static class StrictConfigFile
             diagnostics.Add(catalog.Create(SharedCodes.SchemaVersionInvalid, file, entry.Key.Line, entry.Key.Column, "`schemaVersion` must be a positive whole number.", keyPath: "schemaVersion"));
         else if (version > current)
             diagnostics.Add(catalog.Create(SharedCodes.SchemaVersionNewer, file, entry.Key.Line, entry.Key.Column, $"The file is format {version}, which is newer than this version of Sync reads (format {current}). Update Sync; it does not read part of a newer file.", keyPath: "schemaVersion"));
-        else if (version < current)
+        else if (!reads.Reads(version))
             diagnostics.Add(catalog.Create(SharedCodes.SchemaVersionInvalid, file, entry.Key.Line, entry.Key.Column, $"The file is format {version}, which this version of Sync no longer reads (current: {current}). {ConfigSchema.HowToMove(type, version, current)}", keyPath: "schemaVersion"));
     }
 
