@@ -38,7 +38,7 @@ jobs:
           PWSH: pwsh
       - name: Every product's dist.json binds
         run: |
-          for meta in DbDataBuild DbDataSync DbDataGateway DbDataRunner; do
+          for meta in DbDataBuild DbDataSync DbDataGateway DbDataRunner DbDataStore DbDataWorkspace; do
             python3 -I dist/dist.py bind --meta "$meta/dist.json" --out "$RUNNER_TEMP/$meta"
           done
 

@@ -86,6 +86,30 @@ it (and implies `-Machine`, since a service belongs in Program Files). A service
 Defaults: per-user (`%LOCALAPPDATA%\Programs\<Name>` + user PATH; `~/.local/share/<product>` + a symlink in `~/.local/bin`), unless the
 product's `windowsScope` is `machine` (`%ProgramFiles%`, elevated), as for a product that is a Windows service.
 
+## One package for a single server
+
+`dbdatakit-full` is one Scoop manifest that installs every member product of a suite release on one machine (plan 33 section 6a). The members are listed in start order in `dist/suite.json`, each with its `dist.json` and its folder; `dist.py bind --suite dist/suite.json` writes `dbdatakit-full.json` from them. Every member of a suite release has the same version, so the manifest pins one version of all of them: `url` and `hash` are lists of each member's win-x64 zip, `extract_to` a list of folders and `bin` a list of `[<folder>\<exe>, <alias>]` pairs, so every program is on the PATH.
+
+| member | folder | program |
+| --- | --- | --- |
+| `dbdatakit` (the console) | `console` | `dbdatakit` |
+| `dbdatagateway` | `gateway` | `dbdatagateway` |
+| `dbdatarunner` | `runner` | `dbdatarunner` |
+| `dbdatasync` | `sync` | `dbdatasync` |
+| `dbdatabuild` | `build` | `dbdatabuild` |
+| `dbdatastore` | `store` | `dbdatastore` |
+| `dbdataworkspace` | `workspace` | `dbdataworkspace` |
+
+```powershell
+scoop install -g https://github.com/<owner>/DbDataKit/releases/download/dbdatakit-full/dist/dbdatakit-full.json
+```
+
+The fixed releases are `dbdatakit-full/dist`, `dbdatakit-full/dist-beta` and `dbdatakit-full/dist-snapshot` (the channel is the version's suffix, as for the products), each holding only `dbdatakit-full.json`; `.github/actions/publish-suite-dist` publishes it.
+
+**This first release only installs programs.** The manifest has no `post_install`, no `pre_uninstall` and no installer script: no service is registered, nothing is started and nothing is paired. Its notes list, in member order, what the administrator runs by hand afterwards: `<program> service install` for each member whose `dist.json` has a `service`, starting the console, then `<program> server pair --max-role <roles>` on each other member and `dbdatakit instance add <https address> --code <code>`. To remove it, `scoop uninstall -g dbdatakit-full` removes the files; unregister the services first with `<program> service uninstall`.
+
+Use **one route per machine**: the package installs under Scoop's folder, while a product's own MSI, `install.ps1` or manifest uses its own and registers the same service names. A member that folds into another server leaves `dist/suite.json` in the same commit.
+
 ## Adding or changing a product
 
 Edit `<Product>/dist.json`:

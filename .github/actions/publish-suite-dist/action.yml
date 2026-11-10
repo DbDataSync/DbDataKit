@@ -1,0 +1,70 @@
+name: Publish the suite package manifest
+description: >
+  Binds the Scoop manifest of the suite package (dist/dist.py bind --suite, from dist/suite.json and each member's dist.json) to one suite release and
+  replaces the assets of the fixed release for the release's channel: dbdatakit-full/dist (stable), dbdatakit-full/dist-beta (a -beta version) and
+  dbdatakit-full/dist-snapshot (a -snapshot.g<sha> version), so the URL for "the newest of this kind" never changes. The manifest installs programs
+  only (plan 33 section 6a, first release). It reads each member's SHA256SUMS from that member's own release, so run it after every member's release exists;
+  needs GH_TOKEN and a checkout of the released commit.
+
+inputs:
+  version:
+    description: The suite release's version (every member has the same one). Its suffix (-beta, -snapshot.g<sha>, or none) decides the channel.
+    required: true
+  prerelease:
+    description: "'true' for a beta or a snapshot, 'false' for a stable release. Checked against the version's suffix."
+    required: true
+  sha:
+    description: The released commit, used as the target when a fixed release is first created.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        VERSION: ${{ inputs.version }}
+        PRERELEASE: ${{ inputs.prerelease }}
+        SHA: ${{ inputs.sha }}
+      run: |
+        set -euo pipefail
+        product=dbdatakit-full
+
+        # The channel is the version's suffix, so it cannot disagree with the tag (the same rule as publish-dist).
+        case "$VERSION" in
+          *-snapshot|*-snapshot.*) channel=snapshot; fixed="$product/dist-snapshot"; kind="snapshot" ;;
+          *-beta)     channel=beta;     fixed="$product/dist-beta";     kind="beta" ;;
+          *)          channel=stable;   fixed="$product/dist";          kind="stable" ;;
+        esac
+        if { [ "$channel" = stable ] && [ "$PRERELEASE" = "true" ]; } || { [ "$channel" != stable ] && [ "$PRERELEASE" != "true" ]; }; then
+          echo "::error::version $VERSION is a $channel release but prerelease=$PRERELEASE"
+          exit 1
+        fi
+
+        py=$(command -v python3 || command -v python)
+
+        # Each member's SHA256SUMS comes from its own release (<product>/v<version>); dist.py checks every member's win-x64 zip is listed.
+        sums_dir="$RUNNER_TEMP/suite-sums"
+        rm -rf "$sums_dir"; mkdir -p "$sums_dir"
+        sums=()
+        for member in $("$py" -I -c "import json; print(*(m['product'] for m in json.load(open('dist/suite.json'))['members']))"); do
+          gh release download "$member/v$VERSION" --pattern SHA256SUMS --dir "$sums_dir/$member"
+          sums+=("$sums_dir/$member/SHA256SUMS")
+        done
+
+        out="$RUNNER_TEMP/dist-$product"
+        rm -rf "$out"
+        "$py" -I dist/dist.py bind --suite dist/suite.json --repo "$GITHUB_REPOSITORY" --out "$out" --version "$VERSION" --sums "${sums[@]}"
+        ls -l "$out"
+
+        # One fixed release per channel whose assets are replaced, so the URLs never change. It is a prerelease so it stays out of the way of the real ones:
+        #   https://github.com/$GITHUB_REPOSITORY/releases/download/dbdatakit-full/dist/dbdatakit-full.json            stable
+        #   https://github.com/$GITHUB_REPOSITORY/releases/download/dbdatakit-full/dist-beta/dbdatakit-full.json       newest beta
+        #   https://github.com/$GITHUB_REPOSITORY/releases/download/dbdatakit-full/dist-snapshot/dbdatakit-full.json   newest snapshot
+        # The suite has no release of its own (each member's release carries its zips), so a particular version's manifest is not kept apart.
+        if ! gh release view "$fixed" > /dev/null 2>&1; then
+          gh release create "$fixed" --target "$SHA" --prerelease --latest=false \
+            --title "$product install manifest ($kind)" \
+            --notes "The Scoop manifest that installs every member product of the newest $kind suite release, replaced by each one. See dist/README.md."
+        fi
+        gh release upload "$fixed" "$out/$product.json" --clobber
