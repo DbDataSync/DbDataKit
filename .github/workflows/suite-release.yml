@@ -1,7 +1,7 @@
 name: Suite release
 
 # One release of the whole suite from one commit (plan 13a, L06): the console's zips, MSI and image, and each product's own release (its zips, MSI and
-# install files), which this workflow calls: dbdatabuild-release.yml, dbdatagateway-release.yml, dbdatarunner-release.yml and dbdatasync-release.yml. Container images are
+# install files), which this workflow calls: dbdatabuild-release.yml, dbdatagateway-release.yml, dbdatarunner-release.yml, dbdatastore-release.yml and dbdatasync-release.yml. Container images are
 # built for every product here and pushed to ghcr.io/<owner>/<product> (dbdatakit, dbdatabuild, dbdatagateway); DbDataSync's own image
 # keeps its multi-architecture workflow, dbdatasync-publish-image.yml, and is only built here, to prove the commit makes one.
 #
@@ -226,6 +226,18 @@ jobs:
     permissions:
       contents: write
       actions: read
+  store:
+    needs: guard
+    uses: ./.github/workflows/dbdatastore-release.yml
+    with:
+      sha: ${{ needs.guard.outputs.sha }}
+      beta: ${{ inputs.beta }}
+      snapshot: ${{ inputs.snapshot }}
+      version: ${{ needs.guard.outputs.version }}
+      dry_run: ${{ inputs.dry_run }}
+    permissions:
+      contents: write
+      actions: read
   sync:
     needs: guard
     uses: ./.github/workflows/dbdatasync-release.yml
@@ -305,7 +317,7 @@ jobs:
   verify:
     # The images job is skipped for a snapshot, so this cannot rely on the default (every need succeeded).
     if: ${{ inputs.dry_run && !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
-    needs: [console, build, gateway, runner, sync, images]
+    needs: [console, build, gateway, runner, store, sync, images]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -316,7 +328,7 @@ jobs:
       - name: Every artifact has its checksum
         run: |
           set -euo pipefail
-          for product in dbdatakit dbdatabuild dbdatagateway dbdatarunner dbdatasync; do
+          for product in dbdatakit dbdatabuild dbdatagateway dbdatarunner dbdatastore dbdatasync; do
             dir="release/release-$product"
             sums="$dir/SHA256SUMS"
             [ -f "$sums" ] || { echo "::error::$product has no SHA256SUMS"; exit 1; }
