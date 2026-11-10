@@ -74,7 +74,7 @@ public sealed class AppsModuleTests : IAsyncLifetime
         var identityPort = FreePort();
         while (identityPort == appsPort) identityPort = FreePort();   // a port given back is free to be handed out again, to the second listener too
         app = GatewayHost.Build([
-            $"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Modules:0=apps", "--Gateway:Modules:1=identity",
+            $"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Management:Enabled=false", "--Gateway:Modules:0=apps", "--Gateway:Modules:1=identity",
             "--Gateway:Apps:Address=127.0.0.1", "--Gateway:Apps:RolesRefreshSeconds=1", $"--Gateway:Apps:Port={appsPort}", $"--Gateway:Apps:Home:ClientId={clientId}", 
             "--Gateway:Identity:Address=127.0.0.1", $"--Gateway:Identity:Port={identityPort}", $"--Gateway:Identity:PublicUrl=https://localhost:{identityPort}",
         ]);

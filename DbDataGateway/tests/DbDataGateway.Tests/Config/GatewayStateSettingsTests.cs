@@ -65,7 +65,7 @@ public sealed class GatewayStateSettingsTests : IAsyncLifetime
 
     private WebApplication Instance(params string[] more)
     {
-        var app = GatewayHost.Build([$"--Gateway:DataDirectory={_dir}", "--Gateway:Listen:Address=127.0.0.1", $"--Gateway:Listen:Port={FreePort()}", .. more]);
+        var app = GatewayHost.Build([$"--Gateway:DataDirectory={_dir}", "--Gateway:Listen:Address=127.0.0.1", $"--Gateway:Listen:Port={FreePort()}", "--Gateway:Management:Enabled=false", .. more]);
         _apps.Add(app);
         return app;
     }

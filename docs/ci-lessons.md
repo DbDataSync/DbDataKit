@@ -330,6 +330,12 @@ How it works now, and what to keep true when you add a job:
 | --- | --- | --- |
 | dispatching `suite-release.yml` fails at once with `failed to parse workflow: error parsing called workflow ... dbdatabuild-release.yml (Line: 192, Col: 14): Unexpected value ''`, `Unexpected value 'rids'`; no run starts | a step's `with:` has its input at the same indent (`rids:` under `with:` in the `duckdb-cache` step), so the input is not under it; a called workflow that does not parse stops every release that calls it, and nothing runs the file until a release is cut | indent the input under `with:`; `scripts/tests/test_workflow_with_blocks.py` fails for any `with:` whose next line is not indented under it |
 
+### Gateway test hosts
+
+| Signature | Cause | Fix |
+| --- | --- | --- |
+| Gateway tests fail on the Windows job (and only there, where the engine-gated group tests run) with `Now listening on: https://127.0.0.1:8816` in several hosts and `SecondInstanceException` or `address already in use` | the management API is on by default (plan 33 SC40), so every test host that starts and does not say otherwise binds 8816; two hosts in one process, or two tests in parallel, collide | a test host builder that is not about management passes `--Gateway:Management:Enabled=false` (before any argument that enables it), and one that is passes its own free `Management:Port`; never rely on the default port in a test |
+
 ### Infrastructure (not your change; re-run once, then look closer)
 
 | Signature | What it is |

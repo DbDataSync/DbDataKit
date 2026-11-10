@@ -71,7 +71,7 @@ public sealed class GroupStateTests : IAsyncLifetime
         Directory.CreateDirectory(GatewayConfigFile.DirectoryIn(dataDirectory));
         var serverYaml = Path.Combine(GatewayConfigFile.DirectoryIn(dataDirectory), "server.yaml");
         if (!File.Exists(serverYaml)) File.WriteAllText(serverYaml, "schemaVersion: 2\ntls: { mode: selfSigned }\n");
-        var app = GatewayHost.Build([$"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Listen:Address=127.0.0.1", $"--Gateway:Listen:Port={FreePort()}", .. state]);
+        var app = GatewayHost.Build([$"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Listen:Address=127.0.0.1", $"--Gateway:Listen:Port={FreePort()}", "--Gateway:Management:Enabled=false", .. state]);
         _apps.Add(app);
         return app;
     }
