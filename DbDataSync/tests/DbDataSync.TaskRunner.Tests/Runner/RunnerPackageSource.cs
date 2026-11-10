@@ -10,9 +10,34 @@ namespace DbDataSync.TaskRunner.Tests.Runner;
 /// </summary>
 internal static class RunnerPackageSource
 {
-    public static async Task<string> CreateAsync(string repoRoot, string driverId)
+    public static Task<string> CreateAsync(string repoRoot, string driverId) => CreateAsync(repoRoot, [driverId], []);
+
+    /// <summary>
+    /// The same for a replication between two engines (plan 28c E06d): the client library of each driver is installed beside the definition. SQL Server's and PostgreSQL's are seeded the way the product seeds them; MySQL's
+    /// (which MariaDB uses too) and Oracle's are installed the way <c>config library install</c> does it, by the library id the driver names.
+    /// </summary>
+    public static Task<string> CreateAsync(string repoRoot, params DbDataSync.Drivers.Abstractions.IDriver[] drivers) =>
+        CreateAsync(repoRoot, drivers.Select(d => d.DriverType).Distinct().ToList(), drivers.Select(d => d.RequiredLibraryId).OfType<string>().Distinct().ToList());
+
+    private static async Task<string> CreateAsync(string repoRoot, IReadOnlyList<string> driverIds, IReadOnlyList<string> libraryIds)
     {
         var source = Directory.CreateTempSubdirectory("dbdatasync-runner-package-").FullName;
+        try
+        {
+            await FillAsync(source, repoRoot, driverIds, libraryIds);
+            return source;
+        }
+        catch
+        {
+            // the caller never gets the directory to delete: a package that could not be made (a full disk) is not left behind
+            try { GitTempDirectory.DeleteRecursively(source); }
+            catch (Exception) { /* untidy, not wrong */ }
+            throw;
+        }
+    }
+
+    private static async Task FillAsync(string source, string repoRoot, IReadOnlyList<string> driverIds, IReadOnlyList<string> libraryIds)
+    {
         var engine = EngineBuildOutput();
         try
         {
@@ -25,9 +50,16 @@ internal static class RunnerPackageSource
 
         var repo = Directory.CreateDirectory(Path.Combine(source, "repo")).FullName;
         CopyDirectory(Path.Combine(repoRoot, "config"), Path.Combine(repo, "config"));
-        await BuiltInDriverLibraries.EnsureInstalledAsync(new LibraryRegistry(repo).LoadAll(), repo, driverId, CancellationToken.None);
+        var registry = new LibraryRegistry(repo).LoadAll();
+        foreach (var driverId in driverIds) await BuiltInDriverLibraries.EnsureInstalledAsync(registry, repo, driverId, CancellationToken.None);
+        foreach (var libraryId in libraryIds.Where(id => !registry.Installed.ContainsKey(id)))
+        {
+            var entry = KnownLibraries.TryGetById(libraryId)!;
+            await LibraryInstaller.InstallOrDeferAsync(repo, libraryId, [new PackageRef(entry.PackageId, entry.PinnedVersion)], entry.FactoryType, cancellationToken: CancellationToken.None);
+            registry.RegisterInstalled(libraryId);
+        }
+
         await File.WriteAllTextAsync(Path.Combine(source, "package.yaml"), PackageManifestWriter.Write(RunnerRig.EngineManifest()));
-        return source;
     }
 
     /// <summary>The engine as built: the executable's own output directory, with its runtime configuration beside it.</summary>

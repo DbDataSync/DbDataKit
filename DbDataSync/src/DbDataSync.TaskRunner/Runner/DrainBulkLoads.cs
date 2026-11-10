@@ -88,9 +88,11 @@ internal sealed class DrainBulkLoads(ConfigRepository config, IDrainQueue queue,
         var expanded = segments.ExpandAsync(task, mapping, requested, null, CancellationToken.None).GetAwaiter().GetResult();
         var batchId = Guid.NewGuid().ToString("N");
         var (rows, caveat) = segments.EstimateAsync(task, mapping, CancellationToken.None).GetAwaiter().GetResult();
-        ledger.WriteBatch(batchId, new BatchRecord(mappingName, sourceKey, expanded.Count, 0, 0, 0, 0, rows, caveat, DateTimeOffset.UtcNow));
+        // the position waiting on the batch is the mapping's own checkpoint item (a table replicated by two mappings has one each)
+        var item = WatermarkCheckpoint.ItemKey(mappingName, sourceKey);
+        ledger.WriteBatch(batchId, new BatchRecord(mappingName, item, expanded.Count, 0, 0, 0, 0, rows, caveat, DateTimeOffset.UtcNow));
         Enqueue(task, mapping, batchId, expanded);
-        ledger.SetPendingLoad(sourceKey, capturedPosition, capturedPositionTime, batchId);
+        ledger.SetPendingLoad(item, capturedPosition, capturedPositionTime, batchId);
         log.LogInformation("'{Mapping}' has no position: its initial load is queued as batch {Batch} ({Count} segment(s)); the captured position is promoted when every segment succeeded.", mappingName, batchId, expanded.Count);
     }
 

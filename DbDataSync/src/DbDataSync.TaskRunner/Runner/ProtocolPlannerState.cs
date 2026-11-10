@@ -86,7 +86,7 @@ internal sealed class ProtocolPlannerState(IDrainQueue queue, IDrainCheckpoints 
         lock (_gate) return _reconcileInFlight.Contains(mapping);
     }
 
-    public MappingReadState? GetReadState(string replication, string mapping, string watermarkKey) => ReadState(checkpoints, watermarkKey);
+    public MappingReadState? GetReadState(string replication, string mapping, string watermarkKey) => ReadState(checkpoints, WatermarkCheckpoint.ItemKey(mapping, watermarkKey));
 
     public void EnqueuePrimary(string replication, string mapping)
     {
@@ -111,7 +111,7 @@ internal sealed class ProtocolPlannerState(IDrainQueue queue, IDrainCheckpoints 
 
     // ---- the gate's state: the mapping's own position is the run's checkpoint
 
-    public string? GetWatermark(string taskName, string mappingName, string watermarkKey) => checkpoints.Read(watermarkKey)?.Position;
+    public string? GetWatermark(string taskName, string mappingName, string watermarkKey) => checkpoints.Read(WatermarkCheckpoint.ItemKey(mappingName, watermarkKey))?.Position;
 
     public void RecordCheck(string connection, string database, string readerKind, string? value, DateTimeOffset? sourceTimeUtc)
     {

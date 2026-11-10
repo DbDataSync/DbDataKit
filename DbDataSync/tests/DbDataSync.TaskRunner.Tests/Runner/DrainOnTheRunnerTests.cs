@@ -296,14 +296,14 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
 
         var source = await PackageSourceAsync();
         using var rig = await RunnerRig.StartAsync(stateEngine, Logins());
-        rig.SeedWatermark(_watermarkKey, start);
+        rig.SeedWatermark("main", _watermarkKey, start);
         var request = await rig.DrainRequestAsync(source, "runner-sync");
 
         var result = await rig.Executor.RunAsync(request);
 
         Assert.True(result.End.State == TaskEndState.Succeeded && result.ExitCode == 0, Describe(rig, result));
         Assert.Equal(expected, await TargetFingerprintAsync(_runnerTarget));
-        Assert.Equal(oldWatermark, rig.Watermark(_watermarkKey)!.Value.Position);
+        Assert.Equal(oldWatermark, rig.Watermark("main", _watermarkKey)!.Value.Position);
         Assert.NotEqual(start, oldWatermark);
 
         // the runner's run row says what the old path's does: one run, the rows it moved, and the package it ran from
@@ -339,7 +339,7 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
 
         var source = await PackageSourceAsync();
         using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
-        rig.SeedWatermark(_watermarkKey, start);
+        rig.SeedWatermark("main", _watermarkKey, start);
 
         var failed = await rig.Executor.RunAsync(await rig.DrainRequestAsync(source, "runner-sync", chain: "0197f0e0-0000-7000-8000-00000000d0e4"));
 
@@ -362,7 +362,7 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
         var said = rig.LogText(failed.RunId);
         Assert.Contains("The pass over 'main' ended Failed", said, StringComparison.Ordinal);
         if (record.FailureKind is { Length: > 0 } classified) Assert.Contains($"({classified})", said, StringComparison.Ordinal);
-        var held = rig.Watermark(_watermarkKey)!.Value;
+        var held = rig.Watermark("main", _watermarkKey)!.Value;
         Assert.Equal((start, 1L), (held.Position, held.Version));
 
         // and the proof that it matters: with the target back, the next drain still delivers the changes the failed one read
@@ -372,7 +372,7 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
 
         Assert.True(again.End.State == TaskEndState.Succeeded, Describe(rig, again));
         Assert.Equal(5, (await TargetFingerprintAsync(_runnerTarget)).Count);
-        Assert.NotEqual(start, rig.Watermark(_watermarkKey)!.Value.Position);
+        Assert.NotEqual(start, rig.Watermark("main", _watermarkKey)!.Value.Position);
     }
 
     [Fact]
@@ -384,13 +384,13 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
         await InsertRowsAsync(3);
         var source = await PackageSourceAsync();
         using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
-        Assert.Null(rig.Watermark(_watermarkKey));
+        Assert.Null(rig.Watermark("main", _watermarkKey));
 
         var result = await rig.Executor.RunAsync(await rig.DrainRequestAsync(source, "runner-sync"));
 
         Assert.True(result.End.State == TaskEndState.Succeeded && result.ExitCode == 0, Describe(rig, result));
         Assert.Equal(3, (await TargetFingerprintAsync(_runnerTarget)).Count);
-        var position = rig.Watermark(_watermarkKey);
+        var position = rig.Watermark("main", _watermarkKey);
         Assert.NotNull(position);
         Assert.True(long.Parse(position!.Value.Position, CultureInfo.InvariantCulture) >= long.Parse(before, CultureInfo.InvariantCulture), $"position {position.Value.Position}, before {before}");
         var bulk = Assert.Single(rig.Work.ListAll(RunnerRig.WorkOwner), r => r.Kind == nameof(RunKind.BulkLoad));
@@ -399,7 +399,7 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
         var batchId = Assert.Single(progress.ItemKeys("batch"));
         var batch = progress.GetCheckpoint("batch", batchId)!;
         Assert.Equal((1L, 0L, 3L), (batch.Parts["succeeded"].AsInt, batch.Parts.TryGetValue("failed", out var failed) ? failed.AsInt : 0, batch.Parts["rows_written"].AsInt));
-        var held = progress.GetCheckpoint("watermark", _watermarkKey)!;
+        var held = progress.GetCheckpoint("watermark", WatermarkCheckpoint.ItemKey("main", _watermarkKey))!;
         Assert.False(held.Parts.ContainsKey("pending_position"));
         Assert.Equal("None", held.Parts["hold"].AsText);
 
@@ -434,7 +434,7 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
         await InsertRowsAsync(5);
         var source = await PackageSourceAsync();
         using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, logins);
-        rig.SeedWatermark(_watermarkKey, start);
+        rig.SeedWatermark("main", _watermarkKey, start);
 
         var result = await rig.Executor.RunAsync(await rig.DrainRequestAsync(source, "runner-sync"));
 
@@ -462,7 +462,7 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
 
         var source = await PackageSourceAsync();
         using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
-        rig.SeedWatermark(_watermarkKey, start);
+        rig.SeedWatermark("main", _watermarkKey, start);
         var request = await rig.DrainRequestAsync(source, "provision-sync");
         var before = Snapshot(request.PackageDirectory!);
 
@@ -496,7 +496,7 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
         var source = await PackageSourceAsync(withEngine: false);
         Assert.False(Directory.Exists(Path.Combine(source, "engine")));
         using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
-        rig.SeedWatermark(_watermarkKey, start);
+        rig.SeedWatermark("main", _watermarkKey, start);
         var request = await rig.DrainRequestAsync(source, "runner-sync", runtimeSource: runtimeSource);
         var definitionBefore = Snapshot(request.PackageDirectory!);
         var runtimeBefore = Snapshot(request.RuntimeDirectory!);
@@ -526,7 +526,7 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
 
         var source = await PackageSourceAsync();
         using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
-        rig.SeedWatermark(_watermarkKey, start);
+        rig.SeedWatermark("main", _watermarkKey, start);
         var drain = rig.Executor.RunAsync(await rig.DrainRequestAsync(source, "runner-live"));
 
         // the first cycle plans the mapping (never queued: due; the source's counter is ahead of its position, so the gate admits it), claims it, runs it and finishes it; the drain stays up
@@ -550,7 +550,7 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
         Assert.Equal(rows.Count, units.Count);
         Assert.All(units, u => Assert.Equal("completed", u.State));
         Assert.Equal(oldRun.RowsWritten + 10, units.Sum(u => u.Counts["rows"]));
-        Assert.NotEqual(oldWatermark, rig.Watermark(_watermarkKey)!.Value.Position);
+        Assert.NotEqual(oldWatermark, rig.Watermark("main", _watermarkKey)!.Value.Position);
 
         // plan 28c E13: what the API shows of this drain is the run's own output. Each pass is a record (the row of Sync's run history: mapping, kind, rows, times, the drain it ran in), and the gate's checks of the source are steps
         // (what the lag of the mapping is measured against); both are read back as the runner's steps endpoint gives them, newest first, through the types the API reads them with.
@@ -610,8 +610,8 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
 
         var source = await PackageSourceAsync();
         using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
-        rig.SeedWatermark(_watermarkKey, start);
-        foreach (var added in mappings) rig.SeedWatermark(added.Key, added.Start);
+        rig.SeedWatermark("main", _watermarkKey, start);
+        foreach (var (added, name) in mappings.Zip(new[] { "m1", "m2", "m3" })) rig.SeedWatermark(name, added.Key, added.Start);
         using var cts = new CancellationTokenSource();
         var drain = rig.Executor.RunAsync(await rig.DrainRequestAsync(source, "runner-multi", degreeOfParallelism: 2), cts.Token);
 
@@ -645,7 +645,7 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
         await InsertRowsAsync(1_000_000);
         var source = await PackageSourceAsync();
         using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
-        rig.SeedWatermark(_watermarkKey, start);
+        rig.SeedWatermark("main", _watermarkKey, start);
         using var cts = new CancellationTokenSource();
         var drain = rig.Executor.RunAsync(await rig.DrainRequestAsync(source, "runner-sync", cancellationGrace: TimeSpan.FromSeconds(1)), cts.Token);
 
@@ -657,7 +657,7 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
         Assert.NotEqual(TaskEndState.Succeeded, killed.End.State);
         var held = Assert.Single(rig.Work.ListAll(RunnerRig.WorkOwner));
         Assert.Equal(DbDataKit.Scheduling.WorkItemStatus.Pending, held.Status);
-        Assert.Equal(start, rig.Watermark(_watermarkKey)!.Value.Position);      // the position is still the one before the pass: its commit was never made
+        Assert.Equal(start, rig.Watermark("main", _watermarkKey)!.Value.Position);      // the position is still the one before the pass: its commit was never made
 
         var again = await rig.Executor.RunAsync(await rig.DrainRequestAsync(source, "runner-sync", chain: "0197f0e0-0000-7000-8000-00000000d0e7"));
 
@@ -675,7 +675,7 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
         var now = await CurrentVersionAsync();
         var source = await PackageSourceAsync();
         using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
-        rig.SeedWatermark(_watermarkKey, now);
+        rig.SeedWatermark("main", _watermarkKey, now);
         var full = new FullSegment();
         var shape = WorkQueueStore.Describe("runner-sync", RunKind.BulkLoad, "main", full.Describe(), SegmentSerializer.Serialize(full), WorkItemKinds.FromConfig);
         rig.Work.Enqueue(RunnerRig.WorkOwner, shape.Kind, shape.Subject, shape.Part, shape.Resource, shape.Lane, shape.Payload);
@@ -721,12 +721,12 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
         await InsertRowsAsync(100);
         var source = await PackageSourceAsync();
         using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
-        rig.SeedWatermark(_watermarkKey, start);
+        rig.SeedWatermark("main", _watermarkKey, start);
 
         var onTheRunner = await rig.Executor.RunAsync(await rig.DrainRequestAsync(source, replication));
         Assert.True(onTheRunner.End.State == TaskEndState.Succeeded && onTheRunner.ExitCode == 0, Describe(rig, onTheRunner));
         Assert.Equal(100, (await TargetFingerprintAsync(target)).Count);
-        var runnerPosition = rig.Watermark(_watermarkKey)!.Value.Position;
+        var runnerPosition = rig.Watermark("main", _watermarkKey)!.Value.Position;
         Assert.NotEqual(start, runnerPosition);
 
         // Sync's own state holds the position of the cutover; the rollback copies what the runner holds (or, in the control, does not)
@@ -772,7 +772,7 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
         var now = await CurrentVersionAsync();
         var source = await PackageSourceAsync();
         using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
-        rig.SeedWatermark(_watermarkKey, now);
+        rig.SeedWatermark("main", _watermarkKey, now);
         var drain = rig.Executor.RunAsync(await rig.DrainRequestAsync(source, replication));
 
         await Task.Delay(TimeSpan.FromSeconds(8));
@@ -815,7 +815,7 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
         var inputs = DbDataSync.State.DrainRequestText.Serialize(requests);
         var source = await PackageSourceAsync();
         using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
-        rig.SeedWatermark(_watermarkKey, now);
+        rig.SeedWatermark("main", _watermarkKey, now);
         var chain = "0197f0e0-0000-7000-8000-00000000e12c";
         var first = await rig.DrainRequestAsync(source, replication, chain: chain);
         first = first with { Inputs = new Dictionary<string, string>(first.Inputs) { ["requests"] = inputs } };

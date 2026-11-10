@@ -48,11 +48,13 @@ public sealed class DrainRequestsTests
         Assert.Equal(("orders", ""), (verify.Subject, verify.Part));
     }
 
+    private static string Item(string mapping, string sourceKey) => WatermarkCheckpoint.ItemKey(mapping, sourceKey);
+
     [Fact]
     public async Task APosition_SeedsAMappingThatHasNone_AndNeverReplacesTheRunsOwn()
     {
         var ledger = new FakeLedger();
-        ledger.Write("src.dbo.kept", "own", null);
+        ledger.Write(Item("kept", "src.dbo.kept"), "own", null);
         var time = new DateTimeOffset(2026, 11, 9, 1, 2, 3, TimeSpan.Zero);
 
         await Apply(DrainRequestText.Serialize([
@@ -60,9 +62,9 @@ public sealed class DrainRequestsTests
             new DrainRequest("Position", "kept", SourceKey: "src.dbo.kept", Position: "handed"),
         ]), new FakeDrainQueue(), ledger);
 
-        Assert.Equal(("0x10", (DateTimeOffset?)time), ledger.Read("src.dbo.new"));
-        Assert.Equal((ReadIntent.Changes, ReadHold.None), (ledger.ReadIntentAndHold("src.dbo.new").Intent!.Value, ledger.ReadIntentAndHold("src.dbo.new").Hold!.Value));
-        Assert.Equal("own", ledger.Read("src.dbo.kept")!.Value.Position);
+        Assert.Equal(("0x10", (DateTimeOffset?)time), ledger.Read(Item("new", "src.dbo.new")));
+        Assert.Equal((ReadIntent.Changes, ReadHold.None), (ledger.ReadIntentAndHold(Item("new", "src.dbo.new")).Intent!.Value, ledger.ReadIntentAndHold(Item("new", "src.dbo.new")).Hold!.Value));
+        Assert.Equal("own", ledger.Read(Item("kept", "src.dbo.kept"))!.Value.Position);
     }
 
     [Fact]
@@ -70,12 +72,12 @@ public sealed class DrainRequestsTests
     {
         var queue = new FakeDrainQueue();
         var ledger = new FakeLedger();
-        ledger.Write("src.dbo.orders", "0x10", null);
-        ledger.WriteHold("src.dbo.orders", ReadHold.Loading);
+        ledger.Write(Item("orders", "src.dbo.orders"), "0x10", null);
+        ledger.WriteHold(Item("orders", "src.dbo.orders"), ReadHold.Loading);
 
         await Apply(DrainRequestText.Serialize([new DrainRequest("Resync", "orders", SourceKey: "src.dbo.orders")]), queue, ledger);
 
-        Assert.Equal((ReadIntent.InitialLoad, ReadHold.None), (ledger.ReadIntentAndHold("src.dbo.orders").Intent!.Value, ledger.ReadIntentAndHold("src.dbo.orders").Hold!.Value));
+        Assert.Equal((ReadIntent.InitialLoad, ReadHold.None), (ledger.ReadIntentAndHold(Item("orders", "src.dbo.orders")).Intent!.Value, ledger.ReadIntentAndHold(Item("orders", "src.dbo.orders")).Hold!.Value));
         Assert.Equal(nameof(RunKind.Primary), Assert.Single(queue.Rows).Kind);
     }
 

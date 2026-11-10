@@ -300,7 +300,7 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime, IDisposable
     /// <summary>The position of the mapping <c>main</c> of the default replication as the mode keeps it: Sync's own state, or the runner's checkpoint.</summary>
     private string? PositionFor(RunMode mode, string table) => mode == RunMode.Supervisor
         ? WatermarkFor(table)
-        : _rig?.Watermark(WatermarkKey.Build(new SourceTableRef { ConnectionName = "src-conn", Database = _databaseName, Schema = "dbo", Table = table }, MsSqlDialect.Instance))?.Position;
+        : _rig?.Watermark("main", WatermarkKey.Build(new SourceTableRef { ConnectionName = "src-conn", Database = _databaseName, Schema = "dbo", Table = table }, MsSqlDialect.Instance))?.Position;
 
     /// <summary>
     /// Phase 134: a mapping whose reader captures its own position (<c>IPositionCapturing</c> — Change

@@ -87,7 +87,7 @@ public sealed class RunnerLagInputs(RunnerAccess runner, TimeProvider? clock = n
     private sealed class Reading(RunnerLagSnapshot? snapshot) : ILagInputs
     {
         public AppliedPosition? GetAppliedPosition(string taskName, string mappingName, string watermarkKey) =>
-            snapshot is not null && snapshot.Positions.TryGetValue(watermarkKey, out var position) ? position : null;
+            snapshot is not null && snapshot.Positions.TryGetValue(WatermarkCheckpoint.ItemKey(mappingName, watermarkKey), out var position) ? position : null;
 
         /// <summary>The same choice the store makes: the newest check of the group (by when it was made), the newest one that carries a source time when one is asked for.</summary>
         public ChangeCheck? GetLatestCheck(string connectionName, string sourceDatabase, string sourceKind, bool requireSourceTime = false) =>

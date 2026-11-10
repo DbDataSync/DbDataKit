@@ -42,6 +42,9 @@ public sealed class ProtocolRunnerStateTests
         }
     }
 
+    /// <summary>The checkpoint item of the mapping <c>main</c> on a source: the position is the mapping's own, as Sync's state keeps it.</summary>
+    private static string Item(string sourceKey) => WatermarkCheckpoint.ItemKey("main", sourceKey);
+
     private static (ProtocolRunnerState State, Checkpoints Checkpoints) Create()
     {
         var checkpoints = new Checkpoints();
@@ -59,7 +62,7 @@ public sealed class ProtocolRunnerStateTests
         state.SetWatermark("t", "main", "src/db/table", "42", at);
         state.SetReadIntent("t", "main", "src/db/table", ReadIntent.Changes);
 
-        Assert.Equal(["src/db/table", "src/db/table:intent"], checkpoints.Writes);
+        Assert.Equal([Item("src/db/table"), Item("src/db/table") + ":intent"], checkpoints.Writes);
         Assert.Equal(new MappingReadState(ReadIntent.Changes, ReadHold.None, "42", at), state.GetReadState("t", "main", "src/db/table"));
         Assert.Equal("42", state.GetWatermark("t", "main", "src/db/table"));
     }
@@ -180,7 +183,7 @@ public sealed class ProtocolRunnerStateTests
         state.SetWatermark("t", "main", key, "7", null);
         state.SetReadIntent("t", "main", key, ReadIntent.ChangesFromEarliest);
         Assert.Equal(new MappingReadState(ReadIntent.ChangesFromEarliest, ReadHold.PositionExpired, "7", null), state.GetReadState("t", "main", key));
-        Assert.Equal(["src/db/table:hold", "src/db/table", "src/db/table:intent"], checkpoints.Writes);
+        Assert.Equal([Item(key) + ":hold", Item(key), Item(key) + ":intent"], checkpoints.Writes);
     }
 
     [Fact]

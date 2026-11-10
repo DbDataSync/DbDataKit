@@ -4,7 +4,7 @@ using DbDataSync.State;
 
 namespace DbDataSync.Planning;
 
-/// <summary>One item of the drain's checkpoint as the runner holds it: its key (the engine's watermark key of a source table) and its parts as text (times as ISO 8601 in UTC).</summary>
+/// <summary>One item of the drain's checkpoint as the runner holds it: its key (<see cref="WatermarkCheckpoint.ItemKey"/>: the mapping and the engine's watermark key of its source table) and its parts as text (times as ISO 8601 in UTC).</summary>
 public sealed record CheckpointItem(string Key, IReadOnlyDictionary<string, string> Parts);
 
 /// <summary>A hand-over of positions that was refused; the message says what was found.</summary>
@@ -16,7 +16,7 @@ public sealed class PositionHandOverException(string message) : InvalidOperation
 /// </summary>
 public sealed class RunnerPositions(ConfigRepository config, ChangeWatermarkStore watermarks, DriverRegistry drivers)
 {
-    /// <summary>The checkpoint of the drain's positions: one item per source table, keyed by the engine's watermark key.</summary>
+    /// <summary>The checkpoint of the drain's positions: one item per mapping and source table (<see cref="State.WatermarkCheckpoint.ItemKey"/>), as Sync's own state keeps them.</summary>
     public const string WatermarkCheckpoint = "watermark";
 
     public static void RefuseLoading(IReadOnlyList<CheckpointItem> items)
@@ -24,11 +24,14 @@ public sealed class RunnerPositions(ConfigRepository config, ChangeWatermarkStor
         foreach (var item in items)
         {
             if (item.Parts.TryGetValue("pending_position", out var pending) && pending.Length > 0 || item.Parts.TryGetValue("hold", out var hold) && hold == nameof(ReadHold.Loading))
-                throw new PositionHandOverException($"The source table '{item.Key}' is loading on the runner (its initial load is a batch of the runner's queue); let it finish before the rollback. The owner is as it was.");
+                {
+                var (mapping, table) = DbDataSync.State.WatermarkCheckpoint.Split(item.Key);
+                throw new PositionHandOverException($"The mapping '{mapping}' (source table '{table}') is loading on the runner (its initial load is a batch of the runner's queue); let it finish before the rollback. The owner is as it was.");
+            }
         }
     }
 
-    /// <summary>Writes the positions, intents and holds the drain left on the runner as the mappings' state here; the number of mappings written. A key no mapping has is not this replication's and is left.</summary>
+    /// <summary>Writes the positions, intents and holds the drain left on the runner as the mappings' state here; the number of mappings written. An item no mapping has is not this replication's and is left.</summary>
     public int CopyBack(ReplicationTaskConfig task, IReadOnlyList<CheckpointItem> items)
     {
         var byKey = items.ToDictionary(i => i.Key, StringComparer.Ordinal);
@@ -41,7 +44,7 @@ public sealed class RunnerPositions(ConfigRepository config, ChangeWatermarkStor
             var dialect = (drivers.Get(config.LoadConnection(source.ConnectionName).DriverType) as IDialectProvider)?.Dialect
                 ?? throw new PositionHandOverException($"The driver of the connection '{source.ConnectionName}' names no SQL dialect.");
             var key = WatermarkKey.Build(source, dialect);
-            if (!byKey.TryGetValue(key, out var item)) continue;
+            if (!byKey.TryGetValue(DbDataSync.State.WatermarkCheckpoint.ItemKey(name, key), out var item)) continue;
             if (item.Parts.TryGetValue("position", out var position) && position.Length > 0)
             {
                 DateTimeOffset? time = item.Parts.TryGetValue("position_time", out var text) && DateTimeOffset.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var parsed) ? parsed : null;

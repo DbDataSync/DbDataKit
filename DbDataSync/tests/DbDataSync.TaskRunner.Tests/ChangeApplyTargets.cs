@@ -39,6 +39,8 @@ internal static class ChangeApplyTargets
         public abstract string Q(string id);
         public virtual string Column(string lower) => lower;
         public virtual string Table(string table) => table;
+        /// <summary>The table as a statement names it (the schema qualifier, where the engine has one apart from the database).</summary>
+        public virtual string Qualified(string table) => $"{Q(Schema)}.{Q(table)}";
         public virtual Task PrepareAsync() => Task.CompletedTask;
         public virtual async Task DisposeAsync(string table)
         {
@@ -73,6 +75,7 @@ internal static class ChangeApplyTargets
         public override DbConnection Open() { var c = new MySqlConnection(new MySqlConnectionStringBuilder(_b.ConnectionString) { Database = _database }.ConnectionString); c.Open(); return c; }
         public override string CreateSql(string t) => $"CREATE TABLE `{t}` (id int PRIMARY KEY, name varchar(50) NULL, amount decimal(18,2) NULL)";
         public override string Q(string id) => $"`{id}`";
+        public override string Qualified(string table) => Q(table);
         public override async Task PrepareAsync()
         {
             await using var c = new MySqlConnection(_b.ConnectionString);
