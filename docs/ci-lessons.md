@@ -324,6 +324,12 @@ How it works now, and what to keep true when you add a job:
 | --- | --- | --- |
 | `EngineDifferenceProbes...(name: "sqlserver2025-160")`: `N undocumented difference(s): re_matches: engine-error ...` on the nightly only, the PR runs are green | the 2025 probes fall back to the documented differences of the plain `sqlserver` probe (`KnownKey`). Moving `mssql` to SQL Server 2025 made the plain probe agree with DuckDB, so its entries were deleted (cc41cf6e), and the level-160 run lost the entries it shared (REGEXP_LIKE does not exist below compatibility level 170). The PR jobs do not run the 2025 engine; only the nightly does | give the 160 run its own `sqlserver2025-160:<id>` entry with the reason. When an engine entry is deleted from `Known`, run the probe on every engine that falls back to it (`sqlserver2025-160`, locally with `DBDATABUILD_TEST_MSSQL2025` set to any SQL Server 2025) |
 
+### Release workflows
+
+| Signature | Cause | Fix |
+| --- | --- | --- |
+| dispatching `suite-release.yml` fails at once with `failed to parse workflow: error parsing called workflow ... dbdatabuild-release.yml (Line: 192, Col: 14): Unexpected value ''`, `Unexpected value 'rids'`; no run starts | a step's `with:` has its input at the same indent (`rids:` under `with:` in the `duckdb-cache` step), so the input is not under it; a called workflow that does not parse stops every release that calls it, and nothing runs the file until a release is cut | indent the input under `with:`; `scripts/tests/test_workflow_with_blocks.py` fails for any `with:` whose next line is not indented under it |
+
 ### Infrastructure (not your change; re-run once, then look closer)
 
 | Signature | What it is |
