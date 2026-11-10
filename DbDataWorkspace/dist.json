@@ -1,0 +1,29 @@
+{
+  "product": "dbdataworkspace",
+  "displayName": "DbDataWorkspace",
+  "description": "The workspace server: the projects people and agents author in git workspaces (an app today) and a record of what was done, over a management API a console pairs with. Needs the .NET 10 runtime (ASP.NET Core) and git.",
+  "homepage": "https://github.com/DbDataSync/DbDataKit/tree/main/DbDataWorkspace",
+  "license": "MIT",
+  "platforms": {
+    "win-x64": {
+      "exe": "dbdataworkspace.exe"
+    },
+    "linux-x64": {
+      "exe": "dbdataworkspace"
+    }
+  },
+  "windowsScope": "machine",
+  "globalEnv": [
+    { "name": "DBDATAWORKSPACE_SERVER_DIR", "programData": "DbDataWorkspace\\server" }
+  ],
+  "service": {
+    "name": "DbDataWorkspace",
+    "register": "service install",
+    "unregister": "service uninstall"
+  },
+  "requiresDotnet": "10.0",
+  "notes": "The state, projects and workspaces live in the server's data directory, away from the program files. The state database is a SQLite file in that directory; to put it in a database shared by a group or the install run: dbdataworkspace state init. Start it with: dbdataworkspace server run. Pair a console with it: dbdataworkspace server pair --max-role admin. This package carries neither bun nor a package store: a Workspace with no `apps.packageStore` set in server.yaml (and bun installed) does not build apps; it still creates projects and workspaces, edits, commits and merges. See the apps: section of the Workspace README.",
+  "msi": {
+    "upgradeCode": "01887CA2-7BD5-48F6-AC09-F04F5DC0191A"
+  }
+}
