@@ -10,7 +10,7 @@ param([Parameter(Mandatory)][string]$Exe)
 $ErrorActionPreference = 'Stop'
 $ServiceName = 'DbDataRunner'
 $Account = 'NT SERVICE\DbDataRunner'
-$Data = Join-Path $env:ProgramData 'DbDataRunner\server'
+$Data = Join-Path $env:ProgramData 'DbDataKit\runner'
 
 function Run([string[]]$cliArgs, [int[]]$ok = @(0)) {
   Write-Host "> dbdatarunner $($cliArgs -join ' ')"

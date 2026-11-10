@@ -27,11 +27,14 @@ public sealed record IdentityHostSettings(string Directory, Uri Listen, Uri? Pub
     public const string Product = "dbdatakit-identity";
     public const string DefaultListen = "https://localhost:8490";
 
-    /// <summary>The variable that names the home's directory for every command.</summary>
-    public const string DirectoryVariable = "DBDATAKIT_IDENTITY_DIR";
+    /// <summary>The module's name in the suite's folders and variables (<see cref="SuiteEnvironment"/>): <c>identity</c>.</summary>
+    public const string ServiceName = "identity";
 
-    public const string EngineVariable = "DBDATAKIT_IDENTITY_STATE_ENGINE";
-    public const string ConnectionVariable = "DBDATAKIT_IDENTITY_STATE_CONNECTION";
+    /// <summary>The variable that names the home's directory for every command: <c>DBDATAKIT_DATA_IDENTITY</c>, or the folder <c>identity</c> under <c>DBDATAKIT_DATA</c>.</summary>
+    public static string DirectoryVariable => SuiteEnvironment.FolderVariable(ServiceName);
+
+    public static string EngineVariable => SuiteEnvironment.StateEngineVariableOf(ServiceName);
+    public static string ConnectionVariable => SuiteEnvironment.StateConnectionVariableOf(ServiceName);
 
     /// <summary>The address a browser opens, and the origin a passkey is bound to.</summary>
     public Uri Public => PublicUrl ?? (Listen.Host is "0.0.0.0" or "[::]" or "::" or "*" or "+" ? new UriBuilder(Listen) { Host = "localhost" }.Uri : Listen);
@@ -40,16 +43,11 @@ public sealed record IdentityHostSettings(string Directory, Uri Listen, Uri? Pub
     public string Issuer => Public.GetLeftPart(UriPartial.Authority);
 
     public static string DefaultDirectory(Func<string, string?>? environment = null) =>
-        (environment ?? Environment.GetEnvironmentVariable)(DirectoryVariable) is { Length: > 0 } named
-            ? named
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "dbdatakit", "identity");
+        SuiteEnvironment.ResolveDataFolder(ServiceName, environment, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "dbdatakit", "identity"));
 
     public static StateSettings? StateFrom(Func<string, string?>? environment, string? engineFlag = null, string? connectionFlag = null)
     {
-        environment ??= Environment.GetEnvironmentVariable;
-        var engine = engineFlag ?? environment(EngineVariable);
-        var connection = connectionFlag ?? environment(ConnectionVariable);
-        return string.IsNullOrWhiteSpace(engine) && string.IsNullOrWhiteSpace(connection) ? null : new StateSettings(engine, connection);
+        return SuiteEnvironment.ResolveState(ServiceName, environment, engineFlag, connectionFlag);
     }
 }
 

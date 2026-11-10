@@ -29,7 +29,7 @@ internal sealed class BuildServiceEnvironment
         Acl = new FileSystemAclService(),
         Elevation = new ElevationDetector(),
         BinaryPath = Environment.ProcessPath ?? "",
-        DefaultDataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "DbDataBuild", "server"),
+        DefaultDataDirectory = DbDataKit.State.SuiteEnvironment.ResolveServiceFolder(BuildServerSettings.ServiceName),
     };
 }
 
@@ -84,9 +84,9 @@ internal static class BuildService
     {
         Name = name,
         Description = "DbDataBuild server",
-        ExecStart = $"{executable} server run --repo /var/lib/{name}",
+        ExecStart = $"{executable} server run --repo /var/lib/dbdatakit/{BuildServerSettings.ServiceName}",
         WorkingDirectory = executable[..executable.LastIndexOf('/')],
-        // DynamicUser: no account to manage; the state directory under /var/lib/<name> is created and owned by systemd.
-        StateDirectories = [name],
+        // DynamicUser: no account to manage; the state directory /var/lib/dbdatakit/build is created and owned by systemd.
+        StateDirectories = [$"dbdatakit/{BuildServerSettings.ServiceName}"],
     };
 }

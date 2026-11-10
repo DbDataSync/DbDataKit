@@ -33,7 +33,7 @@ cleanup() {
 trap cleanup EXIT
 
 export DBGATEWAY_Gateway__SchemaVersion=2
-export DBGATEWAY_Gateway__DataDirectory="$tmp"
+export DBDATAKIT_DATA_GATEWAY="$tmp"
 export DBGATEWAY_Gateway__Listen__Address=127.0.0.1
 export DBGATEWAY_Gateway__Listen__Port="$port"
 export DBGATEWAY_Gateway__DataSources__duck__Provider=duckdb

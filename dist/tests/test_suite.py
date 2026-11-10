@@ -37,9 +37,9 @@ def member(product, exe=None, service=None, vc=False, win=True, env=None):
 
 
 MEMBERS = [
-    ("dbdatakit", "console", member("dbdatakit", service={"name": "KitConsole", "register": "service install"}, env=[{"name": "KIT_DIR", "programData": "Kit\\console"}])),
-    ("dbdatagateway", "gateway", member("dbdatagateway", service={"name": "gw", "register": "service install --name {name}"}, vc=True)),
-    ("dbdatabuild", "build", member("dbdatabuild", env=[{"name": "BUILD_DIR", "programData": "Kit\\build"}])),          # no service: it is paired but not registered
+    ("dbdatakit", "console", member("dbdatakit", service={"name": "KitConsole", "register": "service install"}, env=[{"name": "DBDATAKIT_DATA", "programData": "DbDataKit"}, {"name": "KIT_DIR", "programData": "Kit\\console"}])),
+    ("dbdatagateway", "gateway", member("dbdatagateway", service={"name": "gw", "register": "service install --name {name}"}, vc=True, env=[{"name": "DBDATAKIT_DATA", "programData": "DbDataKit"}])),
+    ("dbdatabuild", "build", member("dbdatabuild", env=[{"name": "DBDATAKIT_DATA", "programData": "DbDataKit"}, {"name": "BUILD_DIR", "programData": "Kit\\build"}])),          # no service: it is paired but not registered
 ]
 
 
@@ -141,6 +141,24 @@ class SuiteManifestTests(unittest.TestCase):
         self.assertIn("KIT_DIR", undo)
         self.assertIn("BUILD_DIR", undo)
         self.assertIn("Open a new terminal", m["notes"])
+
+    def test_the_shared_data_root_is_set_once_and_never_removed_on_uninstall(self):
+        m = self.manifest()
+        post = "\n".join(m["post_install"])
+        undo = "\n".join(m["pre_uninstall"])
+        # three members name it; the suite's script sets it once
+        self.assertEqual(post.count("SetEnvironmentVariable('DBDATAKIT_DATA'"), 1)
+        self.assertEqual(m["notes"].count("DBDATAKIT_DATA=%ProgramData%\\DbDataKit"), 1)
+        self.assertNotIn("DBDATAKIT_DATA", undo)
+        self.assertIn("KIT_DIR", undo)
+        self.assertIn("DBDATAKIT_DATA is left in place", m["notes"])
+
+    def test_members_that_disagree_on_a_variable_are_refused_naming_it(self):
+        members = [(p, f, dict(meta, globalEnv=[{"name": "DBDATAKIT_DATA", "programData": "Elsewhere"}]) if p == "dbdatabuild" else meta) for p, f, meta in MEMBERS]
+        self.suite = lay_out(self.tmp, members=members)
+        r, _ = self.bind()
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("DBDATAKIT_DATA", r.stderr)
 
     def test_a_suite_with_no_global_env_has_no_scripts(self):
         self.suite = lay_out(self.tmp, members=[(p, f, member(p)) for p, f, _ in MEMBERS])

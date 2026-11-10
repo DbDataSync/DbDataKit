@@ -14,7 +14,7 @@
   },
   "windowsScope": "machine",
   "globalEnv": [
-    { "name": "DBDATASTORE_SERVER_DIR", "programData": "DbDataStore\\server" }
+    { "name": "DBDATAKIT_DATA", "programData": "DbDataKit" }
   ],
   "service": {
     "name": "DbDataStore",

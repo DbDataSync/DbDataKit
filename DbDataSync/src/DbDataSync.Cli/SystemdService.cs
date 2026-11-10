@@ -80,7 +80,10 @@ internal static class SystemdService
     /// <c>StateDirectory=</c> directive can manage, which is a Linux-service-unit concept unrelated to
     /// how the CLI resolves its default; a future change to one should not silently change the other.
     /// </summary>
-    private const string ManagedStateDirectoryRoot = "/var/lib/dbdatasync";
+    private const string ManagedStateDirectoryRoot = "/var/lib/dbdatakit/sync";
+
+    /// <summary>The unit's <c>StateDirectory=</c>: the same folder, relative to <c>/var/lib</c>.</summary>
+    private const string ManagedStateDirectory = "dbdatakit/sync";
 
     /// <param name="executableOverride">Only for <c>SystemdServiceTests</c> — a real run always takes
     /// <see cref="Environment.ProcessPath"/>, which cannot be pointed at an arbitrary path to prove
@@ -97,7 +100,7 @@ internal static class SystemdService
             return 1;
         }
 
-        var root = Path.GetFullPath(CliOptions.Read(args, "--repo") ?? CliOptions.DefaultRoot);
+        var root = Path.GetFullPath(CliOptions.Read(args, "--repo") ?? CliOptions.ServiceRoot);
         // Explicit vs. defaulted matters: an explicit --url is written into server.yaml
         // (below) so it survives every future restart; a defaulted one is never written, or a bare
         // re-run to change --user would stomp whatever App:Url the operator has since configured
@@ -219,7 +222,7 @@ internal static class SystemdService
     {
         var env = environment ?? new RealSystemdEnvironment();
 
-        var root = Path.GetFullPath(CliOptions.Read(args, "--repo") ?? CliOptions.DefaultRoot);
+        var root = Path.GetFullPath(CliOptions.Read(args, "--repo") ?? CliOptions.ServiceRoot);
         ServiceRegistration.Clear(root);
 
         var disableExit = env.RunSystemctl("disable", "--now", UnitName);
@@ -264,7 +267,7 @@ internal static class SystemdService
             DynamicUser = false,
             User = user,
             Group = user,
-            StateDirectories = isManagedRoot ? [UnitName] : [],
+            StateDirectories = isManagedRoot ? [ManagedStateDirectory] : [],
             ReadWritePaths = [root],
             Environment = dotnetRoot is null ? new Dictionary<string, string>() : new Dictionary<string, string> { ["DOTNET_ROOT"] = dotnetRoot },
             // systemd's own default, stated: the shared generator would otherwise shorten it to 45 s.

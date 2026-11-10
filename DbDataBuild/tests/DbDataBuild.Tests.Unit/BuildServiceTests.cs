@@ -93,10 +93,10 @@ public sealed class BuildServiceTests
         var unit = await Run(noun, "service", "unit");
 
         Assert.Equal(0, unit.Exit);
-        Assert.Contains("ExecStart=/opt/dbdatabuild/dbdatabuild server run --repo /var/lib/dbdatabuild", unit.Out);
+        Assert.Contains("ExecStart=/opt/dbdatabuild/dbdatabuild server run --repo /var/lib/dbdatakit/build", unit.Out);
         Assert.Contains("WorkingDirectory=/opt/dbdatabuild", unit.Out);
         Assert.Contains("DynamicUser=yes", unit.Out);
-        Assert.Contains("StateDirectory=dbdatabuild", unit.Out);
+        Assert.Contains("StateDirectory=dbdatakit/build", unit.Out);
         Assert.Contains("Description=DbDataBuild server", unit.Out);
     }
 

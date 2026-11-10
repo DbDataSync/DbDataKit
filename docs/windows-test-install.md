@@ -47,36 +47,34 @@ I downloaded both zips and the hashes match. A global install puts the programs 
 > (steps 2 and 3). If you want services, use the MSI instead.
 
 A global install also sets machine-wide environment variables (confirmed on a Windows test server, 2026-11-06; the manifest does it with a Scoop `post_install` step that
-runs only for `-g`): `DBDATAKIT_CONSOLE_DIR` to `C:\ProgramData\DbDataKit\console` and `DbDataSync__App__RepoRoot` to
-`C:\ProgramData\DbDataSync`. In a **new** elevated terminal check them:
+runs only for `-g`): `DBDATAKIT_DATA` to `C:\ProgramData\DbDataKit`, the one root every DbDataKit service keeps a folder under (`server`, `sync`, and so on). In a **new** elevated terminal check it:
 
 ```powershell
-[Environment]::GetEnvironmentVariable('DBDATAKIT_CONSOLE_DIR', 'Machine')
-[Environment]::GetEnvironmentVariable('DbDataSync__App__RepoRoot', 'Machine')
+[Environment]::GetEnvironmentVariable('DBDATAKIT_DATA', 'Machine')
 ```
 
-If they are empty, the step did not run: say so, set them by hand, and keep passing `--repo` as step 2 shows. `scoop uninstall -g`
-removes them again, only while they still hold those values.
+If it is empty, the step did not run: say so, set it by hand, and keep passing `--repo` as step 2 shows. `scoop uninstall -g`
+does **not** remove it: every product's manifest sets the same variable, so one product's uninstall must not take it from another. Remove it by hand when the last product is gone.
 
 **MSI** (the documented route for a service): `dbdatakit.msi` and `dbdatasync.msi` from the `dbdatakit/dist-snapshot` and
 `dbdatasync/dist-snapshot` releases (the stable ones are under `dist`), then `msiexec /i dbdatakit.msi /qn` and the same for Sync. Each installs to `C:\Program Files\<Name>` and registers its
-service **stopped**: `DbDataKitConsole` and `DbDataSync`. They are unsigned, so Windows will say "Unknown publisher".
+service **stopped**: `DbDataKitConsole` and `DbDataSync`. Their data folders are `C:\ProgramData\DbDataKit\server` and `C:\ProgramData\DbDataKit\sync` (the folders of earlier builds, `DbDataKit\console` and `DbDataSync`, are not read or moved). They are unsigned, so Windows will say "Unknown publisher".
 
 ## 2. The console
 
 > **Every `dbdatakit` command that touches the console's data needs the same folder** (`server run`, `user`, `instance`). A command
-> without `--repo` and without `DBDATAKIT_CONSOLE_DIR` uses `%LOCALAPPDATA%\dbdatakit\console` instead, which is not the folder
+> without `--repo` and without `DBDATAKIT_DATA_SERVER` (or `DBDATAKIT_DATA`) uses `%LOCALAPPDATA%\dbdatakit\console` instead, which is not the folder
 > `server run` serves, so a pairing made there never shows in the web app. Either pass `--repo` every time, as below, or set the
-> variable once for the account: `[Environment]::SetEnvironmentVariable('DBDATAKIT_CONSOLE_DIR', 'C:\ProgramData\DbDataKit\console', 'User')`
+> variable once for the account: `[Environment]::SetEnvironmentVariable('DBDATAKIT_DATA_SERVER', 'C:\ProgramData\DbDataKit\server', 'User')`
 > (a new terminal picks it up).
 
 ```powershell
-dbdatakit server run --repo C:\ProgramData\DbDataKit\console
+dbdatakit server run --repo C:\ProgramData\DbDataKit\server
 ```
 
 It listens on `https://localhost:8480`, makes a self-signed certificate in that folder, and with no user yet writes an invitation to
 `FIRST-RUN.txt` there and to the log. Open `https://localhost:8480/invite#<code>` **once** on the machine and register a passkey: that
-person is the first administrator. (`dbdatakit user invite --email <your address> --repo C:\ProgramData\DbDataKit\console` prints a new invitation if the first has expired; it needs `--email` for a new person or `--user <id>` for an existing one, and `user list` shows the ids.) To reach it from
+person is the first administrator. (`dbdatakit user invite --email <your address> --repo C:\ProgramData\DbDataKit\server` prints a new invitation if the first has expired; it needs `--email` for a new person or `--user <id>` for an existing one, and `user list` shows the ids.) To reach it from
 another machine add `--listen https://test-sync.example.com:8480`.
 
 ## 3. Sync, started for the first time
@@ -85,7 +83,7 @@ Use a **new, empty** folder, not a copy of your live install. Sync 2026.11 reads
 that means for an existing install.
 
 ```powershell
-dbdatasync server run --repo C:\ProgramData\DbDataSync --url https://test-sync.example.com:5080
+dbdatasync server run --repo C:\ProgramData\DbDataKit\sync --url https://test-sync.example.com:5080
 ```
 
 Because the URL is `https://` and no certificate is configured, Sync makes a self-signed one in `tls\dbdatasync.pfx` under the
@@ -98,8 +96,8 @@ On the Sync machine, in a second window:
 
 ```powershell
 dbdatasync server pair
-dbdatakit instance add https://test-sync.example.com:5080 --code <the code it printed> --repo C:\ProgramData\DbDataKit\console
-dbdatakit instance list --repo C:\ProgramData\DbDataKit\console
+dbdatakit instance add https://test-sync.example.com:5080 --code <the code it printed> --repo C:\ProgramData\DbDataKit\server
+dbdatakit instance list --repo C:\ProgramData\DbDataKit\server
 ```
 
 The code is single-use and lasts a few minutes. The console pins Sync's certificate when it pairs. Then open the console, **Servers**,

@@ -224,16 +224,21 @@ public static class ServiceCli
         }
     }
 
-    public static SystemdUnitOptions UnitOptions(string name, string executable) => new()
+    public static SystemdUnitOptions UnitOptions(string name, string executable)
     {
-        Name = name,
-        Description = "DbDataGateway Arrow Flight SQL gateway",
-        ExecStart = executable + " server run",
-        WorkingDirectory = executable[..executable.LastIndexOf((char)47)], // a Unix path whatever OS generates it
-        // DynamicUser: no account to manage; the state directory under /var/lib/<name> is created and owned by systemd.
-        StateDirectories = [name],
-        Environment = new Dictionary<string, string> { ["DBGATEWAY_Gateway__DataDirectory"] = $"/var/lib/{name}" },
-    };
+        // the folder is named for the service (gateway); a second gateway on one machine, started under another --name, keeps a folder of that name beside it
+        string folder = string.Equals(name, "dbdatagateway", StringComparison.Ordinal) ? "gateway" : name;
+        return new()
+        {
+            Name = name,
+            Description = "DbDataGateway Arrow Flight SQL gateway",
+            ExecStart = executable + " server run",
+            WorkingDirectory = executable[..executable.LastIndexOf((char)47)], // a Unix path whatever OS generates it
+            // DynamicUser: no account to manage; the state directory /var/lib/dbdatakit/gateway is created and owned by systemd.
+            StateDirectories = [$"dbdatakit/{folder}"],
+            Environment = new Dictionary<string, string> { [DbDataKit.State.SuiteEnvironment.FolderVariable("gateway")] = $"/var/lib/dbdatakit/{folder}" },
+        };
+    }
 
     private sealed record ExtractedArgs(string? Verb, string? Name, bool Systemd, string? Exec, string? PasswordOnCommandLine, string? PasswordSecret, List<string> Rest);
 

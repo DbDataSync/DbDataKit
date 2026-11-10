@@ -199,6 +199,9 @@ public sealed class ApiOptions
     /// build whose only integrity check is a same-origin checksum.</summary>
     public IReadOnlyList<ReleaseChannel> SelfUpdateChannels { get; init; } = [ReleaseChannel.Stable];
 
+    /// <summary>The repository root when <c>DbDataSync:App:RepoRoot</c> names none: <c>DBDATAKIT_DATA_SYNC</c> or the folder <c>sync</c> under <c>DBDATAKIT_DATA</c> (the suite's reader), else <c>dbdatasync-repo</c> in the current directory, as the raw API has always done.</summary>
+    public static string DefaultRepoRoot => SuiteEnvironment.ResolveDataFolder("sync", null, Path.Combine(Directory.GetCurrentDirectory(), "dbdatasync-repo"));
+
     public static ApiOptions FromConfiguration(IConfiguration configuration)
     {
         var app = configuration.GetSection("DbDataSync:App");
@@ -208,7 +211,8 @@ public sealed class ApiOptions
         var nuget = configuration.GetSection("DbDataSync:Nuget:Search");
         var notes = configuration.GetSection("DbDataSync:Notes");
 
-        var repoRoot = app["RepoRoot"] ?? Path.Combine(Directory.GetCurrentDirectory(), "dbdatasync-repo");
+        var repoRoot = app["RepoRoot"] ?? DefaultRepoRoot;
+        var suiteState = SuiteEnvironment.ResolveState("sync");
         var stateDbPath = state["DbPath"] ?? Path.Combine(repoRoot, "state.db");
         var taskRunnerDllPath = app["TaskRunnerDllPath"];
         var cliDllPath = app["CliDllPath"];
@@ -228,8 +232,8 @@ public sealed class ApiOptions
             // an open id space (a custom StateDialect can be registered), a typo and "I meant a real
             // custom engine that just isn't registered yet" look identical from here, and silently
             // falling back to SQLite would start an empty store instead of surfacing either mistake.
-            StateEngine = state["Engine"] ?? DefaultStateEngine,
-            StateConnectionString = state["ConnectionString"],
+            StateEngine = state["Engine"] ?? suiteState?.Engine ?? DefaultStateEngine,
+            StateConnectionString = state["ConnectionString"] ?? suiteState?.ConnectionString,
             TaskRunnerDllPath = taskRunnerDllPath,
             StatePort = int.TryParse(state["Port"], out var statePort) ? statePort : DefaultStatePort,
             // Defaults applied when unset, rather than "unset means no limit". An operator who wants

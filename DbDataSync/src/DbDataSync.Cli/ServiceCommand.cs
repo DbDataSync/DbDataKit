@@ -137,7 +137,7 @@ public static class ServiceCommand
         }
 
         var env = environment ?? ServiceEnvironment.Real();
-        var root = Path.GetFullPath(CliOptions.Read(args, "--repo") ?? CliOptions.DefaultRoot);
+        var root = Path.GetFullPath(CliOptions.Read(args, "--repo") ?? CliOptions.ServiceRoot);
         // Explicit vs. defaulted matters: an explicit --url is written into server.yaml
         // (below) so it survives every future restart; a defaulted one is never written, or a bare
         // re-run to change --account would stomp whatever App:Url the operator has since configured
@@ -290,7 +290,7 @@ public static class ServiceCommand
     /// <param name="environment">Only for tests: see <see cref="Install"/>.</param>
     internal static int Uninstall(string[] args, bool? elevatedOverride = null, ServiceEnvironment? environment = null)
     {
-        var root = Path.GetFullPath(CliOptions.Read(args, "--repo") ?? CliOptions.DefaultRoot);
+        var root = Path.GetFullPath(CliOptions.Read(args, "--repo") ?? CliOptions.ServiceRoot);
 
         // Same guard as Install, for the quieter half of the same bug. Removing the service needs elevation, and
         // without this the command answered with "Access is denied" *after* having already deleted the local
@@ -416,7 +416,7 @@ public static class ServiceCommand
     internal static int Doctor(string[]? args = null, ServiceEnvironment? environment = null)
     {
         var env = environment ?? ServiceEnvironment.Real();
-        var root = Path.GetFullPath(CliOptions.Read(args ?? [], "--repo") ?? CliOptions.DefaultRoot);
+        var root = Path.GetFullPath(CliOptions.Read(args ?? [], "--repo") ?? CliOptions.ServiceRoot);
         try
         {
             var executable = env.Scm.GetConfig(ServiceName)?.BinaryPathName is { Length: > 0 } installed

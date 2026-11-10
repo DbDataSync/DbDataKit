@@ -28,7 +28,7 @@ public sealed class ConsoleServiceEnvironment
         Acl = new FileSystemAclService(),
         Elevation = new ElevationDetector(),
         BinaryPath = Environment.ProcessPath ?? "",
-        DefaultDataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "DbDataKit", "console"),
+        DefaultDataDirectory = DbDataKit.State.SuiteEnvironment.ResolveServiceFolder(ConsoleSettings.ServiceName),
     };
 }
 
@@ -82,9 +82,9 @@ public static class ConsoleService
     {
         Name = name,
         Description = "dbdatakit console",
-        ExecStart = $"{executable} server run --repo /var/lib/{name}",
+        ExecStart = $"{executable} server run --repo /var/lib/dbdatakit/{ConsoleSettings.ServiceName}",
         WorkingDirectory = executable[..executable.LastIndexOf('/')],
-        // DynamicUser: no account to manage; the state directory under /var/lib/<name> is created and owned by systemd.
-        StateDirectories = [name],
+        // DynamicUser: no account to manage; the state directory /var/lib/dbdatakit/server is created and owned by systemd.
+        StateDirectories = [$"dbdatakit/{ConsoleSettings.ServiceName}"],
     };
 }

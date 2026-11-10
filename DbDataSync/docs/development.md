@@ -91,7 +91,7 @@ dotnet run --project src/DbDataSync.Api
 
 Listens on `http://localhost:5183`. On first run it creates a local `dbdatasync-repo/` directory
 (under `src/DbDataSync.Api/`, gitignored) as its git-backed config store and SQLite state database —
-no separate setup step needed. Override the location via the `DbDataSync__App__RepoRoot` and
+no separate setup step needed. Override the location via the `DBDATAKIT_DATA_SYNC` variable (or the `--DbDataSync:App:RepoRoot=<folder>` option; the old `DbDataSync__App__RepoRoot` variable is refused) and
 `DbDataSync__State__DbPath` environment variables if you'd rather
 keep it elsewhere. This is one of several ways to start DbDataSync — see
 [Configuration](configuration.md) for the rest (the `dbdatasync` CLI, the Windows service, the

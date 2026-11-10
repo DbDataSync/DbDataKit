@@ -51,7 +51,7 @@ public static class RunnerCli
         RunnerService.Noun(RunnerServiceEnvironment.Real()),
         RunnerService.CertNoun(environment),
         HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl),
-    ], RunnerServer.Version);
+    ], RunnerServer.Version, () => SuiteEnvironment.OldNameProblem(environment));
 
     /// <summary>The shared <c>state show|test|grants</c> verbs over the runner's state: SQLite in <c>state.db</c> in its directory unless the environment names a server engine (<c>--engine</c> overrides the engine), built from <see cref="RunnerState.Modules"/>.</summary>
     private static Noun StateNoun(Func<string, string?>? environment) => DbDataKit.State.Cli.StateVerbs.Create(new DbDataKit.State.Cli.StateVerbContext(

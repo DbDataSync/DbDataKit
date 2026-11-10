@@ -21,7 +21,7 @@ RUN printf '#!/bin/sh\nexec dotnet /app/dbdatastore.dll "$@"\n' > /usr/local/bin
     && mkdir /data && chown 1654:1654 /data
 USER 1654
 ENV DOTNET_BUNDLE_EXTRACT_BASE_DIR=/tmp/.net \
-    DBDATASTORE_SERVER_DIR=/data \
+    DBDATAKIT_DATA_STORE=/data \
     ASPNETCORE_HTTP_PORTS=
 VOLUME /data
 EXPOSE 8490

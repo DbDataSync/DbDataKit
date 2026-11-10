@@ -19,7 +19,7 @@ New-Item -ItemType Directory $tmp | Out-Null
 $db = Join-Path $tmp 'interop.duckdb'
 & $Python (Join-Path $PSScriptRoot 'seed.py') $db
 
-$env:DBGATEWAY_Gateway__DataDirectory = $tmp
+$env:DBDATAKIT_DATA_GATEWAY = $tmp
 $env:DBGATEWAY_Gateway__Listen__Port = "$Port"
 $env:DBGATEWAY_Gateway__DataSources__duck__Provider = 'duckdb'
 $env:DBGATEWAY_Gateway__DataSources__duck__ConnectionString = "Data Source=$db"

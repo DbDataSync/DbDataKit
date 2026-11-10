@@ -70,7 +70,7 @@ public sealed class DbDataSyncRootTests : IDisposable
         Assert.Equal(CliOptions.DefaultRoot, resolved);
     }
 
-    /// <summary>Phase 112's new step: <c>DbDataSync__App__RepoRoot</c> beats <see cref="CliOptions.DefaultRoot"/>
+    /// <summary>The environment step: <c>DBDATAKIT_DATA_SYNC</c> beats <see cref="CliOptions.DefaultRoot"/>
     /// but loses to an explicit <c>--repo</c> and to a real walk-up hit.</summary>
     [Fact]
     public void RepoRootEnvVar_BeatsDefaultRoot_ButLosesToExplicitRepoAndToAWalkUpHit()
@@ -79,7 +79,7 @@ public sealed class DbDataSyncRootTests : IDisposable
         Directory.CreateDirectory(deep);
         var envRoot = Path.Combine(_root, "env-root");
 
-        Environment.SetEnvironmentVariable("DbDataSync__App__RepoRoot", envRoot);
+        Environment.SetEnvironmentVariable("DBDATAKIT_DATA_SYNC", envRoot);
         try
         {
             Assert.Equal(envRoot, DbDataSyncRoot.Resolve([], deep));
@@ -92,7 +92,31 @@ public sealed class DbDataSyncRootTests : IDisposable
         }
         finally
         {
-            Environment.SetEnvironmentVariable("DbDataSync__App__RepoRoot", null);
+            Environment.SetEnvironmentVariable("DBDATAKIT_DATA_SYNC", null);
+        }
+    }
+
+    /// <summary>The install-wide root (<c>DBDATAKIT_DATA</c>) names the folder <c>sync</c> in it; the service's own variable beats it.</summary>
+    [Fact]
+    public void DataRootEnvVar_NamesTheSyncFolderInIt_AndTheServicesOwnVariableBeatsIt()
+    {
+        var deep = Path.Combine(_root, "a", "b");
+        Directory.CreateDirectory(deep);
+        var dataRoot = Path.Combine(_root, "data");
+        var own = Path.Combine(_root, "own");
+
+        Environment.SetEnvironmentVariable("DBDATAKIT_DATA", dataRoot);
+        try
+        {
+            Assert.Equal(Path.Combine(dataRoot, "sync"), DbDataSyncRoot.Resolve([], deep));
+            Environment.SetEnvironmentVariable("DBDATAKIT_DATA_SYNC", own);
+            Assert.Equal(own, DbDataSyncRoot.Resolve([], deep));
+            Assert.Equal(Path.Combine(_root, "x"), DbDataSyncRoot.Resolve(["--repo", Path.Combine(_root, "x")], deep));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("DBDATAKIT_DATA", null);
+            Environment.SetEnvironmentVariable("DBDATAKIT_DATA_SYNC", null);
         }
     }
 
@@ -100,7 +124,7 @@ public sealed class DbDataSyncRootTests : IDisposable
     [Fact]
     public void RepoRootEnvVar_Unset_FallsBackToDefaultRootAsBefore()
     {
-        Environment.SetEnvironmentVariable("DbDataSync__App__RepoRoot", null);
+        Environment.SetEnvironmentVariable("DBDATAKIT_DATA_SYNC", null);
         var deep = Path.Combine(_root, "a", "b");
         Directory.CreateDirectory(deep);
 

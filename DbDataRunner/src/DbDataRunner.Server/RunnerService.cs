@@ -1,4 +1,5 @@
 using DbDataKit.Runner;
+using DbDataKit.State;
 using DbDataKit.Runner.Api;
 using DbDataKit.Cli;
 using DbDataKit.Hosting.Certificates;
@@ -31,7 +32,7 @@ public sealed class RunnerServiceEnvironment
         Acl = new FileSystemAclService(),
         Elevation = new ElevationDetector(),
         BinaryPath = Environment.ProcessPath ?? "",
-        DefaultDataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "DbDataRunner", "server"),
+        DefaultDataDirectory = SuiteEnvironment.ResolveServiceFolder(RunnerSettings.ServiceName),
     };
 }
 
@@ -86,11 +87,14 @@ public static class RunnerService
     {
         Name = name,
         Description = "DbDataRunner server",
-        ExecStart = $"{executable} server run --repo /var/lib/{name}",
+        ExecStart = $"{executable} server run --repo /var/lib/dbdatakit/{Folder}",
         WorkingDirectory = executable[..executable.LastIndexOf('/')],
         // DynamicUser: no account to manage; the state directory under /var/lib/<name> is created and owned by systemd.
-        StateDirectories = [name],
+        StateDirectories = [$"dbdatakit/{Folder}"],
     };
+
+    /// <summary>The runner's folder under <c>/var/lib/dbdatakit</c>, the Linux service's data folder (<see cref="SuiteEnvironment.MachineFolder"/>).</summary>
+    private const string Folder = RunnerSettings.ServiceName;
 
     // ---- cert
 

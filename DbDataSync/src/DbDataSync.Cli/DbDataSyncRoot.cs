@@ -9,7 +9,7 @@ namespace DbDataSync.Cli;
 /// **Explicit <c>--repo</c> wins outright.** Otherwise this walks upward from the current directory —
 /// the same shape git itself uses to find <c>.git</c> — looking for <c>server.yaml</c> at
 /// each parent in turn, so a command run from anywhere inside a repo root finds it, not just from the
-/// root itself. Otherwise <c>DbDataSync__App__RepoRoot</c> (phase 112), and only then
+/// root itself. Otherwise <c>DBDATAKIT_DATA_SYNC</c> or the <c>sync</c> folder of <c>DBDATAKIT_DATA</c>, and only then
 /// <see cref="CliOptions.DefaultRoot"/>.
 /// </para>
 /// <para>
@@ -32,13 +32,11 @@ public static class DbDataSyncRoot
         if (explicitRoot is not null)
             return explicitRoot;
 
-        // DbDataSync__App__RepoRoot is not a new name invented for this resolver — it's the
-        // environment-variable form of the DbDataSync:App:RepoRoot config key the raw API's own
-        // configuration chain already honours (phase 112, regrouped under App: in phase 164).
-        // server run/health resolve the root *before* that chain exists, so it has to be read
-        // directly here too, the same way ServeCommand already reads DbDataSync__App__Url.
+        // DBDATAKIT_DATA_SYNC, else the folder sync under DBDATAKIT_DATA (the suite's one reader; the
+        // old DbDataSync__App__RepoRoot is refused, not read). server run/health resolve the root
+        // *before* the API's configuration chain exists, so it is read here.
         return FindUpward(startDirectory)
-            ?? Environment.GetEnvironmentVariable("DbDataSync__App__RepoRoot")
+            ?? DbDataKit.State.SuiteEnvironment.NamedFolder("sync")
             ?? CliOptions.DefaultRoot;
     }
 

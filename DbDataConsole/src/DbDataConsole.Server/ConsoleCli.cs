@@ -32,7 +32,7 @@ public static class ConsoleCli
         IdentityCli.Noun(environment),
         ConsoleService.Noun(ConsoleServiceEnvironment.Real()),
         HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl),
-    ], ConsoleHost.Version);
+    ], ConsoleHost.Version, () => DbDataKit.State.SuiteEnvironment.OldNameProblem(environment));
 
     /// <summary>The console's certificate is self-signed, so a probe of its own address cannot validate it; it is accepted for a loopback address only, where the answer is this machine and the probe reads a status code and no body.</summary>
     private static HttpClient LoopbackTolerantClient() => new(new HttpClientHandler

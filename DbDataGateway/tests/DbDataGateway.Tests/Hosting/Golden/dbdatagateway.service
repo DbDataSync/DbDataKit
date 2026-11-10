@@ -13,8 +13,8 @@ TimeoutStopSec=45
 
 # Identity
 DynamicUser=yes
-StateDirectory=dbdatagateway
-Environment="DBGATEWAY_Gateway__DataDirectory=/var/lib/dbdatagateway"
+StateDirectory=dbdatakit/gateway
+Environment="DBDATAKIT_DATA_GATEWAY=/var/lib/dbdatakit/gateway"
 
 # Hardening
 NoNewPrivileges=yes

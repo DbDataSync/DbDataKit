@@ -20,26 +20,21 @@ namespace DbDataSync.Cli;
 public static class CliOptions
 {
     /// <summary>
-    /// One documented, machine-wide directory per platform: <c>%ProgramData%\DbDataSync</c> on
+    /// One documented, machine-wide directory per platform: <c>%ProgramData%\DbDataKit\sync</c> on
     /// Windows (<c>CommonApplicationData</c>, not hard-coded, so a redirected <c>ProgramData</c> is
     /// honoured — the all-users store, <c>LocalSystem</c>'s analog of <c>/var/lib</c>); macOS's
     /// <c>/Library/Application Support</c> (hard-coded — <c>CommonApplicationData</c> maps to
     /// <c>/usr/share</c> on macOS, which is wrong for this); FreeBSD's <c>/var/db</c> per
     /// <c>hier(7)</c> (<c>/var/lib</c> does not exist on a stock FreeBSD); Linux's FHS
-    /// <c>/var/lib/&lt;pkg&gt;</c>, which every other Unix-like OS (Solaris/illumos, NetBSD, OpenBSD —
+    /// <c>/var/lib/dbdatakit/sync</c>, which every other Unix-like OS (Solaris/illumos, NetBSD, OpenBSD —
     /// none of which .NET has an <c>OperatingSystem.IsX()</c> for) also falls through to as the
     /// least-surprising generic answer; an operator on one of those sets
-    /// <c>DbDataSync__App__RepoRoot</c> instead if <c>/var/lib</c> is not idiomatic there.
+    /// <c>DBDATAKIT_DATA_SYNC</c> instead if <c>/var/lib</c> is not idiomatic there.
     /// </summary>
-    public static string DefaultRoot =>
-        OperatingSystem.IsWindows()
-            ? Path.Combine(
-                Environment.GetFolderPath(
-                    Environment.SpecialFolder.CommonApplicationData, Environment.SpecialFolderOption.Create),
-                "DbDataSync")
-            : OperatingSystem.IsMacOS() ? "/Library/Application Support/DbDataSync"
-            : OperatingSystem.IsFreeBSD() ? "/var/db/dbdatasync"
-            : "/var/lib/dbdatasync";
+    public static string DefaultRoot => DbDataKit.State.SuiteEnvironment.MachineFolder("sync");
+
+    /// <summary>What <c>service install</c> registers when no <c>--repo</c> is given: <c>DBDATAKIT_DATA_SYNC</c> or the folder <c>sync</c> under <c>DBDATAKIT_DATA</c>, else <see cref="DefaultRoot"/>.</summary>
+    public static string ServiceRoot => DbDataKit.State.SuiteEnvironment.ResolveServiceFolder("sync");
 
     /// <summary>The per-user default this tool used before phase 112 — still checked so an upgrade
     /// does not silently strand a working install; <see cref="DbDataSync.Core.Config.LegacyHostSettings"/> refuses it, naming the file.</summary>

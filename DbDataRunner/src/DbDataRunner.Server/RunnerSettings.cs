@@ -15,14 +15,17 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
     public const string Product = "dbdatarunner";
     public const string DefaultListen = "https://127.0.0.1:8495";
 
-    /// <summary>The variable that names the server's directory for every command (a container sets it once, so <c>docker exec</c> reaches the same files the server uses).</summary>
-    public const string DirectoryVariable = "DBDATARUNNER_SERVER_DIR";
+    /// <summary>The service's name in the suite's folders and variables (<see cref="SuiteEnvironment"/>): <c>runner</c>.</summary>
+    public const string ServiceName = "runner";
 
-    /// <summary>The state engine (<c>sqlite</c>, <c>mssql</c> or <c>postgres</c>); unset is SQLite in the server's directory.</summary>
-    public const string StateEngineVariable = "DBDATARUNNER_STATE_ENGINE";
+    /// <summary>The variable that names the server's directory for every command (a container sets it once, so <c>docker exec</c> reaches the same files the server uses): <c>DBDATAKIT_DATA_RUNNER</c>, or the folder <c>runner</c> under <c>DBDATAKIT_DATA</c>.</summary>
+    public static string DirectoryVariable => SuiteEnvironment.FolderVariable(ServiceName);
 
-    /// <summary>The connection string of a server engine; a <c>secret:</c> or <c>env:</c> reference in it is resolved when the state is opened.</summary>
-    public const string StateConnectionVariable = "DBDATARUNNER_STATE_CONNECTION";
+    /// <summary>The state engine (<c>sqlite</c>, <c>mssql</c> or <c>postgres</c>); unset is SQLite in the server's directory: <c>DBDATAKIT_STATE_RUNNER_ENGINE</c>, else <c>DBDATAKIT_STATE_ENGINE</c>.</summary>
+    public static string StateEngineVariable => SuiteEnvironment.StateEngineVariableOf(ServiceName);
+
+    /// <summary>The connection string of a server engine; a <c>secret:</c> or <c>env:</c> reference in it is resolved when the state is opened: <c>DBDATAKIT_STATE_RUNNER_CONNECTION</c>, else <c>DBDATAKIT_STATE_CONNECTION</c>.</summary>
+    public static string StateConnectionVariable => SuiteEnvironment.StateConnectionVariableOf(ServiceName);
 
     /// <summary>The channels the runner serves, separated by commas; default <see cref="DefaultChannels"/>.</summary>
     public const string ChannelsVariable = "DBDATARUNNER_CHANNELS";
@@ -123,20 +126,13 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
     /// <summary>The socket's directory. Short, because a Unix socket path has a small limit.</summary>
     public string SocketDirectory => Path.Combine(Directory, "run");
 
-    /// <summary>What <c>--repo</c> defaults to: <see cref="DirectoryVariable"/>, else a folder under the user's local application data.</summary>
+    /// <summary>What <c>--repo</c> defaults to: <see cref="DirectoryVariable"/> or the runner's folder under <c>DBDATAKIT_DATA</c>, else a folder under the user's local application data (an interactive run; the registered service names its folder, <see cref="SuiteEnvironment.ResolveServiceFolder"/>).</summary>
     public static string DefaultDirectory(Func<string, string?>? environment = null) =>
-        (environment ?? Environment.GetEnvironmentVariable)(DirectoryVariable) is { Length: > 0 } named
-            ? named
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "dbdatarunner", "server");
+        SuiteEnvironment.ResolveDataFolder(ServiceName, environment, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "dbdatarunner", "server"));
 
     /// <summary>The state settings the environment names; SQLite in the directory when it names none.</summary>
-    public static StateSettings StateFrom(Func<string, string?>? environment, string? engineFlag = null)
-    {
-        environment ??= Environment.GetEnvironmentVariable;
-        var engine = engineFlag ?? environment(StateEngineVariable);
-        var connection = environment(StateConnectionVariable);
-        return string.IsNullOrWhiteSpace(engine) && string.IsNullOrWhiteSpace(connection) ? new StateSettings() : new StateSettings(engine, connection);
-    }
+    public static StateSettings StateFrom(Func<string, string?>? environment, string? engineFlag = null) =>
+        SuiteEnvironment.ResolveState(ServiceName, environment, engineFlag) ?? new StateSettings();
 
     public static TimeSpan ActivationMaxWaitFrom(Func<string, string?>? environment)
     {

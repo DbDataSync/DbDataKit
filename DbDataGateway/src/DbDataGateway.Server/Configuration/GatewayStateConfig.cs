@@ -132,6 +132,9 @@ public static class GatewayStateConfig
                     if (directory.Origins.FirstOrDefault(o => string.Equals(o.Key, key, StringComparison.OrdinalIgnoreCase)) is { Value: { } origin } && !string.IsNullOrEmpty(origin.File))
                         return new StateSource(StateSourceKind.File, origin.File);
                     break;
+                case SuiteStateConfigurationProvider suite:
+                    if (suite.TryGet(key, out var named) && !string.IsNullOrEmpty(named)) return new StateSource(StateSourceKind.Environment, suite.VariableOf(key));
+                    break;
                 case EnvironmentVariablesConfigurationProvider:
                     if (provider.TryGet(key, out var value) && !string.IsNullOrEmpty(value)) return new StateSource(StateSourceKind.Environment, EnvironmentName(key, value));
                     break;

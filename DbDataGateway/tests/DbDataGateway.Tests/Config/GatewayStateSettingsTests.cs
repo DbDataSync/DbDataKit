@@ -13,7 +13,7 @@ namespace DbDataGateway.Tests.Config;
 
 /// <summary>
 /// Plan 29b C07: the Gateway's <c>state:</c> section is the one every product shares (<c>engine</c>, <c>connection</c>, <c>namespaces</c>, <c>retention</c>). The Gateway's own layers decide the winner: the file, then the environment
-/// (<c>DBGATEWAY_Gateway__State__Engine</c>), then the command line; an old-format file is refused naming the file and the key.
+/// (<c>DBDATAKIT_STATE_GATEWAY_ENGINE</c>), then the command line; an old-format file is refused naming the file and the key.
 /// </summary>
 [Collection(ProcessStateCollection.Name)]
 public sealed class GatewayStateSettingsTests : IAsyncLifetime
@@ -134,11 +134,11 @@ public sealed class GatewayStateSettingsTests : IAsyncLifetime
         WriteState(engine, db.Connection);
 
         // the environment beats the file: SQLite, from the variable the gateway has always read
-        using (new EnvScope(("DBGATEWAY_Gateway__State__Engine", "sqlite")))
+        using (new EnvScope(("DBDATAKIT_STATE_GATEWAY_ENGINE", "sqlite")))
         {
             var shown = await Run("state", "show", "--offline");
             Assert.Contains($"engine       {StateEngineIds.Sqlite}", shown.Out);
-            Assert.Contains("environment variable DBGATEWAY_Gateway__State__Engine", shown.Out);
+            Assert.Contains("environment variable DBDATAKIT_STATE_GATEWAY_ENGINE", shown.Out);
             Assert.Equal("environment", shown.Json["data"]!["sources"]!["engine"]!["kind"]!.GetValue<string>());
 
             var viaEnvironment = Instance();

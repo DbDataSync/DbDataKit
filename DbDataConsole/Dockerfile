@@ -34,7 +34,7 @@ COPY --from=web /src/DbDataKit/web/console/dist ./wwwroot
 RUN mkdir /data && chown 1654:1654 /data
 USER 1654
 ENV DOTNET_BUNDLE_EXTRACT_BASE_DIR=/tmp/.net \
-    DBDATAKIT_CONSOLE_DIR=/data \
+    DBDATAKIT_DATA_SERVER=/data \
     ASPNETCORE_HTTP_PORTS=
 VOLUME /data
 EXPOSE 8480

@@ -326,8 +326,8 @@ public static class GatewayHost
     public static string ResolveDataDirectory(GatewayOptions options)
     {
         if (!string.IsNullOrWhiteSpace(options.DataDirectory)) return Path.GetFullPath(options.DataDirectory);
-        string common = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
-        return Path.Combine(string.IsNullOrEmpty(common) ? AppContext.BaseDirectory : common, ServiceName);
+        // DBDATAKIT_DATA_GATEWAY, or the folder gateway under DBDATAKIT_DATA, else the machine folder (%ProgramData%\DbDataKit\gateway, /var/lib/dbdatakit/gateway)
+        return Path.GetFullPath(DbDataKit.State.SuiteEnvironment.ResolveServiceFolder("gateway"));
     }
 }
 

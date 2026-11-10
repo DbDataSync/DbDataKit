@@ -10,8 +10,11 @@ namespace DbDataBuild.Cli.Server;
 /// </summary>
 internal static class BuildState
 {
-    public const string EngineVariable = "DBDATABUILD_STATE_ENGINE";
-    public const string ConnectionVariable = "DBDATABUILD_STATE_CONNECTION";
+    /// <summary>The state engine: <c>DBDATAKIT_STATE_BUILD_ENGINE</c>, else <c>DBDATAKIT_STATE_ENGINE</c>.</summary>
+    public static string EngineVariable => SuiteEnvironment.StateEngineVariableOf(BuildServerSettings.ServiceName);
+
+    /// <summary>The state connection string: <c>DBDATAKIT_STATE_BUILD_CONNECTION</c>, else <c>DBDATAKIT_STATE_CONNECTION</c>.</summary>
+    public static string ConnectionVariable => SuiteEnvironment.StateConnectionVariableOf(BuildServerSettings.ServiceName);
 
     public static string SettingsFile(string serverDirectory) => Path.Combine(serverDirectory, "server.yaml");
 
@@ -19,7 +22,7 @@ internal static class BuildState
 
     /// <summary>The settings and where each came from; raises <see cref="InvalidOperationException"/> naming <c>server.yaml</c> for a state section that is not valid. Nothing is created.</summary>
     public static ResolvedState Resolve(string serverDirectory, Func<string, string?>? environment = null, string? engineFlag = null, string? connectionFlag = null, string engineFlagName = "--state-engine", string connectionFlagName = "--state-connection") =>
-        StateSettingsResolver.Resolve(new StateSettingsInputs(SettingsFile(serverDirectory), engineFlag, engineFlagName, connectionFlag, connectionFlagName, EngineVariable, ConnectionVariable, environment ?? Environment.GetEnvironmentVariable));
+        StateSettingsResolver.Resolve(SuiteEnvironment.StateInputs(BuildServerSettings.ServiceName, SettingsFile(serverDirectory), engineFlag, engineFlagName, connectionFlag, connectionFlagName, environment));
 
     /// <summary>The resolver for the references in a server engine's connection string: the server's secret store, then the environment.</summary>
     public static ISecretResolver Secrets(string serverDirectory, Func<string, string?>? environment = null) =>

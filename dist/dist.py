@@ -71,28 +71,55 @@ def _program_data_ps(entry):
     return f"(Join-Path $env:ProgramData {_ps(entry['programData'])})"
 
 
+# Machine variables every product's manifest sets to the same value and no uninstall removes: another product still installed reads it (plan 33 SC31).
+SHARED_GLOBAL_ENV = ("DBDATAKIT_DATA",)
+
+
+def _distinct_env(entries):
+    """One entry per variable name, in first-seen order; the same name with two different folders is an error naming it (the manifests of the members must agree)."""
+    seen = {}
+    for e in entries:
+        if e["name"] in seen and seen[e["name"]]["programData"] != e["programData"]:
+            raise SystemExit(f"globalEnv: '{e['name']}' is set to both '{seen[e['name']]['programData']}' and '{e['programData']}'")
+        seen.setdefault(e["name"], e)
+    return list(seen.values())
+
+
 def _global_env_set(entries):
     """Scoop runs these lines after a global install only: `$global` is Scoop's own flag for `scoop install -g`, which is also elevated, so
     the machine-level variable can be written. A per-user install leaves the program's own defaults alone."""
     _check_global_env(entries)
     lines = ["if ($global) {"]
-    for e in entries:
+    for e in _distinct_env(entries):
         lines.append(f"  [Environment]::SetEnvironmentVariable({_ps(e['name'])}, {_program_data_ps(e)}, 'Machine')")
     lines.append("}")
     return lines
 
 
 def _global_env_unset(entries):
-    """Removes only a value this manifest set, so one an administrator pointed elsewhere survives an uninstall or an update."""
+    """Removes only a value this manifest set, so one an administrator pointed elsewhere survives an uninstall or an update. The shared variables
+    (`SHARED_GLOBAL_ENV`) are never removed: every product's manifest sets the same one, and uninstalling one product must not take it from another.
+    Returns no lines when nothing is left to remove (the manifest then has no `pre_uninstall`)."""
     lines = ["if ($global) {"]
-    for e in entries:
+    for e in _distinct_env(entries):
+        if e["name"] in SHARED_GLOBAL_ENV:
+            continue
         name = _ps(e["name"])
         lines.append(
             f"  if ([Environment]::GetEnvironmentVariable({name}, 'Machine') -eq {_program_data_ps(e)}) "
             f"{{ [Environment]::SetEnvironmentVariable({name}, $null, 'Machine') }}"
         )
     lines.append("}")
-    return lines
+    return lines if len(lines) > 2 else []
+
+
+def _global_env_notes(entries):
+    listed = ", ".join(f"{e['name']}={_program_data_text(e)}" for e in _distinct_env(entries))
+    kept = [e["name"] for e in _distinct_env(entries) if e["name"] in SHARED_GLOBAL_ENV]
+    text = f"A global install (scoop install -g) also sets, for the machine: {listed}."
+    if kept:
+        text += f" {', '.join(kept)} is left in place when a product is uninstalled, because the other DbDataKit products read it too; remove it by hand when the last one is gone."
+    return text
 
 
 def scoop_manifest(meta, version, repo, sums):
@@ -120,9 +147,9 @@ def scoop_manifest(meta, version, repo, sums):
     env = meta.get("globalEnv") or []
     if env:
         manifest["post_install"] = _global_env_set(env)
-        manifest["pre_uninstall"] = _global_env_unset(env)
-        listed = ", ".join(f"{e['name']}={_program_data_text(e)}" for e in env)
-        notes = (notes + "\n" if notes else "") + f"A global install (scoop install -g) also sets, for the machine: {listed}. Open a new terminal to see it."
+        if unset := _global_env_unset(env):
+            manifest["pre_uninstall"] = unset
+        notes = (notes + "\n" if notes else "") + _global_env_notes(env) + " Open a new terminal to see it."
     if notes:
         manifest["notes"] = notes
     if meta.get("requiresVcRuntime"):
@@ -224,9 +251,9 @@ def suite_manifest(members, version, repo, sums):
     env = [e for m, _ in members for e in (m.get("globalEnv") or [])]
     if env:
         manifest["post_install"] = _global_env_set(env)
-        manifest["pre_uninstall"] = _global_env_unset(env)
-        listed = ", ".join(f"{e['name']}={_program_data_text(e)}" for e in env)
-        manifest["notes"] += f"\nA global install (scoop install -g) also sets, for the machine: {listed}. Open a new terminal to see it, so the commands above read the folders the services use."
+        if unset := _global_env_unset(env):
+            manifest["pre_uninstall"] = unset
+        manifest["notes"] += "\n" + _global_env_notes(env) + " Open a new terminal to see it, so the commands above read the folders the services use."
     if any(m.get("requiresVcRuntime") for m, _ in members):
         manifest["suggest"] = {"Visual C++ Redistributable": ["extras/vcredist2022"]}
     return manifest

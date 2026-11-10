@@ -14,7 +14,7 @@
   },
   "windowsScope": "machine",
   "globalEnv": [
-    { "name": "DBDATAWORKSPACE_SERVER_DIR", "programData": "DbDataWorkspace\\server" }
+    { "name": "DBDATAKIT_DATA", "programData": "DbDataKit" }
   ],
   "service": {
     "name": "DbDataWorkspace",

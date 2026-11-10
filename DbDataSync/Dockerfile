@@ -49,7 +49,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 # The image serves https, as the Build, Proxy, Store and console images do (plan 13a, L08): on its first start the server makes a self-signed certificate in the
 # volume (tls/dbdatasync.pfx), which a console pins when it pairs. Plain http is no longer the image's default; a deployment behind a proxy that ends TLS overrides the
 # entrypoint (docs/install.md, "Running in a container").
-ENV DbDataSync__App__RepoRoot=/var/lib/dbdatasync
+ENV DBDATAKIT_DATA_SYNC=/var/lib/dbdatasync
 VOLUME ["/var/lib/dbdatasync"]
 
 WORKDIR /app
@@ -81,16 +81,13 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0
 # One mount is a complete deployment: the config repository and the state database live together, so
 # a backup of this directory is a backup of everything that is not the image.
 #
-# DbDataSync__App__RepoRoot is not a container-only name — it's the environment-variable form of the
-# DbDataSync:App:RepoRoot config key (phase 112, regrouped under App: in phase 164), the same one an
-# interactive install or a Windows/Linux
-# service points at its own machine-wide data directory with. This container happens to already
-# resolve /var/lib/dbdatasync as CliOptions.DefaultRoot's own Linux answer, but setting it explicitly
-# here means the image's behaviour doesn't depend on that coincidence continuing to hold.
+# DBDATAKIT_DATA_SYNC is not a container-only name — it is the suite's variable for Sync's folder (plan 33 section 6c),
+# the same one an interactive install or a Windows/Linux service points at its own machine-wide data directory with.
+# The volume stays /var/lib/dbdatasync (only the variable's name changed), so an existing volume is still the one used.
 # The image serves https, as the Build, Proxy, Store and console images do (plan 13a, L08): on its first start the server makes a self-signed certificate in the
 # volume (tls/dbdatasync.pfx), which a console pins when it pairs. Plain http is no longer the image's default; a deployment behind a proxy that ends TLS overrides the
 # entrypoint (docs/install.md, "Running in a container").
-ENV DbDataSync__App__RepoRoot=/var/lib/dbdatasync
+ENV DBDATAKIT_DATA_SYNC=/var/lib/dbdatasync
 VOLUME ["/var/lib/dbdatasync"]
 
 WORKDIR /app

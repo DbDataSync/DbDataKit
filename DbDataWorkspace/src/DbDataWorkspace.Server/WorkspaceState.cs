@@ -18,8 +18,11 @@ public static class WorkspaceState
     /// <summary>The modules the server's state is built from.</summary>
     public static IReadOnlyList<StateModule> Modules { get; } = [TrustModule.Module, WorkspaceModule.Module];
 
-    public const string EngineVariable = "DBDATAWORKSPACE_STATE_ENGINE";
-    public const string ConnectionVariable = "DBDATAWORKSPACE_STATE_CONNECTION";
+    /// <summary>The state engine: <c>DBDATAKIT_STATE_WORKSPACE_ENGINE</c>, else <c>DBDATAKIT_STATE_ENGINE</c>.</summary>
+    public static string EngineVariable => SuiteEnvironment.StateEngineVariableOf(WorkspaceSettings.ServiceName);
+
+    /// <summary>The state connection string: <c>DBDATAKIT_STATE_WORKSPACE_CONNECTION</c>, else <c>DBDATAKIT_STATE_CONNECTION</c>.</summary>
+    public static string ConnectionVariable => SuiteEnvironment.StateConnectionVariableOf(WorkspaceSettings.ServiceName);
 
     public static string SettingsFile(string directory) => Path.Combine(directory, "server.yaml");
 
@@ -28,7 +31,7 @@ public static class WorkspaceState
     /// that is not one is refused naming the file and the nearest that is), then SQLite in <c>state.db</c>. Nothing is created.
     /// </summary>
     public static ResolvedState Resolve(string directory, Func<string, string?>? environment = null, string? engineFlag = null, string? connectionFlag = null, string engineFlagName = "--state-engine", string connectionFlagName = "--state-connection") =>
-        StateSettingsResolver.Resolve(new StateSettingsInputs(SettingsFile(directory), engineFlag, engineFlagName, connectionFlag, connectionFlagName, EngineVariable, ConnectionVariable, environment ?? Environment.GetEnvironmentVariable));
+        StateSettingsResolver.Resolve(SuiteEnvironment.StateInputs(WorkspaceSettings.ServiceName, SettingsFile(directory), engineFlag, engineFlagName, connectionFlag, connectionFlagName, environment));
 
     /// <summary>The resolver for the references in a server engine's connection string: the server's own secret store, then the environment.</summary>
     public static DbDataKit.Secrets.ISecretResolver Secrets(string directory, Func<string, string?>? environment = null) =>

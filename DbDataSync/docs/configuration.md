@@ -48,17 +48,18 @@ These commands resolve their repo root the same way, via a shared resolver
 1. An explicit `--repo <path>` wins outright.
 2. Otherwise, walk upward from the current directory — the same shape `git` itself uses to find
    `.git` — looking for `server.yaml` at each parent in turn.
-3. Otherwise, `DbDataSync__App__RepoRoot` — the environment-variable form of the `DbDataSync:App:RepoRoot`
-   config key, not a name invented for this resolver.
+3. Otherwise, `DBDATAKIT_DATA_SYNC` (this folder), or the folder `sync` under `DBDATAKIT_DATA` (the install's data root): the suite's one reader of
+   the data-folder variables. The old `DbDataSync__App__RepoRoot` is not read: a service that finds it set stops and names the new variable
+   (there is no alias).
 4. Otherwise, fall back to one documented, **machine-wide** directory per platform
    (`CliOptions.DefaultRoot`):
 
    | platform | default |
    | --- | --- |
-   | Windows | `%ProgramData%\DbDataSync` |
-   | macOS | `/Library/Application Support/DbDataSync` |
-   | FreeBSD | `/var/db/dbdatasync` |
-   | Linux (and any other Unix-like OS) | `/var/lib/dbdatasync` |
+   | Windows | `%ProgramData%\DbDataKit\sync` |
+   | macOS | `/Library/Application Support/DbDataKit/sync` |
+   | FreeBSD | `/var/db/dbdatakit/sync` |
+   | Linux (and any other Unix-like OS) | `/var/lib/dbdatakit/sync` |
 
    Machine-wide, not per-user, so an interactive `serve`/`setup` and a registered service agree on one
    repo with no `--repo` needed on either side — in earlier versions this was a per-user location
@@ -250,7 +251,7 @@ setting to grow a third state without another schema change. Releases before pla
 
 | key | env var | default | notes |
 | --- | --- | --- | --- |
-| `App:RepoRoot` | `DbDataSync__App__RepoRoot` | `<cwd>/dbdatasync-repo` under raw `dotnet run`; the CLI's `--repo` default under `dbdatasync server run` | git-tracked config store root |
+| `App:RepoRoot` | `DBDATAKIT_DATA_SYNC` (or `DBDATAKIT_DATA`; `DbDataSync__App__RepoRoot` is refused) | `<cwd>/dbdatasync-repo` under raw `dotnet run`; the CLI's `--repo` default under `dbdatasync server run` | git-tracked config store root |
 | `App:Url` | `DbDataSync__App__Url` | `http://localhost:5080` | `dbdatasync server run`/`dbdatasync health check` read this themselves (see above) and translate it to `--urls`/Kestrel's bind address |
 | `App:Server` | `DbDataSync__App__Server` | `kestrel` | `kestrel` or `httpsys`. `httpsys` is Windows-only and exists so the port can be shared with other processes — see "Sharing a port with HTTP.sys," below. Anything else refuses to start. Takes effect on restart |
 | `App:TrustedProxies` | `DbDataSync__App__TrustedProxies` | none | proxies (IP addresses or CIDR ranges such as `10.0.0.0/8`, comma- or semicolon-separated) whose `X-Forwarded-For` and `X-Forwarded-Proto` headers are believed. Set it when a TLS-terminating reverse proxy sits in front of a plain-HTTP bind; see [Plain HTTP](#plain-http-and-reverse-proxies) |
@@ -678,7 +679,7 @@ see [Installing → Running in a container](install.md#running-in-a-container) f
 - The image carries no web app and no docs: the screens, and these docs, are the dbdatakit console's (its own image, `DbDataConsole/Dockerfile`) — see
   [Getting started](getting-started.md#reading-these-docs-in-the-console) and [Installing → Connecting a console](install.md#connecting-a-console).
 - `VOLUME ["/var/lib/dbdatasync"]` — one mount is a complete deployment: the config repository and the state database live together, so a backup of this directory is a backup of everything that isn't the image itself.
-- `ENV DbDataSync__App__RepoRoot=/var/lib/dbdatasync` — the environment-variable form of the `DbDataSync:App:RepoRoot` config key, honoured by the same repo-root resolver every command uses (below). `CliOptions.DefaultRoot` already resolves to the same path on Linux, so this is set explicitly rather than relied on as a coincidence.
+- `ENV DBDATAKIT_DATA_SYNC=/var/lib/dbdatasync` — the suite's variable for Sync's folder, honoured by the same repo-root resolver every command uses (above). The volume keeps its path; only the variable's name changed.
 
 ## `tools/dev-harness` — development and testing only
 
