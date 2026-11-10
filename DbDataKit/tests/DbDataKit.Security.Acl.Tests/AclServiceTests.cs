@@ -12,8 +12,18 @@ public class AclServiceTests
         foreach (var r in new[] { AccessRights.Read, AccessRights.ReadExecute, AccessRights.Modify, AccessRights.Full })
         {
             var back = FileSystemAclService.FromFileSystemRights(FileSystemAclService.ToFileSystemRights(r));
-            Assert.True((back & r) == r || r == AccessRights.Full, $"{r} -> {back}");
+            Assert.True((back & r) == r, $"{r} -> {back}");
         }
+    }
+
+    [Theory]
+    [InlineData(0x1F01FF, AccessRights.Full)]            // FileSystemRights.FullControl, 'F' in icacls: what Administrators and SYSTEM hold
+    [InlineData(0x1301BF, AccessRights.Modify)]          // FileSystemRights.Modify, 'M': not Full
+    [InlineData(0x1301BF | 0x40000, AccessRights.Modify)] // Modify and ChangePermissions only: one of the two Full-only bits is not Full
+    [InlineData(0x1200A9, AccessRights.ReadExecute)]     // FileSystemRights.ReadAndExecute
+    public void A_rights_mask_reads_back_as_the_rights_it_grants_and_FullControl_as_Full(int mask, AccessRights expected)
+    {
+        Assert.Equal(expected, FileSystemAclService.FromMask(mask));
     }
 
     [Fact]
