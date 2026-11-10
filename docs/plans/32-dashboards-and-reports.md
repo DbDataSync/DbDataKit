@@ -411,6 +411,81 @@ Default taken (owner delegated, 2026-11-09): one parameters pane for every catal
 | RC04 | **Searchable like everything else:** the `knowledge` module indexes a snapshot's items as generated knowledge marked with their catalog, access-filtered as in RC03 | RC02, plan 27a lane KN | S | none | a search for a report title finds an SSRS item and a dashboard together, each marked with its catalog, and nothing the person may not see |
 | RC05 | **Front-end tools:** the report browser, the report view (external: framed under the instance's `frame` exception, or a link off the domain), the parameters pane, export; portals mount a catalog folder in their navigation; agents get tools. **Editor:** the instance editor lists the catalogs an app uses (UE01's screen) | RC03, DBR19, AP17 | L | none | Playwright: browse two catalogs, open an item with parameters filled in, a framed external item and a link off the domain, export in a format the item offers |
 
+## 9f. Custom front-end code, and interactivity from widgets (owner, 2026-11-10)
+
+**The request.** Reports, dashboards and widgets must be able to be **entirely custom front-end code in an app**, rendered on screen, exported and emailed like the hosted ones; and both custom and standard widgets must be able to **open an app page or a form with parameters taken from the data** (a drill, a dialog, a side panel). Decisions are in section 12 (2026-11-10).
+
+### What stays the same
+
+A custom view is **app code, in the app's sandboxed document** (`docs/apps.md`: opaque origin, no cookies or storage, `default-src 'self'`, no outside request), built offline from the vendored package store. **Data is never fetched by the code on the paths that print or email**: the view declares its queries, the host runs them **as the viewer** (as the subscriber for a subscription) and hands the rows in, so access, audit, lineage and the cache stay the host's (section 5, point 4). The exporter keeps its rules (4.4 to 4.6): a one-shot page from memory, every other request aborted, the ready signal, the deadline, the page limit, the bundled fonts, structure and not pixels in tests.
+
+### Two kinds of custom view
+
+| Kind | What it is | On screen | In an export |
+| --- | --- | --- | --- |
+| **`widget`** | a component an app exports, used as `type: custom` in a `dashboard/1` or `report/1` (`component: <app>/<export>`, its declared `query`, `params`, `links`) | in a box the document's layout gives it, in the sandboxed frame | the same box; in a paged (`flow`) layout it is an **unbreakable block** that must fit one page (a widget taller than a page is an export error naming it and the page height) |
+| **`page`** | a whole dashboard or report written as code, listed in the app manifest's `views` block (`kind: page`, name, parameters, declared queries, export formats, page size) and addressed like a hosted one | the app's document in the shell | the exporter loads **the app's document as the top-level page, not framed**, because a browser paginates a top-level document and an iframe is one unbreakable box (believed for Chromium; section 14); the host still supplies header, footer, margins, page numbers and the ready signal |
+
+The component contract is **one** for both (the `size` of a page is `{width, height: auto}`); only how the exporter loads it differs. A custom view is listed in the catalog (9e), the report browser and subscriptions by its manifest entry, like any other report.
+
+### The SDK: `@dbdatakit/views-sdk`
+
+Added to the **default library set** of the vendored store (`docs/apps.md`, "Starting an app"): `defineWidget(component)`, props `{data, params, theme, size, mode: 'screen' | 'print' | 'image'}`, `useReady()` (the print ready signal, which also waits for `document.fonts.ready`; `window.__reportError` for a failure, as the exporter reads it), `<PageBreak/>`, the theme as CSS custom properties, and the events `setParam` (cross-filter, exactly a parameter binding) and `open(linkName, row)` (below). **No CSS framework is required.** `@dbdatakit/visuals` (`VegaChart`, `DataTable`) is available, so a custom widget can draw a built-in one. **Other packages** (d3, echarts, an icon package) are on the administrator's `apps.allowedPackages` and vendored; the build bundles them with no network and refuses any other import naming file and line. Prefer SVG-based charts: a canvas chart prints as a bitmap.
+
+**Fonts and icons.** The bundled families are the default. An app may ship **its own font files and icon fonts as assets of its version**: they are fixed bytes (the version's hash covers them), served from the app's own origin, so page breaks are as stable as with the bundled set **provided the page waits for the fonts and the stack does not fall back to a host font**. The export warns only for a family that neither the bundled set nor the app's own files provide (it would fall back to a host font), and the export result records every font used. Standard widgets name an icon from **one open-licence icon font the host bundles** (`icon: <name>`, verified by a pin like `fonts.pin`; the choice and the licence check are DBR37's work, unverified here).
+
+### Interactivity: one link vocabulary for standard and custom widgets
+
+The existing `drill: {to: ..., with: {...}}` (3.5) and `view-spec/1`'s `links` become **one vocabulary**:
+
+```yaml
+links:
+  order-form:  {form: orders, new: {customer_id: $customers.id}, as: dialog, then: refresh, print: hidden}
+  order:       {form: orders, edit: {key: $orders.id}, as: panel, print: normal}
+  region-page: {page: regional-detail, with: {region: $customers.region}, print: link}
+widgets:
+  by_region: {type: chart, ..., on_click: region-page}
+  orders_ref: {type: custom, component: sales-portal/OrdersGrid, query: {...}, links: [order-form, order]}
+```
+
+- **Targets:** `dashboard`, `report`, `view` (a `view-spec/1` page of the same app), `page` (a custom page or a code page of the app), and **`form`**: `new: {field: value}` (prefilled defaults) or `edit: {key: value}` (an existing row). Values are `$field` of the clicked row and `$params.name`. **Targets stay in the same app instance, or an instance mounted in the same portal**; a cross-app link is a later decision.
+- **Presentation:** `as: navigate | dialog | panel`, default `navigate`. **The shell owns it** (navigation belongs to the host's shell page, `docs/apps.md`): the sandboxed widget can only send an event; the shell opens the target in its own sandboxed frame with the values in the route (parameters live in the URL, 3.5). `then: refresh` (the default after a form saves) re-runs the source widget's queries; `then: none` or a list of widgets overrides it. The shell tells the widget when the dialog closes or saves.
+- **A custom widget fires only a named link:** `host.open("order-form", row)`. It cannot choose a target or call the shell; the publish check validated every link of the widget, so the target, its parameters and their types are known before the widget runs.
+- **A prefilled value is a default, never authority:** the form validates, and the Store enforces its rules as the viewer. A `lock: [field]` makes a prefilled field read-only in the form, which is a convenience of the screen, not a rule.
+- **Publish checks** (`app validate`, the loaders): the target exists in the app, a form's entity is in a model the manifest lists, every name in `with`, `new` or `edit` is a parameter or field of the target with a matching type, a required parameter that is not given is an error naming the link, a widget names only links it declares.
+
+### What printing does with a link or an icon (owner, 2026-11-10)
+
+A printed page usually should **not** show a link's address, and a link is often an **icon** (a glyph from an icon font). **The report developer decides for each link or icon**, with `print:` (also `image:` for a PNG snapshot; it defaults to `print`):
+
+| `print:` | What the export draws |
+| --- | --- |
+| `hidden` | the element is **not drawn** (an icon button that only means "open this") |
+| `normal` | the element is drawn **as on screen** (the icon or the text) with **no link behaviour** |
+| `link` | the element is drawn and is a **PDF hyperlink** to the target's address with its parameters; **the address is never printed as text** (a link annotation, not the URL) |
+
+**Defaults:** a link on a data value (a table cell, a label) is `normal`; a link that is an icon or a button is `hidden`; neither is `link` unless the developer says so. In a **PNG snapshot** (`image`), `link` is the same as `normal`, because an image has no annotations. A link whose target has no address (a dialog with no page of its own) is `normal` or `hidden`, never `link`: `app validate` refuses `print: link` there. Standard widgets read `print:` from the link; a **custom widget** uses the SDK's `<HostLink name print="...">` (or `linkHref(name, row)` for its own markup) and may read `mode`; in print and image mode `host.open` does nothing, because there is no interaction. An email carries the report as a PDF attachment, an optional inline PNG, and **one link to the live view**.
+
+### Delivery
+
+A subscription (DBR18) to a custom view runs the exporter **as the subscriber**: declared queries as the subscriber, a **PDF attachment**, an optional **inline PNG** (a new `ExportPngAsync` beside `ExportPdfAsync`: a screenshot of the same page), and a link. **No live HTML in an email.** Custom code runs in the exporter **only from a published, approved app version, in the sandbox, never as `trusted`, with no network**, under the exporter's deadline, page limit and concurrency limit; the browser's own sandbox stays on wherever the platform allows it (root in a container needs `--no-sandbox`, and the exporter logs it).
+
+### Slices
+
+Sizes and rules as section 9. **Formats:** a widget type `custom`, the `links` map and `as`, `then`, `print`, `lock` are **additions to the shared core**, and `form`/`page` are new link targets. If `dashboard/1` and `report/1` are still open when the first of these slices lands, the core changes in place and the 24a row and section 10 say so; if a release has frozen them, it is **`/2` of both kinds in one change** (section 10). The manifest's `views` block is `app/1` additive and open (`docs/formats.json` handling stated in the slice).
+
+| Id | Slice | Needs | Size | Done when |
+| --- | --- | --- | --- | --- |
+| **DBR30** | **The custom view contract:** `@dbdatakit/views-sdk` in the default library set (`defineWidget`, props, `useReady`, `<PageBreak/>`, theme tokens, `setParam`, `open`), the manifest's `views` block (`kind: widget | page`, parameters, declared queries, formats, page size), the `type: custom` widget in the core and its loaders, and `app validate` for both (queries against the model, component exists, links) | DBR02, DBR13, GP34 | M | each bad part is refused with file and line: a custom widget with no declared query, a query naming a field the model lacks, a component that is not exported, an import not in the library or allow-list |
+| **DBR31** | **Custom widgets on screen:** the host resolves a custom widget's declared query as the viewer and passes the rows into the sandboxed frame; resize, `setParam`, error tile; the same cross-filter as a standard widget | DBR30, DBR11 | M | Playwright: a dashboard with a custom widget and a standard one; a selection in the custom widget re-runs the standard one; a denied query shows the error tile and the rest draws |
+| **DBR32** | **Custom views in the export:** the print page serves the app's built files from the one-shot origin, data embedded as JSON, the ready signal; a widget in its box, a `page` as the **top-level document**; a widget taller than a page is an export error naming it; **the iframe claim is tested on the pinned build** (an iframe taller than a page does not split; a top-level document does) | DBR30, DBR15 | L | PDF tests by structure: page count, extracted text, outline, embedded fonts (only `DbDataKit` families and the app's own files); a custom page of three pages exports as three; an unlisted host font is warned; a request outside the origin is blocked and named |
+| **DBR33** | **`page` views served and listed:** the apps host and the `views` module serve a `page` (`/apps/<instance>/_views/<name>`, parameters in the URL), the catalog (9e) and report browser list it by its manifest entry, the export route accepts it, **`ExportPngAsync`** (a screenshot of the same page) | DBR30, DBR32, DBR19 | M | a page opens by its address with its parameters; the catalog lists it by kind with its formats; PNG export of a page and of a dashboard with a custom widget |
+| **DBR34** | **Scheduled and emailed custom views:** DBR18's task handles a custom view as the subscriber: PDF attachment, optional inline PNG, a link to the live view; a failure sends nothing and tells the owner (GP17) | DBR18, DBR32, DBR33 | M | a subscription to a custom page delivers the PDF as the subscriber (the rows differ for two subscribers with different access); the email carries one link; a render that fails tells the owner |
+| **DBR35** | **The link vocabulary:** `links`, the targets (`dashboard`, `report`, `view`, `page`, `form` with `new`/`edit`), `as`, `then`, `lock`, `print`, in the shared core and in `view-spec/1`'s `links`; the publish checks above, in .NET and TypeScript with the same goldens | DBR02, GP06 | M | goldens: each target kind loads; refused with file and line: a target outside the app, a `with` name the target lacks, a type mismatch, a required parameter not given, `print: link` on a target with no address; the .NET and TypeScript results are identical |
+| **DBR36** | **The shell's dialog and panel:** the shell opens a link target as a dialog or side panel in its own sandboxed frame, the values in the route, focus kept and returned, a close and a saved event back to the widget, `then: refresh`; for standard widgets (host-drawn) and for custom ones (`host.open`) | DBR35, DBR31 | L | Playwright: a click on a bar opens a dialog with the form prefilled from the clicked row; saving closes it and the source widget re-runs; a custom widget opens the same dialog; a locked field cannot be changed in the form and the server still refuses a forged value |
+| **DBR37** | **Links and icons in print:** `print: hidden | normal | link` (and `image:`) for standard widgets and the SDK's `<HostLink>`/`linkHref`; PDF link annotations without the address as text; the bundled icon font (a pin like `fonts.pin`, the licence checked, unverified here) named by `icon:`; app icon fonts as app assets | DBR35, DBR15, DBR30 | M | PdfPig reads the page: `hidden` leaves no text and no annotation, `normal` leaves the glyph and no annotation, `link` leaves the glyph and one annotation to the target's address and the address appears nowhere in the text; a PNG draws `link` as `normal`; the defaults are as the table above |
+| **DBR38** | **Editor rows, docs and the exemption:** the visual editor (DBR24 to DBR26) gets controls for a widget's links (target, presentation, `then`, `print`, `lock`), `docs/ui-editors.md` rows for them, and a **documented exemption** for custom views (they are code: the Workspace's code editor and preview are their editor); `docs/views.md` and `docs/apps.md` say how to write, preview and export a custom view | DBR35, DBR30 | M | `check_ui_editors` passes with the rows and the exemption; the docs' commands run |
+
 ## 10. Stored formats and the freeze rule
 
 | Format id | What | Status after this plan | Notes |
@@ -442,6 +517,9 @@ N and N-1: a program reads the current and previous number of each; a document i
 | 9e (was 31) | our own provider is the module `views`; it lists, searches and creates by kind (`dashboard`, `report`) and offers each document's layouts | DBR19 |
 | 26 (apps), lane Y | the dashboards and reports connect to apps through the shared core (9d); the console's Views area grows (DBR23) and the editor (DBR24 to DBR29) reuses Build's file-editing patterns | DBR13, DBR23 |
 | `dist/`, `scripts/`, `repo-checks.yml` | a component and an image layer for the pinned Chromium **and the bundled fonts**; `chromium.pin`, `fonts.pin`, `scripts/fetch-chromium.sh/.ps1`, `scripts/fetch-fonts.sh/.ps1` and their pin jobs (next to `bun.pin` and `duckdb.pin`) | DBR15a, DBR15b, DBR16 |
+| 26 (apps), 30 | an app's manifest gains a `views` block (custom `widget` and `page` views, additive and open); the default library set gains `@dbdatakit/views-sdk`; a custom view is published with its app version and listed by its manifest entry | DBR30, DBR33 |
+| 22a GP06 / `docs/apps.md` | `view-spec/1`'s `links` and the widgets' `drill` become one vocabulary (9f) with `form` and `page` targets | DBR35 |
+| 28 (runner) | the `views-export` task also renders custom views and takes a PNG | DBR34 |
 
 ## 12. Decisions of the owner (none open)
 
@@ -474,6 +552,20 @@ N and N-1: a program reads the current and previous number of each; a document i
 
 **Still open:** none open. The unverified items of section 14 are the first work of their slices (PuppeteerSharp and the font probe in DBR15, the Chrome for Testing pin in DBR15a, the bundled fonts' licences and metrics in DBR15b, font packages for promised host fonts in DBR16, and whether the formats checker accepts two entries with one version source when UC02 is built).
 
+**Decided by the owner (2026-11-10):**
+
+| # | Decision |
+| --- | --- |
+| D1 | **Custom widgets and custom pages are both supported, widgets first.** A custom view is app code in the app's sandboxed document; a widget sits in a document's layout, a page is a whole dashboard or report as code. |
+| D2 | **Declared queries only for print and email**: the host runs them as the viewer or subscriber and passes the rows in. Live data calls from code are for interactive screens of trusted apps only. |
+| D3 | **Email is a PDF attachment, an optional inline PNG snapshot and a link; no live HTML.** |
+| D4 | **Custom code in an export runs only from a published, approved app version, in the sandbox, never as `trusted`, with no network.** |
+| D5 | **`page` is its own view kind** because only a top-level document paginates; the component contract is the same as a widget's. |
+| D6 | **Apps bring their own dependencies within the vendored store and the administrator's allow-list**; no CSS framework is required; `@dbdatakit/views-sdk` joins the default library set. |
+| D7 | **App-shipped font files and icon fonts are as deterministic as the bundled set** (the version's hash covers them) and carry no warning; the export warns only for a family nothing provides, and records the fonts used. |
+| D8 | **One link vocabulary for standard and custom widgets**, with targets in the same app instance or a mounted instance of the same portal, `as: navigate | dialog | panel` owned by the shell, a prefilled value only a default, and `then: refresh` by default after a form saves. |
+| D9 | **`print: hidden | normal | link` is the report developer's choice for each link or icon**, with `image:` for a PNG; defaults: a link on a data value `normal`, an icon or button `hidden`; a `link` is a PDF hyperlink and the address is never printed as text. |
+
 ## 13. Risks
 
 - **Page breaks vary with the Chromium version, and with host fonts when a document uses them.** With the bundled font set (the default) and the same pinned Chromium, breaks are the same on every host (the owner's decision, 4.6). Mitigation: a pinned build in CI and a `pinned` mode; the bundled set verified by hash (`fonts.pin`); structure-only tests; a version bump of Chromium or of the fonts is a reviewed change that regenerates the goldens. A document that names an administrator-listed host font gets best effort only; the audit row records the browser version and the fonts used.
@@ -500,3 +592,4 @@ N and N-1: a program reads the current and previous number of each; a document i
 - **Headless Chromium on the target hosts**: that the pinned build runs there (Windows Server Core, locked-down Linux containers, a root user needs `--no-sandbox`), the shared libraries it needs in an image, its installed size, and the memory for a 500-page report. **`/opt/pw-browsers`'s `chromium-1243`** is Playwright's build, not Chrome for Testing; it can stand in only for a local `system`-mode run.
 - `VegaChart`'s renderer staying sharp under a CSS transform (SVG vs canvas renderer in `vega-embed`).
 - `view-spec/1` and `HomeViewLoader`'s exact refusal codes are read from the branch and base; the Store's lack of an aggregating read rests on a text search; the agent runtime of plan 27a and plan 25's fake client are described, not found, in code; J28's listener shape is undecided, so DBR11's REST paths are provisional; the request keys used by `DeriveRequest` are those documented in `docs/semantic/query.md`, not re-checked against the engine's schema.
+- **Custom views (9f), unverified:** that Chromium does not split an iframe's contents across pages while a top-level document paginates (believed; DBR32 tests it on the pinned build); that an inline PNG screenshot of a long page is acceptable in mail clients' size limits; the **licence and the choice of the bundled icon font set** (DBR37); that a canvas chart's bitmap quality in print is acceptable at the export's scale (the docs say to prefer SVG); running **customer JavaScript in a headless browser on the export host or runner**: the sandbox, the blocked network and the throwaway profile are designed in, but the browser's own sandbox is off where the platform needs `--no-sandbox` (root in a container), which makes the approved-version rule (D4) the real barrier.
