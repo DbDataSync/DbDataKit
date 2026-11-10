@@ -49,7 +49,15 @@ jobs:
           product: DbDataGateway
           global-json: DbDataGateway/global.json
       - run: dotnet build DbDataGateway.slnf -c Release
-      - run: dotnet test --project tests/DbDataGateway.Tests -c Release --no-build --minimum-expected-tests 100
+      - name: Test
+        shell: pwsh
+        run: |
+          # the failed tests are named again at the end: between them the hosts' own log lines run to thousands of lines
+          dotnet test --project tests/DbDataGateway.Tests -c Release --no-build --minimum-expected-tests 100 2>&1 | Tee-Object -FilePath gateway-tests.log
+          $code = $LASTEXITCODE
+          Write-Host '--- failed tests ---'
+          Select-String -Path gateway-tests.log -Pattern 'failed .*\(\d+(\.\d+)?\s?m?s\)' | ForEach-Object { Write-Host $_.Line }
+          exit $code
       - name: Package (smoke test)
         run: ./build/package.ps1 -Version 0.0.0-ci
         shell: pwsh

@@ -73,7 +73,15 @@ catch {
       Select-Object -First 15 |
       ForEach-Object { Write-Host ("{0} {1} {2}: {3}" -f $_.TimeCreated.ToString('HH:mm:ss'), $log, $_.ProviderName, ($_.Message -replace '\s+', ' ')) }
   }
-  Write-Host "--- $Repo ---"; Get-ChildItem -Recurse -Force $Repo -ErrorAction SilentlyContinue | Select-Object -First 40 | ForEach-Object { Write-Host $_.FullName }
+  Write-Host "--- $Repo\tls ---"; Get-ChildItem -Force (Join-Path $Repo 'tls') -ErrorAction SilentlyContinue | ForEach-Object { Write-Host ("{0}  {1} bytes" -f $_.Name, $_.Length) }
+  Write-Host "--- the service command run as a console for 40 s (what its start prints, and where it waits) ---"
+  $out = Join-Path ($env:RUNNER_TEMP ?? $env:TEMP) 'dbdatasync-e2e-console.out'; $err = Join-Path ($env:RUNNER_TEMP ?? $env:TEMP) 'dbdatasync-e2e-console.err'
+  $p = Start-Process -FilePath $Exe -ArgumentList @('server', 'run', '--repo', $Repo) -PassThru -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err
+  Start-Sleep -Seconds 40
+  if (-not $p.HasExited) { Write-Host 'still running after 40 s (it was started, it did not exit)'; try { $p.Kill($true) } catch { } } else { Write-Host "exited with $($p.ExitCode)" }
+  Write-Host '--- stdout ---'; Get-Content $out -ErrorAction SilentlyContinue | Select-Object -First 40 | ForEach-Object { Write-Host $_ }
+  Write-Host '--- stderr ---'; Get-Content $err -ErrorAction SilentlyContinue | Select-Object -First 40 | ForEach-Object { Write-Host $_ }
+  Write-Host "--- $Repo ---"; Get-ChildItem -Recurse -Force $Repo -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\\.git\\' } | Select-Object -First 40 | ForEach-Object { Write-Host $_.FullName }
   throw
 }
 finally {
