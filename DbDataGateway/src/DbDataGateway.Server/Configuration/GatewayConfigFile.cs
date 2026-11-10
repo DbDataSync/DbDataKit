@@ -4,7 +4,7 @@ using Microsoft.Extensions.Configuration;
 namespace DbDataGateway.Server.Configuration;
 
 /// <summary>
-/// Where the gateway's own settings live (plan 13, P01): the <c>config</c> directory inside the data directory (<c>%ProgramData%\DbDataGateway</c> by default), so replacing the
+/// Where the gateway's own settings live (plan 13, P01): the <c>config</c> directory inside the data directory (<c>%ProgramData%\DbDataKit\gateway</c> by default), so replacing the
 /// program files never touches them, and a git repository can track it. <c>server.yaml</c> holds the server's settings, <c>gateway/</c> the client authentication, <c>connections/</c> one
 /// data source per file (see <see cref="GatewayConfigDirectorySource"/>). Environment variables and the command line override the files. Nothing is shipped in the data directory: defaults
 /// are in <see cref="GatewayOptions"/>, and <c>config.example/</c> beside the executable shows every option. An <c>appsettings.json</c> from an earlier release is refused, never read.
@@ -71,6 +71,8 @@ public static class GatewayConfigFile
     public static void AddDataDirectory(IConfigurationBuilder configuration, string dataDirectory, string[] args)
     {
         configuration.Add(new GatewayConfigDirectorySource(DirectoryIn(dataDirectory)));
+        // the state database the install's variables name (DBDATAKIT_STATE_GATEWAY_*, else DBDATAKIT_STATE_*) is above the file and below the Gateway's own spellings
+        configuration.Add(new SuiteStateConfigurationSource());
         // lowest first, as the README says: the files, the plain variables, the DBGATEWAY_ ones, the command line (the command line used to come before DBGATEWAY_, so a DBGATEWAY_ variable beat it; plan 29b C07 makes the flag win)
         configuration.AddEnvironmentVariables();
         configuration.AddEnvironmentVariables("DBGATEWAY_");

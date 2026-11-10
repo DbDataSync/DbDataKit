@@ -131,12 +131,10 @@ public sealed class GroupTests
     {
         var (output, error) = (new StringWriter(), new StringWriter());
         var settings = h.Settings.State;
-        Func<string, string?> environment = name => name switch
-        {
-            RunnerSettings.StateEngineVariable => settings.Engine,
-            RunnerSettings.StateConnectionVariable => settings.ConnectionString,
-            _ => null,
-        };
+        Func<string, string?> environment = name =>
+            name == RunnerSettings.StateEngineVariable ? settings.Engine
+            : name == RunnerSettings.StateConnectionVariable ? settings.ConnectionString
+            : null;
         var exit = await RunnerCli.Router(environment).RunAsync(["label", verb, label, "--instance", instance.ToString(), "--repo", h.Directory], new CliContext(output, error, TextReader.Null));
         return (exit, output.ToString(), error.ToString());
     }

@@ -28,8 +28,11 @@ public sealed record ConsoleSettings(string Directory, Uri Listen, Uri? PublicUr
     public const string Product = "dbdatakit";
     public const string DefaultListen = "https://localhost:8480";
 
-    /// <summary>The variable that names the console's directory for every command, so <c>docker exec</c> reaches the files the server uses.</summary>
-    public const string DirectoryVariable = "DBDATAKIT_CONSOLE_DIR";
+    /// <summary>The service's name in the suite's folders and variables (<see cref="SuiteEnvironment"/>): the DbDataKit service itself is <c>server</c> (plan 33 D9).</summary>
+    public const string ServiceName = "server";
+
+    /// <summary>The variable that names the console's directory for every command, so <c>docker exec</c> reaches the files the server uses: <c>DBDATAKIT_DATA_SERVER</c>, or the folder <c>server</c> under <c>DBDATAKIT_DATA</c>.</summary>
+    public static string DirectoryVariable => SuiteEnvironment.FolderVariable(ServiceName);
 
     public string InstancesPath => System.IO.Path.Combine(Directory, "instances.yaml");
 
@@ -42,11 +45,9 @@ public sealed record ConsoleSettings(string Directory, Uri Listen, Uri? PublicUr
 
     public string SettingsPath => System.IO.Path.Combine(Directory, SettingsFileName);
 
-    /// <summary>What <c>--repo</c> defaults to: <see cref="DirectoryVariable"/>, else a folder under the user's local application data.</summary>
+    /// <summary>What <c>--repo</c> defaults to: <see cref="DirectoryVariable"/> or the folder <c>server</c> under <c>DBDATAKIT_DATA</c>, else a folder under the user's local application data (an interactive run; the registered service names its folder, <see cref="SuiteEnvironment.ResolveServiceFolder"/>).</summary>
     public static string DefaultDirectory(Func<string, string?>? environment = null) =>
-        (environment ?? Environment.GetEnvironmentVariable)(DirectoryVariable) is { Length: > 0 } named
-            ? named
-            : System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "dbdatakit", "console");
+        SuiteEnvironment.ResolveDataFolder(ServiceName, environment, System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "dbdatakit", "console"));
 }
 
 /// <summary>Where this console's people are signed in: the home's address, the client id the home registered this console under (and its secret, read from the variable named), and which app of the home is this console (its roles decide who may sign in here). A session asks the home for the person's roles again every <paramref name="RefreshInterval"/> (default 5 minutes); when the home cannot be asked, the last roles are kept for <paramref name="Grace"/> more (default 10 minutes) and then the person holds no role on any server.</summary>
@@ -85,8 +86,11 @@ public static class ConsoleState
 
     private static string AppliedBy => $"{ConsoleSettings.Product} {typeof(ConsoleState).Assembly.GetName().Version}";
 
-    public const string EngineVariable = "DBDATAKIT_CONSOLE_STATE_ENGINE";
-    public const string ConnectionVariable = "DBDATAKIT_CONSOLE_STATE_CONNECTION";
+    /// <summary>The state engine of the service: <c>DBDATAKIT_STATE_SERVER_ENGINE</c>, else <c>DBDATAKIT_STATE_ENGINE</c>.</summary>
+    public static string EngineVariable => SuiteEnvironment.StateEngineVariableOf(ConsoleSettings.ServiceName);
+
+    /// <summary>The state connection string of the service: <c>DBDATAKIT_STATE_SERVER_CONNECTION</c>, else <c>DBDATAKIT_STATE_CONNECTION</c>.</summary>
+    public static string ConnectionVariable => SuiteEnvironment.StateConnectionVariableOf(ConsoleSettings.ServiceName);
 
     /// <summary>The console's settings file: the <c>state:</c> section of <c>settings.yaml</c> in its directory (the same section every product reads, plan 29b M7), which <c>state move</c> and <c>state init</c> write. The console never creates it itself.</summary>
     public static string SettingsFileIn(string directory) => System.IO.Path.Combine(directory, ConsoleSettings.SettingsFileName);
@@ -97,8 +101,7 @@ public static class ConsoleState
     /// a message naming the file and the nearest setting that is.
     /// </summary>
     public static ResolvedState Resolve(string directory, Func<string, string?>? environment = null, string? engineFlag = null, string? connectionFlag = null, string engineFlagName = "--state-engine", string connectionFlagName = "--state-connection") =>
-        StateSettingsResolver.Resolve(new StateSettingsInputs(
-            SettingsFileIn(directory), engineFlag, engineFlagName, connectionFlag, connectionFlagName, EngineVariable, ConnectionVariable, environment ?? Environment.GetEnvironmentVariable));
+        StateSettingsResolver.Resolve(SuiteEnvironment.StateInputs(ConsoleSettings.ServiceName, SettingsFileIn(directory), engineFlag, engineFlagName, connectionFlag, connectionFlagName, environment));
 
     /// <summary>The state settings the flags, the environment and (when <paramref name="directory"/> is given) the settings file name, as <see cref="Resolve"/> finds them; null when nothing names any, which is SQLite in the console's directory.</summary>
     public static StateSettings? SettingsFrom(Func<string, string?>? environment, string? engineFlag = null, string? connectionFlag = null, string? directory = null)
@@ -109,10 +112,7 @@ public static class ConsoleState
             return resolved.Sources == StateSources.Defaults ? null : resolved.Settings;
         }
 
-        environment ??= Environment.GetEnvironmentVariable;
-        var engine = engineFlag ?? environment(EngineVariable);
-        var connection = connectionFlag ?? environment(ConnectionVariable);
-        return string.IsNullOrWhiteSpace(engine) && string.IsNullOrWhiteSpace(connection) ? null : new StateSettings(engine, connection);
+        return SuiteEnvironment.ResolveState(ConsoleSettings.ServiceName, environment, engineFlag, connectionFlag);
     }
 
     /// <param name="runner">The embedded runner's settings; null reads the <c>runner:</c> section of <c>settings.yaml</c> in <paramref name="directory"/>.</param>

@@ -31,7 +31,7 @@ public sealed class ConsoleStateEngineTests : IDisposable
     {
         Assert.Null(ConsoleState.SettingsFrom(_ => null));
 
-        var fromEnvironment = ConsoleState.SettingsFrom(name => name switch { ConsoleState.EngineVariable => "mssql", ConsoleState.ConnectionVariable => "Server=a", _ => null });
+        var fromEnvironment = ConsoleState.SettingsFrom(name => name == ConsoleState.EngineVariable ? "mssql" : name == ConsoleState.ConnectionVariable ? "Server=a" : null);
         Assert.Equal("mssql", fromEnvironment!.Engine);
 
         var flagged = ConsoleState.SettingsFrom(name => name == ConsoleState.EngineVariable ? "mssql" : null, "postgres", "Host=b");

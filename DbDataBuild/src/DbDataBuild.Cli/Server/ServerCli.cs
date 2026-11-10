@@ -45,7 +45,7 @@ internal static class ServerCli
         .. invocation is ["lineage", ..] ? new[] { ServerLineage.Create(invocation) } : Array.Empty<Noun>(),
         .. invocation is ["state", ..] ? new[] { StateNoun(environment) } : Array.Empty<Noun>(),
         .. invocation is ["service", ..] ? new[] { BuildService.Noun(BuildServiceEnvironment.Real()) } : Array.Empty<Noun>(),
-    ], ProductInfo.Version);
+    ], ProductInfo.Version, () => DbDataKit.State.SuiteEnvironment.OldNameProblem(environment));
 
     /// <summary>The shared <c>state show|test|grants|init</c> verbs over the server's state: its settings come from <c>--engine</c>, the environment (<see cref="BuildState.EngineVariable"/>) and the <c>state:</c> section of <c>server.yaml</c> in its directory (<c>--repo</c>), else SQLite in <c>state.db</c>; built from the <c>scheduling</c> module.</summary>
     private static Noun StateNoun(Func<string, string?>? environment) => DbDataKit.State.Cli.StateVerbs.Create(new DbDataKit.State.Cli.StateVerbContext(

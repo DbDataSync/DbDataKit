@@ -1,4 +1,4 @@
-# Copy this folder to <data directory>/config (%ProgramData%\DbDataGateway\config by default) and keep the parts you need.
+# Copy this folder to <data directory>/config (%ProgramData%\DbDataKit\gateway\config by default) and keep the parts you need.
 # Settings can also come from environment variables (DBGATEWAY_Gateway__Listen__Port=9000) or the command line (--Gateway:Listen:Port=9000).
 #
 # Configuration schema version (optional; absent means 1). 2 makes each data source's classifier default to "strict" instead of "warn".

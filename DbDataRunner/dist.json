@@ -14,7 +14,7 @@
   },
   "windowsScope": "machine",
   "globalEnv": [
-    { "name": "DBDATARUNNER_SERVER_DIR", "programData": "DbDataRunner\\server" }
+    { "name": "DBDATAKIT_DATA", "programData": "DbDataKit" }
   ],
   "service": {
     "name": "DbDataRunner",

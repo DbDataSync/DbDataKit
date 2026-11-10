@@ -57,7 +57,14 @@ public sealed record StateSettingsInputs(
     string? EngineFlag = null, string EngineFlagName = "--state-engine",
     string? ConnectionFlag = null, string ConnectionFlagName = "--state-connection",
     string? EngineVariable = null, string? ConnectionVariable = null,
-    Func<string, string?>? Environment = null);
+    Func<string, string?>? Environment = null)
+{
+    /// <summary>A variable read when <see cref="EngineVariable"/> is not set: the install-wide one (<see cref="SuiteEnvironment"/>).</summary>
+    public string? FallbackEngineVariable { get; init; }
+
+    /// <summary>A variable read when <see cref="ConnectionVariable"/> is not set.</summary>
+    public string? FallbackConnectionVariable { get; init; }
+}
 
 /// <summary>
 /// One order of precedence for a product's state settings (plan 29b M7, C07): the command line, then the environment, then the <c>state:</c> section of the product's settings file, then the default (SQLite). The engine and the
@@ -80,8 +87,8 @@ public static class StateSettingsResolver
 
         StateSource FromFile(string key) => keys.Contains(key) ? new StateSource(StateSourceKind.File, file) : StateSource.Default;
 
-        var (engine, engineSource) = Pick(inputs.EngineFlag, inputs.EngineFlagName, inputs.EngineVariable, environment, fromFile.Engine, FromFile("engine"));
-        var (connection, connectionSource) = Pick(inputs.ConnectionFlag, inputs.ConnectionFlagName, inputs.ConnectionVariable, environment, fromFile.ConnectionString, FromFile("connection"));
+        var (engine, engineSource) = Pick(inputs.EngineFlag, inputs.EngineFlagName, inputs.EngineVariable, inputs.FallbackEngineVariable, environment, fromFile.Engine, FromFile("engine"));
+        var (connection, connectionSource) = Pick(inputs.ConnectionFlag, inputs.ConnectionFlagName, inputs.ConnectionVariable, inputs.FallbackConnectionVariable, environment, fromFile.ConnectionString, FromFile("connection"));
         var settings = new StateSettings(engine, connection)
         {
             Namespaces = fromFile.Namespaces,
@@ -91,10 +98,11 @@ public static class StateSettingsResolver
         return new ResolvedState(settings, new StateSources(engineSource, connectionSource, namespacesSource, FromFile("retention")));
     }
 
-    private static (string? Value, StateSource Source) Pick(string? flag, string flagName, string? variable, Func<string, string?> environment, string? fromFile, StateSource fileSource)
+    private static (string? Value, StateSource Source) Pick(string? flag, string flagName, string? variable, string? fallbackVariable, Func<string, string?> environment, string? fromFile, StateSource fileSource)
     {
         if (!string.IsNullOrWhiteSpace(flag)) return (flag, new StateSource(StateSourceKind.Flag, flagName));
-        if (variable is { Length: > 0 } && environment(variable) is { } value && !string.IsNullOrWhiteSpace(value)) return (value, new StateSource(StateSourceKind.Environment, variable));
+        foreach (var name in new[] { variable, fallbackVariable })
+            if (name is { Length: > 0 } && environment(name) is { } value && !string.IsNullOrWhiteSpace(value)) return (value, new StateSource(StateSourceKind.Environment, name));
         return string.IsNullOrWhiteSpace(fromFile) ? (null, StateSource.Default) : (fromFile, fileSource);
     }
 }

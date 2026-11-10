@@ -23,14 +23,15 @@ internal sealed record BuildServerSettings(string Directory, Uri Listen)
     public string ServerYaml => Path.Combine(Directory, "server.yaml");
 
 
-    /// <summary>The variable that names the server's directory for every command (a container sets it once, so <c>docker exec</c> reaches the same files the server uses).</summary>
-    public const string DirectoryVariable = "DBDATABUILD_SERVER_DIR";
+    /// <summary>The service's name in the suite's folders and variables (<see cref="DbDataKit.State.SuiteEnvironment"/>): <c>build</c>.</summary>
+    public const string ServiceName = "build";
+
+    /// <summary>The variable that names the server's directory for every command (a container sets it once, so <c>docker exec</c> reaches the same files the server uses): <c>DBDATAKIT_DATA_BUILD</c>, or the folder <c>build</c> under <c>DBDATAKIT_DATA</c>.</summary>
+    public static string DirectoryVariable => DbDataKit.State.SuiteEnvironment.FolderVariable(ServiceName);
 
     /// <summary>What <c>--repo</c> defaults to: <see cref="DirectoryVariable"/>, else a folder under the user's local application data.</summary>
     public static string DefaultDirectory(Func<string, string?>? environment = null) =>
-        (environment ?? Environment.GetEnvironmentVariable)(DirectoryVariable) is { Length: > 0 } named
-            ? named
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "dbdatabuild", "server");
+        DbDataKit.State.SuiteEnvironment.ResolveDataFolder(ServiceName, environment, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "dbdatabuild", "server"));
 }
 
 /// <summary>

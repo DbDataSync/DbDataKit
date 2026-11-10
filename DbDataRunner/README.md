@@ -34,7 +34,7 @@ dbdatarunner health check [--url <url>]
 
 ## The server's directory
 
-`--repo` (or `DBDATARUNNER_SERVER_DIR`; by default a folder under the user's local application data) names one directory that holds everything the runner keeps:
+`--repo` (or `DBDATAKIT_DATA_RUNNER`, or the folder `runner` under `DBDATAKIT_DATA`; by default a folder under the user's local application data) names one directory that holds everything the runner keeps:
 
 | Path | What |
 | --- | --- |
@@ -48,7 +48,7 @@ The task host, `dbdatakit-taskhost`, is published into `taskhost/` beside the pr
 
 ## State
 
-SQLite in `state.db` by default, and on a server engine when the environment names one: `DBDATARUNNER_STATE_ENGINE` (`mssql` or `postgres`) and `DBDATARUNNER_STATE_CONNECTION` (the connection string; a `secret:` reference in it is looked up in `DBDATA_SECRET_*` variables, so the password need not be written down). Every verb reads the same two variables, so `tasks`, `runs` and `package` work on the state the server uses. `state show` and `state test` say what the runner would open and whether it can; `state grants` prints what a database login needs. The tables are the modules `runner` (instances, capabilities, the task schedule), `runs` (history and logs), `runner_progress`, `scheduling` (the work queue, leases, job state and pauses), `definitions` and `payloads` (the published versions and their files), `audit`, `notifications` and `trust` (the instance id, the paired clients and the pairing codes).
+SQLite in `state.db` by default, and on a server engine when the environment names one: `DBDATAKIT_STATE_RUNNER_ENGINE` (`mssql` or `postgres`) and `DBDATAKIT_STATE_RUNNER_CONNECTION` (the connection string; a `secret:` reference in it is looked up in `DBDATA_SECRET_*` variables, so the password need not be written down). Every verb reads the same two variables, so `tasks`, `runs` and `package` work on the state the server uses. `state show` and `state test` say what the runner would open and whether it can; `state grants` prints what a database login needs. The tables are the modules `runner` (instances, capabilities, the task schedule), `runs` (history and logs), `runner_progress`, `scheduling` (the work queue, leases, job state and pauses), `definitions` and `payloads` (the published versions and their files), `audit`, `notifications` and `trust` (the instance id, the paired clients and the pairing codes).
 
 ## Publishing packages
 
@@ -133,7 +133,7 @@ At start it listens on the socket its tasks use, registers an instance in the `r
 
 ## In a service
 
-`dbdatarunner service install` registers `server run` with Windows (as `NT SERVICE\DbDataRunner`, the low-privilege account every task then runs as) or prints a hardened systemd unit with `service unit`; its directory is then `%ProgramData%\DbDataRunner\server`. `dbdatarunner server pair --max-role admin` makes the code a console pairs with.
+`dbdatarunner service install` registers `server run` with Windows (as `NT SERVICE\DbDataRunner`, the low-privilege account every task then runs as) or prints a hardened systemd unit with `service unit`; its directory is then `%ProgramData%\DbDataKit\runner` (`/var/lib/dbdatakit/runner` for the Linux unit). `dbdatarunner server pair --max-role admin` makes the code a console pairs with.
 
 ## Groups, labels and routing
 

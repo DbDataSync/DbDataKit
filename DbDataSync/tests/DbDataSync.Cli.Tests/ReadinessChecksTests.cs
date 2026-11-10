@@ -95,7 +95,7 @@ public sealed class ReadinessChecksTests : IDisposable
         ServeCommand.Prepare(_root);
         ServiceRegistration.Write(_root, "dbdatasync", "linux");
         var unit = Path.Combine(_root, "current.service");
-        File.WriteAllText(unit, SystemdService.RenderUnit("/opt/dbdatasync/dbdatasync", "/var/lib/dbdatasync", "dbdatasync"));
+        File.WriteAllText(unit, SystemdService.RenderUnit("/opt/dbdatasync/dbdatasync", "/var/lib/dbdatakit/sync", "dbdatasync"));
 
         var result = await new ServiceRegistrationCheck(unit).RunAsync(Context(), CancellationToken.None);
 

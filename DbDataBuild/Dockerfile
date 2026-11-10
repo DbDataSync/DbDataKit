@@ -31,7 +31,7 @@ RUN printf '#!/bin/sh\nexec dotnet /app/dbdatabuild.dll "$@"\n' > /usr/local/bin
     && mkdir /data && chown 1654:1654 /data
 USER 1654
 ENV DOTNET_BUNDLE_EXTRACT_BASE_DIR=/tmp/.net \
-    DBDATABUILD_SERVER_DIR=/data
+    DBDATAKIT_DATA_BUILD=/data
 VOLUME /data
 EXPOSE 8470
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD ["dbdatabuild", "health", "check"]

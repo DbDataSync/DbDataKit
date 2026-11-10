@@ -339,8 +339,8 @@ public sealed class ServiceCliTests
         rig.Run("unit", "--name", "GatewayB", "--exec", "/srv/gateway/DbDataGateway");
         Assert.Contains("DynamicUser=yes", rig.Out);
         Assert.Contains("NoNewPrivileges=yes", rig.Out);
-        Assert.Contains("StateDirectory=gatewayb", rig.Out);
-        Assert.Contains("DBGATEWAY_Gateway__DataDirectory=/var/lib/gatewayb", rig.Out);
+        Assert.Contains("StateDirectory=dbdatakit/gatewayb", rig.Out);
+        Assert.Contains("DBDATAKIT_DATA_GATEWAY=/var/lib/dbdatakit/gatewayb", rig.Out);
         Assert.DoesNotContain("User=root", rig.Out);
 
         var relative = new Rig { Windows = false };

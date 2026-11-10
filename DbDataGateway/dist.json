@@ -15,7 +15,7 @@
     "register": "service install --name {name}",
     "unregister": "service uninstall --name {name}"
   },
-  "notes": "Settings live in %ProgramData%\\DbDataGateway\\config (server.yaml, gateway/, connections/). The state database is a SQLite file in the data directory (the 'service' topology, no setup); for a group or install database see: dbdatagateway state init. Registering the Windows service needs an elevated prompt: dbdatagateway service install",
+  "notes": "Settings live in %ProgramData%\\DbDataKit\\gateway\\config (server.yaml, gateway/, connections/). The state database is a SQLite file in the data directory (the 'service' topology, no setup); for a group or install database see: dbdatagateway state init. Registering the Windows service needs an elevated prompt: dbdatagateway service install",
   "msi": {
     "upgradeCode": "B47E1D90-2A6C-4F83-8D15-C3E9A5B07F26"
   }

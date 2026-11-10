@@ -21,7 +21,7 @@ public sealed class ConfigStartupTests
             ("DBGATEWAY_Gateway__Listen__Port", "0"),            // prefixed, as documented
             ("Gateway__Tls__Mode", "None"),                    // the stock unprefixed spelling
             ("DBGATEWAY_Gateway__Listen__Address", "127.0.0.1"),
-            ("DBGATEWAY_Gateway__DataDirectory", DataDir),
+            ("DBDATAKIT_DATA_GATEWAY", DataDir),
             ("DBGATEWAY_Gateway__Auth__AllowPassThrough", "False"));   // capitalised boolean, as the stock binder accepted
         await using var app = GatewayHost.Build([]);
         var o = app.Services.GetRequiredService<IOptionsMonitor<GatewayOptions>>().CurrentValue;
@@ -62,13 +62,13 @@ public sealed class ConfigStartupTests
     public async Task Environment_variables_override_the_data_directory_file_with_or_without_the_prefix()
     {
         string dir = NewDataDirectory(FileSettings);
-        using (new EnvScope(("DBGATEWAY_Gateway__DataDirectory", dir), ("Gateway__Listen__Port", "0")))
+        using (new EnvScope(("DBDATAKIT_DATA_GATEWAY", dir), ("Gateway__Listen__Port", "0")))
         {
             await using var app = GatewayHost.Build([]);
             Assert.Equal(0, app.Services.GetRequiredService<IOptionsMonitor<GatewayOptions>>().CurrentValue.Listen.Port);
         }
 
-        using (new EnvScope(("DBGATEWAY_Gateway__DataDirectory", dir), ("DBGATEWAY_Gateway__Listen__Port", "0")))
+        using (new EnvScope(("DBDATAKIT_DATA_GATEWAY", dir), ("DBGATEWAY_Gateway__Listen__Port", "0")))
         {
             await using var app = GatewayHost.Build([]);
             Assert.Equal(0, app.Services.GetRequiredService<IOptionsMonitor<GatewayOptions>>().CurrentValue.Listen.Port);
@@ -162,7 +162,7 @@ public sealed class ConfigStartupTests
     [Fact]
     public async Task Command_line_overrides_use_the_colon_syntax()
     {
-        using var env = new EnvScope(("DBGATEWAY_Gateway__DataDirectory", DataDir));
+        using var env = new EnvScope(("DBDATAKIT_DATA_GATEWAY", DataDir));
         await using var app = GatewayHost.Build(["--Gateway:Listen:Port=0", "--Gateway:Tls:Mode=None"]);
         Assert.Equal(0, app.Services.GetRequiredService<IOptionsMonitor<GatewayOptions>>().CurrentValue.Listen.Port);
     }
@@ -200,7 +200,7 @@ public sealed class ConfigStartupTests
     [Fact]
     public async Task A_literal_secret_with_RequireReferencedSecrets_also_exits_with_code_2()
     {
-        using var env = new EnvScope(("DBGATEWAY_Gateway__DataDirectory", DataDir));
+        using var env = new EnvScope(("DBDATAKIT_DATA_GATEWAY", DataDir));
         var stderr = new StringWriter();
         var original = Console.Error;
         Console.SetError(stderr);

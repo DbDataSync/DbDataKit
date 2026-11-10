@@ -41,7 +41,7 @@ public static class WorkspaceCli
         .. invocation is ["secret", ..] ? new[] { SecretVerbs(invocation) } : Array.Empty<Noun>(),
         WorkspaceService.Noun(WorkspaceServiceEnvironment.Real()),
         HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl),
-    ], WorkspaceServer.Version);
+    ], WorkspaceServer.Version, () => DbDataKit.State.SuiteEnvironment.OldNameProblem(environment));
 
     /// <summary>
     /// The shared <c>secret</c> verbs over the server's own store (<c>dbdataworkspace secret set dbdata:console:state:&lt;name&gt; --stdin</c>, with <c>--repo</c> as for the pairing verbs), so a state connection a console names by secret reference can be resolved here (plan 29b, C06). The value of a

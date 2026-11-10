@@ -35,7 +35,7 @@ RUN apt-get update \
 #    && apt-get update && ACCEPT_EULA=Y apt-get install -y msodbcsql18
 WORKDIR /app
 COPY --from=build /app .
-ENV DBGATEWAY_Gateway__DataDirectory=/data \
+ENV DBDATAKIT_DATA_GATEWAY=/data \
     DBGATEWAY_Gateway__Listen__Address=0.0.0.0
 VOLUME /data
 EXPOSE 8815

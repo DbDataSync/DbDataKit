@@ -13,10 +13,10 @@ public sealed class CliOptionsTests
         var expected =
             OperatingSystem.IsWindows()
                 ? Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "DbDataSync")
-            : OperatingSystem.IsMacOS() ? "/Library/Application Support/DbDataSync"
-            : OperatingSystem.IsFreeBSD() ? "/var/db/dbdatasync"
-            : "/var/lib/dbdatasync";
+                    Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "DbDataKit", "sync")
+            : OperatingSystem.IsMacOS() ? "/Library/Application Support/DbDataKit/sync"
+            : OperatingSystem.IsFreeBSD() ? "/var/db/dbdatakit/sync"
+            : "/var/lib/dbdatakit/sync";
 
         Assert.Equal(expected, CliOptions.DefaultRoot);
     }

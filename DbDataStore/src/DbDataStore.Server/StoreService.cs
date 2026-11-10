@@ -28,7 +28,7 @@ public sealed class StoreServiceEnvironment
         Acl = new FileSystemAclService(),
         Elevation = new ElevationDetector(),
         BinaryPath = Environment.ProcessPath ?? "",
-        DefaultDataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "DbDataStore", "server"),
+        DefaultDataDirectory = DbDataKit.State.SuiteEnvironment.ResolveServiceFolder(StoreSettings.ServiceName),
     };
 }
 
@@ -82,9 +82,9 @@ public static class StoreService
     {
         Name = name,
         Description = "DbDataStore server",
-        ExecStart = $"{executable} server run --repo /var/lib/{name}",
+        ExecStart = $"{executable} server run --repo /var/lib/dbdatakit/{StoreSettings.ServiceName}",
         WorkingDirectory = executable[..executable.LastIndexOf('/')],
-        // DynamicUser: no account to manage; the state directory under /var/lib/<name> is created and owned by systemd.
-        StateDirectories = [name],
+        // DynamicUser: no account to manage; the state directory /var/lib/dbdatakit/store is created and owned by systemd.
+        StateDirectories = [$"dbdatakit/{StoreSettings.ServiceName}"],
     };
 }

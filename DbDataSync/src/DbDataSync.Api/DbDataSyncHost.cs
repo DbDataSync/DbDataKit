@@ -341,7 +341,7 @@ public static class DbDataSyncHost
         // this decision has to be made before the DI container exists, so ApiOptions (which comes from
         // DI) isn't resolvable yet.
         var certificateRepoRoot = builder.Configuration["DbDataSync:App:RepoRoot"]
-            ?? Path.Combine(Directory.GetCurrentDirectory(), "dbdatasync-repo");
+            ?? ApiOptions.DefaultRepoRoot;
         if (string.Equals(
                 builder.Configuration["Kestrel:Certificates:Default:Path"],
                 ManagedSelfSignedCertificate.PfxPath(certificateRepoRoot),
@@ -433,7 +433,8 @@ public static class DbDataSyncHost
     /// </summary>
     private static void RefuseLegacySettings(WebApplicationBuilder builder)
     {
-        var repoRoot = builder.Configuration["DbDataSync:App:RepoRoot"] ?? Path.Combine(Directory.GetCurrentDirectory(), "dbdatasync-repo");
+        SuiteEnvironment.RefuseOldNames();
+        var repoRoot = builder.Configuration["DbDataSync:App:RepoRoot"] ?? ApiOptions.DefaultRepoRoot;
         if (LegacyHostSettings.Refusal(repoRoot, AppContext.BaseDirectory) is { } refusal)
             throw new InvalidOperationException(refusal);
     }
@@ -502,7 +503,7 @@ public static class DbDataSyncHost
     private static void InsertConfigFile(WebApplicationBuilder builder)
     {
         var repoRoot = builder.Configuration["DbDataSync:App:RepoRoot"]
-            ?? Path.Combine(Directory.GetCurrentDirectory(), "dbdatasync-repo");
+            ?? ApiOptions.DefaultRepoRoot;
 
         if (!File.Exists(DbDataSyncConfigFile.PathIn(repoRoot)))
             return;

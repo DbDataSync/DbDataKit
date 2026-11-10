@@ -16,16 +16,16 @@ public sealed class SystemdServiceTests : IDisposable
     [Fact]
     public void RenderUnit_DefaultRoot_IncludesStateDirectoryAndHardening()
     {
-        var unit = SystemdService.RenderUnit("/usr/bin/dbdatasync", "/var/lib/dbdatasync", "dbdatasync");
+        var unit = SystemdService.RenderUnit("/usr/bin/dbdatasync", "/var/lib/dbdatakit/sync", "dbdatasync");
 
         Assert.Contains("Type=notify", unit);
-        Assert.Contains("ExecStart=\"/usr/bin/dbdatasync\" server run --repo \"/var/lib/dbdatasync\"", unit);
+        Assert.Contains("ExecStart=\"/usr/bin/dbdatasync\" server run --repo \"/var/lib/dbdatakit/sync\"", unit);
         Assert.Contains("User=dbdatasync", unit);
         Assert.Contains("Group=dbdatasync", unit);
-        Assert.Contains("WorkingDirectory=/var/lib/dbdatasync", unit);
-        Assert.Contains("StateDirectory=dbdatasync", unit);
+        Assert.Contains("WorkingDirectory=/var/lib/dbdatakit/sync", unit);
+        Assert.Contains("StateDirectory=dbdatakit/sync", unit);
         Assert.Contains("ProtectSystem=strict", unit);
-        Assert.Contains("ReadWritePaths=/var/lib/dbdatasync", unit);
+        Assert.Contains("ReadWritePaths=/var/lib/dbdatakit/sync", unit);
         Assert.Contains("WantedBy=multi-user.target", unit);
     }
 
@@ -35,7 +35,7 @@ public sealed class SystemdServiceTests : IDisposable
     [Fact]
     public void RenderUnit_DefaultRoot_MatchesTheSnapshot()
     {
-        var unit = SystemdService.RenderUnit("/usr/bin/dbdatasync", "/var/lib/dbdatasync", "dbdatasync", "/usr/lib/dotnet");
+        var unit = SystemdService.RenderUnit("/usr/bin/dbdatasync", "/var/lib/dbdatakit/sync", "dbdatasync", "/usr/lib/dotnet");
 
         Assert.Equal(
             "[Unit]\n" +
@@ -45,8 +45,8 @@ public sealed class SystemdServiceTests : IDisposable
             "\n" +
             "[Service]\n" +
             "Type=notify\n" +
-            "ExecStart=\"/usr/bin/dbdatasync\" server run --repo \"/var/lib/dbdatasync\"\n" +
-            "WorkingDirectory=/var/lib/dbdatasync\n" +
+            "ExecStart=\"/usr/bin/dbdatasync\" server run --repo \"/var/lib/dbdatakit/sync\"\n" +
+            "WorkingDirectory=/var/lib/dbdatakit/sync\n" +
             "Restart=on-failure\n" +
             "RestartSec=5\n" +
             "TimeoutStopSec=90\n" +
@@ -54,14 +54,14 @@ public sealed class SystemdServiceTests : IDisposable
             "# Identity\n" +
             "User=dbdatasync\n" +
             "Group=dbdatasync\n" +
-            "StateDirectory=dbdatasync\n" +
+            "StateDirectory=dbdatakit/sync\n" +
             "Environment=\"DOTNET_ROOT=/usr/lib/dotnet\"\n" +
             "\n" +
             "# Hardening\n" +
             "NoNewPrivileges=yes\n" +
             "ProtectSystem=strict\n" +
             "ProtectHome=yes\n" +
-            "ReadWritePaths=/var/lib/dbdatasync\n" +
+            "ReadWritePaths=/var/lib/dbdatakit/sync\n" +
             "\n" +
             "[Install]\n" +
             "WantedBy=multi-user.target\n",
@@ -102,7 +102,7 @@ public sealed class SystemdServiceTests : IDisposable
     [Fact]
     public void RenderUnit_DoesNotAddTheSharedGeneratorsFullerSandbox()
     {
-        foreach (var root in new[] { "/var/lib/dbdatasync", "/srv/dbdatasync" })
+        foreach (var root in new[] { "/var/lib/dbdatakit/sync", "/srv/dbdatasync" })
         {
             var unit = SystemdService.RenderUnit("/usr/bin/dbdatasync", root, "dbdatasync");
 
@@ -118,7 +118,7 @@ public sealed class SystemdServiceTests : IDisposable
     [Fact]
     public void RenderUnit_HasNoPrivilegedStepAndNoSelfUpdate()
     {
-        var unit = SystemdService.RenderUnit("/usr/bin/dbdatasync", "/var/lib/dbdatasync", "dbdatasync");
+        var unit = SystemdService.RenderUnit("/usr/bin/dbdatasync", "/var/lib/dbdatakit/sync", "dbdatasync");
 
         Assert.DoesNotContain("ExecStartPre", unit);
         Assert.DoesNotContain("apply-update", unit);
@@ -130,7 +130,7 @@ public sealed class SystemdServiceTests : IDisposable
     [Fact]
     public void RenderUnit_StaysAWellFormedUnit_EveryLineInTheServiceSection()
     {
-        var unit = SystemdService.RenderUnit("/opt/dbdatasync/dbdatasync", "/var/lib/dbdatasync", "dbdatasync", "/usr/lib/dotnet");
+        var unit = SystemdService.RenderUnit("/opt/dbdatasync/dbdatasync", "/var/lib/dbdatakit/sync", "dbdatasync", "/usr/lib/dotnet");
 
         // No line is glued onto another and none has picked up stray indentation.
         foreach (var line in unit.Split('\n'))
@@ -138,7 +138,7 @@ public sealed class SystemdServiceTests : IDisposable
         Assert.Contains("\nEnvironment=\"DOTNET_ROOT=/usr/lib/dotnet\"\n", unit);
         Assert.Contains("\nExecStart=\"/opt/dbdatasync/dbdatasync\" server run", unit);
         Assert.Contains("\nUser=dbdatasync\n", unit);
-        Assert.Contains("\nStateDirectory=dbdatasync\n", unit);
+        Assert.Contains("\nStateDirectory=dbdatakit/sync\n", unit);
         Assert.EndsWith("WantedBy=multi-user.target\n", unit);
     }
 
@@ -166,7 +166,7 @@ public sealed class SystemdServiceTests : IDisposable
     public void RenderUnit_WithADotnetRoot_EmitsItAsAScopedEnvironmentLine()
     {
         var unit = SystemdService.RenderUnit(
-            "/usr/bin/dbdatasync", "/var/lib/dbdatasync", "dbdatasync", "/usr/lib/dotnet");
+            "/usr/bin/dbdatasync", "/var/lib/dbdatakit/sync", "dbdatasync", "/usr/lib/dotnet");
 
         Assert.Contains("Environment=\"DOTNET_ROOT=/usr/lib/dotnet\"", unit);
     }
@@ -174,7 +174,7 @@ public sealed class SystemdServiceTests : IDisposable
     [Fact]
     public void RenderUnit_WithNoDotnetRoot_OmitsTheLineEntirely()
     {
-        var unit = SystemdService.RenderUnit("/usr/bin/dbdatasync", "/var/lib/dbdatasync", "dbdatasync");
+        var unit = SystemdService.RenderUnit("/usr/bin/dbdatasync", "/var/lib/dbdatakit/sync", "dbdatasync");
 
         Assert.DoesNotContain("DOTNET_ROOT", unit);
     }
@@ -195,7 +195,7 @@ public sealed class SystemdServiceTests : IDisposable
 
     // Linux-only for a reason unrelated to the two real-binary cases below: the refusal under test
     // fires only when the resolved root *is* SystemdService.ManagedStateDirectoryRoot
-    // ("/var/lib/dbdatasync"), and CliOptions.DefaultRoot equals that on Linux alone — Windows resolves
+    // ("/var/lib/dbdatakit/sync"), and CliOptions.DefaultRoot equals that on Linux alone — Windows resolves
     // %ProgramData%\DbDataSync and macOS /Library/Application Support/DbDataSync, so on either there is
     // no "hardened default root" for this to be about and Install takes the warn-and-proceed branch.
     // Passing --repo cannot manufacture it either: Path.GetFullPath roots a leading slash onto the

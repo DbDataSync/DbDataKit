@@ -47,11 +47,17 @@ public sealed class NounRouter
     private readonly string _program;
     private readonly string _version;
     private readonly Noun[] _nouns;
+    private readonly Func<string?>? _precondition;
 
-    public NounRouter(string program, IEnumerable<Noun> nouns, string version = "0")
+    /// <param name="program">The program's name, for the help.</param>
+    /// <param name="nouns">The nouns of the command line.</param>
+    /// <param name="version">The tool version written in the JSON document.</param>
+    /// <param name="precondition">Checked before any verb runs (not for help): a message means the command is refused with it and exit code 1. A product uses it to refuse the environment variables of an earlier release.</param>
+    public NounRouter(string program, IEnumerable<Noun> nouns, string version = "0", Func<string?>? precondition = null)
     {
         _program = program;
         _version = version;
+        _precondition = precondition;
         _nouns = [.. nouns];
         foreach (var noun in _nouns)
             foreach (var verb in noun.Verbs)
@@ -144,6 +150,12 @@ public sealed class NounRouter
         {
             await context.Error.WriteLineAsync($"{_program} {noun.Name}: '{args[1]}' is not a verb. Run '{_program} {noun.Name} help' for the list.");
             return CliExit.Usage;
+        }
+
+        if (_precondition?.Invoke() is { } refused)
+        {
+            await context.Error.WriteLineAsync(refused);
+            return CliExit.Failure;
         }
 
         return await verb.Run(args[2..], context);

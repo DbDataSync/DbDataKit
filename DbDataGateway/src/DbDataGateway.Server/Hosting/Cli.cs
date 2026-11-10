@@ -30,14 +30,14 @@ public static class Cli
     /// <summary>What <c>ui mcp</c> never offers: secrets (they read standard input, which is the protocol's channel), queries (they return rows; an agent works without data) and adopting (a person's act).</summary>
     private static readonly string[] NotForAgents = ["secret", "query", "server pair", "server unpair", "datasource adopt", "identity", "apps"];   // identity: client secrets and invitations establish trust, as pairing does
 
-    public static NounRouter Router()
+    public static NounRouter Router(Func<string, string?>? environment = null)
     {
         NounRouter? router = null;
-        router = Build(() => router!);
+        router = Build(() => router!, environment);
         return router;
     }
 
-    private static NounRouter Build(Func<NounRouter> self) => new(Program,
+    private static NounRouter Build(Func<NounRouter> self, Func<string, string?>? environment) => new(Program,
     [
         ServerNoun.Create(RunServerAsync).With([.. PairingVerbs.Create(PairingFilesOf)]),
         ServiceNoun(),
@@ -53,7 +53,7 @@ public static class Cli
         DataSourceNoun(),
         HealthNoun(),
         UiNoun.Create(self, Program, GatewayHost.Version, NotForAgents),
-    ], GatewayHost.Version);
+    ], GatewayHost.Version, () => DbDataKit.State.SuiteEnvironment.OldNameProblem(environment));
 
     /// <summary>
     /// Where the pairing verbs look: the gateway's <c>server.yaml</c> in the configuration folder of its data directory, and the pairing codes in the data directory itself (not in the folder a person keeps under version control).

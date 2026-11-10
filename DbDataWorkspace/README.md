@@ -31,14 +31,14 @@ dbdataworkspace health check [--url <url>]
 | Path | What |
 | --- | --- |
 | `server.yaml` | the `state:` section (engine and connection) and the `apps:` section (how an app is built: `packageStore`, `allowedPackages`, `packageStoreSha256`, `isolation: required\|auto`, `buildTimeoutSeconds`, `bun`; a server with no `packageStore` does not build) |
-| `state.db` | the state database on SQLite (the default); `DBDATAWORKSPACE_STATE_ENGINE` and `DBDATAWORKSPACE_STATE_CONNECTION`, or the `state:` section, name SQL Server or PostgreSQL |
+| `state.db` | the state database on SQLite (the default); `DBDATAKIT_STATE_WORKSPACE_ENGINE` and `DBDATAKIT_STATE_WORKSPACE_CONNECTION`, or the `state:` section, name SQL Server or PostgreSQL |
 | `projects/<id>/` | a project the server made (a git repository); a project added by path stays where it is |
 | `workspaces/<project>/<id>/` and `<id>.json` | a workspace's worktree and the record that says whose it is (the layout Build's server has always had; `DbDataKit.Authoring`) |
 | `builds/<project>/<id>/` | a build: `app/` (the built folder), `result.json`, `publishes.jsonl` |
 | `publish-targets.json` | the Gateway each publisher key is paired with (address, instance id, pinned fingerprint, roles; never a key) |
 | `management-audit.log` | who made a project or changed a publisher's key reference, never a value |
 
-`DBDATAWORKSPACE_SERVER_DIR` names the directory for every command.
+`DBDATAKIT_DATA_WORKSPACE` (or the folder `workspace` under `DBDATAKIT_DATA`) names the directory for every command; the service's own is `%ProgramData%\DbDataKit\workspace` (`/var/lib/dbdatakit/workspace`).
 
 ## The state module `workspace`
 

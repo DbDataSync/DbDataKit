@@ -151,35 +151,61 @@ REPO_ROOT = DIST.parent
 
 
 class ShippedGlobalEnvTests(unittest.TestCase):
-    """The folders a global Scoop install points the products at are the ones the products default to for a service, so the two cannot drift."""
+    """The folders a global Scoop install points the products at are the ones the products default to for a service, so the two cannot drift (plan 33 SC31):
+    every manifest sets the one machine variable DBDATAKIT_DATA, and each service's folder is <that>\\<its name> by the one reader (SuiteEnvironment)."""
+
+    SHARED = [{"name": "DBDATAKIT_DATA", "programData": "DbDataKit"}]
+    # product folder -> the service name its folder has under the root
+    SERVICES = {"DbDataConsole": "server", "DbDataRunner": "runner", "DbDataStore": "store", "DbDataWorkspace": "workspace", "DbDataSync": "sync"}
 
     def meta(self, path):
         return json.loads((REPO_ROOT / path).read_text(encoding="utf-8"))
 
-    def test_the_console_manifest_names_the_directory_the_console_service_uses(self):
-        env = self.meta("DbDataConsole/dist.json")["globalEnv"]
-        self.assertEqual(env, [{"name": "DBDATAKIT_CONSOLE_DIR", "programData": "DbDataKit\\console"}])
-        settings = (REPO_ROOT / "DbDataConsole/src/DbDataConsole.Server/ConsoleSettings.cs").read_text(encoding="utf-8")
-        self.assertIn('DirectoryVariable = "DBDATAKIT_CONSOLE_DIR"', settings)
-        service = (REPO_ROOT / "DbDataConsole/src/DbDataConsole.Server/ConsoleService.cs").read_text(encoding="utf-8")
-        self.assertIn('SpecialFolder.CommonApplicationData), "DbDataKit", "console")', service)
+    def test_every_manifest_that_sets_a_variable_sets_the_one_shared_root(self):
+        for folder in self.SERVICES:
+            self.assertEqual(self.meta(f"{folder}/dist.json")["globalEnv"], self.SHARED, folder)
+
+    def test_the_root_and_the_services_folder_are_what_the_source_reads_and_registers(self):
+        engines = (REPO_ROOT / "DbDataKit/src/DbDataKit.State.Engines/SuiteEnvironment.cs").read_text(encoding="utf-8")
+        self.assertIn('DataRootVariable = "DBDATAKIT_DATA"', engines)
+        # the machine folder is <ProgramData>\DbDataKit\<service>: the same text the manifests' programData names
+        self.assertIn('Environment.SpecialFolder.CommonApplicationData, Environment.SpecialFolderOption.Create), "DbDataKit", name)', engines)
+        self.assertIn('/var/lib/dbdatakit/{name}', engines)
+        listed = engines.split("Services { get; }")[1].split("]")[0]
+        for service in list(self.SERVICES.values()) + ["gateway", "build", "identity"]:
+            self.assertIn(f'"{service}"', listed)
+
+    def test_each_service_registers_the_folder_the_shared_reader_gives_it(self):
+        for folder, service in (("DbDataConsole", "server"), ("DbDataRunner", "runner"), ("DbDataStore", "store"), ("DbDataWorkspace", "workspace"), ("DbDataBuild", "build")):
+            program = folder[6:]
+            if folder == "DbDataConsole":
+                path, settings, home = f"{folder}/src/DbDataConsole.Server/ConsoleService.cs", "ConsoleSettings", f"{folder}/src/DbDataConsole.Server/ConsoleSettings.cs"
+            elif folder == "DbDataBuild":
+                path, settings, home = f"{folder}/src/DbDataBuild.Cli/Server/BuildService.cs", "BuildServerSettings", f"{folder}/src/DbDataBuild.Cli/Server/BuildServer.cs"
+            else:
+                path, settings, home = f"{folder}/src/{folder}.Server/{program}Service.cs", f"{program}Settings", f"{folder}/src/{folder}.Server/{program}Settings.cs"
+            text = (REPO_ROOT / path).read_text(encoding="utf-8")
+            self.assertIn(f"SuiteEnvironment.ResolveServiceFolder({settings}.ServiceName)", text, path)
+            self.assertNotIn("CommonApplicationData", text, path)
+            self.assertIn(f'ServiceName = "{service}"', (REPO_ROOT / home).read_text(encoding="utf-8"), home)
 
     def test_the_sync_manifest_names_the_folder_sync_defaults_to(self):
-        env = self.meta("DbDataSync/dist.json")["globalEnv"]
-        self.assertEqual(env, [{"name": "DbDataSync__App__RepoRoot", "programData": "DbDataSync"}])
         cli = (REPO_ROOT / "DbDataSync/src/DbDataSync.Cli/CliOptions.cs").read_text(encoding="utf-8")
-        self.assertIn('"DbDataSync")', cli)
-        self.assertIn("DbDataSync__App__RepoRoot", cli)
+        self.assertIn('SuiteEnvironment.MachineFolder("sync")', cli)
+        self.assertIn('SuiteEnvironment.ResolveServiceFolder("sync")', cli)
 
+    def test_the_gateway_default_is_the_machine_folder_of_the_shared_reader(self):
+        host = (REPO_ROOT / "DbDataGateway/src/DbDataGateway.Server/Hosting/GatewayHost.cs").read_text(encoding="utf-8")
+        self.assertIn('SuiteEnvironment.ResolveServiceFolder("gateway")', host)
+        notes = self.meta("DbDataGateway/dist.json")["notes"]
+        self.assertIn("%ProgramData%\\DbDataKit\\gateway\\config", notes)
 
-    def test_the_store_and_workspace_manifests_name_the_folder_their_service_uses(self):
-        for folder, program, var in (("DbDataStore", "DbDataStore", "DBDATASTORE_SERVER_DIR"), ("DbDataWorkspace", "DbDataWorkspace", "DBDATAWORKSPACE_SERVER_DIR")):
-            env = self.meta(f"{folder}/dist.json")["globalEnv"]
-            self.assertEqual(env, [{"name": var, "programData": f"{program}\\server"}])
-            settings = (REPO_ROOT / f"{folder}/src/{folder}.Server/{program[6:]}Settings.cs").read_text(encoding="utf-8")
-            self.assertIn(f'DirectoryVariable = "{var}"', settings)
-            service = (REPO_ROOT / f"{folder}/src/{folder}.Server/{program[6:]}Service.cs").read_text(encoding="utf-8")
-            self.assertIn(f'SpecialFolder.CommonApplicationData), "{program}", "server")', service)
+    def test_no_manifest_names_a_variable_of_an_earlier_release(self):
+        old = ("DBDATAKIT_CONSOLE_DIR", "DBDATARUNNER_SERVER_DIR", "DBDATASTORE_SERVER_DIR", "DBDATAWORKSPACE_SERVER_DIR", "DBDATABUILD_SERVER_DIR", "DbDataSync__App__RepoRoot")
+        for path in REPO_ROOT.glob("*/dist.json"):
+            text = path.read_text(encoding="utf-8")
+            for name in old:
+                self.assertNotIn(name, text, path.name)
 
 
 class BindTests(DistTestCase):
@@ -225,6 +251,28 @@ class BindTests(DistTestCase):
         self.assertIn("scoop install -g", m["notes"])
         self.assertIn("WIDGET_DIR=%ProgramData%\\Acme\\widget", m["notes"])
         self.assertIn("Read the manual", m["notes"])         # the product's own notes stay
+
+    def test_an_uninstall_never_removes_the_shared_data_root(self):
+        out = self.fresh()
+        meta = dict(META, globalEnv=[{"name": "DBDATAKIT_DATA", "programData": "DbDataKit"}, {"name": "WIDGET_DIR", "programData": "Acme\\widget"}])
+        name = "widget-v2026.2.2.0200-win-x64.zip"
+        bind(out, meta=meta, version="2026.2.2.0200", sums=f"{'ab' * 32}  {name}\n")
+        m = json.loads((out / "widget.json").read_text())
+        self.assertIn("SetEnvironmentVariable('DBDATAKIT_DATA', (Join-Path $env:ProgramData 'DbDataKit'), 'Machine')", "\n".join(m["post_install"]))
+        undo = "\n".join(m["pre_uninstall"])
+        self.assertIn("WIDGET_DIR", undo)
+        self.assertNotIn("DBDATAKIT_DATA", undo)          # another product still installed reads it
+        self.assertIn("DBDATAKIT_DATA is left in place", m["notes"])
+
+    def test_a_product_that_sets_only_the_shared_root_has_no_uninstall_script(self):
+        out = self.fresh()
+        meta = dict(META, globalEnv=[{"name": "DBDATAKIT_DATA", "programData": "DbDataKit"}])
+        name = "widget-v2026.2.2.0200-win-x64.zip"
+        bind(out, meta=meta, version="2026.2.2.0200", sums=f"{'ab' * 32}  {name}\n")
+        m = json.loads((out / "widget.json").read_text())
+        self.assertIn("post_install", m)
+        self.assertNotIn("pre_uninstall", m)
+        self.assertIn("DBDATAKIT_DATA=%ProgramData%\\DbDataKit", m["notes"])
 
     def test_a_bad_global_env_entry_is_refused(self):
         for bad in ({"name": "not a name", "programData": "Widget"}, {"name": "OK", "programData": "C:\\Widget"}, {"name": "OK", "programData": "\\Widget"}, {"name": "OK"}):
