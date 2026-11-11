@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>DbDataKit.Agents</PackageId>
+    <Description>The agent runtime of the suite (plan 27a): the loop on Microsoft.Extensions.AI, tools bound to command specs, results marked as data, prompting per action, limits, the agent and policy definitions, context assembly, the model's space and skills. No provider and no host: a scripted client stands in for the model.</Description>
+    <IsPackable>true</IsPackable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <EmbeddedResource Include="schemas\*.schema.json" LogicalName="DbDataKit.Agents.schemas.%(Filename)%(Extension)" />
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
+    <PackageReference Include="JsonSchema.Net" />
+    <ProjectReference Include="..\DbDataKit.Cli\DbDataKit.Cli.csproj" />
+    <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
+    <ProjectReference Include="..\DbDataKit.Knowledge\DbDataKit.Knowledge.csproj" />
+  </ItemGroup>
+</Project>

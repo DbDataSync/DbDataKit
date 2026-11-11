@@ -29,11 +29,15 @@ DbDataBuild has its own MCP server (`dbdatabuild ui mcp`: tools, plus the JSON S
 
 Two guardrails already hold **outside the model**, as the design wants: a Build plan file carries its own hash and an edited plan is refused, and the write login is a separate variable an agent's shell does not hold.
 
+## `DbDataKit.Agents`: the runtime as a library (plan 27a)
+
+`Shared/src/DbDataKit.Agents` is the agent loop on `Microsoft.Extensions.AI` with no provider, host or screen (its README describes each piece). Built: the loop and the tools bound to command specs (AG03), prompting per action (AG07), limits and cost (AG08), the `agent/1` and `agent-policy/1` readers and `agent check` (AG09), context assembly, bound knowledge, the model's space, skills and model fallback (see the rows of plan 27a). Tested with a scripted fake model; nothing here calls a provider, and no host runs it yet (the back-end agent, AG14, waits for its host and the `agents` module).
+
 ## What is not built
 
 | Designed in plan 27 | State today |
 | --- | --- |
-| `DbDataKit.Agents` (runtime on `Microsoft.Extensions.AI`, scripted fake client, provider adapters) | not started; `Microsoft.Extensions.AI` is not in `Directory.Packages.props` |
+| `DbDataKit.Agents` provider adapters and recordings (AG04), model providers as connections (AG05) | not started (the runtime and the scripted fake are built, above) |
 | `agent/1` definitions, install policy, skills as a published kind | not started |
 | Prompting per action (the three settings, the three layers) | not started; `--allow-writes` is the one gate |
 | Traits printed in `--help`, the run header and the JSON document | not started (traits exist on every verb and in the MCP tool list, below) |
