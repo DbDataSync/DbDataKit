@@ -34,6 +34,8 @@ EXEMPT_FILES = {
     "docs/testing-environment.md": "the table of the old test variable names and the new ones",
     "docs/ci-lessons.md": "CI lessons name the test variables of the day they were learnt",
     "docs/release-notes/dbdatagateway-rename.md": "the release note of the rename DbDataProxy to DbDataGateway",
+    "scripts/rename_secret_names.py": "the script of the secret-name rename (it names the old variable forms it rewrites)",
+    "scripts/tests/test_rename_secret_names.py": "the test of that script",
     "scripts/rename_proxy_to_gateway.py": "the script of the rename DbDataProxy to DbDataGateway",
     "scripts/tests/test_rename_proxy_to_gateway.py": "the test of that script",
     "scripts/check_env_names.py": "this script holds the patterns",

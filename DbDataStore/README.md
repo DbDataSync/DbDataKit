@@ -19,8 +19,8 @@ dbdatastore state move --to-engine <engine> [--to-connection <string>] [--yes] [
 dbdatastore secret set|list|delete|... [--repo <server directory>]   # the server's own secret store (the shared secret verbs): the password a console's state connection refers to is dbdatakit:server:state:<name> (plan 29b C06)
 dbdatastore model put --file <model.yaml> [--name <model>] [--repo <server directory>]      # checked first, then saved
 dbdatastore storage create --model <model> [--repo <server directory>]                      # the tables of the model's own copy, on connections/<name>.yaml
-dbdatastore proxy add <name> --url <https address> --code <code> [--repo <server directory>]   # pair with a serving group as a publishing client
-dbdatastore proxy list | remove <name> [--repo <server directory>]
+dbdatastore gateway add <name> --url <https address> --code <code> [--repo <server directory>]   # pair with a serving group as a publishing client
+dbdatastore gateway list | remove <name> [--repo <server directory>]
 dbdatastore model publish <model> [--proxy <name>] [--dry-run] [--repo <server directory>]   # make the model as it is now available: its tables, then every group it is published to
 dbdatastore model unpublish <model> --proxy <name> [--repo <server directory>]
 dbdatastore health check [--url <url>]
@@ -110,7 +110,7 @@ Reads and writes of the data itself are served by the serving layer from the mod
 
 ## Publishing to the serving layer
 
-Reads and writes of master data are served by the serving layer (plan 20), from the models this server publishes to it, so they go on with this server stopped. Pair once with the serving group as a publishing client, with a code its administrator made (`dbdatagateway server pair --max-role publisher`): `dbdatastore proxy add edge --url https://serving.example:8815 --code <code>`.
+Reads and writes of master data are served by the serving layer (plan 20), from the models this server publishes to it, so they go on with this server stopped. Pair once with the serving group as a publishing client, with a code its administrator made (`dbdatagateway server pair --max-role publisher`): `dbdatastore gateway add edge --url https://serving.example:8815 --code <code>`.
 
 **Publishing is the one act that makes the model you are working on available** (plan 20 O10b). Editing a model's file changes nothing for anyone; `dbdatastore model publish <model>` (the first time with `--proxy <name>`; after that, to every group the model is published to):
 
