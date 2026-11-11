@@ -1,4 +1,3 @@
-import type { RenderedChart, RenderedMatrix, RenderedViewDocument } from '@dbdatakit/visuals'
 import type { RunResult } from './runTypes'
 import type { SemanticCatalogView } from './types'
 
@@ -102,84 +101,38 @@ export function suggest(result: RunResult): Encoding {
   return { rows: r.attributes.slice(0, 1), columns: r.attributes.slice(1, 2), value: r.measures[0] ?? '' }
 }
 
-/** Why an encoding cannot be drawn from this result, in words, or null. A channel that names a column the result lacks is refused here, as the renderer refuses it. */
-export function encodingProblem(result: RunResult, shape: ViewShape, e: Encoding): string | null {
-  const names = new Set(result.columns.map((c) => c.name))
-  for (const c of [...e.rows, ...e.columns, e.value]) if (c !== '' && !names.has(c)) return `view_unknown_field: '${c}' is not a column of this result.`
-  if (e.value === '') return 'view_missing_value: choose the measure to draw.'
-  const value = result.columns.find((c) => c.name === e.value)
-  if (value && !isNumber(value.type)) return `view_value_not_numeric: '${e.value}' is ${value.type}; a view draws a number.`
-  if (shape !== 'table' && e.rows.length === 0) return 'view_missing_rows: choose the attribute to draw along.'
-  if (e.rows.includes(e.value) || e.columns.includes(e.value)) return `view_value_in_axis: '${e.value}' cannot be both the measure and a heading.`
-  return null
-}
-
 const text = (v: unknown): string => (v === null || v === undefined ? '' : String(v))
 const format = (v: number): string => (Number.isInteger(v) ? v.toLocaleString('en-US') : v.toLocaleString('en-US', { maximumFractionDigits: 2 }))
 
-/** The rows of a result as objects by column name. */
-export function recordsOf(result: RunResult): Array<Record<string, unknown>> {
-  return result.rows.map((r) => Object.fromEntries(result.columns.map((c, i) => [c.name, r[i] ?? null])))
+/** The view document of the closed subset (`docs/semantic/presentation.md`) that asks the Gateway for a matrix or a chart of a result: only what is chosen here, never a cell. */
+export interface ViewSpec { spec_version: '0.3'; kind: 'view'; result: { ref: string }; views: Array<Record<string, unknown>> }
+
+/**
+ * The totals a matrix may ask for: a total row when the result has a level that rolled up exactly the row attributes, a total column for the column attributes. The result says which levels it has (`totals`), the Gateway's renderer
+ * reads the rows; nothing is added up here. Undefined when the result has none of them (the renderer would refuse a total the result lacks).
+ */
+export function totalsOf(result: RunResult, e: Encoding): { rows?: true; columns?: true } | undefined {
+  const levels = result.totals?.levels.filter((l) => l.level > 0)
+  if (!levels || levels.length === 0) return undefined
+  const logical = (names: string[]) => new Set(names.map((n) => result.columns.find((c) => c.name === n)?.binding ?? n))
+  const rolled = (names: string[]) => names.length > 0 && levels.some((l) => { const want = logical(names); return l.rolled_up.length === want.size && l.rolled_up.every((r) => want.has(r)) })
+  const totals = { ...(rolled(e.rows) ? { rows: true as const } : {}), ...(rolled(e.columns) ? { columns: true as const } : {}) }
+  return Object.keys(totals).length > 0 ? totals : undefined
 }
 
 /**
- * A matrix (`RenderedMatrix`): the rows' attributes down the left, the columns' attributes across, one value per cell. Totals are the rows the engine's own rollup column marks (a level above 0), shown as the
- * row or column that holds them; nothing is added up here. A row of the result whose attributes are all null at a rollup level is the grand total.
+ * What to send the Gateway's renderer for the shape and encodings chosen: a matrix (rows, columns, the value, the totals the result has) or a bar or line chart (the value along the first row attribute, coloured by the first column
+ * attribute) in the closed Vega-Lite subset. A table is drawn by the page itself (null). A choice the result cannot give (an unknown field, a stacked count, totals it lacks) is the renderer's refusal, in its words.
  */
-export function matrixOf(result: RunResult, e: Encoding, id = 'result'): RenderedMatrix {
-  const records = recordsOf(result)
-  const rollup = result.columns.some((c) => c.name === ROLLUP_COLUMN)
-  const isTotal = (r: Record<string, unknown>) => rollup && Number(r[ROLLUP_COLUMN] ?? 0) > 0
-  const labelOf = (r: Record<string, unknown>, names: string[]) => names.map((n) => (r[n] === null || r[n] === undefined ? (isTotal(r) ? 'Total' : '') : text(r[n])))
-  const rowKeys: string[] = []
-  const rowLabels = new Map<string, { labels: string[]; total: boolean }>()
-  const columnKeys: string[] = []
-  const columnLabels = new Map<string, { labels: string[]; total: boolean }>()
-  const cells = new Map<string, number | null>()
-  for (const r of records) {
-    // a total over the columns' attributes is a total column; over the rows', a total row
-    const total = isTotal(r)
-    const rl = labelOf(r, e.rows)
-    const cl = e.columns.length > 0 ? labelOf(r, e.columns) : [e.value]
-    const rk = rl.join('\u0000') + (total && e.rows.every((n) => r[n] === null) ? '#total' : '')
-    const ck = cl.join('\u0000')
-    if (!rowLabels.has(rk)) { rowKeys.push(rk); rowLabels.set(rk, { labels: rl, total: total && e.rows.every((n) => r[n] === null || r[n] === undefined) }) }
-    if (!columnLabels.has(ck)) { columnKeys.push(ck); columnLabels.set(ck, { labels: cl, total: total && e.columns.length > 0 && e.columns.every((n) => r[n] === null || r[n] === undefined) }) }
-    const v = r[e.value]
-    cells.set(rk + '\u0001' + ck, typeof v === 'number' ? v : v === null || v === undefined ? null : Number(v))
-  }
-  // the total row last, the total column last
-  const orderedRows = [...rowKeys.filter((k) => !rowLabels.get(k)!.total), ...rowKeys.filter((k) => rowLabels.get(k)!.total)]
-  const orderedColumns = [...columnKeys.filter((k) => !columnLabels.get(k)!.total), ...columnKeys.filter((k) => columnLabels.get(k)!.total)]
-  return {
-    id, type: 'matrix', notice: null,
-    columns: orderedColumns.map((k) => ({ labels: columnLabels.get(k)!.labels, ...(columnLabels.get(k)!.total ? { total: true } : {}) })),
-    rows: orderedRows.map((rk) => ({
-      labels: rowLabels.get(rk)!.labels, ...(rowLabels.get(rk)!.total ? { total: true } : {}),
-      cells: orderedColumns.map((ck) => { const v = cells.get(rk + '\u0001' + ck); return v === undefined || v === null ? { v: null, text: '' } : { v, text: format(v) } }),
-    })),
-  }
-}
-
-/**
- * A chart (`RenderedChart`) in the closed Vega-Lite subset: a bar or a line of the value along the first row attribute, coloured by the first column attribute when there is one; encodings only, the rows inline as the
- * spec's data. A totals row is left out (a total is not a bar among its parts).
- */
-export function chartOf(result: RunResult, shape: 'bar' | 'line', e: Encoding, id = 'result'): RenderedChart {
-  const rollup = result.columns.some((c) => c.name === ROLLUP_COLUMN)
-  const x = e.rows[0]!
-  const keep = recordsOf(result).filter((r) => !(rollup && Number(r[ROLLUP_COLUMN] ?? 0) > 0))
-  const field = (name: string) => ({ field: name, type: isNumber(result.columns.find((c) => c.name === name)?.type ?? '') ? 'quantitative' : 'nominal' })
-  const encoding: Record<string, unknown> = { x: { ...field(x), ...(shape === 'bar' ? { sort: null } : {}) }, y: { field: e.value, type: 'quantitative' } }
-  if (e.columns[0]) encoding.color = field(e.columns[0])
-  const values = keep.map((r) => Object.fromEntries([x, e.value, ...(e.columns[0] ? [e.columns[0]] : [])].map((n) => [n, (r[n] ?? null) as string | number | boolean | null])))
-  return { id, type: 'chart', vega_lite: { mark: shape === 'bar' ? 'bar' : 'line', encoding, data: { values } } }
-}
-
-/** The document `RenderedViews` draws, from a result and the choice made: a matrix or a chart; a table is drawn by the page itself. */
-export function viewDocument(result: RunResult, shape: ViewShape, e: Encoding): RenderedViewDocument | null {
+export function viewSpecFor(result: RunResult, shape: ViewShape, e: Encoding): ViewSpec | null {
   if (shape === 'table') return null
-  return { kind: 'rendered_view', status: 'complete', views: [shape === 'matrix' ? matrixOf(result, e) : chartOf(result, shape, e)] }
+  const id = 'result'
+  const field = (name: string) => ({ field: name, type: isNumber(result.columns.find((c) => c.name === name)?.type ?? '') ? 'quantitative' : 'nominal' })
+  const totals = totalsOf(result, e)
+  const view: Record<string, unknown> = shape === 'matrix'
+    ? { type: 'matrix', id, rows: e.rows, columns: e.columns, values: e.value === '' ? [] : [{ field: e.value }], ...(totals ? { totals } : {}) }
+    : { type: 'chart', id, vega_lite: { mark: shape, encoding: { ...(e.rows[0] ? { x: field(e.rows[0]) } : {}), y: { field: e.value, type: 'quantitative' }, ...(e.columns[0] ? { color: field(e.columns[0]) } : {}) } } }
+  return { spec_version: '0.3', kind: 'view', result: { ref: 'result' }, views: [view] }
 }
 
 /** The cell a table shows for a value. */

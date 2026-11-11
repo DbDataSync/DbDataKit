@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError, ErrorBanner } from '@dbdatakit/shell'
-import { RenderedViews } from '@dbdatakit/visuals'
+import { RenderedViews, type RenderedViewDocument } from '@dbdatakit/visuals'
 import { gatewayApi } from '../api'
 import { GatewayShell } from '../GatewayShell'
 import {
-  DEFAULT_LIMIT, bodyFor, cellText, clampLimit, encodingProblem, members, pinLink, pinRequest, picksOf, refusal, requestText, roles, scansOf, sqlFromPicks, suggest, toggle, viewDocument,
+  DEFAULT_LIMIT, bodyFor, cellText, clampLimit, members, pinLink, pinRequest, picksOf, refusal, requestText, roles, scansOf, sqlFromPicks, suggest, toggle, viewSpecFor,
   type Encoding, type Mode, type Picks, type ViewShape,
 } from '../explorer'
 import type { RunResult } from '../runTypes'
@@ -28,8 +28,12 @@ export interface ExplorerViewProps {
   /** The engine's or the Gateway's refusal, with its code in front, or a problem found before anything was sent. */
   error: string | null
   result?: RunResult
-  /** The model version the result met. */
   shape: ViewShape
+  /** What the Gateway's renderer made of the matrix or chart chosen (its own errors when it refuses the encoding), and whether that is being asked. */
+  rendered?: RenderedViewDocument
+  rendering?: boolean
+  /** A problem reaching the renderer (not the renderer's refusal, which is in `rendered`). */
+  renderError?: string | null
   encoding: Encoding
   save: SaveForm
   onMode: (mode: Mode) => void
@@ -66,8 +70,6 @@ function Result(p: ExplorerViewProps) {
   }
   const r = roles(result)
   const pinned = pinRequest(p.text, p.picks)
-  const problem = p.shape === 'table' ? null : encodingProblem(result, p.shape, p.encoding)
-  const document = problem === null ? viewDocument(result, p.shape, p.encoding) : null
   const option = (names: string[]) => names.map((n) => <option key={n} value={n}>{n}</option>)
   return (
     <div data-testid="run-result">
@@ -98,8 +100,13 @@ function Result(p: ExplorerViewProps) {
             )}
             {r.hasTotals && <span className="hint" data-testid="has-totals">The result carries totals.</span>}
           </div>
-          {problem && <div role="alert" className="hint" data-testid="view-error">{problem}</div>}
-          {document && <div data-testid="view-drawn"><RenderedViews document={document} /></div>}
+          {p.renderError && <div role="alert" className="hint" style={wrap} data-testid="view-error">{p.renderError}</div>}
+          {p.shape !== 'table' && p.rendering && !p.rendered && <div className="hint" data-testid="view-rendering">Drawing…</div>}
+          {p.shape !== 'table' && p.rendered && (
+            <div data-testid={p.rendered.status === 'failed' ? 'view-refused' : 'view-drawn'}>
+              <RenderedViews document={p.rendered} />
+            </div>
+          )}
           {p.shape === 'table' && (
             <div className="card flush" style={{ overflowX: 'auto' }}>
               <table className="mono" data-testid="result-table" style={{ width: '100%' }}>
@@ -196,6 +203,12 @@ export function ExplorerPage() {
   const [result, setResult] = useState<RunResult | undefined>()
   const [shape, setShape] = useState<ViewShape>('table')
   const [encoding, setEncoding] = useState<Encoding>({ rows: [], columns: [], value: '' })
+  const [rendered, setRendered] = useState<RenderedViewDocument | undefined>()
+  const [rendering, setRendering] = useState(false)
+  const [renderError, setRenderError] = useState<string | null>(null)
+  // the body of the last run and the id of the result the Gateway kept for it: another view of it is a render, not a run
+  const last = useRef<{ body: Record<string, unknown>; id?: string }>({ body: {} })
+  const drawn = useRef(0)
   const [save, setSave] = useState<SaveForm>({ name: '', description: '', saved: null, error: null, busy: false })
 
   // a statement handed over by the address: a run record, a saved query, or plain text
@@ -223,14 +236,38 @@ export function ExplorerPage() {
     if ('problem' in built) { setError(built.problem); return }
     setRunning(true)
     try {
-      const answer = await gatewayApi.runs.run(built.body)
+      // a result that may be drawn is kept by the Gateway, so a matrix or a chart of it later runs nothing
+      const body = explain ? built.body : { ...built.body, keep: true }
+      const answer = await gatewayApi.runs.run(body)
+      last.current = { body: built.body, id: answer.result_id }
+      setRendered(undefined)
       setResult(answer)
-      if (answer.status === 'ok') { const s = suggest(answer); setEncoding(s); if (shape !== 'table' && encodingProblem(answer, shape, s)) setShape('table') }
+      if (answer.status === 'ok') setEncoding(suggest(answer))
     } catch (e) {
       setResult(undefined)
       setError(say(e))
     } finally { setRunning(false) }
   }
+
+  // the matrix or chart chosen is the Gateway's renderer's: ask it for the result kept, or, when that is gone, run the statement again with the view
+  useEffect(() => {
+    const ticket = ++drawn.current
+    const spec = result?.status === 'ok' ? viewSpecFor(result, shape, encoding) : null
+    setRenderError(null)
+    if (!spec) { setRendered(undefined); setRendering(false); return }
+    setRendering(true)
+    const draw = async () => {
+      if (last.current.id) {
+        try { return (await gatewayApi.runs.render(last.current.id, spec)).rendered_view } catch (e) { if (!(e instanceof ApiError && e.status === 410)) throw e }
+      }
+      const again = await gatewayApi.runs.run({ ...last.current.body, keep: true, view: spec })
+      last.current = { ...last.current, id: again.result_id }
+      return again.rendered_view
+    }
+    draw().then((doc) => { if (ticket === drawn.current) setRendered(doc) })
+      .catch((e) => { if (ticket === drawn.current) { setRendered(undefined); setRenderError(say(e)) } })
+      .finally(() => { if (ticket === drawn.current) setRendering(false) })
+  }, [result, shape, encoding])
 
   const keep = async () => {
     const built = bodyFor(name, text, {})
@@ -245,11 +282,11 @@ export function ExplorerPage() {
   }
 
   const props = useMemo<ExplorerViewProps>(() => ({
-    model: name, catalog: catalog.data, catalogError: catalog.error, mode, text, picks, running, error, result, shape, encoding, save,
+    model: name, catalog: catalog.data, catalogError: catalog.error, mode, text, picks, running, error, result, shape, encoding, rendered, rendering, renderError, save,
     onMode, onText: setText, onToggle, onLimit, onRun: () => void send(false), onExplain: () => void send(true), onShape: setShape, onEncoding: setEncoding,
     onSaveName: (n) => setSave((s) => ({ ...s, name: n })), onSaveDescription: (d) => setSave((s) => ({ ...s, description: d })), onSave: () => void keep(),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [name, catalog.data, catalog.error, mode, text, picks, running, error, result, shape, encoding, save])
+  }), [name, catalog.data, catalog.error, mode, text, picks, running, error, result, shape, encoding, rendered, rendering, renderError, save])
 
   return (
     <GatewayShell crumbs={[{ label: 'Models', to: '/models' }, { label: name, mono: true, to: `/models/${encodeURIComponent(name)}` }, { label: 'Explorer', heading: true }]}>
