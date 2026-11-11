@@ -392,7 +392,8 @@ jobs:
         run: |
           Invoke-WebRequest https://dot.net/v1/dotnet-install.ps1 -OutFile "$env:RUNNER_TEMP\dotnet-install.ps1"
           & "$env:RUNNER_TEMP\dotnet-install.ps1" -Runtime aspnetcore -Channel 10.0 -InstallDir "$env:ProgramFiles\dotnet"
-          if ($LASTEXITCODE -ne 0) { throw "dotnet-install exited $LASTEXITCODE" }
+          # dotnet-install.ps1 is a script, not a program: it throws on failure and leaves $LASTEXITCODE unset, so the check is for the result
+          if (-not (Test-Path "$env:ProgramFiles\dotnet\shared\Microsoft.AspNetCore.App")) { throw "the ASP.NET Core runtime was not installed" }
       - uses: actions/download-artifact@v8
         with:
           pattern: release-*
