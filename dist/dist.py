@@ -231,7 +231,7 @@ def suite_notes(members):
         note = " (its default management address; change it with the server's own setting and give that address instead)" if address else ""
         lines.append(
             f"{n}. Pair {_alias(meta)}: run '{_alias(meta)} server pair --max-role {_PAIR_ROLES.get(meta['product'], _PAIR_ROLES_DEFAULT)}' (it prints a single-use code), then "
-            f"'{console} instance add {target} --code <code>'{note}."
+            f"'{console} instance add {target} --code <code> --name {meta['product']}'{note}."
         )
     lines.append("The first administrator is invited with the link in %ProgramData%\\DbDataKit\\server\\FIRST-RUN.txt.")
     return "\n".join(lines)

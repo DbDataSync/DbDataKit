@@ -124,6 +124,8 @@ Use **one route per machine**: the package installs under Scoop's folder, while 
 
 ### The whole install on one server, one command
 
+The commands the script runs, one by one, for a machine that runs only the Console, the Gateway and the Runner (or to finish a step by hand), are in `docs/suite-single-server-install.md`.
+
 In an elevated PowerShell, with [Scoop](https://scoop.sh) installed:
 
 ```powershell
@@ -146,7 +148,7 @@ That is all: when it returns, every member's service is registered, running and 
 
 ### Joining a console by announcement (separately installed products)
 
-Where products are installed one by one (the single-server case of Console, Gateway and Runner is three steps), nobody types a pairing code: give each server the console's private announce address and an administrator confirms it.
+Where products are installed one by one on separate machines, nobody types a pairing code: give each server the console's private announce address and an administrator confirms it. (The single-server case of Console, Gateway and Runner is `docs/suite-single-server-install.md`: the one Scoop command, or the same steps by hand with the commands the install script runs, which pair with codes and need no announce port.)
 
 1. Console: `dbdatakit server run --announce-listen http://<console address>:8481` (its private port; keep it on the network the servers share).
 2. Each server: install with the address, `msiexec /i dbdatagateway-v<version>-win-x64.msi ANNOUNCEURL=http://<console address>:8481 /qn` (the MSI sets the machine variable `DBDATAKIT_ANNOUNCE_URL` before it registers the service and refuses an address that is not http or https), or `install.ps1 -AnnounceUrl ...`, or on Linux `install.sh --announce-url ...` and the printed `Environment=` line in the unit.
