@@ -296,7 +296,13 @@ public sealed class RunnerPublishApiTests : IDisposable
             if (File.Exists(candidate)) return candidate;
         }
 
-        return null;
+        // the default layout: the CLI sits in its own project folder under src/, found from the repository's DbDataSync.slnf like TestApiFactory finds the TaskRunner
+        var baseDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
+        var root = new DirectoryInfo(baseDir);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "DbDataSync.slnf"))) root = root.Parent;
+        if (root is null) return null;
+        var sibling = Path.Combine(root.FullName, "src", "DbDataSync.Cli", "bin", Path.GetFileName(Path.GetDirectoryName(baseDir))!, Path.GetFileName(baseDir), "DbDataSync.Cli.dll");
+        return File.Exists(sibling) ? sibling : null;
     }
 
     [Fact]
