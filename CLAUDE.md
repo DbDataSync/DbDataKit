@@ -116,5 +116,5 @@ The rule is about that, not about branches or merge style.
 - Branches: pushing a work-in-progress branch is fine; leaving it behind is not. The workflow `delete-merged-branch.yml` deletes a pull request's branch
   when it merges; a branch that was pushed and then abandoned, or whose work moved into another branch, is deleted by whoever abandoned it, in the same
   session. Sessions cannot delete remote branches themselves: the list `scripts/branches-to-delete.txt` and the workflow `delete-listed-branches.yml`
-  (see `docs/branch-cleanup.md`) do it. Bring a branch up to date by merging `main` into it rather than copying it to a new name. Do not create one
+  (see `docs/branch-cleanup.md`) do it. Bring a branch up to date by merging `main` into it rather than copying it to a new name. `backup/*` branches (`scripts/backup_branches.py`, `docs/agent-workflow.md`) are the exception: pending work is pushed there as a backup and they are deleted automatically once `main` contains them and they are a day old. Do not create one
   branch per task.

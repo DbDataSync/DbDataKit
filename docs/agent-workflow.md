@@ -32,7 +32,7 @@ At most five to seven agents run at once. More is possible on paper; the machine
    only because agent worktrees exist: run them from a clean path or ignore a complaint that names only a worktree path.
 5. **Remove the finished agent's worktree** (`git worktree remove -f -f .claude/worktrees/agent-<id>`); the branch stays.
 6. **Start the next agent** from the list of open work, so slots are not idle.
-7. **Push only when no run is in progress** (next section).
+7. **Back up** (`python3 scripts/backup_branches.py push`), then **push to main only when no run is in progress** (next sections).
 
 ## Pushing
 
@@ -43,6 +43,20 @@ A push to `main` starts a run set and **cancels** the one still running. So:
 - Fast-forward only. If the push is refused, the CI agent pushed in between: `git fetch`, `git merge origin/main`, check again.
 - One push per completed run set. The CI agent does it on its own cadence; the coordinator pushes when a stop hook demands it and nothing runs.
 - A big merge that was never built together is pushed anyway **after** the checks pass; CI is its first real build, which is why the CI agent is told to watch that run set hardest.
+
+## Backups
+
+The machine is temporary: work that exists only in a local `main` or in an agent's local branch is lost with it. Pending work is therefore pushed to **backup branches**
+while it waits for CI to be idle:
+
+- `python3 scripts/backup_branches.py push` pushes local `main` to `backup/main` and every local `work/*` branch that `origin/main` does not contain yet to `backup/<branch>`
+  (for example `backup/work/delivery2`). Plain pushes, never forced: the branches only grow, so each push is a fast-forward. **The coordinator runs it after every merge into the local
+  main** (and the CI agent at the start of each cycle). Pushes to `backup/*` start no CI run (workflows run on pushes to `main` only).
+- Only **committed** work is covered: one commit per slice is why the rule exists. An agent's uncommitted files are not backed up; ask a long-running agent to commit work in progress to its branch.
+- The workflow **Backup branch cleanup** (`.github/workflows/backup-branch-cleanup.yml`, hourly) runs `python3 scripts/backup_branches.py clean --apply`: a `backup/*` branch is deleted
+  when its tip is contained in `origin/main` **and** its tip commit is older than 24 hours. A backup main has not caught up with is never deleted. By hand: Actions tab, "Run workflow"
+  (a dry run unless `apply` is true).
+- To recover after a lost machine: `git fetch origin 'refs/heads/backup/*:refs/remotes/origin/backup/*'`, then merge or check out the backup branches (`backup/main` first).
 
 ## Resources (a 4-core machine with a small disk)
 
