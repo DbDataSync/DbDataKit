@@ -34,7 +34,12 @@ function Native([string]$name, [scriptblock]$command) {
   $old = $ErrorActionPreference
   $ErrorActionPreference = 'Continue'
   $global:LASTEXITCODE = 0
-  try { & $command *>&1 | Tee-Object -FilePath $file | Out-Host; $code = $LASTEXITCODE } finally { $ErrorActionPreference = $old }
+  try {
+    # Scoop is PowerShell and runs a manifest's hook in this process: a hook that throws (the refusals of dbdatakit-full do) ends the command by an exception, not an exit code. It is the command's
+    # answer here, written to the file and counted as a failure of the command, so the assertions after it can read what it said.
+    try { & $command *>&1 | Tee-Object -FilePath $file | Out-Host; $code = $LASTEXITCODE }
+    catch { $said = ($_ | Out-String); Add-Content -Path $file -Value $said; Write-Host $said; $code = 1 }
+  } finally { $ErrorActionPreference = $old }
   if ($null -eq $code) { $code = 0 }
   return [pscustomobject]@{ Code = $code; File = $file; Text = (Get-Content $file -Raw) }
 }
