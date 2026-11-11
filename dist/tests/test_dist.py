@@ -389,6 +389,34 @@ class BashInstallerTests(DistTestCase):
 
 
 @unittest.skipIf(os.name == "nt", "install.sh is for Linux and macOS")
+class GatewayContainerManagementTests(unittest.TestCase):
+    """The Gateway's management API is the administration API: its container image binds it to loopback, and no compose file publishes it beyond the host's loopback (plan 33 D15)."""
+
+    def test_the_image_binds_management_to_loopback_and_exposes_only_flight(self):
+        text = (REPO_ROOT / "DbDataGateway/Dockerfile").read_text(encoding="utf-8")
+        lines = [line for line in text.splitlines() if not line.lstrip().startswith("#")]
+        code = "\n".join(lines)
+        self.assertIn("DBDATAKIT_Gateway__Management__Address=127.0.0.1", code)
+        self.assertNotIn("Management__Enabled=false", code)         # on by default is the owner's decision (D15)
+        self.assertEqual([line for line in lines if line.startswith("EXPOSE")], ["EXPOSE 8815"])
+
+    def test_no_compose_file_publishes_the_management_port_beyond_loopback(self):
+        import re
+        files = sorted((REPO_ROOT / "dist/compose").glob("*.yml"))
+        self.assertTrue(files)
+        for path in files:
+            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                entry = re.match(r'\s*-\s*"?([^"#\s]+)"?', line)
+                if line.lstrip().startswith("-") and entry and re.search(r"(^|:)8816(:|$)", entry.group(1)):
+                    self.assertTrue(entry.group(1).startswith("127.0.0.1:"), f"{path.name}:{number} publishes 8816 on every address: {line.strip()}")
+
+    def test_a_compose_file_that_widens_management_does_not_publish_it(self):
+        for path in sorted((REPO_ROOT / "dist/compose").glob("*.yml")):
+            text = path.read_text(encoding="utf-8")
+            if "Management__Address: 0.0.0.0" in text:
+                self.assertNotIn('- "8816:8816"', text, path.name)
+
+
 class ShippedGatewayTests(unittest.TestCase):
     """The Gateway ships a win-x64 zip (self-contained, MSI and Scoop) and a linux-x64 zip (framework-dependent, install.sh; plan 33 SC01, SC02): its real
     dist.json is bound and installed from a fake release that has both zips, the way a two-platform dist.json is."""

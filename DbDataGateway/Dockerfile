@@ -35,8 +35,16 @@ RUN apt-get update \
 #    && apt-get update && ACCEPT_EULA=Y apt-get install -y msodbcsql18
 WORKDIR /app
 COPY --from=build /app .
+# The Flight port listens on every address of the container (it is what clients connect to) and is the only port the image exposes.
+# The management API (https, port 8816, plan 33 D15) is on by default but bound to the container's loopback address: nothing outside the container
+# reaches it, `-p 8816:8816` publishes nothing, and no console can pair with it until its address is widened. To let a console in another container
+# pair with it, set DBDATAKIT_Gateway__Management__Address=0.0.0.0 on a private network and **never publish 8816** (dist/compose/gateway.yml does
+# exactly that); to pair from the host, publish it on loopback only (-p 127.0.0.1:8816:8816, with the address 0.0.0.0 inside). Every call needs a
+# token that `dbdatagateway server pair` issued, but the port itself is a listener of the admin API: keep it off public interfaces.
+# `DBDATAKIT_Gateway__Management__Enabled=false` turns it off. dist/tests checks this block and that no compose file publishes 8816 beyond loopback.
 ENV DBDATAKIT_DATA_GATEWAY=/data \
-    DBDATAKIT_Gateway__Listen__Address=0.0.0.0
+    DBDATAKIT_Gateway__Listen__Address=0.0.0.0 \
+    DBDATAKIT_Gateway__Management__Address=127.0.0.1
 VOLUME /data
 EXPOSE 8815
 ENTRYPOINT ["dotnet", "dbdatagateway.dll", "server", "run"]
