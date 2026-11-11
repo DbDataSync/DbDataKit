@@ -95,19 +95,20 @@ foreach ($m in $members) {
   Copy-Item $zip $to
   $sums += (Join-Path $from 'SHA256SUMS')
 }
-function Bind([string]$version, [string]$out) {
+# (PowerShell names are not case-sensitive: a parameter called $version would hide the script's $Version, so this one is $forVersion)
+function Bind([string]$forVersion, [string]$out) {
   # a second version: the same files under the second version's names, so the manifest of the update differs only by its version and its urls
-  if ($version -ne $Version) {
+  if ($forVersion -ne $Version) {
     foreach ($m in $members) {
-      $to = Join-Path $serve "$($m.product)\v$version"
+      $to = Join-Path $serve "$($m.product)\v$forVersion"
       New-Item -ItemType Directory -Force $to | Out-Null
-      Copy-Item (Join-Path $serve "$($m.product)\v$Version\$($m.product)-v$Version-win-x64.zip") (Join-Path $to "$($m.product)-v$version-win-x64.zip")
-      $hash = (Get-FileHash (Join-Path $to "$($m.product)-v$version-win-x64.zip") -Algorithm SHA256).Hash.ToLower()
-      Add-Content -Path (Join-Path $Work 'SHA256SUMS.second') -Value "$hash  $($m.product)-v$version-win-x64.zip"
+      Copy-Item (Join-Path $serve "$($m.product)\v$Version\$($m.product)-v$Version-win-x64.zip") (Join-Path $to "$($m.product)-v$forVersion-win-x64.zip")
+      $hash = (Get-FileHash (Join-Path $to "$($m.product)-v$forVersion-win-x64.zip") -Algorithm SHA256).Hash.ToLower()
+      Add-Content -Path (Join-Path $Work 'SHA256SUMS.second') -Value "$hash  $($m.product)-v$forVersion-win-x64.zip"
     }
     $sumFiles = @((Join-Path $Work 'SHA256SUMS.second'))
   } else { $sumFiles = $sums }
-  & python (Join-Path $repoRoot 'dist\dist.py') bind --suite (Join-Path $repoRoot 'dist\suite.json') --root $repoRoot --version $version --sums @sumFiles --base-url "http://127.0.0.1:$Port" --out $out
+  & python (Join-Path $repoRoot 'dist\dist.py') bind --suite (Join-Path $repoRoot 'dist\suite.json') --root $repoRoot --version $forVersion --sums @sumFiles --base-url "http://127.0.0.1:$Port" --out $out
   if ($LASTEXITCODE -ne 0) { throw "dist.py bind --suite exited $LASTEXITCODE" }
 }
 $manifestDir = Join-Path $Work 'manifest'
