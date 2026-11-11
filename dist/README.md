@@ -144,6 +144,14 @@ That is all: when it returns, every member's service is registered, running and 
 
 `scoop uninstall -g dbdatakit-full` removes the pairings and the services and the files; `%ProgramData%\DbDataKit` (settings, data, `DBDATAKIT_DATA`) stays until the administrator deletes it. **One route per machine:** the install is refused when a member's service is already registered from another folder, so a machine that has a product from its own MSI, `install.ps1` or manifest uninstalls it first. For a machine that runs one product, or products that join by announcement (plan 33 SC10), use the product's own route above.
 
+### Joining a console by announcement (separately installed products)
+
+Where products are installed one by one (the single-server case of Console, Gateway and Runner is three steps), nobody types a pairing code: give each server the console's private announce address and an administrator confirms it.
+
+1. Console: `dbdatakit server run --announce-listen http://<console address>:8481` (its private port; keep it on the network the servers share).
+2. Each server: install with the address, `msiexec /i dbdatagateway-v<version>-win-x64.msi ANNOUNCEURL=http://<console address>:8481 /qn` (the MSI sets the machine variable `DBDATAKIT_ANNOUNCE_URL` before it registers the service and refuses an address that is not http or https), or `install.ps1 -AnnounceUrl ...`, or on Linux `install.sh --announce-url ...` and the printed `Environment=` line in the unit.
+3. Administrator: `dbdatakit instance pending`, then `dbdatakit instance confirm <id or name>` (or the console's screen). A server that announces is **not** paired and not trusted until then; the announcement is never a confirmation. A removal leaves the variable in place, as it leaves the data folders (another product on the machine reads it).
+
 ## Adding or changing a product
 
 Edit `<Product>/dist.json`:
@@ -158,6 +166,7 @@ Edit `<Product>/dist.json`:
 | `requiresDotnet` | warns after install when that runtime is missing. A platform may carry its own (`"linux-x64": { "exe": "...", "requiresDotnet": "10.0" }`) for a product whose Windows zip is self-contained and whose Linux zip is not (the Gateway); `install.sh` reads it, the product-level one wins, and install.ps1, Scoop and the MSI read only the product-level one |
 | `msi.upgradeCode` | the installer's fixed GUID, **never changed** (it is how a newer version finds the older one) |
 | `msi.addToPath` | the installer puts its folder on the machine PATH |
+| `announces` | `true` for a server that announces itself to a console (every product with a `service` except the console): the MSI takes `ANNOUNCEURL=<console announce address>` and sets the machine variable `DBDATAKIT_ANNOUNCE_URL`, `install.ps1 -AnnounceUrl` sets it for the machine or the user, `install.sh --announce-url` prints the line for the service's unit |
 | `service.unregister` | the command the installer runs on removal (with `register`, `{name}` is substituted) |
 | `requiresVcRuntime` | the Windows program needs the Visual C++ Redistributable: `install.ps1` warns when `vcruntime140.dll` is missing and the Scoop manifest suggests `extras/vcredist2022` |
 | `notes` | printed after install and shown by Scoop |

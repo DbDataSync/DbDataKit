@@ -13,6 +13,7 @@
     }
   },
   "windowsScope": "user",
+  "announces": true,
   "globalEnv": [
     { "name": "DBDATAKIT_DATA", "programData": "DbDataKit" }
   ],

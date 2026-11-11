@@ -158,6 +158,10 @@ jobs:
         shell: pwsh
         run: |
           ./dist/tests/msi-pairing-e2e.ps1 -ConsoleMsi "$PWD\msi\dbdatakit\v1.msi" -ProductExe "$env:RUNNER_TEMP\build-out\dbdatabuild.exe"
+      - name: A product installed with ANNOUNCEURL waits in the console's pending list
+        shell: pwsh
+        run: |
+          ./dist/tests/msi-announce-e2e.ps1 -ConsoleMsi "$PWD\msi\dbdatakit\v1.msi" -ProductMsi "$PWD\msi\dbdatabuild\v1.msi" -ProductExe "$env:RUNNER_TEMP\build-out\dbdatabuild.exe"
       - uses: actions/upload-artifact@v7
         if: failure()
         with:

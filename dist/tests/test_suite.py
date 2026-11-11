@@ -376,6 +376,16 @@ class SuiteInstallTestPlumbingTests(unittest.TestCase):
         self.assertIn("is registered already", script)
         self.assertIn("is listed by the console already", script)
 
+    def test_the_announce_script_is_balanced_and_wired_into_the_msi_job(self):
+        check_balanced((DIST / "tests" / "msi-announce-e2e.ps1").read_text(encoding="utf-8"))
+        workflow = (REPO_ROOT / ".github" / "workflows" / "dist-msi-ci.yml").read_text(encoding="utf-8")
+        self.assertIn("msi-announce-e2e.ps1", workflow)
+
+    def test_every_service_product_announces_except_the_console(self):
+        for product in ("DbDataGateway", "DbDataSync", "DbDataBuild", "DbDataRunner", "DbDataStore", "DbDataWorkspace"):
+            self.assertTrue(json.loads((REPO_ROOT / product / "dist.json").read_text())["announces"], product)
+        self.assertNotIn("announces", json.loads((REPO_ROOT / "DbDataKit" / "dist.json").read_text()))
+
     def test_the_job_runs_after_the_dry_run_checks_and_only_in_a_dry_run(self):
         text = (REPO_ROOT / ".github" / "workflows" / "suite-release.yml").read_text(encoding="utf-8")
         job = text[text.index("  suite-install-windows:"):]

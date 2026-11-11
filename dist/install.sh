@@ -25,6 +25,7 @@ PRERELEASE=0
 DRY_RUN=0
 SYSTEM=0
 NO_LINK=0
+ANNOUNCE_URL=
 INSTALL_DIR=''
 REPO="$DEFAULT_REPO"
 API_BASE='https://api.github.com'
@@ -40,6 +41,7 @@ Usage: install.sh [options]
   --system            install for all users (/opt, /usr/local/bin); needs root
   --install-dir <d>   install into <d>
   --no-link           do not put the program on the PATH
+  --announce-url <u>  the console's announce address (http://console:8481); prints the environment line the server's service needs to announce itself there
   --repo <owner/repo> --api-base <url>
 USAGE
 }
@@ -52,6 +54,7 @@ while [ $# -gt 0 ]; do
     --system) SYSTEM=1; shift ;;
     --install-dir) [ $# -ge 2 ] || die "--install-dir needs a value"; INSTALL_DIR="$2"; shift 2 ;;
     --no-link) NO_LINK=1; shift ;;
+    --announce-url) [ $# -ge 2 ] || die "--announce-url needs a value"; ANNOUNCE_URL="$2"; shift 2 ;;
     --repo) [ $# -ge 2 ] || die "--repo needs a value"; REPO="$2"; shift 2 ;;
     --api-base) [ $# -ge 2 ] || die "--api-base needs a value"; API_BASE="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -197,3 +200,10 @@ if [ -n "$REQUIRES_DOTNET" ]; then
   fi
 fi
 [ -z "$NOTES" ] || echo "$NOTES"
+if [ -n "$ANNOUNCE_URL" ]; then
+  if [ "$ANNOUNCES" = 1 ]; then
+    echo "To announce to the console at $ANNOUNCE_URL (it then waits in 'dbdatakit instance pending'), run the server with DBDATAKIT_ANNOUNCE_URL=$ANNOUNCE_URL (in a systemd unit: Environment=DBDATAKIT_ANNOUNCE_URL=$ANNOUNCE_URL)."
+  else
+    echo "Note: $DISPLAY_NAME does not announce itself to a console; --announce-url is ignored." >&2
+  fi
+fi

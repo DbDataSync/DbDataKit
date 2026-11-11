@@ -369,6 +369,7 @@ def bind_ps1(template, meta, repo):
         f"  ServiceRegister = {_ps(service.get('register', ''))}",
         f"  RequiresDotnet = {_ps(meta.get('requiresDotnet', ''))}",
         f"  RequiresVcRuntime = ${'true' if meta.get('requiresVcRuntime') else 'false'}",
+        f"  Announces = ${'true' if meta.get('announces') else 'false'}",
         f"  Notes = {_ps(meta.get('notes', ''))}",
         "}",
     ])
@@ -389,6 +390,7 @@ def bind_sh(template, meta, repo):
         f"PRESERVE={_sh(' '.join(meta.get('preserve', [])))}",
         f"REQUIRES_DOTNET={_sh(meta.get('requiresDotnet') or next((p['requiresDotnet'] for p in unix.values() if p.get('requiresDotnet')), ''))}",
         f"NOTES={_sh(meta.get('notes', ''))}",
+        f"ANNOUNCES={'1' if meta.get('announces') else '0'}",
     ])
     return _replace_block(template, BEGIN, body)
 

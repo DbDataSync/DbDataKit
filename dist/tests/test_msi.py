@@ -80,6 +80,25 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(guids(a), guids(b))
         self.assertEqual(len(set(guids(a).values())), 3)
 
+    def test_a_server_that_announces_takes_the_console_address_as_a_property(self):
+        text, _ = self.source(meta=dict(META, announces=True))
+        root = self.root(text)       # still valid XML with the property reference and the quotes in the command
+        action = next(a for a in root.iter("{%s}CustomAction" % NS["w"]) if a.get("Id") == "SetAnnounceUrl")
+        self.assertEqual(action.get("Execute"), "immediate")
+        self.assertEqual(action.get("Return"), "check")
+        command = action.get("ExeCommand")
+        self.assertIn("[ANNOUNCEURL]", command)
+        self.assertIn("DBDATAKIT_ANNOUNCE_URL", command)
+        self.assertIn("'Machine'", command)
+        step = next(c for c in root.iter("{%s}Custom" % NS["w"]) if c.get("Action") == "SetAnnounceUrl")
+        self.assertEqual(step.get("Sequence"), "1470")          # before the files are copied and the service is registered
+        self.assertEqual(step.text, 'ANNOUNCEURL AND NOT Installed')
+        self.assertNotIn("Remove-Item", command)
+
+    def test_a_product_that_does_not_announce_has_no_such_action(self):
+        text, _ = self.source()
+        self.assertNotIn("ANNOUNCEURL", text)
+
     def test_product_identity_and_upgrade(self):
         text, _ = self.source()
         product = self.root(text).find("w:Product", NS)

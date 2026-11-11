@@ -31,6 +31,9 @@ param(
   [switch]$NoPath,
   # Register the product's Windows service, for a product that has one. A service belongs in Program Files, so this implies -Machine.
   [switch]$InstallService,
+  # The console's announce address (http://console:8481): the server announces itself there and waits in `dbdatakit instance pending` to be confirmed. Sets DBDATAKIT_ANNOUNCE_URL
+  # for the machine (-Machine, elevated) or for the user; only for a product that announces.
+  [string]$AnnounceUrl,
   [string]$Repo,
   [string]$ApiBase = 'https://api.github.com'
 )
@@ -46,6 +49,7 @@ $Bound = @{
 
 if (-not $Bound.Product) { throw 'This copy of install.ps1 is not bound to a product. Use the one attached to a release.' }
 $product = $Bound.Product
+if ($AnnounceUrl -and $AnnounceUrl -notmatch '^https?://\S+$') { throw "-AnnounceUrl must be an http or https address, such as http://console:8481 (got '$AnnounceUrl')." }
 $display = $Bound.DisplayName
 if (-not $Repo) { $Repo = $Bound.Repo }
 $onWindows = ($PSVersionTable.PSVersion.Major -lt 6) -or $IsWindows
@@ -162,6 +166,15 @@ try {
     $registerArgs = ($Bound.ServiceRegister -replace '\{name\}', $Bound.ServiceName) -split '\s+'
     & $exe @registerArgs
     if ($LASTEXITCODE) { throw 'Registering the Windows service failed.' }
+  }
+  if ($AnnounceUrl) {
+    if (-not $Bound.Announces) { Write-Warning "$display does not announce itself to a console; -AnnounceUrl is ignored." }
+    else {
+      $scope = 'User'
+      if ($machineWide) { $scope = 'Machine' }
+      [Environment]::SetEnvironmentVariable('DBDATAKIT_ANNOUNCE_URL', $AnnounceUrl, $scope)
+      Write-Host "Set DBDATAKIT_ANNOUNCE_URL for the $($scope.ToLower()): the server announces itself to $AnnounceUrl and waits in 'dbdatakit instance pending' (confirm it with 'dbdatakit instance confirm')."
+    }
   }
   if ($wasRunning) { Write-Host 'Starting service...'; Start-Service $Bound.ServiceName }
 
