@@ -36,6 +36,11 @@ describe('the explorer', () => {
     expect(text).toContain('one warning')
     expect((text.match(/data-testid="result-row"/g) ?? []).length).toBe(2)
   })
+  it('says a result came from the replay of a record and whether its request hash is the record\'s (D38 (3))', () => {
+    expect(html({ result: { ...result, replay_of: 7, same_hash: true } })).toContain('data-testid="replay-note">replay of run 7, the same request hash')
+    expect(html({ result: { ...result, replay_of: 7, same_hash: false } })).toContain('a different request hash')
+    expect(html({ result })).not.toContain('replay-note')
+  })
   it('shows what the engine left when it would not run everything, with the reason', () => {
     const text = html({ result: { ...result, status: 'unsupported', reason: 'The engine left steps this host does not run.', remaining: [{ step: 'x' }] } })
     expect(text).toContain('data-testid="run-unsupported"')

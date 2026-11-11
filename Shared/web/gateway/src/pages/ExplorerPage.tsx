@@ -83,6 +83,7 @@ function Result(p: ExplorerViewProps) {
         <span data-testid="qis-status">{result.status === 'ok' ? 'complete' : result.status}</span> · {result.rows.length} row{result.rows.length === 1 ? '' : 's'}
         {result.request_hash && <> · request <span className="mono" data-testid="request-hash">{result.request_hash}</span></>}
         {result.model_version != null && <> · model version {result.model_version}</>}
+        {result.replay_of != null && <> · <span data-testid="replay-note">replay of run {result.replay_of}, {result.same_hash ? 'the same request hash' : 'a different request hash'}</span></>}
       </div>
       {result.warnings.length > 0 && <ul data-testid="run-warnings">{result.warnings.map((w, i) => <li key={i} className="hint">{w}</li>)}</ul>}
       {result.notices && result.notices.length > 0 && <ul data-testid="run-notices">{result.notices.map((n, i) => <li key={i} className="hint" style={wrap} data-testid={`run-notice-${n.code}`}>{n.message}</li>)}</ul>}
@@ -221,6 +222,14 @@ export function ExplorerPage() {
   const [drawTick, setDrawTick] = useState(0)
   const [save, setSave] = useState<SaveForm>({ name: '', description: '', saved: null, error: null, busy: false })
 
+  // a result on show: the body that made it, and the id of the result the Gateway kept for it
+  const show = (answer: RunResult, body: Record<string, unknown>) => {
+    last.current = { body, id: answer.result_id }
+    setRendered(undefined)
+    setResult(answer)
+    if (answer.status === 'ok') setEncoding(suggest(answer))
+  }
+
   // a statement handed over by the address: a run record, a saved query, or plain text
   const runId = params.get('run')
   const savedName = params.get('saved')
@@ -229,7 +238,20 @@ export function ExplorerPage() {
   useEffect(() => {
     let live = true
     const open = (statement: string) => { if (live) { setText(statement); setMode(statement.trim().startsWith('{') ? 'json' : 'sql'); const p = picksOf(statement); if (p) setPicks(p) } }
-    if (runId) gatewayApi.runs.read(Number(runId)).then((r) => open(r.text)).catch((e) => live && setError(say(e)))
+    // a record opens by its replay (D38 (3)): one run, the rows and the kept result come back with the text, and a record that did not complete (a refusal) opens as text only
+    if (runId) {
+      gatewayApi.runs.read(Number(runId)).then(async (r) => {
+        open(r.text)
+        if (!live || r.request == null || r.status !== 'complete' || (r.kind !== 'query' && r.kind !== 'explain')) return
+        setError(null)
+        setRunning(true)
+        try {
+          const answer = await gatewayApi.runs.replay(r.id, r.kind === 'explain' ? {} : { keep: true })
+          const built = bodyFor(name, r.text, { explain: r.kind === 'explain', limit: picksOf(r.text)?.limit ?? DEFAULT_LIMIT })
+          if (live) show(answer, 'body' in built ? built.body : {})
+        } catch (e) { if (live) setError(say(e)) } finally { if (live) setRunning(false) }
+      }).catch((e) => live && setError(say(e)))
+    }
     else if (savedName) gatewayApi.savedQueries.read(name, savedName, savedOwner ?? undefined).then((q) => { open(q.sql ?? JSON.stringify(q.request, null, 2)); if (live && q.own) setSave((s) => ({ ...s, name: q.name, description: q.description ?? '' })) }).catch((e) => live && setError(say(e)))
     else if (given) open(given)
     return () => { live = false }
@@ -249,10 +271,7 @@ export function ExplorerPage() {
       // a result that may be drawn is kept by the Gateway, so a matrix or a chart of it later runs nothing
       const body = explain ? built.body : { ...built.body, keep: true }
       const answer = await gatewayApi.runs.run(body)
-      last.current = { body: built.body, id: answer.result_id }
-      setRendered(undefined)
-      setResult(answer)
-      if (answer.status === 'ok') setEncoding(suggest(answer))
+      show(answer, built.body)
     } catch (e) {
       setResult(undefined)
       setError(say(e))

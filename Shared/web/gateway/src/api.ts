@@ -54,7 +54,8 @@ export const gatewayApi = {
       return request<{ runs: RunRow[]; all: boolean; retention_days: number }>(`${v1}/my/runs${text ? `?${text}` : ''}`)
     },
     read: (id: number) => request<RunDetail>(`${v1}/my/runs/${id}`),
-    replay: (id: number) => request<ReplayResult>(`${v1}/my/runs/${id}/replay`, { method: 'POST' }),
+    /** Runs a record's request again as the caller (D38 (3)): `keep` and `view` as a run takes them, so a replay is also how a record is opened in the explorer; the view is drawn and never stored in the record. */
+    replay: (id: number, body?: { keep?: boolean; view?: unknown }) => request<ReplayResult>(`${v1}/my/runs/${id}/replay`, { method: 'POST', ...(body ? { body: JSON.stringify(body) } : {}) }),
     counts: (days = 7) => request<{ days: number; by_code: Record<string, number> }>(`${v1}/my/runs/counts?days=${days}`),
   },
   /** A person's own saved queries and what is shared with them (SL17, SL18). The model is in the path because a saved query is a model's. */

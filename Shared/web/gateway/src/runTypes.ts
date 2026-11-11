@@ -14,6 +14,9 @@ export interface RunResult {
   model_version?: number | null
   /** The kept result a view of it is drawn from (a run that asked `keep` or sent a `view`); see `runs.render`. */
   result_id?: string
+  /** A replay says which record it ran again and whether the request hash is the record's (D38 (3)). */
+  replay_of?: number
+  same_hash?: boolean
   /** What the Gateway says beside the rows: `view_unavailable` names the column whose type matrix and chart cannot read, so the table is all there is (plan 14a D38). */
   notices?: { code: string; message: string; column?: string; type?: string }[]
   /** The rollup levels of a result with totals, and the attributes each rolled up (logical names). */

@@ -203,4 +203,57 @@ public sealed partial class ViewsModuleTests
         Assert.Null(table["notices"]);
         Assert.Equal(2, table["rows"]!.AsArray().Count);
     }
+
+    [Fact]
+    public async Task A_replay_with_a_view_draws_the_matrix_of_a_normal_run_keeps_the_view_out_of_the_record_draws_for_an_administrator_with_their_own_access_and_a_gone_version_is_still_410()
+    {
+        await StartAsync();
+        var state = Get<StateDatabase>();
+        var (ada, _) = HomeSeed.Person(state, "Ada", "ada@example.invalid", Analysts);
+        var (cy, _) = HomeSeed.Person(state, "Cy", "cy@example.invalid", "visitors");
+        PublishModel();
+        const string runs = "/api/v1/my/runs";
+
+        var normal = await ManagementAsync(HttpMethod.Post, runs, ada.Id, ServerRole.Viewer, new JsonObject { ["model"] = Model, ["request"] = MatrixRequest(true), ["view"] = MatrixView(true), ["limit"] = 10000 });
+        Assert.True(normal.Status == HttpStatusCode.OK, normal.Body?.ToJsonString());
+        var record = (long)(await ManagementAsync(HttpMethod.Get, runs, ada.Id, ServerRole.Viewer)).Body!["runs"]![0]!["id"]!;
+        var before = (await ManagementAsync(HttpMethod.Get, $"{runs}/{record}", ada.Id, ServerRole.Viewer)).Body!.ToJsonString();
+
+        // the replay is one run: rows, the hash comparison, a kept result and the view drawn, the same matrix as the normal run's
+        var replay = await ManagementAsync(HttpMethod.Post, $"{runs}/{record}/replay", ada.Id, ServerRole.Viewer, new JsonObject { ["keep"] = true, ["view"] = MatrixView(true) });
+        Assert.True(replay.Status == HttpStatusCode.OK, replay.Body?.ToJsonString());
+        Assert.True((bool)replay.Body!["same_hash"]!);
+        Assert.Equal(normal.Body!["rows"]!.ToJsonString(), replay.Body["rows"]!.ToJsonString());
+        Assert.False(string.IsNullOrEmpty((string?)replay.Body["result_id"]));
+        Assert.Equal("complete", (string)replay.Body["rendered_view"]!["status"]!);
+        Assert.Equal(normal.Body["rendered_view"]!["views"]!.ToJsonString(), replay.Body["rendered_view"]!["views"]!.ToJsonString());
+        Assert.NotNull(replay.Body["totals"]);
+
+        // the kept result of a replay is drawn again, and the view is nowhere in the record
+        var again = await ManagementAsync(HttpMethod.Post, $"{runs}/{(string)replay.Body["result_id"]!}/render", ada.Id, ServerRole.Viewer, new JsonObject { ["view"] = MatrixView(true) });
+        Assert.Equal(HttpStatusCode.OK, again.Status);
+        Assert.Equal(before, (await ManagementAsync(HttpMethod.Get, $"{runs}/{record}", ada.Id, ServerRole.Viewer)).Body!.ToJsonString());
+        var newest = (await ManagementAsync(HttpMethod.Get, runs, ada.Id, ServerRole.Viewer)).Body!["runs"]![0]!;
+        Assert.Equal(record, (long)newest["replay_of"]!);
+        var detail = (await ManagementAsync(HttpMethod.Get, $"{runs}/{(long)newest["id"]!}", ada.Id, ServerRole.Viewer)).Body!.ToJsonString();
+        Assert.DoesNotContain("rendered_view", detail);
+        Assert.DoesNotContain("\"views\"", detail);
+
+        // no body is the replay as it was: no result kept, nothing drawn
+        var bare = await ManagementAsync(HttpMethod.Post, $"{runs}/{record}/replay", ada.Id, ServerRole.Viewer);
+        Assert.Equal(HttpStatusCode.OK, bare.Status);
+        Assert.Null(bare.Body!["result_id"]);
+        Assert.Null(bare.Body["rendered_view"]);
+
+        // an administrator replaying Ada's record runs and draws as the administrator: Cy is not in the group that reads the data, so the replay is refused in the Gateway's words and nothing is drawn
+        var admin = await ManagementAsync(HttpMethod.Post, $"{runs}/{record}/replay", cy.Id, ServerRole.Admin, new JsonObject { ["view"] = MatrixView(true) });
+        Assert.NotEqual(HttpStatusCode.OK, admin.Status);
+        Assert.Null(admin.Body!["rendered_view"]);
+
+        // a version that is gone is a 410 whatever the body asks
+        var gone = Get<SemanticRunStore>().Add(new SemanticRun("ada@example.invalid", Model, 99, "query", "x", MatrixRequest(true), "h", "complete", null, null, null, null, DateTimeOffset.UtcNow, 1, 0));
+        var refused = await ManagementAsync(HttpMethod.Post, $"{runs}/{gone}/replay", ada.Id, ServerRole.Viewer, new JsonObject { ["keep"] = true, ["view"] = MatrixView(true) });
+        Assert.Equal(HttpStatusCode.Gone, refused.Status);
+        Assert.Equal("version_gone", (string)refused.Body!["code"]!);
+    }
 }

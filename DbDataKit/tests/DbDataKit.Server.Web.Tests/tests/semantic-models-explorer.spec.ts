@@ -123,6 +123,9 @@ test('run a statement on a published model, explain it, draw it, keep it, share 
     await check(page.getByTestId('replay-done')).toContainText('the same request hash')
     await page.locator('[data-testid^="run-open-"]').first().click()
     await expect(page.getByTestId('statement')).not.toHaveValue('')
+    // Open in explorer is the record's replay (plan 14a D38): the rows are there without another Run, and it says it is a replay
+    await check(page.getByTestId('run-result')).toBeVisible()
+    await expect(page.getByTestId('replay-note')).toContainText('replay of run')
 
     await page.getByTestId('rail-saved-queries').click()
     await page.getByTestId(`sq-manage-${modelsBuild.model}-regions-own`).click()
