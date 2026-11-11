@@ -84,7 +84,7 @@ public sealed class InvitesController(
     [HttpGet("check")]
     public IActionResult Check([FromQuery] string code) =>
         invites.Find(code) is not { } invite
-            ? NotFound(new { error = "This invitation is not valid. It may have been used already, or expired." })
+            ? NotFound(new { error = "This invitation is not valid. It may have been used already, or expired." + (authOptions.Product.SetupLinkCommandText is { } command ? $" If this was the setup link of a new install, make a new one with `{command}` on the machine it runs on." : "") })
             : Ok(new { valid = true, emailAsked = invite.Email is null && invite.UserId is null });
 
     /// <summary>Starts a passkey enrolment against an invite.</summary>
