@@ -15,6 +15,7 @@ namespace DbDataGateway.Server.Management;
 /// GET  /api/v1/dashboards | /reports              the list the caller may open
 /// GET  /api/v1/dashboards/{name} | /reports/{name} the document as published
 /// POST /api/v1/dashboards/{name}/render           the rendered widgets, as the person the console vouches for
+/// GET  /api/v1/dashboards/{name}/export?format=&amp;layout=&amp;widget=&amp;p.name=   a download as the person, as JSON <c>{file_name, content_type, size, content_base64, headers}</c> (the relay carries JSON only; DBR27's print preview); the module's own refusals, 501 <c>export_unavailable</c> when the host has no browser for a PDF
 /// POST /api/v1/views/preview                      the live preview of an unsaved draft (DBR28), as that person, stored nowhere (viewer; the module's own checks refuse what a publish would refuse)
 /// PUT  /api/v1/dashboards/{name} | /reports/{name} {text, expected_version?, note?} publishes it to the group (author, publisher or administrator)
 /// GET  /api/v1/dashboards/{name}/versions | /reports/{name}/versions   {name, kind, active, previous, versions: [{version, published_by, published_at, note, active, depends_on}]} (the same roles as publishing; no document text)
@@ -81,8 +82,7 @@ public sealed class GatewayViewsManagement(GatewayViewsPublishing publishing, Ga
             case ("GET", null, null): answer = api.List(who, kind, trace); break;
             case ("GET", not null, null): answer = api.Open(who, kind, name, trace); break;
             case ("GET", not null, "export"):
-                // a download is not JSON, which is all the console's relay carries: it is taken from the module's own listener (views.address) with a token of the home
-                return Problem(501, "export_unavailable", $"A download is taken from the views module's own listener with a token of the identity home (GET /api/v1/{(kind == ViewDefinitions.Report ? "reports" : "dashboards")}/{name}/export?format=pdf); the management API and the console's relay carry JSON only.");
+                return await ExportAsync(api, who, kind, name, query, trace, cancellationToken);
             case ("POST", not null, "render"):
                 JsonObject? json;
                 try { json = string.IsNullOrWhiteSpace(body) ? null : JsonNode.Parse(body) as JsonObject ?? throw new JsonException("The body must be a JSON object."); }
@@ -92,6 +92,38 @@ public sealed class GatewayViewsManagement(GatewayViewsPublishing publishing, Ga
             default: return Problem(405, "invalid", "That method is not allowed here.");
         }
         return new ManagementResult(answer.Status, answer.Body);
+    }
+
+    /// <summary>The most a download may be to travel as JSON (base64 makes it a third larger): a console's print preview is a few pages, and a bigger file is taken from the module's own listener.</summary>
+    public const int MaxRelayedDownloadBytes = 24 * 1024 * 1024;
+
+    /// <summary>
+    /// A download on the management API (plan 32 DBR27's print preview): the module's own <see cref="ViewsApi.ExportAsync"/>, in process, as the person, with the same query (<c>format</c>, <c>layout</c>, <c>widget</c>, <c>p.name</c>), the same refusals and the same audit row.
+    /// The relay carries JSON only, so a file comes back as <c>{file_name, content_type, size, content_base64, headers}</c> (<c>headers</c> are the module's <c>X-DbData-*</c> ones: the page count, the browser); a refusal (<c>export_unavailable</c> naming the
+    /// <c>views.export</c> setting, a widget that failed, a limit) is the module's JSON as it is.
+    /// </summary>
+    private static async Task<ManagementResult> ExportAsync(ViewsApi api, ViewsPrincipal who, string kind, string name, string? query, string? trace, CancellationToken cancellationToken)
+    {
+        var q = query is null ? new System.Collections.Specialized.NameValueCollection() : System.Web.HttpUtility.ParseQueryString(query);
+        var parameters = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
+        foreach (var key in q.AllKeys.OfType<string>())
+        {
+            if (!key.StartsWith("p.", StringComparison.Ordinal) || key.Length == 2) continue;
+            var values = q.GetValues(key) ?? [];
+            parameters[key[2..]] = values.Length == 1 ? JsonValue.Create(values[0]) : new JsonArray(values.Select(v => (JsonNode?)JsonValue.Create(v)).ToArray());
+        }
+        static string? One(System.Collections.Specialized.NameValueCollection collection, string key) => collection[key] is { Length: > 0 } v ? v : null;
+        var answer = await api.ExportAsync(who, kind, name, One(q, "format"), One(q, "layout"), One(q, "widget"), parameters, null, trace, cancellationToken);
+        if (answer.File is not { } file) return new ManagementResult(answer.Status, answer.Body);
+        if (file.Content.Length > MaxRelayedDownloadBytes)
+            return Problem(413, "too_large", $"The file is {file.Content.Length} bytes and the management API carries at most {MaxRelayedDownloadBytes} as JSON: take it from the views module's own listener (GET /api/v1/{ViewsApi.Collection(kind)}/{name}/export).");
+        var headers = new JsonObject();
+        foreach (var (key, value) in answer.Headers ?? new Dictionary<string, string>())
+            if (key.StartsWith("X-DbData-", StringComparison.Ordinal)) headers[key] = value;
+        return new ManagementResult(200, new JsonObject
+        {
+            ["file_name"] = file.FileName, ["content_type"] = file.ContentType, ["size"] = file.Content.Length, ["content_base64"] = Convert.ToBase64String(file.Content), ["headers"] = headers,
+        });
     }
 
     /// <summary>The module's own <see cref="ViewsApi.PreviewAsync"/>, in process, as the person the console's token names (DBR28): the same roles and refusals as a render, the same 413 over the module's limit for a draft.</summary>

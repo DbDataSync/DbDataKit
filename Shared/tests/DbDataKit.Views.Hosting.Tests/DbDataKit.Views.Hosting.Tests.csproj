@@ -13,6 +13,8 @@
     <ProjectReference Include="..\..\src\DbDataKit.State.Engines\DbDataKit.State.Engines.csproj" />
     <Compile Include="..\DbDataKit.State.Tests\StateEngines.cs" Link="StateEngines.cs" />
     <Compile Include="..\DbDataKit.Views.Tests\ManualTimeProvider.cs" Link="ManualTimeProvider.cs" />
+    <!-- the fake external provider of the report catalog (DBR19), shared with the merge's own tests -->
+    <Compile Include="..\DbDataKit.Views.Tests\FakeCatalogProvider.cs" Link="FakeCatalogProvider.cs" />
     <!-- where the exporter tests find a browser: the same rule for both projects -->
     <Compile Include="..\DbDataKit.Views.Export.Tests\TestBrowser.cs" Link="TestBrowser.cs" />
   </ItemGroup>
