@@ -9,7 +9,7 @@ import { BuildsPanel } from './BuildsPanel'
 import { CheckPanel } from './CheckPanel'
 import { NewStoreModel, StoreModelEditor } from './StoreModelPanel'
 import { BuildPlanPanel } from './BuildPlanPanel'
-import { SyncFileEditor, SyncSetPanel } from './SyncSetPanel'
+import { SyncFileEditor, SyncSetOverview, findingsKey } from './SyncSetPanel'
 import { editorKindOf } from '../editors'
 import { useLiveCheck } from '../useLiveCheck'
 
@@ -42,7 +42,7 @@ function FileEditor({ project, id, kind, path, editable, canWrite, onGone, onRen
   const loaded = useQuery({ queryKey: ['workspace', 'file', project, id, path], queryFn: () => workspaceApi.readFile(project, id, path), staleTime: Infinity, gcTime: 0, retry: false })
   const text = drafts[path] ?? loaded.data ?? ''
   const dirty = drafts[path] !== undefined && drafts[path] !== loaded.data
-  const refresh = () => client.invalidateQueries({ queryKey: ['workspace', 'changes', project, id] })
+  const refresh = async () => { await client.invalidateQueries({ queryKey: findingsKey(project, id) }); await client.invalidateQueries({ queryKey: ['workspace', 'changes', project, id] }) }
   const save = useMutation({
     mutationFn: async () => { const sent = text; await workspaceApi.writeFile(project, id, path, sent); return sent },
     onSuccess: async (sent) => {
@@ -201,6 +201,7 @@ export function WorkspacePage() {
       setNewPath(''); setSelected(r.path)
       await client.invalidateQueries({ queryKey: ['workspace', 'files', project, id] })
       await client.invalidateQueries({ queryKey: ['workspace', 'changes', project, id] })
+      await client.invalidateQueries({ queryKey: findingsKey(project, id) })
     },
   })
   const make = useMutation({
@@ -209,6 +210,7 @@ export function WorkspacePage() {
       setSelected(first)
       await client.invalidateQueries({ queryKey: ['workspace', 'files', project, id] })
       await client.invalidateQueries({ queryKey: ['workspace', 'changes', project, id] })
+      await client.invalidateQueries({ queryKey: findingsKey(project, id) })
     },
   })
   const abandon = useMutation({
@@ -255,7 +257,7 @@ export function WorkspacePage() {
             {!editable && <div className="hint" data-testid="wsp-readonly">This is {mine.owner}'s workspace: you can read it, and only they edit and commit it.</div>}
             <div className="row" style={{ gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
               <div style={{ flex: '0 0 300px', minWidth: 240, display: 'grid', gap: 12 }}>
-              {kind === 'sync' && <SyncSetPanel paths={(files.data?.files ?? []).map((f) => f.path)} canWrite={editable && canWrite} busy={make.isPending} onOpen={setSelected} onCreate={(made) => make.mutate(made)} />}
+              {kind === 'sync' && <SyncSetOverview project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} canWrite={editable && canWrite} busy={make.isPending} onOpen={setSelected} onCreate={(made) => make.mutate(made)} />}
               <div className="card" data-testid="wsp-files">
                 <div className="card-body">
                   <div className="hint" style={{ marginBottom: 6 }}>Files</div>

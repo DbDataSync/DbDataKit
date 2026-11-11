@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { SchemaSet } from '@dbdatakit/shell'
-import type { CheckDiagnostic } from '../api'
+import { workspaceApi, type CheckDiagnostic } from '../api'
 import { liveState, type EditorKind } from '../editors'
 import {
   SYNC_CONNECTION_SCHEMA, SYNC_MAPPING_SCHEMA, SYNC_TASK_SCHEMA, connectionPath, connectionsOf, newConnectionText, newReplicationFiles, replicationPath, replicationsOf,
@@ -111,5 +112,28 @@ export function SyncSetPanel({ paths, canWrite, busy, onOpen, onCreate, findings
         )}
       </div>
     </div>
+  )
+}
+
+/** The query that holds a draft's findings for the overview; every save, new file, move and delete invalidates it (`findingsKey(project, id)` is its prefix) so the counts follow the files. */
+export const findingsKey = (project: string, id: string) => ['workspace', 'findings', project, id] as const
+
+/** Why the counts are missing, when the check could not run. */
+export function CheckFailedNote({ error }: { error: unknown }) {
+  if (!error) return null
+  return <div className="hint" data-testid="wsp-sync-check-failed">The check could not run, so the counts are not shown: {error instanceof Error ? error.message : 'no answer'}</div>
+}
+
+/**
+ * The replication set with its counts fed (plan 33 SC22f): the check of the draft (Sync's own readers, through the check route) is asked when the page opens and again after each change to the files, and its diagnostics are
+ * counted per replication and per connection by `SyncSetPanel`. A check that cannot run says so under the list and the counts are left out: a count of zero must never mean "not checked".
+ */
+export function SyncSetOverview({ project, id, ...panel }: { project: string; id: string } & Omit<Parameters<typeof SyncSetPanel>[0], 'findings'>) {
+  const check = useQuery({ queryKey: findingsKey(project, id), queryFn: () => workspaceApi.check(project, id), staleTime: 30_000, retry: false })
+  return (
+    <>
+      <SyncSetPanel {...panel} findings={check.data?.diagnostics} />
+      <CheckFailedNote error={check.error} />
+    </>
   )
 }

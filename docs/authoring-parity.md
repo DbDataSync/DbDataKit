@@ -14,8 +14,8 @@ Summary (counts of the features below):
 | --- | --- | --- | --- | --- | --- |
 | Build | 7 | 1 | 12 | 5 | 25 |
 | Store | 5 | 1 | 1 | 3 | 10 |
-| Sync | 6 | 6 | 6 | 3 | 21 |
-| All | 18 | 8 | 19 | 11 | 56 |
+| Sync | 7 | 5 | 6 | 3 | 21 |
+| All | 19 | 7 | 19 | 11 | 56 |
 
 ### Build
 
@@ -70,7 +70,7 @@ Summary (counts of the features below):
 | Connection edit as a form (engine, address, auth by secret reference); no password in git | `sync/src/pages/ConnectionEditPage.tsx` | `workspace/src/pages/SyncSetPanel.tsx`, `StructuredPanel.tsx`, `syncSchemas.ts` (form from `sync-connection`, secret findings) | built | SC22d |
 | The connection's run login (`extensions.sync.run_user`) | `sync/src/pages/connection-edit/RunLoginCard.tsx` | YAML text only | partly | SC22i |
 | Replications: list with status, lag, enable and pause | `sync/src/pages/ReplicationsPage.tsx` | `workspace/src/pages/SyncSetPanel.tsx` (the list, `enabled` in the form); no run state | partly | SC22l |
-| Overview: per replication, what is wrong with it | `sync/src/pages/replication-detail/OverviewPanel.tsx` | see the state: partly | partly | SC22f |
+| Overview: per replication, what is wrong with it | `sync/src/pages/replication-detail/OverviewPanel.tsx` | `workspace/src/pages/SyncSetPanel.tsx` fed by the check of the draft (`WorkspacePage.tsx`) | built | SC22f |
 | Replication settings: notes, schedule, endpoints, pipeline (reader, cache, writer), reconcile | `replication-detail/OverviewPanel.tsx`, `EndpointsCard.tsx`, `ScheduleCard.tsx`, `ReconcileConfigCard.tsx` | `workspace/src/syncSchemas.ts` (the task form: scheduling, change processing, bulk load, endpoints, reconcile) | built | SC22d |
 | New replication (a task and a mapping between two connections) | `sync/src/pages/ReplicationsPage.tsx` | `workspace/src/pages/SyncSetPanel.tsx` (**New replication**) | built | SC22d |
 | Table mappings: new, delete, edit tables, filter, query source | `replication-detail/TableMappingsPanel.tsx`, `TableMappingForm.tsx`, `SourceFilterCard.tsx` | `workspace/src/syncSchemas.ts` (the mapping form: sources, targets, filter, query) | built | SC22d |
