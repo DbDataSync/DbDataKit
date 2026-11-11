@@ -76,7 +76,8 @@ file the product lists as `preserve` (none today: DbDataGateway keeps its settin
 | install for all users | `-Machine` (elevated) | `--system` (root) |
 | install directory | `-InstallDir` | `--install-dir` |
 | leave PATH alone | `-NoPath` | `--no-link` |
-| register the Windows service | `-InstallService` | n/a |
+| register the Windows service | `-InstallService` | n/a (the unit is printed by `<program> service unit`) |
+| join a console by announcement | `-AnnounceUrl <url>` | `--announce-url <url>`; with `--system` (root) it writes the systemd drop-in `/etc/systemd/system/<product>.service.d/announce.conf` (`--systemd-dir <d>` for another place) |
 | a fork or mirror | `-Repo`, `-ApiBase` | `--repo`, `--api-base` |
 
 A product with a Windows service (`service` in `dist.json`: DbDataSync's `DbDataSync`, DbDataGateway's `DbDataGateway`) is handled for you: a running
@@ -151,7 +152,7 @@ That is all: when it returns, every member's service is registered, running and 
 Where products are installed one by one on separate machines, nobody types a pairing code: give each server the console's private announce address and an administrator confirms it. (The single-server case of Console, Gateway and Runner is `docs/suite-single-server-install.md`: the one Scoop command, or the same steps by hand with the commands the install script runs, which pair with codes and need no announce port.)
 
 1. Console: `dbdatakit server run --announce-listen http://<console address>:8481` (its private port; keep it on the network the servers share).
-2. Each server: install with the address, `msiexec /i dbdatagateway-v<version>-win-x64.msi ANNOUNCEURL=http://<console address>:8481 /qn` (the MSI sets the machine variable `DBDATAKIT_ANNOUNCE_URL` before it registers the service and refuses an address that is not http or https), or `install.ps1 -AnnounceUrl ...`, or on Linux `install.sh --announce-url ...` and the printed `Environment=` line in the unit.
+2. Each server: install with the address, `msiexec /i dbdatagateway-v<version>-win-x64.msi ANNOUNCEURL=http://<console address>:8481 /qn` (the MSI sets the machine variable `DBDATAKIT_ANNOUNCE_URL` before it registers the service and refuses an address that is not http or https), or `install.ps1 -AnnounceUrl ...`, or on Linux `sudo install.sh --system --announce-url ...`, which writes the systemd drop-in `<product>.service.d/announce.conf` (`Environment="DBDATAKIT_ANNOUNCE_URL=..."`, a drop-in is read whether or not the unit exists yet, so write the unit with `<program> service unit` before or after) and reloads systemd; without `--system` it only prints the `Environment=` line.
 3. Administrator: `dbdatakit instance pending`, then `dbdatakit instance confirm <id or name>` (or the console's screen). A server that announces is **not** paired and not trusted until then; the announcement is never a confirmation. A removal leaves the variable in place, as it leaves the data folders (another product on the machine reads it).
 
 ## Adding or changing a product
@@ -168,7 +169,7 @@ Edit `<Product>/dist.json`:
 | `requiresDotnet` | warns after install when that runtime is missing. A platform may carry its own (`"linux-x64": { "exe": "...", "requiresDotnet": "10.0" }`) for a product whose Windows zip is self-contained and whose Linux zip is not (the Gateway); `install.sh` reads it, the product-level one wins, and install.ps1, Scoop and the MSI read only the product-level one |
 | `msi.upgradeCode` | the installer's fixed GUID, **never changed** (it is how a newer version finds the older one) |
 | `msi.addToPath` | the installer puts its folder on the machine PATH |
-| `announces` | `true` for a server that announces itself to a console (every product with a `service` except the console): the MSI takes `ANNOUNCEURL=<console announce address>` and sets the machine variable `DBDATAKIT_ANNOUNCE_URL`, `install.ps1 -AnnounceUrl` sets it for the machine or the user, `install.sh --announce-url` prints the line for the service's unit |
+| `announces` | `true` for a server that announces itself to a console (every product with a `service` except the console): the MSI takes `ANNOUNCEURL=<console announce address>` and sets the machine variable `DBDATAKIT_ANNOUNCE_URL`, `install.ps1 -AnnounceUrl` sets it for the machine or the user, `install.sh --announce-url` writes the systemd drop-in for the product's unit when run with `--system` as root (the unit is named for the product: `dbdatagateway`, `dbdatarunner`, `dbdatakit`, `dbdatasync`), and prints the line otherwise; the address must be http or https with no white space, quotes, backslash, `%` or `$` |
 | `service.unregister` | the command the installer runs on removal (with `register`, `{name}` is substituted) |
 | `requiresVcRuntime` | the Windows program needs the Visual C++ Redistributable: `install.ps1` warns when `vcruntime140.dll` is missing and the Scoop manifest suggests `extras/vcredist2022` |
 | `notes` | printed after install and shown by Scoop |

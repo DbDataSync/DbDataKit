@@ -26,6 +26,7 @@ DRY_RUN=0
 SYSTEM=0
 NO_LINK=0
 ANNOUNCE_URL=
+SYSTEMD_DIR=''
 INSTALL_DIR=''
 REPO="$DEFAULT_REPO"
 API_BASE='https://api.github.com'
@@ -41,7 +42,9 @@ Usage: install.sh [options]
   --system            install for all users (/opt, /usr/local/bin); needs root
   --install-dir <d>   install into <d>
   --no-link           do not put the program on the PATH
-  --announce-url <u>  the console's announce address (http://console:8481); prints the environment line the server's service needs to announce itself there
+  --announce-url <u>  the console's announce address (http://console:8481). With --system (root) it writes the systemd drop-in that sets DBDATAKIT_ANNOUNCE_URL for the
+                      unit named for the product (/etc/systemd/system/<product>.service.d/announce.conf); otherwise it prints the line the service needs
+  --systemd-dir <d>   where the drop-in goes instead of /etc/systemd/system (writes it without --system; systemd is not asked to reload)
   --repo <owner/repo> --api-base <url>
 USAGE
 }
@@ -55,12 +58,19 @@ while [ $# -gt 0 ]; do
     --install-dir) [ $# -ge 2 ] || die "--install-dir needs a value"; INSTALL_DIR="$2"; shift 2 ;;
     --no-link) NO_LINK=1; shift ;;
     --announce-url) [ $# -ge 2 ] || die "--announce-url needs a value"; ANNOUNCE_URL="$2"; shift 2 ;;
+    --systemd-dir) [ $# -ge 2 ] || die "--systemd-dir needs a value"; SYSTEMD_DIR="$2"; shift 2 ;;
     --repo) [ $# -ge 2 ] || die "--repo needs a value"; REPO="$2"; shift 2 ;;
     --api-base) [ $# -ge 2 ] || die "--api-base needs a value"; API_BASE="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; die "unknown option $1" ;;
   esac
 done
+
+if [ -n "$ANNOUNCE_URL" ]; then
+  # the address goes into a unit file: an http(s) address with nothing that systemd would read as syntax (white space, quotes, backslash, % and $)
+  case "$ANNOUNCE_URL" in http://?*|https://?*) ;; *) die "--announce-url is the console's http or https announce address, such as http://console:8481." ;; esac
+  case "$ANNOUNCE_URL" in *[[:space:]\"\'\\%\$]*) die "--announce-url must not contain white space, quotes, backslash, % or \$." ;; esac
+fi
 
 fetch() { # fetch <url> [outfile]
   if command -v curl >/dev/null 2>&1; then
@@ -201,9 +211,25 @@ if [ -n "$REQUIRES_DOTNET" ]; then
 fi
 [ -z "$NOTES" ] || echo "$NOTES"
 if [ -n "$ANNOUNCE_URL" ]; then
-  if [ "$ANNOUNCES" = 1 ]; then
-    echo "To announce to the console at $ANNOUNCE_URL (it then waits in 'dbdatakit instance pending'), run the server with DBDATAKIT_ANNOUNCE_URL=$ANNOUNCE_URL (in a systemd unit: Environment=DBDATAKIT_ANNOUNCE_URL=$ANNOUNCE_URL)."
-  else
+  if [ "$ANNOUNCES" != 1 ]; then
     echo "Note: $DISPLAY_NAME does not announce itself to a console; --announce-url is ignored." >&2
+  elif [ "$SYSTEM" = 1 ] || [ -n "$SYSTEMD_DIR" ]; then
+    # The unit is named for the product (`<program> service unit` prints it); a drop-in is read whether the unit exists yet or not, and survives a new unit file.
+    DROPIN_ROOT="${SYSTEMD_DIR:-/etc/systemd/system}"
+    DROPIN_DIR="$DROPIN_ROOT/$PRODUCT.service.d"
+    mkdir -p "$DROPIN_DIR"
+    {
+      echo "# Written by install.sh --announce-url: $DISPLAY_NAME announces itself to the console at this address and waits in 'dbdatakit instance pending' until an administrator confirms it."
+      echo "[Service]"
+      echo "Environment=\"DBDATAKIT_ANNOUNCE_URL=$ANNOUNCE_URL\""
+    } > "$DROPIN_DIR/announce.conf"
+    chmod 644 "$DROPIN_DIR/announce.conf"
+    echo "Wrote $DROPIN_DIR/announce.conf: the $PRODUCT service announces itself to the console at $ANNOUNCE_URL and then waits in 'dbdatakit instance pending'."
+    if [ -z "$SYSTEMD_DIR" ] && [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+      systemctl daemon-reload || echo "Note: systemctl daemon-reload failed; run it before starting the service." >&2
+      echo "Restart the service if it is running: systemctl restart $PRODUCT"
+    fi
+  else
+    echo "To announce to the console at $ANNOUNCE_URL (it then waits in 'dbdatakit instance pending'), run the server with DBDATAKIT_ANNOUNCE_URL=$ANNOUNCE_URL (in a systemd unit: Environment=DBDATAKIT_ANNOUNCE_URL=$ANNOUNCE_URL). A system install (--system, as root) writes that as a drop-in for the $PRODUCT service."
   fi
 fi
