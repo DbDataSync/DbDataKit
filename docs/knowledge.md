@@ -22,6 +22,7 @@
 | Subjects and orphans (KN02) | a subject is checked against the catalog when an item is saved (never heard of: refused at its line); an item whose subjects are all gone is orphaned, reaches nobody and is listed | `SubjectResolver`, `ISubjectCatalog` |
 | Scope matching (KN03) | which instructions and guardrails apply to what is in play, broad to narrow, guardrails apart, by audience, agent and channel | `ScopeMatcher` |
 | The install knowledge project (KN35) | a template with `shared/`, `build/`, `sync-and-build/` and the administrators' `policy/` folder; `policy/` holds only guardrails owned by `administrators` | `InstallKnowledge` |
+| Chunking (KN04) | long references split at headings, then paragraphs, then sentences; tables and code are never cut; the chunk's hash is of what is embedded, so only a changed chunk is embedded again | `Chunker` |
 
 [Shared/src/DbDataKit.Knowledge/README.md](../Shared/src/DbDataKit.Knowledge/README.md) describes each piece.
 
