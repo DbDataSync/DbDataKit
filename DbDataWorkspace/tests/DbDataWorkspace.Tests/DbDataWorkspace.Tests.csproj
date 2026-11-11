@@ -5,6 +5,7 @@
     <NoWarn>$(NoWarn);xUnit1051</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="Fixtures\catalog-cache\*" CopyToOutputDirectory="PreserveNewest" LinkBase="Fixtures\catalog-cache" />
     <PackageReference Include="xunit.v3" />
     <Using Include="Xunit" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />

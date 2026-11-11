@@ -173,7 +173,7 @@ public static class WorkspaceManagement
             if (workspaces.Find(hosted.Id, id) is not { } workspace) return Results.NotFound();
             var kind = projects.Kinds.Find(store.FindProject(hosted.Id)!.Kind);
             if (kind is null) return Results.Json(new { error = $"The project '{hosted.Id}' is of a kind this server does not know ({store.FindProject(hosted.Id)!.Kind})." }, statusCode: StatusCodes.Status409Conflict);
-            var diagnostics = await kind.CheckAsync(workspaces.RootOf(workspace), context.RequestAborted);
+            var diagnostics = await DraftCheck.RunAsync(kind, workspaces.RootOf(workspace), context.RequestAborted);
             return Results.Json(new JsonObject
             {
                 ["kind"] = kind.Name,
