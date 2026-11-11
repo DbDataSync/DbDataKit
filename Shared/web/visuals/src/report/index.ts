@@ -1,5 +1,7 @@
 export { PagedFrame } from './PagedFrame'
 export type { PagedFrameProps } from './PagedFrame'
+export { PrintPreviewDialog, usePrintPreview } from './PrintPreview'
+export type { PrintPreview } from './PrintPreview'
 export { ReportView } from './ReportView'
 export { BLOCK_GAP, FLOW_FONT_STACK, flowCss } from './css'
 export { layoutFlow, plannedWidgets } from './layoutFlow'

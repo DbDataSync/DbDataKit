@@ -44,9 +44,32 @@ export interface ValidationResult {
   diagnostics: ClientDiagnostic[]
 }
 
+/** A viewer's sort of one table, asked of the server (plan 32 DBR45): the column (a catalog name the table shows) and the direction. Never stored. */
+export interface ServerSort { by: string; dir: 'asc' | 'desc' }
+
+/** A file the server made of a document (the exporter's PDF, DBR15; DBR27's print preview). */
+export interface ExportedFile {
+  fileName: string
+  contentType: string
+  bytes: Uint8Array
+  /** The pages of a PDF, as the exporter counted them (`X-DbData-Export-Pages`), or null when the answer did not say. */
+  pages: number | null
+  /** The browser that drew it, when the answer said. */
+  browser: string | null
+}
+
+export interface ExportOptions {
+  /** The layout to draw; absent: the one the print medium selects. */
+  layout?: string
+  parameters?: ParameterValues
+  signal?: AbortSignal
+}
+
 export interface ResolveOptions {
   /** Resolve only these widgets (a parameter changed: the ones that use it). Absent: every widget the layout places. */
   only?: string[]
+  /** The viewer's sort of tables, by widget id (DBR45): the server runs those widgets with this `order` instead of the document's. A source that cannot (`sortsOnServer` is not true) ignores it. */
+  order?: Record<string, ServerSort>
   signal?: AbortSignal
 }
 
@@ -121,6 +144,10 @@ export interface ViewsClient {
   rollback?(kind: ViewKind, name: string, expectedVersion?: number | null): Promise<LifecycleResult>
   /** Stops serving the document (its versions stay and a publish brings it back). */
   retire?(kind: ViewKind, name: string, expectedVersion?: number | null): Promise<void>
+  /** True when `resolve` honours `order` (the module does; the fixtures hold recorded results and do not): a table the server cut is then sorted by a new run, not over the rows loaded. */
+  sortsOnServer?: boolean
+  /** The PDF the exporter draws of the **published** document, as the caller (`GET .../export?format=pdf`; through the console's relay as JSON with the file in base64). Optional: the fixtures have no exporter. A host without a browser refuses with `unavailable` and the module's words, which name the `views.export` setting. */
+  exportPdf?(ref: { kind: ViewKind; name: string }, options?: ExportOptions): Promise<ExportedFile>
   /** One widget's rendered form, for the editor's live preview. */
   preview(request: PreviewRequest): Promise<RenderedWidget>
   /** An unsaved document as the caller would see it, in one call (plan 32 DBR28). Optional: a source with no server (the fixture source) leaves the editor to ask `preview` for each widget. A document the server would refuse to publish rejects with `invalid`, its diagnostics placed in the text. */

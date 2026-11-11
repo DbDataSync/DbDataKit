@@ -37,7 +37,10 @@ export function TableWidget({ id, widget, result, box, maximized = false, onMaxi
   const total = result.rows.length
   const last = result.rows[total - 1]
   const hasTotalRow = last?.total === true
-  let shown = sortedOrder(result.rows, sortable ? sort : null).map((index) => ({ row: result.rows[index]!, index }))
+  const loaded = result.rows.filter((r) => !r.total).length
+  // the server cut the result: a click asks it for the rows in the new order (the loaded ones are then already in it), else the loaded rows are sorted here
+  const byServer = (result.total_rows ?? loaded) > loaded && onServerSort !== undefined
+  let shown = sortedOrder(result.rows, sortable && !byServer ? sort : null).map((index) => ({ row: result.rows[index]!, index }))
   if (box && !maximized) {
     // one line of the body goes to the notice that says rows are cut
     const fit = rowsThatFit(box.height)
@@ -54,7 +57,7 @@ export function TableWidget({ id, widget, result, box, maximized = false, onMaxi
   const click = (i: number) => {
     const next = nextSort(sort, i)
     setSort(next)
-    if (serverCut && onServerSort) onServerSort(next === null ? null : result.columns[i]!.field, next?.dir ?? null)
+    if (byServer && onServerSort) onServerSort(next === null ? null : result.columns[i]!.field, next?.dir ?? null)
   }
   const align = (i: number) => {
     const a = result.columns[i]?.align ?? widget.encodings.columns[i]?.align

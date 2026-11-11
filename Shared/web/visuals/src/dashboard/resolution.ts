@@ -1,7 +1,7 @@
 import type { ViewKind } from '../views/document'
 import type { ParameterValues, ViewsDoc } from '../views/model'
 import type { RenderedWidget } from '../views/rendered'
-import type { ViewsClient } from '../client/types'
+import type { ServerSort, ViewsClient } from '../client/types'
 
 /** What a dashboard has resolved so far: the results by widget id, and the parameters they were resolved for. */
 export interface Resolution {
@@ -64,9 +64,11 @@ export async function resolveLayout(args: {
   document?: Pick<ViewsDoc, 'widgets'>
   /** Ask again for every placed widget, whatever is kept (a refresh); the results of widgets this layout does not place stay. */
   force?: boolean
+  /** The viewer's sorts of tables by widget id (DBR45), sent with every request so a re-resolution keeps them. */
+  order?: Record<string, ServerSort>
   signal?: AbortSignal
 }): Promise<Resolution> {
-  const { client, ref, layout, placed, parameters, previous, document, signal, force = false } = args
+  const { client, ref, layout, placed, parameters, previous, document, signal, force = false, order } = args
   const key = parametersKey(parameters)
   const same = previous !== null && previous.key === key
   let have: Record<string, RenderedWidget> = {}
@@ -78,7 +80,7 @@ export async function resolveLayout(args: {
   }
   const needed = placed.filter((id) => !(id in have))
   if (needed.length === 0 && same && !force) return previous
-  const fresh = needed.length === 0 ? null : await client.resolve(ref, layout, parameters, { only: needed.length === placed.length ? undefined : needed, signal })
+  const fresh = needed.length === 0 ? null : await client.resolve(ref, layout, parameters, { only: needed.length === placed.length ? undefined : needed, ...(order && Object.keys(order).length > 0 ? { order } : {}), signal })
   const asOfBy: Record<string, string> = Object.fromEntries(Object.entries(previous?.asOfBy ?? {}).filter(([id]) => id in have))
   if (fresh) for (const id of Object.keys(fresh.widgets)) asOfBy[id] = fresh.as_of
   return { key, parameters, results: { ...have, ...fresh?.widgets }, asOf: fresh?.as_of ?? previous?.asOf ?? null, asOfBy }

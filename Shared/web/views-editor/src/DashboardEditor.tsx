@@ -271,7 +271,8 @@ export function DashboardEditor({ kind, name, host }: { kind: ViewKind; name: st
                   <Problems diagnostics={own.filter((d) => formTarget(d.path).area === 'layout' && (formTarget(d.path) as { tile?: number }).tile === undefined)} testId={`ed-layout-problems-${layout.name}`} />
                   <SelectorEditor layout={layout} apply={apply} />
                   {layout.type === 'flow' && (
-                    <FlowEditor layout={layout} index={index} doc={doc} diagnostics={draft.validation.diagnostics} apply={apply} name={draft.name} text={draft.text}
+                    <FlowEditor layout={layout} index={index} doc={doc} diagnostics={draft.validation.diagnostics} apply={apply} name={draft.name} text={draft.text} client={client} kind={kind}
+                      printBlocked={!saved ? 'Save the report first: the print preview is the exporter\'s PDF of the saved report.' : dirty ? 'The print preview is the exporter\'s PDF of the saved report, and this one has unsaved changes: save it first.' : undefined}
                       preview={(widget, widgetId) => client.preview({ widget, widgetId, kind, draft: doc, document: draft.name || undefined })}
                       previewDocument={client.previewDocument ? (request) => client.previewDocument!({ kind, ...request }) : undefined} />
                   )}

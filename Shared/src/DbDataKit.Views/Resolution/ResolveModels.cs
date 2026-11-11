@@ -29,6 +29,12 @@ public static class ResolveCodes
     public const string ImageNotFound = "DBD-VIEW-058";
 }
 
+/// <summary>
+/// A viewer's sort of one table, asked of the server (plan 32 DBR45): the table's column (<see cref="By"/>, a catalog name the table shows) and the direction. It replaces the query's own <c>order</c> for that one run and is never stored;
+/// the answer is the table's rows as the server orders all of them, which is what a click on a header means when the row limit cut the result.
+/// </summary>
+public sealed record WidgetOrder(string By, bool Descending);
+
 /// <summary>A resolution that cannot start at all (a layout that does not exist, a parameter value that is not one): the caller's mistake, not one widget's.</summary>
 public sealed class ViewResolutionException(string code, string message) : Exception(message)
 {

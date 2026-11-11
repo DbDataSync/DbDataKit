@@ -576,6 +576,46 @@ public class ResolveTests
     // ---- parameters ----
 
     [Fact]
+    public async Task A_viewers_sort_of_a_table_replaces_its_order_for_that_run_and_is_refused_for_what_the_table_does_not_show_or_for_another_widget_type()
+    {
+        var doc = Doc("""
+              t:
+                type: table
+                encodings:
+                  columns:
+                    - {field: products.category, label: Category}
+                    - {field: sales.units, label: Units}
+                query:
+                  model: retail_sales
+                  order: [[products.category, asc]]
+              c:
+                type: chart
+                mark: bar
+                encodings: {x: products.category, y: sales.units}
+                query: {model: retail_sales}
+            """);
+        var serving = new RetailServing();
+        var resolver = Resolver(serving);
+        var own = await resolver.ResolveAsync(Viewer(), doc, "desk", only: ["t"]);
+        var ownOrder = JsonNode.Parse(((ServingRequest.Semantic)serving.Received[0].Request).Json)!["query"]!["order"]!.ToJsonString();
+        Assert.Equal("""[["products.category","asc"]]""", ownOrder);
+
+        serving.Received.Clear();
+        var sorted = await resolver.ResolveAsync(Viewer(), doc, "desk", only: ["t"], orders: new Dictionary<string, WidgetOrder> { ["t"] = new("sales.units", true) });
+        var sent = JsonNode.Parse(((ServingRequest.Semantic)serving.Received[0].Request).Json)!;
+        Assert.Equal("""[["sales.units","desc"]]""", sent["query"]!["order"]!.ToJsonString());
+        var units = Ok(sorted, "t")["rows"]!.AsArray().Select(r => r!["cells"]![1]!["v"]!.GetValue<long>()).ToList();
+        Assert.Equal(units.OrderByDescending(u => u), units);
+        Assert.NotEqual(own.CacheKeys["t"], sorted.CacheKeys["t"]);       // the sort is part of the request, so of the cache key: a sorted run never answers an unsorted one
+
+        // a column the table does not show is that widget's error, and nothing else changes; another widget type is refused too
+        var elsewhere = await resolver.ResolveAsync(Viewer(), doc, "desk", orders: new Dictionary<string, WidgetOrder> { ["t"] = new("sales.net_amount", false), ["c"] = new("sales.units", false) });
+        Assert.Equal(ResolveCodes.AnswerMismatch, elsewhere.Widgets["t"]["code"]!.GetValue<string>());
+        Assert.Contains("does not show `sales.net_amount`", elsewhere.Widgets["t"]["message"]!.GetValue<string>());
+        Assert.Equal(ResolveCodes.NotRunHere, elsewhere.Widgets["c"]["code"]!.GetValue<string>());
+    }
+
+    [Fact]
     public async Task The_viewers_values_are_bound_beside_the_request_with_the_documents_definitions_and_an_unset_filter_drops_out()
     {
         var doc = Sample("samples/dashboards/retail-sales-today.yaml");

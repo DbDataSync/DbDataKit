@@ -132,6 +132,13 @@ public sealed class ViewsModuleTests : IDisposable
         Assert.Single(h.Host.Received, r => r.Request.Text.Contains("SUM(", StringComparison.Ordinal));      // the table and the control were not asked for
         Assert.DoesNotContain(h.Host.Received, r => r.Request.Text.Contains("GROUP BY", StringComparison.Ordinal));
 
+        // a viewer's sort of a table (DBR45): the table's own order is replaced for that run; the unsorted result is as it was
+        JsonObject Sort(string dir) => new() { ["only"] = new JsonArray("by_region"), ["order"] = new JsonObject { ["by_region"] = new JsonObject { ["by"] = "orders.net_revenue", ["dir"] = dir } } };
+        Assert.Equal(["West", "East"], TableRegions(await h.RenderAsync("all", Sort("desc"))));
+        Assert.Equal(["East", "West"], TableRegions(await h.RenderAsync("all", Sort("asc"))));
+        var absent = await h.RenderAsync("all", new JsonObject { ["only"] = new JsonArray("by_region"), ["order"] = new JsonObject { ["by_region"] = new JsonObject { ["by"] = "orders.units" } } });
+        Assert.Contains("does not show", absent.Object["widgets"]!["by_region"]!["message"]!.GetValue<string>());
+
         // a named layout, and a layout chosen for the viewport
         var named = await h.RenderAsync("all", new JsonObject { ["layout"] = "kpi" });
         Assert.Equal("kpi", named.Object["layout"]!.GetValue<string>());
@@ -159,6 +166,10 @@ public sealed class ViewsModuleTests : IDisposable
         Assert.Contains("Unknown key `widgets`", unknownKey.Object["message"]!.GetValue<string>());
 
         Assert.Equal(400, (await h.RenderAsync("all", new JsonObject { ["only"] = "revenue" })).Status);
+        Assert.Equal(400, (await h.RenderAsync("all", new JsonObject { ["order"] = "by_region" })).Status);
+        var sideways = await h.RenderAsync("all", new JsonObject { ["order"] = new JsonObject { ["by_region"] = new JsonObject { ["by"] = "orders.net_revenue", ["dir"] = "sideways" } } });
+        Assert.Equal(400, sideways.Status);
+        Assert.Contains("asc", sideways.Object["message"]!.GetValue<string>());
         Assert.Equal(404, (await h.RenderAsync("all", name: "missing")).Status);
 
         var big = await h.RenderAsync("all", new JsonObject { ["parameters"] = new JsonObject { ["region"] = new string('x', 70_000) } });
