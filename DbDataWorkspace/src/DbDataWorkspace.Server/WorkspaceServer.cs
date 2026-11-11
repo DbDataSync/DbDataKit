@@ -68,7 +68,7 @@ public static class WorkspaceServer
         app.MapState(StateApi(settings, instanceId, maintenance));
         var store = new WorkspaceStore(state);
         var workspaces = new DbDataKit.Authoring.Workspaces(settings.Directory, TimeProvider.System);
-        var kinds = StandardProjectKinds.Create(new BuildTool(settings.BuildExecutable), new SyncTool(settings.SyncExecutable));
+        var kinds = StandardProjectKinds.Create(new BuildTool(settings.BuildExecutable), new SyncTool(settings.SyncExecutable, platform: settings.SyncPlatform));
         var builds = new WorkspaceBuilds(settings.Directory, store, workspaces, () => settings.Apps ?? WorkspaceAppSettings.Load(settings.Directory), log, kinds);
         app.Lifetime.ApplicationStopping.Register(builds.Dispose);
         WorkspaceManagement.Map(app, instanceId, WorkspaceSettings.Product, Version, store, new WorkspaceProjects(settings.Directory, store, kinds), new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), log, workspaces, builds, new WorkspacePublishing(settings.Directory, store, () => WorkspaceSecrets.Open(settings.Directory), () => WorkspaceState.Secrets(settings.Directory)));

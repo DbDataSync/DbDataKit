@@ -132,6 +132,23 @@ public sealed class WorkspaceSyncKindTests
         Assert.Contains("dbdatasync is not beside it or on its PATH", (string)missing["message"]!);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("win-x64")]
+    public async Task A_package_is_made_for_the_platform_the_server_is_told_the_runners_run_on_and_for_its_own_when_it_is_not(string? platform)
+    {
+        var program = Fake();
+        var root = Directory.CreateTempSubdirectory("ddw-sync-platform-").FullName;
+        Directory.CreateDirectory(Path.Combine(root, "config"));
+        File.WriteAllText(Path.Combine(root, "config", "x.yaml"), "a: 1\n");
+        var kind = new DbDataKit.Authoring.Server.SyncProjectKind(new DbDataKit.Authoring.Server.SyncTool(program, platform: platform));
+        var made = await kind.ProduceAsync(root, "orders-set", Path.Combine(root, "artifact"), CancellationToken.None);
+        Assert.True(made.Succeeded, made.Message);
+        var arguments = File.ReadAllLines(Path.Combine(Path.GetDirectoryName(program)!, "arguments.txt")).Single(l => l.Contains("--out"));
+        if (platform is null) Assert.DoesNotContain("--platform", arguments);
+        else Assert.Contains($"--platform {platform} ", arguments + " ");
+    }
+
     [Fact]
     public async Task The_real_program_checks_the_template_sound_and_refuses_a_mapping_with_no_cache()
     {

@@ -22,6 +22,9 @@ public sealed record WorkspaceSettings(string Directory, Uri Listen)
     /// <summary>The path of <c>dbdatasync</c> when it is not beside the server or on PATH (a test, or a machine with Sync installed elsewhere); a Sync project is checked and published with it.</summary>
     public string? SyncExecutable { get; init; }
 
+    /// <summary>The platform the runners run on (<c>linux-x64</c> or <c>win-x64</c>) when it is not the one of this machine: a Sync project's package is made with the driver libraries restored for it (<c>dbdatasync package publish --platform</c>); null: the machine's own.</summary>
+    public string? SyncPlatform { get; init; }
+
     public const string Product = "dbdataworkspace";
     public const string DefaultListen = "https://127.0.0.1:8471";
 

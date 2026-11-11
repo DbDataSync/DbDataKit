@@ -6,8 +6,11 @@ using DbDataKit.Authoring;
 namespace DbDataKit.Authoring.Server;
 
 /// <summary>The program of the Sync product the Workspace runs as a child process (<see cref="ChildProgram"/>): <c>dbdatasync</c>. Its commands take their folder as <c>--repo</c> and name their JSON form <c>--json</c>, so no argument follows them.</summary>
-public sealed class SyncTool(string? executable = null, TimeSpan? timeout = null) : ChildProgram("dbdatasync", executable, timeout, Missing, [])
+public sealed class SyncTool(string? executable = null, TimeSpan? timeout = null, string? platform = null) : ChildProgram("dbdatasync", executable, timeout, Missing, [])
 {
+    /// <summary>The runtime identifier the runners that take the package run on (<c>linux-x64</c> or <c>win-x64</c>), which decides the driver libraries the verb restores into it (<c>--platform</c>); null: the verb's own, the platform of the machine this server runs on.</summary>
+    public string? Platform { get; } = string.IsNullOrWhiteSpace(platform) ? null : platform.Trim();
+
     public const string Missing = "This server cannot work on a Sync project: the program dbdatasync is not beside it or on its PATH. Install Sync (the suite package has it) and restart the Workspace server.";
 }
 
@@ -148,7 +151,10 @@ public sealed partial class SyncProjectKind(SyncTool tool) : IProjectKind
     {
         var package = PackageArtifacts.NameOf(projectId);
         (int Exit, string Output, string Error) result;
-        try { result = await tool.RunAsync(["package", "publish", "--to", "runner", "--out", outputFolder, "--json", "--package", package, "--repo", root], root, cancellationToken); }
+        List<string> arguments = ["package", "publish", "--to", "runner", "--out", outputFolder, "--json", "--package", package];
+        if (tool.Platform is { } platform) arguments.AddRange(["--platform", platform]);
+        arguments.AddRange(["--repo", root]);
+        try { result = await tool.RunAsync(arguments, root, cancellationToken); }
         catch (ProjectKindUnavailableException ex) { return new(false, ex.Message, [new("error", "DBD-WS-SYNC-MISSING", ex.Message)]); }
         if (result.Exit != 0)
         {
