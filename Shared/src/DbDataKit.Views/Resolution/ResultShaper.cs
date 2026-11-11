@@ -222,15 +222,103 @@ internal static class ResultShaper
 
     public static JsonObject Matrix(ViewWidget widget, AnswerRows answer)
     {
+        var encodings = widget.Raw["encodings"] as JsonObject ?? [];
         var spec = new JsonObject { ["type"] = "matrix", ["id"] = "v" };
-        foreach (var (key, value) in widget.Raw["encodings"] as JsonObject ?? []) spec[key] = value?.DeepClone();
-        return Render(widget, answer, spec, "matrix");
+        // the engine's view reads field names, a sort per axis and the presets: the widget's `{field, format, sort}` entries and a value's mapping format are split off here, and applied to the labels and cells it gives back
+        var axisFormats = new Dictionary<string, List<JsonNode?>> { ["rows"] = [], ["columns"] = [] };
+        var axisSorts = new Dictionary<string, JsonNode?>();
+        var valueFormats = new List<JsonNode?>();
+        foreach (var (key, value) in encodings)
+        {
+            if (key is "rows" or "columns" && value is JsonArray axis)
+            {
+                var names = new JsonArray();
+                foreach (var entry in axis)
+                {
+                    if (entry is JsonObject o)
+                    {
+                        names.Add(o["field"]?.DeepClone());
+                        axisFormats[key].Add(o["format"]?.DeepClone());
+                        if (o["sort"] is { } sort) axisSorts[key] = sort.DeepClone();
+                    }
+                    else { names.Add(entry?.DeepClone()); axisFormats[key].Add(null); }
+                }
+                spec[key] = names;
+            }
+            else if (key == "values" && value is JsonArray values)
+            {
+                var list = new JsonArray();
+                foreach (var entry in values)
+                {
+                    var copy = entry is JsonObject o ? (JsonObject)o.DeepClone() : new JsonObject();
+                    var format = copy["format"];
+                    valueFormats.Add(format);
+                    // a preset the engine knows stays with the engine; the catalog's own format is what `full` reads, and a mapping is applied to the cells afterwards
+                    if (format is JsonValue fv && fv.TryGetValue<string>(out var preset)) copy["format"] = preset is "compact" or "percent" ? preset : "full";
+                    else copy.Remove("format");
+                    list.Add(copy);
+                }
+                spec[key] = list;
+            }
+            else spec[key] = value?.DeepClone();
+        }
+        foreach (var (axis, sort) in axisSorts)
+        {
+            if (encodings["sort"]?[axis] is not null)
+                throw new WidgetProblem(ResolveCodes.AnswerMismatch, $"The {axis} are sorted twice: by an entry's `sort` and by `sort.{axis}`. Say it once.", $"widgets.{widget.Id}.encodings.sort.{axis}");
+            var sorts = spec["sort"] as JsonObject ?? new JsonObject();
+            sorts[axis] = sort;
+            spec["sort"] = sorts;
+        }
+        var rendered = Render(widget, answer, spec, "matrix");
+        FormatMatrix(rendered, answer, encodings, axisFormats, valueFormats);
+        return rendered;
+    }
+
+    /// <summary>The axis labels and the cells of a rendered matrix under the formats the widget gave them (the engine wrote the labels as the members are and the cells as its presets).</summary>
+    private static void FormatMatrix(JsonObject rendered, AnswerRows answer, JsonObject encodings, Dictionary<string, List<JsonNode?>> axisFormats, List<JsonNode?> valueFormats)
+    {
+        JsonObject? CatalogOf(JsonNode? field) => field is JsonValue v && v.TryGetValue<string>(out var name) ? answer.Table.Resolve(name)?.Format : null;
+        var axes = new[] { ("rows", rendered["rows"] as JsonArray), ("columns", rendered["columns"] as JsonArray) };
+        foreach (var (name, items) in axes)
+        {
+            var fields = encodings[name] as JsonArray ?? [];
+            if (items is null) continue;
+            foreach (var item in items.OfType<JsonObject>())
+            {
+                if (item["total"]?.GetValue<bool>() == true || item["other"]?.GetValue<bool>() == true || item["labels"] is not JsonArray labels) continue;
+                for (var level = 0; level < axisFormats[name].Count && level < labels.Count; level++)
+                {
+                    if (axisFormats[name][level] is not { } format || labels[level] is not JsonValue lv || !lv.TryGetValue<string>(out var label)) continue;
+                    var field = fields[level] is JsonObject o ? o["field"] : fields[level];
+                    labels[level] = ViewFormat.Label(label, format, CatalogOf(field));
+                }
+            }
+        }
+        if (!valueFormats.Any(f => f is JsonObject)) return;
+        var count = valueFormats.Count;
+        var onRows = encodings["values_on"]?.GetValue<string>() == "rows";
+        var valueFields = (encodings["values"] as JsonArray ?? []).Select(v => v?["field"]).ToList();
+        var rows = rendered["rows"] as JsonArray ?? [];
+        for (var r = 0; r < rows.Count; r++)
+        {
+            if (rows[r]?["cells"] is not JsonArray cells) continue;
+            for (var c = 0; c < cells.Count; c++)
+            {
+                // the values come in turn: one per column under each member, or one per row under each member
+                var index = (onRows ? r : c) % count;
+                if (valueFormats[index] is not JsonObject format || cells[c] is not JsonObject cell || ResultTable.Number(cell["v"]) is not { } number) continue;
+                cell["text"] = ViewFormat.Number(number, format, CatalogOf(valueFields[index]));
+            }
+        }
     }
 
     public static JsonObject Chart(ViewWidget widget, AnswerRows answer)
     {
         var encodings = widget.Raw["encodings"] as JsonObject ?? [];
         var encoding = new JsonObject();
+        // a channel's `format` is not the engine's (its subset is closed): it is taken off here and drawn after the engine has resolved the channel
+        var formats = new Dictionary<string, JsonNode>();
         foreach (var (channel, value) in encodings)
         {
             if (value is JsonValue v && v.TryGetValue<string>(out var field)) encoding[channel] = new JsonObject { ["field"] = field, ["type"] = ScaleType(answer.Table, field) };
@@ -238,12 +326,15 @@ internal static class ResultShaper
             {
                 var channelSpec = (JsonObject)o.DeepClone();
                 if (channelSpec["type"] is null && channelSpec["field"] is JsonValue fv && fv.TryGetValue<string>(out var f)) channelSpec["type"] = ScaleType(answer.Table, f);
+                if (channelSpec["format"] is { } format) formats[channel] = format.DeepClone();
+                channelSpec.Remove("format");
                 encoding[channel] = channelSpec;
             }
             // a tooltip's list is resolved after the renderer (it reads one channel per object)
         }
         var vega = new JsonObject { ["mark"] = widget.Raw["mark"]?.DeepClone(), ["encoding"] = encoding };
         var rendered = Render(widget, answer, new JsonObject { ["type"] = "chart", ["id"] = "v", ["vega_lite"] = vega }, "chart");
+        var tipFormats = new List<JsonNode?>();
         if (encodings["tooltip"] is JsonArray tips && rendered["vega_lite"]?["encoding"] is JsonObject drawn)
         {
             var list = new JsonArray();
@@ -253,10 +344,107 @@ internal static class ResultShaper
                 if (name is null) continue;
                 var column = answer.Table.Resolve(name) ?? throw Missing(widget, answer, name, "encodings.tooltip");
                 list.Add(new JsonObject { ["field"] = column.Name, ["type"] = ScaleType(answer.Table, name) });
+                tipFormats.Add(tip is JsonObject to ? to["format"]?.DeepClone() : null);
             }
             drawn["tooltip"] = list;
         }
+        else if (encodings["tooltip"] is JsonObject single && single["format"] is { } tf) tipFormats.Add(tf.DeepClone());
+        FormatChart(rendered, answer, formats, tipFormats);
         return rendered;
+    }
+
+    /// <summary>
+    /// Draws a chart's channel formats (plan 32 DBR41). The engine's subset is closed and a spec with a date format must still sort in calendar order, so: on a **categorical** channel (nominal, ordinal, or a date that
+    /// reads as its parts) the members are written as the format reads them into a column of their own, in the order the engine, or the author's <c>sort</c>, gave the raw members, so <c>MMM</c> labels January to December
+    /// and never alphabetically; on a **quantitative** channel the labels are the ticks of the axis, so the format goes to the chart as a d3-format string (<c>formats</c>, made by <see cref="ViewFormat.D3Number"/> from the format's
+    /// closed vocabulary) that the client gives to Vega-Lite after checking it against a fixed pattern. The author never writes an expression.
+    /// </summary>
+    private static void FormatChart(JsonObject rendered, AnswerRows answer, Dictionary<string, JsonNode> formats, List<JsonNode?> tipFormats)
+    {
+        if (rendered["vega_lite"] is not JsonObject vega || vega["encoding"] is not JsonObject encoding) return;
+        var d3 = new JsonObject();
+        var values = (vega["data"]?["values"] as JsonArray ?? []).OfType<JsonObject>().ToList();
+
+        // returns the d3 string of a number format, or bakes the labels of a categorical one: true when the channel's field was replaced by a label column
+        string? Apply(JsonObject def, string channel, JsonNode format, out bool baked)
+        {
+            baked = false;
+            if (def["field"] is not JsonValue fv || !fv.TryGetValue<string>(out var name)) return null;
+            var catalog = answer.Table.Resolve(name)?.Format;
+            if (def["type"]?.GetValue<string>() == "quantitative") return ViewFormat.D3Number(format, catalog);
+            var column = $"{name}__{channel}";
+            foreach (var row in values) row[column] = row[name] is { } raw ? Label(raw, format, catalog) : null;
+            def["field"] = column;
+            def["title"] ??= answer.Table.Resolve(name)?.Binding ?? name;
+            if (def["type"]?.GetValue<string>() == "temporal") def["type"] = "ordinal";
+            def["sort"] = LabelOrder(def["sort"], values, name, column);
+            baked = true;
+            return null;
+        }
+
+        foreach (var (channel, format) in formats)
+        {
+            if (channel == "tooltip" || encoding[channel] is not JsonObject def) continue;
+            var text = Apply(def, channel, format, out _);
+            if (text is not null) d3[channel] = text;
+        }
+        if (encoding["tooltip"] is JsonArray tips)
+        {
+            var list = new JsonArray();
+            for (var i = 0; i < tips.Count; i++)
+            {
+                list.Add(null);
+                if (i >= tipFormats.Count || tipFormats[i] is not { } format || tips[i] is not JsonObject tip) continue;
+                var text = Apply(tip, $"tooltip{i}", format, out _);
+                if (text is not null) list[i] = text;
+            }
+            if (list.Any(n => n is not null)) d3["tooltip"] = list;
+        }
+        else if (encoding["tooltip"] is JsonObject one && tipFormats.Count == 1 && tipFormats[0] is { } tooltipFormat)
+        {
+            var text = Apply(one, "tooltip", tooltipFormat, out _);
+            if (text is not null) d3["tooltip"] = new JsonArray(text);
+        }
+        if (d3.Count > 0) rendered["formats"] = d3;
+    }
+
+    private static string Label(JsonNode raw, JsonNode format, JsonObject? catalog) =>
+        raw is JsonValue v && v.TryGetValue<string>(out var text) ? ViewFormat.Label(text, format, catalog) : ViewFormat.Text(raw, format, catalog);
+
+    /// <summary>
+    /// The sort of a channel whose members are now labels: the members' order is the order of the raw values (the engine's <c>sort_key</c> order that the view wrote out, a list the author gave, or ascending or descending
+    /// by value), written as the distinct labels in that order, so a label that is not alphabetical (a month name) keeps its place.
+    /// </summary>
+    private static JsonNode LabelOrder(JsonNode? sort, List<JsonObject> values, string name, string column)
+    {
+        var raws = new List<JsonNode?>();
+        void Add(JsonNode? n) { if (!raws.Any(r => JsonNode.DeepEquals(r, n))) raws.Add(n?.DeepClone()); }
+        if (sort is JsonArray given) foreach (var n in given) Add(n);
+        else
+        {
+            foreach (var row in values) Add(row[name]);
+            var descending = sort is JsonValue sv && sv.TryGetValue<string>(out var word) && word == "descending";
+            var keep = sort is null ? false : !(sort is JsonValue kv && kv.TryGetValue<string>(out var w) && w is "ascending" or "descending");
+            if (!keep)
+            {
+                raws.Sort((a, b) => Compare(a, b));
+                if (descending) raws.Reverse();
+            }
+        }
+        var labels = new JsonArray();
+        foreach (var raw in raws)
+        {
+            var row = values.FirstOrDefault(r => JsonNode.DeepEquals(r[name], raw));
+            var label = row?[column];
+            if (label is not null && !labels.Any(l => JsonNode.DeepEquals(l, label))) labels.Add(label.DeepClone());
+        }
+        return labels;
+    }
+
+    private static int Compare(JsonNode? a, JsonNode? b)
+    {
+        if (a is null || b is null) return a is null ? (b is null ? 0 : 1) : -1;
+        return ResultTable.Number(a) is { } x && ResultTable.Number(b) is { } y ? x.CompareTo(y) : string.CompareOrdinal(ResultTable.Label(a), ResultTable.Label(b));
     }
 
     private static string ScaleType(ResultTable table, string field)

@@ -20,7 +20,13 @@ function headerCells(columns: RenderedMatrix['columns'], level: number) {
  * A matrix view as a grid: row labels down the left, column labels across the top (outermost first), the server's text in every cell. Nothing is computed here: a
  * total row or column is the one the result held (`total` on the row or column), Other is a sum the server made, and a cell reads as the server formatted it.
  */
-export function MatrixGrid({ view, onCell }: { view: RenderedMatrix; onCell?: (row: number, column: number | undefined, modifiers: Modifiers) => void }) {
+export function MatrixGrid({ view, onCell, sort, onSortColumn }: {
+  view: RenderedMatrix
+  onCell?: (row: number, column: number | undefined, modifiers: Modifiers) => void
+  /** The column the viewer sorted by (a click on the innermost header, plan 32 DBR45) and what a click does: both only when the host lets viewers sort. */
+  sort?: { column: number; dir: 'asc' | 'desc' } | null
+  onSortColumn?: (column: number) => void
+}) {
   const levels = Math.max(1, ...view.columns.map((c) => c.labels.length))
   const rowLabelWidth = Math.max(1, ...view.rows.map((r) => r.labels.length))
   return (
@@ -31,8 +37,11 @@ export function MatrixGrid({ view, onCell }: { view: RenderedMatrix; onCell?: (r
             <tr key={level}>
               {level === 0 && <td className="vz-corner" colSpan={rowLabelWidth} rowSpan={levels} />}
               {headerCells(view.columns, level).map((cell) => (
-                <th key={cell.first} scope="col" colSpan={cell.span} className={view.columns[cell.first]!.total ? 'vz-total' : view.columns[cell.first]!.other ? 'vz-other' : undefined}>
-                  {cell.label}
+                <th key={cell.first} scope="col" colSpan={cell.span} className={view.columns[cell.first]!.total ? 'vz-total' : view.columns[cell.first]!.other ? 'vz-other' : undefined}
+                  aria-sort={onSortColumn && level === levels - 1 ? (sort?.column === cell.first ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none') : undefined}>
+                  {onSortColumn && level === levels - 1
+                    ? <button type="button" className="vz-sort" data-testid={`vz-sort-${view.id}-${cell.first}`} onClick={() => onSortColumn(cell.first)}>{cell.label}{sort?.column === cell.first ? (sort.dir === 'asc' ? ' \u25B2' : ' \u25BC') : ''}</button>
+                    : cell.label}
                 </th>
               ))}
             </tr>

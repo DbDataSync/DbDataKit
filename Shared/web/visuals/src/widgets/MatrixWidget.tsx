@@ -1,15 +1,21 @@
+import { useState } from 'react'
 import { MatrixGrid } from '../MatrixGrid'
 import type { RenderedMatrix } from '../types'
 import type { Box } from '../views/model'
 import { MATRIX_COLUMN_WIDTH, MATRIX_LABEL_WIDTH, TABLE_ROW_HEIGHT } from './density'
 import { FitNotice } from './TableWidget'
 import type { Modifiers } from '../MatrixGrid'
+import { nextSort, sortedOrder, type ViewerSort } from './clickSort'
 
 /**
  * A matrix widget: the existing `MatrixGrid`, cut to its tile. A matrix **truncates columns first** (a column the grid has no room for goes, a total column is kept), then rows (a total row is kept), and says
  * "6 of 9 columns, 12 of 40 rows" with the action that maximizes the tile. `maximized` draws it whole and the widget scrolls.
  */
-export function MatrixWidget({ view, box, maximized = false, onMaximize, title, onCell }: { view: RenderedMatrix; box?: Box; maximized?: boolean; onMaximize?: () => void; title?: string; onCell?: (row: number, column: number | undefined, modifiers: Modifiers) => void }) {
+export function MatrixWidget({ view: given, box, maximized = false, onMaximize, title, onCell, sortable = false }: { view: RenderedMatrix; box?: Box; maximized?: boolean; onMaximize?: () => void; title?: string; onCell?: (row: number, column: number | undefined, modifiers: Modifiers) => void; sortable?: boolean }) {
+  // a click on a column's innermost header sorts the rows by that column on screen (plan 32 DBR45; never stored); a total row stays last, and a cell's row is still the row of the result
+  const [sort, setSort] = useState<ViewerSort | null>(null)
+  const order = sortedOrder(given.rows, sortable ? sort : null)
+  const view: RenderedMatrix = sortable && sort !== null ? { ...given, rows: order.map((i) => given.rows[i]!) } : given
   let shown = view
   const told: string[] = []
   // what a cell of the shown (cut) matrix is in the whole one
@@ -41,7 +47,9 @@ export function MatrixWidget({ view, box, maximized = false, onMaximize, title, 
   }
   return (
     <div className={maximized ? 'vz-matrix-fit vz-maximized' : 'vz-matrix-fit'}>
-      <MatrixGrid view={shown} onCell={onCell ? (r, c, m) => onCell(rowIndex[r]!, c === undefined ? undefined : columnIndex[c]!, m) : undefined} />
+      <MatrixGrid view={shown} onCell={onCell ? (r, c, m) => onCell(order[rowIndex[r]!]!, c === undefined ? undefined : columnIndex[c]!, m) : undefined}
+        sort={sort === null ? null : { column: columnIndex.indexOf(sort.index), dir: sort.dir }}
+        onSortColumn={sortable ? (c) => setSort(nextSort(sort, columnIndex[c]!)) : undefined} />
       {told.length > 0 ? <FitNotice text={told.join(', ')} onMaximize={onMaximize} label={`Show the whole matrix${title ? ` ${title}` : ''}`} /> : null}
     </div>
   )

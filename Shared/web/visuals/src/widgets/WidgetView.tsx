@@ -39,6 +39,10 @@ export interface WidgetViewProps {
   stale?: boolean
   /** Whether the host follows a `drill` (default yes): without it a widget with only a `drill` is not pointable. */
   canDrill?: boolean
+  /** Viewers sort a table or a matrix by clicking a header (plan 32 DBR45), on screen only; off by default so print, export and a host that does not say so are unchanged. */
+  sortable?: boolean
+  /** A table the server cut at its limit: the host runs it again with `order` (column field, direction; null, null for the document's order). */
+  onServerSort?: (widget: string, field: string | null, dir: 'asc' | 'desc' | null) => void
 }
 
 function isEmpty(result: RenderedWidget): boolean {
@@ -55,7 +59,7 @@ function isEmpty(result: RenderedWidget): boolean {
  * One widget in its tile: a title bar (a metric carries its label instead), the body its type draws from its resolved result, and the three states besides drawn: **loading**, **empty** ("No data."), and
  * **error** (the server's code and words: one failing widget never fails the page). Light and dark by the theme; `density` is chosen from the box (a layout's `widget_options` can pin it).
  */
-export function WidgetView({ id, widget, result, loading = false, box, theme = 'auto', options, parameters = {}, definitions = [], onParameterChange, maximized = false, onMaximize, onHit, asOf, stale = false, canDrill = true }: WidgetViewProps) {
+export function WidgetView({ id, widget, result, loading = false, box, theme = 'auto', options, parameters = {}, definitions = [], onParameterChange, maximized = false, onMaximize, onHit, asOf, stale = false, canDrill = true, sortable = false, onServerSort }: WidgetViewProps) {
   const resolved = useTheme(theme)
   const density: DensityClass = box ? densityClass(widget.type, box, options?.density) : options?.density === 'compact' ? 's' : 'l'
   const titled = widget.title !== undefined && widget.type !== 'metric' && options?.show_title !== false
@@ -96,8 +100,8 @@ export function WidgetView({ id, widget, result, loading = false, box, theme = '
   else {
     switch (widget.type) {
       case 'metric': content = <MetricTile widget={widget} result={result as never} density={density} />; break
-      case 'table': content = <TableWidget id={id} widget={widget} result={result as never} box={body} maximized={maximized} onMaximize={onMaximize} onRow={pointable ? (index, m) => onHit!({ kind: 'row', index }, howOf(m)) : undefined} />; break
-      case 'matrix': content = <MatrixWidget view={result as RenderedMatrix} box={body} maximized={maximized} onMaximize={onMaximize} title={widget.title} onCell={pointable ? (row, column, m) => onHit!({ kind: 'matrix', row, ...(column === undefined ? {} : { column }) }, howOf(m)) : undefined} />; break
+      case 'table': content = <TableWidget id={id} widget={widget} result={result as never} box={body} maximized={maximized} onMaximize={onMaximize} sortable={sortable} onServerSort={onServerSort ? (field, dir) => onServerSort(id, field, dir) : undefined} onRow={pointable ? (index, m) => onHit!({ kind: 'row', index }, howOf(m)) : undefined} />; break
+      case 'matrix': content = <MatrixWidget view={result as RenderedMatrix} box={body} maximized={maximized} onMaximize={onMaximize} title={widget.title} sortable={sortable} onCell={pointable ? (row, column, m) => onHit!({ kind: 'matrix', row, ...(column === undefined ? {} : { column }) }, howOf(m)) : undefined} />; break
       case 'chart': content = <ChartWidget view={result as RenderedChart} theme={resolved} box={body} density={density} options={options} onHit={pointable ? onHit : undefined} />; break
       case 'text': content = <TextBlock widget={widget} parameters={parameters} />; break
       case 'image': content = <ImageBlock widget={widget} result={result as never} />; break

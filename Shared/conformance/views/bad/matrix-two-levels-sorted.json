@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "kind": "dashboard",
+  "title": "Formats",
+  "widgets": {
+    "w": {
+      "type": "matrix",
+      "encodings": {
+        "rows": [
+          {
+            "field": "date.year",
+            "sort": {
+              "by": "label"
+            }
+          },
+          {
+            "field": "date.month",
+            "sort": {
+              "by": "sort_key"
+            }
+          }
+        ],
+        "values": [
+          {
+            "field": "orders.net_revenue"
+          }
+        ]
+      },
+      "query": {
+        "model": "sales"
+      }
+    }
+  },
+  "layouts": [
+    {
+      "name": "desk",
+      "type": "reflow",
+      "default": true,
+      "grid": {
+        "columns": 12
+      },
+      "tiles": [
+        {
+          "widget": "w",
+          "x": 0,
+          "y": 0,
+          "w": 12,
+          "h": 6
+        }
+      ]
+    }
+  ]
+}
