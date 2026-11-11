@@ -1,7 +1,7 @@
 using DbDataKit.State;
 using DbDataKit.State.Tracking;
 
-namespace DbDataBuild.State;
+namespace DbDataKit.Tracking.Build;
 
 /// <summary>
 /// The <c>build_tracking</c> module (plan 28c section 5.2, slice E16): the copy of Build's tracking tables in the group's state, one row for each row of a stream, as a document (see <see cref="BuildStreams"/>), under the <b>identity</b> of the

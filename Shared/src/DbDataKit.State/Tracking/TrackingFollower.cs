@@ -34,9 +34,10 @@ public sealed record TrackingFollowerOptions
 public sealed class TrackingFollower
 {
     private readonly ITrackingSource _primary;
-    private readonly ITrackingSink _copy;
-    private readonly ProgressStore _progress;
-    private readonly ITrackingDivergenceStore _divergences;
+    private readonly ITrackingSink? _copy;
+    private readonly ProgressStore? _progress;
+    private readonly ITrackingDivergenceStore? _divergences;
+    private readonly IRemoteTrackingCopy? _remote;
     private readonly TrackingFollowerOptions _options;
     private readonly AuditLog? _audit;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -63,23 +64,59 @@ public sealed class TrackingFollower
         if (_options.TailSize < 1) throw new ArgumentOutOfRangeException(nameof(options), "The comparison looks at least one key.");
     }
 
+    /// <summary>
+    /// A follower whose copy is in another process (plan 28c E16, the runner's task): the checkpoint, the rows and the divergence records are behind <paramref name="remote"/>, which moves rows and checkpoint in one
+    /// transaction where the state is. Such a follower catches up (<see cref="CatchUpAsync"/>, <see cref="RunOnceAsync"/>) and nothing else: resolving a divergence is done where the copy is.
+    /// </summary>
+    public TrackingFollower(string identity, TrackingStream stream, ITrackingSource primary, IRemoteTrackingCopy remote, TrackingFollowerOptions? options = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(identity);
+        ArgumentNullException.ThrowIfNull(stream);
+        ArgumentNullException.ThrowIfNull(primary);
+        ArgumentNullException.ThrowIfNull(remote);
+        Identity = identity;
+        Stream = stream;
+        _primary = primary;
+        _remote = remote;
+        _options = options ?? new TrackingFollowerOptions();
+        if (_options.BatchSize < 1) throw new ArgumentOutOfRangeException(nameof(options), "A batch has at least one row.");
+        if (_options.MaxBatchesPerRun < 1) throw new ArgumentOutOfRangeException(nameof(options), "A run copies at least one batch.");
+        if (_options.TailSize < 1) throw new ArgumentOutOfRangeException(nameof(options), "The comparison looks at least one key.");
+    }
+
     public string Identity { get; }
 
     public TrackingStream Stream { get; }
 
-    private string CheckpointName => $"tracking.{Stream.Name}";
+    /// <summary>The name of the follower's checkpoint in the progress store (what a remote copy keeps it under).</summary>
+    public static string CheckpointNameOf(string stream) => $"tracking.{stream}";
 
-    private const string OrderPart = "order";
-    private const string KeyPart = "key";
+    /// <summary>The checkpoint's two parts: the ordering value and the row key.</summary>
+    public const string OrderPartName = "order";
+
+    public const string KeyPartName = "key";
+
+    private string CheckpointName => CheckpointNameOf(Stream.Name);
+
+    private const string OrderPart = OrderPartName;
+    private const string KeyPart = KeyPartName;
 
     /// <summary>The follower's checkpoint: the last position copied, or null before the first row.</summary>
-    public TrackingPosition? Position => ToPosition(_progress.GetCheckpoint(CheckpointName, Identity));
+    public TrackingPosition? Position => ToPosition(Progress.GetCheckpoint(CheckpointName, Identity));
+
+    private ProgressStore Progress => _progress ?? throw Local();
+
+    private ITrackingSink Copy => _copy ?? throw Local();
+
+    private ITrackingDivergenceStore Divergences => _divergences ?? throw Local();
+
+    private static NotSupportedException Local() => new("This follower's copy is in another process; its checkpoint and divergences are read through the copy (CatchUpAsync).");
 
     private static TrackingPosition? ToPosition(Checkpoint? checkpoint) =>
         checkpoint is not null && checkpoint.Parts.TryGetValue(OrderPart, out var order) && checkpoint.Parts.TryGetValue(KeyPart, out var key) ? new TrackingPosition(order.AsInt, key.AsText) : null;
 
     /// <summary>The open divergence of this connection and stream, or null.</summary>
-    public TrackingDivergence? Divergence => _divergences.Open(Identity, Stream.Name);
+    public TrackingDivergence? Divergence => Divergences.Open(Identity, Stream.Name);
 
     // ---------- running ----------
 
@@ -165,12 +202,13 @@ public sealed class TrackingFollower
     {
         try
         {
-            if (_divergences.Open(Identity, Stream.Name) is { } open)
+            var remoteState = _remote is null ? null : await _remote.StateAsync(Identity, Stream.Name, cancellationToken).ConfigureAwait(false);
+            if ((remoteState is null ? _divergences!.Open(Identity, Stream.Name) : remoteState.Open) is { } open)
                 return new TrackingRunResult(0, false, null, Diverged: true, open);
 
-            var checkpoint = _progress.GetCheckpoint(CheckpointName, Identity);
-            var version = checkpoint?.Version ?? 0;
-            var position = ToPosition(checkpoint);
+            var checkpoint = remoteState is null ? _progress!.GetCheckpoint(CheckpointName, Identity) : null;
+            var version = remoteState?.Version ?? checkpoint?.Version ?? 0;
+            var position = remoteState is null ? ToPosition(checkpoint) : remoteState.Position;
 
             if (await FindDivergenceAsync(position, cancellationToken).ConfigureAwait(false) is { } found)
                 return new TrackingRunResult(0, false, null, Diverged: true, found);
@@ -183,7 +221,12 @@ public sealed class TrackingFollower
                 var last = rows[^1];
                 var parts = new Dictionary<string, ProgressValue> { [OrderPart] = ProgressValue.OfInt(last.Order), [KeyPart] = ProgressValue.OfText(last.Key) };
                 bool moved;
-                if (_copy is IStateTrackingSink state && ReferenceEquals(state.Database, _progress.Database))
+                if (_remote is not null)
+                {
+                    // the copy is in the runner's state, behind the protocol: it writes the rows and moves the checkpoint in one transaction there
+                    moved = await _remote.WriteAdvanceAsync(Identity, Stream, rows, version, cancellationToken).ConfigureAwait(false);
+                }
+                else if (_copy is IStateTrackingSink state && ReferenceEquals(state.Database, _progress!.Database))
                 {
                     // the rows and the checkpoint are one transaction: both land or neither does
                     cancellationToken.ThrowIfCancellationRequested();
@@ -192,8 +235,8 @@ public sealed class TrackingFollower
                 else
                 {
                     // the copy is somewhere else: its write is idempotent and durable before the checkpoint moves, so a crash between the two only repeats the write
-                    await _copy.WriteAsync(Identity, Stream, rows, cancellationToken).ConfigureAwait(false);
-                    moved = _progress.Advance(CheckpointName, parts, version, itemKey: Identity, actor: "tracking-follower");
+                    await _copy!.WriteAsync(Identity, Stream, rows, cancellationToken).ConfigureAwait(false);
+                    moved = _progress!.Advance(CheckpointName, parts, version, itemKey: Identity, actor: "tracking-follower");
                 }
 
                 if (!moved)
@@ -226,7 +269,7 @@ public sealed class TrackingFollower
     private async Task<TrackingDivergence?> FindDivergenceAsync(TrackingPosition? checkpoint, CancellationToken cancellationToken)
     {
         var primaryHigh = await _primary.HighWaterMarkAsync(Identity, Stream, cancellationToken).ConfigureAwait(false);
-        var copyTail = await _copy.TailAsync(Identity, Stream, _options.TailSize, cancellationToken).ConfigureAwait(false);
+        var copyTail = await (_remote is not null ? _remote.TailAsync(Identity, Stream, _options.TailSize, cancellationToken) : _copy!.TailAsync(Identity, Stream, _options.TailSize, cancellationToken)).ConfigureAwait(false);
         var copyHigh = copyTail.Count > 0 ? copyTail[^1] : null;
 
         var primaryTail = copyTail.Count > 0 ? await _primary.TailAsync(Identity, Stream, _options.TailSize, cancellationToken).ConfigureAwait(false) : [];
@@ -239,12 +282,17 @@ public sealed class TrackingFollower
                 : $"The primary's newest row of '{Stream.Name}' (order {primaryHigh.Order}) is behind the follower's checkpoint (order {checkpoint.Order}): the primary was restored from a backup.";
             // the common point is only ever one both sides were seen to hold: what the tails agree on, or the primary's newest row when the copy has it too; otherwise none (conservative)
             var common = differ?.Common ?? (primaryHigh is not null && copyTail.Contains(primaryHigh) ? primaryHigh : null);
-            return _divergences.Mark(Identity, Stream.Name, reason, common, primaryHigh, copyHigh ?? checkpoint);
+            return await MarkAsync(reason, common, primaryHigh, copyHigh ?? checkpoint, cancellationToken).ConfigureAwait(false);
         }
 
         if (differ is null) return null;
-        return _divergences.Mark(Identity, Stream.Name, $"The copy holds rows of '{Stream.Name}' that the primary does not (digest of the copy's newest keys {Digest(differ.CopyWindow)}, the primary's {Digest(differ.PrimaryWindow)}).", differ.Common, primaryHigh, copyHigh);
+        return await MarkAsync($"The copy holds rows of '{Stream.Name}' that the primary does not (digest of the copy's newest keys {Digest(differ.CopyWindow)}, the primary's {Digest(differ.PrimaryWindow)}).", differ.Common, primaryHigh, copyHigh, cancellationToken).ConfigureAwait(false);
     }
+
+    private Task<TrackingDivergence> MarkAsync(string reason, TrackingPosition? common, TrackingPosition? primaryHigh, TrackingPosition? copyHigh, CancellationToken cancellationToken) =>
+        _remote is not null
+            ? _remote.MarkDivergenceAsync(Identity, Stream.Name, reason, common, primaryHigh, copyHigh, cancellationToken)
+            : Task.FromResult(_divergences!.Mark(Identity, Stream.Name, reason, common, primaryHigh, copyHigh));
 
     private sealed record Difference(TrackingPosition? Common, IReadOnlyList<TrackingPosition> CopyWindow, IReadOnlyList<TrackingPosition> PrimaryWindow);
 
@@ -299,18 +347,18 @@ public sealed class TrackingFollower
     public async Task<bool> ResolveAsync(TrackingResolution resolution, string actor, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(actor);
-        if (_divergences.Open(Identity, Stream.Name) is not { } divergence) return false;
+        if (Divergences.Open(Identity, Stream.Name) is not { } divergence) return false;
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var marker = $"divergence-{divergence.Id.ToString(CultureInfo.InvariantCulture)}";
             var moved = resolution == TrackingResolution.Archive
-                ? await _copy.ArchiveAfterAsync(Identity, Stream, divergence.Common, marker, cancellationToken).ConfigureAwait(false)
-                : await _copy.DeleteAfterAsync(Identity, Stream, divergence.Common, cancellationToken).ConfigureAwait(false);
+                ? await Copy.ArchiveAfterAsync(Identity, Stream, divergence.Common, marker, cancellationToken).ConfigureAwait(false)
+                : await Copy.DeleteAfterAsync(Identity, Stream, divergence.Common, cancellationToken).ConfigureAwait(false);
 
             MoveCheckpointTo(divergence.Common, actor);
-            if (!_divergences.Resolve(divergence.Id, resolution, actor)) return false;
+            if (!Divergences.Resolve(divergence.Id, resolution, actor)) return false;
 
             _audit?.Record(new AuditEvent("person", actor, "tracking.resolve", TargetKind: "tracking_stream", TargetId: $"{Identity}/{Stream.Name}",
                 Detail: $"{{\"stream\":\"{Escape(Stream.Name)}\",\"resolution\":\"{resolution}\",\"rows\":{moved.ToString(CultureInfo.InvariantCulture)},\"divergence\":{divergence.Id.ToString(CultureInfo.InvariantCulture)}}}"));
@@ -326,12 +374,12 @@ public sealed class TrackingFollower
     {
         for (var attempt = 0; attempt < 3; attempt++)
         {
-            var current = _progress.GetCheckpoint(CheckpointName, Identity);
+            var current = Progress.GetCheckpoint(CheckpointName, Identity);
             if (common is null)
             {
-                if (current is null || _progress.DeleteCheckpoint(CheckpointName, actor, Identity)) return;
+                if (current is null || Progress.DeleteCheckpoint(CheckpointName, actor, Identity)) return;
             }
-            else if (_progress.Advance(CheckpointName, new Dictionary<string, ProgressValue> { [OrderPart] = ProgressValue.OfInt(common.Order), [KeyPart] = ProgressValue.OfText(common.Key) }, current?.Version ?? 0, itemKey: Identity, actor: actor))
+            else if (Progress.Advance(CheckpointName, new Dictionary<string, ProgressValue> { [OrderPart] = ProgressValue.OfInt(common.Order), [KeyPart] = ProgressValue.OfText(common.Key) }, current?.Version ?? 0, itemKey: Identity, actor: actor))
             {
                 return;
             }

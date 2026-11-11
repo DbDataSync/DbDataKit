@@ -2,11 +2,11 @@ using System.Data.Common;
 using DbDataKit.State;
 using DbDataKit.State.Tracking;
 
-namespace DbDataBuild.State;
+namespace DbDataKit.Tracking.Build;
 
 /// <summary>
 /// The copy side of Build's tracking: <c>build_tracking.tracked_row</c> as a follower's sink (and as a source, for the comparison of the two sides). Every statement is narrowed by the identity. Row keys are compared in binary, so the order of rows that
-/// share a time is the same here as on the target (<see cref="BuildTrackingSource"/> sorts them ordinally).
+/// share a time is the same here as on the target (<c>BuildTrackingSource</c> sorts them ordinally).
 /// </summary>
 public sealed class BuildTrackingStore(StateDatabase database) : IStateTrackingSink
 {
@@ -115,6 +115,21 @@ public sealed class BuildTrackingStore(StateDatabase database) : IStateTrackingS
         });
 
     // ---------- reading the copy as documents ----------
+
+    /// <summary>The connection identities the copy holds live rows of (what a screen lists), in binary order.</summary>
+    public IReadOnlyList<string> Identities() =>
+        database.Retry<IReadOnlyList<string>>(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, "SELECT DISTINCT connection_identity FROM {table:tracked_row} WHERE archive_id = $archive;");
+            cmd.Bind(database, "archive", Live);
+            var rows = new List<string>();
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read()) rows.Add(reader.GetString(0));
+            rows.Sort(StringComparer.Ordinal);
+            return rows;
+        });
+
 
     /// <summary>All live rows of a stream, in order (what a test or a rebuild compares with the target).</summary>
     public IReadOnlyList<TrackingRow> Rows(string identity, string stream) =>

@@ -1,4 +1,5 @@
 using DbDataKit.State;
+using DbDataKit.State.Tracking;
 
 namespace DbDataKit.Runner.Kit;
 
@@ -97,6 +98,22 @@ internal interface IRunBackend
     Task<bool> IsWorkCancelRequestedAsync(Guid itemRunId, CancellationToken ct);
 
     Task<WorkSnapshot> WorkStateAsync(IReadOnlyList<string> kinds, CancellationToken ct);
+
+    // ---- Build's tracking copy (TrackingState, TrackingWrite, TrackingTail, TrackingRead, TrackingUnsettled, TrackingDivergence, TrackingSnapshot; plan 28c E16): the runner's build_tracking module, for the connections the run holds
+
+    Task<TrackingCopyState> TrackingStateAsync(string identity, string stream, CancellationToken ct);
+
+    Task<bool> TrackingWriteAsync(string identity, string stream, IReadOnlyList<TrackingRow> rows, bool advance, long expectedVersion, CancellationToken ct);
+
+    Task<IReadOnlyList<TrackingPosition>> TrackingTailAsync(string identity, string stream, int count, CancellationToken ct);
+
+    Task<IReadOnlyList<TrackingRow>> TrackingReadAsync(string identity, string stream, TrackingPosition? after, int limit, CancellationToken ct);
+
+    Task<IReadOnlyList<(string Key, string Hash)>> TrackingUnsettledAsync(string identity, string stream, int limit, CancellationToken ct);
+
+    Task<TrackingDivergence> TrackingDivergenceAsync(string identity, string stream, string reason, TrackingPosition? common, TrackingPosition? primaryHigh, TrackingPosition? copyHigh, CancellationToken ct);
+
+    Task<int> TrackingSnapshotAsync(string identity, string table, IReadOnlyList<TrackingRow> rows, CancellationToken ct);
 
     // ---- one-way (the protocol batches them): counts, the status line, lineage
     void Count(string name, long n);

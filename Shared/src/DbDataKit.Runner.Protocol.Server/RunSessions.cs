@@ -77,6 +77,11 @@ internal sealed class RunSession
     /// <summary>Whether the run has used the queue (so its heartbeat and its end have claims to look after).</summary>
     public bool WorkUsed => _work?.Used ?? false;
 
+    private RunTracking? _tracking;
+
+    /// <summary>The run's access to the runner's copy of Build's tracking (plan 28c E16): the connections the run holds decide which identities it may write.</summary>
+    public RunTracking Tracking => _tracking ??= new RunTracking(Grant.Environment.Database, Grant.Start.ConnectionHandles);
+
     public ProgressStore Progress { get; }
 
     public DateTimeOffset ExpiresAt { get; }

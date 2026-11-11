@@ -62,7 +62,7 @@ internal static class InitCommand
 
         output.Payload("connection", target);
         output.Payload("tracking_schema", string.Join(", ", schemas));
-        output.Payload("layout_version", DbDataBuild.State.TrackingSchema.Version);
+        output.Payload("layout_version", DbDataKit.Tracking.Build.TrackingSchema.Version);
         output.Payload("unverified", ddl.Unverified);
         output.Payload("applied", apply);
         output.Payload("statements", script.Select(s => new { id = s.Id, description = s.Description, text = s.Text }).ToList());

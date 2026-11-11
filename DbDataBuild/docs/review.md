@@ -47,7 +47,7 @@ Repo: `C:\Projects\DbDataKit\DbDataBuild` (submodule, read-only). `Version` 0.4.
 - **Seeds** (`seeds/**.sql`): SELECTs generating sample rows in DuckDB (`SeedSet.cs`, `Sample/SeedRun.cs`).
 - **Hooks** (`Models/HooksAndIndexes.cs`): project-relative `.sql` scripts attached to lifecycle events, with declared `effect` (ddl/data) and `risk` (safe/risky/destructive); groups via `use:`.
 - **Plan** (`plans/<connection>/<id>.plan.yml`, `Planning/PlanDocument.cs`): every statement, risk, reasons, shape hashes of live and recorded objects, a content SHA-256 (`PlanDocument.cs:15-42`); `Parse` refuses a file whose hash does not match. A **refresh plan** is compiled into `rendered/<connection>/loads.yml`.
-- **Tracking tables** (`State/TrackingSchema.cs`, `TrackingDdl.cs`): a schema on a connection (can be a different connection) recording events, shapes, acknowledgements, metadata; layout versioned (currently 5) with in-place upgrade scripts (`TrackingDdl.UpgradeScript`).
+- **Tracking tables** (`Shared/src/DbDataKit.Tracking.Build/TrackingSchema.cs`, `State/TrackingDdl.cs`): a schema on a connection (can be a different connection) recording events, shapes, acknowledgements, metadata; layout versioned (currently 5) with in-place upgrade scripts (`TrackingDdl.UpgradeScript`).
 - **Matrix** (`matrix/*.yml`): product data. `constructs.yml` (status per construct per engine), `strategies.yml`, `decision-table.yml`, `covered.yml`. Its hash goes into every rendered header.
 - **Dialect lock** (`dialects.lock.yml`, `Models/DialectLockFile.cs`): committed result of discovering a Flight SQL server's dialect.
 - **Answer files** (`AnswerFileLoader.cs`, `schemas/answers.schema.json`): non-interactive answers to planner questions.
@@ -138,7 +138,7 @@ Repo: `C:\Projects\DbDataKit\DbDataBuild` (submodule, read-only). `Version` 0.4.
 | Strict YAML reader + merge | `Models/Yaml/StrictYamlReader.cs`, `YamlNodes.cs`, `YamlMerge.cs`, `YamlFieldReader.cs` | Position-tracking node tree over YamlDotNet's parser; safe by construction. Depends on `DiagnosticCatalog`. |
 | Diagnostics catalog | `Core/Diagnostics.cs` | Coded diagnostics with fix/explanation; pattern reusable, content is project-specific. |
 | Mutation gate + statement log + app lock | `Execution/MutationGate.cs`, `StatementLog.cs`, `Statements.cs`, `GateInvariantTests` | Single choke point for writes with an audit log; a pattern to copy. Coupled to tracking schema/plan model. |
-| Tracking/state tables | `State/TrackingSchema.cs`, `TrackingDdl.cs`, `Execution/TrackingStore.cs` | Engine-specific DDL for a small metadata schema; coupled to this tool's event model. |
+| Tracking/state tables | `DbDataKit.Tracking.Build/TrackingSchema.cs`, `State/TrackingDdl.cs`, `Execution/TrackingStore.cs` | Engine-specific DDL for a small metadata schema; coupled to this tool's event model. |
 | Hashing, deterministic text | `State/Hashing.cs`, `Core/StringBuilderLf.cs` | Trivial; share. |
 | Localhost web/MCP hardening | `Cli/Web/WebServer.cs`, `Cli/Mcp/McpServer.cs`, `ToolSurface.cs` | Token + Host + Origin pattern is a good template; bound to `ICommandHost`. |
 | Not shareable | `Lowering/*`, `Sql/*` (polyglot FFI), `Targets/Rules/*`, `Planning/*` | DbDataBuild's differentiator (DuckDB-SQL lowering); keep local. |

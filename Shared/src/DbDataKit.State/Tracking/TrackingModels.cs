@@ -108,3 +108,37 @@ public interface ITrackingDivergenceStore
 
     IReadOnlyList<TrackingDivergence> List(string? identity = null);
 }
+
+/// <summary>What a remote copy holds of one stream and identity: the follower's checkpoint with its version, and the open divergence, if any.</summary>
+public sealed record TrackingCopyState(TrackingPosition? Position, long Version, TrackingDivergence? Open);
+
+/// <summary>
+/// The copy side of a follower that runs in another process than the state it copies into (plan 28c E16: the runner's task copies Build's tracking into the runner's state through the runner protocol). The
+/// rows and the checkpoint move in <b>one transaction</b> where the state is (<see cref="WriteAdvanceAsync"/>), which is why the follower's checkpoint is not asked for and moved by the follower itself.
+/// </summary>
+public interface IRemoteTrackingCopy
+{
+    /// <summary>The checkpoint of the stream for this identity, and the open divergence.</summary>
+    Task<TrackingCopyState> StateAsync(string identity, string stream, CancellationToken cancellationToken);
+
+    /// <summary>Writes the rows (idempotently) and moves the checkpoint to the last one, in one transaction, when the checkpoint is still at <paramref name="expectedVersion"/>; false when it moved (nothing is written).</summary>
+    Task<bool> WriteAdvanceAsync(string identity, TrackingStream stream, IReadOnlyList<TrackingRow> rows, long expectedVersion, CancellationToken cancellationToken);
+
+    /// <summary>The positions of the newest <paramref name="count"/> rows of the copy, oldest first.</summary>
+    Task<IReadOnlyList<TrackingPosition>> TailAsync(string identity, TrackingStream stream, int count, CancellationToken cancellationToken);
+
+    /// <summary>Marks the stream diverged (the open one, when there already is one, is returned unchanged).</summary>
+    Task<TrackingDivergence> MarkDivergenceAsync(string identity, string stream, string reason, TrackingPosition? common, TrackingPosition? primaryHigh, TrackingPosition? copyHigh, CancellationToken cancellationToken);
+
+    /// <summary>Rewrites rows that are already in the copy (a row that changed since it was copied), without moving the checkpoint.</summary>
+    Task RewriteAsync(string identity, string stream, IReadOnlyList<TrackingRow> rows, CancellationToken cancellationToken);
+
+    /// <summary>The copy's own rows of a stream after a position, in order (what a snapshot is rebuilt from).</summary>
+    Task<IReadOnlyList<TrackingRow>> ReadAsync(string identity, string stream, TrackingPosition? after, int limit, CancellationToken cancellationToken);
+
+    /// <summary>The newest rows of an updated stream that the copy holds as unsettled, with the hash each had when copied.</summary>
+    Task<IReadOnlyList<(string Key, string Hash)>> UnsettledAsync(string identity, string stream, int limit, CancellationToken cancellationToken);
+
+    /// <summary>Replaces every live row of a snapshot table of the identity, in one transaction where the copy is.</summary>
+    Task<int> ReplaceSnapshotAsync(string identity, string table, IReadOnlyList<TrackingRow> rows, CancellationToken cancellationToken);
+}

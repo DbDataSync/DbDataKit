@@ -45,6 +45,33 @@ public sealed class RefreshJob : RunnerJob<RefreshInput, NoProgress, NoSlots>
             name == Actor.Variable ? actor
             : name == InitCommand.StatementLogVariable && !string.IsNullOrEmpty(scratch) ? Path.Combine(scratch, "statement-log")
             : Environment.GetEnvironmentVariable(name);
+        try
+        {
+            await RefreshAsync(project, Env, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            await CopyTrackingAsync(project, Env, ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>The follower step after a refresh (plan 28c E16): the tracking rows the refresh wrote are copied into the runner's state. Never fails the run, and never takes longer than a minute.</summary>
+    private async Task CopyTrackingAsync(string project, Func<string, string?> env, CancellationToken ct)
+    {
+        try
+        {
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            limit.CancelAfter(TimeSpan.FromMinutes(1));
+            foreach (var line in await RunnerTrackingCopy.CopyAsync(Tracking, project, Input.Connection, env, TimeSpan.FromSeconds(50), limit.Token).ConfigureAwait(false)) Console.Out.WriteLine("tracking " + line);
+        }
+        catch (Exception) when (!ct.IsCancellationRequested)
+        {
+            // a copy that could not be made is the next run's, or the catch-up task's, to make
+        }
+    }
+
+    private async Task RefreshAsync(string project, Func<string, string?> Env, CancellationToken ct)
+    {
         var args = new[] { "connection", "refresh", Input.Connection, Input.Plan, "--project", project, "--format", "json" };
         Status($"refresh {Input.Connection} {Input.Plan}");
         var (exit, document) = await Task.Run(() => Invoke(args, Env), ct).ConfigureAwait(false);
@@ -119,5 +146,29 @@ public sealed class RefreshJob : RunnerJob<RefreshInput, NoProgress, NoSlots>
         if (said.Length == 0) said = string.Join(" ", Lines(document, "messages").Concat(Lines(document, "errors")).Take(5));
         var temporary = said.Contains("DDB-242", StringComparison.Ordinal);   // the database refused or lost a command: the connection may be back
         return new TaskFailureException(temporary ? TaskFailureKind.Temporary : TaskFailureKind.Permanent, $"`connection refresh {Input.Connection} {Input.Plan}` ended with exit code {exit} and ran no load. {said}".TrimEnd());
+    }
+}
+
+/// <summary>What the catch-up task is started with: one connection, or every connection of the project that is tracked and whose read login the run holds (the default, empty).</summary>
+public sealed record CatchUpInput(string Connection = "");
+
+/// <summary>
+/// The follower on its own (plan 28c E16): copies the tracking tables of the project's connections into the runner's <c>build_tracking</c> module, so a copy that was down catches up without a refresh, and a project whose
+/// refreshes are run by another tool still has its tracking in the runner's state. Reads each target with the read login the run holds; writes only through the runner protocol; never fails because a target or the copy is down
+/// (it says so in its log), only because the project is not there.
+/// </summary>
+[RunnerTask("catch-up")]
+public sealed class CatchUpJob : RunnerJob<CatchUpInput, NoProgress, NoSlots>
+{
+    public const string TaskName = "catch-up";
+
+    protected override async Task RunAsync(CancellationToken ct)
+    {
+        var project = Environment.GetEnvironmentVariable(RefreshJob.PackageDirectoryVariable);
+        if (string.IsNullOrWhiteSpace(project) || !Directory.Exists(project))
+            throw new TaskFailureException(TaskFailureKind.Permanent, $"The package directory ({RefreshJob.PackageDirectoryVariable}) is not set or does not exist; the catch-up task runs from the project the package holds.");
+        Status("catch up the tracking copy");
+        foreach (var line in await RunnerTrackingCopy.CopyAsync(Tracking, project, Input.Connection, Environment.GetEnvironmentVariable, TimeSpan.FromMinutes(4), ct).ConfigureAwait(false))
+            Console.Out.WriteLine("tracking " + line);
     }
 }

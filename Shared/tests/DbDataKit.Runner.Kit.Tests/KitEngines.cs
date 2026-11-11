@@ -36,7 +36,7 @@ public sealed class KitEngines : IDisposable
     /// <summary>The state database of a fresh scratch database, with the progress, runs and payload modules.</summary>
     public StateDatabase Open(string engine, TimeProvider? time = null)
     {
-        var layout = StateLayout.Create(engine, [ProgressModule.Module, RunsModule.Module, DbDataKit.Scheduling.SchedulingModule.Module], StateScope.Standalone);
+        var layout = StateLayout.Create(engine, [ProgressModule.Module, RunsModule.Module, DbDataKit.Scheduling.SchedulingModule.Module, DbDataKit.Tracking.Build.BuildTrackingModule.Module, DbDataKit.State.Tracking.TrackingModule.Module], StateScope.Standalone);
         if (engine == StateEngineIds.Sqlite)
         {
             var dir = Directory.CreateTempSubdirectory("dbdatakit-kit-");

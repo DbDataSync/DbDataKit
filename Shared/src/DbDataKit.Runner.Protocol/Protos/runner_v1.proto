@@ -69,6 +69,15 @@ service RunnerApi {
   rpc ReleaseWork(WorkItemRef) returns (WorkReply);
   rpc IsCancelRequested(WorkRunRef) returns (CancelRequestedReply);
   rpc WorkState(WorkStateRequest) returns (WorkStateReply);
+
+  // Build's tracking copy in the runner's state (plan 28c E16: additive)
+  rpc TrackingState(TrackingStreamRef) returns (TrackingStateReply);
+  rpc TrackingWrite(TrackingWriteRequest) returns (TrackingWriteReply);
+  rpc TrackingTail(TrackingTailRequest) returns (TrackingTailReply);
+  rpc TrackingRead(TrackingReadRequest) returns (TrackingReadReply);
+  rpc TrackingUnsettled(TrackingUnsettledRequest) returns (TrackingUnsettledReply);
+  rpc TrackingDivergence(TrackingDivergenceRequest) returns (TrackingDivergenceReply);
+  rpc TrackingSnapshot(TrackingSnapshotRequest) returns (TrackingSnapshotReply);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
@@ -563,4 +572,117 @@ message WorkStateReply {
   bool outstanding = 1;                  // any item of the owner is pending, claimed or running
   repeated WorkKindState kinds = 2;      // one entry per kind asked for
   bool paused = 3;                       // somebody paused the run's task on the runner (a run that is up keeps running; an engine that wants to stop at its next boundary looks here)
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+// Build's tracking copy (added to v1 by plan 28c E16: additive, new calls and new messages)
+
+// A task that read a target's tracking tables with the login of a connection it was granted copies them into the runner's `build_tracking` module through these calls. The identity of every call must end with
+// `@<connection>`, a connection the run holds a handle for (its slot's name, or the connection the channel binds it to); a stream is one of Build's tracking tables. The rows and the checkpoint move in one transaction here,
+// because the task never holds a connection to the runner's state.
+
+message TrackingStreamRef {
+  string identity = 1;
+  string stream = 2;
+}
+
+message TrackingPositionMessage {
+  int64 order = 1;
+  string key = 2;
+}
+
+message TrackingRowMessage {
+  string key = 1;
+  int64 order = 2;
+  string document = 3;
+}
+
+message TrackingDivergenceMessage {
+  int64 id = 1;
+  string identity = 2;
+  string stream = 3;
+  string status = 4;
+  string reason = 5;
+  optional TrackingPositionMessage common = 6;
+  optional TrackingPositionMessage primary_high = 7;
+  optional TrackingPositionMessage copy_high = 8;
+  int64 diverged_at_unix_ms = 9;
+}
+
+message TrackingStateReply {
+  optional TrackingPositionMessage position = 1;      // the follower's checkpoint, absent before the first row
+  int64 version = 2;                           // the checkpoint's row version (0 before the first row)
+  optional TrackingDivergenceMessage open = 3; // the open divergence of the identity and stream
+}
+
+message TrackingWriteRequest {
+  string identity = 1;
+  string stream = 2;
+  repeated TrackingRowMessage rows = 3;
+  bool advance = 4;                            // true: move the checkpoint to the last row (expected_version must match); false: rewrite the rows only (a settled row seen again), no checkpoint
+  int64 expected_version = 5;
+}
+
+message TrackingWriteReply {
+  bool applied = 1;                            // false: the checkpoint's version moved; nothing was written
+}
+
+message TrackingTailRequest {
+  string identity = 1;
+  string stream = 2;
+  int32 count = 3;
+}
+
+message TrackingTailReply {
+  repeated TrackingPositionMessage positions = 1;     // oldest first
+}
+
+message TrackingReadRequest {
+  string identity = 1;
+  string stream = 2;
+  optional TrackingPositionMessage after = 3;
+  int32 limit = 4;
+}
+
+message TrackingReadReply {
+  repeated TrackingRowMessage rows = 1;
+}
+
+message TrackingUnsettledRequest {
+  string identity = 1;
+  string stream = 2;
+  int32 limit = 3;
+}
+
+message TrackingUnsettledRow {
+  string key = 1;
+  string hash = 2;
+}
+
+message TrackingUnsettledReply {
+  repeated TrackingUnsettledRow rows = 1;
+}
+
+message TrackingDivergenceRequest {
+  string identity = 1;
+  string stream = 2;
+  string reason = 3;
+  optional TrackingPositionMessage common = 4;
+  optional TrackingPositionMessage primary_high = 5;
+  optional TrackingPositionMessage copy_high = 6;
+}
+
+message TrackingDivergenceReply {
+  TrackingDivergenceMessage divergence = 1;
+}
+
+// Replaces every live row of a snapshot table (`object_info`, `metadata_dependency`) of the identity, in one transaction.
+message TrackingSnapshotRequest {
+  string identity = 1;
+  string table = 2;
+  repeated TrackingRowMessage rows = 3;
+}
+
+message TrackingSnapshotReply {
+  int32 rows = 1;
 }

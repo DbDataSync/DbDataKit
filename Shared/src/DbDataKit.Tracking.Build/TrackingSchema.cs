@@ -1,4 +1,4 @@
-namespace DbDataBuild.State;
+namespace DbDataKit.Tracking.Build;
 
 /// <summary>The few column types the tracking tables use. Each target maps them to its own native type (DESIGN.md 12).</summary>
 public enum TrackingType { Name, Short, Hash, Long, BigInt, Int, Guid, TimestampUtc, Json }
