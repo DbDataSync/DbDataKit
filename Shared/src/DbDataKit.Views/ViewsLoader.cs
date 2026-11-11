@@ -25,8 +25,8 @@ public static partial class ViewsLoader
     /// <summary>The keys each part accepts, by part name. The JSON Schema files have the same keys; a test keeps them equal.</summary>
     public static readonly IReadOnlyDictionary<string, string[]> Keys = new Dictionary<string, string[]>
     {
-        ["dashboard"] = ["schemaVersion", "kind", "title", "parameters", "theme", "refresh", "kiosk", "widgets", "layouts"],
-        ["report"] = ["schemaVersion", "kind", "title", "parameters", "theme", "strict", "limits", "cover", "widgets", "layouts"],
+        ["dashboard"] = ["schemaVersion", "kind", "title", "parameters", "theme", "locale", "refresh", "kiosk", "widgets", "layouts"],
+        ["report"] = ["schemaVersion", "kind", "title", "parameters", "theme", "locale", "strict", "limits", "cover", "widgets", "layouts"],
         ["parameter"] = ["name", "type", "for", "many", "required", "default", "label"],
         ["theme"] = ["font"],
         ["widget.metric"] = ["type", "title", "label", "format", "encodings", "query"],
@@ -89,6 +89,7 @@ public static partial class ViewsLoader
         ["kind"] = ["dashboard", "report"],
         ["parameterType"] = ["string", "integer", "number", "boolean"],
         ["font"] = ["sans", "serif", "mono"],
+        ["locale"] = ["en", "de", "fr", "es", "it", "pt", "nl"],
         ["widgetType"] = ["metric", "chart", "matrix", "table", "text", "image", "control", "embed"],
         ["format"] = ["catalog", "full", "compact", "percent"],
         ["align"] = ["left", "right", "center"],

@@ -56,6 +56,8 @@ public static partial class ViewsLoader
                 if (tm.Get("font") is { } f) font = Choice(f, "theme.font", "`theme.font` (a bundled family)", Choices["font"]);
             }
 
+            var locale = map.Get("locale") is { } loc ? Choice(loc, "locale", "`locale` (the language numbers and dates are written in)", Choices["locale"]) : null;
+
             string? refresh = null, kioskLayout = null; YamlNode? kioskNode = null;
             bool? strict = null, cover = null; int? pages = null, rows = null;
             if (kind == ViewKind.Dashboard)
@@ -99,7 +101,7 @@ public static partial class ViewsLoader
 
             CheckDocument(map, widgets, layouts, kioskLayout, kioskNode);
             if (Diagnostics.HasErrors()) return null;
-            return new ViewDocument(kind, title, parameters, widgets, layouts, font, refresh, kioskLayout, strict, pages, rows, cover);
+            return new ViewDocument(kind, title, parameters, widgets, layouts, font, refresh, kioskLayout, strict, pages, rows, cover, locale);
         }
 
         private string? MissingKey(YamlMapping map, string key)

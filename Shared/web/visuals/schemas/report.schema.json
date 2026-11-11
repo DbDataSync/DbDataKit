@@ -12,6 +12,7 @@
     "title": { "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/title" },
     "parameters": { "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/parameters" },
     "theme": { "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/theme" },
+    "locale": { "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/locale" },
     "strict": { "description": "An over-width block refuses the export.", "type": "boolean" },
     "limits": {
       "type": "object",

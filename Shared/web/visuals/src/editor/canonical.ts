@@ -6,7 +6,7 @@ import { Document, isMap, isScalar, isSeq, YAMLMap, YAMLSeq, type Node } from 'y
  * differ only in order and style. Formatting a file drops its comments; an edit through a command keeps them (`applyOps`).
  */
 
-const ROOT = ['schemaVersion', 'kind', 'title', 'description', 'parameters', 'refresh', 'kiosk', 'theme', 'strict', 'limits', 'cover', 'widgets', 'layouts']
+const ROOT = ['schemaVersion', 'kind', 'title', 'description', 'parameters', 'refresh', 'kiosk', 'theme', 'locale', 'strict', 'limits', 'cover', 'widgets', 'layouts']
 const WIDGET = ['type', 'title', 'label', 'format', 'parameter', 'control', 'values', 'mark', 'encodings', 'query', 'on_select', 'drill', 'text', 'hash', 'media_type', 'alt', 'fit', 'url', 'with', 'link_text']
 const LAYOUT = ['name', 'type', 'default', 'when', 'grid', 'canvas', 'overflow', 'min_scale', 'max_scale', 'page', 'header', 'footer', 'cover', 'widget_options', 'tiles', 'sections']
 const TILE = ['widget', 'x', 'y', 'w', 'h', 'min', 'layer']

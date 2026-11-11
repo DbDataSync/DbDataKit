@@ -66,8 +66,15 @@ format: {date: "dd/MM/yyyy HH:mm"}                        # or a pattern: yyyy y
 
 A number mapping's `decimals` defaults to the catalog's, a currency's to 2 (0 for JPY and KRW); the minus sign never shows on a value that rounds to zero; rounding is half away from zero on the value as written (its
 15 significant digits). A date reads an ISO date or date-time **as written** (no time zone is applied); text that is not a date is shown as it is. A format that cannot be read is refused with the key inside it
-(`DBD-106`, for example `` `date` pattern has the unknown token `yyy` ``); a pattern is a closed set of tokens, never a free format string. Month names and separators are the invariant (English) ones: locale data is not
-carried yet. **One formatter in two languages**: `ViewFormat` in `DbDataKit.Views` writes a cell's text on the server and `formatValue` in `@dbdatakit/visuals` is its twin, both run against `Shared/conformance/views/format/cases.json`.
+(`DBD-106`, for example `` `date` pattern has the unknown token `yyy` ``); a pattern is a closed set of tokens, never a free format string. Month names and separators are the **locale's** (below). **One formatter in two languages**: `ViewFormat` in `DbDataKit.Views` writes a cell's text on the server and `formatValue` in `@dbdatakit/visuals` is its twin, both run against `Shared/conformance/views/format/cases.json`.
+
+#### Locale (DBR46)
+
+A document may say `locale: de` (one of `en de fr es it pt nl`, a closed table: `Shared/web/visuals/src/views/locales.json`, which `DbDataKit.Views` embeds as the same file and the TypeScript twin imports). The locale sets a number's
+**decimal and group separators** (`1.234,5` in `de`, `1 234,5` with a narrow no-break space in `fr`) and the **month names** of a date (`MMMM`, `MMM`, so `März 2026`, `févr. 2026`); the numerals of a numeric pattern (`dd/MM/yyyy`),
+the minus sign and the currency symbol's place (before the number) do not change. The locale of a render is the request's (`ResolveAsync(..., locale:)`, an export's or a subscriber's choice), else the document's, else the host's
+`ResolverOptions.Locale`, else English; an unknown code in a request reads as English, in a document the loader refuses it with the list. The locale is not part of a cache key (the rows are the same; only their text changes).
+**Not localised:** a chart's quantitative axis and legend (d3 strings the client draws with English separators), the QIS view of the semantic library, and a currency symbol's place.
 
 #### The catalog's date format and a bare year (DBR47, DBR48)
 

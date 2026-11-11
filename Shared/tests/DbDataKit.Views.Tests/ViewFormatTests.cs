@@ -16,8 +16,24 @@ public class ViewFormatTests
     {
         var c = Golden()["formats"]![index]!;
         Assert.Equal(name, c["name"]!.GetValue<string>());
-        Assert.Equal(c["text"]!.GetValue<string>(), ViewFormat.Text(c["value"], c["format"], c["catalog"] as JsonObject));
+        Assert.Equal(c["text"]!.GetValue<string>(), ViewFormat.Text(c["value"], c["format"], c["catalog"] as JsonObject, c["locale"]?.GetValue<string>()));
     }
+
+    [Fact]
+    public void The_locale_table_has_the_seven_locales_with_twelve_months_each()
+    {
+        Assert.Equal(["en", "de", "fr", "es", "it", "pt", "nl"], ViewFormat.Locales);
+        foreach (var code in ViewFormat.Locales)
+        {
+            var l = ViewFormat.Locale(code);
+            Assert.Equal(12, l.Months.Count);
+            Assert.Equal(12, l.Short.Count);
+            Assert.NotEqual(l.Decimal, l.Group);
+        }
+        Assert.Equal("en", ViewFormat.Locales[0]);
+        Assert.Same(ViewFormat.Locale("en"), ViewFormat.Locale("klingon"));
+    }
+
 
     [Fact]
     public void Every_good_golden_is_a_format_the_check_accepts()

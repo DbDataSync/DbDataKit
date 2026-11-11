@@ -45,12 +45,14 @@ public sealed class WidgetResolver
     /// <param name="only">Resolve only these widgets (those of them the layout places); null is every widget the layout places.</param>
     /// <param name="cancellationToken">Stops the whole resolution (a widget's own timeout is an error entry, not this).</param>
     /// <param name="orders">A viewer's sort by widget id (a table the viewer sorted by a click, DBR45): replaces that table's <c>order</c> for this run (derived and semantic queries only; another form, or a column the table does not show, is that widget's error entry).</param>
+    /// <param name="locale">The locale numbers and dates are written in (DBR46): the request's, else the document's <c>locale</c>, else <see cref="ResolverOptions.Locale"/>, else English. An unknown code reads as English.</param>
     /// <exception cref="ViewResolutionException">The layout does not exist, or a parameter value is not one.</exception>
-    public async Task<RenderedWidgets> ResolveAsync(ServingContext context, ViewDocument document, string layout, IReadOnlyDictionary<string, JsonNode?>? parameters = null, IReadOnlyCollection<string>? only = null, CancellationToken cancellationToken = default, IReadOnlyDictionary<string, WidgetOrder>? orders = null)
+    public async Task<RenderedWidgets> ResolveAsync(ServingContext context, ViewDocument document, string layout, IReadOnlyDictionary<string, JsonNode?>? parameters = null, IReadOnlyCollection<string>? only = null, CancellationToken cancellationToken = default, IReadOnlyDictionary<string, WidgetOrder>? orders = null, string? locale = null)
     {
         var chosen = document.Layouts.FirstOrDefault(l => l.Name == layout)
             ?? throw new ViewResolutionException(ResolveCodes.UnknownLayout, $"The document has no layout `{layout}` (it has {string.Join(", ", document.Layouts.Select(l => $"`{l.Name}`"))}).");
         var values = new ParameterValues(document, parameters);
+        var chosenLocale = locale ?? document.Locale ?? options.Locale;
         var ids = chosen.Placed.Where(id => only is null || only.Contains(id)).ToList();
 
         var entries = new JsonObject?[ids.Count];
@@ -68,7 +70,7 @@ public sealed class WidgetResolver
             await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                (entries[index], keys[index]) = await ResolveWidgetAsync(context, document, widget, values, orders is not null && orders.TryGetValue(id, out var asked) ? asked : null, cancellationToken).ConfigureAwait(false);
+                (entries[index], keys[index]) = await ResolveWidgetAsync(context, document, widget, values, orders is not null && orders.TryGetValue(id, out var asked) ? asked : null, chosenLocale, cancellationToken).ConfigureAwait(false);
             }
             finally { gate.Release(); }
         })).ConfigureAwait(false);
@@ -85,7 +87,7 @@ public sealed class WidgetResolver
 
     // ---- one widget ----
 
-    private async Task<(JsonObject Entry, string? Key)> ResolveWidgetAsync(ServingContext context, ViewDocument document, ViewWidget widget, ParameterValues values, WidgetOrder? order, CancellationToken cancellationToken)
+    private async Task<(JsonObject Entry, string? Key)> ResolveWidgetAsync(ServingContext context, ViewDocument document, ViewWidget widget, ParameterValues values, WidgetOrder? order, string? locale, CancellationToken cancellationToken)
     {
         using var timeout = new CancellationTokenSource(options.WidgetTimeout, options.Time);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
@@ -113,6 +115,7 @@ public sealed class WidgetResolver
             key = WidgetCacheKey.Of(context, run.Source, run.Canonical);
             // a source that ignores its token is not waited for past the widget's time
             var rows = await RunOrRecallAsync(context, key, run, linked.Token).ConfigureAwait(false);
+            rows = rows.WithLocale(locale);
             var shaped = widget.Type switch
             {
                 "metric" => ResultShaper.Metric(widget, rows),
