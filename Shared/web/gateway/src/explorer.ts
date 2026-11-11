@@ -74,9 +74,10 @@ export function scansOf(result: RunResult): Array<{ source: string; engine: stri
   return result.rows.map((r) => ({ source: String(r[s] ?? ''), engine: String(r[e] ?? ''), text: String(r[t] ?? '') }))
 }
 
-/** The engine's refusal as it should read: its code first, in the engine's own words. */
-export function refusal(message: string, code: unknown): string {
-  return typeof code === 'string' && code !== '' && !message.startsWith(code) ? `${code}: ${message}` : message
+/** The engine's refusal as it should read: its code first, then the path when the Gateway names one (the message already holds it when the engine wrote it in), in the engine's own words (D38 (2)). */
+export function refusal(message: string, code: unknown, path?: unknown): string {
+  const where = typeof path === 'string' && path !== '' && !message.includes(path) ? ` at ${path}` : ''
+  return typeof code === 'string' && code !== '' && !message.startsWith(code) ? `${code}${where}: ${message}` : where === '' ? message : `${where.trim()}: ${message}`
 }
 
 // ---------- views of a result ----------
@@ -118,6 +119,15 @@ export function totalsOf(result: RunResult, e: Encoding): { rows?: true; columns
   const rolled = (names: string[]) => names.length > 0 && levels.some((l) => { const want = logical(names); return l.rolled_up.length === want.size && l.rolled_up.every((r) => want.has(r)) })
   const totals = { ...(rolled(e.rows) ? { rows: true as const } : {}), ...(rolled(e.columns) ? { columns: true as const } : {}) }
   return Object.keys(totals).length > 0 ? totals : undefined
+}
+
+/**
+ * The minimal precheck before the Gateway is asked to draw (plan 14a D38 (2)): the slots a shape cannot do without, named as the page labels them, that are still empty. This is the whole of the client's rules about a view: a matrix needs a Value, a bar
+ * or line chart an Along and a Value; whether the choice is right (an attribute not placed, a stacked count, a total the result lacks) is the engine's to say, in its words, with its code and path.
+ */
+export function missingSlots(shape: ViewShape, e: Encoding): string[] {
+  if (shape === 'table') return []
+  return [...(shape !== 'matrix' && e.rows.length === 0 ? ['Along'] : []), ...(e.value === '' ? ['Value'] : [])]
 }
 
 /**

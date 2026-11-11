@@ -203,6 +203,23 @@ public sealed class DefinitionTests
         Assert.Equal(new LimitSet(Cost: 2000.00m), p.Limits.Install);
         Assert.Equal(90, p.Limits.NotifyAtPercent);
         Assert.Equal(DataRule.Refuse, p.CloudReadsData);
+        Assert.True(p.CloudFallback);
+    }
+
+    [Fact]
+    public void A_policy_can_refuse_the_fall_through_to_a_cloud_provider_and_it_reads_back_and_is_described_as_a_tightening()
+    {
+        var tenant = AgentPolicyLoader.Load("agent-policy: 1\ndata-rules:\n  cloud-providers:\n    fallback: refuse\n", "p.yml").Policy!;
+        Assert.False(tenant.CloudFallback);
+        Assert.False(tenant.AllowsFallbackTo(cloud: true));
+        Assert.True(tenant.AllowsFallbackTo(cloud: false));
+        Assert.True(AgentPolicy.None.AllowsFallbackTo(cloud: true));
+        Assert.False(AgentPolicyLoader.Load(PolicyEditing.Write(tenant), "p.yml").Policy!.CloudFallback);
+        var tightens = PolicyEditing.Describe(AgentPolicy.None, tenant).Single();
+        Assert.False(tightens.Loosens);
+        Assert.True(PolicyEditing.Describe(tenant, AgentPolicy.None).Single().Loosens);
+        var bad = AgentPolicyLoader.Load("agent-policy: 1\ndata-rules:\n  cloud-providers: { fallback: never }", "p.yml");
+        Assert.Contains(bad.Diagnostics, d => d.Message.Contains("not a fallback rule"));
     }
 
     [Theory]

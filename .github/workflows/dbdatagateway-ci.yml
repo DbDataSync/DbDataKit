@@ -85,6 +85,9 @@ jobs:
       - name: Point the suite at them
         working-directory: .
         run: testenv/testenv.sh env dbdatagateway --dotenv >> "$GITHUB_ENV"
+      # the suite starts many hosts in one process, each with file watchers: the runner's 128 inotify instances ran out once (ConfigWatchTests)
+      - name: Raise the inotify instance limit
+        run: sudo sysctl -w fs.inotify.max_user_instances=1024
       - name: Install the SQL Server ODBC driver
         run: |
           curl -sSL -O "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb"

@@ -12,7 +12,11 @@ public enum ToolResultKind
 }
 
 /// <summary>What a tool gave back: the text (a command's JSON document, or a sentence that says why nothing ran) and whether it is an error; a skill's tool also names the skill and its version (<paramref name="Name"/>, <paramref name="Version"/>).</summary>
-public sealed record ToolOutcome(string Text, bool IsError, string? Name = null, string? Version = null);
+public sealed record ToolOutcome(string Text, bool IsError, string? Name = null, string? Version = null)
+{
+    /// <summary>What the tool itself spent when it ran a model (a subagent, plan 27a AG20): added to the calling run's usage, so turns, tokens and cost count to the caller.</summary>
+    public RunUsage? Spent { get; init; }
+}
 
 /// <summary>
 /// One tool an agent may call (plan 27a AG03): a name, a description for the model, the schema of its arguments, its traits (what it does, which decides when a person is asked) and what runs. A command of a product's router becomes one with

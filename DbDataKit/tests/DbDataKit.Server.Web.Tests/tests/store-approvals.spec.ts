@@ -35,7 +35,7 @@ test('the Approvals page lists a waiting change request, opens the screen that d
   await expect(page.getByTestId('approvals-none')).toBeVisible()
 })
 
-// SC21c: the same page decides in place. A rejection needs the reason written (its button is off until then), an approval applies the rows, and the page says nothing waits once the list is empty. Written, not run (it needs the console built).
+// SC21c: the same page decides in place. A rejection needs the reason written (its button is off until then), an approval applies the rows, and the page says nothing waits once the list is empty.
 test('the Approvals page approves and rejects a change request without opening the Store\'s screen', async ({ page, context, baseURL }) => {
   await signInNewAdmin(page, context, baseURL!, 'Approvals Decider', `approvals-decide-${Date.now()}@example.com`)
   const store = await mockStore(page, { role: 'admin', models: { budgets }, created: ['budgets'] })

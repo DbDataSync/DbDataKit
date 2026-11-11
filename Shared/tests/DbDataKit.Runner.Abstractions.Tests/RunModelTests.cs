@@ -166,7 +166,7 @@ public sealed class RunModelTests
         foreach (var kind in All<ConnectionFailureKind>())
         {
             var mapped = TaskFailure.KindOf(kind);
-            var expected = kind is ConnectionFailureKind.Network or ConnectionFailureKind.Timeout ? TaskFailureKind.Temporary : TaskFailureKind.Permanent;
+            var expected = kind is ConnectionFailureKind.Network or ConnectionFailureKind.Timeout or ConnectionFailureKind.RateLimited or ConnectionFailureKind.Unavailable ? TaskFailureKind.Temporary : TaskFailureKind.Permanent;
             Assert.Equal(expected, mapped);
         }
     }

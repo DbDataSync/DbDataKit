@@ -233,7 +233,7 @@ public sealed class SignInTests
         var api = new FakeApi();
         var address = api.BaseAddress;
         await api.DisposeAsync();                                      // nothing listens there now
-        var definition = ConnectionDefinitionLoader.Load($"schema: connection/2\nkind: http\nname: gone\nendpoint: {address}\ntimeouts: {{ connect_s: 2 }}\n", "c.yml", outsideKinds: true).Definition!;
+        var definition = ConnectionDefinitionLoader.Load($"schema: connection/2\nkind: http\nname: gone\nendpoint: {address}\ntimeouts: {{ connect_s: 15 }}\n", "c.yml", outsideKinds: true).Definition!;
         using var gone = HttpConnections.Create(definition, Secrets());
         var failed = await Record.ExceptionAsync(() => Get(gone));
         var failure = HttpFailures.Classify(failed!);

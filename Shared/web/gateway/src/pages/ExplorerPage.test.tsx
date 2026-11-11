@@ -16,7 +16,7 @@ const result: RunResult = {
 const base: ExplorerViewProps = {
   model: 'shop_sales', catalog: view, mode: 'sql', text: 'SELECT 1', picks: { attributes: [], measures: [], limit: 100 }, running: false, error: null, shape: 'table', encoding: { rows: ['customer.region'], columns: [], value: 'revenue' },
   save: { name: '', description: '', saved: null, error: null, busy: false },
-  onMode: noop, onText: noop, onToggle: noop, onLimit: noop, onRun: noop, onExplain: noop, onShape: noop, onEncoding: noop, onSaveName: noop, onSaveDescription: noop, onSave: noop,
+  onMode: noop, onText: noop, onToggle: noop, onLimit: noop, onRun: noop, onExplain: noop, onShape: noop, onDraw: noop, onEncoding: noop, onSaveName: noop, onSaveDescription: noop, onSave: noop,
 }
 const html = (p: Partial<ExplorerViewProps> = {}) => renderToStaticMarkup(<MemoryRouter><ExplorerView {...base} {...p} /></MemoryRouter>)
 
@@ -35,6 +35,11 @@ describe('the explorer', () => {
     expect(text).toContain('model version 3')
     expect(text).toContain('one warning')
     expect((text.match(/data-testid="result-row"/g) ?? []).length).toBe(2)
+  })
+  it('says a result came from the replay of a record and whether its request hash is the record\'s (D38 (3))', () => {
+    expect(html({ result: { ...result, replay_of: 7, same_hash: true } })).toContain('data-testid="replay-note">replay of run 7, the same request hash')
+    expect(html({ result: { ...result, replay_of: 7, same_hash: false } })).toContain('a different request hash')
+    expect(html({ result })).not.toContain('replay-note')
   })
   it('shows what the engine left when it would not run everything, with the reason', () => {
     const text = html({ result: { ...result, status: 'unsupported', reason: 'The engine left steps this host does not run.', remaining: [{ step: 'x' }] } })
@@ -66,10 +71,37 @@ describe('the explorer', () => {
     const refused = html({ result, shape: 'bar', rendered: { kind: 'rendered_view', status: 'failed', errors: [{ code: 'stack_not_additive', path: '$.views[0]', message: 'orders.order_count does not add up, so it cannot be stacked.' }] } })
     expect(refused).toContain('data-testid="view-refused"')
     expect(refused).toContain('stack_not_additive')
+    expect(refused).toContain('$.views[0]')
+    expect(refused).toContain('orders.order_count does not add up')
     expect(refused).not.toContain('data-testid="view-drawn"')
     const broken = html({ result, shape: 'bar', renderError: 'The Gateway could not be reached.' })
     expect(broken).toContain('data-testid="view-error"')
     expect(broken).toContain('could not be reached')
+  })
+  it('turns the Draw button off and says which required slot is empty, and on when each is filled (D38)', () => {
+    const empty = html({ result, shape: 'matrix', encoding: { rows: ['customer.region'], columns: [], value: '' } })
+    expect(empty).toMatch(/<button[^>]*data-testid="view-draw"[^>]*disabled/)
+    expect(empty).toContain('required slot is empty: Value')
+    const bar = html({ result, shape: 'bar', encoding: { rows: [], columns: [], value: '' } })
+    expect(bar).toContain('required slot is empty: Along, Value')
+    expect(bar).not.toContain('data-testid="view-drawn"')
+    const filled = html({ result, shape: 'matrix' })
+    expect(filled).toContain('data-testid="view-draw"')
+    expect(filled).not.toMatch(/<button[^>]*data-testid="view-draw"[^>]*disabled/)
+    expect(filled).not.toContain('view-missing')
+    expect(html({ result, shape: 'table' })).not.toContain('view-draw')
+  })
+  it('shows the table and the Gateway\'s note, and no matrix or chart, when a column type cannot be drawn (D38)', () => {
+    const notice = { code: 'view_unavailable', column: 'logo', type: 'binary', message: 'matrix and chart are unavailable: column logo has type binary, which a view cannot read.' }
+    const text = html({ result: { ...result, notices: [notice] }, shape: 'matrix' })
+    expect(text).toContain('data-testid="run-notice-view_unavailable"')
+    expect(text).toContain('matrix and chart are unavailable: column logo has type binary')
+    expect(text).toContain('data-testid="result-table"')
+    expect((text.match(/data-testid="result-row"/g) ?? []).length).toBe(2)
+    expect(text).not.toContain('data-testid="view-choice"')
+    expect(text).not.toContain('data-testid="shape-matrix"')
+    expect(html({ result })).toContain('data-testid="view-choice"')
+    expect(html({ result })).not.toContain('run-notices')
   })
   it('offers to pin what it ran to a dashboard of the person', () => {
     expect(html({ result, text: '{"query": {"measures": ["revenue"], "attributes": ["customer.region"], "limit": 5}}' })).toContain('href="/views?pin_model=shop_sales')

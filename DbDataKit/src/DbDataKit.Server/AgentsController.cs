@@ -238,6 +238,33 @@ public sealed class AgentsController(ConsoleAgents agents, ConsoleModels models,
         return saved ? Ok(new { saved, diagnostics }) : UnprocessableEntity(new { saved, diagnostics });
     }
 
+    // ---- memories (AG19): the person's own, and the work's of a workspace they have open ----
+
+    public sealed record MemoryBody(string Text, string? Work = null);
+
+    [HttpGet("memories")]
+    [Authorize(Policies.Viewer)]
+    public IActionResult Memories([FromQuery] string? work = null) =>
+        Ok(agents.Memories.Visible(PersonId, work, new MemorySwitches(true, true)).Select(m => new { m.Id, kind = m.Kind.ToString().ToLowerInvariant(), m.Agent, m.Text, m.CreatedAt, m.UpdatedAt }));
+
+    [HttpPut("memories/{id}")]
+    [Authorize(Policies.Viewer)]
+    public IActionResult EditMemory(string id, [FromBody] MemoryBody body)
+    {
+        var result = agents.Memories.Edit(id, PersonId, body.Work, body.Text);
+        if (result.Ok) agents.Store.RecordAudit(null, null, "memory-edited", PersonId, "console", "1", "console", null, null, $"memory {id} was edited by the person");
+        return result.Ok ? Ok(new { message = result.Message }) : Conflict(new { error = result.Message });
+    }
+
+    [HttpDelete("memories/{id}")]
+    [Authorize(Policies.Viewer)]
+    public IActionResult ForgetMemory(string id, [FromQuery] string? work = null)
+    {
+        var result = agents.Memories.Forget(id, PersonId, work);
+        if (result.Ok) agents.Store.RecordAudit(null, null, "memory-forgotten", PersonId, "console", "1", "console", null, null, $"memory {id} was deleted by the person");
+        return result.Ok ? Ok(new { message = result.Message }) : NotFound(new { error = result.Message });
+    }
+
     // ---- the tokens an outside agent signs in with (AG29): a person's own, shown once ----
 
     [HttpGet("tokens")]

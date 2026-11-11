@@ -154,3 +154,10 @@ claude/wonderful-dirac-o0g74c
 
 # --- group 5: abandoned by this session (2026-11-10): batch 31 was re-cut as suite/batch-32 on the merged main
 suite/batch-31
+# --- group 6: batches 26 to 32, every commit is on main (rebase-merged: patch ids equal; batch 32 was a fast-forward) -- checked 2026-11-11 with git cherry
+suite/batch-26
+suite/batch-27
+suite/batch-28
+suite/batch-29
+suite/batch-30
+suite/batch-32

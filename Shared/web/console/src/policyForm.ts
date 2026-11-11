@@ -34,11 +34,16 @@ export interface PolicyForm {
   install: LimitForm
   notifyAt: string
   cloudReadsData: DataRule
+  /** A tenant-only install: a slot never falls through to a cloud provider (AG21). */
+  tenantOnly: boolean
+  /** Each kind of memory is on or off for every agent of the install (AG19). */
+  memoryPerson: boolean
+  memoryWork: boolean
 }
 
 const noLimit = (): LimitForm => ({ turns: '', toolCalls: '', tokens: '', cost: '' })
 
-export const emptyPolicy = (): PolicyForm => ({ minimums: {}, tools: [], conversation: noLimit(), person: noLimit(), install: noLimit(), notifyAt: '80', cloudReadsData: 'allow' })
+export const emptyPolicy = (): PolicyForm => ({ minimums: {}, tools: [], conversation: noLimit(), person: noLimit(), install: noLimit(), notifyAt: '80', cloudReadsData: 'allow', tenantOnly: false, memoryPerson: true, memoryWork: true })
 
 type Dict = Record<string, unknown>
 const asDict = (v: unknown): Dict => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Dict) : {})
@@ -60,10 +65,12 @@ export function policyFromYaml(yaml: string): { form: PolicyForm | null; errors:
   const tools = Object.entries(asDict(prompting['tools'])).map(([name, setting]) => ({ name, setting: text(setting) as Setting }))
   const limits = asDict(root['limits'])
   const cloud = asDict(asDict(root['data-rules'])['cloud-providers'])
+  const memory = asDict(root['memory'])
   return {
     form: {
       minimums, tools, conversation: readLimits(limits['conversation']), person: readLimits(limits['person']), install: readLimits(limits['install']),
       notifyAt: limits['notify-at'] === undefined ? '80' : text(limits['notify-at']), cloudReadsData: (text(cloud['reads-data']) || 'allow') as DataRule,
+      tenantOnly: text(cloud['fallback']) === 'refuse', memoryPerson: text(memory['person']) !== 'off', memoryWork: text(memory['work']) !== 'off',
     },
     errors: [],
   }
@@ -99,6 +106,17 @@ export function policyToYaml(form: PolicyForm): string {
   }
   if (form.notifyAt.trim() !== '' && form.notifyAt.trim() !== '80') limits['notify-at'] = Number(form.notifyAt)
   if (Object.keys(limits).length > 0) root['limits'] = limits
-  if (form.cloudReadsData !== 'allow') root['data-rules'] = { 'cloud-providers': { 'reads-data': form.cloudReadsData } }
+  if (form.cloudReadsData !== 'allow' || form.tenantOnly) {
+    const cloud: Dict = {}
+    if (form.cloudReadsData !== 'allow') cloud['reads-data'] = form.cloudReadsData
+    if (form.tenantOnly) cloud['fallback'] = 'refuse'
+    root['data-rules'] = { 'cloud-providers': cloud }
+  }
+  if (!form.memoryPerson || !form.memoryWork) {
+    const memory: Dict = {}
+    if (!form.memoryPerson) memory['person'] = 'off'
+    if (!form.memoryWork) memory['work'] = 'off'
+    root['memory'] = memory
+  }
   return toYaml(root) + '\n'
 }
