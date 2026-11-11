@@ -4,7 +4,7 @@ using System.Text;
 using System.Text.Json;
 using DbDataKit.State.Tracking;
 
-namespace DbDataBuild.State;
+namespace DbDataKit.Tracking.Build;
 
 /// <summary>How a tracking table changes, which decides how the copy of it is kept (plan 28c section 5.2).</summary>
 public enum BuildStreamKind

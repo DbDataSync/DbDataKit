@@ -25,4 +25,8 @@
     <Using Include="DbDataKit.Schema.Questions" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Using Include="DbDataKit.Tracking.Build" />   <!-- the tracking definition, streams, module and store moved to the shared library; the types keep their names (plan 28c, E16) -->
+  </ItemGroup>
+
 </Project>

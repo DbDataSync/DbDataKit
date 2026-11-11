@@ -1627,7 +1627,7 @@ public partial class ApplyConformanceTests
             Refused(old, "DDB-505", "planning against an older layout");
             Assert.Contains("layout version 1", old.Err);
             Ok(run.Cli("connection", "init", "--apply"), "init upgrades");
-            Assert.Equal(["1", DbDataBuild.State.TrackingSchema.Version.ToString()], await engine.RowsAsync($"SELECT {run.Q("version")} FROM {T("tracking_version")}"));
+            Assert.Equal(["1", DbDataKit.Tracking.Build.TrackingSchema.Version.ToString()], await engine.RowsAsync($"SELECT {run.Q("version")} FROM {T("tracking_version")}"));
             Ok(run.Cli("connection", "deploy", "--write-plan"), "plan after the upgrade");
 
             // metadata.store_on_apply: a successful apply also stores the project, the models it touched and the plan

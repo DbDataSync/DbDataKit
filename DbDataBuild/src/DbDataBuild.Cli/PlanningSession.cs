@@ -207,7 +207,7 @@ internal sealed class PlanningSession
         }
         else if (trackingResolution.Target == null && !trackingResolution.Explicit)
             error.Diag(new Diagnostic(DiagnosticCatalog.TrackingNotConfigured, new($"connection:{target}", 0, 0), $"Nothing is tracked for `{target}`: plans are made from the declared shape against the live one, every change to an existing object is marked risky, and nothing is recorded when the plan is applied."));
-        DbDataBuild.State.TrackingScope? trackingScope = trackingResolution.Target is { } ts ? new DbDataBuild.State.TrackingScope(ts.Engine, ts.SchemaName, target) : null;
+        DbDataKit.Tracking.Build.TrackingScope? trackingScope = trackingResolution.Target is { } ts ? new DbDataKit.Tracking.Build.TrackingScope(ts.Engine, ts.SchemaName, target) : null;
 
         // the routines native models list under `track_definition`, against the last record in the tracking tables
         var watched = NativeDefinitions.InPlay(ctx, mine.Select(m => (m.Model, m.Sql)), target);

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <Description>Build's tracking as shared state (plan 28c E16): the logical definition of the twelve tracking tables, the streams the follower copies, the one document format of a copied row, the build_tracking state module with its retention, and the store that writes the copy. No product logic: a Build process, the Build server and the runner host all write and read the same module.</Description>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
+  </ItemGroup>
+</Project>

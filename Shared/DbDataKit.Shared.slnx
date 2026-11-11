@@ -60,6 +60,7 @@
     <Project Path="src/DbDataKit.Agents.Providers/DbDataKit.Agents.Providers.csproj" />
     <Project Path="src/DbDataKit.Lineage/DbDataKit.Lineage.csproj" />
     <Project Path="src/DbDataKit.Lineage.Cli/DbDataKit.Lineage.Cli.csproj" />
+    <Project Path="src/DbDataKit.Tracking.Build/DbDataKit.Tracking.Build.csproj" />
     <Project Path="src/DbDataKit.Quality/DbDataKit.Quality.csproj" />
     <Project Path="src/DbDataKit.Quality.Evaluation/DbDataKit.Quality.Evaluation.csproj" />
     <Project Path="src/DbDataKit.Quality.Runner/DbDataKit.Quality.Runner.csproj" />

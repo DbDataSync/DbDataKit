@@ -2,11 +2,11 @@ using System.Data.Common;
 using DbDataKit.State;
 using DbDataKit.State.Tracking;
 
-namespace DbDataBuild.State;
+namespace DbDataKit.Tracking.Build;
 
 /// <summary>
 /// The copy side of Build's tracking: <c>build_tracking.tracked_row</c> as a follower's sink (and as a source, for the comparison of the two sides). Every statement is narrowed by the identity. Row keys are compared in binary, so the order of rows that
-/// share a time is the same here as on the target (<see cref="BuildTrackingSource"/> sorts them ordinally).
+/// share a time is the same here as on the target (<c>BuildTrackingSource</c> sorts them ordinally).
 /// </summary>
 public sealed class BuildTrackingStore(StateDatabase database) : IStateTrackingSink
 {

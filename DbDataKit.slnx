@@ -95,6 +95,7 @@
     <Project Path="Shared/src/DbDataKit.Agents.Providers/DbDataKit.Agents.Providers.csproj" />
     <Project Path="Shared/src/DbDataKit.Lineage/DbDataKit.Lineage.csproj" />
     <Project Path="Shared/src/DbDataKit.Lineage.Cli/DbDataKit.Lineage.Cli.csproj" />
+    <Project Path="Shared/src/DbDataKit.Tracking.Build/DbDataKit.Tracking.Build.csproj" />
     <Project Path="Shared/src/DbDataKit.Monitoring/DbDataKit.Monitoring.csproj" />
     <Project Path="Shared/src/DbDataKit.Odbc.Metadata/DbDataKit.Odbc.Metadata.csproj" />
     <Project Path="Shared/src/DbDataKit.Schema/DbDataKit.Schema.csproj" />
