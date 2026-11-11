@@ -116,6 +116,21 @@ public sealed class BuildTrackingStore(StateDatabase database) : IStateTrackingS
 
     // ---------- reading the copy as documents ----------
 
+    /// <summary>The connection identities the copy holds live rows of (what a screen lists), in binary order.</summary>
+    public IReadOnlyList<string> Identities() =>
+        database.Retry<IReadOnlyList<string>>(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, "SELECT DISTINCT connection_identity FROM {table:tracked_row} WHERE archive_id = $archive;");
+            cmd.Bind(database, "archive", Live);
+            var rows = new List<string>();
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read()) rows.Add(reader.GetString(0));
+            rows.Sort(StringComparer.Ordinal);
+            return rows;
+        });
+
+
     /// <summary>All live rows of a stream, in order (what a test or a rebuild compares with the target).</summary>
     public IReadOnlyList<TrackingRow> Rows(string identity, string stream) =>
         ReadAfterAsync(identity, new TrackingStream(stream, ["k", "o"], "o", "k"), null, int.MaxValue / 2, CancellationToken.None).GetAwaiter().GetResult();
