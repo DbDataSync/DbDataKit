@@ -3,8 +3,8 @@
 The delivery service of the suite (plan 22a GP07 to GP09, GP17; plan 22 section 5): a message is written to an **outbox** (the state module `delivery`, `DbDataKit.State`), taken by a sender, handed to a **channel** and its outcome recorded. A report, an alert or a subscription never talks to a mail server: it writes a message and reads what happened to it.
 
 ```csharp
-var settings = DeliverySettings.Read(section, "server.yaml", kinds);          // the strict delivery: section
-var channels = new DeliveryChannels(settings, kinds, secretResolver, scrubber);
+var settings = DeliverySettings.Read(section, "settings.yaml");                   // the strict delivery: section
+var channels = new DeliveryChannels(settings, connections, DeliveryKinds.Default(), secretResolver, scrubber);   // connections: an IDeliveryConnections
 var service  = new DeliveryService(new DeliveryStore(db), new PayloadStore(db), channels, settings.Policy, scrubber);
 var id = await service.SendAsync(new DeliveryRequest("mail", "Weekly sales", ["ana@example.com"], Text: "...", Html: "<p>...</p>",
     Link: "https://console.example/views/sales", Attachments: [new("sales.pdf", "application/pdf", bytes)], Source: "subscription:" + sub, OwnerPerson: person));
@@ -21,7 +21,9 @@ await service.RunAsync(stopping);        // the sender loop; a runner task calls
 - **No secret is written.** The channel's address and password are references (`secret:`, `env:`, `file:`) resolved at the moment of the send through `ChannelContext.SecretAsync`, which registers the value with the `SecretScrubber`; the detail of a try and every log line are scrubbed (a server that echoes a rejected password does not put it in a row). Log lines carry ids, channel, sizes and the scrubbed words, never a body. A test sends a canary secret through a channel that echoes it and searches every row and log line.
 - **Retention.** A settled message and its attempts go after 30 days (the state default; `retention:` settings change it) and its attachments (payloads owned by the message) with them; pending and sending messages have no age limit.
 
-## The `delivery:` section
+## Channels are connections (plan 22a GP18 fold)
+
+A channel is a **connection** (`connection/2`, kept by the console as `connections/<name>.yml`): `kind: smtp` for mail, `kind: http` with a `webhook:` section for Slack, Teams and the signed webhook. The `delivery:` section of the install's settings holds only **which connection each delivery channel name uses in each release channel** (plan 21: `prod`, `test`, `dev`, ...), the retry policy and the limits. The library reads connections through `IDeliveryConnections` (the console implements it over its files; a test uses `FixedDeliveryConnections`), so it does not depend on the console.
 
 ```yaml
 delivery:
@@ -30,29 +32,35 @@ delivery:
     backoff_seconds: [30, 120, 600, 3600, 21600]
   lease_seconds: 120
   channels:
-    mail:                                 # the channel's name
-      kind: email
-      limit_per_minute: 30                # optional, every kind
-      # the kind's own keys: see its section below
+    mail: smtp-main                       # a name alone binds the production release channel (prod), and only it
+    alerts:                               # a release channel to a connection, each explicit
+      prod: slack-ops
+      test: slack-sandbox
+      dev: slack-sandbox
+  limits:                                 # optional: messages per minute per delivery channel (else the connection's own limit_per_minute)
+    alerts: 30
 ```
 
-Read strictly (`DeliverySettings.Read`): an unknown key, an unknown kind, a duplicate name or a secret written out instead of referenced fails naming the file and the key. The channel kinds register with `ChannelKinds` (a kind lists its keys and their types; a `Secret` key takes only a reference).
+Read strictly (`DeliverySettings.Read`): an unknown key, a duplicate name or a limit for a name that is not a channel fails naming the file and the key. **A channel in the earlier form** (`kind: email`, `host`, `url`, ...) **is refused** naming the file, the key and the new form; there is no migration (the library was never released).
 
-## The email channel (`kind: email`)
+### Release channels: a test never notifies production
+
+`DeliveryChannels.Resolve(name, releaseChannel)` makes the channel from the connection **bound for that release channel**, and never answers with another's: a release channel with no entry has **no channel** (it is not inherited from `prod`: sending is a write, plan 21), so a message written on `test` reaches a sandbox and cannot reach production's Slack because production is bound. `*` binds every release channel that has no entry of its own and is written on purpose. `DeliveryRequest.ReleaseChannel` (null: `prod`) is kept with the message (`message.release_channel`, module migration 3) so a retry goes where the first try went. `SendAsync` refuses a release channel that is not bound (`ChannelNotBoundException`, naming where it is bound) and an unknown name (`UnknownChannelException`); a connection that is missing or does not read is a problem the message reports as a temporary failure (fixing it makes the next try work). A sender holds a limit per minute **per connection**, so a test channel never uses up production's. A channel made from a connection is kept until the connection's file changes; an edited connection is used by the next message.
+
+### Mail (`kind: smtp`)
 
 ```yaml
-    mail:
-      kind: email
-      host: smtp.example.com               # the certificate must be for this name
-      port: 587                            # default: 587 starttls, 465 implicit, 25 none
-      tls: starttls                        # starttls (default) | implicit | none
-      from: "DbData <noreply@example.com>"
-      username: robot
-      password: secret:dbdata/delivery/mail/password
-      helo: dbdatakit                      # optional
-      timeout_seconds: 30                  # optional
-      trusted_certificate: /etc/dbdatakit/mail-ca.pem   # optional: a private CA's file
-      limit_per_minute: 30
+schema: connection/2
+kind: smtp
+name: smtp-main
+smtp:
+  host: smtp.example.com               # the certificate must be for this name
+  port: 587                            # default: 587 starttls, 465 implicit, 25 none
+  tls: starttls                        # starttls (default) | implicit | none (refused unless the host is this machine, or allow_plain_text: true)
+  sender: "DbData <noreply@example.com>"
+  trusted_certificate: /etc/dbdatakit/mail-ca.pem    # optional: a private CA's file
+  limit_per_minute: 30
+sign_in: { method: basic, user: robot, password_secret: secret:dbdatakit:server:connection:smtp-main:password }
 ```
 
 A small SMTP client of the library (`SmtpClientLite`: EHLO, STARTTLS or implicit TLS, AUTH PLAIN or LOGIN, one message per connection) because no mail package is pinned and `System.Net.Mail.SmtpClient` cannot do implicit TLS. The message is multipart (`mixed` with attachments, `alternative` for text and html, UTF-8 in base64; a non-ASCII subject or file name is encoded as the RFCs say; a link is added to both bodies).
@@ -61,28 +69,33 @@ A small SMTP client of the library (`SmtpClientLite`: EHLO, STARTTLS or implicit
 - A certificate for another name, or one that chains to no trusted root, is refused (permanent, and it says which); **the name is always checked and there is no setting that turns the check off**. Credentials are never sent before TLS on a `starttls` channel, even when the server does not offer STARTTLS (that is refused too).
 - An address that is not one, no recipient, or a line break in the subject is the message's own fault: permanent.
 
-## Teams, Slack and the signed webhook (`kind: teams | slack | webhook`)
+### Slack, Teams and the signed webhook (`kind: http` with `webhook:`)
 
 ```yaml
-    ops-teams:
-      kind: teams                          # an Adaptive Card in the envelope an incoming webhook takes
-      url: secret:dbdata/delivery/ops-teams/url       # the address carries a token: always a reference
-    ops-slack:
-      kind: slack                          # Block Kit: header, section (mrkdwn, escaped), a button for the link
-      url: secret:dbdata/delivery/ops-slack/url
-    erp-hook:
-      kind: webhook                        # a JSON document signed with HMAC-SHA256 and a timestamp
-      url: env:ERP_HOOK_URL
-      secret: secret:dbdata/delivery/erp-hook/signing
-      allow_private: [erp.internal.example, 10.1.0.0/16]   # optional, every webhook kind
-      timeout_seconds: 20
+schema: connection/2
+kind: http
+name: slack-ops
+endpoint: https://hooks.slack.com/services/{token}      # the template: the origin and the path are visible, the secret part is a placeholder
+endpoint_secrets:
+  token: secret:dbdatakit:server:connection:slack-ops:token
+webhook:
+  format: slack                        # slack (Block Kit) | teams (Adaptive Card) | signed (a JSON document, HMAC-SHA256 and a timestamp)
+  allow_private: [erp.internal.example, 10.1.0.0/16]    # optional: hosts, addresses or ranges that may be private
+  limit_per_minute: 30                 # optional
+  timeout_seconds: 20                  # optional
 ```
 
-- **A private address is refused** (loopback, 10/8, 172.16/12, 192.168/16, 169.254/16, fc00::/7, fe80::/10, 100.64/10 and the other special ranges) unless `allow_private` lists the host name, the address or its CIDR range. It is checked on the address the connection really goes to, so a name that resolves to a private address, or is changed to one between a check and the connect, is refused as well. A plain `http` address is used only for a listed host.
-- **No redirect is followed** (it could lead past the check): a 3xx is a permanent failure that says so. The address is never in a message's words (it carries a token); a failure names the host.
+A signed webhook adds `sign_in: { method: signed_webhook, key_secret: secret:..., name: X-DbData-Signature }`. **The address is a template** (`EndpointTemplate`, `DbDataKit.Connections`): a placeholder is in the path or a query value, never in the scheme, host or port, so the private-address check and "what does this connect to" work; the strict reader refuses a literal address with a secret in plain sight (a known service's token, a long random path segment, a `sig=` or `token=` value) and names the part to move. A whole-address secret (`endpoint: secret:...`) is possible for a service nothing classifies and is shown as "address hidden". Teams Workflows is `https://prod-12.westus.logic.azure.com:443/workflows/{flow}/triggers/manual/paths/invoke?api-version=2016-06-01&sig={sig}` with `flow` and `sig` bound.
+
+- **A private address is refused** (loopback, 10/8, 172.16/12, 192.168/16, 169.254/16, fc00::/7, fe80::/10, 100.64/10 and the other special ranges) unless `webhook.allow_private` lists the host name, the address or its CIDR range. It is checked on the address the connection really goes to, so a name that resolves to a private address, or is changed to one between a check and the connect, is refused as well. A plain `http` address is used only for a listed host.
+- **No redirect is followed** (it could lead past the check): a 3xx is a permanent failure that says so. The composed address (it carries a token) is never in a message's words: a failure names the host, and **every failure text** (a timeout, a refused redirect, a TLS or DNS error, a body that echoes the address) is scrubbed of the composed address and of each secret part (`WebhookChannel`, a test per failure class that looks in the failure, the outbox rows and the log).
 - **Answers:** 2xx is sent; 408, 425, 429 and 5xx are temporary (a 429's `Retry-After` is in the words); a **410 is permanent** and says the webhook was removed; any other 4xx and 3xx is permanent; a network error or a timeout is temporary.
 - **Files:** a webhook cannot carry one, so Teams and Slack name the attachments and the link opens what they came from; the signed webhook lists each (name, type, size, SHA-256) and inlines its bytes (`content_base64`) up to 2 MiB.
-- **The signature** (`WebhookSignature`): `X-DbData-Signature: t=<unix seconds>,v1=<hex>`, `v1` = HMAC-SHA256 of `"<t>.<body>"` with the shared secret, the body exactly as sent. A receiver calls `WebhookSignature.Verify(secret, header, body, now, window)`: constant-time comparison, `Mismatch` after one changed byte or another secret, `OutsideWindow` when `t` is more than the window (default five minutes) from its clock (this is what stops a replay), `Malformed`. `X-DbData-Delivery` is the message id (the receiver's idempotency key: a retry carries the same id) and `X-DbData-Attempt` the try.
+- **The signature** (`SignedWebhook` in `DbDataKit.Connections.Http`, `WebhookSignature` here): `X-DbData-Signature: t=<unix seconds>,v1=<hex>` (or the header `sign_in.name` says), `v1` = HMAC-SHA256 of `"<t>.<body>"` with the shared secret, the body exactly as sent. A receiver calls `WebhookSignature.Verify(secret, header, body, now, window)`: constant-time comparison, `Mismatch` after one changed byte or another secret, `OutsideWindow` when `t` is more than the window (default five minutes, the receiver's, which is what stops a replay) from its clock, `Malformed`. `X-DbData-Delivery` is the message id (the receiver's idempotency key: a retry carries the same id) and `X-DbData-Attempt` the try.
+
+### Secrets
+
+A connection holds references (`secret:`, `env:`, `file:`, ...), never values; each is resolved at the moment of a send through `ChannelContext.SecretAsync`, which registers the value with the `SecretScrubber`; the detail of a try and every log line are scrubbed. Log lines carry ids, channel, release channel, sizes and the scrubbed words, never a body. A test sends a canary secret through a channel that echoes it and searches every row and log line.
 
 ## Subscriptions (plan 22a GP17)
 
@@ -95,12 +108,6 @@ A person subscribes to a dashboard or a report on a schedule: `SubscriptionSpec.
 - **The schedule is the runner's.** `ClaimDue` takes the active subscriptions whose `next_run_at` has come and moves each to its next time by a guarded update (two runners take a subscription once; a runner that was down takes it once, not once per missed time). The cron is read in the subscription's time zone, so 07:00 stays 07:00 across a daylight change (Berlin 06:00 UTC before 2026-03-29, 05:00 after; New York 12:00 UTC before 2026-03-08, 11:00 after). The runner task that calls `RunDueAsync` every minute is `views-export` (plan 32 DBR18).
 - The runs of a subscription are kept 90 days (`subscription_run`); the subscription itself goes only when a person removes it.
 
-## Where this folds into connections later
-
-A channel's endpoint and its secret references are read here by `DeliverySettings` on purpose, as a small reader of their own. When the `connection` format grows a `kind` for outside systems (plan 22a IX01), a delivery channel becomes a connection of kind `mail` or `webhook` and `ChannelConfig` is built from it: the outbox, the sender and the channels' code do not change, only where `ChannelConfig` comes from.
-
 ## Opening the module
 
-A host opens `DeliveryModule.Module` (install scope; it depends on `payloads`) with its other modules. The console does (`ConsoleState.Modules`): it reads the `delivery:` section of `settings.yaml` in its directory, runs the sender as a hosted service and serves `/api/delivery` and the Delivery page (channels with a test send, subscriptions, the outbox). The console cannot draw a document, so a subscription is rendered by the process that runs the views module with the `views-export` task (`DbDataKit.Delivery.Runner`), over the same state; the console's "send now" is offered only when a process registers an `ISubscriptionRenderer`.
-
-**Planned (owner direction, plan 22a GP07 row):** the channels become connection kinds (`kind: http` for Slack, Teams and the signed webhook; `kind: smtp`), and `delivery:` shrinks to channel name to connection name plus limits.
+A host opens `DeliveryModule.Module` (install scope; it depends on `payloads`) with its other modules. The console does (`ConsoleState.Modules`): it reads the `delivery:` section of `settings.yaml` in its directory (which connection each channel name uses in each release channel; the connections are its own `connections/<name>.yml`), runs the sender as a hosted service and serves `/api/delivery` and the Delivery page (channels with a test send, subscriptions, the outbox). The console cannot draw a document, so a subscription is rendered by the process that runs the views module with the `views-export` task (`DbDataKit.Delivery.Runner`), over the same state; the console's "send now" is offered only when a process registers an `ISubscriptionRenderer`.

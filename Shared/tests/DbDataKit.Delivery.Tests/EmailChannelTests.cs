@@ -65,17 +65,15 @@ public sealed class EmailChannelTests : IDisposable
         return server;
     }
 
-    private EmailChannel Channel(FakeSmtpServer server, string tls = "starttls", string? trusted = null, string? password = "secret:mail/password", string? username = "robot", Dictionary<string, string>? secrets = null, SecretScrubber? scrubber = null) =>
+    private IDeliveryChannel Channel(FakeSmtpServer server, string tls = "starttls", string? trusted = null, string? password = "secret:mail/password", string? username = "robot", Dictionary<string, string>? secrets = null, SecretScrubber? scrubber = null) =>
         ChannelOn(server.Port, tls, trusted, password, username, secrets, scrubber);
 
-    private static EmailChannel ChannelOn(int port, string tls = "starttls", string? trusted = null, string? password = "secret:mail/password", string? username = "robot", Dictionary<string, string>? secrets = null, SecretScrubber? scrubber = null)
+    private static IDeliveryChannel ChannelOn(int port, string tls = "starttls", string? trusted = null, string? password = "secret:mail/password", string? username = "robot", Dictionary<string, string>? secrets = null, SecretScrubber? scrubber = null)
     {
-        var json = new JsonObject { ["kind"] = "email", ["host"] = "localhost", ["port"] = port, ["tls"] = tls, ["from"] = "DbData <noreply@example.com>" };
-        if (username is not null) json["username"] = username;
-        if (password is not null) json["password"] = password;
-        if (trusted is not null) json["trusted_certificate"] = trusted;
-        var settings = DeliverySettings.Read(new JsonObject { ["channels"] = new JsonObject { ["mail"] = json } }, "server.yaml", DeliveryKinds.Default());
-        return (EmailChannel)new DeliveryChannels(settings, DeliveryKinds.Default(), new MapResolver(secrets ?? new() { ["secret:mail/password"] = "s3cr3t-pw" }), scrubber ?? new SecretScrubber(), TimeProvider.System).Find("mail")!;
+        var yaml = $"schema: connection/2\nkind: smtp\nname: mail-main\nsmtp:\n  host: localhost\n  port: {port}\n  tls: {tls}\n  sender: \"DbData <noreply@example.com>\"\n" + (trusted is not null ? $"  trusted_certificate: \"{trusted}\"\n" : "");
+        if (username is not null && password is not null) yaml += $"sign_in: {{ method: basic, user: {username}, password_secret: \"{password}\" }}\n";
+        else if (username is not null) yaml += $"sign_in: {{ method: basic, user: {username}, password_secret: \"secret:mail/absent\" }}\n";
+        return TestConnections.Single("mail", TestConnections.Load(yaml), new MapResolver(secrets ?? new() { ["secret:mail/password"] = "s3cr3t-pw" }), scrubber);
     }
 
     private (FakeSmtpServer Server, string TrustFile) TlsServer(bool implicitTls = false, string name = "localhost", bool offerStartTls = true)
@@ -275,16 +273,25 @@ public sealed class EmailChannelTests : IDisposable
         Assert.Single(server.Received);
     }
 
-    [Fact]
-    public void The_settings_of_an_email_channel_are_strict()
+    [Theory]
+    [InlineData("smtp:\n  host: h\n", "sender")]
+    [InlineData("smtp:\n  host: h\n  sender: a@b.example\n  tls: plain\n", "tls")]
+    [InlineData("smtp:\n  host: h\n  sender: a@b.example\n  tls: none\n", "clear text")]
+    public void A_smtp_connection_that_does_not_read_cannot_be_a_channel(string section, string word)
     {
-        static string Refused(string channel) => Assert.Throws<DeliverySettingsException>(() => DeliverySettings.Read(JsonNode.Parse($"{{\"channels\": {{\"mail\": {channel}}}}}")!.AsObject(), "server.yaml", DeliveryKinds.Default())).Message;
-        Assert.Contains("delivery.channels.mail.host is required for a email channel", Refused("""{"kind": "email", "from": "a@b.example"}"""));
-        Assert.Contains("delivery.channels.mail.from is required", Refused("""{"kind": "email", "host": "smtp.example.com"}"""));
-        Assert.Contains("delivery.channels.mail.password is a reference to a secret", Refused("""{"kind": "email", "host": "h", "from": "a@b.example", "password": "plain-text-pw"}"""));
-        Assert.Contains("has no key `ssl`", Refused("""{"kind": "email", "host": "h", "from": "a@b.example", "ssl": true}"""));
-        var settings = DeliverySettings.Read(JsonNode.Parse("""{"channels": {"mail": {"kind": "email", "host": "h", "from": "a@b.example", "tls": "plain"}}}""")!.AsObject(), "server.yaml", DeliveryKinds.Default());
-        var ex = Assert.Throws<DeliverySettingsException>(() => new DeliveryChannels(settings, DeliveryKinds.Default(), new MapResolver([]), new SecretScrubber()));
-        Assert.Contains("delivery.channels.mail.tls is `starttls`, `implicit` or `none`, not `plain`", ex.Message);
+        var r = DbDataKit.Connections.ConnectionDefinitionLoader.Load("schema: connection/2\nkind: smtp\nname: m\n" + section, "connections/m.yml", outsideKinds: true);
+        Assert.False(r.Ok);
+        Assert.Contains(word, string.Join("\n", r.Diagnostics.Select(d => d.Message)), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_trusted_certificate_that_cannot_be_read_is_the_channels_problem_not_a_crash()
+    {
+        var definition = TestConnections.Load("schema: connection/2\nkind: smtp\nname: m\nsmtp:\n  host: localhost\n  sender: a@b.example\n  trusted_certificate: /no/such/file.pem\n");
+        var channels = TestConnections.Channels(TestConnections.Settings("""{"mail": "m"}"""), new FixedDeliveryConnections([definition]), new MapResolver([]));
+        var resolution = channels.Resolve("mail", null);
+        Assert.Null(resolution.Channel);
+        Assert.True(resolution.Retryable);
+        Assert.Contains("trusted_certificate", resolution.Problem);
     }
 }

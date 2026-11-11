@@ -81,7 +81,7 @@ public abstract class WebhookChannel(ChannelContext context, string kind) : IDel
     private static bool CheckEntries(ChannelContext context)
     {
         foreach (var entry in context.Config.List("allow_private"))
-            if (!PrivateAddresses.IsEntry(entry)) throw new DeliverySettingsException($"delivery.channels.{context.Config.Name}.allow_private: `{entry}` is not a host name, an address or a range such as 10.1.0.0/16.");
+            if (!PrivateAddresses.IsEntry(entry)) throw new DeliverySettingsException($"webhook.allow_private: `{entry}` is not a host name, an address or a range such as 10.1.0.0/16.");
         return true;
     }
 
@@ -101,6 +101,32 @@ public abstract class WebhookChannel(ChannelContext context, string kind) : IDel
         new ChannelKey("timeout_seconds", ChannelKeyType.Whole),
     ];
 
+    /// <summary>The key prefix of the secret parts of the address in <see cref="ChannelConfig.Secrets"/> (<c>part:token</c> is the placeholder <c>{token}</c>).</summary>
+    public const string PartPrefix = "part:";
+
+    /// <summary>
+    /// The address to call: the whole address when it is a secret, else the connection's template with each placeholder filled from its secret. The composed address and each part are registered with the scrubber, so no failure text, row or log line can hold them (the text of
+    /// an <see cref="HttpClient"/> failure can carry the request address).
+    /// </summary>
+    private async Task<string> AddressAsync(CancellationToken cancellationToken)
+    {
+        if (Context.Config.Secrets.ContainsKey("url"))
+            return await Context.SecretAsync("url", cancellationToken).ConfigureAwait(false) ?? throw new ChannelUnavailableException($"The channel '{Name}' has no address.");
+        var template = Context.Config.Text("url") ?? throw new ChannelUnavailableException($"The channel '{Name}' has no address (its connection needs an `endpoint`).");
+        var parts = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var name in DbDataKit.Connections.EndpointTemplate.Names(template))
+        {
+            var value = await Context.SecretAsync(PartPrefix + name, cancellationToken).ConfigureAwait(false) ?? throw new ChannelUnavailableException($"The placeholder {{{name}}} of the address of the channel '{Name}' is not bound to a secret.");
+            parts[name] = value.Trim();
+            Context.Scrubber.Track(parts[name]);
+            foreach (var piece in parts[name].Split('/')) if (piece.Length >= 8) Context.Scrubber.Track(piece);   // a short piece would blank ordinary words
+        }
+
+        var composed = DbDataKit.Connections.EndpointTemplate.Compose(template, n => parts[n]);
+        Context.Scrubber.Track(composed);
+        return composed;
+    }
+
     /// <summary>The request for a message (a kind that needs no secret or other await overrides this one).</summary>
     protected virtual WebhookRequest Build(DeliveryPayload payload) => throw new NotSupportedException($"A {Kind} channel builds its request in BuildAsync.");
 
@@ -111,8 +137,15 @@ public abstract class WebhookChannel(ChannelContext context, string kind) : IDel
 
     public async Task<DeliveryResult> SendAsync(DeliveryPayload payload, CancellationToken cancellationToken)
     {
+        var result = await SendCoreAsync(payload, cancellationToken).ConfigureAwait(false);
+        // every failure path (a timeout, a refused redirect, a TLS or DNS error, a body that echoes the address) is scrubbed of the composed address and of each secret part of it
+        return result with { Detail = Context.Scrubber.Scrub(result.Detail) };
+    }
+
+    private async Task<DeliveryResult> SendCoreAsync(DeliveryPayload payload, CancellationToken cancellationToken)
+    {
         if (!_entriesChecked) throw new InvalidOperationException("unreachable: the settings were checked when the channel was made");
-        var address = await Context.SecretAsync("url", cancellationToken).ConfigureAwait(false) ?? throw new ChannelUnavailableException($"The channel '{Name}' has no `url`.");
+        var address = await AddressAsync(cancellationToken).ConfigureAwait(false);
         if (!Uri.TryCreate(address, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https")) return DeliveryResult.Permanent($"The address of the channel '{Name}' (url) is not an http or https address.");
         var host = uri.Host;
         IPAddress.TryParse(host.Trim('[', ']'), out var literal);

@@ -55,27 +55,74 @@ public sealed class ChannelContext(ChannelConfig config, ISecretResolver resolve
     }
 }
 
-/// <summary>The channels of a <see cref="DeliverySettings"/>, built from the kinds. A channel whose kind is unknown at build time is a settings error (the reader has refused it before).</summary>
-public sealed class DeliveryChannels : IDeliveryChannels
+/// <summary>A channel made from a connection, told by its connection and release channel: what a sender holds back by, and what the screens show.</summary>
+internal sealed class BoundChannel(IDeliveryChannel inner, string connection) : IDeliveryChannel
 {
-    private readonly Dictionary<string, IDeliveryChannel> _byName;
+    public string Name => inner.Name;
 
-    public DeliveryChannels(DeliverySettings settings, ChannelKinds kinds, ISecretResolver resolver, SecretScrubber scrubber, TimeProvider? time = null)
+    public string Kind => inner.Kind;
+
+    public string? Connection => connection;
+
+    public int? LimitPerMinute => inner.LimitPerMinute;
+
+    public Task<DeliveryResult> SendAsync(DeliveryPayload payload, CancellationToken cancellationToken) => inner.SendAsync(payload, cancellationToken);
+}
+
+/// <summary>
+/// The delivery channels of an install (plan 22a GP18 fold, plan 21): each delivery channel name is bound, <b>per release channel</b>, to a connection (<see cref="ChannelBinding"/>), and the channel is made from that connection's definition
+/// (<see cref="DeliveryConnectionRules"/>) when a message is sent, so an edited connection is used by the next message. A release channel with no binding has no channel: <see cref="Resolve"/> never answers with another release channel's connection, which is what keeps a test
+/// message from reaching production's Slack. A channel made from a connection is kept until the connection changes (its HTTP client is not made again for each message).
+/// </summary>
+public sealed class DeliveryChannels(DeliverySettings settings, IDeliveryConnections connections, ChannelKinds kinds, ISecretResolver resolver, SecretScrubber scrubber, TimeProvider? time = null) : IDeliveryChannels
+{
+    private readonly TimeProvider _time = time ?? TimeProvider.System;
+    private readonly object _gate = new();
+    private readonly Dictionary<string, IDeliveryChannel> _made = new(StringComparer.Ordinal);
+
+    public IReadOnlyList<string> Names { get; } = [.. settings.Channels.Select(c => c.Name)];
+
+    /// <summary>The bindings of the settings, in order.</summary>
+    public IReadOnlyList<ChannelBinding> Bindings => settings.Channels;
+
+    public ChannelBinding? Binding(string name) => settings.Channels.FirstOrDefault(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
+
+    public IDeliveryChannel? Find(string name) => Resolve(name, null).Channel;
+
+    public ChannelResolution Resolve(string name, string? releaseChannel)
     {
-        time ??= TimeProvider.System;
-        _byName = new Dictionary<string, IDeliveryChannel>(StringComparer.OrdinalIgnoreCase);
-        var names = new List<string>();
-        foreach (var config in settings.Channels)
+        var release = string.IsNullOrWhiteSpace(releaseChannel) ? DbDataKit.State.DefinitionStore.Production : releaseChannel.Trim();
+        if (Binding(name) is not { } binding)
+            return new ChannelResolution(null, null, release, $"The delivery channel '{name}' is not configured any more; the message was not sent. Add the channel again and send it again.");
+        if (binding.For(release) is not { } connectionName)
         {
-            var kind = kinds.Find(config.Kind) ?? throw new DeliverySettingsException($"delivery.channels.{config.Name}.kind is `{config.Kind}`; the kinds are {string.Join(", ", kinds.Names)}.");
-            _byName[config.Name] = kind.Create(new ChannelContext(config, resolver, scrubber, time));
-            names.Add(config.Name);
+            var bound = string.Join(", ", binding.Connections.Keys.Order(StringComparer.Ordinal));
+            return new ChannelResolution(null, null, release, $"The delivery channel '{binding.Name}' is not bound in the release channel '{release}' (it is bound in: {bound}); the message was not sent. A release channel never uses another's connection: bind it there in the delivery: section, or send it from another release channel.");
         }
 
-        Names = names;
+        var lookup = connections.Find(connectionName);
+        if (lookup.Definition is not { } definition)
+            return new ChannelResolution(null, connectionName, release, $"The channel '{binding.Name}' ({release}) uses the connection '{connectionName}', which cannot be used: {lookup.Problem ?? "it does not read"}", Retryable: true);
+        var kindName = DeliveryConnectionRules.KindOf(definition, out var problem);
+        if (kindName is null) return new ChannelResolution(null, connectionName, release, $"The channel '{binding.Name}' ({release}): {problem}", Retryable: true);
+        var kind = kinds.Find(kindName);
+        if (kind is null) return new ChannelResolution(null, connectionName, release, $"The channel '{binding.Name}' ({release}): this program has no `{kindName}` channel kind.", Retryable: false);
+
+        var key = $"{binding.Name}\n{release}\n{connectionName}\n{lookup.Version}\n{binding.LimitPerMinute}";
+        lock (_gate)
+        {
+            if (_made.TryGetValue(key, out var existing)) return new ChannelResolution(existing, connectionName, release, null);
+            try
+            {
+                var config = DeliveryConnectionRules.Config(binding.Name, definition, kindName, binding.LimitPerMinute);
+                var channel = new BoundChannel(kind.Create(new ChannelContext(config, resolver, scrubber, _time)), connectionName);
+                _made[key] = channel;
+                return new ChannelResolution(channel, connectionName, release, null);
+            }
+            catch (DeliverySettingsException e)
+            {
+                return new ChannelResolution(null, connectionName, release, $"The channel '{binding.Name}' ({release}) cannot be made from the connection '{connectionName}': {e.Message}", Retryable: true);
+            }
+        }
     }
-
-    public IReadOnlyList<string> Names { get; }
-
-    public IDeliveryChannel? Find(string name) => _byName.GetValueOrDefault(name);
 }

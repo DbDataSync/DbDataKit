@@ -59,7 +59,24 @@ public sealed record DeliveryPolicy(int MaxAttempts, IReadOnlyList<TimeSpan> Bac
 }
 
 /// <summary>
-/// The install's <c>delivery:</c> settings section (plan 22a GP07), read strictly: an unknown key fails naming the source and the key, a secret that is written out instead of referenced fails naming the key.
+/// One delivery channel name of the install and the connection it is bound to in each release channel (plan 22a GP18 fold, plan 21): <c>alerts: { prod: slack-ops, test: slack-sandbox }</c>. The binding is explicit: <b>a release channel with no entry has no channel</b>
+/// (it never uses another release channel's connection, so a test cannot reach production's Slack because production is bound); <c>*</c> binds every release channel that has no entry of its own, and is written on purpose.
+/// </summary>
+public sealed record ChannelBinding(string Name, IReadOnlyDictionary<string, string> Connections, int? LimitPerMinute = null)
+{
+    /// <summary>Every release channel that has no entry of its own.</summary>
+    public const string AnyReleaseChannel = "*";
+
+    /// <summary>The connection bound for a release channel: its own entry, else the <c>*</c> entry; null when neither says one.</summary>
+    public string? For(string releaseChannel) => Connections.TryGetValue(releaseChannel, out var own) ? own : Connections.GetValueOrDefault(AnyReleaseChannel);
+
+    /// <summary>Whether the entry for this release channel is its own (true) or the <c>*</c> one (false).</summary>
+    public bool IsOwn(string releaseChannel) => Connections.ContainsKey(releaseChannel);
+}
+
+/// <summary>
+/// The install's <c>delivery:</c> settings section (plan 22a GP07, reduced by the GP18 fold): the retry policy, and which connection each delivery channel name uses in each release channel. Channels are <b>connections</b> now (<c>kind: smtp</c>, or <c>kind: http</c> with a
+/// <c>webhook:</c> section; <see cref="DeliveryConnectionRules"/>), so the section holds no address, host or secret. Read strictly: an unknown key fails naming the source and the key, and a channel written in the old form (<c>kind: email</c>, <c>host</c>, <c>url</c> ...) is refused with the new form.
 /// <code>
 /// delivery:
 ///   retry:
@@ -67,22 +84,24 @@ public sealed record DeliveryPolicy(int MaxAttempts, IReadOnlyList<TimeSpan> Bac
 ///     backoff_seconds: [30, 120, 600, 3600, 21600]
 ///   lease_seconds: 120
 ///   channels:
-///     mail:                               # the channel's name
-///       kind: email                       # email | teams | slack | webhook
-///       limit_per_minute: 30              # optional, every kind
-///       host: smtp.example.com            # the keys are the kind's (see its README)
-///       password: secret:dbdata/delivery/mail/password
+///     mail: smtp-main                     # a name alone binds the production release channel (prod)
+///     alerts:                             # a release channel to a connection, each explicit
+///       prod: slack-ops
+///       test: slack-sandbox
+///       dev: slack-sandbox
+///   limits:                               # optional, messages per minute per delivery channel (the connection's own limit_per_minute applies otherwise)
+///     alerts: 30
 /// </code>
 /// </summary>
-public sealed record DeliverySettings(DeliveryPolicy Policy, IReadOnlyList<ChannelConfig> Channels)
+public sealed record DeliverySettings(DeliveryPolicy Policy, IReadOnlyList<ChannelBinding> Channels)
 {
     public static DeliverySettings Empty { get; } = new(DeliveryPolicy.Default, []);
 
-    private static readonly string[] SectionKeys = ["retry", "lease_seconds", "channels"];
+    private static readonly string[] SectionKeys = ["retry", "lease_seconds", "channels", "limits"];
     private static readonly string[] RetryKeys = ["max_attempts", "backoff_seconds"];
 
     /// <summary>Reads the section; <paramref name="source"/> is the file it came from, named in every refusal. A null section is no channels.</summary>
-    public static DeliverySettings Read(JsonObject? section, string source, ChannelKinds kinds)
+    public static DeliverySettings Read(JsonObject? section, string source)
     {
         if (section is null) return Empty;
         foreach (var (key, _) in section)
@@ -105,69 +124,64 @@ public sealed record DeliverySettings(DeliveryPolicy Policy, IReadOnlyList<Chann
 
         if (Whole(section, "lease_seconds", source, "delivery.", 5, 3600) is { } lease) policy = policy with { Lease = TimeSpan.FromSeconds(lease) };
 
-        var channels = new List<ChannelConfig>();
+        var bindings = new List<ChannelBinding>();
         if (section["channels"] is { } channelsNode)
         {
-            if (channelsNode is not JsonObject map) throw new DeliverySettingsException($"{source}: delivery.channels must be a mapping of channel names.");
+            if (channelsNode is not JsonObject map) throw new DeliverySettingsException($"{source}: delivery.channels must be a mapping of channel names to connections.");
             foreach (var (name, node) in map)
             {
                 if (!NameOk(name)) throw new DeliverySettingsException($"{source}: delivery.channels.{name}: a channel's name is letters, digits, dashes and underscores, from 1 to 64.");
-                if (channels.Any(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase))) throw new DeliverySettingsException($"{source}: delivery.channels.{name} is named twice (names are compared ignoring case).");
-                channels.Add(ReadChannel(name, node as JsonObject ?? throw new DeliverySettingsException($"{source}: delivery.channels.{name} must be a mapping."), source, kinds));
+                if (bindings.Any(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase))) throw new DeliverySettingsException($"{source}: delivery.channels.{name} is named twice (names are compared ignoring case).");
+                bindings.Add(ReadBinding(name, node, source));
             }
         }
 
-        return new DeliverySettings(policy, channels);
+        if (section["limits"] is { } limitsNode)
+        {
+            if (limitsNode is not JsonObject limits) throw new DeliverySettingsException($"{source}: delivery.limits must be a mapping of channel names to messages per minute.");
+            foreach (var (name, _) in limits)
+            {
+                var at = bindings.FindIndex(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
+                if (at < 0) throw new DeliverySettingsException($"{source}: delivery.limits.{name} names a channel that is not in delivery.channels ({(bindings.Count == 0 ? "there are none" : string.Join(", ", bindings.Select(c => c.Name)))}).");
+                bindings[at] = bindings[at] with { LimitPerMinute = Whole(limits, name, source, "delivery.limits.", 1, 100000) };
+            }
+        }
+
+        return new DeliverySettings(policy, bindings);
     }
 
     private static bool NameOk(string name) => name.Length is >= 1 and <= 64 && name.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_');
 
-    private static ChannelConfig ReadChannel(string name, JsonObject node, string source, ChannelKinds kinds)
+    /// <summary>A connection's name, as the console keeps it: a letter, then letters, digits, <c>- _ .</c>, up to 64.</summary>
+    public static bool ConnectionNameOk(string name) => name.Length is >= 1 and <= 64 && char.IsAsciiLetter(name[0]) && name.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.');
+
+    private static readonly string[] OldKeys = ["kind", "host", "port", "tls", "from", "username", "password", "helo", "timeout_seconds", "trusted_certificate", "url", "secret", "allow_private", "limit_per_minute"];
+
+    private static ChannelBinding ReadBinding(string name, JsonNode? node, string source)
     {
         var where = $"delivery.channels.{name}";
-        if (node["kind"] is not JsonValue kv || !kv.TryGetValue<string>(out var kindName) || kindName.Length == 0)
-            throw new DeliverySettingsException($"{source}: {where}.kind is required: {string.Join(", ", kinds.Names)}.");
-        var kind = kinds.Find(kindName) ?? throw new DeliverySettingsException($"{source}: {where}.kind is `{kindName}`; the kinds are {string.Join(", ", kinds.Names)}.");
-        var known = kind.Keys.Select(k => k.Key).Append("kind").Append("limit_per_minute").ToArray();
-        foreach (var (key, _) in node)
-            if (!known.Contains(key)) throw new DeliverySettingsException($"{source}: {where} has no key `{key}` for a {kindName} channel. Keys: {string.Join(", ", known)}.");
-
-        var values = new JsonObject();
-        var secrets = new Dictionary<string, SecretRef>(StringComparer.Ordinal);
-        foreach (var key in kind.Keys)
+        var form = $"Channels are connections now: keep the mail server or the webhook as a connection (connections/<name>.yml: `kind: smtp`, or `kind: http` with a `webhook:` section) and write `{name}: <connection>` or `{name}: {{ prod: <connection>, test: <connection> }}`.";
+        if (node is JsonValue v && v.TryGetValue<string>(out var single))
         {
-            var node2 = node[key.Key];
-            if (node2 is null)
-            {
-                if (key.Required) throw new DeliverySettingsException($"{source}: {where}.{key.Key} is required for a {kindName} channel.");
-                continue;
-            }
-
-            switch (key.Type)
-            {
-                case ChannelKeyType.Secret:
-                    if (node2 is not JsonValue sv || !sv.TryGetValue<string>(out var text) || !SecretRef.TryParse(text, out var reference, out _))
-                        throw new DeliverySettingsException($"{source}: {where}.{key.Key} is a reference to a secret (`secret:...`, `env:...` or `file:...`), never the value itself" + (node2 is JsonValue ? "." : "; it is not text."));
-                    secrets[key.Key] = reference;
-                    break;
-                case ChannelKeyType.Text:
-                    values[key.Key] = node2 is JsonValue tv && tv.TryGetValue<string>(out var t) && t.Length > 0 ? t : throw new DeliverySettingsException($"{source}: {where}.{key.Key} must be a non-empty text.");
-                    break;
-                case ChannelKeyType.Whole:
-                    values[key.Key] = node2 is JsonValue wv && wv.TryGetValue<int>(out var w) ? w : throw new DeliverySettingsException($"{source}: {where}.{key.Key} must be a whole number.");
-                    break;
-                case ChannelKeyType.Bool:
-                    values[key.Key] = node2 is JsonValue bv && bv.TryGetValue<bool>(out var b) ? b : throw new DeliverySettingsException($"{source}: {where}.{key.Key} must be true or false.");
-                    break;
-                case ChannelKeyType.List:
-                    values[key.Key] = node2 is JsonArray a && a.All(x => x is JsonValue xv && xv.TryGetValue<string>(out var s) && s.Length > 0) ? a.DeepClone() : throw new DeliverySettingsException($"{source}: {where}.{key.Key} must be a list of texts.");
-                    break;
-            }
+            if (!ConnectionNameOk(single)) throw new DeliverySettingsException($"{source}: {where} is `{single}`, which is not a connection's name (a letter, then letters, digits, - _ .). {form}");
+            return new ChannelBinding(name, new Dictionary<string, string>(StringComparer.Ordinal) { [ReleaseProd] = single });
         }
 
-        var limit = Whole(node, "limit_per_minute", source, where + ".", 1, 100000);
-        return new ChannelConfig(name, kindName, values, secrets, limit);
+        if (node is not JsonObject map || map.Count == 0) throw new DeliverySettingsException($"{source}: {where} is a connection's name, or a mapping of release channels to connection names. {form}");
+        var connections = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (release, value) in map)
+        {
+            if (OldKeys.Contains(release)) throw new DeliverySettingsException($"{source}: {where} has the key `{release}` of the earlier form of a channel. {form}");
+            if (release != ChannelBinding.AnyReleaseChannel && !NameOk(release)) throw new DeliverySettingsException($"{source}: {where}.{release}: a release channel's name is letters, digits, dashes and underscores (or `*` for every release channel).");
+            if (value is not JsonValue cv || !cv.TryGetValue<string>(out var connection) || !ConnectionNameOk(connection))
+                throw new DeliverySettingsException($"{source}: {where}.{release} is a connection's name (a letter, then letters, digits, - _ .). {form}");
+            connections[release] = connection;
+        }
+
+        return new ChannelBinding(name, connections);
     }
+
+    private const string ReleaseProd = "prod";
 
     private static int? Whole(JsonObject o, string key, string source, string prefix, int min, int max)
     {

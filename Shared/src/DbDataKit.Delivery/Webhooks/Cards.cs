@@ -173,7 +173,7 @@ public sealed class SignedWebhookChannel(ChannelContext context) : WebhookChanne
         var body = Document(payload, now).ToJsonString(new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
         return new WebhookRequest(body, "application/json", new Dictionary<string, string>
         {
-            [WebhookSignature.Header] = WebhookSignature.Sign(secret, body, now),
+            [Context.Config.Text("signature_header") ?? WebhookSignature.Header] = WebhookSignature.Sign(secret, body, now),
             ["X-DbData-Delivery"] = payload.MessageId.ToString("D"),
             ["X-DbData-Attempt"] = payload.Attempt.ToString(CultureInfo.InvariantCulture),
         });

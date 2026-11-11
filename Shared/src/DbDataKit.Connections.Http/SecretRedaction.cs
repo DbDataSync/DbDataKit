@@ -16,7 +16,7 @@ public static class SecretRedaction
             all.Add(value);
             all.Add(Uri.EscapeDataString(value));
             all.Add(Uri.EscapeDataString(value).Replace("%2F", "/", StringComparison.Ordinal));
-            foreach (var segment in value.Split('/')) if (segment.Length >= 4) all.Add(segment);
+            foreach (var segment in value.Split('/')) if (segment.Length >= 8) all.Add(segment);
         }
 
         foreach (var value in all.OrderByDescending(v => v.Length)) text = text.Replace(value, Mask, StringComparison.Ordinal);
