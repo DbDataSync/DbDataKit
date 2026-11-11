@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ErrorBanner, Link, useIsAdmin } from '@dbdatakit/shell'
 import { workspaceApi, type ProjectSummary, type WorkspaceSummary } from '../api'
-import { abandonState, createState, describeEvent } from '../model'
+import { abandonState, createState, describeEvent, publishesTo } from '../model'
 import { WorkspaceShell } from '../WorkspaceShell'
 
 const when = (iso: string) => (iso ? new Date(iso).toLocaleString() : '')
@@ -94,9 +94,12 @@ function NewProject({ canWrite }: { canWrite: boolean }) {
   const [open, setOpen] = useState(false)
   const [id, setId] = useState('')
   const [title, setTitle] = useState('')
+  const [kind, setKind] = useState('app')
   const projects = useQuery({ queryKey: ['workspace', 'projects'], queryFn: workspaceApi.projects })
+  const kinds = useQuery({ queryKey: ['workspace', 'kinds'], queryFn: workspaceApi.projectKinds, staleTime: 60_000 })
+  const chosen = kinds.data?.find((k) => k.name === kind)
   const create = useMutation({
-    mutationFn: () => workspaceApi.createProject(id, title.trim() || null),
+    mutationFn: () => workspaceApi.createProject(id, title.trim() || null, kind),
     onSuccess: async () => { setId(''); setTitle(''); setOpen(false); await client.invalidateQueries({ queryKey: ['workspace'] }) },
   })
   const state = createState({ name: id, canWrite, busy: create.isPending, what: 'project', taken: (projects.data ?? []).map((p) => p.id) })
@@ -105,9 +108,15 @@ function NewProject({ canWrite }: { canWrite: boolean }) {
   return (
     <form className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }} data-testid="ws-new-project-form" onSubmit={(e) => { e.preventDefault(); if (state.enabled) create.mutate() }}>
       <input className="input mono" aria-label="Project id" placeholder="project-id" value={id} onChange={(e) => setId(e.target.value)} data-testid="ws-new-project-id" />
+ {(kinds.data?.length ?? 0) > 1 && (
+        <select className="input" aria-label="Kind of project" value={kind} onChange={(e) => setKind(e.target.value)} data-testid="ws-new-project-kind">
+          {kinds.data!.map((k) => <option key={k.name} value={k.name}>{k.title}</option>)}
+        </select>
+      )}
       <input className="input" aria-label="Project title" placeholder="Title (optional)" value={title} onChange={(e) => setTitle(e.target.value)} data-testid="ws-new-project-title" />
       <button type="submit" className="btn btn-primary" disabled={!state.enabled} data-testid="ws-new-project-create">Make project</button>
       <button type="button" className="btn" data-testid="ws-new-project-cancel" onClick={() => setOpen(false)}>Cancel</button>
+      {chosen && <span className="hint" data-testid="ws-new-project-kind-help">{chosen.description} Published to {publishesTo(chosen.publishes)}.</span>}
       {state.why && <span className="hint" data-testid="ws-new-project-problem">{state.why}</span>}
       <ErrorBanner error={create.error} />
     </form>

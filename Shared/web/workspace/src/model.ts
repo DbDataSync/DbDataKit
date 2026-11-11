@@ -168,3 +168,18 @@ export function pairProblem(input: { name: string; url: string }): string | null
   if (input.url.trim() !== '' && !/^https:\/\/\S+$/.test(input.url.trim())) return 'The Gateway\'s address starts with https://.'
   return null
 }
+
+/** A finding of a check as one line: `models/marts/orders.yml:29 DDB-101: the reason`; only the code and reason when no place is named. */
+export const checkLine = (d: { code: string; message: string; file: string | null; line: number | null }) => `${d.file ? `${d.file}${d.line ? `:${d.line}` : ''} ` : ''}${d.code}: ${d.message}`
+
+/** The one sentence over a check's findings: sound, or how many errors and warnings. Counted here, so the screen and its test say the same. */
+export function checkVerdict(result: { diagnostics: readonly { severity: string }[] }): { ok: boolean; text: string } {
+  const errors = result.diagnostics.filter((d) => d.severity === 'error').length
+  const warnings = result.diagnostics.filter((d) => d.severity === 'warning').length
+  if (errors === 0) return { ok: true, text: warnings === 0 ? 'The draft is sound.' : `The draft is sound, with ${warnings} ${warnings === 1 ? 'warning' : 'warnings'}.` }
+  return { ok: false, text: `${errors} ${errors === 1 ? 'error' : 'errors'}${warnings > 0 ? ` and ${warnings} ${warnings === 1 ? 'warning' : 'warnings'}` : ''} to fix before this draft is merged or published.` }
+}
+
+/** Where a kind publishes, in words: `a Gateway (app)`, `a Runner (package)`; `nowhere yet` for a kind that has no route. */
+export const publishesTo = (routes: readonly { product: string; what: string }[]) =>
+  routes.length === 0 ? 'nowhere yet' : routes.map((r) => `a ${r.product === 'runner' ? 'Runner' : r.product === 'gateway' ? 'Gateway' : r.product} (${r.what})`).join(' and ')

@@ -38,7 +38,13 @@ export interface BuildReadiness {
   bun: { path: string; source: string } | null
   isolation: { setting: string; available: boolean }
 }
-export interface PublishTarget { name: string; gateway: string | null; can_publish: boolean }
+export interface PublishTarget { name: string; gateway: string | null; product?: string | null; accepts?: boolean | null; can_publish: boolean }
+
+/** A kind of project the server hosts (`GET /api/v1/project-kinds`) and what it publishes as, to which product (plan 33 SC20). */
+export interface ProjectKindInfo { name: string; title: string; description: string; buildable: boolean; publishes: { product: string; what: string; description: string }[] }
+/** One finding of a kind's check of a draft: a code, a severity, and the file and line when the validator names a place. */
+export interface CheckDiagnostic { severity: 'error' | 'warning' | 'info'; code: string; message: string; file: string | null; line: number | null }
+export interface CheckResult { kind: string; ok: boolean; diagnostics: CheckDiagnostic[] }
 export interface PublishAnswer { steps: string[]; published: { app?: string; version?: number; hash?: string; target?: string; gateway?: string } }
 /** A target's publisher key as a person may see it: the reference to the secret, never the key, and the Gateway it is paired with. */
 export interface PublisherKey { name: string; secret_ref: string; updated: string; gateway: { url: string; roles: string[]; client_name: string; paired: string } | null }
@@ -53,7 +59,9 @@ const json = (body: unknown): RequestInit => ({ method: 'POST', body: JSON.strin
 /** The Workspace server's calls through the console's relay, as the signed-in person; the server checks the role on every call. */
 export const workspaceApi = {
   projects: () => request<{ projects: ProjectSummary[] }>('/api/v1/projects').then((r) => r.projects),
-  createProject: (id: string, title: string | null) => request<ProjectSummary>('/api/v1/projects', json(title ? { id, title } : { id })),
+  createProject: (id: string, title: string | null, kind?: string) => request<ProjectSummary>('/api/v1/projects', json({ id, ...(title ? { title } : {}), ...(kind && kind !== 'app' ? { kind } : {}) })),
+  projectKinds: () => request<{ kinds: ProjectKindInfo[] }>('/api/v1/project-kinds').then((r) => r.kinds),
+  check: (project: string, id: string) => request<CheckResult>(`${ws(project, id)}/check`),
   workspaces: (project: string) => request<{ workspaces: WorkspaceSummary[] }>(`/api/v1/projects/${enc(project)}/workspaces`).then((r) => r.workspaces),
   createWorkspace: (project: string, name: string) => request<WorkspaceSummary>(`/api/v1/projects/${enc(project)}/workspaces`, json({ name })),
   abandon: (project: string, id: string) => request<void>(`/api/v1/projects/${enc(project)}/workspaces/${enc(id)}`, { method: 'DELETE' }),
