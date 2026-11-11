@@ -10,6 +10,7 @@ import { UpgradesPage } from './pages/UpgradesPage'
 import { MonitoringPage } from './pages/MonitoringPage'
 import { ApprovalsPage } from './pages/ApprovalsPage'
 import { RunsPage } from './pages/RunsPage'
+import { TrackingPage } from './pages/TrackingPage'
 import { AuditPage } from './pages/AuditPage'
 import { SecretsPage } from './pages/SecretsPage'
 import { ServerModule } from './pages/ServerModule'
@@ -61,6 +62,7 @@ export default function App() {
       <Route path="/monitoring" element={<MonitoringPage />} />
       <Route path="/approvals" element={<ApprovalsPage />} />
       <Route path="/runs" element={<RunsPage />} />
+      <Route path="/tracking" element={<TrackingPage />} />
       <Route path="/audit" element={<AuditPage />} />
       <Route path="/secrets" element={<SecretsPage />} />
       <Route path="/users" element={<UsersPage />} />
