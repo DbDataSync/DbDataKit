@@ -96,7 +96,8 @@ public static class GatewayManagementHost
         // one for every kind of change, in the state every instance of a group shares (plan 20 O02); the file it used to be is read in once
         var audit = new DbDataGateway.Server.State.StateAuditLog(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>());
         var adoptions = new DataSourceAdoptions(configDirectory);
-        dataSources = new GatewayDataSources(configDirectory, management, provider.ReloadNow, () => app.Services.GetRequiredService<DataSourceCatalog>(), audit, git, findClient: clients.Find, published: app.Services.GetRequiredService<Serving.PublishedDataSources>(), adoptions: adoptions);
+        dataSources = new GatewayDataSources(configDirectory, management, provider.ReloadNow, () => app.Services.GetRequiredService<DataSourceCatalog>(), audit, git, findClient: clients.Find, published: app.Services.GetRequiredService<Serving.PublishedDataSources>(), adoptions: adoptions,
+            servingCatalog: () => app.Services.GetRequiredService<DbDataKit.Serving.IServingServices>().Catalog);
         var identities = new GatewayIdentities(configDirectory, management, provider.ReloadNow, () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue, audit, git);
         var activity = new GatewayActivity(app.Services.GetRequiredService<SessionStore>(), app.Services.GetRequiredService<ActiveQueries>(), app.Services.GetRequiredService<QueryLimits>(),
             app.Services.GetRequiredService<LoginThrottle>(), () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue, audit,

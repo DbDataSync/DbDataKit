@@ -36,6 +36,9 @@ internal sealed class FakeGateway : IAsyncDisposable
     public HashSet<string> HandMade { get; } = [];
     public ConcurrentQueue<string> Adoptions { get; } = new();
 
+    /// <summary>What its catalog reader answers per data source (plan 33 SC20j): the engine and the tables with their columns, as <c>POST /api/v1/data-sources/{name}/schema</c> does.</summary>
+    public ConcurrentDictionary<string, JsonObject> Schemas { get; } = new();
+
     /// <summary>The semantic models it serves (plan 33 SC20e): name to the version, the catalog and the data source each source maps to.</summary>
     public ConcurrentDictionary<string, (int Version, string Catalog, JsonObject Sources)> SemanticModels { get; } = new();
 
@@ -69,6 +72,7 @@ internal sealed class FakeGateway : IAsyncDisposable
         app.MapPut("/api/v1/app-instances/{name}/channels/{channel}", async (string name, string channel, HttpContext context) => await gateway.PreviewInstance(context, name, channel));
         app.MapGet("/api/v1/entity-models/{name}", async (string name, HttpContext context) => await gateway.Models(context, name));
         app.MapPut("/api/v1/entity-models/{name}", async (string name, HttpContext context) => await gateway.Models(context, name));
+        app.MapPost("/api/v1/data-sources/{name}/schema", async (string name, HttpContext context) => await gateway.Schema(context, name));
         app.MapGet("/api/v1/semantic-models/{name}", async (string name, HttpContext context) => await gateway.Semantic(context, name));
         app.MapPut("/api/v1/semantic-models/{name}", async (string name, HttpContext context) => await gateway.Semantic(context, name));
         await app.StartAsync();
@@ -80,6 +84,27 @@ internal sealed class FakeGateway : IAsyncDisposable
     private sealed class FakeGatewayState
     {
         public FakeGateway Owner = null!;
+
+        /// <summary>The Gateway's schema call (plan 33 SC20j): the shape of a data source's catalog, a hand-made data source only with <c>adopt</c> naming it.</summary>
+        public async Task Schema(HttpContext context, string name)
+        {
+            var token = context.ManagementToken();
+            Owner.Calls.Enqueue($"{context.Request.Method} {context.Request.Path} as {token.SubjectId} ({token.SubjectName}) with {string.Join("+", ServerRoles.Names(token.Roles))}");
+            async Task Reply(int status, object body)
+            {
+                context.Response.StatusCode = status;
+                await context.Response.WriteAsJsonAsync(body);
+            }
+            if (!ManagementAuthorization.Authorize(token, ServerRole.Publisher).Allowed && !ManagementAuthorization.Authorize(token, ServerRole.Admin).Allowed) { await Reply(403, new { error = "Reading a catalog needs the publisher role." }); return; }
+            var body = await System.Text.Json.JsonSerializer.DeserializeAsync<JsonObject>(context.Request.Body);
+            if (!Owner.Schemas.TryGetValue(name, out var schema)) { await Reply(404, new { error = $"There is no data source '{name}'." }); return; }
+            if (Owner.HandMade.Contains(name))
+            {
+                if ((string?)body?["adopt"] != name) { await Reply(409, new { error = $"The data source '{name}' was made by hand. Ask again with \"adopt\".", adopt = new { data_source = name, made_by = "hand", publish_adopt = true, field = "adopt" } }); return; }
+                Owner.Adoptions.Enqueue($"{name} schema-read by {token.Client.Id}");
+            }
+            await Reply(200, schema);
+        }
 
         /// <summary>The Gateway's semantic-model route as far as a publish goes: the version it holds, and a PUT over that version whose sources name data sources the Gateway has.</summary>
         public async Task Semantic(HttpContext context, string name)

@@ -259,6 +259,73 @@ public static class WorkspaceManagement
             }
         });
 
+        // plan 33 SC20j (D20): the catalog cache's producer. A paired Gateway, which holds the data source's login, answers a read-only schema call (tables, columns, keys: never a row or a secret) and the answer is written into the draft as
+        // `catalog-cache.yaml` (the format `catalog-cache/1`, read back by the strict reader before anything is written). The Workspace holds no login. The other connections of an existing cache stay as they were.
+        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/catalog/refresh", async (string project, string id, HttpContext context) =>
+        {
+            if (InProject(project, context, ServerRole.Author, out var hosted) is { } refused) return refused;
+            var token = context.ManagementToken();
+            if (workspaces.Find(hosted.Id, id) is not { } workspace) return Results.NotFound();
+            if (workspace.Owner != token.SubjectId) return Results.Json(new { error = "Only the owner of a workspace changes its files." }, statusCode: StatusCodes.Status403Forbidden);
+            if (store.FindProject(hosted.Id)!.Kind == "app") return Results.Json(new { error = "An app has no connections, so it has no catalog to cache." }, statusCode: StatusCodes.Status409Conflict);
+            var body = await Body(context);
+            string? target, connection, dataSource;
+            var adopt = false;
+            try
+            {
+                (target, connection, dataSource) = (body?["target"]?.GetValue<string>(), body?["connection"]?.GetValue<string>(), body?["data_source"]?.GetValue<string>());
+                adopt = body?["adopt"] is JsonValue a && (a.TryGetValue<bool>(out var yes) ? yes : a.TryGetValue<string>(out var named) && !string.IsNullOrWhiteSpace(named));
+            }
+            catch (InvalidOperationException) { target = connection = dataSource = null; }
+            if (string.IsNullOrWhiteSpace(target) || string.IsNullOrWhiteSpace(connection))
+                return Results.Json(new { error = "The body is a JSON object with the \"target\" (a publisher key paired with a Gateway), the \"connection\" of the project the catalog is for, and optionally the Gateway's \"data_source\" for it (the connection's own name by default) and \"adopt\" (true once the person confirmed a data source made by hand)." }, statusCode: StatusCodes.Status400BadRequest);
+            if (!SecretNameLike(connection!)) return Results.Json(new { error = $"'{connection}' is not a connection name (letters, digits, '.', '_' and '-')." }, statusCode: StatusCodes.Status400BadRequest);
+            var steps = new List<string>();
+            var named2 = string.IsNullOrWhiteSpace(dataSource) ? connection! : dataSource!.Trim();
+            try
+            {
+                var (schema, paired) = await publishing.ReadSchemaAsync(target!, named2, adopt, steps.Add, context.RequestAborted);
+                var root = workspaces.RootOf(workspace);
+                CatalogCacheFile? existing = null;
+                var path = Path.Combine(root, CatalogCache.FileName);
+                if (File.Exists(path))
+                {
+                    var load = CatalogCache.Load(File.ReadAllText(path), CatalogCache.FileName);
+                    if (!load.Ok) return Results.Json(new { error = $"{CatalogCache.FileName} of this draft is damaged ({load.Diagnostics.FirstOrDefault(d => d.Severity == DbDataKit.Config.Yaml.ConfigSeverity.Error)?.Message}); fix or delete it, then refresh again.", steps }, statusCode: StatusCodes.Status409Conflict);
+                    existing = load.Cache;
+                }
+                string text;
+                CatalogCacheFile refreshed;
+                try
+                {
+                    refreshed = CatalogCache.Refreshed(existing, connection!, schema, paired.Name, paired.Product, TimeProvider.System.GetUtcNow());
+                    text = CatalogCache.Write(refreshed);
+                }
+                catch (InvalidDataException ex) { return Results.Json(new { error = ex.Message, steps }, statusCode: StatusCodes.Status409Conflict); }
+                // the strict reader has the last word, before a file is written: a name that looks like a login, a table with no columns, a cache too large
+                var check = CatalogCache.Load(text, CatalogCache.FileName);
+                if (!check.Ok) return Results.Json(new { error = $"The catalog the Gateway answered cannot be cached: {check.Diagnostics.First(d => d.Severity == DbDataKit.Config.Yaml.ConfigSeverity.Error).Message}", steps }, statusCode: StatusCodes.Status409Conflict);
+                var created = DbDataKit.Authoring.WorkspaceFiles.Write(root, CatalogCache.FileName, text);
+                var tables = refreshed.Connections[connection!].Tables;
+                Audit(token, "catalog.refresh", $"{hosted.Id}/{id}: {connection} <- {paired.Name}/{named2}", "ok");
+                steps.Add($"Wrote {CatalogCache.FileName}: {tables.Count} table(s) of {connection}.");
+                return Results.Json(new JsonObject
+                {
+                    ["connection"] = connection, ["data_source"] = named2, ["target"] = paired.Name, ["file"] = CatalogCache.FileName, ["created"] = created, ["generated_at"] = refreshed.GeneratedAt,
+                    ["tables"] = tables.Count, ["columns"] = tables.Sum(t => t.Columns.Count), ["steps"] = new JsonArray([.. steps.Select(x => (JsonNode?)x)]),
+                });
+            }
+            catch (WorkspacePublishException ex)
+            {
+                Audit(token, "catalog.refresh", $"{hosted.Id}/{id}: {connection} <- {target}/{named2}", "refused: " + ex.Message);
+                var failure = new JsonObject { ["error"] = ex.Message, ["steps"] = new JsonArray([.. steps.Select(x => (JsonNode?)x)]) };
+                if (ex.Adopt is not null) failure["adopt"] = ex.Adopt.DeepClone();
+                return Results.Json(failure, statusCode: ex.Status);
+            }
+        });
+
+        static bool SecretNameLike(string name) => name.Length is > 0 and <= 64 && name.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-');
+
         // the data sources a person confirmed adopting (plan 33 SC21f): the body's "adopt" is one name or a list of names
         static IReadOnlyList<string>? AdoptNames(JsonNode? node) => node switch
         {

@@ -187,6 +187,32 @@ export function adoptionSentence(a: AdoptionRequest): string {
   return `The data source ${a.data_source} on the Gateway was made ${who}, not by this Workspace. Publishing puts your model on it. The Gateway records that you adopted it (who, when and which data source) in its audit and in the data source's metadata.`
 }
 
+/** What the refresh button says: the data source it reads, or the connection that stands for it. */
+export const refreshLabel = (connection: string, dataSource: string) => `Refresh catalog from ${dataSource.trim() || connection.trim() || 'a data source'}`
+
+/** Whether the refresh can be asked, and why not: the author role, a Gateway key and the connection to cache. */
+export function refreshButton(input: { canWrite: boolean; target: string; connection: string; busy: boolean; targets: readonly { name: string; can_publish: boolean; product?: string | null }[] }): { enabled: boolean; why: string | null } {
+  if (!input.canWrite) return { enabled: false, why: 'Refreshing the catalog changes the draft, which needs the author role.' }
+  if (input.busy) return { enabled: false, why: null }
+  const gateways = input.targets.filter((t) => t.product === 'gateway' && t.can_publish)
+  if (gateways.length === 0) return { enabled: false, why: 'No publisher key is paired with a Gateway: an administrator adds one under Publisher keys. The Gateway holds the logins and answers; the Workspace never connects to a database.' }
+  const known = input.targets.find((t) => t.name === input.target.trim())
+  if (input.target.trim() === '') return { enabled: false, why: null }
+  if (!known || known.product !== 'gateway' || !known.can_publish) return { enabled: false, why: `The catalog is read from a Gateway: choose a key paired with one (${gateways.map((g) => g.name).join(', ')}).` }
+  if (input.connection.trim() === '') return { enabled: false, why: 'Name the connection of the project the catalog is for.' }
+  return { enabled: true, why: null }
+}
+
+/** What a refresh came to, as one sentence. */
+export const refreshedLine = (a: { connection: string; data_source: string; target: string; tables: number; columns: number; file: string }) =>
+  `Cached ${a.tables} ${a.tables === 1 ? 'table' : 'tables'} and ${a.columns} ${a.columns === 1 ? 'column' : 'columns'} of ${a.connection} from the data source ${a.data_source} on ${a.target} into ${a.file}. No row was read.`
+
+/** The confirmation before the catalog of a data source made by hand is read (SC20j, the same consent as SC21f): the data source, who made it, and that the Gateway records it. */
+export function catalogAdoptionSentence(a: AdoptionRequest): string {
+  const who = a.made_by === 'hand' ? 'by hand or by an administrator of the Gateway' : `by ${a.made_by}`
+  return `The data source ${a.data_source} on the Gateway was made ${who}, not by this Workspace. Reading its catalog gives you its table and column names and types, never rows. The Gateway records that you adopted it (who, when and which data source) in its audit and in the data source's metadata.`
+}
+
 /** What a publish came to, as one sentence, whatever it was: an app on a Gateway, a package staged or served on a Runner's channel, models on a Gateway's data sources. */
 export function publishedLine(p: { app?: string; instance?: string; version?: number; gateway?: string; package?: string; channel?: string; mode?: string; changed?: boolean; runner?: string; models?: { model: string; data_source?: string; data_sources?: Record<string, string>; version?: number | null; unchanged?: boolean | null; adopted?: string | string[] | null }[] }): string {
   if (p.package) return `${p.mode === 'serve' ? 'Published' : 'Staged'} ${p.package} on ${p.channel} of ${p.runner ?? 'the Runner'} as version ${p.version}${p.changed === false ? ' (the same content as before, nothing changed)' : ''}.`
