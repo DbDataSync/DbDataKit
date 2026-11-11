@@ -8,6 +8,8 @@ Every product with a command line (`DbDataKit.Cli`: nouns and verbs) gives each 
 
 The effect class is the line between "reads" and "changes" (`CommandSpec.cs`): offline only, repository files only, target read-only, target writes, target data writes, tracking tables only. It is printed in `--help` and in the header of each run.
 
+**Traits** (`Traits.cs`, plan 27a AG02) say more: reads definitions, reads data, writes definitions, writes data, changes structure, deletes, outward, elevated. Each effect class maps to traits by a fixed table (`TraitTable.For`); a verb may add traits (a verb that sends mail is `outward`) and may not drop one its effect class implies, or the router refuses it when it is made. The MCP server decides what to offer from traits, not from the effect class: a verb with any changing trait is offered only with `--allow-writes`, a policy that keeps data from a model can leave out every verb that `reads data` (`McpOptions.RefuseData`), and each tool's `annotations.traits` lists them.
+
 ## Model Context Protocol: `ui mcp`
 
 `dbdatasync ui mcp` and `dbdatagateway ui mcp` start a stdio MCP server over the product's own command router (`DbDataKit.Cli/Mcp.cs`: newline-delimited JSON-RPC, protocol `2025-06-18` and the two before it). Every offered command is a tool named `noun_verb`; a call runs the command in process with `--format json` and returns its document (cut at 120,000 characters).
@@ -31,7 +33,8 @@ Two guardrails already hold **outside the model**, as the design wants: a Build 
 | --- | --- |
 | `DbDataKit.Agents` (runtime on `Microsoft.Extensions.AI`, scripted fake client, provider adapters) | not started; `Microsoft.Extensions.AI` is not in `Directory.Packages.props` |
 | `agent/1` definitions, install policy, skills as a published kind | not started |
-| Traits (reads definitions, reads data, outward, elevated...) and prompting per action | not started; today's six effect classes and `--allow-writes` are all there is |
+| Prompting per action (the three settings, the three layers) | not started; `--allow-writes` is the one gate |
+| Traits printed in `--help`, the run header and the JSON document | not started (traits exist on every verb and in the MCP tool list, below) |
 | The back-end agent in the console's chat; front-end agents in a serving-layer `mcp` module; an app's assistant panel | not started ([serving-layer.md](serving-layer.md) lists `mcp` as not built) |
 | Memories, subagents, evaluation sets, transcripts (`agents` state module), limits and cost | not started |
 | Actions (scripts as tools) and elevated actions | not started |

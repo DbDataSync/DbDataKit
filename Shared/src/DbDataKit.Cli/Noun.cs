@@ -7,7 +7,12 @@ namespace DbDataKit.Cli;
 /// <param name="Usage">The words after the verb in the usage line (<c>[--url &lt;url&gt;]</c>), empty for none.</param>
 /// <param name="Run">Runs the verb with the arguments after it and returns the exit code.</param>
 /// <param name="DataSchema">The JSON Schema of the document's <c>data</c> for this verb (see <see cref="DataSchemas"/>). Every verb of a router must have one: a verb without one is refused when the router is made.</param>
-public sealed record Verb(string Name, string Summary, EffectClass Effect, string Usage, Func<string[], CliContext, Task<int>> Run, string? DataSchema = null);
+/// <param name="Traits">What the verb does beyond its effect class (plan 27a AG02): null means the traits the effect class maps to (<see cref="TraitTable.For"/>). A verb that declares its own must keep every changing trait its effect class implies, or the router refuses it.</param>
+public sealed record Verb(string Name, string Summary, EffectClass Effect, string Usage, Func<string[], CliContext, Task<int>> Run, string? DataSchema = null, Traits? Traits = null)
+{
+    /// <summary>The traits of the verb: its own when it declares them, else those of its effect class.</summary>
+    public Traits EffectiveTraits => Traits ?? TraitTable.For(Effect);
+}
 
 /// <summary>
 /// A group of verbs on one thing, identical in every command line that has it (plan 13, W4). The shared nouns are built here once; a product supplies what is its own
@@ -25,7 +30,7 @@ public sealed class Noun(string name, string summary, IReadOnlyList<Verb> verbs)
     public Noun With(params Verb[] more) => new(Name, Summary, [.. Verbs, .. more]);
 
     /// <summary>The verbs as command specs (<c>server run</c>), for a product's command table and the help.</summary>
-    public IEnumerable<CommandSpec> Specs() => Verbs.Select(v => new CommandSpec($"{Name} {v.Name}", v.Effect, v.Summary, true));
+    public IEnumerable<CommandSpec> Specs() => Verbs.Select(v => new CommandSpec($"{Name} {v.Name}", v.Effect, v.Summary, true) { Traits = v.EffectiveTraits });
 }
 
 /// <summary>
@@ -64,6 +69,9 @@ public sealed class NounRouter
             {
                 if (verb.DataSchema is null)
                     throw new ArgumentException($"'{noun.Name} {verb.Name}' has no data schema; every verb says what its JSON document holds (DataSchemas.None when it holds nothing).");
+                var implied = TraitTable.For(verb.Effect) & TraitTable.Changing;
+                if ((verb.EffectiveTraits & implied) != implied)
+                    throw new ArgumentException($"'{noun.Name} {verb.Name}' declares traits ({string.Join(", ", verb.EffectiveTraits.Names())}) that leave out what its effect class implies ({string.Join(", ", implied.Names())}); a verb may add traits, never drop one.");
                 try { System.Text.Json.Nodes.JsonNode.Parse(verb.DataSchema); }
                 catch (System.Text.Json.JsonException ex) { throw new ArgumentException($"The data schema of '{noun.Name} {verb.Name}' is not JSON: {ex.Message}"); }
             }

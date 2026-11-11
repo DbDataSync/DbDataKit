@@ -6,7 +6,8 @@ namespace DbDataKit.Cli;
 /// <summary>What a product's <c>ui mcp</c> offers (plan 13, C08).</summary>
 /// <param name="Excluded">Commands never offered, as <c>noun</c> or <c>noun verb</c>: the long-running and interactive ones, and anything that takes a secret or returns rows.</param>
 /// <param name="AllowWrites">Also offer the commands that change files or the system. Without it only the ones that read are offered.</param>
-public sealed record McpOptions(IReadOnlySet<string> Excluded, bool AllowWrites = false)
+/// <param name="RefuseData">Leave out the commands whose traits say they read data (an agent whose policy keeps data from its model, plan 27a AG02).</param>
+public sealed record McpOptions(IReadOnlySet<string> Excluded, bool AllowWrites = false, bool RefuseData = false)
 {
     /// <summary>The commands every product keeps out: the MCP server itself, and the ones that run for ever or ask questions on a terminal.</summary>
     public static readonly IReadOnlySet<string> Always = new HashSet<string>(StringComparer.Ordinal) { "ui", "server run", "server setup" };
@@ -40,7 +41,9 @@ public sealed class McpServer(NounRouter router, McpOptions options, string serv
             {
                 string command = $"{noun.Name} {verb.Name}";
                 if (options.Excluded.Contains(command) || McpOptions.Always.Contains(command)) continue;
-                if (!options.AllowWrites && verb.Effect is not (EffectClass.OfflineOnly or EffectClass.TargetReadOnly)) continue;
+                var traits = verb.EffectiveTraits;
+                if (!options.AllowWrites && traits.Changes()) continue;
+                if (options.RefuseData && traits.HasFlag(Traits.ReadsData)) continue;
                 tools.Add((ToolName(noun, verb), noun, verb));
             }
         }
@@ -119,7 +122,11 @@ public sealed class McpServer(NounRouter router, McpOptions options, string serv
                 },
             },
         },
-        ["annotations"] = new JsonObject { ["readOnlyHint"] = verb.Effect is EffectClass.OfflineOnly or EffectClass.TargetReadOnly },
+        ["annotations"] = new JsonObject
+        {
+            ["readOnlyHint"] = !verb.EffectiveTraits.Changes(),
+            ["traits"] = new JsonArray([.. verb.EffectiveTraits.Names().Select(n => (JsonNode)JsonValue.Create(n)!)]),
+        },
     };
 
     private async Task<JsonObject> CallAsync(JsonObject? parameters, CancellationToken cancellation)

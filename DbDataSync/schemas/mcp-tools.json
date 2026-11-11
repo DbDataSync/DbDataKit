@@ -17,7 +17,10 @@
         }
       },
       "annotations": {
-        "readOnlyHint": true
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions"
+        ]
       }
     },
     {
@@ -37,7 +40,10 @@
         }
       },
       "annotations": {
-        "readOnlyHint": true
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions"
+        ]
       }
     },
     {
@@ -57,7 +63,10 @@
         }
       },
       "annotations": {
-        "readOnlyHint": true
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions"
+        ]
       }
     },
     {
@@ -77,7 +86,10 @@
         }
       },
       "annotations": {
-        "readOnlyHint": true
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions"
+        ]
       }
     },
     {
@@ -97,7 +109,10 @@
         }
       },
       "annotations": {
-        "readOnlyHint": true
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions"
+        ]
       }
     },
     {
@@ -117,7 +132,10 @@
         }
       },
       "annotations": {
-        "readOnlyHint": true
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions"
+        ]
       }
     },
     {
@@ -137,7 +155,10 @@
         }
       },
       "annotations": {
-        "readOnlyHint": true
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions"
+        ]
       }
     },
     {
@@ -157,7 +178,10 @@
         }
       },
       "annotations": {
-        "readOnlyHint": true
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions"
+        ]
       }
     },
     {
@@ -177,7 +201,10 @@
         }
       },
       "annotations": {
-        "readOnlyHint": true
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions"
+        ]
       }
     },
     {
@@ -197,7 +224,10 @@
         }
       },
       "annotations": {
-        "readOnlyHint": true
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions"
+        ]
       }
     },
     {
@@ -217,7 +247,10 @@
         }
       },
       "annotations": {
-        "readOnlyHint": true
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions"
+        ]
       }
     },
     {
@@ -237,7 +270,10 @@
         }
       },
       "annotations": {
-        "readOnlyHint": true
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions"
+        ]
       }
     },
     {
@@ -257,7 +293,11 @@
         }
       },
       "annotations": {
-        "readOnlyHint": true
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions",
+          "reads-data"
+        ]
       }
     },
     {
@@ -277,7 +317,11 @@
         }
       },
       "annotations": {
-        "readOnlyHint": true
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions",
+          "reads-data"
+        ]
       }
     },
     {
@@ -297,7 +341,11 @@
         }
       },
       "annotations": {
-        "readOnlyHint": true
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions",
+          "reads-data"
+        ]
       }
     },
     {
@@ -317,7 +365,10 @@
         }
       },
       "annotations": {
-        "readOnlyHint": true
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions"
+        ]
       }
     },
     {
@@ -337,7 +388,10 @@
         }
       },
       "annotations": {
-        "readOnlyHint": true
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions"
+        ]
       }
     }
   ]
