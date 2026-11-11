@@ -152,6 +152,13 @@ public static class BindingsLoader
                 foreach (var channel in channels.Entries)
                 {
                     var release = channel.Key.Value;
+                    if (kind == SlotKind.Delivery && EarlierChannelKeys.Contains(release))
+                    {
+                        Add(EarlierForm, channel.Key, $"`{release}` is a key of the earlier form of a delivery channel (a mail server or webhook written in the channel). Channels are connections now.",
+                            $"Keep the mail server or the webhook as a connection (connections/<name>.yml: `kind: smtp`, or `kind: http` with a `webhook:` section) and write `{name}: <connection>` or `{name}: {{ prod: <connection>, test: <connection> }}`.");
+                        continue;
+                    }
+
                     if (release != BindingSet.AnyReleaseChannel && !NameOk(release)) { Bad(channel.Key, $"`{release}` is not a release channel's name: letters, digits, '-' and '_' (or `*` for every release channel)."); continue; }
                     if (ReadEntries(kind, name, release, channel.Value) is { } entries) perChannel[release] = entries;
                 }
@@ -200,6 +207,8 @@ public static class BindingsLoader
             return new BindingEntry(connection.Value, model?.Value, connection.Line, connection.Column);
         }
     }
+
+    private static readonly string[] EarlierChannelKeys = ["kind", "host", "port", "tls", "from", "username", "password", "helo", "timeout_seconds", "trusted_certificate", "url", "secret", "allow_private", "limit_per_minute"];
 
     /// <summary>A connection's name, as the console keeps it: a letter, then letters, digits, <c>- _ .</c>, up to 64.</summary>
     public static bool ConnectionNameOk(string name) => name.Length is >= 1 and <= 64 && char.IsAsciiLetter(name[0]) && name.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.');

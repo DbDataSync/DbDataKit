@@ -113,7 +113,21 @@ public static class TestConnections
     public static DeliverySettings Settings(string channelsJson) => Section("{\"channels\": " + channelsJson + "}");
 
     /// <summary>The whole <c>delivery:</c> section as JSON (channels, limits, retry).</summary>
-    public static DeliverySettings Section(string json) => DeliverySettings.Read(System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject(), "settings.yaml");
+    public static DeliverySettings Section(string json)
+    {
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+        DbDataKit.Connections.Bindings.BindingSet? bindings = null;
+        if (node["channels"] is { } channels)
+        {
+            // the channels are bindings (bindings.yml, section delivery:); JSON is YAML
+            node.Remove("channels");
+            var read = DbDataKit.Connections.Bindings.BindingsLoader.Load("bindings: 1\ndelivery: " + channels.ToJsonString(), "bindings.yml");
+            Assert.True(read.Ok, string.Join("\n", read.Diagnostics));
+            bindings = read.Bindings;
+        }
+
+        return DeliverySettings.Read(node, "settings.yaml", bindings);
+    }
 
     public static DeliveryChannels Channels(DeliverySettings settings, IDeliveryConnections connections, ISecretResolver resolver, SecretScrubber? scrubber = null, TimeProvider? time = null) =>
         new(settings, connections, DeliveryKinds.Default(), resolver, scrubber ?? new SecretScrubber(), time ?? TimeProvider.System);

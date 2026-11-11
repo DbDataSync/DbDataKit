@@ -128,7 +128,7 @@ public sealed class ConsoleKnowledgeIndexTests : IAsyncLifetime
         Assert.Equal(32, (int)tested["dimensions"]!);
         Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Put, "/api/knowledge/index/embedding", viewer, new EmbeddingBody("emb", "fake-embed"))).Status);
         await Bind("fake-embed");
-        Assert.Contains("embeddings:", File.ReadAllText(Path.Combine(directory, "models", "_slots.yml")));
+        Assert.Contains("\"embeddings\":", File.ReadAllText(Path.Combine(directory, "bindings.yml")));
         var bound = (await State())["embedding"]!;
         Assert.Equal(("emb", "fake-embed", "emb/fake-embed", true), ((string)bound["provider"]!, (string)bound["model"]!, (string)bound["modelId"]!, (bool)bound["usable"]!));
 

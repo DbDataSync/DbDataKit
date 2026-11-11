@@ -76,15 +76,10 @@ public sealed class ConsoleDeliveryTests : IAsyncLifetime
               retry:
                 max_attempts: 2
                 backoff_seconds: [60]
-              channels:
-                hook: hook-conn
-                unfinished: slack-unfinished
-                alerts:
-                  prod: hook-conn
-                  test: hook-sandbox
-                  dev: hook-sandbox
             # kept after the section
             """);
+        // which connection each channel name uses in each release channel is a binding (plan 27a IX23)
+        File.WriteAllText(Path.Combine(directory, "bindings.yml"), "bindings: 1\ndelivery:\n  hook: hook-conn\n  unfinished: slack-unfinished\n  alerts:\n    prod: hook-conn\n    test: hook-sandbox\n    dev: hook-sandbox\n");
         await StartAsync();
     }
 
@@ -356,51 +351,79 @@ public sealed class ConsoleDeliveryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task The_mapping_is_saved_from_the_screen_through_the_strict_reader_and_the_next_message_uses_it_and_a_wrong_one_writes_nothing()
+    public async Task A_binding_is_saved_through_the_strict_reader_and_the_next_message_uses_it_and_a_wrong_one_writes_nothing_and_production_in_a_test_channel_is_a_confirmed_recorded_choice()
     {
-        var file = Path.Combine(directory, "settings.yaml");
+        var file = Path.Combine(directory, "bindings.yml");
         var before = File.ReadAllText(file);
-        var channels = new JsonObject
-        {
-            ["hook"] = "hook-conn",
-            ["alerts"] = new JsonObject { ["prod"] = "hook-conn", ["test"] = "hook-conn" },     // the sandbox's binding is changed: a test now goes to the connection of /in/
-        };
-        Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Put, "/api/delivery/channels", viewer, new JsonObject { ["channels"] = channels.DeepClone() })).Status);
+        var body = new SlotBody(new() { ["prod"] = [new("hook-conn")], ["test"] = [new("hook-conn")] });     // the sandbox's binding is changed: a test would go to the connection of /in/
+        Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Put, "/api/bindings/slots/delivery/alerts", viewer, body)).Status);
 
-        // refused, and nothing is written: an unknown connection, a connection that is not a delivery kind, the earlier form of a channel, a release channel that is not a name
+        // refused, and nothing is written: an unknown connection, a connection that is not a delivery kind, a model for a channel, a release channel that is not a name
         File.WriteAllText(Path.Combine(directory, "connections", "crm.yml"), "schema: connection/2\nkind: http\nname: crm\nendpoint: https://api.example.com/v1\n");
-        foreach (var (bad, word) in new (JsonObject Channels, string Word)[]
+        foreach (var (bad, word) in new (SlotBody Body, string Word)[]
         {
-            (new JsonObject { ["hook"] = "nowhere" }, "does not exist"),
-            (new JsonObject { ["hook"] = "crm" }, "HTTP API without a `webhook:` section"),
-            (new JsonObject { ["hook"] = new JsonObject { ["kind"] = "webhook", ["url"] = "env:X" } }, "Channels are connections now"),
-            (new JsonObject { ["hook"] = new JsonObject { ["te st"] = "hook-conn" } }, "release channel's name"),
+            (new SlotBody(new() { ["prod"] = [new("nowhere")] }), "does not exist"),
+            (new SlotBody(new() { ["prod"] = [new("crm")] }), "cannot send"),
+            (new SlotBody(new() { ["prod"] = [new("hook-conn", "some-model")] }), "Unknown key"),
+            (new SlotBody(new() { ["te st"] = [new("hook-conn")] }), "not a release channel"),
         })
         {
-            var (status, error) = await Call(HttpMethod.Put, "/api/delivery/channels", admin, new JsonObject { ["channels"] = bad });
+            var (status, error) = await Call(HttpMethod.Put, "/api/bindings/slots/delivery/hook", admin, bad);
             Assert.Equal(HttpStatusCode.UnprocessableEntity, status);
-            Assert.Contains(word, (string)error!["error"]!);
+            Assert.Contains(word, error!["diagnostics"]!.ToJsonString());
         }
 
         Assert.Equal(before, File.ReadAllText(file));
 
-        var (saved, body) = await Call(HttpMethod.Put, "/api/delivery/channels", admin, new JsonObject { ["channels"] = channels, ["limits"] = new JsonObject { ["alerts"] = 5 } });
+        // production's connection in the test release channel of a delivery channel needs the administrator's confirmed choice (IX17): refused with what it would do, nothing written
+        var (conflict, needs) = await Call(HttpMethod.Put, "/api/bindings/slots/delivery/alerts", admin, body);
+        Assert.Equal(HttpStatusCode.Conflict, conflict);
+        var need = Assert.Single(needs!["needsConfirmation"]!.AsArray())!;
+        Assert.Equal("bindings/delivery/alerts/test", (string)need["scope"]!);
+        Assert.Contains("which production uses", (string)need["effect"]!);
+        Assert.Equal(before, File.ReadAllText(file));
+
+        // confirmed: written, recorded with who and when, and the screen's view says so
+        var (saved, view) = await Call(HttpMethod.Put, "/api/bindings/slots/delivery/alerts", admin, body with { Confirm = ["bindings/delivery/alerts/test"], Note = "the test channel may use the live hook this week" });
         Assert.Equal(HttpStatusCode.OK, saved);
-        var alerts = body!["channels"]!.AsArray().Single(c => (string)c!["name"]! == "alerts")!;
-        Assert.Equal(5, (int)alerts["limitPerMinute"]!);
-        Assert.Equal(["hook-conn", "hook-conn"], alerts["bindings"]!.AsArray().Select(b => (string)b!["connection"]!));
+        var bindings = app.Services.GetRequiredService<ConsoleBindings>();
+        Assert.True(bindings.Confirmed("bindings/delivery/alerts/test"));
+        var choice = Assert.Single(bindings.Posture.Choices.List("bindings/delivery/alerts/test"));
+        Assert.False(string.IsNullOrEmpty(choice.ChosenBy));
+        Assert.Equal("the test channel may use the live hook this week", choice.Note);
+        var alerts = view!["view"]!["slots"]!.AsArray().Single(x => (string)x!["name"]! == "alerts")!;
+        var testRow = alerts["rows"]!.AsArray().Single(r => (string)r!["release"]! == "test")!;
+        Assert.True((bool)testRow["needsConfirmation"]!);
+        Assert.True((bool)testRow["confirmed"]!);
         var written = File.ReadAllText(file);
-        Assert.StartsWith("# the console's settings", written, StringComparison.Ordinal);
-        Assert.Contains("# kept after the section", written, StringComparison.Ordinal);
-        Assert.Contains("\"alerts\":\n      \"prod\": \"hook-conn\"\n      \"test\": \"hook-conn\"", written, StringComparison.Ordinal);
-        Assert.Contains("limits:\n    \"alerts\": 5", written, StringComparison.Ordinal);
-        Assert.DoesNotContain("unfinished", written, StringComparison.Ordinal);
-        Assert.Contains("max_attempts: 2", written, StringComparison.Ordinal);                 // the retry policy is kept as it was
+        Assert.Contains("\"alerts\":\n    \"prod\": \"hook-conn\"\n    \"test\": \"hook-conn\"", written, StringComparison.Ordinal);
+        Assert.Contains("\"unfinished\": \"slack-unfinished\"", written, StringComparison.Ordinal);
 
         // the file reads again as the console reads it, and the next message on the test channel goes where the new binding says
         Assert.Null((await Call(HttpMethod.Get, "/api/delivery", viewer)).Body!["problem"]);
         var (_, sent) = await Call(HttpMethod.Post, "/api/delivery/channels/alerts/test", admin, new TestSendBody(Channel: "test"));
         Assert.Equal("hook-conn", (string)sent!["connection"]!);
         Assert.Equal($"/in/token-{tag}", Assert.Single(hits).Path);
+
+        // moved back to the sandbox: the choice is taken back with the binding
+        var back = new SlotBody(new() { ["prod"] = [new("hook-conn")], ["test"] = [new("hook-sandbox")] });
+        Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Put, "/api/bindings/slots/delivery/alerts", admin, back)).Status);
+        Assert.False(bindings.Confirmed("bindings/delivery/alerts/test"));
+        Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Delete, "/api/bindings/slots/delivery/unfinished", admin)).Status);
+        Assert.DoesNotContain("unfinished", File.ReadAllText(file), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_mapping_in_settings_yaml_and_the_earlier_form_of_a_channel_are_refused_naming_the_file_and_the_new_place()
+    {
+        var settings = Path.Combine(directory, "settings.yaml");
+        File.WriteAllText(settings, "delivery:\n  channels:\n    hook: hook-conn\n");
+        app.Services.GetRequiredService<ConsoleDelivery>().Reload();
+        Assert.Contains("delivery.channels is not kept here any more", (string)(await Call(HttpMethod.Get, "/api/delivery", viewer)).Body!["problem"]!);
+        File.WriteAllText(settings, "delivery:\n  retry:\n    max_attempts: 2\n");
+        File.WriteAllText(Path.Combine(directory, "bindings.yml"), "bindings: 1\ndelivery:\n  hook: { kind: webhook, url: \"env:X\" }\n");
+        var (_, view) = await Call(HttpMethod.Get, "/api/bindings", viewer);
+        Assert.Contains("Channels are connections now", view!["diagnostics"]!.ToJsonString());
+        Assert.Contains("bindings.yml", view["diagnostics"]!.ToJsonString());
     }
 }

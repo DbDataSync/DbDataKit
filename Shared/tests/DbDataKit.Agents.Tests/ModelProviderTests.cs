@@ -1,5 +1,6 @@
 using DbDataKit.Agents;
 using DbDataKit.Connections;
+using DbDataKit.Connections.Bindings;
 
 namespace DbDataKit.Agents.Tests;
 
@@ -80,18 +81,21 @@ public sealed class ModelProviderTests
         Assert.Contains(result.Diagnostics, d => d.Message.Contains("not `model-provider`") && d.Path == "connections/crm.yml");
     }
 
+    private static IBindingTargets Targets(params ModelProviderDefinition[] providers) =>
+        new FixedBindingTargets(providers.Select(p => new BindingTarget(p.Name, ConnectionKinds.ModelProvider, p.Purpose, [.. p.Models.Select(m => m.Id)])));
+
     [Fact]
-    public void Slots_bind_per_channel_in_order_and_a_channel_without_its_own_has_the_one_for_every_channel()
+    public void Slots_bind_per_release_channel_in_order_and_a_channel_without_its_own_has_the_one_written_for_every_channel()
     {
-        var yaml = "model-slots: 1\nslots:\n  default:\n    \"*\":\n      - { provider: claude, model: claude-sonnet-4-5 }\n      - { provider: local, model: llama }\n    test:\n      - { provider: local, model: llama }\n";
+        var yaml = "bindings: 1\nmodels:\n  default:\n    \"*\":\n      - { connection: claude, model: claude-sonnet-4-5 }\n      - { connection: local, model: llama }\n    test:\n      - { connection: local, model: llama }\n";
 
-        var bindings = SlotBindingsLoader.Load(yaml, "models/_slots.yml").Bindings!;
+        var bindings = BindingsLoader.Load(yaml, "bindings.yml").Bindings!;
 
-        Assert.Equal(["claude", "local"], bindings.For("default", null).Select(c => c.Provider));
-        Assert.Equal(["claude", "local"], bindings.For("default", "prod").Select(c => c.Provider));
-        Assert.Equal(["local"], bindings.For("default", "test").Select(c => c.Provider));
-        Assert.Empty(bindings.For("other", null));
-        Assert.Equal(["other"], bindings.Unbound(["default", "other"], null));      // a promotion that needs it is refused naming it
+        Assert.Equal(["claude", "local"], bindings.Resolve(SlotKind.ModelChat, "default", null).Entries.Select(c => c.Connection));
+        Assert.Equal(["claude", "local"], bindings.Resolve(SlotKind.ModelChat, "default", "prod").Entries.Select(c => c.Connection));
+        Assert.Equal(["local"], bindings.Resolve(SlotKind.ModelChat, "default", "test").Entries.Select(c => c.Connection));
+        Assert.False(bindings.Resolve(SlotKind.ModelChat, "other", null).IsBound);
+        Assert.Equal(["other"], bindings.Unbound(SlotKind.ModelChat, ["default", "other"], null));      // a promotion that needs it is refused naming it
     }
 
     [Fact]
@@ -99,16 +103,15 @@ public sealed class ModelProviderTests
     {
         var chat = ModelProviderConnection.Load(Good, "p.yml").Definition!;
         var embeddings = ModelProviderConnection.Load(Good.Replace("name: claude", "name: embed").Replace("provider: anthropic", "provider: ollama\n  purpose: embeddings").Replace("sign_in: { method: api_key, key_secret: env:ANTHROPIC_API_KEY }\n", ""), "e.yml").Definition!;
-        var providers = new Dictionary<string, ModelProviderDefinition> { ["claude"] = chat, ["embed"] = embeddings };
-        var yaml = "model-slots: 1\nslots:\n  embeddings:\n    \"*\":\n      - { provider: embed, model: claude-sonnet-4-5 }\n    test:\n      - { provider: claude, model: claude-sonnet-4-5 }\n";
+        var yaml = "bindings: 1\nmodels:\n  embeddings:\n    \"*\": { connection: embed, model: claude-sonnet-4-5 }\n    test: { connection: claude, model: claude-sonnet-4-5 }\n";
 
-        var problems = SlotBindingsLoader.Check(SlotBindingsLoader.Load(yaml, "s.yml").Bindings!, providers, "s.yml");
+        var problems = BindingsLoader.Check(BindingsLoader.Load(yaml, "s.yml").Bindings!, Targets(chat, embeddings), "s.yml");
 
-        Assert.Equal("embeddings", SlotBindingsLoader.PurposeOf(SlotBindingsLoader.EmbeddingsSlot));
-        Assert.Equal("chat", SlotBindingsLoader.PurposeOf("default"));
+        Assert.Equal(SlotKind.ModelEmbeddings, BindingsLoader.ModelKindOf(BindingsLoader.EmbeddingsSlot));
+        Assert.Equal(SlotKind.ModelChat, BindingsLoader.ModelKindOf("default"));
         var problem = Assert.Single(problems);
         Assert.Contains("for chat, not embeddings", problem.Message);
-        Assert.Equal(7, problem.Line);
+        Assert.Equal(5, problem.Line);
     }
 
     [Fact]
@@ -116,10 +119,9 @@ public sealed class ModelProviderTests
     {
         var provider = ModelProviderConnection.Load(Good, "p.yml").Definition!;
         var embeddings = ModelProviderConnection.Load(Good.Replace("name: claude", "name: embed").Replace("provider: anthropic", "provider: ollama\n  purpose: embeddings").Replace("sign_in: { method: api_key, key_secret: env:ANTHROPIC_API_KEY }\n", ""), "e.yml").Definition!;
-        var providers = new Dictionary<string, ModelProviderDefinition> { ["claude"] = provider, ["embed"] = embeddings };
-        var yaml = "model-slots: 1\nslots:\n  default:\n    \"*\":\n      - { provider: nobody, model: m }\n      - { provider: claude, model: claude-9 }\n      - { provider: embed, model: claude-sonnet-4-5 }\n      - { provider: claude, model: claude-sonnet-4-5 }\n";
+        var yaml = "bindings: 1\nmodels:\n  default:\n    \"*\":\n      - { connection: nobody, model: m }\n      - { connection: claude, model: claude-9 }\n      - { connection: embed, model: claude-sonnet-4-5 }\n      - { connection: claude, model: claude-sonnet-4-5 }\n";
 
-        var problems = SlotBindingsLoader.Check(SlotBindingsLoader.Load(yaml, "s.yml").Bindings!, providers, "s.yml");
+        var problems = BindingsLoader.Check(BindingsLoader.Load(yaml, "s.yml").Bindings!, Targets(provider, embeddings), "s.yml");
 
         Assert.Equal(3, problems.Count);
         Assert.Contains(problems, d => d.Message.Contains("`nobody`, which does not exist") && d.Line == 5);
@@ -128,10 +130,12 @@ public sealed class ModelProviderTests
     }
 
     [Fact]
-    public void A_newer_format_is_refused_naming_the_file_and_both_numbers_and_an_empty_slots_file_binds_nothing()
+    public void A_newer_format_is_refused_naming_the_file_and_both_numbers_and_an_empty_file_binds_nothing_and_the_earlier_form_names_the_new_one()
     {
-        var result = SlotBindingsLoader.Load("model-slots: 3\nslots: {}\n", "models/_slots.yml");
-        Assert.Contains(result.Diagnostics, d => d.Message.Contains("models/_slots.yml") && d.Message.Contains("format 3") && d.Message.Contains("format 1"));
-        Assert.Empty(SlotBindingsLoader.Load("", "s.yml").Bindings!.Slots);
+        var result = BindingsLoader.Load("bindings: 3\nmodels: {}\n", "bindings.yml");
+        Assert.Contains(result.Diagnostics, d => d.Message.Contains("bindings.yml") && d.Message.Contains("format 3") && d.Message.Contains("format 1"));
+        Assert.Empty(BindingsLoader.Load("", "s.yml").Bindings!.Slots);
+        var earlier = BindingsLoader.Load("model-slots: 1\nslots: {}\n", "models/_slots.yml");
+        Assert.Contains(earlier.Diagnostics, d => d.Code == BindingsLoader.EarlierForm && d.Path == "models/_slots.yml" && d.Fix!.Contains("bindings: 1"));
     }
 }
