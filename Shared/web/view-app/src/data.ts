@@ -91,7 +91,7 @@ export function appStoreClient(host: Pick<Host, 'instance' | 'token'>, fetchImpl
   return createStoreClient(appFetcher(host, fetchImpl))
 }
 
-/** The semantic client of an app, on the same route and token. The host's semantic route is not built yet (plan 22a GP35 needs it); until then every call answers what the host answers (404). */
+/** The semantic client of an app, on the same route and token. The apps host serves the semantic route (plan 22a GP35c) for the models the manifest lists under `semantic:`, as the signed-in person; a model it does not list is refused (`denied`). */
 export function appSemanticClient(host: Pick<Host, 'instance' | 'token'>, fetchImpl?: typeof fetch): SemanticClient {
   return createSemanticClient(appFetcher(host, fetchImpl))
 }
