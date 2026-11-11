@@ -121,7 +121,7 @@ public sealed class KnowledgeStore(StateDatabase database)
 
     /// <summary>
     /// Puts an item and its chunks in a channel's index, replacing what was there for it, in one transaction: a search never sees an item half written. Returns false, writing nothing, when the item is already there with the same hash
-    /// and <paramref name="force"/> is not set (an item that did not change is not indexed again).
+    /// and <paramref name="force"/> is not set (an item that did not change is not indexed again; the source and version it came from are brought up to date).
     /// </summary>
     public bool Put(string channel, StoredItem item, IReadOnlyList<StoredChunk> chunks, bool force = false)
     {
@@ -131,7 +131,17 @@ public sealed class KnowledgeStore(StateDatabase database)
         {
             using var connection = database.OpenConnection();
             EnsureTextIndex(connection);
-            if (!force && Find(connection, channel, item.Id) is { } existing && existing.Hash == item.Hash) return false;
+            if (!force && Find(connection, channel, item.Id) is { } existing && existing.Hash == item.Hash)
+            {
+                // the text is the same: nothing is chunked or indexed again, but where it came from now (a new published version that did not change this item) is kept
+                if (existing.Source != item.Source || existing.Version != item.Version)
+                {
+                    using var touch = database.Command(Module, connection, "UPDATE {table:item} SET source = $source, version = $version, indexed_at = $at WHERE channel = $channel AND id = $id;");
+                    touch.Bind(database, "source", item.Source).Bind(database, "version", item.Version).Bind(database, "at", item.IndexedAt).Bind(database, "channel", channel).Bind(database, "id", item.Id);
+                    touch.ExecuteNonQuery();
+                }
+                return false;
+            }
             using var transaction = database.BeginTransaction(connection, Module);
             RemoveRows(connection, transaction, channel, item.Id);
             using (var insert = database.Command(Module, connection, transaction,

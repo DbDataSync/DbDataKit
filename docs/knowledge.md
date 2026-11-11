@@ -24,6 +24,7 @@
 | The install knowledge project (KN35) | a template with `shared/`, `build/`, `sync-and-build/` and the administrators' `policy/` folder; `policy/` holds only guardrails owned by `administrators` | `InstallKnowledge` |
 | Chunking (KN04) | long references split at headings, then paragraphs, then sentences; tables and code are never cut; the chunk's hash is of what is embedded, so only a changed chunk is embedded again | `Chunker` |
 | The index on a state database (KN07, text-search half) | items, subjects and chunks per channel in the `knowledge` state module, found by their words with the engine's own text search (SQLite FTS5, PostgreSQL `tsvector`, a term match on SQL Server), under the same access filter, with the hash check that does not index an unchanged item again; no model and no vectors | `KnowledgeModule`, `KnowledgeStore`, `StateKnowledgeIndex` (`DbDataKit.Knowledge.Index`) |
+| Generated knowledge (KN12, the renderer and the index half) | what a published semantic model says about itself, one small item per subject with a stable id and the subject's own access, kept in step with the definition (an unchanged item is not indexed again, a dropped one is retired); the list of what has no description | `GeneratedKnowledge`, `GeneratedSync` |
 | Search and the access filter (KN09, with the fake of KN05) | a question is embedded and the nearest chunks are found among those the caller may see (a role on the subject; fail closed on a gone or unknown subject; an item with no subject follows its `for`), at most three chunks per item, adjacent ones joined | `KnowledgeSearch`, `KnowledgeAccess`, `InMemoryKnowledgeIndex`, `FakeEmbeddingGenerator` |
 
 [Shared/src/DbDataKit.Knowledge/README.md](../Shared/src/DbDataKit.Knowledge/README.md) describes each piece.
@@ -33,7 +34,7 @@
 | Designed in plan 27 section 2 | State today |
 | --- | --- |
 | The `knowledge/1` item format (role, scope, owner), `_knowledge.yml` defaults, knowledge projects in git | **built as a library** (above); not published, not served, no editor screen yet |
-| Generated knowledge from published definitions; the `build-metadata` kind (Build publishing its metadata to the serving group) | not started; the published kinds it would read are `semantic-model`, `entity-model`, `data-source`, `app` |
+| Generated knowledge from published definitions (the host that subscribes); the `build-metadata` kind (Build publishing its metadata to the serving group) | the renderer for a semantic model is built (above); nothing subscribes to published definitions yet and entity models, data sources and apps are not rendered; the published kinds are `semantic-model`, `entity-model`, `data-source`, `app` |
 | Embedding models (built in, Ollama, OpenAI-compatible), the vector index per channel, `sqlite-vec` | not started; only the engine feature check exists and search by words (above) |
 | `knowledge search`, `show`, `about`, `check`, `context`, `suggest`, `index` commands | not started |
 | The serving layer's `knowledge` module, suggestions and approvals at the edge, the knowledge app, `@dbdatakit/knowledge-ui` | not started |

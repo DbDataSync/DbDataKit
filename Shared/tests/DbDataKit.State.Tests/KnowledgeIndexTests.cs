@@ -117,8 +117,8 @@ public sealed class KnowledgeIndexTests : IDisposable
         var caller = new Caller("back-end", "semantic-model:Sales");
 
         Assert.True(index.Put(Region, Chunker.Split(Region), "project", "v1"));
-        Assert.False(index.Put(Region, Chunker.Split(Region), "project", "v2"));            // same hash: nothing is written, the version stays
-        Assert.Equal("v1", index.Store.Item("main", "region.md")!.Version);
+        Assert.False(index.Put(Region, Chunker.Split(Region), "project", "v2"));            // same hash: nothing is chunked or indexed again, only where it came from is brought up to date
+        Assert.Equal("v2", index.Store.Item("main", "region.md")!.Version);
         Assert.Equal(["semantic-model:Sales/dimension:region"], index.Store.Item("main", "region.md")!.Subjects);
 
         var changed = Item("region.md", "about:\n  - semantic-model: Sales\n    dimension: region", "Regions are now called territories after the 2026 reorganisation.");
