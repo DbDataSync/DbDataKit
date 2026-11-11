@@ -1,0 +1,48 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "chart",
+      "mark": "bar",
+      "encodings": {
+        "x": {
+          "field": "date.fiscal_month",
+          "format": {
+            "date": "MMM"
+          }
+        },
+        "y": {
+          "field": "orders.net_revenue",
+          "format": {
+            "style": "currency",
+            "currency": "USD",
+            "decimals": 0
+          }
+        },
+        "tooltip": [
+          {
+            "field": "orders.order_count",
+            "format": "compact"
+          }
+        ]
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        "orders.order_count"
+      ],
+      "attributes": [
+        "date.fiscal_month"
+      ],
+      "limit": 500
+    }
+  }
+}

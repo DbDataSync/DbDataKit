@@ -179,7 +179,10 @@ function slotsOf(type: string, encodings: Json, path: string): Slot[] {
     case 'matrix':
       for (const axis of ['rows', 'columns'] as const) {
         const list = encodings[axis]
-        if (Array.isArray(list)) list.forEach((f, i) => { if (typeof f === 'string') slots.push({ field: f, path: at(join(path, axis), i), well: 'attribute' }) })
+        if (Array.isArray(list)) list.forEach((f, i) => {
+          if (typeof f === 'string') slots.push({ field: f, path: at(join(path, axis), i), well: 'attribute' })
+          else if (isObject(f) && typeof f.field === 'string') slots.push({ field: f.field, path: join(at(join(path, axis), i), 'field'), well: 'attribute' })
+        })
       }
       if (Array.isArray(encodings.values)) encodings.values.forEach((v, i) => { if (isObject(v) && typeof v.field === 'string') slots.push({ field: v.field, path: join(at(join(path, 'values'), i), 'field'), well: 'measure' }) })
       break
@@ -193,7 +196,9 @@ function slotsOf(type: string, encodings: Json, path: string): Slot[] {
 // ---- a matrix's totals ----
 
 function matrixTotals(encodings: Json, roles: CatalogRoles, wp: string, query: Json, issue: (code: string, path: string, message: string) => void): Json | undefined {
-  const axis = (name: string): string[] => [...new Set(Array.isArray(encodings[name]) ? (encodings[name] as unknown[]).map((n) => String(n ?? '')) : [])]
+  // an axis entry is a field name or `{field, format, sort}` (DBR41)
+  const entryField = (n: unknown): string => (isObject(n) ? String(n.field ?? '') : String(n ?? ''))
+  const axis = (name: string): string[] => [...new Set(Array.isArray(encodings[name]) ? (encodings[name] as unknown[]).map(entryField) : [])]
   const rows = axis('rows')
   const columns = axis('columns')
   const totalsOf = isObject(encodings.totals) ? encodings.totals : {}
@@ -201,7 +206,8 @@ function matrixTotals(encodings: Json, roles: CatalogRoles, wp: string, query: J
   const wantColumn = totalsOf.columns === true
   // sorting an axis by a measure reads each member's value in the axis total (the view's `sort_needs_totals`), so the request asks for that total too
   const sort = isObject(encodings.sort) ? encodings.sort : {}
-  const byMeasure = (name: string) => { const s = sort[name]; return isObject(s) && typeof s.by === 'string' && roleOf(roles, s.by) === 'measure' }
+  const axisSort = (name: string): unknown => sort[name] ?? (Array.isArray(encodings[name]) ? (encodings[name] as unknown[]).map((n) => (isObject(n) ? n.sort : undefined)).find((x) => x !== undefined) : undefined)
+  const byMeasure = (name: string) => { const s = axisSort(name); return isObject(s) && typeof s.by === 'string' && roleOf(roles, s.by) === 'measure' }
   const needRow = wantRow || (byMeasure('columns') && rows.length > 0)
   const needColumn = wantColumn || (byMeasure('rows') && columns.length > 0)
   if (!needRow && !needColumn) return undefined

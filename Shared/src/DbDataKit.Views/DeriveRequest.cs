@@ -236,7 +236,10 @@ public static class DeriveRequest
                 foreach (var axis in new[] { "rows", "columns" })
                     if (encodings[axis] is JsonArray fields)
                         for (var i = 0; i < fields.Count; i++)
+                        {
                             if (fields[i] is JsonValue v && v.TryGetValue<string>(out var f)) slots.Add(new(f, $"{path}.{axis}[{i}]", Well.Attribute));
+                            else if (fields[i] is JsonObject entry && entry["field"] is JsonValue ev && ev.TryGetValue<string>(out var ef)) slots.Add(new(ef, $"{path}.{axis}[{i}].field", Well.Attribute));
+                        }
                 if (encodings["values"] is JsonArray values)
                     for (var i = 0; i < values.Count; i++)
                         if (values[i] is JsonObject o && o["field"] is JsonValue fv && fv.TryGetValue<string>(out var name)) slots.Add(new(name, $"{path}.values[{i}].field", Well.Measure));
@@ -254,13 +257,16 @@ public static class DeriveRequest
 
     private static JsonObject? MatrixTotals(JsonObject encodings, CatalogRoles roles, string wp, JsonObject query, List<ConfigDiagnostic> diagnostics, Func<string, string, string, string?, ConfigDiagnostic> diag)
     {
-        List<string> Axis(string name) => encodings[name] is JsonArray a ? a.Select(n => n?.GetValue<string>() ?? "").Distinct().ToList() : [];
+        // an axis entry is a field name or `{field, format, sort}` (DBR41)
+        static string EntryField(JsonNode? n) => n is JsonObject o ? o["field"]?.GetValue<string>() ?? "" : n?.GetValue<string>() ?? "";
+        List<string> Axis(string name) => encodings[name] is JsonArray a ? a.Select(EntryField).Distinct().ToList() : [];
+        JsonNode? AxisSort(string axis) => encodings["sort"]?[axis] ?? (encodings[axis] is JsonArray a ? a.OfType<JsonObject>().Select(o => o["sort"]).FirstOrDefault(x => x is not null) : null);
         var rows = Axis("rows");
         var columns = Axis("columns");
         var wantRow = encodings["totals"]?["rows"]?.GetValue<bool>() ?? false;      // a total row: the row fields rolled up, the column fields kept
         var wantColumn = encodings["totals"]?["columns"]?.GetValue<bool>() ?? false;
         // sorting an axis by a measure reads each member's value in the axis total (the view's `sort_needs_totals`), so the request asks for that total too
-        bool ByMeasure(string axis) => encodings["sort"]?[axis]?["by"] is JsonValue v && v.TryGetValue<string>(out var by) && roles.Of(by) == CatalogRole.Measure;
+        bool ByMeasure(string axis) => AxisSort(axis)?["by"] is JsonValue v && v.TryGetValue<string>(out var by) && roles.Of(by) == CatalogRole.Measure;
         var needRow = wantRow || (ByMeasure("columns") && rows.Count > 0);
         var needColumn = wantColumn || (ByMeasure("rows") && columns.Count > 0);
         if (!needRow && !needColumn) return null;

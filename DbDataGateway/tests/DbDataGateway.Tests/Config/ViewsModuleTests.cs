@@ -299,6 +299,38 @@ public sealed partial class ViewsModuleTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_console_takes_a_download_on_the_management_api_as_json_with_the_file_in_base64_and_a_pdf_names_the_setting_when_the_host_has_no_browser()
+    {
+        await StartAsync();
+        var state = Get<StateDatabase>();
+        var (ada, _) = HomeSeed.Person(state, "Ada", "ada@example.invalid", Analysts);
+        PublishModel();
+        Assert.Equal(200, Get<GatewayViewsPublishing>().Publish("dashboard", "sales", Dashboard(), "test").Status);
+        Poll();
+
+        // a data export needs no browser: the file is the module's own, in the answer's JSON (DBR27's print preview takes a PDF the same way)
+        var csv = await ManagementAsync(HttpMethod.Get, "/api/v1/dashboards/sales/export?format=csv&widget=by_region", ada.Id, ServerRole.Viewer);
+        Assert.Equal(HttpStatusCode.OK, csv.Status);
+        Assert.Equal(("sales-by_region.csv", "text/csv; charset=utf-8"), (((string)csv.Body!["file_name"]!), (string)csv.Body["content_type"]!));
+        var bytes = Convert.FromBase64String((string)csv.Body["content_base64"]!);
+        Assert.Equal(bytes.Length, (int)csv.Body["size"]!);
+        Assert.Equal(new byte[] { 0xEF, 0xBB, 0xBF }, bytes[..3]);                         // the CSV's byte-order mark survives the trip
+        Assert.Equal(2, Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3).Split("\r\n")[0].Split(',').Length);
+        Assert.NotNull(csv.Body["headers"]!["X-DbData-Export-Rows"]);
+
+        // the same refusals as the module's own route, in its words
+        var pdf = await ManagementAsync(HttpMethod.Get, "/api/v1/dashboards/sales/export?format=pdf", ada.Id, ServerRole.Viewer);
+        Assert.Equal(HttpStatusCode.NotImplemented, pdf.Status);
+        Assert.Equal("export_unavailable", (string)pdf.Body!["code"]!);
+        Assert.Contains("views.export", (string)pdf.Body["message"]!);
+        var noWidget = await ManagementAsync(HttpMethod.Get, "/api/v1/dashboards/sales/export?format=csv", ada.Id, ServerRole.Viewer);
+        Assert.Equal(HttpStatusCode.BadRequest, noWidget.Status);
+        Assert.Equal(HttpStatusCode.NotFound, (await ManagementAsync(HttpMethod.Get, "/api/v1/dashboards/missing/export?format=csv&widget=x", ada.Id, ServerRole.Viewer)).Status);
+        var audited = new AuditLog(state, DbDataGateway.Server.State.GatewayState.ServiceId).Read(new AuditQuery(Verb: "view.export"));
+        Assert.Equal(1, audited.Count(e => e.Entry.Outcome == "ok"));                     // the CSV, as Ada
+    }
+
+    [Fact]
     public async Task A_console_previews_an_unsaved_draft_in_process_as_the_person_it_vouches_for_and_the_gateway_refuses_what_a_publish_would_refuse()
     {
         await StartAsync();

@@ -153,7 +153,7 @@ internal sealed class ViewsHarness : IAsyncDisposable
               - {widget: revenue, x: 0, y: 1, w: 12, h: 2}
         """;
 
-    /// <summary>A dashboard of rows to export (DBR17): a metric, a table whose first column's label is a formula, a table that cannot be answered (the test host refuses a request about the category alone), a matrix and a chart; the <c>kpi</c> layout places the metric only.</summary>
+    /// <summary>A dashboard of rows to export (DBR17): a metric, a table whose first column's label is a formula, a table that cannot be answered (the test host refuses a request about the category alone), a matrix and a chart; the <c>kpi</c> layout places the metric only and the <c>notes</c> layout a text, which has no rows at all.</summary>
     public static string DataBoard() => $$"""
         schemaVersion: 1
         kind: dashboard
@@ -185,23 +185,33 @@ internal sealed class ViewsHarness : IAsyncDisposable
             mark: bar
             encodings: {x: customers.region, y: orders.net_revenue}
             query: {model: {{Model}}, limit: 100}
+          note:
+            type: text
+            text: "Nothing here has rows."
         layouts:
           - name: desk
             type: reflow
             default: true
-            grid: {columns: 12, rows: 12}
+            grid: {columns: 12, rows: 13}
             tiles:
               - {widget: revenue, x: 0, y: 0, w: 4, h: 3}
               - {widget: by_region, x: 4, y: 0, w: 8, h: 6}
               - {widget: by_category, x: 0, y: 3, w: 4, h: 6}
               - {widget: grid, x: 4, y: 6, w: 8, h: 6}
               - {widget: trend, x: 0, y: 9, w: 4, h: 3}
+              - {widget: note, x: 0, y: 12, w: 12, h: 1}
           - name: kpi
             type: reflow
             when: {width: {max: 600} }
             grid: {columns: 12, rows: 3}
             tiles:
               - {widget: revenue, x: 0, y: 0, w: 12, h: 3}
+          - name: notes
+            type: reflow
+            when: {width: {max: 100} }
+            grid: {columns: 12, rows: 1}
+            tiles:
+              - {widget: note, x: 0, y: 0, w: 12, h: 1}
         """;
 
     /// <summary>Publishes <see cref="DataBoard"/> as the dashboard <c>rows</c> and has the module serve it.</summary>

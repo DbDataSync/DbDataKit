@@ -104,6 +104,29 @@ public sealed class DataExportsTests
     }
 
     [Fact]
+    public void The_metrics_of_a_layout_are_one_sheet_with_their_values_comparisons_and_changes_and_none_is_no_sheet()
+    {
+        var plain = (JsonObject)JsonNode.Parse("""{"type":"metric","value":{"v":1200,"text":"1.2K"}}""")!;
+        var compared = (JsonObject)JsonNode.Parse("""{"type":"metric","value":{"v":110,"text":"110"},"compare":{"v":100,"text":"100","change":{"text":"+10%","direction":"up"}}}""")!;
+        var empty = (JsonObject)JsonNode.Parse("""{"type":"metric","value":null}""")!;
+        var sheet = DataExports.Metrics([("revenue", "Net revenue", plain), ("orders", null, compared), ("blank", "=evil", empty)])!;
+        Assert.Equal(("Metrics", "metrics"), (sheet.Id, sheet.Kind));
+        Assert.Equal(["Widget", "Label", "Value", "Compare", "Change"], sheet.Header);
+        Assert.Equal(new object?[] { "revenue", "Net revenue", 1200.0, null, null }, sheet.Rows[0].Cells);
+        Assert.Equal(new object?[] { "orders", "orders", 110.0, 100.0, "+10%" }, sheet.Rows[1].Cells);     // no label: the id
+        Assert.Equal(new object?[] { "blank", "=evil", null, null, null }, sheet.Rows[2].Cells);
+        Assert.StartsWith("Widget,Label,Value,Compare,Change\r\nrevenue,Net revenue,1200,,\r\norders,orders,110,100,'+10%\r\nblank,'=evil,,,\r\n", Decode(DataExports.Csv(sheet)));
+        Assert.Null(DataExports.Metrics([]));
+
+        using var workbook = new XLWorkbook(new MemoryStream(DataExports.Xlsx([sheet])));
+        var ws = workbook.Worksheet("Metrics");
+        Assert.Equal(1200, ws.Cell(2, 3).GetDouble());
+        Assert.Equal("+10%", ws.Cell(3, 5).GetString());
+        Assert.Equal("=evil", ws.Cell(4, 2).GetString());
+        Assert.False(ws.Cell(4, 2).HasFormula);
+    }
+
+    [Fact]
     public void A_failed_widget_is_its_error_block_and_a_widget_with_no_rows_is_none()
     {
         var error = (JsonObject)JsonNode.Parse("""{"type":"error","code":"unknown_member","path":"widgets.bad.encodings.y","message":"no such member"}""")!;

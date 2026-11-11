@@ -175,3 +175,7 @@ tr.vz-pointable:hover td, th.vz-pointable:hover, td.vz-pointable:hover { backgro
 .vz-kiosk-stage > .vz-dashboard-host { position: absolute; inset: 0; }
 .vz-kiosk-controls { position: fixed; top: 6px; right: 6px; z-index: 1001; display: flex; gap: 6px; opacity: 0.25; transition: opacity 0.15s; }
 .vz-kiosk-controls:hover, .vz-kiosk-controls:focus-within { opacity: 1; }
+
+/* DBR45: a header that sorts is a button that looks like its text */
+.vz-sort { background: none; border: 0; padding: 0; font: inherit; font-weight: inherit; color: inherit; cursor: pointer; text-align: inherit; }
+.vz-sort:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }

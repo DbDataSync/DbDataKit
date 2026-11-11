@@ -156,9 +156,22 @@
       }
     },
 
+    "chart_channel": {
+      "description": "The Vega-Lite subset's channel object (its own definitions of field, type, sort, stack and title, referenced and not copied) and `format` (plan 32 DBR41): how the channel's values read on an axis, in a legend and in a tooltip. The subset and the QIS view (0.3) are unchanged: the format belongs to the widget vocabulary and the renderer maps it.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "field": { "$ref": "https://dbdatakit.invalid/visuals/vega-lite-subset.schema.json#/$defs/channel/properties/field" },
+        "type": { "$ref": "https://dbdatakit.invalid/visuals/vega-lite-subset.schema.json#/$defs/channel/properties/type" },
+        "sort": { "$ref": "https://dbdatakit.invalid/visuals/vega-lite-subset.schema.json#/$defs/channel/properties/sort" },
+        "stack": { "$ref": "https://dbdatakit.invalid/visuals/vega-lite-subset.schema.json#/$defs/channel/properties/stack" },
+        "title": { "$ref": "https://dbdatakit.invalid/visuals/vega-lite-subset.schema.json#/$defs/channel/properties/title" },
+        "format": { "$ref": "#/$defs/format" }
+      }
+    },
     "encoding_channel": {
-      "description": "A chart channel: a field name, or the Vega-Lite subset's own channel object.",
-      "oneOf": [{ "$ref": "#/$defs/field" }, { "$ref": "https://dbdatakit.invalid/visuals/vega-lite-subset.schema.json#/$defs/channel" }]
+      "description": "A chart channel: a field name, or the channel object (the subset's and `format`).",
+      "oneOf": [{ "$ref": "#/$defs/field" }, { "$ref": "#/$defs/chart_channel" }]
     },
     "chart_encodings": {
       "description": "The channels of the Vega-Lite subset's encoding (the test compares the names).",
@@ -173,15 +186,50 @@
         "tooltip": { "oneOf": [{ "$ref": "#/$defs/encoding_channel" }, { "type": "array", "items": { "$ref": "#/$defs/encoding_channel" } }] }
       }
     },
+    "matrix_axis": {
+      "description": "The attributes of a matrix axis, outermost first (plan 32 DBR41): each a field name, or `{field, format, sort}`: the format of the member labels at that level and the sort of the axis (the QIS view's own sort object, by sort_key, label or a measure). Only one level of an axis may carry a sort, which is the axis's sort.",
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/field" },
+          {
+            "type": "object",
+            "required": ["field"],
+            "additionalProperties": false,
+            "properties": {
+              "field": { "$ref": "#/$defs/field" },
+              "format": { "$ref": "#/$defs/format" },
+              "sort": { "$ref": "https://example.internal/qis/view.schema.json#/$defs/sort" }
+            }
+          }
+        ]
+      }
+    },
+    "matrix_values": {
+      "description": "The measures of a matrix: the QIS view's own `field`, `empty` and `label`, and a `format` that is a preset or a mapping (the view's own takes the presets only).",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["field"],
+        "additionalProperties": false,
+        "properties": {
+          "field": { "$ref": "#/$defs/field" },
+          "empty": { "$ref": "https://example.internal/qis/view.schema.json#/$defs/matrix/properties/values/items/properties/empty" },
+          "format": { "$ref": "#/$defs/format" },
+          "label": { "$ref": "https://example.internal/qis/view.schema.json#/$defs/matrix/properties/values/items/properties/label" }
+        }
+      }
+    },
     "matrix_encodings": {
-      "description": "A QIS matrix view's own properties (everything but type and id), referenced from view.schema.json.",
+      "description": "A QIS matrix view's own properties (everything but type and id), referenced from view.schema.json, except the axes and the values, which also take a format (matrix_axis, matrix_values; plan 32 DBR41).",
       "type": "object",
       "required": ["values"],
       "additionalProperties": false,
       "properties": {
-        "rows": { "$ref": "https://example.internal/qis/view.schema.json#/$defs/matrix/properties/rows" },
-        "columns": { "$ref": "https://example.internal/qis/view.schema.json#/$defs/matrix/properties/columns" },
-        "values": { "$ref": "https://example.internal/qis/view.schema.json#/$defs/matrix/properties/values" },
+        "rows": { "$ref": "#/$defs/matrix_axis" },
+        "columns": { "$ref": "#/$defs/matrix_axis" },
+        "values": { "$ref": "#/$defs/matrix_values" },
         "values_on": { "$ref": "https://example.internal/qis/view.schema.json#/$defs/matrix/properties/values_on" },
         "totals": { "$ref": "https://example.internal/qis/view.schema.json#/$defs/matrix/properties/totals" },
         "sort": { "$ref": "https://example.internal/qis/view.schema.json#/$defs/matrix/properties/sort" },

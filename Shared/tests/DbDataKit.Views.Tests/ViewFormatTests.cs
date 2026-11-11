@@ -54,4 +54,53 @@ public class ViewFormatTests
             foreach (var v in new[] { 1.0, 1234.567, -0.004, 2.5e6 })
                 Assert.Equal(DbDataKit.Semantic.Presentation.MatrixView.Format(v, preset, catalog), ViewFormat.Number(v, JsonValue.Create(preset), catalog));
     }
+
+    [Theory]
+    [InlineData("full", null, ",.2~f"), InlineData("compact", null, ".2~s"), InlineData("percent", null, ".0%")]
+    public void A_preset_maps_to_a_d3_string(string preset, string? unused, string expected)
+    {
+        _ = unused;
+        Assert.Equal(expected, ViewFormat.D3Number(JsonValue.Create(preset)));
+    }
+
+    [Fact]
+    public void A_number_mapping_maps_to_a_d3_string_and_a_date_mapping_has_none()
+    {
+        static JsonNode F(string json) => JsonNode.Parse(json)!;
+        Assert.Equal("$,.0f", ViewFormat.D3Number(F("""{"style":"currency","currency":"USD","decimals":0}""")));
+        Assert.Equal(",.2f", ViewFormat.D3Number(F("""{"style":"currency","currency":"EUR"}""")));              // d3 cannot say the euro sign: digits only
+        Assert.Equal(",.0f", ViewFormat.D3Number(F("""{"style":"currency","currency":"JPY"}""")));
+        Assert.Equal(".1%", ViewFormat.D3Number(F("""{"style":"percent","decimals":1}""")));
+        Assert.Equal(".3f", ViewFormat.D3Number(F("""{"style":"number","decimals":3,"grouping":false}""")));
+        Assert.Equal(",.2~f", ViewFormat.D3Number(F("""{"style":"number"}""")));
+        Assert.Equal(".2~s", ViewFormat.D3Number(F("""{"style":"compact"}""")));
+        Assert.Equal(".4~s", ViewFormat.D3Number(F("""{"style":"compact","decimals":3}""")));
+        Assert.Null(ViewFormat.D3Number(F("""{"date":"month"}""")));
+        Assert.Equal("$,.0f", ViewFormat.D3Number(JsonValue.Create("catalog"), new JsonObject { ["style"] = "currency", ["currency"] = "USD", ["decimals"] = 0 }));
+    }
+
+    [Fact]
+    public void Every_d3_string_matches_the_pattern_the_client_checks()
+    {
+        var pattern = new System.Text.RegularExpressions.Regex(@"^\$?,?\.[0-9]{1,2}~?[fs%]$");
+        foreach (var style in new[] { "number", "currency", "percent", "compact" })
+            foreach (var decimals in new int?[] { null, 0, 2, 10 })
+                foreach (var grouping in new[] { true, false })
+                {
+                    var f = new JsonObject { ["style"] = style, ["grouping"] = grouping };
+                    if (decimals is { } d) f["decimals"] = d;
+                    if (style == "currency") f["currency"] = "USD";
+                    Assert.Matches(pattern, ViewFormat.D3Number(f)!);
+                }
+    }
+
+    [Fact]
+    public void A_label_reads_a_date_or_a_number_written_as_text_and_leaves_other_text()
+    {
+        Assert.Equal("Jan", ViewFormat.Label("2026-01-01", new JsonObject { ["date"] = "MMM" }));
+        Assert.Equal("202,601", ViewFormat.Label("202601", new JsonObject { ["style"] = "number" }));
+        Assert.Equal("West", ViewFormat.Label("West", new JsonObject { ["style"] = "number" }));
+        Assert.Equal("(none)", ViewFormat.Label("(none)", new JsonObject { ["date"] = "year" }));
+        Assert.Equal("West", ViewFormat.Label("West", null));
+    }
 }

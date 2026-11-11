@@ -36,3 +36,14 @@ export function nextTile(layout: LayoutDoc, widget: WidgetDoc, id: string): Tile
   if (layout.type === 'reflow') return { widget: id, x: 0, y: bottom, w: Math.min(6, layout.grid.columns), h: widget.type === 'text' ? 1 : 2 }
   throw new Error('A flow layout places widgets in blocks, not tiles.')
 }
+
+/** The named number presets a format select offers (a format may also be a mapping, which the select shows as one read-only choice). */
+export const FORMAT_PRESETS = ['catalog', 'full', 'compact', 'percent'] as const
+/** The value of the read-only choice that stands for a format written as a mapping. */
+export const CUSTOM_FORMAT = '(custom)'
+
+/** What a format select shows for a stored `format`: a preset name, the custom marker for a mapping (or a name that is no preset), or empty for none. A mapping is edited in the JSON, not here. */
+export function formatChoice(format: unknown): string {
+  if (format === undefined || format === null || format === '') return ''
+  return typeof format === 'string' && (FORMAT_PRESETS as readonly string[]).includes(format) ? format : CUSTOM_FORMAT
+}

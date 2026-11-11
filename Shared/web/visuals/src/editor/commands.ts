@@ -1,10 +1,12 @@
 import type { LayoutDoc, ParameterDefinition, TileDoc, ViewsDoc, WidgetDoc, WidgetOptionsDoc, WidgetType } from '../views/model'
 import type { CatalogRoles } from '../views/derive'
+import type { Catalog } from '../views/catalog'
 import type { Op, Path } from './yamlEdit'
 import { WellError, convertWidget, wellOps, wellsOf } from './wells'
 import type { WellChange } from './wells'
 import { EditError } from './errors'
 import { FLOW_COMMANDS, flowOps, type FlowCommand } from './flow'
+import { filterOps, orderOps, sortOps, type FilterChange, type OrderChange, type SortTarget, type SortValue } from './queryParts'
 
 /**
  * The edit commands of the editor (plan 32 DBR24): what a form, a drag or a menu asks of the document, each a small named change with its checks. `commandOps` turns one into the changes of the text
@@ -33,6 +35,12 @@ export type EditCommand =
   | { type: 'removeTile'; layout: string; widget: string }
   /** A change to one field well of a widget (DBR25): add a field (at a position), remove an entry, move one, clear. `roles` (the catalog's) make a field of the wrong kind refused in the engine's words. */
   | { type: 'setWell'; widget: string; well: string; change: WellChange; roles?: CatalogRoles }
+  /** A change to the filters of a widget's derived query (DBR43): add, replace, remove or move one. `catalog` (the model's, with the members' types) makes an operator the field's type does not take refused in the engine's words. */
+  | { type: 'setFilter'; widget: string; change: FilterChange; catalog?: Catalog | null }
+  /** A change to the `order` of a widget's derived query (DBR43). */
+  | { type: 'setOrder'; widget: string; change: OrderChange }
+  /** The sort a table, a matrix axis or a chart channel carries (DBR43); undefined removes it. */
+  | { type: 'setSort'; widget: string; target: SortTarget; sort: SortValue; catalog?: Catalog | null }
   /** The widget as another type (the chooser): its title, model and filters stay, its fields go where they fit. `roles` (the catalog's) place them by kind. */
   | { type: 'changeWidgetType'; id: string; to: WidgetType; roles?: CatalogRoles }
   /** One of a layout's `widget_options` for one widget; undefined removes it (and the entry, and `widget_options`, when they are left empty). */
@@ -233,6 +241,9 @@ export function commandOps(doc: ViewsDoc, command: EditCommand): Op[] {
       if (!spec) throw new EditError('unknown_well', `A ${widget.type} widget has no well named \`${command.well}\`; its wells are ${wellsOf(widget.type).map((w) => `\`${w.id}\``).join(', ') || 'none'}.`)
       try { return wellOps(widget, command.widget, spec, command.change, command.roles) } catch (e) { if (e instanceof WellError) throw new EditError(e.code, e.message); throw e }
     }
+    case 'setFilter': return filterOps(widgetOf(doc, command.widget), command.widget, command.change, command.catalog)
+    case 'setOrder': return orderOps(widgetOf(doc, command.widget), command.widget, command.change)
+    case 'setSort': return sortOps(widgetOf(doc, command.widget), command.widget, command.target, command.sort, command.catalog)
     case 'changeWidgetType': {
       const widget = widgetOf(doc, command.id)
       if (widget.type === command.to) return []

@@ -41,6 +41,18 @@ public static class DataExports
         }
     }
 
+    /// <summary>
+    /// The metrics of a layout as one sheet (id <c>Metrics</c>, kind <c>metrics</c>): a row for each, in the layout's order, with the widget's id, its label (the id when it has none), the value, the comparison value and the change's text, as the engine gave them
+    /// (a value the caller could not be given is an empty cell). Null when there are no metrics. A metric that failed is not here: its error block is its own sheet.
+    /// </summary>
+    public static DataSheet? Metrics(IReadOnlyList<(string Id, string? Label, JsonObject Node)> metrics)
+    {
+        if (metrics.Count == 0) return null;
+        var rows = metrics.Select(m => new DataRow([m.Id, string.IsNullOrEmpty(m.Label) ? m.Id : m.Label, Cell(m.Node["value"]), Cell(m.Node["compare"]),
+            m.Node["compare"]?["change"]?["text"] is JsonValue t && t.TryGetValue<string>(out var change) ? change : null])).ToList();
+        return new DataSheet("Metrics", "metrics", ["Widget", "Label", "Value", "Compare", "Change"], rows);
+    }
+
     private static DataSheet Table(string id, JsonObject widget)
     {
         var header = (widget["columns"] as JsonArray ?? []).Select(c => c?["label"]?.GetValue<string>() ?? c?["field"]?.GetValue<string>() ?? "").ToList();

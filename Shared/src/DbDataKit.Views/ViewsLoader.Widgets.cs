@@ -160,6 +160,7 @@ public static partial class ViewsLoader
             if (m.Get("stack") is { } st && !(st is YamlScalar { Value: var v } && (v is "null" or "~" or "" or "true" or "false" or "zero" or "center" or "normalize")))
                 Bad(ViewsCodes.InvalidValue, st, J(path, "stack"), "A channel's `stack` is null, true, false, zero, center or normalize.");
             if (m.Get("title") is { } ti && ti is not YamlScalar) Bad(ViewsCodes.InvalidValue, ti, J(path, "title"), "A channel's `title` is text.");
+            if (m.Get("format") is { } fm) FormatValue(fm, J(path, "format"));
         }
 
         private void MatrixEncodings(YamlMapping widget, string path, List<EncodedField> fields)
@@ -169,8 +170,24 @@ public static partial class ViewsLoader
             foreach (var axis in new[] { "rows", "columns" })
             {
                 if (enc.Get(axis) is not { } an || Seq(an, J(ep, axis), $"`{axis}`", enc) is not { } list) continue;
+                var sorted = 0;
                 for (var i = 0; i < list.Items.Count; i++)
-                    if (Field(list.Items[i], I(J(ep, axis), i), "A field") is { } f) fields.Add(new(axis, f, I(J(ep, axis), i), list.Items[i].Line, list.Items[i].Column));
+                {
+                    var ip = I(J(ep, axis), i);
+                    if (list.Items[i] is YamlMapping entry)
+                    {
+                        // an axis attribute with a format and a sort (DBR41): `{field, format, sort}`
+                        CheckKeysAt(entry, Keys["matrix_axis_entry"], $"an entry of the {axis}", ip);
+                        if (Required(entry, "field", ip) is { } fn && Field(fn, J(ip, "field"), "`field`") is { } ff) fields.Add(new(axis, ff, J(ip, "field"), fn.Line, fn.Column));
+                        if (entry.Get("format") is { } fmt) FormatValue(fmt, J(ip, "format"));
+                        if (entry.Get("sort") is { } so)
+                        {
+                            SortKey(so, J(ip, "sort"));
+                            if (++sorted > 1) Bad(ViewsCodes.InvalidValue, so, J(ip, "sort"), $"Only one level of the {axis} carries a sort: it is the sort of the axis.");
+                        }
+                    }
+                    else if (Field(list.Items[i], ip, "A field") is { } f) fields.Add(new(axis, f, ip, list.Items[i].Line, list.Items[i].Column));
+                }
             }
             if (Required(enc, "values", ep) is { } vn && Seq(vn, J(ep, "values"), "`values`", enc, 1) is { } vals)
                 for (var i = 0; i < vals.Items.Count; i++)
@@ -180,7 +197,7 @@ public static partial class ViewsLoader
                     CheckKeysAt(vm, ["field", "empty", "format", "label"], "a matrix value", vp);
                     if (Required(vm, "field", vp) is { } fn && Field(fn, J(vp, "field"), "`field`") is { } f) fields.Add(new("values", f, J(vp, "field"), fn.Line, fn.Column));
                     if (vm.Get("empty") is { } em) Choice(em, J(vp, "empty"), "`empty`", ["blank", "zero"]);
-                    if (vm.Get("format") is { } fmt) Choice(fmt, J(vp, "format"), "`format`", ["compact", "full", "percent"]); // the matrix reads the engine's view: presets until DBR41
+                    if (vm.Get("format") is { } fmt) FormatValue(fmt, J(vp, "format"));
                     if (vm.Get("label") is { } lb && lb is not YamlScalar) Bad(ViewsCodes.InvalidValue, lb, J(vp, "label"), "`label` is text.");
                 }
             if (enc.Get("values_on") is { } vo) Choice(vo, J(ep, "values_on"), "`values_on`", ["columns", "rows"]);

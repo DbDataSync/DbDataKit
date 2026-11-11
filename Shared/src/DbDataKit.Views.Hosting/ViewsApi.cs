@@ -329,7 +329,7 @@ public sealed partial class ViewsApi(ViewsPublications published, IServingServic
     /// named, else the one the print medium selects (the print layout, or the default).
     /// <list type="bullet">
     /// <item><c>pdf</c> (the default): the whole layout, drawn from the print page by the exporter (needs the browser).</item>
-    /// <item><c>csv</c>: the rows of the table or matrix <paramref name="widget"/> (or the data of a chart) as the caller was shown them; <c>xlsx</c>: the same for one widget, or with no <paramref name="widget"/> one sheet for each table, matrix and chart the layout places. No browser.
+    /// <item><c>csv</c>: the rows of the table or matrix <paramref name="widget"/> (or the data of a chart) as the caller was shown them; <c>xlsx</c>: the same for one widget, or with no <paramref name="widget"/> one sheet for each table, matrix and chart the layout places and, first, a <c>Metrics</c> sheet with a row for each metric (widget, label, value, comparison, change). No browser.
     /// A widget that failed gives its error block as an xlsx sheet, and for a CSV is refused with its code and words.</item>
     /// <item><c>svg</c>: the chart <paramref name="widget"/> as the print page draws it (needs the browser: the module has no JavaScript of its own, so the picture is the browser's, the same as the screen and the PDF show).</item>
     /// </list>
@@ -461,8 +461,17 @@ public sealed partial class ViewsApi(ViewsPublications published, IServingServic
             sheets.Add(sheet);
         }
         else
+        {
+            var metrics = new List<(string Id, string? Label, JsonObject Node)>();
             foreach (var (id, node) in widgets)
-                if (node is JsonObject o && DataExports.Sheet(id, o, AxisNames(view, id)) is { } sheet) sheets.Add(sheet);
+            {
+                if (node is not JsonObject o) continue;
+                if (o["type"]?.GetValue<string>() == "metric") metrics.Add((id, view.Document.Widget(id)?.Raw["label"]?.GetValue<string>(), o));
+                else if (DataExports.Sheet(id, o, AxisNames(view, id)) is { } sheet) sheets.Add(sheet);
+            }
+            // the metrics of the layout are one sheet of their own, first: a metric alone has no rows, but the figures a dashboard opens with belong in its workbook
+            if (DataExports.Metrics(metrics) is { } summary) sheets.Insert(0, summary);
+        }
         if (sheets.Count == 0)
             return Refuse(who, ViewsAuditVerbs.Export, kind, view, 400, "nothing_tabular", $"The layout '{p.Layout.Name}' of the {kind} '{view.Name}' places no table, matrix or chart: there are no rows to export.", traceId, more);
 

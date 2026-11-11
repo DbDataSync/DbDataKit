@@ -233,7 +233,7 @@ describe('the catalog', () => {
 
   it('reads the Proxy\'s model JSON in its two shapes and the retail model\'s own file shape', () => {
     const fromMap = catalogFromModel({ name: 'm', measures: { 'sales.net': { synonyms: ['net sales'] } }, dimensions: { customers: { attributes: { region: { type: 'string' }, country: {} } } } })
-    expect(fromMap).toEqual({ model: 'm', measures: [{ name: 'sales.net', label: 'net sales', description: undefined }], attributes: [{ name: 'customers.region', label: undefined, description: undefined }, { name: 'customers.country', label: undefined, description: undefined }] })
+    expect(fromMap).toEqual({ model: 'm', measures: [{ name: 'sales.net', label: 'net sales', description: undefined }], attributes: [{ name: 'customers.region', label: undefined, description: undefined, type: 'string' }, { name: 'customers.country', label: undefined, description: undefined }] })
     const fromLists = catalogFromModel({ name: 'm', measures: [{ name: 'sales.net', label: 'Net' }, 'sales.units'], dimensions: [{ name: 'date', attributes: ['year'] }] })
     expect(catalogRoles(fromLists!)).toEqual({ model: 'm', measures: ['sales.net', 'sales.units'], attributes: ['date.year'] })
     expect(catalogFromModel({ name: 'empty' })).toBeNull()

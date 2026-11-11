@@ -1,7 +1,8 @@
 import type { TableDoc } from '../views/model'
 import type { RenderedTable } from '../views/rendered'
 import type { Box } from '../views/model'
-import type { KeyboardEvent, MouseEvent } from 'react'
+import { useState, type KeyboardEvent, type MouseEvent } from 'react'
+import { ariaSort, nextSort, sortedOrder, type SortDirection, type ViewerSort } from './clickSort'
 import { rowsThatFit } from './density'
 
 /** The "12 of 40" line of a table or matrix that does not fit its tile, and the action that gives it the whole container (plan 32 section 3.3 item 1): nothing is hidden silently. */
@@ -18,7 +19,7 @@ export function FitNotice({ text, onMaximize, label }: { text: string; onMaximiz
  * A table widget: the rows of its result as the server formatted them, a total row where the result has one. Given the box of its body it shows **the rows that fit** and says "12 of 40 rows" with an action
  * that maximizes the tile (`onMaximize`); `maximized` shows every row and the widget scrolls. A cut at the server's limit (`total_rows`) is told the same way.
  */
-export function TableWidget({ id, widget, result, box, maximized = false, onMaximize, onRow }: {
+export function TableWidget({ id, widget, result, box, maximized = false, onMaximize, onRow, sortable = false, onServerSort }: {
   id: string
   widget: TableDoc
   result: RenderedTable
@@ -27,11 +28,16 @@ export function TableWidget({ id, widget, result, box, maximized = false, onMaxi
   onMaximize?: () => void
   /** A row was pointed at (a click, or Enter or Space on it: a table's `drill`); the index is into `result.rows`. Rows then take focus and say so to the pointer. */
   onRow?: (index: number, modifiers: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean; altKey: boolean }) => void
+  /** Headers sort the rows on screen (plan 32 DBR45; never stored: print and export use the document's `sort`). Off by default. */
+  sortable?: boolean
+  /** When the server cut the result at its limit, the host runs the query again with `order` for this column (null, null: the document's order) and the notice says the sort is the server's. Without it the loaded rows are sorted. */
+  onServerSort?: (field: string | null, dir: SortDirection | null) => void
 }) {
+  const [sort, setSort] = useState<ViewerSort | null>(null)
   const total = result.rows.length
   const last = result.rows[total - 1]
   const hasTotalRow = last?.total === true
-  let shown = result.rows.map((row, index) => ({ row, index }))
+  let shown = sortedOrder(result.rows, sortable ? sort : null).map((index) => ({ row: result.rows[index]!, index }))
   if (box && !maximized) {
     // one line of the body goes to the notice that says rows are cut
     const fit = rowsThatFit(box.height)
@@ -45,6 +51,11 @@ export function TableWidget({ id, widget, result, box, maximized = false, onMaxi
   const known = result.total_rows ?? dataRows
   const cut = shownData < dataRows
   const serverCut = !cut && known > dataRows
+  const click = (i: number) => {
+    const next = nextSort(sort, i)
+    setSort(next)
+    if (serverCut && onServerSort) onServerSort(next === null ? null : result.columns[i]!.field, next?.dir ?? null)
+  }
   const align = (i: number) => {
     const a = result.columns[i]?.align ?? widget.encodings.columns[i]?.align
     return a === 'right' || a === 'center' ? `vz-${a}` : undefined
@@ -54,7 +65,15 @@ export function TableWidget({ id, widget, result, box, maximized = false, onMaxi
       <table className="vz-table vz-table-widget" data-testid={`vz-table-${id}`}>
         <caption className="vz-sr">{widget.title ?? `Table ${id}`}</caption>
         <thead>
-          <tr>{result.columns.map((c, i) => <th key={c.field} scope="col" className={align(i)}>{c.label}</th>)}</tr>
+          <tr>
+            {result.columns.map((c, i) => (
+              <th key={c.field} scope="col" className={align(i)} aria-sort={sortable ? ariaSort(sort, i) : undefined}>
+                {sortable
+                  ? <button type="button" className="vz-sort" data-testid={`vz-sort-${id}-${i}`} onClick={() => click(i)}>{c.label}{sort?.index === i ? (sort.dir === 'asc' ? ' \u25B2' : ' \u25BC') : ''}</button>
+                  : c.label}
+              </th>
+            ))}
+          </tr>
         </thead>
         <tbody>
           {shown.map(({ row, index }) => {
@@ -74,7 +93,7 @@ export function TableWidget({ id, widget, result, box, maximized = false, onMaxi
         </tbody>
       </table>
       {cut ? <FitNotice text={`${shownData} of ${known} rows`} onMaximize={onMaximize} label={`Show all ${known} rows of ${widget.title ?? id}`} /> : null}
-      {serverCut ? <p className="vz-notice" role="note">{`${dataRows} of ${known} rows`}</p> : null}
+      {serverCut ? <p className="vz-notice" role="note">{`${dataRows} of ${known} rows`}{sortable && sort !== null ? (onServerSort ? ', sorted by the server' : `. Sorted over the ${dataRows} rows loaded, not all ${known}.`) : ''}</p> : null}
     </div>
   )
 }

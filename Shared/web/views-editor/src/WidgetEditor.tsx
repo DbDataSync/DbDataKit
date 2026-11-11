@@ -1,12 +1,26 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  WIDGET_TYPES, WellError, WidgetView, bindingIssues, catalogRoles, defaultLimit, derivedQuery, describeDerivation, explicitQuery, memberProblem, parseRequestText, wellFields, wellsOf,
+  WIDGET_TYPES, WellError, WidgetView, bindingIssues, catalogRoles, defaultLimit, derivedQuery, describeDerivation, explicitQuery, filterEntry, filterProblems, memberProblem, operatorsFor, orderEntry, orderProblems,
+  parameterValue, parseRequestText, parseValues, sortAt, wellFields, wellsOf,
   type Catalog, type CatalogMember, type ClientDiagnostic, type EditCommand, type RenderedWidget, type ViewsDoc, type WellChange, type WellSpec, type WidgetDoc, type WidgetOptionsDoc,
 } from '@dbdatakit/visuals'
+import { CUSTOM_FORMAT, FORMAT_PRESETS, formatChoice } from './editing'
 
 type Apply = (command: EditCommand, group?: string) => void
 
-const FORMATS = ['catalog', 'full', 'compact', 'percent']
+const FORMATS = FORMAT_PRESETS
+
+/** A format select: the presets, and for a format written as a mapping one read-only choice that keeps it (choosing it changes nothing). */
+function FormatSelect({ format, onPick, testid, label }: { format: unknown; onPick: (value: string) => void; testid: string; label?: string }) {
+  const value = formatChoice(format)
+  return (
+    <select aria-label={label} data-testid={testid} value={value} onChange={(e) => { if (e.target.value !== CUSTOM_FORMAT) onPick(e.target.value) }}>
+      <option value="">(default)</option>
+      {value === CUSTOM_FORMAT && <option value={CUSTOM_FORMAT}>{CUSTOM_FORMAT}</option>}
+      {FORMATS.map((f) => <option key={f} value={f}>{f}</option>)}
+    </select>
+  )
+}
 const KIND_WORD = { measure: 'a measure', attribute: 'an attribute', either: 'a measure or an attribute' } as const
 
 /** One field well: its entries (each with a flag when the catalog lacks it), a pick list of the catalog's fields the well takes, a box to type a name, and a drop target for a field dragged from the catalog list. */
@@ -112,6 +126,138 @@ function DerivedPanel({ id, widget, doc, catalog, apply }: { id: string; widget:
   )
 }
 
+const RELATIVE = ['last_complete', 'current', 'period_to_date']
+const NO_VALUE = ['set', 'not_set', ...RELATIVE]
+
+/** The Filter and Sort sections (plan 32 DBR43): the filters and the order of the derived query as forms, with the catalog's operators for each field's type and the engine's words beside an entry that would be refused. */
+function QuerySections({ id, widget, doc, catalog, apply }: { id: string; widget: WidgetDoc; doc: ViewsDoc; catalog: Catalog | null; apply: Apply }) {
+  const query = ((widget as { query?: unknown }).query ?? {}) as Record<string, any>
+  const filters: any[] = Array.isArray(query.filters) ? query.filters : []
+  const order: unknown[] = Array.isArray(query.order) ? query.order : []
+  const parameters = doc.parameters ?? []
+  const attributes = catalog?.attributes ?? []
+  const [attribute, setAttribute] = useState('')
+  const [operator, setOperator] = useState('equals')
+  const [valueText, setValueText] = useState('')
+  const [parameter, setParameter] = useState('')
+  const [count, setCount] = useState('1')
+  const [error, setError] = useState<string | null>(null)
+  const [sortField, setSortField] = useState('')
+  const member = attributes.find((m) => m.name === attribute)
+  const operators = operatorsFor(member)
+  const run = (command: EditCommand) => { try { apply(command); setError(null) } catch (e) { setError(e instanceof Error ? e.message : String(e)) } }
+  const add = () => {
+    const values = NO_VALUE.includes(operator) ? undefined : parameter !== '' ? parameterValue(parameter, parameters) : parseValues(valueText, member)
+    run({ type: 'setFilter', widget: id, change: { op: 'add', filter: filterEntry(attribute, operator, values, operator === 'last_complete' ? Number(count) : undefined) }, catalog })
+    setValueText('')
+  }
+  const sorted = order.map(orderEntry)
+  const orderIssues = orderProblems(order, catalog)
+  const allFields = catalog ? [...catalog.measures, ...catalog.attributes] : []
+  const axisSort = (axis: 'rows' | 'columns') => sortAt(widget, { kind: 'axis', axis })
+  return (
+    <div data-testid={`ed-query-parts-${id}`} style={{ margin: '8px 0' }}>
+      <div data-testid={`ed-filters-${id}`}>
+        <strong>Filter</strong> <span className="hint">the filters of the query</span>
+        <ul style={{ listStyle: 'none', margin: '4px 0', padding: 0 }}>
+          {filters.map((f, i) => {
+            const problems = filterProblems({ attribute: String(f.attribute ?? ''), operator: String(f.operator ?? ''), values: f.values, count: f.count }, catalog)
+            const shown = f.values === undefined ? '' : JSON.stringify(f.values)
+            return (
+              <li key={i} data-testid={`ed-filter-${id}-${i}`} className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                <code>{String(f.attribute)}</code> <code>{String(f.operator)}</code> {shown !== '' && <code>{shown}</code>}
+                {f.count !== undefined && <code>count {String(f.count)}</code>}
+                {problems.map((p, k) => <span key={k} className="hint" role="alert" data-testid={`ed-filter-problem-${id}-${i}`}>{p.code}: {p.message}</span>)}
+                <button type="button" className="btn btn-sm" data-testid={`ed-filter-up-${id}-${i}`} disabled={i === 0} onClick={() => run({ type: 'setFilter', widget: id, change: { op: 'move', from: i, to: i - 1 } })}>Up</button>
+                <button type="button" className="btn btn-sm" data-testid={`ed-filter-remove-${id}-${i}`} onClick={() => run({ type: 'setFilter', widget: id, change: { op: 'remove', index: i } })}>Remove</button>
+              </li>
+            )
+          })}
+          {filters.length === 0 && <li className="hint">No filter.</li>}
+        </ul>
+        <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select aria-label="Attribute to filter on" data-testid={`ed-filter-attribute-${id}`} value={attribute} onChange={(e) => { setAttribute(e.target.value); setOperator('equals') }}>
+            <option value="">Attribute…</option>
+            {attributes.map((m) => <option key={m.name} value={m.name}>{m.label ? `${m.label} (${m.name})` : m.name}</option>)}
+          </select>
+          <select aria-label="Operator" data-testid={`ed-filter-operator-${id}`} value={operator} onChange={(e) => setOperator(e.target.value)}>
+            {(operators.includes(operator) ? operators : [operator, ...operators]).map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+          {operator === 'last_complete' && <input type="number" min={1} aria-label="Count" data-testid={`ed-filter-count-${id}`} style={{ width: 60 }} value={count} onChange={(e) => setCount(e.target.value)} />}
+          {!NO_VALUE.includes(operator) && (
+            <>
+              <input aria-label="Value" data-testid={`ed-filter-value-${id}`} placeholder="value, or a, b" disabled={parameter !== ''} value={valueText} onChange={(e) => setValueText(e.target.value)} />
+              <select aria-label="Or a parameter" data-testid={`ed-filter-parameter-${id}`} value={parameter} onChange={(e) => setParameter(e.target.value)}>
+                <option value="">(a value)</option>
+                {parameters.map((p) => <option key={p.name} value={p.name}>{`parameter ${p.name}`}</option>)}
+              </select>
+            </>
+          )}
+          <button type="button" className="btn btn-sm" data-testid={`ed-filter-add-${id}`} disabled={attribute === ''} onClick={add}>Add filter</button>
+        </div>
+        {error && <div className="hint" role="alert" data-testid={`ed-filter-error-${id}`}>{error}</div>}
+      </div>
+
+      <div data-testid={`ed-sort-${id}`} style={{ marginTop: 8 }}>
+        <strong>Sort</strong> <span className="hint">the order of the query</span>
+        <ul style={{ listStyle: 'none', margin: '4px 0', padding: 0 }}>
+          {sorted.map((entry, i) => (
+            <li key={i} data-testid={`ed-order-${id}-${i}`} className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              {entry ? <code>{entry.field}</code> : <code>{JSON.stringify(order[i])}</code>}
+              {entry && (
+                <select aria-label={`Direction of ${entry.field}`} data-testid={`ed-order-dir-${id}-${i}`} value={entry.dir} onChange={(e) => run({ type: 'setOrder', widget: id, change: { op: 'direction', index: i, dir: e.target.value as 'asc' | 'desc' } })}>
+                  <option value="asc">asc</option><option value="desc">desc</option>
+                </select>
+              )}
+              {orderIssues.filter((p) => p.index === i).map((p, k) => <span key={k} className="hint" role="alert" data-testid={`ed-order-problem-${id}-${i}`}>{p.code}: {p.message}</span>)}
+              <button type="button" className="btn btn-sm" data-testid={`ed-order-up-${id}-${i}`} disabled={i === 0} onClick={() => run({ type: 'setOrder', widget: id, change: { op: 'move', from: i, to: i - 1 } })}>Up</button>
+              <button type="button" className="btn btn-sm" data-testid={`ed-order-remove-${id}-${i}`} onClick={() => run({ type: 'setOrder', widget: id, change: { op: 'remove', index: i } })}>Remove</button>
+            </li>
+          ))}
+          {order.length === 0 && <li className="hint">No order of its own.</li>}
+        </ul>
+        <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select aria-label="Field to sort by" data-testid={`ed-order-field-${id}`} value={sortField} onChange={(e) => setSortField(e.target.value)}>
+            <option value="">Field…</option>
+            {allFields.map((m) => <option key={m.name} value={m.name}>{m.label ? `${m.label} (${m.name})` : m.name}</option>)}
+          </select>
+          <button type="button" className="btn btn-sm" data-testid={`ed-order-add-${id}`} disabled={sortField === ''} onClick={() => { run({ type: 'setOrder', widget: id, change: { op: 'add', field: sortField, dir: 'asc' } }); setSortField('') }}>Add to the order</button>
+        </div>
+        {widget.type === 'matrix' && (['rows', 'columns'] as const).map((axis) => {
+          const current = axisSort(axis)
+          const keywords = ['sort_key', 'label']
+          const measures = catalog?.measures ?? []
+          return (
+            <div key={axis} className="row" style={{ gap: 6, alignItems: 'center' }} data-testid={`ed-axis-sort-${id}-${axis}`}>
+              <label className="hint">{axis} sorted by{' '}
+                <select data-testid={`ed-axis-sort-by-${id}-${axis}`} value={current?.by ?? ''} onChange={(e) => run({ type: 'setSort', widget: id, target: { kind: 'axis', axis }, sort: e.target.value === '' ? undefined : { by: e.target.value, ...(current?.dir ? { dir: current.dir } : {}) }, catalog })}>
+                  <option value="">(the result&apos;s order)</option>
+                  {keywords.map((k) => <option key={k} value={k}>{k}</option>)}
+                  {measures.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+                </select>
+              </label>
+              <select aria-label={`Direction of the ${axis}`} data-testid={`ed-axis-sort-dir-${id}-${axis}`} disabled={!current} value={current?.dir ?? 'asc'} onChange={(e) => current && run({ type: 'setSort', widget: id, target: { kind: 'axis', axis }, sort: { by: current.by, dir: e.target.value as 'asc' | 'desc' }, catalog })}>
+                <option value="asc">asc</option><option value="desc">desc</option>
+              </select>
+            </div>
+          )
+        })}
+        {widget.type === 'chart' && (['x', 'y', 'color'] as const).filter((c) => (widget.encodings as Record<string, unknown>)[c] !== undefined && c !== 'y').map((channel) => {
+          const current = sortAt(widget, { kind: 'channel', channel })
+          const value = current === undefined ? '' : current.by === 'sort_key' ? 'sort_key' : current.dir === 'desc' ? 'descending' : 'ascending'
+          return (
+            <label key={channel} className="hint" style={{ display: 'block' }}>{channel} members{' '}
+              <select data-testid={`ed-channel-sort-${id}-${channel}`} value={value} onChange={(e) => run({ type: 'setSort', widget: id, target: { kind: 'channel', channel }, sort: e.target.value === '' ? undefined : e.target.value === 'sort_key' ? { by: 'sort_key' } : { by: 'field', dir: e.target.value === 'descending' ? 'desc' : 'asc' } })}>
+                <option value="">(default)</option><option value="ascending">ascending</option><option value="descending">descending</option><option value="sort_key">in the result&apos;s order</option>
+              </select>
+            </label>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function Preview({ id, widget, doc, preview }: { id: string; widget: WidgetDoc; doc: ViewsDoc; preview: (widget: WidgetDoc) => Promise<RenderedWidget> }) {
   const [result, setResult] = useState<RenderedWidget | undefined>()
   const key = JSON.stringify(widget)
@@ -199,10 +345,7 @@ export function WidgetEditor({ id, widget, doc, catalog, catalogNote, apply, dia
       <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap', margin: '6px 0' }} data-testid={`ed-widget-fields-${id}`}>
         {widget.type === 'metric' && (
           <label className="hint">format{' '}
-            <select data-testid={`ed-format-${id}`} value={w.format ?? ''} onChange={(e) => setOrClear(['format'], e.target.value, 'format')}>
-              <option value="">(default)</option>
-              {FORMATS.map((f) => <option key={f} value={f}>{f}</option>)}
-            </select>
+            <FormatSelect testid={`ed-format-${id}`} format={w.format} onPick={(v) => setOrClear(['format'], v, 'format')} />
           </label>
         )}
         {widget.type === 'matrix' && (
@@ -258,7 +401,7 @@ export function WidgetEditor({ id, widget, doc, catalog, catalogNote, apply, dia
               <tr key={`${c.field}-${i}`}>
                 <td><code>{c.field}</code></td>
                 <td><input aria-label={`Label of ${c.field}`} data-testid={`ed-column-label-${id}-${i}`} value={c.label ?? ''} onChange={(e) => setOrClear(['encodings', 'columns', i, 'label'], e.target.value, `col${i}:label`)} /></td>
-                <td><select aria-label={`Format of ${c.field}`} data-testid={`ed-column-format-${id}-${i}`} value={c.format ?? ''} onChange={(e) => setOrClear(['encodings', 'columns', i, 'format'], e.target.value, `col${i}:format`)}><option value="">(default)</option>{FORMATS.map((f) => <option key={f} value={f}>{f}</option>)}</select></td>
+                <td><FormatSelect label={`Format of ${c.field}`} testid={`ed-column-format-${id}-${i}`} format={c.format} onPick={(v) => setOrClear(['encodings', 'columns', i, 'format'], v, `col${i}:format`)} /></td>
                 <td><select aria-label={`Align of ${c.field}`} data-testid={`ed-column-align-${id}-${i}`} value={c.align ?? ''} onChange={(e) => setOrClear(['encodings', 'columns', i, 'align'], e.target.value, `col${i}:align`)}><option value="">(default)</option>{['left', 'right', 'center'].map((a) => <option key={a} value={a}>{a}</option>)}</select></td>
               </tr>
             ))}
@@ -278,13 +421,7 @@ export function WidgetEditor({ id, widget, doc, catalog, catalogNote, apply, dia
         </div>
       )}
 
-      {hasQuery && !explicit && (Array.isArray(query.filters) || Array.isArray(query.order)) && (
-        <div className="hint" data-testid={`ed-query-rest-${id}`}>
-          {Array.isArray(query.filters) && <>filters: <code>{JSON.stringify(query.filters)}</code> </>}
-          {Array.isArray(query.order) && <>order: <code>{JSON.stringify(query.order)}</code> </>}
-          (written in the YAML view; the source checks them)
-        </div>
-      )}
+      {hasQuery && !explicit && <QuerySections id={id} widget={widget} doc={doc} catalog={catalog} apply={apply} />}
 
       <div style={{ margin: '8px 0' }}>
         <strong>The request this asks for</strong> <span className="hint">read-only</span>

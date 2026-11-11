@@ -4,6 +4,7 @@ import { refusingLoader, safeVegaOptions } from './safety'
 import { chartConfig, type Theme } from './theme'
 import type { RenderedChart } from './types'
 import type { Box } from './views/model'
+import { applyChartFormats } from './views/chartFormat'
 import { fitChartSpec } from './widgets/chartFit'
 import { densityClass, type DensityClass } from './widgets/density'
 
@@ -26,10 +27,11 @@ export function VegaChart({ view, theme, box, density, legend, onHit }: { view: 
   const [error, setError] = useState<string | null>(null)
   const width = box?.width
   const height = box?.height
-  const spec = useMemo(
-    () => (width !== undefined && height !== undefined ? fitChartSpec(view.vega_lite, { width, height }, density ?? densityClass('chart', { width, height }), legend) : view.vega_lite),
-    [view, width, height, density, legend],
-  )
+  const spec = useMemo(() => {
+    // the widget's channel formats first (generated d3 strings, checked), then the fit, which keeps an axis's other settings
+    const formatted = view.formats ? applyChartFormats(view.vega_lite, view.formats) : view.vega_lite
+    return width !== undefined && height !== undefined ? fitChartSpec(formatted, { width, height }, density ?? densityClass('chart', { width, height }), legend) : formatted
+  }, [view, width, height, density, legend])
 
   useEffect(() => {
     let cancelled = false

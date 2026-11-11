@@ -41,6 +41,10 @@ export interface DashboardViewProps {
    * without a handler a widget's `drill` does nothing. A widget with an `on_select` too selects on a click and drills on Alt+click.
    */
   onDrill?: (drill: ResolvedDrill) => void
+  /** Let viewers sort tables and matrices by clicking a header (plan 32 DBR45), on screen only. Off by default. */
+  sortable?: boolean
+  /** A table the server cut at its limit: run the widget again with `order` for this column. Without it the loaded rows are sorted and the notice says so. */
+  onServerSort?: (widget: string, field: string | null, dir: 'asc' | 'desc' | null) => void
   /**
    * Kiosk mode (`?mode=kiosk`, plan 32 section 3.5 item 5): the layout the document's `kiosk.layout` names is shown unless `layout` names another, and the tiles have no maximize action. The host's chrome is the host's to hide.
    */
@@ -86,7 +90,7 @@ function useBox(given: Box | undefined) {
  * the widgets both layouts place. A widget that fails shows its own error; a failure of the call itself shows once, for the page. A canvas layout is drawn by `layoutCanvas` (DBR07), scaled or scrolled in the same container; a flow layout is the work of its own engine (DBR14):
  * until then a note says so.
  */
-export function DashboardView({ kind = 'dashboard', name, document, client, layout: requested, medium, box: given, theme = 'auto', parameters, onParameterChange, onSelect, onDrill, viewer, onPrintPreview, kiosk = false, refreshFloorMs, clock, visibility, random, timeZone }: DashboardViewProps) {
+export function DashboardView({ kind = 'dashboard', name, document, client, layout: requested, medium, box: given, theme = 'auto', parameters, onParameterChange, onSelect, onDrill, sortable = false, onServerSort, viewer, onPrintPreview, kiosk = false, refreshFloorMs, clock, visibility, random, timeZone }: DashboardViewProps) {
   const layout = requested ?? (kiosk ? document.kiosk?.layout : undefined)
   const resolvedTheme = useTheme(theme)
   const { ref, box } = useBox(given)
@@ -230,6 +234,8 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
         asOf={asOf}
         stale={refreshState?.stale}
         canDrill={onDrill !== undefined}
+        sortable={sortable}
+        onServerSort={onServerSort}
       />
     )
   return (
