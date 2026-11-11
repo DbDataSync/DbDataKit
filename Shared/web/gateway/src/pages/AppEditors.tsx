@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { availableMembers, bindingRows, egressChoices, instanceFormProblem, isRename, KNOWN_SETTINGS, moveEntry, navFormProblem, packageApproveBlock, publishBlock, sizeLabel, type InstanceForm, type NavForm, type Prepared } from '../appEditors'
+import { availableMembers, bindingRows, egressChoices, emptyAddress, instanceFormProblem, isRename, KNOWN_SETTINGS, moveEntry, navFormProblem, packageApproveBlock, publishBlock, sizeLabel, type InstanceForm, type NavForm, type Prepared } from '../appEditors'
 import { NEEDS_PUBLISHER, shortHash } from '../apps'
 import type { AppCheck, AppsCaller, AppSummary } from '../types'
 
@@ -92,6 +92,36 @@ export function InstanceEditorView(p: InstanceEditorProps) {
         ))}
         {known && <div className="hint" style={wrap} data-testid="instance-editor-setting-hint">{known.key}: {known.hint}</div>}
         <button type="button" className="btn sm" disabled={!p.caller.can_publish} onClick={() => set({ settings: [...form.settings, { key: '', value: '' }] })} data-testid="instance-editor-setting-add">Add a setting</button>
+
+        <h3 className="hint" style={{ margin: '16px 0 4px' }}>Addresses</h3>
+        <p className="hint" style={{ margin: '0 0 6px' }}>Besides /apps/{form.name || '<name>'}/ the instance can be served at a name of its own: a subdomain of the host's apps domain ({form.name || '<name>'}.&lt;apps domain&gt;), or a custom domain with its certificate (a secret that holds the PFX). The Gateway checks that the name reaches it and that the certificate is for it before it accepts the address.</p>
+        {form.addresses.length === 0 && <div className="hint" data-testid="instance-editor-addresses-none">No address: the instance is served at its path only.</div>}
+        {form.addresses.map((a, i) => (
+          <div key={i} className="row" style={{ gap: 6, marginBottom: 4, flexWrap: 'wrap', alignItems: 'center' }} data-testid={`instance-editor-address-${i}`}>
+            <select className="input sm" style={{ width: 130, flex: 'none' }} value={a.kind} disabled={!p.caller.can_publish}
+              onChange={(e) => set({ addresses: form.addresses.map((x, j) => j === i ? { ...x, kind: e.target.value as 'subdomain' | 'custom' } : x) })} data-testid={`instance-editor-address-kind-${i}`} aria-label={`Address ${i + 1} kind`}>
+              <option value="subdomain">Subdomain</option>
+              <option value="custom">Custom domain</option>
+            </select>
+            <input className="input sm" style={{ width: 240, flex: 'none' }} placeholder={a.kind === 'subdomain' ? `${form.name || 'name'}.apps.example.com` : 'reports.example.com'} value={a.host} disabled={!p.caller.can_publish}
+              onChange={(e) => set({ addresses: form.addresses.map((x, j) => j === i ? { ...x, host: e.target.value } : x) })} data-testid={`instance-editor-address-host-${i}`} aria-label={`Address ${i + 1} name`} />
+            <input className="input sm" style={{ width: 110, flex: 'none' }} placeholder="/" value={a.path} disabled={!p.caller.can_publish}
+              onChange={(e) => set({ addresses: form.addresses.map((x, j) => j === i ? { ...x, path: e.target.value } : x) })} data-testid={`instance-editor-address-path-${i}`} aria-label={`Address ${i + 1} path`} />
+            {a.kind === 'custom' && <>
+              <input className="input sm" style={{ width: 220, flex: 'none' }} placeholder="certificate: secret:<name>" value={a.certificate} disabled={!p.caller.can_publish}
+                onChange={(e) => set({ addresses: form.addresses.map((x, j) => j === i ? { ...x, certificate: e.target.value } : x) })} data-testid={`instance-editor-address-certificate-${i}`} aria-label={`Address ${i + 1} certificate secret`} />
+              <input className="input sm" style={{ width: 200, flex: 'none' }} placeholder="password: secret:<name> (if any)" value={a.certificatePassword} disabled={!p.caller.can_publish}
+                onChange={(e) => set({ addresses: form.addresses.map((x, j) => j === i ? { ...x, certificatePassword: e.target.value } : x) })} data-testid={`instance-editor-address-password-${i}`} aria-label={`Address ${i + 1} certificate password secret`} />
+            </>}
+            <label className="row" style={{ gap: 4 }}>
+              <input type="checkbox" checked={a.primary} disabled={!p.caller.can_publish}
+                onChange={(e) => set({ addresses: form.addresses.map((x, j) => ({ ...x, primary: j === i ? e.target.checked : false })) })} data-testid={`instance-editor-address-primary-${i}`} />
+              <span className="hint">Primary</span>
+            </label>
+            <button type="button" className="btn sm" disabled={!p.caller.can_publish} onClick={() => set({ addresses: form.addresses.filter((_, j) => j !== i) })} data-testid={`instance-editor-address-remove-${i}`}>Remove</button>
+          </div>
+        ))}
+        <button type="button" className="btn sm" disabled={!p.caller.can_publish} onClick={() => set({ addresses: [...form.addresses, { ...emptyAddress(), kind: 'subdomain', host: form.name ? `${form.name}.` : '' }] })} data-testid="instance-editor-address-add">Add an address</button>
 
         <h3 className="hint" style={{ margin: '16px 0 4px' }}>Data</h3>
         <p className="hint" style={{ margin: '0 0 6px' }}>Each Store model the app uses is bound to one of that model's instances. Left empty, the model is not bound and the app reads none of it.</p>

@@ -273,6 +273,18 @@ public sealed class AppsOptions
     /// <summary>The https address people reach the apps host at, without a path. Empty: <c>https://&lt;the first TLS host name, or localhost&gt;:&lt;Port&gt;</c>. The home's redirect URI for it is this plus <c>/apps/-/callback</c>.</summary>
     public string? PublicUrl { get; set; }
 
+    /// <summary>
+    /// The domain whose subdomains serve instances (<c>apps.domain</c>, plan 26 AP08), such as <c>apps.example.com</c>: an instance <c>acme</c> may be bound at <c>acme.apps.example.com</c>, with this host's own certificate (it should hold
+    /// <c>*.apps.example.com</c>) and a wildcard DNS name. Empty: no subdomain can be bound; a custom domain can.
+    /// </summary>
+    public string? Domain { get; set; }
+
+    /// <summary>The addresses a custom domain may resolve to besides this machine's own (<c>apps.addresses</c>): a balancer's or a public address in front of it. A name is verified before it is bound.</summary>
+    public List<string> Addresses { get; set; } = [];
+
+    /// <summary>The reverse proxies whose <c>X-Forwarded-Host</c> and <c>X-Forwarded-Prefix</c> say which name and path the browser used (<c>apps.trustedProxies</c>): IP addresses or CIDR ranges. The headers of anyone else are ignored.</summary>
+    public List<string> TrustedProxies { get; set; } = [];
+
     /// <summary>How old, in seconds, the identity home's last answer about a person may be before the host asks again: a role taken away at the home stops working here within this time.</summary>
     [ConfigKey(Min = 1, Max = 3600)]
     public int RolesRefreshSeconds { get; set; } = 300;

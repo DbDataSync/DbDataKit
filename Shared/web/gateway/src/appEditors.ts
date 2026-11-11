@@ -1,5 +1,5 @@
 import { NEEDS_PUBLISHER, NEEDS_APPROVER } from './apps'
-import type { AppAbout, AppCheck, AppDetail, AppInstanceRow, AppsCaller, NavigationSetRow } from './types'
+import type { AppAbout, AppAddressRow, AppCheck, AppDetail, AppInstanceRow, AppsCaller, NavigationSetRow } from './types'
 
 // The logic of the Apps screen's editors (plan 33, UE01 to UE03), apart from the screens so it can be tested: the instance form, the package a folder becomes, the navigation set's member list. Nothing here is a second
 // validator. The Gateway reads every name, setting, binding and manifest again and its refusal is what the screen shows; these functions only say why a button is off before a call that could not mean anything, and build
@@ -18,7 +18,15 @@ export interface InstanceForm {
   settings: SettingRow[]
   /** The model instance typed for each model, by model name (an empty text is "not bound"). */
   bindings: Record<string, string>
+  /** The names and paths the instance is also served at (plan 26 AP08). */
+  addresses: AddressForm[]
 }
+
+/** One address in the form: a name, whether it is a subdomain of the host's apps domain or a custom domain (which names the secrets that hold its certificate), the path it is mounted at, and whether it is the primary one. */
+export interface AddressForm { host: string; kind: 'subdomain' | 'custom'; path: string; primary: boolean; certificate: string; certificatePassword: string }
+
+/** The body's address as the Gateway reads it. */
+export interface AddressRequest { host: string; kind: 'subdomain' | 'custom'; path: string; primary: boolean; certificate: string | null; certificate_password: string | null }
 
 /** The body of `PUT /api/v1/app-instances/{name}`. */
 export interface InstanceRequest {
@@ -27,6 +35,8 @@ export interface InstanceRequest {
   title: string | null
   settings: Record<string, string>
   bindings: Record<string, string>
+  /** Left out by a request that must not change the addresses (the pin control). */
+  addresses?: AddressRequest[]
 }
 
 /** Settings the host reads; offered as suggestions in the key field, never required. Any other key is the app's own. */
@@ -35,16 +45,20 @@ export const KNOWN_SETTINGS: { key: string; hint: string }[] = [
   { key: 'portal', hint: 'The portal instance whose look and menu this instance is shown in.' },
 ]
 
-export const emptyInstanceForm = (app = ''): InstanceForm => ({ name: '', app, pin: '', title: '', settings: [], bindings: {} })
+export const emptyInstanceForm = (app = ''): InstanceForm => ({ name: '', app, pin: '', title: '', settings: [], bindings: {}, addresses: [] })
 
-export const formFromRow = (row: Pick<AppInstanceRow, 'name' | 'app' | 'pin' | 'title' | 'settings' | 'bindings'>): InstanceForm => ({
+export const formFromRow = (row: Pick<AppInstanceRow, 'name' | 'app' | 'pin' | 'title' | 'settings' | 'bindings'> & { addresses?: AppAddressRow[] }): InstanceForm => ({
   name: row.name,
   app: row.app,
   pin: row.pin === null ? '' : String(row.pin),
   title: row.title ?? '',
   settings: Object.entries(row.settings ?? {}).map(([key, value]) => ({ key, value })),
   bindings: { ...row.bindings },
+  addresses: (row.addresses ?? []).map((a) => ({ host: a.host, kind: a.kind, path: a.path, primary: a.primary, certificate: a.certificate ?? '', certificatePassword: a.certificate_password ?? '' })),
 })
+
+/** A new address row: a subdomain of the instance (the Gateway says which domain) once there is a name for it. */
+export const emptyAddress = (): AddressForm => ({ host: '', kind: 'custom', path: '/', primary: false, certificate: '', certificatePassword: '' })
 
 /** The models the version an instance would run uses, in the order the manifest lists them: the pinned version's, or the one the app serves when it follows. Null while the app's detail is not read yet, or it has no such version or its manifest is unreadable: the form does not save then, because saving would drop bindings it cannot match to a model. */
 export function modelsOf(detail: Pick<AppDetail, 'serving' | 'versions'> | undefined, pin: string): string[] | null {
@@ -75,6 +89,18 @@ export function instanceFormProblem(form: InstanceForm, isNew: boolean, existing
   if (keys.some((k) => k === '')) return 'A setting needs a name; remove the empty row or name it.'
   const repeated = keys.find((k, i) => keys.indexOf(k) !== i)
   if (repeated) return `The setting ${repeated} is listed twice.`
+  return addressProblem(form.addresses)
+}
+
+/** Why the addresses cannot be saved yet, or null: only what makes the call meaningless (the Gateway verifies the names and certificates and says so in its words). */
+export function addressProblem(addresses: AddressForm[]): string | null {
+  if (addresses.some((a) => a.host.trim() === '')) return 'An address needs a name; remove the empty row or name it.'
+  const keys = addresses.map((a) => `${a.host.trim().toLowerCase()}${a.path.trim() === '' ? '/' : a.path.trim()}`)
+  const repeated = keys.find((k, i) => keys.indexOf(k) !== i)
+  if (repeated) return `The address ${repeated} is listed twice.`
+  const custom = addresses.find((a) => a.kind === 'custom' && a.certificate.trim() === '')
+  if (custom) return `The custom domain ${custom.host.trim()} needs its certificate: the secret that holds the PFX.`
+  if (addresses.filter((a) => a.primary).length > 1) return 'Only one address is the primary one.'
   return null
 }
 
@@ -87,7 +113,12 @@ export function instanceRequest(form: InstanceForm, models: string[]): InstanceR
   }
   const settings: Record<string, string> = {}
   for (const row of form.settings) settings[row.key.trim()] = row.value
-  return { app: form.app, pin: form.pin === '' ? null : Number(form.pin), title: form.title.trim() === '' ? null : form.title.trim(), settings, bindings }
+  const addresses: AddressRequest[] = form.addresses.map((a) => ({
+    host: a.host.trim(), kind: a.kind, path: a.path.trim() === '' ? '/' : a.path.trim(), primary: a.primary,
+    certificate: a.kind === 'custom' && a.certificate.trim() !== '' ? a.certificate.trim() : null,
+    certificate_password: a.kind === 'custom' && a.certificatePassword.trim() !== '' ? a.certificatePassword.trim() : null,
+  }))
+  return { app: form.app, pin: form.pin === '' ? null : Number(form.pin), title: form.title.trim() === '' ? null : form.title.trim(), settings, bindings, addresses }
 }
 
 /** The request that only moves the pin: everything else the instance has (title, settings, bindings) is sent back unchanged, since the Gateway replaces the whole instance. */

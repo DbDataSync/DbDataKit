@@ -28,7 +28,7 @@ namespace DbDataGateway.Server.Management;
 /// Every answer to a read says what the caller may do (<c>caller</c>: <c>can_publish</c>, <c>can_approve</c>), so a screen can say why a button is off; the roles are enforced here on every call, never by the screen.
 /// The author recorded is the person the token names, or the paired client when none is: never the operating-system user of the machine the command ran on.
 /// </summary>
-public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers> approvers, IAuditLog audit, TimeProvider? clock = null, Func<Uri?>? appsAddress = null, Action<string>? instanceSaved = null, Action<string>? instanceRemoved = null)
+public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers> approvers, IAuditLog audit, TimeProvider? clock = null, Func<Uri?>? appsAddress = null, Action<string>? instanceSaved = null, Action<string>? instanceRemoved = null, Serving.AppAddressVerifier? addressVerifier = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly System.Text.RegularExpressions.Regex ChannelRule = new("^[a-z0-9][a-z0-9-]{0,31}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.Compiled);
@@ -37,7 +37,10 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
 
     private sealed record PublishRequest(string? Manifest, Dictionary<string, string>? Files, string? Note);
 
-    private sealed record InstanceRequest(string? App, int? Pin, string? Title, Dictionary<string, string>? Settings, Dictionary<string, string>? Bindings);
+    private sealed record InstanceRequest(string? App, int? Pin, string? Title, Dictionary<string, string>? Settings, Dictionary<string, string>? Bindings, List<AddressRequest>? Addresses);
+
+    private sealed record AddressRequest(string? Host, string? Kind, string? Path, string? Certificate,
+        [property: System.Text.Json.Serialization.JsonPropertyName("certificate_password")] string? CertificatePassword, bool? Primary);
 
     private sealed record NavigationEntryRequest(string? Instance, string? Label, string? Icon);
 
@@ -97,7 +100,13 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
             case ("apps", "POST", 1) when rest[0] == "check": return Check(body, caller);
             case ("apps", "PUT", 1): return await WriteAsync(() => Publish(Uri.UnescapeDataString(rest[0]), body, caller));
             case ("apps", "POST", 2) when rest[1] == "rollback": return await WriteAsync(() => Rollback(Uri.UnescapeDataString(rest[0]), body, caller));
-            case ("app-instances", "PUT", 1): return await WriteAsync(() => SaveInstance(Uri.UnescapeDataString(rest[0]), body, caller));
+            case ("app-instances", "PUT", 1):
+            {
+                var name = Uri.UnescapeDataString(rest[0]);
+                // a name is verified before it is accepted (AP08): the checks that need the network and the secrets run before the write lock is taken
+                if (await VerifyAddressesAsync(name, body, cancellationToken) is { } unverified) return Refused(caller, "app instance-save", name, 400, unverified);
+                return await WriteAsync(() => SaveInstance(name, body, caller));
+            }
             case ("app-navigation", "PUT", 1): return await WriteAsync(() => SaveNavigationSet(Uri.UnescapeDataString(rest[0]), body, caller));
             case ("app-navigation", "DELETE", 1): return await WriteAsync(() => RemoveNavigationSet(Uri.UnescapeDataString(rest[0]), caller));
             default: return ManagementResult.Problem(404, "There is no such call.");
@@ -206,6 +215,7 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
                 ["instance_version"] = current[instance.Name].Version, ["published_by"] = current[instance.Name].PublishedBy, ["published_at"] = current[instance.Name].PublishedAt,
                 ["path"] = $"/apps/{instance.Name}/", ["address"] = address is null ? null : new Uri(address, $"/apps/{instance.Name}/").AbsoluteUri,
                 ["bindings"] = new JsonObject(instance.Bindings.OrderBy(b => b.Key, StringComparer.Ordinal).Select(b => KeyValuePair.Create(b.Key, (JsonNode?)b.Value))),
+                ["addresses"] = Addresses(instance.Addresses),
                 ["settings"] = new JsonObject(instance.Settings.OrderBy(b => b.Key, StringComparer.Ordinal).Select(b => KeyValuePair.Create(b.Key, (JsonNode?)b.Value))),
                 ["navigation"] = new JsonArray([.. sets.Where(s => s.Entries.Any(e => e.Instance == instance.Name)).Select(s => (JsonNode)s.Name)]),
                 ["mounted_by"] = new JsonArray([.. resolved.Values.Where(r => r is not null && r.Instance.Name != instance.Name && r.Manifest.Portal?.Mounts.Any(m => m.App == instance.Name) == true).Select(r => (JsonNode)r!.Instance.Name)]),
@@ -222,6 +232,19 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
             rows.Add(row);
         }
         return ManagementResult.Ok(new JsonObject { ["instances"] = rows, ["apps_address"] = address?.AbsoluteUri, ["caller"] = Capabilities(caller) });
+    }
+
+    /// <summary>An instance's addresses as the API shows them: the name, kind and path, the certificate's secret references (never the certificate), the address people open (on the apps host's public port) and the redirect URI the home needs.</summary>
+    private JsonArray Addresses(IReadOnlyList<AppAddress> addresses)
+    {
+        var home = appsAddress?.Invoke();
+        return new JsonArray([.. addresses.Select(a => (JsonNode)new JsonObject
+        {
+            ["host"] = a.Host, ["kind"] = a.Kind == AppAddressKind.Subdomain ? "subdomain" : "custom", ["path"] = a.Path, ["primary"] = a.Primary,
+            ["certificate"] = a.Certificate, ["certificate_password"] = a.CertificatePassword,
+            ["url"] = home is null ? null : new UriBuilder(Uri.UriSchemeHttps, a.Host, home.IsDefaultPort ? -1 : home.Port, a.Path == "/" ? "/" : a.Path + "/").Uri.AbsoluteUri,
+            ["redirect_uri"] = home is null ? null : Serving.AppInstanceClients.CallbackOfName(a.Host, home),
+        })]);
     }
 
     private ManagementResult Navigation(ManagementCaller caller) =>
@@ -363,6 +386,22 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
         }
     }
 
+    /// <summary>The addresses a save would give the instance: the request's, or the stored instance's when the request names none (a save that does not mention addresses leaves them).</summary>
+    private IReadOnlyList<AppAddress> AddressesOf(string name, InstanceRequest request) =>
+        request.Addresses is null
+            ? new AppInstanceStore(definitions).Get(name)?.Addresses ?? []
+            : [.. request.Addresses.Select(a => new AppAddress(a.Host ?? "", string.Equals(a.Kind, "subdomain", StringComparison.OrdinalIgnoreCase) ? AppAddressKind.Subdomain : AppAddressKind.Custom, a.Path ?? "/", a.Certificate, a.CertificatePassword, a.Primary ?? false))];
+
+    private async Task<string?> VerifyAddressesAsync(string name, string? body, CancellationToken cancellationToken)
+    {
+        if (addressVerifier is null || Read<InstanceRequest>(body) is not { App: { Length: > 0 } app, Addresses: { Count: > 0 } } request) return null;
+        // the store's own rules come first (they need no network), so the person is told the cheaper thing first
+        var instance = new AppInstance(name, app, request.Pin, request.Title) { Addresses = AddressesOf(name, request) };
+        try { instance = instance with { Addresses = AppAddresses.Check(instance, new AppInstanceStore(definitions).List()) }; }
+        catch (AppInstanceException ex) { return ex.Message; }
+        return await addressVerifier.VerifyAsync(instance, cancellationToken);
+    }
+
     private ManagementResult SaveInstance(string name, string? body, ManagementCaller caller, string channel = DefinitionStore.Production)
     {
         var request = Read<InstanceRequest>(body);
@@ -378,10 +417,13 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
                     return Refused(caller, "app instance-save", name, 400, $"There is no instance '{name}' in production to preview. Save it there first: a {channel} instance is opened by the people who may open it.");
                 (settings, bindings) = (settings ?? production.Settings, bindings ?? production.Bindings);
             }
-            var saved = store.Save(new AppInstance(name, app, request.Pin, request.Title, settings, bindings), Who(caller), channel);
+            var addresses = channel == DefinitionStore.Production ? AddressesOf(name, request) : [];
+            var saved = store.Save(new AppInstance(name, app, request.Pin, request.Title, settings, bindings) { Addresses = addresses }, Who(caller), channel);
             Record(caller, "app instance-save", name, channel == DefinitionStore.Production ? $"version {saved.Version}" : $"version {saved.Version} in {channel}");
             if (channel == DefinitionStore.Production) instanceSaved?.Invoke(name);
             var result = new JsonObject { ["name"] = name, ["app"] = app, ["version"] = saved.Version, ["channel"] = channel };
+            if (channel == DefinitionStore.Production && addresses.Count > 0)
+                result["addresses"] = Addresses(store.Get(name)?.Addresses ?? addresses);
             if (channel != DefinitionStore.Production)
             {
                 var address = AppInstanceName.Of(name, channel);

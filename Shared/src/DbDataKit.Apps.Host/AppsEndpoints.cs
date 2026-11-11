@@ -35,7 +35,7 @@ public static class AppsEndpoints
             if (instances.Resolve(instance) is not { } resolved) { await Text(context, 404, "No such app."); return; }
             if (await sessions.FindAsync(context.Request.Cookies[SessionCookie], context.RequestAborted) is not { } session)
             {
-                context.Response.Redirect((await client.BeginAsync(context.Request.Path.Value!, context.RequestAborted)).AbsoluteUri);
+                context.Response.Redirect((await client.BeginAsync(context.Request.Path.Value!, context.RequestAborted, AppAddressing.CallbackFor(context))).AbsoluteUri);
                 return;
             }
             if (session.RolesOn(instance).Count == 0) { await Text(context, 403, "The identity home gives you no role on this app."); return; }
@@ -106,12 +106,12 @@ public static class AppsEndpoints
                 var session = sessions.Create(result.Identity, result.Grant.RefreshToken);
                 context.Response.Cookies.Append(SessionCookie, session.Id, new CookieOptions
                 {
-                    HttpOnly = true, Secure = true, Path = "/apps/", Expires = session.ExpiresAtUtc,
+                    HttpOnly = true, Secure = true, Path = AppAddressing.Of(context)?.Binding is null ? "/apps/" : "/", Expires = session.ExpiresAtUtc,
                     // None: a portal on another site frames an instance (AP07), and the frame must carry the person's session. Nothing the cookie authorises changes state without the shell's own header (a cross-site page cannot send it: that
                     // needs a CORS preflight this host never answers), and who may frame the page is `frame-ancestors`. (Lax would do for the sign-in alone: the browser arrives from the home, and Strict is withheld on that navigation.)
                     SameSite = SameSiteMode.None,
                 });
-                context.Response.Redirect(SafeReturn(result.ReturnUrl));
+                context.Response.Redirect(SafeReturn(result.ReturnUrl, AppAddressing.Of(context)?.Binding is not null));
             }
             catch (OpenIdClientException e)
             {
@@ -127,15 +127,17 @@ public static class AppsEndpoints
             var portal = resolved?.Manifest.Kind == AppKind.Portal ? resolved : null;
             var mount = portal is null || string.IsNullOrEmpty(path) ? null : PortalChrome.MountAt(portal.Manifest.Portal!, path);
             if (!string.IsNullOrEmpty(path) && mount is null) { await Text(context, 404, "No such page."); return; }
-            if (!context.Request.Path.Value!.EndsWith('/')) { context.Response.Redirect(context.Request.Path.Value + "/" + context.Request.QueryString); return; }
+            if (!context.Request.Path.Value!.EndsWith('/')) { context.Response.Redirect(AppAddressing.PublicPath(context) + "/" + context.Request.QueryString); return; }
             if (resolved is null) { await Text(context, 404, "No such app."); return; }
             // `acme~preview`: the instance as another channel has it (plan 21); a portal has no preview, an app's is read only
             var previewing = AppInstanceName.Split(instance).Channel != DbDataKit.State.DefinitionStore.Production;
             if (previewing && portal is not null) { await Text(context, 404, "A portal has no preview."); return; }
             if (await sessions.FindAsync(context.Request.Cookies[SessionCookie], context.RequestAborted) is not { } session)
             {
-                var back = portal is null ? LaunchUrl(instance) : context.Request.Path.Value!;
-                context.Response.Redirect((await client.BeginAsync(back, context.RequestAborted)).AbsoluteUri);
+                // at a bound name the person returns to the name's own address, not to the instance's subpath
+                var bound = AppAddressing.Of(context)?.Binding is not null;
+                var back = bound ? AppAddressing.PublicPath(context) + "?launch" : portal is null ? LaunchUrl(instance) : context.Request.Path.Value!;
+                context.Response.Redirect((await client.BeginAsync(back, context.RequestAborted, AppAddressing.CallbackFor(context))).AbsoluteUri);
                 return;
             }
 
@@ -210,8 +212,8 @@ public static class AppsEndpoints
     private static string TitleOf(ResolvedInstance resolved) => resolved.Instance.Title ?? resolved.Manifest.Title ?? resolved.Instance.Name;
 
     /// <summary>Only a path of this host's apps may be returned to; anything else would make the callback an open redirect.</summary>
-    private static string SafeReturn(string? returnUrl) =>
-        returnUrl is { Length: > 0 } && returnUrl.StartsWith("/apps/", StringComparison.Ordinal) && !returnUrl.Contains('\\') && !returnUrl.StartsWith("//") ? returnUrl : "/";
+    private static string SafeReturn(string? returnUrl, bool atBoundName = false) =>
+        returnUrl is { Length: > 0 } && (returnUrl.StartsWith("/apps/", StringComparison.Ordinal) || (atBoundName && returnUrl.StartsWith('/'))) && !returnUrl.Contains('\\') && !returnUrl.StartsWith("//") ? returnUrl : "/";
 
     private static async Task Write(HttpContext context, AppResponse response)
     {

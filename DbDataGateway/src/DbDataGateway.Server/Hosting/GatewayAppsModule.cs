@@ -32,6 +32,9 @@ public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, S
 
     private WebApplication? _app;
 
+    /// <summary>The certificate chooser the listener asks at each handshake; set before the listener starts.</summary>
+    private AppCertificates? Certificates { get; set; }
+
     public static async Task<ConsoleSigningKey> SigningKeyAsync(GatewayOptions current, CancellationToken cancellationToken)
     {
         var store = SecretsRuntime.OpenStore(current);
@@ -55,6 +58,9 @@ public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, S
         if (certificate.Current is null)
             certificate.Set(CertificateProvider.Load(current, GatewayHost.ResolveDataDirectory(current), loggers.CreateLogger("Tls"), secrets: secrets, group: group));
 
+        var instances = new AppInstanceStore(new DefinitionStore(state));
+        var bindings = new AppBindings(instances);
+        Certificates = new AppCertificates(bindings, () => certificate.Current, reference => secrets.ResolveSecret("Gateway:Apps:Addresses", reference), message => loggers.CreateLogger("Apps").LogWarning("{Problem}", message));
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = ["--hostBuilder:reloadConfigOnChange=false"], ContentRootPath = AppContext.BaseDirectory });
         builder.Logging.ClearProviders();
         builder.WebHost.ConfigureKestrel(kestrel =>
@@ -65,13 +71,13 @@ public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, S
                 listen.Protocols = HttpProtocols.Http1AndHttp2;
                 listen.UseHttps(https =>
                 {
-                    https.ServerCertificateSelector = (_, _) => certificate.Current;
+                    // by the name the client asks for (SNI): a custom domain's own certificate, the host's for everything else (plan 26 AP08)
+                    https.ServerCertificateSelector = (_, name) => Certificates?.Select(name) ?? certificate.Current;
                     https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
                 });
             });
         });
 
-        var instances = new AppInstanceStore(new DefinitionStore(state));
         var approvals = new AppApprovalStore(new DefinitionStore(state));
         var home = HomeOf(current);
         var local = string.IsNullOrWhiteSpace(current.Apps.Home.Authority);
@@ -86,7 +92,7 @@ public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, S
         // an instance the home has no client for yet (saved with the offline command, or at another instance of the group) gets one now
         try
         {
-            foreach (var made in AppInstanceClients.Reconcile(state, instances, AppInstanceClients.CallbackOf(PublicUrlOf(current))))
+            foreach (var made in AppInstanceClients.Reconcile(state, instances, AppInstanceClients.CallbackOf(PublicUrlOf(current)), current.Apps.Home.ClientId))
                 loggers.CreateLogger("Apps").LogInformation("Registered an OpenID client for the app instance {Instance} at the identity home.", made);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -95,6 +101,9 @@ public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, S
         }
         var app = builder.Build();
         app.MapGet("/health/live", () => Results.Text("Healthy"));
+        // a name bound to an instance is routed to it by Host and path, before the routes see the request (plan 26 AP08)
+        app.UseAppAddresses(bindings, instances, new TrustedProxies(current.Apps.TrustedProxies));
+        app.UseRouting();
         app.MapApps(instances, new AppSite(instances, name => instances.Resolve(name) is { } r ? approvals.ApprovedEgress(r) : AppEgress.None, views: ViewsRuntime.FromDirectory(Path.Combine(AppContext.BaseDirectory, ViewsRuntimeFolder))), client, new AppSessions(refresh: client.RefreshAsync, refreshAfter: TimeSpan.FromSeconds(current.Apps.RolesRefreshSeconds), store: new AppSessionStore(state, sessionKey)),
             new AppTokenBroker(new ConsoleTokenIssuer(TokenIssuer, key)), new AppDataGateway(instances, new GroupAppData(GatewayStoreModule.ApiOf(options, state, secrets, models)), new ConsoleIdentity(TokenIssuer, key), approvals: approvals, semantic: new GroupAppSemantic(serving, semanticModels, homeCallers, options)), new AppStorage(state), approvals, () => options.CurrentValue.Apps.StorageCapMb * 1024L * 1024L);
         app.MapFallback(() => Results.Text("The apps host of this DbDataGateway. An app is at /apps/<instance>/.", "text/plain"));

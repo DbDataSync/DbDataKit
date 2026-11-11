@@ -45,8 +45,8 @@ describe('the binding rows', () => {
 
 describe('the instance form', () => {
   it('starts empty for a new instance and from the row for an existing one', () => {
-    expect(emptyInstanceForm('notes')).toEqual({ name: '', app: 'notes', pin: '', title: '', settings: [], bindings: {} })
-    expect(formFromRow(row)).toEqual({ name: 'acme', app: 'notes', pin: '', title: 'Acme notes', settings: [{ key: 'portal', value: 'front' }], bindings: { territories: 'default' } })
+    expect(emptyInstanceForm('notes')).toEqual({ name: '', app: 'notes', pin: '', title: '', settings: [], bindings: {}, addresses: [] })
+    expect(formFromRow(row)).toEqual({ name: 'acme', app: 'notes', pin: '', title: 'Acme notes', settings: [{ key: 'portal', value: 'front' }], bindings: { territories: 'default' }, addresses: [] })
     expect(formFromRow({ ...row, pin: 2, title: null }).pin).toBe('2')
     expect(formFromRow({ ...row, pin: 2, title: null }).title).toBe('')
   })
@@ -62,14 +62,44 @@ describe('the instance form', () => {
   })
 })
 
+describe('the addresses of an instance (plan 26 AP08)', () => {
+  const address = { host: 'sales.contoso.com', kind: 'custom' as const, path: '/', primary: false, certificate: 'secret:cert-sales', certificate_password: null }
+
+  it('reads the instance row into the form and writes the form back as the request, with no certificate for a subdomain', () => {
+    const form = formFromRow({ ...row, addresses: [address, { host: 'acme.apps.example.com', kind: 'subdomain', path: '/', primary: true, certificate: null, certificate_password: null }] })
+    expect(form.addresses).toEqual([
+      { host: 'sales.contoso.com', kind: 'custom', path: '/', primary: false, certificate: 'secret:cert-sales', certificatePassword: '' },
+      { host: 'acme.apps.example.com', kind: 'subdomain', path: '/', primary: true, certificate: '', certificatePassword: '' },
+    ])
+    expect(instanceRequest(form, []).addresses).toEqual([address, { host: 'acme.apps.example.com', kind: 'subdomain', path: '/', primary: true, certificate: null, certificate_password: null }])
+    // a blank path is the root, and a password reference travels with its certificate
+    expect(instanceRequest({ ...form, addresses: [{ ...form.addresses[0]!, path: ' ', certificatePassword: ' secret:pw ' }] }, []).addresses).toEqual([{ ...address, certificate_password: 'secret:pw' }])
+  })
+
+  it('has a problem only for what makes the call meaningless: no name, a custom domain with no certificate, one name twice, two primaries', () => {
+    const ok = { ...emptyInstanceForm('notes'), name: 'sales' }
+    const mine = formFromRow({ ...row, addresses: [address] }).addresses[0]!
+    expect(instanceFormProblem({ ...ok, addresses: [mine] }, true, [])).toBeNull()
+    expect(instanceFormProblem({ ...ok, addresses: [{ ...mine, host: ' ' }] }, true, [])).toContain('needs a name')
+    expect(instanceFormProblem({ ...ok, addresses: [{ ...mine, certificate: '' }] }, true, [])).toContain('needs its certificate')
+    expect(instanceFormProblem({ ...ok, addresses: [{ ...mine, kind: 'subdomain', certificate: '' }] }, true, [])).toBeNull()
+    expect(instanceFormProblem({ ...ok, addresses: [mine, { ...mine, host: 'SALES.contoso.com' }] }, true, [])).toContain('listed twice')
+    expect(instanceFormProblem({ ...ok, addresses: [{ ...mine, primary: true }, { ...mine, host: 'b.contoso.com', primary: true }] }, true, [])).toContain('one address is the primary')
+  })
+
+  it('moving the pin leaves the addresses out, so the Gateway keeps them', () => {
+    expect('addresses' in pinRequest({ ...row, addresses: [address] } as typeof row, 2)).toBe(false)
+  })
+})
+
 describe('the request of the form', () => {
   it('sends the app, the pin as a number or null, a blank title as null, settings as given and only the bindings that are filled for a model the version uses', () => {
     const form = {
       name: 'sales', app: 'notes', pin: '1', title: '  ', settings: [{ key: ' embed.allowed_origins ', value: 'https://portal.example.com' }, { key: 'theme', value: '' }],
-      bindings: { territories: ' default ', people: '', orders: 'live' },
+      bindings: { territories: ' default ', people: '', orders: 'live' }, addresses: [],
     }
     expect(instanceRequest(form, ['territories', 'people'])).toEqual({
-      app: 'notes', pin: 1, title: null, settings: { 'embed.allowed_origins': 'https://portal.example.com', theme: '' }, bindings: { territories: 'default' },
+      app: 'notes', pin: 1, title: null, settings: { 'embed.allowed_origins': 'https://portal.example.com', theme: '' }, bindings: { territories: 'default' }, addresses: [],
     })
     expect(instanceRequest({ ...form, pin: '', title: ' Sales ' }, []).pin).toBeNull()
     expect(instanceRequest({ ...form, pin: '', title: ' Sales ' }, []).title).toBe('Sales')
