@@ -47,7 +47,57 @@ async function refused<T>(call: Promise<T>): Promise<T> {
 const json = (method: string, body?: unknown): RequestInit => ({ method, body: body === undefined ? undefined : JSON.stringify(body) })
 const path = (project: string, id: string) => `${project}/${id.split('/').map(encodeURIComponent).join('/')}`
 
+// ---- KN28, KN07, KN08: the index, its embedding model and the search ----
+
+export type SearchMode = 'words' | 'vectors' | 'both'
+export interface EmbeddingBinding { provider: string | null; model: string | null; modelId: string | null; usable: boolean; problem: string | null }
+export interface VectorState { readyModel: string | null; readyDimension: number | null; buildingModel: string | null; buildingDimension: number | null; chunks: number; embedded: number; buildingEmbedded: number; failed: number }
+export interface IndexFailure { itemId: string; seq: number; model: string; attempts: number; message: string; failedAt: string }
+export interface IndexRun { at: string; embedded: number; failed: number; remaining: number; switched: boolean; problem: string | null }
+export interface KnowledgeIndexState {
+  channel: string; opened: boolean; running: boolean; items: number; chunks: number; wordsMode: string; vectorsAvailable: boolean; vectorsProblem: string | null
+  embedding: EmbeddingBinding; vectors: VectorState | null; failures: IndexFailure[]; lastRun: IndexRun | null; message: string
+}
+export interface SearchHit { itemId: string; title: string; headingPath: string[]; excerpt: string; source: string; version: string; score: number; chunks: number }
+export interface SearchResult { hits: SearchHit[]; used: SearchMode; note: string | null }
+
+/** The ways of searching the index offers: words always, vectors and both only where the index has vectors that are ready (a model is bound and complete). */
+export function modesOffered(state: Pick<KnowledgeIndexState, 'opened' | 'vectorsAvailable' | 'vectors'>): SearchMode[] {
+  if (!state.opened) return []
+  return state.vectorsAvailable && state.vectors?.readyModel ? ['words', 'vectors', 'both'] : ['words']
+}
+
+/** The search mode in a line: what the index can do here, and why it cannot do more. */
+export function searchModeLine(state: KnowledgeIndexState): string {
+  if (!state.opened) return 'Not built.'
+  if (!state.vectorsAvailable) return `Words only. ${state.vectorsProblem ?? 'This engine cannot hold vectors.'}`
+  if (!state.embedding.provider) return 'Words only for now: no embedding model is bound.'
+  if (!state.embedding.usable) return `Words only for now: ${state.embedding.problem ?? 'the embedding model cannot be used.'}`
+  if (!state.vectors?.readyModel) return 'Words only until the vectors are built.'
+  return 'Words, vectors, or both together.'
+}
+
+/** How much of the chunks have a vector, as a whole percentage (an empty index is whole). */
+export const vectorPercent = (embedded: number, chunks: number): number => (chunks <= 0 ? 100 : Math.min(100, Math.floor((embedded / chunks) * 100)))
+
+/** The progress of the vectors in a line: the ready index and the one being built beside it. */
+export function vectorProgressLine(v: VectorState | null): string {
+  if (!v) return 'No vectors.'
+  const ready = v.readyModel ? `${v.readyModel} (${v.readyDimension} dimensions): ${v.embedded} of ${v.chunks} chunks` : 'no index is ready yet'
+  const building = v.buildingModel ? `; building ${v.buildingModel} (${v.buildingDimension} dimensions) beside it: ${v.buildingEmbedded} of ${v.chunks} chunks, the first keeps answering until the new one is complete` : ''
+  return `${ready}${building}${v.failed > 0 ? `; ${v.failed} chunk${v.failed === 1 ? '' : 's'} failed` : ''}.`
+}
+
+/** A hit's place as a line: the heading path, or the title when it has none. */
+export const hitPlace = (h: SearchHit): string => (h.headingPath.length > 0 ? h.headingPath.join(' > ') : h.title)
+
 export const knowledgeApi = {
+  index: () => request<KnowledgeIndexState>('/api/knowledge/index'),
+  build: () => request<{ sync: { added: number; unchanged: number; removed: number }; view: KnowledgeIndexState }>('/api/knowledge/index/build', json('POST')),
+  retry: () => request<KnowledgeIndexState>('/api/knowledge/index/retry', json('POST')),
+  rebuild: () => request<KnowledgeIndexState>('/api/knowledge/index/rebuild', json('POST')),
+  bindEmbedding: (provider: string | null, model: string | null) => refused(request<KnowledgeIndexState>('/api/knowledge/index/embedding', json('PUT', { provider, model }))),
+  search: (question: string, mode: SearchMode) => request<SearchResult>('/api/knowledge/search', json('POST', { question, mode })),
   overview: () => request<KnowledgeOverview>('/api/knowledge/overview'),
   createInstall: () => request<KnowledgeOverview>('/api/knowledge/install', json('POST')),
   item: (project: string, id: string) => request<{ project: string; id: string; text: string }>(`/api/knowledge/items/${path(project, id)}`),

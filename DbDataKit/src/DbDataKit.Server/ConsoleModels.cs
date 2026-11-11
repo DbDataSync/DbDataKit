@@ -223,6 +223,39 @@ public sealed class ConsoleModels : IAgentModels
         return new(choice.Provider, choice.Model, id, problem is null, problem);
     }
 
+    /// <summary>
+    /// Binds the <c>embeddings</c> slot to a model of an embedding provider for every channel (<paramref name="provider"/> null unbinds it), keeping any binding the slot has for one channel only. The slots file is written again from what it holds (its comments are not kept);
+    /// a slots file that does not read is not touched. The model of an index is one: there is no fallback list for embeddings.
+    /// </summary>
+    public (bool Saved, IReadOnlyList<DiagnosticView> Diagnostics) BindEmbedding(string? provider, string? model)
+    {
+        var (_, read) = ReadSlots();
+        if (read.Bindings is not { } current) return (false, [.. read.Diagnostics.Select(DiagnosticView.Of)]);
+        var slots = current.Slots.ToDictionary(s => s.Key, s => (IReadOnlyDictionary<string, IReadOnlyList<SlotChoice>>)new Dictionary<string, IReadOnlyList<SlotChoice>>(s.Value, StringComparer.Ordinal), StringComparer.Ordinal);
+        var channels = slots.TryGetValue(ModelSlotNames.Embeddings, out var own) ? new Dictionary<string, IReadOnlyList<SlotChoice>>(own, StringComparer.Ordinal) : new Dictionary<string, IReadOnlyList<SlotChoice>>(StringComparer.Ordinal);
+        if (provider is null || model is null) channels.Remove(SlotBindings.AnyChannel);
+        else channels[SlotBindings.AnyChannel] = [new SlotChoice(provider, model, 0, 0)];
+        if (channels.Count == 0) slots.Remove(ModelSlotNames.Embeddings); else slots[ModelSlotNames.Embeddings] = channels;
+        return SaveSlots(SlotsYaml(new SlotBindings(slots)));
+    }
+
+    /// <summary>The slots file for bindings: <c>model-slots: 1</c> and per slot and channel the ordered choices, every value quoted so a model id such as <c>llama3.1:8b</c> reads back as it is.</summary>
+    public static string SlotsYaml(SlotBindings bindings)
+    {
+        static string Q(string v) => "\"" + v.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
+        var text = new System.Text.StringBuilder("model-slots: 1\nslots:\n");
+        foreach (var (slot, channels) in bindings.Slots.OrderBy(s => s.Key, StringComparer.Ordinal))
+        {
+            text.Append("  ").Append(slot).Append(":\n");
+            foreach (var (channel, choices) in channels.OrderBy(c => c.Key, StringComparer.Ordinal))
+            {
+                text.Append("    ").Append(Q(channel)).Append(":\n");
+                foreach (var c in choices) text.Append("      - { provider: ").Append(c.Provider).Append(", model: ").Append(Q(c.Model)).Append(" }\n");
+            }
+        }
+        return text.ToString();
+    }
+
     /// <summary>The generator of the embedding model a channel is bound to, with the id the index records it under (<c>connection/model</c>); null when nothing usable is bound.</summary>
     public (IEmbeddingGenerator<string, Embedding<float>> Generator, string ModelId)? EmbeddingFor(string? channel)
     {

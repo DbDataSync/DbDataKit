@@ -460,7 +460,7 @@ public sealed class ConsoleAgentsTests : IAsyncLifetime
         Assert.Equal(1, (int)edited!["preview"]!["changedChunks"]!);
         var (_, overview) = await Get("/api/knowledge/overview", viewer);
         Assert.False((bool)overview!["index"]!["built"]!);
-        Assert.Contains("not part of this install", (string)overview["index"]!["message"]!);
+        Assert.Contains("No index is built yet", (string)overview["index"]!["message"]!);
         Assert.Equal(1, (int)overview["projects"]![1]!["items"]!);
     }
 

@@ -15,8 +15,8 @@ public sealed record ContextPartShare(string Layer, string Id, string Version, i
 
 /// <summary>
 /// The knowledge the console reads (plan 27a KN28, KN36, KN37, KN38): two projects in its directory, <c>install-knowledge/</c> (the template of KN35: the install's guardrails in <c>policy/</c>, owned by the administrators) and <c>knowledge/</c> (items about the install's objects),
-/// each read with the strict reader. What exists to be about is <c>knowledge-subjects.json</c>: what an administrator says exists or is gone, and what the joined lineage graph of the servers says (<see cref="RefreshFromLineage"/>, plan 27a KN02), each entry saying which. There is no index here (KN07 is not built): the screens show what the files
-/// say and what they would be split into, never what a search finds.
+/// each read with the strict reader. What exists to be about is <c>knowledge-subjects.json</c>: what an administrator says exists or is gone, and what the joined lineage graph of the servers says (<see cref="RefreshFromLineage"/>, plan 27a KN02), each entry saying which. The index over them is <see cref="ConsoleKnowledgeIndex"/>; these screens show what the files
+/// say and what they would be split into.
 /// </summary>
 public sealed class ConsoleKnowledge(ConsoleSettings settings)
 {
@@ -206,7 +206,7 @@ public sealed class ConsoleKnowledge(ConsoleSettings settings)
             ["projects"] = projects,
             ["hasSubjectCatalog"] = HasCatalog,
             ["subjects"] = JsonSerializer.SerializeToNode(Subjects(), Web),
-            ["index"] = new JsonObject { ["built"] = false, ["message"] = "No index is built: the knowledge module and its embedding model are not part of this install yet. What is shown is what the files say and what they would be split into." },
+            ["index"] = new JsonObject { ["built"] = false, ["message"] = "No index is built yet: the Search and index tab builds one over these files. What is shown here is what the files say and what they would be split into." },
             ["worklists"] = JsonSerializer.SerializeToNode(Worklists.Build(allItems, catalog), Web),
         };
     }

@@ -5,18 +5,18 @@ import { CodeEditor, ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { ConsoleShell } from '../ConsoleShell'
 import { agentsApi, percent } from '../agents'
 import {
-  contextLine, isPolicyItem, knowledgeApi, parseInPlay, policyItemId, policyItemText, refreshLine, subjectSource, workActions, workWord,
-  type ChunkPreview, type KnowledgeOverview, type Reach, type ScopePreview, type WorkItem,
+  contextLine, hitPlace, isPolicyItem, knowledgeApi, modesOffered, parseInPlay, policyItemId, policyItemText, refreshLine, searchModeLine, subjectSource, vectorPercent, vectorProgressLine, workActions, workWord,
+  type ChunkPreview, type KnowledgeIndexState, type KnowledgeOverview, type Reach, type ScopePreview, type SearchMode, type SearchResult, type WorkItem,
 } from '../knowledge'
 
-type Tab = 'overview' | 'worklist' | 'items' | 'install'
+type Tab = 'overview' | 'search' | 'worklist' | 'items' | 'install'
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'overview', label: 'Index and context' }, { id: 'worklist', label: 'Worklists' }, { id: 'items', label: 'Items and preview' }, { id: 'install', label: 'Install knowledge' },
+  { id: 'overview', label: 'Index and context' }, { id: 'search', label: 'Search and index' }, { id: 'worklist', label: 'Worklists' }, { id: 'items', label: 'Items and preview' }, { id: 'install', label: 'Install knowledge' },
 ]
 
 /**
  * The console's knowledge screens (plan 27a KN28, KN36, KN37, KN38): what the files say and what an agent would be given (KN28), the owners' worklists of orphaned items (KN37), an item as it is typed with how it would be split and what
- * would be given for what is in play (KN38, the item editor), and the install knowledge project with the administrators' policy guardrails (KN36). There is no search here: the index and the embedding model are not built, and the screen says so.
+ * would be given for what is in play (KN38, the item editor), and the install knowledge project with the administrators' policy guardrails (KN36). The tab Search and index (KN28 with KN05, KN07, KN08) builds the index over the files, shows how it can be searched (words, vectors, both), the embedding connection and model, the progress of the vectors and the chunks that failed, and searches it.
  */
 export function KnowledgePage() {
   const [params, setParams] = useSearchParams()
@@ -38,6 +38,7 @@ export function KnowledgePage() {
         </div>
         <ErrorBanner error={overview.error} />
         {overview.data && tab === 'overview' && <OverviewTab overview={overview.data} />}
+        {overview.data && tab === 'search' && <SearchTab />}
         {overview.data && tab === 'worklist' && <WorklistTab overview={overview.data} />}
         {overview.data && tab === 'items' && <ItemsTab overview={overview.data} />}
         {overview.data && tab === 'install' && <InstallTab overview={overview.data} />}
@@ -320,6 +321,127 @@ function InstallTab({ overview }: { overview: KnowledgeOverview }) {
             </div></div>
           )}
         </>
+      )}
+    </div>
+  )
+}
+
+// ---- KN28 with KN05, KN07, KN08: the index, its embedding model and a search ----
+
+const MODE_WORDS: Record<SearchMode, string> = { words: 'Words', vectors: 'Vectors (meaning)', both: 'Both' }
+
+function SearchTab() {
+  const client = useQueryClient()
+  const isAdmin = useIsAdmin()
+  const index = useQuery({ queryKey: ['knowledge', 'index'], queryFn: knowledgeApi.index, refetchInterval: (q) => (q.state.data?.running ? 1500 : 6000) })
+  const models = useQuery({ queryKey: ['agents', 'models'], queryFn: agentsApi.models })
+  const state = index.data
+  const set = (d: KnowledgeIndexState) => client.setQueryData(['knowledge', 'index'], d)
+  const build = useMutation({ mutationFn: knowledgeApi.build, onSuccess: (r) => { set(r.view); client.invalidateQueries({ queryKey: ['knowledge', 'overview'] }) } })
+  const retry = useMutation({ mutationFn: knowledgeApi.retry, onSuccess: set })
+  const rebuild = useMutation({ mutationFn: knowledgeApi.rebuild, onSuccess: set })
+  return (
+    <div data-testid="knowledge-search-tab">
+      <ErrorBanner error={index.error ?? build.error ?? retry.error ?? rebuild.error} />
+      {state && (
+        <div data-testid="index-panel" data-opened={state.opened} data-running={state.running}>
+          <div className="banner" data-testid="index-message"><span>{state.message}</span></div>
+          <table className="table" data-testid="index-facts">
+            <tbody>
+              <tr><th scope="row">Words</th><td data-testid="index-words">{state.opened ? `found with the engine's own text search (${state.wordsMode})` : '-'}</td></tr>
+              <tr><th scope="row">Search</th><td data-testid="index-modes" data-vectors={state.vectorsAvailable}>{searchModeLine(state)}</td></tr>
+              <tr><th scope="row">Items and chunks</th><td data-testid="index-counts">{state.opened ? `${state.items} items in ${state.chunks} chunks` : '-'}</td></tr>
+              <tr><th scope="row">Vectors</th><td data-testid="index-progress" data-embedded={state.vectors?.embedded ?? 0} data-chunks={state.vectors?.chunks ?? 0} data-building={state.vectors?.buildingModel ?? ''}>
+                {state.vectors ? vectorProgressLine(state.vectors) : state.opened ? 'None: ' + (state.vectorsProblem ?? 'no embedding model is bound.') : '-'}
+                {state.vectors && state.vectors.chunks > 0 && <div><progress max={100} value={vectorPercent(state.vectors.buildingModel ? state.vectors.buildingEmbedded : state.vectors.embedded, state.vectors.chunks)} data-testid="index-bar" /></div>}
+              </td></tr>
+              <tr><th scope="row">Last background run</th><td data-testid="index-last-run">{state.running ? 'Running…' : state.lastRun ? `${state.lastRun.embedded} embedded, ${state.lastRun.failed} failed, ${state.lastRun.remaining} left${state.lastRun.switched ? '; switched to the new model' : ''}${state.lastRun.problem ? `. It stopped: ${state.lastRun.problem}` : ''}` : 'None yet in this session.'}</td></tr>
+            </tbody>
+          </table>
+          {isAdmin && (
+            <div style={{ margin: '8px 0' }}>
+              <button type="button" className="btn btn-sm btn-primary" disabled={build.isPending} onClick={() => build.mutate()} data-testid="index-build">{state.opened ? 'Bring the index up to date' : 'Build the index'}</button>{' '}
+              <button type="button" className="btn btn-sm" disabled={!state.vectorsAvailable || rebuild.isPending} onClick={() => rebuild.mutate()} data-testid="index-rebuild" title="Throw the vectors away and make them again; words stay">Rebuild the vectors</button>{' '}
+              <button type="button" className="btn btn-sm" disabled={state.failures.length === 0 || retry.isPending} onClick={() => retry.mutate()} data-testid="index-retry">Try the failed chunks again</button>
+            </div>
+          )}
+          <EmbeddingBox state={state} models={models.data} onChange={set} />
+          {state.failures.length > 0 && (
+            <div data-testid="index-failures" style={{ marginTop: 8 }}>
+              <strong>Chunks that could not be embedded</strong>
+              <table className="table"><thead><tr><th>Item</th><th>Chunk</th><th>Model</th><th>Tries</th><th>Why</th></tr></thead>
+                <tbody>{state.failures.map((f) => <tr key={`${f.model}/${f.itemId}/${f.seq}`} data-testid="index-failure" data-item={f.itemId}><td className="mono">{f.itemId}</td><td>{f.seq}</td><td className="mono">{f.model}</td><td>{f.attempts}</td><td>{f.message}</td></tr>)}</tbody></table>
+            </div>
+          )}
+        </div>
+      )}
+      {state && <SearchBox state={state} />}
+    </div>
+  )
+}
+
+/** The embedding connection and model of the index: what is bound, a Test that reports the dimensions, and (for an administrator) the choice. One model per index: binding another builds beside the first. */
+function EmbeddingBox({ state, models, onChange }: { state: KnowledgeIndexState; models: import('../agents').ModelsView | undefined; onChange: (d: KnowledgeIndexState) => void }) {
+  const isAdmin = useIsAdmin()
+  const embedders = (models?.providers ?? []).filter((p) => p.purpose === 'embeddings' && p.models.length > 0)
+  const [provider, setProvider] = useState('')
+  const [model, setModel] = useState('')
+  const chosen = embedders.find((p) => p.name === (provider || state.embedding.provider || embedders[0]?.name))
+  const modelId = model || (chosen?.name === state.embedding.provider ? state.embedding.model : null) || chosen?.models[0]?.id || ''
+  const bind = useMutation({ mutationFn: (v: { provider: string | null; model: string | null }) => knowledgeApi.bindEmbedding(v.provider, v.model), onSuccess: onChange })
+  const test = useMutation({ mutationFn: () => agentsApi.testProvider(chosen!.name, modelId) })
+  const bound = state.embedding
+  return (
+    <div className="card" style={{ marginTop: 8 }}><div className="card-body" data-testid="index-embedding" data-bound={bound.provider !== null} data-usable={bound.usable}>
+      <strong>Embedding model</strong>
+      <div data-testid="embedding-current">{bound.provider ? <>Bound to <span className="mono">{bound.provider}/{bound.model}</span>{bound.usable ? '.' : <> but it cannot be used: {bound.problem}</>}</> : 'No embedding model is bound; the index is searched by words.'}</div>
+      <p className="hint">An embedding model is a connection of kind <span className="mono">model-provider</span> with purpose <span className="mono">embeddings</span> (Ollama, OpenAI, Microsoft Foundry or a compatible server), added on the Agents screen, tab Models. One model per index: binding another builds a second index beside this one, which keeps answering until the new one is complete.</p>
+      {embedders.length === 0 && <div className="empty" data-testid="embedding-none">No embedding provider yet.</div>}
+      {isAdmin && embedders.length > 0 && (
+        <div>
+          <select value={chosen?.name ?? ''} onChange={(e) => { setProvider(e.target.value); setModel('') }} data-testid="embedding-provider" aria-label="Embedding connection">{embedders.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}</select>{' '}
+          <select value={modelId} onChange={(e) => setModel(e.target.value)} data-testid="embedding-model" aria-label="Embedding model">{chosen?.models.map((m) => <option key={m.id} value={m.id}>{m.id}</option>)}</select>{' '}
+          <button type="button" className="btn btn-sm" disabled={!chosen || test.isPending} onClick={() => test.mutate()} data-testid="embedding-test">Test</button>{' '}
+          <button type="button" className="btn btn-sm btn-primary" disabled={!chosen || bind.isPending} onClick={() => bind.mutate({ provider: chosen!.name, model: modelId })} data-testid="embedding-bind">Bind</button>{' '}
+          <button type="button" className="btn btn-sm" disabled={!bound.provider || bind.isPending} onClick={() => bind.mutate({ provider: null, model: null })} data-testid="embedding-unbind">Unbind</button>
+          {test.data && <div data-testid="embedding-test-result" data-ok={test.data.ok} data-dimensions={test.data.dimensions ?? ''}>{test.data.message}</div>}
+          <ErrorBanner error={test.error ?? bind.error} />
+        </div>
+      )}
+    </div></div>
+  )
+}
+
+function SearchBox({ state }: { state: KnowledgeIndexState }) {
+  const offered = modesOffered(state)
+  const [question, setQuestion] = useState('')
+  const [mode, setMode] = useState<SearchMode>('both')
+  const [result, setResult] = useState<SearchResult | null>(null)
+  const effective: SearchMode = offered.includes(mode) ? mode : 'words'
+  const run = useMutation({ mutationFn: () => knowledgeApi.search(question, effective), onSuccess: setResult })
+  return (
+    <div style={{ marginTop: 16 }} data-testid="search-box">
+      <strong>Search the knowledge</strong>
+      <form onSubmit={(e) => { e.preventDefault(); if (question.trim()) run.mutate() }}>
+        <input value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="ask in your own words" style={{ width: '60%' }} aria-label="Question" data-testid="search-question" disabled={!state.opened} />{' '}
+        {(['words', 'vectors', 'both'] as SearchMode[]).map((m) => (
+          <label key={m} style={{ marginRight: 8 }}><input type="radio" name="search-mode" checked={effective === m} disabled={!offered.includes(m)} onChange={() => setMode(m)} data-testid={`search-mode-${m}`} /> {MODE_WORDS[m]}</label>
+        ))}
+        <button type="submit" className="btn btn-sm btn-primary" disabled={!state.opened || !question.trim() || run.isPending} data-testid="search-run">Search</button>
+      </form>
+      <ErrorBanner error={run.error} />
+      {result && (
+        <div data-testid="search-result" data-used={result.used} style={{ marginTop: 8 }}>
+          <div className="hint" data-testid="search-used">Searched by {MODE_WORDS[result.used].toLowerCase()}.{result.note ? ` ${result.note}` : ''}</div>
+          {result.hits.length === 0 && <div className="empty" data-testid="search-empty">Nothing found that you may see.</div>}
+          {result.hits.map((h) => (
+            <div key={h.itemId} className="card" style={{ marginTop: 6 }} data-testid="search-hit" data-item={h.itemId}><div className="card-body">
+              <strong>{h.title}</strong> <span className="hint" data-testid="hit-place">{hitPlace(h)}</span>
+              <div style={{ whiteSpace: 'pre-wrap' }} data-testid="hit-excerpt">{h.excerpt}</div>
+              <div className="hint">from <span className="mono">{h.source}</span>, version <span className="mono">{h.version}</span></div>
+            </div></div>
+          ))}
+        </div>
       )}
     </div>
   )
