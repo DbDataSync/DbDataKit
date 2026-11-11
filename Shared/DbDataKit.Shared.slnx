@@ -53,6 +53,7 @@
     <Project Path="src/DbDataKit.Semantic.Extraction/DbDataKit.Semantic.Extraction.csproj" />
     <Project Path="src/DbDataKit.Semantic.Ssas/DbDataKit.Semantic.Ssas.csproj" />
     <Project Path="src/DbDataKit.Metadata/DbDataKit.Metadata.csproj" />
+    <Project Path="src/DbDataKit.Knowledge/DbDataKit.Knowledge.csproj" />
     <Project Path="src/DbDataKit.Lineage/DbDataKit.Lineage.csproj" />
     <Project Path="src/DbDataKit.Lineage.Cli/DbDataKit.Lineage.Cli.csproj" />
     <Project Path="src/DbDataKit.Quality/DbDataKit.Quality.csproj" />
@@ -153,6 +154,7 @@
     <Project Path="tests/DbDataKit.Semantic.Cli.Tests/DbDataKit.Semantic.Cli.Tests.csproj" />
     <Project Path="tests/DbDataKit.Serving.Semantic.Tests/DbDataKit.Serving.Semantic.Tests.csproj" />
     <Project Path="tests/DbDataKit.Metadata.Tests/DbDataKit.Metadata.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Knowledge.Tests/DbDataKit.Knowledge.Tests.csproj" />
     <Project Path="tests/DbDataKit.Lineage.Tests/DbDataKit.Lineage.Tests.csproj" />
     <Project Path="tests/DbDataKit.Lineage.Cli.Tests/DbDataKit.Lineage.Cli.Tests.csproj" />
     <Project Path="tests/DbDataKit.Quality.Tests/DbDataKit.Quality.Tests.csproj" />

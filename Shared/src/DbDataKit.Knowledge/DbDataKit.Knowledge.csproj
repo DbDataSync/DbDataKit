@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>DbDataKit.Knowledge</PackageId>
+    <Description>Knowledge for people and agents (plan 27a): the knowledge/1 item (Markdown with a front matter of role, subjects, audience and owner), folder defaults, subjects and orphans, scope matching, chunking. No server, no model.</Description>
+    <IsPackable>true</IsPackable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <EmbeddedResource Include="schemas\*.schema.json" LogicalName="DbDataKit.Knowledge.schemas.%(Filename)%(Extension)" />
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
+    <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
+  </ItemGroup>
+</Project>
