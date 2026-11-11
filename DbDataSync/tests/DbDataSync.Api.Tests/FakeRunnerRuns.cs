@@ -88,6 +88,24 @@ public sealed class FakeRunnerRuns : IRunnerSync, IRunnerRuns
             return Task.FromResult<IReadOnlyList<ClientStep>>([.. _steps.Where(s => s.Task == task && s.Step == step && (before is null || s.Entry.Started < before) && (key is null || s.Entry.Key == key)).Select(s => s.Entry).OrderByDescending(s => s.Started).Take(limit)]);
     }
 
+    /// <summary>Adds the file a step kept as its streamed result; <see cref="StepPayloadAsync"/> answers it for that task and step (a payload not added reads as one the retention removed).</summary>
+    public void AddPayload(string task, string step, Guid id, byte[] content)
+    {
+        lock (_gate) _payloads[(task, step, id)] = content;
+    }
+
+    private readonly Dictionary<(string Task, string Step, Guid Id), byte[]> _payloads = [];
+
+    public async Task<bool> StepPayloadAsync(string task, string step, Guid payload, Stream destination, CancellationToken ct)
+    {
+        Enter();
+        byte[]? content;
+        lock (_gate) content = _payloads.GetValueOrDefault((task, step, payload));
+        if (content is null) return false;
+        await destination.WriteAsync(content, ct);
+        return true;
+    }
+
     public Task<IReadOnlyList<ClientCheckpointItem>> CheckpointAsync(string task, string name, CancellationToken ct)
     {
         Enter();

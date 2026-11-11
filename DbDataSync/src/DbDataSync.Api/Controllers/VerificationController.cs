@@ -26,6 +26,7 @@ public sealed class VerificationController(
     ProcessSupervisor supervisor,
     DbDataSync.Api.Runner.RunnerDispatch runnerDispatch,
     VerificationResultStore results,
+    DbDataSync.Api.Runner.RunnerVerificationResults runnerResults,
     ApiOptions options) : ControllerBase
 {
     /// <summary>
@@ -67,9 +68,22 @@ public sealed class VerificationController(
 
     [Authorize(Policies.Viewer)]
     [HttpGet("verification-results")]
-    public ActionResult<IReadOnlyList<VerificationResultRecord>> List(
-        string replicationName, [FromQuery] string? mappingName = null, [FromQuery] int limit = 50) =>
-        Ok(results.List(replicationName, mappingName, limit));
+    public async Task<ActionResult<IReadOnlyList<VerificationResultRecord>>> List(
+        string replicationName, CancellationToken cancellationToken, [FromQuery] string? mappingName = null, [FromQuery] int limit = 50)
+    {
+        if (!runnerDispatch.RunnerOwns(replicationName))
+            return Ok(results.List(replicationName, mappingName, limit));
+
+        // owned by the runner: its results are steps of its runs (plan 28c E06e), not rows of this process's state
+        try
+        {
+            return Ok(await runnerResults.ListAsync(replicationName, mappingName, limit, cancellationToken));
+        }
+        catch (DbDataSync.Api.Runner.RunnerUnavailableException ex)
+        {
+            return StatusCode(503, new { error = ex.Message });
+        }
+    }
 
     /// <summary>
     /// One page of a result, read back from the parquet the runner wrote.
@@ -95,6 +109,20 @@ public sealed class VerificationController(
         [FromQuery] int limit = 100,
         [FromQuery] bool differingOnly = false)
     {
+        if (runnerDispatch.RunnerOwns(replicationName))
+        {
+            try
+            {
+                var read = await runnerResults.ReadPageAsync(replicationName, id, offset, limit, differingOnly, cancellationToken);
+                if (read.NotFound) return NotFound();
+                return read.Page is { } page ? Ok(page) : NotFound(new { error = read.Error });
+            }
+            catch (DbDataSync.Api.Runner.RunnerUnavailableException ex)
+            {
+                return StatusCode(503, new { error = ex.Message });
+            }
+        }
+
         if (ResolveFile(replicationName, id) is not { } path)
             return NotFound();
 
@@ -120,6 +148,9 @@ public sealed class VerificationController(
     [HttpDelete("verification-results/{id:long}")]
     public IActionResult Delete(string replicationName, long id)
     {
+        if (runnerDispatch.RunnerOwns(replicationName))
+            return StatusCode(409, new { error = "The results of a replication the runner owns are kept by the runner's retention with the run that made them; they are not deleted here." });
+
         if (ResolveFile(replicationName, id) is not { } path)
             return NotFound();
 

@@ -40,6 +40,8 @@ public sealed class ClientRunnerSync(RunnerPublishClient client, RunnerLink link
 
     public Task<IReadOnlyList<ClientStep>> StepsAsync(string task, string step, int limit, DateTimeOffset? before, string? key, CancellationToken ct) => client.StepsAsync(link.Server, null, link.Package, link.Channel, task, step, limit, before, key, null, ct);
 
+    public Task<bool> StepPayloadAsync(string task, string step, Guid payload, Stream destination, CancellationToken ct) => client.StepPayloadAsync(link.Server, null, link.Package, link.Channel, task, step, payload, destination, null, ct);
+
     public Task<ClientTaskSchedule> ScheduleOfAsync(string task, CancellationToken ct) => client.ScheduleOfAsync(link.Server, null, link.Package, link.Channel, task, null, ct);
 
     public Task SetOwnerAsync(string task, string owner, string? reason, ClientSeed? seed, CancellationToken ct) => client.SetOwnerAsync(link.Server, null, link.Package, link.Channel, task, owner, reason, seed, null, ct);

@@ -18,6 +18,7 @@ namespace DbDataKit.Runner.Api;
 /// <item><c>GET /api/v1/status</c>: the engine of the state, the channels served, what this machine reports (<c>LimitCapabilities</c>), this instance's id and every task's status: next due, last run, what is running or waiting, whether it is paused.</item>
 /// <item><c>GET /api/v1/runs[?package=&amp;channel=&amp;task=&amp;outcome=&amp;limit=&amp;before=]</c>: the run history, newest first; <c>task</c> needs the package and the channel.</item>
 /// <item><c>GET /api/v1/runs/{id}</c> and <c>.../runs/{id}/logs[?after=&amp;limit=]</c>: one run and its log in order, a page at a time by line id (plan 28c E13); <c>.../tasks/{package}/{channel}/{task}/steps/{name}[?limit=&amp;before=&amp;key=]</c>: the completed steps of that name across the task's runs, newest first. A viewer reads all three.</item>
+/// <item><c>.../tasks/{package}/{channel}/{task}/steps/{name}/payloads/{id}</c>: the file a completed step of that name kept as its streamed result (plan 28c E06e); 404 when it is not one of that task's or the retention removed it. A viewer reads it.</item>
 /// <item><c>.../tasks/{package}/{channel}/{task}/schedule</c>, <c>.../owner</c> and <c>.../decisions</c>: who schedules a task while a product's own scheduler is still in the picture (plan 28c E09), see <c>MapOwnership</c>.</item>
 /// <item><c>POST /api/v1/tasks/{package}/{channel}/{task}/run</c> with an optional <c>{"inputs": {"name": "value"}}</c>: queues a run now (202 with its run id; 409 when one is queued or running already). <c>.../pause</c> and <c>.../resume</c>.</item>
 /// </list>
@@ -170,6 +171,20 @@ public static class RunnerApi
                     ["result"] = step.ResultJson is { } json ? JsonNode.Parse(json) : null,
                 }).ToArray()),
             });
+        });
+
+        // the streamed result of a step (plan 28c E06e): the file a step kept as a payload of its run (Sync's verification result). Viewer, as the steps are. Only a payload that is the result of a completed step of that name of that task is served.
+        app.MapGet($"{root}/tasks/{{package}}/{{channel}}/{{task}}/steps/{{name}}/payloads/{{id:guid}}", (string package, string channel, string task, string name, Guid id, HttpContext context) =>
+        {
+            if (!ParseTask(package, channel, task, out _, out var bad)) return bad!;
+            if (Deny(context, ServerRole.Viewer) is { } denied) return denied;
+            if (!PackageManifestValidator.NameRule.IsMatch(name)) return Results.BadRequest(new { error = $"'{name}' is not a step name." });
+            var gone = Results.NotFound(new { error = $"There is no result {id} of the step {name} of {package}/{channel}/{task} (the retention may have removed it)." });
+            if (!new StepStore(state, new ProgressKey(package, channel, task)).IsResultPayload(name, id)) return gone;
+            PayloadReader reader;
+            try { reader = new PayloadStore(state).OpenRead(id); }
+            catch (FileNotFoundException) { return gone; }
+            return Results.Stream(reader, reader.Info.MediaType ?? "application/octet-stream");
         });
 
         app.MapPost($"{root}/tasks/{{package}}/{{channel}}/{{task}}/run", async (string package, string channel, string task, HttpContext context) =>

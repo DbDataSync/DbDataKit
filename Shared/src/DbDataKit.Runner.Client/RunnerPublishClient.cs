@@ -430,6 +430,18 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
         return [.. JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!["steps"]!.AsArray().Select(s => new ClientStep((string)s!["key"]!, Time(s["started"])!.Value, Time(s["completed"]), s["result"]?.ToJsonString()))];
     }
 
+    /// <summary>Copies the file a completed step of that name kept as its streamed result (<c>.../steps/{name}/payloads/{id}</c>) into <paramref name="destination"/>; false when the runner has no such result (it is not the task's, or the retention removed it).</summary>
+    public async Task<bool> StepPayloadAsync(string server, string? code, string package, string channel, string task, string step, Guid payload, Stream destination, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        using var response = await link.SendAsync(HttpMethod.Get, TaskPath(package, channel, task) + "/steps/" + Uri.EscapeDataString(step) + "/payloads/" + payload.ToString("D"), null, ct);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return false;
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to read the result {payload} of the step {step} of {package}/{channel}/{task}", ct);
+        await using var body = await response.Content.ReadAsStreamAsync(ct);
+        await body.CopyToAsync(destination, ct);
+        return true;
+    }
+
     /// <summary>The task's row of the runner's status (<c>GET /api/v1/status</c>: owner, next due, last run, running, queued, paused), or null when the runner lists no such task.</summary>
     public async Task<ClientTaskStatus?> TaskStatusAsync(string server, string? code, string package, string channel, string task, Action<string>? log = null, CancellationToken ct = default)
     {
