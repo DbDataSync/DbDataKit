@@ -81,7 +81,7 @@ export function LineagePage() {
                 </div>
               )
             })()}
-            <LineageGraphView graph={graph} selected={selected} onSelect={setSelected} height={640} />
+            <LineageGraphView graph={graph} selected={selected} onSelect={setSelected} height={640} runs={lineage.data?.runs} />
           </>
         )}
         {graph && graph.nodes.length === 0 && graph.servers.length > 0 && !graph.error && <div className="empty" data-testid="lineage-empty">The servers that answered have no lineage to show yet.</div>}

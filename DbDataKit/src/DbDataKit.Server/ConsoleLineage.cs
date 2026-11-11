@@ -4,10 +4,11 @@ using DbDataKit.Lineage;
 namespace DbDataKit.Server;
 
 /// <summary>What one server said about its lineage when it was asked: its graph, what it left out, or why it gave none.</summary>
-public sealed record ServerLineageAnswer(string Server, string InstanceId, string? Product, LineageGraph? Graph, IReadOnlyList<string> Problems, string? Error, DateTimeOffset At);
+public sealed record ServerLineageAnswer(string Server, string InstanceId, string? Product, LineageGraph? Graph, IReadOnlyList<string> Problems, string? Error, DateTimeOffset At, IReadOnlyList<EdgeRun>? Runs = null);
 
 /// <summary>The graphs of every server, joined (plan 18, G09).</summary>
-public sealed record JoinedLineage(LineageGraph Graph, IReadOnlyList<ServerLineageAnswer> Servers, string? JoinError);
+/// <param name="Runs">The newest run of each edge of the joined graph (plan 18, G10b): of the runs the servers sent, the latest per edge, only for an edge the graph has.</param>
+public sealed record JoinedLineage(LineageGraph Graph, IReadOnlyList<ServerLineageAnswer> Servers, string? JoinError, IReadOnlyList<EdgeRun>? Runs = null);
 
 /// <summary>
 /// The suite's lineage as the console sees it: each server that keeps one (a Build server, a Sync server) is asked for its design graph through the relay, as the signed-in person, and the graphs are joined by identity, so a
@@ -29,7 +30,14 @@ public sealed class ConsoleLineage(ConsoleInstances instances, ConsoleRelay rela
         var statuses = await instances.StatusOfAllAsync(ct);
         var answers = await Task.WhenAll(statuses.Select(status => AnswerAsync(status, refresh, ct)));
         var kept = answers.Where(a => a is not null).Select(a => a!).OrderBy(a => a.Server, StringComparer.Ordinal).ToList();
-        try { return new JoinedLineage(LineageGraph.Merge(kept.Where(a => a.Graph is not null).Select(a => a.Graph!)), kept, null); }
+        try
+        {
+            var graph = LineageGraph.Merge(kept.Where(a => a.Graph is not null).Select(a => a.Graph!));
+            var edges = graph.Edges.Select(e => e.Key).ToHashSet(StringComparer.Ordinal);
+            // two servers can know one edge (a table both read); the newer run is what happened last
+            var runs = kept.SelectMany(a => a.Runs ?? []).Where(r => edges.Contains(r.EdgeKey)).GroupBy(r => r.EdgeKey, StringComparer.Ordinal).Select(g => g.OrderByDescending(r => r.At).First()).ToList();
+            return new JoinedLineage(graph, kept, null, runs);
+        }
         catch (LineageGraphException ex) { return new JoinedLineage(LineageGraph.Empty, kept, $"The servers' graphs cannot be joined: {ex.Message}"); }
     }
 
@@ -48,7 +56,7 @@ public sealed class ConsoleLineage(ConsoleInstances instances, ConsoleRelay rela
             try
             {
                 var problems = body?["problems"] is System.Text.Json.Nodes.JsonArray list ? list.Select(p => p?.GetValue<string>() ?? "").ToList() : [];
-                answer = new(instance.Name, instance.InstanceId, status.Product, LineageJson.Read(body), problems, null, _clock.GetUtcNow());
+                answer = new(instance.Name, instance.InstanceId, status.Product, LineageJson.Read(body), problems, null, _clock.GetUtcNow(), LineageJson.ReadRuns(body));
             }
             catch (Exception ex) when (ex is LineageGraphException or InvalidOperationException or FormatException)
             {

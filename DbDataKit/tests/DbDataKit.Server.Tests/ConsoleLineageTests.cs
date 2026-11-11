@@ -54,6 +54,12 @@ public sealed class ConsoleLineageTests : IAsyncLifetime
                 if (syncFails) return Results.Json(new { error = "the configuration cannot be read" }, statusCode: 500);
                 var document = LineageJson.Write(SyncGraph());
                 document["problems"] = new JsonArray("Replication 'old' is left out: its configuration could not be read (ConfigFileException).");
+                // the newest run of the replication's edge (plan 18, G10b); one of an edge the graph does not have is dropped by the join
+                document["runs"] = LineageJson.WriteRuns(
+                [
+                    new EdgeRun(Crm, Warehouse, EdgeKind.Replicates, new DateTimeOffset(2026, 11, 10, 8, 0, 0, TimeSpan.Zero), RunOutcome.Failed, 12),
+                    new EdgeRun(Crm, Model, EdgeKind.Replicates, new DateTimeOffset(2026, 11, 10, 8, 0, 0, TimeSpan.Zero), RunOutcome.Succeeded),
+                ]);
                 return Results.Json(document);
             });
         });
@@ -116,6 +122,16 @@ public sealed class ConsoleLineageTests : IAsyncLifetime
         Assert.Equal(Warehouse, (string)block["node"]!);
         Assert.Equal(["customers_fresh"], block["checks"]!.AsArray().Select(c => (string)c!));
         Assert.Equal([Model], block["stops"]!.AsArray().Select(r => (string)r!["id"]!));
+    }
+
+    [Fact]
+    public async Task The_newest_run_of_each_edge_comes_with_the_graph_and_a_run_of_an_edge_it_does_not_have_is_left_out()
+    {
+        var (_, body) = await Get("/api/lineage");
+
+        var run = Assert.Single(LineageJson.ReadRuns(body));
+        Assert.Equal((Crm, Warehouse, EdgeKind.Replicates, RunOutcome.Failed, 12L), (run.From, run.To, run.Kind, run.Outcome, run.Rows));
+        Assert.Equal(new DateTimeOffset(2026, 11, 10, 8, 0, 0, TimeSpan.Zero), run.At);
     }
 
     [Fact]

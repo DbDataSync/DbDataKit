@@ -53,6 +53,7 @@ public sealed class LineageController(ConsoleLineage lineage, ConsoleQuality qua
         var graph = joined.Graph.WithChecks(ConsoleQuality.ChecksOf(await quality.OverviewAsync(cancellationToken)));
         var document = LineageJson.Write(graph);
         document["fingerprint"] = joined.Graph.Fingerprint();
+        document["runs"] = LineageJson.WriteRuns(joined.Runs ?? []);
         document["blocks"] = new JsonArray(graph.Blocks().Select(b => (JsonNode)new JsonObject
         {
             ["node"] = b.Blocked.Id, ["name"] = b.Blocked.Name, ["checks"] = new JsonArray(b.Checks.Select(c => (JsonNode)JsonValue.Create(c)!).ToArray()), ["since"] = b.Since,

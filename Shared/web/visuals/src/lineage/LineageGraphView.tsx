@@ -3,6 +3,7 @@ import { Background, Controls, Handle, MarkerType, Position, ReactFlow, type Edg
 import { layoutLineage } from './layout'
 import { COLUMN_HEIGHT, HEADER_HEIGHT, projectLineage } from './project'
 import { reach } from './reach'
+import { runLabel, runsOfLinks, type LineageRunDoc } from './runs'
 import type { LineageCard, LineageGraphDoc, PlacedCard } from './types'
 
 /** What a card is to the one selected: it, what feeds it, what it feeds, or none of those once something is selected. */
@@ -53,13 +54,15 @@ export interface LineageGraphViewProps {
   /** The card selected, if the page decides it (then `onSelect` says what was clicked); left out, the view keeps its own. */
   selected?: string | null
   onSelect?: (id: string | null) => void
+  /** The newest run of each edge (plan 18 G10b): a line whose edge failed is marked, one that ran is marked as having run. */
+  runs?: readonly LineageRunDoc[]
 }
 
 /**
  * The lineage graph (plan 19 Y04, plan 18 G10): the joined graph of the servers as cards left to right, at the table level, a dataset opening to its columns. Laid out by dagre; drawn by React Flow, which renders
  * only the cards in view. The import of `@xyflow/react/dist/style.css` is in `styles.css`.
  */
-export function LineageGraphView({ graph, initiallyExpanded = [], height = 600, selected: controlled, onSelect }: LineageGraphViewProps) {
+export function LineageGraphView({ graph, initiallyExpanded = [], height = 600, selected: controlled, onSelect, runs }: LineageGraphViewProps) {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set(initiallyExpanded))
   const [own, setOwn] = useState<string | null>(null)
   const selected = controlled === undefined ? own : controlled
@@ -76,15 +79,16 @@ export function LineageGraphView({ graph, initiallyExpanded = [], height = 600, 
     const reached = selected && projection.cards.some((c) => c.id === selected) ? reach(projection, selected) : null
     const stateOf = (id: string): CardState => (!reached ? 'plain' : id === selected ? 'selected' : reached.upstream.has(id) ? 'upstream' : reached.downstream.has(id) ? 'downstream' : 'dim')
     const nodes: Node<CardData>[] = placed.map((card) => ({ id: card.id, type: 'card', position: { x: card.x, y: card.y }, data: { card, state: stateOf(card.id), onToggle: toggle }, draggable: false }))
+    const linkRuns = runsOfLinks(graph, projection.links, runs)
     const edges: Edge[] = projection.links.map((link) => ({
       id: link.id, source: link.from, target: link.to,
       style: reached && (stateOf(link.from) === 'dim' || stateOf(link.to) === 'dim' || (stateOf(link.from) === 'downstream' && stateOf(link.to) === 'upstream')) ? { opacity: 0.15 } : undefined,
       sourceHandle: link.fromColumn ? `out:${link.fromColumn}` : 'out', targetHandle: link.toColumn ? `in:${link.toColumn}` : 'in',
-      markerEnd: { type: MarkerType.ArrowClosed }, className: `lineage-link lineage-link-${link.kind}`,
-      label: link.folded > 1 ? `${link.kind} (${link.folded})` : link.kind, data: { detail: link.detail },
+      markerEnd: { type: MarkerType.ArrowClosed }, className: `lineage-link lineage-link-${link.kind}${linkRuns.has(link.id) ? ` lineage-run-${linkRuns.get(link.id)!.outcome}` : ''}`,
+      label: runLabel(link.folded > 1 ? `${link.kind} (${link.folded})` : link.kind, linkRuns.get(link.id)), data: { detail: link.detail, run: linkRuns.get(link.id)?.outcome },
     }))
     return { nodes, edges }
-  }, [graph, expanded, selected])
+  }, [graph, expanded, selected, runs])
 
   return (
     <div className="lineage-graph" style={{ height }} data-testid="lineage-graph">

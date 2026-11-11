@@ -1,5 +1,5 @@
 import { request } from '@dbdatakit/shell'
-import type { LineageGraphDoc } from '@dbdatakit/visuals'
+import type { LineageGraphDoc, LineageRunDoc } from '@dbdatakit/visuals'
 
 /** A server this console manages, with how it answered when it was last asked. */
 export interface InstanceSummary {
@@ -54,6 +54,8 @@ export interface LineageAnswer extends LineageGraphDoc {
   fingerprint: string
   servers: LineageServer[]
   blocks?: LineageBlock[]
+  /** The newest run of each edge the servers know (plan 18 G10b): a failed one is marked on its line. */
+  runs?: LineageRunDoc[]
   error?: string
 }
 
