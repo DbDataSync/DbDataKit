@@ -18,6 +18,9 @@ public sealed record WorkspaceBuildRow(Guid Id, string Project, string Workspace
 /// <summary>A target and the reference to the secret that holds the publisher's key for it.</summary>
 public sealed record PublisherKeyRow(string Name, string SecretRef, DateTimeOffset CreatedAt, string CreatedBy, DateTimeOffset UpdatedAt);
 
+/// <summary>A person's roles in the Workspace: <paramref name="Project"/> null is the whole Workspace. <paramref name="Roles"/> are names of <see cref="WorkspaceStore.RoleNames"/>.</summary>
+public sealed record WorkspaceRoleRow(string UserId, string? Project, IReadOnlyList<string> Roles, string GrantedBy, DateTimeOffset GrantedAt);
+
 /// <summary>
 /// Writes and reads the <c>workspace</c> module (<see cref="WorkspaceModule"/>). A change to a draft and the event that says so are written in <b>one transaction</b>, so the history never lacks a draft's creation or end.
 /// </summary>
@@ -259,6 +262,60 @@ public sealed class WorkspaceStore(StateDatabase database)
             using var delete = database.Command(Module, connection, "DELETE FROM {table:publisher_key} WHERE name = $name;");
             delete.Bind(database, "name", name);
             return delete.ExecuteNonQuery() > 0;
+        });
+
+    // ---- the workspace roles (plan 33 SC06) ----
+
+    /// <summary>The roles of the workspace namespace: <c>viewer</c> reads, <c>author</c> edits drafts, <c>publisher</c> merges and publishes, <c>admin</c> makes projects, publisher keys and grants. Each is granted on its own (none implies another but reading).</summary>
+    public static IReadOnlyList<string> RoleNames { get; } = ["viewer", "author", "publisher", "admin"];
+
+    private const string Everywhere = "*";
+
+    /// <summary>Sets the roles <paramref name="userId"/> holds in <paramref name="project"/> (null: the whole Workspace), replacing what they held there. No roles removes the row. A name that is not a role is refused naming the roles.</summary>
+    public void SetRoles(string userId, string? project, IEnumerable<string> roles, string by)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(userId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(by);
+        var chosen = roles.Select(r => r.Trim().ToLowerInvariant()).Where(r => r.Length > 0).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+        foreach (var role in chosen)
+            if (!RoleNames.Contains(role)) throw new ArgumentException($"'{role}' is not a Workspace role; the roles are {string.Join(", ", RoleNames)}.", nameof(roles));
+        var scope = project ?? Everywhere;
+        var now = database.Time.GetUtcNow();
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var transaction = database.BeginTransaction(connection, Module);
+            using (var delete = database.Command(Module, connection, transaction, "DELETE FROM {table:workspace_role} WHERE user_id = $user AND project = $project;"))
+            {
+                delete.Bind(database, "user", userId).Bind(database, "project", scope);
+                delete.ExecuteNonQuery();
+            }
+
+            if (chosen.Count > 0)
+            {
+                using var insert = database.Command(Module, connection, transaction, "INSERT INTO {table:workspace_role} (user_id, project, roles, granted_by, granted_at) VALUES ($user, $project, $roles, $by, $at);");
+                insert.Bind(database, "user", userId).Bind(database, "project", scope).Bind(database, "roles", string.Join(',', chosen)).Bind(database, "by", by).Bind(database, "at", now);
+                insert.ExecuteNonQuery();
+            }
+
+            transaction.Commit();
+        });
+    }
+
+    /// <summary>Every grant, or the grants of one person.</summary>
+    public IReadOnlyList<WorkspaceRoleRow> Roles(string? userId = null) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var command = database.Command(Module, connection, userId is null
+                ? "SELECT user_id, project, roles, granted_by, granted_at FROM {table:workspace_role} ORDER BY user_id, project;"
+                : "SELECT user_id, project, roles, granted_by, granted_at FROM {table:workspace_role} WHERE user_id = $user ORDER BY project;");
+            if (userId is not null) command.Bind(database, "user", userId);
+            using var reader = command.ExecuteReader();
+            var rows = new List<WorkspaceRoleRow>();
+            while (reader.Read())
+                rows.Add(new WorkspaceRoleRow(reader.GetString(0), reader.GetString(1) == Everywhere ? null : reader.GetString(1), reader.GetString(2).Split(',', StringSplitOptions.RemoveEmptyEntries), reader.GetString(3), reader.Time(4)));
+            return rows;
         });
 
     private static string? Text(DbDataReader reader, int ordinal) => reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);

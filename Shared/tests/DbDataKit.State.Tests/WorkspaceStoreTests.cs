@@ -51,7 +51,7 @@ public sealed class WorkspaceStoreTests : IDisposable
         Assert.Equal("workspace", WorkspaceModule.Module.Name);
         Assert.Equal(1, WorkspaceModule.Module.Version);
         Assert.Equal(StateScopeKind.Service, WorkspaceModule.Module.Scope);
-        Assert.Equal(["build", "project", "publisher_key", "workspace", "workspace_event"], StateTableDefinitions.Read(WorkspaceModule.Module).Select(t => t.Name).Order());
+        Assert.Equal(["build", "project", "publisher_key", "workspace", "workspace_event", "workspace_role"], StateTableDefinitions.Read(WorkspaceModule.Module).Select(t => t.Name).Order());
         Assert.All(StateTableDefinitions.Read(WorkspaceModule.Module), t => Assert.NotEmpty(t.PrimaryKey));
     }
 
@@ -61,7 +61,7 @@ public sealed class WorkspaceStoreTests : IDisposable
         var (_, database, _) = Open(engine);
         Assert.Equal("workspace", database.Layout!.Namespace(WorkspaceModule.Name).Module.Name);
         Assert.Equal(1, Assert.Single(database.RegisteredModules(), m => m.Module == "workspace").Version);
-        foreach (var table in new[] { "project", "workspace", "workspace_event", "build", "publisher_key" }) Assert.Equal(0, Count(database, table));
+        foreach (var table in new[] { "project", "workspace", "workspace_event", "build", "publisher_key", "workspace_role" }) Assert.Equal(0, Count(database, table));
     }
 
     [Theory, MemberData(nameof(Engines))]
@@ -208,6 +208,26 @@ public sealed class WorkspaceStoreTests : IDisposable
             Assert.Throws<ArgumentException>(() => store.SetPublisherKey("t", bad, "ada"));
 
         Assert.Equal(0, Count(database, "publisher_key"));
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public void Roles_are_granted_replaced_listed_and_removed_per_person_and_project_and_a_name_that_is_not_a_role_is_refused(string engine)
+    {
+        var (store, database, _) = Open(engine);
+
+        store.SetRoles("u1", null, ["viewer", "Author"], "root");
+        store.SetRoles("u1", "orders", ["publisher"], "root");
+        store.SetRoles("u2", null, ["admin"], "root");
+
+        var mine = store.Roles("u1");
+        Assert.Equal([("*", "author,viewer"), ("orders", "publisher")], mine.OrderBy(r => r.Project ?? "*", StringComparer.Ordinal).Select(r => (r.Project ?? "*", string.Join(',', r.Roles))));
+        Assert.Equal(3, store.Roles().Count);
+        store.SetRoles("u1", null, ["viewer"], "root");                         // replaces what they held there
+        Assert.Equal("viewer", string.Join(',', store.Roles("u1").Single(r => r.Project is null).Roles));
+        store.SetRoles("u1", "orders", [], "root");                             // none removes the row
+        Assert.Single(store.Roles("u1"));
+        Assert.Throws<ArgumentException>(() => store.SetRoles("u1", null, ["owner"], "root"));
+        Assert.Equal(2, Count(database, "workspace_role"));
     }
 
     // ---- retention ----

@@ -58,6 +58,27 @@ public sealed class ConsoleWorkspace : IDisposable
     /// <summary>The id the engine reports as its instance: the console's own, as the Workspace is part of it.</summary>
     public string InstanceId => ConsoleWorkspaceSettings.ServerId;
 
+    /// <summary>
+    /// What a person holds in the Workspace (plan 33 SC06): the workspace role namespace, granted on its own (<see cref="WorkspaceStore.SetRoles"/>) and never implied by a console role, an administrator's included. <c>viewer</c> reads, <c>author</c> edits drafts,
+    /// <c>publisher</c> merges and publishes (the engine's approver role: the publish act needs it and no other), <c>admin</c> makes projects, publisher keys and grants. The whole-Workspace roles, and those in single projects.
+    /// </summary>
+    public (ServerRole Roles, Dictionary<string, ServerRole> Projects) RolesOf(string userId)
+    {
+        var all = ServerRole.None;
+        var projects = new Dictionary<string, ServerRole>(StringComparer.Ordinal);
+        foreach (var grant in Store.Roles(userId))
+        {
+            var held = ServerRole.None;
+            foreach (var name in grant.Roles)
+                held |= name switch { "viewer" => ServerRole.Viewer, "author" => ServerRole.Author, "publisher" => ServerRole.Approver, "admin" => ServerRole.Admin, _ => ServerRole.None };
+            held = ServerRoles.Close(held);
+            if (grant.Project is null) all |= held;
+            else projects[grant.Project] = projects.GetValueOrDefault(grant.Project) | held;
+        }
+
+        return (all, projects);
+    }
+
     public void Dispose() => Builds.Dispose();
 }
 
