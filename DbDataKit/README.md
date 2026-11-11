@@ -96,9 +96,12 @@ runner:
   data_directory: runner          # cache, scratch and socket; default: `runner` in the console's directory
   require_separate_account: false # true: packages of its own are refused while their tasks would run under the console's account
   retention_every_minutes: 60     # how often the console's own state-retention task runs
+  backup_directory: backups       # a folder (relative to the console's directory): the state-backup task writes a verified snapshot of the console's state there; unset: no backup task
+  backup_every_hours: 24          # how often (a day by default)
+  backup_keep: 7                  # how many stay: the newest (7 by default)
 ```
 
-What it runs: the tasks of packages published to a channel it serves, each **in a process of its own** with the time and memory limits of any runner, and the console's own system tasks (package `console-system`, channel `system`), which run in the console's process: `state-retention` (the shared retention job over the console's state, on its schedule) and `evaluation`, a placeholder for plan 27's evaluation runs. A product's own housekeeping stays with the product. The runner's version is the console's.
+What it runs: the tasks of packages published to a channel it serves, each **in a process of its own** with the time and memory limits of any runner, and the console's own system tasks (package `console-system`, channel `system`), which run in the console's process: `state-retention` (the shared retention job over the console's state, on its schedule), `state-backup` (only with `runner.backup_directory`: a snapshot of the console's state written to that folder, checked against its own manifest, the newest `backup_keep` kept, a failed one pruning nothing and leaving no half-written folder; restore is `dbdatakit state import --from <folder>` into an empty database; on SQL Server the export reads committed rows table by table) and `evaluation`, a placeholder for plan 27's evaluation runs. A product's own housekeeping stays with the product. The runner's version is the console's.
 
 **Production is an administrator's recorded choice.** Until then publishing or activating into the production channel (`prod`) is refused with a message that names the choice, and the runner serves no production channel. `dbdatakit runner accept-production --yes [--note <text>]` records it (audited: who and when; so does `POST /api/embedded-runner/accept-production` with `{"confirmed": true}` for an administrator) and the console then logs, and the runner screens show, the warning that **production schedules stop when the console stops**. `dbdatakit runner revoke-production` takes it back.
 

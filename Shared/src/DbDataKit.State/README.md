@@ -99,6 +99,8 @@ The structure is the same whatever the topology; which services share a database
 
 ## Moving state between engines
 
+**Backups.** `StateBackupJob` (`DbDataKit.State.Engines`) writes the same snapshot into `state-<UTC time>` folders of a directory, verified against its own manifest before the folder is named, the newest N kept; the console runs it as the system task `state-backup`. A restore is the import below into an empty database.
+
 Moving is **offline**: the service is stopped (a restart is accepted, it is rare), the state is exported, imported into an empty database, verified and the settings are switched. The old database is left untouched, so going back is a settings change.
 
 * **The unit is a snapshot** (`StateSnapshotWriter`, `StateSnapshotReader`): a directory with `manifest.json` (format `state-snapshot/1`: the modules with versions and checksums, per-table row counts and SHA-256 digests; written last, so a half-written directory has none), one gzipped JSON-lines file per table (`tables/<module>.<table>.jsonl.gz`, rows in the logical types) and the payload chunks as `payloads/<id>.bin`. It is readable, diffable and engine-neutral. The same format is the backup format.

@@ -29,6 +29,7 @@ public sealed class ConsoleRunner : IHostedService, IAsyncDisposable
     private readonly StateDatabase _state;
     private readonly ILogger _log;
     private readonly ConsoleChannels _channels;
+    private readonly string _consoleDirectory;
     private RunnerHost? _host;
 
     public ConsoleRunner(ConsoleRunnerSettings settings, ConsoleSettings console, StateDatabase state, ILogger log)
@@ -40,6 +41,7 @@ public sealed class ConsoleRunner : IHostedService, IAsyncDisposable
         _channels = new ConsoleChannels(settings, Posture);
         Publishing = new RunnerPublishing(state, serviceId: ConsoleState.ServiceId, instanceLease: null) { ChannelRefusal = Refusal };
         Directory = settings.DirectoryFor(console.Directory);
+        _consoleDirectory = console.Directory;
         Retention = console.State?.Retention;
         Version = ConsoleHost.Version;
     }
@@ -139,7 +141,10 @@ public sealed class ConsoleRunner : IHostedService, IAsyncDisposable
         System.IO.Directory.CreateDirectory(Directory);
         // the console's own tasks are published first, in process, so the first tick has them
         PublishSystemPackage();
-        var system = new ConsoleSystemTasks(_state, Retention);
+        var backup = _settings.BackupFor(_consoleDirectory) is { } backupSettings
+            ? new DbDataKit.State.Engines.Snapshots.StateBackupJob(_state, ConsoleState.ModulesFor(_settings), ConsoleState.ScopeFor(_settings), backupSettings)
+            : null;
+        var system = new ConsoleSystemTasks(_state, Retention, backup);
         var hostSettings = new RunnerHostSettings(Directory)
         {
             Channels = _channels,
@@ -172,7 +177,7 @@ public sealed class ConsoleRunner : IHostedService, IAsyncDisposable
     private void PublishSystemPackage()
     {
         var actor = new RunnerActor("system:console", "dbdatakit console", "command");
-        var manifest = ConsoleSystemTasks.Manifest(_settings.RetentionEvery);
+        var manifest = ConsoleSystemTasks.Manifest(_settings.RetentionEvery, _settings.BackupDirectory is { Length: > 0 } ? _settings.BackupEvery : null);
         Publishing.Publish(new PublishInput(ConsoleSystemTasks.Package, manifest, [], ConsoleRunnerSettings.SystemChannel, PublishMode.Serve, Note: "the console's own system tasks (started with the console)"), actor, RunnerPublishing.InstallVerb);
     }
 
