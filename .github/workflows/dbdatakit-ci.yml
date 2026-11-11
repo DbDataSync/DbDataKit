@@ -48,6 +48,14 @@ jobs:
           product: DbDataKit
           global-json: DbDataKit/global.json
       - run: dotnet build DbDataKit.slnf -c Release
+      # The host's state tests (ConsoleStateEngineTests, ConsoleActivityTests, the state verbs) run on SQL Server and PostgreSQL; without the engines they skip, 31 of them (docs/ci-lessons.md).
+      # Docker is on the Linux runner only.
+      - name: Start the test SQL Server and PostgreSQL
+        if: runner.os == 'Linux'
+        working-directory: .
+        run: |
+          testenv/testenv.sh up mssql postgres
+          testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
       - run: dotnet test --project tests/DbDataKit.Server.Tests -c Release --no-build --minimum-expected-tests 10
 
   # The real programs in one run (plan 13a, T12; E05 adds a Sync server): a Build server and a Gateway started from their built output, a console in the test between them. A Build server publishes and updates its own data source on the Gateway, is refused on
