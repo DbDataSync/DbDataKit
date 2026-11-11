@@ -12,5 +12,7 @@
     <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
     <ProjectReference Include="..\DbDataKit.Scheduling\DbDataKit.Scheduling.csproj" />
     <ProjectReference Include="..\DbDataKit.Secrets.Abstractions\DbDataKit.Secrets.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Connections.Abstractions\DbDataKit.Connections.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Connections.Http\DbDataKit.Connections.Http.csproj" />
   </ItemGroup>
 </Project>

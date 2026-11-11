@@ -100,14 +100,13 @@ public enum SignatureCheck
 /// </summary>
 public static class WebhookSignature
 {
-    public const string Header = "X-DbData-Signature";
+    public const string Header = DbDataKit.Connections.Http.SignedWebhook.DefaultHeader;
 
     public static readonly TimeSpan DefaultWindow = TimeSpan.FromMinutes(5);
 
     public static string Sign(string secret, string body, DateTimeOffset at)
     {
-        var t = at.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
-        return $"t={t},v1={Hex(Mac(secret, t, body))}";
+        return DbDataKit.Connections.Http.SignedWebhook.Sign(secret, body, at);
     }
 
     public static SignatureCheck Verify(string secret, string? header, string body, DateTimeOffset now, TimeSpan? window = null)
@@ -133,9 +132,7 @@ public static class WebhookSignature
         return age.Duration() > (window ?? DefaultWindow) ? SignatureCheck.OutsideWindow : SignatureCheck.Valid;
     }
 
-    private static byte[] Mac(string secret, string t, string body) => HMACSHA256.HashData(Encoding.UTF8.GetBytes(secret), Encoding.UTF8.GetBytes(t + "." + body));
-
-    private static string Hex(byte[] bytes) => Convert.ToHexStringLower(bytes);
+    private static byte[] Mac(string secret, string t, string body) => DbDataKit.Connections.Http.SignedWebhook.Mac(secret, t, body);
 }
 
 /// <summary>

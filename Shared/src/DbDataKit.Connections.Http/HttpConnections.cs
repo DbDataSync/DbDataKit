@@ -44,7 +44,7 @@ public static class HttpConnections
     {
         ArgumentNullException.ThrowIfNull(definition);
         if (definition.KindName != ConnectionKinds.Http || definition.Endpoint is null)
-            throw new ArgumentException("The connection is not of kind http with an endpoint.", nameof(definition));
+            throw new ArgumentException(definition.EndpointSecret is not null ? "A webhook's address is a secret reference (endpoint_secret); a delivery channel resolves it when it sends." : "The connection is not of kind http with an endpoint.", nameof(definition));
         options ??= new();
         var spec = definition.SignIn ?? new SignInSpec();
         var time = options.Time ?? TimeProvider.System;
@@ -59,7 +59,7 @@ public static class HttpConnections
         }
 
         OAuthTokenSource? tokens = spec.Method == "oauth2_client_credentials" ? new OAuthTokenSource(spec, secrets, new HttpMessageInvoker(inner, disposeHandler: false), time) : null;
-        var handler = new SignInHandler(spec, secrets, tokens, inner);
+        var handler = new SignInHandler(spec, secrets, tokens, inner, time);
         var endpoint = definition.Endpoint.EndsWith('/') ? definition.Endpoint : definition.Endpoint + "/";
         var client = new HttpClient(handler) { BaseAddress = new Uri(endpoint), Timeout = TimeSpan.FromSeconds(definition.Timeouts.CommandS) };
         return new HttpConnectionClient(client, tokens, certificate);

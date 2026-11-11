@@ -103,12 +103,13 @@ public sealed class GrantsSpec
 /// <summary>
 /// How a connection of an outside kind (<c>http</c>, <c>model-provider</c>) signs in (plan 27a IX01 and IX02; <c>connection/2</c>, additive). Every secret is a <b>reference</b> (<c>secret:</c>, <c>env:</c>, <c>file:</c>, <c>keyring:</c>, <c>dpapi:</c>), never the value.
 /// <c>method</c> is <c>none</c>, <c>api_key</c> (<see cref="KeySecret"/> sent in the header or query parameter <see cref="Name"/>, after <see cref="Prefix"/>), <c>basic</c> (<see cref="User"/> and <see cref="PasswordSecret"/>),
-/// <c>oauth2_client_credentials</c> (<see cref="TokenUrl"/>, <see cref="ClientId"/>, <see cref="ClientSecretSecret"/>, <see cref="Scope"/>; the token is cached and refreshed) or <c>client_certificate</c> (a PKCS#12 file or a secret holding it as Base64).
+/// <c>oauth2_client_credentials</c> (<see cref="TokenUrl"/>, <see cref="ClientId"/>, <see cref="ClientSecretSecret"/>, <see cref="Scope"/>; the token is cached and refreshed), <c>client_certificate</c> (a PKCS#12 file or a secret holding it as Base64)
+/// or <c>signed_webhook</c> (plan 22a GP18 fold: the request body is signed with HMAC-SHA256 and a timestamp using the shared secret <see cref="KeySecret"/>, sent in the header <see cref="Name"/>, default <c>X-DbData-Signature</c>).
 /// </summary>
 [ConfigSchema(Naming = KeyNaming.SnakeCase, Description = "How a connection of an outside kind signs in (connection/2).")]
 public sealed class SignInSpec
 {
-    [ConfigKey(Pattern = "none|api_key|basic|oauth2_client_credentials|client_certificate")]
+    [ConfigKey(Pattern = "none|api_key|basic|oauth2_client_credentials|client_certificate|signed_webhook")]
     public string Method { get; set; } = "none";
 
     /// <summary>api_key: where the key goes, <c>header</c> or <c>query</c>.</summary>
@@ -139,6 +140,62 @@ public sealed class SignInSpec
     /// <summary>... or a secret reference that holds it as Base64.</summary>
     public string? CertificateSecret { get; set; }
     public string? CertificatePasswordSecret { get; set; }
+}
+
+/// <summary>
+/// The <c>webhook:</c> section of a connection of kind <c>http</c> that a delivery channel sends through (plan 22a GP09 and the GP18 fold; <c>connection/2</c>, additive): which message the receiver takes (<c>slack</c> Block Kit, <c>teams</c> Adaptive Card, <c>signed</c> a JSON document
+/// signed with <c>sign_in.method: signed_webhook</c>), and the private addresses it may reach. The address of a webhook carries a token, so it is <see cref="ConnectionDefinition.EndpointSecret"/>, a reference, rather than <c>endpoint</c>.
+/// </summary>
+[ConfigSchema(Naming = KeyNaming.SnakeCase, Description = "A webhook a delivery channel sends through (connection/2, kind http).")]
+public sealed class WebhookSpec
+{
+    [ConfigKey(Required = true, Pattern = "slack|teams|signed")]
+    public string Format { get; set; } = "";
+
+    /// <summary>Hosts, addresses or CIDR ranges (<c>10.1.0.0/16</c>) that may be private (loopback, 10/8, 192.168/16, ...); an address in a private range that is not listed is refused. A plain <c>http</c> address is used only for a listed host.</summary>
+    public List<string> AllowPrivate { get; set; } = [];
+
+    [ConfigKey(Min = 1, Max = 100000)]
+    public int? LimitPerMinute { get; set; }
+
+    [ConfigKey(Min = 1, Max = 600)]
+    public int TimeoutSeconds { get; set; } = 20;
+}
+
+/// <summary>
+/// The <c>smtp:</c> section of a connection of kind <c>smtp</c> (plan 22a GP08 and the GP18 fold; <c>connection/2</c>, additive): the mail server, how the connection is protected, the sender address. The login is <c>sign_in</c> (<c>basic</c>, the password a reference).
+/// <c>tls: none</c> is refused unless the host is this machine (<c>localhost</c>, <c>127.x</c>, <c>::1</c>) or <see cref="AllowPlainText"/> says so on purpose.
+/// </summary>
+[ConfigSchema(Naming = KeyNaming.SnakeCase, Description = "A mail server a delivery channel sends through (connection/2, kind smtp).")]
+public sealed class SmtpSpec
+{
+    [ConfigKey(Required = true)]
+    public string Host { get; set; } = "";
+
+    /// <summary>Default: 587 for starttls, 465 for implicit, 25 for none.</summary>
+    [ConfigKey(Min = 1, Max = 65535)]
+    public int? Port { get; set; }
+
+    [ConfigKey(Pattern = "starttls|implicit|none")]
+    public string Tls { get; set; } = "starttls";
+
+    /// <summary>The sender address: <c>ana@example.com</c> or <c>Name &lt;ana@example.com&gt;</c>.</summary>
+    [ConfigKey(Required = true)]
+    public string Sender { get; set; } = "";
+
+    /// <summary>A certificate file (PEM or DER) the server's chain is checked against instead of the machine's roots. The name is checked either way.</summary>
+    public string? TrustedCertificate { get; set; }
+
+    public string? Helo { get; set; }
+
+    [ConfigKey(Min = 1, Max = 100000)]
+    public int? LimitPerMinute { get; set; }
+
+    [ConfigKey(Min = 1, Max = 600)]
+    public int TimeoutSeconds { get; set; } = 30;
+
+    /// <summary>Allows <c>tls: none</c> for a host that is not this machine (a relay on a private network): said on purpose, never the default.</summary>
+    public bool AllowPlainText { get; set; }
 }
 
 /// <summary>One model of a provider: its id as the provider names it, its window and largest answer, its price per million tokens (null: not priced, as a local model).</summary>
@@ -195,14 +252,17 @@ public sealed class ModelProviderSpec
     };
 }
 
-/// <summary>The kinds of a connection (plan 27a IX01): a database (the default), an HTTP API, a model provider.</summary>
+/// <summary>The kinds of a connection (plan 27a IX01): a database (the default), an HTTP API, a model provider, a mail server.</summary>
 public static class ConnectionKinds
 {
     public const string Database = "database";
     public const string Http = "http";
     public const string ModelProvider = "model-provider";
 
-    public static readonly string[] All = [Database, Http, ModelProvider];
+    /// <summary>A mail server a delivery channel sends through (plan 22a GP08, folded into connections by GP18).</summary>
+    public const string Smtp = "smtp";
+
+    public static readonly string[] All = [Database, Http, ModelProvider, Smtp];
 
     public static bool IsKnown(string? kind) => kind is not null && All.Contains(kind, StringComparer.Ordinal);
 }
@@ -233,7 +293,7 @@ public sealed class ConnectionDefinition
     [ConfigKey(Required = true, Pattern = "[A-Za-z][A-Za-z0-9_.-]{0,63}")]
     public string Name { get; set; } = "";
     /// <summary>
-    /// What the connection is (format 2, plan 27a IX01): <c>database</c> (also when the key is left out), <c>http</c> or <c>model-provider</c>. Only the loader's <c>outsideKinds</c> option lets a program read the last two; a program that keeps database connections refuses
+    /// What the connection is (format 2, plan 27a IX01): <c>database</c> (also when the key is left out), <c>http</c>, <c>model-provider</c> or <c>smtp</c>. Only the loader's <c>outsideKinds</c> option lets a program read the last two; a program that keeps database connections refuses
     /// such a file naming it. A format-1 file cannot say it.
     /// </summary>
     public string? Kind { get; set; }
@@ -242,12 +302,23 @@ public sealed class ConnectionDefinition
     [ConfigIgnore]
     public string KindName => Kind ?? ConnectionKinds.Database;
 
-    /// <summary>True for a kind that is not a database (<c>http</c>, <c>model-provider</c>).</summary>
+    /// <summary>True for a kind that is not a database (<c>http</c>, <c>model-provider</c>, <c>smtp</c>).</summary>
     [ConfigIgnore]
     public bool IsOutside => KindName != ConnectionKinds.Database;
 
     /// <summary>The address of an outside system: an http or https address with no user name, password or query in it (a key is never part of the address).</summary>
     public string? Endpoint { get; set; }
+
+    /// <summary>
+    /// The address of a webhook as a reference to a secret (<c>secret:</c>, <c>env:</c>, <c>file:</c>...): Slack, Teams and signed webhooks carry a token in the address, so it is never written in the file. Instead of <see cref="Endpoint"/>, and only with <see cref="Webhook"/>.
+    /// </summary>
+    public string? EndpointSecret { get; set; }
+
+    /// <summary>The webhook section (kind <c>http</c> that a delivery channel sends through); null: an ordinary API connection.</summary>
+    public WebhookSpec? Webhook { get; set; }
+
+    /// <summary>The mail server (kind <c>smtp</c>).</summary>
+    public SmtpSpec? Smtp { get; set; }
 
     /// <summary>How an outside kind signs in; null: it does not.</summary>
     public SignInSpec? SignIn { get; set; }
