@@ -1,5 +1,7 @@
 using DbDataSync.Api.Services;
+#if !SKIP_JDBC
 using DbDataSync.Drivers.Jdbc.Ado;
+#endif
 using Xunit;
 
 namespace DbDataSync.Api.Tests;
@@ -45,6 +47,7 @@ public sealed class ConnectionDiagnosticsTests
         Assert.Contains("connection timed out", described);
     }
 
+#if !SKIP_JDBC
     /// <summary>The branch the incident's own fix exists for: a JDBC-originated failure — by the time it
     /// reaches this class, always a plain <see cref="JdbcSqlException"/>, never a live <c>java.sql</c>
     /// object — still gets its SQLState/ErrorCode/chained-message detail, built once at the JDBC-side
@@ -64,6 +67,8 @@ public sealed class ConnectionDiagnosticsTests
         Assert.DoesNotContain("already exists", described);
         Assert.Contains("23505", described);
     }
+
+#endif
 
     [Fact]
     public void Redact_ReplacesEveryOccurrenceOfTheSecret_LeavesEverythingElseIntact()

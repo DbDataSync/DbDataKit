@@ -4,6 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- SkipJdbc (root Directory.Build.props): ConnectionDiagnostics names JdbcSqlException, the one compile-time use of the Jdbc project. -->
+    <DefineConstants Condition="'$(SkipJdbc)' == 'true'">$(DefineConstants);SKIP_JDBC</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
@@ -56,7 +58,7 @@
          base can be resolved via Type.GetType (DriverDescriptorReader.BuildDriver, in
          DbDataSync.Drivers.Descriptor). JdbcGenericDriver is still not in BuiltInDrivers/registered by
          default; this only makes it reachable if named. -->
-    <ProjectReference Include="..\DbDataSync.Drivers.Jdbc\DbDataSync.Drivers.Jdbc.csproj" />
+    <ProjectReference Condition="'$(SkipJdbc)' != 'true'" Include="..\DbDataSync.Drivers.Jdbc\DbDataSync.Drivers.Jdbc.csproj" />
     <ProjectReference Include="..\DbDataSync.Libraries\DbDataSync.Libraries.csproj" />
     <ProjectReference Include="..\DbDataSync.State\DbDataSync.State.csproj" />
     <ProjectReference Include="..\DbDataSync.Planning\DbDataSync.Planning.csproj" />   <!-- the planner SchedulerService calls (plan 28c E11); its namespace is a global using below, so the API's own code keeps naming the types it always did -->

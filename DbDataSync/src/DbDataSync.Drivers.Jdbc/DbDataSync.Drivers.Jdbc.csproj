@@ -35,8 +35,16 @@
          entirely from a separate libraries/ikvm/lib/ directory, not this project's own output).
          Phase 170V: bumped 8.11.2 -> 8.16.1 (the exclusion list above was re-verified against 8.16.1's
          package layout, still sufficient — no new asset group appeared). -->
-    <PackageReference Include="IKVM" ExcludeAssets="runtime;build;buildTransitive;native" />
+    <PackageReference Condition="'$(SkipJdbc)' != 'true'" Include="IKVM" ExcludeAssets="runtime;build;buildTransitive;native" />
   </ItemGroup>
+
+  <!-- SkipJdbc (root Directory.Build.props; docs/testing-environment.md, "Fast verifier runs"): this project builds nothing, so no IKVM, JRE image or jar is restored or downloaded. -->
+  <PropertyGroup Condition="'$(SkipJdbc)' == 'true'">
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <Target Name="SkipJdbcNotice" BeforeTargets="CoreCompile" Condition="'$(SkipJdbc)' == 'true'">
+    <Message Importance="high" Text="$(MSBuildProjectName): SkipJdbc is set, nothing was built (unset DBDATAKIT_TEST_SKIP_JDBC for the JDBC projects)." />
+  </Target>
 
   <ItemGroup>
     <InternalsVisibleTo Include="DbDataSync.Drivers.Jdbc.Tests" />

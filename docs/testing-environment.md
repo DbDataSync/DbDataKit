@@ -109,3 +109,10 @@ product's map in `testenv/env/` adds the few names a suite reads that this set d
 
 Left out on purpose: `DBDATASYNC_MSSQL_SA_PASSWORD` and `DBDATASYNC_POSTGRES_PASSWORD` (variables of a `docker-compose.yml` that is gone; the Sync dev
 harness no longer refuses them: the password is `DBDATAKIT_TEST_PASSWORD`). GitHub secrets and repository variables keep their names.
+
+## Building without JDBC (`SkipJdbc`)
+
+`DBDATAKIT_TEST_SKIP_JDBC=true` (or `-p:SkipJdbc=true`) leaves JDBC and IKVM out of the Sync build: `DbDataSync.Api` and `DbDataSync.TaskRunner` do not
+reference `DbDataSync.Drivers.Jdbc`, `DbDataSync.Api.Tests` has no IKVM, no pgJDBC jar and does not compile `JdbcTestQuery*` (the define `SKIP_JDBC` guards the
+rest), and `DbDataSync.Drivers.Jdbc` and `.Jdbc.Tests` build nothing (a message says so). No IKVM package is restored. Off by default, so CI is unchanged.
+Build the Sync projects one by one with it (not a solution that needs the Jdbc projects to produce output): `dotnet build DbDataSync/tests/DbDataSync.Api.Tests`.

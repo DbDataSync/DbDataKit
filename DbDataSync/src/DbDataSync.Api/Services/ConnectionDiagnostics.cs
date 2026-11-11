@@ -1,4 +1,6 @@
+#if !SKIP_JDBC
 using DbDataSync.Drivers.Jdbc.Ado;
+#endif
 
 namespace DbDataSync.Api.Services;
 
@@ -41,7 +43,11 @@ internal static class ConnectionDiagnostics
     /// </summary>
     public static string Describe(Exception ex) =>
         DbDataSync.Core.Sql.DriverFailures.CameFromADriver(ex) ? DbDataSync.Core.Sql.DriverFailures.Describe(ex)
+#if !SKIP_JDBC
         : ex is JdbcSqlException jdbc ? jdbc.Message : ex.ToString();
+#else
+        : ex.ToString();   // SkipJdbc build: the Jdbc project is not referenced, so no JdbcSqlException exists
+#endif
 
     /// <summary>
     /// By literal secret value, applied once at the boundary — deliberately not "only show

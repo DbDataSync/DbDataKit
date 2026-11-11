@@ -20,15 +20,23 @@
          comment) — the same reason DbDataSync.Drivers.Postgres.Tests keeps its own un-excluded Npgsql
          reference. A standalone `dotnet test` here needs the real IKVM assets locally too, with nothing
          installed under libraries/. -->
-    <PackageReference Include="IKVM" />
+    <PackageReference Condition="'$(SkipJdbc)' != 'true'" Include="IKVM" />
   </ItemGroup>
+
+  <!-- SkipJdbc (root Directory.Build.props; docs/testing-environment.md): this project builds nothing, so no IKVM, JRE image or jar is restored or downloaded. -->
+  <PropertyGroup Condition="'$(SkipJdbc)' == 'true'">
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <Target Name="SkipJdbcNotice" BeforeTargets="CoreCompile" Condition="'$(SkipJdbc)' == 'true'">
+    <Message Importance="high" Text="$(MSBuildProjectName): SkipJdbc is set, nothing was built (unset DBDATAKIT_TEST_SKIP_JDBC for the JDBC projects)." />
+  </Target>
 
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\DbDataSync.Drivers.Jdbc\DbDataSync.Drivers.Jdbc.csproj" />
+    <ProjectReference Condition="'$(SkipJdbc)' != 'true'" Include="..\..\src\DbDataSync.Drivers.Jdbc\DbDataSync.Drivers.Jdbc.csproj" />
     <!-- The "known-good" side of every parity test: PostgresDriver's own published readers, not a
          hand-wired PostgresCatalog/PostgresValueBinding pair (both internal to that project). -->
     <ProjectReference Include="..\..\src\DbDataSync.Drivers.Postgres\DbDataSync.Drivers.Postgres.csproj" />
@@ -43,7 +51,7 @@
     <JdbcTestJarPath>$(BaseIntermediateOutputPath)jdbc-jars\postgresql-$(JdbcTestJarVersion).jar</JdbcTestJarPath>
   </PropertyGroup>
 
-  <Target Name="DownloadJdbcTestJar" BeforeTargets="BeforeBuild" Condition="!Exists('$(JdbcTestJarPath)')">
+  <Target Name="DownloadJdbcTestJar" BeforeTargets="BeforeBuild" Condition="'$(SkipJdbc)' != 'true' and !Exists('$(JdbcTestJarPath)')">
     <MakeDir Directories="$(BaseIntermediateOutputPath)jdbc-jars" />
     <!-- Maven Central answered 404 for a jar that exists, once, on CI: a failed first download is not an error until the second source has been tried too. -->
     <DownloadFile
@@ -55,7 +63,7 @@
   </Target>
 
   <ItemGroup>
-    <None Include="$(JdbcTestJarPath)" CopyToOutputDirectory="PreserveNewest" Link="postgresql.jar" Visible="false" />
+    <None Condition="'$(SkipJdbc)' != 'true'" Include="$(JdbcTestJarPath)" CopyToOutputDirectory="PreserveNewest" Link="postgresql.jar" Visible="false" />
   </ItemGroup>
 
   <!-- Phase 169V's own "how to verify" fixture: a second, genuinely distinct jar with nothing pgJDBC
@@ -67,7 +75,7 @@
     <JdbcDecoyJarPath>$(BaseIntermediateOutputPath)jdbc-jars\commons-logging-1.2.jar</JdbcDecoyJarPath>
   </PropertyGroup>
 
-  <Target Name="DownloadJdbcDecoyJar" BeforeTargets="BeforeBuild" Condition="!Exists('$(JdbcDecoyJarPath)')">
+  <Target Name="DownloadJdbcDecoyJar" BeforeTargets="BeforeBuild" Condition="'$(SkipJdbc)' != 'true' and !Exists('$(JdbcDecoyJarPath)')">
     <MakeDir Directories="$(BaseIntermediateOutputPath)jdbc-jars" />
     <DownloadFile
       SourceUrl="https://repo1.maven.org/maven2/commons-logging/commons-logging/1.2/commons-logging-1.2.jar"
@@ -75,7 +83,7 @@
   </Target>
 
   <ItemGroup>
-    <None Include="$(JdbcDecoyJarPath)" CopyToOutputDirectory="PreserveNewest" Link="decoy.jar" Visible="false" />
+    <None Condition="'$(SkipJdbc)' != 'true'" Include="$(JdbcDecoyJarPath)" CopyToOutputDirectory="PreserveNewest" Link="decoy.jar" Visible="false" />
   </ItemGroup>
 
   <ItemGroup>
