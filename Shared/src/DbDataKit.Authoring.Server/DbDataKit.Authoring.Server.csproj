@@ -19,5 +19,6 @@
     <ProjectReference Include="..\DbDataKit.Secrets.Abstractions\DbDataKit.Secrets.Abstractions.csproj" />
     <ProjectReference Include="..\DbDataKit.Secrets\DbDataKit.Secrets.csproj" />
     <ProjectReference Include="..\DbDataKit.Web\DbDataKit.Web.csproj" />
+    <ProjectReference Include="..\DbDataKit.Runner.Client\DbDataKit.Runner.Client.csproj" />
   </ItemGroup>
 </Project>

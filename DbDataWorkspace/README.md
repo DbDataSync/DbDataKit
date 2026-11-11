@@ -64,6 +64,8 @@ Every call needs a token a paired console issued; the roles are the suite's (`Db
 | `POST /api/v1/publisher-keys/{name}/pair` `{url, code, product?}`, `GET /api/v1/publish-targets[?project=<id>]` | admin; approver (each target says its `product`, `gateway` or `runner`, found from the server's own `/version`; with `project`, `accepts` says whether that project's kind publishes to it; plan 33 SC20b) |
 | `GET /api/v1/state` and the maintenance calls | the shared state API (`DbDataKit.State.Api`) |
 
+A build of a project whose kind produces something to publish (`build`, `sync`, `store`) is the kind's check followed by its artifact in `builds/<project>/<id>/artifact/` (`package.yaml` and `files/` for a Runner, `models/` for a Gateway); `POST .../builds/{build}/publish` then takes `{target, note?}` and, by the target's product, `{channel, serve?, expected_version?, bind?}` for a Runner (the package is staged on the channel; `bind` is slot to connection name) or `{data_source?}` for a Gateway (the models' own storage connection by default). The answer is the Runner's or the Gateway's own; a refusal comes back in its words.
+
 The console relays an explicit table of these (`ServerProducts.WorkspaceRoutes` in `DbDataKit.Server`: 30 routes, each with its role, checked at the relay against what the person holds, in the route's project too, and by the server again), not the whole API; the publisher's key reference is not relayed.
 
 ## Build and test

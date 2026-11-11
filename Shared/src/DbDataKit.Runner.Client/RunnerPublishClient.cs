@@ -109,6 +109,15 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
+    private (PairedRunner Runner, ConsoleIdentity Identity, string Subject, string Name)? fixedLink;
+
+    /// <summary>
+    /// A client for one runner that is already paired and signs with a key it is given (plan 33 SC22b): a server that holds a publisher key of its own (the Workspace) uses it as it is, with <paramref name="subject"/> and <paramref name="displayName"/>
+    /// on each call, and touches no client directory. The roles are the pairing's.
+    /// </summary>
+    public static RunnerPublishClient ForKey(PairedRunner runner, ConsoleIdentity identity, string subject, string displayName) =>
+        new(new RunnerClientStore(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "dbdatarunner-unused-client")), null) { fixedLink = (runner, identity, subject, displayName) };
+
     /// <summary>Pairs with the runner at <paramref name="url"/> using its code and remembers it as <paramref name="name"/> (default: its address).</summary>
     public async Task<PairedRunner> PairAsync(Uri url, string code, string? name, CancellationToken ct = default)
     {
@@ -184,6 +193,12 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
     /// <summary>The runner paired under <paramref name="server"/> (pairing with <paramref name="code"/> first when there is none), with a client that pins its certificate and signs each call.</summary>
     private async Task<Link> OpenAsync(string server, string? code, Action<string>? log, CancellationToken ct)
     {
+        if (fixedLink is { } given)
+        {
+            var givenRole = ServerRoles.TryParse(given.Runner.Roles, out var held) ? held : ServerRole.Publisher;
+            return new Link(given.Runner, new HttpClient(PairingClient.Pinned(given.Runner.Fingerprint)) { BaseAddress = new Uri(given.Runner.Url + "/"), Timeout = TimeSpan.FromMinutes(30) }, given.Identity, givenRole, given.Subject, given.Name);
+        }
+
         var runner = store.Find(server);
         if (runner is null)
         {
@@ -198,16 +213,16 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
         return new Link(runner, http, self, role);
     }
 
-    private sealed class Link(PairedRunner runner, HttpClient http, ConsoleIdentity self, ServerRole role) : IDisposable
+    private sealed class Link(PairedRunner runner, HttpClient http, ConsoleIdentity self, ServerRole role, string? subject = null, string? displayName = null) : IDisposable
     {
-        private readonly string _subject = "local:" + Environment.UserName;
+        private readonly string _subject = subject ?? "local:" + Environment.UserName;
 
         public PairedRunner Runner { get; } = runner;
 
         public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, HttpContent? content, CancellationToken ct)
         {
             using var request = new HttpRequestMessage(method, path) { Content = content };
-            request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, self.Issuer().Issue(new ConsoleTokenRequest(Runner.InstanceId, _subject, Environment.UserName, role)));
+            request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, self.Issuer().Issue(new ConsoleTokenRequest(Runner.InstanceId, _subject, displayName ?? Environment.UserName, role)));
             try { return await http.SendAsync(request, ct); }
             catch (HttpRequestException ex) { throw new RunnerClientException($"{Runner.Url} could not be reached ({ex.Message})."); }
         }
