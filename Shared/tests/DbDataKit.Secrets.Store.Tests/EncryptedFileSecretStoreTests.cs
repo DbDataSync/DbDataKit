@@ -7,8 +7,8 @@ namespace DbDataKit.Secrets.Store.Tests;
 public class EncryptedFileSecretStoreTests
 {
     private const string Sentinel = "S3NT1NEL-p@ss/w0rd=#1";
-    private static readonly SecretName Erp = new("proxy", "datasource", "erp", "password");
-    private static readonly SecretName Crm = new("proxy", "datasource", "crm", "password");
+    private static readonly SecretName Erp = new("gateway", "datasource", "erp", "password");
+    private static readonly SecretName Crm = new("gateway", "datasource", "crm", "password");
 
     private static (EncryptedFileSecretStore Store, KeyRing Keys, string Directory) Make(TempDir t)
     {
@@ -30,7 +30,7 @@ public class EncryptedFileSecretStoreTests
         var file = File.ReadAllText(System.IO.Path.Combine(directory, "secrets.yaml"));
         Assert.DoesNotContain(Sentinel, file);
         Assert.DoesNotContain(Convert.ToBase64String(Encoding.UTF8.GetBytes(Sentinel)), file);
-        Assert.Contains("dbdata:proxy:datasource:erp:password", file);
+        Assert.Contains("dbdatakit:gateway:datasource:erp:password", file);
     }
 
     [Fact]
@@ -161,7 +161,7 @@ public class EncryptedFileSecretStoreTests
         await store.SetAsync(new SecretName("sync", "connection", "wh"), SecretValue.From("3"));
 
         var proxy = new List<SecretName>();
-        await foreach (var name in store.ListAsync("dbdata:proxy:")) proxy.Add(name);
+        await foreach (var name in store.ListAsync("dbdatakit:gateway:")) proxy.Add(name);
         Assert.Equal([Crm, Erp], proxy.OrderBy(n => n.ToString(), StringComparer.Ordinal).ToList());
 
         await store.DeleteAsync(Erp);

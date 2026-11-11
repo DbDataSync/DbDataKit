@@ -8,14 +8,14 @@ namespace DbDataGateway.Server.Secrets;
 
 /// <summary>
 /// The secrets the clients of a group keep on it (plan 20 O04b), in the state the group shares and encrypted with its key (<see cref="GroupSessionKey"/>): a Build server's read login for a data source it published through one
-/// instance is there for every instance that serves the source. Only a client's own secrets (<c>dbdata:gateway:managed-&lt;client&gt;:...</c>) are kept here; an operator's stay in each instance's encrypted store. On an instance
+/// instance is there for every instance that serves the source. Only a client's own secrets (<c>dbdatakit:gateway:managed-&lt;client&gt;:...</c>) are kept here; an operator's stay in each instance's encrypted store. On an instance
 /// that is not one of a group it holds nothing and answers nothing.
 /// </summary>
 /// <param name="state">The state, looked up when first needed (opening it may itself need a secret).</param>
 /// <param name="key">The group's key.</param>
 public sealed class GroupSecretStore(Func<StateDatabase> state, Func<GroupSessionKey> key) : ISecretStore, ISecretProvider
 {
-    public const string ManagedPrefix = "dbdata:gateway:managed-";
+    public const string ManagedPrefix = "dbdatakit:gateway:managed-";
 
     public string Name => "group";
 
@@ -43,7 +43,7 @@ public sealed class GroupSecretStore(Func<StateDatabase> state, Func<GroupSessio
     public Task SetAsync(SecretName name, SecretValue value, CancellationToken ct = default)
     {
         var full = name.ToString();
-        if (!full.StartsWith(ManagedPrefix, StringComparison.Ordinal)) throw new ArgumentException("The group keeps only its clients' secrets (dbdata:gateway:managed-...).", nameof(name));
+        if (!full.StartsWith(ManagedPrefix, StringComparison.Ordinal)) throw new ArgumentException("The group keeps only its clients' secrets (dbdatakit:gateway:managed-...).", nameof(name));
         var plain = Encoding.UTF8.GetBytes(value.RevealString());
         string sealedValue;
         try { sealedValue = Convert.ToBase64String(key().Protect(plain)); }

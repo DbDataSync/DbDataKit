@@ -75,7 +75,7 @@ public enum AuthMode
 
 /// <summary>
 /// Persisted, git-tracked representation of a connection. Never carries a plaintext credential —
-/// <see cref="CredentialSecretRef"/> is a name in the encrypted secret store (<c>dbdata:sync:connection:&lt;name&gt;</c>), resolved at
+/// <see cref="CredentialSecretRef"/> is a name in the encrypted secret store (<c>dbdatakit:sync:connection:&lt;name&gt;</c>), resolved at
 /// connect time, never at config-load time.
 /// </summary>
 public sealed class ConnectionConfig
@@ -115,7 +115,7 @@ public sealed class ConnectionConfig
     public string? CredentialSecretRef { get; set; }
 
     /// <summary>
-    /// The login of the <see cref="CredentialRole.Run"/> role (plan 28c, E20), when the connection has a second one: the user it connects as (null: the same <see cref="UserId"/>) and the secret that holds its password (<c>dbdata:sync:connection:&lt;name&gt;:run</c>).
+    /// The login of the <see cref="CredentialRole.Run"/> role (plan 28c, E20), when the connection has a second one: the user it connects as (null: the same <see cref="UserId"/>) and the secret that holds its password (<c>dbdatakit:sync:connection:&lt;name&gt;:run</c>).
     /// <see cref="UserId"/> and <see cref="CredentialSecretRef"/> are the <see cref="CredentialRole.Read"/> login and serve the run role as well when no second login is set, so a connection with one login is what it always was.
     /// </summary>
     public string? RunUserId { get; set; }

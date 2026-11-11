@@ -88,7 +88,7 @@ public static class WorkspaceModule
         CREATE INDEX {index:build_by_workspace} ON {table:build}(project, workspace_id, requested_at);
         CREATE INDEX {index:build_by_time} ON {table:build}(requested_at);
 
-        -- The publisher's key reference: for a target a version is published to (a name the server's settings give it), the reference to the secret that holds the key (secret:dbdata:workspace:publisher:<name>).
+        -- The publisher's key reference: for a target a version is published to (a name the server's settings give it), the reference to the secret that holds the key (secret:dbdatakit:workspace:publisher:<name>).
         -- The key is never here. No retention: a reference stays until it is removed.
         CREATE TABLE {table:publisher_key} (
             name        {{key}} PRIMARY KEY,

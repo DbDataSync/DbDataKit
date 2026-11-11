@@ -44,7 +44,7 @@ public sealed class WorkspaceSyncKindTests
         Assert.Contains("config/replications/orders/table-mappings/orders.yaml", files);
         Assert.Contains("config/connections/source-db.yaml", files);
         Assert.Contains("config/connections/target-db.yaml", files);
-        Assert.Contains("password_secret: secret:dbdata:sync:connection:source-db", await Read(server, id, "config/connections/source-db.yaml"));
+        Assert.Contains("password_secret: secret:dbdatakit:sync:connection:source-db", await Read(server, id, "config/connections/source-db.yaml"));
         Assert.StartsWith("schemaVersion: 2", await Read(server, id, "config/replications/orders/task.yaml"));
         Assert.Contains("Orders set", await Read(server, id, "README.md"));
         Assert.Contains("secrets/", await Read(server, id, ".gitignore"));
@@ -72,8 +72,8 @@ public sealed class WorkspaceSyncKindTests
     }
 
     [Theory]
-    [InlineData("  password_secret: secret:dbdata:sync:connection:source-db", "  password: hunter2", "holds a password value", 10)]
-    [InlineData("  password_secret: secret:dbdata:sync:connection:source-db", "  password_secret: hunter2", "not a secret reference", 10)]
+    [InlineData("  password_secret: secret:dbdatakit:sync:connection:source-db", "  password: hunter2", "holds a password value", 10)]
+    [InlineData("  password_secret: secret:dbdatakit:sync:connection:source-db", "  password_secret: hunter2", "not a secret reference", 10)]
     public async Task A_connection_file_that_holds_a_password_in_place_of_a_reference_is_refused_with_its_line_whatever_the_program_says(string was, string now, string words, int line)
     {
         await using var server = await WorkspaceHarness.StartAsync(syncExecutable: Fake());
@@ -100,7 +100,7 @@ public sealed class WorkspaceSyncKindTests
         Assert.Contains(findings, f => (string)f!["file"]! == "config/connections/odbc.yaml" && (int)f["line"]! == 4);
         Assert.Contains(findings, f => (string)f!["file"]! == "config/secrets/");
         // a reference in the connection string is what is meant and is not refused
-        await Put(server, id, "config/connections/odbc.yaml", "schema: connection/1\nname: odbc\nengine: odbc\nconnection_string: 'Driver=x;Server=s;Pwd=secret:dbdata:sync:connection:odbc;'\n");
+        await Put(server, id, "config/connections/odbc.yaml", "schema: connection/1\nname: odbc\nengine: odbc\nconnection_string: 'Driver=x;Server=s;Pwd=secret:dbdatakit:sync:connection:odbc;'\n");
         Assert.DoesNotContain(((await CheckAsync(server, id))["diagnostics"]!.AsArray()), f => (string)f!["file"]! == "config/connections/odbc.yaml");
     }
 

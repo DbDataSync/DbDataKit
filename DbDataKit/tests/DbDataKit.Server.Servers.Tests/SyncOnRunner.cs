@@ -252,7 +252,7 @@ internal sealed class SyncOnRunner : IAsyncDisposable
         foreach (var (name, password) in new[] { ("src", SqlServerLogin.Password), ("tgt", PostgresLogin.Password!), ("dw", SqlServerLogin.Password) })
         {
             File.Copy(Path.Combine(SyncDirectory, "config", "connections", name + ".yaml"), Path.Combine(connections, name + ".yaml"));
-            environment[EnvSecretProvider.VariableNameFor("dbdata:sync:connection:" + name)] = password;
+            environment[EnvSecretProvider.VariableNameFor("dbdatakit:sync:connection:" + name)] = password;
         }
 
         var consoleCode = Programs.CodeIn(await RealProcess.RunAsync(runner, "server", "pair", "--repo", RunnerDirectory, "--max-role", "admin"));

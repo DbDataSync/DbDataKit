@@ -12,11 +12,11 @@ namespace DbDataGateway.Server.State;
 /// <summary>
 /// The key a group's shared sessions protect what they carry with (plan 20 O02): a pass-through session's database user name and password are written to the state encrypted with it (AES-256-GCM), so any instance of the
 /// group can serve the session and the database never holds a password in the clear. The key is the secret <see cref="Secret"/>, made in the instance's store on its first start; every other instance of the group needs a copy
-/// (<c>dbdatagateway secret set dbdata:gateway:state:session-key --stdin</c>). The state holds a value encrypted with it, so an instance given another key refuses to start, naming the secret, instead of failing sessions one by one.
+/// (<c>dbdatagateway secret set dbdatakit:gateway:state:session-key --stdin</c>). The state holds a value encrypted with it, so an instance given another key refuses to start, naming the secret, instead of failing sessions one by one.
 /// </summary>
 public sealed class GroupSessionKey(StateDatabase state, IOptionsMonitor<GatewayOptions> options)
 {
-    public const string Secret = "dbdata:gateway:state:session-key";
+    public const string Secret = "dbdatakit:gateway:state:session-key";
 
     private const string CheckName = "session-key";
     private static readonly byte[] CheckPlain = Encoding.UTF8.GetBytes("dbdatagateway group session key");

@@ -65,7 +65,7 @@ public sealed partial class ConsoleConnections
     public static bool IsName(string name) => NamePattern().IsMatch(name);
 
     /// <summary>Where a person's typed secret of a connection is kept.</summary>
-    public static SecretName SecretNameFor(string connection, string field) => new("console", "connection", connection, field);
+    public static SecretName SecretNameFor(string connection, string field) => new("server", "connection", connection, field);
 
     /// <summary>The reference to write in a connection's file for the secret kept here.</summary>
     public static string ReferenceFor(string connection, string field) => "secret:" + SecretNameFor(connection, field);

@@ -29,7 +29,7 @@ public sealed class ConnectionInventoryTests
     [Fact]
     public void The_document_reads_back_with_its_users_and_roles()
     {
-        var node = ConnectionInventoryJson.Write("dbdatarunner", [new InventoryConnection("warehouse", "sql", null, null, null, "secret:dbdata:runner:connection:warehouse", [Task, Server])]);
+        var node = ConnectionInventoryJson.Write("dbdatarunner", [new InventoryConnection("warehouse", "sql", null, null, null, "secret:dbdatakit:runner:connection:warehouse", [Task, Server])]);
         var back = Assert.Single(ConnectionInventoryJson.Read(JsonNode.Parse(node.ToJsonString())));
         Assert.Equal("warehouse", back.Name);
         Assert.Equal(["read", "run"], back.Roles);

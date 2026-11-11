@@ -9,7 +9,7 @@ public sealed record ConnectionStringReference(string Key, SecretRef Reference);
 
 /// <summary>
 /// Secret references inside connection strings: <c>Password=env:DB_PASSWORD</c> (a credential key whose value is a
-/// reference) and whole-string references (<c>secret:dbdata:gateway:datasource:erp</c>). Resolution returns a new
+/// reference) and whole-string references (<c>secret:dbdatakit:gateway:datasource:erp</c>). Resolution returns a new
 /// string; the input is never modified and no value is ever logged.
 /// </summary>
 public static class ConnectionStringReferences

@@ -5,7 +5,7 @@ using LibGit2Sharp;
 namespace DbDataSync.Core.Tests;
 
 /// <summary>
-/// Sync's secrets are in the shared encrypted store under the repository root, named <c>dbdata:sync:...</c> (plan 13, A04): they
+/// Sync's secrets are in the shared encrypted store under the repository root, named <c>dbdatakit:sync:...</c> (plan 13, A04): they
 /// persist across instances, are not in the file in the clear, are kept out of git, and the old <c>dbdatasync:...</c> names are not read.
 /// </summary>
 public sealed class SecretStoreTests : IDisposable
@@ -81,7 +81,7 @@ public sealed class SecretStoreTests : IDisposable
 
         var ex = Assert.Throws<FormatException>(() => store.Store("dbdatasync:connection:erp", Sentinel));
 
-        Assert.Contains("dbdata:sync:", ex.Message);
+        Assert.Contains("dbdatakit:sync:", ex.Message);
         Assert.DoesNotContain(Sentinel, ex.Message);
         Assert.Throws<FormatException>(() => store.TryResolve("dbdatasync:connection:erp", out _));
     }
@@ -92,7 +92,7 @@ public sealed class SecretStoreTests : IDisposable
         var store = SecretStore.OpenInRepository(_root, name => name == SecretStoreName("erp") ? "from-env" : null);
 
         Assert.Equal("from-env", store.Resolve(SecretRefs.ForConnection("erp")));
-        Assert.StartsWith("DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_ERP", store.EnvName(SecretRefs.ForConnection("erp")));
+        Assert.StartsWith("DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_ERP", store.EnvName(SecretRefs.ForConnection("erp")));
     }
 
     [Fact]
@@ -102,7 +102,7 @@ public sealed class SecretStoreTests : IDisposable
         store.Store(SecretRefs.ForConnection("erp"), Sentinel);
 
         var missing = Assert.Throws<SecretNotFoundException>(() => store.Resolve(SecretRefs.ForConnection("crm")));
-        Assert.Contains("dbdata:sync:connection:crm", missing.Message);
+        Assert.Contains("dbdatakit:sync:connection:crm", missing.Message);
         Assert.DoesNotContain(Sentinel, missing.ToString());
 
         var invalid = Assert.Throws<FormatException>(() => store.Resolve("not a name"));

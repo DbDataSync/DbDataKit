@@ -153,7 +153,7 @@ test('an app is made from the template, a spec edited, built, previewed, committ
   await page.getByTestId('wsk-pair').click()
   await expect(page.getByTestId('wsk-paired')).toContainText('Paired edge')
   const key = page.locator('[data-testid="wsk-key"][data-key="edge"]')
-  await expect(key.getByTestId('wsk-ref')).toHaveText('secret:dbdata:workspace:publisher-key:edge')
+  await expect(key.getByTestId('wsk-ref')).toHaveText('secret:dbdatakit:workspace:publisher-key:edge')
   await expect(key.getByTestId('wsk-gateway')).toHaveText(managementUrl)
   // a key typed where a reference goes is refused as it is typed
   await page.getByTestId('wsk-ref-name').fill('other')

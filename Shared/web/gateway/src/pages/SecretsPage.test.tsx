@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { SecretsView, type SecretsViewProps } from './SecretsPage'
 
-const have = [{ name: 'erp-login', reference: 'secret:dbdata:gateway:managed-console-1:erp-login' }]
+const have = [{ name: 'erp-login', reference: 'secret:dbdatakit:gateway:managed-console-1:erp-login' }]
 
 function props(over: Partial<SecretsViewProps> = {}): SecretsViewProps {
   return { items: have, loading: false, loadError: null, form: { name: 'warehouse', value: 'hunter2' }, busy: false, written: null, refusal: null, confirming: null, onForm: () => {}, onSet: () => {}, onAskRemove: () => {}, onRemove: () => {}, onKeep: () => {}, ...over }
@@ -24,7 +24,7 @@ describe('the secrets screen', () => {
   it('lists the names with the line to write in a data source, and shows no value', () => {
     const text = html({ form: { name: '', value: '' } })
     expect(text).toContain('data-testid="secret-erp-login"')
-    expect(text).toContain("password_secret: &#x27;secret:dbdata:gateway:managed-console-1:erp-login&#x27;")
+    expect(text).toContain("password_secret: &#x27;secret:dbdatakit:gateway:managed-console-1:erp-login&#x27;")
   })
 
   it('draws the value field as a password field that is never filled in by the list', () => {
@@ -65,7 +65,7 @@ describe('the secrets screen', () => {
   })
 
   it('shows the reference to write after a set, and says when it replaced one, without the value', () => {
-    const text = html({ form: { name: '', value: '' }, written: { name: 'warehouse', reference: 'secret:dbdata:gateway:managed-console-1:warehouse', replaced: false } })
+    const text = html({ form: { name: '', value: '' }, written: { name: 'warehouse', reference: 'secret:dbdatakit:gateway:managed-console-1:warehouse', replaced: false } })
     expect(text).toContain('data-testid="secret-written-reference"')
     expect(text).toContain('warehouse is kept.')
     expect(text).not.toContain('hunter2')

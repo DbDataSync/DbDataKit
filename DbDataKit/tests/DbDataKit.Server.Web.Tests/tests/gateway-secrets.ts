@@ -6,7 +6,7 @@ import { expect, type Page, type Route } from '@playwright/test'
 const SERVER = 'gw-1'
 const OWNER = 'managed-console-1'
 const json = (route: Route, body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
-const reference = (name: string) => `secret:dbdata:gateway:${OWNER}:${name}`
+const reference = (name: string) => `secret:dbdatakit:gateway:${OWNER}:${name}`
 
 export interface SecretsMock { sent: Record<string, unknown[]>; secrets: Map<string, string>; source: { text: string; version: number } }
 
@@ -85,7 +85,7 @@ export async function secretsStory(page: Page) {
   await page.getByTestId('secret-set').click()
 
   // kept: the reference to write is shown, the value is gone from the form and from the page, and the list has the name only
-  await expect(page.getByTestId('secret-written-reference')).toHaveText(`password_secret: '${`secret:dbdata:gateway:managed-console-1:erp-login`}'`)
+  await expect(page.getByTestId('secret-written-reference')).toHaveText(`password_secret: '${`secret:dbdatakit:gateway:managed-console-1:erp-login`}'`)
   await expect(page.getByTestId('secret-erp-login')).toBeVisible()
   await expect(page.getByTestId('secret-value')).toHaveValue('')
   await expect(page.getByTestId('secret-name')).toHaveValue('')
@@ -103,12 +103,12 @@ export async function secretsStory(page: Page) {
 
   // the data source editor shows the reference to write; the file names it; the test finds the secret
   await page.goto(`/servers/${SERVER}/data-sources/erp`)
-  await expect(page.getByTestId('data-source-secret-erp-login')).toContainText("password_secret: 'secret:dbdata:gateway:managed-console-1:erp-login'")
+  await expect(page.getByTestId('data-source-secret-erp-login')).toContainText("password_secret: 'secret:dbdatakit:gateway:managed-console-1:erp-login'")
   await expect(page.getByTestId('data-source-secrets-link')).toBeVisible()
   await page.getByTestId('data-source-test').click()
   await expect(page.getByTestId('data-source-test-result')).toHaveAttribute('data-ok', 'false')
   await expect(page.getByTestId('data-source-test-result')).toContainText('The login has no password')
-  const text = mock.source.text.replace('auth: { mode: sql, user: reader }', `auth: { mode: sql, user: reader, password_secret: 'secret:dbdata:gateway:${OWNER}:erp-login' }`)
+  const text = mock.source.text.replace('auth: { mode: sql, user: reader }', `auth: { mode: sql, user: reader, password_secret: 'secret:dbdatakit:gateway:${OWNER}:erp-login' }`)
   await page.getByTestId('data-source-text').fill(text)
   await page.getByTestId('data-source-save').click()
   await expect(page.getByTestId('data-source-notice')).toContainText('Saved')

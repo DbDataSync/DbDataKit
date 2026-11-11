@@ -24,7 +24,7 @@ internal sealed class ClientRunnerSecrets(RunnerPublishClient client, string ser
 
 /// <summary>
 /// <c>dbdatabuild secret send --to runner &lt;connection&gt; --server &lt;runner&gt; [--role write|read] [--delete-local]</c> (plan 28c E19, the Build side of E20d): a stored login of this server over the paired HTTPS to the runner's secret store,
-/// under the name the server stores it by (<c>dbdata:build:connection:&lt;connection&gt;:&lt;role&gt;</c>), which is the name the runner's <c>connection/1</c> of that connection refers to. The role is <c>write</c> unless <c>--role read</c> says otherwise: a
+/// under the name the server stores it by (<c>dbdatakit:build:connection:&lt;connection&gt;:&lt;role&gt;</c>), which is the name the runner's <c>connection/1</c> of that connection refers to. The role is <c>write</c> unless <c>--role read</c> says otherwise: a
 /// scheduled refresh on the runner writes with the runner's write login, and the server keeps its read logins to plan, preview and report. The value goes into the request body only: it is not printed, logged, put in an error or an audit line.
 /// <para>
 /// <c>--delete-local</c> removes the write login from this server's store once the runner lists it among its secrets (a read login is never deleted: the server needs it). After that the server's refresh has no write login to give.

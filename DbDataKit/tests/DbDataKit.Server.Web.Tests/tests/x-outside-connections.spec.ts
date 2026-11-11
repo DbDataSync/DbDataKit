@@ -13,7 +13,7 @@ async function replaceEditorText(page: Page, text: string) {
   await page.keyboard.insertText(text)
 }
 
-const CRM = 'schema: connection/2\nkind: http\nname: crm\nendpoint: https://api.example.com/v1\nsign_in:\n  method: api_key\n  key_secret: secret:dbdata:console:connection:crm:key\n'
+const CRM = 'schema: connection/2\nkind: http\nname: crm\nendpoint: https://api.example.com/v1\nsign_in:\n  method: api_key\n  key_secret: secret:dbdatakit:server:connection:crm:key\n'
 
 test('an API connection is started from a template, a key written as itself is refused with its line, the file is saved and the typed key is kept as a reference', async ({ page, context, baseURL }) => {
   await signInNewAdmin(page, context, baseURL!, 'Connection Tester', `connections-${Date.now()}@example.com`)
@@ -22,15 +22,15 @@ test('an API connection is started from a template, a key written as itself is r
   const secretBodies: unknown[] = []
   const row = () => ({
     name: 'crm', file: 'connections/crm.yml', yaml: saved ?? CRM, kind: 'http', endpoint: 'https://api.example.com/v1', signIn: 'api_key', cloud: null, diagnostics: [],
-    secrets: [{ field: 'key', path: 'sign_in.key_secret', reference: 'secret:dbdata:console:connection:crm:key', available: stored, problem: stored ? null : 'The secret `secret:dbdata:console:connection:crm:key` is not set. Type it here.' }],
+    secrets: [{ field: 'key', path: 'sign_in.key_secret', reference: 'secret:dbdatakit:server:connection:crm:key', available: stored, problem: stored ? null : 'The secret `secret:dbdatakit:server:connection:crm:key` is not set. Type it here.' }],
   })
   await page.route('**/api/outside-connections', (route) => json(route, { kinds: ['http', 'model-provider'], connections: saved ? [row()] : [] }))
   await page.route('**/api/outside-connections/template*', (route) => json(route, { yaml: CRM }))
   await page.route('**/api/outside-connections/crm/check', (route) => json(route, { diagnostics: [] }))
   await page.route('**/api/outside-connections/crm/test', (route) => json(route, stored
     ? { ok: true, reached: true, signIn: 'accepted', message: 'https://api.example.com/v1 answered 200 and accepted the sign-in.', kind: null, temporary: false, status: 200, milliseconds: 12 }
-    : { ok: false, reached: null, signIn: 'not checked', message: 'The secret `secret:dbdata:console:connection:crm:key` is not set. Type it on this screen.', kind: null, temporary: false, status: null, milliseconds: 0 }))
-  await page.route('**/api/outside-connections/crm/secrets/key', (route) => { secretBodies.push(route.request().postDataJSON()); stored = true; return json(route, { stored: true, reference: 'secret:dbdata:console:connection:crm:key' }) })
+    : { ok: false, reached: null, signIn: 'not checked', message: 'The secret `secret:dbdatakit:server:connection:crm:key` is not set. Type it on this screen.', kind: null, temporary: false, status: null, milliseconds: 0 }))
+  await page.route('**/api/outside-connections/crm/secrets/key', (route) => { secretBodies.push(route.request().postDataJSON()); stored = true; return json(route, { stored: true, reference: 'secret:dbdatakit:server:connection:crm:key' }) })
   await page.route('**/api/outside-connections/crm', (route) => {
     const { yaml } = route.request().postDataJSON() as { yaml: string }
     // the key must be a reference (`key_secret: secret:...`); a bare `key_secret:` line contains the text `secret:` too, so the test is on what follows it

@@ -9,7 +9,7 @@ namespace DbDataSync.Core.Secrets;
 /// The secrets Sync reads and writes, by name (<see cref="SecretRefs"/>), over the shared encrypted store
 /// (<see cref="EncryptedFileSecretStore"/>) with the environment behind it. Sync's own code is synchronous, so this offers the
 /// few calls it makes in that shape; the providers and the store are the shared ones, and the names are
-/// <c>dbdata:sync:...</c>.
+/// <c>dbdatakit:sync:...</c>.
 /// <para>
 /// The store lives in <c>secrets/</c> under a data directory (the repository root for the API and the CLI, a directory a runner gives the engine otherwise: never a read-only package view, plan 28c ED8), its key in <c>secrets/keys</c> (DPAPI on Windows, a 0600 file elsewhere, created on first use)
 /// or in the key file <c>DBDATAKIT_SECRETS_KEY_FILE</c> names. Nothing here ever logs or prints a value.
@@ -110,5 +110,5 @@ public sealed class SecretStore
 
     private static SecretName ParseName(string name) =>
         SecretName.TryParse(name, out var parsed) ? parsed
-            : throw new FormatException($"'{name}' is not a secret name; expected 'dbdata:sync:<kind>:<name>'.");
+            : throw new FormatException($"'{name}' is not a secret name; expected 'dbdatakit:sync:<kind>:<name>'.");
 }

@@ -82,7 +82,7 @@ export function KeysPage() {
               <div className="card-title">Point a target at a key that is already in the secret store</div>
               <form className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }} onSubmit={(e) => { e.preventDefault(); if (!refWhy && !refNameWhy && refName.trim() && reference.trim()) set.mutate() }}>
                 <input className="input mono" aria-label="Target name for the reference" placeholder="target" value={refName} onChange={(e) => setRefName(e.target.value)} data-testid="wsk-ref-name" />
-                <input className="input mono" style={{ minWidth: 300 }} aria-label="Reference to the secret" placeholder="secret:dbdata:workspace:publisher-key:edge" value={reference} onChange={(e) => setReference(e.target.value)} data-testid="wsk-ref-value" />
+                <input className="input mono" style={{ minWidth: 300 }} aria-label="Reference to the secret" placeholder="secret:dbdatakit:workspace:publisher-key:edge" value={reference} onChange={(e) => setReference(e.target.value)} data-testid="wsk-ref-value" />
                 <button type="submit" className="btn" disabled={!!refWhy || !!refNameWhy || !refName.trim() || !reference.trim() || set.isPending} data-testid="wsk-ref-set">Set the reference</button>
                 {(refWhy ?? refNameWhy) && <span className="hint" data-testid="wsk-ref-why">{refWhy ?? refNameWhy}</span>}
               </form>

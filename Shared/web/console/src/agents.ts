@@ -172,7 +172,7 @@ export function connectCommand(product: string, consoleUrl: string, user: string
 export const tokenState = (token: AgentToken): string => (token.revokedAt ? 'revoked' : token.active ? 'active' : 'expired')
 
 /** The reference this console keeps a connection's typed key under (the secret field `key` of `connections/<name>.yml`). */
-export const keyReferenceFor = (name: string): string => `secret:dbdata:console:connection:${name}:key`
+export const keyReferenceFor = (name: string): string => `secret:dbdatakit:server:connection:${name}:key`
 
 /** A starting file for a provider of a kind: a connection of kind `model-provider` (plan 27a IX01), with the key reference this console keeps a typed key under. */
 export function providerTemplate(kind: string, name: string): string {

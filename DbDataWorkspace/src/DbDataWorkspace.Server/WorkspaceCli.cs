@@ -44,7 +44,7 @@ public static class WorkspaceCli
     ], WorkspaceServer.Version, () => DbDataKit.State.SuiteEnvironment.OldNameProblem(environment));
 
     /// <summary>
-    /// The shared <c>secret</c> verbs over the server's own store (<c>dbdataworkspace secret set dbdata:console:state:&lt;name&gt; --stdin</c>, with <c>--repo</c> as for the pairing verbs), so a state connection a console names by secret reference can be resolved here (plan 29b, C06). The value of a
+    /// The shared <c>secret</c> verbs over the server's own store (<c>dbdataworkspace secret set dbdatakit:server:state:&lt;name&gt; --stdin</c>, with <c>--repo</c> as for the pairing verbs), so a state connection a console names by secret reference can be resolved here (plan 29b, C06). The value of a
     /// secret comes from a hidden prompt or standard input, never an argument.
     /// </summary>
     private static Noun SecretVerbs(string[] invocation)
@@ -53,7 +53,7 @@ public static class WorkspaceCli
         var directory = Path.GetFullPath(i >= 0 && i + 1 < invocation.Length ? invocation[i + 1] : WorkspaceSettings.DefaultDirectory(null));
         var store = WorkspaceSecrets.Open(directory);
         var cli = new DbDataKit.Secrets.Cli.SecretCli(new DbDataKit.Secrets.SecretResolverChain([store]), store, store, () => []);
-        return new Noun("secret", "The server's secrets: the logins its state connection refers to (dbdata:console:state:<name>)",
+        return new Noun("secret", "The server's secrets: the logins its state connection refers to (dbdatakit:server:state:<name>)",
             DbDataKit.Secrets.Cli.SecretNoun.Create(cli, context => DbDataKit.Secrets.Cli.SecretNoun.Captured(context, new InputConsole(context.In))).Verbs
                 .Select(v => v with { Run = (args, context) => v.Run(WithoutRepo(args), context) }).ToList());
     }

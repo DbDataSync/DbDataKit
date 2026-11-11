@@ -126,10 +126,10 @@ public sealed class ConnectionTestIntegrationTests(TestApiFactory factory) : ICl
 
         var source = await _client.GetFromJsonAsync<Source>($"/api/connections/{name}/credential-source", JsonOptions);
 
-        Assert.Equal($"dbdata:sync:connection:{name}", source!.SecretRef);
+        Assert.Equal($"dbdatakit:sync:connection:{name}", source!.SecretRef);
         // the environment variable that answers for the connection when the store has no password: the name, upper-cased
         Assert.Equal(
-            $"DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_{name.Replace('-', '_').ToUpperInvariant()}",
+            $"DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_{name.Replace('-', '_').ToUpperInvariant()}",
             source.EnvironmentVariable);
         Assert.True(source.RequiresCredential);
     }

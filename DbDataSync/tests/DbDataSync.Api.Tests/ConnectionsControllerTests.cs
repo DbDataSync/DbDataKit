@@ -219,7 +219,7 @@ public sealed class ConnectionsControllerTests : IClassFixture<TestApiFactory>
 
     private static string FileText(string name, string? secret = null) =>
         "schema: connection/1\n" + $"name: {name}\n" + "engine: sqlserver\n" + "address: { host: sql01, port: 1433, database: App }\n" +
-        $"auth: {{ mode: sql, user: svc_app, password_secret: '{secret ?? $"secret:dbdata:sync:connection:{name}"}' }}\n";
+        $"auth: {{ mode: sql, user: svc_app, password_secret: '{secret ?? $"secret:dbdatakit:sync:connection:{name}"}' }}\n";
 
     private async Task<JsonElement> Json(HttpResponseMessage response) => (await response.Content.ReadFromJsonAsync<JsonElement>(JsonOptions));
 
@@ -235,7 +235,7 @@ public sealed class ConnectionsControllerTests : IClassFixture<TestApiFactory>
 
         var text = answer.GetProperty("text").GetString()!;
         Assert.Contains("schema: connection/2", text);
-        Assert.Contains($"password_secret: secret:dbdata:sync:connection:{name}", text);
+        Assert.Contains($"password_secret: secret:dbdatakit:sync:connection:{name}", text);
         Assert.DoesNotContain("sup3r-s3cr3t", text);
         Assert.Equal(64, answer.GetProperty("version").GetString()!.Length);
     }
@@ -258,7 +258,7 @@ public sealed class ConnectionsControllerTests : IClassFixture<TestApiFactory>
         var connection = await _client.GetFromJsonAsync<ConnectionConfig>($"/api/connections/{name}", JsonOptions);
         Assert.Equal("sql01", connection!.Host);
         Assert.Equal("svc_app", connection.UserId);
-        Assert.Equal($"dbdata:sync:connection:{name}", connection.CredentialSecretRef);
+        Assert.Equal($"dbdatakit:sync:connection:{name}", connection.CredentialSecretRef);
     }
 
     [Fact]
@@ -268,7 +268,7 @@ public sealed class ConnectionsControllerTests : IClassFixture<TestApiFactory>
         var response = await _client.PutAsJsonAsync($"/api/connections/{name}/file", new { text = FileText(name), expected_version = (string?)null }, JsonOptions);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains($"dbdata:sync:connection:{name}", (await Json(response)).GetProperty("error").GetString());
+        Assert.Contains($"dbdatakit:sync:connection:{name}", (await Json(response)).GetProperty("error").GetString());
         Assert.Equal(HttpStatusCode.NotFound, (await _client.GetAsync($"/api/connections/{name}")).StatusCode);
     }
 
@@ -292,10 +292,10 @@ public sealed class ConnectionsControllerTests : IClassFixture<TestApiFactory>
     public async Task PutFile_NamingAnotherConnectionsSecret_IsRefused()
     {
         var name = $"copy-{Guid.NewGuid():N}";
-        var response = await _client.PutAsJsonAsync($"/api/connections/{name}/file", new { text = FileText(name, "secret:dbdata:sync:connection:other"), expected_version = (string?)null, password = "x" }, JsonOptions);
+        var response = await _client.PutAsJsonAsync($"/api/connections/{name}/file", new { text = FileText(name, "secret:dbdatakit:sync:connection:other"), expected_version = (string?)null, password = "x" }, JsonOptions);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains($"dbdata:sync:connection:{name}", (await Json(response)).GetProperty("error").GetString());
+        Assert.Contains($"dbdatakit:sync:connection:{name}", (await Json(response)).GetProperty("error").GetString());
     }
 
     [Fact]

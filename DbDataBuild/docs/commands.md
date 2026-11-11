@@ -724,7 +724,6 @@ Usage: `dbdatabuild ui mcp [options]`
 | `--allow-writes` | Also offer the commands that change a target or its tracking tables (apply, run, load-seeds, init, ack, publish-metadata). Off by default: a person runs those. |
 | `--no-show` | Do not offer the `show` tool (the link to the page in a browser, or the app screen). The other tools, and the app for the tools that carry it, are unchanged. |
 | `--project` `<path>` | Project root the tools work on |
-| `--report-to` `<text>` | Record this session in a console (its address, https://...) as the person whose personal access token is in DBDATAKIT_CONSOLE_USER and DBDATAKIT_CONSOLE_TOKEN: what was asked, answered and run shows on the console's Agents page, and a host that cannot ask the person asks in the console's inbox. |
 
 ## help code
 

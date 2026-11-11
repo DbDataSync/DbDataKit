@@ -86,3 +86,49 @@ describe('an instance of a model', () => {
     ])
   })
 })
+
+describe('a draft of the models (plan 21 CH01)', () => {
+  it('reads and writes with the draft in the query, in an instance too, and the real data without one', async () => {
+    const { calls, client } = recording(() => json({ rows: [], limit: 25, offset: 0, values: {}, version: 1, valid_from: null, valid_to: null, versions: [] }))
+    const draft = client.withDraft('acme~preview')
+    expect(draft.draftId).toBe('acme~preview')
+    expect(client.draftId).toBeNull()
+
+    await draft.rows('m', 'e')
+    await draft.row('m', 'e', { code: 'NA' })
+    await draft.apply('m', [])
+    await draft.withInstance('acme').rows('m', 'e')
+    await client.withInstance('acme').withDraft(null).rows('m', 'e')
+
+    expect(calls.map((c) => c.path)).toEqual([
+      '/relay/store/api/v1/models/m/entities/e/rows?limit=25&offset=0&draft=acme~preview',
+      '/relay/store/api/v1/models/m/entities/e/row?key.code=NA&draft=acme~preview',
+      '/relay/store/api/v1/models/m/changes?draft=acme~preview',
+      '/relay/store/api/v1/models/m/instances/acme/entities/e/rows?limit=25&offset=0&draft=acme~preview',
+      '/relay/store/api/v1/models/m/instances/acme/entities/e/rows?limit=25&offset=0',
+    ])
+  })
+
+  it('reads the draft, discards it and submits it as a change request', async () => {
+    const { calls, client } = recording((p, init) => {
+      if (init?.method === 'DELETE') return json({ discarded: 1 })
+      if (p.endsWith('/submit')) return json({ id: 'abc123', state: 'pending' }, 202)
+      return p.endsWith('/drafts/p1') ? json({ id: 'p1', writes: [{ seq: 1, at: 'now', actor: 'ada', actor_name: null, applies: true, problem: null, changes: [] }] }) : json({ error: 'no' }, 404)
+    })
+    const draft = client.withDraft('p1')
+    expect((await draft.draft('m'))!.writes).toHaveLength(1)
+    expect(await client.withDraft('other').draft('m')).toBeNull()
+    expect(await client.draft('m')).toBeNull()
+    expect(await draft.submitDraft('m', 'from the preview')).toEqual({ id: 'abc123' })
+    await draft.discardDraft('m')
+    await expect(client.submitDraft('m')).rejects.toThrow('no draft')
+
+    expect(calls.map((c) => `${c.init?.method ?? 'GET'} ${c.path}`)).toEqual([
+      'GET /relay/store/api/v1/models/m/drafts/p1',
+      'GET /relay/store/api/v1/models/m/drafts/other',
+      'POST /relay/store/api/v1/models/m/drafts/p1/submit',
+      'DELETE /relay/store/api/v1/models/m/drafts/p1',
+    ])
+    expect(JSON.parse(String(calls[2]!.init!.body))).toEqual({ description: 'from the preview' })
+  })
+})

@@ -83,7 +83,7 @@ public static class Help
               dbdatasync secret set <ref> <value>|list [<ref> ...]|remove <ref>
                   Stores, checks, or removes a secret in the encrypted secret store — e.g. the
                   state database's password:
-                  dbdatasync secret set dbdata:sync:config:stateConnectionString "Password=..."
+                  dbdatasync secret set dbdatakit:sync:config:stateConnectionString "Password=..."
 
               dbdatasync library install <packageId>[ <packageId>...] [--as <id>] --version <v> [--factory-type type] [--source feed]
               dbdatasync library sync [<id>] | list | uninstall <id>
