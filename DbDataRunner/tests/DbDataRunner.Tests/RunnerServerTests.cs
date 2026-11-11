@@ -55,6 +55,22 @@ public sealed class RunnerServerTests
         Assert.Equal(engine == StateEngineIds.Sqlite, File.Exists(Path.Combine(h.Directory, RunnerState.FileName)));   // a server engine keeps nothing in the directory
     }
 
+    [Fact]
+    public async Task The_certificate_route_describes_the_certificate_the_server_presents_and_wants_a_token()
+    {
+        await using var h = new RunnerHarness(StateEngineIds.Sqlite);
+        await h.StartAsync();
+
+        var (code, certificate) = await h.GetAsync("/api/v1/certificate");
+
+        Assert.Equal(HttpStatusCode.OK, code);
+        Assert.True((bool)certificate!["present"]!);
+        Assert.StartsWith("CN=", Text(certificate, "subject"));
+        Assert.True((int)certificate["days_left"]! > 30);
+        Assert.False((bool)certificate["needs_renewal"]!);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await h.CallAsync(HttpMethod.Get, "/api/v1/certificate", ServerRole.Viewer, token: false)).Status);
+    }
+
     [Theory, MemberData(nameof(Engines))]
     public async Task The_status_call_reports_the_engine_the_channels_the_capabilities_and_the_instance(string engine)
     {

@@ -17,7 +17,7 @@ public sealed class RelayRolesTests
     public static TheoryData<string, string, ServerRole> Rows => new()
     {
         { "GET", "/api/v1/status", ServerRole.Viewer }, { "GET", "/api/v1/instances", ServerRole.Viewer }, { "GET", "/api/v1/connections", ServerRole.Viewer },
-        { "GET", "/api/v1/runs", ServerRole.Viewer }, { "GET", "/api/v1/settings", ServerRole.Viewer }, { "GET", "/api/v1/lineage", ServerRole.Viewer },
+        { "GET", "/api/v1/runs", ServerRole.Viewer }, { "GET", "/api/v1/settings", ServerRole.Viewer }, { "GET", "/api/v1/lineage", ServerRole.Viewer }, { "GET", "/api/v1/certificate", ServerRole.Viewer },
         { "GET", "/api/v1/definitions/integration", ServerRole.Viewer }, { "GET", "/api/v1/definitions/integration/orders", ServerRole.Viewer },
         { "GET", $"/api/v1/instances/{Instance}/labels", ServerRole.Viewer },
         { "GET", "/api/v1/tasks/orders/dev/load/schedule", ServerRole.Viewer }, { "GET", "/api/v1/tasks/orders/dev/load/decisions", ServerRole.Viewer },

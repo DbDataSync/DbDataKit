@@ -102,6 +102,20 @@ public sealed class BuildServerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_certificate_route_describes_the_certificate_the_server_presents_and_wants_a_token()
+    {
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Send(HttpMethod.Get, "/api/v1/certificate")).StatusCode);
+        var response = await Send(HttpMethod.Get, "/api/v1/certificate", token: Token());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var certificate = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+        Assert.True((bool)certificate["present"]!);
+        Assert.Equal(BuildServer.Certificate(serverDir).Thumbprint, (string)certificate["thumbprint"]!);
+        Assert.True((int)certificate["days_left"]! > 30);
+        Assert.False((bool)certificate["needs_renewal"]!);
+    }
+
+    [Fact]
     public async Task Without_a_good_token_nothing_is_answered()
     {
         var id = Path.GetFileName(project);

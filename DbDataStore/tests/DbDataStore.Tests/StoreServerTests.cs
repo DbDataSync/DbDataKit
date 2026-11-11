@@ -65,6 +65,24 @@ public sealed class StoreServerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_certificate_route_describes_the_certificate_the_server_presents_and_wants_a_token()
+    {
+        var (http, paired) = await Pair();
+        using var _ = http;
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Send(http, "/api/v1/certificate", null)).StatusCode);
+        var response = await Send(http, "/api/v1/certificate", console.Issuer().Issue(new ConsoleTokenRequest(paired.InstanceId, "ada", "Ada", ServerRole.Viewer)));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var certificate = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+        Assert.True((bool)certificate["present"]!);
+        Assert.Equal(StoreServer.Certificate(directory).Thumbprint, (string)certificate["thumbprint"]!);
+        Assert.True((int)certificate["days_left"]! > 30);
+        Assert.False((bool)certificate["needs_renewal"]!);
+        Assert.DoesNotContain("PRIVATE", certificate.ToJsonString());
+    }
+
+    [Fact]
     public async Task The_instance_id_is_the_same_after_a_restart_because_it_is_written_to_the_servers_directory()
     {
         var first = StoreServer.InstanceId(settings.Directory);

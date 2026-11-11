@@ -81,6 +81,7 @@ internal static class BuildServer
         // maintenance mode and the state endpoints (plan 29b, C05); the scheduler stops claiming through the gate the caller shares with it
         maintenance ??= new MaintenanceGate(work: () => scheduler?.Running ?? 0);
         app.UseMaintenance(maintenance, context => context.ManagementTokenOrNull() is { } token && ManagementAuthorization.Authorize(token, ServerRole.Admin).Allowed);
+        app.MapCertificateStatus(() => certificate);   // days left and subject, for the console's Monitoring (UI10)
         app.MapState(new StateManagement(new StateManagementOptions(
             "dbdatabuild", "dbdatabuild", "the server",
             () => state ?? DbDataKit.State.Cli.StateTarget.From(BuildState.Resolve(settings.Directory), BuildState.SqlitePath(settings.Directory), () => BuildState.Secrets(settings.Directory), BuildState.SettingsFile(settings.Directory)),

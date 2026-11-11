@@ -177,6 +177,8 @@ public static class ConsoleHost
         app.UseAuthorization();
         app.MapControllers();
         MapState(app, settings, maintenance);
+        // the certificate this console presents: days left and subject, for its own Monitoring row (UI10); the shape of every server's `GET /api/v1/certificate`
+        app.MapGet(CertificateStatusEndpoint.Path, () => Results.Json(CertificateStatusEndpoint.Describe(certificate, "self-signed", TimeProvider.System.GetUtcNow()))).RequireAuthorization(DbDataKit.Web.Auth.Policies.Viewer);
         app.MapEmbeddedRunner();
         app.MapRelay();
         if (settings.Home is not null) app.MapFederation();

@@ -70,7 +70,7 @@ All screens are shown by the console (`Shared/web/console`) at `/servers/<server
 
 ## Notes and gaps
 
-* **Monitoring** (console) lists a server that does not answer or says it is not ready (any kind: Store and Workspace servers included, UI04), a certificate that is expired or inside its warning window on a Gateway or a Sync server (UI02; a valid one is no row), and also says who schedules a Build plan or a runner task and moves a Build plan between this server's scheduler, observation by a runner and the runner (`monitoring-owner-*`; the Build server changes its own settings and the runner's record together).
+* **Monitoring** (console) lists a server that does not answer or says it is not ready (any kind: Store and Workspace servers included, UI04), a certificate that is expired or inside its warning window on a Gateway, a Sync, a Build, a Store or a Runner server and on the console itself (UI02, UI10: each answers `GET /api/v1/certificate`, days left and subject; a valid one is no row, and a server without the route shows none), and also says who schedules a Build plan or a runner task and moves a Build plan between this server's scheduler, observation by a runner and the runner (`monitoring-owner-*`; the Build server changes its own settings and the runner's record together).
 * **Console connections** lists and copies; a connection is created and edited in the product's own screens (Sync, or the Gateway's data sources).
 * **Build**: the connections row is from reading `NewConnectionPanel` and `DefinitionPanel`, not from using them; confirm what they edit before relying on the Edit cell.
 * **Semantic models and saved queries** (plan 19, lane J): Build publishes a model and the Gateway's Models screen lists and retires it; the Views page renders view documents, and opens dashboards from recorded fixtures (plan 32 DBR23) or from those published to a Gateway that runs the `views` module (DBR11b); it has no screen for the models themselves.
@@ -107,12 +107,12 @@ Question: for everything a person authors, publishes by file or command, or has 
 | Lineage, data quality | `LineagePage.tsx`, `QualityPage.tsx` | release of a block by hand: FQ15 (plan 23a) |
 | State databases, upgrades | `StateConnections.tsx`, `ServerStatePage.tsx`, `UpgradesPage.tsx` | none |
 | Secrets | Gateway `SecretsPage.tsx` (names and references, never a value); Workspace `KeysPage.tsx` (references) | no overview across servers of which references are written, missing or unused: UI06 |
-| Certificates | Gateway `TlsPage.tsx`, admin `AdminCertificatePage.tsx` (Sync); **new** Monitoring shows an expired one or one inside its warning window on a Gateway or a Sync server | Build, Store, Runner, Workspace and the console itself have no certificate route to read: UI10 |
+| Certificates | Gateway `TlsPage.tsx`, admin `AdminCertificatePage.tsx` (Sync); **new** Monitoring shows an expired one or one inside its warning window on a Gateway, Sync, Build, Store or Runner server and on the console (every one of them answers `GET /api/v1/certificate`, the Gateway's shape; UI10) | Renewing is each server's own command (`cert renew`; the Gateway's screen is the only one with a button). The Workspace server has no route yet (its host is in the authoring work): UI10 keeps that line |
 | Instances, pairing | `InstancesPage.tsx`, `PendingServers.tsx` | none |
 
 ### Open gaps added to plan 13c
 
-`UI06` to `UI10` are in [13c-follow-ups.md](plans/13c-follow-ups.md) with what each needs; each needs a server route first (a screen is never built around a file), so none was built in the audit. UI01 to UI04 were built on routes that exist today; UI05 was built with its route in the next round (the console's own audit).
+`UI06` to `UI10` (UI10 now only for the Workspace server) are in [13c-follow-ups.md](plans/13c-follow-ups.md) with what each needs; each needs a server route first (a screen is never built around a file), so none was built in the audit. UI01 to UI04 were built on routes that exist today; UI05 was built with its route in the next round (the console's own audit).
 
 ### Not verified
 
