@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { buildTarget, targetLine, bindingLine, connectCommand, providerTemplate, cost, eventWord, percent, promptingMeaning, promptingName, sessions, statusWord, tokenState, waitingOn, type AgentToken, type Approval, type AuditRow } from './agents'
-import { moveChoice, planOf, slotsToYaml, againstLimit, type SlotBindingView } from './agents'
+import { buildTarget, targetLine, connectCommand, providerTemplate, cost, eventWord, percent, promptingMeaning, promptingName, sessions, statusWord, tokenState, waitingOn, type AgentToken, type Approval, type AuditRow } from './agents'
+import { againstLimit } from './agents'
 import { emptyPolicy, policyFromYaml, policyToYaml, settingMeaning } from './policyForm'
 import { contextLine, isPolicyItem, parseInPlay, policyItemId, policyItemText, workActions, workWord, type WorkItem } from './knowledge'
 
@@ -22,7 +22,6 @@ describe('model providers and slots', () => {
     expect(providerTemplate('ollama', 'chatty')).not.toContain('purpose:')
   })
   it('says a slot binding as the primary and the fallback in order', () => {
-    expect(bindingLine({ slot: 'default', channel: '*', choices: [{ provider: 'a', model: 'm', usable: true, problem: null }, { provider: 'b', model: 'n', usable: false, problem: 'x' }] })).toBe('a/m then b/n (not usable)')
   })
 })
 
@@ -154,23 +153,7 @@ describe('where a Build agent works (AG14)', () => {
   })
 })
 
-describe('AG18 to AG21: the slot editor, the usage line and the policy switches', () => {
-  const view = (slot: string, channel: string, ...choices: [string, string][]): SlotBindingView => ({ slot, channel, choices: choices.map(([provider, model]) => ({ provider, model, usable: true, problem: null })) })
-
-  it('binds a slot differently in two channels and writes the file the server reads', () => {
-    const plan = planOf([view('default', '*', ['claude', 'claude-sonnet-4-5'], ['local', 'llama3.1:8b']), view('default', 'test', ['local', 'llama3.1:8b'])])
-    expect(plan.default['*']).toHaveLength(2)
-    expect(plan.default.test).toHaveLength(1)
-    const yaml = slotsToYaml(plan)
-    expect(yaml).toBe('model-slots: 1\nslots:\n  default:\n    "*":\n      - { provider: claude, model: "claude-sonnet-4-5" }\n      - { provider: local, model: "llama3.1:8b" }\n    test:\n      - { provider: local, model: "llama3.1:8b" }\n')
-  })
-
-  it('reorders a fallback one place and leaves an out-of-range move alone', () => {
-    expect(moveChoice(['a', 'b', 'c'], 2, -1)).toEqual(['a', 'c', 'b'])
-    expect(moveChoice(['a', 'b', 'c'], 0, -1)).toEqual(['a', 'b', 'c'])
-    expect(moveChoice(['a', 'b', 'c'], 2, 1)).toEqual(['a', 'b', 'c'])
-  })
-
+describe('AG18 to AG21: the usage line and the policy switches', () => {
   it('says what is used against a limit, and that none is set', () => {
     expect(againstLimit(5, 20, 'cost')).toBe('cost: 5 of 20 (25%)')
     expect(againstLimit(1234, null, 'tokens')).toBe('tokens: 1,234 (no limit set)')

@@ -40,7 +40,7 @@ public sealed class SubscriptionTests
 
     private static RenderResult.Rendered Rendered(string text, string title = "Sales") => new(Encoding.UTF8.GetBytes(text), "application/pdf", "sales.pdf", title, $"Sales for the week: {text}", "https://console.example/views/sales", []);
 
-    private static (SubscriptionService Service, SubscriptionStore Store, FakeRenderer Renderer, FakeDirectory Directory, ScriptedChannel Channel, ChannelSet Channels) Build(DeliveryHarness h, Func<SubscriptionRender, RenderResult> render)
+    private static (SubscriptionService Service, SubscriptionStore Store, FakeRenderer Renderer, FakeDirectory Directory, ScriptedChannel Channel, ChannelSet Channels) Build(DeliveryHarness h, Func<SubscriptionRender, RenderResult> render, DbDataKit.Monitoring.INotificationFeed? notifications = null)
     {
         var channel = new ScriptedChannel("mail", _ => DeliveryResult.Sent());
         var channels = new ChannelSet(channel);
@@ -48,7 +48,7 @@ public sealed class SubscriptionTests
         var renderer = new FakeRenderer(render);
         var directory = new FakeDirectory();
         var store = new SubscriptionStore(h.Database);
-        return (new SubscriptionService(store, delivery, renderer, directory, h.Clock), store, renderer, directory, channel, channels);
+        return (new SubscriptionService(store, delivery, renderer, directory, h.Clock, null, notifications), store, renderer, directory, channel, channels);
     }
 
     // ---- the request ----
@@ -218,7 +218,8 @@ public sealed class SubscriptionTests
     public async Task A_subscriber_who_lost_access_gets_nothing_the_subscription_stops_and_says_why_to_them_and_the_owner(string engine)
     {
         using var h = new DeliveryHarness(engine);
-        var (service, store, _, _, _, _) = Build(h, r => r.Subscriber == "bo" ? new RenderResult.AccessLost("Bo Chen is no longer in the group `sales-east`, which the model's rule grants.") : Rendered("rows"));
+        var feed = new RecordingFeed();
+        var (service, store, _, _, _, _) = Build(h, r => r.Subscriber == "bo" ? new RenderResult.AccessLost("Bo Chen is no longer in the group `sales-east`, which the model's rule grants.") : Rendered("rows"), feed);
         var bo = store.Create(Fields("Sales (Bo)"), "bo", "Bo Chen", "admin", T0);
         var ana = store.Create(Fields("Sales (Ana)"), "ana", "Ana Lopez", "ana", T0);
 
@@ -236,6 +237,12 @@ public sealed class SubscriptionTests
         Assert.Equal(["bo@example.com", "admin@example.com"], notice.Recipients);                          // the subscriber and the owner
         Assert.Contains("no longer in the group `sales-east`", notice.BodyText);
         Assert.Equal("access-lost", Assert.Single(store.Runs(bo)).Outcome);
+        // an administrator is told through the notification feed: who, which subscription, why, and that nothing was delivered
+        var raised = Assert.Single(feed.Raised);
+        Assert.Equal(("SubscriptionAccessLost", "Sales (Bo)"), (raised.Kind, raised.Mapping));
+        Assert.StartsWith("Lost access: the subscription 'Sales (Bo)' of Bo Chen", raised.Message);
+        Assert.Contains("nothing was delivered", raised.Message);
+        Assert.Contains("no longer in the group `sales-east`", raised.Message);
 
         h.Clock.Advance(TimeSpan.FromDays(3));
         Assert.Single(await service.RunDueAsync(default));                                                  // only Ana's: a stopped subscription is not due
@@ -357,4 +364,23 @@ public sealed class SubscriptionTests
         Assert.Equal(DateTimeOffset.Parse("2026-03-30T05:00:00Z"), store.Find(berlin)!.NextRunAt);
         Assert.Equal(1, store.Runs(berlin).Count(r => r.StartedAt < DateTimeOffset.Parse("2026-03-29T00:00:00Z")));
     }
+}
+
+
+/// <summary>A notification feed that remembers what was raised (the console's feed is the real one).</summary>
+internal sealed class RecordingFeed : DbDataKit.Monitoring.INotificationFeed
+{
+    public List<(string Kind, string Message, string? Mapping)> Raised { get; } = [];
+
+    public void Raise(string kind, string message, string? taskName = null, string? mappingName = null, Guid? runId = null) => Raised.Add((kind, message, mappingName));
+
+    public IReadOnlyList<DbDataKit.Monitoring.NotificationRecord> List(long? sinceId = null) => [];
+
+    public int UnreadCount(long? lastSeenId) => 0;
+
+    public long? GetCursor(string readerId) => null;
+
+    public void MarkSeen(string readerId, long lastSeenNotificationId) { }
+
+    public int PruneNotifications(TimeSpan? maxAge) => 0;
 }

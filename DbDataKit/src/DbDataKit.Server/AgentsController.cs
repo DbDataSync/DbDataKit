@@ -225,19 +225,6 @@ public sealed class AgentsController(ConsoleAgents agents, ConsoleModels models,
         return Ok(result);
     }
 
-    [HttpPost("models/slots/check")]
-    [Authorize(Policies.Admin)]
-    public IActionResult CheckSlots([FromBody] YamlBody body) => Ok(new { diagnostics = models.CheckSlots(body.Yaml).Diagnostics });
-
-    [HttpPut("models/slots")]
-    [Authorize(Policies.Admin)]
-    public IActionResult SaveSlots([FromBody] YamlBody body)
-    {
-        var (saved, diagnostics) = models.SaveSlots(body.Yaml);
-        if (saved) agents.Store.RecordAudit(null, null, "model-slots-saved", PersonId, "console", "1", "console", null, null, "the slot bindings were saved");
-        return saved ? Ok(new { saved, diagnostics }) : UnprocessableEntity(new { saved, diagnostics });
-    }
-
     // ---- memories (AG19): the person's own, and the work's of a workspace they have open ----
 
     public sealed record MemoryBody(string Text, string? Work = null);

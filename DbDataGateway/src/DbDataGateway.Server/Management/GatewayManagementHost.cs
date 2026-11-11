@@ -141,7 +141,7 @@ public static class GatewayManagementHost
                     // who made a data source: its file in this instance's configuration, else the group's published one (O04b)
                     var file = Path.Combine(configDirectory, "connections", dataSource + ".yaml");
                     var text = File.Exists(file) ? File.ReadAllText(file) : app.Services.GetRequiredService<Serving.PublishedDataSources>().Text(dataSource);
-                    return text is null ? null : DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, dataSource + ".yaml").Definition?.ManagedBy;
+                    return text is null ? null : DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, dataSource + ".yaml").Definition?.ManagedBy;
                 }, audit),
             apps: new GatewayApps(new DbDataKit.State.DefinitionStore(state), () => HomeApprovers.Open(state, app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue), audit,
                 appsAddress: () => { var current = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue; return GatewayModules.Has(current, GatewayModules.Apps) ? GatewayAppsModule.PublicUrlOf(current) : null; },

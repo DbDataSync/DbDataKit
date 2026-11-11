@@ -33,9 +33,13 @@ public sealed record PostureSetting(string Name, string Default, string Effect)
     public static readonly PostureSetting AcceptProductionOnConsoleRunner = new("accept_production_on_console_runner", "the console's embedded runner runs evaluation, system and development work only",
         "Production packages run on the runner embedded in the console: their schedules stop whenever the console stops, and they share the console's process, account and resources.");
 
+    /// <summary>A non-production release channel of a slot that sends or writes (a delivery channel, plan 27a IX17) uses a connection that production uses. The scope of a choice is <c>bindings/&lt;section&gt;/&lt;slot&gt;/&lt;release channel&gt;</c>.</summary>
+    public static readonly PostureSetting ProductionBindingOnNonProduction = new("production_binding_on_non_production", "a non-production release channel uses a connection of its own (a sandbox) or has none",
+        "The release channel uses a connection that production uses: a message or a write sent from it reaches production's far side (its Slack, its mail server, its system), so a test or a preview can notify or change what production notifies or changes.");
+
     /// <summary>Every setting that can be loosened.</summary>
     public static IReadOnlyList<PostureSetting> All { get; } =
-        [RunInProcess, LongerLimits, PrivilegedAccount, RecompileOnInstance, PerPackageAccount, AcceptProductionOnConsoleRunner];
+        [RunInProcess, LongerLimits, PrivilegedAccount, RecompileOnInstance, PerPackageAccount, AcceptProductionOnConsoleRunner, ProductionBindingOnNonProduction];
 
     public static PostureSetting? Find(string name) => All.FirstOrDefault(s => s.Name == name);
 

@@ -61,7 +61,7 @@ public sealed class PublishedDataSources(DefinitionStore store, StateDatabase st
                 reload();
                 return;
             }
-            var loaded = DbDataKit.Connections.ConnectionDefinitionLoader.Load(current.Content, file);
+            var loaded = DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(current.Content, file);
             if (!loaded.Ok)
             {
                 var message = $"Published data source '{name}' version {current.Version} is not a valid data source, so {(File.Exists(file) ? "the version served before stays" : "it is not served")} here: {string.Join("; ", loaded.Diagnostics.Select(d => d.Message))}";

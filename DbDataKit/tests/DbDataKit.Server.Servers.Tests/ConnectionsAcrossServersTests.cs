@@ -122,7 +122,7 @@ public sealed class ConnectionsAcrossServersTests : IAsyncLifetime
         Assert.Contains("name: orders-edge", written);
         Assert.DoesNotContain("test_query", written);                         // extensions.sync is Sync's
         Assert.DoesNotContain("sync-typed-pw", written);
-        Assert.Equal("secret:dbdatakit:gateway:connection:orders-edge", DbDataKit.Connections.ConnectionDefinitionLoader.Load(written, "orders-edge.yaml").Require().Auth!.PasswordSecret);
+        Assert.Equal("secret:dbdatakit:gateway:connection:orders-edge", DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(written, "orders-edge.yaml").Require().Auth!.PasswordSecret);
         var listed = (await AsPerson(HttpMethod.Get, $"/relay/{gatewayId}/api/v1/data-sources")).Body!["data_sources"]!.AsArray().Single(d => (string)d!["name"]! == "orders-edge")!;
         Assert.True((bool)listed["valid"]!);
 

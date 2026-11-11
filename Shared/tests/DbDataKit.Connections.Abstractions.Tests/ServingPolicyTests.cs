@@ -40,7 +40,7 @@ public sealed class ServingPolicyTests
         var block = Gateway("    classifier: strict\n    batch_size: 1000\n    compression:\n      enabled: true\n");
         var text = Head + "connection_string: 'Data Source=:memory:'\n" + ServingPolicy.Emit(block);
         Assert.Equal("extensions:\n  gateway:\n    classifier: strict\n    batch_size: 1000\n    compression:\n      enabled: true\n", ServingPolicy.Emit(block));
-        var loaded = ConnectionDefinitionLoader.Load(text); Assert.True(loaded.Ok, string.Join("\n", loaded.Diagnostics));
+        var loaded = ConnectionDefinitionLoader.LoadDatabaseConnection(text); Assert.True(loaded.Ok, string.Join("\n", loaded.Diagnostics));
         Assert.Equal(ServingPolicy.Describe(block), ServingPolicy.Describe(ServingPolicy.BlockOf(text)!));
     }
 }

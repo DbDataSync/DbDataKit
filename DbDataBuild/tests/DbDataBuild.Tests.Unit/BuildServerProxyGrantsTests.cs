@@ -26,7 +26,7 @@ public sealed partial class BuildServerProxyTests
         var reply = await Publish("ada", ServerRole.Approver, "edge", new { connection = "sqlserver", data_source = "warehouse" });
         Assert.True(reply.StatusCode == HttpStatusCode.OK, await reply.Content.ReadAsStringAsync());
         var text = (string)JsonNode.Parse(seen.Last(r => r.Method == "PUT" && r.Path == "/api/v1/data-sources/warehouse").Body)!["text"]!;
-        return (text, ConnectionDefinitionLoader.Load(text, "warehouse.yaml").Require());
+        return (text, ConnectionDefinitionLoader.LoadDatabaseConnection(text, "warehouse.yaml").Require());
     }
 
     [Fact]
@@ -66,8 +66,8 @@ public sealed partial class BuildServerProxyTests
     public void The_text_of_a_data_source_quotes_group_names_and_says_an_empty_grant_list_is_empty()
     {
         var odd = ProxyPublisher.DataSourceText("w", "sqlserver", "secret:x", new GrantsSpec { Groups = ["it's", "a b"] });
-        Assert.Equal(["it's", "a b"], ConnectionDefinitionLoader.Load(odd, "w.yaml").Require().Grants!.Groups);
-        var empty = ConnectionDefinitionLoader.Load(ProxyPublisher.DataSourceText("w", "sqlserver", "secret:x", new GrantsSpec()), "w.yaml").Require();
+        Assert.Equal(["it's", "a b"], ConnectionDefinitionLoader.LoadDatabaseConnection(odd, "w.yaml").Require().Grants!.Groups);
+        var empty = ConnectionDefinitionLoader.LoadDatabaseConnection(ProxyPublisher.DataSourceText("w", "sqlserver", "secret:x", new GrantsSpec()), "w.yaml").Require();
         Assert.Empty(empty.Grants!.Groups);
         Assert.False(empty.Grants.Everyone);
         Assert.StartsWith("schema: connection/2\n", ProxyPublisher.DataSourceText("w", "sqlserver", "secret:x", null));

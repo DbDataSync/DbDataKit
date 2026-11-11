@@ -11,7 +11,7 @@ public sealed class ConnectionKindTests
 {
     private const string Http = "schema: connection/2\nkind: http\nname: crm\nendpoint: https://api.example.com/v1\nsign_in:\n  method: api_key\n  name: X-Api-Key\n  key_secret: secret:dbdatakit:server:connection:crm:key\n";
 
-    private static ConnectionLoadResult Any(string yaml, string file = "connections/x.yml") => ConnectionDefinitionLoader.Load(yaml, file, outsideKinds: true);
+    private static ConnectionLoadResult Any(string yaml, string file = "connections/x.yml") => ConnectionDefinitionLoader.LoadConnectionOfAnyKind(yaml, file);
 
     private static string Errors(ConnectionLoadResult r) => string.Join("\n", r.Diagnostics.Where(d => d.Severity == ConfigSeverity.Error));
 
@@ -20,7 +20,7 @@ public sealed class ConnectionKindTests
     {
         foreach (var text in new[] { "schema: connection/1\nname: w\nengine: postgres\naddress: { host: h, database: d }\n", "schema: connection/2\nname: w\nengine: postgres\naddress: { host: h, database: d }\n", "schema: connection/2\nkind: database\nname: w\nengine: postgres\naddress: { host: h }\n" })
         {
-            var strict = ConnectionDefinitionLoader.Load(text);
+            var strict = ConnectionDefinitionLoader.LoadDatabaseConnection(text);
             Assert.True(strict.Ok, Errors(strict));
             Assert.Equal("database", strict.Definition!.KindName);
             Assert.False(strict.Definition.IsOutside);
@@ -31,10 +31,10 @@ public sealed class ConnectionKindTests
     [Fact]
     public void A_missing_engine_of_a_database_is_still_refused_and_an_outside_key_in_a_database_is_too()
     {
-        var noEngine = ConnectionDefinitionLoader.Load("schema: connection/1\nname: w\naddress: { host: h }\n", "c.yml");
+        var noEngine = ConnectionDefinitionLoader.LoadDatabaseConnection("schema: connection/1\nname: w\naddress: { host: h }\n", "c.yml");
         Assert.False(noEngine.Ok);
         Assert.Contains("engine", Errors(noEngine), StringComparison.Ordinal);
-        var mixed = ConnectionDefinitionLoader.Load("schema: connection/2\nname: w\nengine: postgres\naddress: { host: h }\nendpoint: https://x.example.com\n");
+        var mixed = ConnectionDefinitionLoader.LoadDatabaseConnection("schema: connection/2\nname: w\nengine: postgres\naddress: { host: h }\nendpoint: https://x.example.com\n");
         Assert.Contains(mixed.Diagnostics, d => d.Code == ConnectionDefinitionLoader.BadOutside && d.Severity == ConfigSeverity.Error);
     }
 
@@ -55,7 +55,7 @@ public sealed class ConnectionKindTests
     [Fact]
     public void A_program_that_keeps_databases_refuses_an_outside_file_naming_it()
     {
-        var r = ConnectionDefinitionLoader.Load(Http, "connections/crm.yaml");
+        var r = ConnectionDefinitionLoader.LoadDatabaseConnection(Http, "connections/crm.yaml");
         Assert.False(r.Ok);
         var e = Assert.Single(r.Diagnostics, d => d.Severity == ConfigSeverity.Error);
         Assert.Equal(ConnectionDefinitionLoader.KindNotKept, e.Code);
@@ -147,7 +147,7 @@ public sealed class ConnectionKindTests
     [Fact]
     public void A_test_path_does_not_belong_to_a_database_or_a_model_provider()
     {
-        Assert.False(ConnectionDefinitionLoader.Load("schema: connection/2\nname: w\nengine: postgres\naddress: { host: h }\ntest_path: /x\n").Ok);
+        Assert.False(ConnectionDefinitionLoader.LoadDatabaseConnection("schema: connection/2\nname: w\nengine: postgres\naddress: { host: h }\ntest_path: /x\n").Ok);
         Assert.False(Any("schema: connection/2\nkind: model-provider\nname: p\ntest_path: /x\nmodel_provider: { provider: ollama, models: [ { id: m } ] }\n").Ok);
     }
 

@@ -23,6 +23,7 @@ import { ViewsPage } from './pages/ViewsPage'
 import { AgentsPage } from './pages/AgentsPage'
 import { KnowledgePage } from './pages/KnowledgePage'
 import { DeliveryPage } from './pages/DeliveryPage'
+import { BindingsPage } from './pages/BindingsPage'
 
 export default function App() {
   const { data: status, isLoading } = useAuthStatus()
@@ -59,6 +60,7 @@ export default function App() {
       <Route path="/agents" element={<AgentsPage />} />
       <Route path="/knowledge" element={<KnowledgePage />} />
       <Route path="/delivery" element={<DeliveryPage />} />
+      <Route path="/bindings" element={<BindingsPage />} />
       <Route path="/monitoring" element={<MonitoringPage />} />
       <Route path="/approvals" element={<ApprovalsPage />} />
       <Route path="/runs" element={<RunsPage />} />

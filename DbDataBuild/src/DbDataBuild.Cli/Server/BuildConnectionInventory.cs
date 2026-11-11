@@ -29,7 +29,7 @@ internal static class BuildConnectionInventory
                 try { text = File.ReadAllText(path); }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { continue; }
                 // a file that is not a valid connection is left out (the project's own checks say why); nothing of its text is echoed
-                if (ConnectionDefinitionLoader.Load(text, path, addressRequired: false).Definition is not { } definition || !definition.Name.Equals(Path.GetFileNameWithoutExtension(path), StringComparison.Ordinal)) continue;
+                if (ConnectionDefinitionLoader.LoadDatabaseConnection(text, path, addressRequired: false).Definition is not { } definition || !definition.Name.Equals(Path.GetFileNameWithoutExtension(path), StringComparison.Ordinal)) continue;
                 var readOnly = definition.Access == AccessMode.Readonly;
                 if (!rows.TryGetValue(definition.Name, out var row)) rows[definition.Name] = row = (definition.Engine, readOnly, [new ConnectionUse(ProcessKinds.Server, "this server", UseRoles.Read, Channel: id)]);
                 if (readOnly) continue;

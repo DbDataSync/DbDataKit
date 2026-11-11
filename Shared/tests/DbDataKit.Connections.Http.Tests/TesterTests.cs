@@ -9,7 +9,7 @@ public sealed class TesterTests
         new SecretResolverChain([new EnvSecretProvider(name => name switch { "API_KEY" => key, "CLIENT_SECRET" => FakeApi.ClientSecret, _ => null })]);
 
     private static ConnectionDefinition Connection(string endpoint, string signIn, string extra = "") =>
-        ConnectionDefinitionLoader.Load($"schema: connection/2\nkind: http\nname: crm\nendpoint: {endpoint}\n{signIn}{extra}", "connections/crm.yml", outsideKinds: true).Require();
+        ConnectionDefinitionLoader.LoadConnectionOfAnyKind($"schema: connection/2\nkind: http\nname: crm\nendpoint: {endpoint}\n{signIn}{extra}", "connections/crm.yml").Require();
 
     [Fact]
     public async Task A_reachable_system_that_accepts_the_sign_in_is_ok_and_says_so()

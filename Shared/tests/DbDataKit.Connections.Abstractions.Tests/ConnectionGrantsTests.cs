@@ -13,25 +13,25 @@ public sealed class ConnectionGrantsTests
     [Fact]
     public void The_groups_and_the_everyone_switch_load_and_a_file_without_grants_has_none()
     {
-        var groups = ConnectionDefinitionLoader.Load(File(2, "grants:\n  groups: [Finance, auditors]"));
+        var groups = ConnectionDefinitionLoader.LoadDatabaseConnection(File(2, "grants:\n  groups: [Finance, auditors]"));
         Assert.True(groups.Ok, string.Join("\n", groups.Diagnostics));
         Assert.Equal(["Finance", "auditors"], groups.Definition!.Grants!.Groups);
         Assert.False(groups.Definition.Grants.Everyone);
 
-        var everyone = ConnectionDefinitionLoader.Load(File(2, "grants: { everyone: true }"));
+        var everyone = ConnectionDefinitionLoader.LoadDatabaseConnection(File(2, "grants: { everyone: true }"));
         Assert.True(everyone.Ok, string.Join("\n", everyone.Diagnostics));
         Assert.True(everyone.Definition!.Grants!.Everyone);
         Assert.Empty(everyone.Definition.Grants.Groups);
 
-        Assert.Null(ConnectionDefinitionLoader.Load(File(2)).Definition!.Grants);
-        Assert.Null(ConnectionDefinitionLoader.Load(File(1)).Definition!.Grants);
-        Assert.True(ConnectionDefinitionLoader.Load(File(2, "grants: {}")).Ok);          // deliberately nothing: used by no home user
+        Assert.Null(ConnectionDefinitionLoader.LoadDatabaseConnection(File(2)).Definition!.Grants);
+        Assert.Null(ConnectionDefinitionLoader.LoadDatabaseConnection(File(1)).Definition!.Grants);
+        Assert.True(ConnectionDefinitionLoader.LoadDatabaseConnection(File(2, "grants: {}")).Ok);          // deliberately nothing: used by no home user
     }
 
     [Fact]
     public void A_format_1_file_with_grants_is_refused_naming_the_file_the_line_and_the_fix()
     {
-        var result = ConnectionDefinitionLoader.Load(File(1, "grants: { everyone: true }"), "connections/warehouse.yaml");
+        var result = ConnectionDefinitionLoader.LoadDatabaseConnection(File(1, "grants: { everyone: true }"), "connections/warehouse.yaml");
         var error = Assert.Single(result.Diagnostics, d => d.Severity == ConfigSeverity.Error);
         Assert.False(result.Ok);
         Assert.Equal(ConnectionDefinitionLoader.SectionNotInThisFormat, error.Code);
@@ -48,7 +48,7 @@ public sealed class ConnectionGrantsTests
     [InlineData("grants:\n  everyone: true\n  groups: [a]", 6, "also names groups")]
     public void Each_bad_grant_is_refused_with_file_and_line(string extra, int line, string says)
     {
-        var result = ConnectionDefinitionLoader.Load(File(2, extra), "warehouse.yaml");
+        var result = ConnectionDefinitionLoader.LoadDatabaseConnection(File(2, extra), "warehouse.yaml");
         Assert.False(result.Ok);
         var error = Assert.Single(result.Diagnostics, d => d.Severity == ConfigSeverity.Error);
         Assert.Equal(ConnectionDefinitionLoader.BadGrants, error.Code);
@@ -62,7 +62,7 @@ public sealed class ConnectionGrantsTests
     [InlineData("grants:\n  everyone: maybe", "everyone")]
     public void Unknown_keys_and_wrong_types_are_refused_by_the_strict_reader(string extra, string says)
     {
-        var result = ConnectionDefinitionLoader.Load(File(2, extra), "warehouse.yaml");
+        var result = ConnectionDefinitionLoader.LoadDatabaseConnection(File(2, extra), "warehouse.yaml");
         Assert.False(result.Ok);
         Assert.Contains(result.Diagnostics, d => d.Severity == ConfigSeverity.Error && d.Message.Contains(says, StringComparison.Ordinal) && d.Path == "warehouse.yaml");
     }

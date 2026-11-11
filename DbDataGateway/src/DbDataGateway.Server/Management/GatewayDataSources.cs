@@ -87,7 +87,7 @@ public sealed partial class GatewayDataSources(
         foreach (var (name, text) in published?.All() ?? []) if (!texts.Any(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase))) texts.Add((name, text));
         foreach (var (name, text) in texts)
         {
-            if (DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, name + ".yaml").Definition is not { } d) continue;
+            if (DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, name + ".yaml").Definition is not { } d) continue;
             var found = new List<string?> { d.ConnectionStringSecret };
             foreach (var login in new[] { d.Auth, d.ReadLogin, d.WriteLogin }) if (login is not null) found.AddRange([login.PasswordSecret, login.ConnectionStringSecret, login.TokenSecret]);
             var references = found.Where(f => !string.IsNullOrWhiteSpace(f)).Select(f => SecretRef.TryParse(f, out var r) ? r : null).Where(r => r is not null).Select(r => r!).ToList();
@@ -103,7 +103,7 @@ public sealed partial class GatewayDataSources(
             foreach (var file in Directory.EnumerateFiles(Folder, "*.yaml").OrderBy(f => f, StringComparer.Ordinal))
             {
                 var text = File.ReadAllText(file);
-                var loaded = DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, file);
+                var loaded = DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, file);
                 if (owner is not null && loaded.Definition?.ManagedBy != owner) continue;
                 items.Add(new JsonObject
                 {
@@ -117,7 +117,7 @@ public sealed partial class GatewayDataSources(
         foreach (var (name, text) in published?.All() ?? [])
         {
             if (own.Contains(name)) continue;
-            var loaded = DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, name + ".yaml");
+            var loaded = DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, name + ".yaml");
             if (owner is not null && loaded.Definition?.ManagedBy != owner) continue;
             items.Add(new JsonObject
             {
@@ -135,8 +135,8 @@ public sealed partial class GatewayDataSources(
         return ManagementResult.Ok(new JsonObject
         {
             ["name"] = name, ["text"] = text, ["version"] = VersionOf(text), ["group"] = group,
-            ["grants"] = GrantsView(DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, name + ".yaml").Definition, group),
-            ["policy"] = PolicyView(DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, name + ".yaml").Definition, text, group),
+            ["grants"] = GrantsView(DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, name + ".yaml").Definition, group),
+            ["policy"] = PolicyView(DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, name + ".yaml").Definition, text, group),
         });
     }
 
@@ -191,7 +191,7 @@ public sealed partial class GatewayDataSources(
 
     /// <summary>Whether the data source exists and nothing manages it: made by hand, or by an administrator (no <c>managed_by</c>).</summary>
     private bool IsHandMade(string name) =>
-        TextOf(name) is { } text && string.IsNullOrEmpty(DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, name + ".yaml").Definition?.ManagedBy);
+        TextOf(name) is { } text && string.IsNullOrEmpty(DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, name + ".yaml").Definition?.ManagedBy);
 
     private ManagementResult? AdoptScope(ManagementCaller caller, string name)
     {
@@ -219,7 +219,7 @@ public sealed partial class GatewayDataSources(
         if (publishing)
         {
             // what a publishing client may send: the serving policy of the definition (plan 13c D19), but not allow_writes or allowed_directories, and the file says whose it is (stamped here when it does not)
-            var sent = DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, $"{name}.yaml").Definition;
+            var sent = DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, $"{name}.yaml").Definition;
             var client = OwnerScope.Stamp(caller.Token!);
             if (DbDataKit.Connections.ServingPolicy.BlockOf(text) is { } block && DbDataKit.Connections.ServingPolicy.Check(block) is { Count: > 0 } problems)
             {
@@ -336,7 +336,7 @@ public sealed partial class GatewayDataSources(
         var file = FileOf(name);
         if (!File.Exists(file)) return ManagementResult.Problem(404, $"There is no data source '{name}'.");
         var text = File.ReadAllText(file);
-        var current = DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, file).Definition;
+        var current = DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, file).Definition;
         var policyFields = DbDataKit.Connections.ServingPolicy.BlockOf(text)?.Entries.Select(e => e.Key.Value).ToList() ?? [];
         if (policyFields.Count > 0 && request.Adopt != true)
         {
@@ -452,7 +452,7 @@ public sealed partial class GatewayDataSources(
         if (IsAdministrator(caller)) return null;
         var text = TextOf(name);
         if (action != ObjectAction.Create && text is null) return ManagementResult.Problem(404, $"There is no data source '{name}'.");
-        ManagedObject? target = action == ObjectAction.Create ? null : new ManagedObject(DbDataKit.Connections.ConnectionDefinitionLoader.Load(text!, name + ".yaml").Definition?.ManagedBy);
+        ManagedObject? target = action == ObjectAction.Create ? null : new ManagedObject(DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text!, name + ".yaml").Definition?.ManagedBy);
         var decision = OwnerScope.Authorize(caller.Token!, action, target);
         return decision.Allowed ? null : ManagementResult.Problem(403, decision.Reason ?? "This client may not do this to that data source.");
     }

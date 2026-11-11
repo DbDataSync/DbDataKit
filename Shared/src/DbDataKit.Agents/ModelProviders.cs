@@ -43,13 +43,11 @@ public static class ModelProviderConnection
 
     public static readonly string[] Purposes = ["chat", "embeddings"];
 
-    /// <summary>The provider of a connection file, or the loader's diagnostics; a file that is not of kind <c>model-provider</c> is refused.</summary>
+    /// <summary>The provider of a connection file, or the loader's diagnostics; a file of another group (not a chat or embedding model provider) is refused naming the connection, its kind and the group accepted.</summary>
     public static ModelProviderResult Load(string yaml, string file)
     {
-        var result = ConnectionDefinitionLoader.Load(yaml.TrimStart('﻿'), file, addressRequired: false, outsideKinds: true);
+        var result = ConnectionDefinitionLoader.Load(yaml.TrimStart('\uFEFF'), file, ConnectionKindGroup.Model | ConnectionKindGroup.Embedding, addressRequired: false);
         if (result.Definition is not { } d || result.Diagnostics.HasErrors()) return new(null, result.Diagnostics);
-        if (d.KindName != ConnectionKinds.ModelProvider)
-            return new(null, [.. result.Diagnostics, DefaultDiagnosticCatalog.Instance.Create(ConnectionDefinitionLoader.BadKind, file, 1, 1, $"The connection file '{file}' is of kind `{d.KindName}`, not `model-provider`.", "A model provider says `kind: model-provider`.")]);
         return new(From(d), result.Diagnostics);
     }
 
