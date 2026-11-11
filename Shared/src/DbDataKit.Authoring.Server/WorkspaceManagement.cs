@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 
-namespace DbDataWorkspace.Server;
+namespace DbDataKit.Authoring.Server;
 
 /// <summary>
 /// The management API of the Workspace server (plan 22a GP31). Every call needs a token a paired console issued, and the role the call says:
@@ -23,12 +23,12 @@ namespace DbDataWorkspace.Server;
 /// </summary>
 public static class WorkspaceManagement
 {
-    public static void Map(IEndpointRouteBuilder app, string instanceId, WorkspaceSettings settings, WorkspaceStore store, WorkspaceProjects projects, IAuditLog audit, Action<string> log, Workspaces workspaces, WorkspaceBuilds builds, WorkspacePublishing publishing)
+    public static void Map(IEndpointRouteBuilder app, string instanceId, string product, string version, WorkspaceStore store, WorkspaceProjects projects, IAuditLog audit, Action<string> log, Workspaces workspaces, WorkspaceBuilds builds, WorkspacePublishing publishing)
     {
         app.MapGet("/api/v1/info", () => Results.Json(new JsonObject
         {
-            ["product"] = WorkspaceSettings.Product,
-            ["version"] = WorkspaceServer.Version,
+            ["product"] = product,
+            ["version"] = version,
             ["instance_id"] = instanceId,
         }));
 

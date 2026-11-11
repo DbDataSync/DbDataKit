@@ -1,3 +1,5 @@
+using DbDataKit.Authoring.Server;
+
 namespace DbDataWorkspace.Server;
 
 /// <summary>Where a DbDataWorkspace server keeps what is its own, and where it listens.</summary>

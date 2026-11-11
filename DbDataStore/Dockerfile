@@ -7,7 +7,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY Directory.Build.props Directory.Packages.props global.json ./
-COPY DbDataKit DbDataKit
+COPY Shared Shared
 COPY DbDataStore DbDataStore
 WORKDIR /src/DbDataStore
 RUN dotnet publish src/DbDataStore.Server -c Release -r linux-x64 --self-contained false -p:DebugType=none -p:DebugSymbols=false -o /app

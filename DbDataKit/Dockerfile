@@ -23,7 +23,7 @@ RUN npm run build -w @dbdatakit/console
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY Directory.Build.props Directory.Packages.props global.json ./
-COPY DbDataKit DbDataKit
+COPY Shared Shared
 COPY DbDataKit DbDataKit
 RUN dotnet publish DbDataKit/src/DbDataKit.Server -c Release -r linux-x64 --self-contained false -p:SkipWebBuild=true -p:DebugType=none -p:DebugSymbols=false -o /app
 

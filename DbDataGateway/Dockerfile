@@ -12,7 +12,7 @@ RUN npm ci && npm run build -w @dbdatakit/view-app
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY Directory.Build.props Directory.Packages.props global.json ./
-COPY DbDataKit DbDataKit
+COPY Shared Shared
 COPY DbDataGateway DbDataGateway
 COPY duckdb.pin ./
 COPY scripts/fetch-duckdb.sh scripts/fetch-duckdb.sh

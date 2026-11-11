@@ -5,4 +5,9 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+  <!-- Fast verifier runs (docs/testing-environment.md, "Fast verifier runs"): SkipJdbc leaves JDBC/IKVM out of the Sync API, the TaskRunner and the API tests
+       (about 3.5 GB of IKVM packages and a 300 MB JRE image per test bin). Off unless asked for: -p:SkipJdbc=true or DBDATAKIT_TEST_SKIP_JDBC=true. -->
+  <PropertyGroup>
+    <SkipJdbc Condition="'$(SkipJdbc)'=='' and '$(DBDATAKIT_TEST_SKIP_JDBC)'=='true'">true</SkipJdbc>
+  </PropertyGroup>
 </Project>

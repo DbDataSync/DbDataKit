@@ -180,6 +180,23 @@ public sealed class BunAppBundler(string bunPath = "bun") : IAppBundler
     private static AppBundleResult Failure(Stopwatch started, string headline, (int ExitCode, string Output) run) =>
         new(false, [], 0, [new AppBundleDiagnostic(headline), .. run.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Take(40).Select(l => new AppBundleDiagnostic(l))], started.Elapsed);
 
+    /// <summary>The only variables of the host's environment a build child may see (plan 33 section 3: an allow-list, never an inherited environment).</summary>
+    public static IReadOnlyList<string> AllowedVariables { get; } = ["PATH", "HOME", "USERPROFILE", "TEMP", "TMP", "TMPDIR", "SystemRoot", "LOCALAPPDATA", "APPDATA"];
+
+    /// <summary>
+    /// The environment of a build child: the allow-listed variables the host has, and <c>CI</c> and <c>NO_COLOR</c>. Nothing else is passed, so a host's data protection key ring, signing key, secrets, connection strings and every <c>DBDATAKIT_*</c> variable
+    /// stay out of it, whatever the host holds.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> ChildEnvironment(Func<string, string?> host)
+    {
+        var environment = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var name in AllowedVariables)
+            if (host(name) is { } value) environment[name] = value;
+        environment["CI"] = "1";
+        environment["NO_COLOR"] = "1";
+        return environment;
+    }
+
     private async Task<(int ExitCode, string Output)> RunAsync(IReadOnlyList<string> arguments, string workingDirectory, CancellationToken cancellationToken, bool isolated = false)
     {
         var wrapped = isolated ? NetworkIsolator.Wrap(bunPath, arguments) : null;
@@ -187,10 +204,7 @@ public sealed class BunAppBundler(string bunPath = "bun") : IAppBundler
         foreach (var argument in wrapped?.Arguments ?? arguments) info.ArgumentList.Add(argument);
         // only what a build needs: the server's own environment (tokens, secrets, connection strings) stays out of the child
         info.Environment.Clear();
-        foreach (var name in new[] { "PATH", "HOME", "USERPROFILE", "TEMP", "TMP", "TMPDIR", "SystemRoot", "LOCALAPPDATA", "APPDATA" })
-            if (Environment.GetEnvironmentVariable(name) is { } value) info.Environment[name] = value;
-        info.Environment["CI"] = "1";
-        info.Environment["NO_COLOR"] = "1";
+        foreach (var (name, value) in ChildEnvironment(Environment.GetEnvironmentVariable)) info.Environment[name] = value;
 
         using var process = Process.Start(info) ?? throw new System.ComponentModel.Win32Exception("the process did not start");
         process.StandardInput.Close();

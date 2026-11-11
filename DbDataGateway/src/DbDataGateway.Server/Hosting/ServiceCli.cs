@@ -358,9 +358,10 @@ public static class ServiceCli
 public static class GatewayConfiguration
 {
     private static IConfigurationRoot Build(string? dataDirectory) =>
-        // The same layers as the host: the data directory's config folder, then the environment.
+        // The same layers as the host: the data directory's config folder, the suite's state variables, then the environment.
         new ConfigurationBuilder()
             .Add(new GatewayConfigDirectorySource(GatewayConfigFile.DirectoryIn(dataDirectory ?? GatewayConfigFile.ResolveDataDirectory())))
+            .Add(new SuiteStateConfigurationSource())
             .AddEnvironmentVariables(GatewayConfigFile.EnvironmentPrefix)
             .Build();
 

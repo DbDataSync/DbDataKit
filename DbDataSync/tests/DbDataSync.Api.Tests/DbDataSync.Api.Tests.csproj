@@ -40,7 +40,15 @@
          runtime/build/native assets (resolved from libraries/ikvm/lib/ via LibraryRegistry in a real
          deployment) — a standalone `dotnet test` here needs the real IKVM assets locally too, the same
          reason DbDataSync.Drivers.Jdbc.Tests carries this identical, un-excluded reference. -->
-    <PackageReference Include="IKVM" />
+    <PackageReference Condition="'$(SkipJdbc)' != 'true'" Include="IKVM" />
+  </ItemGroup>
+
+  <!-- SkipJdbc (root Directory.Build.props; docs/testing-environment.md, "Fast verifier runs"): no IKVM, no pgJDBC jar, and the tests that need a real JDBC host are not compiled. -->
+  <PropertyGroup Condition="'$(SkipJdbc)' == 'true'">
+    <DefineConstants>$(DefineConstants);SKIP_JDBC</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(SkipJdbc)' == 'true'">
+    <Compile Remove="JdbcTestQueryTests.cs;JdbcTestQueryApiFactory.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -74,7 +82,7 @@
     <JdbcTestJarPath>$(BaseIntermediateOutputPath)jdbc-jars\postgresql-$(JdbcTestJarVersion).jar</JdbcTestJarPath>
   </PropertyGroup>
 
-  <Target Name="DownloadJdbcTestJar" BeforeTargets="BeforeBuild" Condition="!Exists('$(JdbcTestJarPath)')">
+  <Target Name="DownloadJdbcTestJar" BeforeTargets="BeforeBuild" Condition="'$(SkipJdbc)' != 'true' and !Exists('$(JdbcTestJarPath)')">
     <MakeDir Directories="$(BaseIntermediateOutputPath)jdbc-jars" />
     <!-- Maven Central answered 404 for a jar that exists, once, on CI: a failed first download is not an error until the second source has been tried too. -->
     <DownloadFile
@@ -86,7 +94,7 @@
   </Target>
 
   <ItemGroup>
-    <None Include="$(JdbcTestJarPath)" CopyToOutputDirectory="PreserveNewest" Link="postgresql.jar" Visible="false" />
+    <None Condition="'$(SkipJdbc)' != 'true'" Include="$(JdbcTestJarPath)" CopyToOutputDirectory="PreserveNewest" Link="postgresql.jar" Visible="false" />
   </ItemGroup>
 
   <ItemGroup>
