@@ -43,6 +43,16 @@ const QualityIcon = () => (
     <path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6z" /><path d="M8.5 12l2.5 2.5 4.5-5" />
   </svg>
 )
+const AgentsIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <rect x="5" y="8" width="14" height="11" rx="2.5" /><path d="M12 4v4M9 13h.01M15 13h.01M9.5 16.5h5" /><circle cx="12" cy="3.5" r="1" />
+  </svg>
+)
+const KnowledgeIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M5 4h10a3 3 0 013 3v13H8a3 3 0 01-3-3z" /><path d="M5 17a3 3 0 013-3h10M9 8h5" />
+  </svg>
+)
 const DocsIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="M4 5.5C4 4.7 4.7 4 5.5 4H12v16H5.5C4.7 20 4 19.3 4 18.5z" /><path d="M20 5.5c0-.8-.7-1.5-1.5-1.5H12v16h6.5c.8 0 1.5-.7 1.5-1.5z" />
@@ -65,6 +75,8 @@ const rail: RailItem[] = [
   { to: '/lineage', title: 'Lineage', icon: <LineageIcon />, testId: 'rail-lineage' },
   { to: '/quality', title: 'Quality', icon: <QualityIcon />, testId: 'rail-quality' },
   { to: '/deployments', title: 'Deployments', icon: <LineageIcon />, testId: 'rail-deployments' },
+  { to: '/agents', title: 'Agents', icon: <AgentsIcon />, testId: 'rail-agents' },
+  { to: '/knowledge', title: 'Knowledge', icon: <KnowledgeIcon />, testId: 'rail-knowledge' },
   { to: '/views', title: 'Views', icon: <ViewsIcon />, testId: 'rail-views' },
   { to: '/docs', title: 'Docs', icon: <DocsIcon />, testId: 'rail-docs' },
   { to: '/users', title: 'Users', icon: <UsersIcon />, testId: 'rail-users', adminOnly: true },

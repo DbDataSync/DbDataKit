@@ -15,6 +15,7 @@ using DbDataKit.Web.Trust;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 
 namespace DbDataKit.Server;
@@ -101,6 +102,11 @@ public static class ConsoleHost
         builder.Services.AddSingleton(RelayTimeouts.Default);
         builder.Services.AddSingleton<ConsoleRelay>();
         builder.Services.AddSingleton<ConsoleLineage>();
+        // the agents the console hosts and the knowledge its screens read (plan 27a AG14 to AG17, AG29 to AG32, KN28, KN36 to KN38); the model an agent's slot is bound to comes from IAgentModels (none until model providers are connections, AG05)
+        builder.Services.TryAddSingleton<IAgentModels, NoAgentModels>();
+        builder.Services.TryAddSingleton<IAgentToolSource, ConsoleToolSource>();
+        builder.Services.AddSingleton<ConsoleKnowledge>();
+        builder.Services.AddSingleton<ConsoleAgents>();
         builder.Services.AddSingleton<ConsoleQuality>();
         if (settings.Home is { } home)
         {

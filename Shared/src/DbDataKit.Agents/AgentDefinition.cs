@@ -101,6 +101,9 @@ public static class AgentDefinitionLoader
 
     private static readonly Regex Name = new("^[a-z][a-z0-9-]{0,63}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    /// <summary>Whether a text is a name an agent may have (and so a folder name).</summary>
+    public static bool IsName(string text) => Name.IsMatch(text);
+
     public static string Schema()
     {
         using var stream = typeof(AgentDefinitionLoader).Assembly.GetManifestResourceStream("DbDataKit.Agents.schemas.agent.schema.json")!;

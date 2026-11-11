@@ -64,7 +64,7 @@ public static class ConsoleState
     /// <summary>The service name the console records on what it writes to a database it may share (the feed's <c>service_id</c>).</summary>
     public const string ServiceId = ConsoleSettings.Product;
 
-    public static IReadOnlyList<StateModule> Modules { get; } = [IdentityModule.Module, NotificationsModule.Module, DbDataKit.Identity.FederationModule.Module, RunsModule.Module, AuditModule.Module];
+    public static IReadOnlyList<StateModule> Modules { get; } = [IdentityModule.Module, NotificationsModule.Module, DbDataKit.Identity.FederationModule.Module, RunsModule.Module, AuditModule.Module, AgentsModule.Module];
 
     /// <summary>
     /// The modules of a console whose embedded runner is <paramref name="runner"/>: the console's own, and when the runner is enabled the runner's (<c>runner</c>, <c>runner_progress</c>, <c>scheduling</c>, <c>definitions</c>, <c>payloads</c>, and

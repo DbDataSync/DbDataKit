@@ -16,6 +16,8 @@ import { LineagePage } from './pages/LineagePage'
 import { QualityPage } from './pages/QualityPage'
 import { DeploymentsPage } from './pages/DeploymentsPage'
 import { ViewsPage } from './pages/ViewsPage'
+import { AgentsPage } from './pages/AgentsPage'
+import { KnowledgePage } from './pages/KnowledgePage'
 
 export default function App() {
   const { data: status, isLoading } = useAuthStatus()
@@ -48,6 +50,8 @@ export default function App() {
       <Route path="/views/dashboards/:name" element={<ViewsPage area="dashboards" />} />
       <Route path="/views/reports" element={<ViewsPage area="reports" />} />
       <Route path="/views/reports/:name" element={<ViewsPage area="reports" />} />
+      <Route path="/agents" element={<AgentsPage />} />
+      <Route path="/knowledge" element={<KnowledgePage />} />
       <Route path="/monitoring" element={<MonitoringPage />} />
       <Route path="/approvals" element={<ApprovalsPage />} />
       <Route path="/runs" element={<RunsPage />} />
