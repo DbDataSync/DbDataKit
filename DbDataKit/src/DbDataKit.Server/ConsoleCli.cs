@@ -28,7 +28,6 @@ public static class ConsoleCli
         InstanceNoun(environment),
         UserNoun(environment),
         RunnerNoun(environment),
-        WorkspaceNoun(environment),
         StateNoun(environment, configureMove),
         IdentityCli.Noun(environment),
         ConsoleService.Noun(ConsoleServiceEnvironment.Real()),
@@ -344,72 +343,6 @@ public static class ConsoleCli
         return CliExit.Ok;
     }
 
-    // ---- workspace ----
-
-    private static Noun WorkspaceNoun(Func<string, string?>? environment) => new("workspace", "The Workspace hosted in the console: who holds which of its roles (a console role is never one)",
-    [
-        new Verb("roles", "Who holds which Workspace role, in the whole Workspace or in one project", EffectClass.OfflineOnly, "[--repo <console directory>]",
-            (args, context) => WorkspaceRolesAsync(args, context, environment, change: null),
-            DataSchemas.Object([("grants", DataSchemas.ListOf(DataSchemas.Object([("user", DataSchemas.String), ("project", DataSchemas.String), ("roles", DataSchemas.String)], "user", "roles")))], "grants")),
-        new Verb("grant", "Set the Workspace roles of a person (viewer, author, publisher, admin) in the whole Workspace or in one project; this replaces what they held there, and the first Workspace administrator is made this way", EffectClass.TrackingTablesOnly, "--user <id> --roles <viewer,author,publisher,admin> [--project <id>] [--repo <console directory>]",
-            (args, context) => WorkspaceRolesAsync(args, context, environment, change: true),
-            DataSchemas.Object([("user", DataSchemas.String), ("roles", DataSchemas.String)], "user", "roles")),
-        new Verb("revoke", "Take away every Workspace role of a person in the whole Workspace or in one project", EffectClass.TrackingTablesOnly, "--user <id> [--project <id>] [--repo <console directory>]",
-            (args, context) => WorkspaceRolesAsync(args, context, environment, change: false),
-            DataSchemas.Object([("user", DataSchemas.String)], "user")),
-    ]);
-
-    private static async Task<int> WorkspaceRolesAsync(string[] args, CliContext context, Func<string, string?>? environment, bool? change)
-    {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "user", "roles", "project" });
-        var usage = change switch
-        {
-            true => "Usage: workspace grant --user <id> --roles <viewer,author,publisher,admin> [--project <id>] [--repo <console directory>]",
-            false => "Usage: workspace revoke --user <id> [--project <id>] [--repo <console directory>]",
-            null => "Usage: workspace roles [--repo <console directory>]",
-        };
-        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || (change is not null && parsed.Get("user") is not { Length: > 0 }) || (change == true && parsed.Get("roles") is not { Length: > 0 }))
-        {
-            await context.Error.WriteLineAsync(usage);
-            return CliExit.Usage;
-        }
-
-        var directory = DirectoryOf(parsed, environment);
-        ConsoleWorkspaceSettings settings;
-        try { settings = ConsoleWorkspaceSettings.Load(directory); }
-        catch (InvalidOperationException ex) { await context.Error.WriteLineAsync(ex.Message); return CliExit.Failure; }
-        if (!settings.Enabled)
-        {
-            await context.Error.WriteLineAsync($"The Workspace is not enabled in this console: set workspace.enabled to true in {ConsoleState.SettingsFileIn(directory)} first.");
-            return CliExit.Failure;
-        }
-
-        var database = OpenState(parsed, environment);
-        var store = new DbDataKit.State.WorkspaceStore(database);
-        if (change is not null)
-        {
-            var user = parsed.Get("user")!;
-            if (new IdentityUserStore(database).Get(user) is null)
-            {
-                await context.Error.WriteLineAsync($"No user has the id '{user}'. 'user list' shows them.");
-                return CliExit.Failure;
-            }
-
-            try { store.SetRoles(user, parsed.Get("project"), change == true ? parsed.Get("roles")!.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) : [], "command line"); }
-            catch (ArgumentException ex) { await context.Error.WriteLineAsync(ex.Message); return CliExit.Usage; }
-            await context.Out.WriteLineAsync(change == true ? $"{user} holds {parsed.Get("roles")} in {(parsed.Get("project") is { } p ? "project " + p : "the whole Workspace")}." : $"{user} holds no Workspace role in {(parsed.Get("project") is { } q ? "project " + q : "the whole Workspace")} now.");
-            context.Data["user"] = user;
-            context.Data["roles"] = change == true ? parsed.Get("roles") : "";
-            return CliExit.Ok;
-        }
-
-        var grants = store.Roles();
-        if (grants.Count == 0) await context.Out.WriteLineAsync("Nobody holds a Workspace role yet. Make the first administrator: workspace grant --user <id> --roles admin,author,publisher ('user list' shows the ids).");
-        foreach (var g in grants) await context.Out.WriteLineAsync($"{g.UserId}  {string.Join(',', g.Roles)}  {(g.Project is null ? "whole Workspace" : "project " + g.Project)}");
-        context.Data["grants"] = grants.Select(g => new Dictionary<string, object?> { ["user"] = g.UserId, ["project"] = g.Project, ["roles"] = string.Join(',', g.Roles) }).ToList();
-        return CliExit.Ok;
-    }
-
     // ---- state ----
 
     /// <summary>The embedded runner's settings in the console's default directory, which decides the modules the <c>state</c> verbs know (a <c>--repo</c> that names another directory is not seen here: the router is built before the arguments are read).</summary>
@@ -417,12 +350,6 @@ public static class ConsoleCli
     {
         try { return ConsoleRunnerSettings.Load(Path.GetFullPath(ConsoleSettings.DefaultDirectory(environment))); }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException) { return ConsoleRunnerSettings.Disabled; }
-    }
-
-    private static ConsoleWorkspaceSettings DefaultWorkspace(Func<string, string?>? environment)
-    {
-        try { return ConsoleWorkspaceSettings.Load(Path.GetFullPath(ConsoleSettings.DefaultDirectory(environment))); }
-        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException) { return ConsoleWorkspaceSettings.Disabled; }
     }
 
     /// <summary>The shared <c>state</c> verbs over the console's state: its settings come from the flags, the environment and <c>settings.yaml</c> in its directory (<see cref="ConsoleState.Resolve"/>; <c>state move</c> and <c>state init</c> write that file), its file is <c>state.db</c> in its directory, and a password that is a secret reference is looked up in its store, then the environment.</summary>
@@ -437,7 +364,7 @@ public static class ConsoleCli
                 () => new DbDataKit.Secrets.SecretResolverChain([ConsoleSecrets.Open(directory, environment), new DbDataKit.Secrets.EnvSecretProvider(environment)]),
                 ConsoleState.SettingsFileIn(directory));
         },
-        ConsoleState.ModulesFor(DefaultRunner(environment), DefaultWorkspace(environment)), ConsoleState.ScopeFor(DefaultRunner(environment), DefaultWorkspace(environment)), ["engine", "repo"], "[--engine mssql|postgres] [--repo <console directory>]") { ConfigureMove = configureMove });
+        ConsoleState.ModulesFor(DefaultRunner(environment)), ConsoleState.ScopeFor(DefaultRunner(environment)), ["engine", "repo"], "[--engine mssql|postgres] [--repo <console directory>]") { ConfigureMove = configureMove });
 
     // ---- user ----
 

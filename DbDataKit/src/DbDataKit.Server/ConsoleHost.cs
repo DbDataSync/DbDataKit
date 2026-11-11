@@ -70,14 +70,7 @@ public static class ConsoleHost
             .AddApplicationPart(typeof(ConsoleHost).Assembly)
             .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
         var runnerSettings = settings.RunnerOrFile();
-        var workspaceSettings = settings.WorkspaceOrFile();
-        builder.Services.AddSingleton(_ => ConsoleState.Open(settings.Directory, settings.State, runner: runnerSettings, workspace: workspaceSettings));
-        if (workspaceSettings.Enabled)
-        {
-            // the Workspace hosted in the console (plan 33 SC05): off unless settings.yaml says workspace.enabled; builds run in a child process of their own and the console never runs app code
-            builder.Services.AddSingleton(workspaceSettings);
-            builder.Services.AddSingleton(sp => new ConsoleWorkspace(workspaceSettings, settings, sp.GetRequiredService<StateDatabase>(), sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataKit.Server.Workspace")));
-        }
+        builder.Services.AddSingleton(_ => ConsoleState.Open(settings.Directory, settings.State, runner: runnerSettings));
         if (runnerSettings.Enabled)
         {
             // the runner embedded in the console (plan 28a R20): off unless settings.yaml says runner.enabled; stopping the console stops it, and stopping waits for its tasks to take their cancellation
@@ -182,7 +175,6 @@ public static class ConsoleHost
         app.MapControllers();
         MapState(app, settings, maintenance);
         app.MapEmbeddedRunner();
-        app.MapEmbeddedWorkspace();
         app.MapRelay();
         if (settings.Home is not null) app.MapFederation();
 
@@ -222,7 +214,7 @@ public static class ConsoleHost
                     () => new DbDataKit.Secrets.SecretResolverChain([ConsoleSecrets.Open(settings.Directory), new DbDataKit.Secrets.EnvSecretProvider()]),
                     ConsoleState.SettingsFileIn(settings.Directory), settings.StateSources ?? resolved.Sources);
             },
-            ConsoleState.ModulesFor(settings.RunnerOrFile(), settings.WorkspaceOrFile()), ConsoleState.ScopeFor(settings.RunnerOrFile(), settings.WorkspaceOrFile()), maintenance, new DbDataKit.State.Api.StateAuditSink(app.Services.GetRequiredService<StateDatabase>(), ConsoleState.ServiceId),
+            ConsoleState.ModulesFor(settings.RunnerOrFile()), ConsoleState.ScopeFor(settings.RunnerOrFile()), maintenance, new DbDataKit.State.Api.StateAuditSink(app.Services.GetRequiredService<StateDatabase>(), ConsoleState.ServiceId),
             Version: Version));
         app.MapState(api, context =>
         {

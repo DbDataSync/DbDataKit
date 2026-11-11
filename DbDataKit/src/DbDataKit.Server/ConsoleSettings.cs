@@ -20,12 +20,6 @@ public sealed record ConsoleSettings(string Directory, Uri Listen, Uri? PublicUr
     /// <summary>The runner settings in effect: the given ones, else the settings file's.</summary>
     public ConsoleRunnerSettings RunnerOrFile() => Runner ?? ConsoleRunnerSettings.Load(Directory);
 
-    /// <summary>The Workspace hosted in the console (plan 33 SC05); null: the <c>workspace:</c> section of <c>settings.yaml</c> says (<see cref="ConsoleWorkspaceSettings.Load"/>), and without one it is off.</summary>
-    public ConsoleWorkspaceSettings? Workspace { get; init; }
-
-    /// <summary>The Workspace settings in effect: the given ones, else the settings file's.</summary>
-    public ConsoleWorkspaceSettings WorkspaceOrFile() => Workspace ?? ConsoleWorkspaceSettings.Load(Directory);
-
     /// <summary>The address a browser opens, and the origin a passkey is bound to.</summary>
     public Uri Public => PublicUrl ?? (IsEveryAddress(Listen.Host) ? new UriBuilder(Listen) { Host = "localhost" }.Uri : Listen);
 
@@ -76,21 +70,16 @@ public static class ConsoleState
     /// The modules of a console whose embedded runner is <paramref name="runner"/>: the console's own, and when the runner is enabled the runner's (<c>runner</c>, <c>runner_progress</c>, <c>scheduling</c>, <c>definitions</c>, <c>payloads</c>, and
     /// <c>trust</c> for the publishing settings). A console that does not enable the runner has none of them, so its state gains no table.
     /// </summary>
-    public static IReadOnlyList<StateModule> ModulesFor(ConsoleRunnerSettings? runner, ConsoleWorkspaceSettings? workspace = null)
+    public static IReadOnlyList<StateModule> ModulesFor(ConsoleRunnerSettings? runner)
     {
-        var all = Modules;
-        if (runner is { Enabled: true })
-        {
-            var names = Modules.Select(m => m.Name).ToHashSet(StringComparer.Ordinal);
-            all = [.. Modules, .. DbDataKit.Runner.RunnerNames.EngineModules.Append(DbDataKit.Web.Trust.TrustModule.Module).Where(m => names.Add(m.Name))];
-        }
-        // the Workspace hosted in the console (plan 33 SC05): its module, in the console's database, never sharing a table with another
-        return workspace is { Enabled: true } ? [.. all, DbDataKit.State.WorkspaceModule.Module] : all;
+        if (runner is not { Enabled: true }) return Modules;
+        var names = Modules.Select(m => m.Name).ToHashSet(StringComparer.Ordinal);
+        return [.. Modules, .. DbDataKit.Runner.RunnerNames.EngineModules.Append(DbDataKit.Web.Trust.TrustModule.Module).Where(m => names.Add(m.Name))];
     }
 
     /// <summary>The scope of the console's state: the install, and with the embedded runner the group <c>console</c> (its modules <c>runner</c>, <c>runner_progress</c> and <c>definitions</c> are per group; the console's own are per install and do not change).</summary>
-    public static StateScope ScopeFor(ConsoleRunnerSettings? runner, ConsoleWorkspaceSettings? workspace = null) =>
-        runner is { Enabled: true } || workspace is { Enabled: true } ? new StateScope(Group: ConsoleRunnerSettings.Group, Service: ServiceId) : StateScope.Install;
+    public static StateScope ScopeFor(ConsoleRunnerSettings? runner) =>
+        runner is { Enabled: true } ? new StateScope(Group: ConsoleRunnerSettings.Group, Service: ServiceId) : StateScope.Install;
 
     /// <summary>The embedded runner's settings as the console's directory says them (off when there is no <c>runner:</c> section).</summary>
     public static ConsoleRunnerSettings RunnerIn(string directory) => ConsoleRunnerSettings.Load(directory);
@@ -127,14 +116,13 @@ public static class ConsoleState
     }
 
     /// <param name="runner">The embedded runner's settings; null reads the <c>runner:</c> section of <c>settings.yaml</c> in <paramref name="directory"/>.</param>
-    public static StateDatabase Open(string directory, StateSettings? settings = null, Func<string, string?>? environment = null, ConsoleRunnerSettings? runner = null, ConsoleWorkspaceSettings? workspace = null)
+    public static StateDatabase Open(string directory, StateSettings? settings = null, Func<string, string?>? environment = null, ConsoleRunnerSettings? runner = null)
     {
         System.IO.Directory.CreateDirectory(directory);
         settings ??= new StateSettings();
         runner ??= RunnerIn(directory);
-        workspace ??= ConsoleWorkspaceSettings.Load(directory);
-        var modules = ModulesFor(runner, workspace);
-        var scope = ScopeFor(runner, workspace);
+        var modules = ModulesFor(runner);
+        var scope = ScopeFor(runner);
         if (settings.IsSqlite) return StateOpener.Open(settings, System.IO.Path.Combine(directory, "state.db"), modules, scope, appliedBy: AppliedBy);
         // the password of a server engine is a secret reference: the console's store, then the environment
         var secrets = new DbDataKit.Secrets.SecretResolverChain([ConsoleSecrets.Open(directory, environment), new DbDataKit.Secrets.EnvSecretProvider(environment)]);

@@ -3,7 +3,7 @@ namespace DbDataKit.State;
 /// <summary>
 /// The <c>workspace</c> module (plan 22a GP31, decision D8): what the Workspace server (DbDataWorkspace) keeps in its state database. The git worktrees themselves are folders on the server's disk; this is the record of them and of what was done.
 /// <para>
-/// <b>Six tables.</b> <c>project</c> is each project the server hosts (an id, its kind, where its repository is); a project of any kind (an app today, an agent, an integration, a skill or a knowledge base when plan 27 adds them) is a row,
+/// <b>Five tables.</b> <c>project</c> is each project the server hosts (an id, its kind, where its repository is); a project of any kind (an app today, an agent, an integration, a skill or a knowledge base when plan 27 adds them) is a row,
 /// so the kinds need no second break. <c>workspace</c> is the drafts that exist now, one row each, removed when a draft is abandoned or merged. <c>workspace_event</c> is the history of what happened to them (created, committed, pushed,
 /// merged, abandoned), kept for <see cref="EventDays"/> days and then removed by the shared retention job. <c>build</c> is each build a workspace asked for (none are made yet; the table and its store are what the build slices write to), kept for
 /// <see cref="BuildDays"/> days. <c>publisher_key</c> names, for each target a version is published to, the <b>reference</b> to the secret that holds the publisher's key: the key itself is in the server's secret store, never in a row.
@@ -96,17 +96,6 @@ public static class WorkspaceModule
             created_at  {{time}} NOT NULL,
             created_by  {{key}} NOT NULL,
             updated_at  {{time}} NOT NULL
-        );
-
-        -- Who holds which role in the Workspace when the console hosts it (plan 33 SC06): the workspace role namespace, kept apart from the console's own roles. user_id is the person's id in the console; project is a project's id, or * for
-        -- the whole Workspace; roles is a comma separated list of viewer, author, publisher, admin. A console administrator holds none of them until one is granted here. Not used by the standalone server, whose roles come from a paired console's token.
-        CREATE TABLE {table:workspace_role} (
-            user_id     {{key}} NOT NULL,
-            project     {{key}} NOT NULL,
-            roles       {{key}} NOT NULL,
-            granted_by  {{key}} NOT NULL,
-            granted_at  {{time}} NOT NULL,
-            PRIMARY KEY (user_id, project)
         );
         """,
     ];

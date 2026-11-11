@@ -190,26 +190,4 @@ public sealed class ConsoleCliTests : IDisposable
         Assert.Contains("server run", unit.Out);
         Assert.Contains("dbdatakit", unit.Out);
     }
-
-    [Fact]
-    public async Task Workspace_roles_are_granted_listed_and_revoked_from_the_command_line_and_only_when_the_console_hosts_the_workspace()
-    {
-        var ada = new IdentityUserStore(ConsoleState.Open(directory)).CreateUser("Ada", null, UserRole.Admin);
-
-        var off = await Run("workspace", "grant", "--repo", directory, "--user", ada.Id, "--roles", "admin");
-        Assert.Equal(1, off.Exit);
-        Assert.Contains("workspace.enabled", off.Err);
-
-        File.WriteAllText(Path.Combine(directory, ConsoleSettings.SettingsFileName), "workspace:\n  enabled: true\n");
-        Assert.Equal(1, (await Run("workspace", "grant", "--repo", directory, "--user", "nobody", "--roles", "admin")).Exit);
-        Assert.Equal(2, (await Run("workspace", "grant", "--repo", directory, "--user", ada.Id, "--roles", "owner")).Exit);
-        var empty = await Run("workspace", "roles", "--repo", directory);
-        Assert.Contains("Nobody holds a Workspace role", empty.Out);
-
-        Assert.Equal(0, (await Run("workspace", "grant", "--repo", directory, "--user", ada.Id, "--roles", "admin,author")).Exit);
-        var listed = await Run("workspace", "roles", "--repo", directory);
-        Assert.Contains($"{ada.Id}  admin,author  whole Workspace", listed.Out);
-        Assert.Equal(0, (await Run("workspace", "revoke", "--repo", directory, "--user", ada.Id)).Exit);
-        Assert.Contains("Nobody holds", (await Run("workspace", "roles", "--repo", directory)).Out);
-    }
 }

@@ -42,12 +42,6 @@ public static class ManagementAuthentication
             await next();
         });
 
-    /// <summary>
-    /// For a module a console hosts itself (the embedded Workspace, plan 33 SC05): the person signed in to the console is the caller, so the host makes the token the module's calls read, from the session, instead of a paired console's
-    /// signed one. Only a host that has authenticated the person may call this.
-    /// </summary>
-    public static void SetManagementToken(this HttpContext context, ValidatedToken token) => context.Items[ItemKey] = token;
-
     /// <summary>The caller's validated token, or null when the request is not under the protected prefix or not authenticated.</summary>
     public static ValidatedToken? ManagementTokenOrNull(this HttpContext context) => context.Items.TryGetValue(ItemKey, out var token) ? token as ValidatedToken : null;
 
