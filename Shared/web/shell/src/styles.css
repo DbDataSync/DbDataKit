@@ -97,9 +97,15 @@ button { font-family: inherit; }
   align-items: center;
   padding: 9px 0;
   gap: 3px;
+  /* as tall as the window and scrolling inside itself: a window shorter than its items (the console has 15) must not make the document scroll */
+  position: sticky; top: 0; align-self: flex-start;
+  height: 100vh; box-sizing: border-box;
+  overflow-y: auto; overflow-x: hidden; scrollbar-width: none;
 }
+.rail::-webkit-scrollbar { display: none; }
 
 .rail-mark {
+  flex: none;
   width: 26px; height: 26px;
   border-radius: 6px;
   background: var(--accent);
@@ -109,6 +115,7 @@ button { font-family: inherit; }
 }
 
 .rail-item {
+  flex: none;
   width: 30px; height: 30px;
   border: none; background: none; padding: 0;
   border-radius: 6px;
