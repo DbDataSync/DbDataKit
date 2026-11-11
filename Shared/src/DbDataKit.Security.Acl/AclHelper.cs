@@ -44,6 +44,34 @@ public static class AclHelper
         return (SecurityIdentifier)new NTAccount(id).Translate(typeof(SecurityIdentifier));
     }
 
+    /// <summary>True for a process whose token holds the Administrators group enabled (an elevated administrator): its rights on a file come through that group.</summary>
+    public static bool IsElevatedAdministrator() =>
+        OperatingSystem.IsWindows() && new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null));
+
+    /// <summary>
+    /// The identities a secret store's files are restricted to by default: the current user, SYSTEM and Administrators, and the accounts of the Windows services that run on
+    /// <paramref name="dataDirectory"/> (so the elevated command line and the service open the same files, whichever made them first). Nobody else.
+    /// </summary>
+    public static IReadOnlyList<string> DefaultIdentities(string dataDirectory)
+    {
+        var identities = new List<string> { "CurrentUser", "SYSTEM", "Administrators" };
+        if (OperatingSystem.IsWindows()) identities.AddRange(WindowsServiceAccounts.On(dataDirectory));
+        return identities;
+    }
+
+    /// <summary>The SIDs of the identities. For a write, the "CurrentUser" alias is left out when the caller is an elevated administrator and Administrators is in the list: the group already grants it, so the file looks the same whoever made it.</summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static HashSet<SecurityIdentifier> ResolveSet(IEnumerable<string> identities, bool forWrite)
+    {
+        var ids = identities.ToArray();
+        var sids = ids.Select(ResolveIdentity).ToHashSet();
+        if (forWrite && ids.Any(i => string.Equals(i.Trim(), "CurrentUser", StringComparison.OrdinalIgnoreCase))
+            && sids.Contains(new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null)) && IsElevatedAdministrator()
+            && WindowsIdentity.GetCurrent().User is { } me)
+            sids.Remove(me);
+        return sids;
+    }
+
     /// <summary>Restricts a file or directory. Directories propagate to children by inheritance on Windows.</summary>
     public static void Restrict(string path, IEnumerable<string> identities, UnixFileMode? unixMode = null)
     {
@@ -52,7 +80,7 @@ public static class AclHelper
 
         if (OperatingSystem.IsWindows())
         {
-            var sids = identities.Select(ResolveIdentity).Distinct().ToArray();
+            var sids = ResolveSet(identities, forWrite: true).ToArray();
             if (sids.Length == 0) throw new ArgumentException("At least one identity is required.", nameof(identities));
             if (isDir)
             {
@@ -120,7 +148,7 @@ public static class AclHelper
         var drift = new List<AclDrift>();
         var ids = identities.ToArray();
         HashSet<SecurityIdentifier>? sids = null;
-        if (OperatingSystem.IsWindows()) sids = ids.Select(ResolveIdentity).ToHashSet();
+        if (OperatingSystem.IsWindows()) sids = ResolveSet(ids, forWrite: false);
         VerifyOne(path, sids, unixMode, drift, checkProtection: true);
         if (recurse && Directory.Exists(path))
             foreach (var child in Directory.EnumerateFileSystemEntries(path, "*", SearchOption.AllDirectories))
@@ -152,8 +180,15 @@ public static class AclHelper
             granted.Add(sid);
             if (!expected!.Contains(sid)) drift.Add(new(path, $"unexpected grant to {Describe(sid)}"));
         }
+        var admins = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+        var current = WindowsIdentity.GetCurrent().User;
         foreach (var sid in expected!)
-            if (!granted.Contains(sid)) drift.Add(new(path, $"missing grant for {Describe(sid)}"));
+        {
+            if (granted.Contains(sid)) continue;
+            // the caller's own account counts as granted when its rights come through the Administrators group the list grants (an elevated administrator)
+            if (current is not null && sid.Equals(current) && granted.Contains(admins) && IsElevatedAdministrator()) continue;
+            drift.Add(new(path, $"missing grant for {Describe(sid)}"));
+        }
     }
 
     private static string Octal(UnixFileMode m) => "0" + Convert.ToString((int)m, 8);
