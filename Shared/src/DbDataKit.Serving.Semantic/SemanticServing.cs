@@ -54,7 +54,7 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
             {
                 var meta = answer?.Schema.Metadata;
                 string? Meta(string key) => meta is not null && meta.TryGetValue(SemanticAnswer.MetadataPrefix + key, out var v) ? v : null;
-                runs.Record(new SemanticRun(SemanticCallers.KeyOf(context.Caller), model.Name, model.Version, note.Kind ?? "refused", text, note.Document, Meta("request_hash"), Meta("status") ?? status, code ?? Meta("reason_code"), message,
+                runs.Record(new SemanticRun(SemanticCallers.KeyOf(context.Caller), model.Name, model.Version, note.Kind ?? "refused", text, note.Document, Meta("request_hash"), note.Kind == "members" ? status : Meta("status") ?? status, code ?? Meta("reason_code"), message,
                     Meta("warnings"), note.Plan, started, clock.ElapsedMilliseconds, answer is SemanticAnswer sa ? sa.RowCount : answer is ExplainAnswer ea ? ea.Rows : 0));
             }
             catch (Exception e) when (e is not OperationCanceledException) { /* the statement's own outcome stands */ }
