@@ -120,6 +120,28 @@ It is idempotent: a registered service is not registered again, a member the con
 
 Use **one route per machine**: the package installs under Scoop's folder, while a product's own MSI, `install.ps1` or manifest uses its own and registers the same service names. A member that folds into another server leaves `dist/suite.json` in the same commit.
 
+### The whole install on one server, one command
+
+In an elevated PowerShell, with [Scoop](https://scoop.sh) installed:
+
+```powershell
+scoop install -g https://github.com/<owner>/DbDataKit/releases/download/dbdatakit-full/dist/dbdatakit-full.json
+```
+
+That is all: when it returns, every member's service is registered, running and paired with the console, and the console's address and the first-run invitation (`%ProgramData%\DbDataKit\server\FIRST-RUN.txt`) are printed. Open the console, sign in with the invitation and the members' screens are there. The install is idempotent, so running it again after a failure (or `scoop update dbdatakit-full`) finishes what is missing.
+
+**What it changes on the machine:**
+
+| where | what |
+| --- | --- |
+| `%ProgramData%\scoop\apps\dbdatakit-full` | the members' programs, one folder each (`console`, `gateway`, `runner`, ...), and the `current` folder the services run from |
+| the machine `PATH` (Scoop's shims) | `dbdatakit`, `dbdatagateway`, `dbdatarunner`, `dbdatasync`, `dbdatabuild`, `dbdatastore`, `dbdataworkspace` |
+| the Service Control Manager | one service per member (`DbDataKit`, `DbDataGateway`, `DbDataRunner`, `DbDataSync`, `DbDataBuild`, `DbDataStore`, `DbDataWorkspace`), set up by the member's own `service install` (its start mode and account) |
+| machine variable | `DBDATAKIT_DATA=%ProgramData%\DbDataKit`, under which each service keeps a folder (`server`, `gateway`, `runner`, ...) with its state, certificate and settings |
+| the console's and each member's data folder | the pairings (the console pins each member's certificate; each member lists the console as a paired client) |
+
+`scoop uninstall -g dbdatakit-full` removes the pairings and the services and the files; `%ProgramData%\DbDataKit` (settings, data, `DBDATAKIT_DATA`) stays until the administrator deletes it. **One route per machine:** the install is refused when a member's service is already registered from another folder, so a machine that has a product from its own MSI, `install.ps1` or manifest uninstalls it first. For a machine that runs one product, or products that join by announcement (plan 33 SC10), use the product's own route above.
+
 ## Adding or changing a product
 
 Edit `<Product>/dist.json`:
