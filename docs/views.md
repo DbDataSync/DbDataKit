@@ -406,6 +406,19 @@ A refusal is `{code, message}`: 400 `invalid` (or the resolver's own code, `DBD-
 - **Following.** `ViewsPublications` holds the two `PublishedViews`; the module follows the group's definitions itself (`ViewsOptions.Follow`, every `PollInterval`, or `Refresh()`), or a host that runs one follower adds `Subscribers` to it.
   `ViewsPublications.Register(kinds, store, payloads)` registers `dashboard` and `report` in the registry of the publisher that validates a publish.
 
+### The report catalog (plan 32 DBR19, section 9e)
+
+One interface answers what a source of reports has, the same for our own documents and for an external report server: `IReportCatalogProvider` (`DbDataKit.Views`) with **browse** (the items under a folder, or a search by name, path or description, narrowed by item type),
+**find**, the item's **parameters** (name, type, default, the values it may take, the attribute the values come from, what it depends on), **open**, the **export** formats and the **permissions** the catalog states. Every call is for a `ReportCatalogViewer` (the serving caller and, for an
+app's token, the app instance and the models its manifest names); a provider never lists or opens what that person may not, and a refusal and a missing item look the same.
+`ReportCatalogs` is the **merged view**: the items of every provider in the order given, an item's key is `provider:id` (`views:dashboard/sales`, `ssrs:{guid}`), a provider that is down is a `ReportCatalogProblem` in the listing and the others are still listed (an unexpected failure shows its
+kind, never its words), a provider's `denied` or `not_found` to a browse is silence, and **an external report is framed only from an approved origin** (scheme, host and port, never the path; a host takes the list from the app instance's `frame` exception): an opening a provider offers as `frame`
+from any other origin is handed on as a `link`, and an address that is not `http` or `https` is refused.
+**Our own provider** is `ViewsCatalog` (`DbDataKit.Views.Hosting`, name `views`): the served documents under `/Dashboards` and `/Reports` (ids `dashboard/<name>`, `report/<name>`, folders `folder/dashboards`, `folder/reports`), narrowed by an app's models as the routes are, opened as
+`{mode: document, kind, name, version, layouts, layout}` (the layout and the parameters are checked against the document's own; the render, export and print are the module's, as the person), the formats of `ViewsApi.Formats` with `pdf` and `svg` unavailable and saying why when the host has no
+browser, and permissions stated as unknown (who may see a document is decided when it renders). Its browse and open are audited (`view.list`, `view.open` with `catalog` in the detail; never a search text or a parameter's value). The owner is empty. Not built yet: the `embed` widget,
+the routes that serve the catalog (`GET /api/v1/catalog...`), and RC01's external provider.
+
 ### In a Build project (plan 32 DBR29)
 
 A dashboard or report can live as a **file of a Build project**: `dashboards/<name>.yaml` and `reports/<name>.yaml` (also `.yml` and `.json`; the folder is the kind, the file's name the document's name, which the Gateway takes as the registry name). They travel with the semantic model they depend on, are versioned by the project's git, and are exactly what an agent writes.
