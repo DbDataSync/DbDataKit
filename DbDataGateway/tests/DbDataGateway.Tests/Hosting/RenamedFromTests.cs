@@ -53,7 +53,7 @@ public sealed class RenamedFromTests : IDisposable
     }
 
     [Fact]
-    public void The_old_authentication_folder_a_reference_to_an_old_secret_and_an_old_extension_key_are_refused_with_their_file()
+    public void The_old_authentication_folder_an_old_extension_key_are_refused_with_their_file()
     {
         Write("config/server.yaml", "schemaVersion: 2\n");
         Write("config/proxy/auth.yaml", "x: 1\n");
@@ -62,20 +62,8 @@ public sealed class RenamedFromTests : IDisposable
         Assert.Contains(Path.Combine(Data, "config", "proxy"), all);
         Assert.Contains(Path.Combine(Data, "config", "gateway"), all);
         Assert.Contains("erp.yaml", all);
-        Assert.Contains("dbdatakit:gateway:", all);
-        Assert.Contains("dbdatakit:gateway:", all);
         Assert.Contains("extensions: proxy:", all);
         Assert.Contains("extensions: gateway:", all);
-    }
-
-    [Fact]
-    public void Secrets_stored_under_the_old_names_are_refused()
-    {
-        Write("config/server.yaml", "schemaVersion: 2\n");
-        Write("secrets/secrets.yaml", "secrets:\n  dbdatakit:gateway:datasource:erp:password: abc\n");
-        var problem = Assert.Single(Problems());
-        Assert.Contains("secrets.yaml", problem);
-        Assert.Contains("dbdatakit:gateway:", problem);
     }
 
     [Fact]

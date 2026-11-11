@@ -6,6 +6,8 @@
 
 Runtime for Plan 02. Depends on `DbDataKit.Secrets.Abstractions`.
 
+Secret names are `dbdatakit:<service>:<kind>:<name>[:<part>]` (see `DbDataKit.Secrets.Abstractions`). Names written as `dbdatakit:...` by an earlier version are not found: set those secrets again under the new names.
+
 ## Public contract
 - `SecretResolverChain(providers, audit?, redactor?)`: first provider that `CanHandle` and returns non-null wins;
   resolved values are registered with the redactor; every attempt is audited by reference name only.

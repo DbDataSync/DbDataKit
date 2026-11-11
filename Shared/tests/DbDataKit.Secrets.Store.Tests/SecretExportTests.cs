@@ -22,14 +22,14 @@ public class SecretExportTests
     public async Task An_export_imports_into_a_store_with_a_different_key_and_every_value_reads_back()
     {
         using var t = new TempDir();
-        var source = await Store(t, "a", (N("one"), "first"), (N("two"), "pässwörd 日本"), (N("proxy-one", "proxy"), "third"));
+        var source = await Store(t, "a", (N("one"), "first"), (N("two"), "pässwörd 日本"), (N("gateway-one", "gateway"), "third"));
         var path = System.IO.Path.Combine(t.Path, "backup", "secrets.export.yaml");
         Assert.Equal(3, await source.ExportAsync(path, SecretValue.From(Passphrase)));
 
         var target = await Store(t, "b");
         var result = await target.ImportAsync(path, SecretValue.From(Passphrase));
         Assert.Equal(new SecretImportResult(3, 0, 0), result);
-        foreach (var (name, expected) in new[] { (N("one"), "first"), (N("two"), "pässwörd 日本"), (N("proxy-one", "proxy"), "third") })
+        foreach (var (name, expected) in new[] { (N("one"), "first"), (N("two"), "pässwörd 日本"), (N("gateway-one", "gateway"), "third") })
         {
             using var value = await target.TryResolveAsync(name.ToRef());
             Assert.Equal(expected, value!.RevealString());
@@ -117,12 +117,12 @@ public class SecretExportTests
     public async Task A_prefix_exports_only_those_names()
     {
         using var t = new TempDir();
-        var source = await Store(t, "a", (N("one"), "1"), (N("p", "proxy"), "2"));
+        var source = await Store(t, "a", (N("one"), "1"), (N("p", "gateway"), "2"));
         var path = System.IO.Path.Combine(t.Path, "x.yaml");
         Assert.Equal(1, await source.ExportAsync(path, SecretValue.From(Passphrase), prefix: "dbdatakit:gateway:"));
         var target = await Store(t, "b");
         await target.ImportAsync(path, SecretValue.From(Passphrase));
-        Assert.Equal([N("p", "proxy").ToString()], (await target.ListInfoAsync()).Select(i => i.Name.ToString()).ToArray());
+        Assert.Equal([N("p", "gateway").ToString()], (await target.ListInfoAsync()).Select(i => i.Name.ToString()).ToArray());
     }
 
     [Fact]
