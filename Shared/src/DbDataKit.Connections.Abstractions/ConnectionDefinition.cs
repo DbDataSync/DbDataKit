@@ -116,6 +116,9 @@ public sealed class ConnectionDefinition
     /// <summary>The newest format this reads.</summary>
     public const int CurrentVersion = 2;
 
+    /// <summary>The id a save or a publish writes (plan 33 6d, rules 3 and 5): <c>connection/</c> and <see cref="CurrentVersion"/>.</summary>
+    public static string CurrentSchemaId => "connection/" + CurrentVersion.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
     /// <summary>The format the file was read in (1 or 2); set by the loader. Its sections <c>cache</c> and <c>checks</c> need 2.</summary>
     [ConfigIgnore]
     public int SchemaVersion { get; set; } = CurrentVersion;

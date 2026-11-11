@@ -81,6 +81,22 @@ public sealed class StoreModelsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_save_writes_the_current_format_of_a_model_read_in_the_previous_one_and_a_format_out_of_range_is_refused_naming_the_file()
+    {
+        // plan 33 6d: model/1 loads, and what a save writes of it is model/2
+        var send = await Client();
+        Assert.Equal(HttpStatusCode.Created, (await send(HttpMethod.Put, "/api/v1/models/territories", Territories, ServerRole.Author)).StatusCode);
+        var text = File.ReadAllText(StoreModels.FileOf(directory, "territories"));
+        Assert.StartsWith("schemaVersion: 2\n", text);
+        Assert.Equal(Territories.Replace("schemaVersion: 1", "schemaVersion: 2"), text);
+
+        var tooNew = await send(HttpMethod.Put, "/api/v1/models/robots", Territories.Replace("schemaVersion: 1", "schemaVersion: 3").Replace("name: territories", "name: robots"), ServerRole.Author);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, tooNew.StatusCode);
+        Assert.Equal("robots.yaml", (string)(await Json(tooNew))["diagnostics"]![0]!["file"]!);
+        Assert.False(File.Exists(StoreModels.FileOf(directory, "robots")));
+    }
+
+    [Fact]
     public async Task A_model_that_does_not_load_is_refused_with_its_diagnostics_and_nothing_is_saved()
     {
         var send = await Client();

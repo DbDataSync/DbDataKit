@@ -160,6 +160,7 @@ public static partial class StoreModels
             if (!result.Ok) return Results.Json(new JsonObject { ["error"] = $"{name}.yaml is not a valid model, so nothing was saved.", ["diagnostics"] = Diagnostics(result.Diagnostics) }, statusCode: StatusCodes.Status422UnprocessableEntity);
             var path = FileOf(directory, name);
             var existed = File.Exists(path);
+            text = DbDataKit.DataModel.DataModelLoader.WithCurrentVersion(text);   // a save writes the current format, never the one that was read (plan 33 6d)
             System.IO.Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             var temporary = path + ".tmp";
             await File.WriteAllTextAsync(temporary, text.ReplaceLineEndings("\n"), new System.Text.UTF8Encoding(false), context.RequestAborted);

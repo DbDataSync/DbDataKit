@@ -41,7 +41,7 @@ public sealed class SyncConnectionFormatTests : IDisposable
     // ---- the new format ----
 
     [Fact]
-    public void A_saved_connection_is_a_connection_1_file()
+    public void A_saved_connection_is_a_file_of_the_current_connection_format()
     {
         _repository.SaveConnection(new ConnectionInput
         {
@@ -50,7 +50,7 @@ public sealed class SyncConnectionFormatTests : IDisposable
         }, Author);
 
         var text = File.ReadAllText(FileOf("orders"));
-        Assert.StartsWith("schema: connection/1", text, StringComparison.Ordinal);
+        Assert.StartsWith("schema: connection/2", text, StringComparison.Ordinal);
         Assert.Contains("engine: sqlserver", text);
         Assert.Contains("host: sql01", text);
         Assert.Contains("password_secret: secret:dbdata:sync:connection:orders", text);

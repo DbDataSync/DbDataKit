@@ -33,6 +33,27 @@ public sealed class ConnectionFormat2Tests
     }
 
     [Fact]
+    public void A_save_or_a_publish_writes_the_current_format_and_a_version_out_of_range_is_refused_naming_the_file()
+    {
+        // plan 33 6d: connection/1 (the oldest still read) loads, and what a save or a publish writes of it is connection/2, the rest as written
+        Assert.Equal("connection/2", ConnectionDefinition.CurrentSchemaId);
+        var current = ConnectionDefinitionLoader.WithCurrentVersion("# kept\n" + File(1));
+        Assert.StartsWith("# kept\nschema: connection/2\n", current);
+        var loaded = ConnectionDefinitionLoader.Load(current);
+        Assert.True(loaded.Ok, string.Join("\n", loaded.Diagnostics));
+        Assert.Equal(2, loaded.Definition!.SchemaVersion);
+        Assert.Equal(current, ConnectionDefinitionLoader.WithCurrentVersion(current));
+        Assert.StartsWith("schema: connection/2\n", ConnectionDefinitionLoader.WithCurrentVersion(File(1).Replace("schema: connection/1", "schema: 'connection/1'")));
+
+        foreach (var outside in new[] { 0, 3 })
+        {
+            var refused = ConnectionDefinitionLoader.Load(File(outside), "warehouse.yaml");
+            Assert.False(refused.Ok);
+            Assert.Contains(refused.Diagnostics, d => d.Path == "warehouse.yaml");
+        }
+    }
+
+    [Fact]
     public void Each_key_of_the_cache_section_loads_and_the_checks_have_their_place()
     {
         var result = ConnectionDefinitionLoader.Load(File(2, "cache: { enabled: true, ttl: 2h, scope: shared, dataset: dbo.orders }\nchecks:\n  - { id: orders_fresh, kind: freshness, dataset: dbo.orders, max_age: 6h }\n  - { id: fk, kind: referential, dataset: dbo.orders, column: customer_id, references: { dataset: dbo.customers, column: id } }\n  - { id: st, kind: accepted_values, dataset: dbo.orders, column: status, values: [open, shipped] }"));

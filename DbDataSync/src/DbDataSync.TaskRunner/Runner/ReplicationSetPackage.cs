@@ -257,6 +257,13 @@ public static class ReplicationSetPackage
             var bytes = File.ReadAllBytes(file.Source);
             if (textExtensions.Contains(Path.GetExtension(file.Path), StringComparer.OrdinalIgnoreCase) && !bytes.Contains((byte)0) && bytes.Contains((byte)'\r'))
                 bytes = new UTF8Encoding(false).GetBytes(new UTF8Encoding(false).GetString(bytes).Replace("\r\n", "\n"));
+            // a configuration file of a versioned kind leaves in the current format, whatever its own number says (plan 33 6d, rule 5); the file in the repository is left as written
+            if (file.Path.StartsWith(RepoDir + "/", StringComparison.Ordinal) && Path.GetExtension(file.Path) == ".yaml" && !bytes.Contains((byte)0))
+            {
+                var text = new UTF8Encoding(false).GetString(bytes);
+                var current = DbDataSync.Core.Config.PublishedConfigText.Current(file.Path[(RepoDir.Length + 1)..], text);
+                if (current != text) bytes = new UTF8Encoding(false).GetBytes(current);
+            }
             File.WriteAllBytes(target, bytes);
         }
     }

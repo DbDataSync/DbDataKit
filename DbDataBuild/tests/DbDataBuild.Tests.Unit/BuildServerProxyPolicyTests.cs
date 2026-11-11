@@ -25,7 +25,7 @@ public sealed partial class BuildServerProxyTests
 
         WriteConnectionWithPolicy("    batch_size: 1000\n    classifier: strict\n    compression:\n      enabled: true\n");
         var (first, loaded) = await PublishedText();
-        Assert.StartsWith("schema: connection/1\n", first);
+        Assert.StartsWith("schema: connection/2\n", first);
         var block = ServingPolicy.BlockOf(first)!;
         Assert.Equal(["batch_size", "classifier", "compression"], block.Entries.Select(e => e.Key.Value));
         Assert.Equal("1000", ((DbDataKit.Config.Yaml.YamlScalar)block.Get("batch_size")!).Value);

@@ -147,7 +147,7 @@ public sealed class StrictConnectionFileTests : IDisposable
     [Fact]
     public void A_saved_file_carries_its_schema()
     {
-        Assert.StartsWith("schema: connection/1", File.ReadAllText(_path), StringComparison.Ordinal);
+        Assert.StartsWith("schema: connection/2", File.ReadAllText(_path), StringComparison.Ordinal);   // a save writes the current format (plan 33 6d)
     }
 
     [Theory]

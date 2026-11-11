@@ -310,7 +310,7 @@ internal static partial class SyncConnectionFile
 
     private sealed class Document
     {
-        [YamlMember(Alias = "schema", ApplyNamingConventions = false)] public string Schema { get; set; } = ConnectionDefinition.SchemaId;
+        [YamlMember(Alias = "schema", ApplyNamingConventions = false)] public string Schema { get; set; } = ConnectionDefinition.CurrentSchemaId;   // a save writes the current format (plan 33 6d)
         [YamlMember(Alias = "name", ApplyNamingConventions = false)] public string Name { get; set; } = "";
         [YamlMember(Alias = "engine", ApplyNamingConventions = false)] public string Engine { get; set; } = "";
         [YamlMember(Alias = "dialect", ApplyNamingConventions = false)] public string? Dialect { get; set; }

@@ -95,6 +95,25 @@ public class ProjectPublishTests
     }
 
     [Fact]
+    public void A_connection_file_of_the_previous_format_is_published_as_the_current_one_and_the_file_in_the_project_stays_as_written()
+    {
+        // plan 33 6d, rule 5: nothing that leaves the machine carries an old number
+        var dir = CompiledProject();
+        var file = Path.Combine(dir, "connections", "sqlserver.yaml");
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        const string AsWritten = "# the warehouse\nschema: connection/1\nname: sqlserver\nengine: sqlserver\n";
+        File.WriteAllText(file, AsWritten);
+
+        var output = Path.Combine(dir, "out");
+        RunnerProject.Write(Built(dir), output);
+
+        var published = File.ReadAllText(Path.Combine(output, "files", "connections", "sqlserver.yaml"));
+        Assert.Equal("# the warehouse\nschema: connection/2\nname: sqlserver\nengine: sqlserver\n", published);
+        Assert.Equal(AsWritten, File.ReadAllText(file));
+        Assert.Equal(2, DbDataKit.Connections.ConnectionDefinitionLoader.Load(published, "sqlserver.yaml", addressRequired: false).Require().SchemaVersion);
+    }
+
+    [Fact]
     public void A_plan_with_a_schedule_that_is_not_cron_is_refused_naming_the_plans_file_and_the_key_as_DDB_106()
     {
         var dir = CompiledProject();

@@ -141,6 +141,8 @@ public sealed class StorePublisher(StoreProxies groups, ConsoleKeyStore identity
         var check = StoreModels.Check(modelName, text);
         if (!check.Ok) return new(false, $"{modelName}.yaml is not a valid model, so nothing was published: {string.Join(" ", check.Diagnostics.Select(d => d.ToString()))}");
         var model = check.Model!;
+        // what is published (and pinned as this server's copy) is the current format of the file; the file itself stays as the person wrote it (plan 33 6d, rule 5)
+        text = DbDataKit.DataModel.DataModelLoader.WithCurrentVersion(text);
         if (model.Instances != DbDataKit.DataModel.InstanceMode.None) return new(false, $"The model '{modelName}' keeps instances, and a group serves only a model's own copy so far; it cannot be published yet.");
 
         // the tables first: the version published is always the one they have
@@ -247,7 +249,7 @@ public sealed class StorePublisher(StoreProxies groups, ConsoleKeyStore identity
 
         var secret = await Send(HttpMethod.Put, $"/api/v1/secrets/{Uri.EscapeDataString(connection + "-write")}", new { value = login.ConnectionString });
         if (!secret.Ok || (string?)secret.Body?["reference"] is not { } reference) return new(false, $"the group did not keep the login of '{connection}' ({secret.Status})");
-        var source = $"schema: connection/1\nname: {connection}\nengine: {login.Engine}\nconnection_string_secret: '{reference}'\n";
+        var source = $"schema: {DbDataKit.Connections.ConnectionDefinition.CurrentSchemaId}\nname: {connection}\nengine: {login.Engine}\nconnection_string_secret: '{reference}'\n";
         var existing = await Send(HttpMethod.Get, $"/api/v1/data-sources/{Uri.EscapeDataString(connection)}");
         var written = await Send(HttpMethod.Put, $"/api/v1/data-sources/{Uri.EscapeDataString(connection)}", new { text = source, expected_version = existing.Ok ? (string?)existing.Body?["version"] : null });
         if (!written.Ok) return new(false, $"the group did not take the data source '{connection}' ({written.Status})", written.Body as JsonObject);

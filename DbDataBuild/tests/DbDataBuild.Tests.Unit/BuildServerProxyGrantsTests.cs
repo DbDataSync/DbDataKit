@@ -54,12 +54,12 @@ public sealed partial class BuildServerProxyTests
         Assert.True((await PublishedText()).Loaded.Grants!.Everyone);
         WriteConnection(null, format: 1);
         var (none, bare) = await PublishedText();
-        Assert.StartsWith("schema: connection/1\n", none);
+        Assert.StartsWith("schema: connection/2\n", none);   // a file read as connection/1 is published as the current format (plan 33 6d)
         Assert.Null(bare.Grants);
 
         // a connection with no file at all (named after its engine) publishes as it always did
         File.Delete(ConnectionFile);
-        Assert.StartsWith("schema: connection/1\n", (await PublishedText()).Text);
+        Assert.StartsWith("schema: connection/2\n", (await PublishedText()).Text);
     }
 
     [Fact]
@@ -70,6 +70,6 @@ public sealed partial class BuildServerProxyTests
         var empty = ConnectionDefinitionLoader.Load(ProxyPublisher.DataSourceText("w", "sqlserver", "secret:x", new GrantsSpec()), "w.yaml").Require();
         Assert.Empty(empty.Grants!.Groups);
         Assert.False(empty.Grants.Everyone);
-        Assert.StartsWith("schema: connection/1\n", ProxyPublisher.DataSourceText("w", "sqlserver", "secret:x", null));
+        Assert.StartsWith("schema: connection/2\n", ProxyPublisher.DataSourceText("w", "sqlserver", "secret:x", null));
     }
 }

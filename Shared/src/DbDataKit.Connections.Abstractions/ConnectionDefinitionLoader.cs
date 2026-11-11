@@ -87,6 +87,14 @@ public static class ConnectionDefinitionLoader
         System.Text.RegularExpressions.Regex.Match(text, "^schema:\\s*[\"']?(connection/[0-9]+)", System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.CultureInvariant) is { Success: true } m
             ? FormatOf(m.Groups[1].Value) ?? 1 : 1;
 
+    /// <summary>
+    /// <paramref name="text"/> with its <c>schema:</c> line set to <see cref="ConnectionDefinition.CurrentSchemaId"/>, the rest as written: what a save or a publish of a connection file that loads writes (plan 33 6d, rules 3 and 5),
+    /// so a file read as <c>connection/1</c> never leaves as 1. A text with no such line is unchanged.
+    /// </summary>
+    public static string WithCurrentVersion(string text) =>
+        System.Text.RegularExpressions.Regex.Replace(text, "^schema:[ \\t]*[\"']?connection/[0-9]+[\"']?", "schema: " + ConnectionDefinition.CurrentSchemaId,
+            System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+
     /// <summary>The semantic rules on their own, for definitions built in code.</summary>
     public static IReadOnlyList<ConfigDiagnostic> Validate(ConnectionDefinition d)
     {
