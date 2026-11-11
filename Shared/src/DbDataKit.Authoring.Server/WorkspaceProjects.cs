@@ -4,7 +4,7 @@ using DbDataKit.Authoring;
 using DbDataKit.Config.Git;
 using DbDataKit.State;
 
-namespace DbDataWorkspace.Server;
+namespace DbDataKit.Authoring.Server;
 
 /// <summary>Why a project could not be made or added, in a sentence a person can read; <see cref="Status"/> is the HTTP status the route answers with.</summary>
 public sealed class WorkspaceProjectException(string message, int status) : Exception(message)

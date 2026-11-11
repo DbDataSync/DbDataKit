@@ -1,3 +1,4 @@
+using DbDataKit.Authoring.Server;
 using DbDataKit.Cli;
 using DbDataKit.Config.Git;
 using DbDataKit.State;
@@ -52,7 +53,7 @@ public static class WorkspaceAdminCommand
         try
         {
             var (store, _) = Open(directory, environment);
-            var target = await new WorkspacePublishing(directory, store).PairAsync(parsed.Words[0], address, code, parsed.Get("client-name"), Operator, context.Cancellation);
+            var target = await new WorkspacePublishing(directory, store, () => WorkspaceSecrets.Open(directory), () => WorkspaceState.Secrets(directory)).PairAsync(parsed.Words[0], address, code, parsed.Get("client-name"), Operator, context.Cancellation);
             await context.Out.WriteLineAsync($"Paired the publisher key {target.Name} with {target.Url} as '{target.ClientName}' with the roles {string.Join(", ", target.Roles)}; its certificate is pinned: {target.Fingerprint}. The key is in this server's secret store: {WorkspacePublishing.ReferenceFor(target.Name)}.");
             context.Data["name"] = target.Name;
             context.Data["url"] = target.Url;
@@ -72,7 +73,7 @@ public static class WorkspaceAdminCommand
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0) { await context.Error.WriteLineAsync($"Usage: publisher list {Where}"); return CliExit.Usage; }
         var directory = DirectoryOf(parsed, environment);
         var (store, _) = Open(directory, environment);
-        var publishing = new WorkspacePublishing(directory, store);
+        var publishing = new WorkspacePublishing(directory, store, () => WorkspaceSecrets.Open(directory), () => WorkspaceState.Secrets(directory));
         var keys = store.PublisherKeys();
         foreach (var k in keys) await context.Out.WriteLineAsync($"{k.Name}  {k.SecretRef}  {publishing.Find(k.Name)?.Url ?? "(no Gateway paired)"}");
         if (keys.Count == 0) await context.Out.WriteLineAsync("There is no publisher key. Make one with: publisher pair <name> --url <gateway> --code <code>");

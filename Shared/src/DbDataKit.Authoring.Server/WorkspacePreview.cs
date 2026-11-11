@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 using DbDataKit.State;
 using Microsoft.AspNetCore.Http;
 
-namespace DbDataWorkspace.Server;
+namespace DbDataKit.Authoring.Server;
 
 /// <summary>
 /// The preview of a build (plan 22a GP35, plan 21: previews are read only by default). The smallest mechanism that cannot write: this server answers <c>GET</c> for the files of the build's folder and nothing else, with a

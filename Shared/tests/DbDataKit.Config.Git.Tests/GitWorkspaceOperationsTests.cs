@@ -40,6 +40,29 @@ public sealed class GitWorkspaceOperationsTests : IDisposable
     }
 
     [Fact]
+    public void A_hook_in_the_repository_never_runs_for_a_commit_or_a_merge_made_here()
+    {
+        // plan 33 SC04: git and archive work is done in the process that also signs people in, so a hook that arrives with a repository (a clone, an added project) must never be run by it
+        if (OperatingSystem.IsWindows()) Assert.Skip("the hooks are shell scripts");
+        var marker = Path.Combine(_root, "hook-ran");
+        var hooks = Path.Combine(Checkout, ".git", "hooks");
+        Directory.CreateDirectory(hooks);
+        foreach (var hook in new[] { "pre-commit", "commit-msg", "post-commit", "pre-merge-commit", "post-merge", "pre-push" })
+        {
+            var path = Path.Combine(hooks, hook);
+            File.WriteAllText(path, $"#!/bin/sh\necho {hook} >> \"{marker}\"\nexit 1\n");
+            if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        File.WriteAllText(Path.Combine(Draft, "a.txt"), "two\n");
+        Assert.NotNull(GitWorkspaceOperations.Commit(Draft, "Take them", _ada));      // a pre-commit hook that fails would have stopped it
+        var merged = GitWorkspaceOperations.Merge(Checkout, "ws/ada-draft", _ada);
+
+        Assert.True(merged.Merged);
+        Assert.False(File.Exists(marker), File.Exists(marker) ? File.ReadAllText(marker) : "");
+    }
+
+    [Fact]
     public void Changes_lists_edits_new_files_and_deletions_with_their_patches()
     {
         File.WriteAllText(Path.Combine(Draft, "a.txt"), "two\n");

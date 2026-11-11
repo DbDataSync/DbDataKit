@@ -6,7 +6,7 @@ using DbDataKit.Apps.Bundling;
 using DbDataKit.Authoring;
 using DbDataKit.State;
 
-namespace DbDataWorkspace.Server;
+namespace DbDataKit.Authoring.Server;
 
 /// <summary>A build or a preview could not be started or read; <see cref="Status"/> is the HTTP status the route answers with.</summary>
 public sealed class WorkspaceBuildException(string message, int status) : Exception(message)
@@ -31,7 +31,7 @@ public sealed partial class WorkspaceBuilds : IDisposable
     private readonly CancellationTokenSource stopping = new();
     private readonly List<Task> running = [];
 
-    /// <param name="settings">Read for each build, so a changed <c>server.yaml</c> applies to the next one.</param>
+    // settings is read for each build, so a changed server.yaml applies to the next one.
     public WorkspaceBuilds(string directory, WorkspaceStore store, Workspaces workspaces, Func<WorkspaceAppSettings> settings, Action<string> log)
     {
         this.directory = directory;
