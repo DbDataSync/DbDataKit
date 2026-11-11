@@ -58,6 +58,20 @@ public sealed class WorkspaceServerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_certificate_route_describes_the_certificate_the_server_presents_and_wants_a_token()
+    {
+        using (var anonymous = await server.Http.GetAsync("/api/v1/certificate")) Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+
+        var (response, certificate) = await server.Send("ada", ServerRole.Viewer, HttpMethod.Get, "/api/v1/certificate");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True((bool)certificate!["present"]!);
+        Assert.Equal(WorkspaceServer.Certificate(server.Directory).Thumbprint, (string)certificate["thumbprint"]!);
+        Assert.True((int)certificate["days_left"]! > 30);
+        Assert.DoesNotContain("PRIVATE", certificate.ToJsonString());
+    }
+
+    [Fact]
     public async Task A_token_with_more_roles_than_the_pairing_allowed_is_refused()
     {
         await using var narrow = await WorkspaceHarness.StartAsync(ceiling: ServerRole.Viewer);

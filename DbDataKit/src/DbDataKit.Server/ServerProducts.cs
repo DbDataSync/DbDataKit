@@ -100,6 +100,7 @@ public static class ServerProducts
     public static IReadOnlyList<(string Method, string Route, ServerRole Needed)> WorkspaceRoutes { get; } =
     [
         ("GET", "api/v1/projects", ServerRole.Viewer),
+        ("GET", "api/v1/certificate", ServerRole.Viewer),   // UI10: days left and subject of the certificate it presents, for Monitoring
         ("POST", "api/v1/projects", ServerRole.Admin),
         ("GET", "api/v1/projects/{p}/workspaces", ServerRole.Viewer),
         ("POST", "api/v1/projects/{p}/workspaces", ServerRole.Author),
