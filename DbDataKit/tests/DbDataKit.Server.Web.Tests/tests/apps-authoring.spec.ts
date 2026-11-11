@@ -142,7 +142,7 @@ test.beforeAll(async () => {
 
   // the Store publishes the model to the group
   const code = /Pairing code: (\S+)/.exec(execFileSync('dotnet', ['exec', gatewayDll, 'server', 'pair', '--repo', gatewayDirectory, '--max-role', 'publisher'], { encoding: 'utf8' }))![1]
-  run(storeDll, storeDirectory, ['proxy', 'add', 'edge', '--url', managementUrl, '--code', code])
+  run(storeDll, storeDirectory, ['gateway', 'add', 'edge', '--url', managementUrl, '--code', code])
   run(storeDll, storeDirectory, ['model', 'publish', 'territories', '--proxy', 'edge'], { [connectionVariable]: warehouse! })
   await new Promise((resolve) => setTimeout(resolve, 3000))   // the instance reads the group's definitions every second
 })

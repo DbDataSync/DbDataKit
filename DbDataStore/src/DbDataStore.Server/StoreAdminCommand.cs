@@ -82,7 +82,7 @@ public static class StoreAdminCommand
         if (parsed.Unknown.Count > 0 || parsed.Words.Count != 1 || parsed.Get("code") is not { Length: > 0 } code
             || !Uri.TryCreate(parsed.Get("url"), UriKind.Absolute, out var url) || url.Scheme != Uri.UriSchemeHttps)
         {
-            await context.Error.WriteLineAsync($"Usage: proxy add <name> --url <https address> --code <pairing code> {Where}");
+            await context.Error.WriteLineAsync($"Usage: gateway add <name> --url <https address> --code <pairing code> {Where}");
             return CliExit.Usage;
         }
         var name = parsed.Words[0];
@@ -106,7 +106,7 @@ public static class StoreAdminCommand
     private static async Task<int> ListProxiesAsync(string[] args, CliContext context)
     {
         var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo" });
-        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0) { await context.Error.WriteLineAsync($"Usage: proxy list {Where}"); return CliExit.Usage; }
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0) { await context.Error.WriteLineAsync($"Usage: gateway list {Where}"); return CliExit.Usage; }
         var all = new StoreProxies(DirectoryOf(parsed)).All();
         foreach (var p in all) await context.Out.WriteLineAsync($"{p.Name}  {p.Url}  {p.InstanceId}");
         if (all.Count == 0) await context.Out.WriteLineAsync("This server is not paired with a serving group.");
@@ -117,7 +117,7 @@ public static class StoreAdminCommand
     private static async Task<int> RemoveProxyAsync(string[] args, CliContext context)
     {
         var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo" });
-        if (parsed.Unknown.Count > 0 || parsed.Words.Count != 1) { await context.Error.WriteLineAsync($"Usage: proxy remove <name> {Where}"); return CliExit.Usage; }
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count != 1) { await context.Error.WriteLineAsync($"Usage: gateway remove <name> {Where}"); return CliExit.Usage; }
         if (!new StoreProxies(DirectoryOf(parsed)).Remove(parsed.Words[0])) { await context.Error.WriteLineAsync($"This server is not paired with '{parsed.Words[0]}'."); return CliExit.Failure; }
         await context.Out.WriteLineAsync($"Forgot {parsed.Words[0]}.");
         context.Data["removed"] = parsed.Words[0];

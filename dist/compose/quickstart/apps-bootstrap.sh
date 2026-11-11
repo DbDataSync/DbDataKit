@@ -8,7 +8,7 @@ store() { docker compose "${files[@]}" exec -T store dbdatastore "$@"; }
 paired=$(gateway server pair --max-role publisher)
 code=$(sed -n 's/.*Pairing code: \([^ ]*\).*/\1/p' <<<"$paired" | head -n 1)
 [ -n "$code" ] || { echo "no pairing code in: $paired"; exit 1; }
-store proxy add edge --url https://gateway:8816 --code "$code"
+store gateway add edge --url https://gateway:8816 --code "$code"
 store model put --file /samples/apps/territories.yaml
 store model publish territories --proxy edge
 docker compose "${files[@]}" exec -T -e DBDATAGATEWAY="dotnet /app/dbdatagateway.dll" gateway bash /samples/apps/publish-samples.sh
