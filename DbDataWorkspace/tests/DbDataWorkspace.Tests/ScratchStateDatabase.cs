@@ -57,7 +57,11 @@ internal sealed class ScratchStateDatabase : IDisposable
     public static ScratchStateDatabase For(string engine)
     {
         var admin = System.Environment.GetEnvironmentVariable(engine == "mssql" ? "DBDATAKIT_TEST_SQLSERVER" : "DBDATAKIT_TEST_POSTGRES");
-        if (admin is null) Assert.Skip($"set DBDATAKIT_TEST_{(engine == "mssql" ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
+        if (admin is null)
+        {
+            Assert.False(string.Equals(System.Environment.GetEnvironmentVariable(engine == "mssql" ? "DBDATAKIT_TEST_REQUIRE_SQLSERVER" : "DBDATAKIT_TEST_REQUIRE_POSTGRES"), "true", StringComparison.OrdinalIgnoreCase), $"the engine is required (DBDATAKIT_TEST_REQUIRE_*) but DBDATAKIT_TEST_{(engine == "mssql" ? "SQLSERVER" : "POSTGRES")} is not set");
+            Assert.Skip($"set DBDATAKIT_TEST_{(engine == "mssql" ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
+        }
         return new ScratchStateDatabase(engine, admin);
     }
 

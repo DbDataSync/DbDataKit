@@ -23,7 +23,11 @@ internal sealed class StateVerbDatabases : IDisposable
     public string Provision(string engine)
     {
         var server = engine == "mssql" ? Environment.GetEnvironmentVariable("DBDATAKIT_TEST_SQLSERVER") : Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES");
-        if (server is null) Assert.Skip($"set DBDATAKIT_TEST_{(engine == "mssql" ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
+        if (server is null)
+        {
+            Assert.False(string.Equals(System.Environment.GetEnvironmentVariable(engine == "mssql" ? "DBDATAKIT_TEST_REQUIRE_SQLSERVER" : "DBDATAKIT_TEST_REQUIRE_POSTGRES"), "true", StringComparison.OrdinalIgnoreCase), $"the engine is required (DBDATAKIT_TEST_REQUIRE_*) but DBDATAKIT_TEST_{(engine == "mssql" ? "SQLSERVER" : "POSTGRES")} is not set");
+            Assert.Skip($"set DBDATAKIT_TEST_{(engine == "mssql" ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
+        }
 
         var name = $"console_verbs_{Guid.NewGuid():N}";
         if (engine == "mssql")
