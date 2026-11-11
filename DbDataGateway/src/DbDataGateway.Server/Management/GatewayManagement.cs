@@ -100,8 +100,10 @@ public sealed partial class GatewayManagement(IConfigurationRoot configuration, 
         {
             if (semanticModels is null) return ManagementResult.Problem(404, "There is no such call.");
             // an administrator may do everything; a publishing server client only what the owner rules let it do to its own models, which GatewaySemanticModels checks
-            if (!caller.Holds(ServerRole.Admin) && !caller.Holds(ServerRole.Publisher)) return Denied(ServerRole.Admin);
             var rest = route.Length > (Prefix + "/semantic-models").Length ? route[(Prefix + "/semantic-models/").Length..].Split('/') : [];
+            // the catalog's content is read by anyone who may query the model (plan 14a SL12, D19); everything else is the administrator's or the publisher's
+            if (method == "GET" && rest is [_, "catalog"] && caller.Holds(ServerRole.Viewer)) return semanticModels.Catalog(Uri.UnescapeDataString(rest[0]));
+            if (!caller.Holds(ServerRole.Admin) && !caller.Holds(ServerRole.Publisher)) return Denied(ServerRole.Admin);
             return await semanticModels.HandleAsync(method, rest, body, caller, cancellationToken);
         }
         if (route == Prefix + "/entity-models" || route.StartsWith(Prefix + "/entity-models/", StringComparison.Ordinal))

@@ -68,6 +68,36 @@ public sealed partial class ManagementTests
     }
 
     [Fact]
+    public async Task A_viewer_reads_the_content_of_a_published_model_without_its_data_source_and_a_publisher_still_cannot_read_another_publishers_model()
+    {
+        // plan 14a SL12 (D19): anyone who may query the model reads what its catalog says; the mapping to data sources and connections stays with the publisher
+        await StartAsync();
+        var admin = await PairAsync();
+        var first = await PairPublisherAsync(build1);
+        var second = await PairPublisherAsync(build2);
+        await CallAsAsync(build1, first, HttpMethod.Put, "/api/v1/data-sources/sales-ro", ServerRole.Publisher, Put(SalesData("sales-ro"), null));
+        await CallAsAsync(build1, first, HttpMethod.Put, "/api/v1/semantic-models/sales_catalog", ServerRole.Publisher, Publish(CatalogText, "sales-ro"));
+
+        var read = await CallAsync(admin, HttpMethod.Get, "/api/v1/semantic-models/sales_catalog/catalog", ServerRole.Viewer);
+        Assert.Equal(HttpStatusCode.OK, read.StatusCode);
+        var text = await read.Content.ReadAsStringAsync();
+        var view = JsonNode.Parse(text)!;
+        Assert.Equal("sales_catalog", (string)view["name"]!);
+        Assert.Equal(1, (int)view["version"]!);
+        Assert.NotEmpty(view["measures"]!.AsArray());
+        Assert.NotEmpty(view["dimensions"]!.AsArray());
+        var attribute = view["dimensions"]!.AsArray().SelectMany(d => d!["attributes"]!.AsArray()).First()!;
+        Assert.NotEmpty(attribute["bindings"]!.AsArray());
+        Assert.DoesNotContain("sales-ro", text);
+        Assert.DoesNotContain("Data Source=", text);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await CallAsync(admin, HttpMethod.Get, "/api/v1/semantic-models/nothing/catalog", ServerRole.Viewer)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(admin, HttpMethod.Put, "/api/v1/semantic-models/sales_catalog", ServerRole.Viewer, Publish(CatalogText, "sales-ro", 1))).StatusCode);
+        // the management read of the model itself is still the publisher's own
+        Assert.Equal(HttpStatusCode.Forbidden, (await CallAsAsync(build2, second, HttpMethod.Get, "/api/v1/semantic-models/sales_catalog", ServerRole.Publisher)).StatusCode);
+    }
+
+    [Fact]
     public async Task A_catalog_with_a_cache_section_is_published_in_format_2_and_refused_while_a_live_instance_reads_only_format_1()
     {
         // plan 24a UC03 and UC01: the format of the package is 2 only when the catalog uses a section of it; the group never holds a version one of its instances cannot serve
