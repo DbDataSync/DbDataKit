@@ -16,11 +16,11 @@ dbdatastore state export --to <directory> [--include-secrets-check] [--repo <ser
 dbdatastore state import --from <directory> [--migrate-after true|false] [--repo <server directory>]   # into an empty directory's state
 dbdatastore state verify --snapshot <directory> [--db] [--rehash-payloads] [--repo <server directory>]   # the snapshot against itself, or the state against it
 dbdatastore state move --to-engine <engine> [--to-connection <string>] [--yes] [--repo <server directory>]   # the server's state is SQLite only for now: it says so and points to export and import
-dbdatastore secret set|list|delete|... [--repo <server directory>]   # the server's own secret store (the shared secret verbs): the password a console's state connection refers to is dbdata:console:state:<name> (plan 29b C06)
+dbdatastore secret set|list|delete|... [--repo <server directory>]   # the server's own secret store (the shared secret verbs): the password a console's state connection refers to is dbdatakit:server:state:<name> (plan 29b C06)
 dbdatastore model put --file <model.yaml> [--name <model>] [--repo <server directory>]      # checked first, then saved
 dbdatastore storage create --model <model> [--repo <server directory>]                      # the tables of the model's own copy, on connections/<name>.yaml
-dbdatastore proxy add <name> --url <https address> --code <code> [--repo <server directory>]   # pair with a serving group as a publishing client
-dbdatastore proxy list | remove <name> [--repo <server directory>]
+dbdatastore gateway add <name> --url <https address> --code <code> [--repo <server directory>]   # pair with a serving group as a publishing client
+dbdatastore gateway list | remove <name> [--repo <server directory>]
 dbdatastore model publish <model> [--proxy <name>] [--dry-run] [--repo <server directory>]   # make the model as it is now available: its tables, then every group it is published to
 dbdatastore model unpublish <model> --proxy <name> [--repo <server directory>]
 dbdatastore health check [--url <url>]
@@ -110,7 +110,7 @@ Reads and writes of the data itself are served by the serving layer from the mod
 
 ## Publishing to the serving layer
 
-Reads and writes of master data are served by the serving layer (plan 20), from the models this server publishes to it, so they go on with this server stopped. Pair once with the serving group as a publishing client, with a code its administrator made (`dbdatagateway server pair --max-role publisher`): `dbdatastore proxy add edge --url https://serving.example:8815 --code <code>`.
+Reads and writes of master data are served by the serving layer (plan 20), from the models this server publishes to it, so they go on with this server stopped. Pair once with the serving group as a publishing client, with a code its administrator made (`dbdatagateway server pair --max-role publisher`): `dbdatastore gateway add edge --url https://serving.example:8815 --code <code>`.
 
 **Publishing is the one act that makes the model you are working on available** (plan 20 O10b). Editing a model's file changes nothing for anyone; `dbdatastore model publish <model>` (the first time with `--proxy <name>`; after that, to every group the model is published to):
 
@@ -124,7 +124,7 @@ A change to rules only (a new `pattern`, a new `max`) is published the same way,
 
 ## What is served
 
-`/health` and `/version` answer without a token. Everything under `/api` needs a token a paired console issued, within the roles the pairing allowed. So far there is `GET /api/v1/info` (the product, its version and its instance id) and the state endpoints every server has: `GET /api/v1/state` (viewer: the engine, the connection with secrets masked, the modules' versions in the registry against this binary, the migrations pending, where each setting came from and the other live instances) and `GET`/`POST /api/v1/state/maintenance` (viewer reads, admin sets `{"enabled": true, "reason": "..."}`: the server answers 503 with `Retry-After` and the reason to everything but these calls, the health endpoints and an administrator, and reports `idle` when what was in flight has finished; audited as `state.maintenance`, refusals too; nothing is persisted, a restart leaves maintenance). See `Shared/src/DbDataKit.State.Api/README.md`. The Store keeps this audit in `management-audit.log` beside `server.yaml`. `GET`/`POST /api/v1/state/move` (plan 29b C06): the server moves its own state when a console asks, from a frozen server (maintenance and idle), writing the `state:` section of `server.yaml`; the console passes the password as a secret reference the server resolves in its own store (`dbdatastore secret set dbdata:console:state:<name> --stdin`).
+`/health` and `/version` answer without a token. Everything under `/api` needs a token a paired console issued, within the roles the pairing allowed. So far there is `GET /api/v1/info` (the product, its version and its instance id) and the state endpoints every server has: `GET /api/v1/state` (viewer: the engine, the connection with secrets masked, the modules' versions in the registry against this binary, the migrations pending, where each setting came from and the other live instances) and `GET`/`POST /api/v1/state/maintenance` (viewer reads, admin sets `{"enabled": true, "reason": "..."}`: the server answers 503 with `Retry-After` and the reason to everything but these calls, the health endpoints and an administrator, and reports `idle` when what was in flight has finished; audited as `state.maintenance`, refusals too; nothing is persisted, a restart leaves maintenance). See `Shared/src/DbDataKit.State.Api/README.md`. The Store keeps this audit in `management-audit.log` beside `server.yaml`. `GET`/`POST /api/v1/state/move` (plan 29b C06): the server moves its own state when a console asks, from a frozen server (maintenance and idle), writing the `state:` section of `server.yaml`; the console passes the password as a secret reference the server resolves in its own store (`dbdatastore secret set dbdatakit:server:state:<name> --stdin`).
 
 ## In a container
 

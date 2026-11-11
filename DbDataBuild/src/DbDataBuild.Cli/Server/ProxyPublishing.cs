@@ -47,7 +47,7 @@ internal sealed class ProxiesFile(string serverDirectory)
 internal sealed record PublishResult(int Status, JsonObject Body);
 
 /// <summary>
-/// Publishes a connection of a project to a paired Proxy as a read-only data source (plan 13, T10, "Server-to-server clients"). Only the <b>read</b> login goes: the secret <c>dbdata:build:connection:&lt;connection&gt;:read</c> is sent once, over the
+/// Publishes a connection of a project to a paired Proxy as a read-only data source (plan 13, T10, "Server-to-server clients"). Only the <b>read</b> login goes: the secret <c>dbdatakit:build:connection:&lt;connection&gt;:read</c> is sent once, over the
 /// pinned channel, to the Proxy's own store, and the data source file refers to it; the write login is never read here. The call carries a token that names the person who asked (their Build user) and the role Publisher, so the Proxy applies its owner
 /// rules to it: it may create data sources and change or remove only the ones this server made.
 /// </summary>

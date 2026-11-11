@@ -19,7 +19,7 @@ export function SecretNotes({ text }: { text: string }) {
   const found = useMemo(() => secretFindings(text), [text])
   return (
     <div style={{ marginTop: 10 }} data-testid="wsp-secret-notes" data-problems={found.length}>
-      <div className="hint">A connection names its secret by reference (<code>secret:dbdata:sync:connection:&lt;name&gt;</code>); the value is set on the server that runs the replication and is never in this draft.</div>
+      <div className="hint">A connection names its secret by reference (<code>secret:dbdatakit:sync:connection:&lt;name&gt;</code>); the value is set on the server that runs the replication and is never in this draft.</div>
       {found.map((f, i) => <div key={i} className="banner error" role="alert" style={{ marginTop: 6 }} data-testid="wsp-secret-finding"><span className="mark">!</span><span>Line {f.line} {f.message}</span></div>)}
     </div>
   )

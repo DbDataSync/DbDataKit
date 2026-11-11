@@ -92,7 +92,7 @@ public sealed class StorePublishingTests : IAsyncLifetime
             var text = await reader.ReadToEndAsync();
             var path = context.Request.Path.Value!;
             _seen.Add((context.Request.Method, path, string.IsNullOrEmpty(text) ? null : JsonNode.Parse(text)));
-            if (path.StartsWith("/api/v1/secrets/", StringComparison.Ordinal)) return Results.Json(new { reference = "secret:dbdata:gateway:managed-store:" + path[(path.LastIndexOf('/') + 1)..] });
+            if (path.StartsWith("/api/v1/secrets/", StringComparison.Ordinal)) return Results.Json(new { reference = "secret:dbdatakit:gateway:managed-store:" + path[(path.LastIndexOf('/') + 1)..] });
             if (path.StartsWith("/api/v1/data-sources/", StringComparison.Ordinal))
                 return context.Request.Method == "GET" ? Results.Json(new { error = "none" }, statusCode: 404) : Results.Json(new { version = "v1", created = true, group = true });
             if (context.Request.Method == "DELETE") { _modelVersion = null; return Results.Json(new { removed = true }); }

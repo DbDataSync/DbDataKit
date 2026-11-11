@@ -32,7 +32,8 @@ public sealed partial class ViewsModuleTests
         Assert.Equal(HttpStatusCode.OK, list.Status);
         var runs = list.Body!["runs"]!.AsArray();
         Assert.NotEmpty(runs);
-        var first = runs[0]!;
+        // newest first: a preview may also list a parameter's members (a run of its own, with no request hash), so the statement is the newest of kind query
+        var first = runs.First(r => (string?)r!["kind"] == "query")!;
         Assert.Equal(("ada@example.invalid", Model, 1, "complete"), ((string)first["caller"]!, (string)first["model"]!, (int)first["model_version"]!, (string)first["status"]!));
         Assert.False(string.IsNullOrEmpty((string?)first["request_hash"]));
         var id = (long)first["id"]!;

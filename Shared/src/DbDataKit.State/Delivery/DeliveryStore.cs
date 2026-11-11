@@ -10,11 +10,15 @@ public sealed record AttachmentRef(Guid Payload, string Name, string MediaType, 
 
 /// <summary>A message to write to the outbox. <paramref name="Id"/> is chosen by the caller when the attachments' payloads were written first (they name the message row as their owner).</summary>
 public sealed record NewMessage(string Channel, string Subject, IReadOnlyList<string>? Recipients = null, string? BodyText = null, string? BodyHtml = null, string? Link = null,
-    IReadOnlyList<AttachmentRef>? Attachments = null, string? Source = null, string? OwnerPerson = null, Guid? Id = null, DateTimeOffset? NotBefore = null);
+    IReadOnlyList<AttachmentRef>? Attachments = null, string? Source = null, string? OwnerPerson = null, Guid? Id = null, DateTimeOffset? NotBefore = null, string? ReleaseChannel = null);
 
 /// <summary>A message as the outbox holds it.</summary>
 public sealed record MessageRow(Guid Id, string Channel, IReadOnlyList<string> Recipients, string Subject, string? BodyText, string? BodyHtml, string? Link, IReadOnlyList<AttachmentRef> Attachments, string? Source, string? OwnerPerson,
-    string Status, int Attempts, DateTimeOffset NextAttemptAt, string? LeaseOwner, DateTimeOffset? LeaseExpiresAt, string? LastOutcome, string? LastDetail, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, DateTimeOffset? SettledAt);
+    string Status, int Attempts, DateTimeOffset NextAttemptAt, string? LeaseOwner, DateTimeOffset? LeaseExpiresAt, string? LastOutcome, string? LastDetail, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, DateTimeOffset? SettledAt, string? ReleaseChannel = null)
+{
+    /// <summary>The release channel the message was written in; <c>prod</c> for one that says none.</summary>
+    public string Release => ReleaseChannel ?? DefinitionStore.Production;
+}
 
 /// <summary>One try of a message.</summary>
 public sealed record AttemptRow(Guid Id, Guid MessageId, int Number, string Sender, string Outcome, string? Detail, DateTimeOffset StartedAt, DateTimeOffset FinishedAt);
@@ -59,12 +63,12 @@ public sealed class DeliveryStore(StateDatabase database)
         {
             using var connection = database.OpenConnection();
             using var insert = database.Command(Module, connection,
-                "INSERT INTO {table:message} (id, channel, recipients, subject, body_text, body_html, link, attachments, source, owner_person, status, attempts, next_attempt_at, created_at, updated_at, row_version) " +
-                "VALUES ($id, $channel, CAST($recipients AS {{json}}), $subject, $text, $html, $link, CAST($attachments AS {{json}}), $source, $person, 'pending', 0, $next, $now, $now, 1);");
+                "INSERT INTO {table:message} (id, channel, recipients, subject, body_text, body_html, link, attachments, source, owner_person, status, attempts, next_attempt_at, created_at, updated_at, row_version, release_channel) " +
+                "VALUES ($id, $channel, CAST($recipients AS {{json}}), $subject, $text, $html, $link, CAST($attachments AS {{json}}), $source, $person, 'pending', 0, $next, $now, $now, 1, $release);");
             insert.Bind(database, "id", id).Bind(database, "channel", message.Channel).Bind(database, "recipients", recipients, System.Data.DbType.String).Bind(database, "subject", message.Subject)
                 .Bind(database, "text", message.BodyText, System.Data.DbType.String).Bind(database, "html", message.BodyHtml, System.Data.DbType.String).Bind(database, "link", message.Link, System.Data.DbType.String)
                 .Bind(database, "attachments", attachments, System.Data.DbType.String).Bind(database, "source", message.Source, System.Data.DbType.String).Bind(database, "person", message.OwnerPerson, System.Data.DbType.String)
-                .Bind(database, "next", message.NotBefore ?? now).Bind(database, "now", now);
+                .Bind(database, "next", message.NotBefore ?? now).Bind(database, "now", now).Bind(database, "release", message.ReleaseChannel, System.Data.DbType.String);
             insert.ExecuteNonQuery();
         });
         return id;
@@ -176,7 +180,7 @@ public sealed class DeliveryStore(StateDatabase database)
             return update.ExecuteNonQuery() == 1;
         });
 
-    private const string Columns = "id, channel, recipients, subject, body_text, body_html, link, attachments, source, owner_person, status, attempts, next_attempt_at, lease_owner, lease_expires_at, last_outcome, last_detail, created_at, updated_at, settled_at";
+    private const string Columns = "id, channel, recipients, subject, body_text, body_html, link, attachments, source, owner_person, status, attempts, next_attempt_at, lease_owner, lease_expires_at, last_outcome, last_detail, created_at, updated_at, settled_at, release_channel";
 
     private static string? Text(DbDataReader r, int i) => r.IsDBNull(i) ? null : r.GetString(i);
 
@@ -188,7 +192,7 @@ public sealed class DeliveryStore(StateDatabase database)
             foreach (var item in list.OfType<JsonObject>())
                 attachments.Add(new AttachmentRef(Guid.Parse((string)item["payload"]!), (string)item["name"]!, (string)item["media_type"]!, (long)item["size"]!));
         return new MessageRow(r.Uuid(0), r.GetString(1), recipients, r.GetString(3), Text(r, 4), Text(r, 5), Text(r, 6), attachments, Text(r, 8), Text(r, 9), r.GetString(10), r.Int32(11), r.Time(12), Text(r, 13), r.NullableTime(14),
-            Text(r, 15), Text(r, 16), r.Time(17), r.Time(18), r.NullableTime(19));
+            Text(r, 15), Text(r, 16), r.Time(17), r.Time(18), r.NullableTime(19), Text(r, 20));
     }
 
     /// <summary>One message, or null.</summary>

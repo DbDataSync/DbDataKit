@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using DbDataKit.Secrets;
 using DbDataKit.State.Snapshots;
 using DbDataKit.State;
 using DbDataKit.State.Tests;
@@ -223,8 +224,7 @@ public sealed class DeliveryServiceTests
         using var h = new DeliveryHarness(engine);
         var scrubber = new SecretScrubber();
         var resolver = new MapResolver(new() { ["secret:dbdata/delivery/mail/password"] = canary });
-        var settings = DeliverySettings.Read(JsonNode.Parse("""{"channels": {"mail": {"kind": "echo", "password": "secret:dbdata/delivery/mail/password"}}}""")!.AsObject(), "server.yaml", EchoKind.Kinds);
-        var channels = new DeliveryChannels(settings, EchoKind.Kinds, resolver, scrubber, h.Clock);
+        var channels = EchoKind.Channels(resolver, scrubber, h.Clock);
         var log = new CollectingLogger<DeliveryService>();
         var service = h.Service(channels, "a", DeliveryPolicy.Default with { MaxAttempts = 1 }, scrubber, log);
         var id = await service.SendAsync(Request("mail"));
@@ -246,8 +246,7 @@ public sealed class DeliveryServiceTests
     {
         using var h = new DeliveryHarness(StateEngineIds.Sqlite);
         var scrubber = new SecretScrubber();
-        var settings = DeliverySettings.Read(JsonNode.Parse("""{"channels": {"mail": {"kind": "echo", "password": "secret:dbdata/delivery/mail/password"}}}""")!.AsObject(), "server.yaml", EchoKind.Kinds);
-        var channels = new DeliveryChannels(settings, EchoKind.Kinds, new MapResolver([]), scrubber, h.Clock);
+        var channels = EchoKind.Channels(new MapResolver([]), scrubber, h.Clock);
         var service = h.Service(channels, "a", scrubber: scrubber);
         var id = await service.SendAsync(Request("mail"));
         await service.RunOnceAsync();
@@ -261,34 +260,49 @@ public sealed class DeliveryServiceTests
     [Fact]
     public void The_section_is_read_strictly_and_an_unknown_key_fails_naming_the_file()
     {
-        var kinds = EchoKind.Kinds;
         var read = DeliverySettings.Read(JsonNode.Parse("""
             {"retry": {"max_attempts": 4, "backoff_seconds": [10, 60]}, "lease_seconds": 90,
-             "channels": {"mail": {"kind": "echo", "password": "env:MAIL_PASSWORD", "limit_per_minute": 20, "greeting": "hi"}}}
-            """)!.AsObject(), "server.yaml", kinds);
+             "channels": {"mail": "smtp-main", "alerts": {"prod": "slack-ops", "test": "slack-sandbox", "*": "slack-sandbox"}}, "limits": {"alerts": 20}}
+            """)!.AsObject(), "settings.yaml");
         Assert.Equal(4, read.Policy.MaxAttempts);
         Assert.Equal([TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(60)], read.Policy.Backoff);
         Assert.Equal(TimeSpan.FromSeconds(90), read.Policy.Lease);
-        var channel = Assert.Single(read.Channels);
-        Assert.Equal(("mail", "echo", 20, "hi"), (channel.Name, channel.Kind, channel.LimitPerMinute, channel.Text("greeting")));
-        Assert.Equal("env:MAIL_PASSWORD", channel.Secrets["password"].ToString());
+        var mail = read.Channels[0];
+        Assert.Equal(("mail", "smtp-main", null, null), (mail.Name, mail.For("prod"), mail.For("test"), mail.LimitPerMinute));   // a name alone binds prod, and prod only
+        var alerts = read.Channels[1];
+        Assert.Equal(("slack-ops", "slack-sandbox", "slack-sandbox", 20), (alerts.For("prod"), alerts.For("test"), alerts.For("anything-else"), alerts.LimitPerMinute));
+        Assert.True(alerts.IsOwn("test"));
+        Assert.False(alerts.IsOwn("anything-else"));
 
-        static string Refused(string json) => Assert.Throws<DeliverySettingsException>(() => DeliverySettings.Read(JsonNode.Parse(json)!.AsObject(), "server.yaml", EchoKind.Kinds)).Message;
-        Assert.StartsWith("server.yaml: delivery has no key `queue`", Refused("""{"queue": {}}"""));
-        Assert.StartsWith("server.yaml: delivery.retry has no key `attempts`", Refused("""{"retry": {"attempts": 3}}"""));
-        Assert.Contains("delivery.channels.mail has no key `host` for a echo channel", Refused("""{"channels": {"mail": {"kind": "echo", "host": "x"}}}"""));
-        Assert.Contains("delivery.channels.mail.kind is `carrier`", Refused("""{"channels": {"mail": {"kind": "carrier"}}}"""));
-        Assert.Contains("delivery.channels.mail.kind is required", Refused("""{"channels": {"mail": {}}}"""));
-        Assert.Contains("delivery.channels.mail.password is a reference to a secret", Refused("""{"channels": {"mail": {"kind": "echo", "password": "hunter2hunter2"}}}"""));
-        Assert.Contains("delivery.channels.mail.limit_per_minute is a whole number", Refused("""{"channels": {"mail": {"kind": "echo", "limit_per_minute": 0}}}"""));
-        Assert.Contains("named twice", Refused("""{"channels": {"mail": {"kind": "echo"}, "MAIL": {"kind": "echo"}}}"""));
+        static string Refused(string json) => Assert.Throws<DeliverySettingsException>(() => DeliverySettings.Read(JsonNode.Parse(json)!.AsObject(), "settings.yaml")).Message;
+        Assert.StartsWith("settings.yaml: delivery has no key `queue`", Refused("""{"queue": {}}"""));
+        Assert.StartsWith("settings.yaml: delivery.retry has no key `attempts`", Refused("""{"retry": {"attempts": 3}}"""));
+        Assert.Contains("delivery.channels.mail is `not a name`", Refused("""{"channels": {"mail": "not a name"}}"""));
+        Assert.Contains("delivery.channels.mail.test is a connection's name", Refused("""{"channels": {"mail": {"test": 5}}}"""));
+        Assert.Contains("named twice", Refused("""{"channels": {"mail": "a", "MAIL": "b"}}"""));
+        Assert.Contains("delivery.limits.nope names a channel that is not in delivery.channels", Refused("""{"channels": {"mail": "a"}, "limits": {"nope": 5}}"""));
+        Assert.Contains("delivery.limits.mail is a whole number", Refused("""{"channels": {"mail": "a"}, "limits": {"mail": 0}}"""));
         Assert.Contains("delivery.retry.max_attempts is a whole number", Refused("""{"retry": {"max_attempts": 0}}"""));
+    }
+
+    [Theory]
+    [InlineData("""{"channels": {"mail": {"kind": "email", "host": "smtp.example.com", "from": "a@b.example"}}}""", "`kind`")]
+    [InlineData("""{"channels": {"mail": {"host": "smtp.example.com"}}}""", "`host`")]
+    [InlineData("""{"channels": {"hook": {"url": "secret:x/url"}}}""", "`url`")]
+    [InlineData("""{"channels": {"hook": {"limit_per_minute": 5}}}""", "`limit_per_minute`")]
+    public void A_channel_in_the_old_form_is_refused_naming_the_file_and_the_new_form(string section, string key)
+    {
+        var message = Assert.Throws<DeliverySettingsException>(() => DeliverySettings.Read(JsonNode.Parse(section)!.AsObject(), "/etc/console/settings.yaml")).Message;
+        Assert.StartsWith("/etc/console/settings.yaml: delivery.channels.", message, StringComparison.Ordinal);
+        Assert.Contains(key, message, StringComparison.Ordinal);
+        Assert.Contains("Channels are connections now", message, StringComparison.Ordinal);
+        Assert.Contains("{ prod: <connection>, test: <connection> }", message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Without_a_section_there_are_no_channels_and_the_default_policy()
     {
-        var read = DeliverySettings.Read(null, "server.yaml", EchoKind.Kinds);
+        var read = DeliverySettings.Read(null, "settings.yaml");
         Assert.Empty(read.Channels);
         Assert.Equal(6, read.Policy.MaxAttempts);
         Assert.Equal(TimeSpan.FromHours(6), read.Policy.WaitAfter(99));
@@ -314,5 +328,10 @@ internal sealed class EchoChannel(ChannelContext context) : IDeliveryChannel
 
 internal static class EchoKind
 {
-    public static ChannelKinds Kinds { get; } = new ChannelKinds().Register(new ChannelKind("echo", [new ChannelKey("password", ChannelKeyType.Secret), new ChannelKey("greeting")], c => new EchoChannel(c)));
+    /// <summary>One channel, <c>mail</c>, that echoes the secret <c>password</c> it resolves (the reference <c>secret:dbdata/delivery/mail/password</c>).</summary>
+    public static IDeliveryChannels Channels(ISecretResolver resolver, SecretScrubber scrubber, TimeProvider time)
+    {
+        var config = new ChannelConfig("mail", "echo", new JsonObject(), new Dictionary<string, DbDataKit.Secrets.SecretRef> { ["password"] = DbDataKit.Secrets.SecretRef.Parse("secret:dbdata/delivery/mail/password") }, null);
+        return new ChannelSet(new EchoChannel(new ChannelContext(config, resolver, scrubber, time)));
+    }
 }

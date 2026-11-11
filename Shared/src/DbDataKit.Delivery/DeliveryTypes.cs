@@ -35,8 +35,11 @@ public sealed record DeliveryResult(DeliveryOutcome Outcome, string Detail)
 /// </summary>
 public interface IDeliveryChannel
 {
-    /// <summary>The name in the <c>delivery:</c> section.</summary>
+    /// <summary>The name in the <c>delivery:</c> section (the delivery channel's name, not the connection's).</summary>
     string Name { get; }
+
+    /// <summary>The connection this channel sends through (plan 22a GP18 fold); null for a channel that is not made from one (a test's). A sender holds back by it, so a test channel's messages never use up production's limit per minute.</summary>
+    string? Connection => null;
 
     /// <summary>The kind: <c>email</c>, <c>teams</c>, <c>slack</c>, <c>webhook</c>.</summary>
     string Kind { get; }
@@ -48,14 +51,35 @@ public interface IDeliveryChannel
     Task<DeliveryResult> SendAsync(DeliveryPayload payload, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// What a delivery channel name is bound to in a release channel (plan 21: prod, test, dev): the channel, or why there is none. <see cref="Retryable"/> says whether fixing the configuration (a connection that does not read yet) makes a later try work, which is so for a connection
+/// that is missing or wrong and not for a channel that is removed or not bound in that release channel.
+/// </summary>
+public sealed record ChannelResolution(IDeliveryChannel? Channel, string? Connection, string ReleaseChannel, string? Problem, bool Retryable = false);
+
 /// <summary>The channels of an install, by name.</summary>
 public interface IDeliveryChannels
 {
     /// <summary>The names, in the order of the settings.</summary>
     IReadOnlyList<string> Names { get; }
 
-    /// <summary>The channel of that name (compared ignoring case), or null: it is not configured (never was, or was removed).</summary>
+    /// <summary>The channel of that name (compared ignoring case) in the production release channel, or null: it is not configured (never was, or was removed).</summary>
     IDeliveryChannel? Find(string name);
+
+    /// <summary>
+    /// The channel of that name for a release channel (null: production). A set of channels made by hand knows production only; <see cref="DeliveryChannels"/> binds a connection per release channel and <b>never answers with another release channel's</b>
+    /// connection: a name that is not bound in <c>test</c> has no channel there, however production is bound.
+    /// </summary>
+    ChannelResolution Resolve(string name, string? releaseChannel)
+    {
+        var release = releaseChannel ?? DbDataKit.State.DefinitionStore.Production;
+        var channel = release == DbDataKit.State.DefinitionStore.Production ? Find(name) : null;
+        return new ChannelResolution(channel, channel?.Connection, release, channel is null
+            ? (release == DbDataKit.State.DefinitionStore.Production
+                ? $"The delivery channel '{name}' is not configured any more; the message was not sent. Add the channel again and send it again."
+                : $"The delivery channel '{name}' is not bound in the release channel '{release}'; the message was not sent. Bind it there in the delivery: section, or send it from another release channel.")
+            : null);
+    }
 }
 
 /// <summary>A message for the outbox, in the form callers use: the attachments are bytes here and payloads in the outbox.</summary>
@@ -65,14 +89,23 @@ public interface IDeliveryChannels
 /// <param name="Source">What made the message: <c>test</c>, <c>subscription:&lt;id&gt;</c>, <c>alert:&lt;kind&gt;</c>.</param>
 /// <param name="OwnerPerson">The person the message is for or who asked for it (a subject id), so a screen shows each person their own.</param>
 /// <param name="NotBefore">Not tried before this time; null: at once.</param>
+/// <param name="ReleaseChannel">The release channel the message is written in (plan 21: <c>prod</c>, <c>test</c>, <c>dev</c>); the channel name is bound to a different connection in each, so a message from <c>test</c> reaches a sandbox and never production. Null: <c>prod</c>.</param>
 public sealed record DeliveryRequest(string Channel, string Subject, IReadOnlyList<string>? Recipients = null, string? Text = null, string? Html = null, string? Link = null,
-    IReadOnlyList<DeliveryAttachment>? Attachments = null, string? Source = null, string? OwnerPerson = null, DateTimeOffset? NotBefore = null);
+    IReadOnlyList<DeliveryAttachment>? Attachments = null, string? Source = null, string? OwnerPerson = null, DateTimeOffset? NotBefore = null, string? ReleaseChannel = null);
 
 /// <summary>The message names a channel that is not configured.</summary>
 public sealed class UnknownChannelException(string channel, IReadOnlyList<string> known)
     : InvalidOperationException($"The delivery channel '{channel}' is not configured (the delivery: section has {(known.Count == 0 ? "no channels" : string.Join(", ", known))}).")
 {
     public string Channel { get; } = channel;
+}
+
+/// <summary>The channel is configured but not bound to a connection in the release channel the message is written in (or its connection is not a usable one): the message is refused to the caller, never sent through another release channel's connection.</summary>
+public sealed class ChannelNotBoundException(string channel, string releaseChannel, string reason) : InvalidOperationException(reason)
+{
+    public string Channel { get; } = channel;
+
+    public string ReleaseChannel { get; } = releaseChannel;
 }
 
 /// <summary>A channel cannot be used right now for a reason in its configuration (a secret that is not in the store yet): a temporary failure, because fixing the configuration makes the next try work.</summary>

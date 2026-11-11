@@ -385,7 +385,7 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await expect(page.getByTestId('copy-name')).toHaveValue('ledger')
   // without a password Sync says what it lacks, naming the reference the copy would use, and nothing is kept
   await page.getByTestId('copy-submit').click()
-  await expect(page.getByTestId('copy-failed')).toContainText('dbdata:sync:connection:ledger')
+  await expect(page.getByTestId('copy-failed')).toContainText('dbdatakit:sync:connection:ledger')
   await expect(connection('Sync one', 'ledger')).toHaveCount(0)
   // with the password typed once (it goes to Sync only, and is stored under the copy's own reference), the copy is made, with what was left out said
   await page.getByTestId('copy-password').fill('e2e-password')

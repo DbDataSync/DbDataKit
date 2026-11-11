@@ -446,7 +446,7 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
     }
 
     /// <summary>
-    /// Stores <paramref name="value"/> under <paramref name="name"/> (<c>dbdata:&lt;product&gt;:&lt;kind&gt;:&lt;name&gt;[:&lt;part&gt;]</c>) in the runner's encrypted store (plan 28c E20d; <c>PUT /api/v1/secrets/{name}</c>, administrator: the pairing must allow the
+    /// Stores <paramref name="value"/> under <paramref name="name"/> (<c>dbdatakit:&lt;service&gt;:&lt;kind&gt;:&lt;name&gt;[:&lt;part&gt;]</c>) in the runner's encrypted store (plan 28c E20d; <c>PUT /api/v1/secrets/{name}</c>, administrator: the pairing must allow the
     /// admin role). The value travels in the body of the paired HTTPS call and is in no message of this client, not even a refusal's. Returns the name the runner stored it under.
     /// </summary>
     public async Task<string> SendSecretAsync(string server, string? code, string name, string value, Action<string>? log = null, CancellationToken ct = default)

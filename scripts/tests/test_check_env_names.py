@@ -23,7 +23,7 @@ class CheckEnvNames(unittest.TestCase):
 
     def test_the_new_scheme_passes(self):
         self.assertEqual([], self.problems({
-            "a.cs": 'Environment.GetEnvironmentVariable("DBDATAKIT_DATA_RUNNER"); // DBDATAKIT_Gateway__Management__Port, DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_ORDERS\n',
+            "a.cs": 'Environment.GetEnvironmentVariable("DBDATAKIT_DATA_RUNNER"); // DBDATAKIT_Gateway__Management__Port, DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_ORDERS\n',
             "b.md": "`DBDATAKIT_BUILD_WAREHOUSE_READ` and `DBDATAKIT_STATE_STORE_ENGINE`\n",
         }))
 
@@ -42,7 +42,7 @@ class CheckEnvNames(unittest.TestCase):
                 self.assertEqual(1, len(self.problems({path: "  DBGATEWAY_PASSWORD: x\n"})))
 
     def test_the_name_of_a_secret_inside_a_variable_is_not_a_variable(self):
-        self.assertEqual([], self.problems({"a.md": "DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_ORDERS and MY_DBDATA_X and xDBGATEWAY_Y\n"}))
+        self.assertEqual([], self.problems({"a.md": "DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_ORDERS and MY_DBDATA_X and xDBGATEWAY_Y\n"}))
 
     def test_the_old_variables_of_tests_are_not_allowed_any_more(self):
         for name in ("DBDATA_TEST_POSTGRES", "DBKIT_TEST_MSSQL", "DBDATASYNC_TEST_MSSQL_SERVER", "DBDATABUILD_TEST_FLIGHT", "DBPROXY_TEST_", "DBGATEWAY_TEST_SQLSERVER",

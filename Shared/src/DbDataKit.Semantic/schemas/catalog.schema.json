@@ -813,6 +813,21 @@
         "sort_key": {
           "type": "string"
         },
+        "format": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "How a person reads this attribute's members: {date: preset or pattern} for a date or a period (year, quarter, month, month-year, date, datetime, or a pattern of yyyy yy Q MMMM MMM MM dd HH mm ss and quoted text). Carried to the result's descriptor as x_format; a view that gives no format of its own reads it (dashboards and reports, plan 32 DBR47).",
+          "properties": {
+            "date": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            }
+          },
+          "required": [
+            "date"
+          ]
+        },
         "members": {
           "description": "The canonical members, used for value maps and for allocating over members the data doesn't show. A list is the members themselves; {from: source} reads them from that source's dimension table, so a member with no fact rows still counts. Without it, the members are the values that appear in a source's fact rows.",
           "oneOf": [

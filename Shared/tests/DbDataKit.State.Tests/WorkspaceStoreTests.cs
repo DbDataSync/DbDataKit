@@ -185,11 +185,11 @@ public sealed class WorkspaceStoreTests : IDisposable
     public void The_publishers_key_is_a_reference_that_is_set_replaced_and_removed(string engine)
     {
         var (store, _, clock) = Open(engine);
-        var first = store.SetPublisherKey("main-group", "secret:dbdata:workspace:publisher:main-group", "ada");
+        var first = store.SetPublisherKey("main-group", "secret:dbdatakit:workspace:publisher:main-group", "ada");
         clock.Advance(TimeSpan.FromHours(1));
-        var again = store.SetPublisherKey("main-group", "secret:dbdata:workspace:publisher:main-group-2", "bob");
+        var again = store.SetPublisherKey("main-group", "secret:dbdatakit:workspace:publisher:main-group-2", "bob");
 
-        Assert.Equal(("secret:dbdata:workspace:publisher:main-group-2", "ada", Start, Start.AddHours(1)), (again.SecretRef, again.CreatedBy, again.CreatedAt, again.UpdatedAt));
+        Assert.Equal(("secret:dbdatakit:workspace:publisher:main-group-2", "ada", Start, Start.AddHours(1)), (again.SecretRef, again.CreatedBy, again.CreatedAt, again.UpdatedAt));
         Assert.Equal(Start, first.UpdatedAt);
         Assert.Single(store.PublisherKeys());
 
@@ -219,7 +219,7 @@ public sealed class WorkspaceStoreTests : IDisposable
         store.RecordCreated(Draft(at: Start.AddDays(-400)));   // its creation event is as old as that
         store.RecordEvent("orders", "ada-new-orders", "committed", "ada", "Ada", "recent");
         store.RequestBuild("orders", "ada-new-orders", "ada");
-        store.SetPublisherKey("t", "secret:dbdata:workspace:publisher:t", "ada");
+        store.SetPublisherKey("t", "secret:dbdatakit:workspace:publisher:t", "ada");
         Assert.Equal(2, Count(database, "workspace_event"));
         clock.Advance(TimeSpan.FromDays(100));    // the build is 100 days old now
 

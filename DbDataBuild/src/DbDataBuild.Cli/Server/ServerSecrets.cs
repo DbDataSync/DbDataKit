@@ -7,7 +7,7 @@ namespace DbDataBuild.Cli.Server;
 
 /// <summary>
 /// The Build server's secrets (plan 13, R04): the shared encrypted store in the server's directory, and the logins taken from it for each command. A connection's logins are the secrets
-/// <c>dbdata:build:connection:&lt;connection&gt;:read</c> and <c>...:write</c> (stored with <c>dbdatabuild secret set</c>, never as an argument); a command's child process gets each as the
+/// <c>dbdatakit:build:connection:&lt;connection&gt;:read</c> and <c>...:write</c> (stored with <c>dbdatabuild secret set</c>, never as an argument); a command's child process gets each as the
 /// variable the command line reads, <c>DBDATAKIT_BUILD_&lt;CONNECTION&gt;_&lt;READ|WRITE&gt;</c>. The two roles are separate secrets and separate variables: a connection with only a read login gets only the read variable,
 /// and nothing here ever copies one into the other, so Build's rule of no fallback from read to write holds.
 /// <para>
@@ -35,7 +35,7 @@ internal static class ServerSecrets
     public static async Task<IReadOnlyDictionary<string, string>> LoginsAsync(EncryptedFileSecretStore store, CancellationToken cancellationToken)
     {
         var variables = new Dictionary<string, string>(StringComparer.Ordinal);
-        await foreach (var name in store.ListAsync($"dbdata:{Product}:{Kind}:", cancellationToken).ConfigureAwait(false))
+        await foreach (var name in store.ListAsync($"dbdatakit:{Product}:{Kind}:", cancellationToken).ConfigureAwait(false))
         {
             var role = name.Part switch { "read" => LoginRole.Read, "write" => LoginRole.Write, _ => (LoginRole?)null };
             if (role is null) continue;

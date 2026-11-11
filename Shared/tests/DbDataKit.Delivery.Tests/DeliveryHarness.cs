@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using DbDataKit.Connections;
 using DbDataKit.Secrets;
 using DbDataKit.State;
 using DbDataKit.State.Tests;
@@ -96,4 +97,28 @@ public sealed class DeliveryHarness : IDisposable
 public static class DeliverySetup
 {
     public static IReadOnlyList<StateModule> Modules { get; } = [DeliveryModule.Module, RunsModule.Module];
+}
+
+/// <summary>Connections and the channels made from them, for tests (plan 22a GP18 fold): the way a host binds delivery channels to connections.</summary>
+public static class TestConnections
+{
+    /// <summary>A connection read with the shared strict loader; the test fails with the loader's words when it does not read.</summary>
+    public static ConnectionDefinition Load(string yaml, string file = "connections/test.yml")
+    {
+        var r = ConnectionDefinitionLoader.Load(yaml, file, addressRequired: false, outsideKinds: true);
+        Assert.True(r.Ok, string.Join("\n", r.Diagnostics));
+        return r.Definition!;
+    }
+
+    public static DeliverySettings Settings(string channelsJson) => Section("{\"channels\": " + channelsJson + "}");
+
+    /// <summary>The whole <c>delivery:</c> section as JSON (channels, limits, retry).</summary>
+    public static DeliverySettings Section(string json) => DeliverySettings.Read(System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject(), "settings.yaml");
+
+    public static DeliveryChannels Channels(DeliverySettings settings, IDeliveryConnections connections, ISecretResolver resolver, SecretScrubber? scrubber = null, TimeProvider? time = null) =>
+        new(settings, connections, DeliveryKinds.Default(), resolver, scrubber ?? new SecretScrubber(), time ?? TimeProvider.System);
+
+    /// <summary>The channel <paramref name="name"/> in production, bound to <paramref name="definition"/>.</summary>
+    public static IDeliveryChannel Single(string name, ConnectionDefinition definition, ISecretResolver resolver, SecretScrubber? scrubber = null, TimeProvider? time = null) =>
+        Channels(Settings($"{{\"{name}\": \"{definition.Name}\"}}"), new FixedDeliveryConnections([definition]), resolver, scrubber, time).Find(name)!;
 }

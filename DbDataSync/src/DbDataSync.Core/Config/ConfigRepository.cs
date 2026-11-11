@@ -166,7 +166,7 @@ public sealed class ConfigRepository
 
     /// <summary>
     /// A <c>connection/1</c> file read as a save of the connection called <paramref name="name"/> (plan 13, E05): the same strict reading a file on disk gets (<see cref="ConfigFileException"/> naming each fault with its line), and the checks a save makes.
-    /// The password is never in a file; a login names <c>secret:dbdata:sync:connection:&lt;name&gt;</c>, the one reference Sync reads, so a file naming another connection's secret is refused rather than saved under the wrong one.
+    /// The password is never in a file; a login names <c>secret:dbdatakit:sync:connection:&lt;name&gt;</c>, the one reference Sync reads, so a file naming another connection's secret is refused rather than saved under the wrong one.
     /// </summary>
     public ConnectionInput ConnectionInputFromFile(string text, string name, string? password, string? runPassword = null)
     {

@@ -34,7 +34,10 @@ public sealed class DeliveryService(DeliveryStore store, PayloadStore payloads, 
     public Task<Guid> SendAsync(DeliveryRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (channels.Find(request.Channel) is null) throw new UnknownChannelException(request.Channel, channels.Names);
+        var release = string.IsNullOrWhiteSpace(request.ReleaseChannel) ? DbDataKit.State.DefinitionStore.Production : request.ReleaseChannel.Trim();
+        if (!channels.Names.Contains(request.Channel, StringComparer.OrdinalIgnoreCase) && channels.Find(request.Channel) is null) throw new UnknownChannelException(request.Channel, channels.Names);
+        // a channel that is not bound in this release channel is refused here; one whose connection does not read yet is written and fails when it is sent (fixing the connection makes the next try work)
+        if (channels.Resolve(request.Channel, release) is { Channel: null, Retryable: false } unbound) throw new ChannelNotBoundException(request.Channel, release, unbound.Problem ?? "not bound");
         var id = Guid.CreateVersion7(_time.GetUtcNow());
         var refs = new List<AttachmentRef>();
         foreach (var attachment in request.Attachments ?? [])
@@ -46,8 +49,8 @@ public sealed class DeliveryService(DeliveryStore store, PayloadStore payloads, 
             refs.Add(new AttachmentRef(writer.Id, attachment.Name, attachment.MediaType, attachment.Content.LongLength));
         }
 
-        store.Enqueue(new NewMessage(request.Channel, request.Subject, request.Recipients, request.Text, request.Html, request.Link, refs, request.Source, request.OwnerPerson, id, request.NotBefore));
-        _log.LogInformation("delivery: message {Message} for channel {Channel} written ({Attachments} attachments, {Bytes} bytes)", id, request.Channel, refs.Count, refs.Sum(a => a.Size));
+        store.Enqueue(new NewMessage(request.Channel, request.Subject, request.Recipients, request.Text, request.Html, request.Link, refs, request.Source, request.OwnerPerson, id, request.NotBefore, release == DbDataKit.State.DefinitionStore.Production ? null : release));
+        _log.LogInformation("delivery: message {Message} for channel {Channel} ({Release}) written ({Attachments} attachments, {Bytes} bytes)", id, request.Channel, release, refs.Count, refs.Sum(a => a.Size));
         return Task.FromResult(id);
     }
 
@@ -88,10 +91,13 @@ public sealed class DeliveryService(DeliveryStore store, PayloadStore payloads, 
     private async Task TryAsync(MessageRow message, CancellationToken cancellationToken)
     {
         var started = _time.GetUtcNow();
-        var channel = channels.Find(message.Channel);
+        var resolution = channels.Resolve(message.Channel, message.ReleaseChannel);
+        var channel = resolution.Channel;
         if (channel is null)
         {
-            Settle(message, AttemptOutcomes.Permanent, $"The delivery channel '{message.Channel}' is not configured any more; the message was not sent. Add the channel again and send it again.", started, final: true);
+            var problem = resolution.Problem ?? $"The delivery channel '{message.Channel}' is not configured any more; the message was not sent. Add the channel again and send it again.";
+            if (resolution.Retryable) Settle(message, AttemptOutcomes.Temporary, problem, started, final: message.Attempts + 1 >= policy.MaxAttempts);
+            else Settle(message, AttemptOutcomes.Permanent, problem, started, final: true);
             return;
         }
 
@@ -167,7 +173,8 @@ public sealed class DeliveryService(DeliveryStore store, PayloadStore payloads, 
         if (channel.LimitPerMinute is not { } limit) return null;
         lock (_gate)
         {
-            if (!_sentInWindow.TryGetValue(channel.Name, out var window)) _sentInWindow[channel.Name] = window = new Queue<DateTimeOffset>();
+            var key = channel.Connection ?? channel.Name;
+            if (!_sentInWindow.TryGetValue(key, out var window)) _sentInWindow[key] = window = new Queue<DateTimeOffset>();
             while (window.Count > 0 && now - window.Peek() >= TimeSpan.FromMinutes(1)) window.Dequeue();
             return window.Count >= limit ? window.Peek() + TimeSpan.FromMinutes(1) : null;
         }
@@ -178,7 +185,8 @@ public sealed class DeliveryService(DeliveryStore store, PayloadStore payloads, 
         if (channel.LimitPerMinute is null) return;
         lock (_gate)
         {
-            if (!_sentInWindow.TryGetValue(channel.Name, out var window)) _sentInWindow[channel.Name] = window = new Queue<DateTimeOffset>();
+            var key = channel.Connection ?? channel.Name;
+            if (!_sentInWindow.TryGetValue(key, out var window)) _sentInWindow[key] = window = new Queue<DateTimeOffset>();
             window.Enqueue(at);
         }
     }

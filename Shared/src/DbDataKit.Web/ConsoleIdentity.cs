@@ -15,10 +15,10 @@ public sealed record ConsoleIdentity(string Id, ConsoleSigningKey Key)
 /// </summary>
 public sealed class ConsoleKeyStore(ISecretStore store, ISecretProvider provider)
 {
-    public static readonly SecretName Name = new("kit", "console", "signing-key");
+    public static readonly SecretName Name = new("server", "identity", "signing-key");
 
     /// <summary>The key a rotation is moving to, kept beside the current one until every server has it.</summary>
-    public static readonly SecretName NextName = new("kit", "console", "signing-key-next");
+    public static readonly SecretName NextName = new("server", "identity", "signing-key-next");
 
     public async Task<ConsoleIdentity> GetOrCreateAsync(CancellationToken ct = default)
     {

@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { StoreError } from './types'
-import { FormView, GridView, HistoryView, InstancePickerView, ViolationList } from './views'
+import { DraftBannerView, FormView, GridView, HistoryView, InstancePickerView, ViolationList } from './views'
 import { territory } from './testing'
 
 const rows = [
@@ -93,4 +93,25 @@ it('the instance picker offers the default and each instance, and nothing for a 
   expect(html).toMatch(/<option value="acme" selected="">acme</)
   expect(html).toContain('>globex<')
   expect(renderToStaticMarkup(<InstancePickerView list={{ mode: 'none', instances: [] }} value={null} />)).toBe('')
+})
+
+describe('the draft banner (plan 21 CH01)', () => {
+  it('says which draft it is, that its rows are not data yet, and offers to submit or discard', () => {
+    const html = renderToStaticMarkup(<DraftBannerView draft="acme~preview" writes={2} stale={0} />)
+    expect(html).toContain('acme~preview')
+    expect(html).toContain('2 writes')
+    expect(html).toContain('not data until it is submitted')
+    expect(html).toContain('data-testid="sui-draft-submit"')
+    expect(html).toContain('data-testid="sui-draft-discard"')
+    expect(html).not.toMatch(/<button[^>]*disabled/)
+  })
+
+  it('names a write the data moved away from, and keeps the buttons off with nothing written, without the role, or while busy', () => {
+    expect(renderToStaticMarkup(<DraftBannerView draft="p" writes={3} stale={1} />)).toContain('1 write no longer applies because the data changed under it')
+    expect(renderToStaticMarkup(<DraftBannerView draft="p" writes={3} stale={2} />)).toContain('2 writes no longer apply')
+    expect(renderToStaticMarkup(<DraftBannerView draft="p" writes={0} stale={0} />)).toContain('nothing written yet')
+    expect(renderToStaticMarkup(<DraftBannerView draft="p" writes={0} stale={0} />).match(/<button[^>]*disabled/g)).toHaveLength(2)
+    expect(renderToStaticMarkup(<DraftBannerView draft="p" writes={1} stale={0} canWrite={false} />).match(/<button[^>]*disabled/g)).toHaveLength(2)
+    expect(renderToStaticMarkup(<DraftBannerView draft="p" writes={1} stale={0} busy />).match(/<button[^>]*disabled/g)).toHaveLength(2)
+  })
 })

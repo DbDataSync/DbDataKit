@@ -16,8 +16,24 @@ public class ViewFormatTests
     {
         var c = Golden()["formats"]![index]!;
         Assert.Equal(name, c["name"]!.GetValue<string>());
-        Assert.Equal(c["text"]!.GetValue<string>(), ViewFormat.Text(c["value"], c["format"], c["catalog"] as JsonObject));
+        Assert.Equal(c["text"]!.GetValue<string>(), ViewFormat.Text(c["value"], c["format"], c["catalog"] as JsonObject, c["locale"]?.GetValue<string>()));
     }
+
+    [Fact]
+    public void The_locale_table_has_the_seven_locales_with_twelve_months_each()
+    {
+        Assert.Equal(["en", "de", "fr", "es", "it", "pt", "nl"], ViewFormat.Locales);
+        foreach (var code in ViewFormat.Locales)
+        {
+            var l = ViewFormat.Locale(code);
+            Assert.Equal(12, l.Months.Count);
+            Assert.Equal(12, l.Short.Count);
+            Assert.NotEqual(l.Decimal, l.Group);
+        }
+        Assert.Equal("en", ViewFormat.Locales[0]);
+        Assert.Same(ViewFormat.Locale("en"), ViewFormat.Locale("klingon"));
+    }
+
 
     [Fact]
     public void Every_good_golden_is_a_format_the_check_accepts()
@@ -53,6 +69,17 @@ public class ViewFormatTests
         foreach (var preset in new[] { "full", "compact", "percent" })
             foreach (var v in new[] { 1.0, 1234.567, -0.004, 2.5e6 })
                 Assert.Equal(DbDataKit.Semantic.Presentation.MatrixView.Format(v, preset, catalog), ViewFormat.Number(v, JsonValue.Create(preset), catalog));
+    }
+
+    [Fact]
+    public void A_member_label_reads_the_catalogs_date_format_when_the_widget_gives_none()
+    {
+        var catalog = new JsonObject { ["date"] = "month-year" };
+        Assert.Equal("Mar 2026", ViewFormat.Label("2026-03", null, catalog));
+        Assert.Equal("Mar 2026", ViewFormat.Label("2026-03", JsonValue.Create("catalog"), catalog));
+        Assert.Equal("2026", ViewFormat.Label("2026-03", new JsonObject { ["date"] = "yyyy" }, catalog));   // the widget's own format wins
+        Assert.Equal("2026-03", ViewFormat.Label("2026-03", null, null));
+        Assert.Equal("not a date", ViewFormat.Label("not a date", null, catalog));                           // text that is no date is left as it is
     }
 
     [Theory]

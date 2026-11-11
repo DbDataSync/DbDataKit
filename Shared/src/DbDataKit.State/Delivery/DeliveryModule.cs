@@ -11,7 +11,7 @@ namespace DbDataKit.State;
 /// <b>Retention.</b> A settled message (<c>sent</c> or <c>dead</c>) and its attempts go after the state default of 30 days (<see cref="HistoryDays"/>), and the payloads that belonged to it with them (the retention job's orphan rule);
 /// a message that is still <c>pending</c> or <c>sending</c> is current work and is never removed by age.
 /// </para>
-/// <para>Scope: one copy per install. Migrations are appended, never edited. Migration 2 (plan 22a GP17) adds <c>subscription</c> and <c>subscription_run</c>.</para>
+/// <para>Scope: one copy per install. Migrations are appended, never edited. Migration 2 (plan 22a GP17) adds <c>subscription</c> and <c>subscription_run</c>; migration 3 (the GP18 fold of the channels into connections) adds <c>message.release_channel</c>.</para>
 /// </summary>
 public static class DeliveryModule
 {
@@ -128,6 +128,11 @@ public static class DeliveryModule
         );
         CREATE INDEX {index:subscription_run_by_subscription} ON {table:subscription_run}(subscription_id, started_at);
         CREATE INDEX {index:subscription_run_by_time} ON {table:subscription_run}(started_at);
+        """,
+        """
+        -- The release channel a message was written in (plan 21: prod, test, dev ...): the delivery channel name of a message is bound to a connection per release channel (the delivery: section), so the same name reaches a sandbox from a test channel
+        -- and production only from prod. NULL (a message from before this column) is prod.
+        ALTER TABLE {table:message} {{addcolumn}} release_channel {{key}} NULL;
         """,
     ];
 

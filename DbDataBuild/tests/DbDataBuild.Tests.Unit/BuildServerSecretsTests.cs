@@ -85,7 +85,7 @@ public sealed class BuildServerSecretsTests : IDisposable
         Assert.Equal(0, await ServerCli.RunAsync(["secret", "set", ServerSecrets.NameOf("sqlserver", LoginRole.Read).ToString(), "--stdin", "--repo", serverDir], o, e, stdin));
         Assert.Equal(0, await ServerCli.RunAsync(["secret", "list", "--repo", serverDir], o, e, TextReader.Null));
 
-        Assert.Contains("dbdata:build:connection:sqlserver:read", o.ToString());
+        Assert.Contains("dbdatakit:build:connection:sqlserver:read", o.ToString());
         Assert.DoesNotContain("s3cret-value", o.ToString() + e);
         Assert.Equal("s3cret-value", (await ServerSecrets.LoginsAsync(ServerSecrets.Open(serverDir), CancellationToken.None))["DBDATAKIT_BUILD_SQLSERVER_READ"]);
     }

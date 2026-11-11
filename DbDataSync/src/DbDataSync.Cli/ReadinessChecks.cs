@@ -232,7 +232,7 @@ internal sealed class StateStoreCheck : IReadinessCheck
             context.ApiOptions.StateEngine == StateEngineIds.Sqlite
                 ? $"Check that '{Path.GetDirectoryName(context.ApiOptions.StateDbPath)}' is writable."
                 : "Check DbDataSync:State:ConnectionString and the stored password " +
-                  "(`dbdatasync secret set dbdata:sync:config:stateConnectionString ...`)."));
+                  "(`dbdatasync secret set dbdatakit:sync:config:stateConnectionString ...`)."));
     }
 }
 

@@ -29,6 +29,12 @@ internal sealed class AnswerRows(JsonObject result, ResultTable table)
     public JsonObject Result { get; } = result;
     public ResultTable Table { get; } = table;
 
+    /// <summary>The locale the widget's numbers and dates are written in (plan 32 DBR46); null is English. Given by the resolver after the answer is taken from the cache (<see cref="WithLocale"/>), so it is never part of a cache key.</summary>
+    public string? Locale { get; private init; }
+
+    /// <summary>The same answer read for a locale; shares the result and the table (the shapers only read them), so a cached answer is never changed.</summary>
+    public AnswerRows WithLocale(string? locale) => new(Result, Table) { Locale = locale };
+
     /// <summary>A copy that shares nothing with this one (JSON nodes have one parent), for a cache to hand out.</summary>
     public AnswerRows Copy()
     {
@@ -171,7 +177,7 @@ internal static partial class ResultShaper
         if (field is null) return null;
         var resolved = answer.Table.Resolve(field) ?? throw Missing(widget, answer, field, where);
         if (row is null || ResultTable.Number(row[resolved.Name]) is not { } n) return null;
-        return new Num(new JsonObject { ["v"] = row[resolved.Name]!.DeepClone(), ["text"] = Text(n, preset, resolved.Format) }, n);
+        return new Num(new JsonObject { ["v"] = row[resolved.Name]!.DeepClone(), ["text"] = Text(n, preset, resolved.Format, answer.Locale) }, n);
     }
 
     // ---- table ----
@@ -213,7 +219,7 @@ internal static partial class ResultShaper
                     cells.Add(new JsonObject { ["v"] = null, ["text"] = labelled ? "" : TotalLabel });
                     labelled = true;
                 }
-                else cells.Add(Cell(node, field, preset));
+                else cells.Add(Cell(node, field, preset, answer.Locale));
             }
             var row = new JsonObject();
             if (total) row["total"] = true;
@@ -223,12 +229,12 @@ internal static partial class ResultShaper
         return new JsonObject { ["type"] = "table", ["columns"] = header, ["rows"] = rows };
     }
 
-    private static JsonObject Cell(JsonNode? node, ResultField field, JsonNode? preset)
+    private static JsonObject Cell(JsonNode? node, ResultField field, JsonNode? preset, string? locale)
     {
         if (node is null) return new JsonObject { ["v"] = null, ["text"] = "" };
         var v = node.DeepClone();
-        if (ResultTable.Number(node) is { } n) return new JsonObject { ["v"] = v, ["text"] = Text(n, preset, field.Format) };
-        return new JsonObject { ["v"] = v, ["text"] = node is JsonValue s && s.TryGetValue<string>(out _) ? ViewFormat.Text(node, preset) : node.ToJsonString() };
+        if (ResultTable.Number(node) is { } n) return new JsonObject { ["v"] = v, ["text"] = Text(n, preset, field.Format, locale) };
+        return new JsonObject { ["v"] = v, ["text"] = node is JsonValue s && s.TryGetValue<string>(out _) ? ViewFormat.Text(node, preset, field.Format, locale) : node.ToJsonString() };
     }
 
     // ---- matrix and chart: the engine's renderer ----
@@ -302,13 +308,17 @@ internal static partial class ResultShaper
                 if (item["total"]?.GetValue<bool>() == true || item["other"]?.GetValue<bool>() == true || item["labels"] is not JsonArray labels) continue;
                 for (var level = 0; level < axisFormats[name].Count && level < labels.Count; level++)
                 {
-                    if (axisFormats[name][level] is not { } format || labels[level] is not JsonValue lv || !lv.TryGetValue<string>(out var label)) continue;
                     var field = fields[level] is JsonObject o ? o["field"] : fields[level];
-                    labels[level] = ViewFormat.Label(label, format, CatalogOf(field));
+                    // a member under no format of the widget reads the catalog's own date format when the attribute has one (DBR47)
+                    var format = axisFormats[name][level] ?? (CatalogOf(field)?["date"] is not null ? JsonValue.Create("catalog") : null);
+                    if (format is null || labels[level] is not JsonValue lv || !lv.TryGetValue<string>(out var label)) continue;
+                    labels[level] = ViewFormat.Label(label, format, CatalogOf(field), answer.Locale);
                 }
             }
         }
-        if (!valueFormats.Any(f => f is JsonObject)) return;
+        // a locale other than English rewrites every number the engine wrote as its English text; a mapping always does
+        var localized = answer.Locale is not (null or "en");
+        if (!localized && !valueFormats.Any(f => f is JsonObject)) return;
         var count = valueFormats.Count;
         var onRows = encodings["values_on"]?.GetValue<string>() == "rows";
         var valueFields = (encodings["values"] as JsonArray ?? []).Select(v => v?["field"]).ToList();
@@ -320,8 +330,8 @@ internal static partial class ResultShaper
             {
                 // the values come in turn: one per column under each member, or one per row under each member
                 var index = (onRows ? r : c) % count;
-                if (valueFormats[index] is not JsonObject format || cells[c] is not JsonObject cell || ResultTable.Number(cell["v"]) is not { } number) continue;
-                cell["text"] = ViewFormat.Number(number, format, CatalogOf(valueFields[index]));
+                if ((valueFormats[index] is not JsonObject && !localized) || cells[c] is not JsonObject cell || ResultTable.Number(cell["v"]) is not { } number) continue;
+                cell["text"] = ViewFormat.Number(number, valueFormats[index], CatalogOf(valueFields[index]), answer.Locale);
             }
         }
     }
@@ -344,12 +354,17 @@ internal static partial class ResultShaper
                 encoding["column"] = nested.EngineChannel(nested.Outer, answer.Table);
                 continue;
             }
-            if (value is JsonValue v && v.TryGetValue<string>(out var field)) encoding[channel] = new JsonObject { ["field"] = field, ["type"] = ScaleType(answer.Table, field) };
+            if (value is JsonValue v && v.TryGetValue<string>(out var field))
+            {
+                encoding[channel] = new JsonObject { ["field"] = field, ["type"] = ScaleType(answer.Table, field) };
+                if (CatalogDate(answer.Table, field)) formats[channel] = JsonValue.Create("catalog");
+            }
             else if (value is JsonObject o)
             {
                 var channelSpec = (JsonObject)o.DeepClone();
                 if (channelSpec["type"] is null && channelSpec["field"] is JsonValue fv && fv.TryGetValue<string>(out var f)) channelSpec["type"] = ScaleType(answer.Table, f);
                 if (channelSpec["format"] is { } format) formats[channel] = format.DeepClone();
+                else if (channelSpec["field"] is JsonValue cf && cf.TryGetValue<string>(out var cfield) && CatalogDate(answer.Table, cfield)) formats[channel] = JsonValue.Create("catalog");
                 channelSpec.Remove("format");
                 encoding[channel] = channelSpec;
             }
@@ -395,12 +410,14 @@ internal static partial class ResultShaper
             baked = false;
             if (def["field"] is not JsonValue fv || !fv.TryGetValue<string>(out var name)) return null;
             var catalog = answer.Table.Resolve(name)?.Format;
-            if (def["type"]?.GetValue<string>() == "quantitative") return ViewFormat.D3Number(format, catalog);
+            var dated = ViewFormat.DatePattern(format, catalog) is not null;
+            // a number that a date format reads (a year held as an integer, DBR48) is a category, its labels written like any date's
+            if (def["type"]?.GetValue<string>() == "quantitative" && !dated) return ViewFormat.D3Number(format, catalog);
             var column = $"{name}__{channel}";
-            foreach (var row in values) row[column] = row[name] is { } raw ? Label(raw, format, catalog) : null;
+            foreach (var row in values) row[column] = row[name] is { } raw ? Label(raw, format, catalog, answer.Locale) : null;
             def["field"] = column;
             def["title"] ??= answer.Table.Resolve(name)?.Binding ?? name;
-            if (def["type"]?.GetValue<string>() == "temporal") def["type"] = "ordinal";
+            if (def["type"]?.GetValue<string>() is "temporal" or "quantitative") def["type"] = "ordinal";
             def["sort"] = LabelOrder(def["sort"], values, name, column);
             baked = true;
             return null;
@@ -432,8 +449,11 @@ internal static partial class ResultShaper
         if (d3.Count > 0) rendered["formats"] = d3;
     }
 
-    private static string Label(JsonNode raw, JsonNode format, JsonObject? catalog) =>
-        raw is JsonValue v && v.TryGetValue<string>(out var text) ? ViewFormat.Label(text, format, catalog) : ViewFormat.Text(raw, format, catalog);
+    private static string Label(JsonNode raw, JsonNode format, JsonObject? catalog, string? locale) =>
+        raw is JsonValue v && v.TryGetValue<string>(out var text) ? ViewFormat.Label(text, format, catalog, locale) : ViewFormat.Text(raw, format, catalog, locale);
+
+    /// <summary>Whether the catalog gives a field a date format of its own (<c>x_format</c> of an attribute, DBR47).</summary>
+    private static bool CatalogDate(ResultTable table, string field) => table.Resolve(field)?.Format?["date"] is not null;
 
     /// <summary>
     /// The sort of a channel whose members are now labels: the members' order is the order of the raw values (the engine's <c>sort_key</c> order that the view wrote out, a list the author gave, or ascending or descending
@@ -520,8 +540,9 @@ internal static partial class ResultShaper
         new(ResolveCodes.AnswerMismatch, $"{field} is not a column of the answer.", $"widgets.{widget.Id}.{where}", answer.Table.Suggest(field));
 
     /// <summary>A number as text: a mapping is the shared formatter's (<see cref="ViewFormat"/>), a preset is the engine's, as before.</summary>
-    private static string Text(double n, JsonNode? format, JsonObject? catalog) =>
-        format is JsonObject ? ViewFormat.Number(n, format, catalog) : MatrixView.Format(n, Preset(format), catalog);
+    private static string Text(double n, JsonNode? format, JsonObject? catalog, string? locale = null) =>
+        ViewFormat.DatePattern(format, catalog) is not null ? ViewFormat.Text(JsonValue.Create(n), format, catalog, locale)
+        : format is JsonObject || locale is not (null or "en") ? ViewFormat.Number(n, format, catalog, locale) : MatrixView.Format(n, Preset(format), catalog);
 
     /// <summary>The number preset a widget names (<c>catalog</c>, <c>full</c>, <c>compact</c>, <c>percent</c>); the catalog's own format is the default and is what <c>full</c> reads.</summary>
     private static string Preset(JsonNode? format) => format is JsonValue v && v.TryGetValue<string>(out var s) && s is "compact" or "percent" ? s : "full";

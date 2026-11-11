@@ -529,6 +529,6 @@ public sealed class AdminConfigServiceTests : IDisposable
         var secretRef = DbDataSync.Core.Secrets.SecretRefs.ForAppSetting("stateConnectionString");
         Assert.True(service.SetStateConnectionSecret(StateConnectionStringKey, "hunter2"));
         Assert.Equal("hunter2", secrets.Resolve(secretRef));
-        Assert.Equal("DBDATAKIT_SECRET_DBDATA_SYNC_CONFIG_STATECONNECTIONSTRING", secrets.EnvName(secretRef));
+        Assert.Equal("DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONFIG_STATECONNECTIONSTRING", secrets.EnvName(secretRef));
     }
 }

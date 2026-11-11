@@ -128,7 +128,7 @@ test.describe.serial('moving a server\'s state from the console', () => {
     await page.getByTestId('state-connection-save').click()
     const row = page.getByTestId('state-connection-row').filter({ has: page.getByText(connectionName, { exact: true }) })
     await expect(row).toBeVisible()
-    await expect(row).toContainText(`secret:dbdata:console:state:${connectionName}`)
+    await expect(row).toContainText(`secret:dbdatakit:server:state:${connectionName}`)
     await expectPasswordNotShown(page, password)
 
     // test: one sentence
@@ -151,11 +151,11 @@ test.describe.serial('moving a server\'s state from the console', () => {
     // the wizard: the server cannot yet resolve the password, and says which command sets it on that machine
     await page.getByTestId('move-target').selectOption(connectionName)
     await page.getByTestId('move-check').click()
-    await expect(page.getByTestId('move-checks')).toContainText(`dbdatastore secret set dbdata:console:state:${connectionName}`)
+    await expect(page.getByTestId('move-checks')).toContainText(`dbdatastore secret set dbdatakit:server:state:${connectionName}`)
     await expect(page.getByTestId('move-start')).toHaveCount(0)
 
     // the operator sets it there, then the checks pass
-    execFileSync('dotnet', ['exec', storeDll, 'secret', 'set', `dbdata:console:state:${connectionName}`, '--stdin', '--repo', storeDirectory], { input: password + '\n', stdio: ['pipe', 'ignore', 'inherit'] })
+    execFileSync('dotnet', ['exec', storeDll, 'secret', 'set', `dbdatakit:server:state:${connectionName}`, '--stdin', '--repo', storeDirectory], { input: password + '\n', stdio: ['pipe', 'ignore', 'inherit'] })
     await page.getByTestId('move-check').click()
     await expect(page.getByTestId('move-start')).toBeVisible()
     await expect(page.getByTestId('move-check-item').filter({ hasText: /Not ready/ })).toHaveCount(0)
@@ -171,7 +171,7 @@ test.describe.serial('moving a server\'s state from the console', () => {
     // the settings file names PostgreSQL with the reference, never the password
     const settings = fs.readFileSync(path.join(storeDirectory, 'server.yaml'), 'utf8')
     expect(settings).toContain('postgres')
-    expect(settings).toContain(`secret:dbdata:console:state:${connectionName}`)
+    expect(settings).toContain(`secret:dbdatakit:server:state:${connectionName}`)
     expect(settings).toMatch(/password=secret:/i)                      // the password is a reference
     if (password.length >= 8) expect(settings).not.toContain(password)  // a short one (CI's `e2e`) is also inside the database name
 
@@ -180,7 +180,7 @@ test.describe.serial('moving a server\'s state from the console', () => {
     await startStore()
     await page.reload()
     await expect(page.getByTestId('state-engine')).toHaveText('PostgreSQL', { timeout: 30_000 })
-    await expect(page.getByTestId('state-connection')).toContainText(`secret:dbdata:console:state:${connectionName}`)
+    await expect(page.getByTestId('state-connection')).toContainText(`secret:dbdatakit:server:state:${connectionName}`)
     await expect(page.getByTestId('maintenance-status')).toHaveAttribute('data-enabled', 'false')
     await expect(page.getByTestId('state-pending')).toHaveText('0')
 

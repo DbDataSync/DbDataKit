@@ -78,6 +78,7 @@ public class SchemaTests
         var checks = new Dictionary<string, string[]>
         {
             ["font"] = Enum(At(core, "$defs/theme/properties/font")),
+            ["locale"] = Enum(At(core, "$defs/locale")),
             ["orientation"] = Enum(At(core, "$defs/selector/properties/orientation")), ["medium"] = Enum(At(core, "$defs/medium")),
             ["overflow"] = Enum(At(core, "$defs/layout_canvas/properties/overflow")), ["unit"] = Enum(At(core, "$defs/layout_canvas/properties/canvas/properties/unit")),
             ["pageSize"] = Enum(At(core, "$defs/page/properties/size/oneOf/0")), ["break"] = Enum(At(core, "$defs/flow_section/properties/break")),
@@ -115,7 +116,7 @@ public class SchemaTests
             Assert.Equal(ViewsFormat.Current, At(Load(kind), "properties/schemaVersion")["const"]!.GetValue<int>());
         }
         // what the kinds share is the same definition in both: the title, the parameters, the theme, the widgets and the layouts
-        foreach (var shared in new[] { "title", "parameters", "theme", "widgets", "layouts" })
+        foreach (var shared in new[] { "title", "parameters", "theme", "locale", "widgets", "layouts" })
             Assert.Equal(At(Load("dashboard"), $"properties/{shared}/$ref")!.GetValue<string>(), At(Load("report"), $"properties/{shared}/$ref")!.GetValue<string>());
         Assert.Equal(ViewsFormat.Current, ViewsFormat.Previous);
     }

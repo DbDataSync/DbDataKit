@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildRequest, channelProblem, describeSchedule, emptyForm, formFromSubscription, outboxLine, sendNowBlockedReason, statusWord, subscriptionProblem, type Subscription, type SubscriptionForm } from './delivery'
+import { bindingLine, bindingProblem, buildRequest, channelProblem, describeSchedule, isChannelName, isReleaseName, mappingBody, mappingOf, mappingProblem, sameMapping, emptyForm, formFromSubscription, outboxLine, sendNowBlockedReason, statusWord, subscriptionProblem, type ChannelBinding, type DeliveryChannel, type Subscription, type SubscriptionForm } from './delivery'
 
 const form = (over: Partial<SubscriptionForm> = {}): SubscriptionForm => ({ ...emptyForm('mail'), name: 'Weekly sales', view: 'sales', ...over })
 
@@ -63,5 +63,50 @@ describe('what a person reads', () => {
     expect(sendNowBlockedReason(false, 'This console does not draw documents.', subscription())).toBe('This console does not draw documents.')
     expect(sendNowBlockedReason(true, null, subscription({ channelProblem: 'The channel is gone.' }))).toBe('The channel is gone.')
     expect(sendNowBlockedReason(true, null, subscription())).toBeNull()
+  })
+})
+
+const binding = (over: Partial<ChannelBinding> = {}): ChannelBinding => ({ release: 'prod', connection: 'slack-ops', own: true, kind: 'slack', target: 'https://hooks.slack.com/services/{token}', ready: true, missing: [], problem: null, ...over })
+const channel = (name: string, bindings: ChannelBinding[], over: Partial<DeliveryChannel> = {}): DeliveryChannel => ({ name, kind: 'slack', limitPerMinute: null, ready: true, missing: [], bindings, outbox: {}, ...over })
+
+describe('the channels as a mapping of release channels to connections (plan 22a GP18 fold, plan 21)', () => {
+  const channels = [
+    channel('alerts', [binding(), binding({ release: 'test', connection: 'slack-sandbox' }), binding({ release: 'dev', connection: 'slack-sandbox' })], { limitPerMinute: 30 }),
+    channel('mail', [binding({ connection: 'smtp-main', kind: 'email', target: 'smtp.example.com:587 (starttls)' })]),
+  ]
+
+  it('is read from what the server says each channel uses in each release channel', () => {
+    expect(mappingOf(channels)).toEqual({ alerts: { prod: 'slack-ops', test: 'slack-sandbox', dev: 'slack-sandbox' }, mail: { prod: 'smtp-main' } })
+  })
+
+  it('is written as the file reads it: a name alone for prod only, a mapping for the rest, the limits of the channels that remain', () => {
+    expect(mappingBody(mappingOf(channels), { alerts: 30, mail: null })).toEqual({
+      channels: { alerts: { prod: 'slack-ops', test: 'slack-sandbox', dev: 'slack-sandbox' }, mail: 'smtp-main' }, limits: { alerts: 30 },
+    })
+    expect(mappingBody({ alerts: { prod: 'a', test: '' }, gone: {} }, { alerts: null, gone: 5 })).toEqual({ channels: { alerts: 'a' } })        // an empty entry and a channel with none are left out
+    expect(mappingBody({ alerts: { test: 'sandbox' } })).toEqual({ channels: { alerts: { test: 'sandbox' } } })                                  // a test-only channel is not written as prod's
+  })
+
+  it('names what the screen can check for itself before the server does', () => {
+    expect(['alerts', 'a_b-2'].every(isChannelName)).toBe(true)
+    expect(['', 'a b', 'a/b', '*'].some(isChannelName)).toBe(false)
+    expect(['prod', 'test', '*', 'qa-2'].every(isReleaseName)).toBe(true)
+    expect(['', 'a b', '**'].some(isReleaseName)).toBe(false)
+    expect(mappingProblem({ alerts: { prod: 'a' } })).toBeNull()
+    expect(mappingProblem({ 'a b': { prod: 'a' } })).toContain('not a channel name')
+    expect(mappingProblem({ alerts: { 'te st': 'a' } })).toContain('not a release channel name')
+  })
+
+  it('knows when there is nothing to save', () => {
+    expect(sameMapping(mappingOf(channels), { mail: { prod: 'smtp-main' }, alerts: { dev: 'slack-sandbox', test: 'slack-sandbox', prod: 'slack-ops' } })).toBe(true)
+    expect(sameMapping(mappingOf(channels), { ...mappingOf(channels), mail: { prod: 'smtp-other' } })).toBe(false)
+  })
+
+  it('says in words where a release channel goes and why a binding cannot be used', () => {
+    expect(bindingLine(binding({ release: 'test', connection: 'slack-sandbox' }))).toBe('test uses slack-sandbox (slack, https://hooks.slack.com/services/{token})')
+    expect(bindingLine(binding({ release: '*', connection: 'slack-sandbox', own: true }))).toContain('every other release channel uses slack-sandbox')
+    expect(bindingProblem(binding())).toBeNull()
+    expect(bindingProblem(binding({ ready: false, problem: 'There is no connection named \'x\'.' }))).toBe('There is no connection named \'x\'.')
+    expect(bindingProblem(binding({ ready: false, missing: ['endpoint_secrets.token: env:T cannot be read'] }))).toBe('endpoint_secrets.token: env:T cannot be read')
   })
 })

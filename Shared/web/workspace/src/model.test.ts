@@ -133,7 +133,7 @@ describe('builds, preview and publish', () => {
   })
   it('refuses a key typed where a reference goes', () => {
     expect(referenceProblem('')).toBeNull()
-    expect(referenceProblem('secret:dbdata:workspace:publisher-key:edge')).toBeNull()
+    expect(referenceProblem('secret:dbdatakit:workspace:publisher-key:edge')).toBeNull()
     expect(referenceProblem('workspace-1a2b3c:c2VlZA')).toContain('"secret:"')
     expect(referenceProblem('secret:a b')).toContain('no spaces')
   })

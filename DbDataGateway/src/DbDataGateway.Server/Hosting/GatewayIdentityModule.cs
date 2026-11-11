@@ -18,14 +18,14 @@ namespace DbDataGateway.Server.Hosting;
 /// state database, with the Gateway's certificate.
 /// <para>
 /// The signing keys live in the state, protected with the key in the secret <see cref="SigningKeySecret"/>: made on the first start, and copied to every other instance of a group that shares the state
-/// (<c>dbdatagateway secret set dbdata:gateway:identity:signing-keys --stdin</c>). An instance with another key refuses to start, naming the secret.
+/// (<c>dbdatagateway secret set dbdatakit:gateway:identity:signing-keys --stdin</c>). An instance with another key refuses to start, naming the secret.
 /// </para>
 /// </summary>
 public sealed class GatewayIdentityModule(
     IOptionsMonitor<GatewayOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, ILoggerFactory loggers, GroupCertificate? group = null) : IHostedService, IAsyncDisposable
 {
     /// <summary>The secret that holds the key the signing keys are protected with.</summary>
-    public const string SigningKeySecret = "dbdata:gateway:identity:signing-keys";
+    public const string SigningKeySecret = "dbdatakit:gateway:identity:signing-keys";
 
     /// <summary>The home's own sign-in: its cookie, its configuration section, and what a person is told to run for an invitation.</summary>
     public static readonly AuthProduct Auth = new("DbDataGatewayIdentity", "dbdatagateway identity invite --email <address>");

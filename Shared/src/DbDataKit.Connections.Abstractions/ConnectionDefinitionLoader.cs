@@ -37,6 +37,8 @@ public static class ConnectionDefinitionLoader
     public const string BadKind = "DBD-CONN-013";
     public const string KindNotKept = "DBD-CONN-014";
     public const string BadOutside = "DBD-CONN-015";
+    public const string AddressHidden = "DBD-CONN-016";
+    public const string WebhookFormatMismatch = "DBD-CONN-017";
 
     /// <summary>JSON Schema for editor aids, generated from the type.</summary>
     public static string JsonSchema() => JsonSchemaGenerator.ToJson(typeof(ConnectionDefinition), "https://dbdata.dev/schema/connection/1.json");
@@ -135,8 +137,9 @@ public static class ConnectionDefinitionLoader
             return;
         }
         if (d.Engine.Length == 0) Err(SharedCodes.MissingKey, "engine", "Required key `engine` is missing: a database connection says which engine it is.", "Add `engine: postgres` (or sqlserver, mysql, oracle, duckdb, odbc, flightsql).");
-        foreach (var (key, present) in new[] { ("endpoint", d.Endpoint is not null), ("sign_in", d.SignIn is not null), ("test_path", d.TestPath is not null), ("model_provider", d.ModelProvider is not null) })
-            if (present) Err(BadOutside, key, $"`{key}` belongs to an outside kind (`http`, `model-provider`), not to a database.", "Remove it, or say `kind: http` (and drop the database keys).");
+        foreach (var (key, present) in new[] { ("endpoint", d.Endpoint is not null), ("sign_in", d.SignIn is not null), ("test_path", d.TestPath is not null), ("model_provider", d.ModelProvider is not null),
+            ("endpoint_secrets", d.EndpointSecrets.Count > 0), ("webhook", d.Webhook is not null), ("smtp", d.Smtp is not null) })
+            if (present) Err(BadOutside, key, $"`{key}` belongs to an outside kind (`http`, `model-provider`, `smtp`), not to a database.", "Remove it, or say `kind: http` (and drop the database keys).");
 
         var logins = new (string Path, LoginSpec? Spec)[] { ("auth", d.Auth), ("read_login", d.ReadLogin), ("write_login", d.WriteLogin) };
 
@@ -238,6 +241,7 @@ public static class ConnectionDefinitionLoader
     private static void ValidateOutside(ConnectionDefinition d, string file, IReadOnlyDictionary<string, SourceInfo> src, List<ConfigDiagnostic> diags)
     {
         void Err(string path, string message, string? fix = null) => diags.Add(Diag(BadOutside, file, src, path, message, fix, ConfigSeverity.Error));
+        void Warn(string path, string message, string? fix = null, string code = TlsOptOut) => diags.Add(Diag(code, file, src, path, message, fix, ConfigSeverity.Warning));
         void CheckRef(string? text, string path)
         {
             if (text is not null && !SecretRef.TryParse(text, out _, out var error))
@@ -252,9 +256,33 @@ public static class ConnectionDefinitionLoader
             if (present) Err(key, $"`{key}` is a key of a database connection; a `{d.KindName}` connection has an `endpoint` and `sign_in`.", $"Remove `{key}`.");
 
         // an address is an http(s) one with no user name, password or query: a key is never part of it
-        string? endpoint = d.Endpoint ?? (d.ModelProvider is { Provider: var p } ? ModelProviderSpec.DefaultEndpoint(p) : null);
-        if (endpoint is null) Err("endpoint", d.KindName == ConnectionKinds.Http ? "A `http` connection needs an `endpoint`." : "A model provider of this kind has no default address: write `endpoint`.", "Write the address, such as `endpoint: https://api.example.com/v1`.");
-        else if (!IsSafeAddress(endpoint)) Err("endpoint", "`endpoint` is an http or https address with no user name, password or query in it.", "A key is never part of the address: write it as `sign_in.key_secret`.");
+        if (d.KindName == ConnectionKinds.Smtp)
+        {
+            foreach (var (key, present) in new[] { ("endpoint", d.Endpoint is not null), ("endpoint_secrets", d.EndpointSecrets.Count > 0), ("webhook", d.Webhook is not null), ("model_provider", d.ModelProvider is not null), ("test_path", d.TestPath is not null) })
+                if (present) Err(key, $"`{key}` does not belong to a `smtp` connection: the mail server is `smtp.host`.", $"Remove `{key}`.");
+            CheckSmtp();
+        }
+        else
+        {
+            if (d.Smtp is not null) Err("smtp", "`smtp` belongs to the kind `smtp`.", "Remove it, or say `kind: smtp`.");
+            string? endpoint = d.Endpoint ?? (d.ModelProvider is { Provider: var p } ? ModelProviderSpec.DefaultEndpoint(p) : null);
+            if (endpoint is null)
+            {
+                if (d.EndpointSecrets.Count > 0) Err("endpoint_secrets", "`endpoint_secrets` binds the placeholders of `endpoint`, and there is none.", "Write the address as a template: `endpoint: https://hooks.example.com/services/{token}`.");
+                Err("endpoint", d.KindName == ConnectionKinds.Http ? "A `http` connection needs an `endpoint`." : "A model provider of this kind has no default address: write `endpoint`.", "Write the address, such as `endpoint: https://api.example.com/v1`; a secret part of it is a `{placeholder}` bound in `endpoint_secrets`.");
+            }
+            else if (EndpointTemplate.IsHidden(endpoint))
+            {
+                if (d.EndpointSecrets.Count > 0) Err("endpoint_secrets", "`endpoint` is wholly a secret reference, so there is no placeholder to bind.", "Remove `endpoint_secrets`, or write the visible address with `{placeholders}`.");
+                Warn("endpoint", "The whole address is a secret (shown as \"address hidden\"): what the connection reaches cannot be read, and the private-address check cannot see it. Prefer the address with its secret part as a `{placeholder}` bound in `endpoint_secrets`.", null, AddressHidden);
+            }
+            else
+            {
+                foreach (var (path, message) in EndpointTemplate.Problems(endpoint)) Err(path, message, "A key, token or signature is never written in the address: bind it in `endpoint_secrets` (or `sign_in`).");
+                if (d.Endpoint is not null)
+                    foreach (var (path, message) in EndpointTemplate.BindingProblems(endpoint, d.EndpointSecrets)) Err(path, message);
+            }
+        }
 
         if (d.SignIn is { } s) CheckSignIn(s);
         if (d.TestPath is { } testPath && (testPath.Contains("://", StringComparison.Ordinal) || testPath.Contains('?', StringComparison.Ordinal) || testPath.Contains('#', StringComparison.Ordinal) || testPath.Contains("..", StringComparison.Ordinal) || testPath.Any(char.IsWhiteSpace)))
@@ -262,8 +290,14 @@ public static class ConnectionDefinitionLoader
         if (d.KindName == ConnectionKinds.Http)
         {
             if (d.ModelProvider is not null) Err("model_provider", "`model_provider` belongs to the kind `model-provider`.", "Remove it.");
+            CheckWebhook();
         }
-        else CheckModelProvider();
+        else if (d.KindName == ConnectionKinds.ModelProvider)
+        {
+            if (d.Webhook is not null) Err("webhook", "`webhook` belongs to the kind `http`.", "Remove it.");
+            CheckModelProvider();
+        }
+        else if (d.Webhook is not null) Err("webhook", "`webhook` belongs to the kind `http`.", "Remove it.");
         if (!d.Tls.Verify) diags.Add(Diag(TlsOptOut, file, src, "tls.verify", "Certificate verification is off for this connection.", null, ConfigSeverity.Warning));
         if (d.Tls.TrustServerCertificate) diags.Add(Diag(TlsOptOut, file, src, "tls.trust_server_certificate", "The server certificate is trusted without verification.", null, ConfigSeverity.Warning));
         if (!d.Tls.Encrypt) diags.Add(Diag(TlsOptOut, file, src, "tls.encrypt", "Encryption is off for this connection.", null, ConfigSeverity.Warning));
@@ -304,11 +338,53 @@ public static class ConnectionDefinitionLoader
                     if (s.TokenUrl is not null && !IsSafeAddress(s.TokenUrl)) Err("sign_in.token_url", "`token_url` is an http or https address with no user name, password or query in it.");
                     NoOthers(("key_secret", s.KeySecret is not null), ("password_secret", s.PasswordSecret is not null), ("certificate_file", s.CertificateFile is not null));
                     break;
+                case "signed_webhook":
+                    Needs("key_secret", s.KeySecret is not null);
+                    NoOthers(("user", s.User is not null), ("password_secret", s.PasswordSecret is not null), ("token_url", s.TokenUrl is not null), ("client_secret_secret", s.ClientSecretSecret is not null), ("certificate_file", s.CertificateFile is not null), ("certificate_secret", s.CertificateSecret is not null));
+                    if (s.Name is { } hn && (hn.Length == 0 || hn.Any(c => char.IsWhiteSpace(c) || char.IsControl(c) || c == ':'))) Err("sign_in.name", "`name` is a header name: no spaces, no colon.");
+                    break;
                 case "client_certificate":
                     if ((s.CertificateFile is null) == (s.CertificateSecret is null)) Err("sign_in", "`sign_in.method: client_certificate` needs one of `certificate_file` and `certificate_secret`.", "Give the PKCS#12 file, or a secret that holds it as Base64.");
                     NoOthers(("key_secret", s.KeySecret is not null), ("user", s.User is not null), ("password_secret", s.PasswordSecret is not null), ("token_url", s.TokenUrl is not null), ("client_secret_secret", s.ClientSecretSecret is not null));
                     break;
             }
+        }
+
+        void CheckWebhook()
+        {
+            if (d.Webhook is not { } w)
+            {
+                if (d.SignIn?.Method == "signed_webhook") Err("sign_in.method", "`signed_webhook` signs what a delivery channel posts: it needs a `webhook:` section (`format: signed`).", "Add `webhook: { format: signed }`.");
+                return;
+            }
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (var i = 0; i < w.AllowPrivate.Count; i++)
+            {
+                var entry = w.AllowPrivate[i];
+                if (string.IsNullOrWhiteSpace(entry) || entry != entry.Trim() || entry.Any(c => char.IsWhiteSpace(c) || char.IsControl(c))) Err($"webhook.allow_private[{i}]", "An entry of `allow_private` is a host name, an address or a range such as `10.1.0.0/16`, with no spaces.");
+                else if (entry.Contains('/', StringComparison.Ordinal) && !CidrOk(entry)) Err($"webhook.allow_private[{i}]", $"`{entry}` is not a range such as `10.1.0.0/16`.");
+                else if (!seen.Add(entry)) Err($"webhook.allow_private[{i}]", $"`{entry}` is listed twice.");
+            }
+            if (d.Endpoint is { } shown && !EndpointTemplate.IsHidden(shown) && Uri.TryCreate(System.Text.RegularExpressions.Regex.Replace(shown, @"\{[A-Za-z][A-Za-z0-9_]*\}", "x"), UriKind.Absolute, out var shownUri)
+                && WebhookPatterns.ServiceOfHost(shownUri.Host) is { Format: { } expected } known && expected != w.Format)
+                Warn("webhook.format", $"The address is {known.Service}'s, which takes `format: {expected}`, and this webhook says `format: {w.Format}`.", $"Set `format: {expected}`, or check the address.", WebhookFormatMismatch);
+            var method = d.SignIn?.Method ?? "none";
+            if (w.Format == "signed" && method != "signed_webhook") Err("sign_in.method", "A `signed` webhook is signed with the shared secret: `sign_in: { method: signed_webhook, key_secret: ... }`.", "Store the shared secret and write its reference.");
+            if (w.Format is "slack" or "teams" && method != "none") Err("sign_in.method", $"A `{w.Format}` webhook takes no sign-in: the token is in its address (a placeholder of `endpoint`).", "Remove `sign_in`.");
+        }
+
+        void CheckSmtp()
+        {
+            if (d.Smtp is not { } m) { Err("smtp", "A `smtp` connection needs an `smtp` section: the host and the sender address.", "Write `smtp: { host: smtp.example.com, sender: noreply@example.com }`."); return; }
+            if (string.IsNullOrWhiteSpace(m.Host) || m.Host.Any(c => char.IsWhiteSpace(c) || c is '/' or '@')) Err("smtp.host", "`smtp.host` is the mail server's name or address, nothing else.");
+            if (!System.Net.Mail.MailAddress.TryCreate(m.Sender, out _)) Err("smtp.sender", "`smtp.sender` is an address: `ana@example.com` or `Name <ana@example.com>`.");
+            if (m.Tls == "none" && !m.AllowPlainText && !IsLoopbackHost(m.Host))
+                Err("smtp.tls", "`tls: none` sends mail, and a login, in clear text; it is allowed only to this machine (`localhost`, `127.0.0.1`, `::1`).", "Use `starttls` or `implicit`, or say `allow_plain_text: true` for a relay on a network you trust.");
+            if (m.AllowPlainText && m.Tls != "none") Err("smtp.allow_plain_text", "`allow_plain_text` goes with `tls: none`.", "Remove it.");
+            if (m.TrustedCertificate is { } cert && string.IsNullOrWhiteSpace(cert)) Err("smtp.trusted_certificate", "`smtp.trusted_certificate` is the path of a certificate file.");
+            var method = d.SignIn?.Method ?? "none";
+            if (method is not ("none" or "basic")) Err("sign_in.method", $"A mail server signs in with `basic` (user and `password_secret`) or `none`, not `{method}`.");
+            if (m.Tls == "none" && method == "basic" && !IsLoopbackHost(m.Host)) Warn("smtp.tls", "A login is sent without TLS.");
         }
 
         void CheckModelProvider()
@@ -330,6 +406,16 @@ public static class ConnectionDefinitionLoader
             if (auth == "none" && m.Provider is "anthropic" or "openai" or "foundry" && m.AuthStyle != "none")
                 Err("sign_in", $"A {m.Provider} provider needs `sign_in: {{ method: api_key, key_secret: ... }}`: the reference of the key (`secret:<name>` or `env:<NAME>`).", "Store the key with the console's secrets and write its reference; a key is never typed into the file.");
         }
+    }
+
+    private static bool IsLoopbackHost(string host) =>
+        string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase) || (System.Net.IPAddress.TryParse(host.Trim('[', ']'), out var address) && System.Net.IPAddress.IsLoopback(address));
+
+    private static bool CidrOk(string entry)
+    {
+        var slash = entry.IndexOf('/', StringComparison.Ordinal);
+        return System.Net.IPAddress.TryParse(entry[..slash], out var network) && int.TryParse(entry[(slash + 1)..], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var bits)
+            && bits <= (network.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork ? 32 : 128);
     }
 
     /// <summary>An http or https address with no user name, password or query: where a key never belongs.</summary>

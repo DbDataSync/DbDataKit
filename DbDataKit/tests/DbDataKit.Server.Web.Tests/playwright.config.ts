@@ -15,8 +15,12 @@ const isWorker = process.env.TEST_WORKER_INDEX !== undefined
 if (!isWorker) {
   fs.rmSync(scratchDirectory, { recursive: true, force: true })
   fs.mkdirSync(scratchDirectory, { recursive: true })
-  // the console's delivery channel for subscriptions-delivery.spec.ts: a signed webhook at an address and a secret read from files that story writes (a local listener); a console reads settings.yaml when it starts
-  fs.writeFileSync(path.join(scratchDirectory, 'settings.yaml'), `delivery:\n  channels:\n    e2e-hook:\n      kind: webhook\n      url: file:${path.join(scratchDirectory, 'delivery-hook-url.txt').replace(/\\/g, '/')}\n      secret: file:${path.join(scratchDirectory, 'delivery-hook-secret.txt').replace(/\\/g, '/')}\n      allow_private: [127.0.0.1]\n`)
+  // the console's delivery channel for subscriptions-delivery.spec.ts (plan 22a GP18 fold: a channel is a connection): `e2e-hook` is bound to the connection `e2e-hook-conn`, a signed webhook whose whole address is a secret read from a file that story writes
+  // (a local listener, so its port is not known yet: the address stays a secret reference, shown as "address hidden") and whose signing secret is a file too; a console reads settings.yaml and connections/ when it starts
+  const fileRef = (name: string) => `file:${path.join(scratchDirectory, name).replace(/\\/g, '/')}`
+  fs.mkdirSync(path.join(scratchDirectory, 'connections'), { recursive: true })
+  fs.writeFileSync(path.join(scratchDirectory, 'connections', 'e2e-hook-conn.yml'), `schema: connection/2\nkind: http\nname: e2e-hook-conn\nendpoint: ${fileRef('delivery-hook-url.txt')}\nwebhook:\n  format: signed\n  allow_private: [127.0.0.1]\nsign_in:\n  method: signed_webhook\n  key_secret: ${fileRef('delivery-hook-secret.txt')}\n`)
+  fs.writeFileSync(path.join(scratchDirectory, 'settings.yaml'), 'delivery:\n  channels:\n    e2e-hook: e2e-hook-conn\n')
 }
 
 // A Build server for the console to pair with: a real one, in a directory of its own, with a pairing code made before it starts and written where the test can read it.
@@ -42,7 +46,7 @@ if (!isWorker) {
   const madeAgain = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--minutes', '120', '--repo', buildDirectory, '--max-role', 'viewer,author,operator,approver,admin'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'build-pairing-code-again.txt'), /Pairing code: (\S+)/.exec(madeAgain)![1])
   // the read login of the starter's SQL Server connection, in the server's own store (what publishing it to a Gateway sends; nothing connects to it)
-  execFileSync('dotnet', ['exec', buildDll, 'secret', 'set', 'dbdata:build:connection:sqlserver:read', '--stdin', '--repo', buildDirectory],
+  execFileSync('dotnet', ['exec', buildDll, 'secret', 'set', 'dbdatakit:build:connection:sqlserver:read', '--stdin', '--repo', buildDirectory],
     { input: 'Server=db.example;User Id=reader;Password=console-e2e-read;Encrypt=True\n', stdio: ['pipe', 'ignore', 'inherit'] })
 }
 
@@ -224,7 +228,7 @@ if (!isWorker) {
   fs.rmSync(authoringBuild.origin, { force: true })
   execFileSync('dotnet', ['exec', buildDll, 'project', 'create', 'adventureworks', source], { stdio: 'ignore' })
   execFileSync('dotnet', ['exec', buildDll, 'project', 'seed', '--project', source, '--out', authoringBuild.origin], { stdio: 'ignore' })
-  execFileSync('dotnet', ['exec', buildDll, 'secret', 'set', 'dbdata:build:connection:origin:read', '--stdin', '--repo', authoringBuild.directory], { input: authoringBuild.origin + '\n', stdio: ['pipe', 'ignore', 'inherit'] })
+  execFileSync('dotnet', ['exec', buildDll, 'secret', 'set', 'dbdatakit:build:connection:origin:read', '--stdin', '--repo', authoringBuild.directory], { input: authoringBuild.origin + '\n', stdio: ['pipe', 'ignore', 'inherit'] })
   const made = execFileSync('dotnet', ['exec', buildDll, 'server', 'pair', '--minutes', '120', '--repo', authoringBuild.directory, '--max-role', 'viewer,author,operator,approver'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'authoring-build-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
@@ -296,7 +300,7 @@ if (!isWorker) {
   })
   pairBuild(modelsBuild.directory, 'models-build-pairing-code.txt')
   // the read login a publish sends with the model is the one stored in the server's own store (the environment variables are what a command run reads, not what the publish sends)
-  if (warehouseConnection) execFileSync('dotnet', ['exec', buildDll, 'secret', 'set', 'dbdata:build:connection:postgres:read', '--stdin', '--repo', modelsBuild.directory], { input: warehouseConnection + ';SSL Mode=Disable\n', stdio: ['pipe', 'ignore', 'inherit'] })
+  if (warehouseConnection) execFileSync('dotnet', ['exec', buildDll, 'secret', 'set', 'dbdatakit:build:connection:postgres:read', '--stdin', '--repo', modelsBuild.directory], { input: warehouseConnection + ';SSL Mode=Disable\n', stdio: ['pipe', 'ignore', 'inherit'] })
 
   // the grants story: the project's connection says who may read the data source it is published as (connection/2 with grants), and the read login is a made-up one in the server's own store
   makeProject(grantsBuild.directory, grantsBuild.project, {
@@ -304,7 +308,7 @@ if (!isWorker) {
     'models/sales/facts.yml': 'name: sales.facts\nkind: mapped\ngrain: [sale_id]\ncolumns:\n  - {name: sale_id, type: BIGINT, nullable: false}\n',
   }, 'schema: connection/2\nname: postgres\nengine: postgres\ntls:\n  encrypt: false\n  trust_server_certificate: true\ngrants:\n  groups: [finance]\n')
   pairBuild(grantsBuild.directory, 'grants-build-pairing-code.txt')
-  execFileSync('dotnet', ['exec', buildDll, 'secret', 'set', 'dbdata:build:connection:postgres:read', '--stdin', '--repo', grantsBuild.directory], { input: 'Host=localhost;Database=ledger;Username=reader;Password=not-used;SSL Mode=Disable\n', stdio: ['pipe', 'ignore', 'inherit'] })
+  execFileSync('dotnet', ['exec', buildDll, 'secret', 'set', 'dbdatakit:build:connection:postgres:read', '--stdin', '--repo', grantsBuild.directory], { input: 'Host=localhost;Database=ledger;Username=reader;Password=not-used;SSL Mode=Disable\n', stdio: ['pipe', 'ignore', 'inherit'] })
   fs.rmSync(grantsGateway.directory, { recursive: true, force: true })
   fs.mkdirSync(path.join(grantsGateway.directory, 'config', 'gateway'), { recursive: true })
   fs.mkdirSync(path.join(grantsGateway.directory, 'config', 'connections'), { recursive: true })
@@ -318,7 +322,7 @@ if (!isWorker) {
     'models/sales/facts.yml': 'name: sales.facts\nkind: mapped\ngrain: [sale_id]\ncolumns:\n  - {name: sale_id, type: BIGINT, nullable: false}\n',
   }, 'schema: connection/1\nname: postgres\nengine: postgres\ntls:\n  encrypt: false\n  trust_server_certificate: true\nextensions:\n  gateway:\n    batch_size: 500\n    classifier: warn\n')
   pairBuild(policyBuild.directory, 'policy-build-pairing-code.txt')
-  execFileSync('dotnet', ['exec', buildDll, 'secret', 'set', 'dbdata:build:connection:postgres:read', '--stdin', '--repo', policyBuild.directory], { input: 'Host=localhost;Database=ledger;Username=reader;Password=not-used;SSL Mode=Disable\n', stdio: ['pipe', 'ignore', 'inherit'] })
+  execFileSync('dotnet', ['exec', buildDll, 'secret', 'set', 'dbdatakit:build:connection:postgres:read', '--stdin', '--repo', policyBuild.directory], { input: 'Host=localhost;Database=ledger;Username=reader;Password=not-used;SSL Mode=Disable\n', stdio: ['pipe', 'ignore', 'inherit'] })
   fs.rmSync(policyGateway.directory, { recursive: true, force: true })
   fs.mkdirSync(path.join(policyGateway.directory, 'config', 'gateway'), { recursive: true })
   fs.mkdirSync(path.join(policyGateway.directory, 'config', 'connections'), { recursive: true })

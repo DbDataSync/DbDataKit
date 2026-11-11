@@ -9,7 +9,7 @@ namespace DbDataSync.Cli.Tests;
 /// </summary>
 public sealed class SecretCommandTests : IDisposable
 {
-    private const string Ref = "dbdata:sync:test:sentinel";
+    private const string Ref = "dbdatakit:sync:test:sentinel";
 
     private readonly string _root = Directory.CreateTempSubdirectory("dbdatasync-secret-cmd-").FullName;
 
@@ -80,7 +80,7 @@ public sealed class SecretCommandTests : IDisposable
         var (code, output) = Run(["set", "dbdatasync:connection:erp", "sup3r-secret"]);
 
         Assert.NotEqual(0, code);
-        Assert.Contains("dbdata:sync:", output);
+        Assert.Contains("dbdatakit:sync:", output);
         Assert.DoesNotContain("sup3r-secret", output);
     }
 

@@ -10,8 +10,8 @@ namespace DbDataRunner.Tests;
 /// <summary>UI06: <c>GET /api/v1/secrets/overview</c> of a runner says which secrets its store holds, which references the connections bound to its packages name, which of those no secret answers (missing) and which secrets nothing names (unused). Never a value.</summary>
 public sealed class RunnerSecretsOverviewTests
 {
-    private const string Bound = "dbdata:sync:connection:crm:run";
-    private const string Spare = "dbdata:sync:connection:old:run";
+    private const string Bound = "dbdatakit:sync:connection:crm:run";
+    private const string Spare = "dbdatakit:sync:connection:old:run";
     private const string Value = "overview-secret-value-4417";
 
     private static async Task Bind(RunnerHarness h, string reference)

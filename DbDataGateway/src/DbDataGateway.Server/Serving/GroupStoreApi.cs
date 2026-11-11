@@ -69,7 +69,7 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
     }
 
     /// <summary>One row by its key (<c>key.&lt;attribute&gt;</c>); <c>as_of</c> the version that held then; <c>history=true</c> every version.</summary>
-    public async Task<StoreAnswer> RowAsync(StoreCaller caller, string name, string entity, IReadOnlyDictionary<string, string> query, CancellationToken cancellationToken)
+    public async Task<StoreAnswer> RowAsync(StoreCaller caller, string name, string entity, IReadOnlyDictionary<string, string> query, CancellationToken cancellationToken, string? draft = null)
     {
         if (Needs(caller, ServerRole.Viewer) is { } denied) return denied;
         var (served, missing) = Served(name, entity);
@@ -87,11 +87,11 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
             }
             else row = await writer.GetAsync(entity, key, cancellationToken);
             return row is null ? StoreAnswer.Error(404, $"`{entity}` has no such row.") : StoreAnswer.Ok(RowJson.Row(row));
-        }, cancellationToken);
+        }, cancellationToken, draft);
     }
 
     /// <summary>A page of rows in key order: <c>limit</c> (100) and <c>offset</c> (0).</summary>
-    public async Task<StoreAnswer> RowsAsync(StoreCaller caller, string name, string entity, IReadOnlyDictionary<string, string> query, CancellationToken cancellationToken)
+    public async Task<StoreAnswer> RowsAsync(StoreCaller caller, string name, string entity, IReadOnlyDictionary<string, string> query, CancellationToken cancellationToken, string? draft = null)
     {
         if (Needs(caller, ServerRole.Viewer) is { } denied) return denied;
         var (served, missing) = Served(name, entity);
@@ -100,14 +100,14 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
             return StoreAnswer.Error(400, "limit and offset are whole numbers.");
         return await WithWriter(served!, async writer =>
             StoreAnswer.Ok(new JsonObject { ["rows"] = new JsonArray([.. (await writer.ListAsync(entity, limit, offset, cancellationToken)).Select(r => (JsonNode)RowJson.Row(r))]), ["limit"] = limit, ["offset"] = offset }),
-            cancellationToken);
+            cancellationToken, draft);
     }
 
     /// <summary>
     /// <c>{"changes": [...], "description": "..."}</c>: written at once, or kept as a change request (202) when the model asks for approval of this caller's writes. <paramref name="mayWrite"/>, when given, is asked about each
     /// change's entity first (an app's scope); a change outside it refuses the whole batch.
     /// </summary>
-    public async Task<StoreAnswer> ChangesAsync(StoreCaller caller, string name, byte[] body, Func<string, bool>? mayWrite, CancellationToken cancellationToken, Func<string, bool>? mayApply = null)
+    public async Task<StoreAnswer> ChangesAsync(StoreCaller caller, string name, byte[] body, Func<string, bool>? mayWrite, CancellationToken cancellationToken, Func<string, bool>? mayApply = null, string? draft = null)
     {
         if (Needs(caller, ServerRole.Author) is { } denied) return denied;
         var (served, missing) = Served(name);
@@ -118,6 +118,13 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
         if (bad is not null) return StoreAnswer.Error(400, bad);
         if (mayWrite is not null && changes!.Select(c => c.Entity).FirstOrDefault(e => !mayWrite(e)) is { } outside)
             return StoreAnswer.Error(403, $"This app may not write `{outside}`: its manifest does not give it that entity to write.");
+        // a draft keeps the writes of a preview or channel apart from the data (plan 21 CH01): checked by every rule on top of the draft and kept in it, never a change request until it is submitted
+        if (draft is not null)
+            return await WithWriter(served!, async writer =>
+            {
+                await writer.ApplyAsync(changes!, new WriteActor(caller.UserId, caller.AuditName), cancellationToken);
+                return StoreAnswer.Ok(new JsonObject { ["applied"] = changes!.Count, ["draft"] = draft });
+            }, cancellationToken, draft);
         // an app that may only propose (the manifest's `change request`) never applies: its batch waits for approval whatever the model says, even if the model would apply a write at once
         if (Waits(ChangeApproval.Needs(served!.Model, caller.IsAgent), changes!.Select(c => c.Entity), mayApply))
         {
@@ -130,6 +137,77 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
             return StoreAnswer.Ok(new JsonObject { ["applied"] = changes!.Count });
         }, cancellationToken);
     }
+
+    /// <summary>The drafts the model has in this group: a viewer lists them.</summary>
+    public async Task<StoreAnswer> DraftsAsync(StoreCaller caller, string name, CancellationToken cancellationToken)
+    {
+        if (Needs(caller, ServerRole.Viewer) is { } denied) return denied;
+        var (served, missing) = Served(name);
+        if (missing is not null) return missing;
+        return await WithWriter(served!, async writer =>
+            StoreAnswer.Ok(new JsonObject { ["drafts"] = new JsonArray([.. (await writer.DraftsAsync(cancellationToken)).Select(d => (JsonNode)new JsonObject { ["id"] = d.Id, ["writes"] = d.Writes, ["first_at"] = d.FirstAt.ToString("O"), ["last_at"] = d.LastAt.ToString("O") })]) }),
+            cancellationToken);
+    }
+
+    /// <summary>One draft with each write and whether it still applies on top of the data.</summary>
+    public async Task<StoreAnswer> DraftAsync(StoreCaller caller, string name, string id, CancellationToken cancellationToken)
+    {
+        if (Needs(caller, ServerRole.Viewer) is { } denied) return denied;
+        var (served, missing) = Served(name);
+        if (missing is not null) return missing;
+        return await WithWriter(served!, async writer =>
+        {
+            var entries = await writer.DraftEntriesAsync(cancellationToken);
+            return entries.Count == 0 ? StoreAnswer.Error(404, $"There is no draft '{id}'.") : StoreAnswer.Ok(DraftJson(id, entries));
+        }, cancellationToken, id);
+    }
+
+    /// <summary>Removes a draft (an author): the data and the other drafts are not touched.</summary>
+    public async Task<StoreAnswer> DiscardDraftAsync(StoreCaller caller, string name, string id, CancellationToken cancellationToken)
+    {
+        if (Needs(caller, ServerRole.Author) is { } denied) return denied;
+        var (served, missing) = Served(name);
+        if (missing is not null) return missing;
+        return await WithWriter(served!, async writer =>
+        {
+            var removed = await writer.DiscardDraftAsync(cancellationToken);
+            return removed == 0 ? StoreAnswer.Error(404, $"There is no draft '{id}'.") : StoreAnswer.Ok(new JsonObject { ["discarded"] = removed });
+        }, cancellationToken, id);
+    }
+
+    /// <summary>
+    /// Submits a draft as a change request (an author): every write of the draft is proposed as one request in the usual way (the rules run now, as at approval; the row ids the draft gave are kept) and the draft is removed.
+    /// A draft the data moved away from is refused with the answer a direct write would get, and stays.
+    /// </summary>
+    public async Task<StoreAnswer> SubmitDraftAsync(StoreCaller caller, string name, string id, byte[] body, CancellationToken cancellationToken)
+    {
+        if (Needs(caller, ServerRole.Author) is { } denied) return denied;
+        var (served, missing) = Served(name);
+        if (missing is not null) return missing;
+        if (Parse(body) is not { Ok: true, Node: var node }) return StoreAnswer.Error(400, "The body is not JSON.");
+        return await WithWriter(served!, async draft =>
+        {
+            var changes = await draft.DraftChangesAsync(cancellationToken);
+            if (changes.Count == 0) return StoreAnswer.Error(404, $"There is no draft '{id}'.");
+            var actor = new WriteActor(caller.UserId, caller.AuditName);
+            await Plain(draft).ValidateAsync(changes, actor, cancellationToken);
+            var request = requests.Propose(name, caller, (string?)node?["description"] ?? $"Submitted from the draft '{id}'", new JsonArray([.. changes.Select(c => (JsonNode)RowJson.Change(c))]));
+            await draft.DiscardDraftAsync(cancellationToken);
+            return new StoreAnswer(202, request.ToJson(withChanges: false));
+        }, cancellationToken, id);
+    }
+
+    private ModelWriter Plain(ModelWriter draftWriter) => draftWriter.WithoutDraft();
+
+    private static JsonObject DraftJson(string id, IReadOnlyList<DraftEntry> entries) => new()
+    {
+        ["id"] = id,
+        ["writes"] = new JsonArray([.. entries.Select(e => (JsonNode)new JsonObject
+        {
+            ["seq"] = e.Seq, ["at"] = e.At.ToString("O"), ["actor"] = e.Actor.Id, ["actor_name"] = e.Actor.Name, ["applies"] = e.Applies, ["problem"] = e.Problem,
+            ["changes"] = new JsonArray([.. e.Changes.Select(c => (JsonNode)RowJson.Change(c))]),
+        })]),
+    };
 
     /// <summary>Whether a batch waits for approval: the model asks for it, or the caller may apply only some of its entities (an app whose manifest gives `change request` and not `write` for one of them).</summary>
     internal static bool Waits(bool modelNeedsApproval, IEnumerable<string> entities, Func<string, bool>? mayApply) =>
@@ -181,7 +259,7 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
     }
 
     /// <summary>Opens the model's data source (published with it, O04b) and runs <paramref name="work"/> with a writer on the model's tables; the writer's refusals become the answers a DbDataStore server gives.</summary>
-    private async Task<StoreAnswer> WithWriter(ServedEntityModel served, Func<ModelWriter, Task<StoreAnswer>> work, CancellationToken cancellationToken)
+    private async Task<StoreAnswer> WithWriter(ServedEntityModel served, Func<ModelWriter, Task<StoreAnswer>> work, CancellationToken cancellationToken, string? draft = null)
     {
         var current = options();
         if (!current.DataSources.TryGetValue(served.DataSource, out var source))
@@ -196,7 +274,7 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
         {
             await using DbConnection connection = engine == "sqlserver" ? new Microsoft.Data.SqlClient.SqlConnection(text) : new Npgsql.NpgsqlConnection(text);
             await connection.OpenAsync(cancellationToken);
-            return await work(new ModelWriter(served.Model, connection, engine, schema: served.Model.Name));
+            return await work(new ModelWriter(served.Model, connection, engine, schema: served.Model.Name, draft: draft));
         }
         catch (WriteRefusedException refused) { return new StoreAnswer(422, RowJson.Refusal(refused)); }
         catch (VersionConflictException conflict) { return new StoreAnswer(409, new JsonObject { ["error"] = conflict.Message, ["expected_version"] = conflict.Expected, ["current_version"] = conflict.Current }); }

@@ -120,7 +120,7 @@ export const syncConnectionSchema: SchemaNode = {
       properties: {
         mode: { description: 'sql signs in with a login and a password; windows with the service\'s own account.', type: 'string' },
         user: { type: 'string' },
-        password_secret: { description: 'A reference to the secret that holds the password: secret:dbdata:sync:connection:<name>. Never the password.', type: 'string' },
+        password_secret: { description: 'A reference to the secret that holds the password: secret:dbdatakit:sync:connection:<name>. Never the password.', type: 'string' },
       },
     },
   },
@@ -145,7 +145,7 @@ export function secretFindings(text: string): SecretFinding[] {
   const found: SecretFinding[] = []
   text.replace(/\r\n/g, '\n').split('\n').forEach((line, i) => {
     if (line.trimStart().startsWith('#')) return
-    if (/^\s*password\s*:\s*\S/i.test(line)) { found.push({ line: i + 1, message: 'holds a password value under `password`. Name a secret with `password_secret: secret:dbdata:sync:connection:<name>` instead.' }); return }
+    if (/^\s*password\s*:\s*\S/i.test(line)) { found.push({ line: i + 1, message: 'holds a password value under `password`. Name a secret with `password_secret: secret:dbdatakit:sync:connection:<name>` instead.' }); return }
     const reference = /^\s*password_secret\s*:\s*['"]?([^'"\s]*)/i.exec(line)
     if (reference && reference[1] !== '') {
       const why = referenceProblem(reference[1])
@@ -181,7 +181,7 @@ export const replicationsOf = (paths: readonly string[]): string[] =>
 
 /** A new connection file: named, with its secret by reference. Same shape as the project's template. */
 export function newConnectionText(name: string, engine: string): string {
-  return ['schema: connection/1', `name: ${name}`, `engine: ${engine}`, 'address:', '  host: server.example.com', '  database: db', 'auth:', '  mode: sql', '  user: sync', `  password_secret: secret:dbdata:sync:connection:${name}`, ''].join('\n')
+  return ['schema: connection/1', `name: ${name}`, `engine: ${engine}`, 'address:', '  host: server.example.com', '  database: db', 'auth:', '  mode: sql', '  user: sync', `  password_secret: secret:dbdatakit:sync:connection:${name}`, ''].join('\n')
 }
 
 /** A new replication: its task (periodic, every 15 minutes, in the current format) and one table mapping between the two connections it names. The mapping holds a column cache with one `id` column on each side: edit it to the table's columns. */

@@ -47,13 +47,13 @@ public sealed class WorkspacePublishTests
 
         Assert.Equal(HttpStatusCode.Created, made.Response.StatusCode);
         var reference = (string)made.Body!["secret_ref"]!;
-        Assert.Equal("secret:dbdata:workspace:publisher-key:edge", reference);
+        Assert.Equal("secret:dbdatakit:workspace:publisher-key:edge", reference);
         Assert.StartsWith(gateway.Url.ToString().TrimEnd('/'), (string)made.Body["gateway"]!["url"]!);
         Assert.Contains("publisher", made.Body["gateway"]!["roles"]!.AsArray().Select(r => (string)r!));
         // the key is in the server's secret store (a file of the store), and no call returns it or the signing seed
         var names = new List<string>();
         await foreach (var name in WorkspaceSecrets.Open(server.Directory).ListAsync("")) names.Add(name.ToString());
-        Assert.Contains("dbdata:workspace:publisher-key:edge", names);
+        Assert.Contains("dbdatakit:workspace:publisher-key:edge", names);
         var listed = await server.AsAdmin(HttpMethod.Get, "/api/v1/publisher-keys");
         Assert.Equal(["edge"], listed.Body!["keys"]!.AsArray().Select(k => (string)k!["name"]!));
         Assert.DoesNotContain("seed", listed.Body.ToJsonString(), StringComparison.OrdinalIgnoreCase);
@@ -86,7 +86,7 @@ public sealed class WorkspacePublishTests
         Assert.Equal(HttpStatusCode.Conflict, noKey.Response.StatusCode);
         Assert.Contains("no publisher key called 'edge'", (string)noKey.Body!["error"]!);
 
-        await server.AsAdmin(HttpMethod.Put, "/api/v1/publisher-keys/edge", """{"secret_ref":"secret:dbdata:workspace:publisher-key:edge"}""");
+        await server.AsAdmin(HttpMethod.Put, "/api/v1/publisher-keys/edge", """{"secret_ref":"secret:dbdatakit:workspace:publisher-key:edge"}""");
         var unpaired = await Approver(server, $"/api/v1/projects/orders/workspaces/{workspace}/builds/{build}/publish", """{"target":"edge"}""");
         Assert.Equal(HttpStatusCode.Conflict, unpaired.Response.StatusCode);
         Assert.Contains("has no Gateway paired", (string)unpaired.Body!["error"]!);
@@ -183,7 +183,7 @@ public sealed class WorkspacePublishTests
         gateway.RefuseWith = null;
         var gone = await Approver(server, path, """{"target":"edge"}""");
         Assert.Equal(HttpStatusCode.Conflict, gone.Response.StatusCode);
-        Assert.Contains("secret:dbdata:workspace:publisher-key:edge", (string)gone.Body!["error"]!);
+        Assert.Contains("secret:dbdatakit:workspace:publisher-key:edge", (string)gone.Body!["error"]!);
         Assert.Contains("not in this server's secret store", (string)gone.Body["error"]!);
         Assert.Empty(gateway.Published);
     }
