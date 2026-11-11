@@ -86,4 +86,25 @@ public sealed class SubjectTests
         Assert.False(SubjectResolver.IsOrphaned(item, new SubjectCatalog()));
         Assert.Equal(SubjectStatus.Exists, SubjectResolver.Status(new SubjectCatalog(), new KnowledgeSubject("install", ["true"])));
     }
+
+    [Theory]
+    [InlineData("semantic-model:Sales/measure:revenue")]
+    [InlineData("store-model:Payroll")]
+    [InlineData("product:build,sync")]
+    [InlineData("install:true")]
+    public void A_key_is_read_back_into_the_subject_it_names(string key)
+    {
+        var subject = KnowledgeSubject.TryParse(key);
+
+        Assert.NotNull(subject);
+        Assert.Equal(key, subject.Key);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("nothing")]
+    [InlineData("semantic-model:")]
+    [InlineData("semantic-model:Sales/measure")]
+    [InlineData("semantic-model:Sales/:revenue")]
+    public void A_text_that_is_not_a_key_is_not_a_subject(string text) => Assert.Null(KnowledgeSubject.TryParse(text));
 }

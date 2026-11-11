@@ -13,5 +13,6 @@
     <Using Include="Xunit" />
     <ProjectReference Include="..\..\src\DbDataKit.State\DbDataKit.State.csproj" />
     <ProjectReference Include="..\..\src\DbDataKit.State.Engines\DbDataKit.State.Engines.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Knowledge.Index\DbDataKit.Knowledge.Index.csproj" />   <!-- plan 27a KN07: the knowledge index on the knowledge module -->
   </ItemGroup>
 </Project>

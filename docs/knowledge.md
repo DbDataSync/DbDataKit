@@ -1,6 +1,6 @@
 # Knowledge and search: what exists today
 
-**DbDataKnowledge is partly built: the library, not the product.** `DbDataKit.Knowledge` reads the item format; there is no index, no embedding connection, no `knowledge` command and no knowledge app. [Plan 27](plans/27-knowledge-agents-integrations-work.md) section 2 is the decided design; [plan 27a](plans/27a-knowledge-slices.md) slices it. This page lists the pieces that are built and that the design stands on, so a reader does not mistake the design for a feature.
+**DbDataKnowledge is partly built: the library and a search by words, not the product.** `DbDataKit.Knowledge` reads the item format and `DbDataKit.Knowledge.Index` finds chunks by their words on a state database; there is no vector index, no embedding connection, no `knowledge` command and no knowledge app. [Plan 27](plans/27-knowledge-agents-integrations-work.md) section 2 is the decided design; [plan 27a](plans/27a-knowledge-slices.md) slices it. This page lists the pieces that are built and that the design stands on, so a reader does not mistake the design for a feature.
 
 ## What a person or an agent can use now
 
@@ -23,6 +23,7 @@
 | Scope matching (KN03) | which instructions and guardrails apply to what is in play, broad to narrow, guardrails apart, by audience, agent and channel | `ScopeMatcher` |
 | The install knowledge project (KN35) | a template with `shared/`, `build/`, `sync-and-build/` and the administrators' `policy/` folder; `policy/` holds only guardrails owned by `administrators` | `InstallKnowledge` |
 | Chunking (KN04) | long references split at headings, then paragraphs, then sentences; tables and code are never cut; the chunk's hash is of what is embedded, so only a changed chunk is embedded again | `Chunker` |
+| The index on a state database (KN07, text-search half) | items, subjects and chunks per channel in the `knowledge` state module, found by their words with the engine's own text search (SQLite FTS5, PostgreSQL `tsvector`, a term match on SQL Server), under the same access filter, with the hash check that does not index an unchanged item again; no model and no vectors | `KnowledgeModule`, `KnowledgeStore`, `StateKnowledgeIndex` (`DbDataKit.Knowledge.Index`) |
 | Search and the access filter (KN09, with the fake of KN05) | a question is embedded and the nearest chunks are found among those the caller may see (a role on the subject; fail closed on a gone or unknown subject; an item with no subject follows its `for`), at most three chunks per item, adjacent ones joined | `KnowledgeSearch`, `KnowledgeAccess`, `InMemoryKnowledgeIndex`, `FakeEmbeddingGenerator` |
 
 [Shared/src/DbDataKit.Knowledge/README.md](../Shared/src/DbDataKit.Knowledge/README.md) describes each piece.
@@ -33,7 +34,7 @@
 | --- | --- |
 | The `knowledge/1` item format (role, scope, owner), `_knowledge.yml` defaults, knowledge projects in git | **built as a library** (above); not published, not served, no editor screen yet |
 | Generated knowledge from published definitions; the `build-metadata` kind (Build publishing its metadata to the serving group) | not started; the published kinds it would read are `semantic-model`, `entity-model`, `data-source`, `app` |
-| Chunking, embedding models (built in, Ollama, OpenAI-compatible), the vector index per channel, `sqlite-vec` | not started; only the engine feature check exists |
+| Embedding models (built in, Ollama, OpenAI-compatible), the vector index per channel, `sqlite-vec` | not started; only the engine feature check exists and search by words (above) |
 | `knowledge search`, `show`, `about`, `check`, `context`, `suggest`, `index` commands | not started |
 | The serving layer's `knowledge` module, suggestions and approvals at the edge, the knowledge app, `@dbdatakit/knowledge-ui` | not started |
 | Verified queries (`verified-query` items, "Verify this answer", re-verification when a model changes) | not started; saved queries and the JSON request are the pieces they pin |

@@ -1,0 +1,11 @@
+# DbDataKit.Knowledge.Index
+
+The knowledge index on a state database (plan 27a KN07, the text-search half). `DbDataKit.Knowledge` holds items, chunks, scope and the access filter and needs no server; this library keeps the chunks of a channel's items in the `knowledge` module of `DbDataKit.State` (`KnowledgeModule`, `KnowledgeStore`) and finds them by their words.
+
+- **`StateKnowledgeIndex`** (one per channel): `Put(item, chunks, source, version)` writes an item and its chunks in one transaction, replacing what was there; an item whose hash did not change is not written again. `Remove`, `Status`.
+- **`SearchAsync(question, caller, catalog)`** finds the chunks that have any of the question's words, applies `KnowledgeAccess.Visible` to each item at the time of the question (so an access change takes effect at once, with no rebuild) and assembles the hits as `KnowledgeSearch` does: per item at most three chunks, adjacent ones joined, with the title, the heading path, the source and the version.
+- **The engine's own text search**, made on first use and always derivable from the chunks: SQLite FTS5 (bm25), PostgreSQL `tsvector` with a GIN index on an expression (`ts_rank_cd`, configuration `simple`: no stemming, any language), and a portable term match (a count of the question's words) where an engine has none, which is SQL Server. SQL Server's full-text feature is an optional install this suite does not require; the term match is what it gets, and it is honest about being basic.
+- **A question** is its words (lower case, letters and digits, the words that mean nothing left out, at most twelve), searched by *any* of them and ranked by how well a chunk matches; no character of a question reaches the engine's query language.
+- **Vectors are not here.** The vector index (meaning-based search, `sqlite-vec`, ONNX) is KN07's other half and KN08; it will be a module of its own beside this one, because a module that needs an engine feature refuses to exist without it and words must be found on every engine.
+
+Tests: `DbDataKit.State.Tests/KnowledgeIndexTests.cs` (SQLite always; SQL Server and PostgreSQL when `DBDATAKIT_TEST_SQLSERVER` and `DBDATAKIT_TEST_POSTGRES` name them).
