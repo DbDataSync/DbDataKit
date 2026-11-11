@@ -53,15 +53,23 @@ describe('the explorer', () => {
     expect(text).toContain('data-testid="scan-text-0">SELECT 1 FROM t')
     expect(text).toContain('Nothing was sent to a source')
   })
-  it('draws a matrix with its total row, and a chart that the renderer refuses shows the refusal', () => {
-    const totals: RunResult = { ...result, columns: [...result.columns, { name: '_rollup_level', type: 'integer' }], rows: [['East', 10, 0], ['West', 5, 0], [null, 15, 1]] }
-    const matrix = html({ result: totals, shape: 'matrix' })
+  it('draws what the Gateway\'s renderer made of the matrix chosen, and says nothing of its own about the cells', () => {
+    const rendered = { kind: 'rendered_view' as const, status: 'complete' as const, views: [{ id: 'result', type: 'matrix' as const, notice: null, columns: [{ labels: ['Revenue'] }], rows: [{ labels: ['East'], cells: [{ v: 10, text: '10' }] }, { labels: ['Total'], total: true, cells: [{ v: 15, text: '15' }] }] }] }
+    const matrix = html({ result, shape: 'matrix', rendered })
+    expect(matrix).toContain('data-testid="view-drawn"')
     expect(matrix).toContain('data-testid="vz-matrix-result"')
     expect(matrix).toContain('Total')
-    const refused = html({ result, shape: 'bar', encoding: { rows: ['nope'], columns: [], value: 'revenue' } })
-    expect(refused).toContain('data-testid="view-error"')
-    expect(refused).toContain('view_unknown_field')
-    expect(refused).not.toContain('view-drawn')
+    expect(html({ result, shape: 'matrix', rendering: true })).toContain('data-testid="view-rendering"')
+    expect(html({ result, shape: 'table', rendered })).not.toContain('view-drawn')
+  })
+  it('shows the renderer\'s refusal of a view with its code, and a problem reaching it apart', () => {
+    const refused = html({ result, shape: 'bar', rendered: { kind: 'rendered_view', status: 'failed', errors: [{ code: 'stack_not_additive', path: '$.views[0]', message: 'orders.order_count does not add up, so it cannot be stacked.' }] } })
+    expect(refused).toContain('data-testid="view-refused"')
+    expect(refused).toContain('stack_not_additive')
+    expect(refused).not.toContain('data-testid="view-drawn"')
+    const broken = html({ result, shape: 'bar', renderError: 'The Gateway could not be reached.' })
+    expect(broken).toContain('data-testid="view-error"')
+    expect(broken).toContain('could not be reached')
   })
   it('offers to pin what it ran to a dashboard of the person', () => {
     expect(html({ result, text: '{"query": {"measures": ["revenue"], "attributes": ["customer.region"], "limit": 5}}' })).toContain('href="/views?pin_model=shop_sales')

@@ -1,6 +1,6 @@
-import { validateRenderedView } from '@dbdatakit/visuals'
+import { validateViewDocument } from '@dbdatakit/visuals'
 import { describe, expect, it } from 'vitest'
-import { bodyFor, chartOf, encodingProblem, matrixOf, members, picksOf, pinRequest, refusal, requestFromPicks, requestText, roles, scansOf, sqlFromPicks, suggest, toggle, viewDocument } from './explorer'
+import { bodyFor, members, picksOf, pinRequest, refusal, requestFromPicks, requestText, roles, scansOf, sqlFromPicks, suggest, toggle, totalsOf, viewSpecFor } from './explorer'
 import type { RunResult } from './runTypes'
 import { view } from './modelBrowserFixture'
 
@@ -64,44 +64,42 @@ describe('views of a result', () => {
     expect(suggest(result())).toEqual({ rows: ['customer.region'], columns: ['quarter'], value: 'revenue' })
     expect(roles(result()).measures).toEqual(['revenue'])
   })
-  it('draws a matrix with the headings of both attributes and the server\'s numbers in the cells', () => {
-    const m = matrixOf(result(), suggest(result()))
-    expect(m.rows.map((r) => r.labels)).toEqual([['East'], ['West']])
-    expect(m.columns.map((c) => c.labels)).toEqual([['Q1'], ['Q2']])
-    expect(m.rows[0]!.cells.map((c) => c.v)).toEqual([10, 20])
-    expect(validateRenderedView({ kind: 'rendered_view', status: 'complete', views: [m] })).toEqual([])
-  })
-  it('reads totals from the result: the rows the rollup column marks, as the total row and the total column, never added up here', () => {
-    const withTotals = result({
-      columns: [{ name: 'customer.region', type: 'string' }, { name: 'quarter', type: 'string' }, { name: 'revenue', type: 'number' }, { name: '_rollup_level', type: 'integer' }],
-      rows: [['East', 'Q1', 10, 0], ['West', 'Q1', 5, 0], [null, 'Q1', 999, 1], ['East', null, 777, 1], [null, null, 5000, 2]],
+  it('asks the Gateway for a matrix by what is chosen and never carries a cell', () => {
+    const spec = viewSpecFor(result(), 'matrix', suggest(result()))!
+    expect(spec).toEqual({
+      spec_version: '0.3', kind: 'view', result: { ref: 'result' },
+      views: [{ type: 'matrix', id: 'result', rows: ['customer.region'], columns: ['quarter'], values: [{ field: 'revenue' }] }],
     })
-    expect(roles(withTotals).hasTotals).toBe(true)
-    const m = matrixOf(withTotals, suggest(withTotals))
-    expect(m.rows.map((r) => [r.labels[0], r.total ?? false])).toEqual([['East', false], ['West', false], ['Total', true]])
-    expect(m.columns.map((c) => [c.labels[0], c.total ?? false])).toEqual([['Q1', false], ['Total', true]])
-    const total = m.rows[2]!
-    expect(total.cells.map((c) => c.v)).toEqual([999, 5000])
-    expect(validateRenderedView({ kind: 'rendered_view', status: 'complete', views: [m] })).toEqual([])
+    expect(validateViewDocument(spec)).toEqual([])
+    expect(JSON.stringify(spec)).not.toContain('"East"')
   })
-  it('draws a bar chart inside the closed subset, leaving a total out of the bars', () => {
-    const withTotals = result({ columns: [{ name: 'customer.region', type: 'string' }, { name: 'revenue', type: 'number' }, { name: '_rollup_level', type: 'integer' }], rows: [['East', 10, 0], ['West', 5, 0], [null, 15, 1]] })
-    const e = suggest(withTotals)
-    const chart = chartOf(withTotals, 'bar', e)
-    expect(chart.vega_lite.data.values).toEqual([{ 'customer.region': 'East', revenue: 10 }, { 'customer.region': 'West', revenue: 5 }])
-    expect(validateRenderedView({ kind: 'rendered_view', status: 'complete', views: [chart] })).toEqual([])
-    expect(viewDocument(withTotals, 'table', e)).toBeNull()
+  it('asks for the totals the result has and no others: a total row for the row attributes, a total column for the column attributes', () => {
+    const columns = [{ name: 'customer.region', type: 'string', binding: 'customer.region' }, { name: 'quarter', type: 'string', binding: 'date.quarter' }, { name: 'revenue', type: 'number' }, { name: '_rollup_level', type: 'integer' }]
+    const levels = (rolled: string[][]) => ({ level_field: '_rollup_level', levels: [{ level: 0, rolled_up: [] }, ...rolled.map((r, i) => ({ level: i + 1, rolled_up: r }))] })
+    const e = { rows: ['customer.region'], columns: ['quarter'], value: 'revenue' }
+    expect(roles(result({ columns })).hasTotals).toBe(true)
+    // the cube: both
+    expect(totalsOf(result({ columns, totals: levels([['date.quarter'], ['customer.region'], ['customer.region', 'date.quarter']]) }), e)).toEqual({ rows: true, columns: true })
+    // only the columns' attribute rolled up: a total column, not a row
+    expect(totalsOf(result({ columns, totals: levels([['date.quarter']]) }), e)).toEqual({ columns: true })
+    expect(viewSpecFor(result({ columns, totals: levels([['customer.region']]) }), 'matrix', e)!.views[0]!.totals).toEqual({ rows: true })
+    // none: nothing is asked, so the renderer is not made to refuse
+    expect(totalsOf(result(), e)).toBeUndefined()
+    expect(viewSpecFor(result(), 'matrix', e)!.views[0]).not.toHaveProperty('totals')
   })
-  it('refuses an encoding the result cannot carry, in words with a code', () => {
-    const r = result()
-    expect(encodingProblem(r, 'bar', { rows: ['nope'], columns: [], value: 'revenue' })).toContain("view_unknown_field: 'nope'")
-    expect(encodingProblem(r, 'bar', { rows: ['customer.region'], columns: [], value: 'quarter' })).toContain('view_value_not_numeric')
-    expect(encodingProblem(r, 'line', { rows: [], columns: [], value: 'revenue' })).toContain('view_missing_rows')
-    expect(encodingProblem(r, 'bar', suggest(r))).toBeNull()
+  it('asks for a bar or line chart in the closed subset, the value along the first row attribute and coloured by the first column attribute', () => {
+    const spec = viewSpecFor(result(), 'line', suggest(result()))!
+    expect(spec.views[0]).toEqual({
+      type: 'chart', id: 'result',
+      vega_lite: { mark: 'line', encoding: { x: { field: 'customer.region', type: 'nominal' }, y: { field: 'revenue', type: 'quantitative' }, color: { field: 'quarter', type: 'nominal' } } },
+    })
+    expect(validateViewDocument(spec)).toEqual([])
+    expect((viewSpecFor(result(), 'bar', { rows: ['customer.region'], columns: [], value: 'revenue' })!.views[0]!.vega_lite as { encoding: object }).encoding).not.toHaveProperty('color')
   })
-  it('lets the renderer refuse a chart that tries to compute or fetch', () => {
-    const chart = chartOf(result(), 'bar', suggest(result()))
-    const sneaky = { ...chart, vega_lite: { ...chart.vega_lite, transform: [{ calculate: '1', as: 'x' }] } }
-    expect(validateRenderedView({ kind: 'rendered_view', status: 'complete', views: [sneaky] }).map((i) => i.code)).toContain('vega_disallowed')
+  it('draws a table itself, and leaves a choice the result cannot carry to the renderer\'s refusal', () => {
+    expect(viewSpecFor(result(), 'table', suggest(result()))).toBeNull()
+    // an unknown field and an empty value are sent as they are: the Gateway answers in the engine\'s words
+    expect(viewSpecFor(result(), 'bar', { rows: ['nope'], columns: [], value: 'revenue' })!.views[0]!.vega_lite).toMatchObject({ encoding: { x: { field: 'nope' } } })
+    expect(viewSpecFor(result(), 'matrix', { rows: ['customer.region'], columns: [], value: '' })!.views[0]).toMatchObject({ values: [] })
   })
 })

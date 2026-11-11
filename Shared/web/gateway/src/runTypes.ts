@@ -1,7 +1,10 @@
+import type { RenderedViewDocument } from '@dbdatakit/visuals'
+
 /** What `POST /api/v1/my/runs` answers (plan 14a SL14, D36): the engine's result as the REST route reads it; an explain's rows are its scans (status `explained`). */
 export interface RunResult {
   status: 'ok' | 'explained' | 'unsupported'
-  columns: { name: string; type: string }[]
+  /** `binding` is the model member a column is (a result drawn through the renderer carries it). */
+  columns: { name: string; type: string; binding?: string }[]
   rows: unknown[][]
   warnings: string[]
   request_hash: string | null
@@ -9,6 +12,12 @@ export interface RunResult {
   remaining?: unknown
   reason?: string
   model_version?: number | null
+  /** The kept result a view of it is drawn from (a run that asked `keep` or sent a `view`); see `runs.render`. */
+  result_id?: string
+  /** The rollup levels of a result with totals, and the attributes each rolled up (logical names). */
+  totals?: { level_field: string; levels: Array<{ level: number; rolled_up: string[] }> }
+  /** What the Gateway's renderer made of the `view` that was sent: the matrix or chart, or the engine's errors (plan 14a D37). */
+  rendered_view?: RenderedViewDocument
 }
 
 /** One record of a statement (SL23). `caller` is the person's key: the email or UPN (D35). */

@@ -1,4 +1,5 @@
 import { put, request } from '@dbdatakit/shell'
+import type { RenderedViewDocument } from '@dbdatakit/visuals'
 import type { InstanceRequest, NavigationRequest, PublishBody } from './appEditors'
 import type { ReplayResult, RunDetail, RunResult, RunRow, SavedQueryRow, SavedQueryVersionRow } from './runTypes'
 import type {
@@ -42,6 +43,8 @@ export const gatewayApi = {
   /** A person's statements on the models (plan 14a SL14, SL15, SL23, SL24): run one as the person (the explorer's call: one function, so the REST listener of SL31 can replace it), the record of what they ran, replay one. */
   runs: {
     run: (body: Record<string, unknown>) => request<RunResult>(`${v1}/my/runs`, { method: 'POST', body: JSON.stringify(body) }),
+    /** Draws a kept result as a view document (a matrix or a chart) through the Gateway's renderer, running nothing; a 410 says the result is gone and the statement must be run again (with the `view`). */
+    render: (resultId: string, view: unknown) => request<{ result_id: string; rendered_view: RenderedViewDocument }>(`${v1}/my/runs/${enc(resultId)}/render`, { method: 'POST', body: JSON.stringify({ view }) }),
     list: (opts: { model?: string; all?: boolean; limit?: number } = {}) => {
       const q = new URLSearchParams()
       if (opts.model) q.set('model', opts.model)
