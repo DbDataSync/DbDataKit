@@ -30,6 +30,7 @@
     <DbDataKitReference Include="Secrets.Store" />   <!-- the key a publishing client signs its tokens with -->
     <DbDataKitReference Include="Secrets.Windows" />
     <DbDataKitReference Include="Runner.Abstractions" />   <!-- package/1 manifests -->
+    <DbDataKitReference Include="Runner.Packaging" />   <!-- package build and package test: a csx integration is built with Roslyn and the NuGet client, no SDK (plan 27a IX20) -->
     <DbDataKitReference Include="Runner.Client" />   <!-- the publishing client: package pair and package publish (moved out of this program by plan 28c E07, so dbdatabuild publishes through the same code) -->
     <DbDataKitReference Include="Runner.Api" />   <!-- the management API and the publishing service layer, shared with the console's embedded runner (R20) -->
     <DbDataKitReference Include="Runner" />   <!-- the engine: artifact cache, executor, scheduler loop -->

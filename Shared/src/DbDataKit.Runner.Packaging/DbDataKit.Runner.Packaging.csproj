@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Runner.Packaging</RootNamespace>
+    <PackageId>DbDataKit.Runner.Packaging</PackageId>
+    <Description>Builds and tests an integration project into a runner package without the .NET SDK (plan 27a IX20, docs/integrations.md): the C# source files of a csx project are compiled with Roslyn against the runtime's own assemblies, the packages their #r "nuget:" lines ask for are restored with DbDataKit.Scripting, and the result is a package/1 manifest and a files folder the runner takes as it is.</Description>
+    <IsPackable>true</IsPackable>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataKit.Scripting\DbDataKit.Scripting.csproj" />
+    <ProjectReference Include="..\DbDataKit.Runner.Abstractions\DbDataKit.Runner.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Runner.Kit\DbDataKit.Runner.Kit.csproj" />
+    <ProjectReference Include="..\DbDataKit.Runner.Kit.Testing\DbDataKit.Runner.Kit.Testing.csproj" />
+  </ItemGroup>
+</Project>
