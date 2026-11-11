@@ -145,7 +145,7 @@ Each is a deliberate limit, a gap a slice of [plan 26](plans/26-app-publishing.m
 - **Remote command line**: `nav-save`, the removals, `approval-list` and `approval-revoke` have no `--to` form; the person of a signed-in console is not passed to a remote verb (the token names the paired client). The Gateway's Apps screen does all of them.
 - **Views apps**: reads are up to 2000 rows an entity, with filter, sort and paging in the browser until the Store has a query; a detail or edit view addresses a row by its key: one parameter named by the view's `key`, or for a composite key one parameter per key attribute, named as the attribute (a link supplies all of them); semantic-layer widgets are not built; the Playwright story (list, edit, a refused row) is not written (AP27).
 - **Store instances**: `scope: shared` entities in `column` mode, a token scoped to instances, per-instance roles for the Store and moving a model between instance modes are not built (Z12b); the migration does the expand step only, no NOT NULL, drop or retype (Z13b). A model with instances cannot be published to a group yet (plan 20 O10c).
-- **Tests**: the Playwright story of `apps-host.spec.ts` (an unapproved fallback with its reason, an approved portal on the host origin with the `_audit` row, a revoked one falls back) is written and has not been run; it needs PostgreSQL, the built Gateway and Store and `npm ci` (AP27).
+- **Tests**: the Playwright stories of `apps-host.spec.ts` (and `apps-policy.spec.ts`) (an unapproved fallback with its reason, an approved portal on the host origin with the `_audit` row, a revoked one falls back) is written and has not been run; it needs PostgreSQL, the built Gateway and Store and `npm ci` (AP27).
 
 ## Decisions
 
