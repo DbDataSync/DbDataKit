@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dbdatakit:schemas:agent-policy:1",
+  "title": "agent-policy/1: the install policy for agents",
+  "description": "The settings that are not text (plan 27 section 3.5): prompting minimums, limits and the data rule for agents on a cloud provider. What agents should read is a guardrail item of the install knowledge project, not part of this. The reader (AgentPolicyLoader) is the authority; a test keeps the keys equal.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["agent-policy"],
+  "properties": {
+    "agent-policy": { "const": 1, "description": "The format number." },
+    "prompting": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "minimums": {
+          "type": "object",
+          "description": "A trait and the least strict setting any agent may use for a tool that has it.",
+          "additionalProperties": false,
+          "properties": {
+            "reads-definitions": { "$ref": "#/$defs/setting" },
+            "reads-data": { "$ref": "#/$defs/setting" },
+            "writes-definitions": { "$ref": "#/$defs/setting" },
+            "writes-data": { "$ref": "#/$defs/setting" },
+            "changes-structure": { "$ref": "#/$defs/setting" },
+            "deletes": { "$ref": "#/$defs/setting" },
+            "outward": { "$ref": "#/$defs/setting" },
+            "elevated": { "$ref": "#/$defs/setting" }
+          }
+        },
+        "tools": { "type": "object", "description": "A tool by name and its setting.", "additionalProperties": { "$ref": "#/$defs/setting" } }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "conversation": { "$ref": "#/$defs/limitSet" },
+        "person": { "$ref": "#/$defs/limitSet" },
+        "install": { "$ref": "#/$defs/limitSet" },
+        "notify-at": { "type": "integer", "minimum": 1, "maximum": 99, "description": "The share of a limit, in percent, at which administrators are told." }
+      }
+    },
+    "data-rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cloud-providers": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "reads-data": { "enum": ["allow", "ask", "refuse"] } }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "setting": { "enum": ["ask", "ask-once", "do-not-ask"] },
+    "limitSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "turns": { "type": "integer", "minimum": 1 },
+        "tool-calls": { "type": "integer", "minimum": 1 },
+        "tokens": { "type": "integer", "minimum": 1 },
+        "cost": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    }
+  }
+}
