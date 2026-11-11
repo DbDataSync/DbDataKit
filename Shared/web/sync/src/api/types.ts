@@ -138,6 +138,19 @@ export interface MappingReadState {
   watermarkTimeUtc: string | null
 }
 
+/** One change to a mapping's position, intent or hold as the progress store's history keeps it (plan 28c E15b); one row per part that changed in a version, newest first. */
+export interface PositionChange {
+  id: number
+  version: number
+  part: string
+  old: string | null
+  new: string | null
+  /** Who made it: a person's name for a rewind, the engine's name for a pass. */
+  actor: string | null
+  runId: string | null
+  at: string
+}
+
 /** Both required, deliberately: recovering from a hold sets the intent and clears the hold as one
  * call, so there is never a window where the hold is gone and the old intent is still what the next
  * pass would honour. See phase 100. */

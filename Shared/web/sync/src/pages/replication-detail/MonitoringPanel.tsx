@@ -323,6 +323,7 @@ function IntentHoldCell({ replicationName, name, task, mapping, source, lag, rea
 
       {dialogOpen && intent && (
         <MappingReadStateDialog
+          replicationName={replicationName}
           mappingName={name}
           sourceLabel={resolvedSource ? `${resolvedSource.schema}.${resolvedSource.table}` : name}
           currentIntent={intent}
