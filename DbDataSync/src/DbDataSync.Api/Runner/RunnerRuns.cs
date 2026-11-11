@@ -15,6 +15,9 @@ public interface IRunnerRuns
     Task<IReadOnlyList<ClientLogLine>?> LogsAsync(Guid id, long? after, int limit, CancellationToken ct);
 
     Task<IReadOnlyList<ClientStep>> StepsAsync(string task, string step, int limit, DateTimeOffset? before, string? key, CancellationToken ct);
+
+    /// <summary>Copies the file a completed step kept as its streamed result into <paramref name="destination"/> (plan 28c E06e); false when the runner has no such result any more.</summary>
+    Task<bool> StepPayloadAsync(string task, string step, Guid payload, Stream destination, CancellationToken ct);
 }
 
 /// <summary>The runner could not be asked (not linked, not reachable, or it refused): said as such, never as a history that is empty.</summary>

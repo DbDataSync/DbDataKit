@@ -212,7 +212,7 @@ The certificate is validated, not waved through. On an https address of this mac
 `<repo>/tls/dbdatasync.cer`, when the server presents exactly that certificate; a server that presents another certificate on a loopback address still answers, and the check says on standard error that the certificate did not validate.
 On an https address anywhere else the certificate must validate as it would for any client, and a self-signed one fails the check (there is no switch that turns this off; install the certificate in the machine's trusted store).
 
-### `dbdatasync secret set|list|remove`
+### `dbdatasync secret set|list|remove|send`
 
 Thin wrappers over the encrypted secret store connections use (see "Secrets," below) — reachable without
 going through a connection's own save flow. Never prints a stored value back.
@@ -222,6 +222,7 @@ going through a connection's own save flow. Never prints a stored value back.
 | `dbdatasync secret set <ref> <value>` | stores `value` under `ref` |
 | `dbdatasync secret list [<ref> ...]` | reports whether each given ref is currently set (given none, checks the one fixed ref this build defines: `dbdata:sync:config:stateConnectionString`) |
 | `dbdatasync secret remove <ref>` | deletes a stored value |
+| `dbdatasync secret send --to runner <connection> --server <runner> [--code <code>]` | sends the connection's run login (its second login, or its only one) over the paired HTTPS to the runner's encrypted store as `dbdata:sync:connection:<name>:run`; never the read login of a connection that has both, never printed; needs a pairing that allows the admin role (plan 28c E20d) |
 
 Example — setting the state store's password for a `server.yaml`-configured deployment:
 
@@ -630,11 +631,11 @@ connection inventory (`GET /api/v1/connections`) lists both references (`secret_
 ### On a runner
 
 A runner never has the read login. A replication set published to a runner declares a slot per connection; the administrator of the runner binds each slot to a connection of the runner's own (`PUT /api/runner/package/bindings`, the Runner screen), and the runner puts
-that connection's login in the engine's environment under both `DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_<NAME>` and `DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_<NAME>_RUN` (the engine reads whichever its connection names; it opens with the run role only). Today the
-value reaches the runner's machine by hand, which is the one manual step left; there is no command that sends it yet (plan 28c, E20d). On the runner's machine, for each connection of the set:
+that connection's login in the engine's environment under both `DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_<NAME>` and `DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_<NAME>_RUN` (the engine reads whichever its connection names; it opens with the run role only). The
+value reaches the runner with `dbdatasync secret send --to runner <connection> --server <runner>` (plan 28c, E20d; step 2 below is then not needed), or by hand. For each connection of the set:
 
 1. Write `<runner directory>/connections/<name>.yaml`, a `connection/1` file of the same name as the Sync connection, whose login is the run login: `auth: {mode: sql, user: <run user>, password_secret: env:<NAME>_RUN_PASSWORD}` (or
-   `secret:dbdata:sync:connection:<name>:run`, which the runner reads from its environment as `DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_<NAME>_RUN`, or from a file of that name in `CREDENTIALS_DIRECTORY`).
+   `secret:dbdata:sync:connection:<name>:run`, which the runner reads from its encrypted store when it was sent there, else from its environment as `DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_<NAME>_RUN`, or from a file of that name in `CREDENTIALS_DIRECTORY`).
 2. Put the password where that reference looks: in the environment of the runner's service (a systemd unit's `LoadCredential=` and `CREDENTIALS_DIRECTORY`, or an `EnvironmentFile=` readable by the service account only; on Windows the service's environment), never in the file and never on a
    command line. Restart the runner after setting an environment variable; a credentials file is read at each run.
 3. Bind the slot to that connection (the Runner screen, or `dbdatarunner` bindings) and check it: a run whose login is not found fails naming the slot, the connection and the reference, and never falls back to another login.

@@ -1340,6 +1340,52 @@
       "if": {
         "properties": {
           "command": {
+            "const": "secret send"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_secret_send"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "secret send"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_secret_send"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "secret set"
           },
           "ok": {
@@ -2476,6 +2522,10 @@
       "additionalProperties": false
     },
     "data_secret_remove": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "data_secret_send": {
       "type": "object",
       "additionalProperties": false
     },

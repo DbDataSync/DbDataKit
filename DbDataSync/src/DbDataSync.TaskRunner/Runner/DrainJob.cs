@@ -154,11 +154,11 @@ public static class DrainSteps
 
     /// <summary>The file of a verification result (plan 28c E06d): the parquet the check wrote into the run's scratch, streamed into a payload of the run (under the run's retention) before the scratch is deleted; the record of <see cref="Verification"/> names it.</summary>
     public static readonly StreamStep<VerificationResultRecord> VerificationFile =
-        Step.Stream<VerificationResultRecord>("verification-file", r => $"{r.MappingName}/{r.CheckName}/{r.CompletedAtUtc.UtcTicks}", "application/vnd.apache.parquet");
+        Step.Stream<VerificationResultRecord>(VerificationResultPayload.FileStepName, r => $"{r.MappingName}/{r.CheckName}/{r.CompletedAtUtc.UtcTicks}", "application/vnd.apache.parquet");
 
     /// <summary>A verification result (plan 28c E11b): the record the verification wrote, an output of the run keyed by mapping, check and time; the Sync back end reads it from the run for a runner-owned replication. Its path is the payload of <see cref="VerificationFile"/>.</summary>
     public static readonly ValueStep<VerificationResultRecord, VerificationResultRecord> Verification =
-        Step.Value<VerificationResultRecord, VerificationResultRecord>("verification-result", r => $"{r.MappingName}/{r.CheckName}/{r.CompletedAtUtc.UtcTicks}");
+        Step.Value<VerificationResultRecord, VerificationResultRecord>(VerificationResultPayload.RecordStepName, r => $"{r.MappingName}/{r.CheckName}/{r.CompletedAtUtc.UtcTicks}");
 }
 
 public static class DrainUnits

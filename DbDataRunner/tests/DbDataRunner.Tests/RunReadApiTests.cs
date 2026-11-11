@@ -180,4 +180,65 @@ public sealed class RunReadApiTests
         Assert.Equal(HttpStatusCode.BadRequest, (await h.GetAsync("/api/v1/tasks/Sample/dev/ok/steps/pass-record", ServerRole.Viewer)).Status);
         Assert.Equal(HttpStatusCode.Unauthorized, (await h.CallAsync(HttpMethod.Get, Base + "pass-record", ServerRole.Viewer, token: false)).Status);
     }
+
+    [Fact]
+    public async Task The_file_a_step_kept_as_its_result_is_served_to_a_viewer_only_for_that_task_and_that_step_and_a_missing_one_is_not_found()
+    {
+        await using var h = new RunnerHarness(StateEngineIds.Sqlite);
+        h.Install(SamplePackage.Task("ok"));
+        await h.StartAsync();
+        var steps = new StepStore(h.State, new ProgressKey("sample", "dev", "ok"));
+        var begin = (StepBegin.Run)steps.Begin("chain-1", "verification-file", "orders/check/1", 1);
+        var content = Enumerable.Range(0, 3000).Select(i => (byte)(i % 251)).ToArray();
+        Guid payload;
+        await using (var writer = steps.OpenStream(begin, "verification-file", "application/vnd.apache.parquet"))
+        {
+            writer.Write(content);
+            writer.Complete();
+            payload = writer.Id;
+        }
+
+        steps.CompleteStream("chain-1", "verification-file", "orders/check/1", 1, payload);
+        var unfinished = (StepBegin.Run)steps.Begin("chain-1", "verification-file", "orders/check/2", 1);
+        Guid half;
+        await using (var writer = steps.OpenStream(unfinished, "verification-file"))
+        {
+            writer.Write(content);
+            half = writer.Id;      // never completed
+        }
+
+        var directory = Directory.CreateTempSubdirectory("dbdr-payload-client-").FullName;
+        try
+        {
+            var client = new RunnerPublishClient(new RunnerClientStore(directory), _ => null);
+            var server = h.Url.ToString();
+            var code = h.NewCode(ServerRole.Viewer);
+
+            using var copy = new MemoryStream();
+            var found = await client.StepPayloadAsync(server, code, "sample", "dev", "ok", "verification-file", payload, copy);
+            using var wrongStep = new MemoryStream();
+            var otherStep = await client.StepPayloadAsync(server, null, "sample", "dev", "ok", "pass-record", payload, wrongStep);
+            var otherTask = await client.StepPayloadAsync(server, null, "sample", "dev", "other", "verification-file", payload, new MemoryStream());
+            var incomplete = await client.StepPayloadAsync(server, null, "sample", "dev", "ok", "verification-file", half, new MemoryStream());
+            var unknown = await client.StepPayloadAsync(server, null, "sample", "dev", "ok", "verification-file", Guid.NewGuid(), new MemoryStream());
+
+            Assert.True(found);
+            Assert.Equal(content, copy.ToArray());
+            Assert.False(otherStep);
+            Assert.Equal(0, wrongStep.Length);
+            Assert.False(otherTask);
+            Assert.False(incomplete);
+            Assert.False(unknown);
+        }
+        finally
+        {
+            try { Directory.Delete(directory, recursive: true); }
+            catch (IOException) { /* temp */ }
+        }
+
+        var path = $"/api/v1/tasks/sample/dev/ok/steps/verification-file/payloads/{Guid.NewGuid()}";
+        Assert.Equal(HttpStatusCode.NotFound, (await h.GetAsync(path, ServerRole.Viewer)).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await h.GetAsync($"/api/v1/tasks/sample/dev/ok/steps/Bad%20Name/payloads/{payload}", ServerRole.Viewer)).Status);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await h.CallAsync(HttpMethod.Get, path, ServerRole.Viewer, token: false)).Status);
+    }
 }

@@ -430,6 +430,48 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
         return [.. JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!["steps"]!.AsArray().Select(s => new ClientStep((string)s!["key"]!, Time(s["started"])!.Value, Time(s["completed"]), s["result"]?.ToJsonString()))];
     }
 
+    /// <summary>
+    /// Stores <paramref name="value"/> under <paramref name="name"/> (<c>dbdata:&lt;product&gt;:&lt;kind&gt;:&lt;name&gt;[:&lt;part&gt;]</c>) in the runner's encrypted store (plan 28c E20d; <c>PUT /api/v1/secrets/{name}</c>, administrator: the pairing must allow the
+    /// admin role). The value travels in the body of the paired HTTPS call and is in no message of this client, not even a refusal's. Returns the name the runner stored it under.
+    /// </summary>
+    public async Task<string> SendSecretAsync(string server, string? code, string name, string value, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        using var content = new StringContent(new JsonObject { ["value"] = value }.ToJsonString(), Encoding.UTF8, "application/json");
+        using var response = await link.SendAsync(HttpMethod.Put, "api/v1/secrets/" + Uri.EscapeDataString(name), content, ct);
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to store the secret {name}", ct);
+        return (string)JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!["name"]!;
+    }
+
+    /// <summary>The names (never values) the runner's store holds under <paramref name="prefix"/> (administrator).</summary>
+    public async Task<IReadOnlyList<string>> SecretNamesAsync(string server, string? code, string prefix = "", Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        using var response = await link.SendAsync(HttpMethod.Get, "api/v1/secrets?prefix=" + Uri.EscapeDataString(prefix), null, ct);
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, "for the names of its secrets", ct);
+        return [.. JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!["names"]!.AsArray().Select(n => (string)n!)];
+    }
+
+    /// <summary>Removes the secret <paramref name="name"/> from the runner's store (administrator).</summary>
+    public async Task RemoveSecretAsync(string server, string? code, string name, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        using var response = await link.SendAsync(HttpMethod.Delete, "api/v1/secrets/" + Uri.EscapeDataString(name), null, ct);
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to remove the secret {name}", ct);
+    }
+
+    /// <summary>Copies the file a completed step of that name kept as its streamed result (<c>.../steps/{name}/payloads/{id}</c>) into <paramref name="destination"/>; false when the runner has no such result (it is not the task's, or the retention removed it).</summary>
+    public async Task<bool> StepPayloadAsync(string server, string? code, string package, string channel, string task, string step, Guid payload, Stream destination, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        using var response = await link.SendAsync(HttpMethod.Get, TaskPath(package, channel, task) + "/steps/" + Uri.EscapeDataString(step) + "/payloads/" + payload.ToString("D"), null, ct);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return false;
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to read the result {payload} of the step {step} of {package}/{channel}/{task}", ct);
+        await using var body = await response.Content.ReadAsStreamAsync(ct);
+        await body.CopyToAsync(destination, ct);
+        return true;
+    }
+
     /// <summary>The task's row of the runner's status (<c>GET /api/v1/status</c>: owner, next due, last run, running, queued, paused), or null when the runner lists no such task.</summary>
     public async Task<ClientTaskStatus?> TaskStatusAsync(string server, string? code, string package, string channel, string task, Action<string>? log = null, CancellationToken ct = default)
     {

@@ -259,6 +259,28 @@ public static class VerificationResultPayload
 {
     public const string Prefix = "payload:";
 
+    /// <summary>The step a drain records the record of a verification result as (a value; its <see cref="VerificationResultRecord.ResultPath"/> names the payload).</summary>
+    public const string RecordStepName = "verification-result";
+
+    /// <summary>The step whose streamed result is the parquet file (the payload the record names).</summary>
+    public const string FileStepName = "verification-file";
+
+    private static readonly System.Text.Json.JsonSerializerOptions Json = new(System.Text.Json.JsonSerializerDefaults.Web);
+
+    /// <summary>The record in the text of a step result (the runner's JSON, as the kit stores a step value), or null when the text is not one.</summary>
+    public static VerificationResultRecord? TryParse(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        try { return System.Text.Json.JsonSerializer.Deserialize<VerificationResultRecord>(text, Json); }
+        catch (System.Text.Json.JsonException) { return null; }
+    }
+
+    /// <summary>
+    /// The id the Sync API gives a runner's result in its routes: a positive number made of the payload's id (the runner keeps no numbered index). The routes of a replication owned by the runner look the result up among the runner's
+    /// records by this number, so a number that names no record of that replication is a 404.
+    /// </summary>
+    public static long RouteIdOf(Guid payloadId) => BitConverter.ToInt64(payloadId.ToByteArray(), 0) & long.MaxValue;
+
     public static string PathFor(Guid payloadId) => Prefix + payloadId.ToString("N");
 
     /// <summary>The payload a result path names, or null when it is a file on disk (a result of the supervisor's worker).</summary>

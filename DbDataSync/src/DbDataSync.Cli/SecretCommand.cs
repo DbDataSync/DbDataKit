@@ -1,3 +1,6 @@
+using DbDataKit.Config.Git;
+using DbDataKit.Runner.Client;
+using DbDataSync.Core.Config;
 using DbDataSync.Core.Secrets;
 
 namespace DbDataSync.Cli;
@@ -42,6 +45,49 @@ public static class SecretCommand
         {
             // a name that is not dbdata:sync:<kind>:<name> (the old dbdatasync:... form among them); the message never holds a value
             Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// <c>dbdatasync secret send --to runner &lt;connection&gt; --server &lt;name or https address&gt; [--code &lt;pairing code&gt;]</c> (plan 28c E20d): the connection's run login over the paired HTTPS to the runner's secret store, under
+    /// <see cref="SecretRefs.ForConnectionRun"/> (the name the runner's connection file names in its <c>auth</c>). The run login is the connection's second login when it has one and its only login otherwise; the read login of a
+    /// connection that has both is never sent. The value is read from this repository's store and goes into the request body only: it is not printed, logged or put in an error. The pairing must allow the admin role.
+    /// </summary>
+    public static async Task<int> SendAsync(string[] args)
+    {
+        if (CliOptions.Read(args, "--to") != "runner") { Console.Error.WriteLine("--to is `runner`, the only place a login is sent to."); return 2; }
+        var server = CliOptions.Read(args, "--server");
+        if (server is null) { Console.Error.WriteLine("Name the runner: --server <name or https address> [--code <pairing code>]."); return 2; }
+        var positional = new List<string>();
+        for (var i = 0; i < args.Length; i++)
+        {
+            if (args[i] is "--to" or "--server" or "--code" or "--repo" or "--client-dir") { i++; continue; }
+            if (!args[i].StartsWith("--", StringComparison.Ordinal)) positional.Add(args[i]);
+        }
+
+        if (positional.Count != 1) { Console.Error.WriteLine("Usage: dbdatasync secret send --to runner <connection> --server <name or https address> [--code <pairing code>] [--repo <path>]"); return 2; }
+        var name = positional[0];
+        var root = DbDataSyncRoot.Resolve(args);
+        var secrets = SecretStore.OpenInRepository(root);
+        ConnectionConfig connection;
+        try { connection = new ConfigRepository(Path.Combine(root, "config"), new GitCommitService(root), secrets).LoadConnection(name); }
+        catch (FileNotFoundException) { Console.Error.WriteLine($"There is no connection '{name}' in {root}."); return 1; }
+        var reference = connection.RunCredentialSecretRef ?? connection.CredentialSecretRef;
+        if (string.IsNullOrWhiteSpace(reference)) { Console.Error.WriteLine($"The connection '{name}' has no login in the secret store (no credential reference), so there is nothing to send."); return 1; }
+        if (!secrets.TryResolve(reference, out var value)) { Console.Error.WriteLine($"The secret '{reference}' of the connection '{name}' is not set in this repository's store: nothing was sent."); return 1; }
+        Func<string, string?> environment = Environment.GetEnvironmentVariable;
+        var client = new RunnerPublishClient(new RunnerClientStore(CliOptions.Read(args, "--client-dir") ?? RunnerClientStore.DefaultDirectory(environment)), environment);
+        try
+        {
+            var stored = await client.SendSecretAsync(server, CliOptions.Read(args, "--code"), SecretRefs.ForConnectionRun(name), value);
+            Console.WriteLine($"Sent the run login of '{name}' ({(connection.HasRunLogin ? "its run login" : "its only login")}) to the runner as {stored}. The runner's connection file for '{name}' names it as `password_secret: secret:{stored}`.");
+            return 0;
+        }
+        catch (RunnerClientException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            Console.Error.WriteLine("Nothing was sent. Storing a secret takes the admin role: pair with `dbdatarunner server pair --max-role admin`.");
             return 1;
         }
     }
@@ -116,5 +162,6 @@ public static class SecretCommand
             Usage: dbdatasync secret set <ref> <value> [--repo <path>]
                    dbdatasync secret list [<ref> ...] [--repo <path>]
                    dbdatasync secret remove <ref> [--repo <path>]
+                   dbdatasync secret send --to runner <connection> --server <name or https address> [--code <pairing code>] [--repo <path>]
             """);
 }

@@ -100,7 +100,7 @@ public class RunnerHost(RunnerHostSettings settings, StateDatabase state, ILogge
 
         // connection slots (plan 28c E02): the bindings are the publisher's, the connections a directory of connection/1 files, the secrets the runner's own providers; every secret the resolver reveals is registered with the redactor the run log uses
         var redactor = new Redactor();
-        var slots = new RunnerSlotResolver(publisher, settings.Connections ?? new DirectoryConnectionCatalog(settings.ConnectionsDirectory), settings.Secrets ?? RunnerHostSettings.DefaultSecrets(), redactor);
+        var slots = new RunnerSlotResolver(publisher, settings.Connections ?? new DirectoryConnectionCatalog(settings.ConnectionsDirectory), settings.Secrets ?? RunnerHostSettings.DefaultSecrets(settings.SecretStore), redactor);
         var executor = new TaskExecutor(state, _host, new TaskExecutorOptions
         {
             DataDirectory = settings.Directory,

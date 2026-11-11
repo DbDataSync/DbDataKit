@@ -347,6 +347,20 @@ public sealed class StepStore(StateDatabase database, ProgressKey key, StepOptio
             return (IReadOnlyList<StepRecord>)steps;
         });
 
+    /// <summary>
+    /// Whether <paramref name="payloadId"/> is the streamed result of a completed step named <paramref name="name"/> of this task (any chain): what a read of a payload through the management API checks first, so a payload id
+    /// of another task, or of no step, is never served through a task's route.
+    /// </summary>
+    public bool IsResultPayload(string name, Guid payloadId) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection,
+                "SELECT COUNT(*) FROM {table:step_result} WHERE package = $package AND channel = $channel AND task = $task AND step_name = $step_name AND state = 'completed' AND result_payload = $payload;");
+            cmd.Bind(database, "package", key.Package).Bind(database, "channel", key.Channel).Bind(database, "task", key.Task).Bind(database, "step_name", name).Bind(database, "payload", payloadId, System.Data.DbType.Guid);
+            return Convert.ToInt64(cmd.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture) > 0;
+        });
+
     private StepRecord? Read(DbConnection connection, DbTransaction? transaction, string chain, string name, string stepKey)
     {
         using var cmd = database.Command(Module, connection, transaction, $"SELECT {Columns} FROM {{table:step_result}} WHERE {Where};");

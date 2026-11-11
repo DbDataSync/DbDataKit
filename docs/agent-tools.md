@@ -13,7 +13,7 @@ The effect class is the line between "reads" and "changes" (`CommandSpec.cs`): o
 `dbdatasync ui mcp` and `dbdatagateway ui mcp` start a stdio MCP server over the product's own command router (`DbDataKit.Cli/Mcp.cs`: newline-delimited JSON-RPC, protocol `2025-06-18` and the two before it). Every offered command is a tool named `noun_verb`; a call runs the command in process with `--format json` and returns its document (cut at 120,000 characters).
 
 - **Only commands that read are offered.** A command whose effect class is anything but offline-only or target read-only is left out unless the operator starts the server with `--allow-writes`.
-- **Some commands are never offered**, whatever the flag says (each product's `NotForAgents` list): the Gateway keeps out `secret`, `query` (it returns rows), pairing, `datasource adopt`, `identity` and `apps`; Sync keeps out `secret set`, `secret remove`, `library validate` and pairing. `ui` itself and `server run` and `server setup` are excluded everywhere.
+- **Some commands are never offered**, whatever the flag says (each product's `NotForAgents` list): the Gateway keeps out `secret`, `query` (it returns rows), pairing, `datasource adopt`, `identity` and `apps`; Sync keeps out `secret set`, `secret remove`, `secret send`, `library validate` and pairing. `ui` itself and `server run` and `server setup` are excluded everywhere.
 - **The Gateway offers the `semantic` noun** (`describe`, `query`, `explain`, `members`) so an agent can read a published semantic model and ask it questions as the person whose token it holds; see [semantic/architecture.md](semantic/architecture.md).
 - **Tests:** `DbDataKit.Cli.Tests/McpServerTests.cs`.
 

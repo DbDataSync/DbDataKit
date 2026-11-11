@@ -71,6 +71,9 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
     /// <summary>Where the secrets a manifest names are looked up (a webhook trigger's <c>secret</c>); null: the environment (<c>DBDATAKIT_SECRET_&lt;NAME&gt;</c>).</summary>
     public DbDataKit.Secrets.ISecretResolver? Secrets { get; init; }
 
+    /// <summary>The runner's own encrypted store as a provider of the chain connection slots resolve against (plan 28c E20d); null: none. <see cref="RunnerServer"/> sets it to the store in the server's directory.</summary>
+    public DbDataKit.Secrets.ISecretProvider? SecretStore { get; init; }
+
     /// <summary>Variables of the runner's environment a task process sees in addition to the executor's default list (<see cref="TaskEnvironmentVariable"/>).</summary>
     public IReadOnlyList<string> TaskEnvironment { get; init; } = [];
 
@@ -114,6 +117,7 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
         StagingContracts = StagingContracts,
         Platform = Platform,
         TaskEnvironment = TaskEnvironment,
+        SecretStore = SecretStore,
         ActivationMaxWait = ActivationMaxWait,
     };
 

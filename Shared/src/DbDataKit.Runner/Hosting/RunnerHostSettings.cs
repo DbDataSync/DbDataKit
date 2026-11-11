@@ -78,11 +78,16 @@ public sealed record RunnerHostSettings(string Directory)
     public ISecretResolver? Secrets { get; init; }
 
     /// <summary>The environment and the credentials directory (<c>CREDENTIALS_DIRECTORY</c>, systemd and container secret mounts), the providers of the shared secret library that need no key.</summary>
-    public static ISecretResolver DefaultSecrets()
+    public static ISecretResolver DefaultSecrets(ISecretProvider? store = null)
     {
         var credentials = Environment.GetEnvironmentVariable("CREDENTIALS_DIRECTORY");
-        return new SecretResolverChain([new EnvSecretProvider(), new FileSecretProvider(new FileSecretOptions { SecretsDirectory = string.IsNullOrWhiteSpace(credentials) ? null : credentials })]);
+        List<ISecretProvider> providers = [new EnvSecretProvider(), new FileSecretProvider(new FileSecretOptions { SecretsDirectory = string.IsNullOrWhiteSpace(credentials) ? null : credentials })];
+        if (store is not null) providers.Add(store);   // last: what an operator put in the environment or the credentials directory wins over what a product sent (plan 28c E20d)
+        return new SecretResolverChain(providers);
     }
+
+    /// <summary>The runner's own encrypted store (what a product sends with <c>PUT /api/v1/secrets/{name}</c>), the last link of the default chain; null: the environment and the credentials directory only. Ignored when <see cref="Secrets"/> is set.</summary>
+    public ISecretProvider? SecretStore { get; init; }
 
     public string ConnectionsDirectory => Path.Combine(Directory, "connections");
 
