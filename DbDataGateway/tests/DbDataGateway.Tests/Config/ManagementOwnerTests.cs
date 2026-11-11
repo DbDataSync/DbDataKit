@@ -283,6 +283,38 @@ public sealed partial class ManagementTests
     }
 
     [Fact]
+    public async Task The_secrets_overview_says_which_reference_of_a_data_source_no_secret_answers_and_which_secret_nothing_names_and_never_gives_a_value()
+    {
+        // UI06
+        const string value = "SENTINEL-overview-pw-7c3a";
+        await StartAsync();
+        var admin = await PairAsync(ServerRole.Admin | ServerRole.Author | ServerRole.Approver);
+        var stored = JsonNode.Parse(await (await CallAsync(admin, HttpMethod.Put, "/api/v1/secrets/erp-login", ServerRole.Admin, SecretBody(value))).Content.ReadAsStringAsync())!;
+        var reference = (string)stored["reference"]!;
+        await CallAsync(admin, HttpMethod.Put, "/api/v1/secrets/spare", ServerRole.Admin, SecretBody("another"));
+        var ghost = "secret:dbdata:gateway:managed-nobody:ghost";
+        await CallAsync(admin, HttpMethod.Put, "/api/v1/data-sources/ledger", ServerRole.Admin, Put(Conn.Yaml("ledger", "duckdb", "Data Source=:memory:", $"auth: {{ mode: sql, user: u, password_secret: '{reference}' }}"), null));
+        await CallAsync(admin, HttpMethod.Put, "/api/v1/data-sources/crm", ServerRole.Admin, Put(Conn.Yaml("crm", "duckdb", "Data Source=:memory:", $"auth: {{ mode: sql, user: u, password_secret: '{ghost}' }}"), null));
+
+        var response = await CallAsync(admin, HttpMethod.Get, "/api/v1/secrets/overview", ServerRole.Admin);
+        var text = await response.Content.ReadAsStringAsync();
+        var overview = JsonNode.Parse(text)!;
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal([ghost], overview["missing"]!.AsArray().Select(n => (string)n!));
+        var unused = overview["unused"]!.AsArray().Select(n => ((string)n!).Split(':').Last()).ToList();
+        Assert.Contains("spare", unused);
+        Assert.DoesNotContain("erp-login", unused);   // a data source names it
+        var used = overview["secrets"]!.AsArray().Single(x => (string)x!["reference"]! == reference)!;
+        Assert.Equal(["ledger"], used["used_by"]!.AsArray().Select(n => (string)n!));
+        Assert.NotNull((string?)used["updated"]);
+        Assert.DoesNotContain(value, text);
+
+        foreach (var held in new[] { ServerRole.Viewer, ServerRole.Operator, ServerRole.Author, ServerRole.Approver })
+            Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(admin, HttpMethod.Get, "/api/v1/secrets/overview", ServerRoles.Close(held))).StatusCode);
+    }
+
+    [Fact]
     public async Task An_administrators_secrets_screen_lists_names_with_the_reference_to_write_sets_replaces_and_removes_and_no_value_is_ever_returned_or_audited_and_no_other_role_may()
     {
         // plan 33 UE16: the console's own secrets (under the console's client id): the names and the reference a data source's file says, a value written once

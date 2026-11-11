@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using DbDataKit.Config.Git;
+using DbDataKit.Secrets;
 using DbDataKit.State;
 using DbDataKit.Web.Trust;
 using DbDataGateway.Server.Auth;
@@ -75,6 +76,24 @@ public sealed partial class GatewayDataSources(
             "DELETE" => await DeleteAsync(name, expectedVersion, caller, cancellationToken),
             _ => ManagementResult.Problem(405, "A data source is read with GET, written with PUT, removed with DELETE."),
         };
+    }
+
+    /// <summary>The secret references the data sources name (the passwords, tokens and whole connection strings of their logins), for the secrets overview (UI06): this instance's files and the group's published ones. References only, none is resolved.</summary>
+    public IEnumerable<ReferenceUse> References()
+    {
+        var texts = new List<(string Name, string Text)>();
+        if (Directory.Exists(Folder))
+            foreach (var file in Directory.EnumerateFiles(Folder, "*.yaml").OrderBy(f => f, StringComparer.Ordinal)) texts.Add((Path.GetFileNameWithoutExtension(file), File.ReadAllText(file)));
+        foreach (var (name, text) in published?.All() ?? []) if (!texts.Any(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase))) texts.Add((name, text));
+        foreach (var (name, text) in texts)
+        {
+            if (DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, name + ".yaml").Definition is not { } d) continue;
+            var found = new List<string?> { d.ConnectionStringSecret };
+            foreach (var login in new[] { d.Auth, d.ReadLogin, d.WriteLogin }) if (login is not null) found.AddRange([login.PasswordSecret, login.ConnectionStringSecret, login.TokenSecret]);
+            var references = found.Where(f => !string.IsNullOrWhiteSpace(f)).Select(f => SecretRef.TryParse(f, out var r) ? r : null).Where(r => r is not null).Select(r => r!).ToList();
+            references.AddRange(ConnectionStringReferences.Find(d.ConnectionString).Select(r => r.Reference));
+            foreach (var reference in references.Distinct()) yield return new ReferenceUse(name, reference);
+        }
     }
 
     private JsonObject List(string? owner)

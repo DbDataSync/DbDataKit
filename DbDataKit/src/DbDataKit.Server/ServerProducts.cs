@@ -55,6 +55,7 @@ public static class ServerProducts
         new("GET", "api/v1/lineage", ServerRole.Viewer),
         new("GET", "api/v1/upgrade", ServerRole.Viewer),                                                    // UC09: the status of its own upgrade
         new("GET", "api/v1/certificate", ServerRole.Viewer),                                                // UI10: days left and subject of the certificate it presents, for Monitoring
+        new("GET", "api/v1/secrets/overview", ServerRole.Admin),                                            // UI06: names, dates and references of the secrets and what names them, never a value
         new("GET", "api/v1/definitions/integration", ServerRole.Viewer),
         new("GET", "api/v1/definitions/integration/{name}", ServerRole.Viewer),
         new("GET", "api/v1/instances/{id}/labels", ServerRole.Viewer),                                      // UE11

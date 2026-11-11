@@ -81,6 +81,7 @@ const rail: RailItem[] = [
   { to: '/docs', title: 'Docs', icon: <DocsIcon />, testId: 'rail-docs' },
   { to: '/users', title: 'Users', icon: <UsersIcon />, testId: 'rail-users', adminOnly: true },
   { to: '/audit', title: 'Audit', icon: <QualityIcon />, testId: 'rail-audit', adminOnly: true },
+  { to: '/secrets', title: 'Secrets', icon: <UsersIcon />, testId: 'rail-secrets', adminOnly: true },
 ]
 
 export function ConsoleShell(props: { crumbs: Crumb[]; tabs?: ReactNode; actions?: ReactNode; children: ReactNode }) {
