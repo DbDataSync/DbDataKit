@@ -31,6 +31,6 @@ test('the Approvals page lists a waiting change request, opens the screen that d
   await page.getByTestId('change-reject').click()
   await expect(page.getByTestId('change-decided')).toContainText('Rejected')
 
-  await page.getByTestId('rail-approvals').click()
+  await page.goto('/approvals')        // a Store model's page has the Store's rail, not the console's, so the page is opened by its address
   await expect(page.getByTestId('approvals-none')).toBeVisible()
 })
