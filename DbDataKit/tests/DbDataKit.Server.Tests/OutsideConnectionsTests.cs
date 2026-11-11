@@ -4,6 +4,8 @@ using System.Text.Json.Nodes;
 using DbDataKit.Server;
 using DbDataKit.State;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DbDataKit.Server.Tests;
@@ -143,5 +145,66 @@ public sealed class OutsideConnectionsTests : IAsyncLifetime
         }
         Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Get, "/api/outside-connections/template?kind=http&name=x", viewer)).Status);
         Assert.Equal(HttpStatusCode.BadRequest, (await Call(HttpMethod.Get, "/api/outside-connections/template?kind=database&name=x", admin)).Status);
+    }
+
+    [Fact]
+    public async Task Test_of_an_api_connection_says_whether_the_system_was_reached_and_the_sign_in_accepted_and_holds_no_secret()
+    {
+        // a local API that wants the key in X-Api-Key
+        var builder = WebApplication.CreateSlimBuilder();
+        builder.Logging.ClearProviders();
+        builder.WebHost.UseUrls("http://127.0.0.1:0");
+        await using var api = builder.Build();
+        api.Run(context =>
+        {
+            context.Response.StatusCode = context.Request.Headers["X-Api-Key"] == Canary ? 200 : 401;
+            return Task.CompletedTask;
+        });
+        await api.StartAsync();
+        var address = api.Urls.First();
+        var file = Crm.Replace("https://api.example.com/v1", address);
+        Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Put, "/api/outside-connections/crm", admin, new YamlBody(file))).Status);
+
+        // the key is not set: nothing was sent, and the answer names the reference
+        var (_, unset) = await Call(HttpMethod.Post, "/api/outside-connections/crm/test", admin);
+        Assert.False((bool)unset!["ok"]!);
+        Assert.Contains("secret:dbdata:console:connection:crm:key", (string)unset["message"]!);
+        Assert.Equal("not checked", (string)unset["signIn"]!);
+
+        // a wrong key: the system answers and refuses it
+        await Call(HttpMethod.Put, "/api/outside-connections/crm/secrets/key", admin, new SecretBody("a-wrong-key-canary"));
+        var (_, refused) = await Call(HttpMethod.Post, "/api/outside-connections/crm/test", admin);
+        Assert.False((bool)refused!["ok"]!);
+        Assert.True((bool)refused["reached"]!);
+        Assert.Equal(("rejected", "Login", false), ((string)refused["signIn"]!, (string)refused["kind"]!, (bool)refused["temporary"]!));
+
+        // the right key: reached and accepted
+        await Call(HttpMethod.Put, "/api/outside-connections/crm/secrets/key", admin, new SecretBody(Canary));
+        var (_, accepted) = await Call(HttpMethod.Post, "/api/outside-connections/crm/test", admin);
+        Assert.True((bool)accepted!["ok"]!);
+        Assert.Equal("accepted", (string)accepted["signIn"]!);
+
+        // a system that is not there
+        await api.StopAsync();
+        var (_, gone) = await Call(HttpMethod.Post, "/api/outside-connections/crm/test", admin);
+        Assert.False((bool)gone!["ok"]!);
+        Assert.False((bool)gone["reached"]!);
+        Assert.True((bool)gone["temporary"]!);
+
+        // only an administrator tests; an unknown name is not found; a model provider is tested per model
+        Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Post, "/api/outside-connections/crm/test", viewer)).Status);
+        Assert.Equal(HttpStatusCode.NotFound, (await Call(HttpMethod.Post, "/api/outside-connections/nobody/test", admin)).Status);
+        var provider = "schema: connection/2\nkind: model-provider\nname: p\nmodel_provider: { provider: ollama, models: [ { id: m } ] }\n";
+        await Call(HttpMethod.Put, "/api/outside-connections/p", admin, new YamlBody(provider));
+        var (_, perModel) = await Call(HttpMethod.Post, "/api/outside-connections/p/test", admin);
+        Assert.Contains("Models screen", (string)perModel!["message"]!);
+
+        // neither key is in any answer or in the record
+        Assert.DoesNotContain(Canary, string.Join('\n', bodies));
+        Assert.DoesNotContain("a-wrong-key-canary", string.Join('\n', bodies));
+        var (_, audit) = await Call(HttpMethod.Get, "/api/agents/audit?limit=1000", admin);
+        Assert.Contains(audit!.AsArray(), a => (string)a!["kind"]! == "connection-tested");
+        Assert.DoesNotContain(Canary, audit.ToJsonString());
+        Assert.DoesNotContain("a-wrong-key-canary", audit.ToJsonString());
     }
 }

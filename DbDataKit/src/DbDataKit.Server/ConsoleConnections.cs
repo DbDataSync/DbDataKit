@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using DbDataKit.Config.Yaml;
 using DbDataKit.Connections;
+using DbDataKit.Connections.Http;
 using DbDataKit.Knowledge;
 using DbDataKit.Secrets;
 using DbDataKit.Secrets.Store;
@@ -26,9 +27,11 @@ public sealed partial class ConsoleConnections
     private readonly string _directory;
     private readonly EncryptedFileSecretStore _store;
     private readonly ISecretResolver _secrets;
+    private readonly HttpConnectionOptions? _http;
 
-    public ConsoleConnections(ConsoleSettings settings, EncryptedFileSecretStore store)
+    public ConsoleConnections(ConsoleSettings settings, EncryptedFileSecretStore store, HttpConnectionOptions? http = null)
     {
+        _http = http;
         _directory = settings.Directory;
         _store = store;
         _secrets = new SecretResolverChain([store, new EnvSecretProvider()]);
@@ -158,6 +161,19 @@ public sealed partial class ConsoleConnections
         await _store.SetAsync(SecretNameFor(name, field), secret, cancellation).ConfigureAwait(false);
         Changed?.Invoke();
         return ReferenceFor(name, field);
+    }
+
+    /// <summary>
+    /// <b>Test</b> of a connection (plan 27a IX02): for an <c>http</c> connection it signs in as the file says and calls the endpoint once (<see cref="HttpConnectionTester"/>), and says whether the system was reached and whether it accepted the sign-in; for a model provider the
+    /// answer says to test a model on the Models screen. Null when there is no such connection that reads. Nothing in the answer is a secret.
+    /// </summary>
+    public async Task<HttpTestResult?> TestAsync(string name, CancellationToken cancellation = default)
+    {
+        if (!IsName(name) || !File.Exists(FileOf(name))) return null;
+        var read = Check(name, File.ReadAllText(FileOf(name)));
+        if (read.Definition is not { } d) return new HttpTestResult(false, null, "not checked", $"The file of `{name}` has errors; fix them first ({read.Diagnostics.Count(x => x.Severity == ConfigSeverity.Error)} to see on the editor).", null, false, null, 0);
+        if (d.KindName == ConnectionKinds.ModelProvider) return new HttpTestResult(false, null, "not checked", $"`{name}` is a model provider: test one of its models on the Models screen of the Agents page.", null, false, null, 0);
+        return await HttpConnectionTester.TestAsync(d, _secrets, _http, cancellation).ConfigureAwait(false);
     }
 
     /// <summary>A file to start from, per kind: references only, a value is typed on the screen and kept in the store.</summary>

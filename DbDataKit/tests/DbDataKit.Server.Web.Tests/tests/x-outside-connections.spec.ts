@@ -27,6 +27,9 @@ test('an API connection is started from a template, a key written as itself is r
   await page.route('**/api/outside-connections', (route) => json(route, { kinds: ['http', 'model-provider'], connections: saved ? [row()] : [] }))
   await page.route('**/api/outside-connections/template*', (route) => json(route, { yaml: CRM }))
   await page.route('**/api/outside-connections/crm/check', (route) => json(route, { diagnostics: [] }))
+  await page.route('**/api/outside-connections/crm/test', (route) => json(route, stored
+    ? { ok: true, reached: true, signIn: 'accepted', message: 'https://api.example.com/v1 answered 200 and accepted the sign-in.', kind: null, temporary: false, status: 200, milliseconds: 12 }
+    : { ok: false, reached: null, signIn: 'not checked', message: 'The secret `secret:dbdata:console:connection:crm:key` is not set. Type it on this screen.', kind: null, temporary: false, status: null, milliseconds: 0 }))
   await page.route('**/api/outside-connections/crm/secrets/key', (route) => { secretBodies.push(route.request().postDataJSON()); stored = true; return json(route, { stored: true, reference: 'secret:dbdata:console:connection:crm:key' }) })
   await page.route('**/api/outside-connections/crm', (route) => {
     const { yaml } = route.request().postDataJSON() as { yaml: string }
@@ -65,9 +68,16 @@ test('an API connection is started from a template, a key written as itself is r
   await expect(page.getByTestId('outside-kind')).toHaveText('API (http)')
   await expect(page.getByTestId('outside-detail')).toContainText('https://api.example.com/v1, API key')
   await expect(page.getByTestId('outside-secret')).toHaveAttribute('data-available', 'false')
+  await page.getByTestId('outside-test').click()
+  await expect(page.getByTestId('outside-test-result')).toHaveAttribute('data-ok', 'false')
+  await expect(page.getByTestId('outside-test-result')).toContainText('is not set')
   await page.getByTestId('outside-secret-input').fill('the-typed-key')
   await page.getByTestId('outside-secret-save').click()
   await expect(page.getByTestId('outside-secret')).toHaveAttribute('data-available', 'true')
+  await page.getByTestId('outside-test').click()
+  await expect(page.getByTestId('outside-test-result')).toHaveAttribute('data-ok', 'true')
+  await expect(page.getByTestId('outside-test-result')).toHaveAttribute('data-signin', 'accepted')
+  await expect(page.getByTestId('outside-test-result')).not.toContainText('the-typed-key')
   expect(secretBodies).toEqual([{ value: 'the-typed-key' }])
   expect(saved).not.toContain('the-typed-key')
 })

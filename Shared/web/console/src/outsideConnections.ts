@@ -35,6 +35,9 @@ export interface OutsideConnection {
   diagnostics: Diagnostic[]
 }
 
+/** What Test found (plan 27a IX02): whether the system was reached (null: not tried), whether it accepted the sign-in, a sentence that says what to do, and the failure's kind and whether a retry can help. Never a secret. */
+export interface OutsideTest { ok: boolean; reached: boolean | null; signIn: string; message: string; kind: string | null; temporary: boolean; status: number | null; milliseconds: number }
+
 const json = (method: string, body?: unknown): RequestInit => ({ method, body: body === undefined ? undefined : JSON.stringify(body) })
 const enc = encodeURIComponent
 
@@ -44,6 +47,7 @@ export const outsideApi = {
   check: (name: string, yaml: string) => request<{ diagnostics: Diagnostic[] }>(`/api/outside-connections/${enc(name)}/check`, json('POST', { yaml })),
   save: (name: string, yaml: string) => request<{ saved: boolean; diagnostics: Diagnostic[] }>(`/api/outside-connections/${enc(name)}`, json('PUT', { yaml })),
   remove: (name: string) => request<void>(`/api/outside-connections/${enc(name)}`, json('DELETE')),
+  test: (name: string) => request<OutsideTest>(`/api/outside-connections/${enc(name)}/test`, json('POST')),
   setSecret: (name: string, field: string, value: string) => request<{ stored: boolean; reference: string }>(`/api/outside-connections/${enc(name)}/secrets/${enc(field)}`, json('PUT', { value })),
 }
 
@@ -66,3 +70,10 @@ export const keptHere = (name: string, s: ConnectionSecret): boolean => s.refere
 
 /** The diagnostics a refused save carries in its body, shown as a check shows them. */
 export const refusedDiagnostics = (e: unknown): Diagnostic[] => (e as { body?: { diagnostics?: Diagnostic[] } } | null)?.body?.diagnostics ?? []
+
+/** Test's answer in one line for the screen: the verdict, then whether the system was reached and what became of the sign-in. */
+export function testSummary(t: OutsideTest): string {
+  const reached = t.reached === null ? 'not reached or not tried' : t.reached ? 'reached' : 'not reached'
+  const retry = t.ok ? '' : t.temporary ? ' A retry can help.' : t.kind ? ' A retry will not help.' : ''
+  return `${t.ok ? 'Works' : 'Does not work'}: ${reached}, sign-in ${t.signIn}.${retry}`
+}

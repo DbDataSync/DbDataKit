@@ -252,6 +252,9 @@ public sealed class ConnectionDefinition
     /// <summary>How an outside kind signs in; null: it does not.</summary>
     public SignInSpec? SignIn { get; set; }
 
+    /// <summary>An address beneath the endpoint that <b>Test</b> calls (a health or a cheap read), such as <c>/v1/ping</c>; none: the endpoint itself. A relative path, with no query: a key is never part of it.</summary>
+    public string? TestPath { get; set; }
+
     /// <summary>The model provider section (kind <c>model-provider</c>).</summary>
     public ModelProviderSpec? ModelProvider { get; set; }
 

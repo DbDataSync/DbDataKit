@@ -54,6 +54,17 @@ public sealed class OutsideConnectionsController(ConsoleConnections connections,
         return NoContent();
     }
 
+    /// <summary>Test (plan 27a IX02): signs in as the file says and calls the system once; says in words whether it was reached and whether it accepted the sign-in. The answer holds no secret.</summary>
+    [HttpPost("{name}/test")]
+    [Authorize(Policies.Admin)]
+    public async Task<IActionResult> Test(string name, CancellationToken cancellation)
+    {
+        if (!ConsoleConnections.IsName(name)) return BadRequest(new { error = "That is not a connection's name." });
+        if (await connections.TestAsync(name, cancellation) is not { } result) return NotFound(new { error = $"There is no connection named '{name}'." });
+        Audit("connection-tested", name, result.Ok ? "the test passed" : result.Message);
+        return Ok(new { result.Ok, result.Reached, result.SignIn, result.Message, kind = result.Kind?.ToString(), result.Temporary, result.Status, result.Milliseconds });
+    }
+
     /// <summary>Keeps a typed secret (a key, a password, a client secret, a certificate) in the console's secret store under the connection's name and gives the reference to write in the file.</summary>
     [HttpPut("{name}/secrets/{field}")]
     [Authorize(Policies.Admin)]

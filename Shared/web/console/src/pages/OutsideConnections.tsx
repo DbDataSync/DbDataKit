@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CodeEditor, ErrorBanner, Field, useIsAdmin } from '@dbdatakit/shell'
 import type { Diagnostic } from '../agents'
 import {
-  KIND_LABEL, KIND_MEANING, OUTSIDE_KINDS, SECRET_LABEL, isConnectionName, keptHere, outsideApi, outsideDetail, refusedDiagnostics, secretProblems,
+  KIND_LABEL, KIND_MEANING, OUTSIDE_KINDS, SECRET_LABEL, isConnectionName, keptHere, outsideApi, outsideDetail, refusedDiagnostics, secretProblems, testSummary,
   type OutsideConnection, type OutsideKind,
 } from '../outsideConnections'
 
@@ -30,6 +30,7 @@ export function OutsideConnections() {
   const save = useMutation({ mutationFn: () => outsideApi.save(selected!, yaml), onSuccess: (r) => { setProblems(r.diagnostics); refresh() } })
   const check = useMutation({ mutationFn: () => outsideApi.check(selected!, yaml), onSuccess: (r) => setProblems(r.diagnostics) })
   const remove = useMutation({ mutationFn: () => outsideApi.remove(selected!), onSuccess: () => { setSelected(null); refresh() } })
+  const test = useMutation({ mutationFn: () => outsideApi.test(selected!) })
   const keep = useMutation({ mutationFn: (field: string) => outsideApi.setSecret(selected!, field, secrets[field] ?? '').then(() => field), onSuccess: (field) => { setSecrets((s) => ({ ...s, [field]: '' })); refresh() } })
   const start = useMutation({
     mutationFn: () => outsideApi.template(newKind, newName),
@@ -55,7 +56,7 @@ export function OutsideConnections() {
               <span className="mono">{c.name}</span>
               <span data-testid="outside-kind">{c.kind ? KIND_LABEL[c.kind] ?? c.kind : 'unreadable'}</span>
               <span data-testid="outside-detail">{outsideDetail(c)}{secretProblems(c).length > 0 && <span className="page-note" data-testid="outside-secret-problem">{' '}A secret cannot be read.</span>}</span>
-              <span className="row" style={{ gap: 8 }}><button type="button" className="btn" onClick={() => setSelected(selected === c.name ? null : c.name)} data-testid="outside-edit">{selected === c.name ? 'Close' : isAdmin ? 'Edit' : 'View'}</button></span>
+              <span className="row" style={{ gap: 8 }}><button type="button" className="btn" onClick={() => { test.reset(); setSelected(selected === c.name ? null : c.name) }} data-testid="outside-edit">{selected === c.name ? 'Close' : isAdmin ? 'Edit' : 'View'}</button></span>
             </div>
           ))}
         </div>
@@ -82,7 +83,13 @@ export function OutsideConnections() {
             <div className="row" style={{ gap: 8, marginTop: 8 }}>
               <button type="button" className="btn" onClick={() => check.mutate()} data-testid="outside-check">Check</button>
               <button type="button" className="btn btn-primary" onClick={() => save.mutate()} disabled={save.isPending} data-testid="outside-save">Save</button>
+              {connection && connection.kind === 'http' && <button type="button" className="btn" onClick={() => test.mutate()} disabled={test.isPending} data-testid="outside-test">Test</button>}
               {connection && <button type="button" className="btn" onClick={() => remove.mutate()} data-testid="outside-remove">Remove</button>}
+            </div>
+          )}
+          {test.data && (
+            <div className="empty" role="status" data-testid="outside-test-result" data-ok={test.data.ok} data-signin={test.data.signIn} style={{ marginTop: 8 }}>
+              <strong>{testSummary(test.data)}</strong> {test.data.message}
             </div>
           )}
           {connection && connection.secrets.map((s) => (
@@ -97,7 +104,7 @@ export function OutsideConnections() {
               )}
             </div>
           ))}
-          <ErrorBanner error={check.error ?? remove.error ?? keep.error} />
+          <ErrorBanner error={check.error ?? remove.error ?? keep.error ?? test.error} />
         </div>
       )}
     </section>

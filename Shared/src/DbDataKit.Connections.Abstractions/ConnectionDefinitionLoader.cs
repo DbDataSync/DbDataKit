@@ -135,7 +135,7 @@ public static class ConnectionDefinitionLoader
             return;
         }
         if (d.Engine.Length == 0) Err(SharedCodes.MissingKey, "engine", "Required key `engine` is missing: a database connection says which engine it is.", "Add `engine: postgres` (or sqlserver, mysql, oracle, duckdb, odbc, flightsql).");
-        foreach (var (key, present) in new[] { ("endpoint", d.Endpoint is not null), ("sign_in", d.SignIn is not null), ("model_provider", d.ModelProvider is not null) })
+        foreach (var (key, present) in new[] { ("endpoint", d.Endpoint is not null), ("sign_in", d.SignIn is not null), ("test_path", d.TestPath is not null), ("model_provider", d.ModelProvider is not null) })
             if (present) Err(BadOutside, key, $"`{key}` belongs to an outside kind (`http`, `model-provider`), not to a database.", "Remove it, or say `kind: http` (and drop the database keys).");
 
         var logins = new (string Path, LoginSpec? Spec)[] { ("auth", d.Auth), ("read_login", d.ReadLogin), ("write_login", d.WriteLogin) };
@@ -257,6 +257,8 @@ public static class ConnectionDefinitionLoader
         else if (!IsSafeAddress(endpoint)) Err("endpoint", "`endpoint` is an http or https address with no user name, password or query in it.", "A key is never part of the address: write it as `sign_in.key_secret`.");
 
         if (d.SignIn is { } s) CheckSignIn(s);
+        if (d.TestPath is { } testPath && (testPath.Contains("://", StringComparison.Ordinal) || testPath.Contains('?', StringComparison.Ordinal) || testPath.Contains('#', StringComparison.Ordinal) || testPath.Contains("..", StringComparison.Ordinal) || testPath.Any(char.IsWhiteSpace)))
+            Err("test_path", "`test_path` is an address beneath the endpoint, such as `/v1/ping`: no scheme, no query, no `..`, no spaces.", "A key is never part of an address: it is `sign_in.key_secret`.");
         if (d.KindName == ConnectionKinds.Http)
         {
             if (d.ModelProvider is not null) Err("model_provider", "`model_provider` belongs to the kind `model-provider`.", "Remove it.");
@@ -311,6 +313,7 @@ public static class ConnectionDefinitionLoader
 
         void CheckModelProvider()
         {
+            if (d.TestPath is not null) Err("test_path", "`test_path` belongs to the kind `http`; a model provider is tested per model.", "Remove it.");
             if (d.ModelProvider is not { } m) { Err("model_provider", "A `model-provider` connection needs a `model_provider` section: the provider, and the models it allows.", "Write `model_provider: { provider: anthropic, models: [ { id: ..., window: 200000 } ] }`."); return; }
             if (m.Provider == "openai-compatible" && m.Locality is null) Err("model_provider.locality", "`locality` is missing: say whether this server is `cloud` or `local`.", "The install policy treats a cloud provider differently (data rules, fallback).");
             if (m.Models.Count == 0) Err("model_provider.models", "`models` is a list of at least one model the provider allows.", "Write `models: [ { id: <the provider's model id>, window: 200000 } ]`.");

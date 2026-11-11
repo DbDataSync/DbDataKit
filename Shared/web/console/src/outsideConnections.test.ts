@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isConnectionName, keptHere, outsideDetail, refusedDiagnostics, secretProblems, type OutsideConnection } from './outsideConnections'
+import { isConnectionName, keptHere, outsideDetail, refusedDiagnostics, secretProblems, testSummary, type OutsideConnection, type OutsideTest } from './outsideConnections'
 import { ApiError } from '@dbdatakit/shell'
 
 const crm: OutsideConnection = {
@@ -34,5 +34,13 @@ describe('outside connections (plan 27a IX01)', () => {
     expect(refusedDiagnostics(new Error('no'))).toEqual([])
     expect(refusedDiagnostics(null)).toEqual([])
     expect(ApiError).toBeDefined()
+  })
+
+  it('says what Test found in a line: reached or not, the sign-in, and whether a retry can help', () => {
+    const base: OutsideTest = { ok: true, reached: true, signIn: 'accepted', message: 'x', kind: null, temporary: false, status: 200, milliseconds: 5 }
+    expect(testSummary(base)).toBe('Works: reached, sign-in accepted.')
+    expect(testSummary({ ...base, ok: false, signIn: 'rejected', kind: 'Login', status: 401 })).toBe('Does not work: reached, sign-in rejected. A retry will not help.')
+    expect(testSummary({ ...base, ok: false, reached: false, signIn: 'not checked', kind: 'Network', temporary: true, status: null })).toBe('Does not work: not reached, sign-in not checked. A retry can help.')
+    expect(testSummary({ ...base, ok: false, reached: null, signIn: 'not checked', kind: null })).toBe('Does not work: not reached or not tried, sign-in not checked.')
   })
 })

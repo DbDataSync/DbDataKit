@@ -130,6 +130,27 @@ public sealed class ConnectionKindTests
         Assert.Contains("a key of a database connection", Errors(r), StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("test_path: /v1/ping\n", true)]
+    [InlineData("test_path: health\n", true)]
+    [InlineData("test_path: /v1/ping?key=abc\n", false)]
+    [InlineData("test_path: https://other.example.com/x\n", false)]
+    [InlineData("test_path: /../admin\n", false)]
+    public void The_test_path_is_an_address_beneath_the_endpoint_with_no_query(string line, bool ok)
+    {
+        var r = Any(Http + line);
+        Assert.Equal(ok, r.Ok);
+        if (!ok) Assert.Contains("test_path", Errors(r), StringComparison.Ordinal);
+        if (ok) Assert.Equal(line.Split(": ")[1].TrimEnd('\n'), r.Definition!.TestPath);
+    }
+
+    [Fact]
+    public void A_test_path_does_not_belong_to_a_database_or_a_model_provider()
+    {
+        Assert.False(ConnectionDefinitionLoader.Load("schema: connection/2\nname: w\nengine: postgres\naddress: { host: h }\ntest_path: /x\n").Ok);
+        Assert.False(Any("schema: connection/2\nkind: model-provider\nname: p\ntest_path: /x\nmodel_provider: { provider: ollama, models: [ { id: m } ] }\n").Ok);
+    }
+
     private const string Provider = "schema: connection/2\nkind: model-provider\nname: anthropic-main\nsign_in: { method: api_key, key_secret: env:ANTHROPIC_API_KEY }\nmodel_provider:\n  provider: anthropic\n  models:\n    - { id: claude-sonnet, window: 200000, max_output: 8192, price: { input: 3, output: 15 } }\n";
 
     [Fact]
