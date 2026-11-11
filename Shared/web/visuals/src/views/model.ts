@@ -8,7 +8,7 @@ import type { LinkDoc } from './links'
  * they are as loose as the engines need (a chart's encodings are the Vega-Lite subset's channels, a query is whatever form the file holds) and no looser. Nothing here validates.
  */
 
-export type WidgetType = 'metric' | 'chart' | 'matrix' | 'table' | 'text' | 'image' | 'control' | 'embed'
+export type WidgetType = 'metric' | 'chart' | 'matrix' | 'table' | 'text' | 'image' | 'control' | 'embed' | 'custom'
 export type ControlKind = 'select' | 'multiselect' | 'date' | 'daterange' | 'number' | 'toggle' | 'text'
 export type ParameterValue = string | number | boolean | null | Array<string | number | boolean>
 /** Parameter name to its value now: what a `control` edits and what a request is bound with. */
@@ -43,7 +43,9 @@ export interface TextDoc extends WidgetCommon { type: 'text'; text: string }
 export interface ImageDoc extends WidgetCommon { type: 'image'; hash: string; media_type: 'image/png' | 'image/jpeg' | 'image/webp'; alt: string; fit?: 'contain' | 'cover' }
 export interface ControlDoc extends WidgetCommon { type: 'control'; parameter: string; control?: ControlKind; label?: string; values?: { attribute: string; limit?: number } }
 export interface EmbedDoc extends WidgetCommon { type: 'embed'; url: string; with?: Record<string, string>; link_text?: string }
-export type WidgetDoc = MetricDoc | ChartDoc | MatrixDoc | TableDoc | TextDoc | ImageDoc | ControlDoc | EmbedDoc
+/** Code of an app (DBR30): drawn only by the app's own host. */
+export interface CustomDoc extends WidgetCommon { type: 'custom'; component: string; params?: Record<string, string | number | boolean>; links?: string[] }
+export type WidgetDoc = CustomDoc | MetricDoc | ChartDoc | MatrixDoc | TableDoc | TextDoc | ImageDoc | ControlDoc | EmbedDoc
 
 export interface TileDoc { widget: string; x: number; y: number; w: number; h: number; min?: { w?: number; h?: number }; layer?: number }
 export interface WidgetOptionsDoc { density?: 'compact' | 'comfortable'; show_title?: boolean; legend?: 'show' | 'hide' }

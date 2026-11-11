@@ -75,6 +75,7 @@ public static partial class ViewsLoader
                 case "image": ImageBody(map, path); break;
                 case "control": ControlBody(map, path); break;
                 case "embed": EmbedBody(map, path); break;
+                case "custom": CustomBody(map, path); break;
             }
             if (type is "metric" or "chart" or "matrix" or "table")
             {
@@ -343,6 +344,33 @@ public static partial class ViewsLoader
                         Bad(ViewsCodes.UndeclaredParameter, v, wp, $"`{v.Value}` names a parameter the document does not declare.", "Declare it under `parameters`.");
                 }
             if (widget.Get("link_text") is { } lt) Text(lt, J(path, "link_text"), "`link_text`", 200);
+        }
+
+        private static readonly Regex ComponentRule = new("^[a-z0-9][a-z0-9_-]{0,63}/[A-Za-z][A-Za-z0-9_]{0,63}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+        /// <summary>
+        /// A custom widget (plan 32 DBR30): code of an app, drawn in the app's sandboxed frame. The document names the component (<c>app/Export</c>), gives it the values of the parameters it declared (a literal or
+        /// <c>$params.name</c>: there is no clicked row) and lists the links it may open by name. What the component declared (queries, parameters) is in the app's manifest, which <c>app validate</c> checks it against.
+        /// </summary>
+        private void CustomBody(YamlMapping widget, string path)
+        {
+            if (Required(widget, "component", path) is { } c
+                && !(c is YamlScalar { Value: var component } && ComponentRule.IsMatch(component)))
+                Bad(ViewsCodes.InvalidValue, c, J(path, "component"), "A custom widget's `component` is `<app>/<Export>`: the app's name, then the name its code registers.", "Write `sales-portal/OrdersGrid`.");
+            if (widget.Get("params") is { } p)
+            {
+                var given = new Dictionary<string, LinkValue>();
+                ReadLinkValues(p, J(path, "params"), given);
+                foreach (var (name, v) in given.Where(g => g.Value.Kind == LinkValueKind.Field))
+                    AddAt(ViewsCodes.InvalidValue, v.Line, v.Column, $"`${v.Text}` is a field of a clicked row, and a custom widget is not clicked: give `$params.name` or a literal.", null, J(J(path, "params"), name));
+            }
+            if (widget.Get("links") is { } l && Seq(l, J(path, "links"), "`links`", widget, 0, 50) is { } ls)
+                for (var i = 0; i < ls.Items.Count; i++)
+                    if (Name(ls.Items[i], I(J(path, "links"), i), "A link of a widget") is { } name)
+                    {
+                        if (ls.Items.Take(i).Any(x => x is YamlScalar { Value: var v } && v == name)) Bad(ViewsCodes.DuplicateName, ls.Items[i], I(J(path, "links"), i), $"The link `{name}` is listed twice.");
+                        else linkRefs.Add((name, ls.Items[i], I(J(path, "links"), i)));
+                    }
         }
 
         private static readonly Regex EmbedName = new("^[A-Za-z][A-Za-z0-9_.:-]{0,63}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);

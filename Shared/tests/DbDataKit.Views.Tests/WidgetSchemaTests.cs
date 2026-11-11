@@ -45,7 +45,7 @@ public class WidgetSchemaTests
             ["parameter"] = Props(At(core, "$defs/parameter")),
             ["widget.metric"] = Props(At(core, "$defs/widget_metric")), ["widget.chart"] = Props(At(core, "$defs/widget_chart")), ["widget.matrix"] = Props(At(core, "$defs/widget_matrix")),
             ["widget.table"] = Props(At(core, "$defs/widget_table")), ["widget.text"] = Props(At(core, "$defs/widget_text")), ["widget.image"] = Props(At(core, "$defs/widget_image")),
-            ["widget.control"] = Props(At(core, "$defs/widget_control")),
+            ["widget.control"] = Props(At(core, "$defs/widget_control")), ["widget.custom"] = Props(At(core, "$defs/widget_custom")),
             ["encodings.metric"] = Props(At(core, "$defs/widget_metric/properties/encodings")), ["encodings.chart"] = Props(At(core, "$defs/chart_encodings")),
             ["encodings.matrix"] = Props(At(core, "$defs/matrix_encodings")), ["encodings.table"] = Props(At(core, "$defs/widget_table/properties/encodings")),
             ["table_column"] = Props(At(core, "$defs/table_column")), ["channel"] = Props(At(core, "$defs/chart_channel")), ["mark"] = Props(At(subset, "$defs/spec/properties/mark/oneOf/1")),

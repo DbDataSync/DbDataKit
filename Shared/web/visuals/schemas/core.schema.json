@@ -427,6 +427,19 @@
         "link_text": { "description": "The words of the link shown when the address is not framed.", "type": "string", "maxLength": 200 }
       }
     },
+    "widget_custom": {
+      "description": "Code of an app (plan 32 section 9f, DBR30): a component the app's code registers with `defineWidget` of `@dbdatakit/views-sdk`, drawn in the app's sandboxed frame. The app's manifest declares what it needs (its queries and parameters); the document names the component, gives it the values of its parameters and lists the links it may open (a custom widget fires only a named link). Only an app's own host draws it.",
+      "type": "object",
+      "required": ["type", "component"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "custom" },
+        "title": { "$ref": "#/$defs/title" },
+        "component": { "description": "`<app>/<Export>`: the app's name, then the name its code registers.", "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}/[A-Za-z][A-Za-z0-9_]{0,63}$" },
+        "params": { "description": "The component's parameters by name: `$params.name` of the document or a literal (there is no clicked row).", "$ref": "#/$defs/link_values" },
+        "links": { "description": "The links of the document the component may open with `open(name, row)`.", "type": "array", "maxItems": 50, "uniqueItems": true, "items": { "$ref": "#/$defs/name" } }
+      }
+    },
     "widget": {
       "description": "A widget by its type.",
       "oneOf": [
@@ -437,7 +450,8 @@
         { "$ref": "#/$defs/widget_text" },
         { "$ref": "#/$defs/widget_image" },
         { "$ref": "#/$defs/widget_control" },
-        { "$ref": "#/$defs/widget_embed" }
+        { "$ref": "#/$defs/widget_embed" },
+        { "$ref": "#/$defs/widget_custom" }
       ]
     },
     "widgets": { "type": "object", "minProperties": 1, "propertyNames": { "$ref": "#/$defs/name" }, "additionalProperties": { "$ref": "#/$defs/widget" } },

@@ -8,7 +8,7 @@ import type { ViewsDoc, WidgetDoc } from '../views/model'
 import { sampleBundle } from '../testing/sampleBundle'
 import { draftFromOpened, edit } from './draft'
 import { localFileStore } from './store'
-import { draftOf, draftProblem, formatOf, formatSample, levelCommand, levelEntry, levelsOf, sortValue } from './axisParts'
+import { draftOf, draftProblem, formatChannelCommand, formatChannelsOf, formatOf, formatSample, levelCommand, levelEntry, levelsOf, sortValue } from './axisParts'
 
 const bundle = sampleBundle()
 const open = async () => draftFromOpened(await localFileStore(bundle.documents).open('dashboard', 'retail-sales-today'))
@@ -84,5 +84,47 @@ describe('the levels of an axis (DBR44)', () => {
     // and a scalar x takes a format in place
     const scalar = levelCommand('w', start, 'x', 0, 'format', { date: 'year' })
     expect(scalar).toEqual({ path: ['widgets', 'w', 'encodings', 'x'], value: { field: 'orders.ordered_at_year', format: { date: 'year' } } })
+  })
+})
+
+describe('the format of a measure channel and of a matrix value (DBR49)', () => {
+  const chart = { type: 'chart', mark: 'bar', encodings: { x: 'customers.region', y: 'orders.net_revenue', color: { field: 'products.category', type: 'nominal' }, column: 'orders.status' }, query: { model: 'sales', limit: 20 } } as unknown as WidgetDoc
+  const matrix = { type: 'matrix', encodings: { rows: ['customers.region'], columns: ['date.year'], values: [{ field: 'orders.net_revenue', label: 'Revenue' }, { field: 'orders.orders', format: 'compact' }] }, query: { model: 'sales', limit: 100 } } as unknown as WidgetDoc
+
+  it('lists the channels that take a format, in the order the form shows them', () => {
+    expect(formatChannelsOf(chart).map((c) => [c.channel, c.field, c.format])).toEqual([['y', 'orders.net_revenue', undefined], ['color', 'products.category', undefined], ['column', 'orders.status', undefined]])
+    expect(formatChannelsOf(matrix).map((c) => [c.channel, c.index, c.field, c.format])).toEqual([['values', 0, 'orders.net_revenue', undefined], ['values', 1, 'orders.orders', 'compact']])
+    expect(formatChannelsOf({ type: 'metric', encodings: { value: 'a.b' }, query: {} } as unknown as WidgetDoc)).toEqual([])
+  })
+
+  it('a bare channel becomes {field, format} and goes back when the format is removed; the other keys stay', () => {
+    expect(formatChannelCommand('w', chart, 'y', 0, { style: 'currency', currency: 'EUR' })).toEqual({ path: ['widgets', 'w', 'encodings', 'y'], value: { field: 'orders.net_revenue', format: { style: 'currency', currency: 'EUR' } } })
+    expect(formatChannelCommand('w', chart, 'color', 0, 'compact').value).toEqual({ field: 'products.category', type: 'nominal', format: 'compact' })
+    const formatted = { ...chart, encodings: { ...(chart as unknown as { encodings: object }).encodings, y: { field: 'orders.net_revenue', format: 'compact' } } } as unknown as WidgetDoc
+    expect(formatChannelCommand('w', formatted, 'y', 0, undefined).value).toBe('orders.net_revenue')
+  })
+
+  it('a matrix value stays an object, and keeps its label', () => {
+    expect(formatChannelCommand('w', matrix, 'values', 0, 'percent')).toEqual({ path: ['widgets', 'w', 'encodings', 'values', 0], value: { field: 'orders.net_revenue', label: 'Revenue', format: 'percent' } })
+    expect(formatChannelCommand('w', matrix, 'values', 1, undefined).value).toEqual({ field: 'orders.orders' })
+  })
+
+  it('the commands write the format into the widget and the saved widget is the golden, valid under the validator', async () => {
+    let d = must(edit(await open(), { type: 'addWidget', id: 'w', widget: structuredClone(chart) }))
+    const apply = (channel: 'y' | 'color' | 'column' | 'row' | 'values', value: unknown) => {
+      const doc = parse(d.text) as ViewsDoc
+      const c = formatChannelCommand('w', doc.widgets.w as WidgetDoc, channel, 0, value)
+      d = must(edit(d, { type: 'setPath', path: c.path, value: c.value }))
+    }
+    apply('y', { style: 'currency', currency: 'EUR', decimals: 0 })
+    apply('color', 'compact')
+    apply('column', undefined)
+    expect((parse(d.text) as ViewsDoc).widgets.w).toEqual({
+      type: 'chart', mark: 'bar',
+      encodings: { x: 'customers.region', y: { field: 'orders.net_revenue', format: { style: 'currency', currency: 'EUR', decimals: 0 } }, color: { field: 'products.category', type: 'nominal', format: 'compact' }, column: 'orders.status' },
+      query: { model: 'sales', limit: 20 },
+    })
+    // the widget is on no layout (a dashboard-level finding); everything about the widget itself is valid
+    expect(d.validation.diagnostics.filter((x) => x.code !== 'DBD-VIEW-023' && x.path.startsWith('widgets.w'))).toEqual([])
   })
 })

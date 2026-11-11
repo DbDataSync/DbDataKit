@@ -6,8 +6,8 @@ import { Document, isMap, isScalar, isSeq, YAMLMap, YAMLSeq, type Node } from 'y
  * differ only in order and style. Formatting a file drops its comments; an edit through a command keeps them (`applyOps`).
  */
 
-const ROOT = ['schemaVersion', 'kind', 'title', 'description', 'parameters', 'refresh', 'kiosk', 'theme', 'locale', 'strict', 'limits', 'cover', 'widgets', 'layouts']
-const WIDGET = ['type', 'title', 'label', 'format', 'parameter', 'control', 'values', 'mark', 'encodings', 'query', 'on_select', 'drill', 'text', 'hash', 'media_type', 'alt', 'fit', 'url', 'with', 'link_text']
+const ROOT = ['schemaVersion', 'kind', 'title', 'description', 'parameters', 'refresh', 'kiosk', 'theme', 'locale', 'strict', 'limits', 'cover', 'links', 'widgets', 'layouts']
+const WIDGET = ['type', 'title', 'label', 'format', 'parameter', 'control', 'values', 'mark', 'encodings', 'query', 'on_select', 'drill', 'on_click', 'text', 'hash', 'media_type', 'alt', 'fit', 'url', 'with', 'link_text']
 const LAYOUT = ['name', 'type', 'default', 'when', 'grid', 'canvas', 'overflow', 'min_scale', 'max_scale', 'page', 'header', 'footer', 'cover', 'widget_options', 'tiles', 'sections']
 const TILE = ['widget', 'x', 'y', 'w', 'h', 'min', 'layer']
 const PAGE = ['size', 'orientation', 'margins']
@@ -16,6 +16,7 @@ const SIDES = ['left', 'center', 'right']
 const SECTION = ['title', 'break', 'blocks']
 const BLOCK = ['widget', 'row', 'height', 'keep', 'repeat_header', 'pagebreak']
 const CELL = ['widget', 'span']
+const LINK = ['dashboard', 'report', 'view', 'page', 'form', 'with', 'new', 'edit', 'as', 'then', 'lock', 'print', 'image', 'label']
 const PARAMETER = ['name', 'type', 'for', 'many', 'required', 'default', 'label']
 
 /** The canonical key order of the mapping at a path of the document (the document, a widget, a layout, a tile, a parameter), or none for a mapping whose order is its own. */
@@ -24,6 +25,7 @@ export function keyOrderAt(path: ReadonlyArray<string | number>): string[] | und
   const [a, b, c, d] = path
   if (a === 'widgets' && path.length === 2) return WIDGET
   if (a === 'parameters' && path.length === 2) return PARAMETER
+  if (a === 'links' && path.length === 2) return LINK
   if (a !== 'layouts' || typeof b !== 'number') return undefined
   if (path.length === 2) return LAYOUT
   if (c === 'tiles' && path.length === 4) return TILE
@@ -47,6 +49,7 @@ export function canonicalValue(value: unknown): unknown {
   if (!isObject(value)) return value
   const root = ordered(value, ROOT)
   if (isObject(root.widgets)) root.widgets = Object.fromEntries(Object.entries(root.widgets).map(([id, w]) => [id, isObject(w) ? ordered(w, WIDGET) : w]))
+  if (isObject(root.links)) root.links = Object.fromEntries(Object.entries(root.links).map(([name, l]) => [name, isObject(l) ? ordered(l, LINK) : l]))
   if (Array.isArray(root.parameters)) root.parameters = root.parameters.map((p) => (isObject(p) ? ordered(p, PARAMETER) : p))
   if (Array.isArray(root.layouts))
     root.layouts = root.layouts.map((l) => {
@@ -86,8 +89,8 @@ export function flowOk(value: unknown): boolean {
   return typeof value !== 'string' || !value.includes('\n')
 }
 
-/** Whether a collection at this path is always a block: the document, the two maps of widgets and layouts, each widget and layout. */
-export const alwaysBlock = (path: ReadonlyArray<string | number>) => path.length === 0 || (path.length <= 2 && (path[0] === 'widgets' || path[0] === 'layouts'))
+/** Whether a collection at this path is always a block: the document, the maps of widgets, layouts and links, each widget and layout. */
+export const alwaysBlock = (path: ReadonlyArray<string | number>) => path.length === 0 || (path.length <= 2 && (path[0] === 'widgets' || path[0] === 'layouts')) || (path.length === 1 && path[0] === 'links')
 
 /** Sets the style of a created node and everything under it. `path` is where the node goes: the document, the two maps of widgets and layouts and each widget and layout are always blocks. */
 export function styleNode(node: unknown, path: ReadonlyArray<string | number>): void {

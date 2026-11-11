@@ -202,7 +202,8 @@ function checkLink(name: string, raw: unknown, path: string, context: LinkContex
   return info
 }
 
-function readLinkValues(raw: unknown, path: string, context: LinkContext, issues: Issues, values: Record<string, LinkValue>): void {
+/** The values a link (or a custom widget) gives, read with the codes and paths of the .NET loader: a name that is a parameter or field of the target, a value that is a row field, a declared parameter or a literal. */
+export function readLinkValues(raw: unknown, path: string, context: Pick<LinkContext, 'declared'>, issues: Issues, values: Record<string, LinkValue>): void {
   if (!isObject(raw)) { issues.add('DBD-106', path, "A link's values must be a mapping."); return }
   for (const [name, value] of Object.entries(raw)) {
     const vp = join(path, name)

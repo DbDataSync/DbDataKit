@@ -38,6 +38,7 @@ public static partial class ViewsLoader
         ["widget.image"] = ["type", "title", "hash", "media_type", "alt", "fit"],
         ["widget.control"] = ["type", "title", "parameter", "control", "label", "values"],
         ["widget.embed"] = ["type", "title", "url", "with", "link_text"],
+        ["widget.custom"] = ["type", "title", "component", "params", "links"],
         ["encodings.metric"] = ["value", "compare"],
         ["encodings.chart"] = ["x", "y", "color", "column", "row", "tooltip"],
         ["encodings.matrix"] = ["rows", "columns", "values", "values_on", "totals", "sort", "column_limit"],
@@ -92,7 +93,7 @@ public static partial class ViewsLoader
         ["parameterType"] = ["string", "integer", "number", "boolean"],
         ["font"] = ["sans", "serif", "mono"],
         ["locale"] = ["en", "de", "fr", "es", "it", "pt", "nl"],
-        ["widgetType"] = ["metric", "chart", "matrix", "table", "text", "image", "control", "embed"],
+        ["widgetType"] = ["metric", "chart", "matrix", "table", "text", "image", "control", "embed", "custom"],
         ["format"] = ["catalog", "full", "compact", "percent"],
         ["align"] = ["left", "right", "center"],
         ["mark"] = ["bar", "line", "area", "point", "rule", "text"],
@@ -118,7 +119,7 @@ public static partial class ViewsLoader
     /// <summary>The smallest a tile of a widget type may be at scale 1, in CSS pixels (plan 32 section 3.3); a type that is not listed has none.</summary>
     public static readonly IReadOnlyDictionary<string, (int W, int H)> Minimums = new Dictionary<string, (int, int)>
     {
-        ["metric"] = (160, 88), ["text"] = (160, 56), ["control"] = (180, 56), ["chart"] = (280, 180), ["table"] = (320, 200), ["matrix"] = (360, 220), ["embed"] = (280, 180),
+        ["metric"] = (160, 88), ["text"] = (160, 56), ["control"] = (180, 56), ["chart"] = (280, 180), ["table"] = (320, 200), ["matrix"] = (360, 220), ["embed"] = (280, 180), ["custom"] = (200, 120),
     };
 
     /// <summary>The names a header or footer may put in braces, besides <c>params.name</c>.</summary>

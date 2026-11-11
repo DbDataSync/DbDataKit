@@ -94,6 +94,7 @@ export function WidgetView({ id, widget, result, loading = false, box, theme = '
     if (widget.type === 'text') content = <TextBlock widget={widget} parameters={parameters} />
     else if (widget.type === 'control') content = control()
     else if (widget.type === 'embed') content = <EmbedBlock widget={widget} />
+    else if (widget.type === 'custom') content = <EmptyTile message={`Drawn by the app that owns it (${widget.component}).`} />
     else content = loading ? <LoadingTile what={widget.title} /> : <EmptyTile message="Nothing to show yet." />
   }
   else if (result.type === 'error') content = <ErrorTile code={result.code} message={result.message} path={result.path} suggestions={result.suggestions} />
@@ -109,6 +110,7 @@ export function WidgetView({ id, widget, result, loading = false, box, theme = '
       case 'image': content = <ImageBlock widget={widget} result={result as never} />; break
       case 'control': content = control(result); break
       case 'embed': content = <EmbedBlock widget={widget} result={result as never} />; break
+      case 'custom': content = <EmptyTile message={`Drawn by the app that owns it (${widget.component}).`} />; break
     }
   }
 

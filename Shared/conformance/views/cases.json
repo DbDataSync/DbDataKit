@@ -55,6 +55,10 @@
     {
       "file": "good/dashboard-links.json",
       "kind": "dashboard"
+    },
+    {
+      "file": "good/dashboard-custom.json",
+      "kind": "dashboard"
     }
   ],
   "bad": [
@@ -1075,6 +1079,60 @@
       "code": "DBD-104",
       "path": "links.region-page.target",
       "line": 25,
+      "schema": true
+    },
+    {
+      "name": "custom-component-without-an-app",
+      "file": "bad/custom-component-without-an-app.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.grid.component",
+      "line": 37,
+      "schema": true
+    },
+    {
+      "name": "custom-parameter-not-declared",
+      "file": "bad/custom-parameter-not-declared.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-008",
+      "path": "widgets.grid.params.region",
+      "line": 39,
+      "schema": false
+    },
+    {
+      "name": "custom-parameter-is-a-row-field",
+      "file": "bad/custom-parameter-is-a-row-field.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.grid.params.id",
+      "line": 28,
+      "schema": false
+    },
+    {
+      "name": "custom-link-not-declared",
+      "file": "bad/custom-link-not-declared.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-036",
+      "path": "widgets.grid.links[1]",
+      "line": 45,
+      "schema": false
+    },
+    {
+      "name": "custom-link-listed-twice",
+      "file": "bad/custom-link-listed-twice.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-020",
+      "path": "widgets.grid.links[1]",
+      "line": 25,
+      "schema": false
+    },
+    {
+      "name": "custom-widget-with-a-query-of-its-own",
+      "file": "bad/custom-widget-with-a-query-of-its-own.json",
+      "as": "dashboard",
+      "code": "DBD-104",
+      "path": "widgets.grid.query",
+      "line": 47,
       "schema": true
     }
   ],

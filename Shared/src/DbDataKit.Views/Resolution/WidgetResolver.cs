@@ -102,6 +102,9 @@ public sealed class WidgetResolver
                     return (Image(widget), null);
                 case "embed":
                     return (Embed(widget, values), null);
+                case "custom":
+                    // code of an app: only the app's own host can draw it, and this module has no app (DBR31)
+                    throw new WidgetProblem(ViewsCodes.ReservedWidget, "A custom widget is drawn by the app that owns it; this host has no app to draw it.");
                 case "control":
                     // a control is how a required parameter gets its value, so it never fails for the lack of one
                     return await ControlAsync(context, document, widget, linked.Token).WaitAsync(linked.Token).ConfigureAwait(false);
