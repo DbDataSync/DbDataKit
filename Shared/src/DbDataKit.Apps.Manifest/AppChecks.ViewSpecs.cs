@@ -23,7 +23,7 @@ public static partial class AppChecks
             found.AddRange(load.Diagnostics);
             if (load.Spec is { } spec) specs[path] = spec;
         }
-        foreach (var spec in specs.Values) { CheckUses(manifest, spec, modelAttributes, found); CheckLinks(manifest, spec, specs, found); }
+        foreach (var spec in specs.Values) { CheckUses(manifest, spec, modelAttributes, found); CheckLinks(manifest, spec, specs, found); CheckEmbeds(manifest, spec, found); }
         if (documentTexts.Count > 0) CheckDocuments(manifest, documentTexts, specs, documents, found);
         return found;
     }
@@ -107,9 +107,27 @@ public static partial class AppChecks
                 Entity(d.Entity, d.EntityAt, d.Sections.SelectMany(s => s.Attributes).Select(a => (a.Name, a.At)).Concat(linked));
                 break;
             case DashboardView board:
-                foreach (var w in board.Widgets)
+                foreach (var w in board.Widgets.Where(w => w.Kind != ViewWidgetKind.Embed))
                     Entity(w.Entity, w.EntityAt, w.Columns.Concat(w.Measure is null ? [] : [w.Measure]).Concat(w.By is null ? [] : [w.By]).Select(a => (a.Name, a.At)));
                 break;
+        }
+    }
+
+    /// <summary>
+    /// An <c>embed</c> widget (plan 26 AP17) frames a report server, so the manifest must ask for its origin under <c>egress.frame</c>: an address on another origin is refused here, naming the app, the view and the origin. This is the
+    /// request; what is framed when the app runs is the part of it an administrator approved (<see cref="EgressPolicy.Effective"/>), and an origin nobody approved is a link.
+    /// </summary>
+    private static void CheckEmbeds(AppManifest manifest, ViewSpec spec, List<ConfigDiagnostic> found)
+    {
+        if (spec is not DashboardView board) return;
+        var asked = (manifest.Egress ?? AppEgress.None).Frame;
+        foreach (var widget in board.Widgets.Where(w => w.Kind == ViewWidgetKind.Embed && w.Url is not null))
+        {
+            var origin = new Uri(widget.Url!).GetLeftPart(UriPartial.Authority).ToLowerInvariant();
+            if (asked.Any(a => EgressPolicy.Covers(a, origin))) continue;
+            Problem(found, ViewSpecLoader.BadViewSpec, spec.File, widget.UrlAt,
+                $"The app `{manifest.Name}`'s view `{ViewName(spec.File)}` embeds a report from `{origin}`, which the manifest does not ask for under `egress.frame`, so the origin cannot be approved and the report cannot be framed.",
+                asked.Count == 0 ? $"Add `egress: {{frame: [{origin}]}}` to the manifest, and have an administrator approve it." : $"The manifest's `egress.frame`: {string.Join(", ", asked)}.");
         }
     }
 

@@ -81,9 +81,9 @@ public sealed class AppSite(AppInstanceStore instances, Func<string, AppEgress>?
         {
             ViewsRuntime.ScriptName => (views.Script, Types[".js"]),
             ViewsRuntime.StyleName when views.Style is not null => (views.Style, Types[".css"]),
-            ViewsApp.ViewsFile => (ViewsApp.Json(instance), Types[".json"]),
+            ViewsApp.ViewsFile => (ViewsApp.Json(instance, FrameOrigins(instance, instanceName)), Types[".json"]),
             _ when path.Length > 0 && Path.HasExtension(path) => null,
-            _ => (ViewsApp.Document(instance.Instance.Title ?? instance.Manifest.Title ?? instanceName, BasePath + Uri.EscapeDataString(instanceName) + "/" + BundleFolder, views.Style is not null, ViewsApp.Json(instance)), Types[".html"]),
+            _ => (ViewsApp.Document(instance.Instance.Title ?? instance.Manifest.Title ?? instanceName, BasePath + Uri.EscapeDataString(instanceName) + "/" + BundleFolder, views.Style is not null, ViewsApp.Json(instance, FrameOrigins(instance, instanceName))), Types[".html"]),
         };
         if (served is not { } file) return Text(404, "No such file.");
         var egress = EgressPolicy.Effective(instance.Manifest.Egress ?? AppEgress.None, approvedEgress?.Invoke(instanceName) ?? AppEgress.None);
@@ -97,6 +97,10 @@ public sealed class AppSite(AppInstanceStore instances, Func<string, AppEgress>?
         };
         return new AppResponse(200, file.Type, headers, file.Body);
     }
+
+    /// <summary>The origins an app's embed widgets may frame: what an administrator approved of the manifest's <c>egress.frame</c>, which is also the document's <c>frame-src</c> (plan 26 AP17).</summary>
+    private IReadOnlyList<string> FrameOrigins(ResolvedInstance instance, string instanceName) =>
+        EgressPolicy.Effective(instance.Manifest.Egress ?? AppEgress.None, approvedEgress?.Invoke(instanceName) ?? AppEgress.None).Frame;
 
     /// <summary>Puts <c>&lt;base href&gt;</c> first in the head so relative links in the bundle resolve under the instance's path; a document that already has one is left alone.</summary>
     public static byte[] WithBase(byte[] html, string href)

@@ -327,6 +327,50 @@ public sealed class ViewSpecTests : IDisposable
         Assert.Contains("`abc` is not a int", type.Message);
     }
 
+    private const string ReportManifest = "schemaVersion: 1\nname: sales\nversion: 1.0.0\ntrust: trusted\nviews: [views/dashboard.yaml]\nmodels:\n  - model: territories\n    entities: {territory: [read]}\negress:\n  frame: [https://reports.contoso.com]\n";
+
+    private const string ReportDashboard = "schemaVersion: 1\nkind: dashboard\ntitle: Overview\nmodel: territories\nwidgets:\n  - {kind: metric, title: Territories, entity: territory, measure: count}\n  - {kind: embed, title: Sales report, url: 'https://reports.contoso.com/Reports/report/Sales?rs:Embed=true', link_text: Open it}\n";
+
+    [Fact]
+    public void An_embed_widget_loads_with_its_address_and_needs_no_entity_and_the_schema_still_agrees()
+    {
+        var board = Assert.IsType<DashboardView>(Load(ReportDashboard));
+        var embed = board.Widgets[1];
+        Assert.Equal((ViewWidgetKind.Embed, "Sales report", "https://reports.contoso.com/Reports/report/Sales?rs:Embed=true", "Open it"), (embed.Kind, embed.Title, embed.Url, embed.LinkText));
+        Assert.Equal(("", 7), (embed.Entity, embed.UrlAt.Line));
+    }
+
+    [Theory]
+    [InlineData("{kind: embed, title: R}", "Required key `url`")]
+    [InlineData("{kind: embed, title: R, url: 'http://reports.contoso.com/r'}", "absolute https address")]
+    [InlineData("{kind: embed, title: R, url: 'https://ada:pw@reports.contoso.com/r'}", "no credentials")]
+    [InlineData("{kind: embed, title: R, url: 'https://reports.contoso.com/r', entity: territory}", "`entity` is for a figure")]
+    [InlineData("{kind: metric, title: R, entity: territory, measure: count, url: 'https://reports.contoso.com/r'}", "for an `embed` widget")]
+    public void A_damaged_embed_widget_is_refused_naming_the_key(string widget, string message)
+    {
+        var load = ViewSpecLoader.Load(ReportDashboard.Split('\n')[0..4].Aggregate("", (a, l) => a + l + "\n") + "widgets:\n  - " + widget + "\n", "views/dashboard.yaml");
+        Assert.Contains(load.Diagnostics, d => d.Message.Contains(message));
+    }
+
+    [Fact]
+    public void An_embed_of_an_origin_the_manifest_does_not_ask_to_frame_is_refused_naming_app_view_and_origin()
+    {
+        Write("app.yaml", ReportManifest); Write("views/dashboard.yaml", ReportDashboard);
+        Assert.DoesNotContain(AppValidator.Validate(folder).Diagnostics, d => d.Message.Contains("embeds a report"));   // asked for: fine
+
+        Write("views/dashboard.yaml", ReportDashboard.Replace("reports.contoso.com", "elsewhere.example.org"));
+        var refused = Assert.Single(AppValidator.Validate(folder).Diagnostics, d => d.Message.Contains("embeds a report"));
+        Assert.Equal(("views/dashboard.yaml", 7), (refused.Path, refused.Line));
+        Assert.Contains("`sales`", refused.Message);
+        Assert.Contains("`dashboard`", refused.Message);
+        Assert.Contains("`https://elsewhere.example.org`", refused.Message);
+        Assert.Contains("egress.frame", refused.Message);
+
+        Write("app.yaml", ReportManifest.Replace("egress:\n  frame: [https://reports.contoso.com]\n", ""));
+        Write("views/dashboard.yaml", ReportDashboard);
+        Assert.Contains("Add `egress:", Assert.Single(AppValidator.Validate(folder).Diagnostics, d => d.Message.Contains("embeds a report")).Fix);
+    }
+
     [Fact]
     public void A_damaged_spec_is_reported_under_its_own_file_and_a_missing_one_only_once()
     {

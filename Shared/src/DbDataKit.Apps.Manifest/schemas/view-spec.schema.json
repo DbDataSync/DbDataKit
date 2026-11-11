@@ -517,18 +517,61 @@
       "type": "object",
       "required": [
         "kind",
-        "title",
-        "entity"
+        "title"
       ],
       "additionalProperties": false,
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "embed"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "url"
+        ],
+        "not": {
+          "anyOf": [
+            { "required": ["entity"] },
+            { "required": ["measure"] },
+            { "required": ["by"] },
+            { "required": ["columns"] },
+            { "required": ["limit"] }
+          ]
+        }
+      },
+      "else": {
+        "required": [
+          "entity"
+        ],
+        "not": {
+          "anyOf": [
+            { "required": ["url"] },
+            { "required": ["link_text"] }
+          ]
+        }
+      },
       "properties": {
         "kind": {
           "enum": [
             "metric",
             "bar",
             "line",
-            "table"
+            "table",
+            "embed"
           ]
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https://[^\\s/@]+(/[^\\s]*)?$",
+          "maxLength": 2000,
+          "description": "For an embed: the report's address, absolute https with no credentials. Its origin must be under egress.frame of the manifest."
+        },
+        "link_text": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "For an embed: the words of the link to the report."
         },
         "title": {
           "type": "string",

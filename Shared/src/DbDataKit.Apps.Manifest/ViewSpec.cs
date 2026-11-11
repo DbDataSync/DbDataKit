@@ -12,7 +12,7 @@ public enum ViewSortDirection { Asc, Desc }
 
 public enum ViewFormMode { Create, Edit }
 
-public enum ViewWidgetKind { Metric, Bar, Line, Table }
+public enum ViewWidgetKind { Metric, Bar, Line, Table, Embed }
 
 public enum ViewAggregate { Count, Sum, Avg, Min, Max }
 
@@ -38,8 +38,12 @@ public sealed record ViewSort(string Attribute, ViewSortDirection Direction, Spe
 
 public sealed record ViewSection(string Title, IReadOnlyList<ViewAttribute> Attributes, SpecPos At);
 
-/// <summary>One figure of a dashboard, over one entity of the view's model: a measure (<see cref="Aggregate"/> of <see cref="Attribute"/>, or a count), grouped by <see cref="By"/> for a bar or a line, or a table of <see cref="Columns"/>.</summary>
-public sealed record ViewWidget(ViewWidgetKind Kind, string Title, string Entity, ViewAggregate Aggregate, ViewAttribute? Measure, ViewAttribute? By, IReadOnlyList<ViewAttribute> Columns, int Limit, SpecPos At, SpecPos EntityAt);
+/// <summary>
+/// One figure of a dashboard, over one entity of the view's model: a measure (<see cref="Aggregate"/> of <see cref="Attribute"/>, or a count), grouped by <see cref="By"/> for a bar or a line, or a table of <see cref="Columns"/>.
+/// An <c>embed</c> (plan 26 AP17) is an external report: it has no entity and no data, only the report's <see cref="Url"/> (an absolute https address; <see cref="UrlAt"/> is where it is written) and the words of its link.
+/// </summary>
+public sealed record ViewWidget(ViewWidgetKind Kind, string Title, string Entity, ViewAggregate Aggregate, ViewAttribute? Measure, ViewAttribute? By, IReadOnlyList<ViewAttribute> Columns, int Limit, SpecPos At, SpecPos EntityAt,
+    string? Url = null, string? LinkText = null, SpecPos UrlAt = default);
 
 /// <summary>A declarative view (<c>view-spec/1</c>), read from a file of the app named under <c>views</c> in its manifest. The file is data the host draws with its own components, never script.</summary>
 public abstract record ViewSpec(ViewKind Kind, string File, string Title, string Model, IReadOnlyList<ViewParam> Params, IReadOnlyList<ViewLink> Links, SpecPos At, SpecPos ModelAt)
