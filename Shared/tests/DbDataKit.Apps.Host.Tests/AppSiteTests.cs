@@ -46,6 +46,27 @@ public sealed class AppSiteTests : IDisposable
     }
 
     [Fact]
+    public void A_trusted_portals_page_may_load_the_hosts_shared_shell_script_that_brokers_tokens_for_the_frames_it_holds()
+    {
+        var site = Publish();
+
+        // the portal's page is on the host's origin (no sandbox) and the policy lets it load the host's own script, so it needs no broker of its own (plan 26 AP29)
+        var page = site.PortalPage("acme");
+        var policy = page.Headers["Content-Security-Policy"];
+        Assert.DoesNotContain("sandbox", policy);
+        Assert.Contains("script-src 'self'", policy);
+        Assert.Contains("connect-src 'self'", policy);   // the script asks the host for each frame's token
+        Assert.Contains("frame-src 'self'", policy);   // and the frames are the host's own pages
+
+        // the script is the one every shell page uses: it serves any iframe that names its instance, with that frame's own token, and answers nothing else
+        var script = Encoding.UTF8.GetString(AppShell.ScriptResponse().Body);
+        Assert.Equal("/apps/-/shell.js", AppShell.ScriptPath);
+        Assert.Contains("iframe[data-instance]", script);
+        Assert.Contains("f.contentWindow === event.source", script);
+        Assert.Contains("X-DbData-Shell", script);
+    }
+
+    [Fact]
     public void The_root_and_a_route_of_the_app_get_the_entry_document_with_a_base_path()
     {
         var site = Publish();
