@@ -75,6 +75,12 @@ encodings:                     # a matrix
   and writing both is that widget's error). A **matrix value** takes a preset or a mapping; a mapping is applied to the cell's number after the engine has arranged the grid.
 * The data of a chart that is exported (its sheet) holds the label columns beside the raw ones.
 
+### Sorting by a click (DBR45)
+
+A viewer may sort a table or a matrix by clicking a header, **on screen only** (the host sets `sortable` on `DashboardView`; the print and export routes never do): a click sorts ascending, a second click reverses, a third gives the
+document's order back; the header carries `aria-sort` and is a button, so the keyboard works. Numbers sort by value, text by code point, an empty cell goes last, a total row stays after the rows. It is never stored: the
+document's `sort` is the default and is what print and export use. A table the server cut at its limit is sorted over the rows loaded and says so, unless the host runs the query again with `order` (`onServerSort`).
+
 ### Diagnostics of widgets
 
 | Code | Meaning |
