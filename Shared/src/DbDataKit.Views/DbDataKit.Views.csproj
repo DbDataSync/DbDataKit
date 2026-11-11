@@ -12,6 +12,8 @@
     <EmbeddedResource Include="..\..\web\visuals\schemas\report.schema.json" LogicalName="DbDataKit.Views.schemas.report.schema.json" />
     <EmbeddedResource Include="..\..\web\visuals\schemas\view.schema.json" LogicalName="DbDataKit.Views.schemas.view.schema.json" />
     <EmbeddedResource Include="..\..\web\visuals\schemas\vega-lite-subset.schema.json" LogicalName="DbDataKit.Views.schemas.vega-lite-subset.schema.json" />
+    <!-- the locale table of the formatter (plan 32 DBR46): the TypeScript twin imports the same file -->
+    <EmbeddedResource Include="..\..\web\visuals\src\views\locales.json" LogicalName="DbDataKit.Views.locales.json" />
     <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
     <!-- the kinds dashboard and report in the registry of published definitions (DBR10), and the follower that reads a published version -->
     <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />

@@ -638,7 +638,7 @@ public sealed partial class QisEngine(Catalog cat, ISourceExecutor executor, Val
                 known.TryAdd(f!["name"]!.GetValue<string>(), f);
         foreach (var d in req.Attributes)
             known.TryAdd(Catalog.ColName(d), new JsonObject
-                { ["name"] = Catalog.ColName(d), ["type"] = cat.TypeOf(d), ["x_kind"] = "attribute", ["x_binding"] = d });
+                { ["name"] = Catalog.ColName(d), ["type"] = cat.TypeOf(d), ["x_kind"] = "attribute", ["x_binding"] = d }.WithAttributeFormat(cat.Doc.Attributes.GetValueOrDefault(d)?.Format));
         known[Combine.LevelColumn] = new JsonObject { ["name"] = Combine.LevelColumn, ["type"] = "integer", ["x_kind"] = "column" };
         foreach (var n in outputs.Where(o => cat.Doc.Measures.TryGetValue(o, out var d) && d.Derived is not null))
             known[Catalog.ColName(n)] = new JsonObject
@@ -895,7 +895,7 @@ public sealed partial class QisEngine(Catalog cat, ISourceExecutor executor, Val
     {
         var fields = new JsonArray();
         foreach (var d in attrs)
-            fields.Add(new JsonObject { ["name"] = Catalog.ColName(d), ["type"] = cat.TypeOf(d), ["x_kind"] = "attribute", ["x_binding"] = d });
+            fields.Add(new JsonObject { ["name"] = Catalog.ColName(d), ["type"] = cat.TypeOf(d), ["x_kind"] = "attribute", ["x_binding"] = d }.WithAttributeFormat(cat.Doc.Attributes.GetValueOrDefault(d)?.Format));
         foreach (var m in measures)
         {
             var field = new JsonObject

@@ -1,5 +1,5 @@
 {
- "_note": "Goldens of the format vocabulary and its formatter (plan 32 DBR40); run by ViewFormatTests (.NET) and format.test.ts (TypeScript). `text` is what formatting `value` under `format` (and the catalog's own format) gives.",
+ "_note": "Goldens of the format vocabulary and its formatter (plan 32 DBR40); run by ViewFormatTests (.NET) and format.test.ts (TypeScript). `text` is what formatting `value` under `format` (and the catalog's own format) gives. A case with `locale` formats under that locale (DBR46; an unknown code reads as en).",
  "formats": [
   {
    "name": "full groups and rounds to two places",
@@ -449,6 +449,241 @@
     "style": "number"
    },
    "text": "abc"
+  },
+  {
+   "name": "a date catalog format is what an attribute without a format reads",
+   "value": "2026-03-05",
+   "catalog": {
+    "date": "month-year"
+   },
+   "text": "Mar 2026"
+  },
+  {
+   "name": "the preset catalog reads the date catalog format",
+   "value": "2026-03-05",
+   "format": "catalog",
+   "catalog": {
+    "date": "quarter"
+   },
+   "text": "Q1 2026"
+  },
+  {
+   "name": "a format of the widget wins over the catalog date format",
+   "value": "2026-03-05",
+   "format": {
+    "date": "yyyy"
+   },
+   "catalog": {
+    "date": "month-year"
+   },
+   "text": "2026"
+  },
+  {
+   "name": "a number format leaves the catalog date format alone",
+   "value": "2026-03-05",
+   "format": "full",
+   "catalog": {
+    "date": "month-year"
+   },
+   "text": "2026-03-05"
+  },
+  {
+   "name": "a bare whole year is read as a date under a date mapping",
+   "value": 2026,
+   "format": {
+    "date": "year"
+   },
+   "text": "2026"
+  },
+  {
+   "name": "a bare whole year reads as a date in a pattern",
+   "value": 2026,
+   "format": {
+    "date": "'FY'yy"
+   },
+   "text": "FY26"
+  },
+  {
+   "name": "a bare whole year is read as a date under the catalog date format",
+   "value": 2026,
+   "catalog": {
+    "date": "year"
+   },
+   "text": "2026"
+  },
+  {
+   "name": "a whole number that is not four digits is a number under a date mapping",
+   "value": 12,
+   "format": {
+    "date": "year"
+   },
+   "text": "12"
+  },
+  {
+   "name": "a fraction is never a year",
+   "value": 2026.5,
+   "format": {
+    "date": "year"
+   },
+   "text": "2,026.5"
+  },
+  {
+   "name": "en is the default and reads as before",
+   "value": 1234.567,
+   "format": "full",
+   "locale": "en",
+   "text": "1,234.57"
+  },
+  {
+   "name": "de groups with a point and has a decimal comma",
+   "value": 1234567.891,
+   "format": "full",
+   "locale": "de",
+   "text": "1.234.567,89"
+  },
+  {
+   "name": "fr groups with a narrow no-break space",
+   "value": 1234567.891,
+   "format": "full",
+   "locale": "fr",
+   "text": "1 234 567,89"
+  },
+  {
+   "name": "es number mapping",
+   "value": 9876.5,
+   "format": {
+    "style": "number",
+    "decimals": 1
+   },
+   "locale": "es",
+   "text": "9.876,5"
+  },
+  {
+   "name": "it percent keeps the percent sign after the number",
+   "value": 0.3825,
+   "format": {
+    "style": "percent",
+    "decimals": 2
+   },
+   "locale": "it",
+   "text": "38,25%"
+  },
+  {
+   "name": "pt currency keeps the symbol in front",
+   "value": 1234.5,
+   "format": {
+    "style": "currency",
+    "currency": "EUR"
+   },
+   "locale": "pt",
+   "text": "€1.234,50"
+  },
+  {
+   "name": "nl compact has the decimal comma",
+   "value": 1234,
+   "format": "compact",
+   "locale": "nl",
+   "text": "1,2K"
+  },
+  {
+   "name": "de negative number",
+   "value": -1234.5,
+   "format": {
+    "style": "number"
+   },
+   "locale": "de",
+   "text": "-1.234,5"
+  },
+  {
+   "name": "a number without grouping has only the decimal separator",
+   "value": 1234.5,
+   "format": {
+    "style": "number",
+    "grouping": false
+   },
+   "locale": "de",
+   "text": "1234,5"
+  },
+  {
+   "name": "de month names are the full names",
+   "value": "2026-03-05",
+   "format": {
+    "date": "MMMM yyyy"
+   },
+   "locale": "de",
+   "text": "März 2026"
+  },
+  {
+   "name": "de short month",
+   "value": "2026-03-05",
+   "format": {
+    "date": "month-year"
+   },
+   "locale": "de",
+   "text": "Mär 2026"
+  },
+  {
+   "name": "fr short month has the point",
+   "value": "2026-02-05",
+   "format": {
+    "date": "month-year"
+   },
+   "locale": "fr",
+   "text": "févr. 2026"
+  },
+  {
+   "name": "es full month in lower case",
+   "value": "2026-12-24",
+   "format": {
+    "date": "MMMM yyyy"
+   },
+   "locale": "es",
+   "text": "diciembre 2026"
+  },
+  {
+   "name": "nl short month",
+   "value": "2026-03-05",
+   "format": {
+    "date": "month"
+   },
+   "locale": "nl",
+   "text": "mrt"
+  },
+  {
+   "name": "pt full month",
+   "value": "2026-03-05",
+   "format": {
+    "date": "MMMM"
+   },
+   "locale": "pt",
+   "text": "março"
+  },
+  {
+   "name": "it the catalog date format reads the locale too",
+   "value": "2026-05-01",
+   "catalog": {
+    "date": "month-year"
+   },
+   "locale": "it",
+   "text": "mag 2026"
+  },
+  {
+   "name": "a date numeric pattern is the same in every locale",
+   "value": "2026-03-05",
+   "format": {
+    "date": "dd/MM/yyyy"
+   },
+   "locale": "fr",
+   "text": "05/03/2026"
+  },
+  {
+   "name": "an unknown locale reads as en",
+   "value": 1234.5,
+   "format": {
+    "style": "number"
+   },
+   "locale": "xx",
+   "text": "1,234.5"
   }
  ],
  "bad": [

@@ -380,6 +380,7 @@ public static partial class CatalogLoader
             var attribute = new AttributeDef
             {
                 Type = d!["type"]!.GetValue<string>(), SortKey = d["sort_key"]?.GetValue<string>(),
+                Format = d["format"]?.DeepClone() as JsonObject,
                 Synonyms = Strings(d["synonyms"]),
             };
             attribute.DateKey = d["date"]?.GetValue<string>();
@@ -450,7 +451,7 @@ public static partial class CatalogLoader
                             if (!instances.TryGetValue(instanceName, out var inst))
                                 instances[instanceName] = inst = new AttributeDef
                                 {
-                                    Type = attribute.Type, SortKey = attribute.SortKey, Instance = (name, r), IsTime = attribute.IsTime,
+                                    Type = attribute.Type, SortKey = attribute.SortKey, Format = attribute.Format, Instance = (name, r), IsTime = attribute.IsTime,
                                     Synonyms = attribute.Synonyms.Select(x => $"{r.Replace('_', ' ')} {x}").ToList(),
                                 };
                             inst.Bindings[SourceId(source, fact)] = new BindingDef { Join = key, Column = column, Dax = b["native"]?["DAX"]?.GetValue<string>() };
@@ -504,7 +505,7 @@ public static partial class CatalogLoader
                 { errors.Add(Err("duplicate_member", $"$.dimensions.{derivedName}", $"{derivedName} is already a dimension, so it can't be {attribute} read through {name}.")); continue; }
                 var derived = new AttributeDef
                 {
-                    Type = attr.Type, SortKey = null, Linked = (name, attribute), IsTime = attr.IsTime,
+                    Type = attr.Type, SortKey = null, Format = attr.Format, Linked = (name, attribute), IsTime = attr.IsTime,
                     Synonyms = attr.Synonyms.Select(x => $"{x} of the {name[(name.IndexOf('.') + 1)..].Replace('_', ' ')}").ToList(),
                 };
                 foreach (var (sourceId, datetimeBinding) in datetimeAttribute.Bindings)

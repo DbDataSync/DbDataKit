@@ -32,6 +32,26 @@ public class EngineTests
         Assert.Equal(2, engine.UnsupportedCounts.Count);
     }
 
+    [Fact]
+    public void An_attribute_format_of_the_catalog_reaches_the_descriptor_as_x_format_and_a_bad_one_is_refused()
+    {
+        var yaml = File.ReadAllText(Path.Combine(Root, "catalog", "catalog.yaml"));
+        const string from = "      fiscal_month:\n        type: string\n        sort_key: fiscal_month\n";
+        Assert.Contains(from, yaml);
+        var cat = CatalogLoader.LoadText(yaml.Replace(from, from + "        format: {date: month-year}\n"));
+        using var executor = new DuckDbStandInExecutor(File.ReadAllText(Path.Combine(Root, "data", "seed.sql")));
+        var engine = new QisEngine(cat, executor, new Validator(cat), 1);
+        var result = engine.Run(Fixture("level1/31_between_dates_by_fiscal_month.json")["request"]!.AsObject());
+        Assert.Equal("complete", result.Status);
+        var fields = result.Combined!.Descriptor["schema"]!["fields"]!.AsArray().ToDictionary(f => f!["name"]!.GetValue<string>(), f => f!);
+        var month = fields.Values.Single(f => f["x_binding"]?.GetValue<string>() == "date.fiscal_month");
+        Assert.Equal("month-year", month["x_format"]!["date"]!.GetValue<string>());
+        Assert.All(fields.Values.Where(f => f["x_kind"]!.GetValue<string>() == "attribute" && f != month), f => Assert.Null(f["x_format"]));
+        // a format that is not a date mapping is refused by the schema
+        var bad = Assert.ThrowsAny<Exception>(() => CatalogLoader.LoadText(yaml.Replace(from, from + "        format: {style: percent}\n")));
+        Assert.Contains("format", bad.Message);
+    }
+
     private static Catalog NewCatalog() => Catalog.Load(Path.Combine(Root, "catalog", "catalog.yaml"));
     private static JsonObject Fixture(string path) => JsonNode.Parse(File.ReadAllText(Path.Combine(Root, "fixtures", path)))!.AsObject();
 

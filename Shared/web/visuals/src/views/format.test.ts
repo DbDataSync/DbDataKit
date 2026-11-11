@@ -1,20 +1,31 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { checkFormat, digits, formatValue } from './format'
+import { checkFormat, digits, formatValue, LOCALES, localeData } from './format'
 import type { CatalogFormat, ViewFormatValue } from './format'
 
 /** The goldens shared with the .NET suite (`ViewFormat`): `Shared/conformance/views/format/cases.json`. */
 const golden = JSON.parse(readFileSync(join(import.meta.dirname, '../../../../conformance/views/format/cases.json'), 'utf8')) as {
-  formats: { name: string; value: unknown; format?: ViewFormatValue; catalog?: CatalogFormat; text: string }[]
+  formats: { name: string; value: unknown; format?: ViewFormatValue; catalog?: CatalogFormat; locale?: string; text: string }[]
   bad: { format: unknown; key: string; message: string }[]
 }
 
 describe('formatValue', () => {
   for (const c of golden.formats)
     it(c.name, () => {
-      expect(formatValue(c.value, c.format, c.catalog)).toBe(c.text)
+      expect(formatValue(c.value, c.format, c.catalog, c.locale)).toBe(c.text)
     })
+
+  it('the locale table has the seven locales with twelve months each', () => {
+    expect([...LOCALES]).toEqual(['en', 'de', 'fr', 'es', 'it', 'pt', 'nl'])
+    for (const code of LOCALES) {
+      const l = localeData(code)
+      expect(l.months).toHaveLength(12)
+      expect(l.short).toHaveLength(12)
+      expect(l.decimal).not.toBe(l.group)
+    }
+    expect(localeData('klingon')).toBe(localeData('en'))
+  })
 
   it('every good golden is a format the check accepts', () => {
     for (const c of golden.formats) if (c.format !== undefined) expect(checkFormat(c.format), c.name).toBeNull()

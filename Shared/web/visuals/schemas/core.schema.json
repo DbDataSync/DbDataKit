@@ -28,6 +28,7 @@
       }
     },
     "parameters": { "type": "array", "items": { "$ref": "#/$defs/parameter" } },
+    "locale": { "description": "The language numbers and dates are written in: the separators of a number and the names of the months (plan 32 DBR46). A request may ask for another; the default is the server's, else en.", "enum": ["en", "de", "fr", "es", "it", "pt", "nl"] },
     "theme": {
       "type": "object",
       "additionalProperties": false,

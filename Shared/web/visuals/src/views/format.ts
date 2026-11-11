@@ -1,8 +1,9 @@
 /**
  * The format vocabulary of the shared core and its one formatter (plan 32 section 9g, DBR40): the twin of `ViewFormat` in `DbDataKit.Views` (.NET), run against the same goldens
  * (`Shared/conformance/views/format/cases.json`) so the screen, the PDF and an email read alike. A format is a preset (`catalog`, `full`, `compact`, `percent`), a number mapping
- * `{style, decimals, currency, grouping}` or a date mapping `{date: preset | pattern}` over a closed token set. Separators and month names are the invariant (English) ones.
+ * `{style, decimals, currency, grouping}` or a date mapping `{date: preset | pattern}` over a closed token set. Separators and month names are the locale's (`locales.json`, DBR46; English when none is given).
  */
+import locales from './locales.json'
 
 export const FORMAT_PRESETS = ['catalog', 'full', 'compact', 'percent'] as const
 export const NUMBER_STYLES = ['number', 'currency', 'percent', 'compact'] as const
@@ -11,7 +12,7 @@ export const MAX_DECIMALS = 10
 export const MAX_PATTERN_LENGTH = 40
 
 /** A catalog's own format of a field (`x_format` of the result's descriptor). */
-export interface CatalogFormat { style?: string; decimals?: number; currency?: string }
+export interface CatalogFormat { style?: string; decimals?: number; currency?: string; date?: string }
 export type ViewFormatValue = string | { style?: string; decimals?: number; currency?: string; grouping?: boolean; date?: string }
 /** What is wrong with a format: the key inside it (empty for the format itself) and the words. */
 export interface FormatProblem { key: string; message: string }
@@ -19,7 +20,21 @@ export interface FormatProblem { key: string; message: string }
 const DATE_PATTERNS: Record<string, string> = {
   year: 'yyyy', quarter: "'Q'Q yyyy", month: 'MMM', 'month-year': 'MMM yyyy', date: 'yyyy-MM-dd', datetime: 'yyyy-MM-dd HH:mm',
 }
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+/** What a locale changes: the separators of a number and the names of the months (plan 32 DBR46). One closed table, `locales.json`, which `DbDataKit.Views` embeds as the same file. */
+export interface LocaleData { decimal: string; group: string; months: string[]; short: string[] }
+const LOCALE_TABLE = locales as Record<string, LocaleData>
+export const LOCALES: readonly string[] = Object.keys(LOCALE_TABLE)
+
+/** The locale's data; an unknown or empty code reads as `en` (a caller that must refuse one checks `LOCALES`). */
+export function localeData(code?: string | null): LocaleData {
+  return (code ? LOCALE_TABLE[code] : undefined) ?? LOCALE_TABLE.en!
+}
+
+function localize(text: string, locale?: string | null): string {
+  if (!locale || locale === 'en') return text
+  const l = localeData(locale)
+  return text.replace(/[,.]/g, (c) => (c === ',' ? l.group : l.decimal))
+}
 const TOKEN_LIST = 'yyyy, yy, Q, MMMM, MMM, MM, dd, HH, mm, ss'
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -91,13 +106,27 @@ function parse(input: string): { problem?: string; parts: Part[] } {
  * A value as text under a format: a number takes a preset or a number mapping (the catalog's own format supplies the default decimals and what `catalog` and `full` read); a text takes a date mapping
  * (an ISO date or date-time, read as written, no time zone applied) and is otherwise returned as it is.
  */
-export function formatValue(value: unknown, format?: ViewFormatValue | null, catalog?: CatalogFormat | null): string {
-  if (typeof value === 'string') return isObject(format) && typeof format.date === 'string' ? formatDate(value, format.date) : value
-  if (typeof value === 'number') return formatNumber(value, format, catalog)
+export function formatValue(value: unknown, format?: ViewFormatValue | null, catalog?: CatalogFormat | null, locale?: string | null): string {
+  const pattern = datePattern(format, catalog)
+  if (typeof value === 'string') return pattern === null ? value : formatDate(value, pattern, locale)
+  // a bare whole number of four digits is a year when a date format reads it (DBR48)
+  if (typeof value === 'number' && pattern !== null && Number.isInteger(value) && value >= 1000 && value <= 9999) return formatDate(String(value), pattern, locale)
+  if (typeof value === 'number') return formatNumber(value, format, catalog, locale)
   return value === null || value === undefined ? '' : String(value)
 }
 
-export function formatNumber(v: number, format?: ViewFormatValue | null, catalog?: CatalogFormat | null): string {
+/** The date pattern a value is read under: the format's own `date`, or, when the widget gives no format (or says `catalog`), the catalog field's (`x_format` of an attribute); null when neither is a date format. */
+export function datePattern(format?: ViewFormatValue | null, catalog?: CatalogFormat | null): string | null {
+  if (isObject(format)) return typeof format.date === 'string' ? format.date : null
+  if (format === null || format === undefined || format === 'catalog') return typeof catalog?.date === 'string' ? catalog.date : null
+  return null
+}
+
+export function formatNumber(v: number, format?: ViewFormatValue | null, catalog?: CatalogFormat | null, locale?: string | null): string {
+  return localize(formatNumberInvariant(v, format, catalog), locale)
+}
+
+function formatNumberInvariant(v: number, format?: ViewFormatValue | null, catalog?: CatalogFormat | null): string {
   if (!Number.isFinite(v)) return String(v)
   if (isObject(format) && typeof format.style === 'string') {
     const grouping = format.grouping !== false
@@ -166,8 +195,9 @@ export function digits(abs: number, fixed: number | null, atMost: number, groupi
 const ISO = /^(\d{4})(?:-(\d{2})(?:-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?)?)?$/
 
 /** A date or date-time as text under a preset or a pattern; text that is not an ISO date is returned as it is. */
-export function formatDate(text: string, patternOrPreset: string): string {
+export function formatDate(text: string, patternOrPreset: string, locale?: string | null): string {
   const { problem, parts } = parse(patternOrPreset)
+  const names = localeData(locale)
   const m = ISO.exec(text)
   if (problem || !m) return text
   const g = (i: number, dflt: number) => (m[i] === undefined ? dflt : Number(m[i]))
@@ -180,8 +210,8 @@ export function formatDate(text: string, patternOrPreset: string): string {
       case 'y4': return String(y).padStart(4, '0')
       case 'y2': return two(y % 100)
       case 'q': return String(Math.floor((mo - 1) / 3) + 1)
-      case 'mname': return MONTHS[mo - 1]!
-      case 'mshort': return MONTHS[mo - 1]!.slice(0, 3)
+      case 'mname': return names.months[mo - 1]!
+      case 'mshort': return names.short[mo - 1]!
       case 'm2': return two(mo)
       case 'd2': return two(d)
       case 'h2': return two(h)
