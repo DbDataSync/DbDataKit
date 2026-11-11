@@ -12,10 +12,10 @@ Summary (counts of the features below):
 
 | Product | built | partly | missing | not planned | features |
 | --- | --- | --- | --- | --- | --- |
-| Build | 15 | 2 | 3 | 5 | 25 |
+| Build | 15 | 3 | 2 | 5 | 25 |
 | Store | 5 | 1 | 1 | 3 | 10 |
 | Sync | 9 | 4 | 5 | 3 | 21 |
-| All | 29 | 7 | 9 | 11 | 56 |
+| All | 29 | 8 | 8 | 11 | 56 |
 
 ### Build
 
@@ -44,7 +44,7 @@ Summary (counts of the features below):
 | Publish the package to a Runner (channel, stage, serve, slots) | `build/src/pages/RunnerPublish.tsx`, `runnerPublish.ts` | `workspace/src/pages/PublishForm.tsx`, `BuildsPanel.tsx` | built | SC20d |
 | Publish a semantic model to a Gateway | `build/src/pages/ModelPublish.tsx` | none: the build kind lists no `gateway` route | missing | SC20e |
 | Publish the project's data sources (connection, read login as a secret, grants) to a Gateway; hand a data source over | `build/src/pages/PublishTab.tsx` | none: it would put a login on a Gateway (D20, the option not taken) | missing | SC20e |
-| Dashboards and reports of a project: list, new, check, publish (Views tab) | `build/src/pages/ViewsTab.tsx` | none: `dashboards/*.yaml` and `reports/*.yaml` open as text | missing | SC20n |
+| Dashboards and reports of a project: list, new, check, publish (Views tab) | `build/src/pages/ViewsTab.tsx` | `workspace/src/pages/BuildViewsPanel.tsx` (list, new, edit with `@dbdatakit/views-editor`, check findings); no model catalog for the wells and no publish to a Gateway (with SC20e) | partly | SC20n |
 | Lineage: the model graph; column lineage is the console's Lineage page, which reads Build servers | `build/src/pages/ProjectPage.tsx` (`GraphTab`); console Lineage page | `workspace/src/pages/BuildGraphPanel.tsx` (model level only) | partly | SC20h |
 
 ### Store
