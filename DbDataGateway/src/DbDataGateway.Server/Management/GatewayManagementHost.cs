@@ -90,7 +90,8 @@ public static class GatewayManagementHost
             git.CommitChanges(found, "Configuration as found", new GitAuthor("dbdatagateway", "dbdatagateway@local.invalid"));
         // the data sources need the management object's validation, and it needs them to route to: made in two steps
         GatewayDataSources? dataSources = null;
-        var maintenance = new MaintenanceGate();
+        // while in maintenance the instance's own row in the state stops being refreshed, so a move's comparison against the source sees no change in it (plan 29b C06)
+        var maintenance = new MaintenanceGate(onEnter: _ => app.Services.GetRequiredService<DbDataGateway.Server.State.ServingInstanceLease>().Pause(), onLeave: () => app.Services.GetRequiredService<DbDataGateway.Server.State.ServingInstanceLease>().Resume());
         var management = new GatewayManagement(configuration, configDirectory, instanceId, GatewayHost.Version);
         // one for every kind of change, in the state every instance of a group shares (plan 20 O02); the file it used to be is read in once
         var audit = new DbDataGateway.Server.State.StateAuditLog(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>());
