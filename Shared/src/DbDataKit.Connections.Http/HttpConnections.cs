@@ -13,12 +13,21 @@ public sealed class HttpConnectionClient : IDisposable
 {
     private readonly OAuthTokenSource? _tokens;
 
-    internal HttpConnectionClient(HttpClient client, OAuthTokenSource? tokens, X509Certificate2? certificate)
+    private readonly string[] _secrets;
+
+    internal HttpConnectionClient(HttpClient client, OAuthTokenSource? tokens, X509Certificate2? certificate, IReadOnlyList<string>? secrets = null)
     {
         Client = client;
         _tokens = tokens;
         Certificate = certificate;
+        _secrets = [.. (secrets ?? []).Where(s => s.Length > 0)];
     }
+
+    /// <summary>
+    /// The text with the composed address and each secret part of it (plain and escaped) replaced by <c>***</c>. An <see cref="HttpClient"/> failure can carry the request address; a caller that shows or logs the words of one passes them through here first
+    /// (the Test result and the failure classes never carry them at all).
+    /// </summary>
+    public string Redact(string? text) => SecretRedaction.Redact(text, _secrets);
 
     public HttpClient Client { get; }
 
@@ -44,7 +53,7 @@ public static class HttpConnections
     {
         ArgumentNullException.ThrowIfNull(definition);
         if (definition.KindName != ConnectionKinds.Http || definition.Endpoint is null)
-            throw new ArgumentException(definition.EndpointSecret is not null ? "A webhook's address is a secret reference (endpoint_secret); a delivery channel resolves it when it sends." : "The connection is not of kind http with an endpoint.", nameof(definition));
+            throw new ArgumentException("The connection is not of kind http with an endpoint.", nameof(definition));
         options ??= new();
         var spec = definition.SignIn ?? new SignInSpec();
         var time = options.Time ?? TimeProvider.System;
@@ -60,9 +69,27 @@ public static class HttpConnections
 
         OAuthTokenSource? tokens = spec.Method == "oauth2_client_credentials" ? new OAuthTokenSource(spec, secrets, new HttpMessageInvoker(inner, disposeHandler: false), time) : null;
         var handler = new SignInHandler(spec, secrets, tokens, inner, time);
-        var endpoint = definition.Endpoint.EndsWith('/') ? definition.Endpoint : definition.Endpoint + "/";
+        var (composed, parts) = ComposeEndpoint(definition, secrets);
+        // an API's address is a base for relative paths (a trailing slash); a webhook's is the whole address, which a slash would change
+        var endpoint = composed.EndsWith('/') || composed.Contains('?', StringComparison.Ordinal) || definition.Webhook is not null ? composed : composed + "/";
         var client = new HttpClient(handler) { BaseAddress = new Uri(endpoint), Timeout = TimeSpan.FromSeconds(definition.Timeouts.CommandS) };
-        return new HttpConnectionClient(client, tokens, certificate);
+        return new HttpConnectionClient(client, tokens, certificate, [composed, .. parts]);
+    }
+
+    /// <summary>The address of a connection with its placeholders filled from the secrets (or the whole address when it is a secret), and the secret values used: the address is secret, and exists only in the call.</summary>
+    internal static (string Address, IReadOnlyList<string> Parts) ComposeEndpoint(ConnectionDefinition definition, ISecretResolver secrets)
+    {
+        var endpoint = definition.Endpoint!;
+        if (EndpointTemplate.IsHidden(endpoint))
+        {
+            var whole = SecretText.ReadAsync(secrets, endpoint, default).GetAwaiter().GetResult().Trim();
+            return (whole, [whole]);
+        }
+
+        var values = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var name in EndpointTemplate.Names(endpoint))
+            values[name] = definition.EndpointSecrets.TryGetValue(name, out var reference) ? SecretText.ReadAsync(secrets, reference, default).GetAwaiter().GetResult().Trim() : throw new ArgumentException($"The placeholder {{{name}}} of the endpoint is not bound.", nameof(definition));
+        return (EndpointTemplate.Compose(endpoint, n => values[n]), [.. values.Values]);
     }
 
     private static SocketsHttpHandler Sockets(ConnectionDefinition d, X509Certificate2? certificate)

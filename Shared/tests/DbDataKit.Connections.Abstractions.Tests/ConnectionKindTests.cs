@@ -94,7 +94,7 @@ public sealed class ConnectionKindTests
     {
         var r = Any($"schema: connection/2\nkind: http\nname: x\n{endpoint}");
         Assert.False(r.Ok);
-        Assert.Contains("no user name, password or query", Errors(r), StringComparison.Ordinal);
+        Assert.Contains("`endpoint`", Errors(r), StringComparison.Ordinal);
     }
 
     [Fact]

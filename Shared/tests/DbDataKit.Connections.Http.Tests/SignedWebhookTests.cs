@@ -64,11 +64,49 @@ public sealed class SignedWebhookTests
     }
 
     [Fact]
-    public void A_webhook_whose_address_is_a_secret_has_no_http_client_of_its_own()
+    public async Task A_template_address_is_composed_inside_the_call_and_redacted_everywhere_else()
     {
-        var r = ConnectionDefinitionLoader.Load("schema: connection/2\nkind: http\nname: hook\nendpoint_secret: env:URL\nwebhook: { format: slack }\n", "c.yml", outsideKinds: true);
-        Assert.True(r.Ok);
-        var e = Assert.Throws<ArgumentException>(() => HttpConnections.Create(r.Definition!, Secrets()));
-        Assert.Contains("endpoint_secret", e.Message, StringComparison.Ordinal);
+        var capture = new UrlCapture();
+        var secrets = new SecretResolverChain([new EnvSecretProvider(n => n switch { "TOKEN" => "T000/B000/CANARYtoken9", "SIG" => "sig+canary/value=", _ => null })]);
+        var r = ConnectionDefinitionLoader.Load("schema: connection/2\nkind: http\nname: hook\nendpoint: \"https://hooks.example.com/services/{token}?api-version=1&sig={sig}\"\nendpoint_secrets: { token: env:TOKEN, sig: env:SIG }\nwebhook: { format: slack }\n", "c.yml", outsideKinds: true);
+        Assert.True(r.Ok, string.Join("\n", r.Diagnostics));
+        using var client = HttpConnections.Create(r.Definition!, secrets, new HttpConnectionOptions(capture));
+        (await client.Client.GetAsync("")).Dispose();
+        Assert.Equal("https://hooks.example.com/services/T000/B000/CANARYtoken9?api-version=1&sig=sig%2Bcanary%2Fvalue%3D", capture.Seen.Single());
+
+        var failure = $"The request to {capture.Seen.Single()} failed (T000/B000/CANARYtoken9, sig+canary/value=, CANARYtoken9)";
+        var shown = client.Redact(failure);
+        foreach (var part in new[] { "CANARYtoken9", "sig%2Bcanary", "sig+canary", "T000/B000" }) Assert.DoesNotContain(part, shown, StringComparison.Ordinal);
+        Assert.Contains("***", shown, StringComparison.Ordinal);
+
+        // the Test result shows the template, never the composed address
+        var test = await HttpConnectionTester.TestAsync(r.Definition!, secrets, new HttpConnectionOptions(capture));
+        Assert.Contains("https://hooks.example.com/services/{token}", test.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("CANARYtoken9", test.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("canary", test.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_whole_address_secret_is_called_and_shown_as_hidden()
+    {
+        var capture = new UrlCapture();
+        var secrets = new SecretResolverChain([new EnvSecretProvider(n => n == "URL" ? "https://hook.example.com/in/CANARYwhole1234" : null)]);
+        var r = ConnectionDefinitionLoader.Load("schema: connection/2\nkind: http\nname: hook\nendpoint: env:URL\nwebhook: { format: slack }\n", "c.yml", outsideKinds: true);
+        Assert.True(r.Ok, string.Join("\n", r.Diagnostics));
+        var test = await HttpConnectionTester.TestAsync(r.Definition!, secrets, new HttpConnectionOptions(capture));
+        Assert.Equal("https://hook.example.com/in/CANARYwhole1234", capture.Seen.Single());
+        Assert.Contains(EndpointTemplate.Hidden, test.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("CANARYwhole1234", test.Message, StringComparison.Ordinal);
+    }
+
+    private sealed class UrlCapture : HttpMessageHandler
+    {
+        public List<string> Seen { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Seen.Add(request.RequestUri!.AbsoluteUri);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+        }
     }
 }

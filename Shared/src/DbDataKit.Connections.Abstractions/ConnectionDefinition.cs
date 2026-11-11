@@ -144,7 +144,7 @@ public sealed class SignInSpec
 
 /// <summary>
 /// The <c>webhook:</c> section of a connection of kind <c>http</c> that a delivery channel sends through (plan 22a GP09 and the GP18 fold; <c>connection/2</c>, additive): which message the receiver takes (<c>slack</c> Block Kit, <c>teams</c> Adaptive Card, <c>signed</c> a JSON document
-/// signed with <c>sign_in.method: signed_webhook</c>), and the private addresses it may reach. The address of a webhook carries a token, so it is <see cref="ConnectionDefinition.EndpointSecret"/>, a reference, rather than <c>endpoint</c>.
+/// signed with <c>sign_in.method: signed_webhook</c>), and the private addresses it may reach. The address of a webhook carries a token, so the secret parts are <c>{placeholders}</c> of the <c>endpoint</c> template bound in <see cref="ConnectionDefinition.EndpointSecrets"/>.
 /// </summary>
 [ConfigSchema(Naming = KeyNaming.SnakeCase, Description = "A webhook a delivery channel sends through (connection/2, kind http).")]
 public sealed class WebhookSpec
@@ -306,13 +306,14 @@ public sealed class ConnectionDefinition
     [ConfigIgnore]
     public bool IsOutside => KindName != ConnectionKinds.Database;
 
-    /// <summary>The address of an outside system: an http or https address with no user name, password or query in it (a key is never part of the address).</summary>
+    /// <summary>The address of an outside system, as a template (<see cref="EndpointTemplate"/>): an http or https address with no user name or password and no secret in plain sight; the secret parts are <c>{placeholders}</c> bound in <see cref="EndpointSecrets"/>. Or wholly a secret reference (<c>secret:...</c>), for a service nothing classifies, shown as "address hidden".</summary>
     public string? Endpoint { get; set; }
 
     /// <summary>
-    /// The address of a webhook as a reference to a secret (<c>secret:</c>, <c>env:</c>, <c>file:</c>...): Slack, Teams and signed webhooks carry a token in the address, so it is never written in the file. Instead of <see cref="Endpoint"/>, and only with <see cref="Webhook"/>.
+    /// The secret parts of <see cref="Endpoint"/> as <c>{placeholder}</c> names bound to secret references (<c>token: secret:...</c>): a webhook's address carries a token, so the file keeps the visible template and the secrets stay in the store (see <see cref="EndpointTemplate"/>).
+    /// Every placeholder is bound and every binding used.
     /// </summary>
-    public string? EndpointSecret { get; set; }
+    public Dictionary<string, string> EndpointSecrets { get; set; } = [];
 
     /// <summary>The webhook section (kind <c>http</c> that a delivery channel sends through); null: an ordinary API connection.</summary>
     public WebhookSpec? Webhook { get; set; }
