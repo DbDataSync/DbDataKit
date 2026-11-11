@@ -129,6 +129,10 @@ jobs:
         run: |
           npm ci
           npm run build -w @dbdatakit/console
+      # The console's own tests (vitest): the module docs build, which fails for a page link that does not resolve. Nothing else ran them, so a broken link in a module's docs went unseen.
+      - name: Test the console web app
+        working-directory: Shared/web
+        run: npm test -w @dbdatakit/console
       # The shared visuals (plan 19, Y01-Y02): the view schema's validator and the renderer's component tests, on the semantic library's view fixtures. Plain Node, no browser.
       - name: Test the shared visuals
         working-directory: Shared/web
