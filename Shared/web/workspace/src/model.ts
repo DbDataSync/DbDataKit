@@ -171,9 +171,10 @@ export function parseBindings(text: string): { bind: Record<string, string>; pro
 }
 
 /** What a publish came to, as one sentence, whatever it was: an app on a Gateway, a package staged or served on a Runner's channel, models on a Gateway's data sources. */
-export function publishedLine(p: { app?: string; version?: number; gateway?: string; package?: string; channel?: string; mode?: string; changed?: boolean; runner?: string; models?: { model: string; data_source: string; version?: number | null; unchanged?: boolean | null }[] }): string {
+export function publishedLine(p: { app?: string; instance?: string; version?: number; gateway?: string; package?: string; channel?: string; mode?: string; changed?: boolean; runner?: string; models?: { model: string; data_source: string; version?: number | null; unchanged?: boolean | null }[] }): string {
   if (p.package) return `${p.mode === 'serve' ? 'Published' : 'Staged'} ${p.package} on ${p.channel} of ${p.runner ?? 'the Runner'} as version ${p.version}${p.changed === false ? ' (the same content as before, nothing changed)' : ''}.`
   if (p.models) return `Published ${p.models.map((m) => `${m.model} on the data source ${m.data_source}${m.version ? ` as version ${m.version}${m.unchanged ? ' (unchanged)' : ''}` : ''}`).join(', ')} to ${p.gateway ?? 'the Gateway'}.`
+  if (p.instance) return `Sent ${p.app} to ${p.gateway ?? 'the Gateway'} as the preview of ${p.instance}${p.version ? ` (version ${p.version} of the preview channel)` : ''}.`
   return `Published ${p.app} to ${p.gateway}${p.version ? ` as version ${p.version}` : ''}.`
 }
 

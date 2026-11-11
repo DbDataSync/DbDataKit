@@ -278,6 +278,18 @@ test('an app is made from the template, a spec edited, built, previewed, committ
   // ---- the instance on the Gateway: an instance of the published app, opened as a person of the home, shows the change
   gatewayCommand(['apps', 'instance-save', '--name', 'sales', '--app', 'sales'])
   await new Promise((resolve) => setTimeout(resolve, 3000))        // the host reads the group's definitions every second
+
+  // ---- plan 22a GP35d: the same build as a preview of that instance on the Gateway's preview channel (an author's step: nothing goes to production)
+  await done.getByTestId('wsp-preview-data-target').fill('edge')
+  await done.getByTestId('wsp-preview-data-instance').fill('ghost')
+  await done.getByTestId('wsp-preview-data').click()
+  await expect(page.getByTestId('wsp-publish-refused').last()).toContainText("no instance 'ghost' in production")     // the Gateway's own words
+  await done.getByTestId('wsp-preview-data-instance').fill('sales')
+  await done.getByTestId('wsp-preview-data').click()
+  const sent = page.getByTestId('wsp-preview-data-done')
+  await expect(sent).toHaveAttribute('data-instance', 'sales', { timeout: 60_000 })
+  await expect(sent.getByTestId('wsp-preview-data-link')).toHaveAttribute('href', `${appsUrl}/apps/sales~preview/`)
+  await expect(done.locator('[data-testid="wsp-publish-record"][data-ok="true"]').last()).toContainText('previewed sales on edge')
   await openInstance(browser)
 })
 
@@ -311,6 +323,18 @@ async function openInstance(browser: Browser) {
     const app = page.frameLocator('#app-frame')
     await expect(app.locator('nav.va-menu a').first()).toHaveText(title, { timeout: 30_000 })
     await expect(app.locator('.va-title')).toHaveText(title)
+
+    // the preview of it (GP35d): its own address, the same people, a notice that it is a preview; its token is its own and its changes are refused
+    await page.goto(`${appsUrl}/apps/sales~preview/`)
+    await expect(page.locator('p.notice')).toContainText('Preview of sales')
+    await expect(page.frameLocator('#app-frame').locator('nav.va-menu a').first()).toHaveText(title, { timeout: 30_000 })
+    const refused = await page.evaluate(async (url) => {
+      const token = (await (await fetch(`${url}/apps/sales~preview/_token`, { method: 'POST', credentials: 'same-origin', headers: { 'X-DbData-Shell': '1' } })).json()).token
+      const write = await fetch(`${url}/apps/sales~preview/_data/api/v1/models/territories/changes`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: '{"changes":[]}' })
+      return { status: write.status, text: await write.text() }
+    }, appsUrl)
+    expect(refused.status).toBe(403)
+    expect(refused.text).toContain('This is a preview')
   } finally {
     await context.close()
   }

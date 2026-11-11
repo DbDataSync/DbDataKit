@@ -31,6 +31,9 @@ internal sealed class FakeGateway : IAsyncDisposable
     /// <summary>The entity models it serves (plan 33 SC21b): name to the version and the data source; and the data sources it has, which a model must name.</summary>
     public ConcurrentDictionary<string, (int Version, string DataSource, string Text)> Models { get; } = new();
     public HashSet<string> DataSources { get; } = ["mdm"];
+
+    /// <summary>The instances production has, which a preview may be of.</summary>
+    public HashSet<string> Instances { get; } = ["orders"];
     public string InstanceId { get; } = "fake-gateway-1";
 
     private FakeGateway(WebApplication app, Uri url, string directory, PairingCodes codes) => (this.app, Url, this.directory, Codes) = (app, url, directory, codes);
@@ -55,6 +58,8 @@ internal sealed class FakeGateway : IAsyncDisposable
         var gateway = new FakeGatewayState();
         app.MapPost("/api/v1/apps/check", async (HttpContext context) => await gateway.Handle(context, check: true));
         app.MapPut("/api/v1/apps/{name}", async (HttpContext context) => await gateway.Handle(context, check: false));
+        app.MapPut("/api/v1/apps/{name}/channels/{channel}", async (HttpContext context) => await gateway.Handle(context, check: false));
+        app.MapPut("/api/v1/app-instances/{name}/channels/{channel}", async (string name, string channel, HttpContext context) => await gateway.PreviewInstance(context, name, channel));
         app.MapGet("/api/v1/entity-models/{name}", async (string name, HttpContext context) => await gateway.Models(context, name));
         app.MapPut("/api/v1/entity-models/{name}", async (string name, HttpContext context) => await gateway.Models(context, name));
         await app.StartAsync();
@@ -96,6 +101,19 @@ internal sealed class FakeGateway : IAsyncDisposable
             Owner.Models[name] = (version, dataSource, text);
             Owner.Published.Enqueue(body);
             await Reply(200, new { name, version, created = was is null, unchanged });
+        }
+
+        /// <summary>The Gateway's <c>PUT /api/v1/app-instances/{name}/channels/{channel}</c>: a preview instance of an instance that exists in production (here: the ones in <see cref="FakeGateway.Instances"/>).</summary>
+        public async Task PreviewInstance(HttpContext context, string name, string channel)
+        {
+            var token = context.ManagementToken();
+            Owner.Calls.Enqueue($"{context.Request.Method} {context.Request.Path} as {token.SubjectId} ({token.SubjectName}) with {string.Join("+", ServerRoles.Names(token.Roles))}");
+            context.Response.StatusCode = !Owner.Instances.Contains(name) ? 400 : 200;
+            var body = await System.Text.Json.JsonSerializer.DeserializeAsync<JsonObject>(context.Request.Body);
+            Owner.Published.Enqueue(body!);
+            await context.Response.WriteAsJsonAsync(Owner.Instances.Contains(name)
+                ? new JsonObject { ["name"] = name, ["channel"] = channel, ["path"] = $"/apps/{name}~{channel}/", ["address"] = $"https://apps.fake.test:8818/apps/{name}~{channel}/" }
+                : new JsonObject { ["error"] = $"There is no instance '{name}' in production to preview." });
         }
 
         public async Task Handle(HttpContext context, bool check)

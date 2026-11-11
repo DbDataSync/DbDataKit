@@ -31,7 +31,7 @@ export interface BuildResult {
   kind?: string; info?: Record<string, string>
 }
 /** What was published from a build: when, by whom, to which target, whether it worked and what the Gateway said. */
-export interface PublishRecord { at: string; by: string; target: string; ok: boolean; error?: string; answer?: PublishedAnswer }
+export interface PublishRecord { at: string; by: string; target: string; ok: boolean; error?: string; answer?: PublishedAnswer; /** the instance of a preview with data, when this record is one (GP35d) */ preview?: string }
 export interface BuildDetail { build: BuildSummary; result: BuildResult | null; publishes: PublishRecord[] }
 /** Whether the server can build, and what it lacks (`GET /api/v1/app-build`): each problem is a sentence that says what to set. */
 export interface BuildReadiness {
@@ -50,10 +50,14 @@ export interface CheckResult { kind: string; ok: boolean; diagnostics: CheckDiag
 /** What a Gateway or a Runner answered a publish with: an app's version, a package's version on a channel, or the models published. */
 export interface PublishedAnswer {
   app?: string; version?: number; hash?: string; target?: string; gateway?: string
+  /** a preview with data (GP35d): the instance it is of and where the Gateway serves it */
+  instance?: string; preview_path?: string | null; preview_address?: string | null
   package?: string; channel?: string; mode?: string; changed?: boolean; uploaded?: number; skipped?: number; tasks?: string[]; runner?: string
   models?: { model: string; data_source: string; version?: number | null; created?: boolean | null; unchanged?: boolean | null }[]
 }
 export interface PublishAnswer { steps: string[]; published: PublishedAnswer }
+/** What sending a build to the Gateway's preview channel answered (`POST .../builds/{b}/preview-data`). */
+export interface PreviewDataAnswer { steps: string[]; preview: PublishedAnswer }
 /** What a publish says besides the target and the note: for a Runner the channel (and whether it serves at once, the slots to bind), for a Gateway the data source of the models. */
 export interface PublishOptions { channel?: string; serve?: boolean; bind?: Record<string, string>; data_source?: string }
 /** A target's publisher key as a person may see it: the reference to the secret, never the key, and the Gateway it is paired with. */
@@ -93,6 +97,7 @@ export const workspaceApi = {
   previewUrl: (project: string, id: string, build: string) => apiUrl(`${builds(project, id)}/${enc(build)}/preview/`),
   publishTargets: (project?: string) => request<{ targets: PublishTarget[] }>(project ? `/api/v1/publish-targets?project=${enc(project)}` : '/api/v1/publish-targets').then((r) => r.targets),
   publish: (project: string, id: string, build: string, target: string, note: string, options: PublishOptions = {}) => request<PublishAnswer>(`${builds(project, id)}/${enc(build)}/publish`, json({ target, ...(note ? { note } : {}), ...options })),
+  previewWithData: (project: string, id: string, build: string, target: string, instance: string) => request<PreviewDataAnswer>(`${builds(project, id)}/${enc(build)}/preview-data`, json({ target, instance })),
   publisherKeys: () => request<{ keys: PublisherKey[] }>('/api/v1/publisher-keys').then((r) => r.keys),
   pairKey: (name: string, url: string, code: string) => request<PublisherKey>(`/api/v1/publisher-keys/${enc(name)}/pair`, json({ url, code })),
   setKey: (name: string, secretRef: string) => request<PublisherKey>(`/api/v1/publisher-keys/${enc(name)}`, { method: 'PUT', body: JSON.stringify({ secret_ref: secretRef }), headers: { 'Content-Type': 'application/json' } }),

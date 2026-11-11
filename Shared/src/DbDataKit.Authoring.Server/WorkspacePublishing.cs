@@ -41,6 +41,9 @@ public sealed partial class WorkspacePublishing(string directory, WorkspaceStore
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     private readonly object gate = new();
 
+    /// <summary>The Gateway channel a preview with data goes to (plan 21, plan 22a GP35d).</summary>
+    public const string PreviewChannel = "preview";
+
     private ISecretResolver Resolver => secrets();
 
     private string TargetsFile => Path.Combine(directory, "publish-targets.json");
@@ -155,7 +158,7 @@ public sealed partial class WorkspacePublishing(string directory, WorkspaceStore
     /// Publishes the app in <paramref name="appFolder"/> (a build's output) to the target <paramref name="targetName"/>. <paramref name="step"/> is told each step as it happens (the screen's progress). The Gateway first checks what publishing
     /// would do (its refusal, in its words, ends the publish before anything is stored); then the version is published. Returns what the Gateway answered.
     /// </summary>
-    public async Task<JsonObject> PublishAsync(string targetName, string appFolder, string? note, string actor, Action<string> step, CancellationToken ct = default)
+    public async Task<JsonObject> PublishAsync(string targetName, string appFolder, string? note, string actor, Action<string> step, CancellationToken ct = default, string? previewInstance = null)
     {
         var (target, key, role) = ResolveTarget(targetName, "an app");
 
@@ -170,11 +173,11 @@ public sealed partial class WorkspacePublishing(string directory, WorkspaceStore
         var identity = await KeyAsync(targetName, key.SecretRef, ct);
 
         using var http = new HttpClient(PairingClient.Pinned(target.Fingerprint)) { BaseAddress = new Uri(target.Url + "/"), Timeout = TimeSpan.FromMinutes(5) };
-        async Task<JsonObject> Call(HttpMethod method, string path, string doing)
+        async Task<JsonObject> Call(HttpMethod method, string path, string doing, JsonObject? content = null)
         {
             using var request = new HttpRequestMessage(method, path);
             request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, identity.Issuer().Issue(new ConsoleTokenRequest(target.InstanceId, "client:" + identity.Id, target.ClientName, role)));
-            request.Content = JsonContent.Create(body, options: Json);
+            request.Content = JsonContent.Create(content ?? body, options: Json);
             HttpResponseMessage response;
             try { response = await http.SendAsync(request, ct); }
             catch (HttpRequestException ex) { throw new WorkspacePublishException($"{target.Url} could not be reached ({ex.Message}).", 502); }
@@ -194,6 +197,21 @@ public sealed partial class WorkspacePublishing(string directory, WorkspaceStore
         var check = await Call(HttpMethod.Post, "api/v1/apps/check", $"the check of the app {name}");
         if (check["diagnostics"] is JsonArray diagnostics && diagnostics.Any(d => (string?)d?["severity"] is "error" or "Error"))
             throw new WorkspacePublishException("The Gateway's check of the app found errors: " + string.Join(" ", diagnostics.Where(d => (string?)d?["severity"] is "error" or "Error").Select(d => (string?)d?["message"] ?? d!.ToJsonString())), 409);
+        if (previewInstance is not null)
+        {
+            // plan 22a GP35d: not production. The build goes to the Gateway's preview channel and a preview of the instance runs it; that instance reads the data the production one reads and writes nothing
+            step($"Published {name} to the preview channel of {target.Url}.");
+            var sent = await Call(HttpMethod.Put, $"api/v1/apps/{Uri.EscapeDataString(name)}/channels/{PreviewChannel}", $"the preview of the app {name}");
+            var instance = await Call(HttpMethod.Put, $"api/v1/app-instances/{Uri.EscapeDataString(previewInstance)}/channels/{PreviewChannel}", $"the preview of the instance {previewInstance}", new JsonObject { ["app"] = name });
+            step($"Saved the preview of {previewInstance}{((string?)instance["address"] is { } at ? " at " + at : "")}.");
+            sent["app"] = name;
+            sent["instance"] = previewInstance;
+            sent["preview_path"] = (string?)instance["path"];
+            sent["preview_address"] = (string?)instance["address"];
+            sent["target"] = targetName;
+            sent["gateway"] = target.Url;
+            return sent;
+        }
         step($"Published {name} to {target.Url}.");
         var published = await Call(HttpMethod.Put, $"api/v1/apps/{Uri.EscapeDataString(name)}", $"the app {name}");
         published["app"] = name;
