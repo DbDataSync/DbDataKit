@@ -122,7 +122,7 @@ public sealed partial class WorkspaceBuilds : IDisposable
             ProjectArtifact artifact;
             try
             {
-                var findings = await projectKind.CheckAsync(root, limit.Token);
+                var findings = await DraftCheck.RunAsync(projectKind, root, limit.Token);
                 if (findings.Any(d => d.IsError)) artifact = new(false, findings.First(d => d.IsError).Message, findings);
                 else
                 {

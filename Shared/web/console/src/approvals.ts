@@ -22,6 +22,8 @@ export interface ApprovalRow {
   canDecide: boolean
   /** The console route of the screen where it is read and decided. */
   link: string
+  /** A change request: which one, so it can be decided here (SC21c). Absent on an app version, which is decided on the Gateway's screen. */
+  request?: { model: string; instance: string; id: string }
 }
 
 /** The Store's list of a model's requests (`GET /api/v1/models/{m}/requests?state=pending`). */
@@ -41,6 +43,7 @@ export function storeRows(server: InstanceSummary, model: string, list: StoreReq
       subject: `${model}${instance}`, detail: r.description ? `${r.description} (${changes})` : changes,
       by: r.proposed_by_name ?? r.proposed_by, byAgent: r.by_agent, since: r.proposed_at, canDecide: list.can_decide,
       link: `/servers/${server.id}/model/${encodeURIComponent(model)}/changes`,
+      request: { model, instance: r.instance || 'default', id: r.id },
     }
   })
 }
@@ -66,6 +69,30 @@ export function appRows(server: InstanceSummary, detail: GatewayAppDetail): Appr
     by: v.published_by, byAgent: false, since: v.published_at, canDecide: detail.caller.can_approve,
     link: `/servers/${server.id}/apps`,
   }))
+}
+
+/** The relay address of a decision on a Store change request: the Store's own route for the model copy (`POST .../requests/{id}/approve` or `reject`), the one its Change requests tab calls. */
+export function decisionPath(server: string, request: NonNullable<ApprovalRow['request']>, approve: boolean): string {
+  const copy = request.instance && request.instance !== 'default' ? `/instances/${encodeURIComponent(request.instance)}` : ''
+  return `/relay/${server}/api/v1/models/${encodeURIComponent(request.model)}${copy}/requests/${encodeURIComponent(request.id)}/${approve ? 'approve' : 'reject'}`
+}
+
+/** Why a decision cannot be sent yet, in words; null when it can. A rejection needs its reason written (the person who proposed it reads it), an approval needs none. */
+export function decisionProblem(row: ApprovalRow, approve: boolean, note: string): string | null {
+  if (!row.request) return 'This is decided on its own screen.'
+  if (!row.canDecide) return 'You may not decide it.'
+  if (!approve && note.trim() === '') return 'Say why in the note: the person who proposed it reads it.'
+  return null
+}
+
+/**
+ * Decides a change request through the relay as the signed-in person. The Store applies the rows exactly as proposed through its own rules (a request that breaks one stays waiting and its answer says why), checks the role again
+ * and records who decided; this only sends the decision and the note.
+ */
+export function decideRequest(row: ApprovalRow, approve: boolean, note: string): Promise<unknown> {
+  if (!row.request) return Promise.reject(new Error('This is decided on its own screen.'))
+  const text = note.trim()
+  return request(decisionPath(row.server, row.request, approve), { method: 'POST', body: JSON.stringify(text ? { note: text } : {}), headers: { 'Content-Type': 'application/json' } })
 }
 
 /** Oldest first: what has waited longest is at the top, and an agent's write before a person's of the same age. Rows with no date go last. */

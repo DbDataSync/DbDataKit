@@ -4,7 +4,8 @@ import { parseYaml } from '@dbdatakit/shell'
 import { editorKindOf } from '../editors'
 import { connectionsOf, newConnectionText, newReplicationFiles, replicationsOf, secretFindings, syncNameProblem, connectionPath, replicationPath, withCurrentTaskVersion } from '../syncSchemas'
 import type { LiveCheck } from '../useLiveCheck'
-import { SecretNotes, SyncFileEditor, SyncSetPanel } from './SyncSetPanel'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { CheckFailedNote, SecretNotes, SyncFileEditor, SyncSetOverview, SyncSetPanel, findingsKey } from './SyncSetPanel'
 
 const idle: LiveCheck = { diagnostics: [], checkedText: null, running: false, failed: null }
 const paths = [
@@ -108,5 +109,42 @@ describe('the editor writes the current task format', () => {
     const html = renderToStaticMarkup(<SyncFileEditor kind="sync-task" path="config/replications/orders/task.yaml" text={v1} onText={() => {}} readOnly={false} live={idle} />)
     expect(html).toContain('data-testid="form-field-name"')
     expect(html).toContain('data-testid="form-field-scheduling.cronExpression"')
+  })
+})
+
+describe('the overview fed by the check of the draft (SC22f)', () => {
+  const overview = (data: unknown, extra?: (client: QueryClient) => void) => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    if (data !== undefined) client.setQueryData(findingsKey('crm', 'w1'), data)
+    extra?.(client)
+    return renderToStaticMarkup(<QueryClientProvider client={client}><SyncSetOverview project="crm" id="w1" paths={paths} canWrite busy={false} onOpen={() => {}} onCreate={() => {}} /></QueryClientProvider>)
+  }
+  const result = (diagnostics: object[]) => ({ kind: 'sync', ok: false, diagnostics })
+
+  it('shows how many errors each replication and connection has, from the diagnostics of the check, and counts nothing for a warning', () => {
+    const html = overview(result([
+      { severity: 'error', code: 'DBD-WS-SYNC', message: 'bad schedule', file: 'config/replications/orders/task.yaml', line: 4 },
+      { severity: 'error', code: 'DBD-WS-SYNC', message: 'no columns', file: 'config/replications/orders/table-mappings/orders.yaml', line: 1 },
+      { severity: 'warning', code: 'DBD-WS-SYNC', message: 'note', file: 'config/replications/stock/task.yaml', line: 1 },
+      { severity: 'error', code: 'DBD-WS-SYNC', message: 'password', file: 'config/connections/source-db.yaml', line: 3 },
+    ]))
+    expect(html).toMatch(/data-name="orders" data-errors="2"/)
+    expect(html).toMatch(/data-name="stock" data-errors="0"/)
+    expect(html).toMatch(/data-name="source-db" data-errors="1"/)
+    expect(html).toContain('2 to fix')
+    expect(html).not.toContain('wsp-sync-check-failed')
+  })
+
+  it('shows no count of errors for a draft the check found sound', () => {
+    const html = overview(result([]))
+    expect(html).toMatch(/data-name="orders" data-errors="0"/)
+    expect(html).not.toContain('to fix')
+  })
+
+  it('says the check could not run when it failed (and the panel then has no counts to show)', () => {
+    const html = renderToStaticMarkup(<CheckFailedNote error={new Error('dbdatasync is not installed')} />)
+    expect(html).toContain('wsp-sync-check-failed')
+    expect(html).toContain('dbdatasync is not installed')
+    expect(renderToStaticMarkup(<CheckFailedNote error={null} />)).toBe('')
   })
 })

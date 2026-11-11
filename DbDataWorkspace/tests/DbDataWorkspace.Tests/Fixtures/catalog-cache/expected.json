@@ -1,0 +1,29 @@
+{
+  "sound.yaml": [],
+  "row.yaml": ["DBD-CAT-002 connections.source-db.tables[0].rows"],
+  "secrets.yaml": [
+    "DBD-CAT-004 source.server",
+    "DBD-CAT-004 connections.source-db.engine",
+    "DBD-CAT-004 connections.source-db.tables[0].columns[1].type",
+    "DBD-CAT-004 connections.source-db.tables[0].columns[2].type"
+  ],
+  "shape.yaml": [
+    "DBD-CAT-002 source.url",
+    "DBD-CAT-003 connections.source-db.tables[0].kind",
+    "DBD-CAT-003 connections.source-db.tables[0].columns[0].nullable",
+    "DBD-CAT-002 connections.source-db.tables[0].columns[0].comment",
+    "DBD-CAT-003 connections.source-db.tables[1].columns",
+    "DBD-CAT-003 connections.source-db.tables[2].columns"
+  ],
+  "duplicates.yaml": [
+    "DBD-CAT-005 connections.source-db.tables[0].columns[1]",
+    "DBD-CAT-005 connections.source-db.tables[1]"
+  ],
+  "newer.yaml": ["DBD-CAT-001 schema"],
+  "missing.yaml": [
+    "DBD-CAT-003 schema",
+    "DBD-CAT-003 generated_at",
+    "DBD-CAT-003 source",
+    "DBD-CAT-003 connections.source-db.engine"
+  ]
+}

@@ -1,0 +1,29 @@
+schema: catalog-cache/1
+generated_at: 2026-11-11T10:00:00Z
+source: {server: prod-gateway, product: gateway}
+connections:
+  source-db:
+    engine: postgres
+    tables:
+      - schema: public
+        name: orders
+        kind: table
+        columns:
+          - {name: id, type: integer, nullable: false, key: true}
+          - {name: customer_id, type: integer, nullable: false}
+          - {name: placed_at, type: "timestamp without time zone", nullable: true}
+          - {name: password, type: "character varying(60)"}
+      - schema: public
+        name: order_totals
+        kind: view
+        columns:
+          - {name: id, type: integer}
+          - {name: total, type: "numeric(12,2)"}
+  target-db:
+    engine: sqlserver
+    tables:
+      - schema: dbo
+        name: Orders
+        kind: table
+        columns:
+          - {name: Id, type: int, nullable: false, key: true}
