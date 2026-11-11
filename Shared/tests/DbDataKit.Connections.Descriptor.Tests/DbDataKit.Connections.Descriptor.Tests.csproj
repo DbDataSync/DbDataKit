@@ -12,5 +12,7 @@
     <ProjectReference Include="..\..\src\DbDataKit.Connections.DuckDb\DbDataKit.Connections.DuckDb.csproj" />
     <ProjectReference Include="..\..\src\DbDataKit.Connections.Odbc\DbDataKit.Connections.Odbc.csproj" />
     <ProjectReference Include="..\..\src\DbDataKit.Metadata\DbDataKit.Metadata.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Semantic\DbDataKit.Semantic.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.DataModel\DbDataKit.DataModel.csproj" />
   </ItemGroup>
 </Project>

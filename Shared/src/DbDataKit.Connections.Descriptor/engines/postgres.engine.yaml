@@ -12,6 +12,6 @@ roles:
   sync_target: { status: supported, note: "native binary COPY staging; incremental passes apply with the change writer ChangeApply (UPDATE, INSERT and DELETE against the staging table, no MERGE), reloads with DeleteInsert" }
   build_target: { status: supported, note: "PostgreSQL 17 in Build's real-engine suite" }
   build_origin: { status: supported, note: "project import reads the live catalog" }
-  gateway_source: { status: no, note: "only through ODBC; the gateway has no PostgreSQL provider of its own" }
-  semantic_emitter: { status: planned, note: "plan 19 J05; until then the DuckDB-dialect twin runs on it and 9 fixtures need the emitter" }
-  master_data_store: { status: planned, note: "plan 15" }
+  gateway_source: { status: supported, note: "the gateway's own PostgresProvider (engine: postgres); address, connection string or secret reference" }
+  semantic_emitter: { status: supported, note: "PostgreSQL's own text (EmitDialects.Postgres, plan 19 J05); the conformance fixtures run on PostgreSQL 17" }
+  master_data_store: { status: supported, note: "plan 15: models are stored in a schema of PostgreSQL (ModelStorage)" }

@@ -11,11 +11,11 @@ Generated from the engine registry (`Shared/src/DbDataKit.Connections.Descriptor
 | Arrow Flight SQL | yes | no | no | yes | no | no | no |
 | DuckDB | yes | no | no | yes | yes | yes | no |
 | Microsoft Fabric warehouse | no | no | unverified | unverified | no | no | no |
-| Microsoft SQL Server | yes | yes | yes | yes | yes | yes | planned |
+| Microsoft SQL Server | yes | yes | yes | yes | yes | yes | yes |
 | MySQL and MariaDB | yes | yes | no | no | no | no | no |
 | ODBC | no | no | no | yes | yes | no | no |
 | Oracle Database | yes | yes | no | no | no | no | no |
-| PostgreSQL | yes | yes | yes | yes | no | planned | planned |
+| PostgreSQL | yes | yes | yes | yes | yes | yes | yes |
 
 ## What each says
 
@@ -52,7 +52,7 @@ Generated from the engine registry (`Shared/src/DbDataKit.Connections.Descriptor
 - Build origin: yes. Project import reads keys, foreign keys and indexes from the live catalog
 - Gateway source: yes. Address, connection string or secret reference; pass-through identity
 - Semantic emitter: yes. T-SQL; every conformance fixture passes on SQL Server 2022 (plan 19 J02, J03)
-- Master data store: planned. Plan 15
+- Master data store: yes. Plan 15: models are stored in a schema of SQL Server (ModelStorage)
 
 ### MySQL and MariaDB
 
@@ -83,6 +83,6 @@ Generated from the engine registry (`Shared/src/DbDataKit.Connections.Descriptor
 - Sync target: yes. Native binary COPY staging; incremental passes apply with the change writer ChangeApply (UPDATE, INSERT and DELETE against the staging table, no MERGE), reloads with DeleteInsert
 - Build target: yes. PostgreSQL 17 in Build's real-engine suite
 - Build origin: yes. Project import reads the live catalog
-- Gateway source: no. Only through ODBC; the gateway has no PostgreSQL provider of its own
-- Semantic emitter: planned. Plan 19 J05; until then the DuckDB-dialect twin runs on it and 9 fixtures need the emitter
-- Master data store: planned. Plan 15
+- Gateway source: yes. The gateway's own PostgresProvider (engine: postgres); address, connection string or secret reference
+- Semantic emitter: yes. PostgreSQL's own text (EmitDialects.Postgres, plan 19 J05); the conformance fixtures run on PostgreSQL 17
+- Master data store: yes. Plan 15: models are stored in a schema of PostgreSQL (ModelStorage)
