@@ -1,0 +1,8 @@
+# The CLDR release the snapshot next to this file was taken from (plan 32 DBR46 follow-up; read by scripts/fetch_cldr_snapshot.py, KEY=value lines).
+# The integrity is the `dist.integrity` the npm registry shows for each package at this version (sha512, base64); a download that does not match is refused.
+# SNAPSHOT_SHA256 is the hash of cldr-snapshot.json; the tests and scripts/tests/test_cldr_snapshot.py fail when the file changes without it.
+# To move to a new release: see the header of scripts/fetch_cldr_snapshot.py.
+CLDR_VERSION=49.0.0
+PACKAGE_cldr-numbers-full_INTEGRITY=sha512-8Ww1u18Sbl7h8UA1tJ7pKFuzV4wKLYHk20wRJE8wewNKS0Ex83DoYawoIrLfzTGWjUt41rjrBRJv9TC3THiznA==
+PACKAGE_cldr-dates-full_INTEGRITY=sha512-nnyd2GGvLn83o2wG1PG8yF6SNGGdIWn6csvuZVHir+QEhu41+5YfOVSUQcBWNBo407nMvBlCFAT0YrSDSXPZfg==
+SNAPSHOT_SHA256=8382c567977fc69cffc45ab24a404364e47bb4bb0e7ae601626ab76fcb799d1f
