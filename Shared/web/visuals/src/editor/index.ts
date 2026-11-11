@@ -20,3 +20,5 @@ export { WIDGET_TYPES, WellError, bindingIssues, changedFields, convertWidget, d
 export type { Conversion, Derivation, WellChange, WellSpec } from './wells'
 export { FLOW_COMMANDS, flowOps, runningTokens, unknownTokens } from './flow'
 export type { FlowCommand } from './flow'
+export { CHANNEL_SORTS, RELATIVE_OPERATORS, filterEntry, filterOps, filterProblems, filterTypeOf, operatorsFor, orderEntry, orderOps, orderProblems, parameterValue, parseValues, sortAt, sortOps } from './queryParts'
+export type { Direction, FilterChange, FilterEntry, FilterType, FilterValue, OrderChange, QueryProblem, SortTarget, SortValue } from './queryParts'

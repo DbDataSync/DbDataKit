@@ -7,7 +7,8 @@ import type { ViewsDoc } from './model'
  * `GET /api/v1/semantic-models/{name}` and Build's `project compile` both give it; `catalogFromModel` reads either shape loosely (nothing here validates a model: the engine does, at publish), and `catalogRoles`
  * turns it into what `deriveRequest` needs.
  */
-export interface CatalogMember { name: string; label?: string; description?: string }
+/** `type` is the member's data type as the model says it (`string`, `integer`, `number`, `date`, `datetime`), `time` that a string attribute holds periods: what the Filter section offers operators by (plan 32 DBR43). */
+export interface CatalogMember { name: string; label?: string; description?: string; type?: string; time?: boolean }
 export interface Catalog { model: string; measures: CatalogMember[]; attributes: CatalogMember[] }
 
 export const catalogRoles = (catalog: Catalog): CatalogRoles => ({ model: catalog.model, measures: catalog.measures.map((m) => m.name), attributes: catalog.attributes.map((m) => m.name) })
@@ -19,7 +20,7 @@ function members(node: unknown, prefix = ''): CatalogMember[] {
   const found: CatalogMember[] = []
   const add = (name: string, body: unknown) => {
     const b = isObject(body) ? body : {}
-    found.push({ name: prefix && !name.includes('.') ? `${prefix}.${name}` : name, label: text(b.label) ?? text((b.synonyms as unknown[] | undefined)?.[0]), description: text(b.description) })
+    found.push({ name: prefix && !name.includes('.') ? `${prefix}.${name}` : name, label: text(b.label) ?? text((b.synonyms as unknown[] | undefined)?.[0]), description: text(b.description), ...(text(b.type) ? { type: text(b.type) } : {}), ...(b.time === true ? { time: true } : {}) })
   }
   if (Array.isArray(node)) for (const n of node) { if (typeof n === 'string') add(n, {}); else if (isObject(n) && typeof n.name === 'string') add(n.name, n) }
   else if (isObject(node)) for (const [name, body] of Object.entries(node)) add(name, body)
@@ -42,13 +43,13 @@ export function catalogFromModel(model: unknown): Catalog | null {
 export const retailCatalog: Catalog = {
   model: 'retail_sales',
   measures: [
-    { name: 'sales.net_amount', label: 'Net sales' },
-    { name: 'sales.gross_amount', label: 'Gross sales' },
-    { name: 'sales.margin_amount', label: 'Margin' },
-    { name: 'sales.units', label: 'Units' },
-    { name: 'sales.order_count', label: 'Orders' },
-    { name: 'returns.refund_amount', label: 'Refunds' },
-    { name: 'sales.margin_rate', label: 'Margin rate' },
+    { name: 'sales.net_amount', type: 'number', label: 'Net sales' },
+    { name: 'sales.gross_amount', type: 'number', label: 'Gross sales' },
+    { name: 'sales.margin_amount', type: 'number', label: 'Margin' },
+    { name: 'sales.units', type: 'number', label: 'Units' },
+    { name: 'sales.order_count', type: 'number', label: 'Orders' },
+    { name: 'returns.refund_amount', type: 'number', label: 'Refunds' },
+    { name: 'sales.margin_rate', type: 'number', label: 'Margin rate' },
   ],
   attributes: [
     { name: 'customers.region', label: 'Customer region' },
@@ -59,9 +60,9 @@ export const retailCatalog: Catalog = {
     { name: 'stores.region', label: 'Store region' },
     { name: 'stores.channel_group', label: 'Channel' },
     { name: 'stores.store', label: 'Store' },
-    { name: 'date.calendar_date', label: 'Date' },
-    { name: 'date.year', label: 'Year' },
-    { name: 'date.year_month', label: 'Month' },
+    { name: 'date.calendar_date', type: 'date', label: 'Date' },
+    { name: 'date.year', type: 'integer', label: 'Year' },
+    { name: 'date.year_month', type: 'integer', label: 'Month' },
   ],
 }
 
