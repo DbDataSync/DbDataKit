@@ -59,7 +59,7 @@ runtime part is somewhere else.
 | Store | `model/1` files, change approval | the model, published to the Gateway (plan 20 O10b) | the Gateway's `store` module serves the rows; a scheduled step, if any, on the Runner |
 
 Plan 28c already covers how Sync's and Build's engines run on the Runner; this plan covers only where they are *authored and published from*. Each builder
-needs its own slice list (a project kind in the Workspace, plan 27 style) and is sliced in SC20 to SC22 (2026-11-11, owner: the three become authoring in the Workspace, standalone products working until the hand-over rows); what had to be
+needs its own slice list (a project kind in the Workspace, plan 27 style) and is sliced in SC20 to SC22 (2026-11-11, owner: the three become authoring in the Workspace, standalone products working until the hand-over rows); what had to be **A fourth authored kind, `integration` (plan 27a IX20), was added on 2026-11-11** beside them: a manifest, job classes (C# files built with no .NET SDK, or a compiled project that needs it) and tests, built by `dbdatarunner package build|test` as a child process and published to a Runner as a package like SC22c's; the page is [`docs/integrations.md`](../integrations.md).
 settled first is in the rows.
 
 ## 6. Installing and joining on one server
