@@ -31,13 +31,13 @@ public abstract class StubLive : LiveDialectConformanceTests
         => throw new NotSupportedException($"{EnvironmentVariable} is set but no driver is wired: derive from this class and implement Connect.");
 }
 
-public sealed class SqlServerLive : StubLive { protected override string EnvironmentVariable => "DBDATA_CONFORMANCE_SQLSERVER"; protected override ISqlDialect CreateDialect() => DialectCatalog.Builtin.Get("sqlserver"); }
-public sealed class PostgresLive : StubLive { protected override string EnvironmentVariable => "DBDATA_CONFORMANCE_POSTGRES"; protected override ISqlDialect CreateDialect() => DialectCatalog.Builtin.Get("postgres"); }
-public sealed class MySqlLive : StubLive { protected override string EnvironmentVariable => "DBDATA_CONFORMANCE_MYSQL"; protected override ISqlDialect CreateDialect() => DialectCatalog.Builtin.Get("mysql"); }
+public sealed class SqlServerLive : StubLive { protected override string EnvironmentVariable => "DBDATAKIT_TEST_CONFORMANCE_SQLSERVER"; protected override ISqlDialect CreateDialect() => DialectCatalog.Builtin.Get("sqlserver"); }
+public sealed class PostgresLive : StubLive { protected override string EnvironmentVariable => "DBDATAKIT_TEST_CONFORMANCE_POSTGRES"; protected override ISqlDialect CreateDialect() => DialectCatalog.Builtin.Get("postgres"); }
+public sealed class MySqlLive : StubLive { protected override string EnvironmentVariable => "DBDATAKIT_TEST_CONFORMANCE_MYSQL"; protected override ISqlDialect CreateDialect() => DialectCatalog.Builtin.Get("mysql"); }
 public sealed class OracleLive : StubLive
 {
-    protected override string EnvironmentVariable => "DBDATA_CONFORMANCE_ORACLE";
+    protected override string EnvironmentVariable => "DBDATAKIT_TEST_CONFORMANCE_ORACLE";
     protected override ISqlDialect CreateDialect() => DialectCatalog.Builtin.Get("oracle");
     protected override string SelectExpression(string expression) => $"SELECT {expression} FROM dual";
 }
-public sealed class DuckDbLive : StubLive { protected override string EnvironmentVariable => "DBDATA_CONFORMANCE_DUCKDB"; protected override ISqlDialect CreateDialect() => DialectCatalog.Builtin.Get("duckdb"); }
+public sealed class DuckDbLive : StubLive { protected override string EnvironmentVariable => "DBDATAKIT_TEST_CONFORMANCE_DUCKDB"; protected override ISqlDialect CreateDialect() => DialectCatalog.Builtin.Get("duckdb"); }

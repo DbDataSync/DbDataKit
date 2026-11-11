@@ -5,11 +5,11 @@ namespace DbDataKit.Config.Testing;
 /// <summary>
 /// Golden before/after pairs for migrations (migrations are pure functions of the text). A pair passes when the engine turns <c>before</c> into exactly
 /// <c>after</c> (comments and ordering included), the result is valid strict YAML, and running the engine again on <c>after</c> changes nothing.
-/// Set the environment variable <c>DBDATA_UPDATE_GOLDEN=1</c> to rewrite the <c>.after</c> files from the current engine output (review the diff).
+/// Set the environment variable <c>DBDATAKIT_TEST_UPDATE_GOLDEN=1</c> to rewrite the <c>.after</c> files from the current engine output (review the diff).
 /// </summary>
 public static class GoldenMigration
 {
-    public const string UpdateVariable = "DBDATA_UPDATE_GOLDEN";
+    public const string UpdateVariable = "DBDATAKIT_TEST_UPDATE_GOLDEN";
 
     public static void AssertPair(MigrationEngine engine, string kind, string before, string after, MigrationOptions? options = null, string file = "golden.yml")
     {

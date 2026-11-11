@@ -16,7 +16,7 @@ namespace DbDataSync.Drivers.Postgres.Tests;
 public sealed class MsSqlScratchDatabase : IAsyncLifetime
 {
     public static string ServerConnectionString { get; } =
-        Environment.GetEnvironmentVariable("DBDATASYNC_TEST_MSSQL_SERVER")
+        Environment.GetEnvironmentVariable("DBDATAKIT_TEST_MSSQL")
         ?? "Data Source=localhost,14330;User ID=sa;Password=DbDataSync_Test_Pw1;TrustServerCertificate=True";
 
     public string DatabaseName { get; } = $"DbDataSyncXEng_{Guid.NewGuid():N}";

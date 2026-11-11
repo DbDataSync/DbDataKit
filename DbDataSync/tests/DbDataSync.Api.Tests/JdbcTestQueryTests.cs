@@ -27,11 +27,11 @@ public sealed class JdbcTestQueryTests : IClassFixture<JdbcTestQueryApiFactory>,
     };
 
     private static string ServerConnectionString =>
-        Environment.GetEnvironmentVariable("DBDATASYNC_TEST_POSTGRES_SERVER")
+        Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES_LOGICAL")
         ?? "Host=localhost;Port=15432;Username=dbdatasync;Password=DbDataSync_Test_Pw1;Database=postgres";
 
     private static string JdbcUrl =>
-        Environment.GetEnvironmentVariable("DBDATASYNC_TEST_POSTGRES_JDBC_URL")
+        Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES_LOGICAL_JDBC_URL")
         ?? "jdbc:postgresql://localhost:15432/";
 
     private readonly HttpClient _client;

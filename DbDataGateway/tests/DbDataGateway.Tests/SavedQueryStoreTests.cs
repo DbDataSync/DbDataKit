@@ -74,8 +74,8 @@ public sealed class SavedQueryStoreTests : IDisposable
     [Fact]
     public void The_same_on_a_postgresql_database_the_operator_names()
     {
-        var server = Environment.GetEnvironmentVariable("DBDATA_TEST_POSTGRES");
-        if (server is null) Assert.Skip("set DBDATA_TEST_POSTGRES to run on PostgreSQL");
+        var server = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES");
+        if (server is null) Assert.Skip("set DBDATAKIT_TEST_POSTGRES to run on PostgreSQL");
 
         var name = $"gateway_saved_{Guid.NewGuid():N}";
         using (var admin = new NpgsqlConnection(server))

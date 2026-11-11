@@ -13,9 +13,9 @@ const here = path.dirname(fileURLToPath(import.meta.url))
  * one folder per spec, so a numeric prefix reused across specs (`62-`, `90-`) never collides.
  */
 export function screenshotDir(group: string): string {
-  // The screens are shown inside the console's frame, so a run does not overwrite the committed pictures (which the docs show) with them: they go to a scratch folder, unless DBDATASYNC_E2E_SCREENSHOTS=repo says
+  // The screens are shown inside the console's frame, so a run does not overwrite the committed pictures (which the docs show) with them: they go to a scratch folder, unless DBDATAKIT_TEST_E2E_SCREENSHOTS=repo says
   // to replace the committed ones on purpose.
-  const dir = process.env.DBDATASYNC_E2E_SCREENSHOTS === 'repo'
+  const dir = process.env.DBDATAKIT_TEST_E2E_SCREENSHOTS === 'repo'
     ? path.resolve(here, '..', '..', 'screenshots', group)
     : path.join(os.tmpdir(), 'dbdatasync-console-e2e-screenshots', group)
   fs.mkdirSync(dir, { recursive: true })

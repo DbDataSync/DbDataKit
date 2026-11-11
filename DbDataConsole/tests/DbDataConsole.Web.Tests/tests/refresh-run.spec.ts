@@ -10,7 +10,7 @@ import { signInNewAdmin } from './people'
 // Plan 33 UE09: from the Build screens, run a refresh plan and the project's tests. The project `refreshing` (made by playwright.config.ts, Build server on port 8541) has a mapped model over staging.events and an
 // incremental mart with a refresh plan `nightly` and two checks: amount_not_negative passes and amount_small is broken by one of the three rows the story inserts. Ada deploys the mart (the Plans tab, as the
 // deploy story does), then runs the plan: the Run button is off until a dry run of the same choice passed (and says why), the dry run executes nothing, the run loads the three rows, and the checks of the model that
-// loaded are shown with the broken one named (plan 23a FQ09: data.checks). The Check tab runs the project's tests. Needs the test PostgreSQL (DBDATA_E2E_PG); it skips without it.
+// loaded are shown with the broken one named (plan 23a FQ09: data.checks). The Check tab runs the project's tests. Needs the test PostgreSQL (DBDATAKIT_TEST_E2E_PG); it skips without it.
 // Order: the specs run one at a time by file name; this one drops the schemas it made at the end, so the deploy story (template-to-plan, which resets them itself) and the others are not affected.
 const check = expect.configure({ timeout: 60_000 })
 
@@ -21,7 +21,7 @@ async function sql(statements: string[]) {
   try { for (const s of statements) await client.query(s) } finally { await client.end() }
 }
 
-test.skip(!warehouseConnection, 'set DBDATA_E2E_PG to run the refresh story')
+test.skip(!warehouseConnection, 'set DBDATAKIT_TEST_E2E_PG to run the refresh story')
 
 test('refresh a plan from the Plans tab (dry run first, then the run with its checks) and run the project tests', async ({ page, context, baseURL }) => {
   test.setTimeout(300_000)

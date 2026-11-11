@@ -15,11 +15,11 @@ namespace DbDataSync.State.Tests;
 public sealed class StateEngineFixture : IDisposable
 {
     private static readonly string MsSqlServer =
-        Environment.GetEnvironmentVariable("DBDATASYNC_TEST_MSSQL_SERVER")
+        Environment.GetEnvironmentVariable("DBDATAKIT_TEST_MSSQL")
         ?? "Data Source=localhost,14330;User ID=sa;Password=DbDataSync_Test_Pw1;TrustServerCertificate=True";
 
     private static readonly string PostgresServer =
-        Environment.GetEnvironmentVariable("DBDATASYNC_TEST_POSTGRES_SERVER")
+        Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES_LOGICAL")
         ?? "Host=localhost;Port=15432;Username=dbdatasync;Password=DbDataSync_Test_Pw1;Database=postgres";
 
     private readonly string _engine;

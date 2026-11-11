@@ -23,7 +23,7 @@ public sealed class MemoryAudit : IAuditLog
     public IReadOnlyList<AuditEntry> Read(int limit = 100) => Entries;
 }
 
-/// <summary>A scratch state database per test: SQLite, and SQL Server and PostgreSQL when the shared engines are up (<c>DBDATA_TEST_SQLSERVER</c>, <c>DBDATA_TEST_POSTGRES</c>).</summary>
+/// <summary>A scratch state database per test: SQLite, and SQL Server and PostgreSQL when the shared engines are up (<c>DBDATAKIT_TEST_SQLSERVER</c>, <c>DBDATAKIT_TEST_POSTGRES</c>).</summary>
 public sealed class ScratchDatabases : IDisposable
 {
     public const string Password = "Pl@nted_Secret_Pw9";
@@ -37,8 +37,8 @@ public sealed class ScratchDatabases : IDisposable
 
     private static string? Server(string engine) => engine switch
     {
-        StateEngineIds.MsSql => Environment.GetEnvironmentVariable("DBDATA_TEST_SQLSERVER"),
-        StateEngineIds.Postgres => Environment.GetEnvironmentVariable("DBDATA_TEST_POSTGRES"),
+        StateEngineIds.MsSql => Environment.GetEnvironmentVariable("DBDATAKIT_TEST_SQLSERVER"),
+        StateEngineIds.Postgres => Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES"),
         _ => null,
     };
 
@@ -82,8 +82,8 @@ public sealed class ScratchDatabases : IDisposable
         var server = Server(engine);
         if (server is null)
         {
-            Assert.False(Environment.GetEnvironmentVariable(engine == StateEngineIds.MsSql ? "DBDATA_REQUIRE_SQLSERVER" : "DBDATA_REQUIRE_POSTGRES") is "true", $"{engine} is required but its DBDATA_TEST_* variable is not set");
-            Assert.Skip($"set DBDATA_TEST_{(engine == StateEngineIds.MsSql ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
+            Assert.False(Environment.GetEnvironmentVariable(engine == StateEngineIds.MsSql ? "DBDATAKIT_TEST_REQUIRE_SQLSERVER" : "DBDATAKIT_TEST_REQUIRE_POSTGRES") is "true", $"{engine} is required but its DBDATAKIT_TEST_* variable is not set");
+            Assert.Skip($"set DBDATAKIT_TEST_{(engine == StateEngineIds.MsSql ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
         }
 
         StateOpener.RegisterProviders();

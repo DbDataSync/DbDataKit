@@ -1,7 +1,3 @@
-# DbDataGateway's suite: a SQL Server name plus SQL login and a PostgreSQL connection string, each with a switch that makes a missing server a failure instead of a skip.
-DBGATEWAY_TEST_SQLSERVER          <- DBKIT_TEST_MSSQL_SERVER
-DBGATEWAY_TEST_SQLSERVER_USER     <- DBKIT_TEST_MSSQL_USER
-DBGATEWAY_TEST_SQLSERVER_PASSWORD <- DBKIT_TEST_MSSQL_PASSWORD
-DBGATEWAY_REQUIRE_SQLSERVER = true if DBKIT_TEST_MSSQL
-DBGATEWAY_TEST_POSTGRES           <- DBKIT_TEST_POSTGRES
-DBGATEWAY_REQUIRE_POSTGRES = true if DBKIT_TEST_POSTGRES
+# DbDataGateway's suite reads DBDATAKIT_TEST_MSSQL_SERVER / _USER / _PASSWORD and DBDATAKIT_TEST_POSTGRES (all printed by `env`); each engine has a switch that makes a missing server a failure instead of a skip.
+DBDATAKIT_TEST_REQUIRE_SQLSERVER = true if DBDATAKIT_TEST_MSSQL
+DBDATAKIT_TEST_REQUIRE_POSTGRES = true if DBDATAKIT_TEST_POSTGRES

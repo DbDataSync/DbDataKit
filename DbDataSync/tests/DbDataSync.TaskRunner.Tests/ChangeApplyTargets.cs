@@ -51,7 +51,7 @@ internal static class ChangeApplyTargets
 
     internal sealed class PostgresTarget : TargetEngine
     {
-        private static string Server => Environment.GetEnvironmentVariable("DBDATASYNC_TEST_POSTGRES_SERVER") ?? Environment.GetEnvironmentVariable("DBKIT_TEST_POSTGRES") ?? TestEngines.Postgres.ConnectionString;
+        private static string Server => Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES_LOGICAL") ?? Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES") ?? TestEngines.Postgres.ConnectionString;
         private readonly NpgsqlConnectionStringBuilder _b = new(Server);
         public override string DriverType => DriverIds.Postgres;
         public override IDriver Driver { get; } = new PostgresDriver();
@@ -92,8 +92,8 @@ internal static class ChangeApplyTargets
     internal sealed class OracleTarget : TargetEngine
     {
         private static string Env(string name, string fallback) => Environment.GetEnvironmentVariable(name) ?? fallback;
-        private readonly string _host = Env("DBKIT_TEST_ORACLE_HOST", "127.0.0.1"), _user = Env("DBKIT_TEST_ORACLE_USER", "dbkit"), _password = Env("DBKIT_TEST_ORACLE_PASSWORD", "DbKit_Test_Pw1"), _service = Env("DBKIT_TEST_ORACLE_SERVICE", "FREEPDB1");
-        private readonly int _port = int.Parse(Env("DBKIT_TEST_ORACLE_PORT", "15210"), CultureInfo.InvariantCulture);
+        private readonly string _host = Env("DBDATAKIT_TEST_ORACLE_HOST", "127.0.0.1"), _user = Env("DBDATAKIT_TEST_ORACLE_USER", "dbkit"), _password = Env("DBDATAKIT_TEST_ORACLE_PASSWORD", "DbKit_Test_Pw1"), _service = Env("DBDATAKIT_TEST_ORACLE_SERVICE", "FREEPDB1");
+        private readonly int _port = int.Parse(Env("DBDATAKIT_TEST_ORACLE_PORT", "15210"), CultureInfo.InvariantCulture);
         public override string DriverType => DriverIds.Oracle;
         public override IDriver Driver { get; } = new OracleDriver();
         public override string Database => _service;
@@ -127,7 +127,7 @@ internal static class ChangeApplyTargets
     {
         "postgres" => new PostgresTarget(),
         "mysql" => new MySqlFamilyTarget(TestEngines.MySql.ConnectionString),
-        "mariadb" => new MySqlFamilyTarget(Environment.GetEnvironmentVariable("DBDATASYNC_TEST_MARIADB_SERVER") ?? "Server=localhost;Port=13307;UserID=root;Password=DbDataSync_Test_Pw1;AllowUserVariables=true;"),
+        "mariadb" => new MySqlFamilyTarget(Environment.GetEnvironmentVariable("DBDATAKIT_TEST_MARIADB") ?? "Server=localhost;Port=13307;UserID=root;Password=DbDataSync_Test_Pw1;AllowUserVariables=true;"),
         "oracle" => new OracleTarget(),
         "sqlserver" => new SqlServerTargetInSource(),
         _ => throw new ArgumentOutOfRangeException(nameof(engine)),

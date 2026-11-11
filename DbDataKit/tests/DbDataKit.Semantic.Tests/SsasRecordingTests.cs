@@ -8,23 +8,23 @@ namespace DbDataKit.Semantic.Tests;
 
 /// <summary>
 /// Plan 19, J20: records a session against a real Analysis Services with the XMLA forwarder (<c>DbDataKit/tools/DbDataKit.Tools.XmlaForwarder</c>). Not a test of
-/// the engine and it does nothing unless <c>DBDATA_TEST_SSAS_RECORD</c> is set together with <c>DBDATA_TEST_SSAS</c> (the Windows job in <c>dbdatakit-ci.yml</c> when started by hand
+/// the engine and it does nothing unless <c>DBDATAKIT_TEST_SSAS_RECORD</c> is set together with <c>DBDATAKIT_TEST_SSAS</c> (the Windows job in <c>dbdatakit-ci.yml</c> when started by hand
 /// with <c>ssas_record</c>): the forwarder listens on a free port in front of the instance, the ADOMD.NET client of <see cref="SsasExecutor"/> connects through it
-/// and runs a few DAX queries, and the folder named by <c>DBDATA_XMLA_RECORDING_DIR</c> (default <c>xmla-recording</c>) holds the recording for the
+/// and runs a few DAX queries, and the folder named by <c>DBDATAKIT_TEST_XMLA_RECORDING_DIR</c> (default <c>xmla-recording</c>) holds the recording for the
 /// workflow to upload. What it asserts is that bytes crossed in both directions on at least one connection and that the queries returned what the model holds;
 /// whether the XML of the messages is readable in the recording (the protocol may compress it) is written to the output, not asserted.
 /// </summary>
 public class SsasRecordingTests
 {
-    private static readonly string? Ssas = Environment.GetEnvironmentVariable("DBDATA_TEST_SSAS");
+    private static readonly string? Ssas = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_SSAS");
 
     [Fact]
     public async Task ASessionThroughTheForwarderIsRecorded()
     {
-        if (Ssas is null || Environment.GetEnvironmentVariable("DBDATA_TEST_SSAS_RECORD") is null) return;
+        if (Ssas is null || Environment.GetEnvironmentVariable("DBDATAKIT_TEST_SSAS_RECORD") is null) return;
         var instance = Regex.Match(Ssas, @"Data Source=([^:;\\]+):(\d+)", RegexOptions.IgnoreCase);
-        Assert.True(instance.Success, $"DBDATA_TEST_SSAS must name the instance by host and port (Data Source=host:port); it is '{Ssas}'.");
-        var folder = Environment.GetEnvironmentVariable("DBDATA_XMLA_RECORDING_DIR") is { Length: > 0 } dir ? dir : "xmla-recording";
+        Assert.True(instance.Success, $"DBDATAKIT_TEST_SSAS must name the instance by host and port (Data Source=host:port); it is '{Ssas}'.");
+        var folder = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_XMLA_RECORDING_DIR") is { Length: > 0 } dir ? dir : "xmla-recording";
 
         // the model is deployed straight to the server, as the conformance run does; only the queries go through the forwarder
         SsasExecutor.DeployModel(Ssas, File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "conformance", "ssas", "model.tmsl.json")));

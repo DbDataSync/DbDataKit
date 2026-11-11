@@ -6,9 +6,9 @@ using Grpc.Core;
 namespace DbDataKit.Connections.FlightSql.Tests;
 
 /// <summary>
-/// The client against a real <c>dbdatagateway server</c> in front of SQL Server and DuckDB (plan 13, A18). Skipped unless <c>DBGATEWAY_E2E_ADDRESS</c> names a running proxy
-/// (<c>https://127.0.0.1:18815</c>); <c>DBGATEWAY_E2E_USER</c> / <c>DBGATEWAY_E2E_PASSWORD</c> are the proxy user, which may use the data sources <c>duck</c> (a writable DuckDB file)
-/// and <c>mssql</c> (SQL Server, read-only). <c>DBGATEWAY_E2E_REQUIRED=true</c> fails the tests instead of skipping them, for the CI job that starts the proxy.
+/// The client against a real <c>dbdatagateway server</c> in front of SQL Server and DuckDB (plan 13, A18). Skipped unless <c>DBDATAKIT_TEST_E2E_ADDRESS</c> names a running proxy
+/// (<c>https://127.0.0.1:18815</c>); <c>DBDATAKIT_TEST_E2E_USER</c> / <c>DBDATAKIT_TEST_E2E_PASSWORD</c> are the proxy user, which may use the data sources <c>duck</c> (a writable DuckDB file)
+/// and <c>mssql</c> (SQL Server, read-only). <c>DBDATAKIT_TEST_E2E_REQUIRED=true</c> fails the tests instead of skipping them, for the CI job that starts the proxy.
 /// <c>DbDataGateway/tests/interop/run-flightsql-e2e.sh</c> starts everything and runs this class.
 /// </summary>
 public class GatewayEndToEndTests
@@ -17,9 +17,9 @@ public class GatewayEndToEndTests
 
     private static void RequireProxy()
     {
-        if (Env("DBGATEWAY_E2E_ADDRESS") is not null) return;
-        Assert.False(string.Equals(Env("DBGATEWAY_E2E_REQUIRED"), "true", StringComparison.OrdinalIgnoreCase), "DBGATEWAY_E2E_REQUIRED is true but DBGATEWAY_E2E_ADDRESS is not set");
-        Assert.Skip("set DBGATEWAY_E2E_ADDRESS to a running dbdatagateway to run");
+        if (Env("DBDATAKIT_TEST_E2E_ADDRESS") is not null) return;
+        Assert.False(string.Equals(Env("DBDATAKIT_TEST_E2E_REQUIRED"), "true", StringComparison.OrdinalIgnoreCase), "DBDATAKIT_TEST_E2E_REQUIRED is true but DBDATAKIT_TEST_E2E_ADDRESS is not set");
+        Assert.Skip("set DBDATAKIT_TEST_E2E_ADDRESS to a running dbdatagateway to run");
     }
 
     private static async Task<FlightSqlConnection> OpenAsync(
@@ -27,7 +27,7 @@ public class GatewayEndToEndTests
     {
         RequireProxy();
         var settings = new FlightSqlSettings(
-            new Uri(Env("DBGATEWAY_E2E_ADDRESS")!), FlightSqlAuthMethod.Basic, Env("DBGATEWAY_E2E_USER") ?? "e2e", password ?? Env("DBGATEWAY_E2E_PASSWORD") ?? "",
+            new Uri(Env("DBDATAKIT_TEST_E2E_ADDRESS")!), FlightSqlAuthMethod.Basic, Env("DBDATAKIT_TEST_E2E_USER") ?? "e2e", password ?? Env("DBDATAKIT_TEST_E2E_PASSWORD") ?? "",
             SkipCertificateValidation: true, Catalog: null, ConnectTimeout: TimeSpan.FromSeconds(30), CommandTimeout: TimeSpan.FromSeconds(60), mode,
             DataSource: dataSource, Compression: compression);
         var connection = new FlightSqlConnection(settings, Literal);

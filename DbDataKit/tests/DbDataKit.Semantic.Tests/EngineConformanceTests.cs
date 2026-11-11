@@ -8,7 +8,7 @@ namespace DbDataKit.Semantic.Tests;
 /// <summary>
 /// The conformance fixtures on the shared engines. SQL Server and DuckDB run through <c>DbDataKit.Semantic.Connections</c> (the shared connections:
 /// the T-SQL the engine emits on SQL Server, its DuckDB twin on a read-only DuckDB file; the level 0 agent-written queries run on SQL Server in test code);
-/// SSAS (Windows, <c>DBDATA_TEST_SSAS</c>) runs the DAX of the catalog's SSAS source on a real Tabular server; PostgreSQL runs the text the engine emits for it (the catalog's relational source declared a `postgres` one) through the same connections executor. The same checks as the stand-in run:
+/// SSAS (Windows, <c>DBDATAKIT_TEST_SSAS</c>) runs the DAX of the catalog's SSAS source on a real Tabular server; PostgreSQL runs the text the engine emits for it (the catalog's relational source declared a `postgres` one) through the same connections executor. The same checks as the stand-in run:
 /// the expected rows, the result schema, replay from the run record, and the other subtotal modes.
 /// </summary>
 public class EngineConformanceTests(EngineFixture engines) : IClassFixture<EngineFixture>

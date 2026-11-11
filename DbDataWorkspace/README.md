@@ -65,4 +65,4 @@ The console relays an explicit table of these (`ServerProducts.WorkspaceRoutes` 
 
 ## Build and test
 
-From this folder: `dotnet build`, then `dotnet test --project tests/DbDataWorkspace.Tests` (xunit v3). The server tests run on SQLite always and on PostgreSQL and SQL Server when `DBDATA_TEST_POSTGRES` and `DBDATA_TEST_SQLSERVER` are set (`testenv/testenv.sh up mssql postgres`, then `eval "$(testenv/testenv.sh env dbdatakit)"`); `DBDATA_REQUIRE_POSTGRES=true` makes a missing engine a failure, not a skip. The module's own convention, layout and retention tests are `WorkspaceStoreTests` in `DbDataKit.State.Tests`.
+From this folder: `dotnet build`, then `dotnet test --project tests/DbDataWorkspace.Tests` (xunit v3). The server tests run on SQLite always and on PostgreSQL and SQL Server when `DBDATAKIT_TEST_POSTGRES` and `DBDATAKIT_TEST_SQLSERVER` are set (`testenv/testenv.sh up mssql postgres`, then `eval "$(testenv/testenv.sh env dbdatakit)"`); `DBDATAKIT_TEST_REQUIRE_POSTGRES=true` makes a missing engine a failure, not a skip. The module's own convention, layout and retention tests are `WorkspaceStoreTests` in `DbDataKit.State.Tests`.

@@ -25,7 +25,7 @@ namespace DbDataSync.TaskRunner.Tests;
 /// inserts, updates, deletes, a primary key change and several changes to one key in one pass, ending with the target's rows equal to the source's. The replication's file does <b>not</b> name a
 /// writer: the default for an incremental reader (<c>ChangeApply</c>) is what runs, which is the proof that the default works end to end. A second drain from an older position replays changes
 /// the target already has and must leave it unchanged. Needs the engines of <c>testenv.sh env dbdatasync</c> (SQL Server, MySQL, MariaDB, Oracle) and PostgreSQL
-/// (<c>DBDATASYNC_TEST_POSTGRES_SERVER</c>, or the <c>DBKIT_TEST_POSTGRES</c> of <c>env dbdatakit</c>).
+/// (<c>DBDATAKIT_TEST_POSTGRES_LOGICAL</c>, or the <c>DBDATAKIT_TEST_POSTGRES</c> of <c>env dbdatakit</c>).
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class ChangeApplyReplicationTests : IAsyncLifetime

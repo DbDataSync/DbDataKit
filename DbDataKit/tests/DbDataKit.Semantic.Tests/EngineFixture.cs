@@ -5,8 +5,8 @@ namespace DbDataKit.Semantic.Tests;
 
 /// <summary>
 /// A scratch database on each shared engine (<c>testenv/testenv.sh up mssql postgres</c>), seeded with the conformance data and dropped afterwards.
-/// <c>DBDATA_TEST_SQLSERVER</c> and <c>DBDATA_TEST_POSTGRES</c> name a server; an engine whose variable is not set skips its tests unless
-/// <c>DBDATA_REQUIRE_SQLSERVER</c> / <c>DBDATA_REQUIRE_POSTGRES</c> is <c>true</c>, which fails them (the CI job that started the engines sets it).
+/// <c>DBDATAKIT_TEST_SQLSERVER</c> and <c>DBDATAKIT_TEST_POSTGRES</c> name a server; an engine whose variable is not set skips its tests unless
+/// <c>DBDATAKIT_TEST_REQUIRE_SQLSERVER</c> / <c>DBDATAKIT_TEST_REQUIRE_POSTGRES</c> is <c>true</c>, which fails them (the CI job that started the engines sets it).
 /// </summary>
 public sealed class EngineFixture : IAsyncLifetime
 {
@@ -14,7 +14,7 @@ public sealed class EngineFixture : IAsyncLifetime
     public const string Postgres = "postgres";
     /// <summary>DuckDB needs no server: the fixtures run on a seeded file, opened read-only through <c>DbDataKit.Connections.DuckDb</c>.</summary>
     public const string DuckDb = "duckdb";
-    /// <summary>SQL Server Analysis Services (Tabular), Windows only: <c>DBDATA_TEST_SSAS</c> is the connection string of the instance without a Catalog (<c>Data Source=localhost:2383</c>); the sample model is deployed once as database <c>qis_budget</c>.</summary>
+    /// <summary>SQL Server Analysis Services (Tabular), Windows only: <c>DBDATAKIT_TEST_SSAS</c> is the connection string of the instance without a Catalog (<c>Data Source=localhost:2383</c>); the sample model is deployed once as database <c>qis_budget</c>.</summary>
     public const string Ssas = "ssas";
 
     private readonly string _name = $"dbdatakit_semantic_{Guid.NewGuid():N}";
@@ -25,9 +25,9 @@ public sealed class EngineFixture : IAsyncLifetime
 
     private static string Suffix(string engine) => engine switch { SqlServer => "SQLSERVER", Ssas => "SSAS", _ => "POSTGRES" };
 
-    private static string? Server(string engine) => Environment.GetEnvironmentVariable("DBDATA_TEST_" + Suffix(engine));
+    private static string? Server(string engine) => Environment.GetEnvironmentVariable("DBDATAKIT_TEST_" + Suffix(engine));
 
-    private static bool Required(string engine) => string.Equals(Environment.GetEnvironmentVariable("DBDATA_REQUIRE_" + Suffix(engine)), "true", StringComparison.OrdinalIgnoreCase);
+    private static bool Required(string engine) => string.Equals(Environment.GetEnvironmentVariable("DBDATAKIT_TEST_REQUIRE_" + Suffix(engine)), "true", StringComparison.OrdinalIgnoreCase);
 
     public ValueTask InitializeAsync()
     {
@@ -88,8 +88,8 @@ public sealed class EngineFixture : IAsyncLifetime
     public string Database(string engine)
     {
         if (_databases.TryGetValue(engine, out var db)) return db;
-        Assert.False(Required(engine), $"{engine} is required but its DBDATA_TEST_* variable is not set");
-        Assert.Skip($"set DBDATA_TEST_{Suffix(engine)} to run on {engine}");
+        Assert.False(Required(engine), $"{engine} is required but its DBDATAKIT_TEST_* variable is not set");
+        Assert.Skip($"set DBDATAKIT_TEST_{Suffix(engine)} to run on {engine}");
         return "";
     }
 

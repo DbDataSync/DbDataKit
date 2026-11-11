@@ -8,12 +8,12 @@ namespace DbDataBuild.Tests.Conformance;
 /// </summary>
 public static class EngineEnv
 {
-    public const string SqlServer = "DBDATABUILD_TEST_MSSQL";
-    public const string SqlServer2025 = "DBDATABUILD_TEST_MSSQL2025";
-    public const string Postgres = "DBDATABUILD_TEST_PG";
-    public const string Oracle = "DBDATABUILD_TEST_ORACLE";
-    public const string Spark = "DBDATABUILD_TEST_SPARK";
-    public const string BigQuery = "DBDATABUILD_TEST_BIGQUERY";
+    public const string SqlServer = "DBDATAKIT_TEST_MSSQL";
+    public const string SqlServer2025 = "DBDATAKIT_TEST_MSSQL2025";
+    public const string Postgres = "DBDATAKIT_TEST_POSTGRES";
+    public const string Oracle = "DBDATAKIT_TEST_ORACLE_KV";
+    public const string Spark = "DBDATAKIT_TEST_SPARK";
+    public const string BigQuery = "DBDATAKIT_TEST_BIGQUERY";
 
     public static string? Get(string name) => Environment.GetEnvironmentVariable(name) is { Length: > 0 } v ? v : null;
 

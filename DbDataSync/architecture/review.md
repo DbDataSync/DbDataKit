@@ -294,7 +294,7 @@ See section 3; likely breaks parameterised statements on `mssql.odbc`. Correctne
 
 ### 9.13 Hardcoded credentials - Low
 No production secrets found. `DbDataSync_Test_Pw1` (SA password) appears in ~35 test files (`tests/DbDataSync.Api.Tests/*IntegrationTests.cs`, `tests/DbDataSync.State.Tests/StateEngineFixture.cs:18`, `tools/DbDataSync.Benchmarks/Program.cs:41`) and as the default of
-`${DBDATASYNC_MSSQL_SA_PASSWORD:-DbDataSync_Test_Pw1}` in `docker-compose.yml`; `sup3r-s3cr3t`, `hunter2` are unit-test fixtures. Acceptable for throwaway containers. GitHub App id in `release.yml` is not secret.
+the SA password default `DbDataSync_Test_Pw1` in the old `docker-compose.yml`; `sup3r-s3cr3t`, `hunter2` are unit-test fixtures. Acceptable for throwaway containers. GitHub App id in `release.yml` is not secret.
 
 ### 9.14 Dependencies - Info (scanner NOT run)
 Reading csproj/package.json: nothing obviously pinned to a famous-critical-CVE version, but no scan was possible without a restore into the read-only repo. Add `dotnet list package --vulnerable` and `npm audit` to CI. Watch: `Npgsql 9.0.3`, `Microsoft.Data.SqlClient 7.0.2`,

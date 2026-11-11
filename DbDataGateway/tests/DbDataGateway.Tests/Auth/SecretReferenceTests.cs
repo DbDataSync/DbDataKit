@@ -28,7 +28,7 @@ public sealed class SecretReferenceTests : IDisposable
 
     private string Env(string value, string? name = null)
     {
-        name ??= "DBGATEWAY_TEST_" + Guid.NewGuid().ToString("N");
+        name ??= "DBDATAKIT_TEST_" + Guid.NewGuid().ToString("N");
         Environment.SetEnvironmentVariable(name, value);
         _envVars.Add(name);
         return name;
@@ -157,9 +157,9 @@ public sealed class SecretReferenceTests : IDisposable
     {
         var (runtime, _) = Runtime();
         var ex = Assert.Throws<SecretConfigurationException>(() =>
-            runtime.ResolveConnectionString("Gateway:DataSources:erp:ConnectionString", "Server=db;Password=env:DBGATEWAY_TEST_DOES_NOT_EXIST", "sqlserver"));
+            runtime.ResolveConnectionString("Gateway:DataSources:erp:ConnectionString", "Server=db;Password=env:DBDATAKIT_TEST_DOES_NOT_EXIST", "sqlserver"));
         Assert.Equal("Gateway:DataSources:erp:ConnectionString", ex.ConfigKey);
-        Assert.Contains("env:DBGATEWAY_TEST_DOES_NOT_EXIST", ex.Message);
+        Assert.Contains("env:DBDATAKIT_TEST_DOES_NOT_EXIST", ex.Message);
     }
 
     [Fact]

@@ -7,7 +7,7 @@ namespace DbDataGateway.Tests.Hosting;
 
 /// <summary>
 /// Installs and removes a real, throwaway Windows service through the gateway's own CLI. Needs an elevated prompt and
-/// the Service Control Manager, so it only runs when DBGATEWAY_ADMIN_TESTS=1 (CI on windows-latest runs as admin).
+/// the Service Control Manager, so it only runs when DBDATAKIT_TEST_ADMIN_TESTS=1 (CI on windows-latest runs as admin).
 /// The service is never started, is named uniquely, and is removed even when an assertion fails.
 /// </summary>
 public sealed class ServiceAdminTests : IDisposable
@@ -17,7 +17,7 @@ public sealed class ServiceAdminTests : IDisposable
 
     public void Dispose()
     {
-        if (OperatingSystem.IsWindows() && Environment.GetEnvironmentVariable("DBGATEWAY_ADMIN_TESTS") == "1" && Environment.IsPrivilegedProcess)
+        if (OperatingSystem.IsWindows() && Environment.GetEnvironmentVariable("DBDATAKIT_TEST_ADMIN_TESTS") == "1" && Environment.IsPrivilegedProcess)
         {
             try { new WindowsServiceControlManager().Delete(_name); } catch (ServiceControlException) { /* not created */ }
         }
@@ -29,7 +29,7 @@ public sealed class ServiceAdminTests : IDisposable
     public void Install_configure_and_uninstall_a_real_service()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows service control");
-        Assert.SkipUnless(Environment.GetEnvironmentVariable("DBGATEWAY_ADMIN_TESTS") == "1", "Set DBGATEWAY_ADMIN_TESTS=1 (elevated prompt) to install a throwaway service.");
+        Assert.SkipUnless(Environment.GetEnvironmentVariable("DBDATAKIT_TEST_ADMIN_TESTS") == "1", "Set DBDATAKIT_TEST_ADMIN_TESTS=1 (elevated prompt) to install a throwaway service.");
         Assert.SkipUnless(Environment.IsPrivilegedProcess, "Needs an elevated prompt.");
         if (!OperatingSystem.IsWindows()) return;
 

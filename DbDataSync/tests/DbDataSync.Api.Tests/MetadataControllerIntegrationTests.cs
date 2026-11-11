@@ -18,7 +18,7 @@ public sealed class MetadataControllerIntegrationTests : IClassFixture<TestApiFa
     };
 
     private static string ServerConnectionString =>
-        Environment.GetEnvironmentVariable("DBDATASYNC_TEST_MSSQL_SERVER")
+        Environment.GetEnvironmentVariable("DBDATAKIT_TEST_MSSQL")
         ?? "Data Source=localhost,14330;User ID=sa;Password=DbDataSync_Test_Pw1;TrustServerCertificate=True";
 
     private readonly TestApiFactory _factory;

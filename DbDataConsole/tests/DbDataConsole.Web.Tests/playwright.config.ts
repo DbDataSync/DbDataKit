@@ -44,9 +44,9 @@ if (!isWorker) {
     { input: 'Server=db.example;User Id=reader;Password=console-e2e-read;Encrypt=True\n', stdio: ['pipe', 'ignore', 'inherit'] })
 }
 
-// A project for the deploy test, when there is a PostgreSQL to deploy to (`DBDATA_E2E_PG`, an Npgsql connection string to an empty database; CI starts one): the starter template set up for PostgreSQL, compiled and committed
+// A project for the deploy test, when there is a PostgreSQL to deploy to (`DBDATAKIT_TEST_E2E_PG`, an Npgsql connection string to an empty database; CI starts one): the starter template set up for PostgreSQL, compiled and committed
 // (a deploy applies from a clean working tree), with the tracking tables made and the raw tables seeded. The Build server gets the logins as the variables its commands read.
-export const warehouseConnection = process.env.DBDATA_E2E_PG
+export const warehouseConnection = process.env.DBDATAKIT_TEST_E2E_PG
 if (!isWorker && warehouseConnection) {
   execFileSync(process.execPath, [path.join(__dirname, 'pgReset.cjs')], { stdio: 'inherit' })
   const project = path.join(os.tmpdir(), 'dbdatakit-console-e2e-warehouse')
@@ -227,7 +227,7 @@ if (!isWorker) {
   fs.writeFileSync(path.join(scratchDirectory, 'authoring-build-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
 
-// A Build server for the end-to-end story (plan 13a, W10): it hosts no project, so the story makes one from the starter template, edits, commits and merges it, and (when there is a PostgreSQL, DBDATA_E2E_PG) plans, approves and applies it
+// A Build server for the end-to-end story (plan 13a, W10): it hosts no project, so the story makes one from the starter template, edits, commits and merges it, and (when there is a PostgreSQL, DBDATAKIT_TEST_E2E_PG) plans, approves and applies it
 // there. Its own directory and port, so nothing the other stories leave in the servers above is in its way. Its commands read the PostgreSQL login from the environment the server is started with, as the first Build server's do.
 export const endToEndBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-end-to-end-build'), port: 8494 }
 if (!isWorker) {
@@ -238,7 +238,7 @@ if (!isWorker) {
 }
 
 // Plan 33 UE09 and UE12: two Build servers and a Gateway for the refresh story (`refresh-run.spec.ts`) and the published-models story (`semantic-models.spec.ts`). Ports 8541 to 8544 (a port table: 8541 refresh Build,
-// 8542 and 8543 the Gateway's Flight SQL and management listeners, 8544 models Build). Both stories need the test PostgreSQL (DBDATA_E2E_PG) and skip without it: the refresh runs loads on it, and a Gateway publishes a
+// 8542 and 8543 the Gateway's Flight SQL and management listeners, 8544 models Build). Both stories need the test PostgreSQL (DBDATAKIT_TEST_E2E_PG) and skip without it: the refresh runs loads on it, and a Gateway publishes a
 // model only when its data source answers. Each server has its own directory, and each project is compiled and committed here (a deploy applies from a clean working tree).
 export const refreshBuild = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-refresh-build'), port: 8541, project: 'refreshing', plan: 'nightly' }
 export const modelsGateway = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-models-gateway'), flightPort: 8542, managementPort: 8543 }

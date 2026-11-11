@@ -164,7 +164,7 @@ public sealed class SecretStoreTests : IDisposable
     [Fact]
     public async Task A_password_set_with_the_command_connects()
     {
-        Assert.SkipUnless(SqlServerEnv.UsesSqlAuthentication, "needs DBGATEWAY_TEST_SQLSERVER_USER and _PASSWORD");
+        Assert.SkipUnless(SqlServerEnv.UsesSqlAuthentication, "needs DBDATAKIT_TEST_MSSQL_USER and _PASSWORD");
         await SqlServerEnv.EnsureReachableAsync();
         var options = Options();
         await Secret(options, SqlServerEnv.Password + "\n", "set", Reference);

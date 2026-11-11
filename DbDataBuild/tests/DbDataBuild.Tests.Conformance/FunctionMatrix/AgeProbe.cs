@@ -65,7 +65,7 @@ public class AgeProbe
     {
         var path = Environment.GetEnvironmentVariable("DDB_AGE_PROBE_OUT");
         Skip.If(string.IsNullOrEmpty(path), "Set DDB_AGE_PROBE_OUT to a file (scripts/age-probe.sh does, with the engines running).");
-        Skip.If(EngineEnv.Get(EngineEnv.SqlServer) == null || EngineEnv.Get(EngineEnv.Postgres) == null, "Set DBDATABUILD_TEST_MSSQL and DBDATABUILD_TEST_PG.");
+        Skip.If(EngineEnv.Get(EngineEnv.SqlServer) == null || EngineEnv.Get(EngineEnv.Postgres) == null, "Set DBDATAKIT_TEST_MSSQL and DBDATAKIT_TEST_POSTGRES.");
         await using var x = new Execution();
         await x.StartAsync();
 

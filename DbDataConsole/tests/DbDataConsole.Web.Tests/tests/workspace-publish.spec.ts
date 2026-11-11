@@ -11,11 +11,11 @@ import { scratchDirectory, workspacePublish } from '../playwright.config'
 // template; the build runs Bun from the vendored package store (made here with `app-store/build.mjs`: `npm ci` in DbDataKit/web first) and the server's `apps:` section; the Gateway (identity home 8632, apps host 8633, management 8634) is
 // started by the story, paired with the Workspace server on the publisher keys page with a single-use code, and the instance is made with the Gateway's own command. It also shows what the screens must show on the way: a refused import
 // with its file and line, whether the build was isolated, the preview with no network, the refusal of a publish in the server's words.
-// It invites an administrator, so it sorts after identity-home (`workspace-files` before it, `workspaces` after, the order of the file names). `DBDATA_E2E_GATEWAY_DLL` names a Gateway build outside its own bin folder.
+// It invites an administrator, so it sorts after identity-home (`workspace-files` before it, `workspaces` after, the order of the file names). `DBDATAKIT_TEST_E2E_GATEWAY_DLL` names a Gateway build outside its own bin folder.
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
 const consoleDll = path.join(repoRoot, 'DbDataConsole/src/DbDataConsole.Server/bin/Debug/net10.0/dbdatakit.dll')
-const gatewayDll = process.env.DBDATA_E2E_GATEWAY_DLL ?? path.join(repoRoot, 'DbDataGateway/src/DbDataGateway.Server/bin/Debug/net10.0/dbdatagateway.dll')
+const gatewayDll = process.env.DBDATAKIT_TEST_E2E_GATEWAY_DLL ?? path.join(repoRoot, 'DbDataGateway/src/DbDataGateway.Server/bin/Debug/net10.0/dbdatagateway.dll')
 const serverName = 'Workspace publish e2e'
 const { gateway } = workspacePublish
 const homeUrl = `https://localhost:${gateway.homePort}`

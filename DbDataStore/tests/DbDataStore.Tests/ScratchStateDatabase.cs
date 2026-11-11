@@ -5,7 +5,7 @@ using Npgsql;
 namespace DbDataStore.Tests;
 
 /// <summary>
-/// A scratch database on the shared SQL Server or PostgreSQL (<c>DBDATA_TEST_SQLSERVER</c>, <c>DBDATA_TEST_POSTGRES</c>) for a test of a product's state settings. <see cref="Connection"/> is a connection string whose
+/// A scratch database on the shared SQL Server or PostgreSQL (<c>DBDATAKIT_TEST_SQLSERVER</c>, <c>DBDATAKIT_TEST_POSTGRES</c>) for a test of a product's state settings. <see cref="Connection"/> is a connection string whose
 /// password is a reference to the variable <see cref="PasswordVariable"/>, which <see cref="Environment"/> answers: the settings file written from it holds no password.
 /// </summary>
 internal sealed class ScratchStateDatabase : IDisposable
@@ -56,8 +56,8 @@ internal sealed class ScratchStateDatabase : IDisposable
     /// <summary>The database on <paramref name="engine"/>'s server; the test is skipped when that engine is not set up.</summary>
     public static ScratchStateDatabase For(string engine)
     {
-        var admin = System.Environment.GetEnvironmentVariable(engine == "mssql" ? "DBDATA_TEST_SQLSERVER" : "DBDATA_TEST_POSTGRES");
-        if (admin is null) Assert.Skip($"set DBDATA_TEST_{(engine == "mssql" ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
+        var admin = System.Environment.GetEnvironmentVariable(engine == "mssql" ? "DBDATAKIT_TEST_SQLSERVER" : "DBDATAKIT_TEST_POSTGRES");
+        if (admin is null) Assert.Skip($"set DBDATAKIT_TEST_{(engine == "mssql" ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
         return new ScratchStateDatabase(engine, admin);
     }
 

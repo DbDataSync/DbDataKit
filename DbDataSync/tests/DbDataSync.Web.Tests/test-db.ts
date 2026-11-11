@@ -8,7 +8,7 @@ export const TGT_CONNECTION_NAME = 'playwright-tgt'
 
 /**
  * The test engines are the shared ones in testenv/ (`testenv/testenv.sh up mssql postgres-logical mysql`, then
- * `eval "$(testenv/testenv.sh env dbdatasync)"`), whose connection strings arrive in DBDATASYNC_TEST_*. The defaults are what the old
+ * `eval "$(testenv/testenv.sh env dbdatasync)"`), whose connection strings arrive in DBDATAKIT_TEST_*. The defaults are what the old
  * DbDataSync/docker-compose.yml had (password DbDataSync_Test_Pw1, SQL Server on 14330, MySQL on 13306), for a run without the variables.
  */
 function part(connectionString: string, keys: string[]): string | undefined {
@@ -26,9 +26,9 @@ function portOf(connectionString: string, fallback: number): number {
   return Number(text) || fallback
 }
 
-const MSSQL = process.env.DBDATASYNC_TEST_MSSQL_SERVER
+const MSSQL = process.env.DBDATAKIT_TEST_MSSQL
   ?? 'Data Source=localhost,14330;User ID=sa;Password=DbDataSync_Test_Pw1;TrustServerCertificate=True'
-const MYSQL = process.env.DBDATASYNC_TEST_MYSQL_SERVER
+const MYSQL = process.env.DBDATAKIT_TEST_MYSQL
   ?? 'Server=localhost;Port=13306;UserID=root;Password=DbDataSync_Test_Pw1'
 
 export const SA_PASSWORD = part(MSSQL, ['password', 'pwd']) ?? 'DbDataSync_Test_Pw1'

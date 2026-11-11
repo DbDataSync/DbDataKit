@@ -158,9 +158,8 @@ public static class SuiteEnvironment
     /// <summary>A family of variables of an earlier release that share a prefix: the prefix becomes <see cref="NewPrefix"/> and the rest of the name stays (<c>DBGATEWAY_Gateway__Listen__Port</c> is <c>DBDATAKIT_Gateway__Listen__Port</c>).</summary>
     /// <param name="Prefix">The old prefix, matched without regard to case (a Windows environment has none).</param>
     /// <param name="NewPrefix">What replaces it.</param>
-    /// <param name="Except">Names (after the prefix) the rule leaves alone: the variables of tests and harnesses, which plan 33 SC31b renames; empty once it has.</param>
     /// <param name="Rename">The rest of the name in the new spelling, when more than the prefix changed.</param>
-    public sealed record OldPrefix(string Prefix, string NewPrefix, Func<string, bool>? Except = null, Func<string, string>? Rename = null)
+    public sealed record OldPrefix(string Prefix, string NewPrefix, Func<string, string>? Rename = null)
     {
         /// <summary>The replacement for a variable that has this prefix.</summary>
         public string Replacement(string name)
@@ -169,22 +168,17 @@ public static class SuiteEnvironment
             return NewPrefix + (Rename?.Invoke(rest) ?? rest);
         }
 
-        /// <summary>True when the variable belongs to this family and is not one of the exceptions.</summary>
-        public bool Matches(string name) => name.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase) && name.Length > Prefix.Length && Except?.Invoke(name[Prefix.Length..]) != true;
+        /// <summary>True when the variable belongs to this family (the prefix and at least one more character).</summary>
+        public bool Matches(string name) => name.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase) && name.Length > Prefix.Length;
     }
-
-    // SC31b renames these (the variables of tests, harnesses and CI); until then a prefix rule does not refuse them
-    private static bool IsTestOrHarness(string rest) =>
-        rest.StartsWith("TEST_", StringComparison.OrdinalIgnoreCase) || rest.StartsWith("E2E_", StringComparison.OrdinalIgnoreCase) || rest.StartsWith("REQUIRE_", StringComparison.OrdinalIgnoreCase) ||
-        rest.StartsWith("LIVE_", StringComparison.OrdinalIgnoreCase) || rest.StartsWith("UPDATE_", StringComparison.OrdinalIgnoreCase) || rest.StartsWith("ADMIN_TESTS", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Every family of earlier variables that is refused by prefix, after <see cref="OldNames"/> has had its say. This is the one list.</summary>
     public static IReadOnlyList<OldPrefix> OldPrefixes { get; } =
     [
         new("DBDATA_SECRET_", "DBDATAKIT_SECRET_"),
         new("DBDATA_BUILD_", "DBDATAKIT_BUILD_"),
-        new("DBGATEWAY_", "DBDATAKIT_", IsTestOrHarness),
-        new("DBPROXY_", "DBDATAKIT_", IsTestOrHarness, rest => rest.StartsWith("Proxy__", StringComparison.OrdinalIgnoreCase) ? "Gateway__" + rest["Proxy__".Length..] : rest),
+        new("DBGATEWAY_", "DBDATAKIT_"),
+        new("DBPROXY_", "DBDATAKIT_", rest => rest.StartsWith("Proxy__", StringComparison.OrdinalIgnoreCase) ? "Gateway__" + rest["Proxy__".Length..] : rest),
     ];
 
     /// <summary>Every variable of an earlier release that is refused, with the one that replaces it. This is the one list.</summary>

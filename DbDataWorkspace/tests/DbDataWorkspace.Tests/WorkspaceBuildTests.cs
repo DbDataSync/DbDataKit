@@ -22,7 +22,7 @@ public sealed class WorkspaceBuildTests
     private static string NeedBun()
     {
         var found = BunLocator.Locate();
-        Assert.False(!found.Found && string.Equals(Environment.GetEnvironmentVariable("DBDATA_REQUIRE_BUN"), "true", StringComparison.OrdinalIgnoreCase), "Bun is required but was not found: " + found.Problem);
+        Assert.False(!found.Found && string.Equals(Environment.GetEnvironmentVariable("DBDATAKIT_TEST_REQUIRE_BUN"), "true", StringComparison.OrdinalIgnoreCase), "Bun is required but was not found: " + found.Problem);
         if (!found.Found) Assert.Skip("bun is not installed");
         return found.Path!;
     }
@@ -223,7 +223,7 @@ public sealed class WorkspaceBuildTests
     [Fact]
     public async Task A_machine_that_cannot_isolate_refuses_a_required_build_and_with_auto_builds_and_says_it_was_not_isolated()
     {
-        if (NetworkIsolator.IsAvailable) Assert.Skip("this machine can make a network namespace, so the fallback is not reached here (CI sets DBDATA_REQUIRE_NETNS)");
+        if (NetworkIsolator.IsAvailable) Assert.Skip("this machine can make a network namespace, so the fallback is not reached here (CI sets DBDATAKIT_TEST_REQUIRE_NETNS)");
         var strict = Real(NetworkIsolation.Required);
         await using (var server = await WorkspaceHarness.StartAsync(apps: strict))
         {

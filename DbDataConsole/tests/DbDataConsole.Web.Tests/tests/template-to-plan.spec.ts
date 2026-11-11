@@ -8,7 +8,7 @@ import { endToEndBuild, scratchDirectory, warehouseConnection } from '../playwri
 import { signInNewAdmin } from './people'
 
 // Plan 13a, W10: from a template to an applied plan, all in the console, by two people. Ada makes a project from the starter template on a Build server that hosts none, starts a workspace, points the project at the
-// PostgreSQL (its settings, in the YAML editor), describes a model (a form), has the compiler write the rendered files a deploy plans from, commits and merges. Then, on the test PostgreSQL (DBDATA_E2E_PG; the
+// PostgreSQL (its settings, in the YAML editor), describes a model (a form), has the compiler write the rendered files a deploy plans from, commits and merges. Then, on the test PostgreSQL (DBDATAKIT_TEST_E2E_PG; the
 // story stops after the merge when it is unset), Ada plans the deploy, and Grace, a second person signed in on her own, reviews it, tries it, approves and applies it, and the tracking tables name her as the approver.
 //
 // Nothing here is done outside the console (plan 13a, W13): the connection file is made in her workspace (New connection), and the tracking tables and the tables the models read are made from the Status tab (an administrator's step).

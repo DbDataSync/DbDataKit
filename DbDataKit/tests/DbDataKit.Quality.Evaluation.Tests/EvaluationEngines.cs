@@ -11,8 +11,8 @@ using Npgsql;
 namespace DbDataKit.Quality.Evaluation.Tests;
 
 /// <summary>
-/// One data engine of the conformance suite: SQL Server and PostgreSQL when the shared engines are up (<c>DBDATA_TEST_SQLSERVER</c>, <c>DBDATA_TEST_POSTGRES</c>, <c>testenv/testenv.sh up mssql postgres</c>), DuckDB always (a file in a scratch
-/// directory). An engine whose variable is not set skips its rows unless <c>DBDATA_REQUIRE_SQLSERVER</c> / <c>DBDATA_REQUIRE_POSTGRES</c> is <c>true</c>. The checks run over the <b>provider's read-only connection</b>; the data is written over a second, writing one.
+/// One data engine of the conformance suite: SQL Server and PostgreSQL when the shared engines are up (<c>DBDATAKIT_TEST_SQLSERVER</c>, <c>DBDATAKIT_TEST_POSTGRES</c>, <c>testenv/testenv.sh up mssql postgres</c>), DuckDB always (a file in a scratch
+/// directory). An engine whose variable is not set skips its rows unless <c>DBDATAKIT_TEST_REQUIRE_SQLSERVER</c> / <c>DBDATAKIT_TEST_REQUIRE_POSTGRES</c> is <c>true</c>. The checks run over the <b>provider's read-only connection</b>; the data is written over a second, writing one.
 /// </summary>
 public sealed class EvaluationEngine : IAsyncDisposable
 {
@@ -43,7 +43,7 @@ public sealed class EvaluationEngine : IAsyncDisposable
 
     public static EvaluationEngine Open(string name)
     {
-        var variable = name switch { SqlServer => "DBDATA_TEST_SQLSERVER", Postgres => "DBDATA_TEST_POSTGRES", _ => null };
+        var variable = name switch { SqlServer => "DBDATAKIT_TEST_SQLSERVER", Postgres => "DBDATAKIT_TEST_POSTGRES", _ => null };
         if (variable is null)
         {
             var dir = Directory.CreateTempSubdirectory("dbdatakit-quality-");
@@ -52,7 +52,7 @@ public sealed class EvaluationEngine : IAsyncDisposable
         var server = Environment.GetEnvironmentVariable(variable);
         if (string.IsNullOrWhiteSpace(server))
         {
-            var required = string.Equals(Environment.GetEnvironmentVariable(name == SqlServer ? "DBDATA_REQUIRE_SQLSERVER" : "DBDATA_REQUIRE_POSTGRES"), "true", StringComparison.OrdinalIgnoreCase);
+            var required = string.Equals(Environment.GetEnvironmentVariable(name == SqlServer ? "DBDATAKIT_TEST_REQUIRE_SQLSERVER" : "DBDATAKIT_TEST_REQUIRE_POSTGRES"), "true", StringComparison.OrdinalIgnoreCase);
             Assert.False(required, $"{name} is required but {variable} is not set");
             Assert.Skip($"set {variable} to run on {name}");
         }

@@ -37,7 +37,7 @@ public abstract class StoreDataTests(string engine) : IAsyncLifetime
     private IReadOnlyList<string>? scope;
     private WebApplication? app;
     private StoreSettings settings = null!;
-    private readonly string? server = Environment.GetEnvironmentVariable(engine == "sqlserver" ? "DBDATA_TEST_SQLSERVER" : "DBDATA_TEST_POSTGRES");
+    private readonly string? server = Environment.GetEnvironmentVariable(engine == "sqlserver" ? "DBDATAKIT_TEST_SQLSERVER" : "DBDATAKIT_TEST_POSTGRES");
 
     private bool SqlServer => engine == "sqlserver";
 
@@ -112,8 +112,8 @@ public abstract class StoreDataTests(string engine) : IAsyncLifetime
 
     private async Task<Func<HttpMethod, string, string?, ServerRole, Task<HttpResponseMessage>>> Client()
     {
-        if (server is null && string.Equals(Environment.GetEnvironmentVariable(SqlServer ? "DBDATA_REQUIRE_SQLSERVER" : "DBDATA_REQUIRE_POSTGRES"), "true", StringComparison.OrdinalIgnoreCase)) Assert.Fail($"{engine} is required but its DBDATA_TEST_* variable is not set");
-        Assert.SkipWhen(server is null, $"set DBDATA_TEST_{(SqlServer ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
+        if (server is null && string.Equals(Environment.GetEnvironmentVariable(SqlServer ? "DBDATAKIT_TEST_REQUIRE_SQLSERVER" : "DBDATAKIT_TEST_REQUIRE_POSTGRES"), "true", StringComparison.OrdinalIgnoreCase)) Assert.Fail($"{engine} is required but its DBDATAKIT_TEST_* variable is not set");
+        Assert.SkipWhen(server is null, $"set DBDATAKIT_TEST_{(SqlServer ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
         var url = new Uri(app!.Urls.First());
         var code = StoreState.Pairing(settings.Directory).Codes().Create(ServerRoles.Close(ServerRole.Admin | ServerRole.Author));
         var paired = await PairingClient.PairAsync(url, code.Code, console, ClientKind.Console, "test console");
@@ -471,8 +471,8 @@ public abstract class StoreDataTests(string engine) : IAsyncLifetime
 }
 
 
-/// <summary>On PostgreSQL (<c>DBDATA_TEST_POSTGRES</c>).</summary>
+/// <summary>On PostgreSQL (<c>DBDATAKIT_TEST_POSTGRES</c>).</summary>
 public sealed class StoreDataOnPostgresTests() : StoreDataTests("postgres");
 
-/// <summary>On SQL Server (<c>DBDATA_TEST_SQLSERVER</c>).</summary>
+/// <summary>On SQL Server (<c>DBDATAKIT_TEST_SQLSERVER</c>).</summary>
 public sealed class StoreDataOnSqlServerTests() : StoreDataTests("sqlserver");

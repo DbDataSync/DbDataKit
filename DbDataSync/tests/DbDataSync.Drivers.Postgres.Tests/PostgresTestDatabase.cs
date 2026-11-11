@@ -6,12 +6,12 @@ namespace DbDataSync.Drivers.Postgres.Tests;
 /// <summary>
 /// Creates a uniquely-named database on a real PostgreSQL instance for the lifetime of one test class
 /// and drops it afterwards. Points at the local Docker container from testenv/ by default;
-/// override via DBDATASYNC_TEST_POSTGRES_SERVER.
+/// override via DBDATAKIT_TEST_POSTGRES_LOGICAL.
 /// </summary>
 public sealed class PostgresTestDatabase : IAsyncLifetime
 {
     public static string ServerConnectionString { get; } =
-        Environment.GetEnvironmentVariable("DBDATASYNC_TEST_POSTGRES_SERVER")
+        Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES_LOGICAL")
         ?? "Host=localhost;Port=15432;Username=dbdatasync;Password=DbDataSync_Test_Pw1;Database=postgres";
 
     // Lower-case: Postgres folds unquoted identifiers down, and a mixed-case database name would then

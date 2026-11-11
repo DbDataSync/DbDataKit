@@ -8,16 +8,16 @@ using Xunit.Abstractions;
 namespace DbDataSync.Drivers.ArrowFlightSql.Tests;
 
 /// <summary>
-/// The driver against a running DbDataGateway. Opt-in: set DBGATEWAY_LIVE_ADDRESS (for example
-/// <c>https://127.0.0.1:18815</c>), DBGATEWAY_LIVE_USER and DBGATEWAY_LIVE_PASSWORD; the proxy needs a data source
+/// The driver against a running DbDataGateway. Opt-in: set DBDATAKIT_TEST_LIVE_ADDRESS (for example
+/// <c>https://127.0.0.1:18815</c>), DBDATAKIT_TEST_LIVE_USER and DBDATAKIT_TEST_LIVE_PASSWORD; the proxy needs a data source
 /// <c>scratch</c> holding a <c>sales</c> table (id, name, amount, d) and a second source <c>other</c> without it.
 /// Without the variables each test returns immediately.
 /// </summary>
 public sealed class LiveGatewayTests(ITestOutputHelper output)
 {
-    private static readonly string? Address = Environment.GetEnvironmentVariable("DBGATEWAY_LIVE_ADDRESS");
-    private static readonly string User = Environment.GetEnvironmentVariable("DBGATEWAY_LIVE_USER") ?? "me";
-    private static readonly string Password = Environment.GetEnvironmentVariable("DBGATEWAY_LIVE_PASSWORD") ?? "";
+    private static readonly string? Address = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_LIVE_ADDRESS");
+    private static readonly string User = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_LIVE_USER") ?? "me";
+    private static readonly string Password = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_LIVE_PASSWORD") ?? "";
 
     private static async Task<(ArrowFlightSqlDriver Driver, DbConnection Connection)> OpenAsync(
         string dataSource, string? compression = null, string? parameterMode = null)

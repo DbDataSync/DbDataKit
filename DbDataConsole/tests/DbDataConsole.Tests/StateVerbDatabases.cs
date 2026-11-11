@@ -5,7 +5,7 @@ using Npgsql;
 
 namespace DbDataConsole.Tests;
 
-/// <summary>New empty databases on the engines of the shared test environment (<c>DBDATA_TEST_POSTGRES</c>, <c>DBDATA_TEST_SQLSERVER</c>), named the way a console's operator names them: the password is a reference to an environment variable, so no test text holds it.</summary>
+/// <summary>New empty databases on the engines of the shared test environment (<c>DBDATAKIT_TEST_POSTGRES</c>, <c>DBDATAKIT_TEST_SQLSERVER</c>), named the way a console's operator names them: the password is a reference to an environment variable, so no test text holds it.</summary>
 internal sealed class StateVerbDatabases : IDisposable
 {
     public const string PasswordVariable = "CONSOLE_VERB_TEST_PASSWORD";
@@ -22,8 +22,8 @@ internal sealed class StateVerbDatabases : IDisposable
     /// <summary>A new empty database: its connection string (the password as <c>env:</c> reference) and the password for the environment.</summary>
     public string Provision(string engine)
     {
-        var server = engine == "mssql" ? Environment.GetEnvironmentVariable("DBDATA_TEST_SQLSERVER") : Environment.GetEnvironmentVariable("DBDATA_TEST_POSTGRES");
-        if (server is null) Assert.Skip($"set DBDATA_TEST_{(engine == "mssql" ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
+        var server = engine == "mssql" ? Environment.GetEnvironmentVariable("DBDATAKIT_TEST_SQLSERVER") : Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES");
+        if (server is null) Assert.Skip($"set DBDATAKIT_TEST_{(engine == "mssql" ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
 
         var name = $"console_verbs_{Guid.NewGuid():N}";
         if (engine == "mssql")

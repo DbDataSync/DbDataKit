@@ -4,15 +4,15 @@ namespace DbDataGateway.Tests.Support;
 
 /// <summary>
 /// Where the PostgreSQL tests connect: the shared test engine (<c>testenv/testenv.sh up postgres</c>, then <c>eval "$(testenv/testenv.sh env dbdatagateway)"</c>)
-/// as an Npgsql connection string in <c>DBGATEWAY_TEST_POSTGRES</c>. Without it the tests skip; with <c>DBGATEWAY_REQUIRE_POSTGRES=true</c> (what the map sets
+/// as an Npgsql connection string in <c>DBDATAKIT_TEST_POSTGRES</c>. Without it the tests skip; with <c>DBDATAKIT_TEST_REQUIRE_POSTGRES=true</c> (what the map sets
 /// when the engine was started) an unreachable server fails them, so CI cannot go green without really running them.
 /// </summary>
 public static class PostgresEnv
 {
-    private static readonly string? Raw = Environment.GetEnvironmentVariable("DBGATEWAY_TEST_POSTGRES");
+    private static readonly string? Raw = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES");
 
     public static bool Required =>
-        string.Equals(Environment.GetEnvironmentVariable("DBGATEWAY_REQUIRE_POSTGRES"), "true", StringComparison.OrdinalIgnoreCase);
+        string.Equals(Environment.GetEnvironmentVariable("DBDATAKIT_TEST_REQUIRE_POSTGRES"), "true", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The connection string as the administrator of a data source writes it: the engine's TLS is a throwaway self-signed certificate, so the string says <c>SSL Mode=Require</c> (encrypted, not verified).</summary>
     public static string ConnectionString(int timeoutSeconds = 15) => $"{Raw};SSL Mode=Require;Timeout={timeoutSeconds}";
@@ -28,8 +28,8 @@ public static class PostgresEnv
     {
         if (string.IsNullOrEmpty(Raw))
         {
-            if (Required) throw new InvalidOperationException("PostgreSQL is required (DBGATEWAY_REQUIRE_POSTGRES) but DBGATEWAY_TEST_POSTGRES is not set.");
-            Assert.Skip("DBGATEWAY_TEST_POSTGRES is not set (testenv/testenv.sh up postgres, then eval \"$(testenv/testenv.sh env dbdatagateway)\").");
+            if (Required) throw new InvalidOperationException("PostgreSQL is required (DBDATAKIT_TEST_REQUIRE_POSTGRES) but DBDATAKIT_TEST_POSTGRES is not set.");
+            Assert.Skip("DBDATAKIT_TEST_POSTGRES is not set (testenv/testenv.sh up postgres, then eval \"$(testenv/testenv.sh env dbdatagateway)\").");
         }
         try
         {

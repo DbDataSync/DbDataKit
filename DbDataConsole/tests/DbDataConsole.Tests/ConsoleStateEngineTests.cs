@@ -49,8 +49,8 @@ public sealed class ConsoleStateEngineTests : IDisposable
     [Fact]
     public void Users_are_kept_in_a_postgresql_database_the_operator_names_with_the_password_from_the_environment()
     {
-        var server = Environment.GetEnvironmentVariable("DBDATA_TEST_POSTGRES");
-        if (server is null) Assert.Skip("set DBDATA_TEST_POSTGRES to run on PostgreSQL");
+        var server = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES");
+        if (server is null) Assert.Skip("set DBDATAKIT_TEST_POSTGRES to run on PostgreSQL");
 
         var name = $"console_state_{Guid.NewGuid():N}";
         var builder = new NpgsqlConnectionStringBuilder(server);

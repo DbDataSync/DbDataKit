@@ -12,7 +12,7 @@ internal static class ProtocolSnapshot
 {
     public const string FileName = "runner.v1.snapshot.txt";
 
-    public const string UpdateVariable = "DBKIT_UPDATE_PROTOCOL_SNAPSHOT";
+    public const string UpdateVariable = "DBDATAKIT_TEST_UPDATE_PROTOCOL_SNAPSHOT";
 
     /// <summary>One line per message field, enum value and call: <c>key = value</c>.</summary>
     public static IReadOnlyList<(string Key, string Value)> Describe(FileDescriptor file)

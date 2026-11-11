@@ -4,11 +4,11 @@ using System.Security;
 
 namespace DbDataKit.Hosting.WindowsService.Tests;
 
-/// <summary>Windows-only. Anything needing admin is skipped unless DBDATA_ADMIN_TESTS=1.</summary>
+/// <summary>Windows-only. Anything needing admin is skipped unless DBDATAKIT_TEST_ADMIN_TESTS=1.</summary>
 [System.Runtime.Versioning.SupportedOSPlatform("windows")]
 public class WindowsTests
 {
-    private static bool AdminTestsEnabled => Environment.GetEnvironmentVariable("DBDATA_ADMIN_TESTS") == "1";
+    private static bool AdminTestsEnabled => Environment.GetEnvironmentVariable("DBDATAKIT_TEST_ADMIN_TESTS") == "1";
 
     [Fact]
     public void Real_scm_reports_unknown_service_as_null_without_admin()
@@ -59,7 +59,7 @@ public class WindowsTests
     public async Task Admin_only_install_and_remove_real_service()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows only");
-        Assert.SkipUnless(AdminTestsEnabled, "Set DBDATA_ADMIN_TESTS=1 (elevated) to run against the real SCM");
+        Assert.SkipUnless(AdminTestsEnabled, "Set DBDATAKIT_TEST_ADMIN_TESTS=1 (elevated) to run against the real SCM");
         var name = "DbDataKitTest_" + Guid.NewGuid().ToString("N")[..8];
         var scm = new WindowsServiceControlManager();
         var p = new ServiceProvisioner(scm, new WindowsEventLogSourceRegistrar());

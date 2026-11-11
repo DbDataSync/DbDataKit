@@ -56,12 +56,12 @@ not just two databases on one shared instance. The third is PostgreSQL with `wal
 `postgres` profile on 15432 that the other products test against does not have it. MySQL (13306), MariaDB (13307) and Oracle
 (15210, service `FREEPDB1`) are the profiles `mysql`, `mariadb` and `oracle`; `up` with no names starts every engine.
 
-Every engine uses the password `DbKit_Test_Pw1` (set `DBKIT_TEST_PASSWORD` before `up` to change it; it is read when the containers
+Every engine uses the password `DbKit_Test_Pw1` (set `DBDATAKIT_TEST_PASSWORD` before `up` to change it; it is read when the containers
 are created) and the users `sa`, `root`, `dbdatasync` (PostgreSQL) and `dbkit` (Oracle). Nothing is kept between runs: `testenv/testenv.sh
 down` removes the containers and their data, and every test creates its own databases and tables. `up` waits for each engine's health
 check. `tools/dev-harness up` starts the three engines above itself.
 
-The tests read where the engines are from `DBDATASYNC_TEST_*` variables; print them for what is running and load them into your shell:
+The tests read where the engines are from `DBDATAKIT_TEST_*` variables; print them for what is running and load them into your shell:
 
 ```sh
 eval "$(testenv/testenv.sh env dbdatasync)"
@@ -70,8 +70,8 @@ eval "$(testenv/testenv.sh env dbdatasync)"
 (`testenv/testenv.sh env dbdatasync --dotenv >> "$GITHUB_ENV"` in a GitHub Actions job.) Without them the tests use literal defaults, the
 values of the old `DbDataSync/docker-compose.yml`: password `DbDataSync_Test_Pw1`, PostgreSQL on 15432. Those no longer match the shared
 engines (password `DbKit_Test_Pw1`, PostgreSQL on 15433, Oracle user `dbkit`), so run the suites after the `eval` above. The variables:
-`DBDATASYNC_TEST_MSSQL_SERVER` and `_MSSQL_SOURCE_SERVER` (14330), `_MSSQL_TARGET_SERVER` (14331), `_POSTGRES_SERVER` and
-`_POSTGRES_JDBC_URL` (15433), `_MYSQL_SERVER`, `_MARIADB_SERVER`, `_ORACLE_SERVER`.
+`DBDATAKIT_TEST_MSSQL` (14330), `_MSSQL_TARGET` (14331), `_POSTGRES_LOGICAL` and `_POSTGRES_LOGICAL_JDBC_URL` (15433), `_MYSQL`, `_MARIADB`,
+`_ORACLE` (each a connection string; the names of the suite are in `docs/testing-environment.md`).
 
 ## 2. Build the solution
 
@@ -146,7 +146,7 @@ npx playwright test
 ```
 
 The screens are shown inside the console's frame, so a run writes its pictures to a scratch folder and leaves the committed
-`screenshots/` alone (`DBDATASYNC_E2E_SCREENSHOTS=repo` replaces them on purpose).
+`screenshots/` alone (`DBDATAKIT_TEST_E2E_SCREENSHOTS=repo` replaces them on purpose).
 
 ## Repository layout
 

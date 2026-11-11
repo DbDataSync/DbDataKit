@@ -10,9 +10,10 @@ Branching and releases are in [releases.md](releases.md).
   `bigquery`, `flight`, `flight-tls` (the slow ones, Build's conformance suite only; `up all` starts them); `mssql2022` and `postgres16`
   (the previous release of each state engine, N-1, left out of a bare `up`). `testenv/testenv.sh` has `up`, `down`, `status`, `env`;
   `testenv/selftest.sh` checks the generation without Docker.
-- **Connection variables.** `testenv.sh env <product>` emits canonical `DBKIT_TEST_*` variables for what is running and applies the
-  product's mapping file in `testenv/env/` (`dbdatakit`, `dbdatakit-older` for the N-1 engines, `dbdataproxy`, `dbdatasync`, `dbdatabuild`),
-  which re-exports them under the names that suite reads.
+- **Connection variables.** `testenv.sh env <product>` emits canonical `DBDATAKIT_TEST_*` variables for what is running and applies the
+  product's mapping file in `testenv/env/` (`dbdatakit`, `dbdatakit-older` for the N-1 engines, `dbdatagateway`, `dbdatasync`, `dbdatabuild`),
+  which adds the few names that suite reads and `env` does not print (the State suites' `DBDATAKIT_TEST_SQLSERVER`, the `DBDATAKIT_TEST_REQUIRE_*`
+  switches). Every variable of a test, harness or CI step is `DBDATAKIT_TEST_<NAME>` (`docs/testing-environment.md` has the table).
 - **Build's engines live in `testenv/`** (SQL Server 2022 and 2025, PostgreSQL, Oracle, Spark, the BigQuery emulator, Arrow Flight with and
   without TLS); `DbDataBuild/scripts/test-engines.sh` is gone.
 - **Per-product workflows** in `.github/workflows/`: `dbdatakit-ci.yml` (the shared libraries, once, on Linux and Windows, with SQL Server and
@@ -32,7 +33,7 @@ Branching and releases are in [releases.md](releases.md).
 
 ## Rules
 
-1. **Variable names:** a suite reads the canonical `DBKIT_TEST_*` variable first and its old name as a fallback; the mapping files in `testenv/env/` re-export the canonical names under the old ones.
+1. **Variable names:** every variable of a test, harness or CI step is `DBDATAKIT_TEST_<NAME>`, one name for one meaning, with no fallback to an old name (`docs/testing-environment.md`).
 2. **Which engines gate every push:** SQL Server and PostgreSQL. MySQL, MariaDB, Oracle and the rest run when their code changes (and Build's conformance nightly).
 3. **The shared libraries' live tests** gate every pull request that touches them (`DbDataKit/**`, `testenv/`).
 

@@ -49,7 +49,7 @@ public sealed class RunnerCliTests : IDisposable
     {
         var file = Path.Combine(AppContext.BaseDirectory, "help.snapshot.txt");
         var actual = Help();
-        if (Environment.GetEnvironmentVariable("DBDATA_UPDATE_SNAPSHOTS") == "1") File.WriteAllText(Environment.GetEnvironmentVariable("DBDATA_SNAPSHOT_FILE") ?? file, actual);
+        if (Environment.GetEnvironmentVariable("DBDATAKIT_TEST_UPDATE_SNAPSHOTS") == "1") File.WriteAllText(Environment.GetEnvironmentVariable("DBDATAKIT_TEST_SNAPSHOT_FILE") ?? file, actual);
 
         Assert.Equal(File.ReadAllText(file).ReplaceLineEndings("\n"), actual);
         // the shared nouns are there with their shared verbs, and the runner's own

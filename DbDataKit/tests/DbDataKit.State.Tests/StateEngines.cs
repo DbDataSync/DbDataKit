@@ -6,8 +6,8 @@ namespace DbDataKit.State.Tests;
 
 /// <summary>
 /// A throwaway state database per test on SQLite, and, when the shared engines are up (<c>testenv/testenv.sh up mssql postgres</c>), on SQL Server and PostgreSQL:
-/// <c>DBDATA_TEST_SQLSERVER</c> and <c>DBDATA_TEST_POSTGRES</c> name a server, and each test gets its own scratch database on it. An engine whose variable is not set
-/// skips its theory rows, unless <c>DBDATA_REQUIRE_SQLSERVER</c> / <c>DBDATA_REQUIRE_POSTGRES</c> is <c>true</c>, which fails them instead.
+/// <c>DBDATAKIT_TEST_SQLSERVER</c> and <c>DBDATAKIT_TEST_POSTGRES</c> name a server, and each test gets its own scratch database on it. An engine whose variable is not set
+/// skips its theory rows, unless <c>DBDATAKIT_TEST_REQUIRE_SQLSERVER</c> / <c>DBDATAKIT_TEST_REQUIRE_POSTGRES</c> is <c>true</c>, which fails them instead.
 /// </summary>
 public sealed class StateEngines : IDisposable
 {
@@ -16,13 +16,13 @@ public sealed class StateEngines : IDisposable
 
     public static string? Server(string engine) => engine switch
     {
-        StateEngineIds.MsSql => Environment.GetEnvironmentVariable("DBDATA_TEST_SQLSERVER"),
-        StateEngineIds.Postgres => Environment.GetEnvironmentVariable("DBDATA_TEST_POSTGRES"),
+        StateEngineIds.MsSql => Environment.GetEnvironmentVariable("DBDATAKIT_TEST_SQLSERVER"),
+        StateEngineIds.Postgres => Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES"),
         _ => null,
     };
 
     private static bool Required(string engine) => string.Equals(
-        Environment.GetEnvironmentVariable(engine == StateEngineIds.MsSql ? "DBDATA_REQUIRE_SQLSERVER" : "DBDATA_REQUIRE_POSTGRES"), "true", StringComparison.OrdinalIgnoreCase);
+        Environment.GetEnvironmentVariable(engine == StateEngineIds.MsSql ? "DBDATAKIT_TEST_REQUIRE_SQLSERVER" : "DBDATAKIT_TEST_REQUIRE_POSTGRES"), "true", StringComparison.OrdinalIgnoreCase);
 
     public static TheoryData<string> Engines => [StateEngineIds.Sqlite, StateEngineIds.MsSql, StateEngineIds.Postgres];
 
@@ -69,18 +69,18 @@ public sealed class StateEngines : IDisposable
 
     /// <summary>
     /// The older engines of the support matrix (plan 29b, U01: N-1 beside N), each with the variable that names its server and the one that makes its rows fail instead of skip when the variable is unset.
-    /// The main rows of <see cref="Engines"/> run on whatever <c>DBDATA_TEST_SQLSERVER</c> / <c>DBDATA_TEST_POSTGRES</c> name (SQL Server 2025 and PostgreSQL 17 in <c>testenv</c>); these name SQL Server 2022
-    /// (<c>DBDATA_TEST_SQLSERVER2022</c>, <c>testenv/testenv.sh up mssql2022</c>) and PostgreSQL 16 (<c>DBDATA_TEST_POSTGRES16</c>, profile <c>postgres16</c>), so one run covers both.
+    /// The main rows of <see cref="Engines"/> run on whatever <c>DBDATAKIT_TEST_SQLSERVER</c> / <c>DBDATAKIT_TEST_POSTGRES</c> name (SQL Server 2025 and PostgreSQL 17 in <c>testenv</c>); these name SQL Server 2022
+    /// (<c>DBDATAKIT_TEST_SQLSERVER2022</c>, <c>testenv/testenv.sh up mssql2022</c>) and PostgreSQL 16 (<c>DBDATAKIT_TEST_POSTGRES16</c>, profile <c>postgres16</c>), so one run covers both.
     /// </summary>
     public static IReadOnlyList<(string Variant, string Engine, string Variable, string RequireVariable)> OlderEngineVariants { get; } =
     [
-        ("mssql2022", StateEngineIds.MsSql, "DBDATA_TEST_SQLSERVER2022", "DBDATA_REQUIRE_SQLSERVER2022"),
-        ("postgres16", StateEngineIds.Postgres, "DBDATA_TEST_POSTGRES16", "DBDATA_REQUIRE_POSTGRES16"),
+        ("mssql2022", StateEngineIds.MsSql, "DBDATAKIT_TEST_SQLSERVER2022", "DBDATAKIT_TEST_REQUIRE_SQLSERVER2022"),
+        ("postgres16", StateEngineIds.Postgres, "DBDATAKIT_TEST_POSTGRES16", "DBDATAKIT_TEST_REQUIRE_POSTGRES16"),
     ];
 
     public static TheoryData<string> OlderEngines => [.. OlderEngineVariants.Select(v => v.Variant)];
 
-    /// <summary>A scratch database on an older engine of <see cref="OlderEngineVariants"/>; skips (or fails, with its DBDATA_REQUIRE_* variable set to true) when the server is not named.</summary>
+    /// <summary>A scratch database on an older engine of <see cref="OlderEngineVariants"/>; skips (or fails, with its DBDATAKIT_TEST_REQUIRE_* variable set to true) when the server is not named.</summary>
     public Location ProvisionVariant(string variant)
     {
         var entry = OlderEngineVariants.Single(v => v.Variant == variant);
@@ -106,8 +106,8 @@ public sealed class StateEngines : IDisposable
         var server = Server(engine);
         if (server is null)
         {
-            Assert.False(Required(engine), $"{engine} is required but its DBDATA_TEST_* variable is not set");
-            Assert.Skip($"set DBDATA_TEST_{(engine == StateEngineIds.MsSql ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
+            Assert.False(Required(engine), $"{engine} is required but its DBDATAKIT_TEST_* variable is not set");
+            Assert.Skip($"set DBDATAKIT_TEST_{(engine == StateEngineIds.MsSql ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
         }
 
         return ProvisionOn(engine, server!);

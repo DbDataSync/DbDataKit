@@ -10,7 +10,7 @@ namespace DbDataSync.Drivers.Postgres.Tests;
 /// <summary>
 /// What binary COPY staging does with every loose value a source reader can return, into every column type the target can have: the stored value, or the
 /// refusal. The expected file is the table in <c>DbDataSync/architecture/staging-value-types.md</c>; a change in it is a change in what Sync writes,
-/// so it fails here until the file is regenerated (<c>DBDATASYNC_MATRIX_UPDATE=1</c>) and the difference is read in review.
+/// so it fails here until the file is regenerated (<c>DBDATAKIT_TEST_MATRIX_UPDATE=1</c>) and the difference is read in review.
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class StagingValueMatrixTests(PostgresTestDatabase db) : IClassFixture<PostgresTestDatabase>
@@ -61,7 +61,7 @@ public sealed class StagingValueMatrixTests(PostgresTestDatabase db) : IClassFix
         var file = new StagingMatrixFile(ExpectedPath());
         if (StagingMatrixFile.Update) { file.Write(actual); return; }
         var expected = file.Read();
-        Assert.True(expected.SequenceEqual(actual), "staging outcomes changed (DBDATASYNC_MATRIX_UPDATE=1 regenerates the file):" + Environment.NewLine + StagingMatrixFile.Diff(expected, actual));
+        Assert.True(expected.SequenceEqual(actual), "staging outcomes changed (DBDATAKIT_TEST_MATRIX_UPDATE=1 regenerates the file):" + Environment.NewLine + StagingMatrixFile.Diff(expected, actual));
     }
 
     private static async Task Exec(NpgsqlConnection c, string sql)

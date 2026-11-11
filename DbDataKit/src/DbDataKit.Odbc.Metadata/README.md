@@ -42,8 +42,8 @@ on Unix, bitness from the library path when it says). Registry and file access g
 * Verified against real odbc32.dll on Windows, and against SQL Server (`ODBC Driver 17/18`) including SQLGetTypeInfo,
   SQLProcedures, SQLProcedureColumns, the cap and sessions. Not verified on Linux/macOS (unixODBC naming, UTF-32 detection) or
   with drivers that reject `SQL_ATTR_QUERY_TIMEOUT`; those paths are covered by fakes only.
-* Integration tests skip when no server is reachable: `DBDATA_TEST_SQLSERVER` (default `.\SQLEXPRESS`), `_USER`, `_PASSWORD`,
-  `DBDATA_REQUIRE_SQLSERVER=true` to fail instead of skip (the Gateway-prefixed spellings of these test variables also work until SC31b).
+* Integration tests skip when no server is reachable: `DBDATAKIT_TEST_MSSQL_SERVER` (default `.\SQLEXPRESS`), `_MSSQL_USER`, `_MSSQL_PASSWORD`,
+  `DBDATAKIT_TEST_REQUIRE_SQLSERVER=true` to fail instead of skip.
 
 Public API is tracked with `Microsoft.CodeAnalysis.PublicApiAnalyzers` (`PublicAPI.Shipped.txt`).
 

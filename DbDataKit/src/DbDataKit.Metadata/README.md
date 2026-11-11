@@ -47,4 +47,4 @@ limits, hash) as a deterministic `dialects.lock.yml`-style file. Parsing is stri
 ## Tests
 `dotnet test --project tests/DbDataKit.Metadata.Tests` from `shared/`. DuckDB tests run in-process (DuckDB.NET.Data.Full); SQL Server and PostgreSQL are tested offline
 through a recording fake `DbConnection` (SQL text and row mapping); ODBC through a fake `IOdbcCatalogFunctions`. Live tests skip unless
-`DBDATA_METADATA_ODBC` (connection string) or `DBDATA_METADATA_SQLSERVER` / `DBDATA_METADATA_POSTGRES` (plus a registered provider) are set.
+`DBDATAKIT_TEST_METADATA_ODBC` (connection string) or `DBDATAKIT_TEST_METADATA_SQLSERVER` / `DBDATAKIT_TEST_METADATA_POSTGRES` (plus a registered provider) are set.

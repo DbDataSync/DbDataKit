@@ -8,4 +8,4 @@ Options (`SqlServerBulkSettings.From`): `BatchSize` (0 = one batch), `Timeout` (
 
 Pass the writer to `WriteGate.BulkWriteAsync` so the write is checked and logged. This file and `AdoWriteExecutor` are the only ones allowed to touch driver commands (see `InvariantTests`).
 
-Tested offline: settings mapping, reader and adaptation. Live (`DBDATA_TEST_SQLSERVER`): 10,000-row streaming copy and the conformance cases. Not measured: throughput versus the old DataTable path (see `shared/benchmarks`; the stub only compares the in-memory feeding cost). `Microsoft.Data.SqlClient` 7.1.1 pulls `System.Security.Cryptography.Pkcs` 9.0.18 (known advisories); `Directory.Packages.props` pins it to 10.0.13.
+Tested offline: settings mapping, reader and adaptation. Live (`DBDATAKIT_TEST_SQLSERVER`): 10,000-row streaming copy and the conformance cases. Not measured: throughput versus the old DataTable path (see `shared/benchmarks`; the stub only compares the in-memory feeding cost). `Microsoft.Data.SqlClient` 7.1.1 pulls `System.Security.Cryptography.Pkcs` 9.0.18 (known advisories); `Directory.Packages.props` pins it to 10.0.13.

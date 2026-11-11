@@ -65,8 +65,8 @@ jobs:
         run: |
           testenv/testenv.sh up mssql postgres
           testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
-          echo "DBDATA_REQUIRE_POSTGRES=true" >> "$GITHUB_ENV"
-          echo "DBDATA_REQUIRE_SQLSERVER=true" >> "$GITHUB_ENV"
+          echo "DBDATAKIT_TEST_REQUIRE_POSTGRES=true" >> "$GITHUB_ENV"
+          echo "DBDATAKIT_TEST_REQUIRE_SQLSERVER=true" >> "$GITHUB_ENV"
       - run: dotnet build DbDataRunner.slnf -c Release
       - run: dotnet test --project tests/DbDataRunner.Tests -c Release --no-build --minimum-expected-tests 27
 

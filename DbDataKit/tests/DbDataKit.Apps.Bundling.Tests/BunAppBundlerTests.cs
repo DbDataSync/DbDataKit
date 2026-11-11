@@ -3,7 +3,7 @@ using DbDataKit.Apps.Bundling;
 
 namespace DbDataKit.Apps.Bundling.Tests;
 
-/// <summary>The Bun bundler on small real sources. Needs <c>bun</c> on the path; without it the tests that build skip (set <c>DBDATA_REQUIRE_BUN=true</c> to fail them instead).</summary>
+/// <summary>The Bun bundler on small real sources. Needs <c>bun</c> on the path; without it the tests that build skip (set <c>DBDATAKIT_TEST_REQUIRE_BUN=true</c> to fail them instead).</summary>
 public sealed class BunAppBundlerTests : IDisposable
 {
     private readonly string root = Path.Combine(Path.GetTempPath(), "bundling-" + Guid.NewGuid().ToString("N")[..8]);
@@ -23,7 +23,7 @@ public sealed class BunAppBundlerTests : IDisposable
         }
         catch (System.ComponentModel.Win32Exception)
         {
-            Assert.False(string.Equals(Environment.GetEnvironmentVariable("DBDATA_REQUIRE_BUN"), "true", StringComparison.OrdinalIgnoreCase), "bun is required but not on the path");
+            Assert.False(string.Equals(Environment.GetEnvironmentVariable("DBDATAKIT_TEST_REQUIRE_BUN"), "true", StringComparison.OrdinalIgnoreCase), "bun is required but not on the path");
             Assert.Skip("bun is not on the path");
         }
     }

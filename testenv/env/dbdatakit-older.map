@@ -1,13 +1,12 @@
 # The State and Scheduling suites on the previous release of each engine (plan 29b U01, the N-1 leg of the support matrix): the variables the
-# suites always read (DBDATA_TEST_SQLSERVER, DBDATA_TEST_POSTGRES) name SQL Server 2022 and PostgreSQL 16, so every theory row of every
+# suites always read (DBDATAKIT_TEST_SQLSERVER, DBDATAKIT_TEST_POSTGRES) name SQL Server 2022 and PostgreSQL 16, so every theory row of every
 # engine-backed test runs on them; the *2022 / *16 variables are the explicit rows of DbDataKit.State.Tests' StateOlderEngineTests.
 # Use it with only the older profiles up: `testenv/testenv.sh up mssql2022 postgres16 && eval "$(testenv/testenv.sh env dbdatakit-older)"`.
-DBDATA_TEST_SQLSERVER           <- DBKIT_TEST_MSSQL2022
-DBDATA_TEST_SQLSERVER2022       <- DBKIT_TEST_MSSQL2022
-DBDATA_TEST_POSTGRES            <- DBKIT_TEST_POSTGRES16
-DBDATA_TEST_POSTGRES16          <- DBKIT_TEST_POSTGRES16
+DBDATAKIT_TEST_SQLSERVER           <- DBDATAKIT_TEST_MSSQL2022
+DBDATAKIT_TEST_SQLSERVER2022       <- DBDATAKIT_TEST_MSSQL2022
+DBDATAKIT_TEST_POSTGRES            <- DBDATAKIT_TEST_POSTGRES16
 # Engines the job started are required: a server that does not answer fails the run instead of skipping its tests.
-DBDATA_REQUIRE_SQLSERVER = true if DBKIT_TEST_MSSQL2022
-DBDATA_REQUIRE_SQLSERVER2022 = true if DBKIT_TEST_MSSQL2022
-DBDATA_REQUIRE_POSTGRES = true if DBKIT_TEST_POSTGRES16
-DBDATA_REQUIRE_POSTGRES16 = true if DBKIT_TEST_POSTGRES16
+DBDATAKIT_TEST_REQUIRE_SQLSERVER = true if DBDATAKIT_TEST_MSSQL2022
+DBDATAKIT_TEST_REQUIRE_SQLSERVER2022 = true if DBDATAKIT_TEST_MSSQL2022
+DBDATAKIT_TEST_REQUIRE_POSTGRES = true if DBDATAKIT_TEST_POSTGRES16
+DBDATAKIT_TEST_REQUIRE_POSTGRES16 = true if DBDATAKIT_TEST_POSTGRES16

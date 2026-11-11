@@ -73,7 +73,7 @@ jobs:
       engines: ${{ github.event_name != 'workflow_dispatch' || inputs.engines }}
 
   # The PDF exporter on the pinned Chromium (plan 32 DBR15): the pin and the bundled fonts are fetched and hash-checked, the visuals' print page is built, and the exporter's tests and the
-  # module's export tests run against that browser. They fail, not skip, here (DBDATA_REQUIRE_CHROMIUM): a skipped export test is a test that did not run. The same pin on Windows.
+  # module's export tests run against that browser. They fail, not skip, here (DBDATAKIT_TEST_REQUIRE_CHROMIUM): a skipped export test is a test that did not run. The same pin on Windows.
   views-export:
     name: PDF export on the pinned Chromium (${{ matrix.os }})
     strategy:
@@ -116,11 +116,11 @@ jobs:
         shell: bash
         run: |
           rid=linux-x64; [ "$RUNNER_OS" = "Windows" ] && rid=win-x64
-          echo "DBDATA_TEST_CHROMIUM=$GITHUB_WORKSPACE/.chromium/$rid" >> "$GITHUB_ENV"
-          echo "DBDATA_TEST_PRINT_ASSETS=$GITHUB_WORKSPACE/DbDataKit/web/visuals/dist/print" >> "$GITHUB_ENV"
-          echo "DBDATA_REQUIRE_CHROMIUM=true" >> "$GITHUB_ENV"
+          echo "DBDATAKIT_TEST_CHROMIUM=$GITHUB_WORKSPACE/.chromium/$rid" >> "$GITHUB_ENV"
+          echo "DBDATAKIT_TEST_PRINT_ASSETS=$GITHUB_WORKSPACE/DbDataKit/web/visuals/dist/print" >> "$GITHUB_ENV"
+          echo "DBDATAKIT_TEST_REQUIRE_CHROMIUM=true" >> "$GITHUB_ENV"
           # the runner's kernel may forbid the user namespaces Chromium's sandbox needs
-          [ "$RUNNER_OS" = "Linux" ] && echo "DBDATA_TEST_NOSANDBOX=true" >> "$GITHUB_ENV" || true
+          [ "$RUNNER_OS" = "Linux" ] && echo "DBDATAKIT_TEST_NOSANDBOX=true" >> "$GITHUB_ENV" || true
       - name: Exporter tests
         working-directory: DbDataKit
         run: dotnet test --project tests/DbDataKit.Views.Export.Tests
@@ -147,8 +147,8 @@ jobs:
       - name: Point the suite at the engines
         run: |
           testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
-          echo "DBDATA_REQUIRE_SQLSERVER=true" >> "$GITHUB_ENV"
-          echo "DBDATA_REQUIRE_POSTGRES=true" >> "$GITHUB_ENV"
+          echo "DBDATAKIT_TEST_REQUIRE_SQLSERVER=true" >> "$GITHUB_ENV"
+          echo "DBDATAKIT_TEST_REQUIRE_POSTGRES=true" >> "$GITHUB_ENV"
       - uses: ./.github/actions/duckdb-cache
       - name: Fetch the pinned DuckDB engine
         run: scripts/fetch-duckdb.sh
@@ -161,8 +161,8 @@ jobs:
 
   # The state layer's support matrix, the N-1 half (plan 29b U01): the State and Scheduling suites on the previous release of each engine, SQL Server 2022 and
   # PostgreSQL 16 (with pgvector), started from the older testenv profiles. The jobs above run the same suites on the current engines (SQL Server 2025, PostgreSQL 17),
-  # so together they are N and N-1. `testenv.sh env dbdatakit-older` points DBDATA_TEST_SQLSERVER and DBDATA_TEST_POSTGRES at the older servers (so every engine-backed
-  # test runs on them) and sets the DBDATA_REQUIRE_* variables, so a server that does not answer fails the run instead of skipping it. Nothing else in this workflow changed.
+  # so together they are N and N-1. `testenv.sh env dbdatakit-older` points DBDATAKIT_TEST_SQLSERVER and DBDATAKIT_TEST_POSTGRES at the older servers (so every engine-backed
+  # test runs on them) and sets the DBDATAKIT_TEST_REQUIRE_* variables, so a server that does not answer fails the run instead of skipping it. Nothing else in this workflow changed.
   state-older-engines:
     name: State and Scheduling suites (SQL Server 2022, PostgreSQL 16)
     runs-on: ubuntu-latest
@@ -216,7 +216,7 @@ jobs:
 
   # The semantic layer's DAX path against a real SQL Server Analysis Services (Tabular), the one thing the Linux jobs cannot run (the ADOMD.NET client
   # is Windows-only). On a pull request that touches the DAX emitter, the model or the SSAS executor (ssas-changes), or by hand: it installs Analysis Services with Chocolatey (about 3 minutes), deploys
-  # DbDataKit/tests/DbDataKit.Semantic.Tests/conformance/ssas/model.tmsl.json, and runs the semantic suite with DBDATA_TEST_SSAS set so the SSAS source of every fixture runs
+  # DbDataKit/tests/DbDataKit.Semantic.Tests/conformance/ssas/model.tmsl.json, and runs the semantic suite with DBDATAKIT_TEST_SSAS set so the SSAS source of every fixture runs
   # as real DAX. Run it after a change to the DAX emitter, the catalog's DAX bindings, the model or SsasExecutor (docs/semantic/ssas-ci.md).
   semantic-ssas:
     name: Semantic DAX on Analysis Services (Windows)
@@ -255,19 +255,19 @@ jobs:
           if ($portFile) {
             $port = (Get-Content $portFile.FullName -Raw) -replace '\D', ''
             "Port file $($portFile.FullName): $port"
-            "DBDATA_TEST_SSAS=Data Source=localhost:$port" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+            "DBDATAKIT_TEST_SSAS=Data Source=localhost:$port" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
           } else {
             "No port file; starting SQL Browser and connecting by name"
             Set-Service SQLBrowser -StartupType Manual -ErrorAction SilentlyContinue
             Start-Service SQLBrowser -ErrorAction SilentlyContinue
-            "DBDATA_TEST_SSAS=Data Source=localhost\QIS" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+            "DBDATAKIT_TEST_SSAS=Data Source=localhost\QIS" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
           }
-          "DBDATA_REQUIRE_SSAS=true" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          "DBDATAKIT_TEST_REQUIRE_SSAS=true" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
       - name: DAX probe (what does the server accept?)
         if: inputs.ssas_probe
         working-directory: DbDataKit
         env:
-          DBDATA_TEST_SSAS_PROBE: "1"
+          DBDATAKIT_TEST_SSAS_PROBE: "1"
         run: dotnet test --project tests/DbDataKit.Semantic.Tests --filter-class "*SsasProbe"
       - name: What the probe got
         if: inputs.ssas_probe
@@ -281,8 +281,8 @@ jobs:
         if: ${{ inputs.ssas_record && !inputs.ssas_probe }}
         working-directory: DbDataKit
         env:
-          DBDATA_TEST_SSAS_RECORD: "1"
-          DBDATA_XMLA_RECORDING_DIR: ${{ runner.temp }}\xmla-recording
+          DBDATAKIT_TEST_SSAS_RECORD: "1"
+          DBDATAKIT_TEST_XMLA_RECORDING_DIR: ${{ runner.temp }}\xmla-recording
         run: dotnet test --project tests/DbDataKit.Semantic.Tests --filter-class "*SsasRecordingTests"
       - name: Upload the recording
         if: ${{ always() && inputs.ssas_record && !inputs.ssas_probe }}

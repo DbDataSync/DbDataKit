@@ -194,7 +194,7 @@ jobs:
         working-directory: DbDataConsole/tests/DbDataConsole.Web.Tests
         run: npx playwright test
         env:
-          DBDATA_E2E_PG: Host=127.0.0.1;Port=5432;Username=postgres;Password=e2e;Database=warehouse
+          DBDATAKIT_TEST_E2E_PG: Host=127.0.0.1;Port=5432;Username=postgres;Password=e2e;Database=warehouse
 
   # The image the console is delivered as: it builds, becomes healthy, serves its web app, and does not run as root.
   image:

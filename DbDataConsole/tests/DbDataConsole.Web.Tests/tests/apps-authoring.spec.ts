@@ -10,16 +10,16 @@ import pg from 'pg'
 // Plan 22a GP34: an app made from the template (`apps new`), built from the vendored package store (`apps build`, GP32 and GP33) and served by the apps host, whose screens are three view-spec/1 files drawn by the
 // library's components: a grid that lists, a form that edits (a rule violation of the model is shown against its field) and a dashboard. Then the dashboard's spec is replaced by a page of code (a component
 // registered in src/pages, the spec file deleted), the app is built and published again, and the other two screens are as they were. A real Gateway (identity home and apps host), the Store's own command line
-// publishing the model `territories` to its group, a PostgreSQL (`DBDATA_E2E_PG`, an Npgsql connection string), Bun and Node (the store is made from the web workspace's packages: `npm ci` in DbDataKit/web).
+// publishing the model `territories` to its group, a PostgreSQL (`DBDATAKIT_TEST_E2E_PG`, an Npgsql connection string), Bun and Node (the store is made from the web workspace's packages: `npm ci` in DbDataKit/web).
 //
 // Ports (a port table: 8601 the identity home, 8602 the apps host, 8603 the management API). The story starts its own servers, so the config has no webServer for it; it needs no console and sorts anywhere.
-// `DBDATA_E2E_GATEWAY_DLL` and `DBDATA_E2E_STORE_DLL` name builds that are not in the products' own bin folders; `DBDATAKIT_BUN` names Bun when it is not on the PATH.
+// `DBDATAKIT_TEST_E2E_GATEWAY_DLL` and `DBDATAKIT_TEST_E2E_STORE_DLL` name builds that are not in the products' own bin folders; `DBDATAKIT_BUN` names Bun when it is not on the PATH.
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '../../../..')
-const gatewayDll = process.env.DBDATA_E2E_GATEWAY_DLL ?? path.join(repoRoot, 'DbDataGateway/src/DbDataGateway.Server/bin/Debug/net10.0/dbdatagateway.dll')
-const storeDll = process.env.DBDATA_E2E_STORE_DLL ?? path.join(repoRoot, 'DbDataStore/src/DbDataStore.Server/bin/Debug/net10.0/dbdatastore.dll')
-const warehouse = process.env.DBDATA_E2E_PG
+const gatewayDll = process.env.DBDATAKIT_TEST_E2E_GATEWAY_DLL ?? path.join(repoRoot, 'DbDataGateway/src/DbDataGateway.Server/bin/Debug/net10.0/dbdatagateway.dll')
+const storeDll = process.env.DBDATAKIT_TEST_E2E_STORE_DLL ?? path.join(repoRoot, 'DbDataStore/src/DbDataStore.Server/bin/Debug/net10.0/dbdatastore.dll')
+const warehouse = process.env.DBDATAKIT_TEST_E2E_PG
 
 const root = path.join(os.tmpdir(), 'dbdatakit-e2e-apps-authoring')
 const gatewayDirectory = path.join(root, 'gateway')
@@ -101,7 +101,7 @@ test.describe.configure({ mode: 'serial' })
 test.setTimeout(240_000)
 
 test.beforeAll(async () => {
-  test.skip(!warehouse, 'set DBDATA_E2E_PG to run the app authoring story')
+  test.skip(!warehouse, 'set DBDATAKIT_TEST_E2E_PG to run the app authoring story')
   fs.rmSync(root, { recursive: true, force: true })
   for (const directory of [gatewayDirectory, storeDirectory]) fs.mkdirSync(directory, { recursive: true })
 

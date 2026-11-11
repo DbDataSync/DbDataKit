@@ -16,7 +16,7 @@ public sealed record Ran(int Exit, string Out, string Error, JsonNode Json)
 }
 
 /// <summary>
-/// A scratch state database per test on SQLite and, when the shared engines are up (<c>DBDATA_TEST_SQLSERVER</c>, <c>DBDATA_TEST_POSTGRES</c>), on SQL Server and PostgreSQL, with the
+/// A scratch state database per test on SQLite and, when the shared engines are up (<c>DBDATAKIT_TEST_SQLSERVER</c>, <c>DBDATAKIT_TEST_POSTGRES</c>), on SQL Server and PostgreSQL, with the
 /// helpers to run the <c>state</c> verbs against it as a product would register them.
 /// </summary>
 public sealed class StateCliHarness : IDisposable
@@ -35,8 +35,8 @@ public sealed class StateCliHarness : IDisposable
 
     private static string? Server(string engine) => engine switch
     {
-        StateEngineIds.MsSql => Environment.GetEnvironmentVariable("DBDATA_TEST_SQLSERVER"),
-        StateEngineIds.Postgres => Environment.GetEnvironmentVariable("DBDATA_TEST_POSTGRES"),
+        StateEngineIds.MsSql => Environment.GetEnvironmentVariable("DBDATAKIT_TEST_SQLSERVER"),
+        StateEngineIds.Postgres => Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES"),
         _ => null,
     };
 
@@ -114,8 +114,8 @@ public sealed class StateCliHarness : IDisposable
         var server = Server(engine);
         if (server is null)
         {
-            Assert.False(Environment.GetEnvironmentVariable(engine == StateEngineIds.MsSql ? "DBDATA_REQUIRE_SQLSERVER" : "DBDATA_REQUIRE_POSTGRES") is "true", $"{engine} is required but its DBDATA_TEST_* variable is not set");
-            Assert.Skip($"set DBDATA_TEST_{(engine == StateEngineIds.MsSql ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
+            Assert.False(Environment.GetEnvironmentVariable(engine == StateEngineIds.MsSql ? "DBDATAKIT_TEST_REQUIRE_SQLSERVER" : "DBDATAKIT_TEST_REQUIRE_POSTGRES") is "true", $"{engine} is required but its DBDATAKIT_TEST_* variable is not set");
+            Assert.Skip($"set DBDATAKIT_TEST_{(engine == StateEngineIds.MsSql ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
         }
 
         StateOpener.RegisterProviders();

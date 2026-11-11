@@ -27,7 +27,7 @@ namespace DbDataSync.Api.Tests;
 public sealed class ReplicationChecksIntegrationTests(TestApiFactory factory) : IClassFixture<TestApiFactory>, IAsyncLifetime
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true, Converters = { new JsonStringEnumConverter() } };
-    private static string ServerConnectionString => Environment.GetEnvironmentVariable("DBDATASYNC_TEST_MSSQL_SERVER") ?? "Data Source=localhost,14330;User ID=sa;Password=DbDataSync_Test_Pw1;TrustServerCertificate=True";
+    private static string ServerConnectionString => Environment.GetEnvironmentVariable("DBDATAKIT_TEST_MSSQL") ?? "Data Source=localhost,14330;User ID=sa;Password=DbDataSync_Test_Pw1;TrustServerCertificate=True";
 
     private readonly HttpClient _client = factory.CreateClient();
     private readonly string _suffix = Guid.NewGuid().ToString("N")[..12];

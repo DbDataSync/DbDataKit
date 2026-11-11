@@ -3,12 +3,12 @@ using Xunit;
 namespace DbDataKit.Semantic.Tests;
 
 /// <summary>
-/// Not a test of the engine: with DBDATA_TEST_SSAS_PROBE set, it sends a set of DAX shapes to a real server and writes what each returned or the error it
+/// Not a test of the engine: with DBDATAKIT_TEST_SSAS_PROBE set, it sends a set of DAX shapes to a real server and writes what each returned or the error it
 /// gave to <c>ssas-probe.txt</c>, so an unknown about what SSAS accepts can be settled in one workflow run. Does nothing otherwise.
 /// </summary>
 public class SsasProbe
 {
-    private static readonly string? Ssas = Environment.GetEnvironmentVariable("DBDATA_TEST_SSAS");
+    private static readonly string? Ssas = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_SSAS");
 
     private const string Rollup2 = "ROLLUPADDISSUBTOTAL ( 'Customer'[Region], \"_sub_region\" ), ROLLUPADDISSUBTOTAL ( 'Date'[Fiscal Quarter], \"_sub_quarter\" )";
 
@@ -48,7 +48,7 @@ public class SsasProbe
     [Fact]
     public void Probe()
     {
-        if (Ssas is null || Environment.GetEnvironmentVariable("DBDATA_TEST_SSAS_PROBE") is null) return;
+        if (Ssas is null || Environment.GetEnvironmentVariable("DBDATAKIT_TEST_SSAS_PROBE") is null) return;
         var conn = Ssas + ";Catalog=qis_budget";
         DbDataKit.Semantic.Ssas.SsasExecutor.DeployModel(Ssas, File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "conformance", "ssas", "model.tmsl.json")));
         var text = string.Join("\n\n", Variants.Select(v => $"### {v.Name}\n{v.Dax}\n-->\n{DbDataKit.Semantic.Ssas.SsasExecutor.Probe(conn, v.Dax)}"));

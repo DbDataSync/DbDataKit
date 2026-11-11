@@ -1,10 +1,6 @@
-# The shared libraries' suite. DBDATA_TEST_SQLSERVER is a full connection string for the SqlServer and Transfer tests; the ODBC
-# metadata tests take the server, user and password separately (see SqlServerCatalogTests), so they get their own variables.
-DBDATA_TEST_SQLSERVER           <- DBKIT_TEST_MSSQL
-DBDATA_TEST_SQLSERVER_SERVER    <- DBKIT_TEST_MSSQL_SERVER
-DBDATA_TEST_SQLSERVER_USER      <- DBKIT_TEST_MSSQL_USER
-DBDATA_TEST_SQLSERVER_PASSWORD  <- DBKIT_TEST_MSSQL_PASSWORD
-DBDATA_TEST_ODBC                <- DBKIT_TEST_MSSQL_ODBC
-DBDATA_TEST_POSTGRES            <- DBKIT_TEST_POSTGRES
+# The shared libraries' suite. Every variable it reads is one `env` prints already (DBDATAKIT_TEST_MSSQL_SERVER / _USER / _PASSWORD / _ODBC,
+# DBDATAKIT_TEST_POSTGRES); what is added here is the name of the State suites, DBDATAKIT_TEST_SQLSERVER, which the `dbdatakit-older` map points at
+# SQL Server 2022 instead, so the two maps never print it with different values in one shell.
+DBDATAKIT_TEST_SQLSERVER           <- DBDATAKIT_TEST_MSSQL
 # Engines the job started are required: a server that does not answer fails the run instead of skipping its tests.
-DBDATA_REQUIRE_SQLSERVER = true if DBKIT_TEST_MSSQL
+DBDATAKIT_TEST_REQUIRE_SQLSERVER = true if DBDATAKIT_TEST_MSSQL

@@ -14,7 +14,7 @@ namespace DbDataBuild.Tests.Conformance;
 
 /// <summary>
 /// The Build runtime package as the tests make it (plan 28c E05): what `scripts/publish-runtime.sh` writes, as text and files. <see cref="Manifest"/> is the manifest the script prints (a test holds the two equal), the directory is
-/// `package.yaml` and `files/bin/dbdatabuild[.exe]`. `DBDATABUILD_TEST_PUBLISHED` names a directory the script (or an earlier run) made, so a machine with a small disk publishes once; otherwise the tool is published here, once per test run
+/// `package.yaml` and `files/bin/dbdatabuild[.exe]`. `DBDATAKIT_TEST_PUBLISHED` names a directory the script (or an earlier run) made, so a machine with a small disk publishes once; otherwise the tool is published here, once per test run
 /// (about 285 MB, three minutes).
 /// </summary>
 internal static class BuildRuntimePackage
@@ -37,12 +37,12 @@ internal static class BuildRuntimePackage
             new BuiltAgainst("10.0", "1", "dbdatakit.runner.v1"), [], IsRuntime: true, Version: version, Platform: rid);
 
     /// <summary>A directory of the layout `publish-runtime.sh` writes, for this machine's platform.</summary>
-    public static string Directory() => Environment.GetEnvironmentVariable("DBDATABUILD_TEST_PUBLISHED") is { Length: > 0 } given ? Checked(given) : Published.Value;
+    public static string Directory() => Environment.GetEnvironmentVariable("DBDATAKIT_TEST_PUBLISHED") is { Length: > 0 } given ? Checked(given) : Published.Value;
 
     private static string Checked(string directory)
     {
         if (!File.Exists(Path.Combine(directory, "package.yaml")) || !File.Exists(Path.Combine(directory, "files", "bin", ToolFile)))
-            throw new InvalidOperationException($"DBDATABUILD_TEST_PUBLISHED names '{directory}', which is not a runtime package: it holds no package.yaml and files/bin/{ToolFile}. Name the output of `scripts/publish-runtime.sh {Rid}`.");
+            throw new InvalidOperationException($"DBDATAKIT_TEST_PUBLISHED names '{directory}', which is not a runtime package: it holds no package.yaml and files/bin/{ToolFile}. Name the output of `scripts/publish-runtime.sh {Rid}`.");
         return directory;
     }
 

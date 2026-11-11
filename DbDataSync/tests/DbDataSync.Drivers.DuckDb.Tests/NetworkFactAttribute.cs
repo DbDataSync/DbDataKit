@@ -1,12 +1,12 @@
 namespace DbDataSync.Drivers.DuckDb.Tests;
 
 /// <summary>
-/// A test that needs the internet (DuckDB's extension server). It runs only when <c>DBDATASYNC_TEST_NETWORK</c> is <c>true</c> — the
+/// A test that needs the internet (DuckDB's extension server). It runs only when <c>DBDATAKIT_TEST_NETWORK</c> is <c>true</c> — the
 /// integration job in CI sets it — and is skipped, with the reason, everywhere else.
 /// </summary>
 public sealed class NetworkFactAttribute : FactAttribute
 {
-    public const string Variable = "DBDATASYNC_TEST_NETWORK";
+    public const string Variable = "DBDATAKIT_TEST_NETWORK";
 
     public NetworkFactAttribute()
     {

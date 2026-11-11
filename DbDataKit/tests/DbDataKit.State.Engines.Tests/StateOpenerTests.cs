@@ -54,8 +54,8 @@ public sealed class StateOpenerTests : IDisposable
     }
 
     [Theory]
-    [InlineData("mssql", "DBDATA_TEST_SQLSERVER")]
-    [InlineData("postgres", "DBDATA_TEST_POSTGRES")]
+    [InlineData("mssql", "DBDATAKIT_TEST_SQLSERVER")]
+    [InlineData("postgres", "DBDATAKIT_TEST_POSTGRES")]
     public void A_server_engine_opens_a_database_the_operator_names_and_keeps_state_in_it(string engine, string variable)
     {
         var server = Environment.GetEnvironmentVariable(variable);

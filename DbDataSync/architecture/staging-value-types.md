@@ -16,7 +16,7 @@ changes what a value becomes, that is a behaviour change and goes in the release
 | Reader types: Oracle | **Oracle's ODP.NET documentation, not executed** (no Oracle image on this machine). Rows marked "(docs)" are unverified | no |
 | What staging does with each value | `StagingValueMatrixTests` (SQL Server and PostgreSQL): every loose value in `StagingMatrix.Values` into a column of every target type, through the real staging provider; the stored value read back, or the refusal. Checked in as `StagingMatrix.mssql.expected.tsv` and `StagingMatrix.postgres.expected.tsv` (about 50 values x 20 and 18 types each) | **yes**, same engines |
 
-The two matrices are the gate: they fail when any cell changes, and `DBDATASYNC_MATRIX_UPDATE=1` regenerates them so the difference is reviewed. The
+The two matrices are the gate: they fail when any cell changes, and `DBDATAKIT_TEST_MATRIX_UPDATE=1` regenerates them so the difference is reviewed. The
 tables below are summaries of them; when they disagree, the files win.
 
 The staging provider does not see the source column's declared type (the change set carries values and a column name, and a mapping's `Transform` can
@@ -121,7 +121,7 @@ once per column and runtime type, from `StagingValueRules`:
 reverse, so one canonical conversion cannot reproduce both engines, and a conversion per engine is exactly what the providers already do. The cost per cell is unchanged: one type comparison against the column's last accepted type
 (`Verdict` runs two short list scans once per column and runtime type, not per cell; see `benchmarks/staging-baseline.md`).
 
-What changed in the matrices, cell by cell (1,900 cells, regenerated with `DBDATASYNC_MATRIX_UPDATE=1` and compared with the files of A14a):
+What changed in the matrices, cell by cell (1,900 cells, regenerated with `DBDATAKIT_TEST_MATRIX_UPDATE=1` and compared with the files of A14a):
 
 | | A14a against the pre-gate matrices | A14b against A14a |
 | --- | --- | --- |
@@ -208,7 +208,7 @@ Open for the owner: whether any of 2 to 4 should become a conversion or a refusa
 ## 5. Keeping it true
 
 * A change to what a reader returns, or to what staging stores or refuses, fails `ReaderTypesTests`, `LogicalSlotValueTypesTests` or
-  `StagingValueMatrixTests` until its `*.expected.tsv` is regenerated (`DBDATASYNC_MATRIX_UPDATE=1`) and the diff is read.
+  `StagingValueMatrixTests` until its `*.expected.tsv` is regenerated (`DBDATAKIT_TEST_MATRIX_UPDATE=1`) and the diff is read.
 * New source driver: add its `ReaderTypesTests` and extend section 1.
 * Run: SQL Server and PostgreSQL integration tests against the engines (`testenv/testenv.sh`), for example
   `dotnet test tests/DbDataSync.Drivers.MsSql.Tests --filter "FullyQualifiedName~StagingValueMatrixTests|FullyQualifiedName~ReaderTypesTests"`.

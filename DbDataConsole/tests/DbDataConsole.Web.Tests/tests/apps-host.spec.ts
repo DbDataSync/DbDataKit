@@ -11,13 +11,13 @@ import pg from 'pg'
 // Plan 26, AP05, and plan 20 O08c: a sandboxed code app in a real browser. A person signs in at the identity home, opens the app on the apps host, and the app (a document with an opaque origin) reads and writes rows of a
 // master data model through the host: the shell hands it a token, the host checks it and answers from the model the Store published to the group, within the scope of the app's manifest. The app cannot read the host's
 // page or its cookies. The Gateway (modules `identity` and `apps`, with its management API for the Store to publish to) is started here; the Store's server is never started: its command line publishes the model.
-// Needs a PostgreSQL (`DBDATA_E2E_PG`, an Npgsql connection string) for the model's tables.
+// Needs a PostgreSQL (`DBDATAKIT_TEST_E2E_PG`, an Npgsql connection string) for the model's tables.
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '../../../..')
 const gatewayDll = path.join(repoRoot, 'DbDataGateway/src/DbDataGateway.Server/bin/Debug/net10.0/dbdatagateway.dll')
 const storeDll = path.join(repoRoot, 'DbDataStore/src/DbDataStore.Server/bin/Debug/net10.0/dbdatastore.dll')
-const warehouse = process.env.DBDATA_E2E_PG
+const warehouse = process.env.DBDATAKIT_TEST_E2E_PG
 
 const gatewayDirectory = path.join(os.tmpdir(), 'dbdatakit-e2e-apps-gateway')
 const storeDirectory = path.join(os.tmpdir(), 'dbdatakit-e2e-apps-store')
@@ -162,7 +162,7 @@ fetch('https://example.com/', { mode: 'no-cors' }).then(() => out('elsewhere', '
 test.describe.configure({ mode: 'serial' })
 
 test.beforeAll(async () => {
-  test.skip(!warehouse, 'set DBDATA_E2E_PG to run the apps host story')
+  test.skip(!warehouse, 'set DBDATAKIT_TEST_E2E_PG to run the apps host story')
   for (const directory of [gatewayDirectory, storeDirectory, appDirectory]) {
     fs.rmSync(directory, { recursive: true, force: true })
     fs.mkdirSync(directory, { recursive: true })

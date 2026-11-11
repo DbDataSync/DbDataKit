@@ -6,7 +6,7 @@ import { modelsBuild, scratchDirectory, warehouseConnection } from '../playwrigh
 import { signInNewAdmin } from './people'
 
 // Plan 33 UE12: publish a project's semantic model to a Gateway from Build's Publish tab, and see what the Gateway serves on its Models screen. The project `shop` (made by playwright.config.ts, Build server on port 8544)
-// has a mapped model over sales.facts, which the story creates in the test PostgreSQL (DBDATA_E2E_PG; it skips without it, because a Gateway publishes a model only when its data source answers and its tables exist), and the
+// has a mapped model over sales.facts, which the story creates in the test PostgreSQL (DBDATAKIT_TEST_E2E_PG; it skips without it, because a Gateway publishes a model only when its data source answers and its tables exist), and the
 // semantic model `shop_sales` over it. Ada links the Build server to the Gateway (port 8543, its own directory), publishes (version 1, the connection `postgres` published with it), changes the model's description in the
 // project's own file and publishes again (version 2: the text is a new version), opens the Gateway's Models screen, serves version 1 again, and retires the model. The Build page's testids are the ones Build has kept
 // (`build-publish-proxy`: Build did not rename its words when the Proxy became the Gateway), and the Gateway's words are the Gateway's.
@@ -20,7 +20,7 @@ async function sql(statements: string[]) {
   try { for (const s of statements) await client.query(s) } finally { await client.end() }
 }
 
-test.skip(!warehouseConnection, 'set DBDATA_E2E_PG to run the published models story')
+test.skip(!warehouseConnection, 'set DBDATAKIT_TEST_E2E_PG to run the published models story')
 
 test('publish a semantic model from Build to a Gateway, see its versions on the Gateway, serve the first again and retire it', async ({ page, context, baseURL }) => {
   test.setTimeout(300_000)

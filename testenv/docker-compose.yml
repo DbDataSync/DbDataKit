@@ -32,7 +32,7 @@
 #
 # - `postgres-logical` is a separate engine on purpose, the one place where two engines of the same kind run side by side. Logical
 #   decoding needs `wal_level=logical`, a restart-requiring server setting, and the wal2json plugin, which no public image carries (it is
-#   built from testenv/postgres-logical/Dockerfile on a freshly pulled `postgres:17`; DBKIT_TEST_PULL=false skips the pull, for a machine that is offline or rate-limited). Turning that on for the plain `postgres`
+#   built from testenv/postgres-logical/Dockerfile on a freshly pulled `postgres:17`; DBDATAKIT_TEST_PULL=false skips the pull, for a machine that is offline or rate-limited). Turning that on for the plain `postgres`
 #   would change the server every other suite tests against (TLS, default settings, the Debian build Build's conformance suite pins
 #   differences to) to suit one product, so Sync's slot tests get their own server on its own port.
 # - `oracle` mounts testenv/oracle-init: Sync's flashback reader needs EXECUTE on DBMS_FLASHBACK and FLASHBACK ANY TABLE for the app
@@ -40,18 +40,18 @@
 #   on the container's first start; harmless for the other suites.
 #
 # None of the engines keeps data between runs (no volumes): `testenv.sh down` removes everything, and every suite creates its own
-# databases and tables. The users and the password are the same for every engine (DBKIT_TEST_PASSWORD, default DbKit_Test_Pw1), except
+# databases and tables. The users and the password are the same for every engine (DBDATAKIT_TEST_PASSWORD, default DbKit_Test_Pw1), except
 # that Sync's PostgreSQL user stays `dbdatasync`.
 name: dbkit-test
 
-x-password: &password ${DBKIT_TEST_PASSWORD:-DbKit_Test_Pw1}
+x-password: &password ${DBDATAKIT_TEST_PASSWORD:-DbKit_Test_Pw1}
 
 # Images from 2025 onward ship /opt/mssql-tools18 only, whose sqlcmd needs -C for the container's self-signed certificate;
 # try that first and fall back, since a `-latest` tag moves under you.
 #
 # SQL Server 2025 since plan 27 (the knowledge index's vector search needs its vector type). The image is pinned by digest, the same one
 # as `mssql2025` below (D29); to move it, change MSSQL_IMAGE here and the digest on `mssql2025` together.
-x-mssql-image: &mssql-image ${DBKIT_TEST_MSSQL_IMAGE:-mcr.microsoft.com/mssql/server:2025-latest@sha256:245f6b1c8903edae52cb20fa31419cefcde1a49938bb8c3447099011fc871ca3}
+x-mssql-image: &mssql-image ${DBDATAKIT_TEST_MSSQL_IMAGE:-mcr.microsoft.com/mssql/server:2025-latest@sha256:245f6b1c8903edae52cb20fa31419cefcde1a49938bb8c3447099011fc871ca3}
 x-mssql-health: &mssql-health
   test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' || exit 1"]
   interval: 5s
@@ -94,7 +94,7 @@ services:
     # The pgvector project's own image: postgres:17 (Debian) with the extension installed, so there is no build step and nothing to install from a package
     # repository (a machine behind a proxy that allows only registries could not). The extension is installed, not created: `CREATE EXTENSION vector`
     # is run by whatever uses it.
-    image: ${DBKIT_TEST_POSTGRES_IMAGE:-pgvector/pgvector:pg17}
+    image: ${DBDATAKIT_TEST_POSTGRES_IMAGE:-pgvector/pgvector:pg17}
     container_name: dbkit-test-postgres
     # TLS on with a throwaway self-signed certificate, like SQL Server's container, so the libraries' secure default
     # (encrypt, with verification switched off for the self-signed cert) is what the live tests exercise.
@@ -124,7 +124,7 @@ services:
     profiles: [postgres-logical]
     build:
       context: ./postgres-logical
-      pull: ${DBKIT_TEST_PULL:-true}
+      pull: ${DBDATAKIT_TEST_PULL:-true}
     image: dbkit-test-postgres-logical:17
     container_name: dbkit-test-postgres-logical
     # wal_level=logical is what lets a replication slot decode anything at all; it is a restart-requiring setting on a real server,
@@ -221,7 +221,7 @@ services:
   # `docker buildx imagetools inspect <image:tag>`, put it after the tag, and run the Build conformance suite on that engine before merging.
   mssql2025:
     profiles: [mssql2025]
-    image: ${DBKIT_TEST_MSSQL2025_IMAGE:-mcr.microsoft.com/mssql/server:2025-latest@sha256:245f6b1c8903edae52cb20fa31419cefcde1a49938bb8c3447099011fc871ca3}
+    image: ${DBDATAKIT_TEST_MSSQL2025_IMAGE:-mcr.microsoft.com/mssql/server:2025-latest@sha256:245f6b1c8903edae52cb20fa31419cefcde1a49938bb8c3447099011fc871ca3}
     container_name: dbkit-test-mssql2025
     environment:
       ACCEPT_EULA: "Y"
@@ -235,7 +235,7 @@ services:
   # SQL Server 2022 is pinned by digest like the 2025 images (D29): to move it, read the new digest and run the State suites on it before merging.
   mssql2022:
     profiles: [mssql2022]
-    image: ${DBKIT_TEST_MSSQL2022_IMAGE:-mcr.microsoft.com/mssql/server:2022-latest@sha256:cf8f0ab2ebe61feec2eed2629061a07d247f791c2a8ddda74a4ac9f06a291718}
+    image: ${DBDATAKIT_TEST_MSSQL2022_IMAGE:-mcr.microsoft.com/mssql/server:2022-latest@sha256:cf8f0ab2ebe61feec2eed2629061a07d247f791c2a8ddda74a4ac9f06a291718}
     container_name: dbkit-test-mssql2022
     environment:
       ACCEPT_EULA: "Y"
@@ -248,7 +248,7 @@ services:
   # PostgreSQL 16 from the pgvector project's image, pinned by tag like `postgres` (pg17), with the same TLS setup.
   postgres16:
     profiles: [postgres16]
-    image: ${DBKIT_TEST_POSTGRES16_IMAGE:-pgvector/pgvector:pg16}
+    image: ${DBDATAKIT_TEST_POSTGRES16_IMAGE:-pgvector/pgvector:pg16}
     container_name: dbkit-test-postgres16
     entrypoint:
       - sh
@@ -274,7 +274,7 @@ services:
   # The Thrift server (HiveServer2) in http mode, which the ADBC Spark driver speaks; Spark 4 in its default ANSI mode.
   spark:
     profiles: [spark]
-    image: ${DBKIT_TEST_SPARK_IMAGE:-apache/spark:4.0.0@sha256:a89782d90529a623fc4471cdddb0f9c32d6eed10a81b256a80207b23c3b1df00}
+    image: ${DBDATAKIT_TEST_SPARK_IMAGE:-apache/spark:4.0.0@sha256:a89782d90529a623fc4471cdddb0f9c32d6eed10a81b256a80207b23c3b1df00}
     container_name: dbkit-test-spark
     command:
       - /opt/spark/bin/spark-submit
@@ -296,7 +296,7 @@ services:
 
   bigquery:
     profiles: [bigquery]
-    image: ${DBKIT_TEST_BIGQUERY_IMAGE:-ghcr.io/goccy/bigquery-emulator:latest@sha256:f4e428d265a93dc5ce36c294e1c584c7c9b384117d47ab8ddbb63d8d50b7f393}
+    image: ${DBDATAKIT_TEST_BIGQUERY_IMAGE:-ghcr.io/goccy/bigquery-emulator:latest@sha256:f4e428d265a93dc5ce36c294e1c584c7c9b384117d47ab8ddbb63d8d50b7f393}
     container_name: dbkit-test-bigquery
     command: ["--project=ddb", "--port=9050"]
     ports:
@@ -304,7 +304,7 @@ services:
 
   flight:
     profiles: [flight]
-    image: &flight-image ${DBKIT_TEST_FLIGHT_IMAGE:-voltrondata/sqlflite:latest@sha256:4fc872838d71d26757bf4bbe7c23e128cae2c3e008df0f15f30fb513d6be26ba}
+    image: &flight-image ${DBDATAKIT_TEST_FLIGHT_IMAGE:-voltrondata/sqlflite:latest@sha256:4fc872838d71d26757bf4bbe7c23e128cae2c3e008df0f15f30fb513d6be26ba}
     container_name: dbkit-test-flight
     environment:
       SQLFLITE_PASSWORD: *password

@@ -15,7 +15,7 @@ namespace DbDataStore.Tests;
 /// <summary>
 /// Plan 20 O10b (owner decision 2026-11-04): publishing is the one act that makes the model being worked on available. Its tables are brought to it first, this server's copy is pinned to it, and that version, never one
 /// still being worked on, goes to the serving groups; a published model is read and written there only. The group is a stand-in that pairs as a Proxy does and records what it is sent; the tables are on a real SQL Server
-/// (<c>DBDATA_TEST_SQLSERVER</c>; skipped without it).
+/// (<c>DBDATAKIT_TEST_SQLSERVER</c>; skipped without it).
 /// </summary>
 public sealed class StorePublishingTests : IAsyncLifetime
 {
@@ -31,7 +31,7 @@ public sealed class StorePublishingTests : IAsyncLifetime
               name: {type: VARCHAR(100), required: true}{{extra}}
         """;
 
-    private readonly string? _server = Environment.GetEnvironmentVariable("DBDATA_TEST_SQLSERVER");
+    private readonly string? _server = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_SQLSERVER");
     private readonly string _root = Path.Combine(Path.GetTempPath(), "dds-publish-" + Guid.NewGuid().ToString("N")[..8]);
     private readonly string _database = "dds_publish_" + Guid.NewGuid().ToString("N")[..10];
     private readonly string _variable = "DDS_PUBLISH_" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
@@ -155,7 +155,7 @@ public sealed class StorePublishingTests : IAsyncLifetime
     [Fact]
     public async Task Publishing_brings_the_tables_to_the_model_first_and_sends_only_that_version_and_the_model_is_then_read_and_written_in_the_group_only()
     {
-        Assert.SkipWhen(_server is null, "set DBDATA_TEST_SQLSERVER (testenv/testenv.sh up mssql; eval \"$(testenv/testenv.sh env dbdatakit)\") to publish against a real database");
+        Assert.SkipWhen(_server is null, "set DBDATAKIT_TEST_SQLSERVER (testenv/testenv.sh up mssql; eval \"$(testenv/testenv.sh env dbdatakit)\") to publish against a real database");
         await Pair();
 
         // the first publish names the group, makes the tables (there were none) and sends the model with its login and data source
@@ -203,7 +203,7 @@ public sealed class StorePublishingTests : IAsyncLifetime
     [Fact]
     public async Task A_group_that_does_not_take_the_version_keeps_the_one_it_had_and_publishing_again_sends_it()
     {
-        Assert.SkipWhen(_server is null, "set DBDATA_TEST_SQLSERVER to publish against a real database");
+        Assert.SkipWhen(_server is null, "set DBDATAKIT_TEST_SQLSERVER to publish against a real database");
         await Pair();
         Assert.Equal(0, (await Cli("model", "publish", "territories", "--proxy", "edge")).Exit);
         File.WriteAllText(StoreModels.FileOf(StoreDir, "territories"), Model("\n      region: {type: VARCHAR(20)}"));

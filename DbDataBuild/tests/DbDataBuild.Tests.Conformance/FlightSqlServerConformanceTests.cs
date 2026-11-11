@@ -29,8 +29,8 @@ internal sealed class SqlFliteSession : IAsyncDisposable
 
     public static async Task<SqlFliteSession> OpenAsync()
     {
-        var value = EngineEnv.Get("DBDATABUILD_TEST_FLIGHT");
-        Skip.If(value == null, "Set DBDATABUILD_TEST_FLIGHT to the login of a local Flight SQL test server (run testenv/testenv.sh up flight flight-tls, then eval \"$(testenv/testenv.sh env dbdatabuild)\").");
+        var value = EngineEnv.Get("DBDATAKIT_TEST_FLIGHT");
+        Skip.If(value == null, "Set DBDATAKIT_TEST_FLIGHT to the login of a local Flight SQL test server (run testenv/testenv.sh up flight flight-tls, then eval \"$(testenv/testenv.sh env dbdatabuild)\").");
         var login = FlightSqlLogin.Parse(value!);
         if (login.Host is not ("127.0.0.1" or "localhost" or "::1")) throw new InvalidOperationException($"Refusing to run conformance tests against `{login.Host}`: only local throwaway servers are allowed.");
         var channel = GrpcChannel.ForAddress(login.Address);
@@ -77,7 +77,7 @@ public class FlightSqlServerConformanceTests
     public async Task The_rows_of_a_real_flight_sql_server_arrive_intact_with_a_user_and_password_the_handshake_giving_the_token(string destination)
     {
         await using var origin = await SqlFliteSession.OpenAsync();
-        using var run = await FlightRun.SetUpAsync(destination, EngineEnv.Get("DBDATABUILD_TEST_FLIGHT")!);
+        using var run = await FlightRun.SetUpAsync(destination, EngineEnv.Get("DBDATAKIT_TEST_FLIGHT")!);
         await using var to = run.Destination;
         var s = origin.Schema;
         run.Write($"models/{s}/items.yml", Model(s, "items"));
@@ -175,9 +175,9 @@ public class FlightSqlServerConformanceTests
     [SkippableFact]
     public async Task TLS_is_checked_against_the_machine_or_a_certificate_authority_file_and_a_failure_is_named_as_a_handshake_failure()
     {
-        var tls = EngineEnv.Get("DBDATABUILD_TEST_FLIGHT_TLS");
-        var ca = EngineEnv.Get("DBDATABUILD_TEST_FLIGHT_CA");
-        Skip.If(tls == null || ca == null || !File.Exists(ca), "Set DBDATABUILD_TEST_FLIGHT_TLS and DBDATABUILD_TEST_FLIGHT_CA (run testenv/testenv.sh up flight flight-tls, then eval \"$(testenv/testenv.sh env dbdatabuild)\").");
+        var tls = EngineEnv.Get("DBDATAKIT_TEST_FLIGHT_TLS");
+        var ca = EngineEnv.Get("DBDATAKIT_TEST_FLIGHT_TLS_CA");
+        Skip.If(tls == null || ca == null || !File.Exists(ca), "Set DBDATAKIT_TEST_FLIGHT_TLS and DBDATAKIT_TEST_FLIGHT_TLS_CA (run testenv/testenv.sh up flight flight-tls, then eval \"$(testenv/testenv.sh env dbdatabuild)\").");
         using var run = await FlightRun.SetUpAsync("postgres", tls!);
         await using var to = run.Destination;
         Ok(run.Cli("connection", "init", "postgres", "--apply"), "init");                                          // so that a clean inspect exits 0
@@ -217,7 +217,7 @@ public class FlightSqlServerConformanceTests
         Assert.Contains("ca_file", unreadable.Out);
 
         // TLS asked for on a plain port, and the other way round: said as unreachable, not as a parse of what came back
-        var plain = EngineEnv.Get("DBDATABUILD_TEST_FLIGHT");
+        var plain = EngineEnv.Get("DBDATAKIT_TEST_FLIGHT");
         Skip.If(plain == null, "The plain server is not running.");
         var plainLogin = FlightSqlLogin.Parse(plain!);
         run.OriginLogin = $"grpc+tls://localhost:{plainLogin.Port};user={plainLogin.User};password={plainLogin.Password};tls_skip_verify=true";
@@ -233,7 +233,7 @@ public class FlightSqlServerConformanceTests
     public async Task The_catalog_comes_from_the_metadata_calls_and_falls_back_to_information_schema_when_the_server_will_not_describe_the_table(string destination)
     {
         await using var origin = await SqlFliteSession.OpenAsync();
-        using var run = await FlightRun.SetUpAsync(destination, EngineEnv.Get("DBDATABUILD_TEST_FLIGHT")!);
+        using var run = await FlightRun.SetUpAsync(destination, EngineEnv.Get("DBDATAKIT_TEST_FLIGHT")!);
         await using var to = run.Destination;
         // `main` is the schema name the server describes in its metadata calls (its table-schema call fails for any other, which is the fallback); the tables of other tests are in it too, so a prefix picks ours
         var prefix = "ddb" + Guid.NewGuid().ToString("N")[..8];
@@ -292,7 +292,7 @@ public class FlightSqlServerConformanceTests
     public async Task A_native_query_runs_as_a_prepared_statement_on_a_real_server_with_its_values_bound_in_the_plans_order(string destination)
     {
         await using var origin = await SqlFliteSession.OpenAsync();
-        using var run = await FlightRun.SetUpAsync(destination, EngineEnv.Get("DBDATABUILD_TEST_FLIGHT")!, "parameters:\n  min_id: { type: BIGINT, value: \"3\" }\n  since: { type: DATE, value: \"2024-02-01\" }\n");
+        using var run = await FlightRun.SetUpAsync(destination, EngineEnv.Get("DBDATAKIT_TEST_FLIGHT")!, "parameters:\n  min_id: { type: BIGINT, value: \"3\" }\n  since: { type: DATE, value: \"2024-02-01\" }\n");
         await using var to = run.Destination;
         var s = origin.Schema;
         // the server binds every parameter as text, so the query casts them: `CAST(? AS BIGINT)` is the dialect of a server like this one

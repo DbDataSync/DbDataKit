@@ -4,24 +4,23 @@ using DbDataKit.Odbc.Metadata;
 namespace DbDataKit.Odbc.Metadata.Tests;
 
 /// <summary>
-/// The native layer against a real driver. Variables (DBDATA_ prefix, or the DBGATEWAY_ prefix the proxy's tests use): TEST_SQLSERVER_SERVER
-/// (default .\SQLEXPRESS with Windows authentication), TEST_SQLSERVER_USER and _PASSWORD for SQL authentication, and REQUIRE_SQLSERVER=true
-/// to fail instead of skip when the server or driver is missing. TEST_SQLSERVER alone is still read as the server name, as before, unless
-/// it holds a connection string: the SqlServer and Transfer suites use that same variable for a full connection string, and one value
-/// cannot be both, so a string is ignored here. testenv/env/dbdatakit.map sets all of them.
+/// The native layer against a real driver. Variables: DBDATAKIT_TEST_MSSQL_SERVER
+/// (default .\SQLEXPRESS with Windows authentication), DBDATAKIT_TEST_MSSQL_USER and _PASSWORD for SQL authentication, and
+/// DBDATAKIT_TEST_REQUIRE_SQLSERVER=true to fail instead of skip when the server or driver is missing. DBDATAKIT_TEST_SQLSERVER alone is still read as
+/// the server name unless it holds a connection string: the SqlServer and Transfer suites use that variable for a full connection string,
+/// and one value cannot be both, so a string is ignored here. `testenv/testenv.sh env` prints all of them.
 /// </summary>
 public sealed class SqlServerCatalogTests : IAsyncLifetime
 {
-    // DBDATA_* first, then the DBGATEWAY_* names the Proxy tests use.
-    private static string? Env(string name) => Environment.GetEnvironmentVariable("DBDATA_" + name) ?? Environment.GetEnvironmentVariable("DBGATEWAY_" + name);
+    private static string? Env(string name) => Environment.GetEnvironmentVariable("DBDATAKIT_TEST_" + name);
 
-    private static readonly string Server = Env("TEST_SQLSERVER_SERVER") ?? ServerNameOrNull(Env("TEST_SQLSERVER")) ?? @".\SQLEXPRESS";
+    private static readonly string Server = Env("MSSQL_SERVER") ?? ServerNameOrNull(Env("SQLSERVER")) ?? @".\SQLEXPRESS";
 
     /// <summary>A server name, or null for a connection string (which has '=' and ';' in it, and no server name does).</summary>
     internal static string? ServerNameOrNull(string? value) =>
         string.IsNullOrWhiteSpace(value) || value.Contains('=') || value.Contains(';') ? null : value;
-    private static readonly string? User = Env("TEST_SQLSERVER_USER");
-    private static readonly string? Password = Env("TEST_SQLSERVER_PASSWORD");
+    private static readonly string? User = Env("MSSQL_USER");
+    private static readonly string? Password = Env("MSSQL_PASSWORD");
     private static readonly bool Required = string.Equals(Env("REQUIRE_SQLSERVER"), "true", StringComparison.OrdinalIgnoreCase);
 
     private const string Schema = "dbdata_meta";

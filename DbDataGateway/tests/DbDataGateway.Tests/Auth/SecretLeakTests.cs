@@ -24,7 +24,7 @@ public sealed class SecretLeakTests : IDisposable
     private static readonly string[] Sentinels = [EnvSentinel, LiteralSentinel, LoginSentinel, PassThroughSentinel];
 
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "dbgateway-leak-" + Guid.NewGuid().ToString("N"));
-    private readonly string _envName = "DBGATEWAY_TEST_" + Guid.NewGuid().ToString("N");
+    private readonly string _envName = "DBDATAKIT_TEST_" + Guid.NewGuid().ToString("N");
     private readonly CaptureLoggerProvider _logs = new();
 
     public SecretLeakTests()

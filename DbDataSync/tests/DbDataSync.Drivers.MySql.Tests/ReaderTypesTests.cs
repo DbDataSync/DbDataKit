@@ -49,7 +49,7 @@ public abstract class MySqlFamilyReaderTypesTestsBase<TDatabase>(TDatabase db, s
         var file = new StagingMatrixFile(Path.Combine(Path.GetDirectoryName(Here())!, $"ReaderTypes.{engine}.expected.tsv"));
         if (StagingMatrixFile.Update) { file.Write(actual); return; }
         var expected = file.Read();
-        Assert.True(expected.SequenceEqual(actual), "reader types changed (DBDATASYNC_MATRIX_UPDATE=1 regenerates the file):" + Environment.NewLine + StagingMatrixFile.Diff(expected, actual));
+        Assert.True(expected.SequenceEqual(actual), "reader types changed (DBDATAKIT_TEST_MATRIX_UPDATE=1 regenerates the file):" + Environment.NewLine + StagingMatrixFile.Diff(expected, actual));
     }
 
     private static string Here([CallerFilePath] string here = "") => here;

@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 OUT="${1:-docs/research/age-function-results.txt}"
-if [ -z "${DBDATABUILD_TEST_MSSQL:-}" ] || [ -z "${DBDATABUILD_TEST_PG:-}" ]; then
+if [ -z "${DBDATAKIT_TEST_MSSQL:-}" ] || [ -z "${DBDATAKIT_TEST_POSTGRES:-}" ]; then
   eval "$(../testenv/testenv.sh env dbdatabuild)"
 fi
 DDB_AGE_PROBE_OUT="$(cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")" dotnet test tests/DbDataBuild.Tests.Conformance --filter "FullyQualifiedName~AgeProbe"

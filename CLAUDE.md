@@ -53,19 +53,19 @@ connect. Start it yourself, as root: `(nohup dockerd > /tmp/dockerd.log 2>&1 &);
 Do not conclude Docker is unavailable, and do not skip the SQL Server and PostgreSQL runs of a state or engine test for that reason: start the
 daemon, then `testenv/testenv.sh up mssql postgres`. Two limits of that environment, found by running `testenv` there: Docker Hub answers anonymous pulls with `429 Too Many Requests` (pull through the
 mirror and tag the result: `docker pull mirror.gcr.io/library/postgres:17 && docker tag mirror.gcr.io/library/postgres:17 postgres:17`, the same for
-`mirror.gcr.io/pgvector/pgvector:pg17` (and `:pg16` for `postgres16`; SQL Server 2022 pulls from `mcr.microsoft.com` directly), then `DBKIT_TEST_PULL=false testenv/testenv.sh up ...`), and the proxy lets containers reach registries but not
+`mirror.gcr.io/pgvector/pgvector:pg17` (and `:pg16` for `postgres16`; SQL Server 2022 pulls from `mcr.microsoft.com` directly), then `DBDATAKIT_TEST_PULL=false testenv/testenv.sh up ...`), and the proxy lets containers reach registries but not
 package repositories (`apt-get` inside a build fails with 403), so a testenv image must be pulled whole, never built with a package install.
-Then `eval "$(testenv/testenv.sh env dbdatakit)"` sets `DBDATA_TEST_SQLSERVER` and `DBDATA_TEST_POSTGRES` for the state suites.
+Then `eval "$(testenv/testenv.sh env dbdatakit)"` sets `DBDATAKIT_TEST_SQLSERVER` and `DBDATAKIT_TEST_POSTGRES` for the state suites.
 
-Test engines:
+Test engines (every variable of a test, harness or CI step is `DBDATAKIT_TEST_<NAME>`; `docs/testing-environment.md` has the old-to-new table):
 
 - One environment for every suite, `testenv/docker-compose.yml`, one profile per engine: `testenv/testenv.sh up mssql postgres`, then
   `eval "$(testenv/testenv.sh env dbdatagateway)"` (also `dbdatakit`, `dbdatabuild`, `dbdatasync`); `down` when finished. Profiles: `mssql`
   (14330, SQL Server Agent on), `mssql-target` (14331), `postgres` (15432), `postgres-logical` (15433), `mysql` (13306), `mariadb`
   (13307), `oracle` (15210). The previous release of each state engine (N-1, plan 29b U01) runs beside the current ones and is left out of a bare `up`:
   `mssql2022` (14333, SQL Server 2022) and `postgres16` (15434, `pgvector/pgvector:pg16`); `testenv/testenv.sh up mssql2022 postgres16`, then
-  `eval "$(testenv/testenv.sh env dbdatakit-older)"` points `DBDATA_TEST_SQLSERVER` / `DBDATA_TEST_POSTGRES` (and the explicit `DBDATA_TEST_SQLSERVER2022` /
-  `DBDATA_TEST_POSTGRES16`) at them, so the State suites (`DbDataKit.State.Tests`, `.State.Engines.Tests`, `.State.Cli.Tests`, `.Scheduling.Tests`) run on them; CI does this in the job `state-older-engines`. Sync: `testenv/testenv.sh up mssql mssql-target postgres-logical mysql mariadb oracle`, then
+  `eval "$(testenv/testenv.sh env dbdatakit-older)"` points `DBDATAKIT_TEST_SQLSERVER` / `DBDATAKIT_TEST_POSTGRES` (and the explicit `DBDATAKIT_TEST_SQLSERVER2022` /
+  `DBDATAKIT_TEST_POSTGRES16`) at them, so the State suites (`DbDataKit.State.Tests`, `.State.Engines.Tests`, `.State.Cli.Tests`, `.Scheduling.Tests`) run on them; CI does this in the job `state-older-engines`. Sync: `testenv/testenv.sh up mssql mssql-target postgres-logical mysql mariadb oracle`, then
   `eval "$(testenv/testenv.sh env dbdatasync)"`. `postgres-logical` is the one second engine of a kind (wal_level=logical and wal2json,
   built from `testenv/postgres-logical` on a fresh `postgres:17`), kept apart so the plain `postgres` stays what the other suites test.
   Run one stack at a time on a machine: the ports are fixed.

@@ -133,8 +133,8 @@ public class PostgresTests
     [Fact]
     public async Task Live_read_only_session_blocks_writes_when_a_server_is_configured()
     {
-        var cs = Environment.GetEnvironmentVariable("DBDATA_TEST_POSTGRES");
-        Assert.SkipWhen(string.IsNullOrEmpty(cs), "Set DBDATA_TEST_POSTGRES to a connection string (credentials included) to run this.");
+        var cs = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES");
+        Assert.SkipWhen(string.IsNullOrEmpty(cs), "Set DBDATAKIT_TEST_POSTGRES to a connection string (credentials included) to run this.");
         var login = new ResolvedLogin(LoginRole.Read, AuthMode.Sql, "env") { ConnectionString = SecretValue.From(cs!) };
         var p = new PostgresProvider();
         var ctx = Ctx(d => { d.Address = null; d.Access = AccessMode.Readonly; d.Tls.Verify = false; }, login, LoginRole.Read);

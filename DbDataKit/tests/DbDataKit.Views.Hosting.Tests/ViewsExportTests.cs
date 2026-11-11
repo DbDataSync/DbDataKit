@@ -367,8 +367,8 @@ public sealed class ViewsExportTests : IDisposable
         var bundle = FindBundle();
         if (bundle is null)
         {
-            if (TestBrowser.Required) Assert.Fail("the print bundle is required here: run `npm run build:print -w @dbdatakit/visuals` and set DBDATA_TEST_PRINT_ASSETS.");
-            Assert.Skip("The visuals' print bundle is not built (npm run build:print -w @dbdatakit/visuals; DBDATA_TEST_PRINT_ASSETS names the folder): this test was not run.");
+            if (TestBrowser.Required) Assert.Fail("the print bundle is required here: run `npm run build:print -w @dbdatakit/visuals` and set DBDATAKIT_TEST_PRINT_ASSETS.");
+            Assert.Skip("The visuals' print bundle is not built (npm run build:print -w @dbdatakit/visuals; DBDATAKIT_TEST_PRINT_ASSETS names the folder): this test was not run.");
         }
         var (h, exporter) = await StartAsync(pageAssets: bundle);
         await using var _ = h;
@@ -395,7 +395,7 @@ public sealed class ViewsExportTests : IDisposable
 
     private static string? FindBundle()
     {
-        if (Environment.GetEnvironmentVariable("DBDATA_TEST_PRINT_ASSETS") is { Length: > 0 } env && File.Exists(Path.Combine(env, "print.js"))) return env;
+        if (Environment.GetEnvironmentVariable("DBDATAKIT_TEST_PRINT_ASSETS") is { Length: > 0 } env && File.Exists(Path.Combine(env, "print.js"))) return env;
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
         {
             var built = Path.Combine(dir.FullName, "DbDataKit", "web", "visuals", "dist", "print");
