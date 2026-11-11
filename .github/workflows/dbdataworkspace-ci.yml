@@ -29,7 +29,7 @@ jobs:
   changes:
     uses: ./.github/workflows/_changes.yml
     with:
-      paths: '^(DbDataWorkspace/|Shared/|DbDataGateway/tests/DbDataGateway\.Tests/Support/AppStoreSupport\.cs|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdataworkspace-|_)|actions/setup-product))'
+      paths: '^(DbDataWorkspace/|DbDataBuild/|Shared/|DbDataGateway/tests/DbDataGateway\.Tests/Support/AppStoreSupport\.cs|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdataworkspace-|_)|actions/setup-product))'
 
   # The server, its pairing and its command line run on both systems; the Windows service registration is only exercised here against fakes.
   test:
@@ -72,7 +72,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-product
@@ -100,5 +100,14 @@ jobs:
           echo "DBDATAKIT_TEST_REQUIRE_BUN=true" >> "$GITHUB_ENV"
           echo "DBDATAKIT_TEST_REQUIRE_APP_STORE=true" >> "$GITHUB_ENV"
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+      # The Build project kind (plan 33 SC20c) starts a project from Build's own template, made by the real `dbdatabuild`: build it (Debug, where the tests look for it) so those tests run,
+      # and fail, not skip, if it is missing.
+      - uses: ./.github/actions/native-cache
+      - name: Build the dbdatabuild command line
+        working-directory: DbDataBuild
+        run: |
+          scripts/fetch-native.sh
+          dotnet build src/DbDataBuild.Cli -c Debug
+          echo "DBDATAKIT_TEST_REQUIRE_BUILD=true" >> "$GITHUB_ENV"
       - run: dotnet build DbDataWorkspace.slnf -c Release
       - run: dotnet test --project tests/DbDataWorkspace.Tests -c Release --no-build --minimum-expected-tests 17
