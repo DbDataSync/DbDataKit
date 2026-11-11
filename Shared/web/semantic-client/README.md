@@ -10,4 +10,4 @@ A typed client for semantic queries (plan 22a GP32), for apps and for anything e
 
 A request without a limit (1 to 10,000) or without a measure is refused before anything is sent. A failure is a `SemanticError` with `code` (`not_found`, `denied`, `invalid`, `clarify`, `unsupported`, `unavailable`, `bad_response`), the HTTP status and the server's words; `clarify` and `unsupported` are the engine's answers to a request it will not run. An abort is rethrown as it is.
 
-**The routes are the contract the host will serve, and no host serves them yet**: the apps host's data route answers Store models only. The client is built and tested against a fake host (`npm test -w @dbdatakit/semantic-client`); plan 22a GP35 needs the host's route.
+**The apps host serves these routes** under `/apps/<instance>/_data/api/v1` (plan 22a GP35c; `docs/apps.md`, "The semantic route"): the models the app's manifest lists under `semantic:`, run as the signed-in person. The client is also tested against a fake host (`npm test -w @dbdatakit/semantic-client`).

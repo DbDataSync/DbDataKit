@@ -10,8 +10,8 @@ namespace DbDataKit.Authoring.Server;
 /// The preview of a build (plan 22a GP35, plan 21: previews are read only by default). The smallest mechanism that cannot write: this server answers <c>GET</c> for the files of the build's folder and nothing else, with a
 /// <c>Content-Security-Policy</c> that leaves the page no network at all (<c>connect-src 'none'</c>, <c>form-action 'none'</c>, <c>default-src 'none'</c>) and a <c>sandbox</c> directive (an opaque origin: no cookies, no storage, no access to
 /// the console that frames it). The entry document comes with its script and style inlined, so the page needs no second request (a sandboxed document has no cookie to send with one, and the relay needs it). What this shows is the
-/// app's own screens as built; it is <b>not connected to data</b>: the host's data routes and the semantic route (<c>.../_data/api/v1/semantic/...</c>, not built) are not here, so a preview reads nothing and can write nothing.
-/// A preview with live data is the apps host's preview channel (plan 21 section 2, a later slice); until then publishing to a test Gateway is how an app is seen with data.
+/// app's own screens as built; it is <b>not connected to data</b>: the host's data routes and the semantic route (<c>.../_data/api/v1/semantic/...</c>, built in the apps host, plan 22a GP35c) are not here, so a preview reads nothing and can write nothing.
+/// A preview with live data is the apps host's preview channel (plan 21 section 2; plan 22a GP35d, open); until then publishing to a test Gateway is how an app is seen with data.
 /// </summary>
 public static partial class WorkspacePreview
 {

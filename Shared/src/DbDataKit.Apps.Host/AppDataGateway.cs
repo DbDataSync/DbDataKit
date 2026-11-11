@@ -27,6 +27,18 @@ public sealed record AppDataCall(
         Scope.Contains(TokenScope.Entry(Model, entity, write: true), StringComparer.Ordinal) || (!write && Scope.Contains(TokenScope.Entry(Model, entity, write: false), StringComparer.Ordinal));
 }
 
+/// <summary>Which of the semantic calls an app may make: the models its manifest lists, one model's catalog, or a query.</summary>
+public enum AppSemanticRoute { Models, Catalog, Query }
+
+/// <summary>One semantic call of an app, checked by the host: the person and the roles the identity home gave them on the instance, the models the manifest's <c>semantic</c> lists (<see cref="Allowed"/>; the host has checked that <see cref="Model"/> is one), and the request body of a query.</summary>
+public sealed record AppSemanticCall(string App, string SubjectId, string? SubjectName, ServerRole Roles, IReadOnlyList<string> Allowed, AppSemanticRoute Route, string Model, byte[] Body, string? Via = null);
+
+/// <summary>What answers an app's semantic calls: in the serving layer, the semantic module running the query as the person (plan 22a GP35c).</summary>
+public interface IAppSemantic
+{
+    Task<AppResponse> SendAsync(AppSemanticCall call, CancellationToken cancellationToken);
+}
+
 /// <summary>What answers an app's data calls: in the serving layer, the group's published entity models, read and written in the same process (plan 20 O08c).</summary>
 public interface IAppData
 {
@@ -39,8 +51,10 @@ public interface IAppData
 /// with the store's server stopped and a model in development is never what an app sees. The browser reaches nothing else, needs no CORS but this route's, and the app never holds a token anything else accepts. Only row reads
 /// and the changes endpoint are answered.
 /// </summary>
-public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, ConsoleIdentity self, TimeProvider? clock = null, AppApprovalStore? approvals = null)
+public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, ConsoleIdentity self, TimeProvider? clock = null, AppApprovalStore? approvals = null, IAppSemantic? semantic = null)
 {
+    private static readonly Regex SemanticPath = new(@"^api/v1/semantic/models(/(?<model>[^/]+)/(?<kind>catalog|query))?$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
     private static readonly Regex DataPath = new(@"^api/v1/models/(?<model>[^/]+)(/instances/(?<copy>[^/]+))?/(entities/(?<entity>[^/]+)/(?<kind>rows?)|(?<kind>changes)|(?<kind>schema))$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     // the path of a call as apps made it before the group served their data: a paired store's id first
@@ -70,6 +84,8 @@ public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, Co
         if (validated.Token is not { } token) return Refuse(401, "A token for this app is needed.");
 
         var trimmed = path.Trim('/');
+        if (trimmed.StartsWith("api/v1/semantic/", StringComparison.Ordinal) || trimmed == "api/v1/semantic")
+            return await ForwardSemanticAsync(resolved, instance, trimmed, method, body, token, via, ct);
         var match = DataPath.Match(trimmed);
         if (!match.Success)
             return StorePath.IsMatch(trimmed)
@@ -87,6 +103,24 @@ public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, Co
             match.Groups["entity"].Success ? Uri.UnescapeDataString(match.Groups["entity"].Value) : null, copy, parameters, body, via);
         var answer = await data.SendAsync(call, ct);
         return answer with { Headers = Cors };
+    }
+
+    // The semantic route (plan 22a GP35c): the models the manifest's `semantic:` lists, a model's catalog and a query, as the person the token names. The scope is asked before the host, so nothing says whether a model the manifest
+    // does not list exists.
+    private async Task<AppResponse> ForwardSemanticAsync(ResolvedInstance resolved, string instance, string trimmed, string method, byte[] body, ValidatedToken token, string? via, CancellationToken ct)
+    {
+        var match = SemanticPath.Match(trimmed);
+        if (!match.Success) return Refuse(403, "Apps reach the semantic models, a model's catalog and its queries only: api/v1/semantic/models[/<model>/catalog|query].");
+        var route = !match.Groups["kind"].Success ? AppSemanticRoute.Models : match.Groups["kind"].Value == "catalog" ? AppSemanticRoute.Catalog : AppSemanticRoute.Query;
+        if (route == AppSemanticRoute.Query ? !HttpMethods.IsPost(method) : !HttpMethods.IsGet(method))
+            return Refuse(405, route == AppSemanticRoute.Query ? "A semantic query is sent with POST." : "The models and a catalog are read with GET.");
+        if (semantic is null) return Refuse(404, "This host serves no semantic models.");
+        var model = match.Groups["model"].Success ? Uri.UnescapeDataString(match.Groups["model"].Value) : "";
+        var listed = resolved.Manifest.SemanticModels;
+        if (route != AppSemanticRoute.Models && !listed.Contains(model, StringComparer.OrdinalIgnoreCase))
+            return Refuse(403, $"This app may not use the semantic model '{model}': its manifest does not list it under `semantic`.");
+        var call = new AppSemanticCall(instance, token.SubjectId, token.SubjectName, token.Roles, listed, route, model, body, via);
+        return (await semantic.SendAsync(call, ct)) with { Headers = Cors };
     }
 
     public static readonly IReadOnlyDictionary<string, string> Cors = new Dictionary<string, string>

@@ -143,6 +143,57 @@ public sealed class AppDataGatewayTests : IDisposable
         Assert.Contains("approved by grace", approval.AuditLabel);
     }
 
+    private sealed class SemanticRecorder : IAppSemantic
+    {
+        public List<AppSemanticCall> Seen { get; } = [];
+
+        public Task<AppResponse> SendAsync(AppSemanticCall call, CancellationToken cancellationToken)
+        {
+            Seen.Add(call);
+            return Task.FromResult(new AppResponse(200, "application/json", new Dictionary<string, string>(), Encoding.UTF8.GetBytes("{\"ok\":true}")));
+        }
+    }
+
+    [Fact]
+    public async Task The_semantic_route_checks_the_token_the_verb_and_the_manifests_models_before_the_host_is_asked()
+    {
+        instances.PublishApp("schemaVersion: 1\nname: shop\nversion: 1.0.0\nentry: index.html\nroles: [viewer]\nsemantic: [sales, ops]\n", "ada");
+        instances.Save(new AppInstance("shop", "shop"), "ada");
+        var semantic = new SemanticRecorder();
+        var gated = new AppDataGateway(instances, data, host, semantic: semantic);
+        string Token(string instance) => new AppTokenBroker(host.Issuer()).Issue(new AppSessions().Create(new DbDataKit.Identity.HomeIdentity("user-7", "Ada", null, [], new Dictionary<string, IReadOnlyList<string>> { ["app:" + instance] = ["viewer"] })), instance).Token;
+        Task<AppResponse> Send(string path, string method, string? token, string body = "") =>
+            gated.ForwardAsync("shop", path, method, "", token is null ? null : "Bearer " + token, Encoding.UTF8.GetBytes(body), default);
+
+        var list = await Send("api/v1/semantic/models", "GET", Token("shop"));
+        Assert.Equal(200, list.Status);
+        Assert.Equal("*", list.Headers["Access-Control-Allow-Origin"]);
+        Assert.Equal((AppSemanticRoute.Models, "shop", "user-7"), (semantic.Seen[0].Route, semantic.Seen[0].App, semantic.Seen[0].SubjectId));
+        Assert.Equal(["sales", "ops"], semantic.Seen[0].Allowed);
+
+        Assert.Equal(200, (await Send("api/v1/semantic/models/sales/catalog", "GET", Token("shop"))).Status);
+        Assert.Equal((AppSemanticRoute.Catalog, "sales"), (semantic.Seen[1].Route, semantic.Seen[1].Model));
+        Assert.Equal(200, (await Send("api/v1/semantic/models/ops/query", "POST", Token("shop"), "{\"kind\":\"query\"}")).Status);
+        Assert.Equal((AppSemanticRoute.Query, "ops", "{\"kind\":\"query\"}"), (semantic.Seen[2].Route, semantic.Seen[2].Model, Encoding.UTF8.GetString(semantic.Seen[2].Body)));
+        var asked = semantic.Seen.Count;
+
+        // a model the manifest does not list, whatever the host serves; the verbs; paths the route does not have; no token and another instance's token
+        var unlisted = await Send("api/v1/semantic/models/finance/query", "POST", Token("shop"), "{}");
+        Assert.Equal(403, unlisted.Status);
+        Assert.Contains("does not list it", Encoding.UTF8.GetString(unlisted.Body));
+        Assert.Equal(405, (await Send("api/v1/semantic/models/sales/query", "GET", Token("shop"))).Status);
+        Assert.Equal(405, (await Send("api/v1/semantic/models", "POST", Token("shop"))).Status);
+        Assert.Equal(403, (await Send("api/v1/semantic/models/sales/members", "GET", Token("shop"))).Status);
+        Assert.Equal(403, (await Send("api/v1/semantic/models/sales/query/extra", "POST", Token("shop"))).Status);
+        Assert.Equal(401, (await Send("api/v1/semantic/models", "GET", null)).Status);
+        Assert.Equal(401, (await Send("api/v1/semantic/models", "GET", Token("acme"))).Status);
+        Assert.Equal(asked, semantic.Seen.Count);
+
+        // a host with no semantic models answers 404 for the route and still answers rows
+        var without = new AppDataGateway(instances, data, host);
+        Assert.Equal(404, (await without.ForwardAsync("shop", "api/v1/semantic/models", "GET", "", "Bearer " + Token("shop"), [], default)).Status);
+    }
+
     [Fact]
     public async Task A_missing_foreign_or_other_instances_token_is_refused_before_anything_is_asked()
     {

@@ -6,7 +6,7 @@ namespace DbDataGateway.Server.State;
 /// The Gateway's own module (plan 29a Q16), kept per group: what the instances of a serving group share. <c>client_session</c> is a client's session (valid on any instance): the hash of its
 /// token (the token itself is never kept), who it is (a document, with the database credentials inside it encrypted with the group's key), and its expiry and last use.
 /// <c>serving_instance</c> is the instances running against the state, each refreshing its row while it runs (a second one is refused on SQLite). The three <c>saved_query*</c> tables are the
-/// queries people keep on a model: the current version, every version it has had, and who else may call it. Everything else the Gateway keeps is a shared module: identity, notifications,
+/// queries people keep on a model: the current version, every version it has had, and who else may call it. <c>app_session</c> is a person's sign-in at the apps host (plan 26 AP29), the same on every instance. Everything else the Gateway keeps is a shared module: identity, notifications,
 /// definitions, app storage, trust and audit.
 /// </summary>
 public static class ServingModule
@@ -102,7 +102,19 @@ public static class ServingModule
             """
             ALTER TABLE {table:serving_instance} {{addcolumn}} generation {{int}} NULL;
             """,
+            // plan 26 AP29: the apps host's sessions, kept where any instance of the group finds them (a person signs in once per group, not once per instance). session_hash is the hash of the cookie's id;
+            // person is the document the identity home gave (who, groups, roles); refresh_token is the home's refresh token encrypted with the group's session key
+            """
+            CREATE TABLE {table:app_session} (
+                session_hash   {{key}} PRIMARY KEY,
+                person         {{text}} NOT NULL,
+                refresh_token  {{text}} NULL,
+                expires_at     {{time}} NOT NULL,
+                asked_at       {{time}} NOT NULL
+            );
+            CREATE INDEX {index:app_session_by_expiry} ON {table:app_session}(expires_at);
+            """,
         ],
-        // the third to fifth migrations only add nullable columns, which the code of the version before never reads or writes: an instance of the previous version still works with them
+        // the third to seventh migrations only add nullable columns or a table, which the code of the version before never reads or writes: an instance of the previous version still works with them
         compatibleWithPrevious: 1);
 }
