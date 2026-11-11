@@ -87,7 +87,7 @@ Question: for everything a person authors, publishes by file or command, or has 
 
 | Format | Editor (state in ui-editors.md) | History, result or monitoring view | Gap |
 | --- | --- | --- | --- |
-| `model` (Store) | Store `ModelEditor.tsx` (partial: publishing is a command) | change requests: Store `ChangesTab.tsx`, and now the console's `ApprovalsPage.tsx`; storage: `StorageTab.tsx` | history of a model's text: the History tab of `ModelWorkspace.tsx`; publish and register an instance: O10c (plan 20) |
+| `model` (Store) | Store `ModelEditor.tsx` (partial: publishing is a command) | change requests: Store `ChangesTab.tsx`, and now the console's `ApprovalsPage.tsx`; storage: `StorageTab.tsx` | history of a model's text: the History tab (`HistoryTab.tsx`) of `ModelWorkspace.tsx`; publish and register an instance: O10c (plan 20) |
 | `connection` | Gateway `DataSourcesPage.tsx`, Build `EditTab.tsx` (full) | Gateway `ConfigPage.tsx` (commits and diff), the Test button; Monitoring has no per-connection health | a bound connection slot of a runner cannot be tested from the Bindings card: UI08 |
 | `view-spec`, `dashboard`, `report` | Workspace, `views-editor` (partial) | `VersionsPanel.tsx` | owned by the plan 32 and apps/Workspace work (another agent): skipped |
 | `semantic-package` | Build `ModelPublish.tsx`, Gateway `ModelsPage.tsx` (full / partial) | `ModelsPage.tsx`: versions, the version served, a failed version and why; roll back | saved queries: SL (plan 14a) |
