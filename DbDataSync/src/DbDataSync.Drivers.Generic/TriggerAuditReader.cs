@@ -30,7 +30,8 @@ namespace DbDataSync.Drivers.Generic;
 /// out from a latency graph.
 /// </para>
 /// </summary>
-public sealed class TriggerAuditReader(SqlDialect dialect, ITableCatalog catalog)
+public sealed class TriggerAuditReader(
+    SqlDialect dialect, ITableCatalog catalog, ITriggerAuditInstallCheck? installCheck = null)
     : IChangeReader, IStatementPreview, IPositionAcknowledging, IReadIntentDeclaring, IPositionCapturing
 {
     /// <summary>
@@ -69,6 +70,7 @@ public sealed class TriggerAuditReader(SqlDialect dialect, ITableCatalog catalog
         CancellationToken cancellationToken)
     {
         await dialect.UseDatabaseAsync(sourceConnection, source.Database, cancellationToken);
+        await RequireCurrentTriggerAsync(sourceConnection, source, mappingName: null, cancellationToken);
         var target = await GetMaxSequenceAsync(sourceConnection, source, cancellationToken);
         return new CapturedPosition(target.ToString(), PositionTimeUtc: null);
     }
@@ -101,6 +103,7 @@ public sealed class TriggerAuditReader(SqlDialect dialect, ITableCatalog catalog
         CancellationToken cancellationToken)
     {
         await dialect.UseDatabaseAsync(sourceConnection, source.Database, cancellationToken);
+        await RequireCurrentTriggerAsync(sourceConnection, source, mappingName, cancellationToken);
 
         var target = await GetMaxSequenceAsync(sourceConnection, source, cancellationToken);
         var diagnostics = new ReadDiagnostics();
@@ -151,6 +154,23 @@ public sealed class TriggerAuditReader(SqlDialect dialect, ITableCatalog catalog
                 cancellationToken),
             target.ToString(),
             diagnostics);
+    }
+
+    /// <summary>
+    /// A trigger of the text before CW02a records only the new key of an UPDATE. Reading its shadow table
+    /// would be silently wrong after the first primary key update, so the pass stops, naming the table and
+    /// the way out. Costs one catalog read per pass; a driver with no check (SQL Server, whose trigger never
+    /// had the gap, and descriptor drivers) skips it.
+    /// </summary>
+    private async Task RequireCurrentTriggerAsync(
+        DbConnection connection, SourceTableRef source, string? mappingName, CancellationToken cancellationToken)
+    {
+        if (installCheck is null)
+            return;
+
+        if (await installCheck.InspectAsync(connection, source, cancellationToken) == TriggerAuditInstall.Outdated)
+            throw new InvalidOperationException(TriggerAuditInstallMessages.Outdated(
+                dialect.QualifyTable(source.Schema, source.Table), mappingName ?? source.Table));
     }
 
     public async Task AcknowledgeAsync(
@@ -344,6 +364,14 @@ public sealed class TriggerAuditReader(SqlDialect dialect, ITableCatalog catalog
             };
 
             var sourceRowGone = Convert.ToInt32(reader.GetValue(TriggerAuditStatement.BaseMissingOrdinal)) == 1;
+
+            // A delete is what the source says only while the row is gone. The last shadow row of a key can be
+            // a D while the row exists: a key swap inside one transaction (1 to 2 and 2 to 1: the key-change
+            // trigger writes the old key as a D after the other row wrote the same key as its new one), or a
+            // key deleted and taken again by a later write that is above this pass's target sequence. The base
+            // row is the truth, so it is read as the update it is; a replay of the later row is the same values.
+            if (operation == ChangeOperation.Delete && !sourceRowGone)
+                operation = ChangeOperation.Update;
 
             // An insert or update whose row has since been deleted carries no values — every non-key
             // column is a LEFT JOIN NULL, indistinguishable from real data. Skipped rather than

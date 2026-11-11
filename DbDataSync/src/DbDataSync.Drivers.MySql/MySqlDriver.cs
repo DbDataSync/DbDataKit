@@ -40,7 +40,7 @@ public sealed class MySqlDriver : IDriver, IConnectionTester, IDialectProvider, 
     public IReadOnlyList<IChangeReader> Readers { get; } =
     [
         new WatermarkReader(MySqlDialect.Instance, MySqlValueBinding.Instance),
-        new TriggerAuditReader(MySqlDialect.Instance, MySqlCatalog.Instance),
+        new TriggerAuditReader(MySqlDialect.Instance, MySqlCatalog.Instance, MySqlTriggerInstall.Instance),
         new BatchReloadReader(MySqlDialect.Instance, MySqlValueBinding.Instance),
         new KeyReconcileReader(MySqlDialect.Instance, MySqlValueBinding.Instance),
     ];

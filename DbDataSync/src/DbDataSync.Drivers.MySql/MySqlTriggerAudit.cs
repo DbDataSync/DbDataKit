@@ -21,6 +21,14 @@ public static class MySqlTriggerAudit
     /// is already fully set up.</summary>
     public static IReadOnlyList<string> TriggerSuffixes { get; } = ["ai", "au", "ad"];
 
+    /// <summary>
+    /// Whether the body of the <c>au</c> trigger as the server reports it (<c>information_schema.triggers</c>
+    /// <c>action_statement</c>) is the current text. The text that recorded only the new key of an update never
+    /// named <c>OLD</c> in its update trigger; the current one does.
+    /// </summary>
+    public static bool IsCurrentUpdateTrigger(string? actionStatement) =>
+        actionStatement is not null && actionStatement.Contains("OLD.", StringComparison.OrdinalIgnoreCase);
+
     public static string TriggerName(string table, string suffix) => $"ds_trg_{table}_{suffix}";
 
     public static string CreateShadowTable(string schema, string table, IReadOnlyList<string> keyColumnDefinitions)
@@ -60,6 +68,13 @@ public static class MySqlTriggerAudit
         var newKeys = string.Join(", ", keyColumns.Select(k => $"NEW.{dialect.QuoteIdentifier(k)}"));
         var oldKeys = string.Join(", ", keyColumns.Select(k => $"OLD.{dialect.QuoteIdentifier(k)}"));
 
+        // A key update is a delete of the old key and the new row, in one statement because a trigger body
+        // here has no BEGIN..END (one statement per trigger is what lets a plain ";" split the script). The
+        // two rows are different keys, so their order in the shadow table does not matter. The reference
+        // to OLD in this trigger is also what <see cref="IsCurrentUpdateTrigger"/> recognises.
+        var keyUnchanged = string.Join(" AND ", keyColumns.Select(
+            k => $"OLD.{dialect.QuoteIdentifier(k)} <=> NEW.{dialect.QuoteIdentifier(k)}"));
+
         return $"""
             DROP TRIGGER IF EXISTS {insertTrigger};
             CREATE TRIGGER {insertTrigger} AFTER INSERT ON {baseTable}
@@ -67,7 +82,9 @@ public static class MySqlTriggerAudit
 
             DROP TRIGGER IF EXISTS {updateTrigger};
             CREATE TRIGGER {updateTrigger} AFTER UPDATE ON {baseTable}
-            FOR EACH ROW INSERT INTO {shadow} ({op}, {keyList}) VALUES ('U', {newKeys});
+            FOR EACH ROW INSERT INTO {shadow} ({op}, {keyList})
+            SELECT 'D', {oldKeys} FROM DUAL WHERE NOT ({keyUnchanged})
+            UNION ALL SELECT 'U', {newKeys};
 
             DROP TRIGGER IF EXISTS {deleteTrigger};
             CREATE TRIGGER {deleteTrigger} AFTER DELETE ON {baseTable}

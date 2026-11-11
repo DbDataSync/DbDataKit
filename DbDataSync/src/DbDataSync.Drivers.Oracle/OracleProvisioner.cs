@@ -69,7 +69,9 @@ public static class OracleProvisioner
         var state = new TriggerAuditState(
             await ObjectExistsAsync(connection, table.Schema, shadowTable, cancellationToken),
             await TriggerExistsAsync(connection, table.Schema, OracleTriggerAudit.TriggerName(table.Table), cancellationToken),
-            keyColumns);
+            keyColumns,
+            await OracleTriggerInstall.InspectAsync(connection, table.Schema, table.Table, cancellationToken)
+                == TriggerAuditInstall.Outdated);
 
         var steps = new List<ProvisioningStep>();
 
@@ -95,6 +97,17 @@ public static class OracleProvisioner
                 "One trigger, branching on INSERTING/UPDATING/DELETING — Oracle, unlike MySQL, can " +
                 "combine all three events in one definition. Needs only ordinary CREATE TRIGGER rights, " +
                 "none of the DBA-level grants the Flashback alternative needs.",
+                ProvisioningStepScope.Table));
+
+        // CREATE OR REPLACE: the same statement replaces a trigger of the text that recorded only the new
+        // key of an update; the shadow table and the replication's position are not touched.
+        if (keyColumns.Count > 0 && state.TriggerExists && state.TriggerOutdated)
+            steps.Add(new ProvisioningStep(
+                $"Replace the change trigger on {OracleDialect.Instance.QualifyTable(table.Schema, table.Table)}",
+                OracleTriggerAudit.CreateTrigger(table.Schema, table.Table, keyColumns),
+                "The installed trigger records only the new key of an UPDATE, so a primary key update at the " +
+                "source leaves the old key in the target. The new text records the old key as a delete too. " +
+                "The shadow table and the replication's position are not touched.",
                 ProvisioningStepScope.Table));
 
         return TriggerAuditPlan.Build(

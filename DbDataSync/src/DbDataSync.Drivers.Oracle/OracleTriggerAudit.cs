@@ -43,6 +43,13 @@ public static class OracleTriggerAudit
             """;
     }
 
+    /// <summary>
+    /// The version marker the trigger body carries. <c>OracleProvisioner</c> and the reader's install check
+    /// look for it in <c>ALL_SOURCE</c>, which holds the text as written; a trigger without it is the text
+    /// that recorded only the new key of an update. A key column is NOT NULL, so <c>&lt;&gt;</c> is enough.
+    /// </summary>
+    public const string VersionMarker = "-- ds-audit-v2";
+
     public static string CreateTrigger(string schema, string table, IReadOnlyList<string> keyColumns)
     {
         var dialect = OracleDialect.Instance;
@@ -55,14 +62,21 @@ public static class OracleTriggerAudit
         var newKeys = string.Join(", ", keyColumns.Select(k => $":NEW.{dialect.QuoteIdentifier(k)}"));
         var oldKeys = string.Join(", ", keyColumns.Select(k => $":OLD.{dialect.QuoteIdentifier(k)}"));
 
+        var keyChanged = string.Join(" OR ", keyColumns.Select(
+            k => $":OLD.{dialect.QuoteIdentifier(k)} <> :NEW.{dialect.QuoteIdentifier(k)}"));
+
         return $"""
             CREATE OR REPLACE TRIGGER {trigger}
             AFTER INSERT OR UPDATE OR DELETE ON {baseTable}
             FOR EACH ROW
             BEGIN
+                {VersionMarker}: an UPDATE that changes the key is a delete of the old key and the new row
                 IF INSERTING THEN
                     INSERT INTO {shadow} ({op}, {keyList}) VALUES ('I', {newKeys});
                 ELSIF UPDATING THEN
+                    IF {keyChanged} THEN
+                        INSERT INTO {shadow} ({op}, {keyList}) VALUES ('D', {oldKeys});
+                    END IF;
                     INSERT INTO {shadow} ({op}, {keyList}) VALUES ('U', {newKeys});
                 ELSE
                     INSERT INTO {shadow} ({op}, {keyList}) VALUES ('D', {oldKeys});

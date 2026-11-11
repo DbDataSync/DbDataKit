@@ -70,4 +70,18 @@ public sealed class OracleTriggerAuditStatementTests
     [Fact]
     public void TriggerName_IsStable() =>
         Assert.Equal("ds_trg_orders", OracleTriggerAudit.TriggerName("orders"));
+
+    [Fact]
+    public void TheUpdateBranch_RecordsTheOldKeyAsADelete_WhenTheKeyChanges()
+    {
+        var sql = OracleTriggerAudit.CreateTrigger("SCHEMA", "orders", ["region", "id"]);
+
+        Assert.Contains("IF :OLD.\"region\" <> :NEW.\"region\" OR :OLD.\"id\" <> :NEW.\"id\" THEN", sql);
+        Assert.Contains(OracleTriggerAudit.VersionMarker, sql);
+        // the D row of the old key sits inside the UPDATING branch, before the U row of the new one
+        var updating = sql.IndexOf("ELSIF UPDATING", StringComparison.Ordinal);
+        var deleteOfOld = sql.IndexOf("'D', :OLD.\"region\", :OLD.\"id\"", updating, StringComparison.Ordinal);
+        var updateOfNew = sql.IndexOf("'U', :NEW.\"region\", :NEW.\"id\"", updating, StringComparison.Ordinal);
+        Assert.InRange(deleteOfOld, updating + 1, updateOfNew - 1);
+    }
 }
