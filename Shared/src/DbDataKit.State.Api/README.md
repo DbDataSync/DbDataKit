@@ -11,6 +11,8 @@ It is a project of its own because it needs `DbDataKit.State.Cli` (the read-only
 * The console's own wizard calls are audited by the console as `state.connection.save`, `state.connection.remove`, `state.move.check` (the preflight) and `state.move.start`, who and which call, never a body (`ConsoleAuditTrail`); the server audits the same move as `state.move` and the maintenance switch as `state.maintenance`.
 * Every change is audited as `state.maintenance` (who, through which console, the reason; never a secret) through the product's `IAuditLog`, and a refusal (a role that is not enough, a body that is not valid) too. A change that cannot be audited is not kept.
 
+The identity home's own host (`dbdatakit identity run`) registers them under its management prefix (marked anonymous: the token check is their authentication, the home's session policy is for people at the home); its state settings are read from the `state:` section of its `server.yaml` in the shared order. `Move: true`, its audit is `management-audit.log` beside `server.yaml`.
+
 ## What a product does
 
 ```csharp

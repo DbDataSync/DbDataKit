@@ -28,7 +28,7 @@ public static class IdentityCli
         Path.GetFullPath(parsed.Get("repo") ?? IdentityHostSettings.DefaultDirectory(environment));
 
     private static StateDatabase OpenState(CliArgs parsed, Func<string, string?>? environment) =>
-        IdentityHostState.Open(DirectoryOf(parsed, environment), IdentityHostSettings.StateFrom(environment), environment);
+        IdentityHostState.Open(DirectoryOf(parsed, environment), IdentityHostSettings.StateFrom(environment, directory: DirectoryOf(parsed, environment)), environment);
 
     private static async Task<int> RunAsync(string[] args, CliContext context, Func<string, string?>? environment)
     {
@@ -55,7 +55,11 @@ public static class IdentityCli
             await context.Error.WriteLineAsync("--public-url is the https address every console, app and browser reaches the home at (the token issuer), such as https://identity.example.");
             return CliExit.Usage;
         }
-        var settings = new IdentityHostSettings(DirectoryOf(parsed, environment), listen, publicUrl, IdentityHostSettings.StateFrom(environment, parsed.Get("state-engine"), parsed.Get("state-connection")));
+        var directory = DirectoryOf(parsed, environment);
+        ResolvedState resolvedState;
+        try { resolvedState = IdentityHostSettings.ResolveState(directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection")); }
+        catch (InvalidOperationException ex) { await context.Error.WriteLineAsync(ex.Message); return CliExit.Usage; }
+        var settings = new IdentityHostSettings(directory, listen, publicUrl, resolvedState.Sources == StateSources.Defaults ? null : resolvedState.Settings, resolvedState.Sources);
         Directory.CreateDirectory(settings.Directory);
         var app = IdentityHost.Build(settings, ConsoleHost.Certificate(settings.Directory), line => context.Error.WriteLine(line));
         await context.Out.WriteLineAsync($"The identity home is on {listen}; its issuer is {settings.Issuer}. The first administrator redeems the invitation in {Path.Combine(settings.Directory, "FIRST-RUN.txt")}; pair a console to administer it: dbdatakit identity pair --max-role admin.");

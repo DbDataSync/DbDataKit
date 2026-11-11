@@ -4,7 +4,10 @@ using System.Text.Json.Serialization;
 using DbDataKit.Hosting;
 using DbDataKit.Hosting.Certificates;
 using DbDataKit.Identity;
+using DbDataKit.Monitoring;
 using DbDataKit.State;
+using DbDataKit.State.Api;
+using DbDataKit.State.Engines;
 using DbDataKit.Web.Auth;
 using DbDataKit.Web.Auth.Controllers;
 using DbDataKit.Web.Trust;
@@ -22,7 +25,8 @@ namespace DbDataKit.Server;
 /// <param name="Listen">The address it listens on; HTTPS (a passkey needs a secure origin).</param>
 /// <param name="PublicUrl">The address every console, app and browser reaches the home at, which is the token issuer: it has to be the same before and after the home moves. Null: the address it listens on, or <c>localhost</c> on the same port where that is every address.</param>
 /// <param name="State">The engine of the state database; null is SQLite in <see cref="Directory"/>.</param>
-public sealed record IdentityHostSettings(string Directory, Uri Listen, Uri? PublicUrl = null, StateSettings? State = null)
+/// <param name="StateSources">Where each state setting came from (the flags, the environment, the <c>state:</c> section of <c>server.yaml</c>, the default), for <c>GET /api/v1/state</c>; null: it is worked out from the directory when asked.</param>
+public sealed record IdentityHostSettings(string Directory, Uri Listen, Uri? PublicUrl = null, StateSettings? State = null, StateSources? StateSources = null)
 {
     public const string Product = "dbdatakit-identity";
     public const string DefaultListen = "https://localhost:8482";
@@ -45,9 +49,22 @@ public sealed record IdentityHostSettings(string Directory, Uri Listen, Uri? Pub
     public static string DefaultDirectory(Func<string, string?>? environment = null) =>
         SuiteEnvironment.ResolveDataFolder(ServiceName, environment, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "dbdatakit", "identity"));
 
-    public static StateSettings? StateFrom(Func<string, string?>? environment, string? engineFlag = null, string? connectionFlag = null)
+    /// <summary>The home's settings file: <c>server.yaml</c> in its directory, whose <c>state:</c> section is the one every product reads (plan 29b C07).</summary>
+    public static string SettingsFileIn(string directory) => Path.Combine(directory, "server.yaml");
+
+    /// <summary>
+    /// The state settings and where each came from (plan 29b C07): the flags, then <see cref="EngineVariable"/> and <see cref="ConnectionVariable"/> (then the install's), then the <c>state:</c> section of <c>server.yaml</c> in
+    /// <paramref name="directory"/>, then SQLite in the directory. The file is read strictly and never created.
+    /// </summary>
+    public static ResolvedState ResolveState(string directory, Func<string, string?>? environment = null, string? engineFlag = null, string? connectionFlag = null) =>
+        StateSettingsResolver.Resolve(SuiteEnvironment.StateInputs(ServiceName, SettingsFileIn(directory), engineFlag, "--state-engine", connectionFlag, "--state-connection", environment));
+
+    /// <summary>The settings <see cref="ResolveState"/> finds; null when nothing names any, which is SQLite in the directory.</summary>
+    public static StateSettings? StateFrom(Func<string, string?>? environment, string? engineFlag = null, string? connectionFlag = null, string? directory = null)
     {
-        return SuiteEnvironment.ResolveState(ServiceName, environment, engineFlag, connectionFlag);
+        if (directory is null) return SuiteEnvironment.ResolveState(ServiceName, environment, engineFlag, connectionFlag);
+        var resolved = ResolveState(directory, environment, engineFlag, connectionFlag);
+        return resolved.Sources == StateSources.Defaults ? null : resolved.Settings;
     }
 }
 
@@ -61,9 +78,12 @@ public static class IdentityHostState
         var path = Path.Combine(directory, "state.db");
         if (settings.IsSqlite) return StateOpener.Open(settings, path, DbDataKit.Identity.IdentityHomeState.Modules, StateScope.Install, appliedBy: "dbdatakit identity");
         // the password of a server engine is a secret reference: the home's store, then the environment
-        var secrets = new DbDataKit.Secrets.SecretResolverChain([ConsoleSecrets.Open(directory, environment), new DbDataKit.Secrets.EnvSecretProvider(environment)]);
-        return StateOpener.Open(settings, path, DbDataKit.Identity.IdentityHomeState.Modules, StateScope.Install, secrets, "dbdatakit identity");
+        return StateOpener.Open(settings, path, DbDataKit.Identity.IdentityHomeState.Modules, StateScope.Install, Secrets(directory, environment), "dbdatakit identity");
     }
+
+    /// <summary>The resolver for the references in a server engine's connection string: the home's secret store, then the environment.</summary>
+    public static DbDataKit.Secrets.ISecretResolver Secrets(string directory, Func<string, string?>? environment = null) =>
+        new DbDataKit.Secrets.SecretResolverChain([ConsoleSecrets.Open(directory, environment), new DbDataKit.Secrets.EnvSecretProvider(environment)]);
 }
 
 /// <summary>Protects the signing keys at rest with the framework's key ring, which the home keeps in its directory.</summary>
@@ -133,6 +153,12 @@ public static class IdentityHost
         app.UseManagementAuthentication(new ConsoleTokenValidator(instanceId, paired, new StateReplayCache(used, "management:" + instanceId)), refused => log($"warn: a management call was refused ({refused.Failure}): {refused.Detail}"), ManagementPrefix);
         app.MapIdentityHome(log);
 
+        // the state endpoints and the maintenance mode (plan 29b C05): a console shows the home's state and puts it into maintenance, which answers every request but the management calls with 503. Under the management prefix, so the token check above covers them;
+        // the home's session policy is for people at the home, so they are marked anonymous as the admin API below is
+        var maintenance = new MaintenanceGate();
+        app.UseMaintenance(maintenance, context => context.ManagementTokenOrNull() is { } token && ManagementAuthorization.Authorize(token, ServerRole.Admin).Allowed);
+        app.MapState(StateApi(settings, instanceId, maintenance)).AllowAnonymous();
+
         var admin = new IdentityAdminApi(app.Services.GetRequiredService<StateDatabase>(), settings.Public.AbsoluteUri);
         app.MapMethods(IdentityAdminApi.Prefix + "/{**rest}", ["GET", "POST", "DELETE"], async (HttpContext context, string? rest) =>
         {
@@ -152,6 +178,17 @@ public static class IdentityHost
             .AllowAnonymous();
         return app;
     }
+
+    /// <summary>The state endpoints over the home's state: the settings it was started with, the audit in a file beside <c>server.yaml</c> (the home's state has no audit module).</summary>
+    private static StateManagement StateApi(IdentityHostSettings settings, string instanceId, IMaintenanceGate gate) => new(new StateManagementOptions(
+        IdentityHostSettings.Product, "dbdatakit identity", "the identity home",
+        () =>
+        {
+            var resolved = IdentityHostSettings.ResolveState(settings.Directory);
+            return new DbDataKit.State.Cli.StateTarget(settings.State ?? resolved.Settings, Path.Combine(settings.Directory, "state.db"), () => IdentityHostState.Secrets(settings.Directory),
+                IdentityHostSettings.SettingsFileIn(settings.Directory), settings.StateSources ?? resolved.Sources);
+        },
+        DbDataKit.Identity.IdentityHomeState.Modules, StateScope.Install, gate, new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), instanceId, ConsoleHost.Version, Move: true));
 
     /// <summary>Where the management calls a paired console makes live: the token check covers this prefix only.</summary>
     public const string ManagementPrefix = "/api/v1/";
