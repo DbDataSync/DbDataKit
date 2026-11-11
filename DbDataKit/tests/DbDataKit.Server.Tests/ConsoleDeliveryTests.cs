@@ -66,7 +66,9 @@ public sealed class ConsoleDeliveryTests : IAsyncLifetime
         Directory.CreateDirectory(Path.Combine(directory, "connections"));
         // a signed webhook (production's), a sandbox of it (another path), and a Slack webhook whose secret is not set
         File.WriteAllText(Path.Combine(directory, "connections", "hook-conn.yml"), $"schema: connection/2\nkind: http\nname: hook-conn\nendpoint: \"http://127.0.0.1:{port}/in/{{token}}\"\nendpoint_secrets: {{ token: env:DDK_TEST_HOOK_TOKEN_{tag} }}\nwebhook: {{ format: signed, allow_private: [127.0.0.1] }}\nsign_in: {{ method: signed_webhook, key_secret: env:DDK_TEST_HOOK_SECRET_{tag} }}\n");
-        File.WriteAllText(Path.Combine(directory, "connections", "hook-sandbox.yml"), $"schema: connection/2\nkind: http\nname: hook-sandbox\nendpoint: \"http://127.0.0.1:{port}/sandbox/{{token}}\"\nendpoint_secrets: {{ token: env:DDK_TEST_HOOK_TOKEN_{tag} }}\nwebhook: {{ format: signed, allow_private: [127.0.0.1] }}\nsign_in: {{ method: signed_webhook, key_secret: env:DDK_TEST_HOOK_SECRET_{tag} }}\n");
+        var tokenFile = Path.Combine(directory, "sandbox-token.txt");
+        File.WriteAllText(tokenFile, $"token-{tag}\n");      // the sandbox's token is a file: reference
+        File.WriteAllText(Path.Combine(directory, "connections", "hook-sandbox.yml"), $"schema: connection/2\nkind: http\nname: hook-sandbox\nendpoint: \"http://127.0.0.1:{port}/sandbox/{{token}}\"\nendpoint_secrets: {{ token: \"file:{tokenFile.Replace('\\', '/')}\" }}\nwebhook: {{ format: signed, allow_private: [127.0.0.1] }}\nsign_in: {{ method: signed_webhook, key_secret: env:DDK_TEST_HOOK_SECRET_{tag} }}\n");
         File.WriteAllText(Path.Combine(directory, "connections", "slack-unfinished.yml"), $"schema: connection/2\nkind: http\nname: slack-unfinished\nendpoint: https://hooks.slack.com/services/{{token}}\nendpoint_secrets: {{ token: env:DDK_TEST_NOT_SET_{tag} }}\nwebhook: {{ format: slack }}\n");
         File.WriteAllText(Path.Combine(directory, "settings.yaml"), """
             # the console's settings: this comment is not part of the delivery section

@@ -49,7 +49,7 @@ public sealed partial class ConsoleConnections
         _http = http;
         _directory = settings.Directory;
         _store = store;
-        _secrets = new SecretResolverChain([store, new EnvSecretProvider()]);
+        _secrets = new SecretResolverChain([store, new EnvSecretProvider(), new FileSecretProvider()]);   // `file:` references work for what a connection names (a webhook's address, a key kept by the system)
     }
 
     public string Folder => Path.Combine(_directory, "connections");

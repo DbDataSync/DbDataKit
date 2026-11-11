@@ -33,7 +33,8 @@ test('an API connection is started from a template, a key written as itself is r
   await page.route('**/api/outside-connections/crm/secrets/key', (route) => { secretBodies.push(route.request().postDataJSON()); stored = true; return json(route, { stored: true, reference: 'secret:dbdata:console:connection:crm:key' }) })
   await page.route('**/api/outside-connections/crm', (route) => {
     const { yaml } = route.request().postDataJSON() as { yaml: string }
-    if (!yaml.includes('secret:')) {
+    // the key must be a reference (`key_secret: secret:...`); a bare `key_secret:` line contains the text `secret:` too, so the test is on what follows it
+    if (!/key_secret:\s*(secret|env|file|keyring|dpapi):/.test(yaml)) {
       return json(route, { saved: false, diagnostics: [{ code: 'DBD-CONN-006', severity: 'error', file: 'connections/crm.yml', line: 8, column: 3, message: '`sign_in.key_secret` is not a secret reference: a key is never written in the file.', fix: 'Use secret:, env:, file:, keyring: or dpapi:.' }] }, 422)
     }
     saved = yaml
