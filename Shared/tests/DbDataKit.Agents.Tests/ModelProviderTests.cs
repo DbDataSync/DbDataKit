@@ -68,7 +68,7 @@ public sealed class ModelProviderTests
     [Fact]
     public void An_address_with_a_key_in_it_and_a_missing_key_for_a_cloud_provider_are_refused()
     {
-        Assert.Contains(ModelProviderConnection.Load(Good.Replace("name: claude\n", "name: claude\nendpoint: https://u:p@api.example.com\n"), "p.yml").Diagnostics, d => d.Message.Contains("no user name"));
+        Assert.Contains(ModelProviderConnection.Load(Good.Replace("name: claude\n", "name: claude\nendpoint: https://u:p@api.example.com\n"), "p.yml").Diagnostics, d => d.Message.Contains("user name or password in it"));
         Assert.Contains(ModelProviderConnection.Load(Good.Replace("sign_in: { method: api_key, key_secret: env:ANTHROPIC_API_KEY }\n", ""), "p.yml").Diagnostics, d => d.Message.Contains("needs `sign_in"));
     }
 

@@ -70,7 +70,7 @@ public sealed class EmailChannelTests : IDisposable
 
     private static IDeliveryChannel ChannelOn(int port, string tls = "starttls", string? trusted = null, string? password = "secret:mail/password", string? username = "robot", Dictionary<string, string>? secrets = null, SecretScrubber? scrubber = null)
     {
-        var yaml = $"schema: connection/2\nkind: smtp\nname: mail-main\nsmtp:\n  host: localhost\n  port: {port}\n  tls: {tls}\n  sender: \"DbData <noreply@example.com>\"\n" + (trusted is not null ? $"  trusted_certificate: \"{trusted}\"\n" : "");
+        var yaml = $"schema: connection/2\nkind: smtp\nname: mail-main\nsmtp:\n  host: localhost\n  port: {port}\n  tls: {tls}\n  sender: \"DbData <noreply@example.com>\"\n" + (trusted is not null ? $"  trusted_certificate: \"{trusted.Replace('\\', '/')}\"\n" : "");
         if (username is not null && password is not null) yaml += $"sign_in: {{ method: basic, user: {username}, password_secret: \"{password}\" }}\n";
         else if (username is not null) yaml += $"sign_in: {{ method: basic, user: {username}, password_secret: \"secret:mail/absent\" }}\n";
         return TestConnections.Single("mail", TestConnections.Load(yaml), new MapResolver(secrets ?? new() { ["secret:mail/password"] = "s3cr3t-pw" }), scrubber);
