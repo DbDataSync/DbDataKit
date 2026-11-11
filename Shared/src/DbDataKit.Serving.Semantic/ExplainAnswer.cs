@@ -23,6 +23,9 @@ internal sealed class ExplainAnswer : IServingAnswer
 
     public Schema Schema { get; }
 
+    /// <summary>The scans, one row each.</summary>
+    public long Rows => _batch.Length;
+
     public ServingProvenance Provenance { get; }
 
     public async IAsyncEnumerable<RecordBatch> ReadBatchesAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)

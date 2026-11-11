@@ -52,6 +52,9 @@ internal sealed class SemanticAnswer : IServingAnswer
 
     public Schema Schema { get; }
 
+    /// <summary>The rows of the result (what a run record counts).</summary>
+    public long RowCount => _batch.Length;
+
     public ServingProvenance Provenance { get; }
 
     public async IAsyncEnumerable<RecordBatch> ReadBatchesAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)

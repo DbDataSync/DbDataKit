@@ -34,6 +34,7 @@ export function ModelBrowserView(p: ModelBrowserViewProps) {
             <h1 className="page-title mono" data-testid="model-name">{view.name}</h1>
             <span className="page-note" data-testid="model-version">{view.published ? `version ${view.version} (published)` : 'set up in server.yaml'} · time zone {view.timezone}. Authored in Build; this page only reads it.</span>
           </div>
+          <div style={{ marginBottom: 10 }}><Link className="btn btn-sm" to={`/models/${encodeURIComponent(view.name)}/explore`} data-testid="model-explore">Explore this model</Link></div>
           <input value={p.search} onChange={(e) => p.onSearch(e.target.value)} placeholder="find a dimension, an attribute or a measure" aria-label="Find" data-testid="model-search" style={{ minWidth: 300, marginBottom: 10 }} />
 
           <h2 className="card-title">Measures</h2>

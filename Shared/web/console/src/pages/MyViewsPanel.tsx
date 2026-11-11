@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ViewsClientError, type ViewKind, type ViewsDoc, type WidgetDoc } from '@dbdatakit/visuals'
 import { personalViewsClient, type ViewsSource } from '../viewsSource'
@@ -339,10 +339,12 @@ export function PinPanel({ document, personal }: { document: ViewsDoc; personal:
  */
 function PinQueryPanel({ source, items, onPinned, keep }: { source: ViewsSource; items: MineItem[]; onPinned: (r: PinResult) => Promise<unknown> | void; keep: string | null }) {
   const client = personalViewsClient(source.id)
-  const [open, setOpen] = useState(false)
-  const [model, setModel] = useState('')
-  const [request, setRequest] = useState('')
-  const [shape, setShape] = useState<QueryShape>('table')
+  // the Gateway's query explorer hands a result over by the address (plan 14a SL16): the panel opens with it filled in
+  const [handed] = useSearchParams()
+  const [open, setOpen] = useState(handed.has('pin_request'))
+  const [model, setModel] = useState(handed.get('pin_model') ?? '')
+  const [request, setRequest] = useState(handed.get('pin_request') ?? '')
+  const [shape, setShape] = useState<QueryShape>((['table', 'chart', 'metric'] as const).find((s) => s === handed.get('pin_shape')) ?? 'table')
   const [title, setTitle] = useState('')
   const own = ownDashboards(items)
   const [target, setTarget] = useState<string | null>(null)

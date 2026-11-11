@@ -1,5 +1,6 @@
 import { put, request } from '@dbdatakit/shell'
 import type { InstanceRequest, NavigationRequest, PublishBody } from './appEditors'
+import type { ReplayResult, RunDetail, RunResult, RunRow, SavedQueryRow, SavedQueryVersionRow } from './runTypes'
 import type {
   AdoptAnswer, SemanticCatalogView, EntityModelDetail, EntityModelRow, SemanticModelDetail, SemanticModelRow, AppApprovals, AppCheck, AppDetail, AppInstances, AppsList, NavigationSetRow, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SecretWritten, SecretsList, ServerSettings, SettingsCheck, SettingsEdit, SettingsWritten, SessionRow, TestResult, WriteDataSourceResult,
 } from './types'
@@ -37,6 +38,33 @@ export const gatewayApi = {
       read: (name: string) => request<EntityModelDetail>(`${v1}/entity-models/${enc(name)}`),
       remove: (name: string) => request<{ name: string; removed?: boolean }>(`${v1}/entity-models/${enc(name)}`, { method: 'DELETE' }),
     },
+  },
+  /** A person's statements on the models (plan 14a SL14, SL15, SL23, SL24): run one as the person (the explorer's call: one function, so the REST listener of SL31 can replace it), the record of what they ran, replay one. */
+  runs: {
+    run: (body: Record<string, unknown>) => request<RunResult>(`${v1}/my/runs`, { method: 'POST', body: JSON.stringify(body) }),
+    list: (opts: { model?: string; all?: boolean; limit?: number } = {}) => {
+      const q = new URLSearchParams()
+      if (opts.model) q.set('model', opts.model)
+      if (opts.all) q.set('all', 'true')
+      if (opts.limit) q.set('limit', String(opts.limit))
+      const text = q.toString()
+      return request<{ runs: RunRow[]; all: boolean; retention_days: number }>(`${v1}/my/runs${text ? `?${text}` : ''}`)
+    },
+    read: (id: number) => request<RunDetail>(`${v1}/my/runs/${id}`),
+    replay: (id: number) => request<ReplayResult>(`${v1}/my/runs/${id}/replay`, { method: 'POST' }),
+    counts: (days = 7) => request<{ days: number; by_code: Record<string, number> }>(`${v1}/my/runs/counts?days=${days}`),
+  },
+  /** A person's own saved queries and what is shared with them (SL17, SL18). The model is in the path because a saved query is a model's. */
+  savedQueries: {
+    list: (model?: string) => request<{ queries: SavedQueryRow[] }>(`${v1}/my/queries${model ? `?model=${enc(model)}` : ''}`).then((r) => r.queries),
+    read: (model: string, name: string, owner?: string) => request<SavedQueryRow>(`${v1}/my/queries/${enc(model)}/${enc(name)}${owner ? `?owner=${enc(owner)}` : ''}`),
+    save: (model: string, name: string, body: { sql?: string; request?: Record<string, unknown>; description?: string | null; parameters?: Record<string, unknown>; expected_version?: number }) =>
+      put<SavedQueryRow>(`${v1}/my/queries/${enc(model)}/${enc(name)}`, body),
+    remove: (model: string, name: string) => request<{ name: string; removed: boolean }>(`${v1}/my/queries/${enc(model)}/${enc(name)}`, { method: 'DELETE' }),
+    history: (model: string, name: string) => request<{ versions: SavedQueryVersionRow[] }>(`${v1}/my/queries/${enc(model)}/${enc(name)}/history`).then((r) => r.versions),
+    restore: (model: string, name: string, version: number) => request<SavedQueryRow>(`${v1}/my/queries/${enc(model)}/${enc(name)}/restore`, { method: 'POST', body: JSON.stringify({ version }) }),
+    shares: (model: string, name: string) => request<{ grantees: string[] }>(`${v1}/my/queries/${enc(model)}/${enc(name)}/shares`).then((r) => r.grantees),
+    setShares: (model: string, name: string, grantees: string[]) => put<{ grantees: string[] }>(`${v1}/my/queries/${enc(model)}/${enc(name)}/shares`, { grantees }),
   },
   identities: {
     get: () => request<Identities>(`${v1}/identities`),

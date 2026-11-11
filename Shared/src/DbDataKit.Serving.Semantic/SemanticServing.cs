@@ -31,7 +31,7 @@ internal sealed class SemanticServices(IServingServices inner, SemanticModels mo
 /// <summary>Runs a semantic request: validate and plan in the engine, send each scan to the host as the caller, combine, answer with an Arrow table.</summary>
 internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog catalog, SemanticModels models) : IServingQueries
 {
-    public Task<IServingAnswer> RunAsync(ServingContext context, ServingRequest request, CancellationToken cancellationToken = default)
+    public async Task<IServingAnswer> RunAsync(ServingContext context, ServingRequest request, CancellationToken cancellationToken = default)
     {
         var (model, text, isSql) = request switch
         {
@@ -40,8 +40,49 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
             ServingRequest.SemanticSql q => (Model(q.Source), q.Text, true),
             _ => (null, "", false),
         };
-        if (model is null) return inner.RunAsync(context, request, cancellationToken);
+        if (model is null) return await inner.RunAsync(context, request, cancellationToken).ConfigureAwait(false);
+        if (models.Runs is not { } runs) return await RunModelAsync(context, request, model, text, isSql, null, cancellationToken).ConfigureAwait(false);
 
+        // a record of every statement on a model (SL23): written when it ends, however it ends; a record that cannot be written never fails the statement
+        var note = new RunNote();
+        var started = DateTimeOffset.UtcNow;
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        void Write(string status, string? code, string? message, IServingAnswer? answer)
+        {
+            if (note.Kind == "describe") return;   // a read of the catalog, not a statement over data
+            try
+            {
+                var meta = answer?.Schema.Metadata;
+                string? Meta(string key) => meta is not null && meta.TryGetValue(SemanticAnswer.MetadataPrefix + key, out var v) ? v : null;
+                runs.Record(new SemanticRun(SemanticCallers.KeyOf(context.Caller), model.Name, model.Version, note.Kind ?? "refused", text, note.Document, Meta("request_hash"), Meta("status") ?? status, code ?? Meta("reason_code"), message,
+                    Meta("warnings"), note.Plan, started, clock.ElapsedMilliseconds, answer is SemanticAnswer sa ? sa.RowCount : answer is ExplainAnswer ea ? ea.Rows : 0));
+            }
+            catch (Exception e) when (e is not OperationCanceledException) { /* the statement's own outcome stands */ }
+        }
+        try
+        {
+            var answer = await RunModelAsync(context, request, model, text, isSql, note, cancellationToken).ConfigureAwait(false);
+            Write("complete", null, null, answer);
+            return answer;
+        }
+        catch (OperationCanceledException) { Write("cancelled", null, null, null); throw; }
+        catch (ServingLimitException e) { Write("limit", e.Limit, e.Message, null); throw; }
+        catch (ServingInvalidException e) { Write("refused", CodeOf(e.Message), e.Message, null); throw; }
+        catch (ServingException e) { Write("failed", null, e.Message, null); throw; }
+    }
+
+    /// <summary>What the statement turned into on its way, for its record.</summary>
+    private sealed class RunNote
+    {
+        public string? Kind { get; set; }
+        public JsonObject? Document { get; set; }
+        public string? Plan { get; set; }
+    }
+
+    private static string? CodeOf(string message) => SemanticRest.CodeOf(message);
+
+    private Task<IServingAnswer> RunModelAsync(ServingContext context, ServingRequest request, SemanticModel model, string text, bool isSql, RunNote? note, CancellationToken cancellationToken)
+    {
         var explaining = false;
         if (isSql && text.TrimStart().StartsWith("EXPLAIN ", StringComparison.OrdinalIgnoreCase)) { explaining = true; text = text.TrimStart()[8..]; }
         var document = isSql ? TranslateOrCall(text, model, BoundParameters(request, text), UserFinder(context, model)) : Parse(text);
@@ -51,6 +92,11 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
             explaining = true;
             document = new JsonObject { ["kind"] = "query", ["query"] = explained.DeepClone() };
             foreach (var (key, value) in (JsonObject)Parse(text)) if (key is not ("kind" or "query")) document[key] = value?.DeepClone();
+        }
+        if (note is not null)
+        {
+            note.Kind = explaining ? "explain" : document["kind"]?.GetValue<string>();
+            note.Document = document.DeepClone() as JsonObject;
         }
         if (document["kind"]?.GetValue<string>() == "members") return MembersAsync(context, model, document, text, cancellationToken);
         if (document["kind"]?.GetValue<string>() == "describe") return DescribeAsync(context, model, text, cancellationToken);
@@ -64,6 +110,7 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
             var engine = new QisEngine(model.Catalog, new ServingSourceExecutor(inner, catalog, context, model, models, cancellationToken, scans), new Validator(model.Catalog), models.Level, rowCap: 1);
             var result = engine.Run(document);
             if (result.Status == "failed") throw new ServingInvalidException(Describe(result));
+            if (note is not null) note.Plan = string.Join("\n", scans.Select(x => $"{x.Source} ({x.Engine}): {x.Text}"));
             return new ExplainAnswer(scans, provenance);
         }, cancellationToken);
 

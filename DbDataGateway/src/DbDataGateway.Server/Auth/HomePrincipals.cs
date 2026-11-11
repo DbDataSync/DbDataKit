@@ -17,7 +17,7 @@ public static class HomePrincipals
     {
         var groups = callers.GroupsOf(user.Id);
         var sources = options.DataSources.Where(d => DataSourceAccess.HomeMayUse(d.Value, groups)).Select(d => d.Key);
-        return new GatewayPrincipal(user.DisplayName, method, sources, defaultDataSource: null, credentials: null, homeUserId: user.Id, homeGroups: groups);
+        return new GatewayPrincipal(user.DisplayName, method, sources, defaultDataSource: null, credentials: null, homeUserId: user.Id, homeGroups: groups, email: user.Email);
     }
 }
 

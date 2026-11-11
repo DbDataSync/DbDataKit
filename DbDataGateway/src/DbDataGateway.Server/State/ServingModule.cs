@@ -114,6 +114,10 @@ public static class ServingModule
             );
             CREATE INDEX {index:app_session_by_expiry} ON {table:app_session}(expires_at);
             """,
+            // plan 14a D35: a saved query's owner is the person's email or UPN (lower case); the display name as of the last save is kept beside it for the lists
+            """
+            ALTER TABLE {table:saved_query} {{addcolumn}} owner_name {{text}} NULL;
+            """,
         ],
         // the third to seventh migrations only add nullable columns or a table, which the code of the version before never reads or writes: an instance of the previous version still works with them
         compatibleWithPrevious: 1);
