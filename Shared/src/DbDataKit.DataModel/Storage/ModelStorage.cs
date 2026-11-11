@@ -29,6 +29,18 @@ public sealed record ExpandPlan(string Schema, IReadOnlyList<StorageStatement> S
     public bool UpToDate => Statements.Count == 0 && Blocked.Count == 0;
 }
 
+/// <summary>One step of the contract of an instance's tables: <paramref name="Description"/> (<c>drop column territory.note</c>, <c>make territory.region required</c>), the text to run, and for a column that becomes required the count of rows that have no value (<paramref name="NullCheck"/>), which must be zero.</summary>
+public sealed record ContractStep(string Object, string Description, string Text, string? NullCheck = null);
+
+/// <summary>
+/// What the contract step of expand-then-contract does to an instance's tables (plan 26 Z13b; plan 21 decision 4): the columns the model no longer has are dropped, the columns it requires and the table keeps nullable are made required.
+/// <see cref="Hash"/> names this exact plan: applying needs the hash of a plan that was read (a planned and approved change), and a plan that changed since is refused. What is not here is in <see cref="Blocked"/> and <see cref="Notes"/>.
+/// </summary>
+public sealed record ContractPlan(string Schema, IReadOnlyList<ContractStep> Steps, IReadOnlyList<string> Blocked, IReadOnlyList<string> Notes, string Hash)
+{
+    public bool Nothing => Steps.Count == 0 && Blocked.Count == 0;
+}
+
 /// <summary>The model cannot be stored on the engine, or something of it is already there; the message says which.</summary>
 public sealed class StorageException(string message) : Exception(message);
 
@@ -256,6 +268,80 @@ public static class ModelStorage
         foreach (var table in liveTables.Keys.Where(t => !full.TableColumns!.ContainsKey(t)).Order(StringComparer.Ordinal))
             notes.Add($"`{table}` is in the schema and not in the model; it is left in place.");
         return new ExpandPlan(schema, statements, blocked, notes);
+    }
+
+    /// <summary>
+    /// The contract step for the tables of a schema (plan 26 Z13b): what <see cref="PlanExpand"/> leaves alone and a person may choose to do once nothing reads it any more. A column the table has and the model does not is dropped; a column the model
+    /// requires and the table keeps nullable (an expand adds it that way) is made required, if no row lacks a value. The columns that keep rows as history or per instance (<c>_instance</c>, <c>_valid_from</c>, ...) and a table the model does not have are never touched:
+    /// that is a change of how rows are kept, a planned change of its own and not built. Column types are not compared (a retype is not here either).
+    /// </summary>
+    public static ContractPlan PlanContract(DataModel model, string engine, string? schema, IReadOnlyList<LiveColumn> live)
+    {
+        schema ??= model.Name;
+        var full = Plan(model, engine, schema);
+        var ddl = DdlFor(engine);
+        var steps = new List<ContractStep>();
+        var blocked = new List<string>();
+        var notes = new List<string>();
+        var liveTables = live.GroupBy(c => c.Table, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.ToDictionary(c => c.Column, c => c.Nullable, StringComparer.Ordinal), StringComparer.Ordinal);
+        if (liveTables.Count == 0) return new ContractPlan(schema, [], [$"Nothing of the model is in schema `{schema}`: there is nothing to contract."], [], Hash(schema, []));
+        var structural = new HashSet<string>(StringComparer.Ordinal) { InstanceColumn, VersionColumn, ValidFromColumn, ValidToColumn };
+        foreach (var (table, columns) in full.TableColumns!.OrderBy(t => t.Key, StringComparer.Ordinal))
+        {
+            if (!liveTables.TryGetValue(table, out var have)) continue;
+            var wanted = columns.ToDictionary(c => c.Name, StringComparer.Ordinal);
+            foreach (var extra in have.Keys.Where(c => !wanted.ContainsKey(c)).Order(StringComparer.Ordinal))
+            {
+                if (structural.Contains(extra)) { blocked.Add($"`{table}.{extra}` is how the table keeps its rows (history or instances) and the model does not use it now. That changes the keys of a table that holds rows: a planned change of its own, not a contract step."); continue; }
+                steps.Add(new($"{schema}.{table}", $"drop column {table}.{extra}", ddl.DropColumn(schema, table, extra)));
+            }
+            foreach (var column in columns.Where(c => !c.Nullable && have.TryGetValue(c.Name, out var nullable) && nullable && !structural.Contains(c.Name)))
+                steps.Add(new($"{schema}.{table}", $"make {table}.{column.Name} required", ddl.AlterColumn(schema, table, column),
+                    $"SELECT COUNT(*) FROM {ddl.Qualified(schema, table)} WHERE {ddl.Quote(column.Name)} IS NULL"));
+        }
+        foreach (var table in liveTables.Keys.Where(t => !full.TableColumns!.ContainsKey(t)).Order(StringComparer.Ordinal))
+            notes.Add($"`{table}` is in the schema and not in the model; it is left in place.");
+        return new ContractPlan(schema, steps, blocked, notes, Hash(schema, steps));
+    }
+
+    private static string Hash(string schema, IReadOnlyList<ContractStep> steps) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(schema + "\n" + string.Join("\n", steps.Select(s => s.Text))))).ToLowerInvariant();
+
+    /// <summary>
+    /// Runs a contract plan in one transaction, for the person who approved it: <paramref name="approvedHash"/> is the <see cref="ContractPlan.Hash"/> of the plan they read, and a plan that is not that one is refused, so what runs is what was reviewed. A column that
+    /// becomes required is checked inside the transaction and the whole plan is refused, naming the column and how many rows have no value, if any row lacks one. A plan with blocked items runs nothing.
+    /// </summary>
+    public static async Task ApplyContractAsync(DbConnection connection, ContractPlan plan, string approvedHash, CancellationToken cancellationToken = default)
+    {
+        if (plan.Blocked.Count > 0) throw new StorageException(string.Join(" ", plan.Blocked));
+        if (!string.Equals(plan.Hash, approvedHash, StringComparison.OrdinalIgnoreCase))
+            throw new StorageException($"The plan to apply is {plan.Hash[..12]}... and the approval is for {(approvedHash.Length > 12 ? approvedHash[..12] + "..." : approvedHash)}: the tables or the model changed since the plan was read. Read it again and approve that one.");
+        if (plan.Steps.Count == 0) return;
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            foreach (var step in plan.Steps)
+            {
+                if (step.NullCheck is not null)
+                {
+                    await using var count = connection.CreateCommand();
+                    count.Transaction = transaction;
+                    count.CommandText = step.NullCheck;
+                    var missing = Convert.ToInt64(await count.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false));
+                    if (missing > 0) throw new StorageException($"{step.Description}: {missing} row{(missing == 1 ? " has" : "s have")} no value for it. Give them one first; nothing was changed.");
+                }
+                await using var command = connection.CreateCommand();
+                command.Transaction = transaction;
+                command.CommandText = step.Text;
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
     }
 
     /// <summary>Runs an expand plan in one transaction. Refuses a plan with blocked items, writing nothing.</summary>
