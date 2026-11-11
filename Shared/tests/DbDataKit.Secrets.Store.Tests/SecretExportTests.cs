@@ -51,7 +51,7 @@ public class SecretExportTests
         Assert.Contains("format: dbdata-secrets-export", text);
         Assert.Contains("kdf: pbkdf2-sha256", text);
         Assert.Contains("iterations: 600000", text);
-        Assert.Contains("dbdata:sync:connection:one", text);
+        Assert.Contains("dbdatakit:sync:connection:one", text);
         Assert.DoesNotContain((await source.ListInfoAsync())[0].KeyId, text);       // the store's key id is not there
     }
 
@@ -119,7 +119,7 @@ public class SecretExportTests
         using var t = new TempDir();
         var source = await Store(t, "a", (N("one"), "1"), (N("p", "proxy"), "2"));
         var path = System.IO.Path.Combine(t.Path, "x.yaml");
-        Assert.Equal(1, await source.ExportAsync(path, SecretValue.From(Passphrase), prefix: "dbdata:proxy:"));
+        Assert.Equal(1, await source.ExportAsync(path, SecretValue.From(Passphrase), prefix: "dbdatakit:gateway:"));
         var target = await Store(t, "b");
         await target.ImportAsync(path, SecretValue.From(Passphrase));
         Assert.Equal([N("p", "proxy").ToString()], (await target.ListInfoAsync()).Select(i => i.Name.ToString()).ToArray());

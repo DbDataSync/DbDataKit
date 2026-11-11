@@ -49,7 +49,7 @@ test.describe.serial('connection screen: read and run logins (plan 28c E20)', ()
     await expect(page.getByTestId('connection-run-user-input')).toHaveValue('sa')
     // never sent back: blank, with the placeholder saying the stored one is kept
     await expect(page.getByTestId('connection-run-password-input')).toHaveValue('')
-    await expect(page.getByTestId('connection-run-secret-ref')).toHaveValue(`dbdata:sync:connection:${NAME}:run`)
+    await expect(page.getByTestId('connection-run-secret-ref')).toHaveValue(`dbdatakit:sync:connection:${NAME}:run`)
     await expect(page.getByTestId('credential-run-env-var')).toHaveValue(/_RUN$/)
 
     await page.getByTestId('test-connection-button').click()

@@ -17,8 +17,8 @@ public sealed record CopyPlan(string? Text, string? Problem, IReadOnlyList<strin
 /// <item><c>name</c> is the new name (the file name on the target is the name).</item>
 /// <item><c>managed_by</c> is dropped: it names a client of the source's server, which means nothing on the target (the person who copies is its administrator).</item>
 /// <item><c>extensions.&lt;product&gt;</c> of another product is dropped, since the target does not read it; the target's own (a copy between two Sync servers, or two Gateways) is kept.</item>
-/// <item>A password is a reference, never a value, and is not copied. Sync keeps a connection's password under <c>secret:dbdata:sync:connection:&lt;name&gt;</c> only, so a copy to Sync names that for the new name (and a Gateway's copy of a Sync connection names
-/// <c>secret:dbdata:gateway:connection:&lt;name&gt;</c>, not Sync's store); every other reference is kept as written. The copy says which references the target must hold.</item>
+/// <item>A password is a reference, never a value, and is not copied. Sync keeps a connection's password under <c>secret:dbdatakit:sync:connection:&lt;name&gt;</c> only, so a copy to Sync names that for the new name (and a Gateway's copy of a Sync connection names
+/// <c>secret:dbdatakit:gateway:connection:&lt;name&gt;</c>, not Sync's store); every other reference is kept as written. The copy says which references the target must hold.</item>
 /// </list>
 /// The text is edited in place (<see cref="YamlEditor"/>), so the source's comments, key order and quoting stay.
 /// </summary>
@@ -97,8 +97,8 @@ public static partial class ConnectionCopy
             if (login.PasswordSecret is { } reference)
             {
                 var named = reference;
-                if (targetProduct == Sync && path == "auth") named = $"secret:dbdata:sync:connection:{newName}";
-                else if (targetProduct == Gateway && reference.StartsWith("secret:dbdata:sync:", StringComparison.OrdinalIgnoreCase)) named = $"secret:dbdata:gateway:connection:{newName}";
+                if (targetProduct == Sync && path == "auth") named = $"secret:dbdatakit:sync:connection:{newName}";
+                else if (targetProduct == Gateway && reference.StartsWith("secret:dbdatakit:sync:", StringComparison.OrdinalIgnoreCase)) named = $"secret:dbdatakit:gateway:connection:{newName}";
                 if (named != reference && problem is null) problem = Edit(t => YamlEditor.Set(t, path + ".password_secret", named));
                 secrets.Add(named);
             }

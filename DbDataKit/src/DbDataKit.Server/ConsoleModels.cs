@@ -161,7 +161,7 @@ public sealed class ConsoleModels : IAgentModels
         }
         var agentView = agentSlots.GroupBy(a => a.Slot, StringComparer.Ordinal).OrderBy(g => g.Key, StringComparer.Ordinal)
             .Select(g => new AgentSlotView(g.Key, [.. g.Select(a => a.Agent).Distinct().Order(StringComparer.Ordinal)], For(g.Key, null) is not null)).ToList();
-        return new ModelsView(providers, slotsYaml, slotDiagnostics, views, agentView, "secret:dbdata:console:connection:<name>:key");
+        return new ModelsView(providers, slotsYaml, slotDiagnostics, views, agentView, "secret:dbdatakit:server:connection:<name>:key");
     }
 
     private (bool Ok, string? Problem) KeyState(ModelProviderDefinition provider)

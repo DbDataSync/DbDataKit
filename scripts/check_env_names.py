@@ -11,7 +11,7 @@ old names, except:
 The variables of tests, harnesses and CI are `DBDATAKIT_TEST_<NAME>` since plan 33 SC31b (the table is `docs/testing-environment.md`), so no
 product-prefixed name is allowed anywhere else.
 
-A name is the run of letters, digits and underscores that starts at a product prefix and is not the end of a longer word, so `DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_ORDERS`
+A name is the run of letters, digits and underscores that starts at a product prefix and is not the end of a longer word, so `DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_ORDERS`
 (a secret's name inside a variable's) is not found. Binary files are skipped. Tracked files come from `git ls-files`; a folder that is not a
 repository is walked.
 Run from anywhere: python3 -I scripts/check_env_names.py [root]

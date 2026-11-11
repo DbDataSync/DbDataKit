@@ -218,10 +218,10 @@ public sealed partial class ManagementTests
     [Fact]
     public void Secrets_are_masked_in_keyed_values_and_in_connection_strings_but_a_reference_to_one_is_not()
     {
-        var text = "tls: { mode: selfSigned, certificatePassword: hunter2 }\nidentity:\n  entra: { clientSecret: 'secret:dbdata:gateway:x:entra' }\nstate:\n  connection: 'Server=s;User Id=u;Password=p4ss;Encrypt=True'\nother: { apiKey: \"k-123\" }\n";
+        var text = "tls: { mode: selfSigned, certificatePassword: hunter2 }\nidentity:\n  entra: { clientSecret: 'secret:dbdatakit:gateway:x:entra' }\nstate:\n  connection: 'Server=s;User Id=u;Password=p4ss;Encrypt=True'\nother: { apiKey: \"k-123\" }\n";
         var masked = GatewayServerSettings.MaskSecrets(text);
         Assert.Contains("certificatePassword: '********'", masked);
-        Assert.Contains("'secret:dbdata:gateway:x:entra'", masked);
+        Assert.Contains("'secret:dbdatakit:gateway:x:entra'", masked);
         Assert.Contains("Password=********;Encrypt=True", masked);
         Assert.Contains("apiKey: '********'", masked);
         Assert.DoesNotContain("hunter2", masked);

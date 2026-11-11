@@ -22,7 +22,7 @@ public static class StoreAdminCommand
             DataSchemas.Object([("model", DataSchemas.String), ("proxy", DataSchemas.String)], "model", "proxy")),
     ]);
 
-    public static Noun Proxy() => new("proxy", "The serving groups this server publishes its models to",
+    public static Noun Proxy() => new("gateway", "The serving groups this server publishes its models to",
     [
         new Verb("add", "Pair this server with a serving group (a Proxy) as a publishing client, with a code its administrator made (dbdatagateway server pair --max-role publisher)", EffectClass.RepoFilesOnly,
             $"<name> --url <https address> --code <pairing code> {Where}", AddProxyAsync,

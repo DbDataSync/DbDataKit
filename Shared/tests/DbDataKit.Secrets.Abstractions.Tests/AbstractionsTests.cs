@@ -5,7 +5,7 @@ namespace DbDataKit.Secrets.Tests;
 public class SecretRefTests
 {
     [Theory]
-    [InlineData("secret:dbdata:build:connection:wh:write", SecretRefKind.Secret, "dbdata:build:connection:wh:write")]
+    [InlineData("secret:dbdatakit:build:connection:wh:write", SecretRefKind.Secret, "dbdatakit:build:connection:wh:write")]
     [InlineData("env:MY_VAR", SecretRefKind.Env, "MY_VAR")]
     [InlineData("file:/run/secrets/x", SecretRefKind.File, "/run/secrets/x")]
     [InlineData("file:C:\\s\\x.txt", SecretRefKind.File, "C:\\s\\x.txt")]
@@ -44,21 +44,21 @@ public class SecretNameTests
     [Fact]
     public void RoundTrips_WithAndWithoutPart()
     {
-        var n = SecretName.Parse("dbdata:build:connection:Warehouse:write");
+        var n = SecretName.Parse("dbdatakit:build:connection:Warehouse:write");
         Assert.Equal("build", n.Product);
         Assert.Equal("warehouse", n.Name);
         Assert.Equal("write", n.Part);
-        Assert.Equal("dbdata:build:connection:warehouse:write", n.ToString());
-        Assert.Equal("dbdata:sync:connection:erp", SecretName.Parse("dbdata:sync:connection:erp").ToString());
+        Assert.Equal("dbdatakit:build:connection:warehouse:write", n.ToString());
+        Assert.Equal("dbdatakit:sync:connection:erp", SecretName.Parse("dbdatakit:sync:connection:erp").ToString());
         Assert.Equal(SecretRefKind.Secret, n.ToRef().Kind);
     }
 
     [Theory]
     [InlineData("dbdatasync:connection:erp")]
-    [InlineData("dbdata:a:b")]
-    [InlineData("dbdata:a:b:c:d:e")]
-    [InlineData("dbdata:a:b:c d")]
-    [InlineData("dbdata:a::c")]
+    [InlineData("dbdatakit:a:b")]
+    [InlineData("dbdatakit:a:b:c:d:e")]
+    [InlineData("dbdatakit:a:b:c d")]
+    [InlineData("dbdatakit:a::c")]
     [InlineData("x:a:b:c")]
     public void RejectsMalformed(string text) => Assert.False(SecretName.TryParse(text, out _));
 }
@@ -161,7 +161,7 @@ public class CredentialKeyDetectorTests
             ["DbPassword"] = "plain",
             ["ApiKey"] = "k",
             ["ProxyToken"] = "t",
-            ["PasswordSecret"] = "secret:dbdata:sync:connection:erp",
+            ["PasswordSecret"] = "secret:dbdatakit:sync:connection:erp",
             ["PasswordRef"] = "x",
             ["Timeout"] = "30",
             ["Empty"] = "",

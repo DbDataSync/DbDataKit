@@ -57,13 +57,13 @@ public sealed class RenamedFromTests : IDisposable
     {
         Write("config/server.yaml", "schemaVersion: 2\n");
         Write("config/proxy/auth.yaml", "x: 1\n");
-        Write("config/connections/erp.yaml", "schema: connection/1\nconnection_string_secret: 'secret:dbdata:proxy:datasource:erp'\nextensions:\n  proxy:\n    access: readonly\n");
+        Write("config/connections/erp.yaml", "schema: connection/1\nconnection_string_secret: 'secret:dbdatakit:gateway:datasource:erp'\nextensions:\n  proxy:\n    access: readonly\n");
         var all = string.Join("\n", Problems());
         Assert.Contains(Path.Combine(Data, "config", "proxy"), all);
         Assert.Contains(Path.Combine(Data, "config", "gateway"), all);
         Assert.Contains("erp.yaml", all);
-        Assert.Contains("dbdata:proxy:", all);
-        Assert.Contains("dbdata:gateway:", all);
+        Assert.Contains("dbdatakit:gateway:", all);
+        Assert.Contains("dbdatakit:gateway:", all);
         Assert.Contains("extensions: proxy:", all);
         Assert.Contains("extensions: gateway:", all);
     }
@@ -72,10 +72,10 @@ public sealed class RenamedFromTests : IDisposable
     public void Secrets_stored_under_the_old_names_are_refused()
     {
         Write("config/server.yaml", "schemaVersion: 2\n");
-        Write("secrets/secrets.yaml", "secrets:\n  dbdata:proxy:datasource:erp:password: abc\n");
+        Write("secrets/secrets.yaml", "secrets:\n  dbdatakit:gateway:datasource:erp:password: abc\n");
         var problem = Assert.Single(Problems());
         Assert.Contains("secrets.yaml", problem);
-        Assert.Contains("dbdata:gateway:", problem);
+        Assert.Contains("dbdatakit:gateway:", problem);
     }
 
     [Fact]

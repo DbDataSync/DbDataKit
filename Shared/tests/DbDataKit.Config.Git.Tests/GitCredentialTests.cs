@@ -14,7 +14,7 @@ public sealed class GitCredentialTests : IDisposable
     private readonly AuthenticatedGitServer _server = new("oauth2", Token);
     private readonly string _root = Directory.CreateTempSubdirectory("dbdata-git-cred-").FullName;
     private readonly GitAuthor _ada = new("Ada", "ada@example.com");
-    private readonly GitCredential _good = new("oauth2", Token, "dbdata:build:git:sales");
+    private readonly GitCredential _good = new("oauth2", Token, "dbdatakit:build:git:sales");
     private string Draft => Path.Combine(_root, "draft");
     private string _remoteUrl = "";
 
@@ -73,7 +73,7 @@ public sealed class GitCredentialTests : IDisposable
 
         var ex = Assert.Throws<GitOperationException>(() => GitWorkspaceOperations.Push(Draft, "ws/ada-draft", wrong));
 
-        Assert.Contains("dbdata:build:git:sales", ex.Message);
+        Assert.Contains("dbdatakit:build:git:sales", ex.Message);
         Assert.Contains("refused", ex.Message);
         Assert.DoesNotContain("not-the-token-1234567", ex.ToString());
         Assert.False(RemoteHasBranch());
@@ -107,7 +107,7 @@ public sealed class GitCredentialTests : IDisposable
 
         Assert.True(result.Cloned);
         Assert.False(again.Cloned);
-        Assert.Contains("dbdata:build:git:sales", wrong.Message);
+        Assert.Contains("dbdatakit:build:git:sales", wrong.Message);
         Assert.DoesNotContain("nope-nope-nope", wrong.ToString());
         Assert.Empty(FilesContaining(work, Token));
     }
@@ -119,7 +119,7 @@ public sealed class GitCredentialTests : IDisposable
     [InlineData("a:b:c", "a", "b:c")]
     public void A_secrets_value_is_a_token_or_user_and_token(string value, string user, string token)
     {
-        var credential = GitCredential.Parse(value, "dbdata:build:git:x");
+        var credential = GitCredential.Parse(value, "dbdatakit:build:git:x");
 
         Assert.Equal((user, token), (credential.Username, credential.Token));
         Assert.DoesNotContain(token, credential.ToString());
@@ -128,6 +128,6 @@ public sealed class GitCredentialTests : IDisposable
     [Fact]
     public void An_empty_secret_is_refused_by_name()
     {
-        Assert.Contains("dbdata:build:git:x", Assert.Throws<FormatException>(() => GitCredential.Parse("  ", "dbdata:build:git:x")).Message);
+        Assert.Contains("dbdatakit:build:git:x", Assert.Throws<FormatException>(() => GitCredential.Parse("  ", "dbdatakit:build:git:x")).Message);
     }
 }

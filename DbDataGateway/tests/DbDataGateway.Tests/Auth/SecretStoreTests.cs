@@ -16,7 +16,7 @@ namespace DbDataGateway.Tests.Auth;
 /// <summary>The shared encrypted secret store as Gateway uses it (plan 13, V06): <c>secret:</c> references, the <c>secret</c> command, the key from outside.</summary>
 public sealed class SecretStoreTests : IDisposable
 {
-    private const string Reference = "dbdata:gateway:datasource:erp:password";
+    private const string Reference = "dbdatakit:gateway:datasource:erp:password";
     private readonly string _dir = Directory.CreateTempSubdirectory("dbgateway-store-").FullName;
 
     public void Dispose()
@@ -136,15 +136,15 @@ public sealed class SecretStoreTests : IDisposable
     {
         var options = Options();
         options.DataSources["erp"] = new DataSourceOptions { Provider = "sqlserver", ConnectionString = $"Server=db;User Id=u;Password=secret:{Reference}" };
-        options.Tls.CertificatePassword = "secret:dbdata:gateway:tls:pfx";
+        options.Tls.CertificatePassword = "secret:dbdatakit:gateway:tls:pfx";
 
         var (missing, console) = await Secret(options, "", "check");
         Assert.Equal(1, missing);
         Assert.Contains($"not found: secret:{Reference}", console.All);
-        Assert.Contains("not found: secret:dbdata:gateway:tls:pfx", console.All);
+        Assert.Contains("not found: secret:dbdatakit:gateway:tls:pfx", console.All);
 
         await Secret(options, "pw-1\n", "set", Reference);
-        await Secret(options, "pw-2\n", "set", "dbdata:gateway:tls:pfx");
+        await Secret(options, "pw-2\n", "set", "dbdatakit:gateway:tls:pfx");
         var (ok, again) = await Secret(options, "", "check");
         Assert.True(ok == 0, again.All);
         Assert.DoesNotContain("pw-", again.All);

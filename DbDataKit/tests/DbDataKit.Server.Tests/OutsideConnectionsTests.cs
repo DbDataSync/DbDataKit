@@ -18,7 +18,7 @@ public sealed class OutsideConnectionsTests : IAsyncLifetime
 {
     private const string Canary = "canary-secret-7f3a91c2-do-not-log";
 
-    private const string Crm = "schema: connection/2\nkind: http\nname: crm\nendpoint: https://api.example.com/v1\nsign_in:\n  method: api_key\n  name: X-Api-Key\n  key_secret: secret:dbdata:console:connection:crm:key\n";
+    private const string Crm = "schema: connection/2\nkind: http\nname: crm\nendpoint: https://api.example.com/v1\nsign_in:\n  method: api_key\n  name: X-Api-Key\n  key_secret: secret:dbdatakit:server:connection:crm:key\n";
 
     private readonly string directory = Path.Combine(Path.GetTempPath(), "ddk-console-conns-" + Guid.NewGuid().ToString("N")[..8]);
     private readonly List<string> bodies = [];
@@ -64,7 +64,7 @@ public sealed class OutsideConnectionsTests : IAsyncLifetime
         Assert.Empty((await Call(HttpMethod.Get, "/api/outside-connections", admin)).Body!["connections"]!.AsArray());
 
         // a key written as itself is refused and the refusal does not repeat it
-        var (refused, bad) = await Call(HttpMethod.Put, "/api/outside-connections/crm", admin, new YamlBody(Crm.Replace("secret:dbdata:console:connection:crm:key", Canary)));
+        var (refused, bad) = await Call(HttpMethod.Put, "/api/outside-connections/crm", admin, new YamlBody(Crm.Replace("secret:dbdatakit:server:connection:crm:key", Canary)));
         Assert.Equal(HttpStatusCode.UnprocessableEntity, refused);
         Assert.Contains("secret reference", (string)bad!["diagnostics"]![0]!["message"]!);
         Assert.DoesNotContain(Canary, bad.ToJsonString());
@@ -86,7 +86,7 @@ public sealed class OutsideConnectionsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.BadRequest, (await Call(HttpMethod.Put, "/api/outside-connections/crm/secrets/9bad", admin, new SecretBody(Canary))).Status);
         var (stored, answer) = await Call(HttpMethod.Put, "/api/outside-connections/crm/secrets/key", admin, new SecretBody(Canary));
         Assert.Equal(HttpStatusCode.OK, stored);
-        Assert.Equal("secret:dbdata:console:connection:crm:key", (string)answer!["reference"]!);
+        Assert.Equal("secret:dbdatakit:server:connection:crm:key", (string)answer!["reference"]!);
         var (_, after) = await Call(HttpMethod.Get, "/api/outside-connections", admin);
         Assert.True((bool)after!["connections"]![0]!["secrets"]![0]!["available"]!);
         Assert.Equal(Crm, File.ReadAllText(Path.Combine(directory, "connections", "crm.yml")));
@@ -168,7 +168,7 @@ public sealed class OutsideConnectionsTests : IAsyncLifetime
         // the key is not set: nothing was sent, and the answer names the reference
         var (_, unset) = await Call(HttpMethod.Post, "/api/outside-connections/crm/test", admin);
         Assert.False((bool)unset!["ok"]!);
-        Assert.Contains("secret:dbdata:console:connection:crm:key", (string)unset["message"]!);
+        Assert.Contains("secret:dbdatakit:server:connection:crm:key", (string)unset["message"]!);
         Assert.Equal("not checked", (string)unset["signIn"]!);
 
         // a wrong key: the system answers and refuses it

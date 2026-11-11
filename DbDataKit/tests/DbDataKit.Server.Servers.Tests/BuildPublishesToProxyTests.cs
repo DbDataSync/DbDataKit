@@ -63,9 +63,9 @@ public sealed class BuildPublishesToProxyTests : IAsyncLifetime
         // an ODBC and a DuckDB connection too (read only, as those drivers are): every engine the Gateway serves can be published
         File.WriteAllText(Path.Combine(project, "connections", "lake.yaml"), "schema: connection/1\nname: lake\nengine: odbc\naccess: readonly\n");
         File.WriteAllText(Path.Combine(project, "connections", "local.yaml"), "schema: connection/1\nname: local\nengine: duckdb\naccess: readonly\n");
-        await RealProcess.RunWithInputAsync(build, "Driver={ODBC Driver 18 for SQL Server};Server=db.example;UID=reader;PWD=ODBC-pw-77aa\n", "secret", "set", "dbdata:build:connection:lake:read", "--stdin", "--repo", buildDirectory);
-        await RealProcess.RunWithInputAsync(build, "Data Source=/data/local.duckdb\n", "secret", "set", "dbdata:build:connection:local:read", "--stdin", "--repo", buildDirectory);
-        await RealProcess.RunWithInputAsync(build, ReadLogin + "\n", "secret", "set", "dbdata:build:connection:sqlserver:read", "--stdin", "--repo", buildDirectory);
+        await RealProcess.RunWithInputAsync(build, "Driver={ODBC Driver 18 for SQL Server};Server=db.example;UID=reader;PWD=ODBC-pw-77aa\n", "secret", "set", "dbdatakit:build:connection:lake:read", "--stdin", "--repo", buildDirectory);
+        await RealProcess.RunWithInputAsync(build, "Data Source=/data/local.duckdb\n", "secret", "set", "dbdatakit:build:connection:local:read", "--stdin", "--repo", buildDirectory);
+        await RealProcess.RunWithInputAsync(build, ReadLogin + "\n", "secret", "set", "dbdatakit:build:connection:sqlserver:read", "--stdin", "--repo", buildDirectory);
         var buildCode = Programs.CodeIn(await RealProcess.RunAsync(build, "server", "pair", "--repo", buildDirectory, "--max-role", "viewer,author,operator,approver,admin"));
         var buildPort = Programs.FreePort();
         buildUrl = new Uri($"https://127.0.0.1:{buildPort}");
@@ -133,7 +133,7 @@ public sealed class BuildPublishesToProxyTests : IAsyncLifetime
         var file = File.ReadAllText(GatewayConfig("warehouse"));
         Assert.Contains($"managed_by: {buildClientId}", file);
         Assert.Contains("engine: sqlserver", file);
-        Assert.Contains($"secret:dbdata:gateway:managed-{buildClientId}:warehouse-read", file);
+        Assert.Contains($"secret:dbdatakit:gateway:managed-{buildClientId}:warehouse-read", file);
         Assert.DoesNotContain("READ-pw-4c1e", file);
         foreach (var other in Directory.EnumerateFiles(gatewayDirectory, "*", SearchOption.AllDirectories).Where(f => !f.Contains(Path.DirectorySeparatorChar + "secrets" + Path.DirectorySeparatorChar) && !f.Contains(Path.DirectorySeparatorChar + ".git" + Path.DirectorySeparatorChar)))
             Assert.DoesNotContain("READ-pw-4c1e", File.ReadAllText(other));

@@ -109,7 +109,7 @@ export function outsideDetail(c: OutsideConnection): string {
 export const secretProblems = (c: OutsideConnection): string[] => c.secrets.filter((s) => !s.available).map((s) => s.problem ?? `${s.reference} is not set.`)
 
 /** Whether the secret a reference names is one the console keeps for this connection (so a typed value can be kept here under it). */
-export const keptHere = (name: string, s: ConnectionSecret): boolean => s.keptHere ?? s.reference === `secret:dbdata:console:connection:${name}:${s.field}`
+export const keptHere = (name: string, s: ConnectionSecret): boolean => s.keptHere ?? s.reference === `secret:dbdatakit:server:connection:${name}:${s.field}`
 
 /** The diagnostics a refused save carries in its body, shown as a check shows them. */
 export const refusedDiagnostics = (e: unknown): Diagnostic[] => (e as { body?: { diagnostics?: Diagnostic[] } } | null)?.body?.diagnostics ?? []

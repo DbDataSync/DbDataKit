@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { afterCall, checkSecret, passwordLine, sorted } from './secrets'
 
-const have = [{ name: 'erp-login', reference: 'secret:dbdata:gateway:managed-console-1:erp-login' }]
+const have = [{ name: 'erp-login', reference: 'secret:dbdatakit:gateway:managed-console-1:erp-login' }]
 
 describe('the secret form', () => {
   it('asks for the name, then the value, saying so', () => {

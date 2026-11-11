@@ -30,7 +30,7 @@ public sealed class ConfigStartupTests
             ("DBDATAKIT_ANNOUNCE_LISTEN", "http://127.0.0.1:0"),
             ("DBDATAKIT_ADVERTISE_URL", "https://gw.example:8815"),
             ("DBDATAKIT_INSTANCE_NAME", "gw-1"),
-            ("DBDATAKIT_SECRET_DBDATA_GATEWAY_DATASOURCE_ERP", "x"),
+            ("DBDATAKIT_SECRET_DBDATAKIT_GATEWAY_DATASOURCE_ERP", "x"),
             ("DBDATAKIT_GATEWAY_PASSWORD", "x"),
             ("DBDATAKIT_UPGRADE_CHANNEL", "stable"),
             ("DBDATAKIT_STATE_ENGINE", "sqlite"),
@@ -340,7 +340,7 @@ public sealed class ConfigCommandTests
             ("gateway/auth.yaml", $"jwt:\n  signingKey: {signingKey}\n  audience: a\n  mappings: [ {{ claim: c, value: v, dataSources: ['*'] }} ]\n"),
             ("connections/a.yaml", Conn.Yaml("a", connectionString: "Server=s;Encrypt=True", auth: "auth: { mode: sql, user: u, password_secret: 'env:A_PW' }")),
             ("connections/b.yaml", Conn.Yaml("b", connectionString: "Server=s", auth: "auth: { mode: sql, user: u, password_secret: 'env:B_PW' }")),
-            ("connections/c.yaml", Conn.Yaml("c", connectionString: null, extra: "connection_string_secret: 'secret:dbdata:gateway:c'")));
+            ("connections/c.yaml", Conn.Yaml("c", connectionString: null, extra: "connection_string_secret: 'secret:dbdatakit:gateway:c'")));
 
         var r = Run("show", "--origin", "--file", c.Directory);
         Assert.Equal(0, r.Code);
@@ -359,7 +359,7 @@ public sealed class ConfigCommandTests
         Assert.Contains("Tls.CertificatePassword = env:PFX_PW", text);                      // a reference is not secret
         Assert.Contains("DataSources.a.ConnectionString = Server=s;Encrypt=True;User Id=u;Password=env:A_PW", text);   // a reference is shown as it is: it is not the secret
         Assert.Contains("Password=env:B_PW", text);
-        Assert.Contains("DataSources.c.ConnectionString = secret:dbdata:gateway:c", text);
+        Assert.Contains("DataSources.c.ConnectionString = secret:dbdatakit:gateway:c", text);
         Assert.Contains($"({c.Path(Path.Combine("connections", "a.yaml"))}:4)", text);
     }
 

@@ -4,7 +4,7 @@ import { ApiError } from '@dbdatakit/shell'
 
 const crm: OutsideConnection = {
   name: 'crm', file: 'connections/crm.yml', yaml: '', kind: 'http', endpoint: 'https://api.example.com/v1', signIn: 'api_key', cloud: null, diagnostics: [],
-  secrets: [{ field: 'key', path: 'sign_in.key_secret', reference: 'secret:dbdata:console:connection:crm:key', available: false, problem: 'The secret `secret:dbdata:console:connection:crm:key` is not set.' }],
+  secrets: [{ field: 'key', path: 'sign_in.key_secret', reference: 'secret:dbdatakit:server:connection:crm:key', available: false, problem: 'The secret `secret:dbdatakit:server:connection:crm:key` is not set.' }],
 }
 
 describe('outside connections (plan 27a IX01)', () => {

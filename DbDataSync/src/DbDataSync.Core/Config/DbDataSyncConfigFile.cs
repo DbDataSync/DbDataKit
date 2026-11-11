@@ -417,7 +417,7 @@ public static class DbDataSyncConfigFile
         #   State:
         #     Engine: MsSql
         #     # Connection string only - never a password. Set the password with:
-        #     #   dbdatasync secret set dbdata:sync:config:stateConnectionString "Password=..."
+        #     #   dbdatasync secret set dbdatakit:sync:config:stateConnectionString "Password=..."
         #     ConnectionString: "Server=sql01;Database=DbDataSyncState;"
 
         """;

@@ -22,7 +22,7 @@ namespace DbDataGateway.Server.Hosting;
 public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, PublishedEntityModels models, DbDataKit.Serving.IServingServices serving, DbDataKit.Serving.Semantic.SemanticModels semanticModels, HomeCallers homeCallers, GroupSessionKey sessionKey, ILoggerFactory loggers, GroupCertificate? group = null) : IHostedService, IAsyncDisposable
 {
     /// <summary>The secret that holds the seed of the key the apps host signs its app tokens with: made on the first start, and copied to every other instance of a group.</summary>
-    public const string SigningKeySecret = "dbdata:gateway:apps:signing-key";
+    public const string SigningKeySecret = "dbdatakit:gateway:apps:signing-key";
 
     /// <summary>The folder next to the program that holds the runtime for apps of views only (<c>views-app.js</c>, <c>views-app.css</c>; plan 26, AP25), copied there by the build from <c>Shared/web/view-app/dist</c>.</summary>
     public const string ViewsRuntimeFolder = "apps-views";

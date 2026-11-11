@@ -5,7 +5,7 @@ Contracts and pure logic for Plan 02. No dependencies.
 ## Public contract
 - `SecretRef.Parse/TryParse`: `secret:<name>`, `env:NAME`, `file:<path>`, `dpapi:<base64>` (there is no `keyring:`: no OS keychain, which is per user and does not suit services).
   `ToAuditString()` elides DPAPI blobs.
-- `SecretName`: `dbdata:<product>:<kind>:<name>[:<part>]`, lower-cased, segments `[A-Za-z0-9._-]`.
+- `SecretName`: `dbdatakit:<service>:<kind>:<name>[:<part>]`, lower-cased, segments `[A-Za-z0-9._-]`.
   Read/write split is the `read`/`write` part (no fallback between them).
 - `SecretValue`: `ToString()` is `***`; `Reveal()` returns a span over the internal buffer; zeroed on `Dispose`;
   `Reveal()` after dispose throws.

@@ -22,7 +22,7 @@ public sealed class WorkspaceSecurityTests
         Assert.Equal(HttpStatusCode.Created, paired.Response.StatusCode);
 
         // the key, as only the publish step reads it: through the secret store's resolver, from the reference
-        using var value = await WorkspaceState.Secrets(server.Directory).ResolveAsync(SecretRef.Parse("secret:dbdata:workspace:publisher-key:edge"));
+        using var value = await WorkspaceState.Secrets(server.Directory).ResolveAsync(SecretRef.Parse("secret:dbdatakit:workspace:publisher-key:edge"));
         var key = value.RevealString();
         var seed = key[(key.IndexOf(':') + 1)..];
         Assert.True(seed.Length >= 32);

@@ -11,7 +11,7 @@ namespace DbDataSync.Cli.Tests;
 public sealed class ConfigCommandTests : IDisposable
 {
     private readonly string _root = Directory.CreateTempSubdirectory("dbdatasync-config-tests-").FullName;
-    private readonly string _secretRef = "dbdata:sync:test:routing";
+    private readonly string _secretRef = "dbdatakit:sync:test:routing";
 
     public void Dispose()
     {

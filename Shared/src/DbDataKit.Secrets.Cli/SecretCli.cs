@@ -68,7 +68,7 @@ public sealed class SecretCli(
         "  export <file> [--prefix p] [--passphrase-stdin]   write the secrets, encrypted under a passphrase, to move a server\n" +
         "  import <file> [--overwrite] [--passphrase-stdin]  read an export made by `export`\n" +
         "  protect [--stdin]               an inline, encrypted form of one value for a single field (Windows: dpapi:)\n" +
-        "names look like dbdata:<product>:<kind>:<name>[:<part>]; refs like secret:<name>, env:X, file:/p. There is no command that prints a value.";
+        "names look like dbdatakit:<service>:<kind>:<name>[:<part>]; refs like secret:<name>, env:X, file:/p. There is no command that prints a value.";
 
     public int Execute(string[] args, IConsole console, CancellationToken ct = default) =>
         ExecuteAsync(args, console, ct).GetAwaiter().GetResult();
@@ -152,7 +152,7 @@ public sealed class SecretCli(
         if (positional.Count > 1)
             return Usage_(console, "set takes only a name. The value is read from a hidden prompt or stdin; it is never accepted on the command line.");
         if (positional.Count == 0 || !SecretName.TryParse(positional[0], out var name))
-            return Usage_(console, "set needs a secret name like dbdata:<product>:<kind>:<name>[:<part>].");
+            return Usage_(console, "set needs a secret name like dbdatakit:<service>:<kind>:<name>[:<part>].");
 
         var text = ReadValue(console, flags, "Secret value: ", confirm: true, "value");
         if (text is null) return 1;
@@ -167,7 +167,7 @@ public sealed class SecretCli(
     private async Task<int> ListAsync(List<string> positional, IConsole console, CancellationToken ct)
     {
         if (positional.Count > 1) return Usage_(console, "list takes at most one prefix.");
-        var prefix = positional.Count == 1 ? positional[0] : "dbdata:";
+        var prefix = positional.Count == 1 ? positional[0] : "dbdatakit:";
         var count = 0;
         if (admin is not null)
         {

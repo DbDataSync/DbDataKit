@@ -40,7 +40,7 @@ public sealed partial class SyncProjectKind(SyncTool tool) : IProjectKind
     {
         static ProjectKindFile File(string path, string text) => new(path, Utf8.GetBytes(text.Replace("\r\n", "\n")));
         static string Connection(string name, string engine, string host, string database) => string.Join("\n",
-            "schema: connection/1", $"name: {name}", $"engine: {engine}", "address:", $"  host: {host}", $"  database: {database}", "auth:", "  mode: sql", "  user: sync", $"  password_secret: secret:dbdata:sync:connection:{name}", "");
+            "schema: connection/1", $"name: {name}", $"engine: {engine}", "address:", $"  host: {host}", $"  database: {database}", "auth:", "  mode: sql", "  user: sync", $"  password_secret: secret:dbdatakit:sync:connection:{name}", "");
         var task = string.Join("\n",
             "schemaVersion: 2", "name: orders", "scheduling:", "  mode: Periodic", "  cronExpression: '*/15 * * * *'",
             "changeProcessing:", "  reader:", "    kind: MsSqlChangeTracking", "    options: {}", "  cache:", "    kind: MsSqlStagingTable", "    options: {}", "  writer:", "    kind: PostgresMerge", "    options: {}",
@@ -52,7 +52,7 @@ public sealed partial class SyncProjectKind(SyncTool tool) : IProjectKind
             "columnMappings: []", "relationships: []", "scripts: {}", "hooks: {}", "provisioning: {}", "verification: []", "defaultSegmenting: []", "primaryKey: []",
             "sourceColumns:", "- name: id", "  nativeType: bigint", "  isPrimaryKey: true", "  keyOrdinal: 1", "targetColumns:", "- name: id", "  nativeType: bigint", "  isPrimaryKey: true", "  keyOrdinal: 1", "relationshipColumns: {}", "");
         var readme = $"# {title ?? id}\n\nA replication set of Sync. `config/replications/<name>/task.yaml` is a replication, `table-mappings/` its mappings (with the cache of the columns they read and write), `config/connections/` the connections by reference:\n"
-            + "a connection holds the name of its secret (`password_secret: secret:dbdata:sync:connection:<name>`), never a password. Edit in a workspace, check, merge, publish to a Runner; the connections are bound there.\n";
+            + "a connection holds the name of its secret (`password_secret: secret:dbdatakit:sync:connection:<name>`), never a password. Edit in a workspace, check, merge, publish to a Runner; the connections are bound there.\n";
         return
         [
             File("config/connections/source-db.yaml", Connection("source-db", "sqlserver", "source.example.com", "App")),
@@ -96,7 +96,7 @@ public sealed partial class SyncProjectKind(SyncTool tool) : IProjectKind
                 if (line.TrimStart().StartsWith('#')) continue;
                 string? why = null;
                 if (PasswordKey().IsMatch(line)) why = "holds a password value under `password`";
-                else if (PasswordSecretKey().Match(line) is { Success: true } s && s.Groups["value"].Value is { Length: > 0 } reference && !reference.StartsWith("secret:", StringComparison.Ordinal)) why = "has a `password_secret` that is not a secret reference (`secret:dbdata:sync:connection:<name>`)";
+                else if (PasswordSecretKey().Match(line) is { Success: true } s && s.Groups["value"].Value is { Length: > 0 } reference && !reference.StartsWith("secret:", StringComparison.Ordinal)) why = "has a `password_secret` that is not a secret reference (`secret:dbdatakit:sync:connection:<name>`)";
                 else if (line.Contains("connection_string", StringComparison.OrdinalIgnoreCase) && PasswordInString().Match(line) is { Success: true } p
                     && !p.Groups["value"].Value.StartsWith("secret:", StringComparison.Ordinal) && !p.Groups["value"].Value.StartsWith("env:", StringComparison.Ordinal)) why = "has a password in its connection string";
                 if (why is not null) found.Add(new("error", "DBD-WS-SYNC-SECRET", $"{relative} {why}. A connection names its secret by reference and the value is set on the server that runs it; a password in a file would reach git.", relative, i + 1));

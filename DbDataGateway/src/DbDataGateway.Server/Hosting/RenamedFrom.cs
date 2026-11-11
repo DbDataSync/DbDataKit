@@ -8,14 +8,14 @@ namespace DbDataGateway.Server.Hosting;
 /// The clean break of the rename DbDataProxy to DbDataGateway (plan 20, O14). The new program does not read what the old one wrote under the old names and does not accept the old names as aliases: it
 /// stops, once, with one message per leftover that names the old name, the new one and what to do. A message names the file or variable it found. Nothing is migrated silently and nothing is accepted in both spellings.
 /// What it looks for: <c>--Proxy:</c> command-line settings (the environment variables of the old product are refused by <c>SuiteEnvironment</c>, which every command runs first), the old default data directory when the new one has no settings, a <c>config/proxy</c> folder, <c>extensions.proxy</c>
-/// or <c>dbdata:proxy:</c> in a settings or connection file, secrets stored as <c>dbdata:proxy:*</c>, and (on Windows, at <c>service install</c>) the service registered as <c>dbdataproxy</c>.
+/// or <c>dbdatakit:gateway:</c> in a settings or connection file, secrets stored as <c>dbdatakit:gateway:*</c>, and (on Windows, at <c>service install</c>) the service registered as <c>dbdataproxy</c>.
 /// </summary>
 public static class RenamedFrom
 {
     public const string OldProduct = "DbDataProxy";
     public const string OldProgram = "dbdataproxy";
-    public const string OldSecretPrefix = "dbdata:proxy:";
-    public const string NewSecretPrefix = "dbdata:gateway:";
+    public const string OldSecretPrefix = "dbdatakit:gateway:";
+    public const string NewSecretPrefix = "dbdatakit:gateway:";
 
     private const string Why = "DbDataProxy is now DbDataGateway (a clean break: the old names are refused, not read). ";
 

@@ -69,8 +69,8 @@ jobs:
       - name: Pair, add a login and answer a call
         run: |
           docker exec ddb dbdatabuild server pair --max-role viewer | grep -q "Pairing code:"
-          printf 'secret' | docker exec -i ddb dbdatabuild secret set dbdata:build:connection:warehouse:read --stdin
-          docker exec ddb dbdatabuild secret list | grep -q "dbdata:build:connection:warehouse:read"
+          printf 'secret' | docker exec -i ddb dbdatabuild secret set dbdatakit:build:connection:warehouse:read --stdin
+          docker exec ddb dbdatabuild secret list | grep -q "dbdatakit:build:connection:warehouse:read"
           test "$(curl -sk -o /dev/null -w '%{http_code}' https://localhost:8470/api/v1/projects)" = 401
           curl -skf https://localhost:8470/version | grep -q '"product":"dbdatabuild"'
           test "$(docker exec ddb id -u)" != 0

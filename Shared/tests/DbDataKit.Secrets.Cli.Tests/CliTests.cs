@@ -43,12 +43,12 @@ internal sealed class MemoryStore : ISecretStore, ISecretResolver, ISecretAdmin
 
 public class CliTests
 {
-    private const string Name = "dbdata:build:connection:wh:write";
+    private const string Name = "dbdatakit:build:connection:wh:write";
 
     private static (SecretCli cli, MemoryStore store, FakeConsole con) Make()
     {
         var s = new MemoryStore();
-        return (new SecretCli(s, s, s, () => [new SecretRef(SecretRefKind.Env, "PRESENT"), new SecretRef(SecretRefKind.Secret, "dbdata:build:connection:wh:write")], v => "dpapi:PROTECTED"), s, new FakeConsole());
+        return (new SecretCli(s, s, s, () => [new SecretRef(SecretRefKind.Env, "PRESENT"), new SecretRef(SecretRefKind.Secret, "dbdatakit:build:connection:wh:write")], v => "dpapi:PROTECTED"), s, new FakeConsole());
     }
 
     [Fact]
@@ -121,11 +121,11 @@ public class CliTests
     public void List_PrintsNamesOnly_WithPrefixFilter()
     {
         var (cli, store, con) = Make();
-        store.Data["dbdata:build:connection:a"] = "v1";
-        store.Data["dbdata:proxy:datasource:b"] = "v2";
-        Assert.Equal(0, cli.Execute(["list", "dbdata:build:"], con));
+        store.Data["dbdatakit:build:connection:a"] = "v1";
+        store.Data["dbdatakit:gateway:datasource:b"] = "v2";
+        Assert.Equal(0, cli.Execute(["list", "dbdatakit:build:"], con));
         Assert.Single(con.Out);
-        Assert.StartsWith("dbdata:build:connection:a  written 2026-10-21 12:30 UTC  key k1", con.Out[0]);
+        Assert.StartsWith("dbdatakit:build:connection:a  written 2026-10-21 12:30 UTC  key k1", con.Out[0]);
         Assert.DoesNotContain("v1", con.All);
 
         var all = new FakeConsole();
@@ -206,8 +206,8 @@ public class CliTests
     {
         var (cli, store, con) = Make();
         con.Prompts.Enqueue("a passphrase of length"); con.Prompts.Enqueue("a passphrase of length");
-        Assert.Equal(0, cli.Execute(["export", "out.yaml", "--prefix", "dbdata:proxy:"], con));
-        Assert.Equal(["export out.yaml prefix=dbdata:proxy: pass=a passphrase of length"], store.Admin);
+        Assert.Equal(0, cli.Execute(["export", "out.yaml", "--prefix", "dbdatakit:gateway:"], con));
+        Assert.Equal(["export out.yaml prefix=dbdatakit:gateway: pass=a passphrase of length"], store.Admin);
         Assert.DoesNotContain("a passphrase of length", con.All);
 
         var mismatch = new FakeConsole();
@@ -258,7 +258,7 @@ public class CliTests
     public void Without_an_admin_the_store_verbs_say_so_and_list_shows_names_only()
     {
         var s = new MemoryStore();
-        s.Data["dbdata:build:connection:a"] = "v";
+        s.Data["dbdatakit:build:connection:a"] = "v";
         var cli = new SecretCli(s, s);
         foreach (var verb in new[] { new[] { "rotate-key" }, ["export", "x.yaml"], ["import", "x.yaml"] })
         {
@@ -268,7 +268,7 @@ public class CliTests
         }
         var list = new FakeConsole();
         Assert.Equal(0, cli.Execute(["list"], list));
-        Assert.Equal(["dbdata:build:connection:a"], list.Out);
+        Assert.Equal(["dbdatakit:build:connection:a"], list.Out);
     }
 
     /// <summary>No verb prints a value: every one is run with a sentinel as the value and as the passphrase, and the sentinel is looked for in everything written.</summary>

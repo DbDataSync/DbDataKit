@@ -61,11 +61,11 @@ public sealed class ConnectionCopyTests
     }
 
     [Theory]
-    [InlineData(ConnectionCopy.Gateway, ConnectionCopy.Sync, "env:PW", "secret:dbdata:sync:connection:e2")]               // Sync reads one reference only
-    [InlineData(ConnectionCopy.Sync, ConnectionCopy.Sync, "secret:dbdata:sync:connection:erp", "secret:dbdata:sync:connection:e2")]
-    [InlineData(ConnectionCopy.Sync, ConnectionCopy.Gateway, "secret:dbdata:sync:connection:erp", "secret:dbdata:gateway:connection:e2")]   // not Sync's store
+    [InlineData(ConnectionCopy.Gateway, ConnectionCopy.Sync, "env:PW", "secret:dbdatakit:sync:connection:e2")]               // Sync reads one reference only
+    [InlineData(ConnectionCopy.Sync, ConnectionCopy.Sync, "secret:dbdatakit:sync:connection:erp", "secret:dbdatakit:sync:connection:e2")]
+    [InlineData(ConnectionCopy.Sync, ConnectionCopy.Gateway, "secret:dbdatakit:sync:connection:erp", "secret:dbdatakit:gateway:connection:e2")]   // not Sync's store
     [InlineData(ConnectionCopy.Gateway, ConnectionCopy.Gateway, "env:PW", "env:PW")]                                                   // kept as written
-    [InlineData(ConnectionCopy.Gateway, ConnectionCopy.Gateway, "secret:dbdata:gateway:connection:erp", "secret:dbdata:gateway:connection:erp")]
+    [InlineData(ConnectionCopy.Gateway, ConnectionCopy.Gateway, "secret:dbdatakit:gateway:connection:erp", "secret:dbdatakit:gateway:connection:erp")]
     public void The_password_reference_is_the_targets_to_hold_and_the_note_says_so(string from, string to, string reference, string expected)
     {
         var plan = ConnectionCopy.Plan(Base.Replace("env:PW", reference) + "\n", from, to, "e2");
@@ -115,7 +115,7 @@ public sealed class ConnectionCopyTests
     [Fact]
     public void A_scripts_and_hooks_note_is_made_for_a_Sync_copy_that_keeps_them()
     {
-        var text = Base.Replace("'env:PW'", "'secret:dbdata:sync:connection:erp'") + "\nextensions:\n  sync:\n    scripts:\n      before: { name: warm-up }\n";
+        var text = Base.Replace("'env:PW'", "'secret:dbdatakit:sync:connection:erp'") + "\nextensions:\n  sync:\n    scripts:\n      before: { name: warm-up }\n";
 
         Assert.Contains(ConnectionCopy.Plan(text, ConnectionCopy.Sync, ConnectionCopy.Sync, "e2").Notes, n => n.Contains("scripts and hooks"));
         Assert.DoesNotContain(ConnectionCopy.Plan(text, ConnectionCopy.Sync, ConnectionCopy.Gateway, "e2").Notes, n => n.Contains("scripts and hooks"));

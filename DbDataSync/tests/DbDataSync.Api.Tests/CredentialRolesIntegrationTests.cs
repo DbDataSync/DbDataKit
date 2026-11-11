@@ -138,7 +138,7 @@ public sealed class CredentialRolesIntegrationTests(TestApiFactory factory) : IC
 
         var text = await _client.GetStringAsync($"/api/connections/{name}/credential-source");
 
-        Assert.Contains($"dbdata:sync:connection:{name}:run", text);
+        Assert.Contains($"dbdatakit:sync:connection:{name}:run", text);
         Assert.DoesNotContain(LoginPassword, text);
         var config = await _client.GetStringAsync($"/api/connections/{name}");
         Assert.DoesNotContain(LoginPassword, config);

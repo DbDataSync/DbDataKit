@@ -104,7 +104,7 @@ commented out, as a reference rather than a default silently taking effect.
 `ConnectionConfig.ConnectionString` already is (`ConfigValidation.RejectEmbeddedCredential`) — a
 `password`/`pwd`/`passwd`/`secret`/`accountkey`/`apikey` key in the string is rejected outright. The
 password for a non-SQLite state store goes through the secret store instead, under the one fixed ref
-`dbdata:sync:config:stateConnectionString` (see "Secrets," below) — the starter file's own comment names
+`dbdatakit:sync:config:stateConnectionString` (see "Secrets," below) — the starter file's own comment names
 this, and it and the connection string are spliced together at connect time.
 
 ### `dbdatasync server run`
@@ -220,14 +220,14 @@ going through a connection's own save flow. Never prints a stored value back.
 | command | does |
 | --- | --- |
 | `dbdatasync secret set <ref> <value>` | stores `value` under `ref` |
-| `dbdatasync secret list [<ref> ...]` | reports whether each given ref is currently set (given none, checks the one fixed ref this build defines: `dbdata:sync:config:stateConnectionString`) |
+| `dbdatasync secret list [<ref> ...]` | reports whether each given ref is currently set (given none, checks the one fixed ref this build defines: `dbdatakit:sync:config:stateConnectionString`) |
 | `dbdatasync secret remove <ref>` | deletes a stored value |
-| `dbdatasync secret send --to runner <connection> --server <runner> [--code <code>]` | sends the connection's run login (its second login, or its only one) over the paired HTTPS to the runner's encrypted store as `dbdata:sync:connection:<name>:run`; never the read login of a connection that has both, never printed; needs a pairing that allows the admin role (plan 28c E20d) |
+| `dbdatasync secret send --to runner <connection> --server <runner> [--code <code>]` | sends the connection's run login (its second login, or its only one) over the paired HTTPS to the runner's encrypted store as `dbdatakit:sync:connection:<name>:run`; never the read login of a connection that has both, never printed; needs a pairing that allows the admin role (plan 28c E20d) |
 
 Example — setting the state store's password for a `server.yaml`-configured deployment:
 
 ```
-dbdatasync secret set dbdata:sync:config:stateConnectionString "Password=..."
+dbdatasync secret set dbdatakit:sync:config:stateConnectionString "Password=..."
 ```
 
 ### `dbdatasync version`
@@ -586,7 +586,7 @@ address:                     # or connection_string: (an ODBC string, a JDBC URL
 auth:                        # sql, integrated or none
   mode: sql
   user: sync
-  password_secret: secret:dbdata:sync:connection:orders
+  password_secret: secret:dbdatakit:sync:connection:orders
 timeouts: { connect_s: 20, command_s: 600 }   # unset: Sync's own defaults, 30 and 1800 seconds
 extensions:
   sync:                      # what only Sync has; the keys are written like the shared ones, snake_case
@@ -597,14 +597,14 @@ extensions:
 
 `extensions.sync` also holds `run_user` and `run_password_secret` (a second login, see "Two logins: read and run" below), `scripts` and `hooks` (the bindings of a connection), `database` (for a connection with a `connection_string`; with an `address` the
 database is `address.database`) and a `connect_timeout_seconds` or `command_timeout_seconds` the shared `timeouts` cannot say (`0` for unlimited, or more than a day).
-The password is never in the file: `password_secret` is the reference `secret:dbdata:sync:connection:<name>` to the encrypted store (see "Secrets").
+The password is never in the file: `password_secret` is the reference `secret:dbdatakit:sync:connection:<name>` to the encrypted store (see "Secrets").
 Unknown keys are errors with their position; `tls`, `read_login`, `write_login`, `connection_string_secret`, `access` and `managed_by` are refused because Sync
 does not use them. Another product's `extensions.<product>` block is not read.
 
 **As a file through the API.** `GET /api/connections/<name>/file` answers `{name, text, version}` (the file as kept, with the SHA-256 of its text as the version; viewers may read it) and
 `PUT /api/connections/<name>/file` with `{text, expectedVersion, password}` creates (`expectedVersion` null; a name that exists is a 409 with `currentVersion`) or changes (the version read) a connection from a whole
 file (administrators). The text is read exactly as a file on disk is and checked as a save is: a file Sync would not read is a 400 with `diagnostics` (code, key, line, column, message, fix) and nothing is written, and a
-`password_secret` that is not `secret:dbdata:sync:connection:<name>` is refused. A `password` beside the file, for a connection that logs in with one, is stored as the Connections page stores one; it is never in the file. The console
+`password_secret` that is not `secret:dbdatakit:sync:connection:<name>` is refused. A `password` beside the file, for a connection that logs in with one, is stored as the Connections page stores one; it is never in the file. The console
 uses these to copy a connection to or from another server (see the console's README).
 
 **The form of earlier releases is refused.** A file with `driverType`, `host` or `authMode` at the top and no `schema:` makes every command and screen that reads
@@ -619,17 +619,17 @@ A connection has one login by default, and it does everything. It may have **two
 
 | Login | What uses it | Where it is kept |
 | --- | --- | --- |
-| **read** (`auth.user`, `auth.password_secret`) | this server's own use of the connection: browsing metadata, **Test connection**, previews, a provisioning plan's reading, segment bounds and counts | the encrypted store, `dbdata:sync:connection:<name>` |
-| **run** (`extensions.sync.run_user`, `extensions.sync.run_password_secret`) | what a replication does: reading the source and writing the target in a pass, and the steps a provisioning **apply** runs; the login a runner is given | the encrypted store, `dbdata:sync:connection:<name>:run` (on a runner, see below) |
+| **read** (`auth.user`, `auth.password_secret`) | this server's own use of the connection: browsing metadata, **Test connection**, previews, a provisioning plan's reading, segment bounds and counts | the encrypted store, `dbdatakit:sync:connection:<name>` |
+| **run** (`extensions.sync.run_user`, `extensions.sync.run_password_secret`) | what a replication does: reading the source and writing the target in a pass, and the steps a provisioning **apply** runs; the login a runner is given | the encrypted store, `dbdatakit:sync:connection:<name>:run` (on a runner, see below) |
 
-Without a run login the read login serves both, exactly as before. `run_user` is optional (the read user when absent); `run_password_secret` is `secret:dbdata:sync:connection:<name>:run`, and a file that names another connection's secret is refused.
+Without a run login the read login serves both, exactly as before. `run_user` is optional (the read user when absent); `run_password_secret` is `secret:dbdatakit:sync:connection:<name>:run`, and a file that names another connection's secret is refused.
 
 ```yaml
-auth: { mode: sql, user: sync_read, password_secret: secret:dbdata:sync:connection:orders }
+auth: { mode: sql, user: sync_read, password_secret: secret:dbdatakit:sync:connection:orders }
 extensions:
   sync:
     run_user: sync_run
-    run_password_secret: secret:dbdata:sync:connection:orders:run
+    run_password_secret: secret:dbdatakit:sync:connection:orders:run
 ```
 
 The Connections page shows both: tick **Use a different login for replications (run)**, give the user (blank: the read user) and the password (blank keeps the stored one), and **Test run login** tries it. **Test connection** tries the read login. A file with a
@@ -639,11 +639,11 @@ connection inventory (`GET /api/v1/connections`) lists both references (`secret_
 ### On a runner
 
 A runner never has the read login. A replication set published to a runner declares a slot per connection; the administrator of the runner binds each slot to a connection of the runner's own (`PUT /api/runner/package/bindings`, the Runner screen), and the runner puts
-that connection's login in the engine's environment under both `DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_<NAME>` and `DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_<NAME>_RUN` (the engine reads whichever its connection names; it opens with the run role only). The
+that connection's login in the engine's environment under both `DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_<NAME>` and `DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_<NAME>_RUN` (the engine reads whichever its connection names; it opens with the run role only). The
 value reaches the runner with `dbdatasync secret send --to runner <connection> --server <runner>` (plan 28c, E20d; step 2 below is then not needed), or by hand. For each connection of the set:
 
 1. Write `<runner directory>/connections/<name>.yaml`, a `connection/1` file of the same name as the Sync connection, whose login is the run login: `auth: {mode: sql, user: <run user>, password_secret: env:<NAME>_RUN_PASSWORD}` (or
-   `secret:dbdata:sync:connection:<name>:run`, which the runner reads from its encrypted store when it was sent there, else from its environment as `DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_<NAME>_RUN`, or from a file of that name in `CREDENTIALS_DIRECTORY`).
+   `secret:dbdatakit:sync:connection:<name>:run`, which the runner reads from its encrypted store when it was sent there, else from its environment as `DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_<NAME>_RUN`, or from a file of that name in `CREDENTIALS_DIRECTORY`).
 2. Put the password where that reference looks: in the environment of the runner's service (a systemd unit's `LoadCredential=` and `CREDENTIALS_DIRECTORY`, or an `EnvironmentFile=` readable by the service account only; on Windows the service's environment), never in the file and never on a
    command line. Restart the runner after setting an environment variable; a credentials file is read at each run.
 3. Bind the slot to that connection (the Runner screen, or `dbdatarunner` bindings) and check it: a run whose login is not found fails naming the slot, the connection and the reference, and never falls back to another login.
@@ -658,13 +658,13 @@ each value AES-256-GCM encrypted under a key that is protected by DPAPI on Windo
 `secrets/` is added to the repository's `.gitignore` when the store is first opened. The same store is the one every DbData product uses
 (`DbDataKit.Secrets.Store`); back up `secrets/` together with its key, or the values cannot be read again.
 
-Names are `dbdata:sync:<kind>:<name>`: a connection named `<name>` has its password at `dbdata:sync:connection:<name>` (its second, run login's at `dbdata:sync:connection:<name>:run`), and the state
-database's at `dbdata:sync:config:stateConnectionString`. Names are lower-cased, so two connections whose names differ only by case share a
+Names are `dbdatakit:sync:<kind>:<name>`: a connection named `<name>` has its password at `dbdatakit:sync:connection:<name>` (its second, run login's at `dbdatakit:sync:connection:<name>:run`), and the state
+database's at `dbdatakit:sync:config:stateConnectionString`. Names are lower-cased, so two connections whose names differ only by case share a
 secret. The names from before the store (`dbdatasync:connection:...`) are **not read**: the secrets are set again (`dbdatasync secret set`,
 or save the connection with its password), and `dbdatasync secret set` with an old-form name is refused with the form to use.
 
 When the store has no value, the environment answers: the name upper-cased, every character other than a letter or digit replaced by `_`,
-prefixed `DBDATAKIT_SECRET_`. A connection named `orders-db` resolves to `DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_ORDERS_DB`. A file named after the secret in
+prefixed `DBDATAKIT_SECRET_`. A connection named `orders-db` resolves to `DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_ORDERS_DB`. A file named after the secret in
 the directory `CREDENTIALS_DIRECTORY` names (systemd `LoadCredential=`, a container secret mount) is the last place looked.
 
 ## Sync screens' dev server (`Shared/web/sync`)

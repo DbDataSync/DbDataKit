@@ -38,7 +38,7 @@ const task = (name: string, scheduling: string[]) => [
   'reconcile:', '  afterChange:', '    mode: none', '  deleteGuard:', '    mode: ratio', '    maxRatio: 0.5', 'segmentingStrategies: []', ''].join('\n')
 
 const connection = (name: string, engine: string, host: string) => [
-  'schema: connection/1', `name: ${name}`, `engine: ${engine}`, 'address:', `  host: ${host}`, '  database: app', 'auth:', '  mode: sql', '  user: u', `  password_secret: secret:dbdata:sync:connection:${name}`, ''].join('\n')
+  'schema: connection/1', `name: ${name}`, `engine: ${engine}`, 'address:', `  host: ${host}`, '  database: app', 'auth:', '  mode: sql', '  user: u', `  password_secret: secret:dbdatakit:sync:connection:${name}`, ''].join('\n')
 
 function seed(cached = true) {
   write('connections/rp-crm-src.yaml', connection('rp-crm-src', 'sqlserver', 'src'))

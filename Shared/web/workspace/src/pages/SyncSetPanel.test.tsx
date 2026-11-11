@@ -73,7 +73,7 @@ describe('a connection holds a reference, never a password', () => {
     expect(secretFindings('auth:\n  password: hunter2\n')).toEqual([{ line: 2, message: expect.stringContaining('password value') }])
     expect(secretFindings('auth:\n  password_secret: hunter2\n')).toEqual([{ line: 2, message: expect.stringContaining('not a reference') }])
     expect(secretFindings('connection_string: Server=x;Password=abc;')).toEqual([{ line: 1, message: expect.stringContaining('connection string') }])
-    expect(secretFindings('connection_string: Server=x;Password=secret:dbdata:a;')).toEqual([])
+    expect(secretFindings('connection_string: Server=x;Password=secret:dbdatakit:a;')).toEqual([])
     expect(secretFindings('# password: nope\n')).toEqual([])
   })
   it('shows the finding with its line under the editor, and the rule beside it', () => {
@@ -88,7 +88,7 @@ describe('a connection holds a reference, never a password', () => {
     const html = renderToStaticMarkup(<SyncFileEditor kind="sync-connection" path="config/connections/source-db.yaml" text={text} onText={() => {}} readOnly={false} live={idle} />)
     expect(html).toContain('data-testid="wsp-form"')
     expect(html).toContain('wsp-secret-notes')
-    expect(html).toContain('secret:dbdata:sync:connection:source-db')
+    expect(html).toContain('secret:dbdatakit:sync:connection:source-db')
   })
 })
 

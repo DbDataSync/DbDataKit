@@ -116,7 +116,7 @@ public sealed class AdminConfigControllerTests(AuthenticatedApiFactory factory) 
 
     /// <summary>
     /// The endpoint writes through the same <see cref="SecretStore"/> singleton DI hands every other consumer,
-    /// under the <c>dbdata:sync:config:...</c> name.
+    /// under the <c>dbdatakit:sync:config:...</c> name.
     /// </summary>
     [Fact]
     public async Task TheSecretEndpoint_ResolvesThroughTheDbDataSyncPrefixedStore()

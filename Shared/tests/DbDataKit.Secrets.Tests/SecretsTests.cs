@@ -9,7 +9,7 @@ public class ProviderTests
 {
     [Fact]
     public void VariableNameFor_MatchesTheDefaultMapping() =>
-        Assert.Equal("DBDATAKIT_SECRET_DBDATA_PROXY_DATASOURCE_ERP", EnvSecretProvider.VariableNameFor("dbdata:proxy:datasource:erp"));
+        Assert.Equal("DBDATAKIT_SECRET_DBDATAKIT_GATEWAY_DATASOURCE_ERP", EnvSecretProvider.VariableNameFor("dbdatakit:gateway:datasource:erp"));
 
     private static Func<string, string?> Env(params (string, string)[] vars)
     {
@@ -20,9 +20,9 @@ public class ProviderTests
     [Fact]
     public async Task Env_ResolvesEnvRef_AndSecretViaDefaultMapping()
     {
-        var p = new EnvSecretProvider(Env(("MY_VAR", "v1"), ("DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_ERP", "v2")));
+        var p = new EnvSecretProvider(Env(("MY_VAR", "v1"), ("DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_ERP", "v2")));
         Assert.Equal("v1", (await p.TryResolveAsync(SecretRef.Parse("env:MY_VAR")))!.RevealString());
-        Assert.Equal("v2", (await p.TryResolveAsync(SecretRef.Parse("secret:dbdata:sync:connection:erp")))!.RevealString());
+        Assert.Equal("v2", (await p.TryResolveAsync(SecretRef.Parse("secret:dbdatakit:sync:connection:erp")))!.RevealString());
         Assert.Null(await p.TryResolveAsync(SecretRef.Parse("env:NOPE")));
         Assert.False(p.CanHandle(SecretRef.Parse("file:/x")));
     }
@@ -60,9 +60,9 @@ public class ProviderTests
         var dir = Directory.CreateTempSubdirectory();
         try
         {
-            await File.WriteAllTextAsync(Path.Combine(dir.FullName, "dbdata_proxy_datasource_erp"), "pw\n");
+            await File.WriteAllTextAsync(Path.Combine(dir.FullName, "dbdatakit_gateway_datasource_erp"), "pw\n");
             var p = new FileSecretProvider(new FileSecretOptions { SecretsDirectory = dir.FullName });
-            Assert.Equal("pw", (await p.TryResolveAsync(SecretRef.Parse("secret:dbdata:proxy:datasource:erp")))!.RevealString());
+            Assert.Equal("pw", (await p.TryResolveAsync(SecretRef.Parse("secret:dbdatakit:gateway:datasource:erp")))!.RevealString());
             Assert.Null(await p.TryResolveAsync(SecretRef.Parse("secret:../../etc/passwd")));
         }
         finally { dir.Delete(true); }
@@ -97,11 +97,11 @@ public class ProviderTests
         var redactor = new Redactor();
         var chain = new SecretResolverChain([other, a, b, c], audit, redactor);
 
-        using var v = await chain.ResolveAsync(SecretRef.Parse("secret:dbdata:x:y:z"));
+        using var v = await chain.ResolveAsync(SecretRef.Parse("secret:dbdatakit:x:y:z"));
         Assert.Equal("topsecret", v.RevealString());
         Assert.Equal(0, other.Calls);
         Assert.Equal(0, c.Calls);
-        Assert.Equal(["secret:dbdata:x:y:z|b|True"], audit.Lines);
+        Assert.Equal(["secret:dbdatakit:x:y:z|b|True"], audit.Lines);
         Assert.DoesNotContain("topsecret", string.Concat(audit.Lines));
         Assert.Equal("pw=***", redactor.Redact("pw=topsecret"));
     }

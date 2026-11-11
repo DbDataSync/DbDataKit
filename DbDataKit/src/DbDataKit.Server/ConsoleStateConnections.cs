@@ -9,7 +9,7 @@ using DbDataKit.State.Cli;
 namespace DbDataKit.Server;
 
 /// <summary>
-/// A state database the console knows by name (plan 29b, C06, M8): where a server's state can be moved to. The connection string never holds a password: it holds the reference <c>Password=secret:dbdata:console:state:&lt;name&gt;</c>, and the
+/// A state database the console knows by name (plan 29b, C06, M8): where a server's state can be moved to. The connection string never holds a password: it holds the reference <c>Password=secret:dbdatakit:server:state:&lt;name&gt;</c>, and the
 /// password itself is in the console's secret store like the key it signs with.
 /// </summary>
 /// <param name="Name">Lower-case letters, digits and dashes.</param>
@@ -32,8 +32,8 @@ public sealed partial class ConsoleStateConnections(string directory, EncryptedF
 
     public static bool ValidName(string? name) => name is not null && NameRegex().IsMatch(name);
 
-    /// <summary>The secret that holds the password of a connection: the name the console stores it under, and the name a server needs it under (<c>dbdatastore secret set dbdata:console:state:&lt;name&gt;</c>).</summary>
-    public static SecretName SecretNameOf(string name) => new("console", "state", name);
+    /// <summary>The secret that holds the password of a connection: the name the console stores it under, and the name a server needs it under (<c>dbdatastore secret set dbdatakit:server:state:&lt;name&gt;</c>).</summary>
+    public static SecretName SecretNameOf(string name) => new("server", "state", name);
 
     public static string ReferenceOf(string name) => SecretNameOf(name).ToRef().ToString();
 
