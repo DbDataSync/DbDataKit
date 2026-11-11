@@ -15,5 +15,6 @@
     <ProjectReference Include="..\DbDataKit.Connections.Abstractions\DbDataKit.Connections.Abstractions.csproj" />
     <ProjectReference Include="..\DbDataKit.Knowledge\DbDataKit.Knowledge.csproj" />
     <ProjectReference Include="..\DbDataKit.Secrets.Abstractions\DbDataKit.Secrets.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
   </ItemGroup>
 </Project>
