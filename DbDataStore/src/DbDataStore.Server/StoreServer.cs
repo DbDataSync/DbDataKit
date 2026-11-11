@@ -71,6 +71,7 @@ public static class StoreServer
         app.UsePublishedModels(settings.Directory);
         Map(app, instanceId);
         StoreModels.Map(app, settings.Directory);
+        StoreModelHistory.Map(app, settings.Directory);
         StoreData.Map(app, settings.Directory, new StoreConnections(settings.Directory));
         return app;
     }

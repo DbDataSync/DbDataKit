@@ -176,6 +176,56 @@ public sealed class StoreModelsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Every_text_that_is_saved_is_in_the_models_history_with_who_and_when_and_a_restore_is_a_save_of_an_earlier_text()
+    {
+        var send = await Client();
+        var first = (string)(await Json(await send(HttpMethod.Put, "/api/v1/models/territories", Territories, ServerRole.Author)))["version"]!;
+        await send(HttpMethod.Put, "/api/v1/models/territories", Territories, ServerRole.Author);   // the same text again is not a new entry
+        var changed = Territories.Replace("VARCHAR(100)", "VARCHAR(120)");
+        var second = (string)(await Json(await send(HttpMethod.Put, $"/api/v1/models/territories?expected_version={first}", changed, ServerRole.Author)))["version"]!;
+        await send(HttpMethod.Put, "/api/v1/models/territories", Territories.Replace("name: territories", "name: broken\n  x: ["), ServerRole.Author);   // a refused save leaves nothing
+
+        var history = await Json(await send(HttpMethod.Get, "/api/v1/models/territories/history", null, ServerRole.Viewer));
+        Assert.Equal(second, (string)history["current"]!);
+        var versions = history["versions"]!.AsArray();
+        Assert.Equal(2, versions.Count);
+        Assert.Equal(second, (string)versions[0]!["version"]!);
+        Assert.True((bool)versions[0]!["current"]!);
+        Assert.Equal("saved", (string)versions[0]!["kind"]!);
+        Assert.Equal("ada", (string)versions[0]!["by"]!);
+        Assert.Equal("Ada", (string)versions[0]!["by_name"]!);
+        Assert.Equal(first, (string)versions[1]!["version"]!);
+        Assert.Equal("created", (string)versions[1]!["kind"]!);
+        Assert.False((bool)versions[1]!["current"]!);
+        Assert.True(DateTimeOffset.TryParse((string)versions[0]!["at"]!, out _));
+
+        // an earlier text is read by its version; a made-up one is not there
+        var old = await Json(await send(HttpMethod.Get, $"/api/v1/models/territories/history/{first}", null, ServerRole.Viewer));
+        Assert.Contains("VARCHAR(100)", (string)old["text"]!);
+        Assert.Equal(first, StoreModels.VersionOf((string)old["text"]!));
+        Assert.Equal(HttpStatusCode.NotFound, (await send(HttpMethod.Get, "/api/v1/models/territories/history/" + new string('a', 64), null, ServerRole.Viewer)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await send(HttpMethod.Get, "/api/v1/models/nothing/history", null, ServerRole.Viewer)).StatusCode);
+
+        // Restore is a save of that text quoting the version read: a new entry, the earlier text is current again, and a stale restore is a conflict like any save
+        var restored = await send(HttpMethod.Put, $"/api/v1/models/territories?expected_version={second}", (string)old["text"]!, ServerRole.Author);
+        Assert.Equal(HttpStatusCode.OK, restored.StatusCode);
+        Assert.Equal(first, (string)(await Json(restored))["version"]!);
+        Assert.Equal(HttpStatusCode.Conflict, (await send(HttpMethod.Put, $"/api/v1/models/territories?expected_version={second}", changed, ServerRole.Author)).StatusCode);
+        var after = (await Json(await send(HttpMethod.Get, "/api/v1/models/territories/history", null, ServerRole.Viewer)))["versions"]!.AsArray();
+        Assert.Equal(3, after.Count);   // one entry per save: the restore is a third
+        Assert.Equal(first, (string)after[0]!["version"]!);
+        Assert.True((bool)after[0]!["current"]!);
+
+        // removing the model keeps its history, says who removed it and still reads the texts
+        Assert.Equal(HttpStatusCode.NoContent, (await send(HttpMethod.Delete, "/api/v1/models/territories", null, ServerRole.Admin)).StatusCode);
+        var removed = await Json(await send(HttpMethod.Get, "/api/v1/models/territories/history", null, ServerRole.Viewer));
+        Assert.False((bool)removed["exists"]!);
+        Assert.Null(removed["current"]);
+        Assert.Equal("removed", (string)removed["versions"]![0]!["kind"]!);
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Get, $"/api/v1/models/territories/history/{second}", null, ServerRole.Viewer)).StatusCode);
+    }
+
+    [Fact]
     public async Task The_requests_list_says_whether_this_caller_may_decide_and_which_role_would()
     {
         var send = await Client();

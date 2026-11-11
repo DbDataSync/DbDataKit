@@ -1,5 +1,5 @@
 import type { EditorDiagnostic } from '@dbdatakit/shell'
-import type { ChangeRequestRow, CopyState, Diagnostic, MigrationPlan, ProposedChange, RequestList, StoragePlan } from './api'
+import type { ChangeRequestRow, CopyState, Diagnostic, HistoryEntry, MigrationPlan, ProposedChange, RequestList, StoragePlan } from './api'
 
 /** Where a model's name must fit: what the server accepts (`StoreModels.IsValidName`). The server decides; this only keeps a button off for a name it will refuse. */
 export const modelNamePattern = /^[a-z0-9][a-z0-9_-]{0,63}$/
@@ -152,3 +152,24 @@ export function changeSummary(changes: ProposedChange[] | undefined, count: numb
 
 export const sortRequests = (rows: ChangeRequestRow[]) =>
   [...rows].sort((a, b) => (a.state === 'pending' ? 0 : 1) - (b.state === 'pending' ? 0 : 1) || b.proposed_at.localeCompare(a.proposed_at))
+
+// ---- the history of a model's text (UI07)
+
+export const kindText = (kind: string) => kind === 'created' ? 'Created' : kind === 'saved' ? 'Saved' : kind === 'removed' ? 'Removed' : kind
+
+/** Who saved it, in words; a text older than the journal has no author. */
+export const authorText = (e: Pick<HistoryEntry, 'by' | 'by_name'>) => e.by_name ?? e.by ?? 'unknown'
+
+/** The entry to show when none is chosen: the newest that is not the current text, or the newest. */
+export function defaultVersion(versions: HistoryEntry[]): string | null {
+  return (versions.find((v) => !v.current && v.kind !== 'removed') ?? versions[0])?.version ?? null
+}
+
+/** Whether Restore is offered for a chosen version, and the sentence that says why not. Restoring is a save, so it needs what a save needs. */
+export function restoreState(i: { exists: boolean; canSave: boolean; isCurrent: boolean; busy: boolean }): { allowed: boolean; reason: string | null } {
+  if (!i.exists) return { allowed: false, reason: 'The model was removed; create it again in the model list.' }
+  if (i.isCurrent) return { allowed: false, reason: 'This is the text the model holds now.' }
+  if (!i.canSave) return { allowed: false, reason: 'Restoring saves a model, which needs the author or administrator role.' }
+  if (i.busy) return { allowed: false, reason: 'Saving...' }
+  return { allowed: true, reason: null }
+}

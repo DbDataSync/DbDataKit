@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { ChangeRequestRow, CopyState, Diagnostic, MigrationPlan, ProposedChange, RequestList, StoragePlan } from './api'
-import { changeSummary, copyAction, decideState, fieldDiff, isModelName, markersOf, migrationSummary, newModelText, saveState, sortRequests, storageReason, summaryOf } from './model'
+import type { HistoryEntry, ChangeRequestRow, CopyState, Diagnostic, MigrationPlan, ProposedChange, RequestList, StoragePlan } from './api'
+import { authorText, changeSummary, defaultVersion, kindText, restoreState, copyAction, decideState, fieldDiff, isModelName, markersOf, migrationSummary, newModelText, saveState, sortRequests, storageReason, summaryOf } from './model'
 
 const error = (over: Partial<Diagnostic> = {}): Diagnostic => ({ code: 'DBD-1', severity: 'error', file: 'm.yaml', line: 3, column: 5, message: 'bad type', fix: 'use VARCHAR(n)', ...over })
 const inputs = { isNew: false, name: 'm', canWrite: true, changed: true, checking: false, stale: false, diagnostics: [] as Diagnostic[], saving: false }
@@ -139,5 +139,31 @@ describe('what a request proposes, beside what the row holds', () => {
     expect(changeSummary(undefined, 1)).toBe('1 change')
     const rows = [request({ id: 'old', state: 'approved' }), request({ id: 'a', proposed_at: '2026-11-01T00:00:00Z' }), request({ id: 'b', proposed_at: '2026-11-05T00:00:00Z' })]
     expect(sortRequests(rows).map((r) => r.id)).toEqual(['b', 'a', 'old'])
+  })
+})
+
+describe('the history of a model text', () => {
+  const entry = (over: Partial<HistoryEntry> = {}): HistoryEntry => ({ version: 'a'.repeat(64), at: '2026-11-11T10:00:00Z', by: 'ada', by_name: 'Ada', kind: 'saved', current: false, ...over })
+  it('names who saved a text, and says so when the journal did not know', () => {
+    expect(authorText(entry())).toBe('Ada')
+    expect(authorText(entry({ by_name: null }))).toBe('ada')
+    expect(authorText(entry({ by: null, by_name: null }))).toBe('unknown')
+    expect(kindText('created')).toBe('Created')
+    expect(kindText('removed')).toBe('Removed')
+  })
+  it('opens on the newest text that is not the current one', () => {
+    const v = [entry({ version: 'c', current: true }), entry({ version: 'b' }), entry({ version: 'a' })]
+    expect(defaultVersion(v)).toBe('b')
+    expect(defaultVersion([entry({ version: 'only', current: true })])).toBe('only')
+    expect(defaultVersion([])).toBeNull()
+    expect(defaultVersion([entry({ version: 'gone', kind: 'removed' }), entry({ version: 'old' })])).toBe('old')
+  })
+  it('offers Restore for an earlier text of a model that exists to someone who may save, and says why not otherwise', () => {
+    const ok = { exists: true, canSave: true, isCurrent: false, busy: false }
+    expect(restoreState(ok)).toEqual({ allowed: true, reason: null })
+    expect(restoreState({ ...ok, exists: false }).reason).toMatch(/removed/)
+    expect(restoreState({ ...ok, isCurrent: true }).reason).toMatch(/holds now/)
+    expect(restoreState({ ...ok, canSave: false }).reason).toMatch(/author or administrator/)
+    expect(restoreState({ ...ok, busy: true }).allowed).toBe(false)
   })
 })

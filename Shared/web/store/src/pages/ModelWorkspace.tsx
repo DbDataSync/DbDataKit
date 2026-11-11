@@ -4,6 +4,7 @@ import { ErrorBanner, Link, SubTabs } from '@dbdatakit/shell'
 import { storeApi } from '../api'
 import { StoreShell } from '../StoreShell'
 import { ChangesTab } from './ChangesTab'
+import { HistoryTab } from './HistoryTab'
 import { ModelEditor } from './ModelEditor'
 import { StorageTab } from './StorageTab'
 
@@ -32,11 +33,13 @@ export function ModelWorkspace() {
           { path: null, label: 'Definition', testId: 'model-tab-definition' },
           { path: 'storage', label: 'Storage', testId: 'model-tab-storage' },
           { path: 'changes', label: 'Change requests', testId: 'model-tab-changes' },
+          { path: 'history', label: 'History', testId: 'model-tab-history' },
         ]} />
         <Routes>
           <Route index element={<DefinitionTab model={model} />} />
           <Route path="storage" element={<StorageTab model={model} />} />
           <Route path="changes" element={<ChangesTab model={model} />} />
+          <Route path="history" element={<HistoryTab model={model} />} />
         </Routes>
       </div>
     </StoreShell>
