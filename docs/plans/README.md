@@ -4,6 +4,8 @@ Plans for extracting shared code into `Shared/`, derived from the code review (`
 current state per product (with file references from the review), design, package layout, phases with exit
 criteria, risks and acceptance. Plans are proposals; review the "decisions" in each before starting.
 
+**[Open work, by service](open-work.md)** lists every open row grouped by Console, Gateway, Runner, Workspace, Build, Sync, Store and Shared, with what is on hold, low priority, parked or waiting for an owner decision (audited 2026-11-11).
+
 | # | Plan | Main inputs | Key payoff |
 |---|---|---|---|
 | 00 | [Repo strategy](../releases.md) | Finished: now a product doc | Hub-and-spokes was superseded by the monorepo; `docs/releases.md` has the branch, CI and release rules |
