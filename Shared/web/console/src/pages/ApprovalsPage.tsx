@@ -68,7 +68,7 @@ export function ApprovalsPage() {
             <div className="card flush" data-testid="approvals-rows" role="table" aria-label="Waiting for approval">
               <div className="grid-head" role="row" style={{ gridTemplateColumns: '1.2fr 1fr 1.8fr 2.6fr 1.2fr 0.9fr 1fr', gap: 14 }}><span>Kind</span><span>Server</span><span>What</span><span>Detail</span><span>From</span><span>Waiting</span><span /></div>
               {rows.map((row) => (
-                <div key={row.key} role="row" className="grid-row" style={{ gridTemplateColumns: '1.2fr 1fr 1.8fr 2.6fr 1.2fr 0.9fr 1fr', gap: 14 }} data-testid="approvals-row" data-kind={row.kind} data-can-decide={row.canDecide}>
+                <div key={row.key} role="row" className="grid-row auto" style={{ gridTemplateColumns: '1.2fr 1fr 1.8fr 2.6fr 1.2fr 0.9fr 1fr', gap: 14 }} data-testid="approvals-row" data-kind={row.kind} data-can-decide={row.canDecide}>
                   <span data-testid="approvals-kind">{kindText[row.kind]}{row.byAgent ? ' (an agent)' : ''}</span>
                   <span>{row.serverName}</span>
                   <span className="mono">{row.subject}</span>

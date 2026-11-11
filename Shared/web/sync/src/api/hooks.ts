@@ -100,6 +100,8 @@ const keys = {
     ['replications', replicationName, 'bulk-loads', 'history'] as const,
   mappingReadState: (replicationName: string, mappingName: string) =>
     ['replications', replicationName, 'table-mappings', mappingName, 'read-state'] as const,
+  mappingPositionHistory: (replicationName: string, mappingName: string) =>
+    ['replications', replicationName, 'table-mappings', mappingName, 'position-history'] as const,
   verificationResults: (replicationName: string, mappingName: string) =>
     ['replications', replicationName, 'verification-results', mappingName] as const,
   verificationResult: (replicationName: string, id: number) =>
@@ -984,6 +986,28 @@ export function useSetMappingReadState(replicationName: string, mappingName: str
       // Phase 131: a Paused-boundary crossing here writes a PauseEvents row too, over the same
       // replication-level history a mapping-level pause now shares.
       queryClient.invalidateQueries({ queryKey: keys.replicationPauseHistory(replicationName) })
+    },
+  })
+}
+
+/** The changes to a mapping's position, read when the history is opened (plan 28c E15b). */
+export function useMappingPositionHistory(replicationName: string, mappingName: string, enabled: boolean) {
+  return useQuery({
+    queryKey: keys.mappingPositionHistory(replicationName, mappingName),
+    queryFn: () => api.tableMappings.positionHistory(replicationName, mappingName),
+    enabled,
+    retry: false,
+  })
+}
+
+/** Rewinds a mapping's position to before one change of its history; the history and the read state are read again. */
+export function useRewindMappingPosition(replicationName: string, mappingName: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (historyId: number) => api.tableMappings.rewindPosition(replicationName, mappingName, historyId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: keys.mappingPositionHistory(replicationName, mappingName) })
+      queryClient.invalidateQueries({ queryKey: keys.mappingReadState(replicationName, mappingName) })
     },
   })
 }

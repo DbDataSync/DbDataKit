@@ -27,6 +27,7 @@ import type {
   BulkCreateResult,
   MappingLag,
   MappingReadState,
+  PositionChange,
   MetadataRefreshResult,
   PauseEvent,
   ReplicationLag,
@@ -249,6 +250,17 @@ export const api = {
       request<MappingReadState>(
         `/api/replications/${encodeURIComponent(replicationName)}/table-mappings/${encodeURIComponent(mappingName)}/read-state`,
         { method: 'POST', body: JSON.stringify(body) },
+      ),
+    /** The changes to a mapping's position, newest first (plan 28c E15b). */
+    positionHistory: (replicationName: string, mappingName: string) =>
+      request<PositionChange[]>(
+        `/api/replications/${encodeURIComponent(replicationName)}/table-mappings/${encodeURIComponent(mappingName)}/position-history`,
+      ),
+    /** Moves a mapping back to what it was before the change `historyId` (an administrator; the next pass re-reads). */
+    rewindPosition: (replicationName: string, mappingName: string, historyId: number) =>
+      request<MappingReadState>(
+        `/api/replications/${encodeURIComponent(replicationName)}/table-mappings/${encodeURIComponent(mappingName)}/position-rewind`,
+        { method: 'POST', body: JSON.stringify({ historyId }) },
       ),
   },
   /** The runner the replications move to (plan 28c E12). */

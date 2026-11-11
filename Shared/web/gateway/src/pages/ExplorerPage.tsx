@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { ApiError, ErrorBanner } from '@dbdatakit/shell'
+import { Link as ConsoleLink, useParams, useSearchParams } from 'react-router-dom'
+import { ApiError, ErrorBanner, Link } from '@dbdatakit/shell'
 import { RenderedViews, type RenderedViewDocument } from '@dbdatakit/visuals'
 import { gatewayApi } from '../api'
 import { GatewayShell } from '../GatewayShell'
@@ -117,7 +117,7 @@ function Result(p: ExplorerViewProps) {
           )}
           {pinned && (
             <div style={{ marginTop: 8 }}>
-              <Link className="btn btn-sm" to={pinLink(p.model, pinned, p.shape === 'table' || p.shape === 'matrix' ? 'table' : 'chart')} data-testid="pin-result">Pin to my dashboard</Link>
+              <ConsoleLink className="btn btn-sm" to={pinLink(p.model, pinned, p.shape === 'table' || p.shape === 'matrix' ? 'table' : 'chart')} data-testid="pin-result">Pin to my dashboard</ConsoleLink>
             </div>
           )}
         </>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Field, Link } from '@dbdatakit/shell'
 import { INTENT_INFO } from '../pages/replication-detail/readIntent'
 import type { ReadHold, ReadIntent } from '../api/types'
+import { MappingPositionHistory } from './MappingPositionHistory'
 
 /**
  * The popup a mapping row's "Manage" button opens — where the row is a summary and this is where you
@@ -24,10 +25,12 @@ import type { ReadHold, ReadIntent } from '../api/types'
  * for an operator who wants to record why.
  */
 export function MappingReadStateDialog({
-  mappingName, sourceLabel, currentIntent, currentHold, offered,
+  replicationName, mappingName, sourceLabel, currentIntent, currentHold, offered,
   hasVerificationChecks, verificationHref, verificationPending, onRunVerification,
   busy, error, onConfirm, onCancel,
 }: {
+  /** The replication the mapping belongs to; the position history is offered when it is given. */
+  replicationName?: string
   mappingName: string
   /** What a `ChangesFromLatest` confirmation names as what would be skipped. */
   sourceLabel: string
@@ -202,6 +205,7 @@ export function MappingReadStateDialog({
                   {busy ? 'Saving…' : paused ? 'Resume this table' : 'Pause this table'}
                 </button>
               </div>
+              {replicationName && <MappingPositionHistory replicationName={replicationName} mappingName={mappingName} />}
             </>
           )}
         </div>
