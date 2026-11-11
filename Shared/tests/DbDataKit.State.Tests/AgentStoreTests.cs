@@ -44,7 +44,7 @@ public sealed class AgentStoreTests : IDisposable
     {
         var rule = Assert.Single(AgentsModule.Module.Retention);
         Assert.Equal(("turn_text", "created_at", 30d), (rule.Table, rule.TimeColumn, rule.DefaultDays));
-        Assert.Equal(["agent_token", "approval", "audit_event", "conversation", "turn_record", "turn_text"], StateTableDefinitions.Read(AgentsModule.Module).Select(t => t.Name).Order());
+        Assert.Equal(["agent_token", "approval", "audit_event", "conversation", "memory", "turn_record", "turn_text"], StateTableDefinitions.Read(AgentsModule.Module).Select(t => t.Name).Order());
         Assert.All(StateTableDefinitions.Read(AgentsModule.Module), t => Assert.NotEmpty(t.PrimaryKey));
         Assert.Equal(StateScopeKind.Install, AgentsModule.Module.Scope);
         Assert.Equal(StateScopeKind.Group, AgentsModule.GroupModule.Scope);
@@ -55,8 +55,8 @@ public sealed class AgentStoreTests : IDisposable
     {
         var (_, database, _) = Open(engine);
         Assert.Equal("agents", database.Layout!.Namespace(AgentsModule.Name).Module.Name);
-        Assert.Equal(2, Assert.Single(database.RegisteredModules(), m => m.Module == "agents").Version);
-        foreach (var table in new[] { "conversation", "turn_text", "turn_record", "audit_event", "approval", "agent_token" }) Assert.Equal(0, Count(database, table));
+        Assert.Equal(3, Assert.Single(database.RegisteredModules(), m => m.Module == "agents").Version);
+        foreach (var table in new[] { "conversation", "turn_text", "turn_record", "audit_event", "approval", "agent_token", "memory" }) Assert.Equal(0, Count(database, table));
     }
 
     [Theory, MemberData(nameof(Engines))]
@@ -209,8 +209,8 @@ public sealed class AgentStoreTests : IDisposable
         var ex = Assert.Throws<InvalidOperationException>(() => location.Open([AgentsModule.Module]));
 
         Assert.Contains("'agents", ex.Message);
+        Assert.Contains("version 4", ex.Message);
         Assert.Contains("version 3", ex.Message);
-        Assert.Contains("version 2", ex.Message);
         Assert.Contains("newer-agents 3.0", ex.Message);
     }
 
@@ -243,5 +243,25 @@ public sealed class AgentStoreTests : IDisposable
         Assert.Null(store.VerifyToken(secondSecret));
         Assert.Throws<ArgumentException>(() => store.CreateToken("ada", " "));
         Assert.Throws<ArgumentException>(() => store.CreateToken("ada", "x", TimeSpan.FromDays(400)));
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public void A_memory_is_written_changed_listed_by_person_and_work_and_deleted(string engine)
+    {
+        var (store, _, clock) = Open(engine);
+        var made = clock.GetUtcNow();
+        store.SaveMemory(new MemoryRow("m1", "person", "ada", null, "build-helper", "Prefers tables.", made, made));
+        store.SaveMemory(new MemoryRow("m2", "work", "ada", "build/sales/ws1", "build-helper", "Uses the retail model.", made, made));
+        store.SaveMemory(new MemoryRow("m3", "person", "bob", null, null, "Speaks German.", made, made));
+
+        Assert.Equal(["m1", "m2"], store.Memories("ada").Select(m => m.Id));
+        Assert.Equal(["m2"], store.Memories(workRef: "build/sales/ws1").Select(m => m.Id));
+        store.SaveMemory(new MemoryRow("m1", "person", "ada", null, "build-helper", "Prefers matrices.", made, made.AddMinutes(1)));
+        Assert.Equal("Prefers matrices.", store.Memory("m1")!.Content);
+        Assert.Equal(3, store.Memories().Count);
+        Assert.True(store.DeleteMemory("m1"));
+        Assert.False(store.DeleteMemory("m1"));
+        Assert.Null(store.Memory("m1"));
+        Assert.Equal(["m3"], store.Memories("bob").Select(m => m.Id));
     }
 }

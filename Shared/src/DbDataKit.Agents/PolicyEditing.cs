@@ -49,8 +49,18 @@ public static class PolicyEditing
             if (limits.NotifyAtPercent != 80) text.Append("  notify-at: ").Append(limits.NotifyAtPercent.ToString(CultureInfo.InvariantCulture)).Append('\n');
         }
 
-        if (policy.CloudReadsData != DataRule.Allow)
-            text.Append("data-rules:\n  cloud-providers:\n    reads-data: ").Append(AgentPolicyLoader.DataRuleNames[(int)policy.CloudReadsData]).Append('\n');
+        if (policy.CloudReadsData != DataRule.Allow || !policy.CloudFallback)
+        {
+            text.Append("data-rules:\n  cloud-providers:\n");
+            if (policy.CloudReadsData != DataRule.Allow) text.Append("    reads-data: ").Append(AgentPolicyLoader.DataRuleNames[(int)policy.CloudReadsData]).Append('\n');
+            if (!policy.CloudFallback) text.Append("    fallback: refuse\n");
+        }
+        if (!policy.PersonMemory || !policy.WorkMemory)
+        {
+            text.Append("memory:\n");
+            if (!policy.PersonMemory) text.Append("  person: off\n");
+            if (!policy.WorkMemory) text.Append("  work: off\n");
+        }
         return text.ToString();
     }
 
@@ -114,6 +124,17 @@ public static class PolicyEditing
                 _ => "An agent bound to a cloud provider cannot run a command that reads data: those tools are left out.",
             } + $" (reads-data: {rule})"));
         }
+
+        foreach (var (kind, was, now) in new[] { ("person", before.PersonMemory, after.PersonMemory), ("work", before.WorkMemory, after.WorkMemory) })
+            if (was != now)
+                changes.Add(new PolicyChange($"{kind} memories", now, now
+                    ? $"Agents may remember things about {(kind == "person" ? "the person" : "the work")} again, unless an agent's own file turns it off. (memory: {kind}: on)"
+                    : $"No agent writes or reads {kind} memories: what is kept stays in the list, and is not given to a model. (memory: {kind}: off)"));
+
+        if (before.CloudFallback != after.CloudFallback)
+            changes.Add(new PolicyChange("fallback to cloud providers", after.CloudFallback, after.CloudFallback
+                ? "A slot bound to a local model may fall through to a cloud provider when the local one fails: the conversation can then reach the provider. (fallback: allow)"
+                : "A slot never falls through to a cloud provider: a failing local model ends the conversation with a message instead (a tenant-only install). (fallback: refuse)"));
 
         return [.. changes.OrderByDescending(c => c.Loosens).ThenBy(c => c.Setting, StringComparer.Ordinal)];
     }

@@ -54,6 +54,8 @@ export interface ModelsView {
 }
 export interface ProviderTest { ok: boolean; message: string; answer: string | null; inputTokens: number | null; outputTokens: number | null; milliseconds: number; temporary: boolean }
 
+export interface MemoryItem { id: string; kind: 'person' | 'work'; agent: string | null; text: string; createdAt: string; updatedAt: string }
+
 export interface Usage { byPerson: UsageRow[]; byAgent: UsageRow[]; install: UsageRow | null }
 
 /** Where a Build agent works (plan 27a AG14): a Build server, one of its projects and, for anything that changes files, the person's own workspace. */
@@ -104,6 +106,9 @@ export const agentsApi = {
   testProvider: (name: string, model: string) => request<ProviderTest>(`/api/agents/models/providers/${encodeURIComponent(name)}/test`, json('POST', { model })),
   checkSlots: (yaml: string) => request<{ diagnostics: Diagnostic[] }>('/api/agents/models/slots/check', json('POST', { yaml })),
   saveSlots: (yaml: string) => request<{ saved: boolean; diagnostics: Diagnostic[] }>('/api/agents/models/slots', json('PUT', { yaml })),
+  memories: (work?: string) => request<MemoryItem[]>(`/api/agents/memories${work ? `?work=${encodeURIComponent(work)}` : ''}`),
+  editMemory: (id: string, text: string, work?: string) => request<{ message: string }>(`/api/agents/memories/${encodeURIComponent(id)}`, json('PUT', { text, work })),
+  forgetMemory: (id: string, work?: string) => request<{ message: string }>(`/api/agents/memories/${encodeURIComponent(id)}${work ? `?work=${encodeURIComponent(work)}` : ''}`, json('DELETE')),
   tokens: () => request<AgentToken[]>('/api/agents/tokens'),
   makeToken: (name: string, days?: number) => request<MadeToken>('/api/agents/tokens', json('POST', { name, days })),
   revokeToken: (id: string) => request<void>(`/api/agents/tokens/${encodeURIComponent(id)}`, json('DELETE')),
@@ -187,3 +192,46 @@ export function providerTemplate(kind: string, name: string): string {
 
 /** What a slot's binding says in a line: the primary and the fallback in order. */
 export const bindingLine = (b: SlotBindingView): string => b.choices.map((c, i) => `${i === 0 ? '' : 'then '}${c.provider}/${c.model}${c.usable ? '' : ' (not usable)'}`).join(' ')
+
+
+// ---- AG18: a slot bound per channel as a list, edited as a list ----
+
+/** One slot of the bindings file: per channel an ordered list of provider and model, the primary first. */
+export type SlotPlan = Record<string, Record<string, { provider: string; model: string }[]>>
+
+/** The plan of a bindings view (the server's reading of `models/_slots.yml`). */
+export function planOf(bindings: SlotBindingView[]): SlotPlan {
+  const plan: SlotPlan = {}
+  for (const b of bindings) (plan[b.slot] ??= {})[b.channel] = b.choices.map((c) => ({ provider: c.provider, model: c.model }))
+  return plan
+}
+
+/** Moves one choice of a list one place up or down: the fallback order. Out of range changes nothing. */
+export function moveChoice<T>(list: T[], index: number, by: -1 | 1): T[] {
+  const to = index + by
+  if (index < 0 || index >= list.length || to < 0 || to >= list.length) return list
+  const next = [...list]
+  ;[next[index], next[to]] = [next[to], next[index]]
+  return next
+}
+
+/** The file the plan makes (`model-slots: 1`). The server reads it back and says what is wrong: the screen never decides what a provider allows. */
+export function slotsToYaml(plan: SlotPlan): string {
+  const lines = ['model-slots: 1', 'slots:']
+  for (const slot of Object.keys(plan).sort()) {
+    lines.push(`  ${slot}:`)
+    for (const channel of Object.keys(plan[slot]).sort((a, b) => (a === '*' ? -1 : b === '*' ? 1 : a.localeCompare(b)))) {
+      const list = plan[slot][channel]
+      if (list.length === 0) continue
+      lines.push(`    ${/^[A-Za-z0-9_-]+$/.test(channel) ? channel : JSON.stringify(channel)}:`)
+      for (const c of list) lines.push(`      - { provider: ${c.provider}, model: ${JSON.stringify(c.model)} }`)
+    }
+  }
+  return lines.join('\n') + '\n'
+}
+
+/** What a person's use is against the install's limit, in a sentence a screen can show. */
+export function againstLimit(used: number, limit: number | null | undefined, what: string): string {
+  if (limit === null || limit === undefined || limit <= 0) return `${what}: ${used.toLocaleString()} (no limit set)`
+  return `${what}: ${used.toLocaleString()} of ${limit.toLocaleString()} (${Math.round((used / limit) * 100)}%)`
+}

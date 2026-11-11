@@ -10,7 +10,7 @@ namespace DbDataKit.State;
 /// </para>
 /// <para>
 /// <b>Scope.</b> One copy per install (<see cref="Module"/>): the console hosts the back-end agents. A group's front-end agents (AG25) keep <see cref="GroupModule"/>, the same migrations.
-/// Migrations are appended, never edited; memories (AG19) will be a migration of this module.
+/// Migrations are appended, never edited; the third adds the memories of AG19.
 /// </para>
 /// </summary>
 public static class AgentsModule
@@ -137,6 +137,22 @@ public static class AgentsModule
             last_used_at {{time}} NULL
         );
         CREATE INDEX {index:agent_token_by_person} ON {table:agent_token}(person, created_at);
+        """,
+        """
+        -- What agents remember (plan 27a AG19): kind is person (what the agent keeps of one person: only that person sees, edits and deletes it) or work (what it keeps of a workspace or work item, in work_ref: whoever opens the work sees it).
+        -- person is who the memory is about (person) or who wrote it (work); agent is the agent that wrote it. A memory never holds a secret (the runtime refuses one) and is deleted when it is forgotten: the audit rows say it was written and forgotten, not what it said.
+        CREATE TABLE {table:memory} (
+            id         {{key}} PRIMARY KEY,
+            kind       {{key}} NOT NULL,
+            person     {{key}} NOT NULL,
+            work_ref   {{key}} NULL,
+            agent      {{key}} NULL,
+            content    {{text}} NOT NULL,
+            created_at {{time}} NOT NULL,
+            updated_at {{time}} NOT NULL
+        );
+        CREATE INDEX {index:memory_by_person} ON {table:memory}(person, kind);
+        CREATE INDEX {index:memory_by_work} ON {table:memory}(work_ref);
         """,
     ];
 

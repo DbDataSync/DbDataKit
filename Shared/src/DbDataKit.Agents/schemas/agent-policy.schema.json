@@ -40,6 +40,11 @@
         "notify-at": { "type": "integer", "minimum": 1, "maximum": 99, "description": "The share of a limit, in percent, at which administrators are told." }
       }
     },
+    "memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "person": { "enum": ["on", "off"] }, "work": { "enum": ["on", "off"] } }
+    },
     "data-rules": {
       "type": "object",
       "additionalProperties": false,
@@ -47,7 +52,7 @@
         "cloud-providers": {
           "type": "object",
           "additionalProperties": false,
-          "properties": { "reads-data": { "enum": ["allow", "ask", "refuse"] } }
+          "properties": { "reads-data": { "enum": ["allow", "ask", "refuse"] }, "fallback": { "enum": ["allow", "refuse"] } }
         }
       }
     }

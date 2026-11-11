@@ -4,6 +4,7 @@ using DbDataKit.Agents;
 using DbDataKit.Cli;
 using DbDataKit.Config.Yaml;
 using DbDataKit.Knowledge;
+using AgentAnswerViews = DbDataKit.Views.AgentAnswerViews;
 using DbDataKit.State;
 using Microsoft.Extensions.AI;
 
@@ -86,7 +87,11 @@ public sealed class ConsoleAgents
         Knowledge = knowledge;
         _time = time ?? TimeProvider.System;
         _desk = new ApprovalDesk(new StateApprovalLedger(_store), time: _time);
+        Memories = new MemoryService(new StateMemoryStore(_store), _time);
     }
+
+    /// <summary>What agents remember (plan 27a AG19): the person's own and the work's, kept in the <c>agents</c> module.</summary>
+    public MemoryService Memories { get; }
 
     public AgentStore Store => _store;
 
@@ -365,6 +370,21 @@ public sealed class ConsoleAgents
         var skills = new SkillCatalog(Skills().Where(s => definition.Skills.Contains(s.Skill.Name, StringComparer.Ordinal)).Select(s => s.Skill));
         var log = new StateConversationLog(_store, person, agentName, version, "console");
         if (definition.Skills.Count > 0) tools.Add(skills.Tool(context, log));
+        // memories (AG19): the tools only when a kind is on, and what is remembered is read again every turn, so a forgotten one is not given again
+        var switches = MemorySwitches.For(definition.Memory, policy);
+        var workRef = build?.Workspace is { } ws ? $"{build.Server}/{build.Project}/{ws}" : null;
+        tools.AddRange(Memories.Tools(context, switches, workRef));
+        var memoryRoom = Math.Max(200, model.WindowTokens / 20);
+        // a view in an answer (AG22) is checked against the view schemas before it is shown
+        if (definition.Output.Count > 0)
+            tools.Add(AnswerViewTool.Create(definition.Output, (view, kinds) => { var check = AgentAnswerViews.Check(view, kinds); return new ViewVerdict(check.Ok, check.Message); }));
+        // subagents (AG20): each is a tool; its reach is what this agent can call, narrowed by what it names; its asks come to this conversation's desk
+        if (definition.Subagents.Count > 0)
+        {
+            var approver = _desk.ApproverFor(id);
+            var parentTools = tools.ToList();
+            tools.AddRange(SubagentTools.For(definition, parentTools, context, name => SubagentSetupFor(name, parentTools), d => new ApprovalGate(approver, policy.Prompting, d.Tools.Where(t => t.Prompting is not null).ToDictionary(t => t.ToolName, t => t.Prompting!.Value, StringComparer.Ordinal), log), null, null, log));
+        }
         var tracker = new InPlayTracker(ScopesInPlay(definition));
         var instructions = Instructions(agentName, definition);
         var sources = Knowledge.Sources();
@@ -377,10 +397,21 @@ public sealed class ConsoleAgents
             Model = model.Model,
             Ledger = new StateUsageLedger(_store),
             AfterCall = tracker.Observe,
-            Inputs = _ => new ContextInputs(Knowledge.PolicyItems(), instructions, BoundKnowledgeProvider.Bind(definition, sources, tracker.Current, Knowledge.Catalog), [], BoundKnowledgeProvider.AlwaysGiven(definition, sources), skills.Offers),
+            Inputs = _ => new ContextInputs(Knowledge.PolicyItems(), instructions, BoundKnowledgeProvider.Bind(definition, sources, tracker.Current, Knowledge.Catalog), Memories.Inputs(person, workRef, switches, memoryRoom), BoundKnowledgeProvider.AlwaysGiven(definition, sources), skills.Offers),
         });
         _live[id] = new Live(session, agentName);
         return (_store.Find(id), null);
+    }
+
+    /// <summary>A subagent as the runtime runs it: its definition, version, the model its slot is bound to, its instructions, and the tools it names that the calling agent can call. Null when it does not exist, is not a back-end agent or has no model bound.</summary>
+    private SubagentSetup? SubagentSetupFor(string name, IReadOnlyList<AgentTool> parentTools)
+    {
+        var detail = Read(name, withReports: false);
+        if (detail is null || AgentDefinitionLoader.Load(detail.Yaml, detail.File).Definition is not { Audience: AgentAudience.BackEnd } definition || detail.Diagnostics.Any(d => d.Severity == "error")) return null;
+        var model = _models.For(definition.ModelSlot, null);
+        if (model is null) return null;
+        var wanted = definition.Tools.Select(t => t.ToolName).ToHashSet(StringComparer.Ordinal);
+        return new SubagentSetup(definition, KnowledgeItemLoader.HashOf(detail.Yaml)[..12], model.Client, string.Join("\n\n", Instructions(name, definition).Select(c => c.Text)), [.. parentTools.Where(t => wanted.Contains(t.Name))]);
     }
 
     /// <summary>Takes the person's message and runs it in the background; false when the conversation is not here, is another person's or is still running.</summary>
@@ -477,4 +508,18 @@ internal sealed class StateUsageLedger(AgentStore store) : IUsageLedger
     public UsageTotals Install() => Of(store.Usage("install").FirstOrDefault());
 
     public void Add(string person, UsageTotals usage) { /* the turn records are the ledger: nothing to add */ }
+}
+
+/// <summary>The memories of <see cref="MemoryService"/> kept in the <c>agents</c> module.</summary>
+internal sealed class StateMemoryStore(AgentStore store) : IMemoryStore
+{
+    private static Memory Of(MemoryRow r) => new(r.Id, r.Kind == "work" ? MemoryKind.Work : MemoryKind.Person, r.Person, r.WorkRef, r.Agent, r.Content, r.CreatedAt, r.UpdatedAt);
+
+    public IReadOnlyList<Memory> All(string? person = null, string? workRef = null) => [.. store.Memories(person, workRef).Select(Of)];
+
+    public Memory? Find(string id) => store.Memory(id) is { } r ? Of(r) : null;
+
+    public void Save(Memory m) => store.SaveMemory(new MemoryRow(m.Id, m.Kind == MemoryKind.Work ? "work" : "person", m.Person, m.WorkRef, m.Agent, m.Text, m.CreatedAt, m.UpdatedAt));
+
+    public bool Remove(string id) => store.DeleteMemory(id);
 }
