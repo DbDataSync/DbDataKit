@@ -98,6 +98,9 @@ public enum SnapshotImportRefusal
 
     /// <summary>The target is not a database built from modules.</summary>
     Unsupported,
+
+    /// <summary>A module of the snapshot needs an engine feature the target engine lacks (plan 29b U01); nothing was created.</summary>
+    FeatureMissing,
 }
 
 /// <summary>An import that was refused before it wrote anything, or that stopped; the message names the file, module or table.</summary>

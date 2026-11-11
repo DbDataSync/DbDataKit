@@ -57,7 +57,7 @@ CI runs the State and Scheduling suites on both columns: the current engines (SQ
 | --- | --- | --- | --- |
 | `Vector` (vector columns and search) | 2025 or later (the `vector` type) | the `pgvector` extension, installed on the server (`pg_available_extensions`); the module's migration runs `CREATE EXTENSION IF NOT EXISTS vector` | none |
 
-`EngineSupport.Features(engine, version, ...)` and `Features(connection, engine)` say which a server has (`Enabled`: usable; `Creatable`: installed on the server, not created in this database yet, which a migration does; `Missing`). `state show` prints them and `state test` has a `features` step.
+`EngineSupport.Features(engine, version, ...)` and `Features(connection, engine)` say which a server has (`Enabled`: usable; `Creatable`: installed on the server, not created in this database yet, which a migration does; `Missing`). `state show` prints them and `state test` has a `features` step. On PostgreSQL a `Creatable` extension also carries `CreateExtensionProblem`: the login is not a superuser and the extension is not trusted, or it has no `CREATE` on the database; `state test` and the migrator then refuse with that sentence before any DDL. The snapshot importer makes the same check (`SnapshotImportRefusal.FeatureMissing`) before it creates the first schema.
 
 **How a refusal reads.** The migrator checks before it runs any DDL (no schema, no registry, no table is made), only for a module that still has migrations to apply, and stops with one sentence naming the module, the feature, the engine and the fix:
 

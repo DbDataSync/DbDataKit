@@ -31,7 +31,8 @@ public enum FeatureStatus
 /// <param name="Engine">A <see cref="StateEngineIds"/> value.</param>
 /// <param name="Version">The engine's own version text, or null when it was not asked.</param>
 /// <param name="Statuses">The status of every <see cref="EngineFeature"/>.</param>
-public sealed record EngineFeatureReport(string Engine, string? Version, IReadOnlyDictionary<EngineFeature, FeatureStatus> Statuses)
+/// <param name="CreateExtensionProblem">PostgreSQL only: when an extension is installed on the server and not created, why this login cannot run its <c>CREATE EXTENSION</c> (not a superuser and the extension is not trusted, or no <c>CREATE</c> on the database); null when it can or the engine has no such step (plan 29b U01).</param>
+public sealed record EngineFeatureReport(string Engine, string? Version, IReadOnlyDictionary<EngineFeature, FeatureStatus> Statuses, string? CreateExtensionProblem = null)
 {
     public FeatureStatus Status(EngineFeature feature) => Statuses.GetValueOrDefault(feature, FeatureStatus.Missing);
 
@@ -78,7 +79,7 @@ public static class EngineFeatures
     };
 
     /// <summary>The report for an engine whose facts are known: the pure rules (SQL Server 17 and newer has the vector type; PostgreSQL has pgvector as <paramref name="postgresVector"/> says; SQLite has no feature).</summary>
-    public static EngineFeatureReport Judge(string engine, string? version, FeatureStatus postgresVector = FeatureStatus.Missing)
+    public static EngineFeatureReport Judge(string engine, string? version, FeatureStatus postgresVector = FeatureStatus.Missing, string? createExtensionProblem = null)
     {
         var statuses = new Dictionary<EngineFeature, FeatureStatus>();
         foreach (var feature in Enum.GetValues<EngineFeature>())
@@ -88,7 +89,7 @@ public static class EngineFeatures
                 (EngineFeature.Vector, StateEngineIds.Postgres) => postgresVector,
                 _ => FeatureStatus.Missing,
             };
-        return new EngineFeatureReport(engine, version, statuses);
+        return new EngineFeatureReport(engine, version, statuses, createExtensionProblem);
     }
 
     /// <summary>
@@ -142,10 +143,36 @@ public static class EngineFeatures
                     var version = $"{number / 10000}.{number % 10000}";
                     var installed = Scalar(connection, "SELECT installed_version IS NOT NULL FROM pg_available_extensions WHERE name = 'vector';");
                     var status = installed is null or DBNull ? FeatureStatus.Missing : Convert.ToBoolean(installed, CultureInfo.InvariantCulture) ? FeatureStatus.Enabled : FeatureStatus.Creatable;
-                    return Judge(engine, version, status);
+                    return Judge(engine, version, status, status == FeatureStatus.Creatable ? CreateExtensionProblem(connection, "vector") : null);
                 default:
                     return Judge(engine, null);
             }
+        }
+
+        /// <summary>Why this login cannot run <c>CREATE EXTENSION</c> for the extension, or null when it can (a superuser, a trusted extension with <c>CREATE</c> on the database, or an extension that does not need a superuser).</summary>
+        private static string? CreateExtensionProblem(DbConnection connection, string extension)
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT (SELECT rolsuper FROM pg_roles WHERE rolname = current_user), has_database_privilege(current_database(), 'CREATE'), " +
+                "COALESCE((SELECT v.superuser FROM pg_available_extension_versions v JOIN pg_available_extensions e ON e.name = v.name AND e.default_version = v.version WHERE v.name = @name), true), " +
+                "COALESCE((SELECT v.trusted FROM pg_available_extension_versions v JOIN pg_available_extensions e ON e.name = v.name AND e.default_version = v.version WHERE v.name = @name), false), current_user, current_database();";
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = "name";
+            parameter.Value = extension;
+            command.Parameters.Add(parameter);
+            using var reader = command.ExecuteReader();
+            if (!reader.Read()) return null;
+            var isSuper = !reader.IsDBNull(0) && reader.GetBoolean(0);
+            if (isSuper) return null;
+            var login = reader.GetString(4);
+            var database = reader.GetString(5);
+            var needsSuper = reader.GetBoolean(2);
+            var trusted = reader.GetBoolean(3);
+            if (needsSuper && !trusted)
+                return $"CREATE EXTENSION {extension} needs a superuser (the extension is not marked trusted) and '{login}' is not one; ask a database administrator to run CREATE EXTENSION {extension} in the database '{database}' once";
+            if (!reader.GetBoolean(1))
+                return $"'{login}' has no CREATE right on the database '{database}', which creating the extension needs; ask a database administrator to GRANT CREATE ON DATABASE or to run CREATE EXTENSION {extension} once";
+            return null;
         }
 
         private static object? Scalar(DbConnection connection, string sql)
