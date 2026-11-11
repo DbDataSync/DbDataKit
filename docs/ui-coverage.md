@@ -16,6 +16,8 @@ All screens are shown by the console (`Shared/web/console`) at `/servers/<server
 | | Server state: panel, maintenance and the Move wizard | – | – | – | Maintenance on and off, check and run a move | `ServerStatePage.tsx` |
 | | Lineage, Deployments (where a package is deployed and what a runner holds, from the runners' lineage), Views (rendered views; **Dashboards** and **Reports** tabs over a **source**: the recorded fixtures, or the documents **published to a Gateway that runs the `views` module** through the console's relay, each widget read as the signed-in person (the source is chosen in the page and kept as `?source=`; with no choice the first such Gateway is used, else the fixtures); a dashboard is opened, laid out to the window, its layout switched and its parameters kept in the address; saving from the editor on a published source publishes a new version, and the board's **Versions** panel lists the versions (who, when, note), serves an earlier one, rolls back and removes the document from the group (author role); a report is listed and checked, not drawn yet), Monitoring, Docs | – | – | – | Read-only | `LineagePage.tsx`, `DeploymentsPage.tsx`, `ViewsPage.tsx`, `DashboardsPanel.tsx`, `VersionsPanel.tsx`, `MyViewsPanel.tsx`, `MonitoringPage.tsx`, `DocsPages.tsx`, `HomePage.tsx` |
 | | Data quality (`/quality`; plan 23a FQ17): the datasets of the checks stored with Sync's replications and Build's models, joined by dataset identity, worst first; per check the latest result, the measure, the block and its history with the keys of the rows that failed; an evaluation on request on a Sync server (admin; Build evaluates after a refresh and the button says so); the chosen table's checks on the Lineage page | – (checks are written in the product's own files: `checks:` of a replication's `task.yaml`, a model's file) | – | – | Evaluate (Sync), read history, ask the servers again; **no release by hand** of a block yet (it clears when the check passes; the serving layer's release is FQ15) | `QualityPage.tsx` |
+| | Runs (`/runs`; the audit of 2026-11-11, UI03): the newest runs of every replication of every Sync server and of every runner's tasks, newest first, over the relay; a switch for only the failures; a run that completed with failures or was interrupted is shown as failed; each row opens the replication's run history or the runner's Runs screen | – | – | – | Read-only (nothing is started, cancelled or resynchronised here: those are the product screens' actions); a server that does not answer is named | `RunsPage.tsx` |
+| | Approvals (`/approvals`; UI01): what waits for a decision on the Store and Gateway servers: the Store's pending change requests (each model and instance; an agent's write is marked and comes first among equal waits) and the Gateway's app versions that ask to be trusted and have no approval for their exact files; longest wait first, whether the signed-in person may decide it (as the server says), a link to the screen where it is read and decided | – | – | – | Review (opens the Store's Change requests tab or the Gateway's Apps screen); **decides nothing itself**; a server that does not answer is named | `ApprovalsPage.tsx` |
 | | **My dashboards and reports** (the source *My dashboards on `<server>`* of the Views page, plan 32 DBR12: a person's own, kept in the Gateway's state and read as the signed-in person) | Yes (New, or **Pin to my dashboard** from a rendered dashboard or report, or **Pin a query result** from a pasted semantic request) | Yes (the Views editor, against this source; a shared document is read-only and *Make my copy* makes an own one) | Yes | Share to a person, a group or everyone; history and restore as a new version; promote to a file (path and text, with a download); open what others shared (each viewer's own rows) | `MyViewsPanel.tsx` (list, share, history, promote, pin), `DashboardsPanel.tsx`, `DashboardEditor.tsx` |
 | **Sync** | Connections | Yes | Yes | Yes | Test | `ConnectionsPage.tsx`, `ConnectionEditPage.tsx` |
 | | Replications | Yes | Yes | Yes | Enable, pause and resume | `ReplicationsPage.tsx`, `ReplicationDetailPage.tsx` |
@@ -67,11 +69,53 @@ All screens are shown by the console (`Shared/web/console`) at `/servers/<server
 
 ## Notes and gaps
 
-* **Monitoring** (console) also says who schedules a Build plan or a runner task and moves a Build plan between this server's scheduler, observation by a runner and the runner (`monitoring-owner-*`; the Build server changes its own settings and the runner's record together).
+* **Monitoring** (console) lists a server that does not answer or says it is not ready (any kind: Store and Workspace servers included, UI04), a certificate that is expired or inside its warning window on a Gateway or a Sync server (UI02; a valid one is no row), and also says who schedules a Build plan or a runner task and moves a Build plan between this server's scheduler, observation by a runner and the runner (`monitoring-owner-*`; the Build server changes its own settings and the runner's record together).
 * **Console connections** lists and copies; a connection is created and edited in the product's own screens (Sync, or the Gateway's data sources).
 * **Build**: the connections row is from reading `NewConnectionPanel` and `DefinitionPanel`, not from using them; confirm what they edit before relying on the Edit cell.
 * **Semantic models and saved queries** (plan 19, lane J): Build publishes a model and the Gateway's Models screen lists and retires it; the Views page renders view documents, and opens dashboards from recorded fixtures (plan 32 DBR23) or from those published to a Gateway that runs the `views` module (DBR11b); it has no screen for the models themselves.
 * **Sync** hides most of its screens in `ReplicationDetailPage` and its tab components; the matrix names the page, not each tab.
+
+## Audit of editing, publishing and monitoring (2026-11-11)
+
+Question: for everything a person authors, publishes by file or command, or has to watch, which screen covers it, and what has none. Method: every format of `docs/formats.json` against [ui-editors.md](ui-editors.md) (editor) and against the screens that show its history or result; every management route a person or an operator uses (runs, publishes, approvals, queues, health, audit, lineage, quality, state databases, upgrades, runners, secrets, certificates, instances, pairing) against `Shared/web/*/src/pages`; read from the code, not from clicking through. The gaps are ids `UI01` to `UI10`: UI01 to UI04 were built in this audit (UI01 the Approvals page, UI02 certificates in Monitoring, UI03 the Runs page, UI04 servers that are down in Monitoring) and UI05 to UI10 are rows of [13c-follow-ups.md](plans/13c-follow-ups.md); a gap another plan already owns is named with that plan's slice and gets no new row.
+
+### Formats: editor, and where its history or result is seen
+
+| Format | Editor (state in ui-editors.md) | History, result or monitoring view | Gap |
+| --- | --- | --- | --- |
+| `model` (Store) | Store `ModelEditor.tsx` (partial: publishing is a command) | change requests: Store `ChangesTab.tsx`, and now the console's `ApprovalsPage.tsx`; storage: `StorageTab.tsx` | no history of a model's text: UI07; publish and register an instance: O10c (plan 20) |
+| `connection` | Gateway `DataSourcesPage.tsx`, Build `EditTab.tsx` (full) | Gateway `ConfigPage.tsx` (commits and diff), the Test button; Monitoring has no per-connection health | none beyond UI08 |
+| `view-spec`, `dashboard`, `report` | Workspace, `views-editor` (partial) | `VersionsPanel.tsx` | owned by the plan 32 and apps/Workspace work (another agent): skipped |
+| `semantic-package` | Build `ModelPublish.tsx`, Gateway `ModelsPage.tsx` (full / partial) | `ModelsPage.tsx`: versions, the version served, a failed version and why; roll back | saved queries: SL (plan 14a) |
+| `build-model` | Build screens (full) | `RefreshPanel.tsx` and `TestsPanel.tsx` (each load, the checks after it), `GitPanel.tsx`; Monitoring (scheduled plans, failed last run) | no run history of a plan across servers: UI09 |
+| `sync-task-config`, `sync-mapping-config`, `sync-script-config` | Sync screens (full) | per replication: Monitoring tab and run history; console Monitoring (last run, lag); **new** `RunsPage.tsx` (the newest runs of every replication) | none |
+| `package` (frozen) | Runner `PackagesPage.tsx`, `PublishFromFiles.tsx`, Build `RunnerPublish.tsx`, Sync `RunnerPage.tsx` (partial) | Runner `RunsPage.tsx`, console `DeploymentsPage.tsx` (what each runner holds, behind, staged), **new** `RunsPage.tsx` | the run's log is not shown: UI08 |
+| `release`, `update-plan` | `UpgradesPage.tsx` (view-only, the person starts Apply) | `UpgradesPage.tsx` (check report, journal, outcome) | none |
+| `knowledge`, `agent`, `agent-policy` | planned (plan 27a) | planned | owned by the agents and knowledge work (another agent): skipped |
+
+### Things people watch
+
+| What | Screen today | Gap |
+| --- | --- | --- |
+| Runs | per product: Sync replication history, Runner `RunsPage.tsx`, Build `RefreshPanel.tsx`; across servers: **new** console `RunsPage.tsx` for Sync and runners | Build plan runs have no list route (a scheduled plan has the last exit only): UI09 |
+| Publishes (who published what, to where) | Runner package history, Gateway `ConfigPage.tsx` and `AppsPage.tsx` (versions, who, when), Workspace `BuildsPanel.tsx` (who published what), console `DeploymentsPage.tsx` | the Store's `model publish` has no route or screen: O10c (plan 20); no one place lists publishes across products (plan 30 owns publishing; not built here) |
+| Approvals | Store `ChangesTab.tsx`, Gateway `AppsPage.tsx`, Build and Workspace approver actions; **new** `ApprovalsPage.tsx` lists what waits on every Store and Gateway | Build deploy plans, Workspace merges and publishes, Runner activations are immediate approver actions with no waiting state: nothing to list. Agent tool approvals and outside agents' sessions: AG29 (owned by the agents work; its inbox adds a source to this page) |
+| Queues and tasks | Runner `TasksPage.tsx` (waiting reason, position), console Monitoring (a task that waits shows as failed) | none |
+| Health | `InstancesPage.tsx` (status, upgrade mark), `ServerStatePage.tsx`; **new** a server that is down or not ready is a row of Monitoring, whatever its kind (before this the page showed only servers that answered, and a Store or Workspace server never) | no health history or alert: GP16 to GP18 (plan 22a) |
+| Audit (who did what) | Workspace history of a workspace; Store row history (`EntityPage.tsx`); Gateway `ConfigPage.tsx` (commits); `PauseHistoryPanel`/`BulkLoadHistoryPanel` of Sync | the console has no audit trail of its own (sign-ins, invitations, pairing, a person's relayed writes): UI05 |
+| Lineage, data quality | `LineagePage.tsx`, `QualityPage.tsx` | release of a block by hand: FQ15 (plan 23a) |
+| State databases, upgrades | `StateConnections.tsx`, `ServerStatePage.tsx`, `UpgradesPage.tsx` | none |
+| Secrets | Gateway `SecretsPage.tsx` (names and references, never a value); Workspace `KeysPage.tsx` (references) | no overview across servers of which references are written, missing or unused: UI06 |
+| Certificates | Gateway `TlsPage.tsx`, admin `AdminCertificatePage.tsx` (Sync); **new** Monitoring shows an expired one or one inside its warning window on a Gateway or a Sync server | Build, Store, Runner, Workspace and the console itself have no certificate route to read: UI10 |
+| Instances, pairing | `InstancesPage.tsx`, `PendingServers.tsx` | none |
+
+### Open gaps added to plan 13c
+
+`UI05` to `UI10` are in [13c-follow-ups.md](plans/13c-follow-ups.md) with what each needs; each needs a server route first (a screen is never built around a file), so none is built in this audit. UI01 to UI04 were built on routes that exist today.
+
+### Not verified
+
+The vitest tests of the new screens run (`approvals.test.ts`, `runs.test.ts`, `monitoring.test.ts`). The Playwright story `approvals.spec.ts` was written against the Store mock of `store-fake.ts` and was not run (the console build is the cost). `RunsPage.tsx`, the certificate rows and the server rows of Monitoring have no story of their own; `monitoring.spec.ts` (real servers) was not run and, with a freshly made certificate and servers that answer, should be unaffected.
 
 ## Keeping it current
 
