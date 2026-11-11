@@ -24,4 +24,4 @@ To delete another branch later, add it to the list (with a comment saying why) a
 
 ## Backup branches
 
-`backup/*` branches hold pending work while it waits for CI (`docs/agent-workflow.md`, "Backups"). They clean themselves: the hourly workflow **Backup branch cleanup** deletes a backup whose tip is contained in `main` and whose tip commit is older than 24 hours (`scripts/backup_branches.py clean`). Do not list them in `scripts/branches-to-delete.txt`.
+`backup/*` branches hold pending work while it waits for CI (`docs/agent-workflow.md`, "Backups"). They clean themselves: the workflow **Backup branch cleanup** deletes a backup as soon as its tip is contained in `main`, on every push to `main` and hourly (`scripts/backup_branches.py clean`). Do not list them in `scripts/branches-to-delete.txt`.

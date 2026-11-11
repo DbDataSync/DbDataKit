@@ -3,8 +3,8 @@
 
   push    push local `main` and every local `work/*` branch whose tip is not on origin/main yet to `backup/main` and `backup/<branch>`
           (plain pushes, never forced; the branches only grow, so each push is a fast-forward). Run it after every merge into the local main.
-  clean   delete the remote `backup/*` branches whose tip is contained in origin/main and whose tip commit is older than --hours (default 24).
-          Dry run unless --apply. The scheduled workflow `backup-branch-cleanup.yml` runs it with --apply.
+  clean   delete the remote `backup/*` branches whose tip is contained in origin/main (default: at once; --hours N keeps one that is younger than N hours
+          as a safety margin). Dry run unless --apply. The workflow `backup-branch-cleanup.yml` runs it with --apply on every push to main and hourly.
 
 Only committed work is backed up: an agent's uncommitted files are not. Intent: docs/agent-workflow.md ("Backups").
 Run from a clone of the repository: python3 scripts/backup_branches.py push | clean [--apply] [--hours N] [--remote origin]
@@ -95,7 +95,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("mode", choices=["push", "clean"])
     parser.add_argument("--remote", default="origin")
-    parser.add_argument("--hours", type=float, default=24)
+    parser.add_argument("--hours", type=float, default=0)
     parser.add_argument("--apply", action="store_true", help="clean: delete (default is a dry run)")
     parser.add_argument("--dry-run", action="store_true", help="push: list only")
     args = parser.parse_args(argv)

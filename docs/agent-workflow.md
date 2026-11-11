@@ -53,8 +53,9 @@ while it waits for CI to be idle:
   (for example `backup/work/delivery2`). Plain pushes, never forced: the branches only grow, so each push is a fast-forward. **The coordinator runs it after every merge into the local
   main** (and the CI agent at the start of each cycle). Pushes to `backup/*` start no CI run (workflows run on pushes to `main` only).
 - Only **committed** work is covered: one commit per slice is why the rule exists. An agent's uncommitted files are not backed up; ask a long-running agent to commit work in progress to its branch.
-- The workflow **Backup branch cleanup** (`.github/workflows/backup-branch-cleanup.yml`, hourly) runs `python3 scripts/backup_branches.py clean --apply`: a `backup/*` branch is deleted
-  when its tip is contained in `origin/main` **and** its tip commit is older than 24 hours. A backup main has not caught up with is never deleted. By hand: Actions tab, "Run workflow"
+- The workflow **Backup branch cleanup** (`.github/workflows/backup-branch-cleanup.yml`) runs `python3 scripts/backup_branches.py clean --apply` on every push to `main` (and hourly as a net): a `backup/*` branch is deleted
+  **as soon as** its tip is contained in `origin/main`. Merging a branch with `git merge` (not a squash or cherry-pick) is what keeps its tip contained, so a merged agent branch's backup goes with the next push to main.
+  A backup main has not caught up with is never deleted. `--hours N` keeps a young backup as a margin if ever wanted. By hand: Actions tab, "Run workflow"
   (a dry run unless `apply` is true).
 - To recover after a lost machine: `git fetch origin 'refs/heads/backup/*:refs/remotes/origin/backup/*'`, then merge or check out the backup branches (`backup/main` first).
 

@@ -32,7 +32,7 @@ first if the worktree base is old. Use the brief template in `docs/agent-workflo
 3. Run every `python3 -I scripts/check_*.py` (`check_solution.py` / `check_docs_commands.py` can fail only because worktrees exist under `.claude/worktrees`).
 4. `git worktree remove -f -f .claude/worktrees/agent-<id>` (the branch stays), then start the next agent.
 
-**Backups.** After every merge into the local main run `python3 scripts/backup_branches.py push` (local main and unmerged `work/*` branches go to `backup/<name>`; plain pushes, no CI run). The hourly workflow `backup-branch-cleanup.yml` deletes a backup once main contains it and it is older than 24 hours. Only committed work is covered. Recovery: `git fetch origin 'refs/heads/backup/*:refs/remotes/origin/backup/*'`.
+**Backups.** After every merge into the local main run `python3 scripts/backup_branches.py push` (local main and unmerged `work/*` branches go to `backup/<name>`; plain pushes, no CI run). The workflow `backup-branch-cleanup.yml` deletes a backup as soon as main contains its tip (on every push to main, hourly as a net); merge agent branches with `git merge`, not squash or cherry-pick, so their tips stay contained. Only committed work is covered. Recovery: `git fetch origin 'refs/heads/backup/*:refs/remotes/origin/backup/*'`.
 
 **Pushing.** A push cancels the run set in progress. Check first:
 `gh api "repos/DbDataSync/DbDataKit/actions/runs?branch=main&per_page=14" --jq '.workflow_runs[]|select(.status!="completed")|"\(.name) \(.status) \(.head_sha[0:8])"'`
