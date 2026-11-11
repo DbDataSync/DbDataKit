@@ -107,6 +107,14 @@
     {
       "name": "a-field-used-twice-is-asked-once",
       "file": "good/a-field-used-twice-is-asked-once.json"
+    },
+    {
+      "name": "matrix-axis-entries-with-a-format-and-a-sort",
+      "file": "good/matrix-axis-entries-with-a-format-and-a-sort.json"
+    },
+    {
+      "name": "chart-channel-formats",
+      "file": "good/chart-channel-formats.json"
     }
   ],
   "refused": [

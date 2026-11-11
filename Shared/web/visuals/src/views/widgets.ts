@@ -4,7 +4,7 @@ import {
 } from './common'
 import type { Json, ViewsIssue } from './common'
 import { checkFormat } from './format'
-import vegaSubsetSchema from '../../schemas/vega-lite-subset.schema.json'
+import coreSchema from '../../schemas/core.schema.json'
 
 /**
  * The validator of the widget vocabulary (plan 32 section 2, DBR01): the shape check of a widgets map, as `ViewsLoader.LoadWidgets` does it in .NET. A widget is a type, its encodings and a query; the
@@ -28,7 +28,7 @@ const widgetChecks: Record<string, ValidateFunction> = {
 const queryChecks: Record<string, ValidateFunction> = {
   derived: part(defs.query_derived!), semantic: part(defs.query_explicit_semantic!), saved: part(defs.query_explicit_saved!), store: part(defs.query_explicit_store!), ref: part(defs.query_explicit_ref!),
 }
-const channelCheck = ajv.getSchema(`${(vegaSubsetSchema as { $id: string }).$id}#/$defs/channel`)!
+const channelCheck = ajv.getSchema(`${(coreSchema as { $id: string }).$id}#/$defs/chart_channel`)!
 
 export const RAW_HTML = /<[A-Za-z/!?]/
 export const MARKDOWN_IMAGE = /!\[[^\]]*\]\([^)]*\)/
@@ -88,7 +88,15 @@ function checkWidget(id: string, raw: unknown, path: string, context: Context, i
     case 'matrix':
       for (const axis of ['rows', 'columns'] as const) {
         const list = encodings?.[axis]
-        if (Array.isArray(list)) list.forEach((f, i) => { if (typeof f === 'string') fields.push({ channel: axis, field: f, path: at(join(ep, axis), i) }) })
+        if (Array.isArray(list)) list.forEach((f, i) => {
+          if (typeof f === 'string') fields.push({ channel: axis, field: f, path: at(join(ep, axis), i) })
+          else if (isObject(f) && typeof f.field === 'string') fields.push({ channel: axis, field: f.field, path: join(at(join(ep, axis), i), 'field') })
+        })
+        if (Array.isArray(list)) {
+          // one level of an axis carries a sort: it is the sort of the axis (the second is the one refused, as the .NET loader does)
+          const sorted = list.map((f, i) => (isObject(f) && f.sort !== undefined ? i : -1)).filter((i) => i >= 0)
+          if (sorted.length > 1) issues.add('DBD-106', join(at(join(ep, axis), sorted[1]!), 'sort'), `Only one level of the ${axis} carries a sort: it is the sort of the axis.`)
+        }
       }
       if (Array.isArray(encodings?.values)) encodings.values.forEach((v, i) => { if (isObject(v) && typeof v.field === 'string') fields.push({ channel: 'values', field: v.field, path: join(at(join(ep, 'values'), i), 'field') }) })
       break
@@ -115,7 +123,7 @@ function checkWidget(id: string, raw: unknown, path: string, context: Context, i
   return { id, type, raw }
 }
 
-/** The formats a metric and a table's columns name (a matrix reads the engine's presets until DBR41); the words are `ViewFormat.Check`'s in .NET. */
+/** The formats a widget names: a metric's, a table column's, a matrix value's and axis level's, a chart channel's; the words are `ViewFormat.Check`'s in .NET. */
 function formats(raw: Json, type: string, path: string, issues: Issues): void {
   const one = (format: unknown, where: string) => {
     if (format === undefined) return
@@ -123,10 +131,24 @@ function formats(raw: Json, type: string, path: string, issues: Issues): void {
     if (!problem) return
     issues.add('DBD-106', problem.key !== '' && isObject(format) ? join(where, problem.key) : where, problem.message)
   }
+  const ep = join(path, 'encodings')
+  const encodings = isObject(raw.encodings) ? raw.encodings : undefined
   if (type === 'metric') one(raw.format, join(path, 'format'))
-  const columns = isObject(raw.encodings) ? raw.encodings.columns : undefined
+  const columns = encodings?.columns
   if (type === 'table' && Array.isArray(columns))
-    columns.forEach((c, i) => { if (isObject(c)) one(c.format, join(at(join(join(path, 'encodings'), 'columns'), i), 'format')) })
+    columns.forEach((c, i) => { if (isObject(c)) one(c.format, join(at(join(ep, 'columns'), i), 'format')) })
+  if (type === 'matrix') {
+    if (Array.isArray(encodings?.values)) encodings.values.forEach((v, i) => { if (isObject(v)) one(v.format, join(at(join(ep, 'values'), i), 'format')) })
+    for (const axis of ['rows', 'columns'] as const) {
+      const list = encodings?.[axis]
+      if (Array.isArray(list)) list.forEach((f, i) => { if (isObject(f)) one(f.format, join(at(join(ep, axis), i), 'format')) })
+    }
+  }
+  if (type === 'chart' && encodings)
+    for (const [channel, value] of Object.entries(encodings)) {
+      const items = channel === 'tooltip' && Array.isArray(value) ? value.map((v, i) => [v, at(join(ep, channel), i)] as const) : ([[value, join(ep, channel)]] as const)
+      for (const [item, where] of items) if (isObject(item)) one(item.format, join(where, 'format'))
+    }
 }
 
 /** A chart's mark and encodings: the Vega-Lite subset, closed. Anything that fetches or computes is refused by name (no computation in the chart spec). */

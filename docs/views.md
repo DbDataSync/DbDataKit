@@ -16,8 +16,8 @@ shares are part of the **query**, run on the server as the viewer.
 | Type | Keys | Notes |
 | --- | --- | --- |
 | `metric` | `encodings: {value, compare}`, `label`, `format` (a preset or a mapping, see Formats), `query` | `compare` is a second measure of the same request |
-| `chart` | `mark`, `encodings` (channels, each a field name or the subset's `{field, type, sort, stack, title}`), `query`, `on_select`, `drill` | the subset is the QIS view's own (`vega-lite-subset.schema.json`) |
-| `matrix` | `encodings` (a QIS matrix view's own: `rows columns values values_on totals sort column_limit`), `query`, `on_select`, `drill` | the encodings are `view.schema.json`'s definitions, referenced and not copied |
+| `chart` | `mark`, `encodings` (channels, each a field name or the subset's `{field, type, sort, stack, title}` and `format`), `query`, `on_select`, `drill` | the subset is the QIS view's own (`vega-lite-subset.schema.json`); `format` is the widget's (see Formats) |
+| `matrix` | `encodings` (a QIS matrix view's own: `rows columns values values_on totals sort column_limit`; a `rows` or `columns` entry is a field or `{field, format, sort}`, a `values` entry takes a `format` mapping), `query`, `on_select`, `drill` | the encodings are `view.schema.json`'s definitions, referenced and not copied, except the axes and the values, which also take a format |
 | `table` | `encodings: {columns: [{field, label, format (a preset or a mapping), align, width}], sort}`, `query`, `drill` | a total row is a row of the result |
 | `text` | `text` | markdown, **no raw HTML, no image, links only to a path on the host** (`/docs/x`); `{{params.name}}` is substituted as text |
 | `image` | `hash: sha256:<64 hex>`, `media_type` (`image/png image/jpeg image/webp`), `alt`, `fit` | held in the definition's artifacts by hash; **no URL, no SVG** |
@@ -50,7 +50,30 @@ A number mapping's `decimals` defaults to the catalog's, a currency's to 2 (0 fo
 15 significant digits). A date reads an ISO date or date-time **as written** (no time zone is applied); text that is not a date is shown as it is. A format that cannot be read is refused with the key inside it
 (`DBD-106`, for example `` `date` pattern has the unknown token `yyy` ``); a pattern is a closed set of tokens, never a free format string. Month names and separators are the invariant (English) ones: locale data is not
 carried yet. **One formatter in two languages**: `ViewFormat` in `DbDataKit.Views` writes a cell's text on the server and `formatValue` in `@dbdatakit/visuals` is its twin, both run against `Shared/conformance/views/format/cases.json`.
-A matrix value still takes the engine's presets (`compact full percent`) until the matrix's own format form lands (DBR41).
+
+#### Formats on attributes and axes (DBR41)
+
+`format` is read wherever a field is shown. The QIS view (`view 0.3`) and its Vega-Lite subset are **unchanged**: the format belongs to the widget vocabulary and the renderer maps it.
+
+```yaml
+encodings:                     # a chart
+  x: {field: orders.month, format: {date: MMM}}                       # January to December, in calendar order
+  y: {field: orders.net_revenue, format: {style: currency, currency: USD, decimals: 0}}
+  tooltip: [{field: orders.month, format: month-year}, {field: orders.net_revenue, format: compact}]
+encodings:                     # a matrix
+  rows: [{field: orders.year, format: {date: year}, sort: {by: sort_key, dir: desc}}, {field: orders.month, format: {date: MMM}}]
+  columns: [customers.region]
+  values: [{field: orders.net_revenue, format: {style: currency, currency: EUR, decimals: 0}}]
+```
+
+* A **chart channel** that is categorical (nominal, ordinal, a date) has its members written as the format reads them, into a column of its own (`<field>__<channel>`) in the chart's data, in the order of the raw members
+  (the engine's `sort_key` order, the channel's `sort` list, or ascending and descending by value): `MMM` labels the months in calendar order, never alphabetically. A quantitative channel keeps its field and the
+  rendered chart carries `formats`, a d3-format string per channel (`$,.0f`, `.0%`, `,.2~f`, `.2~s`) that `ViewFormat.D3Number` makes from the format's own closed vocabulary; the client checks each against one fixed
+  pattern before it gives it to Vega-Lite as the axis, legend, header or tooltip format (`applyChartFormats`). **What d3 cannot say:** `$` is the dollar, so another currency draws its digits without a symbol on an axis
+  (the cell text of a table and a matrix has it); `compact` uses d3's SI prefixes (`k`, `M`, `G`) where the cell text says `K`, `M`, `B`; d3's minus is the typographic one. An author's expression is still refused (`vega_disallowed`).
+* A **matrix axis entry** is a field or `{field, format, sort}`: the format applies to the labels of that level; one level of an axis may carry a `sort`, which is the axis's sort (the same as `sort.rows` or `sort.columns`,
+  and writing both is that widget's error). A **matrix value** takes a preset or a mapping; a mapping is applied to the cell's number after the engine has arranged the grid.
+* The data of a chart that is exported (its sheet) holds the label columns beside the raw ones.
 
 ### Diagnostics of widgets
 

@@ -175,6 +175,54 @@ public static class ViewFormat
         }
     }
 
+    // ---- the same formats for a chart axis ----
+
+    /// <summary>
+    /// A member label (a text, or the text of a number) as it reads under a format: a date mapping reads an ISO date, a number format reads a number written as text (<c>2026</c>), and a text that is neither is returned
+    /// as it is. A matrix axis and a categorical chart axis show their members through this, so the screen, the PDF and an email read alike.
+    /// </summary>
+    public static string Label(string label, JsonNode? format, JsonObject? catalog = null)
+    {
+        if (format is JsonObject o && o["date"] is JsonValue dv && dv.TryGetValue<string>(out var pattern)) return Date(label, pattern);
+        if (format is null || (format is JsonObject n && !n.ContainsKey("style"))) return label;
+        return double.TryParse(label, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) ? Number(number, format, catalog) : label;
+    }
+
+    /// <summary>
+    /// The d3-format string that draws a number format on a **quantitative** chart axis, legend or tooltip, or null for a format that is not a number format (a date mapping). The string is made here from the format's own
+    /// closed vocabulary and never taken from a document, and the renderer's client checks it against a fixed pattern before it is given to Vega-Lite. d3 cannot say every symbol: <c>$</c> is the dollar, so another
+    /// currency draws its digits without a symbol; <c>compact</c> uses d3's SI prefixes (k, M, G), so a billion reads <c>G</c> where the cell text says <c>B</c>; d3's minus is the typographic one.
+    /// </summary>
+    public static string? D3Number(JsonNode? format, JsonObject? catalog = null)
+    {
+        if (format is JsonObject o)
+        {
+            if (!(o["style"] is JsonValue sv && sv.TryGetValue<string>(out var style))) return null;
+            var decimals = o["decimals"] is { } dn ? (int?)Whole(dn) : catalog?["decimals"] is { } cd ? (int?)Whole(cd) : null;
+            var group = o["grouping"] is not JsonValue g || !g.TryGetValue<bool>(out var gb) || gb ? "," : "";
+            return D3Styled(style, decimals, o["currency"]?.GetValue<string>(), group);
+        }
+        var preset = format is JsonValue pv && pv.TryGetValue<string>(out var p) ? p : "full";
+        var catalogStyle = catalog?["style"]?.GetValue<string>() ?? "number";
+        int? catalogDecimals = catalog?["decimals"] is { } ccd ? (int?)Whole(ccd) : null;
+        if (preset == "percent" || catalogStyle == "percent") return D3Styled("percent", catalogDecimals, null, ",");
+        if (preset == "compact") return D3Styled("compact", null, null, ",");
+        return D3Styled(catalogStyle == "currency" ? "currency" : "number", catalogDecimals, catalog?["currency"]?.GetValue<string>(), ",");
+    }
+
+    private static string D3Styled(string style, int? decimals, string? currency, string group)
+    {
+        switch (style)
+        {
+            case "percent": return "." + (decimals ?? 0).ToString(CultureInfo.InvariantCulture) + "%";
+            case "compact": return "." + ((decimals ?? 1) + 1).ToString(CultureInfo.InvariantCulture) + "~s";
+            case "currency":
+                var d = decimals ?? (currency is "JPY" or "KRW" ? 0 : 2);
+                return (currency == "USD" ? "$" : "") + group + "." + d.ToString(CultureInfo.InvariantCulture) + "f";
+            default: return decimals is { } n ? group + "." + n.ToString(CultureInfo.InvariantCulture) + "f" : group + ".2~f";
+        }
+    }
+
     private static string Compact(double v, int? decimals, string symbol)
     {
         var a = Math.Abs(v);

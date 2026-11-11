@@ -39,6 +39,10 @@
     {
       "file": "good/dashboard-formats.json",
       "kind": "dashboard"
+    },
+    {
+      "file": "good/dashboard-axis-formats.json",
+      "kind": "dashboard"
     }
   ],
   "bad": [
@@ -542,6 +546,33 @@
       "code": "DBD-106",
       "path": "widgets.w.format",
       "line": 9,
+      "schema": false
+    },
+    {
+      "name": "format-unknown-date-token-on-a-channel",
+      "file": "bad/format-unknown-date-token-on-a-channel.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.by_month.encodings.x.format.date",
+      "line": 14,
+      "schema": false
+    },
+    {
+      "name": "format-currency-without-code-on-an-axis",
+      "file": "bad/format-currency-without-code-on-an-axis.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.rows[0].format",
+      "line": 12,
+      "schema": false
+    },
+    {
+      "name": "matrix-two-levels-sorted",
+      "file": "bad/matrix-two-levels-sorted.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.rows[1].sort",
+      "line": 18,
       "schema": false
     }
   ],

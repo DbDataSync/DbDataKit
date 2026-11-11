@@ -245,6 +245,100 @@ public class ResolveTests
     }
 
     [Fact]
+    public async Task A_chart_channels_format_labels_a_categorical_axis_in_the_members_order_and_gives_a_quantitative_one_a_generated_d3_string()
+    {
+        var doc = Doc("""
+              ch:
+                type: chart
+                mark: bar
+                encodings:
+                  x: {field: date.year_month, format: {style: number, grouping: true}}
+                  y: {field: sales.net_amount, format: {style: currency, currency: USD, decimals: 0}}
+                  tooltip: [{field: sales.units, format: compact}]
+                query: {model: retail_sales, limit: 100}
+            """);
+        var r = await Resolver(new RetailServing()).ResolveAsync(Viewer(), doc, "desk");
+        var ch = Ok(r, "ch");
+        var spec = ch["vega_lite"]!;
+        // the month members are written as the format reads them, in the order of the raw members (here the numbers 202601 to 202610), never alphabetically
+        Assert.Equal("date_year_month__x", spec["encoding"]!["x"]!["field"]!.GetValue<string>());
+        Assert.Equal(["202,601", "202,602", "202,603", "202,604", "202,605", "202,606", "202,607", "202,608", "202,609", "202,610"], spec["encoding"]!["x"]!["sort"]!.AsArray().Select(n => n!.GetValue<string>()));
+        Assert.Equal("202,601", spec["data"]!["values"]![0]!["date_year_month__x"]!.GetValue<string>());
+        Assert.NotNull(spec["encoding"]!["x"]!["title"]);
+        // a quantitative channel keeps its field and gets the d3 string the format maps to; the engine's own subset saw no `format`
+        Assert.Equal("sales_net_amount", spec["encoding"]!["y"]!["field"]!.GetValue<string>());
+        Assert.Equal("$,.0f", ch["formats"]!["y"]!.GetValue<string>());
+        Assert.Equal(".2~s", ch["formats"]!["tooltip"]![0]!.GetValue<string>());
+        Assert.Null(spec["encoding"]!["y"]!["format"]);
+        Assert.Empty(Violations(r.ToJson()));
+    }
+
+    [Fact]
+    public async Task A_chart_without_a_format_has_no_formats_and_a_bad_format_is_refused_by_the_loader_before_it_is_drawn()
+    {
+        var doc = Doc("""
+              ch:
+                type: chart
+                mark: bar
+                encodings: {x: customers.region, y: sales.net_amount}
+                query: {model: retail_sales}
+            """);
+        var r = await Resolver(new RetailServing()).ResolveAsync(Viewer(), doc, "desk");
+        Assert.Null(Ok(r, "ch")["formats"]);
+        var bad = ViewsLoader.Load("schemaVersion: 1\nkind: dashboard\ntitle: T\nwidgets:\n  ch:\n    type: chart\n    mark: bar\n    encodings: {x: {field: customers.region, format: {date: yyy}}, y: sales.net_amount}\n    query: {model: retail_sales}\nlayouts:\n  - {name: desk, type: reflow, default: true, grid: {columns: 12}, tiles: [{widget: ch, x: 0, y: 0, w: 12, h: 6}]}\n", "t.yaml");
+        Assert.False(bad.Ok);
+        Assert.Contains(bad.Diagnostics, d => d.KeyPath == "widgets.ch.encodings.x.format.date");
+    }
+
+    [Fact]
+    public async Task A_matrix_formats_its_axis_labels_and_its_values_by_mapping_and_takes_the_sort_of_an_entry()
+    {
+        var doc = Doc("""
+              mx:
+                type: matrix
+                encodings:
+                  rows: [{field: customers.region, sort: {by: label, dir: desc}}]
+                  columns: [{field: date.year_month, format: {style: number, grouping: true}}]
+                  values:
+                    - {field: sales.net_amount, format: {style: currency, currency: EUR, decimals: 0}}
+                    - {field: sales.units}
+                query: {model: retail_sales}
+            """);
+        var r = await Resolver(new RetailServing()).ResolveAsync(Viewer(), doc, "desk");
+        var mx = Ok(r, "mx");
+        var columns = mx["columns"]!.AsArray();
+        Assert.Equal(20, columns.Count);                                           // ten months, two values under each
+        Assert.Equal("202,601", columns[0]!["labels"]![0]!.GetValue<string>());
+        Assert.Equal("202,601", columns[1]!["labels"]![0]!.GetValue<string>());
+        Assert.Equal("202,610", columns[19]!["labels"]![0]!.GetValue<string>());
+        // the regions are sorted by label descending, as the entry says
+        Assert.Equal(["West", "South", "East", "Central"], mx["rows"]!.AsArray().Select(row => row!["labels"]![0]!.GetValue<string>()));
+        var first = mx["rows"]![0]!["cells"]!;
+        var euros = first[0]!["v"]!.GetValue<double>();
+        Assert.Equal(ViewFormat.Number(euros, new JsonObject { ["style"] = "currency", ["currency"] = "EUR", ["decimals"] = 0 }), first[0]!["text"]!.GetValue<string>());
+        Assert.StartsWith("€", first[0]!["text"]!.GetValue<string>());
+        Assert.DoesNotContain("€", first[1]!["text"]!.GetValue<string>());          // the second value has no format of its own: the engine's text
+        Assert.Empty(Violations(r.ToJson()));
+    }
+
+    [Fact]
+    public async Task A_matrix_sorted_by_an_entry_and_by_the_axis_sort_is_that_widgets_error()
+    {
+        var doc = Doc("""
+              mx:
+                type: matrix
+                encodings:
+                  rows: [{field: customers.region, sort: {by: label}}]
+                  values: [{field: sales.net_amount}]
+                  sort: {rows: {by: sort_key}}
+                query: {model: retail_sales}
+            """);
+        var r = await Resolver(new RetailServing()).ResolveAsync(Viewer(), doc, "desk");
+        Assert.Equal("error", Type(r, "mx"));
+        Assert.Equal("widgets.mx.encodings.sort.rows", r.Widgets["mx"]["path"]!.GetValue<string>());
+    }
+
+    [Fact]
     public async Task Text_has_its_parameters_substituted_as_text_and_an_image_its_bytes_as_a_data_uri()
     {
         var png = new byte[] { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3 };

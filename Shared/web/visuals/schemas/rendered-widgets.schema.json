@@ -121,6 +121,7 @@
         }
       }
     },
+    "d3_format": { "type": "string", "pattern": "^\\$?,?\\.[0-9]{1,2}~?[fs%]$" },
     "chart": {
       "type": "object",
       "required": ["id", "type", "vega_lite"],
@@ -128,6 +129,19 @@
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "type": { "const": "chart" },
+        "formats": {
+          "description": "d3-format strings the renderer's own format mapping made for the quantitative channels (plan 32 DBR41), by channel; a tooltip's is a list in the order of its entries (null where an entry has none). The client checks each against a fixed pattern before it gives it to Vega-Lite.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "x": { "$ref": "#/$defs/d3_format" },
+            "y": { "$ref": "#/$defs/d3_format" },
+            "color": { "$ref": "#/$defs/d3_format" },
+            "column": { "$ref": "#/$defs/d3_format" },
+            "row": { "$ref": "#/$defs/d3_format" },
+            "tooltip": { "type": "array", "items": { "oneOf": [{ "$ref": "#/$defs/d3_format" }, { "type": "null" }] } }
+          }
+        },
         "vega_lite": {
           "type": "object",
           "required": ["data"],

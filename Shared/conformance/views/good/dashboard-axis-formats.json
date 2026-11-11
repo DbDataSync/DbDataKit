@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "kind": "dashboard",
+  "title": "Formats",
+  "widgets": {
+    "by_month": {
+      "type": "chart",
+      "title": "Revenue by month",
+      "mark": "bar",
+      "encodings": {
+        "x": {
+          "field": "date.month",
+          "format": {
+            "date": "MMM"
+          }
+        },
+        "y": {
+          "field": "orders.net_revenue",
+          "format": {
+            "style": "currency",
+            "currency": "USD",
+            "decimals": 0
+          }
+        },
+        "color": {
+          "field": "customers.region"
+        },
+        "tooltip": [
+          {
+            "field": "date.month",
+            "format": "month-year"
+          },
+          {
+            "field": "orders.net_revenue",
+            "format": "compact"
+          }
+        ]
+      },
+      "query": {
+        "model": "sales"
+      }
+    },
+    "grid": {
+      "type": "matrix",
+      "title": "Revenue by year and month",
+      "encodings": {
+        "rows": [
+          {
+            "field": "date.year",
+            "format": {
+              "date": "year"
+            },
+            "sort": {
+              "by": "sort_key",
+              "dir": "desc"
+            }
+          },
+          {
+            "field": "date.month",
+            "format": {
+              "date": "MMM"
+            }
+          }
+        ],
+        "columns": [
+          "customers.region"
+        ],
+        "values": [
+          {
+            "field": "orders.net_revenue",
+            "format": {
+              "style": "currency",
+              "currency": "EUR",
+              "decimals": 0
+            },
+            "empty": "zero"
+          },
+          {
+            "field": "orders.units",
+            "format": "compact"
+          }
+        ]
+      },
+      "query": {
+        "model": "sales"
+      }
+    }
+  },
+  "layouts": [
+    {
+      "name": "desk",
+      "type": "reflow",
+      "default": true,
+      "grid": {
+        "columns": 12
+      },
+      "tiles": [
+        {
+          "widget": "by_month",
+          "x": 0,
+          "y": 0,
+          "w": 12,
+          "h": 6
+        },
+        {
+          "widget": "grid",
+          "x": 0,
+          "y": 6,
+          "w": 12,
+          "h": 6
+        }
+      ]
+    }
+  ]
+}
