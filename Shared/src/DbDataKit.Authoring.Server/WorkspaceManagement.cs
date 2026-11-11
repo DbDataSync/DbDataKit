@@ -145,6 +145,42 @@ public static class WorkspaceManagement
             return decision.Allowed ? null : Refused(decision);
         }
 
+        // ---- the kinds of project and the check of a draft (plan 33 SC20a) ----
+
+        // what a screen offers when a project is made, and what each kind publishes as and to which product; any role that reads anything may ask
+        app.MapGet("/api/v1/project-kinds", (HttpContext context) =>
+        {
+            var token = context.ManagementToken();
+            if (ManagementAuthorization.Authorize(token, ServerRole.Viewer) is { Allowed: false } refused && !token.Projects.Keys.Any(p => ManagementAuthorization.Authorize(token, ServerRole.Viewer, p).Allowed)) return Refused(refused);
+            return Results.Json(new JsonObject
+            {
+                ["kinds"] = new JsonArray([.. projects.Kinds.All.Select(k => (JsonNode?)new JsonObject
+                {
+                    ["name"] = k.Name,
+                    ["title"] = k.Title,
+                    ["description"] = k.Description,
+                    ["buildable"] = k.Buildable,
+                    ["publishes"] = new JsonArray([.. k.Publishes.Select(r => (JsonNode?)new JsonObject { ["product"] = r.Product, ["what"] = r.What, ["description"] = r.Description })]),
+                })]),
+            });
+        });
+
+        // the draft checked by its kind's own validators (the ones the standalone product runs); a finding is a diagnostic, never an error status
+        app.MapGet("/api/v1/projects/{project}/workspaces/{id}/check", async (string project, string id, HttpContext context) =>
+        {
+            if (InProject(project, context, ServerRole.Viewer, out var hosted) is { } refused) return refused;
+            if (workspaces.Find(hosted.Id, id) is not { } workspace) return Results.NotFound();
+            var kind = projects.Kinds.Find(store.FindProject(hosted.Id)!.Kind);
+            if (kind is null) return Results.Json(new { error = $"The project '{hosted.Id}' is of a kind this server does not know ({store.FindProject(hosted.Id)!.Kind})." }, statusCode: StatusCodes.Status409Conflict);
+            var diagnostics = await kind.CheckAsync(workspaces.RootOf(workspace), context.RequestAborted);
+            return Results.Json(new JsonObject
+            {
+                ["kind"] = kind.Name,
+                ["ok"] = !diagnostics.Any(d => d.IsError),
+                ["diagnostics"] = new JsonArray([.. diagnostics.Select(d => (JsonNode?)new JsonObject { ["severity"] = d.Severity, ["code"] = d.Code, ["message"] = d.Message, ["file"] = d.File, ["line"] = d.Line })]),
+            });
+        });
+
         app.MapPost("/api/v1/projects/{project}/workspaces/{id}/builds", (string project, string id, HttpContext context) =>
         {
             if (InProject(project, context, ServerRole.Author, out var hosted) is { } refused) return refused;

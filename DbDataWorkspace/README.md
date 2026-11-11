@@ -51,6 +51,8 @@ Every call needs a token a paired console issued; the roles are the suite's (`Db
 | Call | Role |
 | --- | --- |
 | `GET /api/v1/info` | any |
+| `GET /api/v1/project-kinds` | viewer (the kinds of project, what each publishes as and to which product; plan 33 SC20a) |
+| `GET .../{id}/check` (under `/api/v1/projects/{project}/workspaces`) | viewer (the draft checked by its kind's validators: diagnostics with file and line) |
 | `GET /api/v1/projects` | viewer (a token scoped to some projects lists those) |
 | `POST /api/v1/projects` `{id, title?, kind?}` | admin |
 | `GET\|POST /api/v1/projects/{project}/workspaces`, `DELETE .../{id}` | viewer; author to make one; the owner abandons theirs |
@@ -61,7 +63,7 @@ Every call needs a token a paired console issued; the roles are the suite's (`Db
 | `GET /api/v1/publisher-keys`, `PUT\|DELETE /api/v1/publisher-keys/{name}` `{secret_ref}` | admin |
 | `GET /api/v1/state` and the maintenance calls | the shared state API (`DbDataKit.State.Api`) |
 
-The console relays an explicit table of these (`ServerProducts.WorkspaceRoutes` in `DbDataKit.Server`: 16 routes, each with its role, checked at the relay against what the person holds, in the route's project too, and by the server again), not the whole API; the publisher's key reference is not relayed.
+The console relays an explicit table of these (`ServerProducts.WorkspaceRoutes` in `DbDataKit.Server`: 30 routes, each with its role, checked at the relay against what the person holds, in the route's project too, and by the server again), not the whole API; the publisher's key reference is not relayed.
 
 ## Build and test
 

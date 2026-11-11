@@ -16,9 +16,12 @@ public sealed class WorkspaceProjectException(string message, int status) : Exce
 /// The projects this server hosts (plan 22a GP31), kept in the <c>workspace</c> state module and served to the shared authoring calls (<see cref="IAuthoringProjects"/>, GP30). A project is a git repository: one the server made in
 /// <c>projects/&lt;id&gt;</c> of its directory, or one already on this machine that an operator added by path. A project has a kind (<c>app</c> today; plan 27 adds the others), which the server records and does not interpret.
 /// </summary>
-public sealed partial class WorkspaceProjects(string directory, WorkspaceStore store) : IAuthoringProjects
+public sealed partial class WorkspaceProjects(string directory, WorkspaceStore store, ProjectKinds? registry = null) : IAuthoringProjects
 {
     private readonly object gate = new();
+
+    /// <summary>The kinds this server hosts (plan 33 SC20a): what a new project starts as and how a draft is checked are the kind's, not this class's.</summary>
+    public ProjectKinds Kinds { get; } = registry ?? StandardProjectKinds.Create();
 
     [GeneratedRegex("^[a-z0-9][a-z0-9_-]{0,31}$")]
     private static partial Regex IdPattern();
@@ -48,18 +51,15 @@ public sealed partial class WorkspaceProjects(string directory, WorkspaceStore s
             try
             {
                 Directory.CreateDirectory(folder);
-                if (kind == "app")
+                var projectKind = Kinds.Require(kind);
+                // a new project starts as its kind's template (an app: the app template, plan 22a GP32), named for the project
+                foreach (var file in projectKind.Template(id, title))
                 {
-                    // an app project starts as the app template (plan 22a GP32), named for the project: app.yaml, index.html, package.json, src/ and the three view specs
-                    foreach (var (path, bytes) in AppTemplate.Files(id, title))
-                    {
-                        var target = Path.Combine(folder, path.Replace('/', Path.DirectorySeparatorChar));
-                        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                        File.WriteAllBytes(target, bytes);
-                    }
-                    File.WriteAllText(Path.Combine(folder, ".gitignore"), "node_modules/\ndist/\n");
+                    var target = Path.Combine(folder, file.Path.Replace('/', Path.DirectorySeparatorChar));
+                    Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                    File.WriteAllBytes(target, file.Content);
                 }
-                else File.WriteAllText(Path.Combine(folder, "README.md"), $"# {title ?? id}\n\nAn {kind} project of the Workspace server. Edit it in a workspace; a merge changes this copy.\n");
+                if (projectKind.GitIgnore is { } ignore) File.WriteAllText(Path.Combine(folder, ".gitignore"), ignore);
                 File.WriteAllText(Path.Combine(folder, ".gitattributes"), "* text=auto eol=lf\n");
                 LibGit2Sharp.Repository.Init(folder);
                 GitWorkspaceOperations.Commit(folder, $"New {kind} project", author);
@@ -96,9 +96,9 @@ public sealed partial class WorkspaceProjects(string directory, WorkspaceStore s
         }
     }
 
-    private static void CheckId(string id, string kind)
+    private void CheckId(string id, string kind)
     {
         if (!IsValidId(id)) throw new WorkspaceProjectException($"'{id}' is not a project name: lower-case letters, digits, '-' and '_', starting with a letter or digit, at most 32.", 400);
-        if (!WorkspaceModule.ProjectKinds.Contains(kind)) throw new WorkspaceProjectException($"'{kind}' is not a kind of project this server knows ({string.Join(", ", WorkspaceModule.ProjectKinds)}).", 400);
+        if (Kinds.Find(kind) is null) throw new WorkspaceProjectException($"'{kind}' is not a kind of project this server knows ({string.Join(", ", Kinds.Names)}).", 400);
     }
 }
