@@ -7,7 +7,11 @@ using DbDataKit.Secrets;
 
 namespace DbDataKit.Connections;
 
-public enum ConnectionFailureKind { Login, Network, Timeout, Tls, Permission, Syntax, Unsupported, Other }
+/// <summary>
+/// What kind of failure a connection had. The last three (plan 27a IX01) are those of outside systems: <see cref="RateLimited"/> and <see cref="Unavailable"/> (an HTTP 429, or a 5xx the system will recover from) are temporary, <see cref="NotFound"/> is not.
+/// Members are only ever added at the end: other programs switch on them.
+/// </summary>
+public enum ConnectionFailureKind { Login, Network, Timeout, Tls, Permission, Syntax, Unsupported, Other, RateLimited, Unavailable, NotFound }
 
 /// <summary>
 /// A classified failure. <see cref="PublicMessage"/> is fixed text per <see cref="Kind"/> plus the code; it is never raw driver output.
@@ -22,8 +26,19 @@ public sealed class ConnectionFailure(ConnectionFailureKind kind, string? code, 
     /// <summary>Local diagnostics only (explicit flag, redacted). Never put this in a client response.</summary>
     public string? Raw { get; } = raw;
 
+    /// <summary>
+    /// Whether trying again can help (plan 27a IX01): a network failure, a timeout, a system that is busy or briefly unavailable. A rejected login or certificate, a missing permission, a statement or request that is not accepted, an unsupported operation, a missing
+    /// object and anything unforeseen are permanent: a retry would repeat them (and a wrong secret would lock an account). The runner's retry reads this.
+    /// </summary>
+    public bool IsTemporary => IsTemporaryKind(Kind);
+
+    public static bool IsTemporaryKind(ConnectionFailureKind kind) => kind is ConnectionFailureKind.Network or ConnectionFailureKind.Timeout or ConnectionFailureKind.RateLimited or ConnectionFailureKind.Unavailable;
+
     public static string TextFor(ConnectionFailureKind kind) => kind switch
     {
+        ConnectionFailureKind.RateLimited => "The system is limiting requests; try again shortly.",
+        ConnectionFailureKind.Unavailable => "The system is unavailable for the moment.",
+        ConnectionFailureKind.NotFound => "The address or object was not found.",
         ConnectionFailureKind.Login => "The login was rejected.",
         ConnectionFailureKind.Network => "The server could not be reached.",
         ConnectionFailureKind.Timeout => "The operation timed out.",

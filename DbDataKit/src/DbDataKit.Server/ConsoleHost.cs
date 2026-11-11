@@ -108,9 +108,11 @@ public static class ConsoleHost
         builder.Services.AddSingleton<ConsoleRelay>();
         builder.Services.AddSingleton<ConsoleLineage>();
         // the agents the console hosts and the knowledge its screens read (plan 27a AG14 to AG17, AG29 to AG32, KN28, KN36 to KN38); the model an agent's slot is bound to comes from IAgentModels (none until model providers are connections, AG05)
-        // the model providers and slots of models/ in the console's directory (plan 27a AG05): what an agent's slot is bound to; a test gives its own IAgentModels and ModelHttp
+        // the model providers (connections of kind model-provider) and the slots of models/_slots.yml (plan 27a AG05): what an agent's slot is bound to; a test gives its own IAgentModels and ModelHttp
         builder.Services.TryAddSingleton<ModelHttp>();
-        builder.Services.AddSingleton<ConsoleModels>(sp => new ConsoleModels(settings, sp.GetRequiredService<EncryptedFileSecretStore>(), sp.GetRequiredService<ModelHttp>()));
+        // the connections of outside systems (plan 27a IX01): connections/ in the console's directory
+        builder.Services.AddSingleton(sp => new ConsoleConnections(settings, sp.GetRequiredService<EncryptedFileSecretStore>()));
+        builder.Services.AddSingleton<ConsoleModels>(sp => new ConsoleModels(settings, sp.GetRequiredService<ConsoleConnections>(), sp.GetRequiredService<ModelHttp>()));
         builder.Services.TryAddSingleton<IAgentModels>(sp => sp.GetRequiredService<ConsoleModels>());
         builder.Services.TryAddSingleton<IAgentToolSource, ConsoleToolSource>();
         builder.Services.AddSingleton<ConsoleKnowledge>();

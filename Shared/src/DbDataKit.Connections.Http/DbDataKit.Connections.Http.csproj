@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Connections.Http</RootNamespace>
+    <PackageId>DbDataKit.Connections.Http</PackageId>
+    <Description>HTTP client of a connection of kind http (plan 27a IX02): sign-in with an API key, basic, OAuth 2 client credentials (token cached and refreshed once) or a client certificate, the connection's failure classification, and the Test of a connection.</Description>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Connections.Abstractions\DbDataKit.Connections.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Secrets.Abstractions\DbDataKit.Secrets.Abstractions.csproj" />
+    <InternalsVisibleTo Include="DbDataKit.Connections.Http.Tests" />
+  </ItemGroup>
+</Project>

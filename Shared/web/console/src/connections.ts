@@ -15,6 +15,8 @@ export interface ConnectionRow {
   serverName: string
   product: ConnectionProduct
   name: string
+  /** What the connection is (plan 27a IX01): the servers listed here keep database connections; an API or a model provider is listed below, kept by the console. */
+  kind: 'database'
   engine: string
   /** Where it connects, or how it may be used, in a few words. */
   detail: string
@@ -31,14 +33,14 @@ const relay = (server: InstanceSummary, path: string) => `/relay/${enc(server.id
 /** A Sync connection: its driver, and its address (host, port and database, or "connection string"; the string itself can hold what should not be shown). */
 export function syncConnectionRow(server: InstanceSummary, c: SyncConnection): ConnectionRow {
   const address = c.host ? `${c.host}${c.port ? `:${c.port}` : ''}${c.database ? `/${c.database}` : ''}` : c.connectionString ? 'connection string' : 'no address'
-  return { key: `${server.id}/${c.name}`, server: server.id, serverName: server.name, product: 'dbdatasync', name: c.name, engine: c.driverType, detail: address, valid: true }
+  return { key: `${server.id}/${c.name}`, server: server.id, serverName: server.name, product: 'dbdatasync', name: c.name, kind: 'database', engine: c.driverType, detail: address, valid: true }
 }
 
 /** A Gateway data source: its engine, whether it can write, and who manages it. */
 export function gatewayConnectionRow(server: InstanceSummary, d: GatewayDataSource): ConnectionRow {
   const owner = d.managed_by ? `managed by ${d.managed_by}` : 'by hand'
   return {
-    key: `${server.id}/${d.name}`, server: server.id, serverName: server.name, product: 'dbdatagateway', name: d.name, engine: d.engine ?? 'unreadable',
+    key: `${server.id}/${d.name}`, server: server.id, serverName: server.name, product: 'dbdatagateway', name: d.name, kind: 'database', engine: d.engine ?? 'unreadable',
     detail: d.valid ? `${d.access ?? 'readwrite'}, ${owner}` : 'the file is not valid', valid: d.valid,
   }
 }

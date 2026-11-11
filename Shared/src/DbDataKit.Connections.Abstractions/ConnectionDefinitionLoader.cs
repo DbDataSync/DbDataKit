@@ -34,14 +34,21 @@ public static class ConnectionDefinitionLoader
     public const string CannotBeCached = "DBD-CONN-010";
     public const string BadCache = "DBD-CONN-011";
     public const string BadGrants = "DBD-CONN-012";
+    public const string BadKind = "DBD-CONN-013";
+    public const string KindNotKept = "DBD-CONN-014";
+    public const string BadOutside = "DBD-CONN-015";
 
     /// <summary>JSON Schema for editor aids, generated from the type.</summary>
     public static string JsonSchema() => JsonSchemaGenerator.ToJson(typeof(ConnectionDefinition), "https://dbdata.dev/schema/connection/1.json");
 
     public static ConnectionLoadResult LoadFile(string path) => Load(File.ReadAllText(path), path);
 
+    /// <summary>Loads a file of any kind, outside systems and model providers included (the console, the runner and what uses them); <see cref="LoadFile(string)"/> reads database connections only.</summary>
+    public static ConnectionLoadResult LoadFileOfAnyKind(string path) => Load(File.ReadAllText(path), path, outsideKinds: true);
+
     /// <param name="addressRequired">False for a product whose connection files carry no address because the login comes from its environment (DbDataBuild: plan 13, E03); every other rule still applies.</param>
-    public static ConnectionLoadResult Load(string yaml, string file = "connection.yml", bool addressRequired = true)
+    /// <param name="outsideKinds">False (the default) for a program that keeps database connections only: a file of kind <c>http</c> or <c>model-provider</c> is refused naming the file. True for one that uses them (the console, the runner).</param>
+    public static ConnectionLoadResult Load(string yaml, string file = "connection.yml", bool addressRequired = true, bool outsideKinds = false)
     {
         var diags = new List<ConfigDiagnostic>();
         var root = StrictYamlReader.Read(yaml, file, diags);
@@ -71,7 +78,7 @@ public static class ConnectionDefinitionLoader
         diags.AddRange(bound.Diagnostics);
         if (bound.Value is null || diags.HasErrors()) return new(null, diags);
         bound.Value.SchemaVersion = declared;
-        Validate(bound.Value, file, bound.Sources, diags, addressRequired);
+        Validate(bound.Value, file, bound.Sources, diags, addressRequired, outsideKinds);
         // format 2's checks are check/1 entries (23a FQ01); format 1 has none, and a file that has them was refused above
         if (declared >= 2 && root is YamlMapping { } whole && whole.Get("checks") is { } checksNode)
             bound.Value.CheckDefinitions = DbDataKit.Quality.CheckSection.Read(checksNode, file, diags);
@@ -103,10 +110,33 @@ public static class ConnectionDefinitionLoader
         return diags;
     }
 
-    private static void Validate(ConnectionDefinition d, string file, IReadOnlyDictionary<string, SourceInfo> src, List<ConfigDiagnostic> diags, bool addressRequired = true)
+    private static void Validate(ConnectionDefinition d, string file, IReadOnlyDictionary<string, SourceInfo> src, List<ConfigDiagnostic> diags, bool addressRequired = true, bool outsideKinds = true)
     {
         void Err(string code, string path, string message, string? fix = null) => diags.Add(Diag(code, file, src, path, message, fix, ConfigSeverity.Error));
         void Warn(string code, string path, string message, string? fix = null) => diags.Add(Diag(code, file, src, path, message, fix, ConfigSeverity.Warning));
+
+        // the kind first (plan 27a IX01): a file of a kind this program does not know, or does not keep, is refused naming the file, before any rule of another kind misreads it
+        if (d.Kind is not null && d.SchemaVersion < 2)
+        {
+            Err(SectionNotInThisFormat, "kind", "`kind` is a key of format 2 (connection/2), and this file says `schema: connection/1`.", "Set `schema: connection/2`. A program that reads only connection/1 then refuses the file by its version instead of misreading it as a database.");
+            return;
+        }
+        if (!ConnectionKinds.IsKnown(d.KindName))
+        {
+            Err(BadKind, "kind", $"The connection file '{file}' is of kind `{d.Kind}`, which this program does not know.", $"The kinds are {string.Join(", ", ConnectionKinds.All.Select(k => $"`{k}`"))}; a database is the default.");
+            return;
+        }
+        if (d.IsOutside)
+        {
+            if (!outsideKinds)
+                Err(KindNotKept, "kind", $"The connection file '{file}' is of kind `{d.KindName}` (an outside system), and this program keeps database connections only.", "Keep it where the console or the runner keeps outside connections.");
+            else
+                ValidateOutside(d, file, src, diags);
+            return;
+        }
+        if (d.Engine.Length == 0) Err(SharedCodes.MissingKey, "engine", "Required key `engine` is missing: a database connection says which engine it is.", "Add `engine: postgres` (or sqlserver, mysql, oracle, duckdb, odbc, flightsql).");
+        foreach (var (key, present) in new[] { ("endpoint", d.Endpoint is not null), ("sign_in", d.SignIn is not null), ("test_path", d.TestPath is not null), ("model_provider", d.ModelProvider is not null) })
+            if (present) Err(BadOutside, key, $"`{key}` belongs to an outside kind (`http`, `model-provider`), not to a database.", "Remove it, or say `kind: http` (and drop the database keys).");
 
         var logins = new (string Path, LoginSpec? Spec)[] { ("auth", d.Auth), ("read_login", d.ReadLogin), ("write_login", d.WriteLogin) };
 
@@ -203,6 +233,108 @@ public static class ConnectionDefinitionLoader
             }
         }
     }
+
+    /// <summary>The rules of the kinds that are not a database (plan 27a IX01): an endpoint, secret references for what signs in, and for a model provider its section.</summary>
+    private static void ValidateOutside(ConnectionDefinition d, string file, IReadOnlyDictionary<string, SourceInfo> src, List<ConfigDiagnostic> diags)
+    {
+        void Err(string path, string message, string? fix = null) => diags.Add(Diag(BadOutside, file, src, path, message, fix, ConfigSeverity.Error));
+        void CheckRef(string? text, string path)
+        {
+            if (text is not null && !SecretRef.TryParse(text, out _, out var error))
+                diags.Add(Diag(BadSecretRef, file, src, path, $"`{path}` is not a secret reference: {error}", "Use secret:, env:, file:, keyring: or dpapi: (a key is never written in the file).", ConfigSeverity.Error));
+        }
+
+        foreach (var (key, present) in new[]
+        {
+            ("engine", d.Engine.Length > 0), ("dialect", d.Dialect is not null), ("address", d.Address is not null), ("connection_string", d.ConnectionString is not null), ("connection_string_secret", d.ConnectionStringSecret is not null),
+            ("auth", d.Auth is not null), ("read_login", d.ReadLogin is not null), ("write_login", d.WriteLogin is not null), ("cache", d.Cache is not null), ("checks", d.Checks is not null), ("grants", d.Grants is not null),
+        })
+            if (present) Err(key, $"`{key}` is a key of a database connection; a `{d.KindName}` connection has an `endpoint` and `sign_in`.", $"Remove `{key}`.");
+
+        // an address is an http(s) one with no user name, password or query: a key is never part of it
+        string? endpoint = d.Endpoint ?? (d.ModelProvider is { Provider: var p } ? ModelProviderSpec.DefaultEndpoint(p) : null);
+        if (endpoint is null) Err("endpoint", d.KindName == ConnectionKinds.Http ? "A `http` connection needs an `endpoint`." : "A model provider of this kind has no default address: write `endpoint`.", "Write the address, such as `endpoint: https://api.example.com/v1`.");
+        else if (!IsSafeAddress(endpoint)) Err("endpoint", "`endpoint` is an http or https address with no user name, password or query in it.", "A key is never part of the address: write it as `sign_in.key_secret`.");
+
+        if (d.SignIn is { } s) CheckSignIn(s);
+        if (d.TestPath is { } testPath && (testPath.Contains("://", StringComparison.Ordinal) || testPath.Contains('?', StringComparison.Ordinal) || testPath.Contains('#', StringComparison.Ordinal) || testPath.Contains("..", StringComparison.Ordinal) || testPath.Any(char.IsWhiteSpace)))
+            Err("test_path", "`test_path` is an address beneath the endpoint, such as `/v1/ping`: no scheme, no query, no `..`, no spaces.", "A key is never part of an address: it is `sign_in.key_secret`.");
+        if (d.KindName == ConnectionKinds.Http)
+        {
+            if (d.ModelProvider is not null) Err("model_provider", "`model_provider` belongs to the kind `model-provider`.", "Remove it.");
+        }
+        else CheckModelProvider();
+        if (!d.Tls.Verify) diags.Add(Diag(TlsOptOut, file, src, "tls.verify", "Certificate verification is off for this connection.", null, ConfigSeverity.Warning));
+        if (d.Tls.TrustServerCertificate) diags.Add(Diag(TlsOptOut, file, src, "tls.trust_server_certificate", "The server certificate is trusted without verification.", null, ConfigSeverity.Warning));
+        if (!d.Tls.Encrypt) diags.Add(Diag(TlsOptOut, file, src, "tls.encrypt", "Encryption is off for this connection.", null, ConfigSeverity.Warning));
+
+        void CheckSignIn(SignInSpec s)
+        {
+            CheckRef(s.KeySecret, "sign_in.key_secret");
+            CheckRef(s.PasswordSecret, "sign_in.password_secret");
+            CheckRef(s.ClientSecretSecret, "sign_in.client_secret_secret");
+            CheckRef(s.CertificateSecret, "sign_in.certificate_secret");
+            CheckRef(s.CertificatePasswordSecret, "sign_in.certificate_password_secret");
+            void Needs(string key, bool given) { if (!given) Err("sign_in." + key, $"`sign_in.method: {s.Method}` needs `{key}`."); }
+            void NoOthers(params (string Key, bool Present)[] keys)
+            {
+                foreach (var (key, present) in keys) if (present) Err("sign_in." + key, $"`{key}` does not belong to `sign_in.method: {s.Method}`.", $"Remove `{key}`.");
+            }
+            switch (s.Method)
+            {
+                case "none":
+                    NoOthers(("key_secret", s.KeySecret is not null), ("user", s.User is not null), ("password_secret", s.PasswordSecret is not null), ("token_url", s.TokenUrl is not null), ("client_id", s.ClientId is not null),
+                        ("client_secret_secret", s.ClientSecretSecret is not null), ("certificate_file", s.CertificateFile is not null), ("certificate_secret", s.CertificateSecret is not null));
+                    break;
+                case "api_key":
+                    Needs("key_secret", s.KeySecret is not null);
+                    NoOthers(("user", s.User is not null), ("password_secret", s.PasswordSecret is not null), ("token_url", s.TokenUrl is not null), ("client_secret_secret", s.ClientSecretSecret is not null), ("certificate_file", s.CertificateFile is not null));
+                    if (s.Name is { } n && (n.Length == 0 || n.Any(c => char.IsWhiteSpace(c) || char.IsControl(c) || c == ':'))) Err("sign_in.name", "`name` is a header or query parameter name: no spaces, no colon.");
+                    if (s.In == "query" && s.Prefix is not null) Err("sign_in.prefix", "`prefix` is for a header; a query parameter holds the key as it is.");
+                    break;
+                case "basic":
+                    Needs("user", !string.IsNullOrWhiteSpace(s.User));
+                    Needs("password_secret", s.PasswordSecret is not null);
+                    NoOthers(("key_secret", s.KeySecret is not null), ("token_url", s.TokenUrl is not null), ("client_secret_secret", s.ClientSecretSecret is not null), ("certificate_file", s.CertificateFile is not null));
+                    break;
+                case "oauth2_client_credentials":
+                    Needs("token_url", s.TokenUrl is not null);
+                    Needs("client_id", !string.IsNullOrWhiteSpace(s.ClientId));
+                    Needs("client_secret_secret", s.ClientSecretSecret is not null);
+                    if (s.TokenUrl is not null && !IsSafeAddress(s.TokenUrl)) Err("sign_in.token_url", "`token_url` is an http or https address with no user name, password or query in it.");
+                    NoOthers(("key_secret", s.KeySecret is not null), ("password_secret", s.PasswordSecret is not null), ("certificate_file", s.CertificateFile is not null));
+                    break;
+                case "client_certificate":
+                    if ((s.CertificateFile is null) == (s.CertificateSecret is null)) Err("sign_in", "`sign_in.method: client_certificate` needs one of `certificate_file` and `certificate_secret`.", "Give the PKCS#12 file, or a secret that holds it as Base64.");
+                    NoOthers(("key_secret", s.KeySecret is not null), ("user", s.User is not null), ("password_secret", s.PasswordSecret is not null), ("token_url", s.TokenUrl is not null), ("client_secret_secret", s.ClientSecretSecret is not null));
+                    break;
+            }
+        }
+
+        void CheckModelProvider()
+        {
+            if (d.TestPath is not null) Err("test_path", "`test_path` belongs to the kind `http`; a model provider is tested per model.", "Remove it.");
+            if (d.ModelProvider is not { } m) { Err("model_provider", "A `model-provider` connection needs a `model_provider` section: the provider, and the models it allows.", "Write `model_provider: { provider: anthropic, models: [ { id: ..., window: 200000 } ] }`."); return; }
+            if (m.Provider == "openai-compatible" && m.Locality is null) Err("model_provider.locality", "`locality` is missing: say whether this server is `cloud` or `local`.", "The install policy treats a cloud provider differently (data rules, fallback).");
+            if (m.Models.Count == 0) Err("model_provider.models", "`models` is a list of at least one model the provider allows.", "Write `models: [ { id: <the provider's model id>, window: 200000 } ]`.");
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            for (var i = 0; i < m.Models.Count; i++)
+            {
+                var id = m.Models[i].Id;
+                if (id.Length > 120 || id.Any(char.IsWhiteSpace)) Err($"model_provider.models[{i}].id", "A model id is the provider's own name for it, with no spaces.");
+                else if (!seen.Add(id)) Err($"model_provider.models[{i}].id", $"`{id}` is listed more than once.");
+            }
+            var auth = d.SignIn?.Method ?? "none";
+            if (auth is not ("none" or "api_key")) Err("sign_in.method", $"A model provider signs in with `api_key` or `none`, not `{auth}`.");
+            if (auth == "api_key" && m.AuthStyle == "none") Err("sign_in.method", "`auth_style: none` and an api key contradict each other.");
+            if (auth == "none" && m.Provider is "anthropic" or "openai" or "foundry" && m.AuthStyle != "none")
+                Err("sign_in", $"A {m.Provider} provider needs `sign_in: {{ method: api_key, key_secret: ... }}`: the reference of the key (`secret:<name>` or `env:<NAME>`).", "Store the key with the console's secrets and write its reference; a key is never typed into the file.");
+        }
+    }
+
+    /// <summary>An http or https address with no user name, password or query: where a key never belongs.</summary>
+    public static bool IsSafeAddress(string text) =>
+        Uri.TryCreate(text, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" && string.IsNullOrEmpty(uri.UserInfo) && string.IsNullOrEmpty(uri.Query);
 
     private static ConfigDiagnostic Diag(string code, string file, YamlNode at, string message, string? fix) =>
         new(code, ConfigSeverity.Error, file, at.Line, at.Column, message, fix);

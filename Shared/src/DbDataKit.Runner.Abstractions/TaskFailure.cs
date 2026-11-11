@@ -40,13 +40,13 @@ public sealed record TaskFailure(TaskFailureKind Kind, string Message, string? I
 
     /// <summary>
     /// The one place a connection's classification becomes a task's: a network failure and a database timeout are temporary; every other kind
-    /// (login, TLS, permission, syntax, unsupported, other) is permanent, because retrying an unknown or configuration problem only repeats it.
+    /// (login, TLS, permission, syntax, unsupported, not found, other) is permanent, because retrying an unknown or configuration problem only repeats it.
     /// </summary>
     public static TaskFailureKind KindOf(ConnectionFailureKind kind) => kind switch
     {
-        ConnectionFailureKind.Network or ConnectionFailureKind.Timeout => TaskFailureKind.Temporary,
+        ConnectionFailureKind.Network or ConnectionFailureKind.Timeout or ConnectionFailureKind.RateLimited or ConnectionFailureKind.Unavailable => TaskFailureKind.Temporary,
         ConnectionFailureKind.Login or ConnectionFailureKind.Tls or ConnectionFailureKind.Permission or ConnectionFailureKind.Syntax
-            or ConnectionFailureKind.Unsupported or ConnectionFailureKind.Other => TaskFailureKind.Permanent,
+            or ConnectionFailureKind.Unsupported or ConnectionFailureKind.Other or ConnectionFailureKind.NotFound => TaskFailureKind.Permanent,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "A connection failure kind is classified as temporary or permanent."),
     };
 

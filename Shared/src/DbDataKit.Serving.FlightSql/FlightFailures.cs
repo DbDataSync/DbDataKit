@@ -25,6 +25,9 @@ public static class FlightFailures
         ConnectionFailureKind.Timeout => StatusCode.DeadlineExceeded,
         ConnectionFailureKind.Permission => StatusCode.PermissionDenied,
         ConnectionFailureKind.Syntax => StatusCode.InvalidArgument,
+        ConnectionFailureKind.RateLimited => StatusCode.ResourceExhausted,
+        ConnectionFailureKind.Unavailable => StatusCode.Unavailable,
+        ConnectionFailureKind.NotFound => StatusCode.NotFound,
         ConnectionFailureKind.Unsupported => StatusCode.InvalidArgument, // a driver or server that cannot do what was asked (a missing ODBC driver is IM002)
         _ => StatusCode.Internal,
     };
