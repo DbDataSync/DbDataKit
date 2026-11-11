@@ -68,11 +68,17 @@ public sealed class ConsoleAgents
     private readonly ApprovalDesk _desk;
     private readonly ConcurrentDictionary<string, Live> _live = new(StringComparer.Ordinal);
     private readonly TimeProvider _time;
+    private readonly IBuildRelay? _relay;
+    private readonly IUserAccounts? _users;
+    private IReadOnlyList<BuildCommand>? _surface;
+    private readonly object _surfaceLock = new();
 
     private sealed class Live(AgentSession session, string agent) { public AgentSession Session { get; } = session; public string Agent { get; } = agent; public Task? Running { get; set; } public CancellationTokenSource? Cancel { get; set; } }
 
-    public ConsoleAgents(ConsoleSettings settings, StateDatabase database, IAgentModels models, IAgentToolSource toolSource, ConsoleKnowledge knowledge, TimeProvider? time = null)
+    public ConsoleAgents(ConsoleSettings settings, StateDatabase database, IAgentModels models, IAgentToolSource toolSource, ConsoleKnowledge knowledge, TimeProvider? time = null, IBuildRelay? relay = null, IUserAccounts? users = null)
     {
+        _relay = relay;
+        _users = users;
         _directory = settings.Directory;
         _store = new AgentStore(database);
         _models = models;
@@ -123,7 +129,71 @@ public sealed class ConsoleAgents
         return listings;
     }
 
-    private AgentCatalog Catalog() => AgentCatalog.Of(_toolSource.Router(), Skills().Select(s => s.Skill.Name), Directory.Exists(AgentsFolder) ? Directory.EnumerateDirectories(AgentsFolder).Select(Path.GetFileName)!.Select(n => n!) : []);
+    private AgentCatalog Catalog()
+    {
+        var catalog = AgentCatalog.Of(_toolSource.Router(), Skills().Select(s => s.Skill.Name), Directory.Exists(AgentsFolder) ? Directory.EnumerateDirectories(AgentsFolder).Select(Path.GetFileName)!.Select(n => n!) : []);
+        var tools = new Dictionary<string, Traits>(catalog.Tools, StringComparer.Ordinal);
+        foreach (var command in BuildSurface().Where(c => c.OfferedToAgents)) tools.TryAdd(command.Tool, command.Traits);   // Build's commands, as the last Build server asked said them
+        return catalog with { Tools = tools };
+    }
+
+    // ---- Build's commands (plan 27a AG14): learned from a Build server, kept in the console's folder so a definition is checked without one ----
+
+    private string SurfaceFile => Path.Combine(_directory, "build-surface.json");
+
+    /// <summary>The commands the last Build server asked offered (what <c>agent check</c> and the screens know of Build's tools).</summary>
+    public IReadOnlyList<BuildCommand> BuildSurface()
+    {
+        lock (_surfaceLock)
+        {
+            if (_surface is not null) return _surface;
+            try { _surface = File.Exists(SurfaceFile) ? BuildCommand.Parse(JsonNode.Parse(File.ReadAllText(SurfaceFile))) : []; }
+            catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException) { _surface = []; }
+            return _surface;
+        }
+    }
+
+    private void LearnSurface(IReadOnlyList<BuildCommand> commands)
+    {
+        lock (_surfaceLock)
+        {
+            _surface = commands;
+            try
+            {
+                Directory.CreateDirectory(_directory);
+                File.WriteAllText(SurfaceFile, new JsonObject { ["commands"] = new JsonArray(commands.Select(c => (JsonNode)new JsonObject { ["tool"] = c.Tool, ["name"] = c.Name, ["purpose"] = c.Purpose, ["impact"] = c.Impact, ["write_flag"] = c.WriteFlag, ["allowed"] = true, ["input_schema"] = c.InputSchema.DeepClone() }).ToArray()) }.ToJsonString());
+            }
+            catch (IOException) { /* the memory copy still serves */ }
+        }
+    }
+
+    private RelayPerson? PersonNow(string id) => _users?.Get(id) is { Enabled: true } user ? new RelayPerson(user.Id, user.DisplayName, user.Role) : null;
+
+    /// <summary>
+    /// Makes (or brings up to date) the first agent, <c>build-helper</c>, from what a Build server offers an agent: its definition with every command it may be offered, its instructions, and the skill of that server's version of
+    /// Build's agent kit. The person is whoever asked; the server is asked as them.
+    /// </summary>
+    public async Task<(bool Done, string? Problem)> InstallBuildHelperAsync(BuildTarget target, string person, CancellationToken cancellation)
+    {
+        if (_relay is null || PersonNow(person) is not { } who) return (false, "This console cannot reach a Build server.");
+        var (commands, problem) = await BuildAgentTools.ListAsync(_relay, target, who, cancellation);
+        if (problem is not null) return (false, problem);
+        var (status, skill) = await _relay.CallAsync(target.Server, who, HttpMethod.Get, "/api/v1/skill", null, cancellation);
+        if (status != 200 || (string?)skill?["content"] is not { } text) return (false, $"The Build server did not give its skill ({status}); it may be an older version without one.");
+        LearnSurface(commands);
+        var folder = Path.Combine(AgentsFolder, BuildAgentTools.HelperName);
+        foreach (var (relative, content) in BuildAgentTools.HelperFiles(commands))
+        {
+            var file = Path.Combine(folder, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            File.WriteAllText(file, content);
+        }
+        var skillFile = Path.Combine(SkillsFolder, BuildAgentTools.SkillName, "SKILL.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(skillFile)!);
+        File.WriteAllText(skillFile, text);
+        _store.RecordAudit(null, null, "agent-installed", person, BuildAgentTools.HelperName, KnowledgeItemLoader.HashOf(text)[..12], "console", null, null, $"from {target.Server}/{target.Project}");
+        return (true, null);
+    }
 
     private List<(Skill Skill, string Original)> Skills()
     {
@@ -141,7 +211,10 @@ public sealed class ConsoleAgents
     {
         var offered = CommandTools.From(_toolSource.Router(), _toolSource.Options);
         var wanted = definition.Tools.Select(t => t.ToolName).ToHashSet(StringComparer.Ordinal);
-        return [.. offered.Where(t => wanted.Contains(t.Name))];
+        var consoleTools = offered.Where(t => wanted.Contains(t.Name)).ToList();
+        // Build's tools are described from what a Build server said (they run only in a conversation, as the person)
+        consoleTools.AddRange(BuildAgentTools.Described(BuildSurface()).Where(t => wanted.Contains(t.Name) && consoleTools.All(c => c.Name != t.Name)));
+        return consoleTools;
     }
 
     /// <summary>The agent's file with the reports a screen shows. Null when there is no such agent.</summary>
@@ -257,8 +330,18 @@ public sealed class ConsoleAgents
 
     // ---- conversations ----
 
-    public (ConversationRow? Conversation, string? Problem) Start(string agentName, string person, string personName, string? title)
+    public async Task<(ConversationRow? Conversation, string? Problem)> StartAsync(string agentName, string person, string personName, string? title, BuildTarget? build = null, CancellationToken cancellation = default)
     {
+        // an agent that works on a Build project asks the server for what it may use, as the person, before its definition is read (a tool it names is checked against that list)
+        IReadOnlyList<BuildCommand> live = [];
+        if (build is not null)
+        {
+            if (_relay is null || PersonNow(person) is not { } who) return (null, "This console cannot reach a Build server as you.");
+            var (commands, problem) = await BuildAgentTools.ListAsync(_relay, build, who, cancellation);
+            if (problem is not null) return (null, problem);
+            live = commands;
+            LearnSurface(commands);
+        }
         var detail = Read(agentName, withReports: false);
         if (detail is null) return (null, $"There is no agent named '{agentName}'.");
         var loaded = AgentDefinitionLoader.Load(detail.Yaml, detail.File);
@@ -273,7 +356,12 @@ public sealed class ConsoleAgents
         _store.Start(id, agentName, version, person, personName, "console", null, null, title);
         var context = new AgentRunContext(person, agentName, version, id);
         var policy = Policy(out _);
-        var tools = ToolsFor(definition).ToList();
+        var wanted = definition.Tools.Select(t => t.ToolName).ToHashSet(StringComparer.Ordinal);
+        var consoleOffered = CommandTools.From(_toolSource.Router(), _toolSource.Options).Where(t => wanted.Contains(t.Name)).ToList();
+        var buildWanted = wanted.Where(w => consoleOffered.All(c => c.Name != w)).ToHashSet(StringComparer.Ordinal);
+        if (buildWanted.Count > 0 && build is null) return (null, $"The agent '{agentName}' works on a Build project: say which server, project and workspace.");
+        var tools = consoleOffered;
+        if (build is not null && _relay is not null) tools.AddRange(BuildAgentTools.Tools(_relay, build, live, buildWanted, () => PersonNow(person)));
         var skills = new SkillCatalog(Skills().Where(s => definition.Skills.Contains(s.Skill.Name, StringComparer.Ordinal)).Select(s => s.Skill));
         var log = new StateConversationLog(_store, person, agentName, version, "console");
         if (definition.Skills.Count > 0) tools.Add(skills.Tool(context, log));

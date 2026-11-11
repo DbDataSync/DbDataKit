@@ -141,6 +141,18 @@ public sealed class BuildServerTests : IAsyncLifetime
         Assert.Equal("author", (string)byName["project compile"]["role"]!);
         Assert.DoesNotContain(byName.Keys, n => n.StartsWith("ui ", StringComparison.Ordinal));
 
+        // plan 27a AG14: what the console's agents need to offer a command as a tool: what it touches and the schema of its inputs
+        Assert.Equal("None", (string)byName["project show graph"]["impact"]!);
+        Assert.Equal("RepoFiles", (string)byName["project compile"]["impact"]!);
+        Assert.Equal("Target", (string)byName["connection deploy"]["impact"]!);
+        Assert.Equal("object", (string)byName["project show graph"]["input_schema"]!["type"]!);
+        Assert.False(byName["project show graph"]["input_schema"]!["properties"]!.AsObject().ContainsKey("project"));
+
+        // the skill of the agent kit, as this version holds it
+        var skill = JsonNode.Parse(await (await Send(HttpMethod.Get, "/api/v1/skill", token: Token())).Content.ReadAsStringAsync())!;
+        Assert.Equal("dbdatabuild", (string)skill["name"]!);
+        Assert.StartsWith("---\nname: dbdatabuild", (string)skill["content"]!);
+
         // a viewer may run what reads and is told which of the others it may not
         Assert.True((bool)byName["project show graph"]["allowed"]!);
         Assert.False((bool)byName["connection deploy"]["allowed"]!);

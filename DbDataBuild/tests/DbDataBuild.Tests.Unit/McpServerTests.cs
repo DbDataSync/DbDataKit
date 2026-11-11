@@ -225,7 +225,7 @@ public class McpServerTests : IDisposable
     private static string WaitForLine(SyncWriter output, string contains) => output.WaitForLine(contains, TimeSpan.FromSeconds(60));
 
     /// <summary>Runs a session: initialize (with or without elicitation), then a call of apply; `answer` gets the question the server asks and returns what the person answered (null: nothing asked is expected).</summary>
-    private (List<JsonNode> Replies, ApplyHost Host) ApplySession(bool clientAsks, Func<JsonNode, JsonObject>? answer, bool dryRun = false)
+    private (List<JsonNode> Replies, ApplyHost Host) ApplySession(bool clientAsks, Func<JsonNode, JsonObject>? answer, bool dryRun = false, DbDataKit.Cli.IMcpAudit? audit = null, Func<DbDataKit.Cli.ApprovalRequest, CancellationToken, Task<DbDataKit.Cli.ApprovalDecision>>? inbox = null)
     {
         var plan = Path.Combine(dir, "plans", "postgres");
         Directory.CreateDirectory(plan);
@@ -234,9 +234,9 @@ public class McpServerTests : IDisposable
             [new DbDataKit.Schema.Planning.ObjectBase("marts.fct", DbDataKit.Schema.ObjectState.InSync, new string('a', 64), new string('a', 64))], [],
             [new DbDataBuild.Planning.PlanStep("1", DbDataBuild.Planning.StepType.Ddl, "marts.fct", "drop column x", "ALTER TABLE marts.fct DROP COLUMN x;", DbDataKit.Schema.Planning.RiskClass.Destructive, ["col.dropped"], new string('b', 64), [])], [])));
         var host = new ApplyHost(); var feed = new Feed(); var output = new SyncWriter();
-        var server = new McpServer(dir, true, feed, output, host) { AnswerTimeout = TimeSpan.FromSeconds(20) };
+        var server = new McpServer(dir, true, feed, output, host) { AnswerTimeout = TimeSpan.FromSeconds(20), Audit = audit, Inbox = inbox };
         var serving = Task.Run(server.Serve);
-        feed.Send(Request("initialize", new JsonObject { ["protocolVersion"] = McpServer.LatestProtocol, ["capabilities"] = clientAsks ? new JsonObject { ["elicitation"] = new JsonObject() } : new JsonObject() }, id: 1).ToJsonString());
+        feed.Send(Request("initialize", new JsonObject { ["protocolVersion"] = McpServer.LatestProtocol, ["capabilities"] = clientAsks ? new JsonObject { ["elicitation"] = new JsonObject() } : new JsonObject(), ["clientInfo"] = new JsonObject { ["name"] = "claude-code", ["version"] = "2.1" } }, id: 1).ToJsonString());
         var arguments = new JsonObject { ["apply_plan"] = $"plans/postgres/{id}.plan.yml" };
         if (dryRun) arguments["dry_run"] = true;
         feed.Send(Request("tools/call", new JsonObject { ["name"] = "connection_deploy", ["arguments"] = arguments }, id: 2).ToJsonString());
@@ -291,6 +291,58 @@ public class McpServerTests : IDisposable
         Assert.True((bool)result["isError"]!);
         Assert.Contains("Run it yourself: dbdatabuild connection deploy --apply-plan", (string)result["content"]![0]!["text"]!);
         Assert.Empty(host.Ran);
+    }
+
+    // ---- plan 27a AG29: `ui mcp --report-to` for Build's own server ----
+
+    [Fact]
+    public void A_session_is_reported_with_what_was_asked_what_the_person_answered_and_what_ran()
+    {
+        var log = new DbDataKit.Cli.McpAuditLog();
+        var (_, host) = ApplySession(clientAsks: true, _ => Accept(true, "connection deploy"), audit: log);
+
+        Assert.Single(host.Ran);
+        Assert.Equal(["asked", "approved", "ran"], log.Entries.Select(e => e.Outcome));
+        Assert.All(log.Entries, e => Assert.Equal(("claude-code 2.1", "connection_deploy", "connection deploy"), (e.Agent, e.Tool, e.Command)));
+        Assert.Contains("writes-data", log.Entries[0].Note);   // the traits of a command that reaches a target are in what the person was asked
+    }
+
+    [Fact]
+    public void A_denied_step_is_reported_as_asked_and_denied_and_runs_nothing()
+    {
+        var log = new DbDataKit.Cli.McpAuditLog();
+        var (_, host) = ApplySession(clientAsks: true, _ => Accept(false, "connection deploy"), audit: log);
+
+        Assert.Empty(host.Ran);
+        Assert.Equal(["asked", "denied", "refused"], log.Entries.Select(e => e.Outcome));
+    }
+
+    [Fact]
+    public void A_host_that_cannot_ask_asks_in_the_consoles_inbox_and_runs_only_after_the_persons_own_answer_there()
+    {
+        var log = new DbDataKit.Cli.McpAuditLog();
+        DbDataKit.Cli.ApprovalRequest? asked = null;
+        var (replies, host) = ApplySession(clientAsks: false, answer: null, audit: log, inbox: (request, _) => { asked = request; return Task.FromResult(new DbDataKit.Cli.ApprovalDecision(true, "go")); });
+
+        Assert.Single(host.Ran);
+        Assert.False((bool)replies.Single(r => r["id"]?.ToJsonString() == "2")["result"]!["isError"]!);
+        Assert.Equal("connection_deploy", asked!.Tool);
+        Assert.Contains("drop column x", asked.Command);   // the plan summary and its first steps are in what the inbox shows
+        Assert.True(asked.Traits.HasFlag(DbDataKit.Cli.Traits.ChangesStructure));
+        Assert.Equal(["asked", "approved", "ran"], log.Entries.Select(e => e.Outcome));
+    }
+
+    [Fact]
+    public void A_console_that_says_no_or_cannot_be_reached_means_nothing_runs()
+    {
+        var log = new DbDataKit.Cli.McpAuditLog();
+        var (denied, ran) = ApplySession(clientAsks: false, answer: null, audit: log, inbox: (_, _) => Task.FromResult(new DbDataKit.Cli.ApprovalDecision(false, "not now")));
+        Assert.Empty(ran.Ran);
+        Assert.Contains("not now", (string)denied.Single(r => r["id"]?.ToJsonString() == "2")["result"]!["content"]![0]!["text"]!);
+
+        var (unreachable, ranAgain) = ApplySession(clientAsks: false, answer: null, inbox: (_, _) => throw new HttpRequestException("no route"));
+        Assert.Empty(ranAgain.Ran);
+        Assert.True((bool)unreachable.Single(r => r["id"]?.ToJsonString() == "2")["result"]!["isError"]!);
     }
 
     [Fact]

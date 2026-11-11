@@ -11,7 +11,9 @@ namespace DbDataKit.Server;
 
 public sealed record YamlBody(string Yaml, bool Confirmed = false);
 
-public sealed record StartConversationBody(string Agent, string? Title = null);
+public sealed record StartConversationBody(string Agent, string? Title = null, string? Server = null, string? Project = null, string? Workspace = null);
+
+public sealed record InstallBuildHelperBody(string Server, string Project);
 
 public sealed record SendMessageBody(string Text);
 
@@ -35,7 +37,7 @@ public sealed record OutsideEventsBody(IReadOnlyList<OutsideEvent> Events);
 /// </summary>
 [ApiController]
 [Route("api/agents")]
-public sealed class AgentsController(ConsoleAgents agents, ConsoleModels models, IUserAccounts users) : ControllerBase
+public sealed class AgentsController(ConsoleAgents agents, ConsoleModels models, IUserAccounts users, ConsoleInstances instances, IBuildRelay? relay = null) : ControllerBase
 {
     private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
 
@@ -125,10 +127,39 @@ public sealed class AgentsController(ConsoleAgents agents, ConsoleModels models,
 
     [HttpPost("conversations")]
     [Authorize(Policies.Admin)]
-    public IActionResult Start([FromBody] StartConversationBody body)
+    public async Task<IActionResult> Start([FromBody] StartConversationBody body, CancellationToken cancellation)
     {
-        var (conversation, problem) = agents.Start(body.Agent, PersonId, PersonName, body.Title);
+        var target = body.Server is { Length: > 0 } && body.Project is { Length: > 0 } ? new BuildTarget(body.Server, body.Project, body.Workspace is { Length: > 0 } w ? w : null) : null;
+        var (conversation, problem) = await agents.StartAsync(body.Agent, PersonId, PersonName, body.Title, target, cancellation);
         return conversation is null ? Conflict(new { error = problem }) : Ok(conversation);
+    }
+
+    /// <summary>The Build servers this console manages, and for one of them the projects and the workspaces of the person who asks (the server is asked as them): what a conversation with a Build agent is started on (plan 27a AG14, AG15).</summary>
+    [HttpGet("build-targets")]
+    [Authorize(Policies.Admin)]
+    public async Task<IActionResult> BuildTargets([FromQuery] string? server, [FromQuery] string? project, CancellationToken cancellation)
+    {
+        var servers = instances.Registry.All().Select(i => new { id = i.InstanceId, name = i.Name }).ToList();
+        if (server is null || relay is null) return Ok(new { servers, projects = Array.Empty<object>(), workspaces = Array.Empty<object>() });
+        var who = new RelayPerson(PersonId, PersonName, IsAdmin ? UserRole.Admin : UserRole.Viewer);
+        var (status, projects) = await relay.CallAsync(server, who, HttpMethod.Get, "/api/v1/projects", null, cancellation);
+        if (status != 200) return Conflict(new { error = (string?)projects?["error"] ?? $"The server answered {status}." });
+        JsonNode? workspaces = null;
+        if (project is not null)
+        {
+            var (wStatus, found) = await relay.CallAsync(server, who, HttpMethod.Get, $"/api/v1/projects/{Uri.EscapeDataString(project)}/workspaces", null, cancellation);
+            if (wStatus == 200) workspaces = found?["workspaces"];
+        }
+        return Ok(new { servers, projects = projects?["projects"], workspaces });
+    }
+
+    /// <summary>Makes or refreshes the <c>build-helper</c> agent from what a Build server offers an agent, and its skill (plan 27a AG14).</summary>
+    [HttpPost("build-helper/install")]
+    [Authorize(Policies.Admin)]
+    public async Task<IActionResult> InstallBuildHelper([FromBody] InstallBuildHelperBody body, CancellationToken cancellation)
+    {
+        var (done, problem) = await agents.InstallBuildHelperAsync(new BuildTarget(body.Server, body.Project, null), PersonId, cancellation);
+        return done ? Ok(agents.Read(BuildAgentTools.HelperName)) : Conflict(new { error = problem });
     }
 
     [HttpGet("conversations/{id}")]

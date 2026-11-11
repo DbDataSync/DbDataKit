@@ -113,10 +113,20 @@ internal static class BuildManagementApi
                     name = c.Name,
                     purpose = c.Purpose,
                     effect = c.Effect,
+                    impact = c.Impact.ToString(),               // what the call touches (None, RepoFiles, TrackingTables, TargetData, Target): the console's agents map it to traits
+                    write_flag = c.WriteFlag,                   // the flag that makes a RepoFiles command change files (`--write`), null when it always does
+                    input_schema = surface.Describe(c)["inputSchema"]!.DeepClone(),   // the same JSON Schema of the inputs the MCP server offers
                     role = specs.TryGetValue(c.Name, out var spec) ? ManagementAuthorization.RoleFor(spec.Effect).ToString().ToLowerInvariant() : null,
                     allowed = specs.TryGetValue(c.Name, out var s) && ManagementAuthorization.Authorize(token, s, projectId).Allowed,
                 }),
             });
+        });
+
+        // plan 27a AG14: the skill of Build's agent kit, as this server's version holds it, so the console's build-helper agent is told to work the way this version works (no copy that goes stale)
+        app.MapGet("/api/v1/skill", () =>
+        {
+            var skill = AgentKitCommand.Files().FirstOrDefault(f => f.Path == "SKILL.md");
+            return skill.Content is null ? Results.NotFound() : Results.Json(new { name = "dbdatabuild", version = DbDataBuild.Core.ProductInfo.Version, content = skill.Content });
         });
 
         if (workspaces is not null) MapWorkspaces(app, projects, workspaces, workspaceRunner);

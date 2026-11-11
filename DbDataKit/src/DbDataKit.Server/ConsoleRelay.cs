@@ -18,7 +18,7 @@ namespace DbDataKit.Server;
 /// (<see cref="ServerProducts.RunnerRoutes"/>): only the routes of its table pass, and only for a person who holds the role the runner asks for there; a product's reports and a webhook are not a console's to make.
 /// </para>
 /// </summary>
-public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore keys, CurrentUser current, ILogger<ConsoleRelay> log, DbDataKit.Identity.FederatedUsers? federated = null, RelayTimeouts? timeouts = null)
+public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore keys, CurrentUser current, ILogger<ConsoleRelay> log, DbDataKit.Identity.FederatedUsers? federated = null, RelayTimeouts? timeouts = null) : IBuildRelay
 {
     private readonly RelayTimeouts _timeouts = timeouts ?? RelayTimeouts.Default;
 
@@ -80,8 +80,17 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
     public async Task<(int Status, System.Text.Json.Nodes.JsonNode? Body)> CallAsync(RegisteredInstance instance, HttpMethod method, string path, object? body, CancellationToken ct)
     {
         if (current.Id is not { } userId || current.Role is not { } role) return (401, new System.Text.Json.Nodes.JsonObject { ["error"] = "Sign in first." });
+        return await CallAsAsync(instance, userId, current.Name, role, method, path, body, ct);
+    }
+
+    /// <summary>
+    /// A call on behalf of a named person with no request of theirs in hand (an agent's tool call runs in the background): the same token a relayed call carries, made from the person's id, name and role as they stand now, so the
+    /// server decides what that person may do and the agent never has more. Nothing of the console's own authority is added.
+    /// </summary>
+    public async Task<(int Status, System.Text.Json.Nodes.JsonNode? Body)> CallAsAsync(RegisteredInstance instance, string userId, string? userName, UserRole role, HttpMethod method, string path, object? body, CancellationToken ct)
+    {
         using var request = new HttpRequestMessage(method, new Uri(instance.Url, path));
-        request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, await TokenForAsync(instance, userId, current.Name, role, ct));
+        request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, await TokenForAsync(instance, userId, userName, role, ct));
         if (body is not null) request.Content = System.Net.Http.Json.JsonContent.Create(body);
         try
         {
@@ -100,6 +109,14 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
             log.LogWarning("{Server} did not answer a {Method} {Path}: {Reason}", instance.Name, method, path, ex.GetType().Name);
             return (502, new System.Text.Json.Nodes.JsonObject { ["error"] = $"{instance.Name} did not answer." });
         }
+    }
+
+    /// <inheritdoc />
+    async Task<(int Status, System.Text.Json.Nodes.JsonNode? Body)> IBuildRelay.CallAsync(string server, RelayPerson person, HttpMethod method, string path, object? body, CancellationToken ct)
+    {
+        if (instances.Registry.Find(server) is not { } instance) return (404, new System.Text.Json.Nodes.JsonObject { ["error"] = $"No server '{server}' is registered." });
+        if (await ProductOfAsync(instance, ct) != ServerProducts.Build) return (409, new System.Text.Json.Nodes.JsonObject { ["error"] = $"'{instance.Name}' is not a Build server." });
+        return await CallAsAsync(instance, person.Id, person.Name, person.Role, method, path, body, ct);
     }
 
     public async Task RelayAsync(HttpContext context, string server, string path)

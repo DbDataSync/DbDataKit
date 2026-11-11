@@ -56,6 +56,26 @@ export interface ProviderTest { ok: boolean; message: string; answer: string | n
 
 export interface Usage { byPerson: UsageRow[]; byAgent: UsageRow[]; install: UsageRow | null }
 
+/** Where a Build agent works (plan 27a AG14): a Build server, one of its projects and, for anything that changes files, the person's own workspace. */
+export interface BuildTarget { server: string; project: string; workspace?: string }
+export interface BuildTargets { servers: { id: string; name: string }[]; projects: { id: string }[] | null; workspaces: { id: string; name?: string; owned?: boolean }[] | null }
+
+/** The target a conversation starts on, or nothing when no server and project are chosen (an agent of the console's own commands needs none). */
+export function buildTarget(server: string, project: string, workspace: string): BuildTarget | undefined {
+  return server && project ? { server, project, ...(workspace ? { workspace } : {}) } : undefined
+}
+
+/** What the target says in a line: which server and project, and whether files can be changed. */
+export const targetLine = (t: BuildTarget | undefined): string =>
+  t ? `${t.server} / ${t.project}${t.workspace ? ` / workspace ${t.workspace}` : ' (read only: no workspace)'}` : 'the console'
+
+const targetQuery = (server?: string, project?: string): string => {
+  const q = new URLSearchParams()
+  if (server) q.set('server', server)
+  if (server && project) q.set('project', project)
+  return q.size > 0 ? `?${q.toString()}` : ''
+}
+
 const json = (method: string, body?: unknown): RequestInit => ({ method, body: body === undefined ? undefined : JSON.stringify(body) })
 
 export const agentsApi = {
@@ -67,7 +87,9 @@ export const agentsApi = {
   previewPolicy: (yaml: string) => request<PolicyPreview>('/api/agents/policy/preview', json('POST', { yaml })),
   savePolicy: (yaml: string, confirmed: boolean) => request<{ saved: boolean; changes: PolicyChange[] }>('/api/agents/policy', json('PUT', { yaml, confirmed })),
   conversations: (all: boolean) => request<Conversation[]>(`/api/agents/conversations?all=${all}`),
-  start: (agent: string, title?: string) => request<Conversation>('/api/agents/conversations', json('POST', { agent, title })),
+  start: (agent: string, title?: string, target?: BuildTarget) => request<Conversation>('/api/agents/conversations', json('POST', { agent, title, ...target })),
+  buildTargets: (server?: string, project?: string) => request<BuildTargets>(`/api/agents/build-targets${targetQuery(server, project)}`),
+  installBuildHelper: (server: string, project: string) => request<AgentDetail>('/api/agents/build-helper/install', json('POST', { server, project })),
   conversation: (id: string) => request<ConversationView>(`/api/agents/conversations/${encodeURIComponent(id)}`),
   send: (id: string, text: string) => request<void>(`/api/agents/conversations/${encodeURIComponent(id)}/messages`, json('POST', { text })),
   cancel: (id: string) => request<void>(`/api/agents/conversations/${encodeURIComponent(id)}/cancel`, json('POST')),

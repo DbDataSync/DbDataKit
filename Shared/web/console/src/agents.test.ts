@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bindingLine, connectCommand, providerTemplate, cost, eventWord, percent, promptingMeaning, promptingName, sessions, statusWord, tokenState, waitingOn, type AgentToken, type Approval, type AuditRow } from './agents'
+import { buildTarget, targetLine, bindingLine, connectCommand, providerTemplate, cost, eventWord, percent, promptingMeaning, promptingName, sessions, statusWord, tokenState, waitingOn, type AgentToken, type Approval, type AuditRow } from './agents'
 import { emptyPolicy, policyFromYaml, policyToYaml, settingMeaning } from './policyForm'
 import { contextLine, isPolicyItem, parseInPlay, policyItemId, policyItemText, workActions, workWord, type WorkItem } from './knowledge'
 
@@ -132,5 +132,19 @@ describe('knowledge worklists and the policy item form', () => {
   })
   it('reads a context part as a line with its share of the budget', () => {
     expect(contextLine({ layer: 'install-policy', id: 'policy/a.md', version: 'v', tokens: 40, shareOfBudget: 0.123 })).toBe('install-policy: policy/a.md (40 tokens, 12% of the budget)')
+  })
+})
+
+describe('where a Build agent works (AG14)', () => {
+  it('has no target until a server and a project are chosen, and a workspace only when named', () => {
+    expect(buildTarget('', '', '')).toBeUndefined()
+    expect(buildTarget('b1', '', 'w')).toBeUndefined()
+    expect(buildTarget('b1', 'sales', '')).toEqual({ server: 'b1', project: 'sales' })
+    expect(buildTarget('b1', 'sales', 'ws1')).toEqual({ server: 'b1', project: 'sales', workspace: 'ws1' })
+  })
+  it('says whether files can be changed', () => {
+    expect(targetLine(undefined)).toBe('the console')
+    expect(targetLine({ server: 'b1', project: 'sales' })).toBe('b1 / sales (read only: no workspace)')
+    expect(targetLine({ server: 'b1', project: 'sales', workspace: 'ws1' })).toBe('b1 / sales / workspace ws1')
   })
 })
