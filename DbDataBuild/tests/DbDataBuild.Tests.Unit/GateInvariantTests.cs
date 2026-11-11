@@ -21,8 +21,9 @@ public class GateInvariantTests
             .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"));
 
     // the only files that may touch a command object: the write executor and the read session
+    // BuildRunsModule (UI09) keeps the runs of the scheduled plans in the same state database: the state layer's statements, never a target's
     // BuildTrackingStore writes only to the state database of the server (the copy of the tracking tables, plan 28c E16), never to a target: its statements are the shared state layer's, not a connection of a project
-    private static readonly string[] DriverFiles = ["DbDataBuild.Execution/MutationGate.cs", "DbDataBuild.Execution/ReadSession.cs", "DbDataBuild.State/BuildTrackingStore.cs"];
+    private static readonly string[] DriverFiles = ["DbDataBuild.Execution/MutationGate.cs", "DbDataBuild.Execution/ReadSession.cs", "DbDataBuild.State/BuildTrackingStore.cs", "DbDataBuild.State/BuildRunsModule.cs"];
 
     private static string Rel(string f) => Path.GetRelativePath(Path.Combine(Root(), "src"), f).Replace('\\', '/');
 

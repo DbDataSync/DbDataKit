@@ -198,6 +198,23 @@ internal static class BuildManagementApi
             return Results.Json(new { enabled = scheduler is not null, jobs = rows });
         });
 
+        // UI09: the runs of the scheduled plans this server's scheduler finished, newest first (when, outcome, exit code), for the console's Runs page. A server that runs no scheduler has none.
+        app.MapGet("/api/v1/plan-runs", (HttpContext context) =>
+        {
+            if (!ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer).Allowed) return Results.Json(new { error = "This needs the viewer role." }, statusCode: StatusCodes.Status403Forbidden);
+            var limit = int.TryParse(context.Request.Query["limit"], out var asked) ? Math.Clamp(asked, 1, 500) : 50;
+            var runs = scheduler?.RecentRuns(limit) ?? [];
+            return Results.Json(new
+            {
+                enabled = scheduler is not null,
+                runs = runs.Select(r => new
+                {
+                    id = r.RunId, project = r.Project, plan = r.Subject, started = r.Started, finished = r.Ended, exit = r.Exit,
+                    outcome = r.Exit == 0 ? "succeeded" : "failed",
+                }),
+            });
+        });
+
         // Pausing, resuming and running a scheduled plan now are an operator's (running a plan changes target data). For a plan this server's scheduler owns they need the scheduler: without it nothing is queued, so there is nothing to
         // pause or start. For a plan the runner owns the call is forwarded to the runner (a server that runs no scheduler forwards too), and what the runner answers is what the caller is told; the audit line names the caller.
         foreach (var action in new[] { "pause", "resume", "run" })

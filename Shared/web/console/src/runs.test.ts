@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loadRuns, runnerRunRow, sortRuns, syncRunRow, took, visible, type RunnerRun, type SyncRun } from './runs'
+import { buildRunRow, loadRuns, runnerRunRow, sortRuns, syncRunRow, took, visible, type BuildPlanRun, type RunnerRun, type SyncRun } from './runs'
 import type { InstanceSummary } from './api'
 
 const server = (id: string, name: string, product: string): InstanceSummary => ({ id, name, url: 'https://x', product, version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null })
@@ -78,6 +78,33 @@ describe('loading', () => {
       expect(asked).toContain('/relay/r1/api/v1/runs?limit=100')
       expect(rows.map((r) => r.product)).toEqual(['dbdatarunner', 'dbdatasync'])
       expect(problems.map((p) => p.server)).toEqual(['Sync down'])
+    } finally { globalThis.fetch = real }
+  })
+})
+
+describe('a Build plan run (UI09)', () => {
+  const build = server('b1', 'Build prod', 'dbdatabuild')
+  const planRun = (over: Partial<BuildPlanRun> = {}): BuildPlanRun => ({ id: 'p1', project: 'sales', plan: 'sqlserver/hourly', started: '2026-11-11T12:15:00Z', finished: '2026-11-11T12:15:40Z', exit: 0, outcome: 'succeeded', ...over })
+
+  it('is a row with the project and the plan, the time it took, and the Build project as the screen to open', () => {
+    const row = buildRunRow(build, planRun())
+    expect(row).toMatchObject({ product: 'dbdatabuild', subject: 'sales sqlserver/hourly', state: 'succeeded', detail: '', link: '/servers/b1/projects/sales' })
+    expect(took(row)).toBe('40 s')
+  })
+
+  it('says a failed run failed with its exit code, and one that could not be started says so', () => {
+    expect(buildRunRow(build, planRun({ exit: 2, outcome: 'failed' }))).toMatchObject({ state: 'failed', detail: 'The refresh ended with exit code 2' })
+    expect(buildRunRow(build, planRun({ exit: -1, outcome: 'failed' })).detail).toBe('The scheduled run could not be started')
+  })
+
+  it('is asked of a Build server through the relay', async () => {
+    const real = globalThis.fetch
+    const asked: string[] = []
+    globalThis.fetch = (async (url: string) => { asked.push(String(url)); return new Response(JSON.stringify({ runs: [planRun()] }), { status: 200, headers: { 'content-type': 'application/json' } }) }) as typeof fetch
+    try {
+      const { rows } = await loadRuns([build])
+      expect(asked).toEqual(['/relay/b1/api/v1/plan-runs?limit=50'])
+      expect(rows.map((r) => r.product)).toEqual(['dbdatabuild'])
     } finally { globalThis.fetch = real }
   })
 })

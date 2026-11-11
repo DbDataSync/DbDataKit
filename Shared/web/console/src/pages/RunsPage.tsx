@@ -33,14 +33,14 @@ export function RunsPage() {
       <div className="pane" data-testid="runs-page">
         <div className="page-head">
           <h1 className="page-title">Runs</h1>
-          <span className="page-note">The latest runs of your replications and runner tasks, whichever server they ran on.</span>
+          <span className="page-note">The latest runs of your replications, scheduled Build plans and runner tasks, whichever server they ran on.</span>
         </div>
         <ErrorBanner error={instances.error ?? view.error} />
         {(view.data?.problems ?? []).map((p) => (
           <div key={p.server} className="empty" data-testid="runs-problem">{`${p.server} did not answer: ${p.message}`}</div>
         ))}
         {view.isLoading && <div className="hint" data-testid="runs-loading">Asking the servers…</div>}
-        {view.isSuccess && all.length === 0 && <div className="empty" data-testid="runs-none">No run on the Sync and runner servers that answered.</div>}
+        {view.isSuccess && all.length === 0 && <div className="empty" data-testid="runs-none">No run on the Sync, Build and runner servers that answered.</div>}
         {all.length > 0 && (
           <>
             <label className="row" style={{ gap: 8, marginBottom: 10 }}>

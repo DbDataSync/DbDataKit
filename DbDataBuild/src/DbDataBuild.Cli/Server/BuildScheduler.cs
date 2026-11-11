@@ -58,7 +58,7 @@ internal static class BuildSchedulerSchema
     public const string Service = "dbdatabuild";
 
     /// <summary>The scheduling module, the <c>quality</c> module (the results of the models' checks, plan 23a FQ09: install scope), and the modules of the copy of the tracking tables (plan 28c E16): the progress store the follower's checkpoints are in, the divergence records and <c>build_tracking</c> itself.</summary>
-    public static IReadOnlyList<StateModule> Modules { get; } = [SchedulingModule.Module, .. DbDataBuild.State.BuildTrackingState.Modules, QualityModule.Module];
+    public static IReadOnlyList<StateModule> Modules { get; } = [SchedulingModule.Module, DbDataBuild.State.BuildRunsModule.Module, .. DbDataBuild.State.BuildTrackingState.Modules, QualityModule.Module];
 
     /// <summary>Install-scoped modules ignore it; the copy's modules are kept for the group <c>main</c>, the one a server has until it has groups of its own.</summary>
     public static StateScope Scope => DbDataBuild.State.BuildTrackingState.Scope;
@@ -96,6 +96,7 @@ internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunne
     public static readonly TimeSpan DefaultLease = TimeSpan.FromMinutes(10);
 
     private readonly ModuleJobStateStore _jobs = new(database, BuildSchedulerSchema.Service);
+    private readonly DbDataBuild.State.PlanRunStore _runs = new(database, BuildSchedulerSchema.Service);
     private readonly ModuleJobPauseStore _pauses = new(database, BuildSchedulerSchema.Service);
     private readonly ModuleWorkQueueStore _queue = new(database, BuildSchedulerSchema.Service) { LeaseDuration = lease ?? DefaultLease };
     public const string Kind = "refresh";
@@ -212,6 +213,7 @@ internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunne
             log($"Project '{project.Id}', {item.Subject}: the scheduled run ended with exit code {exit}.");
         }
         _jobs.SaveExit(project.Id, item.Subject, exit);
+        _runs.Record(project.Id, item.Subject, item.RunId, started, clock.GetUtcNow(), exit);   // UI09: the run is listed by GET /api/v1/plan-runs
         // the copy of the tracking tables follows a run, within a budget and never failing it (a down copy or target is a line in the log)
         if (tracking is { Enabled: true }) await tracking.CopyAsync(project, parts[0], TrackingBudget, CancellationToken.None);
     }
@@ -230,6 +232,9 @@ internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunne
         var now = clock.GetUtcNow();
         return [.. RefreshJobs.Discover(root).Select(j => (j, (DateTimeOffset?)ScheduleEvaluator.NextAfter(j.Schedule, now), _jobs.Get(project.Id, j.Subject)))];
     }
+
+    /// <summary>The newest finished runs of the scheduled plans, newest first (UI09).</summary>
+    public IReadOnlyList<DbDataBuild.State.PlanRun> RecentRuns(int limit) => _runs.Recent(limit);
 
     /// <summary>Who paused the plan and when, or null when it is not paused.</summary>
     public (string By, DateTimeOffset At)? PausedBy(HostedProject project, ScheduledJob job) => _pauses.Get(project.Id, job.Subject);
