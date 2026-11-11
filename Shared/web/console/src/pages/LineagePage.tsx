@@ -5,7 +5,7 @@ import { ErrorBanner } from '@dbdatakit/shell'
 import { LineageGraphView, projectLineage, reach } from '@dbdatakit/visuals'
 import { consoleApi } from '../api'
 import { ConsoleShell } from '../ConsoleShell'
-import { findCards, serverNote, withoutDeployments } from '../lineage'
+import { checkLine, checkStatusOf, findCards, serverNote, withoutDeployments } from '../lineage'
 import { panelLine, qualityApi } from '../quality'
 
 /**
@@ -64,6 +64,11 @@ export function LineagePage() {
               <div className="hint" style={{ marginBottom: 8 }} data-testid="lineage-selected">
                 <strong>{chosen.name}</strong> · {counts.upstream} upstream, {counts.downstream} downstream
                 {chosen.unknown_upstream && ' · what feeds it is not known'} · <span className="mono">{chosen.id}</span>
+              </div>
+            )}
+            {chosen && checkLine(chosen, lineage.data?.blocks) && (
+              <div className="hint" style={{ marginBottom: 8 }} data-testid="lineage-node-checks" data-status={checkStatusOf(chosen)}>
+                Checks on this node: {checkLine(chosen, lineage.data?.blocks)}
               </div>
             )}
             {chosen && counts && quality.data && (() => {
