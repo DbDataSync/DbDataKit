@@ -110,6 +110,11 @@ async function buildFlow(page: Page) {
   await page.getByTestId('wsp-tab-models').click()
   await expect(page.locator('[data-testid="wsp-build-model"]')).toHaveCount(2)
   await expect(page.locator('[data-testid="wsp-build-refresh-plan"][data-name="hourly"]')).toContainText('2 loads')
+  // SC20h: the load graph, read from the committed loads file of the draft (Build's own picture): a node per model, an edge for the one dependency; choosing one is Build's own behaviour
+  await expect(page.getByTestId('build-graph-node-orders')).toBeVisible()
+  await expect(page.getByTestId('build-graph-node-fct_sales')).toBeVisible()
+  await expect(page.getByTestId('build-graph-edge')).toHaveCount(1)
+  await expect(page.getByTestId('wsp-build-graph-count')).toContainText('2 models, 1 edge')
   // a model that reads a table nothing defines: the check names the model, its code and its line
   await page.getByTestId('wsp-tab-changes').click()
   await page.getByTestId('wsp-new-path').fill('models/staging/bad.sql')

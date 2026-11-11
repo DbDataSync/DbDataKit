@@ -58,7 +58,7 @@ const template = (id: string, kind: Kind): Map<string, string> => {
     ['dbdatabuild.yml', 'name: starter\n'],
     ['models/staging/orders.sql', 'SELECT 1 AS id\n'], ['models/staging/orders.yml', 'name: orders\n'],
     ['models/marts/fct_sales.sql', 'SELECT id FROM {{ ref(\'orders\') }}\n'],
-    ['rendered/sqlserver/loads.yml', 'loads:\n- model: orders\n- model: fct_sales\n'], ['rendered/sqlserver/refresh/hourly.yml', 'members:\n- model: orders\n- model: fct_sales\n'],
+    ['rendered/sqlserver/loads.yml', 'loads_file:\n  connection: "sqlserver"\nloads:\n- model: orders\n- model: fct_sales\ndependencies:\n- model: fct_sales\n  model_kind: full\n  depends_on: orders\n  depends_on_kind: full\n  depth: 1\nmodels:\n- name: orders\n  kind: full\n- name: fct_sales\n  kind: full\n'], ['rendered/sqlserver/refresh/hourly.yml', 'members:\n- model: orders\n- model: fct_sales\n'],
   ])
 }
 

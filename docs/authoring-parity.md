@@ -12,10 +12,10 @@ Summary (counts of the features below):
 
 | Product | built | partly | missing | not planned | features |
 | --- | --- | --- | --- | --- | --- |
-| Build | 7 | 1 | 12 | 5 | 25 |
+| Build | 8 | 2 | 10 | 5 | 25 |
 | Store | 5 | 1 | 1 | 3 | 10 |
 | Sync | 7 | 5 | 6 | 3 | 21 |
-| All | 19 | 7 | 19 | 11 | 56 |
+| All | 20 | 8 | 17 | 11 | 56 |
 
 ### Build
 
@@ -28,7 +28,7 @@ Summary (counts of the features below):
 | Schema forms for a model's `.yml` and a semantic file's `.yml` | `build/src/pages/EditTab.tsx` (form from `semantic.schema.json`) | none: YAML text only | missing | SC20m |
 | New model by kind (`project model create`) | `build/src/pages/NewModelPanel.tsx` | none: a new file is made by path | missing | SC20m |
 | New connection, grants, serving policy (`extensions.gateway`) | `build/src/pages/NewConnectionPanel.tsx`, `ConnectionGrants.tsx`, `ConnectionPolicy.tsx` | none: `connections/*.yaml` as text | missing | SC20m |
-| Load graph of the models (layers; choose one to light up what it is built from and what is built from it) | `build/src/pages/ProjectPage.tsx` (`GraphTab`), `graphLayout.ts` | none | missing | SC20h |
+| Load graph of the models (layers; choose one to light up what it is built from and what is built from it) | `build/src/pages/ProjectPage.tsx` (`GraphTab`), `graphLayout.ts` | `workspace/src/pages/BuildGraphPanel.tsx`, `buildGraph.ts` (read from `rendered/<connection>/loads.yml`; draws with Build's `GraphView.tsx`) | built | SC20h |
 | Check the project (compiler diagnostics, errors and warnings, file and line) | `build/src/pages/ProjectPage.tsx` (`CheckTab`), `Problems.tsx` | `workspace/src/pages/CheckPanel.tsx` (`dbdatabuild project show metadata`, offline) | built | SC20c |
 | Compile: write the plan into `rendered/` and see what was written or removed | `build/src/pages/CompilePanel.tsx` | none: `rendered/` is read only | missing | SC20l |
 | The lowered SQL of a model (rendered files per model) | `build/src/pages/PreviewPanel.tsx` | `workspace/src/pages/BuildPlanPanel.tsx` opens a rendered file read only | partly | SC20l |
@@ -45,7 +45,7 @@ Summary (counts of the features below):
 | Publish a semantic model to a Gateway | `build/src/pages/ModelPublish.tsx` | none: the build kind lists no `gateway` route | missing | SC20e |
 | Publish the project's data sources (connection, read login as a secret, grants) to a Gateway; hand a data source over | `build/src/pages/PublishTab.tsx` | none: it would put a login on a Gateway (D20, the option not taken) | missing | SC20e |
 | Dashboards and reports of a project: list, new, check, publish (Views tab) | `build/src/pages/ViewsTab.tsx` | none: `dashboards/*.yaml` and `reports/*.yaml` open as text | missing | SC20n |
-| Lineage: the model graph; column lineage is the console's Lineage page, which reads Build servers | `build/src/pages/ProjectPage.tsx` (`GraphTab`); console Lineage page | none | missing | SC20h |
+| Lineage: the model graph; column lineage is the console's Lineage page, which reads Build servers | `build/src/pages/ProjectPage.tsx` (`GraphTab`); console Lineage page | `workspace/src/pages/BuildGraphPanel.tsx` (model level only) | partly | SC20h |
 
 ### Store
 
