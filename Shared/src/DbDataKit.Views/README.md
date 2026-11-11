@@ -14,6 +14,10 @@ A widget is a type, its encodings and a query. The loader checks the closed Vega
 mode, the parameters a marker, control, cross-filter or drill names, and the **binding**: an explicit query must output every field the widget encodes (a derived query is made from the encodings).
 `ViewWidget.Fields` lists the encoded fields in the order written, each with its path and position, for the code that derives the request (DBR03).
 
+A document's **links** (`links`, a widget's `on_click`; plan 32 DBR35) are read with the document: `ViewDocument.Links` gives each by name (`ViewLink`: the target kind and name, the values under `with`, `new` or `edit`, `as`, `then`, `lock`, `print`, `image`).
+Pass `targets` (`dashboard:name`, `report:name`, `view:name`, `page:name`, `form:name`, each with its parameters or fields and their types) to `ViewsLoader.Load` and a link to a target the app lacks, a name the target lacks, a value of the wrong type
+(`ViewsLoader.LinkTypeFits`) and a required parameter not given are refused with the code and the place; `docs/views.md` has the vocabulary.
+
 ## Deriving the request, and the catalog check
 
 ```csharp

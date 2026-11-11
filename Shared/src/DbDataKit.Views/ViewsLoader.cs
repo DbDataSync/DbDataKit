@@ -16,6 +16,7 @@ public static partial class ViewsLoader
     public const int MaximumLayouts = 20;
     public const int MaximumTiles = 200;
     public const int MaximumParameters = 50;
+    public const int MaximumLinks = 100;
     public const int MaximumQueryLimit = 10_000;
     public const int MinimumCanvasPixels = 320;
     public const int MaximumCanvasPixels = 8_000;
@@ -25,18 +26,19 @@ public static partial class ViewsLoader
     /// <summary>The keys each part accepts, by part name. The JSON Schema files have the same keys; a test keeps them equal.</summary>
     public static readonly IReadOnlyDictionary<string, string[]> Keys = new Dictionary<string, string[]>
     {
-        ["dashboard"] = ["schemaVersion", "kind", "title", "parameters", "theme", "locale", "refresh", "kiosk", "widgets", "layouts"],
-        ["report"] = ["schemaVersion", "kind", "title", "parameters", "theme", "locale", "strict", "limits", "cover", "widgets", "layouts"],
+        ["dashboard"] = ["schemaVersion", "kind", "title", "parameters", "theme", "locale", "refresh", "kiosk", "links", "widgets", "layouts"],
+        ["report"] = ["schemaVersion", "kind", "title", "parameters", "theme", "locale", "strict", "limits", "cover", "links", "widgets", "layouts"],
         ["parameter"] = ["name", "type", "for", "many", "required", "default", "label"],
         ["theme"] = ["font"],
         ["widget.metric"] = ["type", "title", "label", "format", "encodings", "query"],
-        ["widget.chart"] = ["type", "title", "mark", "encodings", "query", "on_select", "drill"],
-        ["widget.matrix"] = ["type", "title", "encodings", "query", "on_select", "drill"],
-        ["widget.table"] = ["type", "title", "encodings", "query", "drill"],
+        ["widget.chart"] = ["type", "title", "mark", "encodings", "query", "on_select", "drill", "on_click"],
+        ["widget.matrix"] = ["type", "title", "encodings", "query", "on_select", "drill", "on_click"],
+        ["widget.table"] = ["type", "title", "encodings", "query", "drill", "on_click"],
         ["widget.text"] = ["type", "title", "text"],
         ["widget.image"] = ["type", "title", "hash", "media_type", "alt", "fit"],
         ["widget.control"] = ["type", "title", "parameter", "control", "label", "values"],
         ["widget.embed"] = ["type", "title", "url", "with", "link_text"],
+        ["widget.custom"] = ["type", "title", "component", "params", "links"],
         ["encodings.metric"] = ["value", "compare"],
         ["encodings.chart"] = ["x", "y", "color", "column", "row", "tooltip"],
         ["encodings.matrix"] = ["rows", "columns", "values", "values_on", "totals", "sort", "column_limit"],
@@ -56,6 +58,7 @@ public static partial class ViewsLoader
         ["on_select"] = ["set", "from"],
         ["drill"] = ["to", "with"],
         ["drill.to"] = ["dashboard", "report", "view"],
+        ["link"] = ["dashboard", "report", "view", "page", "form", "with", "new", "edit", "as", "then", "lock", "print", "image", "label"],
         ["control.values"] = ["attribute", "limit"],
         ["layout.common"] = ["name", "type", "default", "when", "widget_options"],
         ["layout.reflow"] = ["grid", "tiles"],
@@ -90,7 +93,7 @@ public static partial class ViewsLoader
         ["parameterType"] = ["string", "integer", "number", "boolean"],
         ["font"] = ["sans", "serif", "mono"],
         ["locale"] = ["en", "de", "fr", "es", "it", "pt", "nl"],
-        ["widgetType"] = ["metric", "chart", "matrix", "table", "text", "image", "control", "embed"],
+        ["widgetType"] = ["metric", "chart", "matrix", "table", "text", "image", "control", "embed", "custom"],
         ["format"] = ["catalog", "full", "compact", "percent"],
         ["align"] = ["left", "right", "center"],
         ["mark"] = ["bar", "line", "area", "point", "rule", "text"],
@@ -107,12 +110,16 @@ public static partial class ViewsLoader
         ["break"] = ["before", "after"],
         ["density"] = ["compact", "comfortable"],
         ["legend"] = ["show", "hide"],
+        ["linkAs"] = ["navigate", "dialog", "panel"],
+        ["linkThen"] = ["refresh", "none"],
+        ["linkPrint"] = ["hidden", "normal", "link"],
+        ["linkTarget"] = ["dashboard", "report", "view", "page", "form"],
     };
 
     /// <summary>The smallest a tile of a widget type may be at scale 1, in CSS pixels (plan 32 section 3.3); a type that is not listed has none.</summary>
     public static readonly IReadOnlyDictionary<string, (int W, int H)> Minimums = new Dictionary<string, (int, int)>
     {
-        ["metric"] = (160, 88), ["text"] = (160, 56), ["control"] = (180, 56), ["chart"] = (280, 180), ["table"] = (320, 200), ["matrix"] = (360, 220), ["embed"] = (280, 180),
+        ["metric"] = (160, 88), ["text"] = (160, 56), ["control"] = (180, 56), ["chart"] = (280, 180), ["table"] = (320, 200), ["matrix"] = (360, 220), ["embed"] = (280, 180), ["custom"] = (200, 120),
     };
 
     /// <summary>The names a header or footer may put in braces, besides <c>params.name</c>.</summary>
@@ -143,7 +150,7 @@ public static partial class ViewsLoader
     /// <param name="text">The file's text (YAML, or JSON when the file name ends in <c>.json</c>).</param>
     /// <param name="file">The file's path, which diagnostics name.</param>
     /// <param name="expected">The kind the caller wants (<see cref="DashboardLoader"/>, <see cref="ReportLoader"/>); null accepts either.</param>
-    /// <param name="targets">The parameters of the documents a drill may lead to, keyed <c>dashboard:name</c>, <c>report:name</c> or <c>view:name</c>; null skips the check of a drill's parameters.</param>
+    /// <param name="targets">The parameters of the documents a drill or a link may lead to, keyed <c>dashboard:name</c>, <c>report:name</c>, <c>view:name</c>, <c>page:name</c> or <c>form:name</c> (a form lists its fields, and its key as required); null skips the checks of a drill's and a link's targets.</param>
     public static ViewsLoadResult Load(string text, string file, ViewKind? expected = null, IReadOnlyDictionary<string, IReadOnlyList<ViewParameter>>? targets = null)
     {
         var diags = new List<ConfigDiagnostic>();

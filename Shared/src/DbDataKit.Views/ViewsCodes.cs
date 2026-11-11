@@ -61,8 +61,18 @@ public static class ViewsCodes
     public const string DefaultLayoutType = "DBD-VIEW-034";
     /// <summary>A key of the other kind (<c>refresh</c> in a report, <c>strict</c> in a dashboard).</summary>
     public const string KeyOfOtherKind = "DBD-VIEW-035";
-    /// <summary>A drill that does not give a required parameter of its target.</summary>
+    /// <summary>A widget's <c>on_click</c> (or a custom widget's link list) names a link the document does not declare.</summary>
+    public const string LinkNotDeclared = "DBD-VIEW-036";
+    /// <summary>A drill or a link that does not give a required parameter of its target.</summary>
     public const string DrillMissingParameter = "DBD-VIEW-037";
+    /// <summary>A link to a dashboard, report, view, page or form that the app (the <c>targets</c> a check is given) does not have: a target outside the app.</summary>
+    public const string LinkTargetUnknown = "DBD-VIEW-039";
+    /// <summary>A name in a link's <c>with</c>, <c>new</c>, <c>edit</c> or <c>lock</c> that the target has no parameter or field of.</summary>
+    public const string LinkNameUnknown = "DBD-VIEW-044";
+    /// <summary>A value whose type is not the type of the target's parameter or field.</summary>
+    public const string LinkTypeMismatch = "DBD-VIEW-045";
+    /// <summary><c>print: link</c> on a target that has no address of its own (a dialog or a panel): a PDF has nothing to point at.</summary>
+    public const string LinkNoAddress = "DBD-VIEW-046";
     /// <summary>An <c>embed</c> widget in a report: a report is paged and exported, and a frame is neither (plan 32 DBR19: dashboards only).</summary>
     public const string EmbedInReport = "DBD-VIEW-038";
     /// <summary>A widget with no request to derive: a type without a query (text, image, control) or a query that is explicit (its encodings do not drive it).</summary>

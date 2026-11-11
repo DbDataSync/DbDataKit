@@ -62,8 +62,14 @@ public sealed record ViewDocument(
     int? MaxPages,
     int? MaxRows,
     bool? CoverParameters,
-    string? Locale = null)
+    string? Locale = null,
+    IReadOnlyDictionary<string, ViewLink>? LinkMap = null)
 {
+    /// <summary>The links the document declares (<c>links</c>), by name; empty when it has none.</summary>
+    public IReadOnlyDictionary<string, ViewLink> Links => LinkMap ?? EmptyLinks;
+
+    private static readonly IReadOnlyDictionary<string, ViewLink> EmptyLinks = new Dictionary<string, ViewLink>();
+
     public ViewLayout DefaultLayout => Layouts.First(l => l.IsDefault);
 
     public ViewWidget? Widget(string id) => Widgets.FirstOrDefault(w => w.Id == id);

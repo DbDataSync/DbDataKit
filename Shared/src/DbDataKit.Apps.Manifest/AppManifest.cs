@@ -85,8 +85,12 @@ public sealed record AppManifest(
     AppEgress? Egress = null,
     AppKind Kind = AppKind.App,
     PortalSpec? Portal = null,
-    AppStorageUse? Storage = null)
+    AppStorageUse? Storage = null,
+    IReadOnlyList<CustomView>? CustomViewList = null)
 {
+    /// <summary>The custom views the manifest declares under <c>views</c> (a widget or a page that is code of the app), in the order written; empty when it has none.</summary>
+    public IReadOnlyList<CustomView> CustomViews => CustomViewList ?? [];
+
     public AppStorageUse StorageUse => Storage ?? AppStorageUse.None;
 
     public const string FormatId = "app/1";

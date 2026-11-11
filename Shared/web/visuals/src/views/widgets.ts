@@ -4,6 +4,8 @@ import {
 } from './common'
 import type { Json, ViewsIssue } from './common'
 import { checkFormat } from './format'
+import { isLinkName, readLinkValues } from './links'
+import type { LinkValue } from './links'
 import coreSchema from '../../schemas/core.schema.json'
 
 /**
@@ -12,9 +14,9 @@ import coreSchema from '../../schemas/core.schema.json'
  */
 
 /** The parameters of a document a drill may lead to. */
-export interface DrillTarget { name: string; required?: boolean; default?: unknown }
+export interface DrillTarget { name: string; required?: boolean; default?: unknown; type?: string; many?: boolean }
 
-const WIDGET_TYPES = ['metric', 'chart', 'matrix', 'table', 'text', 'image', 'control', 'embed'] as const
+const WIDGET_TYPES = ['metric', 'chart', 'matrix', 'table', 'text', 'image', 'control', 'embed', 'custom'] as const
 const noProperties = (...names: string[]) => (copy: Json) => { for (const n of names) (copy.properties as Json)[n] = {} }
 const widgetChecks: Record<string, ValidateFunction> = {
   metric: part(defs.widget_metric!, noProperties('query')),
@@ -25,6 +27,7 @@ const widgetChecks: Record<string, ValidateFunction> = {
   image: part(defs.widget_image!),
   control: part(defs.widget_control!),
   embed: part(defs.widget_embed!),
+  custom: part(defs.widget_custom!, noProperties('params', 'links')),
 }
 const queryChecks: Record<string, ValidateFunction> = {
   derived: part(defs.query_derived!), semantic: part(defs.query_explicit_semantic!), saved: part(defs.query_explicit_saved!), store: part(defs.query_explicit_store!), ref: part(defs.query_explicit_ref!),
@@ -40,7 +43,11 @@ export const PARAM_USE = /\{\{\s*params\.([A-Za-z0-9_-]+)\s*\}\}/g
 export interface WidgetInfo { id: string; type: string; raw: Json }
 
 /** What reading widgets needs of the rest of the document. */
-export interface Context { kind?: 'dashboard' | 'report'; declared: Set<string>; targets?: Record<string, DrillTarget[]>; widgetIds: Set<string> | null }
+export interface Context {
+  kind?: 'dashboard' | 'report'; declared: Set<string>; targets?: Record<string, DrillTarget[]>; widgetIds: Set<string> | null
+  /** The links the widgets name (`on_click`), collected for the document to resolve once it has read `links`. */
+  clickRefs?: { name: string; path: string }[]
+}
 
 /**
  * The shape check of a widgets map alone: the same checks a document runs on its `widgets`, for a map an assistant's answer, a portal block or a pin holds. `parameters` are the names the widgets may use.
@@ -106,6 +113,7 @@ function checkWidget(id: string, raw: unknown, path: string, context: Context, i
       break
     case 'text': text(raw, path, context, issues); break
     case 'embed': embed(raw, path, context, issues); break
+    case 'custom': custom(raw, path, context, issues); break
     case 'control':
       if (typeof raw.parameter === 'string' && NAME.test(raw.parameter) && !context.declared.has(raw.parameter))
         issues.add(VIEW('008'), join(path, 'parameter'), `The control edits \`${raw.parameter}\`, a parameter the document does not declare.`)
@@ -121,8 +129,32 @@ function checkWidget(id: string, raw: unknown, path: string, context: Context, i
     }
     if (raw.on_select !== undefined) onSelect(raw.on_select, join(path, 'on_select'), context, issues)
     if (raw.drill !== undefined) drill(raw.drill, join(path, 'drill'), context, issues)
+    if (raw.on_click !== undefined && type !== 'metric' && isLinkName(raw.on_click)) {
+      if (raw.drill !== undefined) issues.add('DBD-106', join(path, 'on_click'), 'A widget follows `on_click` (a link of the document) or `drill` (the same thing written in place), not both.')
+      else context.clickRefs?.push({ name: raw.on_click, path: join(path, 'on_click') })
+    }
   }
   return { id, type, raw }
+}
+
+/** A custom widget (DBR30): the values of its parameters (a literal or a declared parameter, never a field of a clicked row) and the links it may open, by name, resolved once the document has read `links`. */
+function custom(raw: Json, path: string, context: Context, issues: Issues): void {
+  if (raw.params !== undefined) {
+    const given: Record<string, LinkValue> = {}
+    readLinkValues(raw.params, join(path, 'params'), context, issues, given)
+    for (const [name, v] of Object.entries(given))
+      if (v.kind === 'field') issues.add('DBD-106', join(join(path, 'params'), name), 'A row field is not a value here: a custom widget is not clicked, so give `$params.name` or a literal.')
+  }
+  if (raw.links !== undefined) {
+    const lp = join(path, 'links')
+    if (!Array.isArray(raw.links)) issues.add('DBD-106', lp, '`links` must be a list.')
+    else if (raw.links.length > 50) issues.add('DBD-106', lp, '`links` has at most 50 entries.')
+    else raw.links.forEach((n, i) => {
+      if (!isLinkName(n)) issues.add('DBD-106', at(lp, i), 'A link of a widget is a name: lower-case letters, digits, hyphen and underscore, starting with a letter (at most 64).')
+      else if ((raw.links as unknown[]).slice(0, i).includes(n)) issues.add(VIEW('020'), at(lp, i), `The link ${n} is listed twice.`)
+      else context.clickRefs?.push({ name: n, path: at(lp, i) })
+    })
+  }
 }
 
 /** The formats a widget names: a metric's, a table column's, a matrix value's and axis level's, a chart channel's; the words are `ViewFormat.Check`'s in .NET. */

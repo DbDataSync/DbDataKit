@@ -79,6 +79,18 @@ public static class ViewSpecLoader
         return reader.ReadToEnd();
     }
 
+    /// <summary>
+    /// Whether a file is a <c>dashboard/1</c> or <c>report/1</c> document and not a view spec (plan 32 DBR13): its <c>kind</c> is <c>report</c> (a view spec has no such kind), or <c>dashboard</c> with the
+    /// <c>layouts</c> a dashboard document has and the mini dashboard of a view spec has not. The checker of <see cref="IViewDocumentChecker"/> reads it.
+    /// </summary>
+    public static bool IsDocument(string yaml)
+    {
+        var scratch = new List<ConfigDiagnostic>();
+        if (StrictYamlReader.Read(yaml, "x", scratch) is not YamlMapping map) return false;
+        var kind = (map.Get("kind") as YamlScalar)?.Value;
+        return kind == "report" || (kind == "dashboard" && map.Get("layouts") is not null);
+    }
+
     private static readonly Regex Identifier = new("^[A-Za-z][A-Za-z0-9_]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>Whether a text is a value of a parameter type: a whole number, <c>true</c> or <c>false</c>, a date as yyyy-MM-dd.</summary>

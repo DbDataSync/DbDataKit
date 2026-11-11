@@ -1,13 +1,14 @@
 import type { RenderedError } from '../types'
 import type { SelectableLayout } from './selectLayout'
 import type { ViewFormatValue } from './format'
+import type { LinkDoc } from './links'
 
 /**
  * The shapes of a dashboard or report document as the renderers and layout engines read it (plan 32 sections 2 and 3). They describe a document that has already passed `validateViewsDocument`, so
  * they are as loose as the engines need (a chart's encodings are the Vega-Lite subset's channels, a query is whatever form the file holds) and no looser. Nothing here validates.
  */
 
-export type WidgetType = 'metric' | 'chart' | 'matrix' | 'table' | 'text' | 'image' | 'control' | 'embed'
+export type WidgetType = 'metric' | 'chart' | 'matrix' | 'table' | 'text' | 'image' | 'control' | 'embed' | 'custom'
 export type ControlKind = 'select' | 'multiselect' | 'date' | 'daterange' | 'number' | 'toggle' | 'text'
 export type ParameterValue = string | number | boolean | null | Array<string | number | boolean>
 /** Parameter name to its value now: what a `control` edits and what a request is bound with. */
@@ -33,15 +34,18 @@ export interface ChartDoc extends WidgetCommon {
   query: QueryDoc
   on_select?: { set: string; from: string }
   drill?: unknown
+  on_click?: string
 }
-export interface MatrixDoc extends WidgetCommon { type: 'matrix'; encodings: Record<string, unknown>; query: QueryDoc; on_select?: { set: string; from: string }; drill?: unknown }
+export interface MatrixDoc extends WidgetCommon { type: 'matrix'; encodings: Record<string, unknown>; query: QueryDoc; on_select?: { set: string; from: string }; drill?: unknown; on_click?: string }
 export interface TableColumnDoc { field: string; label?: string; format?: ViewFormatValue; align?: 'left' | 'right' | 'center'; width?: number }
-export interface TableDoc extends WidgetCommon { type: 'table'; encodings: { columns: TableColumnDoc[]; sort?: unknown }; query: QueryDoc; drill?: unknown }
+export interface TableDoc extends WidgetCommon { type: 'table'; encodings: { columns: TableColumnDoc[]; sort?: unknown }; query: QueryDoc; drill?: unknown; on_click?: string }
 export interface TextDoc extends WidgetCommon { type: 'text'; text: string }
 export interface ImageDoc extends WidgetCommon { type: 'image'; hash: string; media_type: 'image/png' | 'image/jpeg' | 'image/webp'; alt: string; fit?: 'contain' | 'cover' }
 export interface ControlDoc extends WidgetCommon { type: 'control'; parameter: string; control?: ControlKind; label?: string; values?: { attribute: string; limit?: number } }
 export interface EmbedDoc extends WidgetCommon { type: 'embed'; url: string; with?: Record<string, string>; link_text?: string }
-export type WidgetDoc = MetricDoc | ChartDoc | MatrixDoc | TableDoc | TextDoc | ImageDoc | ControlDoc | EmbedDoc
+/** Code of an app (DBR30): drawn only by the app's own host. */
+export interface CustomDoc extends WidgetCommon { type: 'custom'; component: string; params?: Record<string, string | number | boolean>; links?: string[] }
+export type WidgetDoc = CustomDoc | MetricDoc | ChartDoc | MatrixDoc | TableDoc | TextDoc | ImageDoc | ControlDoc | EmbedDoc
 
 export interface TileDoc { widget: string; x: number; y: number; w: number; h: number; min?: { w?: number; h?: number }; layer?: number }
 export interface WidgetOptionsDoc { density?: 'compact' | 'comfortable'; show_title?: boolean; legend?: 'show' | 'hide' }
@@ -73,6 +77,8 @@ export interface ViewsDoc {
   parameters?: ParameterDefinition[]
   /** The language numbers and dates are written in (DBR46); `en` when absent. */
   locale?: 'en' | 'de' | 'fr' | 'es' | 'it' | 'pt' | 'nl'
+  /** The links the document declares by name (DBR35); a widget follows one with `on_click`. */
+  links?: Record<string, LinkDoc>
   widgets: Record<string, WidgetDoc>
   layouts: LayoutDoc[]
   refresh?: { every: string }

@@ -66,7 +66,12 @@ public static partial class AppManifestLoader
             if (map.Get("views") is { } viewsNode)
             {
                 if (viewsNode is not YamlSequence list) Add(SharedCodes.InvalidValue, viewsNode, "`views` must be a list of file paths.");
-                else foreach (var item in list.Items) if (item is YamlScalar s && SafePath(s) is { } p) views.Add(p); else if (item is not YamlScalar) Add(SharedCodes.InvalidValue, item, "A view is a file path.");
+                else foreach (var item in list.Items)
+                    {
+                        if (item is YamlScalar s) { if (SafePath(s) is { } p) views.Add(p); }
+                        else if (item is YamlMapping custom) ReadCustomView(custom);
+                        else Add(SharedCodes.InvalidValue, item, "A view is a file path, or a custom view: `{name, kind, export, ...}`.");
+                    }
             }
             var kind = map.Get("kind") is YamlScalar k ? Choice(k, "kind", new Dictionary<string, AppKind> { ["app"] = AppKind.App, ["portal"] = AppKind.Portal }) : AppKind.App;
             if (kind == AppKind.Portal) { /* a portal is declared data: its pages are the `portal:` section's */ }
@@ -84,7 +89,7 @@ public static partial class AppManifestLoader
             var description = map.Get("description") is YamlScalar d ? d.Value : null;
             var portal = kind == AppKind.Portal ? Portal(map, entry, views, trust) : NoPortal(map);
             if (name is null || version is null) return null;
-            return new AppManifest(name, title, description, version.Value, entry, views, origin, chrome, models, semantic, roles, trust, egress, kind, portal, StorageOf(map));
+            return new AppManifest(name, title, description, version.Value, entry, views, origin, chrome, models, semantic, roles, trust, egress, kind, portal, StorageOf(map), customViews);
         }
 
         private AppStorageUse? StorageOf(YamlMapping map)

@@ -12,7 +12,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /** What an app may import with no allow-list entry: the suite's libraries for apps, and the framework they draw with. */
-export const DEFAULT_LIBRARY = ['@dbdatakit/semantic-client', '@dbdatakit/store-ui', '@dbdatakit/view-app', '@dbdatakit/visuals', 'react', 'react-dom']
+export const DEFAULT_LIBRARY = ['@dbdatakit/semantic-client', '@dbdatakit/store-ui', '@dbdatakit/view-app', '@dbdatakit/views-sdk', '@dbdatakit/visuals', 'react', 'react-dom']
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 

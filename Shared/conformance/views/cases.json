@@ -51,6 +51,14 @@
     {
       "file": "good/dashboard-embed.json",
       "kind": "dashboard"
+    },
+    {
+      "file": "good/dashboard-links.json",
+      "kind": "dashboard"
+    },
+    {
+      "file": "good/dashboard-custom.json",
+      "kind": "dashboard"
     }
   ],
   "bad": [
@@ -627,6 +635,505 @@
       "path": "widgets.frame.type",
       "line": 10,
       "schema": false
+    },
+    {
+      "name": "link-not-declared",
+      "file": "bad/link-not-declared.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-036",
+      "path": "widgets.by_region.on_click",
+      "line": 83,
+      "schema": false
+    },
+    {
+      "name": "link-two-targets",
+      "file": "bad/link-two-targets.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "links.region-page",
+      "line": 17,
+      "schema": true
+    },
+    {
+      "name": "link-target-outside-app",
+      "file": "bad/link-target-outside-app.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-039",
+      "path": "links.region-page.page",
+      "line": 18,
+      "schema": false,
+      "targets": {
+        "report:region_detail": [
+          {
+            "name": "region",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "year",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "dashboard:overview": [],
+        "view:customers": [
+          {
+            "name": "code",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "form:orders": [
+          {
+            "name": "id",
+            "required": true,
+            "type": "integer"
+          },
+          {
+            "name": "customer_id",
+            "type": "integer"
+          },
+          {
+            "name": "region",
+            "type": "string"
+          },
+          {
+            "name": "status",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "link-name-not-a-parameter-of-the-target",
+      "file": "bad/link-name-not-a-parameter-of-the-target.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-044",
+      "path": "links.region-page.with.reigon",
+      "line": 22,
+      "schema": false,
+      "targets": {
+        "page:regional-detail": [
+          {
+            "name": "region",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "year",
+            "type": "integer"
+          }
+        ],
+        "report:region_detail": [
+          {
+            "name": "region",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "year",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "dashboard:overview": [],
+        "view:customers": [
+          {
+            "name": "code",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "form:orders": [
+          {
+            "name": "id",
+            "required": true,
+            "type": "integer"
+          },
+          {
+            "name": "customer_id",
+            "type": "integer"
+          },
+          {
+            "name": "region",
+            "type": "string"
+          },
+          {
+            "name": "status",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "link-value-of-the-wrong-type",
+      "file": "bad/link-value-of-the-wrong-type.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-045",
+      "path": "links.year-report.with.year",
+      "line": 57,
+      "schema": false,
+      "targets": {
+        "page:regional-detail": [
+          {
+            "name": "region",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "year",
+            "type": "integer"
+          }
+        ],
+        "report:region_detail": [
+          {
+            "name": "region",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "year",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "dashboard:overview": [],
+        "view:customers": [
+          {
+            "name": "code",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "form:orders": [
+          {
+            "name": "id",
+            "required": true,
+            "type": "integer"
+          },
+          {
+            "name": "customer_id",
+            "type": "integer"
+          },
+          {
+            "name": "region",
+            "type": "string"
+          },
+          {
+            "name": "status",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "link-parameter-of-the-wrong-type",
+      "file": "bad/link-parameter-of-the-wrong-type.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-045",
+      "path": "links.region-page.with.year",
+      "line": 21,
+      "schema": false,
+      "targets": {
+        "page:regional-detail": [
+          {
+            "name": "region",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "year",
+            "type": "integer"
+          }
+        ],
+        "report:region_detail": [
+          {
+            "name": "region",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "year",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "dashboard:overview": [],
+        "view:customers": [
+          {
+            "name": "code",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "form:orders": [
+          {
+            "name": "id",
+            "required": true,
+            "type": "integer"
+          },
+          {
+            "name": "customer_id",
+            "type": "integer"
+          },
+          {
+            "name": "region",
+            "type": "string"
+          },
+          {
+            "name": "status",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "link-required-parameter-not-given",
+      "file": "bad/link-required-parameter-not-given.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-037",
+      "path": "links.region-page",
+      "line": 17,
+      "schema": false,
+      "targets": {
+        "page:regional-detail": [
+          {
+            "name": "region",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "year",
+            "type": "integer"
+          }
+        ],
+        "report:region_detail": [
+          {
+            "name": "region",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "year",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "dashboard:overview": [],
+        "view:customers": [
+          {
+            "name": "code",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "form:orders": [
+          {
+            "name": "id",
+            "required": true,
+            "type": "integer"
+          },
+          {
+            "name": "customer_id",
+            "type": "integer"
+          },
+          {
+            "name": "region",
+            "type": "string"
+          },
+          {
+            "name": "status",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "link-edit-without-the-key",
+      "file": "bad/link-edit-without-the-key.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-037",
+      "path": "links.order",
+      "line": 40,
+      "schema": false,
+      "targets": {
+        "page:regional-detail": [
+          {
+            "name": "region",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "year",
+            "type": "integer"
+          }
+        ],
+        "report:region_detail": [
+          {
+            "name": "region",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "year",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "dashboard:overview": [],
+        "view:customers": [
+          {
+            "name": "code",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "form:orders": [
+          {
+            "name": "id",
+            "required": true,
+            "type": "integer"
+          },
+          {
+            "name": "customer_id",
+            "type": "integer"
+          },
+          {
+            "name": "region",
+            "type": "string"
+          },
+          {
+            "name": "status",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "link-print-link-without-an-address",
+      "file": "bad/link-print-link-without-an-address.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-046",
+      "path": "links.order-form.print",
+      "line": 38,
+      "schema": false
+    },
+    {
+      "name": "link-lock-a-field-not-given",
+      "file": "bad/link-lock-a-field-not-given.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "links.order-form.lock[0]",
+      "line": 36,
+      "schema": false
+    },
+    {
+      "name": "link-new-on-a-page",
+      "file": "bad/link-new-on-a-page.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "links.region-page.new",
+      "line": 21,
+      "schema": false
+    },
+    {
+      "name": "link-and-drill-together",
+      "file": "bad/link-and-drill-together.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.by_region.on_click",
+      "line": 83,
+      "schema": false
+    },
+    {
+      "name": "link-then-names-a-widget-that-is-not-there",
+      "file": "bad/link-then-names-a-widget-that-is-not-there.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-025",
+      "path": "links.order.then[0]",
+      "line": 47,
+      "schema": false
+    },
+    {
+      "name": "link-undeclared-parameter",
+      "file": "bad/link-undeclared-parameter.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-008",
+      "path": "links.year-report.with.region",
+      "line": 56,
+      "schema": false
+    },
+    {
+      "name": "link-lock-on-a-page",
+      "file": "bad/link-lock-on-a-page.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "links.region-page.lock",
+      "line": 25,
+      "schema": false
+    },
+    {
+      "name": "link-unknown-key",
+      "file": "bad/link-unknown-key.json",
+      "as": "dashboard",
+      "code": "DBD-104",
+      "path": "links.region-page.target",
+      "line": 25,
+      "schema": true
+    },
+    {
+      "name": "custom-component-without-an-app",
+      "file": "bad/custom-component-without-an-app.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.grid.component",
+      "line": 37,
+      "schema": true
+    },
+    {
+      "name": "custom-parameter-not-declared",
+      "file": "bad/custom-parameter-not-declared.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-008",
+      "path": "widgets.grid.params.region",
+      "line": 39,
+      "schema": false
+    },
+    {
+      "name": "custom-parameter-is-a-row-field",
+      "file": "bad/custom-parameter-is-a-row-field.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.grid.params.id",
+      "line": 42,
+      "schema": false
+    },
+    {
+      "name": "custom-link-not-declared",
+      "file": "bad/custom-link-not-declared.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-036",
+      "path": "widgets.grid.links[1]",
+      "line": 45,
+      "schema": false
+    },
+    {
+      "name": "custom-link-listed-twice",
+      "file": "bad/custom-link-listed-twice.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-020",
+      "path": "widgets.grid.links[1]",
+      "line": 45,
+      "schema": true
+    },
+    {
+      "name": "custom-widget-with-a-query-of-its-own",
+      "file": "bad/custom-widget-with-a-query-of-its-own.json",
+      "as": "dashboard",
+      "code": "DBD-104",
+      "path": "widgets.grid.query",
+      "line": 47,
+      "schema": true
     }
   ],
   "warnings": [

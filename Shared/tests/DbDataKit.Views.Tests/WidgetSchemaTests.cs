@@ -45,7 +45,7 @@ public class WidgetSchemaTests
             ["parameter"] = Props(At(core, "$defs/parameter")),
             ["widget.metric"] = Props(At(core, "$defs/widget_metric")), ["widget.chart"] = Props(At(core, "$defs/widget_chart")), ["widget.matrix"] = Props(At(core, "$defs/widget_matrix")),
             ["widget.table"] = Props(At(core, "$defs/widget_table")), ["widget.text"] = Props(At(core, "$defs/widget_text")), ["widget.image"] = Props(At(core, "$defs/widget_image")),
-            ["widget.control"] = Props(At(core, "$defs/widget_control")),
+            ["widget.control"] = Props(At(core, "$defs/widget_control")), ["widget.custom"] = Props(At(core, "$defs/widget_custom")),
             ["encodings.metric"] = Props(At(core, "$defs/widget_metric/properties/encodings")), ["encodings.chart"] = Props(At(core, "$defs/chart_encodings")),
             ["encodings.matrix"] = Props(At(core, "$defs/matrix_encodings")), ["encodings.table"] = Props(At(core, "$defs/widget_table/properties/encodings")),
             ["table_column"] = Props(At(core, "$defs/table_column")), ["channel"] = Props(At(core, "$defs/chart_channel")), ["mark"] = Props(At(subset, "$defs/spec/properties/mark/oneOf/1")),
@@ -69,11 +69,11 @@ public class WidgetSchemaTests
             ["align"] = Enum(At(core, "$defs/table_column/properties/align")), ["mark"] = Enum(At(subset, "$defs/mark")), ["fieldType"] = Enum(At(subset, "$defs/channel/properties/type")),
             ["control"] = Enum(At(core, "$defs/widget_control/properties/control")), ["mediaType"] = Enum(At(core, "$defs/widget_image/properties/media_type")),
             ["fit"] = Enum(At(core, "$defs/widget_image/properties/fit")),
-            ["widgetType"] = [.. new[] { "metric", "chart", "matrix", "table", "text", "image", "control", "embed" }.Where(t => At(core, $"$defs/widget_{t}/properties/type")["const"]!.GetValue<string>() == t)],
+            ["widgetType"] = [.. new[] { "metric", "chart", "matrix", "table", "text", "image", "control", "embed", "custom" }.Where(t => At(core, $"$defs/widget_{t}/properties/type")["const"]!.GetValue<string>() == t)],
         };
         foreach (var (name, values) in checks) Assert.True(ViewsLoader.Choices[name].Order().SequenceEqual(values.Order()), $"{name}: loader {string.Join(",", ViewsLoader.Choices[name])} / schema {string.Join(",", values)}");
         Assert.Equal(ViewsLoader.MaximumQueryLimit, At(core, "$defs/query_derived/properties/limit")["maximum"]!.GetValue<int>());
-        Assert.Equal(["metric", "chart", "matrix", "table", "text", "image", "control", "embed"], ViewsLoader.Choices["widgetType"]);
+        Assert.Equal(["metric", "chart", "matrix", "table", "text", "image", "control", "embed", "custom"], ViewsLoader.Choices["widgetType"]);
     }
 
     [Fact]

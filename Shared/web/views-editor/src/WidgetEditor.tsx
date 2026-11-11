@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   WIDGET_TYPES, WellError, WidgetView, bindingIssues, catalogRoles, defaultLimit, derivedQuery, describeDerivation, explicitQuery, filterEntry, filterProblems, memberProblem, operatorsFor, orderEntry, orderProblems,
   parameterValue, parseRequestText, parseValues, sortAt, wellFields, wellsOf,
-  DATE_PRESETS, NUMBER_STYLES, draftOf, draftProblem, formatOf, formatSample, levelCommand, levelsOf, sortValue,
+  DATE_PRESETS, NUMBER_STYLES, draftOf, formatChannelCommand, formatChannelsOf, draftProblem, formatOf, formatSample, levelCommand, levelsOf, sortValue,
   type AxisChannel, type FormatDraft, type Catalog, type CatalogMember, type ClientDiagnostic, type EditCommand, type RenderedWidget, type ViewsDoc, type WellChange, type WellSpec, type WidgetDoc, type WidgetOptionsDoc,
 } from '@dbdatakit/visuals'
 import { CUSTOM_FORMAT, FORMAT_PRESETS, formatChoice } from './editing'
@@ -101,6 +101,26 @@ function AxisLevels({ id, widget, channel, catalog, apply }: { id: string; widge
               </>
             )}
             {channel === 'x' && <input aria-label={`Title of ${level.field}`} data-testid={`${base}-title`} placeholder="title" style={{ width: 110 }} value={level.title ?? ''} onChange={(e) => lev(i, 'title', e.target.value === '' ? undefined : e.target.value)} />}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/** The format of a chart's `y`, `color`, `column` and `row` and of each value of a matrix (DBR49): the same format editor as an axis level and a table column, a change the edit command `setPath` of that channel's entry. */
+function ChannelFormats({ id, widget, apply }: { id: string; widget: WidgetDoc; apply: Apply }) {
+  const channels = formatChannelsOf(widget)
+  if (channels.length === 0) return null
+  return (
+    <div data-testid={`ed-channel-formats-${id}`} style={{ margin: '4px 0' }}>
+      <span className="hint">formats</span>
+      {channels.map((c) => {
+        const base = `ed-channel-format-${id}-${c.channel}${c.channel === 'values' ? `-${c.index}` : ''}`
+        return (
+          <div key={base} className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap', padding: '2px 0' }} data-testid={base}>
+            <span className="hint">{c.channel === 'values' ? 'value' : c.channel}</span> <code>{c.field}</code>
+            <FormatEditor label={`Format of ${c.field}`} testid={`${base}-format`} format={c.format} onChange={(v) => { const cmd = formatChannelCommand(id, widget, c.channel, c.index, v); apply({ type: 'setPath', path: cmd.path, value: cmd.value }, `${id}:${c.channel}${c.index}:format`) }} />
           </div>
         )
       })}
@@ -467,6 +487,9 @@ export function WidgetEditor({ id, widget, doc, catalog, catalogNote, apply, dia
             <label className="hint">values limit <input type="number" min={1} style={{ width: 70 }} data-testid={`ed-values-limit-${id}`} value={widget.values?.limit ?? ''} onChange={(e) => { if (widget.values?.attribute) setOrClear(['values', 'limit'], e.target.value === '' ? undefined : Number(e.target.value), 'values_limit') }} /></label>
           </>
         )}
+        {widget.type === 'custom' && (
+          <p className="hint" data-testid={`ed-custom-note-${id}`}>Code of an app ({(widget as { component?: string }).component}): its component, queries and parameters are the app&apos;s, edited in the Workspace&apos;s code editor; here the document gives it parameter values and the links it may open (YAML view).</p>
+        )}
         {widget.type === 'embed' && (
           <>
             <label className="hint">address <input data-testid={`ed-embed-url-${id}`} style={{ width: 360 }} value={widget.url} onChange={(e) => set(['url'], e.target.value, 'url')} /></label>
@@ -490,6 +513,7 @@ export function WidgetEditor({ id, widget, doc, catalog, catalogNote, apply, dia
       </div>
 
       {widget.type === 'chart' && <AxisLevels id={id} widget={widget} channel="x" catalog={catalog} apply={apply} />}
+      {(widget.type === 'chart' || widget.type === 'matrix') && <ChannelFormats id={id} widget={widget} apply={apply} />}
       {widget.type === 'matrix' && (['rows', 'columns'] as const).map((axis) => <AxisLevels key={axis} id={id} widget={widget} channel={axis} catalog={catalog} apply={apply} />)}
       {widget.type === 'table' && columns.length > 0 && (
         <table className="table" data-testid={`ed-columns-${id}`}>

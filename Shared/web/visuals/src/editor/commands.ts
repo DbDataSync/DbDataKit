@@ -6,6 +6,7 @@ import { WellError, convertWidget, wellOps, wellsOf } from './wells'
 import type { WellChange } from './wells'
 import { EditError } from './errors'
 import { FLOW_COMMANDS, flowOps, type FlowCommand } from './flow'
+import { LINK_COMMANDS, linkOps, type LinkCommand } from './linkCommands'
 import { filterOps, orderOps, sortOps, type FilterChange, type OrderChange, type SortTarget, type SortValue } from './queryParts'
 
 /**
@@ -47,6 +48,8 @@ export type EditCommand =
   | { type: 'setWidgetOption'; layout: string; widget: string; key: keyof WidgetOptionsDoc; value: WidgetOptionsDoc[keyof WidgetOptionsDoc] | undefined }
   /** The report editor's commands (DBR27): the page, running text, cover, sections, blocks and cells of a flow layout, and the report's own options. */
   | FlowCommand
+  /** The link editor's commands (DBR38): a document's `links` and the link a widget follows on a click. */
+  | LinkCommand
 
 export { EditError } from './errors'
 export type { EditErrorCode } from './errors'
@@ -102,10 +105,12 @@ function removals(uses: Array<{ list: Path; index: number }>): Op[] {
     .map((u) => ({ op: 'remove', path: [...u.list, u.index] }))
 }
 
+const isLinkCommand = (command: EditCommand): command is LinkCommand => LINK_COMMANDS.has(command.type)
 const isFlowCommand = (command: EditCommand): command is FlowCommand => FLOW_COMMANDS.has(command.type)
 
 export function commandOps(doc: ViewsDoc, command: EditCommand): Op[] {
   if (isFlowCommand(command)) return flowOps(doc, command)
+  if (isLinkCommand(command)) return linkOps(doc, command)
   switch (command.type) {
     case 'setTitle': return [{ op: 'set', path: ['title'], value: command.title }]
     case 'setPath': return [{ op: 'set', path: command.path, value: command.value }]

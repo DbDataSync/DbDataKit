@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "kind": "dashboard",
+  "title": "Orders with a custom widget",
+  "parameters": [
+    {
+      "name": "region",
+      "type": "string",
+      "for": "customers.region"
+    },
+    {
+      "name": "year",
+      "type": "integer"
+    }
+  ],
+  "links": {
+    "order-form": {
+      "form": "orders",
+      "new": {
+        "region": "$params.region"
+      },
+      "as": "dialog",
+      "print": "hidden"
+    },
+    "order": {
+      "form": "orders",
+      "edit": {
+        "id": "$orders.id"
+      },
+      "as": "panel"
+    }
+  },
+  "widgets": {
+    "grid": {
+      "type": "custom",
+      "title": "Orders",
+      "component": "sales-portal/OrdersGrid",
+      "params": {
+        "region": "$params.region",
+        "year": "$params.year",
+        "top": 10
+      },
+      "links": [
+        "order-form",
+        "ghost"
+      ]
+    },
+    "by_region": {
+      "type": "chart",
+      "title": "Revenue by region",
+      "mark": "bar",
+      "encodings": {
+        "x": "customers.region",
+        "y": "orders.net_revenue"
+      },
+      "query": {
+        "model": "sales",
+        "limit": 20
+      }
+    }
+  },
+  "layouts": [
+    {
+      "name": "desk",
+      "type": "reflow",
+      "default": true,
+      "grid": {
+        "columns": 12
+      },
+      "tiles": [
+        {
+          "widget": "grid",
+          "x": 0,
+          "y": 0,
+          "w": 8,
+          "h": 6
+        },
+        {
+          "widget": "by_region",
+          "x": 8,
+          "y": 0,
+          "w": 4,
+          "h": 6
+        }
+      ]
+    }
+  ]
+}

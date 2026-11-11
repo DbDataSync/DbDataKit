@@ -52,6 +52,7 @@ const WELLS: Record<WidgetType, WellSpec[]> = {
   text: [],
   image: [],
   embed: [],
+  custom: [],
 }
 
 export const WIDGET_TYPES: readonly WidgetType[] = ['metric', 'chart', 'matrix', 'table', 'text', 'image', 'control', 'embed']
@@ -193,6 +194,7 @@ function shell(to: WidgetType, from: WidgetDoc, model: string, parameter: string
     case 'image': return { type: to, ...named('title'), hash: IMAGE_PLACEHOLDER, media_type: 'image/png', alt: 'Describe the image' }
     case 'control': return { type: to, ...named('title'), parameter: parameter ?? '', control: 'select', ...(label ? { label } : {}) }
     case 'embed': return { type: to, ...named('title'), url: 'https://reports.example.com/' }
+    case 'custom': throw new WellError('bad_field', 'A custom widget is code of an app: it is written in the app, not made from another widget.')
   }
 }
 

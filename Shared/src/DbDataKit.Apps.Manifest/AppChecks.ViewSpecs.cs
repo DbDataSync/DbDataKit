@@ -10,19 +10,56 @@ public static partial class AppChecks
     /// and, when <paramref name="modelAttributes"/> is given (model, then entity, then its attributes, from the Store's schema), every attribute a view names must exist in the entity.
     /// <paramref name="read"/> gives a file's text by its path in the app, or null when there is none (that is <see cref="Files"/>' finding, not repeated here).
     /// </summary>
-    public static IReadOnlyList<ConfigDiagnostic> ViewSpecs(AppManifest manifest, Func<string, string?> read, IReadOnlyDictionary<string, IReadOnlyDictionary<string, IReadOnlySet<string>>>? modelAttributes = null)
+    public static IReadOnlyList<ConfigDiagnostic> ViewSpecs(AppManifest manifest, Func<string, string?> read, IReadOnlyDictionary<string, IReadOnlyDictionary<string, IReadOnlySet<string>>>? modelAttributes = null, IViewDocumentChecker? documents = null)
     {
         var found = new List<ConfigDiagnostic>();
         var specs = new Dictionary<string, ViewSpec>(StringComparer.Ordinal);
+        var documentTexts = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var path in manifest.Views.Distinct(StringComparer.Ordinal))
         {
             if (read(path) is not { } text) continue;
+            if (ViewSpecLoader.IsDocument(text)) { documentTexts[path] = text; continue; }
             var load = ViewSpecLoader.Load(text, path, manifest.Name);
             found.AddRange(load.Diagnostics);
             if (load.Spec is { } spec) specs[path] = spec;
         }
         foreach (var spec in specs.Values) { CheckUses(manifest, spec, modelAttributes, found); CheckLinks(manifest, spec, specs, found); }
+        if (documentTexts.Count > 0) CheckDocuments(manifest, documentTexts, specs, documents, found);
         return found;
+    }
+
+    /// <summary>The name a link uses for a view file: its file name without folder and extension.</summary>
+    public static string ViewName(string path) => Path.GetFileNameWithoutExtension(path);
+
+    private static string TargetType(ViewParamType t) => t switch { ViewParamType.Int => "integer", ViewParamType.Bool => "boolean", ViewParamType.Date => "date", _ => "string" };
+
+    private static void CheckDocuments(AppManifest manifest, Dictionary<string, string> texts, Dictionary<string, ViewSpec> specs, IViewDocumentChecker? checker, List<ConfigDiagnostic> found)
+    {
+        if (checker is null)
+        {
+            foreach (var path in texts.Keys)
+                found.Add(new ConfigDiagnostic(AppManifestLoader.ViewDocumentNotChecked, ConfigSeverity.Warning, path, 1, 1, "This is a dashboard or a report, and this tool has no loader for them, so the file was not checked.", "Check it with the Gateway's `apps validate`, which has."));
+            return;
+        }
+        // what a link or drill may lead to: the view specs, the forms, the custom pages and the other documents of the app, each with the parameters it takes
+        var targets = new Dictionary<string, IReadOnlyList<ViewDocumentTarget>>(StringComparer.Ordinal);
+        foreach (var (path, spec) in specs)
+        {
+            var parameters = spec.Params.Select(p => new ViewDocumentTarget(p.Name, TargetType(p.Type), false, p.Required, p.Default is not null)).ToList();
+            targets[$"view:{ViewName(path)}"] = parameters;
+            if (spec is FormView form)
+            {
+                var fields = form.Fields.Select(f => new ViewDocumentTarget(f.Attribute, "any", false, false, false)).ToList();
+                if (form.Key is { } key && parameters.All(p => p.Name != key)) fields.Add(new ViewDocumentTarget(key, "any", false, true, false));
+                targets[$"form:{ViewName(path)}"] = [.. fields.Where(f => f.Name != form.Key), .. parameters.Where(p => p.Name == form.Key).Select(p => p with { Required = true })];
+            }
+        }
+        foreach (var page in manifest.CustomViews.Where(v => v.Kind == CustomViewKind.Page))
+            targets[$"page:{page.Name}"] = page.Params.Select(p => new ViewDocumentTarget(p.Name, p.Type, p.Many, p.Required, p.HasDefault)).ToList();
+        foreach (var (path, text) in texts)
+            if (checker.Describe(text, path) is { } info) targets[$"{info.Kind}:{ViewName(path)}"] = info.Parameters;
+        var context = new ViewDocumentContext(manifest, targets);
+        foreach (var (path, text) in texts) found.AddRange(checker.Check(text, path, context));
     }
 
     private static void Problem(List<ConfigDiagnostic> found, string code, string file, SpecPos at, string message, string? fix = null) =>

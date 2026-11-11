@@ -12,6 +12,7 @@
     "store-ui",
     "semantic-client",
     "view-app",
+    "views-sdk",
     "store",
     "runner",
     "workspace",

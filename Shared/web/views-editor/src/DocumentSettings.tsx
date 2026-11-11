@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { NAME_PATTERN, diagnosticsFor, type ClientDiagnostic, type EditCommand, type ParameterDefinition, type ViewsDoc, type WidgetDoc } from '@dbdatakit/visuals'
 
+import { LinkEditor } from './LinkEditor'
+
 type Apply = (command: EditCommand, group?: string) => void
 
 /** The text a default is shown as, and the value a typed text makes of it: a list is comma separated, a number a number, a boolean `true` or `false`; text that is not of the type is kept as typed (the loader says so). */
@@ -77,6 +79,8 @@ export function DocumentSettings({ doc, diagnostics, apply }: { doc: ViewsDoc; d
         </div>
       </div>
 
+      <LinkEditor doc={doc} diagnostics={diagnostics} apply={apply} />
+
       <div className="card" style={{ marginBottom: 12 }} data-testid="ed-widget-properties">
         <strong>Widget properties</strong>
         {Object.entries(doc.widgets ?? {}).map(([id, w]) => {
@@ -91,6 +95,14 @@ export function DocumentSettings({ doc, diagnostics, apply }: { doc: ViewsDoc; d
                   <select data-testid={`ed-prop-mark-${id}`} value={typeof widget.mark === 'string' ? widget.mark : ''} onChange={(e) => apply({ type: 'setPath', path: ['widgets', id, 'mark'], value: e.target.value }, `prop:${id}:mark`)}>
                     {typeof widget.mark !== 'string' && <option value="">(see YAML)</option>}
                     {MARKS.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </label>
+              )}
+              {(widget.type === 'chart' || widget.type === 'matrix' || widget.type === 'table') && Object.keys(doc.links ?? {}).length > 0 && (
+                <label className="hint">on click{' '}
+                  <select data-testid={`ed-prop-onclick-${id}`} value={(widget as { on_click?: string }).on_click ?? ''} onChange={(e) => apply({ type: 'setOnClick', widget: id, link: e.target.value === '' ? undefined : e.target.value }, `prop:${id}:on_click`)}>
+                    <option value="">{(widget as { drill?: unknown }).drill !== undefined ? '(a drill, see YAML)' : '(nothing)'}</option>
+                    {Object.keys(doc.links ?? {}).map((l) => <option key={l} value={l}>{l}</option>)}
                   </select>
                 </label>
               )}

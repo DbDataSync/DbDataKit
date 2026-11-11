@@ -120,3 +120,47 @@ export function sortValue(by: string, dir: string | undefined): { by: string; di
   if (by === '') return undefined
   return dir === 'desc' ? { by, dir: 'desc' } : { by }
 }
+
+// ---- the format of a measure channel and of a matrix value (DBR49) ----
+
+/** The channels that carry a measure or a category and take a `format` besides the axis levels: a chart's `y`, `color`, `column` and `row`, and each value of a matrix. */
+export type FormatChannel = 'y' | 'color' | 'column' | 'row' | 'values'
+export const FORMAT_CHANNELS: readonly FormatChannel[] = ['y', 'color', 'column', 'row', 'values']
+
+/** One such channel as written: its place (`index` is the position in a matrix's `values`, 0 for a chart channel), its field and its `format`. */
+export interface ChannelFormat { channel: FormatChannel; index: number; field: string; format?: unknown }
+
+/** The channels of a chart or a matrix that take a format and name a field, in the order the form shows them. */
+export function formatChannelsOf(widget: WidgetDoc): ChannelFormat[] {
+  const encodings = (widget as unknown as { encodings?: Record<string, unknown> }).encodings
+  if (!encodings) return []
+  const found: ChannelFormat[] = []
+  if (widget.type === 'chart') {
+    for (const channel of ['y', 'color', 'column', 'row'] as const) {
+      const entry = encodings[channel]
+      if (typeof entry === 'string' && entry.length > 0) found.push({ channel, index: 0, field: entry })
+      else if (isObject(entry) && typeof entry.field === 'string' && entry.field.length > 0) found.push({ channel, index: 0, field: entry.field, format: entry.format })
+    }
+  } else if (widget.type === 'matrix' && Array.isArray(encodings.values)) {
+    encodings.values.forEach((entry, index) => {
+      if (isObject(entry) && typeof entry.field === 'string' && entry.field.length > 0) found.push({ channel: 'values', index, field: entry.field, format: entry.format })
+    })
+  }
+  return found
+}
+
+/**
+ * The `setPath` that sets (or, with undefined, removes) the format of one such channel: a chart channel written as a bare field becomes `{field, format}` and goes back to the bare field when the format is removed
+ * and nothing else is left on it; a matrix value stays an object (its schema has no bare form). The sibling keys (`type`, `sort`, `empty`, `label`) are kept.
+ */
+export function formatChannelCommand(id: string, widget: WidgetDoc, channel: FormatChannel, index: number, value: unknown): { path: Array<string | number>; value: unknown } {
+  const encodings = (widget as unknown as { encodings?: Record<string, unknown> }).encodings ?? {}
+  if (channel === 'values') {
+    const entry = Array.isArray(encodings.values) ? encodings.values[index] : undefined
+    const object: Record<string, unknown> = isObject(entry) ? { ...entry } : { field: entry }
+    if (value === undefined) delete object.format
+    else object.format = value
+    return { path: ['widgets', id, 'encodings', 'values', index], value: object }
+  }
+  return { path: ['widgets', id, 'encodings', channel], value: levelEntry(encodings[channel], 'format', value) }
+}
