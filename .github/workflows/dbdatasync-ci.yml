@@ -8,7 +8,7 @@ name: DbDataSync CI
 # of the decisions here. Every step runs inside DbDataSync/ (defaults.run.working-directory, and explicit paths for actions).
 #
 # A `changes` job skips the suites when nothing of DbDataSync's, or of the Shared/ code it builds against, changed; the run then
-# still reports success. The shared libraries' own suite is dbdatakit-ci.yml, run once, not per product.
+# still reports success. The shared libraries' own suite is shared-ci.yml, run once, not per product.
 
 on:
   pull_request:

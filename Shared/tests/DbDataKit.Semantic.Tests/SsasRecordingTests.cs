@@ -8,7 +8,7 @@ namespace DbDataKit.Semantic.Tests;
 
 /// <summary>
 /// Plan 19, J20: records a session against a real Analysis Services with the XMLA forwarder (<c>Shared/tools/DbDataKit.Tools.XmlaForwarder</c>). Not a test of
-/// the engine and it does nothing unless <c>DBDATAKIT_TEST_SSAS_RECORD</c> is set together with <c>DBDATAKIT_TEST_SSAS</c> (the Windows job in <c>dbdatakit-ci.yml</c> when started by hand
+/// the engine and it does nothing unless <c>DBDATAKIT_TEST_SSAS_RECORD</c> is set together with <c>DBDATAKIT_TEST_SSAS</c> (the Windows job in <c>shared-ci.yml</c> when started by hand
 /// with <c>ssas_record</c>): the forwarder listens on a free port in front of the instance, the ADOMD.NET client of <see cref="SsasExecutor"/> connects through it
 /// and runs a few DAX queries, and the folder named by <c>DBDATAKIT_TEST_XMLA_RECORDING_DIR</c> (default <c>xmla-recording</c>) holds the recording for the
 /// workflow to upload. What it asserts is that bytes crossed in both directions on at least one connection and that the queries returned what the model holds;

@@ -30,7 +30,7 @@ truth; their header comments say how to dispatch them. What a release contains a
 `Shared/` is consumed by the products at the same commit through project references, so a shared change must be proven against every consumer.
 
 1. **Each product's CI runs when `Shared/` changes** (its `changes` job includes the path).
-2. **The shared libraries' own suite runs once**, in `dbdatakit-ci.yml` (it calls `_dbdatakit.yml`: Linux and Windows, against the engines of
+2. **The shared libraries' own suite runs once**, in `shared-ci.yml` (it calls `_shared.yml`: Linux and Windows, against the engines of
    `testenv/`), not once per product.
 3. Conflicts are ordinary merge or rebase conflicts on the batch branch, resolved before the pull request is merged.
 

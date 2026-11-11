@@ -1,6 +1,6 @@
-name: DbDataKit tests
+name: Shared tests
 
-# The shared libraries' own suite, on Linux and Windows. Called by dbdatakit-ci.yml when Shared/ or testenv/ changes, so it runs once
+# The shared libraries' own suite, on Linux and Windows. Called by shared-ci.yml when Shared/ or testenv/ changes, so it runs once
 # rather than once per product, and runnable by hand on any branch, which is how to see the suite's state independent of a change.
 #
 # Linux needs unixODBC for DbDataKit.Odbc.Metadata's tests. The live database tests are gated on environment variables and skip

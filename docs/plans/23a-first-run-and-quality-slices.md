@@ -18,7 +18,7 @@ A slice is one branch, one pull request, "done" is the test in the last column b
 2. **The first administrator arrives through a one-time setup link.**
    - The installer prints, and logs, a single-use link that expires after a set time.
    - Following it creates the first administrator's account in the identity home, using the same machinery as invitations
-     (`DbDataConsole` already has them).
+     (`DbDataKit` already has them).
    - After that, the link is dead, and a new one can only be made from the machine itself (`dbdatakit setup link`).
 3. **A setup checklist in the console** guides the first steps:
    - the sign-in method (local accounts, Windows, OpenID Connect or Entra ID);

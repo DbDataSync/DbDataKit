@@ -2,7 +2,7 @@ name: DbDataWorkspace CI
 
 # DbDataWorkspace on the trunk model (docs/releases.md): a pull request into `main` runs this.
 # A `changes` job skips the suite when nothing of the workspace server's, of the Shared/ code it builds against, or of the build
-# settings changed; the run then still reports success. The shared libraries' own suite is dbdatakit-ci.yml, run once, not per product.
+# settings changed; the run then still reports success. The shared libraries' own suite is shared-ci.yml, run once, not per product.
 
 on:
   pull_request:

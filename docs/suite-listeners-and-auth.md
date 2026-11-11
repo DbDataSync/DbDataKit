@@ -8,7 +8,7 @@ What each service listens on and how each way of proving who you are is used. It
 
 | Service | Listener (default) | Protocol | TLS | Who may connect, and what it carries |
 | --- | --- | --- | --- | --- |
-| **DbDataConsole** (`dbdatakit server run`) | `https://localhost:8480` (`--listen`) | HTTPS (HTTP/1.1 and 2): the web app, the REST-style API behind it, the sign-in controllers, `/health*` and `/version` | the console's own certificate | People (browsers); servers asking for the console's public key; the relay below |
+| **DbDataKit** (`dbdatakit server run`) | `https://localhost:8480` (`--listen`) | HTTPS (HTTP/1.1 and 2): the web app, the REST-style API behind it, the sign-in controllers, `/health*` and `/version` | the console's own certificate | People (browsers); servers asking for the console's public key; the relay below |
 | | same listener, `/relay/<server>/api/...` and `/relay/<server>/hubs/...` | HTTPS in, then HTTPS out to the managed server with its certificate pinned; SignalR (WebSocket) for the hubs | in and out | The console calls a managed server as the signed-in person (a signed token) and relays the answer |
 | | `--announce-listen` (off unless set; plain `http`, a port of its own, for example 8481) | HTTP, one `POST /announce` (body capped at 4 KB) | none, by design | Servers that are not paired yet announce their name, address and pairing code; the console lists them as waiting |
 | **Identity home on its own** (`dbdatakit identity run`, in the console's project) | `https://localhost:8482` (`--listen`) | HTTPS: OpenID Connect provider (discovery, JWKS, `authorize`, `token`, `userinfo`, `end-session`), the shared sign-in (passkeys, invitations), the Users screens when `wwwroot` is installed | its own certificate | People and the OpenID clients (consoles) |
@@ -32,7 +32,7 @@ Every server that a console manages also answers the same four things on its man
 
 ### Default-port clashes to know about
 
-* No two services share a default port (plan 33 SC19; `scripts/check_default_ports.py` fails when two do): the Console 8480, Build 8470, the Workspace 8471, the identity home on its own 8482, the Store 8490, the Runner 8495, Sync 5080 and the Gateway 8815 (Flight), 8816 (management), 8817 (identity), 8818 (apps), 8819 (store module) and 8820 (views). The Workspace and the identity home moved from 8495 and 8490.
+* No two services share a default port (plan 33 SC19; `scripts/check_default_ports.py` fails when two do): DbDataKit 8480, Build 8470, the Workspace 8471, the identity home on its own 8482, the Store 8490, the Runner 8495, Sync 5080 and the Gateway 8815 (Flight), 8816 (management), 8817 (identity), 8818 (apps), 8819 (store module) and 8820 (views). The Workspace and the identity home moved from 8495 and 8490.
 * The console (8480) and its announce port (8481 in the examples) are different listeners on purpose: the announce port is plain HTTP and takes nothing but the announcement.
 
 ## 2. Authentication methods and the services that use them directly

@@ -11,7 +11,7 @@ Trust between a console and the servers it manages (plan 13, W12).
 * **Roles follow the command's effect class** (`ManagementAuthorization.RoleFor`): offline-only and target-read-only commands need Viewer; repo-file writes (a project's files and commits) Author; target data writes (run now, pause, cancel, restart) Operator; tracking-table changes and configuration (connections, data sources, replications, schedules, certificates) Admin; anything that changes a target's structure or data under a plan, Approver. The effective role is the lower of the user's role in the token and the client's ceiling; a long operation is authorised when it starts and runs to its end under that user.
 * **Several clients at once.** Every write carries the version it was based on (`WriteGuard`) and a stale one is refused with the current version, never merged silently. The server audits the client id and the user of every change, and authors its configuration commits as `user name <console name>`.
 * **Secrets.** No console holds database credentials. A secret typed into a console is sent once to the server's management API, which stores it in its own secret store; the console keeps only the reference.
-* **A browser reaches a server only through the console** (the console relays every call; see `DbDataConsole`'s README), so servers stay off the browser's network and pinned self-signed certificates work.
+* **A browser reaches a server only through the console** (the console relays every call; see `DbDataKit`'s README), so servers stay off the browser's network and pinned self-signed certificates work.
 * **Compatibility.** A console and a server release on their own, so they can differ in version: see "Management API version" below.
 
 ## The token

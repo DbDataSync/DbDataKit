@@ -1,61 +1,17 @@
 name: DbDataKit CI
 
-# The shared libraries' own suite (Shared/), run once on Linux and Windows against the shared engines from testenv/, on a pull request
-# into `main` and on every push to it that touches the shared code or the test environment. Each product's CI also runs when Shared/
-# changes, so a shared change is proven against every product; this is the libraries' own tests, which used to run once per product.
-# The job itself is _dbdatakit.yml, which can also be dispatched on its own.
+# The dbdatakit console on the trunk model (docs/releases.md): a pull request into `main` runs this.
+# A `changes` job skips the suites when nothing of the console's, of the Shared/ code it builds against, or of the build
+# settings changed; the run then still reports success. The shared libraries' own suite is shared-ci.yml, run once, not per product.
 
 on:
   pull_request:
     branches: [main]
-    paths:
-      - "Shared/**"
-      - "testenv/**"
-      - "duckdb.pin"
-      - "scripts/fetch-duckdb.*"
-      - "chromium.pin"
-      - "fonts.pin"
-      - "scripts/fetch-chromium.*"
-      - "scripts/fetch-fonts.*"
-      - "Directory.Build.props"
-      - "Directory.Packages.props"
-      - "global.json"
-      - ".github/workflows/dbdatakit-ci.yml"
-      - ".github/workflows/_dbdatakit.yml"
   push:
     branches: [main]
-    paths:
-      - "Shared/**"
-      - "testenv/**"
-      - "duckdb.pin"
-      - "scripts/fetch-duckdb.*"
-      - "chromium.pin"
-      - "fonts.pin"
-      - "scripts/fetch-chromium.*"
-      - "scripts/fetch-fonts.*"
-      - "Directory.Build.props"
-      - "Directory.Packages.props"
-      - "global.json"
-      - ".github/workflows/dbdatakit-ci.yml"
-      - ".github/workflows/_dbdatakit.yml"
+  # Everything, whatever changed.
   workflow_dispatch:
-    inputs:
-      engines:
-        description: Start the shared SQL Server and PostgreSQL engines (testenv/) for the live tests.
-        type: boolean
-        default: true
-      ssas:
-        description: Also run the semantic layer's DAX conformance on a real Analysis Services (Tabular) instance installed on a Windows runner (about 6 minutes).
-        type: boolean
-        default: false
-      ssas_probe:
-        description: With ssas, run only the DAX probe (SsasProbe) instead of the suite.
-        type: boolean
-        default: false
-      ssas_record:
-        description: With ssas, also record a session through the XMLA forwarder (Shared/tools/DbDataKit.Tools.XmlaForwarder) and upload the recording as the artifact xmla-recording.
-        type: boolean
-        default: false
+  workflow_call:
 
 # A newer push to a PR supersedes the older run; runs on main always complete.
 concurrency:
@@ -65,242 +21,238 @@ concurrency:
 permissions:
   contents: read
 
-jobs:
-  dbdatakit:
-    uses: ./.github/workflows/_dbdatakit.yml
-    with:
-      # The live tests run against the shared engines every time (a dispatch can still switch them off).
-      engines: ${{ github.event_name != 'workflow_dispatch' || inputs.engines }}
+defaults:
+  run:
+    working-directory: DbDataKit
 
-  # The PDF exporter on the pinned Chromium (plan 32 DBR15): the pin and the bundled fonts are fetched and hash-checked, the visuals' print page is built, and the exporter's tests and the
-  # module's export tests run against that browser. They fail, not skip, here (DBDATAKIT_TEST_REQUIRE_CHROMIUM): a skipped export test is a test that did not run. The same pin on Windows.
-  views-export:
-    name: PDF export on the pinned Chromium (${{ matrix.os }})
+jobs:
+  changes:
+    uses: ./.github/workflows/_changes.yml
+    with:
+      paths: '^(DbDataKit/|Shared/|DbDataBuild/|DbDataSync/|DbDataGateway/|DbDataStore/|DbDataWorkspace/|dist/compose/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdatakit-|_)|actions/setup-product))'
+
+  # The host, its sign-in and its command line run on both systems; the Windows service registration is only exercised here against fakes.
+  test:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: ./.github/actions/setup-product
         with:
-          dotnet-version: "10.0.x"
-          cache: true
-          cache-dependency-path: "Shared/**/*.csproj"
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-      - uses: ./.github/actions/duckdb-cache
-      - name: Fetch the pinned Chromium, the bundled fonts and DuckDB
-        if: runner.os != 'Windows'
-        run: |
-          scripts/fetch-chromium.sh
-          scripts/fetch-fonts.sh
-          scripts/fetch-duckdb.sh
-      - name: Fetch the pinned Chromium, the bundled fonts and DuckDB (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          ./scripts/fetch-chromium.ps1
-          ./scripts/fetch-fonts.ps1
-          ./scripts/fetch-duckdb.ps1
-      - name: Build the print page
-        shell: bash
-        working-directory: Shared/web
-        run: |
-          npm ci --workspace @dbdatakit/visuals --include-workspace-root --ignore-scripts
-          npm run build:print --workspace @dbdatakit/visuals
-      - name: Point the tests at them
-        shell: bash
-        run: |
-          rid=linux-x64; [ "$RUNNER_OS" = "Windows" ] && rid=win-x64
-          echo "DBDATAKIT_TEST_CHROMIUM=$GITHUB_WORKSPACE/.chromium/$rid" >> "$GITHUB_ENV"
-          echo "DBDATAKIT_TEST_PRINT_ASSETS=$GITHUB_WORKSPACE/Shared/web/visuals/dist/print" >> "$GITHUB_ENV"
-          echo "DBDATAKIT_TEST_REQUIRE_CHROMIUM=true" >> "$GITHUB_ENV"
-          # the runner's kernel may forbid the user namespaces Chromium's sandbox needs
-          [ "$RUNNER_OS" = "Linux" ] && echo "DBDATAKIT_TEST_NOSANDBOX=true" >> "$GITHUB_ENV" || true
-      - name: Exporter tests
-        working-directory: Shared
-        run: dotnet test --project tests/DbDataKit.Views.Export.Tests
-      - name: Module export tests
-        working-directory: Shared
-        run: dotnet test --project tests/DbDataKit.Views.Hosting.Tests --filter-class "*ViewsExportTests"
+          product: DbDataKit
+          global-json: DbDataKit/global.json
+      - run: dotnet build DbDataKit.slnf -c Release
+      - run: dotnet test --project tests/DbDataKit.Server.Tests -c Release --no-build --minimum-expected-tests 10
 
-  # The semantic layer's conformance fixtures (plan 19, J02) on the shared engines, as a check of their own: the engine seeds a scratch
-  # database on SQL Server and PostgreSQL and runs every fixture through it. The tests also run in the job above whenever the engines
-  # are up; this one fails by name when the semantic layer breaks and requires both engines instead of skipping.
-  semantic-fixtures:
-    name: Semantic fixtures (SQL Server, PostgreSQL)
+  # The real programs in one run (plan 13a, T12; E05 adds a Sync server): a Build server and a Gateway started from their built output, a console in the test between them. A Build server publishes and updates its own data source on the Gateway, is refused on
+  # one made by hand and on extensions.gateway, cannot adopt for itself, and the Gateway's audit names the person and the Build server. The second test (J12) publishes a project's semantic model and queries it, so a SQL Server from testenv/ is up for that job.
+  # The fourth (plan 28c E12e) is a Sync replication that really is owned by a runner: a Sync server and a runner (both programs) with the engine as the runtime package, the replication set published with `dbdatasync package publish`,
+  # and a continuous and a periodic replication moved to the runner and back, SQL Server to PostgreSQL (and one SQL Server to SQL Server); it needs the PostgreSQL of testenv/ as well, and takes about five minutes.
+  servers:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: ./.github/actions/setup-product
         with:
-          dotnet-version: "10.0.x"
-          cache: true
-          cache-dependency-path: "Shared/**/*.csproj"
-      - name: Start the shared engines (SQL Server, PostgreSQL)
-        run: testenv/testenv.sh up mssql postgres
-      - name: Point the suite at the engines
+          product: DbDataKit
+          global-json: DbDataKit/global.json
+      - uses: ./.github/actions/native-cache
+      - name: Build a Build server
+        working-directory: DbDataBuild
         run: |
+          scripts/fetch-native.sh
+          dotnet build src/DbDataBuild.Cli -c Debug
+      - name: Build a Gateway
+        working-directory: DbDataGateway
+        run: dotnet build src/DbDataGateway.Server -c Debug
+      - name: Build a Sync server
+        working-directory: DbDataSync
+        run: dotnet build src/DbDataSync.Cli -c Debug   # builds the engine (the TaskRunner) too: the runtime package of the runner story
+      - name: Build a runner
+        working-directory: DbDataRunner
+        run: dotnet build src/DbDataRunner.Server -c Debug
+      - run: dotnet build tests/DbDataKit.Server.Servers.Tests -c Debug
+      - name: Start the test SQL Server and PostgreSQL
+        working-directory: .
+        run: |
+          testenv/testenv.sh up mssql postgres
           testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
-          echo "DBDATAKIT_TEST_REQUIRE_SQLSERVER=true" >> "$GITHUB_ENV"
-          echo "DBDATAKIT_TEST_REQUIRE_POSTGRES=true" >> "$GITHUB_ENV"
-      - uses: ./.github/actions/duckdb-cache
-      - name: Fetch the pinned DuckDB engine
-        run: scripts/fetch-duckdb.sh
-      - name: Test
-        working-directory: Shared
-        run: dotnet test --project tests/DbDataKit.Semantic.Tests
-      - name: Stop the shared engines
-        if: always()
-        run: testenv/testenv.sh down
+      - run: dotnet test --project tests/DbDataKit.Server.Servers.Tests -c Debug --no-build --minimum-expected-tests 4
 
-  # The state layer's support matrix, the N-1 half (plan 29b U01): the State and Scheduling suites on the previous release of each engine, SQL Server 2022 and
-  # PostgreSQL 16 (with pgvector), started from the older testenv profiles. The jobs above run the same suites on the current engines (SQL Server 2025, PostgreSQL 17),
-  # so together they are N and N-1. `testenv.sh env dbdatakit-older` points DBDATAKIT_TEST_SQLSERVER and DBDATAKIT_TEST_POSTGRES at the older servers (so every engine-backed
-  # test runs on them) and sets the DBDATAKIT_TEST_REQUIRE_* variables, so a server that does not answer fails the run instead of skipping it. Nothing else in this workflow changed.
-  state-older-engines:
-    name: State and Scheduling suites (SQL Server 2022, PostgreSQL 16)
+  # The web app in a real browser against a real console: the first-run invitation, a passkey made in a virtual authenticator, signing out and back in with it, the users list,
+  # pairing a real Build server, and (M12) the Monitoring page across a Build server that runs a failing schedule, a Sync replication that lags and a Gateway that locked a user out.
+  playwright:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 30
+    # A PostgreSQL for the deploy the browser test approves in the console.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: e2e
+          POSTGRES_DB: warehouse
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: ./.github/actions/setup-product
         with:
-          dotnet-version: "10.0.x"
-          cache: true
-          cache-dependency-path: "Shared/**/*.csproj"
-      - name: Start the previous engines (SQL Server 2022, PostgreSQL 16)
-        run: testenv/testenv.sh up mssql2022 postgres16
-      - name: Point the suites at the previous engines
-        run: testenv/testenv.sh env dbdatakit-older --dotenv >> "$GITHUB_ENV"
-      - name: Test State
-        working-directory: Shared
-        run: dotnet test --project tests/DbDataKit.State.Tests
-      - name: Test State.Engines
-        working-directory: Shared
-        run: dotnet test --project tests/DbDataKit.State.Engines.Tests
-      - name: Test State.Cli
-        working-directory: Shared
-        run: dotnet test --project tests/DbDataKit.State.Cli.Tests
-      - name: Test Scheduling
-        working-directory: Shared
-        run: dotnet test --project tests/DbDataKit.Scheduling.Tests
-      - name: Stop the previous engines
-        if: always()
-        run: testenv/testenv.sh down
+          product: DbDataKit
+          global-json: DbDataKit/global.json
+          # the Build server the browser test pairs with links the pinned DuckDB engine
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Build the web app
+        working-directory: Shared/web
+        run: |
+          npm ci
+          npm run build -w @dbdatakit/console
+      # The shared visuals (plan 19, Y01-Y02): the view schema's validator and the renderer's component tests, on the semantic library's view fixtures. Plain Node, no browser.
+      - name: Test the shared visuals
+        working-directory: Shared/web
+        run: npm test -w @dbdatakit/visuals
+      # The Workspace screen's model: names, the create and abandon rules, the history line (plan 22a, GP31). Plain Node.
+      - name: Test the Workspace screens
+        working-directory: Shared/web
+        run: npm test -w @dbdatakit/workspace
+      # The Store's reusable controls (plan 19, Z06): field parsing, the client against a fake server, the views as markup. Plain Node.
+      - name: Test the Store controls
+        working-directory: Shared/web
+        run: |
+          npm run typecheck -w @dbdatakit/store-ui
+          npm test -w @dbdatakit/store-ui
+      # The typed client for semantic queries that apps use (plan 22a GP32), against a fake host. Plain Node.
+      - name: Test the semantic client
+        working-directory: Shared/web
+        run: |
+          npm run typecheck -w @dbdatakit/semantic-client
+          npm test -w @dbdatakit/semantic-client
+      # The runtime that draws an app of views only (plan 26, AP25): its logic and parts in plain Node, and the one-script build the Gateway ships (`apps-views`).
+      - name: Test and build the views runtime
+        working-directory: Shared/web
+        run: |
+          npm run typecheck -w @dbdatakit/view-app
+          npm test -w @dbdatakit/view-app
+          npm run build -w @dbdatakit/view-app
+      - run: dotnet build DbDataKit.slnf -c Debug
+      # A real Build server for the console to pair with (the pairing, the version and the health the console shows are its own).
+      - uses: ./.github/actions/native-cache
+      - name: Build a Build server
+        working-directory: DbDataBuild
+        run: |
+          scripts/fetch-native.sh
+          dotnet build src/DbDataBuild.Cli -c Debug
+      # A real Sync server, for the console to host its screens.
+      - name: Build a Sync server
+        working-directory: DbDataSync
+        run: dotnet build src/DbDataSync.Cli -c Debug
+      # A real Gateway, with its management listener on.
+      - name: Build a Gateway
+        working-directory: DbDataGateway
+        run: dotnet build src/DbDataGateway.Server -c Debug
+      # A real Store, for the apps host story (plan 26, AP05): a sandboxed app reads and writes its tables through the host.
+      - name: Build a Store
+        working-directory: DbDataStore
+        run: dotnet build src/DbDataStore.Server -c Debug
+      # A real runner, for the runner story (plan 28a, R19): the console pairs with it, runs and pauses a task and activates a staged package version.
+      - name: Build a runner
+        working-directory: DbDataRunner
+        run: dotnet build src/DbDataRunner.Server -c Debug
+      # A real Workspace server, for the workspaces story (plan 22a, GP31): the console pairs with it, makes and abandons a workspace.
+      - name: Build a Workspace server
+        working-directory: DbDataWorkspace
+        run: dotnet build src/DbDataWorkspace.Server -c Debug
+      # The app authoring story (plan 22a GP34) builds an app from the template with the pinned Bun, from the package store made out of the web workspace's packages (the `npm ci` above).
+      # The workspace publishing story (plan 22a GP35) builds in the Workspace server with the same Bun and store, and allows user namespaces so the bundler runs in a network namespace
+      # where the runner lets it; its server is set to `isolation: auto`, so a runner that does not still builds, and the page says "not isolated".
+      - name: Fetch the pinned Bun
+        working-directory: .
+        run: |
+          scripts/fetch-bun.sh
+          echo "$GITHUB_WORKSPACE/.bun/linux-x64" >> "$GITHUB_PATH"
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+      - name: Install the browser
+        working-directory: DbDataKit/tests/DbDataKit.Server.Web.Tests
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run the browser tests
+        working-directory: DbDataKit/tests/DbDataKit.Server.Web.Tests
+        run: npx playwright test
+        env:
+          DBDATAKIT_TEST_E2E_PG: Host=127.0.0.1;Port=5432;Username=postgres;Password=e2e;Database=warehouse
 
-  # Whether a pull request touches what the SSAS job tests: the DAX emitter, the sample model, or the SSAS executor. Only then does the Windows job run on a pull request.
-  ssas-changes:
-    name: Does the pull request touch the DAX path?
-    if: github.event_name == 'pull_request'
+  # The image the console is delivered as: it builds, becomes healthy, serves its web app, and does not run as root.
+  image:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: ubuntu-latest
-    outputs:
-      run: ${{ steps.diff.outputs.run }}
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: .
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - id: diff
+      - name: Build the image
+        run: docker build -f DbDataKit/Dockerfile -t dbdatakit:ci .
+      - name: Start it and wait for its health check
         run: |
-          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" \
-            | grep -E '^Shared/src/DbDataKit\.Semantic/Emit/DaxEmitter\.cs$|^Shared/tests/DbDataKit\.Semantic\.Tests/conformance/ssas/|^Shared/src/DbDataKit\.Semantic\.Ssas/'; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
+          docker run -d --name ddk -p 8480:8480 dbdatakit:ci
+          for i in $(seq 1 40); do
+            status="$(docker inspect -f '{{.State.Health.Status}}' ddk)"
+            [ "$status" = healthy ] && break
+            sleep 3
+          done
+          docker logs ddk
+          [ "$status" = healthy ] || { echo "the container is $status, not healthy" >&2; exit 1; }
+      - name: Answer, serve the app, make an invitation
+        run: |
+          curl -skf https://localhost:8480/version | grep -q '"product":"dbdatakit"'
+          curl -skf https://localhost:8480/ | grep -q '<div id="root">'
+          test "$(curl -sk -o /dev/null -w '%{http_code}' https://localhost:8480/api/users)" = 401
+          docker exec ddk dotnet /app/dbdatakit.dll user invite --email ci@example.invalid --url https://localhost:8480 | grep -q '/invite#'
+          test "$(docker exec ddk id -u)" != 0
 
-  # The semantic layer's DAX path against a real SQL Server Analysis Services (Tabular), the one thing the Linux jobs cannot run (the ADOMD.NET client
-  # is Windows-only). On a pull request that touches the DAX emitter, the model or the SSAS executor (ssas-changes), or by hand: it installs Analysis Services with Chocolatey (about 3 minutes), deploys
-  # Shared/tests/DbDataKit.Semantic.Tests/conformance/ssas/model.tmsl.json, and runs the semantic suite with DBDATAKIT_TEST_SSAS set so the SSAS source of every fixture runs
-  # as real DAX. Run it after a change to the DAX emitter, the catalog's DAX bindings, the model or SsasExecutor (docs/semantic/ssas-ci.md).
-  semantic-ssas:
-    name: Semantic DAX on Analysis Services (Windows)
-    needs: ssas-changes
-    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.ssas) || needs.ssas-changes.outputs.run == 'true') }}
-    runs-on: windows-2022
-    timeout-minutes: 60
+  # Each compose file of dist/compose starts a product with the console: the product announces itself on the console's private port, waits as pending, and is paired when confirmed (plan 13a, L03).
+  compose:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: .
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: "10.0.x"
+      # the images of Build, Gateway and Sync fetch the DuckDB engine; .duckdb-archives/ is inside their build context
       - uses: ./.github/actions/duckdb-cache
-      - name: Fetch the pinned DuckDB engine
-        shell: pwsh
-        run: ./scripts/fetch-duckdb.ps1
-      - name: Install Analysis Services (Tabular) with Chocolatey
-        shell: pwsh
-        timeout-minutes: 30
-        run: |
-          # Only Analysis Services is asked for, instance QIS. The Developer bootstrapper (SQL2022-SSEI-Dev.exe) hung in three tries; Chocolatey works.
-          choco install sql-server-2022 -y --no-progress --params "'/FEATURES=AS /ASSERVERMODE=TABULAR /INSTANCENAME=QIS /ASSYSADMINACCOUNTS=BUILTIN\Administrators'"
-          $code = $LASTEXITCODE
-          "choco exit code: $code"
-          Get-Service MSOLAP*
-          if ($code -ne 0) {
-            Get-ChildItem 'C:\Program Files\Microsoft SQL Server\*\Setup Bootstrap\Log' -Recurse -Filter Summary.txt -ErrorAction SilentlyContinue | ForEach-Object { "--- $($_.FullName)"; Get-Content $_.FullName -Tail 60 }
-            Get-Content C:\ProgramData\chocolatey\logs\chocolatey.log -Tail 80
-            exit $code
-          }
-      - name: Find the Analysis Services port
-        shell: pwsh
-        run: |
-          # A named instance is found through the SQL Browser service (not running here) or on the dynamic port it writes to msmdsrv.port.txt: use the port.
-          $portFile = Get-ChildItem 'C:\Program Files\Microsoft SQL Server' -Recurse -Filter msmdsrv.port.txt -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($portFile) {
-            $port = (Get-Content $portFile.FullName -Raw) -replace '\D', ''
-            "Port file $($portFile.FullName): $port"
-            "DBDATAKIT_TEST_SSAS=Data Source=localhost:$port" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-          } else {
-            "No port file; starting SQL Browser and connecting by name"
-            Set-Service SQLBrowser -StartupType Manual -ErrorAction SilentlyContinue
-            Start-Service SQLBrowser -ErrorAction SilentlyContinue
-            "DBDATAKIT_TEST_SSAS=Data Source=localhost\QIS" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-          }
-          "DBDATAKIT_TEST_REQUIRE_SSAS=true" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-      - name: DAX probe (what does the server accept?)
-        if: inputs.ssas_probe
-        working-directory: Shared
-        env:
-          DBDATAKIT_TEST_SSAS_PROBE: "1"
-        run: dotnet test --project tests/DbDataKit.Semantic.Tests --filter-class "*SsasProbe"
-      - name: What the probe got
-        if: inputs.ssas_probe
-        shell: pwsh
-        run: Get-ChildItem -Recurse -Filter ssas-probe.txt | ForEach-Object { Get-Content $_.FullName }
-      - name: Semantic suite against Analysis Services
-        if: ${{ !inputs.ssas_probe }}
-        working-directory: Shared
-        run: dotnet test --project tests/DbDataKit.Semantic.Tests --report-xunit-trx --report-xunit-trx-filename ssas.trx
-      - name: Record a session through the XMLA forwarder
-        if: ${{ inputs.ssas_record && !inputs.ssas_probe }}
-        working-directory: Shared
-        env:
-          DBDATAKIT_TEST_SSAS_RECORD: "1"
-          DBDATAKIT_TEST_XMLA_RECORDING_DIR: ${{ runner.temp }}\xmla-recording
-        run: dotnet test --project tests/DbDataKit.Semantic.Tests --filter-class "*SsasRecordingTests"
-      - name: Upload the recording
-        if: ${{ always() && inputs.ssas_record && !inputs.ssas_probe }}
-        uses: actions/upload-artifact@v7
         with:
-          name: xmla-recording
-          path: ${{ runner.temp }}\xmla-recording
-          if-no-files-found: warn
-      - name: Failures grouped by cause
-        if: always() && !inputs.ssas_probe
-        shell: pwsh
-        run: |
-          $trx = Get-ChildItem -Recurse -Filter ssas.trx | Select-Object -First 1
-          if (-not $trx) { 'No results file'; exit 0 }
-          $xml = [xml](Get-Content $trx.FullName)
-          $ns = @{ t = 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010' }
-          $failed = Select-Xml -Xml $xml -XPath "//t:UnitTestResult[@outcome='Failed']" -Namespace $ns
-          "Failed: $(@($failed).Count)"
-          $failed | ForEach-Object { [pscustomobject]@{ Test = $_.Node.testName; Message = ($_.Node.Output.ErrorInfo.Message -split "`n" | Select-Object -First 4) -join ' | ' } } |
-            Group-Object Message | Sort-Object Count -Descending | Select-Object -First 25 | ForEach-Object {
-              "[$($_.Count)] $($_.Name)"; "     e.g. " + (($_.Group | Select-Object -First 3).Test -join '; ') }
+          rids: linux-x64
+      # the Build image also fetches the polyglot library; .native-archives/ is inside its build context
+      - uses: ./.github/actions/native-cache
+        with:
+          rids: linux-x64
+      - name: Build server and console
+        run: dist/compose/check.sh dist/compose/build.yml dbdatabuild
+      - name: Store server and console
+        run: dist/compose/check.sh dist/compose/store.yml dbdatastore
+      - name: Gateway and console
+        run: dist/compose/check.sh dist/compose/gateway.yml dbdatagateway
+      - name: Sync server and console
+        run: dist/compose/check.sh dist/compose/sync.yml dbdatasync
+      - name: The whole suite (docs/quickstart.md)
+        run: dist/compose/check.sh dist/compose/quickstart.yml dbdatagateway dbdatasync dbdatabuild dbdatastore

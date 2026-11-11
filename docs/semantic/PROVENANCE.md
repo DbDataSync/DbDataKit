@@ -19,8 +19,8 @@ Imported on 2026-10-27 from `DbDataSync/QueryIntentSpec` at `cddca24` (`qis/docs
 | `qis/fixtures/` (321 files), `view-fixtures/` (25), `extraction-fixtures/` (12) | `.../Semantic.Tests/conformance/`, identical |
 | `qis/catalog/catalog.yaml`, `qis/data/seed*.sql` | `.../conformance/catalog`, `.../conformance/data`, identical |
 | `qis/ssas/model.tmsl.json` | `.../conformance/ssas/` |
-| `.github/workflows/ci.yml` | the `semantic-fixtures` job and the shared suite in `dbdatakit-ci.yml` (J02) |
-| `.github/workflows/ssas.yml` | the `semantic-ssas` job in `dbdatakit-ci.yml`, by hand ([ssas-ci.md](ssas-ci.md)) |
+| `.github/workflows/ci.yml` | the `semantic-fixtures` job and the shared suite in `shared-ci.yml` (J02) |
+| `.github/workflows/ssas.yml` | the `semantic-ssas` job in `shared-ci.yml`, by hand ([ssas-ci.md](ssas-ci.md)) |
 | `qis/docker/docker-compose.yml` | **not imported**: `testenv/` (SQL Server 2022 and PostgreSQL) replaces it |
 | `README.md`, `qis/README.md` | **not imported**: layout and how-to-run text of the old repository; `docs/README.md` is the index of the specs and the layout is in each package's README |
 | `.gitattributes` (`eol=lf`) | **not imported**: `Shared/**` is already `eol=lf` here |

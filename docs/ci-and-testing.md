@@ -16,11 +16,11 @@ Branching and releases are in [releases.md](releases.md).
   switches). Every variable of a test, harness or CI step is `DBDATAKIT_TEST_<NAME>` (`docs/testing-environment.md` has the table).
 - **Build's engines live in `testenv/`** (SQL Server 2022 and 2025, PostgreSQL, Oracle, Spark, the BigQuery emulator, Arrow Flight with and
   without TLS); `DbDataBuild/scripts/test-engines.sh` is gone.
-- **Per-product workflows** in `.github/workflows/`: `dbdatakit-ci.yml` (the shared libraries, once, on Linux and Windows, with SQL Server and
-  PostgreSQL; a job on the N-1 engines for State and Scheduling; a DAX/SSAS job), `_dbdatakit.yml` (its reusable form), `dbdatasync-ci.yml`
+- **Per-product workflows** in `.github/workflows/`: `shared-ci.yml` (the shared libraries, once, on Linux and Windows, with SQL Server and
+  PostgreSQL; a job on the N-1 engines for State and Scheduling; a DAX/SSAS job), `_shared.yml` (its reusable form), `dbdatasync-ci.yml`
   (Linux, Windows, `dotnet-integration` on six engines, Playwright), `dbdataproxy-ci.yml` (Linux with SQL Server and the ODBC driver,
   Windows without an engine), `dbdatabuild-ci.yml` (unit on Linux and Windows, runtime package on Linux and Windows, conformance groups on
-  SQL Server and PostgreSQL), `dbdataconsole-ci.yml`, `dbdatarunner-ci.yml` and `dbdatastore-ci.yml` (SQLite plus an engines job; Linux
+  SQL Server and PostgreSQL), `dbdatakit-ci.yml`, `dbdatarunner-ci.yml` and `dbdatastore-ci.yml` (SQLite plus an engines job; Linux
   only), `_changes.yml` (a job skipped by it still reports success), `repo-checks.yml`. Every job has a timeout; superseded pull request runs
   are cancelled.
 - **Nightly:** only `dbdatabuild-conformance-full.yml` (daily 05:00, skipped when nothing of Build's or `testenv/` changed; also called by

@@ -1,0 +1,6 @@
+# Occurrences of `DbDataConsole` or `DbDataKitConsole` that scripts/check_product_name.py tolerates (printed as warnings), one `path: count` per line.
+# Each file here names the old word on purpose (a plan that explains the rename, or an unadopted proposal in needs-review/). The list only shrinks:
+# a count that no longer matches the file fails the check, so lower it or delete the line (deleting a plan deletes its line).
+docs/plans/33-fewer-services.md: 13
+docs/plans/needs-review/13a-lane-I-addition.md: 1
+docs/plans/needs-review/27-studio-and-the-dbdatakit-tool.md: 6

@@ -7,7 +7,7 @@ namespace DbDataKit.Server;
 /// <summary>The console's secrets: the shared encrypted store in its directory, where the key that signs for every server it manages is kept (never in a file a person edits, and never in a log).</summary>
 public static class ConsoleSecrets
 {
-    public static readonly byte[] DpapiEntropy = Encoding.UTF8.GetBytes("DbDataKitConsole");
+    public static readonly byte[] DpapiEntropy = Encoding.UTF8.GetBytes("DbDataKit");
 
     public static EncryptedFileSecretStore Open(string consoleDirectory, Func<string, string?>? environment = null)
     {

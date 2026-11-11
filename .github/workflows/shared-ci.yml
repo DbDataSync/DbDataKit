@@ -1,0 +1,306 @@
+name: Shared CI
+
+# The shared libraries' own suite (Shared/), run once on Linux and Windows against the shared engines from testenv/, on a pull request
+# into `main` and on every push to it that touches the shared code or the test environment. Each product's CI also runs when Shared/
+# changes, so a shared change is proven against every product; this is the libraries' own tests, which used to run once per product.
+# The job itself is _shared.yml, which can also be dispatched on its own.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "Shared/**"
+      - "testenv/**"
+      - "duckdb.pin"
+      - "scripts/fetch-duckdb.*"
+      - "chromium.pin"
+      - "fonts.pin"
+      - "scripts/fetch-chromium.*"
+      - "scripts/fetch-fonts.*"
+      - "Directory.Build.props"
+      - "Directory.Packages.props"
+      - "global.json"
+      - ".github/workflows/shared-ci.yml"
+      - ".github/workflows/_shared.yml"
+  push:
+    branches: [main]
+    paths:
+      - "Shared/**"
+      - "testenv/**"
+      - "duckdb.pin"
+      - "scripts/fetch-duckdb.*"
+      - "chromium.pin"
+      - "fonts.pin"
+      - "scripts/fetch-chromium.*"
+      - "scripts/fetch-fonts.*"
+      - "Directory.Build.props"
+      - "Directory.Packages.props"
+      - "global.json"
+      - ".github/workflows/shared-ci.yml"
+      - ".github/workflows/_shared.yml"
+  workflow_dispatch:
+    inputs:
+      engines:
+        description: Start the shared SQL Server and PostgreSQL engines (testenv/) for the live tests.
+        type: boolean
+        default: true
+      ssas:
+        description: Also run the semantic layer's DAX conformance on a real Analysis Services (Tabular) instance installed on a Windows runner (about 6 minutes).
+        type: boolean
+        default: false
+      ssas_probe:
+        description: With ssas, run only the DAX probe (SsasProbe) instead of the suite.
+        type: boolean
+        default: false
+      ssas_record:
+        description: With ssas, also record a session through the XMLA forwarder (Shared/tools/DbDataKit.Tools.XmlaForwarder) and upload the recording as the artifact xmla-recording.
+        type: boolean
+        default: false
+
+# A newer push to a PR supersedes the older run; runs on main always complete.
+concurrency:
+  group: shared-ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  dbdatakit:
+    uses: ./.github/workflows/_shared.yml
+    with:
+      # The live tests run against the shared engines every time (a dispatch can still switch them off).
+      engines: ${{ github.event_name != 'workflow_dispatch' || inputs.engines }}
+
+  # The PDF exporter on the pinned Chromium (plan 32 DBR15): the pin and the bundled fonts are fetched and hash-checked, the visuals' print page is built, and the exporter's tests and the
+  # module's export tests run against that browser. They fail, not skip, here (DBDATAKIT_TEST_REQUIRE_CHROMIUM): a skipped export test is a test that did not run. The same pin on Windows.
+  views-export:
+    name: PDF export on the pinned Chromium (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: "Shared/**/*.csproj"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - uses: ./.github/actions/duckdb-cache
+      - name: Fetch the pinned Chromium, the bundled fonts and DuckDB
+        if: runner.os != 'Windows'
+        run: |
+          scripts/fetch-chromium.sh
+          scripts/fetch-fonts.sh
+          scripts/fetch-duckdb.sh
+      - name: Fetch the pinned Chromium, the bundled fonts and DuckDB (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./scripts/fetch-chromium.ps1
+          ./scripts/fetch-fonts.ps1
+          ./scripts/fetch-duckdb.ps1
+      - name: Build the print page
+        shell: bash
+        working-directory: Shared/web
+        run: |
+          npm ci --workspace @dbdatakit/visuals --include-workspace-root --ignore-scripts
+          npm run build:print --workspace @dbdatakit/visuals
+      - name: Point the tests at them
+        shell: bash
+        run: |
+          rid=linux-x64; [ "$RUNNER_OS" = "Windows" ] && rid=win-x64
+          echo "DBDATAKIT_TEST_CHROMIUM=$GITHUB_WORKSPACE/.chromium/$rid" >> "$GITHUB_ENV"
+          echo "DBDATAKIT_TEST_PRINT_ASSETS=$GITHUB_WORKSPACE/Shared/web/visuals/dist/print" >> "$GITHUB_ENV"
+          echo "DBDATAKIT_TEST_REQUIRE_CHROMIUM=true" >> "$GITHUB_ENV"
+          # the runner's kernel may forbid the user namespaces Chromium's sandbox needs
+          [ "$RUNNER_OS" = "Linux" ] && echo "DBDATAKIT_TEST_NOSANDBOX=true" >> "$GITHUB_ENV" || true
+      - name: Exporter tests
+        working-directory: Shared
+        run: dotnet test --project tests/DbDataKit.Views.Export.Tests
+      - name: Module export tests
+        working-directory: Shared
+        run: dotnet test --project tests/DbDataKit.Views.Hosting.Tests --filter-class "*ViewsExportTests"
+
+  # The semantic layer's conformance fixtures (plan 19, J02) on the shared engines, as a check of their own: the engine seeds a scratch
+  # database on SQL Server and PostgreSQL and runs every fixture through it. The tests also run in the job above whenever the engines
+  # are up; this one fails by name when the semantic layer breaks and requires both engines instead of skipping.
+  semantic-fixtures:
+    name: Semantic fixtures (SQL Server, PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: "Shared/**/*.csproj"
+      - name: Start the shared engines (SQL Server, PostgreSQL)
+        run: testenv/testenv.sh up mssql postgres
+      - name: Point the suite at the engines
+        run: |
+          testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
+          echo "DBDATAKIT_TEST_REQUIRE_SQLSERVER=true" >> "$GITHUB_ENV"
+          echo "DBDATAKIT_TEST_REQUIRE_POSTGRES=true" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/duckdb-cache
+      - name: Fetch the pinned DuckDB engine
+        run: scripts/fetch-duckdb.sh
+      - name: Test
+        working-directory: Shared
+        run: dotnet test --project tests/DbDataKit.Semantic.Tests
+      - name: Stop the shared engines
+        if: always()
+        run: testenv/testenv.sh down
+
+  # The state layer's support matrix, the N-1 half (plan 29b U01): the State and Scheduling suites on the previous release of each engine, SQL Server 2022 and
+  # PostgreSQL 16 (with pgvector), started from the older testenv profiles. The jobs above run the same suites on the current engines (SQL Server 2025, PostgreSQL 17),
+  # so together they are N and N-1. `testenv.sh env dbdatakit-older` points DBDATAKIT_TEST_SQLSERVER and DBDATAKIT_TEST_POSTGRES at the older servers (so every engine-backed
+  # test runs on them) and sets the DBDATAKIT_TEST_REQUIRE_* variables, so a server that does not answer fails the run instead of skipping it. Nothing else in this workflow changed.
+  state-older-engines:
+    name: State and Scheduling suites (SQL Server 2022, PostgreSQL 16)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: "Shared/**/*.csproj"
+      - name: Start the previous engines (SQL Server 2022, PostgreSQL 16)
+        run: testenv/testenv.sh up mssql2022 postgres16
+      - name: Point the suites at the previous engines
+        run: testenv/testenv.sh env dbdatakit-older --dotenv >> "$GITHUB_ENV"
+      - name: Test State
+        working-directory: Shared
+        run: dotnet test --project tests/DbDataKit.State.Tests
+      - name: Test State.Engines
+        working-directory: Shared
+        run: dotnet test --project tests/DbDataKit.State.Engines.Tests
+      - name: Test State.Cli
+        working-directory: Shared
+        run: dotnet test --project tests/DbDataKit.State.Cli.Tests
+      - name: Test Scheduling
+        working-directory: Shared
+        run: dotnet test --project tests/DbDataKit.Scheduling.Tests
+      - name: Stop the previous engines
+        if: always()
+        run: testenv/testenv.sh down
+
+  # Whether a pull request touches what the SSAS job tests: the DAX emitter, the sample model, or the SSAS executor. Only then does the Windows job run on a pull request.
+  ssas-changes:
+    name: Does the pull request touch the DAX path?
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.diff.outputs.run }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: diff
+        run: |
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" \
+            | grep -E '^Shared/src/DbDataKit\.Semantic/Emit/DaxEmitter\.cs$|^Shared/tests/DbDataKit\.Semantic\.Tests/conformance/ssas/|^Shared/src/DbDataKit\.Semantic\.Ssas/'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # The semantic layer's DAX path against a real SQL Server Analysis Services (Tabular), the one thing the Linux jobs cannot run (the ADOMD.NET client
+  # is Windows-only). On a pull request that touches the DAX emitter, the model or the SSAS executor (ssas-changes), or by hand: it installs Analysis Services with Chocolatey (about 3 minutes), deploys
+  # Shared/tests/DbDataKit.Semantic.Tests/conformance/ssas/model.tmsl.json, and runs the semantic suite with DBDATAKIT_TEST_SSAS set so the SSAS source of every fixture runs
+  # as real DAX. Run it after a change to the DAX emitter, the catalog's DAX bindings, the model or SsasExecutor (docs/semantic/ssas-ci.md).
+  semantic-ssas:
+    name: Semantic DAX on Analysis Services (Windows)
+    needs: ssas-changes
+    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.ssas) || needs.ssas-changes.outputs.run == 'true') }}
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+      - uses: ./.github/actions/duckdb-cache
+      - name: Fetch the pinned DuckDB engine
+        shell: pwsh
+        run: ./scripts/fetch-duckdb.ps1
+      - name: Install Analysis Services (Tabular) with Chocolatey
+        shell: pwsh
+        timeout-minutes: 30
+        run: |
+          # Only Analysis Services is asked for, instance QIS. The Developer bootstrapper (SQL2022-SSEI-Dev.exe) hung in three tries; Chocolatey works.
+          choco install sql-server-2022 -y --no-progress --params "'/FEATURES=AS /ASSERVERMODE=TABULAR /INSTANCENAME=QIS /ASSYSADMINACCOUNTS=BUILTIN\Administrators'"
+          $code = $LASTEXITCODE
+          "choco exit code: $code"
+          Get-Service MSOLAP*
+          if ($code -ne 0) {
+            Get-ChildItem 'C:\Program Files\Microsoft SQL Server\*\Setup Bootstrap\Log' -Recurse -Filter Summary.txt -ErrorAction SilentlyContinue | ForEach-Object { "--- $($_.FullName)"; Get-Content $_.FullName -Tail 60 }
+            Get-Content C:\ProgramData\chocolatey\logs\chocolatey.log -Tail 80
+            exit $code
+          }
+      - name: Find the Analysis Services port
+        shell: pwsh
+        run: |
+          # A named instance is found through the SQL Browser service (not running here) or on the dynamic port it writes to msmdsrv.port.txt: use the port.
+          $portFile = Get-ChildItem 'C:\Program Files\Microsoft SQL Server' -Recurse -Filter msmdsrv.port.txt -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($portFile) {
+            $port = (Get-Content $portFile.FullName -Raw) -replace '\D', ''
+            "Port file $($portFile.FullName): $port"
+            "DBDATAKIT_TEST_SSAS=Data Source=localhost:$port" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          } else {
+            "No port file; starting SQL Browser and connecting by name"
+            Set-Service SQLBrowser -StartupType Manual -ErrorAction SilentlyContinue
+            Start-Service SQLBrowser -ErrorAction SilentlyContinue
+            "DBDATAKIT_TEST_SSAS=Data Source=localhost\QIS" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          }
+          "DBDATAKIT_TEST_REQUIRE_SSAS=true" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+      - name: DAX probe (what does the server accept?)
+        if: inputs.ssas_probe
+        working-directory: Shared
+        env:
+          DBDATAKIT_TEST_SSAS_PROBE: "1"
+        run: dotnet test --project tests/DbDataKit.Semantic.Tests --filter-class "*SsasProbe"
+      - name: What the probe got
+        if: inputs.ssas_probe
+        shell: pwsh
+        run: Get-ChildItem -Recurse -Filter ssas-probe.txt | ForEach-Object { Get-Content $_.FullName }
+      - name: Semantic suite against Analysis Services
+        if: ${{ !inputs.ssas_probe }}
+        working-directory: Shared
+        run: dotnet test --project tests/DbDataKit.Semantic.Tests --report-xunit-trx --report-xunit-trx-filename ssas.trx
+      - name: Record a session through the XMLA forwarder
+        if: ${{ inputs.ssas_record && !inputs.ssas_probe }}
+        working-directory: Shared
+        env:
+          DBDATAKIT_TEST_SSAS_RECORD: "1"
+          DBDATAKIT_TEST_XMLA_RECORDING_DIR: ${{ runner.temp }}\xmla-recording
+        run: dotnet test --project tests/DbDataKit.Semantic.Tests --filter-class "*SsasRecordingTests"
+      - name: Upload the recording
+        if: ${{ always() && inputs.ssas_record && !inputs.ssas_probe }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: xmla-recording
+          path: ${{ runner.temp }}\xmla-recording
+          if-no-files-found: warn
+      - name: Failures grouped by cause
+        if: always() && !inputs.ssas_probe
+        shell: pwsh
+        run: |
+          $trx = Get-ChildItem -Recurse -Filter ssas.trx | Select-Object -First 1
+          if (-not $trx) { 'No results file'; exit 0 }
+          $xml = [xml](Get-Content $trx.FullName)
+          $ns = @{ t = 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010' }
+          $failed = Select-Xml -Xml $xml -XPath "//t:UnitTestResult[@outcome='Failed']" -Namespace $ns
+          "Failed: $(@($failed).Count)"
+          $failed | ForEach-Object { [pscustomobject]@{ Test = $_.Node.testName; Message = ($_.Node.Output.ErrorInfo.Message -split "`n" | Select-Object -First 4) -join ' | ' } } |
+            Group-Object Message | Sort-Object Count -Descending | Select-Object -First 25 | ForEach-Object {
+              "[$($_.Count)] $($_.Name)"; "     e.g. " + (($_.Group | Select-Object -First 3).Test -join '; ') }

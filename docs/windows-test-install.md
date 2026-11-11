@@ -58,7 +58,7 @@ does **not** remove it: every product's manifest sets the same variable, so one 
 
 **MSI** (the documented route for a service): `dbdatakit.msi` and `dbdatasync.msi` from the `dbdatakit/dist-snapshot` and
 `dbdatasync/dist-snapshot` releases (the stable ones are under `dist`), then `msiexec /i dbdatakit.msi /qn` and the same for Sync. Each installs to `C:\Program Files\<Name>` and registers its
-service **stopped**: `DbDataKitConsole` and `DbDataSync`. Their data folders are `C:\ProgramData\DbDataKit\server` and `C:\ProgramData\DbDataKit\sync` (the folders of earlier builds, `DbDataKit\console` and `DbDataSync`, are not read or moved). They are unsigned, so Windows will say "Unknown publisher".
+service **stopped**: `DbDataKit` and `DbDataSync`. Their data folders are `C:\ProgramData\DbDataKit\server` and `C:\ProgramData\DbDataKit\sync` (the folders of earlier builds, `DbDataKit\console` and `DbDataSync`, are not read or moved). They are unsigned, so Windows will say "Unknown publisher".
 
 ## 2. The console
 

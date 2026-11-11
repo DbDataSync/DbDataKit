@@ -5,7 +5,7 @@ name: DbDataGateway CI
 # commits, so the run on `main` is the one that validates what landed, and it is what dbdatagateway-release.yml looks for.
 #
 # A `changes` job skips the suites when nothing of DbDataGateway's, of the Shared/ code it builds against, or of the test
-# environment changed; the run then still reports success. The shared libraries' own suite is dbdatakit-ci.yml, run once, not per product.
+# environment changed; the run then still reports success. The shared libraries' own suite is shared-ci.yml, run once, not per product.
 
 on:
   pull_request:

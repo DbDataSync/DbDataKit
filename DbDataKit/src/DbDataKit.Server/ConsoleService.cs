@@ -34,12 +34,12 @@ public sealed class ConsoleServiceEnvironment
 
 /// <summary>
 /// <c>dbdatakit service install|uninstall|status|start|stop|restart|doctor|unit</c>: registration of <c>server run</c> with Windows or systemd, the shared verbs over the shared command. The service runs as the virtual account
-/// <c>NT SERVICE\DbDataKitConsole</c> unless <c>--account</c> says otherwise, and keeps everything it writes (the users, the sessions, the certificate) in one data directory, which only administrators and the service can reach.
+/// <c>NT SERVICE\DbDataKit</c> unless <c>--account</c> says otherwise, and keeps everything it writes (the users, the sessions, the certificate) in one data directory, which only administrators and the service can reach.
 /// </summary>
 public static class ConsoleService
 {
-    public const string RegistrationName = "DbDataKitConsole";
-    public const string DisplayName = "dbdatakit console";
+    public const string RegistrationName = "DbDataKit";
+    public const string DisplayName = "DbDataKit";
     public const string Description = "The web console for DbData servers: signs people in and manages the servers paired with it.";
 
     public static Noun Noun(ConsoleServiceEnvironment env) =>

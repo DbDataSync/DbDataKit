@@ -22,7 +22,7 @@ var result = await exporter.ExportPdfAsync(new PrintJob("Title", html, assets, P
 
 ## What was verified for DBR15 (plan 32 section 14)
 
-Run on **Chrome for Testing 153.0.8010.12** (Playwright's build in a cloud session, `mode: system`), PuppeteerSharp **25.15.0** on **net10.0**. **The pinned build (156.0.8078.47) was not downloaded or exercised here**; the job `views-export` of `dbdatakit-ci.yml` runs the same tests on it.
+Run on **Chrome for Testing 153.0.8010.12** (Playwright's build in a cloud session, `mode: system`), PuppeteerSharp **25.15.0** on **net10.0**. **The pinned build (156.0.8078.47) was not downloaded or exercised here**; the job `views-export` of `shared-ci.yml` runs the same tests on it.
 
 | Question | Result |
 | --- | --- |

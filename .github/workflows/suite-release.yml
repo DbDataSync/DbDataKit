@@ -120,9 +120,9 @@ jobs:
         if: ${{ !inputs.dry_run && !inputs.snapshot }}
         run: |
           green=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$SHA&status=success" \
-            --jq '[.workflow_runs[] | select(.name == "DbDataConsole CI")] | length')
-          echo "successful DbDataConsole CI runs for $SHA: $green"
-          [ "$green" -ge 1 ] || { echo "::error::No successful DbDataConsole CI run for $SHA."; exit 1; }
+            --jq '[.workflow_runs[] | select(.name == "DbDataKit CI")] | length')
+          echo "successful DbDataKit CI runs for $SHA: $green"
+          [ "$green" -ge 1 ] || { echo "::error::No successful DbDataKit CI run for $SHA."; exit 1; }
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: DbDataKit/global.json
