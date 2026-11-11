@@ -69,6 +69,13 @@ public static class SemanticRest
         return await ResultAsync(answer, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>The code an engine refusal starts with (<c>unknown_attribute at query.measures[0]: ...</c>, <c>unknown_attribute: ...</c>); null when the message has none.</summary>
+    public static string? CodeOf(string message)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(message, @"^([a-z][a-z0-9_]+)(?: at [^:]*)?:");
+        return m.Success ? m.Groups[1].Value : null;
+    }
+
     /// <summary>
     /// Runs any request of the model as the caller (a query, an explain, a members request) and answers it as <see cref="ResultAsync"/> does; for a tool that is not an app (the console's run list replaying a record). The row
     /// cap is <paramref name="maxRows"/> (up to <see cref="MaxRows"/>).
@@ -80,7 +87,8 @@ public static class SemanticRest
         return await ResultAsync(answer, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<JsonObject> ResultAsync(IServingAnswer answer, CancellationToken cancellationToken)
+    /// <summary>An answer as the JSON a REST caller reads (see <see cref="QueryAsync"/>); an explain's rows are its scans (status <c>explained</c>).</summary>
+    public static async Task<JsonObject> ResultAsync(IServingAnswer answer, CancellationToken cancellationToken)
     {
         var metadata = answer.Schema.Metadata ?? new Dictionary<string, string>();
         string? Meta(string key) => metadata.TryGetValue(SemanticAnswer.MetadataPrefix + key, out var v) ? v : null;

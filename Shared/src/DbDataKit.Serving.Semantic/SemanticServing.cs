@@ -79,12 +79,7 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
         public string? Plan { get; set; }
     }
 
-    /// <summary>The code an engine refusal starts with (<c>unknown_attribute at query.measures[0]: ...</c>, <c>unknown_attribute: ...</c>); null when the message has none.</summary>
-    private static string? CodeOf(string message)
-    {
-        var m = System.Text.RegularExpressions.Regex.Match(message, @"^([a-z][a-z0-9_]+)(?: at [^:]*)?:");
-        return m.Success ? m.Groups[1].Value : null;
-    }
+    private static string? CodeOf(string message) => SemanticRest.CodeOf(message);
 
     private Task<IServingAnswer> RunModelAsync(ServingContext context, ServingRequest request, SemanticModel model, string text, bool isSql, RunNote? note, CancellationToken cancellationToken)
     {

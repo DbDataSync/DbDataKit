@@ -46,7 +46,7 @@ public sealed partial class GatewayManagement(IConfigurationRoot configuration, 
             return new ManagementResult(answer.Status, answer.Body);
         }
         if (semanticRuns is not null && GatewaySemanticRuns.Handles(route))
-            return await semanticRuns.HandleAsync(method, route, path.Contains('?') ? path[(path.IndexOf('?') + 1)..] : null, caller, cancellationToken);
+            return await semanticRuns.HandleAsync(method, route, path.Contains('?') ? path[(path.IndexOf('?') + 1)..] : null, body, caller, cancellationToken);
         if (userQueries is not null && GatewayUserQueries.Handles(route))
             return await userQueries.HandleAsync(method, route, path.Contains('?') ? path[(path.IndexOf('?') + 1)..] : null, body, caller, cancellationToken);
         if (views is not null && GatewayViewsManagement.Handles(route))

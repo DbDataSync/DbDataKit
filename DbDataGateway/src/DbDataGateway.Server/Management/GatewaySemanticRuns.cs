@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using DbDataKit.Serving;
 using DbDataKit.Serving.Semantic;
@@ -15,7 +16,7 @@ namespace DbDataGateway.Server.Management;
 /// on a version that is gone (pruned, or the model unpublished) is answered 410 and says which version. A replay writes a record of its own that names the one it re-ran. The viewer role is enough; the caller is the person the
 /// console's token names, so the views module must be on.
 /// </summary>
-public sealed class GatewaySemanticRuns(SemanticRunStore store, SemanticModels models, PublishedSemanticModels published, IServingServices serving, GatewayViews? views, IAuditLog audit, TimeProvider? clock = null)
+public sealed class GatewaySemanticRuns(SemanticRunStore store, SemanticModels models, PublishedSemanticModels published, IServingServices serving, IServingServices semantic, GatewayViews? views, IAuditLog audit, TimeProvider? clock = null)
 {
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
 
@@ -25,7 +26,7 @@ public sealed class GatewaySemanticRuns(SemanticRunStore store, SemanticModels m
 
     private static ManagementResult Problem(int status, string message) => ManagementResult.Problem(status, message);
 
-    public async Task<ManagementResult> HandleAsync(string method, string route, string? query, ManagementCaller caller, CancellationToken cancellationToken)
+    public async Task<ManagementResult> HandleAsync(string method, string route, string? query, string? body, ManagementCaller caller, CancellationToken cancellationToken)
     {
         if (!caller.Holds(ServerRole.Viewer)) return Problem(403, "This needs the viewer role.");
         if (views is null) return Problem(404, "This gateway does not serve the views module, which tells who a person is: list `views` under `modules:` in server.yaml.");
@@ -37,6 +38,7 @@ public sealed class GatewaySemanticRuns(SemanticRunStore store, SemanticModels m
         if (wantsAll && !admin) return Problem(403, "Everyone's runs are an administrator's to read.");
         var parts = route.Length > Route.Length ? route[(Route.Length + 1)..].Split('/') : [];
 
+        if (parts.Length == 0 && method == "POST") return await RunAsync(body, who, cancellationToken);
         if (parts.Length == 0) return method == "GET" ? List(who, wantsAll, q["model"], int.TryParse(q["limit"], out var limit) ? limit : 100) : Problem(405, "The list is read with GET.");
         if (parts is ["counts"]) return method == "GET" ? Counts(who, wantsAll, int.TryParse(q["days"], out var days) ? Math.Clamp(days, 1, 365) : 7) : Problem(405, "The counts are read with GET.");
         if (!long.TryParse(parts[0], out var id) || parts.Length > 2) return Problem(404, "There is no such call.");
@@ -45,6 +47,68 @@ public sealed class GatewaySemanticRuns(SemanticRunStore store, SemanticModels m
         if (parts.Length == 1) return method == "GET" ? ManagementResult.Ok(Detail(record)) : Problem(405, "A run is read with GET.");
         if (parts[1] != "replay") return Problem(404, "There is no such call.");
         return method == "POST" ? await ReplayAsync(record, who, caller, cancellationToken) : Problem(405, "A replay is started with POST.");
+    }
+
+    private sealed record RunBody(string? Model, string? Sql, JsonObject? Request, JsonObject? Parameters, bool? Explain, int? Limit);
+
+    /// <summary>
+    /// <c>POST /api/v1/my/runs</c> <c>{model, sql | request, parameters?, explain?, limit?}</c>: the explorer's call (plan 14a SL14, SL15, D36). The statement runs as the caller through the semantic module, so it is checked, limited and recorded like one from any other
+    /// protocol, and the answer is <see cref="SemanticRest"/>'s JSON (<c>status</c>, <c>columns</c>, <c>rows</c>, <c>warnings</c>, <c>request_hash</c>, <c>remaining</c>). A refusal is a 400 that carries the engine's own <c>code</c>.
+    /// </summary>
+    private async Task<ManagementResult> RunAsync(string? body, ServingCaller who, CancellationToken cancellationToken)
+    {
+        RunBody? run;
+        try { run = string.IsNullOrWhiteSpace(body) ? null : JsonSerializer.Deserialize<RunBody>(body, new JsonSerializerOptions(JsonSerializerDefaults.Web)); }
+        catch (JsonException) { run = null; }
+        if (run is null || string.IsNullOrWhiteSpace(run.Model) || (run.Sql is null) == (run.Request is null))
+            return Problem(400, "The body is {\"model\": \"<name>\", \"sql\": \"<semantic sql>\"} or {\"model\": ..., \"request\": {...}} (one of them), with optional \"parameters\", \"explain\" and \"limit\".");
+        if (models.Find(run.Model) is not { } model) return Problem(404, $"There is no model '{run.Model}'.");
+        var limit = Math.Clamp(run.Limit ?? 1000, 1, SemanticRest.MaxRows);
+        var context = new ServingContext(who, ClientAddress: null);
+        var source = SemanticModels.SourcePrefix + model.Name;
+        try
+        {
+            IServingAnswer answer;
+            if (run.Sql is not null)
+                answer = await semantic.Queries.RunAsync(context, new ServingRequest.SemanticSql(source, (run.Explain == true ? "EXPLAIN " : "") + WithLimit(run.Sql, limit), new ServingLimits(MaxRows: limit), Bind(run.Parameters)), cancellationToken);
+            else
+            {
+                var request = run.Request!.DeepClone().AsObject();
+                if (request["query"] is JsonObject inner && inner["limit"] is null) inner["limit"] = limit;
+                if (run.Explain == true && request["kind"]?.GetValue<string>() == "query") request["kind"] = "explain";
+                if (run.Parameters is { Count: > 0 } && request["parameters"] is null) request["parameters"] = run.Parameters.DeepClone();
+                answer = await semantic.Queries.RunAsync(context, new ServingRequest.Semantic(source, request.ToJsonString(), new ServingLimits(MaxRows: limit)), cancellationToken);
+            }
+            await using var _ = answer;
+            var result = await SemanticRest.ResultAsync(answer, cancellationToken);
+            result["model_version"] = model.Version;
+            return ManagementResult.Ok(result);
+        }
+        catch (ServingException ex)
+        {
+            var status = ex switch { ServingNotFoundException => 404, ServingDeniedException or ServingUnauthenticatedException => 403, ServingBackendException => 502, _ => 400 };
+            return new ManagementResult(status, new JsonObject { ["error"] = ex.Message, ["code"] = ex is ServingLimitException l ? l.Limit : SemanticRest.CodeOf(ex.Message) });
+        }
+    }
+
+    /// <summary>The engine wants every query to state its limit; the explorer's text may leave it out, and then it gets the call's (a text that says LIMIT keeps its own).</summary>
+    private static string WithLimit(string sql, int limit) =>
+        System.Text.RegularExpressions.Regex.IsMatch(sql, @"\bLIMIT\s+\d+", System.Text.RegularExpressions.RegexOptions.IgnoreCase) ? sql : sql.TrimEnd().TrimEnd(';') + " LIMIT " + limit.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>The values of a JSON object as the statement's bound parameters, by name.</summary>
+    private static IReadOnlyList<ServingParameter>? Bind(JsonObject? values)
+    {
+        if (values is not { Count: > 0 }) return null;
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        return [.. values.Select(v => v.Value switch
+        {
+            null => new ServingParameter(v.Key, "null", null),
+            JsonArray a => new ServingParameter(v.Key, "list", a.ToJsonString()),
+            JsonValue j when j.TryGetValue<bool>(out var b) => new ServingParameter(v.Key, "bool", b ? "true" : "false"),
+            JsonValue j when j.TryGetValue<long>(out var n) => new ServingParameter(v.Key, "int64", n.ToString(inv)),
+            JsonValue j when j.TryGetValue<double>(out var d) => new ServingParameter(v.Key, "double", d.ToString("R", inv)),
+            var other => new ServingParameter(v.Key, "string", other.GetValue<string>()),
+        })];
     }
 
     private ManagementResult List(ServingCaller who, bool all, string? model, int limit)

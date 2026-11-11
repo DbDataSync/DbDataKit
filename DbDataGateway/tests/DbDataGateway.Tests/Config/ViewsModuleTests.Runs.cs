@@ -87,4 +87,45 @@ public sealed partial class ViewsModuleTests
         Assert.Equal(7, (int)counts.Body!["days"]!);
         Assert.Equal(1, counts.Body["by_code"]!.AsObject().Sum(c => (int)c.Value!));
     }
+
+    [Fact]
+    public async Task The_explorer_runs_semantic_sql_and_a_request_as_the_person_explains_without_reading_and_a_refusal_carries_the_engines_code()
+    {
+        await StartAsync();
+        var state = Get<StateDatabase>();
+        var (ada, _) = HomeSeed.Person(state, "Ada", "ada@example.invalid", Analysts);
+        var (bob, _) = HomeSeed.Person(state, "Bob", "bob@example.invalid", "visitors");
+        PublishModel();
+        var sql = $"SELECT customers.region, MEASURE(orders.net_revenue) FROM {Model} GROUP BY ALL";
+        const string runs = "/api/v1/my/runs";
+
+        var ran = await ManagementAsync(HttpMethod.Post, runs, ada.Id, ServerRole.Viewer, new JsonObject { ["model"] = Model, ["sql"] = sql, ["limit"] = 5 });
+        Assert.True(ran.Status == HttpStatusCode.OK, ran.Body?.ToJsonString());
+        Assert.Equal("ok", (string)ran.Body!["status"]!);
+        Assert.NotEmpty(ran.Body["rows"]!.AsArray());
+        Assert.True(ran.Body["rows"]!.AsArray().Count <= 5);
+        Assert.False(string.IsNullOrEmpty((string?)ran.Body["request_hash"]));
+
+        // the same as a request; explain answers the scans, as a record of kind explain
+        var request = JsonNode.Parse(Request())!;
+        var asRequest = await ManagementAsync(HttpMethod.Post, runs, ada.Id, ServerRole.Viewer, new JsonObject { ["model"] = Model, ["request"] = request.DeepClone() });
+        Assert.True(asRequest.Status == HttpStatusCode.OK, asRequest.Body?.ToJsonString());
+        var explained = await ManagementAsync(HttpMethod.Post, runs, ada.Id, ServerRole.Viewer, new JsonObject { ["model"] = Model, ["request"] = request.DeepClone(), ["explain"] = true });
+        Assert.Equal("explained", (string)explained.Body!["status"]!);
+        Assert.Equal(["source", "engine", "text"], explained.Body["columns"]!.AsArray().Select(c => (string)c!["name"]!));
+        var explainedSql = await ManagementAsync(HttpMethod.Post, runs, ada.Id, ServerRole.Viewer, new JsonObject { ["model"] = Model, ["sql"] = sql, ["explain"] = true });
+        Assert.Equal("explained", (string)explainedSql.Body!["status"]!);
+        var kinds = (await ManagementAsync(HttpMethod.Get, runs, ada.Id, ServerRole.Viewer)).Body!["runs"]!.AsArray().Select(r => (string)r!["kind"]!).ToList();
+        Assert.Equal(2, kinds.Count(k => k == "explain"));
+
+        // a refusal is a 400 with the code; a person without the data source is refused in the Gateway's words
+        var refused = await ManagementAsync(HttpMethod.Post, runs, ada.Id, ServerRole.Viewer, new JsonObject { ["model"] = Model, ["request"] = JsonNode.Parse(Request(measure: "orders.no_such_measure")) });
+        Assert.Equal(HttpStatusCode.BadRequest, refused.Status);
+        Assert.False(string.IsNullOrEmpty((string?)refused.Body!["code"]));
+        Assert.Contains("orders.no_such_measure", (string)refused.Body["error"]!);
+        var denied = await ManagementAsync(HttpMethod.Post, runs, bob.Id, ServerRole.Viewer, new JsonObject { ["model"] = Model, ["sql"] = sql });
+        Assert.NotEqual(HttpStatusCode.OK, denied.Status);
+        Assert.Equal(HttpStatusCode.NotFound, (await ManagementAsync(HttpMethod.Post, runs, ada.Id, ServerRole.Viewer, new JsonObject { ["model"] = "nope", ["sql"] = "SELECT 1" })).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await ManagementAsync(HttpMethod.Post, runs, ada.Id, ServerRole.Viewer, new JsonObject { ["model"] = Model })).Status);
+    }
 }

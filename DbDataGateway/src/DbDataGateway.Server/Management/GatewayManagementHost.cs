@@ -129,7 +129,7 @@ public static class GatewayManagementHost
             userQueries: new GatewayUserQueries(app.Services.GetRequiredService<DbDataGateway.Server.State.SavedQueryStore>(), app.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>(),
                 GatewayModules.Has(options, GatewayModules.Views) ? app.Services.GetRequiredService<Serving.GatewayViews>() : null, audit),
             semanticRuns: new GatewaySemanticRuns(app.Services.GetRequiredService<DbDataGateway.Server.State.SemanticRunStore>(), app.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>(),
-                app.Services.GetRequiredService<Serving.PublishedSemanticModels>(), app.Services.GetRequiredService<Serving.GatewayServing>(),
+                app.Services.GetRequiredService<Serving.PublishedSemanticModels>(), app.Services.GetRequiredService<Serving.GatewayServing>(), app.Services.GetRequiredService<DbDataKit.Serving.IServingServices>(),
                 GatewayModules.Has(options, GatewayModules.Views) ? app.Services.GetRequiredService<Serving.GatewayViews>() : null, audit),
             audit: audit,
             serverSettings: new GatewayServerSettings(configDirectory, management, provider.ReloadNow, audit, git),
