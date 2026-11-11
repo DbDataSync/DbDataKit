@@ -24,7 +24,7 @@ public static class WorkspaceModule
     public const double BuildDays = 90;
 
     /// <summary>The kinds of project the module knows; plan 27 adds the others by name, and a row with a kind not in this list is refused by <see cref="WorkspaceStore"/>.</summary>
-    public static IReadOnlyList<string> ProjectKinds { get; } = ["app", "build", "store"];
+    public static IReadOnlyList<string> ProjectKinds { get; } = ["app", "build", "store", "sync"];
 
     /// <summary>The statuses a build has, as stored.</summary>
     public static IReadOnlyList<string> BuildStatuses { get; } = ["queued", "running", "succeeded", "failed", "canceled"];

@@ -6,69 +6,10 @@ using DbDataKit.Authoring;
 
 namespace DbDataKit.Authoring.Server;
 
-/// <summary>
-/// How the Workspace reaches Build's own program (plan 33 SC20c). The Workspace does not reference Build's assemblies (a product is not a shared library): it runs <c>dbdatabuild</c> as a child process, offline, in the draft's folder and
-/// with a cleared environment (a draft is content a person wrote; the host's variables, secrets among them, are not for it), and reads the one JSON document the command prints. The program is found at <paramref name="executable"/> when given,
-/// else <c>dbdatabuild</c> (<c>dbdatabuild.exe</c>) in the host's own folder or on <c>PATH</c>.
-/// </summary>
-public sealed class BuildTool(string? executable = null, TimeSpan? timeout = null)
+/// <summary>The program of the Build product the Workspace runs as a child process (<see cref="ChildProgram"/>): <c>dbdatabuild</c>, which prints one JSON document with <c>--format json</c>.</summary>
+public sealed class BuildTool(string? executable = null, TimeSpan? timeout = null) : ChildProgram("dbdatabuild", executable, timeout, Missing, ["--format", "json"])
 {
-    public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(120);
-
-    private static readonly string[] KeptVariables = ["PATH", "HOME", "USERPROFILE", "TMPDIR", "TEMP", "TMP", "LANG", "DOTNET_ROOT", "SystemRoot"];
-
-    /// <summary>The program's path, or null when there is none to run.</summary>
-    public string? Find()
-    {
-        if (executable is { Length: > 0 }) return File.Exists(executable) ? executable : null;
-        var name = OperatingSystem.IsWindows() ? "dbdatabuild.exe" : "dbdatabuild";
-        var own = Path.Combine(AppContext.BaseDirectory, name);
-        if (File.Exists(own)) return own;
-        foreach (var folder in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
-            try { if (File.Exists(Path.Combine(folder, name))) return Path.Combine(folder, name); }
-            catch (ArgumentException) { /* a bad entry of PATH */ }
-        return null;
-    }
-
     public const string Missing = "This server cannot work on a Build project: the program dbdatabuild is not beside it or on its PATH. Install Build (the suite package has it) and restart the Workspace server.";
-
-    /// <summary>Runs <c>dbdatabuild &lt;arguments&gt; --format json</c> with <paramref name="workingFolder"/> as its folder; the exit code, what it printed and what it said on its error output.</summary>
-    public async Task<(int Exit, string Output, string Error)> RunAsync(IReadOnlyList<string> arguments, string workingFolder, CancellationToken cancellationToken)
-    {
-        var program = Find() ?? throw new ProjectKindUnavailableException(Missing);
-        var start = new ProcessStartInfo(program)
-        {
-            WorkingDirectory = workingFolder,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            RedirectStandardInput = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        var kept = KeptVariables.Select(n => (n, v: Environment.GetEnvironmentVariable(n))).Where(p => p.v is not null).ToList();
-        start.Environment.Clear();
-        foreach (var (name, value) in kept) start.Environment[name] = value!;
-        foreach (var a in arguments) start.ArgumentList.Add(a);
-        start.ArgumentList.Add("--format");
-        start.ArgumentList.Add("json");
-        using var process = Process.Start(start) ?? throw new ProjectKindUnavailableException("The dbdatabuild process did not start.");
-        process.StandardInput.Close();
-        var output = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
-        var error = process.StandardError.ReadToEndAsync(CancellationToken.None);
-        using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        limit.CancelAfter(timeout ?? DefaultTimeout);
-        try { await process.WaitForExitAsync(limit.Token); }
-        catch (OperationCanceledException)
-        {
-            try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { /* it ended as we looked */ }
-            await process.WaitForExitAsync(CancellationToken.None);
-            cancellationToken.ThrowIfCancellationRequested();
-            return (124, "", "dbdatabuild ran longer than this server allows and was stopped.");
-        }
-        return (process.ExitCode, await output, await error);
-    }
 }
 
 /// <summary>
@@ -84,7 +25,7 @@ public sealed class BuildProjectKind(BuildTool tool) : IProjectKind
     public bool Buildable => false;
     public string? GitIgnore => null;       // the template carries its own .gitignore
 
-    // SC20d adds the package to a Runner, SC20e the models and connections to a Gateway; a route is listed only when it can be used
+    // SC20d adds the package to a Runner; a route is listed only when it can be used
     public IReadOnlyList<ProjectPublishRoute> Publishes { get; } = [];
 
     private static readonly UTF8Encoding Utf8 = new(false, true);

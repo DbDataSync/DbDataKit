@@ -9,6 +9,9 @@ public sealed record ProjectDiagnostic(string Severity, string Code, string Mess
     public bool IsError => Severity == "error";
 }
 
+/// <summary>What a kind made of a draft to publish (plan 33 SC20d, SC21b, SC22b): whether it worked, a sentence, the findings that stopped it, and what it wrote down about it (the tasks of a package, the models), kept with the build.</summary>
+public sealed record ProjectArtifact(bool Succeeded, string Message, IReadOnlyList<ProjectDiagnostic> Diagnostics, IReadOnlyDictionary<string, string>? Info = null);
+
 /// <summary>
 /// What a project of a kind can be published as, and to which product (plan 33 SC20b): <see cref="Product"/> is the kind of server that takes it (<c>gateway</c>, <c>runner</c>), <see cref="What"/> the thing that arrives there
 /// (<c>app</c>, <c>package</c>, <c>model</c>, <c>connection</c>), <see cref="Description"/> a sentence for the screen.
@@ -40,6 +43,15 @@ public interface IProjectKind
 
     /// <summary>The files of a new project <paramref name="id"/> (titled <paramref name="title"/> when given).</summary>
     IReadOnlyList<ProjectKindFile> Template(string id, string? title);
+
+    /// <summary>True when the kind makes something to publish from a draft (<see cref="ProduceAsync"/>): a package of tasks for a Runner, the models of a Store. An app is bundled instead (<see cref="Buildable"/>).</summary>
+    bool Produces => false;
+
+    /// <summary>
+    /// Makes what <see cref="Publishes"/> says from the draft in <paramref name="root"/> into <paramref name="outputFolder"/> (a build's folder, empty): for a <c>package</c> route <c>package.yaml</c> and <c>files/</c>, for a <c>model</c> route <c>models/&lt;name&gt;.yaml</c> in the current format.
+    /// The draft is checked first by the caller; a kind that cannot produce says why in <see cref="ProjectArtifact.Diagnostics"/>. <paramref name="projectId"/> names the package.
+    /// </summary>
+    Task<ProjectArtifact> ProduceAsync(string root, string projectId, string outputFolder, CancellationToken cancellationToken) => throw new NotSupportedException($"The {Name} kind makes nothing to publish.");
 
     /// <summary>Checks the draft in <paramref name="root"/> and returns what is wrong with it; empty means it is sound. Never throws for a damaged file: that is a diagnostic.</summary>
     Task<IReadOnlyList<ProjectDiagnostic>> CheckAsync(string root, CancellationToken cancellationToken);
