@@ -17,9 +17,9 @@ public static class WorkspaceAdminCommand
 
     public static Noun Project(Func<string, string?>? environment) => new("project", "The projects this server hosts",
     [
-        new Verb("create", "Make a new project: a git repository in the server's directory with a first commit", EffectClass.RepoFilesOnly, $"<id> [--title <text>] [--kind app] {Where}",
+        new Verb("create", "Make a new project: a git repository in the server's directory with a first commit", EffectClass.RepoFilesOnly, $"<id> [--title <text>] [--kind app|build] {Where}",
             (args, context) => CreateAsync(args, context, environment), DataSchemas.Object([("id", DataSchemas.String), ("kind", DataSchemas.String)], "id", "kind")),
-        new Verb("add", "Host a git repository that is already on this machine, in place (merges land in that folder)", EffectClass.RepoFilesOnly, $"<id> --path <repository folder> [--title <text>] [--kind app] {Where}",
+        new Verb("add", "Host a git repository that is already on this machine, in place (merges land in that folder)", EffectClass.RepoFilesOnly, $"<id> --path <repository folder> [--title <text>] [--kind app|build] {Where}",
             (args, context) => AddAsync(args, context, environment), DataSchemas.Object([("id", DataSchemas.String), ("kind", DataSchemas.String), ("path", DataSchemas.String)], "id", "kind", "path")),
         new Verb("list", "The projects this server hosts", EffectClass.OfflineOnly, Where,
             (args, context) => ListAsync(args, context, environment), DataSchemas.Object([("projects", DataSchemas.ListOf(ProjectRow))], "projects")),
@@ -97,7 +97,7 @@ public static class WorkspaceAdminCommand
         var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "title", "kind", "repo" });
         if (parsed.Unknown.Count > 0 || parsed.Words.Count != 1)
         {
-            await context.Error.WriteLineAsync($"Usage: project create <id> [--title <text>] [--kind app] {Where}");
+            await context.Error.WriteLineAsync($"Usage: project create <id> [--title <text>] [--kind app|build] {Where}");
             return CliExit.Usage;
         }
         var directory = DirectoryOf(parsed, environment);
@@ -122,7 +122,7 @@ public static class WorkspaceAdminCommand
         var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "path", "title", "kind", "repo" });
         if (parsed.Unknown.Count > 0 || parsed.Words.Count != 1 || parsed.Get("path") is not { Length: > 0 } path)
         {
-            await context.Error.WriteLineAsync($"Usage: project add <id> --path <repository folder> [--title <text>] [--kind app] {Where}");
+            await context.Error.WriteLineAsync($"Usage: project add <id> --path <repository folder> [--title <text>] [--kind app|build] {Where}");
             return CliExit.Usage;
         }
         try

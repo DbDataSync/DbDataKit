@@ -7,8 +7,8 @@ The server where people (and, later, agents) author projects in git workspaces (
 dbdataworkspace server run [--repo <server directory>] [--listen https://127.0.0.1:8471] [--state-engine sqlite|mssql|postgres --state-connection <connection string>]
 dbdataworkspace server pair --max-role <roles> [--repo <server directory>]
 dbdataworkspace server clients | unpair <client> [--repo <server directory>]
-dbdataworkspace project create <id> [--title <text>] [--kind app] [--repo <server directory>]   # a git repository in projects/<id> with a first commit
-dbdataworkspace project add <id> --path <repository folder> [--title <text>] [--kind app] [--repo <server directory>]   # host a repository that is already on this machine, in place
+dbdataworkspace project create <id> [--title <text>] [--kind app|build] [--repo <server directory>]   # a git repository in projects/<id> with a first commit
+dbdataworkspace project add <id> --path <repository folder> [--title <text>] [--kind app|build] [--repo <server directory>]   # host a repository that is already on this machine, in place
 dbdataworkspace project list [--repo <server directory>]
 dbdataworkspace workspace list [--project <id>] [--repo <server directory>]
 dbdataworkspace publisher pair <name> --url <https address of a Gateway's management API> --code <pairing code> [--client-name <text>] [--repo <server directory>]   # make the key for a target and pair it with a Gateway (the code: `server pair --max-role publisher` there)

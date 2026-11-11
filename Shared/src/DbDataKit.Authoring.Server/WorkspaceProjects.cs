@@ -50,10 +50,13 @@ public sealed partial class WorkspaceProjects(string directory, WorkspaceStore s
                 throw new WorkspaceProjectException($"The server already has a folder for '{id}' that is not empty, so no project was made over it.", 409);
             try
             {
-                Directory.CreateDirectory(folder);
                 var projectKind = Kinds.Require(kind);
-                // a new project starts as its kind's template (an app: the app template, plan 22a GP32), named for the project
-                foreach (var file in projectKind.Template(id, title))
+                // a new project starts as its kind's template (an app: the app template, plan 22a GP32), named for the project; made before the folder, so a kind that cannot make it leaves nothing behind
+                IReadOnlyList<ProjectKindFile> template;
+                try { template = projectKind.Template(id, title); }
+                catch (ProjectKindUnavailableException ex) { throw new WorkspaceProjectException(ex.Message, 409); }
+                Directory.CreateDirectory(folder);
+                foreach (var file in template)
                 {
                     var target = Path.Combine(folder, file.Path.Replace('/', Path.DirectorySeparatorChar));
                     Directory.CreateDirectory(Path.GetDirectoryName(target)!);

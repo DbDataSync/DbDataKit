@@ -68,3 +68,6 @@ public sealed class ProjectKinds
     /// <summary>The kind, or a sentence naming the kinds that exist.</summary>
     public IProjectKind Require(string name) => Find(name) ?? throw new ArgumentException($"'{name}' is not a kind of project this server knows ({string.Join(", ", Names)}).", nameof(name));
 }
+
+/// <summary>A kind cannot do what was asked on this server (a program it runs is not installed, say): a sentence a person can act on, never a stack trace. The server answers 409 with it.</summary>
+public sealed class ProjectKindUnavailableException(string message) : Exception(message);
