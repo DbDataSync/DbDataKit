@@ -89,6 +89,10 @@ A newer version of a model is migrated per copy with `POST /api/v1/models/{m}/mi
 
 A write waits as a change request when it is an agent's (a token whose subject starts with `agent:`) and the model does not say `agents: direct`, or when anyone's and the model has `approval.changes` of `steward` or `owner` (`ChangeApproval`). Approving applies the changes as proposed through the same writer; a request they break stays pending. A steward's approval needs the author role, an owner's an administrator, and an agent never decides. Details are under "Change requests" below.
 
+## Change events
+
+An applied change (a direct write, or the approval of a change request; never a refused write or a rejected request) is one line of `events.jsonl` in the server's directory: `seq` (only grows), `change_id` (the change request's id when it waited, else the write's own), model, instance, the entities touched, how many changes, who, when. `GET /api/v1/events?after=<seq>&model=<m>&limit=<n>` (viewer; default 100, at most 1000) answers the events after the last sequence a consumer saw, with `last` to keep and `first` (the oldest sequence still kept: the file is cut to its newest half past 4 MB, so a reader that was away for long sees a `first` beyond what it asked for). A write whose event could not be recorded is not undone. The scheduler's "on change" trigger that would use this, and the events of a model published to a serving group (it is written there), are plan 15's.
+
 ## Published models
 
 Reads and writes of the data itself are served by the serving layer from the models this server publishes to it, so they continue with this server stopped; see "Publishing to the serving layer" below. Structure changes stay here.

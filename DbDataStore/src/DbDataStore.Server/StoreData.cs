@@ -377,6 +377,7 @@ public static class StoreData
             {
                 await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
                 await new ModelWriter(model!, connection, connections.EngineOf(connectionName), schema: schema, instance: instanceId).ApplyAsync(changes!, new WriteActor(token.SubjectId, token.SubjectName), context.RequestAborted);
+                StoreEvents.Record(directory, name, InstanceName(context), changes!, token, null, DateTimeOffset.UtcNow);
                 return Results.Json(new { applied = changes!.Count });
             }
             catch (Exception ex) when (Known(ex)) { return Fail(ex); }
@@ -457,6 +458,7 @@ public static class StoreData
             await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
             var actor = new WriteActor(token.SubjectId, $"{token.SubjectName ?? token.SubjectId}, approving {request.ProposedByName ?? request.ProposedBy}'s change request {request.Id}");
             await new ModelWriter(model!, connection, connections.EngineOf(connectionName), schema: schema, instance: instanceId).ApplyAsync(changes!, actor, context.RequestAborted);
+            StoreEvents.Record(directory, name, instance, changes!, token, request.Id, DateTimeOffset.UtcNow);
         }
         catch (Exception ex) when (Known(ex)) { return Fail(ex); }
         return Results.Json(StoreChangeRequests.Decide(directory, request, ChangeRequest.Approved, token, note, DateTimeOffset.UtcNow).ToJson(withChanges: false));

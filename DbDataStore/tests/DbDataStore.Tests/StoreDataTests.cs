@@ -260,6 +260,42 @@ public abstract class StoreDataTests(string engine) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task An_applied_change_is_an_event_a_consumer_reads_after_the_last_one_it_saw_and_a_refused_or_rejected_one_is_not()
+    {
+        var send = await Client();
+        await send(HttpMethod.Put, "/api/v1/models/territories", Model, ServerRole.Author);
+        await send(HttpMethod.Post, "/api/v1/models/territories/storage/create", null, ServerRole.Admin);
+        Assert.Empty((await Json(await send(HttpMethod.Get, "/api/v1/events", null, ServerRole.Viewer)))["events"]!.AsArray());
+
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Post, "/api/v1/models/territories/changes", Insert("NA", "North", "10"), ServerRole.Author)).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await send(HttpMethod.Post, "/api/v1/models/territories/changes", Insert("EU", "Europe", "-5"), ServerRole.Author)).StatusCode);
+        var first = await Json(await send(HttpMethod.Get, "/api/v1/events", null, ServerRole.Viewer));
+        var only = Assert.Single(first["events"]!.AsArray());
+        Assert.Equal("territories", (string)only!["model"]!);
+        Assert.Equal("territory", (string)only["entities"]![0]!);
+        Assert.Equal(1, (int)only["changes"]!);
+        Assert.Equal("ada", (string)only["by"]!);
+        Assert.Null(only["request"]);
+        Assert.False(string.IsNullOrEmpty((string)only["change_id"]!));
+        var seen = (long)first["last"]!;
+
+        // an agent's proposal is no event until a person approves it; the event carries the request's id as its change id, and a rejected one never becomes one
+        subject = "agent:helper";
+        var approved = (string)(await Json(await send(HttpMethod.Post, "/api/v1/models/territories/changes", Insert("AS", "Asia", "3"), ServerRole.Author)))["id"]!;
+        var rejected = (string)(await Json(await send(HttpMethod.Post, "/api/v1/models/territories/changes", Insert("AF", "Africa", "4"), ServerRole.Author)))["id"]!;
+        Assert.Empty((await Json(await send(HttpMethod.Get, $"/api/v1/events?after={seen}", null, ServerRole.Viewer)))["events"]!.AsArray());
+        subject = "ada";
+        await send(HttpMethod.Post, $"/api/v1/models/territories/requests/{rejected}/reject", null, ServerRole.Author);
+        Assert.Empty((await Json(await send(HttpMethod.Get, $"/api/v1/events?after={seen}", null, ServerRole.Viewer)))["events"]!.AsArray());
+        await send(HttpMethod.Post, $"/api/v1/models/territories/requests/{approved}/approve", null, ServerRole.Author);
+        var next = Assert.Single((await Json(await send(HttpMethod.Get, $"/api/v1/events?after={seen}", null, ServerRole.Viewer)))["events"]!.AsArray());
+        Assert.Equal(approved, (string)next!["change_id"]!);
+        Assert.Equal(approved, (string)next["request"]!);
+        Assert.True((long)next["seq"]! > seen);
+        Assert.Equal(HttpStatusCode.BadRequest, (await send(HttpMethod.Get, "/api/v1/events?after=x", null, ServerRole.Viewer)).StatusCode);
+    }
+
+    [Fact]
     public async Task An_apps_token_reaches_only_the_entities_its_scope_names_and_nothing_else()
     {
         var send = await Client();
