@@ -94,5 +94,29 @@ class BackupBranches(unittest.TestCase):
         self.assertIn("backup/work/fresh", heads)
 
 
+    def test_a_rewritten_branch_goes_to_the_next_name_and_the_old_backup_is_cleaned_by_content(self):
+        run(self.work, "checkout", "-b", "work/sq")
+        self.commit("wip1")
+        self.commit("wip2")
+        backup_branches.push("origin")  # backup/work/sq = two wip commits
+        # squash the two commits into one (a rewrite)
+        run(self.work, "reset", "--soft", "main")
+        run(self.work, "commit", "-m", "squashed")
+        rows = backup_branches.push("origin")
+        moved = [r for r in rows if r[0] == "work/sq"][0]
+        self.assertEqual(moved[1], "backup/work/sq-2")
+        self.assertIn("rewritten", moved[2])
+        rows = backup_branches.push("origin")  # again: fast-forward of -2 (no new commit: nothing to say, but no failure)
+        self.assertFalse(any("FAILED" in s for _, _, s in rows), rows)
+        # main takes the squashed work by cherry-pick (a different history)
+        run(self.work, "checkout", "main")
+        run(self.work, "cherry-pick", "work/sq")
+        run(self.work, "push", "origin", "main")
+        run(self.work, "fetch", "origin", "+refs/heads/backup/*:refs/remotes/origin/backup/*")
+        done = dict(backup_branches.clean("origin", 0, apply=True))
+        self.assertEqual(done["backup/work/sq"], "deleted")  # the old two-commit backup: same content as main
+        self.assertEqual(done["backup/work/sq-2"], "deleted")
+
+
 if __name__ == "__main__":
     unittest.main()

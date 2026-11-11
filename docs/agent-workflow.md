@@ -52,6 +52,8 @@ while it waits for CI to be idle:
 - `python3 scripts/backup_branches.py push` pushes local `main` to `backup/main` and every local `work/*` branch that `origin/main` does not contain yet to `backup/<branch>`
   (for example `backup/work/delivery2`). Plain pushes, never forced: the branches only grow, so each push is a fast-forward. **The coordinator runs it after every merge into the local
   main** (and the CI agent at the start of each cycle). Pushes to `backup/*` start no CI run (workflows run on pushes to `main` only).
+- **Agents never rewrite their branch** (no amend, squash, rebase or reset of commits already made): the backups are plain pushes. If a branch is rewritten anyway, the next push goes to
+  `backup/<branch>-2` (then `-3`...) and the cleanup removes the old name once `main` has the same files (it compares content, not only history, so a squash or rebase is covered).
 - Only **committed** work is covered: one commit per slice is why the rule exists. An agent's uncommitted files are not backed up; ask a long-running agent to commit work in progress to its branch.
 - The workflow **Backup branch cleanup** (`.github/workflows/backup-branch-cleanup.yml`) runs `python3 scripts/backup_branches.py clean --apply` on every push to `main` (and hourly as a net): a `backup/*` branch is deleted
   **as soon as** its tip is contained in `origin/main`. Merging a branch with `git merge` (not a squash or cherry-pick) is what keeps its tip contained, so a merged agent branch's backup goes with the next push to main.
