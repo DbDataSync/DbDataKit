@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
+    <InternalsVisibleTo Include="DbDataKit.Runner.Kit.Landing" />
     <PackageReference Include="ClosedXML" />
     <PackageReference Include="Parquet.Net" />
     <PackageReference Include="BouncyCastle.Cryptography" />

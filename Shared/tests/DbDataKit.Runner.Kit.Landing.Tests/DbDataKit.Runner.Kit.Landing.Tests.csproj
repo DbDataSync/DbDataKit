@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <ProjectReference Include="..\..\src\DbDataKit.Runner.Kit.Landing\DbDataKit.Runner.Kit.Landing.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Transfer.Conformance\DbDataKit.Transfer.Conformance.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Transfer.Postgres\DbDataKit.Transfer.Postgres.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Transfer.SqlServer\DbDataKit.Transfer.SqlServer.csproj" />
+  </ItemGroup>
+  <Import Project="..\..\build\DuckDb.Native.targets" />
+</Project>
