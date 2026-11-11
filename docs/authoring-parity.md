@@ -12,10 +12,10 @@ Summary (counts of the features below):
 
 | Product | built | partly | missing | not planned | features |
 | --- | --- | --- | --- | --- | --- |
-| Build | 9 | 3 | 8 | 5 | 25 |
+| Build | 10 | 3 | 6 | 6 | 25 |
 | Store | 5 | 1 | 1 | 3 | 10 |
 | Sync | 9 | 4 | 5 | 3 | 21 |
-| All | 23 | 8 | 14 | 11 | 56 |
+| All | 24 | 8 | 12 | 12 | 56 |
 
 ### Build
 
@@ -42,8 +42,8 @@ Summary (counts of the features below):
 | Compare two tables (counts and digests) | `build/src/pages/DeployTabs.tsx` (`CompareTab`) | none: reads databases | not planned | SC20o |
 | Initialise a target (tracking tables, seeds) | `build/src/pages/DeployTabs.tsx` (`InitialiseView`) | none: an act on a database | not planned | SC20o |
 | Publish the package to a Runner (channel, stage, serve, slots) | `build/src/pages/RunnerPublish.tsx`, `runnerPublish.ts` | `workspace/src/pages/PublishForm.tsx`, `BuildsPanel.tsx` | built | SC20d |
-| Publish a semantic model to a Gateway | `build/src/pages/ModelPublish.tsx` | none: the build kind lists no `gateway` route | missing | SC20e |
-| Publish the project's data sources (connection, read login as a secret, grants) to a Gateway; hand a data source over | `build/src/pages/PublishTab.tsx` | none: it would put a login on a Gateway (D20, the option not taken) | missing | SC20e |
+| Publish a semantic model to a Gateway | `build/src/pages/ModelPublish.tsx` | `workspace/src/pages/PublishForm.tsx`, `BuildsPanel.tsx` (a `gateway` target: the build's compiled semantic models, made offline by `dbdatabuild project publish --to gateway --out`, over the data sources the Gateway has under the connections' names) | built | SC20e |
+| Publish the project's data sources (connection, read login as a secret, grants) to a Gateway; hand a data source over | `build/src/pages/PublishTab.tsx` | none: it puts a login on a Gateway, and the Workspace holds none (D20, the option not taken); the offline publish names data sources the Gateway already has, which an administrator or Build's server makes | not planned | SC20e |
 | Dashboards and reports of a project: list, new, check, publish (Views tab) | `build/src/pages/ViewsTab.tsx` | none: `dashboards/*.yaml` and `reports/*.yaml` open as text | missing | SC20n |
 | Lineage: the model graph; column lineage is the console's Lineage page, which reads Build servers | `build/src/pages/ProjectPage.tsx` (`GraphTab`); console Lineage page | `workspace/src/pages/BuildGraphPanel.tsx` (model level only) | partly | SC20h |
 
@@ -96,7 +96,7 @@ Removing the standalone screens with these still `not planned` loses the feature
 - **Runs and the database-facing Build views** (SC20o: tests, status, refresh run, compare, initialise). Candidates: they move to the Runner's task screens and a `dbdatabuild` command line, or the Build server keeps these routes and only its authoring routes are removed.
 - **The Store's storage and rows** (`StorageTab.tsx`, `EntityPage.tsx`): acts on a database and data, not authoring. SC21d's hand-over removes only the authoring screens and keeps these.
 - **Sync's run, monitoring and verification screens** (SC22l): the Sync server's runtime screens stay; SC22e removes the authoring routes only.
-- **Publish of Build's data sources and models to a Gateway** (SC20e) is open for the owner: either an offline `project publish --to gateway` or the Gateway publishes stay with Build's server.
+- **Publish of Build's models to a Gateway** (SC20e, owner decision 2026-11-11): Build has the offline verb `project publish --to gateway --out <dir>` (models and data-source documents, no login); the Workspace publishes its models with the publisher key over data sources the Gateway already has. Making or changing a data source (the login) stays with Build's server or a Gateway administrator. Built against a fake Gateway and a stand-in `dbdatabuild`; not run against a real Gateway.
 
 ## Gaps and their rows
 

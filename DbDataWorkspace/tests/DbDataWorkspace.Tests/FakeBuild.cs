@@ -16,12 +16,21 @@ internal static class FakeBuild
         var path = Path.Combine(folder, "dbdatabuild");
         var script = """
             #!/bin/bash
-            verb="$1 $2"; out=""; root="."; pkg="orders-set"; dest=""
+            verb="$1 $2"; out=""; root="."; pkg="orders-set"; dest=""; to="runner"
             if [ "$1 $2 $3" = "project create starter" ]; then dest="$4"; mkdir -p "$dest/rendered" "$dest/models"; printf 'schema: dbdatabuild.project/2\ntitle: starter\n' > "$dest/dbdatabuild.yml"; printf 'cron: "*/15 * * * *"\n' > "$dest/rendered/refresh.plan.yaml"; echo "{}"; exit 0; fi
-            while [ $# -gt 0 ]; do case "$1" in --out) out="$2"; shift;; --project) root="$2"; shift;; --package) pkg="$2"; shift;; esac; shift; done
+            while [ $# -gt 0 ]; do case "$1" in --out) out="$2"; shift;; --project) root="$2"; shift;; --package) pkg="$2"; shift;; --to) to="$2"; shift;; esac; shift; done
             if [ "$verb" = "project show" ]; then
               if grep -q 'garbage' "$root/dbdatabuild.yml"; then echo '{"diagnostics":[{"code":"DDB-101","severity":"error","title":"The project file does not parse","found":"garbage","location":{"file":"dbdatabuild.yml","line":3}}]}'; exit 1; fi
               echo '{"diagnostics":[]}'; exit 0
+            fi
+            if [ "$verb" = "project publish" ] && [ "$to" = "gateway" ]; then
+              set -- "$root"/semantic/*.yml
+              if [ ! -e "$1" ]; then echo "The project has no semantic model (semantic/*.yml), so there is nothing for a Gateway to serve. Nothing was written." >&2; exit 1; fi
+              mkdir -p "$out/models" "$out/data-sources"; names=""; sep=""
+              for f in "$@"; do n=$(basename "$f" .yml); cp "$f" "$out/models/$n.catalog.json"; names="$names$sep{\"name\":\"$n\",\"file\":\"models/$n.catalog.json\",\"sources\":{\"default\":\"warehouse\"},\"data_sources\":[\"warehouse\"]}"; sep=","; done
+              printf 'schema: connection/2\nname: warehouse\nengine: postgres\naccess: readonly\n' > "$out/data-sources/warehouse.yaml"
+              echo "{\"schema\":\"gateway-publish/1\",\"models\":[$names],\"data_sources\":[{\"name\":\"warehouse\",\"engine\":\"postgres\",\"file\":\"data-sources/warehouse.yaml\",\"access\":\"readonly\"}]}" > "$out/gateway.json"
+              echo "{\"data\":{\"models\":[],\"data_sources\":[\"warehouse\"]}}"; exit 0
             fi
             if [ "$verb" = "project publish" ]; then
               if grep -q 'cron: bad' "$root/rendered/refresh.plan.yaml"; then echo "rendered/refresh.plan.yaml: schedule.cron: 'bad' is not a cron expression" >&2; echo "Nothing was sent." >&2; exit 1; fi

@@ -32,6 +32,9 @@ internal sealed class FakeGateway : IAsyncDisposable
     public ConcurrentDictionary<string, (int Version, string DataSource, string Text)> Models { get; } = new();
     public HashSet<string> DataSources { get; } = ["mdm"];
 
+    /// <summary>The semantic models it serves (plan 33 SC20e): name to the version, the catalog and the data source each source maps to.</summary>
+    public ConcurrentDictionary<string, (int Version, string Catalog, JsonObject Sources)> SemanticModels { get; } = new();
+
     /// <summary>The instances production has, which a preview may be of.</summary>
     public HashSet<string> Instances { get; } = ["orders"];
     public string InstanceId { get; } = "fake-gateway-1";
@@ -62,6 +65,8 @@ internal sealed class FakeGateway : IAsyncDisposable
         app.MapPut("/api/v1/app-instances/{name}/channels/{channel}", async (string name, string channel, HttpContext context) => await gateway.PreviewInstance(context, name, channel));
         app.MapGet("/api/v1/entity-models/{name}", async (string name, HttpContext context) => await gateway.Models(context, name));
         app.MapPut("/api/v1/entity-models/{name}", async (string name, HttpContext context) => await gateway.Models(context, name));
+        app.MapGet("/api/v1/semantic-models/{name}", async (string name, HttpContext context) => await gateway.Semantic(context, name));
+        app.MapPut("/api/v1/semantic-models/{name}", async (string name, HttpContext context) => await gateway.Semantic(context, name));
         await app.StartAsync();
         var made = new FakeGateway(app, new Uri(app.Urls.First().Replace("[::1]", "127.0.0.1")), directory, codes);
         gateway.Owner = made;
@@ -71,6 +76,39 @@ internal sealed class FakeGateway : IAsyncDisposable
     private sealed class FakeGatewayState
     {
         public FakeGateway Owner = null!;
+
+        /// <summary>The Gateway's semantic-model route as far as a publish goes: the version it holds, and a PUT over that version whose sources name data sources the Gateway has.</summary>
+        public async Task Semantic(HttpContext context, string name)
+        {
+            var token = context.ManagementToken();
+            Owner.Calls.Enqueue($"{context.Request.Method} {context.Request.Path} as {token.SubjectId} ({token.SubjectName}) with {string.Join("+", ServerRoles.Names(token.Roles))}");
+            async Task Reply(int status, object body)
+            {
+                context.Response.StatusCode = status;
+                await context.Response.WriteAsJsonAsync(body);
+            }
+            if (!ManagementAuthorization.Authorize(token, ServerRole.Publisher).Allowed && !ManagementAuthorization.Authorize(token, ServerRole.Admin).Allowed) { await Reply(403, new { error = "Publishing models needs the publisher role." }); return; }
+            if (context.Request.Method == "GET")
+            {
+                if (!Owner.SemanticModels.TryGetValue(name, out var held)) { await Reply(404, new { error = $"There is no published model '{name}'." }); return; }
+                await Reply(200, new { name, current_version = held.Version, catalog = held.Catalog });
+                return;
+            }
+            var body = (await System.Text.Json.JsonSerializer.DeserializeAsync<JsonObject>(context.Request.Body))!;
+            if (Owner.RefuseWith is { } refusal) { await Reply(400, new { error = refusal }); return; }
+            var sources = (JsonObject)body["sources"]!;
+            foreach (var (source, dataSource) in sources)
+                if (!Owner.DataSources.Contains((string)dataSource!)) { await Reply(400, new { error = $"Source '{source}' maps to '{(string)dataSource!}', which is not a data source of this server." }); return; }
+            var expected = (int?)body["expected_version"];
+            var was = Owner.SemanticModels.TryGetValue(name, out var existing) ? existing.Version : (int?)null;
+            if (was != expected) { await Reply(409, new { error = "The model changed since it was read; read it again and publish on that.", current_version = was }); return; }
+            var catalog = (string)body["catalog"]!;
+            var unchanged = was is not null && existing.Catalog == catalog && existing.Sources.ToJsonString() == sources.ToJsonString();
+            var version = unchanged ? was!.Value : (was ?? 0) + 1;
+            Owner.SemanticModels[name] = (version, catalog, (JsonObject)sources.DeepClone());
+            Owner.Published.Enqueue(body);
+            await Reply(200, new { name, version, created = was is null, unchanged });
+        }
 
         public async Task Models(HttpContext context, string name)
         {

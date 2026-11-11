@@ -138,7 +138,7 @@ public static class CliApp
                     break;
                 case "project publish":
                     var ppProject = new Option<DirectoryInfo>("--project") { Description = "Project root", DefaultValueFactory = _ => new DirectoryInfo(".") };
-                    var ppTo = new Option<string>("--to") { Description = "Where to publish: `runner` (the only place; the default)", DefaultValueFactory = _ => "runner" };
+                    var ppTo = new Option<string>("--to") { Description = "Where to publish: `runner` (the default), or `gateway`, which only writes (--out) the semantic models and the data sources they read, with no login, for a server that holds none to publish", DefaultValueFactory = _ => "runner" };
                     var ppServer = new Option<string?>("--server") { Description = "The runner: the name it was paired under or its https address" };
                     var ppCode = new Option<string?>("--code") { Description = "The single-use pairing code (from `dbdatarunner server pair --max-role publisher`), when this machine is not paired with the runner yet" };
                     var ppChannel = new Option<string?>("--channel") { Description = "The channel the version goes to" };
@@ -149,7 +149,7 @@ public static class CliApp
                     var ppPromote = new Option<string?>("--promote-from") { Description = "Do not publish: promote the version this channel serves to --channel (the same version; the runner's `switch`, which needs an administrator pairing)" };
                     var ppRange = new Option<string?>("--runtime-range") { Description = "The engine versions the package accepts, instead of this tool's minor line (`0.4.x`, `>=0.4 <1`)" };
                     var ppClientDir = new Option<string?>("--client-dir") { Description = "Where this machine's pairings with runners are kept (default: DBDATAKIT_RUNNER_CLIENT_DIR, else a folder under the user's local application data)" };
-                    var ppOut = new Option<string?>("--out") { Description = "Write the package (package.yaml and files/) to this directory and send nothing" };
+                    var ppOut = new Option<string?>("--out") { Description = "Write the package (package.yaml and files/; for --to gateway gateway.json, models/ and data-sources/) to this directory and send nothing" };
                     var ppRunnerSchedules = new Option<bool>("--runner-schedules") { Description = "Let the runner schedule the plans from the first activation. By default each task is recorded on the runner as scheduled by the Build server (`server schedule`) until it is cut over, so a published plan never runs from two schedulers" };
                     cmd.Options.Add(ppProject); cmd.Options.Add(ppTo); cmd.Options.Add(ppServer); cmd.Options.Add(ppCode); cmd.Options.Add(ppChannel); cmd.Options.Add(ppPackage); cmd.Options.Add(ppServe); cmd.Options.Add(ppExpected); cmd.Options.Add(ppBind); cmd.Options.Add(ppPromote); cmd.Options.Add(ppRange); cmd.Options.Add(ppClientDir); cmd.Options.Add(ppRunnerSchedules); cmd.Options.Add(ppOut);
                     cmd.SetAction(pr => Reported(pr, spec, (o, e) => Runner.ProjectPublishCommand.Run(spec, pr.GetValue(ppProject)!.FullName,
