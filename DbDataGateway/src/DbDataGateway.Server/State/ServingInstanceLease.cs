@@ -21,6 +21,7 @@ public sealed class ServingInstanceLease(StateDatabase state, ILogger<ServingIns
     private readonly string _key = Guid.NewGuid().ToString("N");
     private ITimer? _timer;
     private bool _registered;
+    private volatile bool _paused;
 
     public string InstanceKey => _key;
 
@@ -45,8 +46,24 @@ public sealed class ServingInstanceLease(StateDatabase state, ILogger<ServingIns
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Stops refreshing this instance's row while the instance is in maintenance (plan 29b C06): the row is the one table the running instance writes on its own, so a move that compares the new database with the old one
+    /// would find <c>heartbeat_at</c> changed and report a false difference. The row stays (the instance is still live for the others) and lapses only if maintenance lasts longer than <see cref="Stale"/>.
+    /// </summary>
+    public void Pause() => _paused = true;
+
+    /// <summary>Starts refreshing the row again, at once.</summary>
+    public void Resume()
+    {
+        _paused = false;
+        if (_registered) Heartbeat();
+    }
+
+    public bool Paused => _paused;
+
     private void Heartbeat()
     {
+        if (_paused) return;
         try { Write(_clock.GetUtcNow(), insert: false); }
         catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException or TimeoutException)
         {

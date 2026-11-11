@@ -67,7 +67,7 @@ internal static class StateMoveVerb
             }
         }
 
-        var options = new MoveOptions { DeleteSnapshotOnSuccess = !keep };
+        var options = new MoveOptions { DeleteSnapshotOnSuccess = !keep, SecretSamples = context.SecretSamples, RestartCommand = $"{context.Program} service restart" };
         if (context.ConfigureMove is { } configure) options = configure(options);
         var service = new StateMoveService(opened.Secrets, appliedBy: context.Program);
         try

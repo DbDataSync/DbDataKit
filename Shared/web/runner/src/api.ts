@@ -148,6 +148,17 @@ export interface RunFilters { package?: string; channel?: string; outcome?: stri
 
 export const OUTCOMES = ['running', 'succeeded', 'completedwithfailures', 'failed', 'stopped', 'interrupted'] as const
 
+/** One part of a checkpoint as `GET .../checkpoints` gives it: its type (`int`, `text`, `time`, ...) and its value as text. */
+export interface CheckpointPart { type: string; value: string }
+
+/** A checkpoint of a task under one key (`''` when it is not kept per key). */
+export interface CheckpointItem { key: string; version: number; updated: string; updated_by: string | null; parts: Record<string, CheckpointPart> }
+
+export interface TaskCheckpoint { name: string; items: CheckpointItem[] }
+
+/** One change in a checkpoint's history: a part went from `old` to `new` (null: it did not exist, or was removed), by a run or by an operator. */
+export interface CheckpointChange { id: number; part: string; type: string; old: string | null; new: string | null; version: number; run_id: string | null; actor: string | null; at: string }
+
 const enc = encodeURIComponent
 
 export function runsQuery(filters: RunFilters, limit = 100): string {
@@ -187,6 +198,13 @@ export const runnerApi = {
   schedule: (task: TaskKey) => request<TaskSchedule>(`${taskPath(task)}/schedule`),
   decisions: (task: TaskKey) => request<{ task: string; decisions: TaskDecision[] }>(`${taskPath(task)}/decisions`).then((r) => r.decisions),
   setOwner: (task: TaskKey, body: OwnerBody) => request<{ task: string; owner: string }>(`${taskPath(task)}/owner`, { method: 'PUT', body: JSON.stringify(body) }),
+  /** Where the task got to in each outside source (plan 29a Q20): every checkpoint with its items. */
+  checkpoints: (task: TaskKey) => request<{ task: string; checkpoints: TaskCheckpoint[] }>(`${taskPath(task)}/checkpoints`).then((r) => r.checkpoints),
+  /** The changes to one checkpoint (one key of it), newest first. */
+  checkpointHistory: (task: TaskKey, name: string, key = '') =>
+    request<{ task: string; name: string; key: string; changes: CheckpointChange[] }>(`${taskPath(task)}/checkpoints/${enc(name)}/history?limit=50${key === '' ? '' : `&key=${enc(key)}`}`).then((r) => r.changes),
+  /** Goes back to what the checkpoint was before one change of its history: a new version under the operator's name, audited. 409 when a run moved it meanwhile. */
+  rewindCheckpoint: (task: TaskKey, name: string, historyId: number, key = '') => post<{ task: string; name: string; key: string; version: number | null }>(`${taskPath(task)}/checkpoints/${enc(name)}/rewind`, { history_id: historyId, key }),
   pause: (task: TaskKey) => post<unknown>(`${taskPath(task)}/pause`),
   resume: (task: TaskKey) => post<unknown>(`${taskPath(task)}/resume`),
   definitions: () => request<{ definitions: DefinitionSummary[] }>('/api/v1/definitions/integration').then((r) => r.definitions),

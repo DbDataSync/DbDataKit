@@ -303,6 +303,37 @@ public sealed class EmbeddedRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task The_state_backup_system_task_writes_a_verified_snapshot_to_the_folder_on_its_schedule_and_keeps_the_newest()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "ddk-backups-" + Guid.NewGuid().ToString("N")[..8]);
+        try
+        {
+            var rig = await Start("sqlite", new ConsoleRunnerSettings { BackupDirectory = folder, BackupEvery = TimeSpan.FromSeconds(1), BackupKeep = 2 });
+
+            Assert.True(await rig.Eventually(() => DbDataKit.State.Engines.Snapshots.StateBackupJob.List(folder).Count == 2 && !Directory.GetDirectories(folder, "*.partial").Any()), "two backups were written and the older ones pruned");
+            var newest = DbDataKit.State.Engines.Snapshots.StateBackupJob.List(folder)[0];
+            Assert.True((await new DbDataKit.State.Engines.Snapshots.StateSnapshotService().VerifyAsync(newest, null, default)).Equal, "the newest backup verifies against its own manifest");
+            var store = new RunStore(rig.State, RunnerNames.EngineService);
+            Assert.True(await rig.Eventually(() => store.Read(new RunQuery(RunnerNames.EngineService, Package: ConsoleSystemTasks.Package, Channel: "system")).Any(r => r.Run.Outcome == RunOutcome.Succeeded && r.Run.JobId == "console-system/system/state-backup")));
+            Assert.Empty(rig.Recorder.Started);   // in the console's process
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            try { Directory.Delete(folder, true); } catch (IOException) { /* released later */ }
+        }
+    }
+
+    [Fact]
+    public async Task Without_a_backup_folder_there_is_no_backup_task()
+    {
+        var rig = await Start("sqlite");
+        Assert.True(await rig.Eventually(() => rig.Runner.Host?.Control is not null));
+        var (status, _) = await rig.Call(HttpMethod.Post, "/api/embedded-runner/tasks/console-system/system/state-backup/run", rig.Admin);
+        Assert.Equal(HttpStatusCode.NotFound, status);
+    }
+
+    [Fact]
     public async Task The_evaluation_task_is_listed_and_says_it_is_a_placeholder_when_run()
     {
         var rig = await Start("sqlite");

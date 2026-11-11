@@ -124,6 +124,7 @@ public sealed partial class ManagementTests
         var status = await Json(enabled);
         Assert.True((bool)status["enabled"]!);
         Assert.True((bool)status["idle"]!);
+        Assert.True(app.Services.GetRequiredService<DbDataGateway.Server.State.ServingInstanceLease>().Paused);   // C06: the instance's own row stops being refreshed, so a move sees no false difference in it
 
         var refused = await CallAsync(server, HttpMethod.Get, "/api/v1/about", ServerRole.Viewer);
         Assert.Equal(HttpStatusCode.ServiceUnavailable, refused.StatusCode);
@@ -134,6 +135,7 @@ public sealed partial class ManagementTests
 
         var left = await CallAsync(server, HttpMethod.Post, "/api/v1/state/maintenance", ServerRole.Admin, """{"enabled": false}""");
         Assert.False((bool)(await Json(left))["enabled"]!);
+        Assert.False(app.Services.GetRequiredService<DbDataGateway.Server.State.ServingInstanceLease>().Paused);
         Assert.Equal(HttpStatusCode.OK, (await CallAsync(server, HttpMethod.Get, "/api/v1/about", ServerRole.Viewer)).StatusCode);
 
         var audit = Audited();

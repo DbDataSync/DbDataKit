@@ -33,7 +33,7 @@ internal static partial class StateInitVerb
     [
         ("topology", DataSchemas.String), ("engine", DataSchemas.String), ("changed", DataSchemas.Boolean), ("settings_file", DataSchemas.String), ("applied", DataSchemas.Boolean), ("ok", DataSchemas.Boolean),
         ("steps", DataSchemas.ListOf(DataSchemas.Object([("name", DataSchemas.String), ("status", DataSchemas.String), ("message", DataSchemas.String)], "name", "status", "message"))),
-        ("statements", DataSchemas.StringList),
+        ("statements", DataSchemas.StringList), ("overridden_by_environment", DataSchemas.StringList),
     ], "topology", "steps");
 
     private sealed class Steps(CliContext output)
@@ -169,6 +169,18 @@ internal static partial class StateInitVerb
         }
 
         output.Data["settings_file"] = file;
+
+        // an environment variable beats the file (the settings order), so what was just written does not take effect until it is unset (plan 29b C07; `state show` says the same under "settings from")
+        if (target.Sources is { } effective)
+        {
+            var overriding = new[] { ("engine", effective.Engine), ("connection", effective.Connection), ("namespaces", effective.Namespaces), ("retention", effective.Retention) }.Where(s => s.Item2.Kind == StateSourceKind.Environment).ToList();
+            if (overriding.Count > 0)
+            {
+                var sentence = $"{string.Join(", ", overriding.Select(s => $"the {s.Item1} still comes from {s.Item2}"))}: it wins over {(file is null ? "the settings" : file)}, so unset it (or set it to the same value) for the state section to apply; '{context.Program} state show' lists where each setting comes from.";
+                output.Data["overridden_by_environment"] = overriding.Select(s => (object?)s.Item1).ToList();
+                await steps.Add("override", "note", sentence);
+            }
+        }
 
         // ---- 5. state test on what was written
         var after = context with { Locate = _ => new StateTarget(settings, target.SqlitePath, target.Secrets, file) };

@@ -23,6 +23,9 @@ public enum MoveStep
     /// <summary>The target is verified against the source database.</summary>
     VerifyDatabases,
 
+    /// <summary>A sample of the copied secrets is decrypted with the keys this process has (plan 29b C04); only when the product named samples (<see cref="MoveOptions.SecretSamples"/>).</summary>
+    CheckSecrets,
+
     /// <summary>The new settings are written.</summary>
     WriteSettings,
 
@@ -34,6 +37,17 @@ public enum MoveStep
 
 /// <summary>A line of progress: which step, and what it says; the snapshot or verification detail is there when the step has it.</summary>
 public sealed record MoveProgress(MoveStep Step, string Message, SnapshotProgress? Snapshot = null, VerificationProgress? Verification = null);
+
+/// <summary>
+/// A column of the state that holds a value encrypted with a key that is not in the snapshot (it lives in the secret store): a signing key's private half, a group's secret. A move decrypts up to
+/// <see cref="Sample"/> values of it in the target before it writes the settings, so a target whose service could not read them is found while the old settings are still in force (plan 29b C04).
+/// </summary>
+/// <param name="Module">The module that owns the table, as the registry names it.</param>
+/// <param name="Table">The logical table name.</param>
+/// <param name="Column">The column that holds the encrypted value (text).</param>
+/// <param name="CanDecrypt">True when this process's keys decrypt the value as stored; false or throwing is a failure. It never receives anything but ciphertext, and must not put the value in an exception.</param>
+/// <param name="Sample">How many rows to try.</param>
+public sealed record StateSecretSample(string Module, string Table, string Column, Func<string, bool> CanDecrypt, int Sample = 5);
 
 /// <summary>What a move may be asked to do differently.</summary>
 public sealed record MoveOptions
@@ -61,6 +75,12 @@ public sealed record MoveOptions
 
     /// <summary>A seam for tests: runs on the freshly imported target before it is verified (a test corrupts a row here to see the move refuse).</summary>
     public Func<StateDatabase, CancellationToken, Task>? AfterImport { get; init; }
+
+    /// <summary>The encrypted columns to try to decrypt in the target before the settings are written; empty: none is checked (a product that keeps no encrypted value in its state, or that has not named them).</summary>
+    public IReadOnlyList<StateSecretSample> SecretSamples { get; init; } = [];
+
+    /// <summary>The command that restarts this product's service (<c>dbdatakit service restart</c>), named in the instruction after a move; null: the instruction says to restart the service without naming a command.</summary>
+    public string? RestartCommand { get; init; }
 
     /// <summary>The name added to the settings file for the copy of its previous content (<c>.before-state-move</c>).</summary>
     public string BackupSuffix { get; init; } = ".before-state-move";
@@ -145,6 +165,14 @@ public sealed class StateMoveService(ISecretResolver? secrets = null, TimeProvid
             var againstSource = await StateSnapshotService.VerifyDatabasesAsync(source, target, verify, ForwardVerification(progress, step), ct).ConfigureAwait(false);
             if (!againstSource.Equal) throw new StateServiceException(StateServiceRefusal.SnapshotNotIntact, "The target does not match the source database.\n" + againstSource.Summary);
 
+            // ---- a sample of the secrets, decrypted with the keys this process has
+            if (options.SecretSamples.Count > 0)
+            {
+                step = MoveStep.CheckSecrets;
+                Report(progress, step, "Decrypting a sample of the copied secrets in the target.");
+                CheckSecrets(target, options.SecretSamples);
+            }
+
             // ---- only now: the settings
             step = MoveStep.WriteSettings;
             Report(progress, step, $"Writing the new state settings to '{settingsPath}'.");
@@ -167,7 +195,7 @@ public sealed class StateMoveService(ISecretResolver? secrets = null, TimeProvid
                 }
             }
 
-            var restart = $"Restart the service now so that it opens the new state database ({to.Describe()}). Until it is restarted it keeps using the old one.";
+            var restart = $"Restart the service now{(options.RestartCommand is { Length: > 0 } command ? $" ('{command}')" : "")} so that it opens the new state database ({to.Describe()}). Until it is restarted it keeps using the old one.";
             var wayBack = WayBack(settingsPath, backup, from);
             var result = new MoveResult(settingsPath, backup, kept, exported, imported.Import, againstSnapshot, againstSource, restart, wayBack, "");
             result = result with { Summary = Summary(result, from, to, againstSource) };
@@ -209,6 +237,33 @@ public sealed class StateMoveService(ISecretResolver? secrets = null, TimeProvid
         var source = StateEndpoints.Open(from, modules, scope, StateEndpoints.Role.Read, _secrets, redactor, _appliedBy, _time);
         var target = StateEndpoints.Open(to, modules, scope, StateEndpoints.Role.Target, _secrets, redactor, _appliedBy, _time);
         return (source, target);
+    }
+
+    /// <summary>Reads the sampled rows of every named column from the target and decrypts each; the first that fails stops the move naming the table and the key of the row (never the value).</summary>
+    private static void CheckSecrets(StateDatabase target, IReadOnlyList<StateSecretSample> samples)
+    {
+        foreach (var sample in samples)
+        {
+            if (target.Layout is null || !target.Layout.Has(sample.Module)) continue;   // a product that does not have the module has nothing to decrypt
+            var table = target.Layout.Table(sample.Module, sample.Table);
+            var values = new List<string>();
+            using (var connection = target.OpenConnection())
+            {
+                using var command = target.Command(connection, $"SELECT {sample.Column} FROM {table} WHERE {sample.Column} IS NOT NULL");
+                using var reader = command.ExecuteReader();
+                while (values.Count < sample.Sample && reader.Read()) values.Add(reader.GetString(0));
+            }
+
+            for (var i = 0; i < values.Count; i++)
+            {
+                bool ok;
+                try { ok = sample.CanDecrypt(values[i]); }
+                catch (Exception ex) when (ex is not OperationCanceledException) { ok = false; }
+                if (!ok)
+                    throw new StateServiceException(StateServiceRefusal.SecretsUnreadable,
+                        $"The target holds {values.Count} sampled value(s) of {sample.Module}.{sample.Table}.{sample.Column} ({table}), and the keys this process has cannot decrypt value {i + 1} of them. The keys live in the secret store, not in the snapshot: give the target's service the same secret store (or restore the key that protected these values), then move again. The settings were not changed.");
+            }
+        }
     }
 
     private static void Report(IProgress<MoveProgress>? progress, MoveStep step, string message) => progress?.Report(new MoveProgress(step, message));

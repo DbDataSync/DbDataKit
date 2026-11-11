@@ -54,7 +54,7 @@ A large value is never a column of an ordinary table (a `SELECT *` would pull it
 
 What a task needs to rerun without losing or repeating work, kept by the runner and reached through its protocol, so a task never holds a login to it. Every row is keyed by package, channel and task, so a preview's progress never mixes with production's.
 
-* **Checkpoints**: where a task got to in an outside source (a modified time, a change token, a sequence number). Values are typed (text, int, decimal, time, date, bool, bytes as a payload id, json), one row per value and key, in typed columns; a checkpoint can hold several parts and be kept per key. It moves **only with the run's outcome, in one transaction** (`Advance`): a failed run leaves it where it was. It is read and written with a `row_version`, so a second overlapping run is refused. Every change goes to a history, so an operator can see how far a task got and rewind it as an audited action.
+* **Checkpoints**: where a task got to in an outside source (a modified time, a change token, a sequence number). Values are typed (text, int, decimal, time, date, bool, bytes as a payload id, json), one row per value and key, in typed columns; a checkpoint can hold several parts and be kept per key. It moves **only with the run's outcome, in one transaction** (`Advance`): a failed run leaves it where it was. It is read and written with a `row_version`, so a second overlapping run is refused. Every change goes to a history, so an operator can see how far a task got and rewind it as an audited action (the runner's API `.../checkpoints`, `.../history`, `.../rewind`; the console shows them in a task's details).
 * **State values** (a cursor token, a last-seen id): the same typed store, declared the same way; history and rewind apply to checkpoints.
 * **File ledger** (a file by connection, path, size, modified time and content hash, so a renamed or re-sent file is recognised), **idempotency keys** with their results and an expiry, **dead letters** (the refused record as a payload; open, replayed or discarded), and the **inbox** (received webhooks, each taken by exactly one run).
 * **Steps and units** (`step_result`, `unit_result`): a step is identified by task, name and key within an attempt chain and keeps its result (JSON under 64 KiB, or a streamed payload); a unit is one item of a fan-out. Their semantics are in the `DbDataKit.Runner.Kit` README.
@@ -98,6 +98,8 @@ The structure is the same whatever the topology; which services share a database
 | One per install (an option) | every service uses one database, each in its own modules | one backup; the console reads runs, audit and notifications of every service with one query; one identity module | that database's outage stops every service; a module upgrade must suit every service that uses it (N and N-1 per module) |
 
 ## Moving state between engines
+
+**Backups.** `StateBackupJob` (`DbDataKit.State.Engines`) writes the same snapshot into `state-<UTC time>` folders of a directory, verified against its own manifest before the folder is named, the newest N kept; the console runs it as the system task `state-backup`. A restore is the import below into an empty database.
 
 Moving is **offline**: the service is stopped (a restart is accepted, it is rare), the state is exported, imported into an empty database, verified and the settings are switched. The old database is left untouched, so going back is a settings change.
 

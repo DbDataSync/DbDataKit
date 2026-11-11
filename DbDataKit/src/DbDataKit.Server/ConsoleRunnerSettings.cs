@@ -14,6 +14,8 @@ namespace DbDataKit.Server;
 ///   data_directory: runner       # cache, scratch and socket (default: runner, in the console's directory)
 ///   require_separate_account: false
 ///   retention_every_minutes: 60  # how often the console's state-retention system task runs
+///   backup_directory: backups    # a folder: the state-backup system task writes a verified snapshot of the console's state there
+///   backup_every_hours: 24       # how often it does (a day by default); backup_keep: 7 keeps the newest seven
 /// </code>
 /// Serving a production channel is not a setting: it is an administrator's recorded choice (<c>dbdatakit runner accept-production</c>).
 /// </summary>
@@ -46,6 +48,19 @@ public sealed record ConsoleRunnerSettings
     public bool RequireSeparateAccount { get; init; }
 
     public TimeSpan RetentionEvery { get; init; } = TimeSpan.FromHours(1);
+
+    /// <summary>The folder scheduled snapshots of the console's state go to (plan 29b U03: the system task <c>state-backup</c>); relative to the console's directory when not rooted. Null: no backup task.</summary>
+    public string? BackupDirectory { get; init; }
+
+    /// <summary>How often the backup runs; a day by default.</summary>
+    public TimeSpan BackupEvery { get; init; } = TimeSpan.FromHours(24);
+
+    /// <summary>How many backups stay in the folder: the newest.</summary>
+    public int BackupKeep { get; init; } = 7;
+
+    /// <summary>The backup's settings for the console in <paramref name="consoleDirectory"/>; null when no folder is named.</summary>
+    public DbDataKit.State.Engines.Snapshots.StateBackupSettings? BackupFor(string consoleDirectory) =>
+        BackupDirectory is { Length: > 0 } folder ? new(Path.GetFullPath(folder, consoleDirectory), BackupKeep) : null;
 
     // ---- seams for the tests and for a host that needs another shape
 
@@ -96,6 +111,17 @@ public sealed record ConsoleRunnerSettings
                         throw new InvalidOperationException($"{path}: runner.retention_every_minutes is a number of minutes above zero.");
                     result = result with { RetentionEvery = TimeSpan.FromMinutes(minutes) };
                     break;
+                case "backup_directory": result = result with { BackupDirectory = Scalar() }; break;
+                case "backup_every_hours":
+                    if (!double.TryParse(Scalar(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var hours) || hours <= 0)
+                        throw new InvalidOperationException($"{path}: runner.backup_every_hours is a number of hours above zero.");
+                    result = result with { BackupEvery = TimeSpan.FromHours(hours) };
+                    break;
+                case "backup_keep":
+                    if (!int.TryParse(Scalar(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var keep) || keep < 1)
+                        throw new InvalidOperationException($"{path}: runner.backup_keep is a whole number of at least 1.");
+                    result = result with { BackupKeep = keep };
+                    break;
                 case "data_directory": result = result with { DataDirectory = Scalar() }; break;
                 case "channels":
                     var names = item.Value switch
@@ -112,7 +138,7 @@ public sealed record ConsoleRunnerSettings
                     result = result with { Channels = names.Distinct(StringComparer.Ordinal).ToList() };
                     break;
                 default:
-                    throw new InvalidOperationException($"{path}: '{key}' is not a runner setting (enabled, channels, max_concurrent, data_directory, require_separate_account, retention_every_minutes).");
+                    throw new InvalidOperationException($"{path}: '{key}' is not a runner setting (enabled, channels, max_concurrent, data_directory, require_separate_account, retention_every_minutes, backup_directory, backup_every_hours, backup_keep).");
             }
         }
 

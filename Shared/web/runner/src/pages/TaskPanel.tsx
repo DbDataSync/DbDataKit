@@ -4,6 +4,7 @@ import { ErrorBanner } from '@dbdatakit/shell'
 import { runnerApi, type OwnerBody, type TaskDecision, type TaskSchedule, type TaskStatus } from '../api'
 import { decisionSummary, effectiveOwner, openOwnerForm, ownerBlock, ownerBody, ownerLabel, OWNERS, ownerText, parseInputs, type Owner, type OwnerForm } from '../ownership'
 import { taskKey } from '../model'
+import { CheckpointsCard } from './CheckpointsCard'
 import { when } from './format'
 
 export interface TaskPanelViewProps {
@@ -129,11 +130,14 @@ export function TaskPanel({ task, canAct }: { task: TaskStatus; canAct: boolean 
     onSuccess: (answer) => { setMoved(`Run ${answer.run_id} queued.`); client.invalidateQueries({ queryKey: ['runner'] }) },
   })
   return (
+    <>
     <TaskPanelView
       task={task} canAct={canAct} schedule={schedule.data} scheduleLoading={schedule.isLoading} scheduleError={schedule.error} decisions={owner === 'observe' ? decisions.data : undefined}
       form={form ?? openOwnerForm(owner, schedule.data)} inputsText={inputs} busy={move.isPending || run.isPending} moved={moved} failure={move.error ?? run.error}
       onForm={(next) => { setForm(next); setMoved(null); move.reset() }} onInputs={(text) => { setInputs(text); run.reset() }}
       onMove={(body) => { setMoved(null); move.mutate(body) }} onRun={(values) => { setMoved(null); run.mutate(values) }}
     />
+    <CheckpointsCard task={task} canAct={canAct} />
+    </>
   )
 }

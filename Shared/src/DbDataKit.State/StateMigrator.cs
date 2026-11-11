@@ -140,6 +140,26 @@ internal static class StateMigrator
             {
                 if (!report.Has(feature))
                     throw new InvalidOperationException(EngineFeatures.Refusal(ns.Module, feature, layout.Engine, EngineFeatures.EngineName(layout.Engine, report.Version)));
+                if (report.Status(feature) == FeatureStatus.Creatable && report.CreateExtensionProblem is { } problem)
+                    throw new InvalidOperationException($"The module '{ns.Module.Name}' needs the engine feature '{EngineFeatures.Name(feature)}', and the login cannot turn it on: {problem}; nothing of the module was created.");
+            }
+        }
+    }
+
+    /// <summary>The feature check of the import path (plan 29b U01): every one of <paramref name="modules"/> is about to be created, so none is skipped as already applied.</summary>
+    internal static void RequireFeatures(DbConnection connection, StateLayout layout, IEnumerable<StateModule> modules)
+    {
+        EngineFeatureReport? report = null;
+        foreach (var module in modules)
+        {
+            if (module.RequiresFeatures.Count == 0) continue;
+            report ??= layout.FeatureProbe.Detect(connection, layout.Engine);
+            foreach (var feature in module.RequiresFeatures)
+            {
+                if (!report.Has(feature))
+                    throw new InvalidOperationException(EngineFeatures.Refusal(module, feature, layout.Engine, EngineFeatures.EngineName(layout.Engine, report.Version)));
+                if (report.Status(feature) == FeatureStatus.Creatable && report.CreateExtensionProblem is { } problem)
+                    throw new InvalidOperationException($"The module '{module.Name}' needs the engine feature '{EngineFeatures.Name(feature)}', and the login cannot turn it on: {problem}; nothing of the module was created.");
             }
         }
     }

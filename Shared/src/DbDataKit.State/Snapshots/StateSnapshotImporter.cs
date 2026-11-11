@@ -55,6 +55,7 @@ public static class StateSnapshotImporter
         var manifest = StateSnapshotReader.ReadManifest(root);
         var plan = Plan(manifest, layout, modules);
         await CheckTargetIsEmptyAsync(target, layout, ct).ConfigureAwait(false);
+        await CheckFeaturesAsync(target, layout, plan, ct).ConfigureAwait(false);
 
         foreach (var payload in manifest.Payloads)
         {
@@ -252,6 +253,23 @@ public static class StateSnapshotImporter
         }
 
         return plan;
+    }
+
+    /// <summary>Plan 29b U01: refuses, before the first schema is created, a snapshot whose module needs an engine feature the target engine lacks (the migrator's check, made on the import path too).</summary>
+    private static async Task CheckFeaturesAsync(StateDatabase target, StateLayout layout, List<PlannedModule> plan, CancellationToken ct)
+    {
+        var needing = plan.Select(p => p.Namespace.Module).Where(m => m.RequiresFeatures.Count > 0).ToList();
+        if (needing.Count == 0) return;
+        await using var connection = target.OpenConnection();
+        ct.ThrowIfCancellationRequested();
+        try
+        {
+            StateMigrator.RequireFeatures(connection, layout, needing);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new SnapshotImportException(SnapshotImportRefusal.FeatureMissing, ex.Message);
+        }
     }
 
     private static async Task CheckTargetIsEmptyAsync(StateDatabase target, StateLayout layout, CancellationToken ct)

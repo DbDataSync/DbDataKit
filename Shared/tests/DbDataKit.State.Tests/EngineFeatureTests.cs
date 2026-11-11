@@ -172,6 +172,49 @@ public sealed class EngineFeatureTests : IDisposable
         Assert.Equal(0L, Convert.ToInt64(location.Scalar("SELECT COUNT(*) FROM sqlite_master WHERE name LIKE '%more'")));
     }
 
+    [Fact]
+    public async Task A_snapshot_import_into_an_engine_without_the_feature_is_refused_before_any_DDL()
+    {
+        var module = Knowledge(StateEngineIds.Sqlite);
+        var source = _engines.Provision(StateEngineIds.Sqlite).Open([module], StateScope.Standalone, featureProbe: new FakeProbe(FeatureStatus.Enabled));
+        var directory = Path.Combine(Path.GetTempPath(), "dbdatakit-feature-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            await DbDataKit.State.Snapshots.StateSnapshotWriter.WriteAsync(source, [module], StateScope.Standalone, directory, DbDataKit.State.Snapshots.SnapshotOptions.Default, null, CancellationToken.None);
+
+            var location = _engines.Provision(StateEngineIds.Sqlite);
+            var probe = new FakeProbe(FeatureStatus.Missing);
+            var layout = StateLayout.Create(StateEngineIds.Sqlite, [module], StateScope.Standalone, null, probe);
+            var target = StateDatabase.OpenSqliteForImport(location.Target, layout);
+
+            var refusal = await Assert.ThrowsAsync<DbDataKit.State.Snapshots.SnapshotImportException>(() =>
+                DbDataKit.State.Snapshots.StateSnapshotImporter.ImportAsync(directory, target, [module], StateScope.Standalone, DbDataKit.State.Snapshots.ImportOptions.Default, null, CancellationToken.None));
+
+            Assert.Equal(DbDataKit.State.Snapshots.SnapshotImportRefusal.FeatureMissing, refusal.Reason);
+            Assert.Contains("'knowledge'", refusal.Message);
+            Assert.Contains("'vector'", refusal.Message);
+            Assert.Equal(1, probe.Asked);
+            Assert.Equal(0L, Convert.ToInt64(location.Scalar("SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'dbdatakit%'")));   // not even the registry
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void An_extension_the_login_cannot_create_is_reported_by_state_test_and_refused_before_any_DDL()
+    {
+        var report = EngineSupport.Features(StateEngineIds.Postgres, "17.2", FeatureStatus.Creatable, "CREATE EXTENSION vector needs a superuser and 'app' is not one");
+        Assert.True(report.Has(EngineFeature.Vector));   // the server has it
+        var unmet = EngineSupport.Unmet([Knowledge(StateEngineIds.Postgres)], report);
+        Assert.Single(unmet);
+        Assert.Contains("cannot turn it on", unmet[0].Message);
+        Assert.Contains("superuser", unmet[0].Message);
+
+        Assert.Empty(EngineSupport.Unmet([Knowledge(StateEngineIds.Postgres)], EngineSupport.Features(StateEngineIds.Postgres, "17.2", FeatureStatus.Creatable)));
+    }
+
     /// <summary>A connection to the scratch database for the real probe; the caller's scratch database is dropped with the harness, so the connection is left to the pool.</summary>
     private static DbConnection OpenProbeConnection(StateEngines.Location location)
     {

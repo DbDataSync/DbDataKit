@@ -91,6 +91,28 @@ public sealed class StateInitTests : IDisposable
         Assert.Equal(text, File.ReadAllText(SettingsFile));
     }
 
+    [Fact]
+    public async Task A_setting_an_environment_variable_still_decides_is_named_after_init_wrote_the_file()
+    {
+        var db = _h.Provision(StateEngineIds.Sqlite);
+        File.WriteAllText(SettingsFile, Yaml + "state:\n  engine: postgres\n  connection: Host=nowhere;Database=x;Password=env:INIT_PW\n");
+        var plain = Product(db, [Module("alpha")]);
+        var overridden = plain with
+        {
+            Locate = args => plain.Locate(args) with { Sources = new StateSources(new StateSource(StateSourceKind.Environment, "TOOL_STATE_ENGINE"), StateSource.Default, StateSource.Default, StateSource.Default) },
+        };
+
+        var ran = await RunAsync(overridden, "init", "--topology", "service");
+
+        Assert.Equal(0, ran.Exit);
+        Assert.Contains("NOTE    override", ran.Out);
+        Assert.Contains("the engine still comes from environment variable TOOL_STATE_ENGINE", ran.Out);
+        Assert.Equal(["engine"], ran.Data["overridden_by_environment"]!.AsArray().Select(n => n!.GetValue<string>()).ToArray());
+
+        var quiet = await RunAsync(plain, "init", "--topology", "service");
+        Assert.DoesNotContain("override", quiet.Out);
+    }
+
     // ---- group
 
     [Theory]

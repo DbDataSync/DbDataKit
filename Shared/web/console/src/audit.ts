@@ -92,6 +92,10 @@ export function what(e: AuditEntry): string {
     case 'server.reject': return `rejected the waiting server ${server}`
     case 'server.forget': return `removed the server ${server}`
     case 'server.link': return 'paired a Build server with a Gateway'
+    case 'state.connection.save': return `saved the state database ${e.targetId ?? ''}`.trim()
+    case 'state.connection.remove': return `removed the state database ${e.targetId ?? ''}`.trim()
+    case 'state.move.check': return 'checked a state move before starting it'
+    case 'state.move.start': return 'started moving a server\'s state to another database'
     case 'relay.write': return `${d.method ?? 'wrote'} ${relayedPath(d.path)} on ${server}`
     case 'console.write': return `${d.method ?? 'changed'} ${e.targetId ?? d.path ?? ''}`.trim()
     default: return e.verb
