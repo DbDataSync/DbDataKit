@@ -14,8 +14,8 @@ Summary (counts of the features below):
 | --- | --- | --- | --- | --- | --- |
 | Build | 8 | 2 | 10 | 5 | 25 |
 | Store | 5 | 1 | 1 | 3 | 10 |
-| Sync | 7 | 5 | 6 | 3 | 21 |
-| All | 20 | 8 | 17 | 11 | 56 |
+| Sync | 9 | 4 | 5 | 3 | 21 |
+| All | 22 | 7 | 16 | 11 | 56 |
 
 ### Build
 
@@ -74,8 +74,8 @@ Summary (counts of the features below):
 | Replication settings: notes, schedule, endpoints, pipeline (reader, cache, writer), reconcile | `replication-detail/OverviewPanel.tsx`, `EndpointsCard.tsx`, `ScheduleCard.tsx`, `ReconcileConfigCard.tsx` | `workspace/src/syncSchemas.ts` (the task form: scheduling, change processing, bulk load, endpoints, reconcile) | built | SC22d |
 | New replication (a task and a mapping between two connections) | `sync/src/pages/ReplicationsPage.tsx` | `workspace/src/pages/SyncSetPanel.tsx` (**New replication**) | built | SC22d |
 | Table mappings: new, delete, edit tables, filter, query source | `replication-detail/TableMappingsPanel.tsx`, `TableMappingForm.tsx`, `SourceFilterCard.tsx` | `workspace/src/syncSchemas.ts` (the mapping form: sources, targets, filter, query) | built | SC22d |
-| Mapping editor with columns from the live database (the source column of each target column, same-name suggestions, types) | `replication-detail/ColumnMappingEditor.tsx`, `suggestMappings.ts`, `CachedMetadataCard.tsx` | none | missing | SC22g |
-| Primary key (natural key picked from the target columns) | `replication-detail/PrimaryKeyCard.tsx`, `naturalKey.ts` | see the state: partly | partly | SC22g |
+| Mapping editor with columns from the live database (the source column of each target column, same-name suggestions, types) | `replication-detail/ColumnMappingEditor.tsx`, `suggestMappings.ts`, `CachedMetadataCard.tsx` | `workspace/src/pages/MappingColumns.tsx` (from the catalog cache, `catalogCache.ts`) | built | SC22g |
+| Primary key (natural key picked from the target columns) | `replication-detail/PrimaryKeyCard.tsx`, `naturalKey.ts` | `workspace/src/pages/MappingColumns.tsx` (picks from the cached columns), `syncSchemas.ts` | built | SC22g |
 | Transforms per column, the mapping's whole pipeline (Custom Transforms tab, mapping preview) | `replication-detail/MappingPipelineCard.tsx`, `MappingPreview.tsx`, `OverviewPanel.tsx` | the transform text of a column mapping in the form; scripts and the pipeline in YAML | partly | SC22i |
 | Segmenting strategies and the default segmenting of a reload | `replication-detail/SegmentingStrategiesCard.tsx`, `DefaultSegmentingCard.tsx`, `BulkLoadForm.tsx` | YAML text only | missing | SC22i |
 | Provisioning: both sides' plan, preview, apply (DDL runs now) | `replication-detail/ProvisioningCard.tsx`, `ReplicationProvisioningPanel.tsx` | none | missing | SC22j |

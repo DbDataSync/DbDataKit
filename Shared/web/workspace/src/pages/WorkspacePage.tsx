@@ -9,7 +9,7 @@ import { BuildsPanel } from './BuildsPanel'
 import { CheckPanel } from './CheckPanel'
 import { NewStoreModel, StoreModelEditor } from './StoreModelPanel'
 import { BuildPlanPanel } from './BuildPlanPanel'
-import { CatalogPanel } from './CatalogPanel'
+import { CatalogPanel, useCatalogRead } from './CatalogPanel'
 import { SyncFileEditor, SyncSetOverview, findingsKey } from './SyncSetPanel'
 import { editorKindOf } from '../editors'
 import { useLiveCheck } from '../useLiveCheck'
@@ -66,6 +66,7 @@ function FileEditor({ project, id, kind, path, editable, canWrite, onGone, onRen
   const state = saveState({ mine: editable, canWrite, dirty, busy: save.isPending })
   const problem = pathProblem(target.trim())
   const editorKind = editorKindOf(kind, path)
+  const catalog = useCatalogRead(project, id)
   const live = useLiveCheck({ project, id, text, enabled: editorKind !== null && editable && canWrite && !loaded.isLoading && !loaded.error, flush: async () => { if (dirty) await save.mutateAsync() } })
   const onText = (value: string) => setDrafts((d) => ({ ...d, [path]: value }))
   return (
@@ -99,7 +100,7 @@ function FileEditor({ project, id, kind, path, editable, canWrite, onGone, onRen
         <StoreModelEditor path={path} text={text} onText={onText} readOnly={!editable || !canWrite} live={live} onOpen={onOpen} />
       )}
       {!loaded.error && !loaded.isLoading && editorKind !== null && editorKind !== 'store-model' && (
-        <SyncFileEditor kind={editorKind} path={path} text={text} onText={onText} readOnly={!editable || !canWrite} live={live} onOpen={onOpen} />
+        <SyncFileEditor kind={editorKind} path={path} text={text} onText={onText} readOnly={!editable || !canWrite} live={live} onOpen={onOpen} catalog={catalog.read} />
       )}
       {!loaded.error && !loaded.isLoading && editorKind === null && (
         <CodeEditor value={text} language={languageOf(path)} readOnly={!editable || !canWrite} minLines={14} maxLines={30} testId="wsp-code"
@@ -296,7 +297,7 @@ export function WorkspacePage() {
                   : tab === 'models' && kind === 'build'
                     ? <BuildPlanPanel project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} onOpen={setSelected} />
                   : tab === 'catalog' && (kind === 'build' || kind === 'sync')
-                    ? <CatalogPanel project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} onOpen={setSelected} />
+                    ? <CatalogPanel project={project} id={id} onOpen={setSelected} />
                   : tab === 'check'
                     ? <CheckPanel project={project} id={id} onOpen={setSelected} />
                     : tab === 'builds'

@@ -37,14 +37,21 @@ export function CatalogView({ read, present, onOpen }: { read: CacheRead | null;
   )
 }
 
+/** The cache of a draft as the screens read it: null when the draft has none (the files list says so), the strict reader's answer otherwise. Shared by the Catalog tab and the editors that pick from it (one query, so a save shows everywhere). */
+export function useCatalogRead(project: string, id: string): { read: CacheRead | null; present: boolean; error: unknown } {
+  const files = useQuery({ queryKey: ['workspace', 'files', project, id], queryFn: () => workspaceApi.files(project, id) })
+  const present = files.data?.files.some((f) => f.path === CATALOG_CACHE_FILE) ?? false
+  const text = useQuery({ queryKey: ['workspace', 'catalog', project, id], queryFn: () => workspaceApi.readFile(project, id, CATALOG_CACHE_FILE), enabled: present, staleTime: 0 })
+  return { read: present && text.data !== undefined ? readCatalogCache(text.data) : null, present, error: text.error }
+}
+
 /** The cache of a draft, read through the file route and checked by the twin reader. */
-export function CatalogPanel({ project, id, paths, onOpen }: { project: string; id: string; paths: readonly string[]; onOpen: (path: string) => void }) {
-  const present = paths.includes(CATALOG_CACHE_FILE)
-  const text = useQuery({ queryKey: ['workspace', 'catalog', project, id, present], queryFn: () => workspaceApi.readFile(project, id, CATALOG_CACHE_FILE), enabled: present, staleTime: 0 })
+export function CatalogPanel({ project, id, onOpen }: { project: string; id: string; onOpen: (path: string) => void }) {
+  const { read, present, error } = useCatalogRead(project, id)
   return (
     <>
-      <ErrorBanner error={text.error} />
-      <CatalogView read={text.data === undefined ? null : readCatalogCache(text.data)} present={present} onOpen={onOpen} />
+      <ErrorBanner error={error} />
+      <CatalogView read={read} present={present} onOpen={onOpen} />
     </>
   )
 }

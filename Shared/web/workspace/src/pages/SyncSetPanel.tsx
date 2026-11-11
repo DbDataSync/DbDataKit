@@ -8,6 +8,8 @@ import {
   secretFindings, syncConnectionSchema, syncMappingSchema, syncNameProblem, syncSchemaOf, syncTaskSchema, withCurrentTaskVersion,
 } from '../syncSchemas'
 import type { LiveCheck } from '../useLiveCheck'
+import type { CacheRead } from '../catalogCache'
+import { MappingColumns } from './MappingColumns'
 import { StructuredEditor } from './StructuredPanel'
 
 const schemas = new SchemaSet({ [SYNC_TASK_SCHEMA]: syncTaskSchema, [SYNC_MAPPING_SCHEMA]: syncMappingSchema, [SYNC_CONNECTION_SCHEMA]: syncConnectionSchema })
@@ -24,14 +26,15 @@ export function SecretNotes({ text }: { text: string }) {
 }
 
 /** A file of a Sync replication set as a form (from the schema of its kind) or as YAML, with Sync's own readers' findings as the draft is checked. A task is written in the current format whatever it was read as. */
-export function SyncFileEditor({ kind, path, text, onText, readOnly, live, onOpen }: { kind: Extract<EditorKind, 'sync-task' | 'sync-mapping' | 'sync-connection'>; path: string; text: string; onText: (text: string) => void; readOnly: boolean; live: LiveCheck; onOpen?: (path: string) => void }) {
+export function SyncFileEditor({ kind, path, text, onText, readOnly, live, onOpen, catalog }: { catalog?: CacheRead | null; kind: Extract<EditorKind, 'sync-task' | 'sync-mapping' | 'sync-connection'>; path: string; text: string; onText: (text: string) => void; readOnly: boolean; live: LiveCheck; onOpen?: (path: string) => void }) {
   const diagnostics: CheckDiagnostic[] = live.diagnostics
   const state = liveState({ text, checkedText: live.checkedText, failed: live.failed, running: live.running })
   const set = kind === 'sync-task' ? (value: string) => onText(withCurrentTaskVersion(value)) : onText
   const notes = (
     <>
       {kind === 'sync-connection' && <SecretNotes text={text} />}
-      {kind === 'sync-mapping' && <div className="hint" style={{ marginTop: 10 }}>The column cache (<code>sourceColumns</code>, <code>targetColumns</code>) is what the check and the package are made from. It is edited in the YAML tab; reading it from the database is not done here.</div>}
+      {kind === 'sync-mapping' && <div className="hint" style={{ marginTop: 10 }}>The column cache (<code>sourceColumns</code>, <code>targetColumns</code>) is what the check and the package are made from. It is written from the catalog cache below (or edited in the YAML tab); no database is asked here.</div>}
+      {kind === 'sync-mapping' && <MappingColumns mapping={text} catalog={catalog ?? null} readOnly={readOnly} onApply={onText} />}
       {live.failed && <div className="banner error" role="alert" style={{ marginTop: 10 }} data-testid="wsp-live-failed"><span className="mark">!</span><span>{live.failed}</span></div>}
     </>
   )
