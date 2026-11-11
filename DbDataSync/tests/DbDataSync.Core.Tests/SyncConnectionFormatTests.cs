@@ -61,7 +61,7 @@ public sealed class SyncConnectionFormatTests : IDisposable
         Assert.DoesNotContain("schemaVersion", text);
 
         // the shared loader, which every product uses, reads what Sync wrote (the console's view across servers, E05, needs that)
-        var shared = ConnectionDefinitionLoader.Load(text, "orders.yaml").Require();
+        var shared = ConnectionDefinitionLoader.LoadDatabaseConnection(text, "orders.yaml").Require();
         Assert.Equal("sqlserver", shared.Engine);
         Assert.Equal("sql01", shared.Address!.Host);
         Assert.Equal("sync", shared.Auth!.User);
@@ -110,7 +110,7 @@ public sealed class SyncConnectionFormatTests : IDisposable
         Assert.Equal(HookErrorMode.Warn, hook.OnError);
 
         // and the shared loader accepts the whole file, Sync's settings kept as an extension it does not read
-        var shared = ConnectionDefinitionLoader.Load(text, "lake.v2.yaml").Require();
+        var shared = ConnectionDefinitionLoader.LoadDatabaseConnection(text, "lake.v2.yaml").Require();
         Assert.True(shared.Extensions.Items.ContainsKey("sync"));
     }
 

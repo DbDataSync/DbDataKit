@@ -35,7 +35,7 @@ public sealed class StoreConnections(string directory, ISecretResolver? secrets 
     {
         var file = FileOf(directory, name);
         if (!StoreModels.IsValidName(name) || !File.Exists(file)) throw new StoreConnectionException($"There is no connection '{name}': a model's storage.connection names a file connections/{name}.yaml in the server's directory.");
-        var loaded = ConnectionDefinitionLoader.LoadFile(file);
+        var loaded = ConnectionDefinitionLoader.LoadDatabaseFile(file);
         if (loaded.Definition is not { } definition) throw new StoreConnectionException($"{name}.yaml is not a valid connection: {string.Join(" ", loaded.Diagnostics.Select(d => d.ToString()))}");
         return definition;
     }

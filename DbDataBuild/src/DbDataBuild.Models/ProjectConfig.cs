@@ -88,9 +88,10 @@ public sealed record ConnectionConfig(string Name, string Engine, int? Version =
 
 /// <summary>
 /// The project's `tracking:` section: the connection that keeps the records of what the tool built (null: none is configured, which is "nothing is tracked", with a warning) and the schema name they live in there.
-/// <see cref="Disabled"/> is the explicit choice `tracking: none`: not tracked, and no warning.
+/// <see cref="Disabled"/> is the explicit choice `tracking: none`: not tracked, and no warning. <see cref="RunnerCopy"/> is `tracking: { runner_copy: false }` (plan 28c E16, owner 2026-11-11): the runner keeps no copy of this
+/// project's tracking tables, so the step after a refresh and the `catch-up` task do nothing; it does not touch the tables on the target or the Build server's own copy. On by default.
 /// </summary>
-public sealed record TrackingConfig(string? Connection, string SchemaName, bool Disabled = false)
+public sealed record TrackingConfig(string? Connection, string SchemaName, bool Disabled = false, bool RunnerCopy = true)
 {
     public static TrackingConfig Default { get; } = new(null, ProductInfo.TrackingSchemaName);
 }

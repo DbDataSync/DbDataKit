@@ -4,9 +4,10 @@ import { useSearchParams } from 'react-router-dom'
 import { CodeEditor, ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { ConsoleShell } from '../ConsoleShell'
 import {
-  agentsApi, buildTarget, targetLine, bindingLine, connectCommand, keyReferenceFor, providerTemplate, cost, eventWord, percent, promptingMeaning, promptingName, sessions, statusWord, tokenState, waitingOn,
-  type AgentDetail, type Approval, type AuditRow, type ConversationView, type Diagnostic, type MadeToken, type PolicyChange, type ProviderTest, type ProviderView, type ModelsView, type MemoryItem, type SlotPlan, moveChoice, planOf, slotsToYaml, againstLimit } from '../agents'
+  agentsApi, buildTarget, targetLine, connectCommand, keyReferenceFor, providerTemplate, cost, eventWord, percent, promptingMeaning, promptingName, sessions, statusWord, tokenState, waitingOn,
+  type AgentDetail, type Approval, type AuditRow, type ConversationView, type Diagnostic, type MadeToken, type PolicyChange, type ProviderTest, type ProviderView, type MemoryItem, againstLimit } from '../agents'
 import { outsideApi } from '../outsideConnections'
+import { BindingsPanel } from './BindingsPage'
 import { SETTINGS, TRAITS, emptyPolicy, policyFromYaml, policyToYaml, settingLabel, settingMeaning, type PolicyForm, type Setting } from '../policyForm'
 
 type Tab = 'chat' | 'inbox' | 'record' | 'agents' | 'models' | 'policy'
@@ -303,11 +304,8 @@ function ModelsTab() {
   const [newPurpose, setNewPurpose] = useState<'chat' | 'embeddings'>('chat')
   const [key, setKey] = useState('')
   const [tests, setTests] = useState<Record<string, ProviderTest>>({})
-  const [slotsYaml, setSlotsYaml] = useState<string | null>(null)
-  const [slotProblems, setSlotProblems] = useState<Diagnostic[]>([])
   const refresh = () => client.invalidateQueries({ queryKey: ['agents'] })
   const provider: ProviderView | undefined = models.data?.providers.find((p) => p.name === selected)
-  useEffect(() => { if (models.data && slotsYaml === null) setSlotsYaml(models.data.slotsYaml || 'model-slots: 1\nslots:\n  default:\n    "*":\n      - { provider: <provider>, model: <model> }\n') }, [models.data, slotsYaml])
   useEffect(() => { if (provider) { setYaml(provider.yaml); setProblems(provider.diagnostics) } }, [provider?.name, provider?.yaml]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = useMutation({ mutationFn: () => outsideApi.save(selected!, yaml), onSuccess: (r) => { setProblems(r.diagnostics); refresh() } })
@@ -315,12 +313,9 @@ function ModelsTab() {
   const remove = useMutation({ mutationFn: () => outsideApi.remove(selected!), onSuccess: () => { setSelected(null); refresh() } })
   const setTheKey = useMutation({ mutationFn: () => outsideApi.setSecret(selected!, 'key', key), onSuccess: () => { setKey(''); refresh() } })
   const test = useMutation({ mutationFn: (model: string) => agentsApi.testProvider(selected!, model).then((r) => [model, r] as const), onSuccess: ([model, r]) => setTests((t) => ({ ...t, [`${selected}/${model}`]: r })) })
-  const saveSlots = useMutation({ mutationFn: () => agentsApi.saveSlots(slotsYaml ?? ''), onSuccess: (r) => { setSlotProblems(r.diagnostics); refresh() } })
-  const checkSlots = useMutation({ mutationFn: () => agentsApi.checkSlots(slotsYaml ?? ''), onSuccess: (r) => setSlotProblems(r.diagnostics) })
   // a refused save carries the reader's diagnostics in its body: shown as the check shows them
   const refused = (e: unknown): Diagnostic[] | null => (e as { body?: { diagnostics?: Diagnostic[] } } | null)?.body?.diagnostics ?? null
   const shownProblems = problems.length > 0 ? problems : refused(save.error) ?? []
-  const shownSlotProblems = slotProblems.length > 0 ? slotProblems : refused(saveSlots.error) ?? []
   const severityOf = (d: Diagnostic) => (d.severity === 'error' ? 'error' as const : d.severity === 'warning' ? 'warning' as const : 'info' as const)
 
   const start = () => { if (!/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(newName)) return; setSelected(newName); setYaml(providerTemplate(newKind, newName, newPurpose)); setProblems([]); setNewName('') }
@@ -328,7 +323,7 @@ function ModelsTab() {
   return (
     <div data-testid="agents-models">
       <p className="hint">Where an agent&apos;s model comes from. A provider is a connection of kind <span className="mono">model-provider</span> (<span className="mono">connections/&lt;name&gt;.yml</span>, listed with the other connections on the Connections screen): its provider, address, the models it allows with their prices, and the <em>reference</em> of its key. The key you type here is kept in the console&apos;s secret store, never in the file. A slot (the name an agent asks for) is bound to an ordered list of models: the first is used and the others take over when it is down.</p>
-      <ErrorBanner error={models.error ?? check.error ?? remove.error ?? setTheKey.error ?? test.error ?? checkSlots.error} />
+      <ErrorBanner error={models.error ?? check.error ?? remove.error ?? setTheKey.error ?? test.error} />
       {models.data?.agentSlots.map((s) => (
         <div key={s.slot} data-testid={`slot-state-${s.slot}`} data-bound={s.bound} className={s.bound ? 'hint' : 'banner'}>
           Slot <span className="mono">{s.slot}</span> (asked for by {s.agents.join(', ')}): {s.bound ? 'bound to a model that can be used.' : 'nothing usable is bound. Add a provider and bind the slot below; an agent on it cannot start a conversation until then.'}
@@ -392,20 +387,9 @@ function ModelsTab() {
         )}
       </div>
       <h3>Slots</h3>
-      <p className="hint">Per slot and channel (<span className="mono">&quot;*&quot;</span> for every channel without its own), an ordered list: the primary first, then the fallback.</p>
-      <table className="table" data-testid="slot-bindings">
-        <thead><tr><th>Slot</th><th>Channel</th><th>Bound to</th></tr></thead>
-        <tbody>{models.data?.bindings.map((b) => <tr key={`${b.slot}/${b.channel}`}><td className="mono">{b.slot}</td><td className="mono">{b.channel}</td><td>{bindingLine(b)}</td></tr>)}</tbody>
-      </table>
-      {models.data && <SlotEditor models={models.data} />}
+      <p className="hint">Which provider and model each slot uses in each release channel is a binding: the same panel and the same rules as the delivery channels and the runner&apos;s slots (<a href="/bindings">Bindings</a>).</p>
+      <BindingsPanel kinds={['model-chat', 'model-embeddings']} showRunner={false} showFile={false} />
       <UsageAgainstLimits />
-      {slotsYaml !== null && (
-        <>
-          <CodeEditor value={slotsYaml} language="yaml" onChange={(v) => { setSlotsYaml(v); setSlotProblems([]) }} diagnostics={shownSlotProblems.map((d) => ({ line: d.line, column: d.column, message: d.message, severity: severityOf(d) }))} readOnly={!isAdmin} testId="slots-yaml" />
-          <div data-testid="slot-diagnostics">{shownSlotProblems.map((d, i) => <div key={i} data-testid="slot-diagnostic" data-severity={d.severity}><span className="mono">{d.code}</span> line {d.line}: {d.message}{d.fix ? ` ${d.fix}` : ''}</div>)}</div>
-          {isAdmin && <div style={{ margin: '8px 0' }}><button type="button" className="btn btn-sm" onClick={() => checkSlots.mutate()} data-testid="slots-check">Check</button>{' '}<button type="button" className="btn btn-sm btn-primary" onClick={() => saveSlots.mutate()} data-testid="slots-save">Save the bindings</button></div>}
-        </>
-      )}
     </div>
   )
 }
@@ -448,68 +432,7 @@ function MemoriesPanel({ work }: { work?: string }) {
   )
 }
 
-// ---- AG18: bind a slot per channel as a list; usage against the limits ----
-
-function SlotEditor({ models }: { models: ModelsView }) {
-  const client = useQueryClient()
-  const isAdmin = useIsAdmin()
-  const [plan, setPlan] = useState<SlotPlan | null>(null)
-  const [problems, setProblems] = useState<Diagnostic[]>([])
-  const [slot, setSlot] = useState('default')
-  const [channel, setChannel] = useState('*')
-  const [saved, setSaved] = useState(false)
-  useEffect(() => { setPlan(planOf(models.bindings)) }, [models.bindings])
-  const usable = models.providers.filter((p) => p.diagnostics.length === 0 && p.purpose === 'chat')
-  const save = useMutation({ mutationFn: () => agentsApi.saveSlots(slotsToYaml(plan ?? {})), onSuccess: (r) => { setProblems(r.diagnostics); setSaved(true); client.invalidateQueries({ queryKey: ['agents'] }) } })
-  const refused = (save.error as { body?: { diagnostics?: Diagnostic[] } } | null)?.body?.diagnostics ?? []
-  if (!plan) return null
-  const change = (next: SlotPlan) => { setPlan(next); setSaved(false); setProblems([]) }
-  const list = (sl: string, ch: string) => plan[sl]?.[ch] ?? []
-  const setList = (sl: string, ch: string, items: { provider: string; model: string }[]) => {
-    const copy: SlotPlan = JSON.parse(JSON.stringify(plan))
-    ;(copy[sl] ??= {})[ch] = items
-    if (items.length === 0) delete copy[sl][ch]
-    if (Object.keys(copy[sl]).length === 0) delete copy[sl]
-    change(copy)
-  }
-  return (
-    <div className="card" style={{ margin: '12px 0' }} data-testid="slot-editor"><div className="card-body">
-      <strong>Bind a slot</strong>
-      <p className="hint">Choose a slot and a channel (<span className="mono">*</span> is every channel without its own binding), then order the models: the first is used, the next ones take over when it is down. The channels bind differently, so a test channel can use a local model while production uses a cloud one.</p>
-      <div>
-        <input value={slot} onChange={(e) => setSlot(e.target.value)} aria-label="Slot" data-testid="bind-slot" style={{ width: 140 }} />{' '}
-        <input value={channel} onChange={(e) => setChannel(e.target.value)} aria-label="Channel" data-testid="bind-channel" style={{ width: 120 }} />
-      </div>
-      <ol data-testid="bind-list" style={{ margin: '8px 0' }}>
-        {list(slot, channel).map((c, i, all) => (
-          <li key={`${c.provider}/${c.model}/${i}`} data-testid="bind-choice">
-            <span className="mono">{c.provider}/{c.model}</span>{' '}
-            {isAdmin && <>
-              <button type="button" className="btn btn-sm" disabled={i === 0} onClick={() => setList(slot, channel, moveChoice(all, i, -1))} data-testid={`bind-up-${i}`} aria-label="Move up">Up</button>{' '}
-              <button type="button" className="btn btn-sm" disabled={i === all.length - 1} onClick={() => setList(slot, channel, moveChoice(all, i, 1))} data-testid={`bind-down-${i}`} aria-label="Move down">Down</button>{' '}
-              <button type="button" className="btn btn-sm" onClick={() => setList(slot, channel, all.filter((_, j) => j !== i))} data-testid={`bind-remove-${i}`}>Remove</button>
-            </>}
-          </li>
-        ))}
-        {list(slot, channel).length === 0 && <li className="hint" data-testid="bind-empty">Nothing is bound for {slot} in {channel}.</li>}
-      </ol>
-      {isAdmin && (
-        <div>
-          <select aria-label="Model to add" data-testid="bind-add" value="" onChange={(e) => {
-            const [provider, ...rest] = e.target.value.split('/')
-            if (provider) setList(slot, channel, [...list(slot, channel), { provider, model: rest.join('/') }])
-          }}>
-            <option value="">Add a model…</option>
-            {usable.flatMap((p) => p.models.map((m) => <option key={`${p.name}/${m.id}`} value={`${p.name}/${m.id}`}>{p.name}/{m.id}{p.cloud ? ' (cloud)' : ' (local)'}</option>))}
-          </select>{' '}
-          <button type="button" className="btn btn-sm btn-primary" disabled={save.isPending} onClick={() => save.mutate()} data-testid="bind-save">Save the bindings</button>
-        </div>
-      )}
-      {saved && problems.length === 0 && <div className="hint" data-testid="bind-saved">Saved.</div>}
-      {[...problems, ...refused].map((d, i) => <div key={i} className="banner error" data-testid="bind-diagnostic">line {d.line}: {d.message}</div>)}
-    </div></div>
-  )
-}
+// ---- AG18: usage against the limits ----
 
 function UsageAgainstLimits() {
   const usage = useQuery({ queryKey: ['agents', 'usage'], queryFn: agentsApi.usage })

@@ -1,18 +1,16 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { SchemaSet } from '@dbdatakit/shell'
 import { workspaceApi, type CheckDiagnostic } from '../api'
 import { liveState, type EditorKind } from '../editors'
 import {
-  SYNC_CONNECTION_SCHEMA, SYNC_MAPPING_SCHEMA, SYNC_TASK_SCHEMA, connectionPath, connectionsOf, newConnectionText, newReplicationFiles, replicationPath, replicationsOf,
-  secretFindings, syncConnectionSchema, syncMappingSchema, syncNameProblem, syncSchemaOf, syncTaskSchema, withCurrentTaskVersion,
+  connectionPath, connectionsOf, newConnectionText, newReplicationFiles, replicationPath, replicationsOf,
+  secretFindings, syncNameProblem, syncSchemaOf, syncSchemaSet, withCurrentTaskVersion,
 } from '../syncSchemas'
 import type { LiveCheck } from '../useLiveCheck'
 import type { CacheRead } from '../catalogCache'
 import { MappingColumns } from './MappingColumns'
 import { StructuredEditor } from './StructuredPanel'
 
-const schemas = new SchemaSet({ [SYNC_TASK_SCHEMA]: syncTaskSchema, [SYNC_MAPPING_SCHEMA]: syncMappingSchema, [SYNC_CONNECTION_SCHEMA]: syncConnectionSchema })
 
 /** What stands under a connection's editor: the secrets rule, and a finding for each place a password would reach git (the same ones the check refuses by file and line). */
 export function SecretNotes({ text }: { text: string }) {
@@ -40,7 +38,7 @@ export function SyncFileEditor({ kind, path, text, onText, readOnly, live, onOpe
   )
   const label = kind === 'sync-task' ? 'A replication' : kind === 'sync-mapping' ? 'A table mapping' : 'A connection'
   return (
-    <StructuredEditor schemas={schemas} schema={syncSchemaOf(kind)} path={path} text={text} onText={set} readOnly={readOnly} diagnostics={diagnostics} state={state} summary={label} notes={notes} onOpen={onOpen} />
+    <StructuredEditor schemas={syncSchemaSet} schema={syncSchemaOf(kind)} path={path} text={text} onText={set} readOnly={readOnly} diagnostics={diagnostics} state={state} summary={label} notes={notes} onOpen={onOpen} />
   )
 }
 

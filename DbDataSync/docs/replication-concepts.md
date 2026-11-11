@@ -36,7 +36,7 @@ replication behaves.
 | `MsSqlCdc` | SQL Server **Change Data Capture** — every intermediate change harvested from the transaction log | Yes | Enable CDC capture on the table | Reach for this over Change Tracking specifically for **read consistency under concurrent writes** — Change Tracking's own reader joins live table data with its change list, and the two can move against each other under load; CDC's reader needs no such join. Not an "upgrade" to Change Tracking — a different trade |
 | `PgLogicalSlot` | PostgreSQL **logical decoding** — every change, read out of the write-ahead log through a replication slot with the `wal2json` output plugin | Yes | `wal_level = logical` (a **server restart**), the `wal2json` plugin installed *and* listed in `output_plugin_libraries` (a reload, not a restart), and a replication slot DbDataSync previews and creates | PostgreSQL's equivalent of CDC, and the only Postgres mechanism that reports deletes without costing every write to the table. The obstacles are real and worth knowing up front: the restart, the plugin, and a slot that pins WAL on the source until something advances it |
 | `TriggerAudit` | A trigger-maintained shadow audit table, engine-neutral | Yes | DbDataSync generates the trigger/table DDL; an operator previews and applies it | Any engine with no native change-tracking metadata — the one mechanism that reaches SQL Server, PostgreSQL, MySQL/MariaDB, Oracle, and anything ODBC/JDBC-reachable identically. Costs every write to the table, forever — that trade is worth naming to an operator before they turn it on |
-| `Watermark` | A monotonic column (an `updated_at`, a version) — reads rows where it exceeds the stored position | **No** | A monotonic watermark column on the table | Any engine, when the table has such a column and either never deletes rows or deletes are handled separately by [reconciliation](#reconciliation-delete-detection) below |
+| `Watermark` | A monotonic column (an `updated_at`, a version) — reads rows where it exceeds the stored position | **No** | A monotonic watermark column on the table | Any engine, when the table has such a column and either never deletes rows or re-keys them, or deletes and key changes are handled separately by [reconciliation](#reconciliation-delete-detection) below (it also **cannot see a primary key update**: see [A key change](#changeapply-the-change-writer-of-every-engine)) |
 | `BatchReload` | A full (or segmented) table read — not incremental | N/A (a reload always converges) | None beyond read access | A standalone reload replication, or as the mechanism a [Bulk Load](#bulk-loading-backfill) actually runs under |
 | `OracleFlashback` | Oracle **Flashback Version Query** — `VERSIONS BETWEEN SCN` reads a table's own committed row history directly. No shadow table, no trigger | Yes | None beyond ordinary `SELECT`, `FLASHBACK` privilege (only if the connection doesn't own the table), and `EXECUTE` on `DBMS_FLASHBACK` | Oracle sources, when the per-write trigger cost isn't wanted. Bounded by the source's undo retention — a replication paused longer than that needs a reload to catch back up, the same way any log-based mechanism's history can expire |
 | `ScriptedQuery` | An operator-supplied SQL script | Depends on the script | Write the script | A change-tracking mechanism DbDataSync has no built-in driver for — the MySQL binlog, Oracle LogMiner — as an escape hatch |
@@ -144,9 +144,15 @@ The delete runs first, so a unique value that moves from a deleted row to an ins
   whole or not at all (`applyBatchSize` still splits each statement into slices of staged rows, inside that one transaction).
 - **The key is the target's primary key**, and the mapping must write it. A target without one is refused with a message that says so; read the whole table with `BatchReload` and write with
   `DeleteInsert` for a keyless table. A key column is NOT NULL, as a primary key is.
-- **A key change** reaches the writer as a delete of the old key and an insert of the new row. Change Tracking, CDC and the logical-slot reader say it so. `TriggerAudit` and `Watermark` cannot:
-  a trigger records the new key of an update only, and a watermark scan sees only rows that exist, so after a primary key update at the source the old key stays in the target until a reload or the
-  delete-reconcile sweep removes it (the same with `MsSqlMerge`).
+- **A key change** (`UPDATE orders SET id = 2 WHERE id = 1`) reaches the writer as a delete of the old key and an insert of the new row, so the target ends with one row, not two. What
+  says it depends on the reader: Change Tracking, CDC, the logical-slot reader and Flashback say it themselves. `TriggerAudit` says it too: the trigger records the old key as a delete
+  and the new one as an update (SQL Server's statement-level trigger always did, because a row whose key moved matches nothing in its `deleted` table; the PostgreSQL, MySQL/MariaDB and Oracle
+  triggers write the old key when the update changes a key column, and the reader refuses a pass over a trigger that still has the old text, naming the table and the way out: see [TriggerAudit and key updates](#triggeraudit-and-key-updates)). `Watermark` **cannot**: a scan sees only rows that
+  exist, so the row with the old key is simply not there to read, and the new key is read only if the update also moved the watermark column. After a primary key update at the source the old key
+  stays in the target until a reload or the delete-reconcile sweep removes it (the same with `MsSqlMerge`): the example is `orders` and its replica both holding `(1, 'Alice')`, the application
+  running `UPDATE orders SET id = 2 WHERE id = 1`, and the target then holding `(1, 'Alice')` and `(2, 'Alice')`, with no pass failing. That is correct for a table whose keys never change. For one that can
+  re-key, turn on [reconciliation](#reconciliation-delete-detection) and set `afterEveryPasses`, which runs the sweep every N passes so the old key is gone within a bounded time without a hand-run
+  reload. The reader picker marks such a reader "cannot see a key change" (the capability `detectsKeyChanges`: false for `Watermark` and `ScriptedQuery`) and the Pipeline screen says so beside the choice.
 - **Generated (identity) columns** that are not part of the key are written on insert and never updated.
 - It does not reconcile: a target row the stage does not mention is left alone, which is why it is accepted behind every incremental reader, where a reconciling writer is refused.
 - It needs a staging cache (`StagingTable`, `MsSqlStagingTable`, `PgCopyStaging`); it is refused behind `PassThrough`, which stages nothing.
@@ -206,6 +212,25 @@ processing is refused, and a mapping that reaches it anyway (saved before the ru
 writer changed since) fails its incremental pass before anything is read. Use an upsert writer for change processing — `ChangeApply` on every engine
 (the default when no writer is named), or `MsSqlMerge` on SQL Server — and set the reconciling writer on the Bulk Load pipeline if full
 reloads should use it.
+
+### TriggerAudit and key updates
+
+A `TriggerAudit` shadow table holds one row per write to the source table: `DS_Seq` (the position), `DS_Op` (`I`, `U` or `D`) and the key columns. The generated trigger writes an `INSERT` as
+`I`, a `DELETE` as `D` with the old key, and an `UPDATE` as `U` with the new key. **An `UPDATE` that changes a key column also writes a `D` row with the old key** (PostgreSQL and Oracle test every key column,
+MySQL and MariaDB compare the old and new key null-safely), so `UPDATE orders SET id = 2 WHERE id = 1` leaves `D 1` and `U 2` in the shadow table, and the target loses row 1 as it gains row 2. SQL Server's
+trigger is one statement-level trigger that joins the `inserted` and `deleted` tables on the key; a row whose key moved matches nothing in the other table, so it writes the `D` and the `I` without a
+change. The two rows have different keys, so their order does not matter, and the read still collapses to the last row per key; a delete of a key that no row holds any more (a key that existed for a moment
+in a swap through a free key) deletes nothing in the target.
+
+The read takes the source row as the truth: a `D` as the last row of a key while the row exists (two rows swapping keys in one statement, or a key deleted and taken again by a write after the pass's end) is
+staged as the update of that row.
+
+**The trigger in your database is the text that was generated when the table was set up.** A trigger created before this change records only the new key of an update. The reader looks at the installed
+text before every pass (PostgreSQL: the marker comment `-- ds-audit-v2` in the capture function's source; Oracle: the same marker in the trigger's source; MySQL and MariaDB: the update trigger's body
+names `OLD`), and a pass over the old text **fails**, naming the table and the way out, because after the first key update at the source the target would be wrong with nothing to say so. Replace it
+from the replication's **Provisioning** card: *Enable source change capture* lists a step "Replace the change function" (PostgreSQL), "Replace the change trigger" (Oracle) or "Replace the change triggers"
+(MySQL, MariaDB); applying it replaces the text and leaves the shadow table, its rows and the replication's stored position alone, so nothing is read twice or missed. A trigger that is not there at all (set up by
+hand, or not yet) is not a version question and is left to the reader's existing message. A descriptor (ODBC/JDBC) driver's trigger is the operator's own and is not checked.
 
 ## Bulk loading (backfill)
 
@@ -333,6 +358,12 @@ Change Processing, evaluated independently), an **after-change** trigger, or bot
 | --- | --- |
 | `none` (default) | Cadence only. |
 | `any` | Any row read by a successful `Primary` pass since the last sweep is enough to trigger another one — still floored by the configured cadence. |
+
+**`afterEveryPasses: N`** (a number beside `every` and `afterChange`, off when left out) runs a sweep after every N successful change passes of the mapping since its last sweep was queued. It needs no
+cadence, counts passes that read nothing (a quiet table still gets its sweep), and is the way to bound how long an old key stays in the target after a primary key update when the reader cannot see one
+(`Watermark`): with `afterEveryPasses: 3` the old key is gone after the third pass. A sweep still in flight is not queued behind; a mapping never swept counts its whole history, so it is due at once if it
+has made N passes. Under `reconcile:` in `task.yaml` (or the mapping's `reconcileOverride`) it is written as `afterEveryPasses: 3`; the Reconcile card calls it *Sweep after every N passes*. A value below 1 is
+refused at save.
 
 An operator can also trigger a sweep on demand (`Runs → Reconcile deletes…`), with the same
 pre-filled-from-default segment picker the Backfill form uses — no reader/staging/writer choice to make,

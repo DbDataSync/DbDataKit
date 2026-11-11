@@ -21,7 +21,7 @@ public sealed class SignInTests
     private static ConnectionDefinition Connection(FakeApi api, string signIn, string extra = "")
     {
         var yaml = $"schema: connection/2\nkind: http\nname: crm\nendpoint: {api.BaseAddress}\n{signIn}{extra}";
-        var result = ConnectionDefinitionLoader.Load(yaml, "connections/crm.yml", outsideKinds: true);
+        var result = ConnectionDefinitionLoader.LoadConnectionOfAnyKind(yaml, "connections/crm.yml");
         Assert.True(result.Ok, string.Join("\n", result.Diagnostics));
         return result.Definition!;
     }
@@ -233,7 +233,7 @@ public sealed class SignInTests
         var api = new FakeApi();
         var address = api.BaseAddress;
         await api.DisposeAsync();                                      // nothing listens there now
-        var definition = ConnectionDefinitionLoader.Load($"schema: connection/2\nkind: http\nname: gone\nendpoint: {address}\ntimeouts: {{ connect_s: 15 }}\n", "c.yml", outsideKinds: true).Definition!;
+        var definition = ConnectionDefinitionLoader.LoadConnectionOfAnyKind($"schema: connection/2\nkind: http\nname: gone\nendpoint: {address}\ntimeouts: {{ connect_s: 15 }}\n", "c.yml").Definition!;
         using var gone = HttpConnections.Create(definition, Secrets());
         var failed = await Record.ExceptionAsync(() => Get(gone));
         var failure = HttpFailures.Classify(failed!);

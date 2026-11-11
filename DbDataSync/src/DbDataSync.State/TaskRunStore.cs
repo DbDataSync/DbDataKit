@@ -57,7 +57,14 @@ public sealed class TaskRunStore(StateDatabase database)
     /// Rows each mapping's successful <see cref="RunKind.Primary"/> passes have read since that mapping's own cutoff — phase 125's after-change trigger input. One bounded query, not one per mapping: the shared
     /// floor (the earliest cutoff) bounds the read and each mapping's own cutoff is applied in memory.
     /// </summary>
-    public IReadOnlyDictionary<string, long> GetRowsReadSincePerMapping(string taskName, IReadOnlyDictionary<string, DateTimeOffset> sinceByMapping)
+    public IReadOnlyDictionary<string, long> GetRowsReadSincePerMapping(string taskName, IReadOnlyDictionary<string, DateTimeOffset> sinceByMapping) =>
+        SumSuccessfulPrimarySince(taskName, sinceByMapping, countPasses: false);
+
+    /// <summary>How many successful <see cref="RunKind.Primary"/> passes each mapping made since its own cutoff, whatever they read: <c>reconcile.afterEveryPasses</c>'s input (plan 28c CW02b). Same query and cutoff rules as <see cref="GetRowsReadSincePerMapping"/>.</summary>
+    public IReadOnlyDictionary<string, long> GetPassesSincePerMapping(string taskName, IReadOnlyDictionary<string, DateTimeOffset> sinceByMapping) =>
+        SumSuccessfulPrimarySince(taskName, sinceByMapping, countPasses: true);
+
+    private IReadOnlyDictionary<string, long> SumSuccessfulPrimarySince(string taskName, IReadOnlyDictionary<string, DateTimeOffset> sinceByMapping, bool countPasses)
     {
         if (sinceByMapping.Count == 0)
             return new Dictionary<string, long>();
@@ -79,7 +86,7 @@ public sealed class TaskRunStore(StateDatabase database)
                 if (reader.Time(1) <= since)
                     continue;   // older than this mapping's own cutoff: the shared floor is a lower bound, not the answer
 
-                totals[mappingName] = totals.GetValueOrDefault(mappingName) + reader.Int64(2);
+                totals[mappingName] = totals.GetValueOrDefault(mappingName) + (countPasses ? 1 : reader.Int64(2));
             }
 
             return (IReadOnlyDictionary<string, long>)totals;

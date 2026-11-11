@@ -25,7 +25,7 @@ public sealed class SignedWebhookTests
 
     private static ConnectionDefinition Connection(string signIn)
     {
-        var r = ConnectionDefinitionLoader.Load($"schema: connection/2\nkind: http\nname: hook\nendpoint: https://hook.example.com\nwebhook: {{ format: signed }}\nsign_in: {{ {signIn} }}\n", "connections/hook.yml", outsideKinds: true);
+        var r = ConnectionDefinitionLoader.LoadConnectionOfAnyKind($"schema: connection/2\nkind: http\nname: hook\nendpoint: https://hook.example.com\nwebhook: {{ format: signed }}\nsign_in: {{ {signIn} }}\n", "connections/hook.yml");
         Assert.True(r.Ok, string.Join("\n", r.Diagnostics));
         return r.Definition!;
     }
@@ -68,7 +68,7 @@ public sealed class SignedWebhookTests
     {
         var capture = new UrlCapture();
         var secrets = new SecretResolverChain([new EnvSecretProvider(n => n switch { "TOKEN" => "T000/B000/CANARYtoken9", "SIG" => "sig+canary/value=", _ => null })]);
-        var r = ConnectionDefinitionLoader.Load("schema: connection/2\nkind: http\nname: hook\nendpoint: \"https://hooks.example.com/services/{token}?api-version=1&sig={sig}\"\nendpoint_secrets: { token: env:TOKEN, sig: env:SIG }\nwebhook: { format: slack }\n", "c.yml", outsideKinds: true);
+        var r = ConnectionDefinitionLoader.LoadConnectionOfAnyKind("schema: connection/2\nkind: http\nname: hook\nendpoint: \"https://hooks.example.com/services/{token}?api-version=1&sig={sig}\"\nendpoint_secrets: { token: env:TOKEN, sig: env:SIG }\nwebhook: { format: slack }\n", "c.yml");
         Assert.True(r.Ok, string.Join("\n", r.Diagnostics));
         using var client = HttpConnections.Create(r.Definition!, secrets, new HttpConnectionOptions(capture));
         (await client.Client.GetAsync("")).Dispose();
@@ -91,7 +91,7 @@ public sealed class SignedWebhookTests
     {
         var capture = new UrlCapture();
         var secrets = new SecretResolverChain([new EnvSecretProvider(n => n == "URL" ? "https://hook.example.com/in/CANARYwhole1234" : null)]);
-        var r = ConnectionDefinitionLoader.Load("schema: connection/2\nkind: http\nname: hook\nendpoint: env:URL\nwebhook: { format: slack }\n", "c.yml", outsideKinds: true);
+        var r = ConnectionDefinitionLoader.LoadConnectionOfAnyKind("schema: connection/2\nkind: http\nname: hook\nendpoint: env:URL\nwebhook: { format: slack }\n", "c.yml");
         Assert.True(r.Ok, string.Join("\n", r.Diagnostics));
         var test = await HttpConnectionTester.TestAsync(r.Definition!, secrets, new HttpConnectionOptions(capture));
         Assert.Equal("https://hook.example.com/in/CANARYwhole1234", capture.Seen.Single());

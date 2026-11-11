@@ -128,6 +128,40 @@ public sealed class BuildTrackingTests : IDisposable
         Assert.Equal(0, store.Count("another-identity", "run_log"));
     }
 
+    // ---------- the runner's copy: the project's off switch ----------
+
+    private string Project(string yaml)
+    {
+        var dir = Path.Combine(_dir, "project" + Guid.NewGuid().ToString("N")[..6]);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "dbdatabuild.yml"), yaml);
+        return dir;
+    }
+
+    [Fact]
+    public async Task The_runner_copy_is_on_unless_the_project_says_runner_copy_false_and_then_the_follower_step_says_so_and_does_nothing()
+    {
+        const string head = "defaults: {connections: [sqlserver]}\n";
+        Assert.False(BuildTrackedConnections.RunnerCopyOff(Project(head)));
+        Assert.False(BuildTrackedConnections.RunnerCopyOff(Project(head + "tracking: {connection: sqlserver}\n")));
+        Assert.False(BuildTrackedConnections.RunnerCopyOff(Project(head + "tracking: {connection: sqlserver, runner_copy: true}\n")));
+        var off = Project(head + "tracking: {connection: sqlserver, runner_copy: false}\n");
+        Assert.True(BuildTrackedConnections.RunnerCopyOff(off));
+
+        // the copy is never touched (a null copy would throw), and the log line names the switch
+        var lines = await DbDataBuild.Cli.Runner.RunnerTrackingCopy.CopyAsync(null!, off, null, _ => "x", TimeSpan.FromSeconds(5), default);
+        var line = Assert.Single(lines);
+        Assert.Contains("runner_copy: false", line);
+    }
+
+    [Fact]
+    public void A_runner_copy_that_is_not_true_or_false_is_a_diagnostic_naming_the_key()
+    {
+        var diagnostics = new List<DbDataBuild.Core.Diagnostic>();
+        DbDataBuild.Models.ProjectConfigLoader.LoadFromProject(Project("defaults: {connections: [sqlserver]}\ntracking: {connection: sqlserver, runner_copy: maybe}\n"), diagnostics);
+        Assert.Contains(diagnostics, d => d.Found.Contains("runner_copy", StringComparison.Ordinal));
+    }
+
     // ---------- the setting ----------
 
     private string ServerDirectory(string? yaml)

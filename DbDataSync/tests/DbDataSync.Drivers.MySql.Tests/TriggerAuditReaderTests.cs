@@ -20,7 +20,7 @@ public abstract class MySqlFamilyTriggerAuditReaderTestsBase<TFixture> : IClassF
     where TFixture : MySqlFamilyTestDatabase
 {
     private readonly TFixture _db;
-    private readonly TriggerAuditReader _reader = new(MySqlDialect.Instance, MySqlCatalog.Instance);
+    private readonly TriggerAuditReader _reader = new(MySqlDialect.Instance, MySqlCatalog.Instance, MySqlTriggerInstall.Instance);
     private MySqlConnection _connection = null!;
     private string _tableName = null!;
 
@@ -261,6 +261,173 @@ public abstract class MySqlFamilyTriggerAuditReaderTestsBase<TFixture> : IClassF
         var deleted = Assert.Single(rows, r => r.Operation == ChangeOperation.Delete);
         Assert.Equal("south", deleted["Region"]);
         Assert.Equal(1, deleted["Id"]);
+    }
+
+    // ---- CW02a: a primary key update is a delete of the old key and the new row -------------------
+
+    private string Q => $"`{_tableName}`";
+
+    private async Task<List<ChangeRow>> ChangesSinceAsync(string start) =>
+        await CollectAsync((await ReadAsync(start)).Rows);
+
+    /// <summary>The case of the row: <c>UPDATE orders SET id = 2 WHERE id = 1</c> used to leave the row
+    /// with id 1 in the target for good.</summary>
+    [Fact]
+    public async Task AKeyUpdate_IsADeleteOfTheOldKeyAndTheNewRow()
+    {
+        await ExecuteAsync($"INSERT INTO {Q} (`Id`, `Name`) VALUES (1, 'Alice');");
+        var start = (await ReadAsync(null)).NewWatermark;
+
+        await ExecuteAsync($"UPDATE {Q} SET `Id` = 2 WHERE `Id` = 1;");
+
+        var rows = await ChangesSinceAsync(start);
+
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(ChangeOperation.Delete, Assert.Single(rows, r => (int)r["Id"]! == 1).Operation);
+        var moved = Assert.Single(rows, r => (int)r["Id"]! == 2);
+        Assert.NotEqual(ChangeOperation.Delete, moved.Operation);
+        Assert.Equal("Alice", moved["Name"]);
+    }
+
+    /// <summary>An update that leaves the key alone is still one row, never a delete beside it.</summary>
+    [Fact]
+    public async Task AnUpdateThatKeepsTheKey_IsStillOneRow()
+    {
+        await ExecuteAsync($"INSERT INTO {Q} (`Id`, `Name`) VALUES (1, 'Alice');");
+        var start = (await ReadAsync(null)).NewWatermark;
+
+        await ExecuteAsync($"UPDATE {Q} SET `Name` = 'Alicia' WHERE `Id` = 1;");
+
+        var row = Assert.Single(await ChangesSinceAsync(start));
+        Assert.Equal(ChangeOperation.Update, row.Operation);
+    }
+
+    /// <summary>Two rows swap keys in one transaction (through a free key, as a primary key requires): both
+    /// keys still exist afterwards, so neither may come out as a delete.</summary>
+    [Fact]
+    public async Task AKeySwapOfTwoRows_InOneTransaction_LeavesBothKeysAsRows()
+    {
+        await ExecuteAsync($"INSERT INTO {Q} (`Id`, `Name`) VALUES (1, 'one'), (2, 'two');");
+        var start = (await ReadAsync(null)).NewWatermark;
+
+        await using (var transaction = await _connection.BeginTransactionAsync())
+        {
+            foreach (var statement in new[]
+            {
+                $"UPDATE {Q} SET `Id` = 0 WHERE `Id` = 1",
+                $"UPDATE {Q} SET `Id` = 1 WHERE `Id` = 2",
+                $"UPDATE {Q} SET `Id` = 2 WHERE `Id` = 0",
+            })
+            {
+                await using var cmd = _connection.CreateCommand();
+                cmd.Transaction = transaction;
+                cmd.CommandText = statement;
+                await cmd.ExecuteNonQueryAsync();
+            }
+            await transaction.CommitAsync();
+        }
+
+        var rows = await ChangesSinceAsync(start);
+
+        Assert.Equal(ChangeOperation.Delete, Assert.Single(rows, r => (int)r["Id"]! == 0).Operation);
+        var one = Assert.Single(rows, r => (int)r["Id"]! == 1);
+        var two = Assert.Single(rows, r => (int)r["Id"]! == 2);
+        Assert.NotEqual(ChangeOperation.Delete, one.Operation);
+        Assert.NotEqual(ChangeOperation.Delete, two.Operation);
+        Assert.Equal("two", one["Name"]);
+        Assert.Equal("one", two["Name"]);
+    }
+
+    [Fact]
+    public async Task AKeyUpdateFollowedByAnUpdateOfTheNewRow_CarriesTheFinalValues()
+    {
+        await ExecuteAsync($"INSERT INTO {Q} (`Id`, `Name`) VALUES (1, 'Alice');");
+        var start = (await ReadAsync(null)).NewWatermark;
+
+        await ExecuteAsync($"UPDATE {Q} SET `Id` = 2 WHERE `Id` = 1;");
+        await ExecuteAsync($"UPDATE {Q} SET `Name` = 'Final' WHERE `Id` = 2;");
+
+        var rows = await ChangesSinceAsync(start);
+
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(ChangeOperation.Delete, Assert.Single(rows, r => (int)r["Id"]! == 1).Operation);
+        Assert.Equal("Final", Assert.Single(rows, r => (int)r["Id"]! == 2)["Name"]);
+    }
+
+    [Fact]
+    public async Task ADeleteAndAnInsertOfTheSameKey_CollapseToTheLastOperation()
+    {
+        await ExecuteAsync($"INSERT INTO {Q} (`Id`, `Name`) VALUES (1, 'old');");
+        var start = (await ReadAsync(null)).NewWatermark;
+
+        await ExecuteAsync($"DELETE FROM {Q} WHERE `Id` = 1;");
+        await ExecuteAsync($"INSERT INTO {Q} (`Id`, `Name`) VALUES (1, 'new');");
+
+        var row = Assert.Single(await ChangesSinceAsync(start));
+        Assert.NotEqual(ChangeOperation.Delete, row.Operation);
+        Assert.Equal("new", row["Name"]);
+    }
+
+    [Fact]
+    public async Task ADeleteRecordWhileTheRowExists_IsReadAsTheRow()
+    {
+        await ExecuteAsync($"INSERT INTO {Q} (`Id`, `Name`) VALUES (5, 'here');");
+        var start = (await ReadAsync(null)).NewWatermark;
+        await ExecuteAsync($"INSERT INTO `{TriggerAuditStatement.ShadowTableName(_tableName)}` (`DS_Op`, `Id`) VALUES ('D', 5);");
+
+        var row = Assert.Single(await ChangesSinceAsync(start));
+
+        Assert.NotEqual(ChangeOperation.Delete, row.Operation);
+        Assert.Equal("here", row["Name"]);
+    }
+
+    // ---- CW02a: a trigger of the old text is detected, named, and replaced -------------------------
+
+    /// <summary>The update trigger as it was before CW02a: it records the new key only.</summary>
+    private Task InstallOldUpdateTriggerAsync() => ExecuteAsync($"""
+        DROP TRIGGER IF EXISTS `ds_trg_{_tableName}_au`;
+        CREATE TRIGGER `ds_trg_{_tableName}_au` AFTER UPDATE ON `{_tableName}`
+        FOR EACH ROW INSERT INTO `DS_Changes_{_tableName}` (`DS_Op`, `Id`) VALUES ('U', NEW.`Id`);
+        """);
+
+    [Fact]
+    public async Task ATriggerOfTheOldText_IsOutdated_TheCurrentOneIsCurrent_AMissingOneIsAbsent()
+    {
+        Assert.Equal(TriggerAuditInstall.Current,
+            await MySqlTriggerInstall.InspectAsync(_connection, _db.DatabaseName, _tableName, CancellationToken.None));
+
+        await InstallOldUpdateTriggerAsync();
+        Assert.Equal(TriggerAuditInstall.Outdated,
+            await MySqlTriggerInstall.InspectAsync(_connection, _db.DatabaseName, _tableName, CancellationToken.None));
+
+        Assert.Equal(TriggerAuditInstall.Absent,
+            await MySqlTriggerInstall.InspectAsync(_connection, _db.DatabaseName, "no_such_table", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task APassOverATriggerOfTheOldText_FailsNamingTheTableAndTheWayOut_UntilItIsReplaced()
+    {
+        await ExecuteAsync($"INSERT INTO {Q} (`Id`, `Name`) VALUES (1, 'Alice');");
+        var start = (await ReadAsync(null)).NewWatermark;
+        await InstallOldUpdateTriggerAsync();
+
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => ReadAsync(start));
+        Assert.Contains(_tableName, failure.Message);
+        Assert.Contains("Enable source change capture", failure.Message);
+
+        var request = new ProvisioningRequest(
+            ProvisioningActions.EnableSourceChangeCapture,
+            new TableRef { ConnectionName = "c", Database = _db.DatabaseName, Schema = _db.DatabaseName, Table = _tableName },
+            GenericDriverKinds.TriggerAudit, new Dictionary<string, string>(), []);
+        var plan = await MySqlProvisioner.PlanAsync(_connection, request, CancellationToken.None);
+        var step = Assert.Single(plan.Steps);
+        Assert.StartsWith("Replace the change triggers", step.Title);
+        await ExecuteAsync(step.CommandText);
+
+        Assert.Equal(ProvisioningState.Satisfied,
+            (await MySqlProvisioner.PlanAsync(_connection, request, CancellationToken.None)).State);
+        await ExecuteAsync($"UPDATE {Q} SET `Id` = 2 WHERE `Id` = 1;");
+        Assert.Equal(2, (await ChangesSinceAsync(start)).Count);
     }
 }
 

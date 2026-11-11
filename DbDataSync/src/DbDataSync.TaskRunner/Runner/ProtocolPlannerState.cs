@@ -64,6 +64,15 @@ internal sealed class ProtocolPlannerState(IDrainQueue queue, IDrainCheckpoints 
             ? throw new NotSupportedException("IPlannerState.GetRowsReadSincePerMapping is not supported by a drain without a ledger of the rows each mapping read: an after-change reconcile strategy needs it.")
             : sinceByMapping.Keys.ToDictionary(mapping => mapping, ledger.RowsReadSinceSweep, StringComparer.Ordinal);
 
+    /// <summary>The successful primary passes each mapping made since its last sweep was queued (what <c>reconcile.afterEveryPasses</c> counts).</summary>
+    public IReadOnlyDictionary<string, long> GetPassesSincePerMapping(string replication, IReadOnlyDictionary<string, DateTimeOffset> sinceByMapping) =>
+        ledger is null
+            ? throw new NotSupportedException("IPlannerState.GetPassesSincePerMapping is not supported by a drain without a ledger of the passes each mapping made: reconcile.afterEveryPasses needs it.")
+            : sinceByMapping.Keys.ToDictionary(mapping => mapping, ledger.PassesSinceSweep, StringComparer.Ordinal);
+
+    /// <summary>A successful primary pass of the mapping ended, whatever it read: what <c>afterEveryPasses</c> counts.</summary>
+    public void NotePassSucceeded(string mapping) => ledger?.AddPass(mapping);
+
     /// <summary>A successful primary pass of the mapping read rows: what an after-change strategy reacts to.</summary>
     public void NoteRowsRead(string mapping, long rows)
     {

@@ -49,16 +49,20 @@ public sealed record SubscriptionRunResult(Guid SubscriptionId, string Name, str
 /// Runs subscriptions (plan 22a GP17, DBR18's half that is not a runner): the due ones (<see cref="RunDueAsync"/>, called from the runner's task every minute) or one on request (<see cref="RunNowAsync"/>).
 /// <list type="bullet">
 /// <item><b>As the subscriber.</b> The renderer is asked for the document as the subscriber; two subscribers of one view with different rules get different attachments, and the outbox shows both.</item>
-/// <item><b>A subscriber who lost access</b> (the renderer says so, or the identity home no longer knows them, or the identity is disabled) <b>gets nothing</b>: the subscription is <c>stopped</c> with the reason, and a message tells them and the owner on the subscription's channel.</item>
+/// <item><b>A subscriber who lost access</b> (the module refuses, every widget is denied, or the identity home no longer knows them or the identity is disabled) <b>gets nothing</b> (owner decision 2026-11-11): the subscription is <c>stopped</c> with the reason, the run is recorded
+/// as <c>access-lost</c> ("lost access") in the subscription's log, <b>an administrator is notified</b> through the install's notification feed (<c>SubscriptionAccessLost</c>, shown on the console), and a message tells the subscriber and the owner on the subscription's channel.</item>
 /// <item><b>A render that fails</b> sends nothing and tells the owner; the subscription stays active and tries at its next time.</item>
 /// <item><b>A removed channel</b> is a problem the subscription shows in its status (it stays active; the run is <c>failed</c>), so a person fixing the settings sees what was waiting.</item>
 /// <item><b>The schedule</b> is read in the subscription's time zone (daylight saving follows it); a runner that was down runs a subscription once, not once for every missed time.</item>
 /// </list>
 /// </summary>
-public sealed class SubscriptionService(SubscriptionStore store, DeliveryService delivery, ISubscriptionRenderer renderer, ISubscriberDirectory directory, TimeProvider? time = null, ILogger<SubscriptionService>? log = null)
+public sealed class SubscriptionService(SubscriptionStore store, DeliveryService delivery, ISubscriptionRenderer renderer, ISubscriberDirectory directory, TimeProvider? time = null, ILogger<SubscriptionService>? log = null, DbDataKit.Monitoring.INotificationFeed? notifications = null)
 {
     private readonly TimeProvider _time = time ?? TimeProvider.System;
     private readonly ILogger _log = (ILogger?)log ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
+
+    /// <summary>The kind of notification raised for an administrator when a subscriber lost access.</summary>
+    public const string AccessLostNotification = "SubscriptionAccessLost";
 
     public SubscriptionStore Store => store;
 
@@ -141,6 +145,7 @@ public sealed class SubscriptionService(SubscriptionStore store, DeliveryService
         if (!string.Equals(row.Owner, row.Person, StringComparison.Ordinal)) tell.Add(row.Owner);
         await TellAsync(row, channel, tell, $"Subscription '{f.Name}' was stopped", $"The subscription '{f.Name}' to the {f.Kind} {f.ViewName} was stopped and nothing was sent: {reason} Ask for access again and set the subscription going from the subscriptions page.", ct).ConfigureAwait(false);
         store.RecordRun(row.Id, started, SubscriptionOutcomes.AccessLost, detail, null, runId);
+        notifications?.Raise(AccessLostNotification, $"Lost access: the subscription '{f.Name}' of {row.PersonName ?? row.Person} to the {f.Kind} {f.ViewName} was stopped and nothing was delivered. {reason}", mappingName: f.Name);
         _log.LogInformation("subscription {Subscription} {Name}: stopped: {Reason}", row.Id, f.Name, reason);
         return new SubscriptionRunResult(row.Id, f.Name, SubscriptionOutcomes.AccessLost, detail, null);
     }

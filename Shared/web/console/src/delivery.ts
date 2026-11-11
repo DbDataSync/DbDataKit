@@ -150,45 +150,6 @@ export const channelProblem = (c: Pick<DeliveryChannel, 'ready' | 'missing'>): s
 /** Why one binding cannot be used now, or null: the connection's problem, or the references that cannot be read. */
 export const bindingProblem = (b: Pick<ChannelBinding, 'ready' | 'missing' | 'problem'>): string | null => (b.ready ? null : b.problem ?? (b.missing.length > 0 ? b.missing.join('; ') : 'Not ready.'))
 
-/** The mapping the screen edits: delivery channel name, then release channel, then connection name. `*` is the entry for every release channel that has none of its own. */
-export type ChannelMapping = Record<string, Record<string, string>>
-
-export const mappingOf = (channels: Pick<DeliveryChannel, 'name' | 'bindings'>[]): ChannelMapping =>
-  Object.fromEntries(channels.map((c) => [c.name, Object.fromEntries(c.bindings.map((b) => [b.release, b.connection]))]))
-
-/** A release channel's name: letters, digits, dashes and underscores, or `*` for every release channel that has no entry of its own (the settings reader's rule). */
-export const isReleaseName = (name: string): boolean => name === '*' || /^[A-Za-z0-9_-]{1,64}$/.test(name)
-
-/** A delivery channel's name (the settings reader's rule). */
-export const isChannelName = (name: string): boolean => /^[A-Za-z0-9_-]{1,64}$/.test(name)
-
-/**
- * The body of `PUT /api/delivery/channels` from the mapping and the limits: a channel bound in the production release channel only is written as the connection's name alone, as the file does, any other as release channel to connection.
- * Entries with no connection are left out, and so is a channel with none.
- */
-export function mappingBody(mapping: ChannelMapping, limits: Record<string, number | null> = {}): { channels: Record<string, string | Record<string, string>>; limits?: Record<string, number> } {
-  const channels: Record<string, string | Record<string, string>> = {}
-  for (const [name, releases] of Object.entries(mapping)) {
-    const entries = Object.entries(releases).filter(([, connection]) => connection !== '')
-    if (entries.length === 0) continue
-    channels[name] = entries.length === 1 && entries[0][0] === 'prod' ? entries[0][1] : Object.fromEntries(entries)
-  }
-  const kept = Object.fromEntries(Object.entries(limits).filter(([name, n]) => n !== null && name in channels) as [string, number][])
-  return Object.keys(kept).length > 0 ? { channels, limits: kept } : { channels }
-}
-
-/** What is wrong with the mapping the screen can see for itself (the server checks the rest, in its own words), or null. */
-export function mappingProblem(mapping: ChannelMapping): string | null {
-  for (const [name, releases] of Object.entries(mapping)) {
-    if (!isChannelName(name)) return `\`${name}\` is not a channel name: letters, digits, dashes and underscores.`
-    for (const release of Object.keys(releases)) if (!isReleaseName(release)) return `\`${release}\` is not a release channel name: letters, digits, dashes and underscores (or * for every release channel).`
-  }
-  return null
-}
-
-/** Whether the mapping is the one the server has (nothing to save). */
-export const sameMapping = (a: ChannelMapping, b: ChannelMapping): boolean => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b))
-const sorted = (m: ChannelMapping) => Object.keys(m).sort().map((k) => [k, Object.entries(m[k]).sort(([x], [y]) => (x < y ? -1 : 1))])
 
 /** A line for one binding: where it goes and whether it can be used. */
 export const bindingLine = (b: ChannelBinding): string =>
@@ -228,7 +189,6 @@ export const deliveryApi = {
   overview: () => request<DeliveryOverview>('/api/delivery'),
   test: (channel: string, recipient: string, release = 'prod') =>
     request<{ id: string; releaseChannel: string; connection: string; message: DeliveryMessage; attempts: DeliveryAttempt[] }>(`/api/delivery/channels/${encodeURIComponent(channel)}/test`, json({ recipient: recipient.trim() === '' ? null : recipient.trim(), channel: release })),
-  saveChannels: (body: ReturnType<typeof mappingBody>) => request<{ saved: boolean; releaseChannels: string[]; channels: DeliveryChannel[] }>('/api/delivery/channels', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
   messages: (status: string, channel: string) => request<{ messages: DeliveryMessage[] }>(`/api/delivery/messages?${new URLSearchParams({ ...(status ? { status } : {}), ...(channel ? { channel } : {}), limit: '200' })}`),
   message: (id: string) => request<{ message: DeliveryMessage; attempts: DeliveryAttempt[] }>(`/api/delivery/messages/${id}`),
   requeue: (id: string) => request<{ message: DeliveryMessage }>(`/api/delivery/messages/${id}/requeue`, { method: 'POST' }),

@@ -1,0 +1,264 @@
+{
+  "source": {
+    "name": "Unicode CLDR (JSON)",
+    "version": "49.0.0",
+    "licence": "Unicode-3.0",
+    "licenceUrl": "https://www.unicode.org/license.txt",
+    "packages": {
+      "cldr-numbers-full": {
+        "version": "49.0.0",
+        "integrity": "sha512-8Ww1u18Sbl7h8UA1tJ7pKFuzV4wKLYHk20wRJE8wewNKS0Ex83DoYawoIrLfzTGWjUt41rjrBRJv9TC3THiznA=="
+      },
+      "cldr-dates-full": {
+        "version": "49.0.0",
+        "integrity": "sha512-nnyd2GGvLn83o2wG1PG8yF6SNGGdIWn6csvuZVHir+QEhu41+5YfOVSUQcBWNBo407nMvBlCFAT0YrSDSXPZfg=="
+      }
+    },
+    "generatedBy": "scripts/fetch_cldr_snapshot.py",
+    "note": "Only the locales and fields the suite holds by hand. Months are the stand-alone context (a month shown on its own, as an axis label or a column)."
+  },
+  "locales": {
+    "en": {
+      "decimal": ".",
+      "group": ",",
+      "months": [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December"
+      ],
+      "short": [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec"
+      ]
+    },
+    "de": {
+      "decimal": ",",
+      "group": ".",
+      "months": [
+        "Januar",
+        "Februar",
+        "März",
+        "April",
+        "Mai",
+        "Juni",
+        "Juli",
+        "August",
+        "September",
+        "Oktober",
+        "November",
+        "Dezember"
+      ],
+      "short": [
+        "Jan",
+        "Feb",
+        "Mär",
+        "Apr",
+        "Mai",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Okt",
+        "Nov",
+        "Dez"
+      ]
+    },
+    "fr": {
+      "decimal": ",",
+      "group": " ",
+      "months": [
+        "janvier",
+        "février",
+        "mars",
+        "avril",
+        "mai",
+        "juin",
+        "juillet",
+        "août",
+        "septembre",
+        "octobre",
+        "novembre",
+        "décembre"
+      ],
+      "short": [
+        "janv.",
+        "févr.",
+        "mars",
+        "avr.",
+        "mai",
+        "juin",
+        "juil.",
+        "août",
+        "sept.",
+        "oct.",
+        "nov.",
+        "déc."
+      ]
+    },
+    "es": {
+      "decimal": ",",
+      "group": ".",
+      "months": [
+        "enero",
+        "febrero",
+        "marzo",
+        "abril",
+        "mayo",
+        "junio",
+        "julio",
+        "agosto",
+        "septiembre",
+        "octubre",
+        "noviembre",
+        "diciembre"
+      ],
+      "short": [
+        "ene",
+        "feb",
+        "mar",
+        "abr",
+        "may",
+        "jun",
+        "jul",
+        "ago",
+        "sept",
+        "oct",
+        "nov",
+        "dic"
+      ]
+    },
+    "it": {
+      "decimal": ",",
+      "group": ".",
+      "months": [
+        "gennaio",
+        "febbraio",
+        "marzo",
+        "aprile",
+        "maggio",
+        "giugno",
+        "luglio",
+        "agosto",
+        "settembre",
+        "ottobre",
+        "novembre",
+        "dicembre"
+      ],
+      "short": [
+        "gen",
+        "feb",
+        "mar",
+        "apr",
+        "mag",
+        "giu",
+        "lug",
+        "ago",
+        "set",
+        "ott",
+        "nov",
+        "dic"
+      ]
+    },
+    "pt": {
+      "decimal": ",",
+      "group": ".",
+      "months": [
+        "janeiro",
+        "fevereiro",
+        "março",
+        "abril",
+        "maio",
+        "junho",
+        "julho",
+        "agosto",
+        "setembro",
+        "outubro",
+        "novembro",
+        "dezembro"
+      ],
+      "short": [
+        "jan.",
+        "fev.",
+        "mar.",
+        "abr.",
+        "mai.",
+        "jun.",
+        "jul.",
+        "ago.",
+        "set.",
+        "out.",
+        "nov.",
+        "dez."
+      ]
+    },
+    "nl": {
+      "decimal": ",",
+      "group": ".",
+      "months": [
+        "januari",
+        "februari",
+        "maart",
+        "april",
+        "mei",
+        "juni",
+        "juli",
+        "augustus",
+        "september",
+        "oktober",
+        "november",
+        "december"
+      ],
+      "short": [
+        "jan",
+        "feb",
+        "mrt",
+        "apr",
+        "mei",
+        "jun",
+        "jul",
+        "aug",
+        "sep",
+        "okt",
+        "nov",
+        "dec"
+      ]
+    }
+  },
+  "currencySymbols": {
+    "locale": "en",
+    "symbols": {
+      "USD": "$",
+      "EUR": "€",
+      "GBP": "£",
+      "JPY": "¥",
+      "CNY": "CN¥",
+      "INR": "₹",
+      "KRW": "₩"
+    }
+  },
+  "compactSuffixes": {
+    "locale": "en",
+    "thousand": "0K",
+    "million": "0M",
+    "billion": "0B"
+  }
+}

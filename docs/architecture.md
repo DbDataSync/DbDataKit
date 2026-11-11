@@ -80,7 +80,7 @@ is not ours to break and is outside this rule. (CLAUDE.md states the working rul
 
 ### Decisions recorded after plan 13
 
-Decided by the owner after the table above was closed. The numbers are the ones the follow-up list (`docs/plans/13c-follow-ups.md`) gave them and that source comments cite as `13c D<n>`; the details are in the README named in the last column.
+Decided by the owner after the table above was closed. The numbers are the ones the old follow-up list gave them (the plan is finished and deleted) and that source comments cite as `13c D<n>`; the details are in the README named in the last column.
 
 | # | Decision | Why | Details |
 | --- | --- | --- | --- |

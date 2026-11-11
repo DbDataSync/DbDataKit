@@ -25,7 +25,7 @@ public sealed class ConsoleModelsTests : IAsyncLifetime
 
     private const string Provider = "schema: connection/2\nkind: model-provider\nname: claude\nsign_in: { method: api_key, key_secret: secret:dbdatakit:server:connection:claude:key }\nmodel_provider:\n  provider: anthropic\n  models:\n    - { id: claude-sonnet-4-5, window: 200000, max_output: 8192, price: { input: 3, output: 15 } }\n";
 
-    private const string Slots = "model-slots: 1\nslots:\n  default:\n    \"*\":\n      - { provider: claude, model: claude-sonnet-4-5 }\n";
+    private const string Slots = "bindings: 1\nmodels:\n  default:\n    \"*\":\n      - { connection: claude, model: claude-sonnet-4-5 }\n";
 
     private sealed class Answers : HttpMessageHandler
     {
@@ -143,13 +143,14 @@ public sealed class ConsoleModelsTests : IAsyncLifetime
         Assert.Contains("did not accept the key", (string)refusedKey["message"]!);
 
         // a slot that names a model the provider does not allow is refused with the line; the right one binds the install
-        var (slotRefused, slotBad) = await Call(HttpMethod.Put, "/api/agents/models/slots", admin, new YamlBody(Slots.Replace("claude-sonnet-4-5", "claude-9")));
+        var (slotRefused, slotBad) = await Call(HttpMethod.Put, "/api/bindings", admin, new BindingsYamlBody(Slots.Replace("claude-sonnet-4-5", "claude-9")));
         Assert.Equal(HttpStatusCode.UnprocessableEntity, slotRefused);
         Assert.Contains("claude-9", (string)slotBad!["diagnostics"]![0]!["message"]!);
-        Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Put, "/api/agents/models/slots", admin, new YamlBody(Slots))).Status);
+        Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Put, "/api/bindings", admin, new BindingsYamlBody(Slots))).Status);
         var (_, bound) = await Get("/api/agents/models", viewer);
         Assert.True((bool)bound!["agentSlots"]![0]!["bound"]!);
-        Assert.True((bool)bound["bindings"]![0]!["choices"]![0]!["usable"]!);
+        var (_, bindings) = await Get("/api/bindings", viewer);
+        Assert.True((bool)bindings!["slots"]![0]!["rows"]![0]!["entries"]![0]!["usable"]!);
 
         // a conversation starts, asks the person before the tool, and ends with the answer
         answers.Queue.Enqueue((HttpStatusCode.OK, ToolCall));
@@ -192,8 +193,8 @@ public sealed class ConsoleModelsTests : IAsyncLifetime
         File.WriteAllText(Path.Combine(directory, "connections", "claude.yml"), Provider);
         File.WriteAllText(Path.Combine(directory, "connections", "local.yml"), "schema: connection/2\nkind: model-provider\nname: local\nmodel_provider:\n  provider: ollama\n  models:\n    - { id: llama3.1:8b, window: 8000 }\n");
         await Call(HttpMethod.Put, "/api/outside-connections/claude/secrets/key", admin, new SecretBody(Canary));
-        var slots = "model-slots: 1\nslots:\n  default:\n    \"*\":\n      - { provider: claude, model: claude-sonnet-4-5 }\n      - { provider: local, model: \"llama3.1:8b\" }\n    test:\n      - { provider: local, model: \"llama3.1:8b\" }\n";
-        Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Put, "/api/agents/models/slots", admin, new YamlBody(slots))).Status);
+        var slots = "bindings: 1\nmodels:\n  default:\n    \"*\":\n      - { connection: claude, model: claude-sonnet-4-5 }\n      - { connection: local, model: \"llama3.1:8b\" }\n    test:\n      - { connection: local, model: \"llama3.1:8b\" }\n";
+        Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Put, "/api/bindings", admin, new BindingsYamlBody(slots))).Status);
 
         var models = app.Services.GetRequiredService<ConsoleModels>();
         Assert.Equal("claude/claude-sonnet-4-5", models.For("default", null)!.Model);
@@ -217,8 +218,8 @@ public sealed class ConsoleModelsTests : IAsyncLifetime
         File.WriteAllText(Path.Combine(directory, "connections", "claude.yml"), Provider);
         File.WriteAllText(Path.Combine(directory, "connections", "local.yml"), "schema: connection/2\nkind: model-provider\nname: local\nmodel_provider:\n  provider: ollama\n  models:\n    - { id: llama3.1:8b, window: 8000 }\n");
         await Call(HttpMethod.Put, "/api/outside-connections/claude/secrets/key", admin, new SecretBody(Canary));
-        var slots = "model-slots: 1\nslots:\n  default:\n    \"*\":\n      - { provider: local, model: \"llama3.1:8b\" }\n      - { provider: claude, model: claude-sonnet-4-5 }\n";
-        Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Put, "/api/agents/models/slots", admin, new YamlBody(slots))).Status);
+        var slots = "bindings: 1\nmodels:\n  default:\n    \"*\":\n      - { connection: local, model: \"llama3.1:8b\" }\n      - { connection: claude, model: claude-sonnet-4-5 }\n";
+        Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Put, "/api/bindings", admin, new BindingsYamlBody(slots))).Status);
         var models = app.Services.GetRequiredService<ConsoleModels>();
         var hi = new[] { new Microsoft.Extensions.AI.ChatMessage(Microsoft.Extensions.AI.ChatRole.User, "hi") };
         const string Down = """{"error":{"message":"busy"}}""";

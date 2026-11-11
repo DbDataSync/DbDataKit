@@ -133,9 +133,9 @@ public sealed class StorePublisher(StoreProxies groups, ConsoleKeyStore identity
         if (!StoreModels.IsValidName(modelName) || !File.Exists(StoreModels.FileOf(directory, modelName))) return new(false, $"There is no model '{modelName}'.");
         var publications = new StorePublications(directory);
         var targets = proxies.Count > 0 ? proxies : publications.Of(modelName);
-        if (targets.Count == 0) return new(false, $"The model '{modelName}' is not published to a group yet; name one with --proxy (dbdatastore proxy list).");
+        if (targets.Count == 0) return new(false, $"The model '{modelName}' is not published to a group yet; name one with --proxy (dbdatastore gateway list).");
         foreach (var target in targets)
-            if (groups.Find(target) is null) return new(false, $"This server is not paired with a proxy called '{target}' (dbdatastore proxy add).");
+            if (groups.Find(target) is null) return new(false, $"This server is not paired with a proxy called '{target}' (dbdatastore gateway add).");
 
         var text = (await File.ReadAllTextAsync(StoreModels.FileOf(directory, modelName), ct)).ReplaceLineEndings("\n");
         var check = StoreModels.Check(modelName, text);

@@ -57,7 +57,7 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
 
     /// <summary>
     /// The engines the Proxy serves (its providers: SQL Server, ODBC, DuckDB and PostgreSQL) and what a Build connection's driver is called there: the same word. The read login of such a connection is a connection string (for flightsql the login value, <c>grpc+tls://host:port;token=...</c>), which the Proxy takes whole as
-    /// <c>connection_string_secret</c> whatever the engine; <c>access: readonly</c> is what is written, because only the read login goes. A driver the Proxy has no provider for (fabric: plan 13a, P12) is not published.
+    /// <c>connection_string_secret</c> whatever the engine; <c>access: readonly</c> is what is written, because only the read login goes. A driver the Proxy has no provider for (fabric: `docs/engine-support.md`, Microsoft Fabric warehouse) is not published.
     /// </summary>
     private static readonly string[] ProxyEngines = ["sqlserver", "odbc", "duckdb", "postgres", "flightsql"];
 

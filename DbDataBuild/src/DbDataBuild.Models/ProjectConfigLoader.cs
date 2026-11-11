@@ -545,14 +545,20 @@ public static class ProjectConfigLoader
         {
             if (top.Get("tracking") is not { } node) return null;
             if (node is YamlScalar { Value: "none" }) return new TrackingConfig(null, ProductInfo.TrackingSchemaName, Disabled: true);
-            var t = ReadTrackingMapping(node, connections, "`tracking`");
-            return t == null ? null : new TrackingConfig(t.Value.Connection, t.Value.SchemaName ?? ProductInfo.TrackingSchemaName);
+            var t = ReadTrackingMapping(node, connections, "`tracking`", ["connection", "schema", "runner_copy"]);
+            var runnerCopy = true;
+            if (t != null && node is YamlMapping { } map && map.Get("runner_copy") is { } rc)
+            {
+                if (rc is YamlScalar { Value: "true" or "false" } rcs) runnerCopy = rcs.Value == "true";
+                else Add(DiagnosticCatalog.InvalidValue, rc, "`tracking.runner_copy` is `true` or `false`.", "`false` stops the runner from keeping a copy of this project's tracking tables.");
+            }
+            return t == null ? null : new TrackingConfig(t.Value.Connection, t.Value.SchemaName ?? ProductInfo.TrackingSchemaName, RunnerCopy: runnerCopy);
         }
 
-        private (string? Connection, string? SchemaName)? ReadTrackingMapping(YamlNode node, IReadOnlySet<string> connections, string where)
+        private (string? Connection, string? SchemaName)? ReadTrackingMapping(YamlNode node, IReadOnlySet<string> connections, string where, string[]? keys = null)
         {
             if (node is not YamlMapping map) { Add(DiagnosticCatalog.InvalidValue, node, $"{where} is `none`, or a mapping with `connection` and `schema`."); return null; }
-            CheckKeys(map, ["connection", "schema"], where);
+            CheckKeys(map, keys ?? ["connection", "schema"], where);
             string? connection = null, schema = null;
             if (map.Get("connection") is { } c)
             {

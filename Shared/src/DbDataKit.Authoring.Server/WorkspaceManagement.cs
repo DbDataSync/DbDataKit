@@ -182,6 +182,78 @@ public static class WorkspaceManagement
             });
         });
 
+        // compile, lowered text and the offline sample of a draft (plan 33 SC20l): the product's own program on a copy or read only, offline, the draft untouched; an author writes what a compile made through the file routes
+        static JsonArray DiagnosticsJson(IEnumerable<ProjectDiagnostic> found) => new([.. found.Select(d => (JsonNode?)new JsonObject { ["severity"] = d.Severity, ["code"] = d.Code, ["message"] = d.Message, ["file"] = d.File, ["line"] = d.Line })]);
+        IResult? CompilerOf(string project, string id, HttpContext context, out IDraftCompiler compiler, out string root)
+        {
+            (compiler, root) = (null!, null!);
+            if (InProject(project, context, ServerRole.Viewer, out var hosted) is { } refused) return refused;
+            if (workspaces.Find(hosted.Id, id) is not { } workspace) return Results.NotFound();
+            var kindName = store.FindProject(hosted.Id)!.Kind;
+            if (projects.Kinds.Find(kindName) is not IDraftCompiler found) return Results.Json(new { error = $"A project of the kind '{kindName}' has nothing to compile." }, statusCode: StatusCodes.Status409Conflict);
+            (compiler, root) = (found, workspaces.RootOf(workspace));
+            return null;
+        }
+
+        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/compile", async (string project, string id, HttpContext context) =>
+        {
+            if (CompilerOf(project, id, context, out var compiler, out var root) is { } refused) return refused;
+            try
+            {
+                var result = await compiler.CompileAsync(root, context.RequestAborted);
+                return Results.Json(new JsonObject
+                {
+                    ["ok"] = result.Ok,
+                    ["message"] = result.Message,
+                    ["diagnostics"] = DiagnosticsJson(result.Diagnostics),
+                    ["files"] = new JsonArray([.. result.Files.Select(f => (JsonNode?)new JsonObject { ["path"] = f.Path, ["status"] = f.Status, ["content"] = f.Content, ["truncated"] = f.Truncated })]),
+                });
+            }
+            catch (ProjectKindUnavailableException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
+        });
+
+        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/lowered", async (string project, string id, HttpContext context) =>
+        {
+            if (CompilerOf(project, id, context, out var compiler, out var root) is { } refused) return refused;
+            var body = await Body(context);
+            string? path;
+            try { path = body?["path"]?.GetValue<string>(); } catch (InvalidOperationException) { path = null; }
+            if (!BuildProjectKind.IsModelPath(path)) return Results.Json(new { error = "The body is a JSON object with the \"path\" of a model file of the project (under models/, .sql or .yml)." }, statusCode: StatusCodes.Status400BadRequest);
+            try
+            {
+                var result = await compiler.LowerAsync(root, path!, context.RequestAborted);
+                return Results.Json(new JsonObject
+                {
+                    ["ok"] = result.Ok,
+                    ["diagnostics"] = DiagnosticsJson(result.Diagnostics),
+                    ["files"] = new JsonArray([.. result.Files.Select(f => (JsonNode?)new JsonObject { ["path"] = f.Path, ["content"] = f.Content })]),
+                });
+            }
+            catch (ProjectKindUnavailableException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
+        });
+
+        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/sample", async (string project, string id, HttpContext context) =>
+        {
+            if (CompilerOf(project, id, context, out var compiler, out var root) is { } refused) return refused;
+            var body = await Body(context);
+            const string Shape = "The body is a JSON object with optional \"models\" (up to 20 model files of the project), \"rows\" (1 to 1000, default 50), \"seed\" and \"limit\" (1 to 200, default 20).";
+            var models = new List<string>();
+            int rows, seed, limit;
+            try
+            {
+                if (body?["models"] is { } asked) foreach (var m in asked.AsArray()) models.Add(m!.GetValue<string>());
+                (rows, seed, limit) = (body?["rows"]?.GetValue<int>() ?? 50, body?["seed"]?.GetValue<int>() ?? 1, body?["limit"]?.GetValue<int>() ?? 20);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or FormatException) { return Results.Json(new { error = Shape }, statusCode: StatusCodes.Status400BadRequest); }
+            if (models.Count > 20 || models.Any(m => !BuildProjectKind.IsModelPath(m)) || rows is < 1 or > 1000 || limit is < 1 or > 200) return Results.Json(new { error = Shape }, statusCode: StatusCodes.Status400BadRequest);
+            try
+            {
+                var result = await compiler.SampleAsync(root, models, rows, seed, limit, context.RequestAborted);
+                return Results.Json(new JsonObject { ["ok"] = result.Ok, ["diagnostics"] = DiagnosticsJson(result.Diagnostics), ["data"] = result.Data });
+            }
+            catch (ProjectKindUnavailableException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
+        });
+
         app.MapPost("/api/v1/projects/{project}/workspaces/{id}/builds", (string project, string id, HttpContext context) =>
         {
             if (InProject(project, context, ServerRole.Author, out var hosted) is { } refused) return refused;

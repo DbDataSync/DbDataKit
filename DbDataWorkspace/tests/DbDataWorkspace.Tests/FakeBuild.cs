@@ -16,9 +16,20 @@ internal static class FakeBuild
         var path = Path.Combine(folder, "dbdatabuild");
         var script = """
             #!/bin/bash
-            verb="$1 $2"; out=""; root="."; pkg="orders-set"; dest=""; to="runner"
+            verb="$1 $2"; out=""; root="."; pkg="orders-set"; dest=""; to="runner"; content=0; rows=50; seed=1; limit=20; models=""
             if [ "$1 $2 $3" = "project create starter" ]; then dest="$4"; mkdir -p "$dest/rendered" "$dest/models"; printf 'schema: dbdatabuild.project/2\ntitle: starter\n' > "$dest/dbdatabuild.yml"; printf 'cron: "*/15 * * * *"\n' > "$dest/rendered/refresh.plan.yaml"; echo "{}"; exit 0; fi
-            while [ $# -gt 0 ]; do case "$1" in --out) out="$2"; shift;; --project) root="$2"; shift;; --package) pkg="$2"; shift;; --to) to="$2"; shift;; esac; shift; done
+            if [ "$verb" = "project compile" ] || [ "$verb" = "project sample" ]; then shift; shift; fi
+            while [ $# -gt 0 ]; do case "$1" in --out) out="$2"; shift;; --project) root="$2"; shift;; --package) pkg="$2"; shift;; --to) to="$2"; shift;; --content) content=1;; --rows) rows="$2"; shift;; --seed) seed="$2"; shift;; --limit) limit="$2"; shift;; models/*) models="$models $1";; esac; shift; done
+            if [ "$verb" = "project compile" ]; then
+              if grep -q 'broken' "$root/models/marts/orders.sql" 2>/dev/null; then echo '{"ok":false,"diagnostics":[{"code":"DDB-301","severity":"error","title":"A table is not defined","found":"nowhere","location":{"file":"models/marts/orders.sql","line":1}}],"data":{}}'; exit 1; fi
+              if [ "$content" = "1" ]; then echo '{"ok":true,"data":{"files":[{"path":"rendered/sqlserver/orders.sql","hash":"h","content":"-- lowered\nSELECT 1 AS id"}]},"diagnostics":[]}'; exit 0; fi
+              mkdir -p "$root/rendered/sqlserver"; printf -- '-- lowered\nSELECT 1 AS id\n' > "$root/rendered/sqlserver/orders.sql"; rm -f "$root/rendered/stale.sql"
+              echo '{"ok":true,"data":{"files":[]},"diagnostics":[{"code":"DDB-900","severity":"note","title":"Note","found":"compiled"}]}'; exit 0
+            fi
+            if [ "$verb" = "project sample" ]; then
+              if grep -q 'broken' "$root/models/marts/orders.sql" 2>/dev/null; then echo '{"ok":false,"diagnostics":[{"code":"DDB-301","severity":"error","title":"A table is not defined","found":"nowhere","location":{"file":"models/marts/orders.sql","line":1}}],"data":{}}'; exit 1; fi
+              echo "{\"ok\":true,\"data\":{\"seed\":$seed,\"tables\":[{\"name\":\"marts.orders\",\"kind\":\"view\",\"origin\":null,\"columns\":[{\"name\":\"id\",\"type\":\"BIGINT\"}],\"row_count\":$rows,\"rows\":[[\"1\"],[\"2\"]],\"error\":null,\"warnings\":[\"models:$models limit:$limit\"]}]},\"diagnostics\":[]}"; exit 0
+            fi
             if [ "$verb" = "project show" ]; then
               if grep -q 'garbage' "$root/dbdatabuild.yml"; then echo '{"diagnostics":[{"code":"DDB-101","severity":"error","title":"The project file does not parse","found":"garbage","location":{"file":"dbdatabuild.yml","line":3}}]}'; exit 1; fi
               echo '{"diagnostics":[]}'; exit 0

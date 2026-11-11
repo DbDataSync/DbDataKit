@@ -2,7 +2,7 @@ import { isValidElement, type ReactElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { InstanceEditorView, instanceSaveBlock, NavigationEditorView, navSaveBlock, PublishView, type InstanceEditorProps, type NavigationEditorProps, type PublishViewProps } from './AppEditors'
-import { emptyInstanceForm, emptyNavForm, formFromRow, navFormFromSet, prepareManifest } from '../appEditors'
+import { emptyInstanceForm, emptyNavForm, formFromRow, navFormFromSet, prepareManifest, type InstanceForm } from '../appEditors'
 import { ApprovalsView, AppsView, AboutView, InstancesView, NavigationView, VersionsView, type ApprovalsViewProps, type InstancesViewProps, type NavigationViewProps, type VersionsViewProps } from './AppsPage'
 import type { AppAbout, AppApprovalRow, AppCheck, NavigationSetRow, AppDetail, AppInstanceRow, AppsCaller, AppSummary, AppVersionRow } from '../types'
 
@@ -281,6 +281,41 @@ function editorProps(over: Partial<InstanceEditorProps> = {}): InstanceEditorPro
     models: ['territories', 'people'], existing: ['acme', 'pinned'], caller: admin, busy: false, onChange: () => {}, onSave: () => {}, onCancel: () => {}, ...over,
   }
 }
+
+describe('the addresses section of the instance form (plan 26 AP08)', () => {
+  it('says there is no address, and adds a subdomain row named after the instance', () => {
+    const text = html(InstanceEditorView(editorProps()))
+    expect(text).toContain('data-testid="instance-editor-addresses-none"')
+    let changed: InstanceForm | null = null
+    const view = InstanceEditorView(editorProps({ onChange: (f) => { changed = f } }))
+    ;(find(view, 'instance-editor-address-add')!.props.onClick as () => void)()
+    expect(changed!.addresses).toEqual([{ host: 'sales.', kind: 'subdomain', path: '/', primary: false, certificate: '', certificatePassword: '' }])
+  })
+
+  it('shows the certificate secrets only for a custom domain, and blocks saving a custom domain with none', () => {
+    const custom = { host: 'sales.contoso.com', kind: 'custom' as const, path: '/', primary: false, certificate: '', certificatePassword: '' }
+    const form = { ...emptyInstanceForm('notes'), name: 'sales', addresses: [custom, { ...custom, host: 'sales.apps.example.com', kind: 'subdomain' as const }] }
+    const text = html(InstanceEditorView(editorProps({ form })))
+    expect(text).toContain('data-testid="instance-editor-address-certificate-0"')
+    expect(text).not.toContain('data-testid="instance-editor-address-certificate-1"')
+    const view = InstanceEditorView(editorProps({ form }))
+    expect(find(view, 'instance-editor-save')!.props.disabled).toBe(true)
+    expect(html(view)).toContain('needs its certificate')
+    const filled = InstanceEditorView(editorProps({ form: { ...form, addresses: [{ ...custom, certificate: 'secret:cert-sales' }] } }))
+    expect(find(filled, 'instance-editor-save')!.props.disabled).toBe(false)
+  })
+
+  it('makes one address the primary one at a time and removes a row', () => {
+    const a = { host: 'a.contoso.com', kind: 'custom' as const, path: '/', primary: true, certificate: 'secret:a', certificatePassword: '' }
+    let changed: InstanceForm | null = null
+    const form = { ...emptyInstanceForm('notes'), name: 'sales', addresses: [a, { ...a, host: 'b.contoso.com', primary: false }] }
+    const view = InstanceEditorView(editorProps({ form, onChange: (f) => { changed = f } }))
+    ;(find(view, 'instance-editor-address-primary-1')!.props.onChange as (e: unknown) => void)({ target: { checked: true } })
+    expect(changed!.addresses.map((x) => x.primary)).toEqual([false, true])
+    ;(find(view, 'instance-editor-address-remove-0')!.props.onClick as () => void)()
+    expect(changed!.addresses.map((x) => x.host)).toEqual(['b.contoso.com'])
+  })
+})
 
 describe('the new instance form', () => {
   it('offers a binding for each model the manifest lists and for no other', () => {

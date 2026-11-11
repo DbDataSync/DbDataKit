@@ -99,7 +99,7 @@ public sealed partial class ConsoleConnections
     /// <summary>The loader's answer for a file's text, plus the rule that a file is named after its connection.</summary>
     public static ConnectionLoadResult Check(string name, string yaml)
     {
-        var result = ConnectionDefinitionLoader.Load(yaml.TrimStart('﻿'), $"connections/{name}.yml", addressRequired: false, outsideKinds: true);
+        var result = ConnectionDefinitionLoader.LoadConnectionOfAnyKind(yaml.TrimStart('﻿'), $"connections/{name}.yml", addressRequired: false);
         var diagnostics = result.Diagnostics.ToList();
         if (result.Definition is { } d)
         {

@@ -59,6 +59,24 @@ public sealed class OidcClients(StateDatabase database)
         return client with { App = instance };
     }
 
+    /// <summary>
+    /// Replaces a client's redirect URIs (plan 26 AP08: a name bound to an app instance is a redirect URI of its client while the binding exists). There must be at least one, each an absolute URI with no fragment. False when there is no such client.
+    /// </summary>
+    public bool SetRedirectUris(string clientId, IReadOnlyList<string> redirectUris)
+    {
+        if (redirectUris.Count == 0) throw new ArgumentException("A client needs at least one redirect URI.", nameof(redirectUris));
+        foreach (var uri in redirectUris)
+            if (!Uri.TryCreate(uri, UriKind.Absolute, out var u) || u.Fragment.Length > 0 || uri.Contains('\n')) throw new ArgumentException("A redirect URI is an absolute URI with no fragment.", nameof(redirectUris));
+        return database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, "UPDATE {table:oidc_client} SET redirect_uris = $uris WHERE client_id = $id;");
+            cmd.Bind(database, "id", clientId);
+            cmd.Bind(database, "uris", string.Join('\n', redirectUris));
+            return cmd.ExecuteNonQuery() == 1;
+        });
+    }
+
     /// <summary>The client registered for an app instance, or null.</summary>
     public OidcClient? AppClientOf(string instance)
     {

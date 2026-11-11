@@ -12,10 +12,10 @@ Summary (counts of the features below):
 
 | Product | built | partly | missing | not planned | features |
 | --- | --- | --- | --- | --- | --- |
-| Build | 10 | 3 | 6 | 6 | 25 |
-| Store | 6 | 1 | 0 | 3 | 10 |
-| Sync | 9 | 4 | 5 | 3 | 21 |
-| All | 25 | 8 | 11 | 12 | 56 |
+| Build | 16 | 3 | 0 | 6 | 25 |
+| Store | 7 | 0 | 0 | 3 | 10 |
+| Sync | 12 | 3 | 3 | 3 | 21 |
+| All | 35 | 6 | 3 | 12 | 56 |
 
 ### Build
 
@@ -25,14 +25,14 @@ Summary (counts of the features below):
 | A draft of a project: make, abandon, commit, push, merge, diff, history | `build/src/pages/GitPanel.tsx`, `build/src/views/workspaceStore.ts` | `workspace/src/pages/WorkspacePage.tsx`, `WorkspacesPage.tsx` | built | plan 22a GP35a |
 | Models by folder with the errors per model | `build/src/pages/ProjectPage.tsx` (`ModelsTab`) | `workspace/src/pages/BuildPlanPanel.tsx` (`ModelsView`) | built | SC20f |
 | Edit a model's `.sql` and `.yml` and the other files of a project (tree, new, move, delete, diagnostics marked in the text) | `build/src/pages/EditTab.tsx`, `FileTools.tsx` | `workspace/src/pages/WorkspacePage.tsx` (the file editor: Save, Move, Delete) | built | SC20f |
-| Schema forms for a model's `.yml` and a semantic file's `.yml` | `build/src/pages/EditTab.tsx` (form from `semantic.schema.json`) | none: YAML text only | missing | SC20m |
-| New model by kind (`project model create`) | `build/src/pages/NewModelPanel.tsx` | none: a new file is made by path | missing | SC20m |
-| New connection, grants, serving policy (`extensions.gateway`) | `build/src/pages/NewConnectionPanel.tsx`, `ConnectionGrants.tsx`, `ConnectionPolicy.tsx` | none: `connections/*.yaml` as text | missing | SC20m |
+| Schema forms for a model's `.yml` and a semantic file's `.yml` | `build/src/pages/EditTab.tsx` (form from `semantic.schema.json`) | `workspace/src/pages/BuildFilePanel.tsx`, `buildSchemas.ts` (Build's own schemas, imported) | built | SC20m |
+| New model by kind (`project model create`) | `build/src/pages/NewModelPanel.tsx` | `workspace/src/pages/BuildFilePanel.tsx` (`NewBuildModel`: the two files the command writes) | built | SC20m |
+| New connection, grants, serving policy (`extensions.gateway`) | `build/src/pages/NewConnectionPanel.tsx`, `ConnectionGrants.tsx`, `ConnectionPolicy.tsx` | `workspace/src/pages/BuildFilePanel.tsx` (`NewBuildConnection`; the grants and policy editors of Build, imported) | built | SC20m |
 | Load graph of the models (layers; choose one to light up what it is built from and what is built from it) | `build/src/pages/ProjectPage.tsx` (`GraphTab`), `graphLayout.ts` | `workspace/src/pages/BuildGraphPanel.tsx`, `buildGraph.ts` (read from `rendered/<connection>/loads.yml`; draws with Build's `GraphView.tsx`) | built | SC20h |
 | Check the project (compiler diagnostics, errors and warnings, file and line) | `build/src/pages/ProjectPage.tsx` (`CheckTab`), `Problems.tsx` | `workspace/src/pages/CheckPanel.tsx` (`dbdatabuild project show metadata`, offline) | built | SC20c |
-| Compile: write the plan into `rendered/` and see what was written or removed | `build/src/pages/CompilePanel.tsx` | none: `rendered/` is read only | missing | SC20l |
-| The lowered SQL of a model (rendered files per model) | `build/src/pages/PreviewPanel.tsx` | `workspace/src/pages/BuildPlanPanel.tsx` opens a rendered file read only | partly | SC20l |
-| Offline sample: a model run on generated rows (Sample tab) | `build/src/pages/DeployTabs.tsx` (`SampleTab`), `PreviewPanel.tsx` | none | missing | SC20l |
+| Compile: write the plan into `rendered/` and see what was written or removed | `build/src/pages/CompilePanel.tsx` | `workspace/src/pages/BuildCompilePanel.tsx` (`POST .../compile` on a copy; the author writes the files into the draft) | built | SC20l |
+| The lowered SQL of a model (rendered files per model) | `build/src/pages/PreviewPanel.tsx` | `workspace/src/pages/BuildCompilePanel.tsx` (`POST .../lowered`, read only) | built | SC20l |
+| Offline sample: a model run on generated rows (Sample tab) | `build/src/pages/DeployTabs.tsx` (`SampleTab`), `PreviewPanel.tsx` | `workspace/src/pages/BuildCompilePanel.tsx` (`POST .../sample`: rows, seed, models) | built | SC20l |
 | Preview of a table or model: its columns and types, with generated values (never the database's rows) | `build/src/pages/PreviewPanel.tsx` | `workspace/src/pages/CatalogPanel.tsx` (from the catalog cache, `catalogCache.ts`) | built | SC20k |
 | Import tables from a database into the project (list what is not mapped yet, write the files) | `build/src/pages/ImportPanel.tsx`, `DefinitionPanel.tsx` | `workspace/src/pages/CatalogPanel.tsx` lists the cached tables; writing model files from them is not built | partly | SC20k |
 | Project tests (metadata rules and model tests, violating rows) | `build/src/pages/TestsPanel.tsx` | none: the tests read the target database | not planned | SC20o |
@@ -44,7 +44,7 @@ Summary (counts of the features below):
 | Publish the package to a Runner (channel, stage, serve, slots) | `build/src/pages/RunnerPublish.tsx`, `runnerPublish.ts` | `workspace/src/pages/PublishForm.tsx`, `BuildsPanel.tsx` | built | SC20d |
 | Publish a semantic model to a Gateway | `build/src/pages/ModelPublish.tsx` | `workspace/src/pages/PublishForm.tsx`, `BuildsPanel.tsx` (a `gateway` target: the build's compiled semantic models, made offline by `dbdatabuild project publish --to gateway --out`, over the data sources the Gateway has under the connections' names) | built | SC20e |
 | Publish the project's data sources (connection, read login as a secret, grants) to a Gateway; hand a data source over | `build/src/pages/PublishTab.tsx` | none: it puts a login on a Gateway, and the Workspace holds none (D20, the option not taken); the offline publish names data sources the Gateway already has, which an administrator or Build's server makes | not planned | SC20e |
-| Dashboards and reports of a project: list, new, check, publish (Views tab) | `build/src/pages/ViewsTab.tsx` | none: `dashboards/*.yaml` and `reports/*.yaml` open as text | missing | SC20n |
+| Dashboards and reports of a project: list, new, check, publish (Views tab) | `build/src/pages/ViewsTab.tsx` | `workspace/src/pages/BuildViewsPanel.tsx` (list, new, edit with `@dbdatakit/views-editor`, check findings); no model catalog for the wells and no publish to a Gateway (with SC20e) | partly | SC20n |
 | Lineage: the model graph; column lineage is the console's Lineage page, which reads Build servers | `build/src/pages/ProjectPage.tsx` (`GraphTab`); console Lineage page | `workspace/src/pages/BuildGraphPanel.tsx` (model level only) | partly | SC20h |
 
 ### Store
@@ -55,7 +55,7 @@ Summary (counts of the features below):
 | Model editor: a form from the model schema and YAML, the check as you type | `store/src/pages/ModelEditor.tsx`, `views/ModelEditorView.tsx` | `workspace/src/pages/StoreModelPanel.tsx`, `StructuredPanel.tsx` | built | SC21d |
 | New model from a starting text, name checked | `store/src/pages/NewModelPage.tsx` | `workspace/src/pages/StoreModelPanel.tsx` (`NewStoreModel`) | built | SC21d |
 | Change requests: read the proposed rows against the rows now, approve, reject with a reason | `store/src/pages/ChangesTab.tsx`, `views/ChangesView.tsx` | `console/src/pages/ApprovalsPage.tsx` decides in place (change requests are a Store server's data, not a draft's) | built | SC21c |
-| History of a model's text: earlier texts with who and when, diff against now, restore | `store/src/pages/HistoryTab.tsx`, `views/HistoryView.tsx` | `workspace/src/pages/WorkspacePage.tsx` (git history and changes of the draft; no restore button) | partly | SC21e |
+| History of a model's text: earlier texts with who and when, diff against now, restore | `store/src/pages/HistoryTab.tsx`, `views/HistoryView.tsx` | `workspace/src/pages/FileHistory.tsx` (the commits that changed the file, the text beside the editor's, put it into the editor; any kind of file) | built | SC21e |
 | Publish a model to the Gateway (the entity-model route) | `dbdatastore model publish` (the Store has no screen for it) | `workspace/src/pages/PublishForm.tsx` | built | SC21b |
 | Publish with the approval path (`approval: steward|owner` opens a change request) | Store server | none: the Workspace's merge is the author's review (SC21b) | not planned | SC21b |
 | Data source adoption for a publisher client (a data source made by hand is refused) | Gateway adopt route; the Store sends its own data source | `workspace/src/pages/PublishForm.tsx`: the Gateway's refusal of a data source made by hand opens a confirmation that names the data source and who made it; **Confirm and publish** sends `adopt`, which the Gateway records (who, when, which; in its audit and the data source's metadata) | built | SC21f |
@@ -68,7 +68,7 @@ Summary (counts of the features below):
 | --- | --- | --- | --- | --- |
 | Connections: list, test a connection (reachable) | `sync/src/pages/ConnectionsPage.tsx`, `connection-edit/ConnectionTestCard.tsx` | `workspace/src/pages/SyncSetPanel.tsx` lists them; no test | partly | SC22h |
 | Connection edit as a form (engine, address, auth by secret reference); no password in git | `sync/src/pages/ConnectionEditPage.tsx` | `workspace/src/pages/SyncSetPanel.tsx`, `StructuredPanel.tsx`, `syncSchemas.ts` (form from `sync-connection`, secret findings) | built | SC22d |
-| The connection's run login (`extensions.sync.run_user`) | `sync/src/pages/connection-edit/RunLoginCard.tsx` | YAML text only | partly | SC22i |
+| The connection's run login (`extensions.sync.run_user`) | `sync/src/pages/connection-edit/RunLoginCard.tsx` | `workspace/src/syncSchemas.ts` (`extensions.sync.run_user` and its secret reference, in the connection form) | built | SC22i |
 | Replications: list with status, lag, enable and pause | `sync/src/pages/ReplicationsPage.tsx` | `workspace/src/pages/SyncSetPanel.tsx` (the list, `enabled` in the form); no run state | partly | SC22l |
 | Overview: per replication, what is wrong with it | `sync/src/pages/replication-detail/OverviewPanel.tsx` | `workspace/src/pages/SyncSetPanel.tsx` fed by the check of the draft (`WorkspacePage.tsx`) | built | SC22f |
 | Replication settings: notes, schedule, endpoints, pipeline (reader, cache, writer), reconcile | `replication-detail/OverviewPanel.tsx`, `EndpointsCard.tsx`, `ScheduleCard.tsx`, `ReconcileConfigCard.tsx` | `workspace/src/syncSchemas.ts` (the task form: scheduling, change processing, bulk load, endpoints, reconcile) | built | SC22d |
@@ -76,10 +76,10 @@ Summary (counts of the features below):
 | Table mappings: new, delete, edit tables, filter, query source | `replication-detail/TableMappingsPanel.tsx`, `TableMappingForm.tsx`, `SourceFilterCard.tsx` | `workspace/src/syncSchemas.ts` (the mapping form: sources, targets, filter, query) | built | SC22d |
 | Mapping editor with columns from the live database (the source column of each target column, same-name suggestions, types) | `replication-detail/ColumnMappingEditor.tsx`, `suggestMappings.ts`, `CachedMetadataCard.tsx` | `workspace/src/pages/MappingColumns.tsx` (from the catalog cache, `catalogCache.ts`) | built | SC22g |
 | Primary key (natural key picked from the target columns) | `replication-detail/PrimaryKeyCard.tsx`, `naturalKey.ts` | `workspace/src/pages/MappingColumns.tsx` (picks from the cached columns), `syncSchemas.ts` | built | SC22g |
-| Transforms per column, the mapping's whole pipeline (Custom Transforms tab, mapping preview) | `replication-detail/MappingPipelineCard.tsx`, `MappingPreview.tsx`, `OverviewPanel.tsx` | the transform text of a column mapping in the form; scripts and the pipeline in YAML | partly | SC22i |
-| Segmenting strategies and the default segmenting of a reload | `replication-detail/SegmentingStrategiesCard.tsx`, `DefaultSegmentingCard.tsx`, `BulkLoadForm.tsx` | YAML text only | missing | SC22i |
+| Transforms per column, the mapping's whole pipeline (Custom Transforms tab, mapping preview) | `replication-detail/MappingPipelineCard.tsx`, `MappingPreview.tsx`, `OverviewPanel.tsx` | `workspace/src/syncSchemas.ts`: the transform text of a column mapping, the `scripts` and `hooks` of the task and of a mapping as forms; no mapping preview (it reads rows) | partly | SC22i |
+| Segmenting strategies and the default segmenting of a reload | `replication-detail/SegmentingStrategiesCard.tsx`, `DefaultSegmentingCard.tsx`, `BulkLoadForm.tsx` | `workspace/src/syncSchemas.ts` (`segmentingStrategies` of the task, `defaultSegmenting` of a mapping; the bulk load itself is a run) | built | SC22i |
 | Provisioning: both sides' plan, preview, apply (DDL runs now) | `replication-detail/ProvisioningCard.tsx`, `ReplicationProvisioningPanel.tsx` | none | missing | SC22j |
-| Quality checks of a replication (`checks:` seven kinds, severity, on_error) | `replication-detail/ReplicationChecksPanel.tsx`, `checkForms.ts`, `ChecksCard.tsx` | YAML text only | missing | SC22k |
+| Quality checks of a replication (`checks:` seven kinds, severity, on_error) | `replication-detail/ReplicationChecksPanel.tsx`, `checkForms.ts`, `ChecksCard.tsx` | `workspace/src/syncSchemas.ts`, `qualitySchema.ts` (the task's `checks:` as a form from the shared `check/1` schema) | built | SC22k |
 | Scripts: the registry, write, compile, test against sample input, bind | `sync/src/pages/ScriptsPage.tsx`, `ScriptEditPage.tsx`, `script-edit/ScriptTestPanel.tsx` | none: the template has no scripts folder | missing | SC22k |
 | Library management (drivers and the platform a package is made for) | `sync/src/pages/ScriptsPage.tsx`, the console's connection library | none: `SyncPlatform` has no setting (SC22c open) | missing | SC22k |
 | Publish to a Runner (package check, channel, stage or serve, slots, bindings) | `sync/src/pages/RunnerPage.tsx`, `RunnerLinkCard.tsx`, `replication-detail/ReplicationRunnerPanel.tsx` | `workspace/src/pages/PublishForm.tsx` | built | SC22c |

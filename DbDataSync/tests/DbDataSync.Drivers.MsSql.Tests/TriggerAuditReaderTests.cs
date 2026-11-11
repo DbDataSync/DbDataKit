@@ -434,4 +434,92 @@ public sealed class TriggerAuditReaderTests(MsSqlTestDatabase db) : IClassFixtur
         Assert.Equal("source", ex.Side);
         Assert.Null(ex.Column);
     }
+
+    // ---- CW02a: SQL Server's trigger already says a key update as a delete plus an insert ----------
+    // It is statement-level: the inserted and deleted tables are joined on the key, so a row whose key
+    // moved matches nothing in either and is written as a D of the old key and an I of the new one. These
+    // tests are the proof, and the guard that nobody "simplifies" the join away.
+
+    private string Q => $"dbo.[{_tableName}]";
+
+    private async Task<List<ChangeRow>> ChangesSinceAsync(string start) =>
+        await CollectAsync((await ReadAsync(start)).Rows);
+
+    [Fact]
+    public async Task AKeyUpdate_IsADeleteOfTheOldKeyAndTheNewRow()
+    {
+        await ExecuteAsync($"INSERT INTO {Q} (Id, Name) VALUES (1, 'Alice');");
+        var start = (await ReadAsync(null)).NewWatermark;
+
+        await ExecuteAsync($"UPDATE {Q} SET Id = 2 WHERE Id = 1;");
+
+        var rows = await ChangesSinceAsync(start);
+
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(ChangeOperation.Delete, Assert.Single(rows, r => (int)r["Id"]! == 1).Operation);
+        var moved = Assert.Single(rows, r => (int)r["Id"]! == 2);
+        Assert.NotEqual(ChangeOperation.Delete, moved.Operation);
+        Assert.Equal("Alice", moved["Name"]);
+    }
+
+    /// <summary>One statement swaps two keys (SQL Server checks the key at the end of the statement): both
+    /// keys exist afterwards, so both come back as rows with the other's values.</summary>
+    [Fact]
+    public async Task AKeySwapOfTwoRows_InOneStatement_LeavesBothKeysAsRows()
+    {
+        await ExecuteAsync($"INSERT INTO {Q} (Id, Name) VALUES (1, 'one'), (2, 'two');");
+        var start = (await ReadAsync(null)).NewWatermark;
+
+        await ExecuteAsync($"UPDATE {Q} SET Id = 3 - Id;");
+
+        var rows = await ChangesSinceAsync(start);
+
+        Assert.Equal(2, rows.Count);
+        Assert.All(rows, r => Assert.NotEqual(ChangeOperation.Delete, r.Operation));
+        Assert.Equal("two", Assert.Single(rows, r => (int)r["Id"]! == 1)["Name"]);
+        Assert.Equal("one", Assert.Single(rows, r => (int)r["Id"]! == 2)["Name"]);
+    }
+
+    [Fact]
+    public async Task AKeyUpdateFollowedByAnUpdateOfTheNewRow_CarriesTheFinalValues()
+    {
+        await ExecuteAsync($"INSERT INTO {Q} (Id, Name) VALUES (1, 'Alice');");
+        var start = (await ReadAsync(null)).NewWatermark;
+
+        await ExecuteAsync($"UPDATE {Q} SET Id = 2 WHERE Id = 1;");
+        await ExecuteAsync($"UPDATE {Q} SET Name = 'Final' WHERE Id = 2;");
+
+        var rows = await ChangesSinceAsync(start);
+
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(ChangeOperation.Delete, Assert.Single(rows, r => (int)r["Id"]! == 1).Operation);
+        Assert.Equal("Final", Assert.Single(rows, r => (int)r["Id"]! == 2)["Name"]);
+    }
+
+    [Fact]
+    public async Task ADeleteAndAnInsertOfTheSameKey_CollapseToTheLastOperation()
+    {
+        await ExecuteAsync($"INSERT INTO {Q} (Id, Name) VALUES (1, 'old');");
+        var start = (await ReadAsync(null)).NewWatermark;
+
+        await ExecuteAsync($"DELETE FROM {Q} WHERE Id = 1;");
+        await ExecuteAsync($"INSERT INTO {Q} (Id, Name) VALUES (1, 'new');");
+
+        var row = Assert.Single(await ChangesSinceAsync(start));
+        Assert.NotEqual(ChangeOperation.Delete, row.Operation);
+        Assert.Equal("new", row["Name"]);
+    }
+
+    [Fact]
+    public async Task ADeleteRecordWhileTheRowExists_IsReadAsTheRow()
+    {
+        await ExecuteAsync($"INSERT INTO {Q} (Id, Name) VALUES (5, 'here');");
+        var start = (await ReadAsync(null)).NewWatermark;
+        await ExecuteAsync($"INSERT INTO dbo.[{TriggerAuditStatement.ShadowTableName(_tableName)}] (DS_Op, Id) VALUES ('D', 5);");
+
+        var row = Assert.Single(await ChangesSinceAsync(start));
+
+        Assert.NotEqual(ChangeOperation.Delete, row.Operation);
+        Assert.Equal("here", row["Name"]);
+    }
 }

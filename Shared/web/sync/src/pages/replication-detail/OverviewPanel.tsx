@@ -159,6 +159,11 @@ export function PipelineTab() {
     draft.changeProcessing.writer.kind === 'Scd2'
     && capabilities.readers.find((r) => r.kind === draft.changeProcessing.reader.kind)?.detectsDeletes === false
 
+  // A watermark scan sees only rows that exist: after UPDATE t SET id = 2 WHERE id = 1 the row with the old key
+  // is not there to be read. Plan 28c CW02b: said where the reader is chosen, with the setting that bounds it.
+  const keyChangeBlind =
+    capabilities.readers.find((r) => r.kind === draft.changeProcessing.reader.kind)?.detectsKeyChanges === false
+
   // The natural key is not a question this level can answer since phase 68: one replication syncs
   // many tables, and each has its own. Declared settings minus that one, and static text in its place.
   const historizing = stage === 'writer' && versionsRows(draft.changeProcessing.writer.kind)
@@ -224,6 +229,16 @@ export function PipelineTab() {
               key needs a reader that reports deletes. Paired with one that cannot, a row that
               disappears at the source stays "current" here forever, which is a real configuration
               for a source that never deletes and a silent wrong answer for one that does. */}
+          {stage === 'reader' && keyChangeBlind && (
+            <span className="banner warn" role="alert" data-testid="key-change-blind-note">
+              The <strong>{draft.changeProcessing.reader.kind}</strong> reader reads only the rows that exist, so it
+              cannot see a primary key change: after <span className="mono">UPDATE t SET id = 2 WHERE id = 1</span> the
+              row with the old key stays in a target that is keyed by the source's key until a reload or a delete
+              reconciliation sweep removes it. Turn on <em>Delete reconciliation</em> and set <em>Sweep after every N
+              passes</em> to bound how long. That is correct for a table whose keys never change.
+            </span>
+          )}
+
           {stage === 'writer' && historizingWithoutDeletes && (
             <span className="banner warn" role="alert" data-testid="scd2-delete-blind-warning">
               The <strong>{draft.changeProcessing.reader.kind}</strong> reader cannot report deletes,
