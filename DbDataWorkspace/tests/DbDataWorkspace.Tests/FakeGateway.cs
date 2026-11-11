@@ -31,7 +31,7 @@ internal sealed class FakeGateway : IAsyncDisposable
 
     private FakeGateway(WebApplication app, Uri url, string directory, PairingCodes codes) => (this.app, Url, this.directory, Codes) = (app, url, directory, codes);
 
-    public static async Task<FakeGateway> StartAsync()
+    public static async Task<FakeGateway> StartAsync(string product = "dbdatagateway")
     {
         var directory = Directory.CreateTempSubdirectory("ddw-gateway-").FullName;
         var certificate = DirectoryCertificate.Load(directory);
@@ -39,7 +39,7 @@ internal sealed class FakeGateway : IAsyncDisposable
         var codes = new PairingCodes(Path.Combine(directory, "pairing-codes.json"));
         var builder = WebApplication.CreateSlimBuilder();
         builder.Logging.ClearProviders();
-        builder.UseDbDataHost(host => { host.Product = "dbdatagateway"; host.Version = "9.9.9"; });
+        builder.UseDbDataHost(host => { host.Product = product; host.Version = "9.9.9"; });
         builder.WebHost.ConfigureKestrel(o => o.Listen(IPAddress.Loopback, 0, listen => listen.UseHttps(certificate)));
         var app = builder.Build();
         const string instance = "fake-gateway-1";

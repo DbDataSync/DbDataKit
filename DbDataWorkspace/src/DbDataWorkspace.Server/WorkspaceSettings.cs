@@ -16,6 +16,9 @@ public sealed record WorkspaceSettings(string Directory, Uri Listen)
     /// <summary>How apps are built (the <c>apps:</c> section of <c>server.yaml</c>), when something other than the file says (tests); null: the file is read for every build.</summary>
     public WorkspaceAppSettings? Apps { get; init; }
 
+    /// <summary>The program that checks a Build project (<c>dbdatabuild</c>), when something other than "beside the server or on PATH" says (tests); null: found the usual way.</summary>
+    public string? BuildExecutable { get; init; }
+
     public const string Product = "dbdataworkspace";
     public const string DefaultListen = "https://127.0.0.1:8471";
 

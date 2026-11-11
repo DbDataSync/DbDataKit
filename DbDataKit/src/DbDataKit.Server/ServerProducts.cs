@@ -114,6 +114,9 @@ public static class ServerProducts
         ("POST", "api/v1/projects/{p}/workspaces/{id}/push", ServerRole.Author),
         ("POST", "api/v1/projects/{p}/workspaces/{id}/merge", ServerRole.Approver),
         // GP35b: what a server can build with (the package store and what is missing), the builds of a draft and each one's result, the preview of a build (read only, a sandbox with no network) and its publish to a paired Gateway
+        // plan 33 SC20a: the kinds of project (what a new project can be and where each publishes) and the check of a draft by its kind's validators
+        ("GET", "api/v1/project-kinds", ServerRole.Viewer),
+        ("GET", "api/v1/projects/{p}/workspaces/{id}/check", ServerRole.Viewer),
         ("GET", "api/v1/app-build", ServerRole.Viewer),
         ("POST", "api/v1/projects/{p}/workspaces/{id}/builds", ServerRole.Author),
         ("GET", "api/v1/projects/{p}/workspaces/{id}/builds", ServerRole.Viewer),
