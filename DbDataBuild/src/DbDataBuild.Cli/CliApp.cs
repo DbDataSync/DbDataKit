@@ -401,6 +401,14 @@ public static class CliApp
                     cmd.Arguments.Add(semNames); cmd.Options.Add(semProject);
                     cmd.SetAction(pr => Reported(pr, spec, (o, e) => SemanticShowCommand.Run(spec, pr.GetValue(semProject)!.FullName, pr.GetValue(semNames) ?? [], o, e)));
                     break;
+                case "dashboard validate":
+                case "report validate":
+                    var viewKind = spec.Name.StartsWith("report", StringComparison.Ordinal) ? DbDataKit.Views.ViewKind.Report : DbDataKit.Views.ViewKind.Dashboard;
+                    var vvFiles = new Argument<string[]>("files") { Description = "Files of the project, relative to its root (default: every file of the folder)", Arity = ArgumentArity.ZeroOrMore };
+                    var vvProject = new Option<DirectoryInfo>("--project") { Description = "Project root", DefaultValueFactory = _ => new DirectoryInfo(".") };
+                    cmd.Arguments.Add(vvFiles); cmd.Options.Add(vvProject);
+                    cmd.SetAction(pr => Reported(pr, spec, (o, e) => ViewValidateCommand.Run(spec, viewKind, pr.GetValue(vvProject)!.FullName, pr.GetValue(vvFiles) ?? [], o, e)));
+                    break;
                 case "project show refresh":
                     var showRefreshPlan = new Argument<string?>("plan") { Description = "A refresh plan by name; omit to list the plans of every connection", Arity = ArgumentArity.ZeroOrOne };
                     var showRefreshProject = new Option<DirectoryInfo>("--project") { Description = "Project root", DefaultValueFactory = _ => new DirectoryInfo(".") };

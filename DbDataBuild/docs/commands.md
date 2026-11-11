@@ -18,6 +18,8 @@ Generated from the command tree of `dbdatabuild` (`UPDATE_GOLDEN=1 dotnet test t
 | [`project show graph`](#project-show-graph) | `P→` | Offline only | Show the dependency graph (which table each model reads), column lineage, or a diagram of it; selectors pick the part to show |
 | [`project show metadata`](#project-show-metadata) | `P→` | Offline only | Print everything the tool knows about the project and its models (use --format json) |
 | [`project show semantic`](#project-show-semantic) | `P→` | Offline only | Show the semantic models of the project (semantic/): the connections they read, what each attribute and measure is bound to (connection, model, column), the generated physical layer, relationships and hierarchies |
+| [`dashboard validate`](#dashboard-validate) | `P→` | Offline only | Check the dashboard files of the project (dashboards/, or the files named) as the views loader reads them and against the project's semantic models: each finding has its file, line and column; a report file is refused as a report |
+| [`report validate`](#report-validate) | `P→` | Offline only | Check the report files of the project (reports/, or the files named) as the views loader reads them and against the project's semantic models: each finding has its file, line and column; a dashboard file is refused as a dashboard |
 | [`project show refresh`](#project-show-refresh) | `P→` | Offline only | Read the compiled refresh plans (offline): the plans of each connection, or one plan with its members in the order they run, the inputs each load takes and where each default comes from, what each load waits for (the dependency graph the loads file carries, with model kinds and depth), what was left out and the hashes |
 | [`project show plan`](#project-show-plan) | `P→` | Offline only | Read plan files (offline, nothing applied): list a project's plans, or show one with its steps, risk, exact statements, report and what applying it would need to be allowed |
 | [`project file list`](#project-file-list) | `P→` | Offline only | List the files of the project (or of a folder in it) with their size and content hash; the way a console or an agent sees the tree |
@@ -282,6 +284,38 @@ Usage: `dbdatabuild project show semantic [models]... [options]`
 | Argument | Meaning |
 |---|---|
 | `models` (several) | Semantic models by name or file (default: every file in semantic/) |
+
+| Option | Meaning |
+|---|---|
+| `--project` `<path>` | Project root |
+
+## dashboard validate
+
+Check the dashboard files of the project (dashboards/, or the files named) as the views loader reads them and against the project's semantic models: each finding has its file, line and column; a report file is refused as a report.
+
+Effect: Offline only. Reads and writes: `P→`.
+
+Usage: `dbdatabuild dashboard validate [files]... [options]`
+
+| Argument | Meaning |
+|---|---|
+| `files` (several) | Files of the project, relative to its root (default: every file of the folder) |
+
+| Option | Meaning |
+|---|---|
+| `--project` `<path>` | Project root |
+
+## report validate
+
+Check the report files of the project (reports/, or the files named) as the views loader reads them and against the project's semantic models: each finding has its file, line and column; a dashboard file is refused as a dashboard.
+
+Effect: Offline only. Reads and writes: `P→`.
+
+Usage: `dbdatabuild report validate [files]... [options]`
+
+| Argument | Meaning |
+|---|---|
+| `files` (several) | Files of the project, relative to its root (default: every file of the folder) |
 
 | Option | Meaning |
 |---|---|
