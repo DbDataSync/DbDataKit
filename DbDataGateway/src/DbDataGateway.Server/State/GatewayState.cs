@@ -25,7 +25,7 @@ public static class GatewayState
     public static IReadOnlyList<StateModule> Modules { get; } =
     [
         IdentityModule.Module, NotificationsModule.Module, AuditModule.Module,
-        DefinitionsModule.Module, AppStorageModule.Module, DbDataKit.Web.Trust.TrustModule.Module, ServingModule.Module, UserViewsModule.Module,
+        DefinitionsModule.Module, AppStorageModule.Module, DbDataKit.Web.Trust.TrustModule.Module, ServingModule.Module, UserViewsModule.Module, SemanticRunsModule.Module,
     ];
 
     public static StateScope ScopeOf(string? group = null) => new(Group: string.IsNullOrWhiteSpace(group) ? DefaultGroup : group, Service: ServiceId);

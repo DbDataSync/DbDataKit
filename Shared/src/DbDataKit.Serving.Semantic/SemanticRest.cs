@@ -69,6 +69,17 @@ public static class SemanticRest
         return await ResultAsync(answer, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Runs any request of the model as the caller (a query, an explain, a members request) and answers it as <see cref="ResultAsync"/> does; for a tool that is not an app (the console's run list replaying a record). The row
+    /// cap is <paramref name="maxRows"/> (up to <see cref="MaxRows"/>).
+    /// </summary>
+    public static async Task<JsonObject> RunAsync(IServingServices services, ServingContext context, string model, string requestJson, int maxRows, CancellationToken cancellationToken)
+    {
+        var answer = await services.Queries.RunAsync(context, new ServingRequest.Semantic(SemanticModels.SourcePrefix + model, requestJson, new ServingLimits(MaxRows: Math.Clamp(maxRows, 1, MaxRows))), cancellationToken).ConfigureAwait(false);
+        await using var _ = answer;
+        return await ResultAsync(answer, cancellationToken).ConfigureAwait(false);
+    }
+
     private static async Task<JsonObject> ResultAsync(IServingAnswer answer, CancellationToken cancellationToken)
     {
         var metadata = answer.Schema.Metadata ?? new Dictionary<string, string>();
@@ -79,7 +90,8 @@ public static class SemanticRest
         if (Meta("warnings") is { } w && JsonNode.Parse(w) is JsonArray listed)
             foreach (var item in listed) warnings.Add(item is JsonValue v && v.TryGetValue<string>(out var text) ? text : item?.ToJsonString());
 
-        if (status != "complete")
+        // an explain or a members request has no engine status of a result: its rows are the answer
+        if (status is not (null or "complete" or "explained"))
         {
             var remaining = Meta("remaining");
             var reason = status == "partial"
@@ -106,7 +118,7 @@ public static class SemanticRest
                 rowsOut.Add(row);
             }
         }
-        return new JsonObject { ["status"] = "ok", ["columns"] = columns, ["rows"] = rowsOut, ["warnings"] = warnings, ["request_hash"] = hash };
+        return new JsonObject { ["status"] = status == "explained" ? "explained" : "ok", ["columns"] = columns, ["rows"] = rowsOut, ["warnings"] = warnings, ["request_hash"] = hash };
     }
 
     private static string TypeOf(Apache.Arrow.Types.IArrowType type) => type switch

@@ -10,6 +10,9 @@ public sealed record SemanticModel(Catalog Catalog, IReadOnlyDictionary<string, 
 {
     public string Name => Catalog.Name;
 
+    /// <summary>The published version this model is (plan 14a SL23), so a run record names it and a replay can load it again; null for a model the host was configured with.</summary>
+    public int? Version { get; init; }
+
     /// <summary>
     /// The serving source a catalog source's queries run against; a source the map does not name is the serving source of the same name. The engine names a source with several fact tables
     /// <c>source.fact</c> for all but the first, and those queries run where the source does.
@@ -39,6 +42,9 @@ public sealed class SemanticModels
 
     /// <summary>Where people keep saved queries of their own (J27); null when the host keeps none.</summary>
     public IUserSavedQueries? UserQueries { get; set; }
+
+    /// <summary>Where a record of every statement is kept (plan 14a SL23, D21); null when the host keeps none.</summary>
+    public ISemanticRuns? Runs { get; set; }
 
     public IReadOnlyCollection<SemanticModel> All => _models.Values.ToList();
 

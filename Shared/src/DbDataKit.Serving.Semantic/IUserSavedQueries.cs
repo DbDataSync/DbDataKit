@@ -16,4 +16,14 @@ public interface IUserSavedQueries
 }
 
 /// <summary>A user-owned saved query as listed to a caller.</summary>
-public sealed record UserSavedQuery(string Name, string Owner, SavedQueryDef Query);
+public sealed record UserSavedQuery(string Name, string Owner, SavedQueryDef Query, string? OwnerName = null);
+
+/// <summary>How a person's own semantic data is keyed (plan 14a D35): the email or UPN the host put in the caller's claim <c>email</c>, trimmed and lower case; a caller with none is keyed by their name in the same form.</summary>
+public static class SemanticCallers
+{
+    public const string EmailClaim = "email";
+
+    public static string KeyOf(ServingCaller caller) => Normalize(caller.Claims.TryGetValue(EmailClaim, out var email) && !string.IsNullOrWhiteSpace(email) ? email : caller.Name);
+
+    public static string Normalize(string key) => key.Trim().ToLowerInvariant();
+}

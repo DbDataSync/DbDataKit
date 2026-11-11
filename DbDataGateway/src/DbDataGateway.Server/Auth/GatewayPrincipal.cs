@@ -9,8 +9,9 @@ public sealed class GatewayPrincipal
     private readonly HashSet<string> _dataSources;
 
     public GatewayPrincipal(string name, string method, IEnumerable<string> dataSources, string? defaultDataSource = null, DbCredentials? credentials = null,
-        string? homeUserId = null, IEnumerable<string>? homeGroups = null)
+        string? homeUserId = null, IEnumerable<string>? homeGroups = null, string? email = null)
     {
+        Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim().ToLowerInvariant();
         Name = name;
         Method = method;
         _dataSources = new HashSet<string>(dataSources, StringComparer.OrdinalIgnoreCase);
@@ -21,6 +22,9 @@ public sealed class GatewayPrincipal
     }
 
     public string Name { get; }
+
+    /// <summary>The email or UPN the identity home has for the person (trimmed, lower case), or null when there is none; what a person's own data is keyed by (plan 14a D35).</summary>
+    public string? Email { get; }
 
     /// <summary>How the caller proved their identity ("home-token", "home-user", "windows", "passthrough", "jwt").</summary>
     public string Method { get; }

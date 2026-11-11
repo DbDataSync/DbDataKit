@@ -171,6 +171,8 @@ public static class GatewayHost
             var loaded = SemanticModelsLoader.Load(current, ResolveDataDirectory(current), sp.GetRequiredService<SecretsRuntime>(), problem => log.LogWarning("{Problem}", problem));
             // the saved queries people keep for themselves (J27) are looked up in the state database
             loaded.UserQueries = sp.GetRequiredService<DbDataGateway.Server.State.SavedQueryStore>();
+            // a record of every statement (SL23)
+            loaded.Runs = sp.GetRequiredService<DbDataGateway.Server.State.SemanticRunStore>();
             // a changed server.yaml is applied to the models without a restart; the first pass only learns which names the file gives
             var directory = ResolveDataDirectory(current);
             var configured = SemanticModelsLoader.Reload(loaded, current, directory, new HashSet<string>(), _ => { });
@@ -281,6 +283,7 @@ public static class GatewayHost
         builder.Services.AddSingleton(sp => new DbDataKit.State.NotificationFeedStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>(), DbDataGateway.Server.State.GatewayState.ServiceId));
         builder.Services.AddSingleton<DbDataKit.Monitoring.INotificationFeed>(sp => sp.GetRequiredService<DbDataKit.State.NotificationFeedStore>());
         builder.Services.AddSingleton(sp => new DbDataGateway.Server.State.SavedQueryStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
+        builder.Services.AddSingleton(sp => new DbDataGateway.Server.State.SemanticRunStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
         builder.Services.AddSingleton<GatewayEvents>();
         builder.Services.AddSingleton<DbDataGateway.Server.State.GroupSessionKey>();
         // the secrets a group's clients keep on it (plan 20 O04b); the state is looked up when a client's secret is first asked for, never to open the state itself
