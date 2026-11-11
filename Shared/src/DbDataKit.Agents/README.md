@@ -31,3 +31,14 @@ Always the same order: the platform's rules (`PlatformRules`, versioned with the
 ## The model's space (`ContextBudget`, `ContextFitter`) and skills (`SkillCatalog`)
 
 What is always given is counted (`ITokenCounter`; with no local tokenizer `EstimateCounter`: characters divided by 3.5 plus 15%, and the refusal says so) and compared with a share of the window; over it, a publish is refused naming what is largest. At run time references give way first, then old turns (summarised, recorded), never an instruction. A skill is offered by name and description; `skill_load` returns the body and records its version; the largest body must fit in the room left.
+
+## What a host shows people (`Insight`, `PolicyEditing`) and runs (`Session`)
+
+The console's screens (plan 27a AG15 to AG17, AG29 to AG32) compute nothing of their own; they show what these functions say, by the rules the run uses.
+
+- **What each tool will ask** (`ToolPromptingReport`): per tool the setting that applies (`PromptingResolver.Resolve`, the same call the gate makes), the layer that sets it (the install policy's setting for the tool, the policy's minimum for a trait, the agent, the tool's own default or its traits) and a warning when the agent's own setting is below what a higher layer needs, so it has no effect.
+- **The model's space** (`ModelSpace`): the always-given parts (instructions, tool definitions, skill descriptions, the references an agent always has, the bound instructions and guardrails) by kind and by part against the budget, how they were counted, and, when over, the refusal that names what is largest.
+- **Skills** (`SkillViews`): each skill's description and version, the size of its body against the room left, the refusal that names a skill that does not fit, and the files that export it.
+- **The install policy as a file** (`PolicyEditing.Write`): an `agent-policy/1` text the loader reads back equal; `Describe(before, after)` lists what a change does in sentences and marks every one that makes the install less strict, which a host asks the person to confirm and records.
+- **The approval desk** (`ApprovalDesk`): the steps that wait for a person. `ApproverFor(conversation)` is the conversation's `IApprover`; `Answer` is the person's own act and counts only for the person a step is for; a step nobody answers within the timeout expires, which is a no. Nothing a model says reaches it.
+- **A session** (`AgentSession`): one conversation of an agent with a person. A message runs the loop with the gate, the limits (the agent's own narrow the install's) and the context of each turn, and writes to an `IConversationLog` the words, one record per model turn (tokens, cost, what the turn was given) and every event naming the person, the agent and its version. A run that ends on a limit, a denial or a refusal says so in the conversation's status; the next message goes on.
