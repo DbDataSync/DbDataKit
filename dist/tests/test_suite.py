@@ -5,6 +5,7 @@ The members here are fixtures (a root folder with one dist.json each), so the te
 """
 import json
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -12,8 +13,38 @@ import unittest
 
 DIST = pathlib.Path(__file__).resolve().parent.parent
 REPO_ROOT = DIST.parent
+PWSH = shutil.which("pwsh")     # the parse check runs only where PowerShell is installed (CI has it)
 REPO = "acme/kit"
 VERSION = "2026.2.2.0200"
+
+
+def check_balanced(text):
+    """A cheap syntax check for machines without PowerShell: braces, brackets and parentheses pair up outside strings, and every quote closes."""
+    stack, pairs, i = [], {")": "(", "]": "[", "}": "{"}, 0
+    while i < len(text):
+        c = text[i]
+        if c in "'\"":
+            j = i + 1
+            while j < len(text):
+                if text[j] == c and text[j + 1:j + 2] == c:      # a doubled quote inside a quoted string
+                    j += 2
+                    continue
+                if text[j] == c:
+                    break
+                if c == '"' and text[j] == "`":
+                    j += 1
+                j += 1
+            else:
+                raise AssertionError(f"a {c} quote opens and never closes near: {text[i:i + 60]!r}")
+            i = j
+        elif c in "([{":
+            stack.append(c)
+        elif c in ")]}":
+            if not stack or stack.pop() != pairs[c]:
+                raise AssertionError(f"unbalanced {c} near: {text[max(0, i - 60):i + 1]!r}")
+        i += 1
+    if stack:
+        raise AssertionError(f"unclosed {stack}")
 
 
 def member(product, exe=None, service=None, vc=False, win=True, env=None):
@@ -119,17 +150,83 @@ class SuiteManifestTests(unittest.TestCase):
     def test_per_member_sums_files_give_the_same_manifest(self):
         self.assertEqual(self.manifest(split=True), self.manifest(split=False))
 
-    def test_it_installs_programs_and_sets_the_machine_variables_only(self):
+    def test_it_has_the_two_scripts_and_no_installer_keys(self):
         m = self.manifest()
         for key in ("installer", "uninstaller", "persist"):
             self.assertNotIn(key, m)
-        # The one script: the members' own globalEnv, for a global install only, removed on uninstall (as each product's own manifest does).
-        script = "\n".join(m["post_install"]) + "\n" + "\n".join(m["pre_uninstall"])
-        self.assertIn("if ($global)", script)
-        self.assertIn("SetEnvironmentVariable", script)
-        for word in ("service install", "server pair", "instance add", "Start-Service", "sc.exe", "New-Service"):
-            self.assertNotIn(word, script)
         self.assertEqual(sorted(m), ["architecture", "bin", "description", "extract_to", "homepage", "license", "notes", "post_install", "pre_uninstall", "suggest", "version"])
+        self.assertTrue(all(isinstance(line, str) for line in m["post_install"] + m["pre_uninstall"]))
+
+    def test_the_bound_member_list_is_in_start_order_with_each_services_commands(self):
+        post = "\n".join(self.manifest()["post_install"])
+        self.assertLess(post.index("Product = 'dbdatakit'"), post.index("Product = 'dbdatagateway'"))
+        self.assertLess(post.index("Product = 'dbdatagateway'"), post.index("Product = 'dbdatabuild'"))
+        self.assertIn("Service = 'KitConsole'; Register = 'service install'; Unregister = ''", post)
+        self.assertIn("Register = 'service install --name gw'", post)       # {name} is substituted
+        self.assertIn("Service = ''; Register = ''", post)                   # a member with no service is bound without one and left alone
+        self.assertIn("Roles = 'viewer,operator,admin'", post)
+        self.assertIn("Address = 'https://localhost:8816'", post)
+
+    def test_the_install_checks_before_it_changes_anything(self):
+        post = "\n".join(self.manifest()["post_install"])
+        refuse_user = post.index("if (-not $global)")
+        refuse_route = post.index("is registered from")
+        env = post.index("SetEnvironmentVariable('DBDATAKIT_DATA'")
+        first_change = post.index("Registered $m")
+        self.assertLess(refuse_user, refuse_route)
+        self.assertLess(refuse_route, env)
+        self.assertLess(refuse_route, first_change)
+        self.assertIn("IsInRole", post)
+        self.assertIn("Use one install route per machine", post)
+
+    def test_the_install_registers_starts_the_console_then_pairs_and_starts_the_others(self):
+        post = "\n".join(self.manifest()["post_install"])
+        self.assertLess(post.index("Registered $m"), post.index("Started $consoleMember"))
+        self.assertLess(post.index("Started $consoleMember"), post.index("Paired $m"))
+        for word in ("'server', 'pair', '--max-role'", "'instance', 'add'", "'instance', 'list', '--offline'", "'health', 'check'", "Start-Service"):
+            self.assertIn(word, post)
+        self.assertIn("is listed by the console already", post)        # idempotent
+        self.assertIn("is registered already", post)
+        self.assertIn("$failed", post)                                 # one member's failure names it and leaves the rest
+
+    def test_no_pairing_code_reaches_a_file_the_log_or_a_message(self):
+        post = "\n".join(self.manifest()["post_install"])
+        for word in ("Out-File", "Set-Content", "Add-Content", "Tee-Object", "Export-", ">>", " > "):
+            self.assertNotIn(word, post)
+        for line in post.splitlines():
+            if "$code" in line:                                        # the only uses: read it, pass it to `instance add`, scrub it from a message, drop it
+                self.assertTrue(any(k in line for k in ("Groups[1].Value", "'--code', $code", "Scrub $added.Output $code", "$code = $null")), line)
+            if line.lstrip().startswith(("Say ", "Write-Host", "Write-Warning")):
+                self.assertNotIn("$code", line)
+                self.assertNotIn("$made.Output", line)
+
+    def test_an_uninstall_unpairs_and_unregisters_in_reverse_and_an_update_only_stops(self):
+        undo = "\n".join(self.manifest()["pre_uninstall"])
+        real = undo.index("if ($cmd -eq 'uninstall')")
+        self.assertLess(real, undo.index("'instance', 'remove'"))
+        self.assertLess(undo.index("'instance', 'remove'"), undo.index("'server', 'unpair'"))
+        self.assertLess(undo.index("'server', 'unpair'"), undo.index("Stopped $m.Service"))
+        self.assertLess(undo.index("Stopped $m.Service"), undo.index("$m.Unregister"))
+        self.assertIn("[array]::Reverse", undo)
+        update = undo[undo.index("} else {", real):].split("SetEnvironmentVariable")[0]
+        for word in ("Unregister", "unpair", "instance"):
+            self.assertNotIn(word, update)
+        self.assertNotIn("Remove-Item", undo)           # data under %ProgramData% stays
+
+    def test_the_services_run_from_scoops_current_folder(self):
+        post = "\n".join(self.manifest()["post_install"])
+        self.assertIn("Join-Path $appDir 'current'", post)
+
+    def test_the_scripts_are_balanced_powershell(self):
+        m = self.manifest()
+        for script in (m["post_install"], m["pre_uninstall"]):
+            check_balanced("\n".join(script))
+        if PWSH:
+            for name in ("post_install", "pre_uninstall"):
+                f = self.tmp / f"{name}.ps1"
+                f.write_text("\n".join(m[name]) + "\n", encoding="utf-8")
+                r = subprocess.run([PWSH, "-NoProfile", "-Command", f"$e=$null;[void][System.Management.Automation.Language.Parser]::ParseFile('{f}',[ref]$null,[ref]$e);if($e){{$e|Out-String;exit 1}}"], capture_output=True, text=True)
+                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     def test_the_variables_are_every_members_global_env_in_order(self):
         m = self.manifest()
@@ -149,7 +246,7 @@ class SuiteManifestTests(unittest.TestCase):
         # three members name it; the suite's script sets it once
         self.assertEqual(post.count("SetEnvironmentVariable('DBDATAKIT_DATA'"), 1)
         self.assertEqual(m["notes"].count("DBDATAKIT_DATA=%ProgramData%\\DbDataKit"), 1)
-        self.assertNotIn("DBDATAKIT_DATA", undo)
+        self.assertNotIn("SetEnvironmentVariable('DBDATAKIT_DATA'", undo)
         self.assertIn("KIT_DIR", undo)
         self.assertIn("DBDATAKIT_DATA is left in place", m["notes"])
 
@@ -160,13 +257,13 @@ class SuiteManifestTests(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("DBDATAKIT_DATA", r.stderr)
 
-    def test_a_suite_with_no_global_env_has_no_scripts(self):
-        self.suite = lay_out(self.tmp, members=[(p, f, member(p)) for p, f, _ in MEMBERS])
+    def test_a_suite_with_no_global_env_has_scripts_but_no_variable_lines(self):
+        self.suite = lay_out(self.tmp, members=[(p, f, member(p, service={"name": "S" + p, "register": "service install"})) for p, f, _ in MEMBERS])
         r, path = self.bind()
         self.assertEqual(r.returncode, 0, r.stderr)
         m = json.loads(path.read_text())
-        self.assertNotIn("post_install", m)
-        self.assertNotIn("pre_uninstall", m)
+        self.assertNotIn("SetEnvironmentVariable", "\n".join(m["post_install"] + m["pre_uninstall"]))
+        self.assertIn("$MachineVars = @()", m["post_install"])
 
     def test_the_notes_name_each_service_and_each_pairing_by_hand(self):
         notes = self.manifest()["notes"]
