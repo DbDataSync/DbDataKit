@@ -1,3 +1,4 @@
+import { CHECK_SCHEMA, CHECK_SCHEMA_ID } from './qualitySchema'
 import { SchemaSet, schemaFor, type SchemaAssociation, type SchemaNode } from '@dbdatakit/shell'
 
 /**
@@ -6,16 +7,13 @@ import { SchemaSet, schemaFor, type SchemaAssociation, type SchemaNode } from '@
  */
 const found = import.meta.glob(['../../../../DbDataBuild/schemas/*.schema.json', '!../../../../DbDataBuild/schemas/output.schema.json'], { import: 'default', eager: true }) as Record<string, SchemaNode>
 
-/** The shared `check/1` schema the semantic file's `checks` refer to by its `$id` (a library's, `DbDataKit.Quality`): the set has to hold it under that name. */
-const quality = import.meta.glob('../../../../Shared/src/DbDataKit.Quality/schemas/check.schema.json', { import: 'default', eager: true }) as Record<string, SchemaNode>
-
 /** The semantic library's schemas that the semantic file's request parts refer to by file name (`semantic_request.schema.json` and what it refers to). */
 const semantic = import.meta.glob('../../../../Shared/src/DbDataKit.Semantic/schemas/*.schema.json', { import: 'default', eager: true }) as Record<string, SchemaNode>
 
 export const BUILD_SCHEMAS: Record<string, SchemaNode> = {
   ...Object.fromEntries(Object.entries(semantic).map(([path, schema]) => [path.slice(path.lastIndexOf('/') + 1), schema])),
   ...Object.fromEntries(Object.entries(found).map(([path, schema]) => [path.slice(path.lastIndexOf('/') + 1), schema])),
-  ...Object.fromEntries(Object.values(quality).map((schema) => [String(schema.$id), schema])),
+  [CHECK_SCHEMA_ID]: CHECK_SCHEMA,
 }
 
 /** Which schema a file of a project has: the same table as `FileSchemas.All` of the Build server (a test keeps the two equal). */

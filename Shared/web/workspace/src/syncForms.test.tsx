@@ -1,10 +1,10 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { SchemaForm, SchemaSet, parseYaml } from '@dbdatakit/shell'
-import { SYNC_CONNECTION_SCHEMA, SYNC_MAPPING_SCHEMA, SYNC_TASK_SCHEMA, newReplicationFiles, secretFindings, syncConnectionSchema, syncMappingSchema, syncTaskSchema } from './syncSchemas'
+import { SchemaForm, parseYaml } from '@dbdatakit/shell'
+import { SYNC_CONNECTION_SCHEMA, SYNC_MAPPING_SCHEMA, SYNC_TASK_SCHEMA, newReplicationFiles, secretFindings, syncSchemaSet } from './syncSchemas'
 
 // plan 33 SC22i: the parts of a replication that were YAML only: the connection's run login, the scripts and hooks of the pipeline, the segmenting strategies and a mapping's default segmenting
-const schemas = new SchemaSet({ [SYNC_TASK_SCHEMA]: syncTaskSchema, [SYNC_MAPPING_SCHEMA]: syncMappingSchema, [SYNC_CONNECTION_SCHEMA]: syncConnectionSchema })
+const schemas = syncSchemaSet
 const problems = (schema: string, text: string) => schemas.problems(schema, parseYaml(text).value)
 const draw = (schema: string, text: string) => renderToStaticMarkup(<SchemaForm schemas={schemas} schema={schema} text={text} onText={() => {}} />)
 
@@ -68,5 +68,24 @@ describe('the pipeline: scripts and hooks of a mapping and of a replication', ()
   it('keep the files of a new replication sound', () => {
     expect(problems(SYNC_TASK_SCHEMA, task.text)).toEqual([])
     expect(problems(SYNC_MAPPING_SCHEMA, mapping.text)).toEqual([])
+  })
+})
+
+// plan 33 SC22k: the replication's `checks:` section is the shared check/1 list, drawn from its own schema
+describe('the quality checks of a replication', () => {
+  const withChecks = (checks: string) => task.text.replace('segmentingStrategies: []', `segmentingStrategies: []\nchecks:\n${checks}`)
+  it('are a list of check/1 entries in the task form', () => {
+    const text = withChecks('- id: orders_not_null\n  kind: not_null\n  dataset: orders\n  columns: [id]\n- id: orders_fresh\n  kind: freshness\n  dataset: orders\n  max_age: 2h')
+    expect(problems(SYNC_TASK_SCHEMA, text)).toEqual([])
+    const html = draw(SYNC_TASK_SCHEMA, text)
+    expect(html).toContain('orders_not_null')
+    expect(html).toContain('orders_fresh')
+  })
+  it('are refused by the schema when a kind is unknown or a required part is missing', () => {
+    expect(problems(SYNC_TASK_SCHEMA, withChecks('- id: x\n  kind: sparkle\n  dataset: orders')).length).toBeGreaterThan(0)
+    expect(problems(SYNC_TASK_SCHEMA, withChecks('- kind: not_null\n  dataset: orders\n  columns: [id]')).length).toBeGreaterThan(0)
+  })
+  it('leave a task without checks sound', () => {
+    expect(problems(SYNC_TASK_SCHEMA, task.text)).toEqual([])
   })
 })

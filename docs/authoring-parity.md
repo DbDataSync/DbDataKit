@@ -14,8 +14,8 @@ Summary (counts of the features below):
 | --- | --- | --- | --- | --- | --- |
 | Build | 15 | 3 | 2 | 5 | 25 |
 | Store | 6 | 0 | 1 | 3 | 10 |
-| Sync | 11 | 3 | 4 | 3 | 21 |
-| All | 32 | 6 | 7 | 11 | 56 |
+| Sync | 12 | 3 | 3 | 3 | 21 |
+| All | 33 | 6 | 6 | 11 | 56 |
 
 ### Build
 
@@ -79,7 +79,7 @@ Summary (counts of the features below):
 | Transforms per column, the mapping's whole pipeline (Custom Transforms tab, mapping preview) | `replication-detail/MappingPipelineCard.tsx`, `MappingPreview.tsx`, `OverviewPanel.tsx` | `workspace/src/syncSchemas.ts`: the transform text of a column mapping, the `scripts` and `hooks` of the task and of a mapping as forms; no mapping preview (it reads rows) | partly | SC22i |
 | Segmenting strategies and the default segmenting of a reload | `replication-detail/SegmentingStrategiesCard.tsx`, `DefaultSegmentingCard.tsx`, `BulkLoadForm.tsx` | `workspace/src/syncSchemas.ts` (`segmentingStrategies` of the task, `defaultSegmenting` of a mapping; the bulk load itself is a run) | built | SC22i |
 | Provisioning: both sides' plan, preview, apply (DDL runs now) | `replication-detail/ProvisioningCard.tsx`, `ReplicationProvisioningPanel.tsx` | none | missing | SC22j |
-| Quality checks of a replication (`checks:` seven kinds, severity, on_error) | `replication-detail/ReplicationChecksPanel.tsx`, `checkForms.ts`, `ChecksCard.tsx` | YAML text only | missing | SC22k |
+| Quality checks of a replication (`checks:` seven kinds, severity, on_error) | `replication-detail/ReplicationChecksPanel.tsx`, `checkForms.ts`, `ChecksCard.tsx` | `workspace/src/syncSchemas.ts`, `qualitySchema.ts` (the task's `checks:` as a form from the shared `check/1` schema) | built | SC22k |
 | Scripts: the registry, write, compile, test against sample input, bind | `sync/src/pages/ScriptsPage.tsx`, `ScriptEditPage.tsx`, `script-edit/ScriptTestPanel.tsx` | none: the template has no scripts folder | missing | SC22k |
 | Library management (drivers and the platform a package is made for) | `sync/src/pages/ScriptsPage.tsx`, the console's connection library | none: `SyncPlatform` has no setting (SC22c open) | missing | SC22k |
 | Publish to a Runner (package check, channel, stage or serve, slots, bindings) | `sync/src/pages/RunnerPage.tsx`, `RunnerLinkCard.tsx`, `replication-detail/ReplicationRunnerPanel.tsx` | `workspace/src/pages/PublishForm.tsx` | built | SC22c |

@@ -1,4 +1,5 @@
-import { parseYaml, setAt, type SchemaNode } from '@dbdatakit/shell'
+import { SchemaSet, parseYaml, setAt, type SchemaNode } from '@dbdatakit/shell'
+import { CHECKS_REF, CHECK_SCHEMA, CHECK_SCHEMA_ID } from './qualitySchema'
 import { referenceProblem } from './model'
 
 /** The names the forms know the Sync schemas by. */
@@ -112,6 +113,7 @@ export const syncTaskSchema: SchemaNode = {
     },
     bulkLoad: { type: 'object', description: 'The full reload used for the first load or a repair.', properties: { reader: kindOptions('Reads the whole source.') } },
     endpoints: { type: 'object', description: 'The default source and target connection of the replication\'s mappings.', properties: { source: endpoint, target: endpoint } },
+    checks: { $ref: CHECKS_REF, description: 'Data quality checks of the datasets the replication writes (the shared check/1 list: freshness, not_null, unique, accepted_values, range, referential, row_count_change), each with a severity and what to do when it cannot run.' },
     scripts,
     hooks,
     segmentingStrategies: { type: 'array', description: 'Named ways of dividing a table for a reload; a mapping\'s default segmenting and a bulk load refer to them by name.', items: segmentingStrategy },
@@ -202,6 +204,9 @@ export const syncConnectionSchema: SchemaNode = {
     },
   },
 }
+
+/** The schemas the Sync forms draw from: the three files' and the shared check schema the task's `checks:` refers to. */
+export const syncSchemaSet = new SchemaSet({ [SYNC_TASK_SCHEMA]: syncTaskSchema, [SYNC_MAPPING_SCHEMA]: syncMappingSchema, [SYNC_CONNECTION_SCHEMA]: syncConnectionSchema, [CHECK_SCHEMA_ID]: CHECK_SCHEMA })
 
 export const syncSchemaOf = (kind: 'sync-task' | 'sync-mapping' | 'sync-connection') => (kind === 'sync-task' ? SYNC_TASK_SCHEMA : kind === 'sync-mapping' ? SYNC_MAPPING_SCHEMA : SYNC_CONNECTION_SCHEMA)
 
