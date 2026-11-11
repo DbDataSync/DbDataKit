@@ -15,6 +15,10 @@ public sealed record StartConversationBody(string Agent, string? Title = null);
 
 public sealed record SendMessageBody(string Text);
 
+public sealed record KeyBody(string Key);
+
+public sealed record TestModelBody(string Model);
+
 public sealed record TokenBody(string? Name, int? Days = null);
 
 public sealed record AnswerBody(bool Approve, string? Note = null);
@@ -31,7 +35,7 @@ public sealed record OutsideEventsBody(IReadOnlyList<OutsideEvent> Events);
 /// </summary>
 [ApiController]
 [Route("api/agents")]
-public sealed class AgentsController(ConsoleAgents agents, IUserAccounts users) : ControllerBase
+public sealed class AgentsController(ConsoleAgents agents, ConsoleModels models, IUserAccounts users) : ControllerBase
 {
     private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
 
@@ -174,6 +178,70 @@ public sealed class AgentsController(ConsoleAgents agents, IUserAccounts users) 
     [HttpGet("usage")]
     [Authorize(Policies.Admin)]
     public IActionResult Usage() => Named(new { byPerson = agents.Store.Usage("person").Select(u => new { u.Key, u.Turns, u.InputTokens, u.OutputTokens, u.Cost, person = u.Key }), byAgent = agents.Store.Usage("agent"), install = agents.Store.Usage("install").FirstOrDefault() });
+
+    // ---- model providers and slots (AG05): admin writes, anyone signed in reads what is bound (never a key) ----
+
+    [HttpGet("models")]
+    [Authorize(Policies.Viewer)]
+    public IActionResult Models() => Ok(models.View(agents.List().Select(a => (a.ModelSlot, a.Name))));
+
+    [HttpPost("models/providers/{name}/check")]
+    [Authorize(Policies.Admin)]
+    public IActionResult CheckProvider(string name, [FromBody] YamlBody body) =>
+        ModelProviderLoader.IsName(name) ? Ok(new { diagnostics = models.CheckProvider(name, body.Yaml).Diagnostics }) : BadRequest(new { error = "A provider's name is lower case letters, digits and hyphens." });
+
+    [HttpPut("models/providers/{name}")]
+    [Authorize(Policies.Admin)]
+    public IActionResult SaveProvider(string name, [FromBody] YamlBody body)
+    {
+        if (!ModelProviderLoader.IsName(name)) return BadRequest(new { error = "A provider's name is lower case letters, digits and hyphens." });
+        var (saved, diagnostics) = models.SaveProvider(name, body.Yaml);
+        if (saved) agents.Store.RecordAudit(null, null, "model-provider-saved", PersonId, "console", "1", "console", name, null, "the provider's file was saved");
+        return saved ? Ok(new { saved, diagnostics }) : UnprocessableEntity(new { saved, diagnostics });
+    }
+
+    [HttpDelete("models/providers/{name}")]
+    [Authorize(Policies.Admin)]
+    public IActionResult DeleteProvider(string name)
+    {
+        if (!models.DeleteProvider(name)) return NotFound(new { error = $"There is no provider named '{name}'." });
+        agents.Store.RecordAudit(null, null, "model-provider-removed", PersonId, "console", "1", "console", name, null, "the provider's file was removed");
+        return NoContent();
+    }
+
+    /// <summary>Keeps a pasted key in the console's secret store under the provider's name. The key is in no answer and no audit row.</summary>
+    [HttpPut("models/providers/{name}/key")]
+    [Authorize(Policies.Admin)]
+    public async Task<IActionResult> SetKey(string name, [FromBody] KeyBody body)
+    {
+        if (!ModelProviderLoader.IsName(name)) return BadRequest(new { error = "A provider's name is lower case letters, digits and hyphens." });
+        if (string.IsNullOrWhiteSpace(body.Key)) return BadRequest(new { error = "Type the key." });
+        await models.StoreKeyAsync(name, body.Key.Trim());
+        agents.Store.RecordAudit(null, null, "model-key-set", PersonId, "console", "1", "console", name, null, $"a key was stored for the provider, as {ConsoleModels.ReferenceFor(name)}");
+        return Ok(new { stored = true, reference = ConsoleModels.ReferenceFor(name) });
+    }
+
+    [HttpPost("models/providers/{name}/test")]
+    [Authorize(Policies.Admin)]
+    public async Task<IActionResult> TestProvider(string name, [FromBody] TestModelBody body, CancellationToken cancellation)
+    {
+        var result = await models.TestAsync(name, body.Model, cancellation);
+        agents.Store.RecordAudit(null, null, "model-provider-tested", PersonId, "console", "1", "console", name, null, result.Ok ? $"{body.Model} answered" : result.Message);
+        return Ok(result);
+    }
+
+    [HttpPost("models/slots/check")]
+    [Authorize(Policies.Admin)]
+    public IActionResult CheckSlots([FromBody] YamlBody body) => Ok(new { diagnostics = models.CheckSlots(body.Yaml).Diagnostics });
+
+    [HttpPut("models/slots")]
+    [Authorize(Policies.Admin)]
+    public IActionResult SaveSlots([FromBody] YamlBody body)
+    {
+        var (saved, diagnostics) = models.SaveSlots(body.Yaml);
+        if (saved) agents.Store.RecordAudit(null, null, "model-slots-saved", PersonId, "console", "1", "console", null, null, "the slot bindings were saved");
+        return saved ? Ok(new { saved, diagnostics }) : UnprocessableEntity(new { saved, diagnostics });
+    }
 
     // ---- the tokens an outside agent signs in with (AG29): a person's own, shown once ----
 

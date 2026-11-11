@@ -49,7 +49,7 @@ The console runs `DbDataKit.Agents` for back-end agents (`ConsoleAgents`, `Agent
 
 | Designed in plan 27 | State today |
 | --- | --- |
-| Model providers as connections, bound per channel; the provider adapters and recordings (AG04, AG05, AG18) | not started: **no model is bound, so no conversation can start** in a real install; the tests use the scripted fake. The Agents page says so |
+| Model providers as connections, bound per channel; the provider adapters and recordings (AG04, AG05, AG18) | AG04 and AG05 built for the console install: `DbDataKit.Agents.Providers` (Anthropic and OpenAI-compatible adapters, recorded fixtures), `models/<name>.yml` and `models/_slots.yml`, the Models tab with a typed key kept in the secret store and Test. Not built: the `connection` kind (IX01), per-channel slots of groups, usage per slot (AG18) |
 | The `build-helper` agent, a workspace of the Workspace server, the relay to a server as the person (AG14) | not started; the console's agents use its own read-only commands |
 | `ui mcp` posting to the console's inbox and record (the client side of AG29) | not started; the console's half exists |
 | The agent project editor in a workspace, the form view of `agent.yml`, scripted conversations (AG16) | not started; the definition is edited as text in the console's folder |

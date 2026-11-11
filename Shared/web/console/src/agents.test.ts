@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { connectCommand, cost, eventWord, percent, promptingMeaning, promptingName, sessions, statusWord, tokenState, waitingOn, type AgentToken, type Approval, type AuditRow } from './agents'
+import { bindingLine, connectCommand, providerTemplate, cost, eventWord, percent, promptingMeaning, promptingName, sessions, statusWord, tokenState, waitingOn, type AgentToken, type Approval, type AuditRow } from './agents'
 import { emptyPolicy, policyFromYaml, policyToYaml, settingMeaning } from './policyForm'
 import { contextLine, isPolicyItem, parseInPlay, policyItemId, policyItemText, workActions, workWord, type WorkItem } from './knowledge'
 
@@ -7,6 +7,19 @@ const row = (over: Partial<AuditRow> = {}): AuditRow => ({
   id: 'r', conversationId: 'c1', turn: 1, kind: 'tool-called', person: 'Ada', agent: 'build-helper', agentVersion: 'v3', origin: 'console', tool: 'x', arguments: null, detail: null, occurredAt: '2026-11-11T10:00:00Z', ...over,
 })
 const approval = (status: string): Approval => ({ id: 'a', conversationId: 'c1', person: 'Ada', agent: 'x', agentVersion: 'v', origin: 'console', tool: 't', preview: 'p', arguments: null, traits: 'writes-data', status, requestedAt: 't', answeredAt: null, answeredBy: null, note: null })
+
+describe('model providers and slots', () => {
+  it('starts a provider file of each kind with the reference the console keeps a typed key under, and none for a local server', () => {
+    expect(providerTemplate('anthropic', 'claude')).toContain('api-key-secret: secret:dbdata:console:model-provider:claude:key')
+    expect(providerTemplate('anthropic', 'claude')).toContain('kind: anthropic\n')
+    expect(providerTemplate('ollama', 'local')).not.toContain('api-key-secret')
+    expect(providerTemplate('openai-compatible', 'lab')).toContain('locality: local')
+    expect(providerTemplate('foundry', 'f')).toContain('endpoint: https://<resource>')
+  })
+  it('says a slot binding as the primary and the fallback in order', () => {
+    expect(bindingLine({ slot: 'default', channel: '*', choices: [{ provider: 'a', model: 'm', usable: true, problem: null }, { provider: 'b', model: 'n', usable: false, problem: 'x' }] })).toBe('a/m then b/n (not usable)')
+  })
+})
 
 describe('connecting an outside agent', () => {
   it('writes the command and the environment, with a placeholder until the token is made', () => {

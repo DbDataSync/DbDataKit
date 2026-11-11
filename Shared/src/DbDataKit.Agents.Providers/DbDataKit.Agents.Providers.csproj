@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>DbDataKit.Agents.Providers</PackageId>
+    <Description>The model provider adapters of the agent runtime (plan 27a AG04): IChatClient over Anthropic's Messages API and over the chat completions API OpenAI, Microsoft Foundry, Ollama and local servers share, written against the documented request and response shapes.</Description>
+    <IsPackable>true</IsPackable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
+    <ProjectReference Include="..\DbDataKit.Agents\DbDataKit.Agents.csproj" />
+  </ItemGroup>
+</Project>
