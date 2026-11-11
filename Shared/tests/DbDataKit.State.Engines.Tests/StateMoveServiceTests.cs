@@ -84,6 +84,51 @@ public sealed class StateMoveServiceTests : IDisposable
     }
 
     [Theory]
+    [InlineData("sqlite", "sqlite")]
+    [InlineData("sqlite", "postgres")]
+    [InlineData("mssql", "sqlite")]
+    public async Task A_target_that_cannot_decrypt_a_seeded_secret_fails_before_the_settings_are_written(string from, string to)
+    {
+        var (source, _, _) = Seed(from);
+        var target = _scratch.Provision(to);
+        var settings = SettingsFile();
+        var before = File.ReadAllBytes(settings);
+        var asked = new List<string>();
+
+        var failure = await Assert.ThrowsAsync<StateMoveException>(() => Move(source, target, settings, new MoveOptions
+        {
+            SecretSamples = [new StateSecretSample("svc_types", "sample", "label", value => { asked.Add(value); return false; })],
+        }));
+
+        Assert.Equal(MoveStep.CheckSecrets, failure.Step);
+        Assert.NotEmpty(asked);
+        Assert.Contains("svc_types.sample.label", failure.Message);
+        Assert.Contains("secret store", failure.Message);
+        Assert.DoesNotContain(asked[0], failure.Message.Replace("svc_types.sample.label", ""));   // the value is never in the message
+        Assert.Equal(before, File.ReadAllBytes(settings));
+        Assert.Empty(Directory.GetFiles(_scratch.Directory, "settings.yaml.before-state-move*"));
+    }
+
+    [Theory]
+    [InlineData("sqlite", "sqlite")]
+    public async Task A_target_that_decrypts_the_sample_is_moved_and_the_restart_instruction_names_the_command(string from, string to)
+    {
+        var (source, _, _) = Seed(from);
+        var target = _scratch.Provision(to);
+        var steps = new List<MoveStep>();
+
+        var result = await Move(source, target, SettingsFile(), new MoveOptions
+        {
+            SecretSamples = [new StateSecretSample("svc_types", "sample", "label", _ => true, Sample: 2), new StateSecretSample("not_in_this_layout", "x", "y", _ => false)],
+            RestartCommand = "demo service restart",
+        }, new InlineProgress<MoveProgress>(p => { if (steps.Count == 0 || steps[^1] != p.Step) steps.Add(p.Step); }));
+
+        Assert.Contains(MoveStep.CheckSecrets, steps);
+        Assert.True(steps.IndexOf(MoveStep.CheckSecrets) < steps.IndexOf(MoveStep.WriteSettings));
+        Assert.Contains("('demo service restart')", result.RestartInstruction);
+    }
+
+    [Theory]
     [InlineData("sqlite", "postgres")]
     [InlineData("postgres", "mssql")]
     [InlineData("mssql", "sqlite")]

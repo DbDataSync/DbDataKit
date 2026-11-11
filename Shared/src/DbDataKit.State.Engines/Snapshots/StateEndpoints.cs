@@ -60,6 +60,9 @@ public enum StateServiceRefusal
     /// <summary>The snapshot is not intact (a file differs from its manifest).</summary>
     SnapshotNotIntact,
 
+    /// <summary>The copied secrets cannot be decrypted with the keys this process has (plan 29b C04).</summary>
+    SecretsUnreadable,
+
     /// <summary>The settings to write are not valid, or the settings file cannot be written.</summary>
     SettingsInvalid,
 }

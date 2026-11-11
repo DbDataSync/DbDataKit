@@ -42,6 +42,9 @@ public sealed record StateVerbContext(
     /// <summary>For tests: answers which engine features the engine has, in place of asking it (the layout, the checks and the migration all use it).</summary>
     public IEngineFeatureProbe? FeatureProbe { get; init; }
 
+    /// <summary>The encrypted columns <c>state move</c> tries to decrypt in the target before it writes the settings (plan 29b C04): the product names the ones it keeps (the console: the identity home's signing keys), with the keys of its own secret store. Empty: none.</summary>
+    public IReadOnlyList<DbDataKit.State.Engines.Snapshots.StateSecretSample> SecretSamples { get; init; } = [];
+
     /// <summary>For tests: changes the options of <c>state move</c> before it runs (for example <c>MoveOptions.AfterImport</c>, to inject a failure after the import, or a fixed snapshot directory).</summary>
     public Func<DbDataKit.State.Engines.Snapshots.MoveOptions, DbDataKit.State.Engines.Snapshots.MoveOptions>? ConfigureMove { get; init; }
 }
