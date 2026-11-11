@@ -9,8 +9,8 @@ using DbDataKit.Web.Trust;
 
 namespace DbDataKit.Authoring.Server;
 
-/// <summary>What a person says when they publish what a kind made (plan 33 SC20d, SC21b, SC22b): for a Runner the <see cref="Channel"/> (and whether it serves at once, <see cref="Serve"/>, or is staged, the default; <see cref="ExpectedVersion"/> and the connections <see cref="Bind"/> fills, slot to connection name); for a Gateway the <see cref="DataSource"/> its tables are on, the models' own storage connection when none is named.</summary>
-public sealed record ArtifactPublishOptions(string? Channel = null, bool Serve = false, int? ExpectedVersion = null, IReadOnlyDictionary<string, string>? Bind = null, string? DataSource = null);
+/// <summary>What a person says when they publish what a kind made (plan 33 SC20d, SC21b, SC22b): for a Runner the <see cref="Channel"/> (and whether it serves at once, <see cref="Serve"/>, or is staged, the default; <see cref="ExpectedVersion"/> and the connections <see cref="Bind"/> fills, slot to connection name); for a Gateway the <see cref="DataSource"/> its tables are on, the models' own storage connection when none is named, and <see cref="Adopt"/> (plan 33 SC21f) the data sources made by hand that the person confirmed the models may go on (the Gateway records the adoption).</summary>
+public sealed record ArtifactPublishOptions(string? Channel = null, bool Serve = false, int? ExpectedVersion = null, IReadOnlyDictionary<string, string>? Bind = null, string? DataSource = null, IReadOnlyList<string>? Adopt = null);
 
 public sealed partial class WorkspacePublishing
 {
@@ -28,7 +28,7 @@ public sealed partial class WorkspacePublishing
         {
             "package" => await PublishPackageAsync(target, identity, artifactFolder, options, actor, step, ct),
             "model" => await PublishModelsAsync(target, identity, role, artifactFolder, options, step, ct),
-            "semantic-model" => await PublishSemanticModelsAsync(target, identity, role, Path.Combine(artifactFolder, "gateway"), step, ct),
+            "semantic-model" => await PublishSemanticModelsAsync(target, identity, role, Path.Combine(artifactFolder, "gateway"), options, step, ct),
             _ => throw new WorkspacePublishException($"A {kind.Name} project publishes '{route.What}' to a {route.Product}, which this server does not know how to send.", 409),
         };
     }
@@ -93,15 +93,18 @@ public sealed partial class WorkspacePublishing
             var loaded = DataModelLoader.Load(text, Path.GetFileName(file));
             if (loaded.Model is not { } model) throw new WorkspacePublishException($"{Path.GetFileName(file)} is not a model that loads.", 409);
             var dataSource = string.IsNullOrWhiteSpace(options.DataSource) ? model.Connection : options.DataSource.Trim();
+            // the person's confirmation names a data source; it holds for the data source the models go on, and nothing else (plan 33 SC21f)
+            if (options.Adopt is { Count: > 0 } && !options.Adopt.Contains(dataSource, StringComparer.Ordinal))
+                throw new WorkspacePublishException($"The confirmation names {string.Join(", ", options.Adopt.Select(a => "'" + a + "'"))}, and {model.Name} goes on '{dataSource}': confirm the data source it goes on.", 400);
             var path = $"api/v1/entity-models/{Uri.EscapeDataString(model.Name)}";
             step($"Asked {target.Url} for the version of {model.Name} it serves.");
             var held = await Call(HttpMethod.Get, path);
             if (held.Status is not (200 or 404)) throw Refused(held, $"reading the model {model.Name}");
             int? current = held.Status == 200 ? (int?)held.Body?["current_version"] : null;
-            var sent = await Call(HttpMethod.Put, path, new JsonObject { ["model"] = text, ["data_source"] = dataSource, ["expected_version"] = current });
+            var sent = await Call(HttpMethod.Put, path, new JsonObject { ["model"] = text, ["data_source"] = dataSource, ["expected_version"] = current, ["adopt"] = options.Adopt is { Count: > 0 } ? dataSource : null });
             if (sent.Status is < 200 or >= 300) throw Refused(sent, $"the model {model.Name} on the data source '{dataSource}'");
             step($"Published {model.Name} to {target.Url} on the data source '{dataSource}'.");
-            published.Add(new JsonObject { ["model"] = model.Name, ["data_source"] = dataSource, ["version"] = (int?)sent.Body?["version"], ["created"] = (bool?)sent.Body?["created"], ["unchanged"] = (bool?)sent.Body?["unchanged"] });
+            published.Add(new JsonObject { ["model"] = model.Name, ["data_source"] = dataSource, ["version"] = (int?)sent.Body?["version"], ["created"] = (bool?)sent.Body?["created"], ["unchanged"] = (bool?)sent.Body?["unchanged"], ["adopted"] = (string?)sent.Body?["adopted"] });
         }
         return new JsonObject { ["models"] = published, ["target"] = target.Name, ["gateway"] = target.Url };
     }
@@ -111,7 +114,7 @@ public sealed partial class WorkspacePublishing
     /// expected_version}</c> as the paired client. The sources name data sources the Gateway already has (the connections' names): no login and no data source is sent, and the Gateway's own rules (the data source must exist, answer, and be one this client made)
     /// come back in its words.
     /// </summary>
-    private static async Task<JsonObject> PublishSemanticModelsAsync(PublishTarget target, ConsoleIdentity identity, ServerRole role, string folder, Action<string> step, CancellationToken ct)
+    private static async Task<JsonObject> PublishSemanticModelsAsync(PublishTarget target, ConsoleIdentity identity, ServerRole role, string folder, ArtifactPublishOptions options, Action<string> step, CancellationToken ct)
     {
         var manifestPath = Path.Combine(folder, "gateway.json");
         if (!File.Exists(manifestPath)) throw new WorkspacePublishException("This build has no semantic model to publish (gateway.json is not in it).", 409);
@@ -154,10 +157,10 @@ public sealed partial class WorkspacePublishing
             var held = await Call(HttpMethod.Get, path);
             if (held.Status is not (200 or 404)) throw Refused(held, $"reading the model {name}");
             int? current = held.Status == 200 ? (int?)held.Body?["current_version"] : null;
-            var sent = await Call(HttpMethod.Put, path, new JsonObject { ["catalog"] = File.ReadAllText(full), ["sources"] = sources, ["expected_version"] = current });
+            var sent = await Call(HttpMethod.Put, path, new JsonObject { ["catalog"] = File.ReadAllText(full), ["sources"] = sources, ["expected_version"] = current, ["adopt"] = options.Adopt is { Count: > 0 } ? new JsonArray([.. options.Adopt.Select(a => (JsonNode?)a)]) : null });
             if (sent.Status is < 200 or >= 300) throw Refused(sent, $"the model {name} on the data sources {string.Join(", ", sources.Select(s => "'" + (string?)s.Value + "'").Distinct())}");
             step($"Published {name} to {target.Url}.");
-            published.Add(new JsonObject { ["model"] = name, ["data_sources"] = sources.DeepClone(), ["version"] = (int?)sent.Body?["version"], ["created"] = (bool?)sent.Body?["created"], ["unchanged"] = (bool?)sent.Body?["unchanged"] });
+            published.Add(new JsonObject { ["model"] = name, ["data_sources"] = sources.DeepClone(), ["version"] = (int?)sent.Body?["version"], ["created"] = (bool?)sent.Body?["created"], ["unchanged"] = (bool?)sent.Body?["unchanged"], ["adopted"] = sent.Body?["adopted"]?.DeepClone() });
         }
         return new JsonObject { ["models"] = published, ["target"] = target.Name, ["gateway"] = target.Url };
     }
@@ -166,6 +169,6 @@ public sealed partial class WorkspacePublishing
     {
         var words = (string?)answer.Body?["error"] ?? (answer.Text.Length > 0 ? answer.Text : "no reason given");
         if (answer.Body?["diagnostics"] is JsonArray found && found.Count > 0) words += " " + string.Join(" ", found.Select(d => d is JsonValue v && v.TryGetValue<string>(out var text) ? text : d?.ToJsonString()));
-        return new WorkspacePublishException($"The Gateway refused {doing} ({answer.Status}): {words}", answer.Status == 403 ? 403 : 409);
+        return new WorkspacePublishException($"The Gateway refused {doing} ({answer.Status}): {words}", answer.Status == 403 ? 403 : 409, answer.Body?["adopt"] is JsonObject hint ? (JsonObject)hint.DeepClone() : null);
     }
 }

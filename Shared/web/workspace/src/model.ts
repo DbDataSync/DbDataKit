@@ -1,4 +1,4 @@
-import type { WorkspaceEvent } from './api'
+import type { AdoptionRequest, WorkspaceEvent } from './api'
 
 const NAME = /^[a-z0-9][a-z0-9_-]{0,31}$/
 
@@ -170,16 +170,33 @@ export function parseBindings(text: string): { bind: Record<string, string>; pro
   return { bind, problem: null }
 }
 
+/** The data source(s) a published model is on: a Store model's one, or the distinct data sources a Build model's sources map to. */
+const modelDataSources = (m: { data_source?: string; data_sources?: Record<string, string> }) => m.data_source ?? [...new Set(Object.values(m.data_sources ?? {}))].join(', ')
+
+/** The refusal of a publish that asks for an adoption (SC21f), read from the error's body: the data source and who made it, or null for any other refusal. */
+export function adoptionRequest(body: unknown): AdoptionRequest | null {
+  const a = typeof body === 'object' && body ? (body as { adopt?: unknown }).adopt : null
+  if (typeof a !== 'object' || a === null) return null
+  const { data_source, made_by } = a as { data_source?: unknown; made_by?: unknown }
+  return typeof data_source === 'string' && data_source !== '' ? { data_source, made_by: typeof made_by === 'string' ? made_by : 'hand' } : null
+}
+
+/** What the confirmation says: the data source, who made it, and what adopting means (the Gateway records who adopted it and when). */
+export function adoptionSentence(a: AdoptionRequest): string {
+  const who = a.made_by === 'hand' ? 'by hand or by an administrator of the Gateway' : `by ${a.made_by}`
+  return `The data source ${a.data_source} on the Gateway was made ${who}, not by this Workspace. Publishing puts your model on it. The Gateway records that you adopted it (who, when and which data source) in its audit and in the data source's metadata.`
+}
+
 /** What a publish came to, as one sentence, whatever it was: an app on a Gateway, a package staged or served on a Runner's channel, models on a Gateway's data sources. */
-export function publishedLine(p: { app?: string; instance?: string; version?: number; gateway?: string; package?: string; channel?: string; mode?: string; changed?: boolean; runner?: string; models?: { model: string; data_source: string; version?: number | null; unchanged?: boolean | null }[] }): string {
+export function publishedLine(p: { app?: string; instance?: string; version?: number; gateway?: string; package?: string; channel?: string; mode?: string; changed?: boolean; runner?: string; models?: { model: string; data_source?: string; data_sources?: Record<string, string>; version?: number | null; unchanged?: boolean | null; adopted?: string | string[] | null }[] }): string {
   if (p.package) return `${p.mode === 'serve' ? 'Published' : 'Staged'} ${p.package} on ${p.channel} of ${p.runner ?? 'the Runner'} as version ${p.version}${p.changed === false ? ' (the same content as before, nothing changed)' : ''}.`
-  if (p.models) return `Published ${p.models.map((m) => `${m.model} on the data source ${m.data_source}${m.version ? ` as version ${m.version}${m.unchanged ? ' (unchanged)' : ''}` : ''}`).join(', ')} to ${p.gateway ?? 'the Gateway'}.`
+  if (p.models) return `Published ${p.models.map((m) => `${m.model} on the data source ${modelDataSources(m)}${m.version ? ` as version ${m.version}${m.unchanged ? ' (unchanged)' : ''}` : ''}${m.adopted && [m.adopted].flat().length > 0 ? ` (adopted ${[m.adopted].flat().join(', ')}, made by hand)` : ''}`).join(', ')} to ${p.gateway ?? 'the Gateway'}.`
   if (p.instance) return `Sent ${p.app} to ${p.gateway ?? 'the Gateway'} as the preview of ${p.instance}${p.version ? ` (version ${p.version} of the preview channel)` : ''}.`
   return `Published ${p.app} to ${p.gateway}${p.version ? ` as version ${p.version}` : ''}.`
 }
 
 /** The words on the button that makes what a kind publishes: a Build or Sync project is made into a package, a Store project's models are made ready. */
-export const makeLabel = (kind: string) => (kind === 'store' ? 'Check and make the models' : kind === 'app' ? 'Build' : 'Check and make the package')
+export const makeLabel = (kind: string) => (kind === 'store' ? 'Check and make the models' : kind === 'app' ? 'Build' : kind === 'build' ? 'Check and make the package and the models' : 'Check and make the package')
 
 /** Why a reference to a secret would be refused, or null. The server says the same; a pasted key must not reach it. */
 export function referenceProblem(reference: string): string | null {

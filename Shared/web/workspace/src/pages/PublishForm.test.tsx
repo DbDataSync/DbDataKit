@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import type { PublishTarget } from '../api'
-import { makeLabel, parseBindings, publishButton, publishedLine } from '../model'
+import { adoptionRequest, adoptionSentence, makeLabel, parseBindings, publishButton, publishedLine } from '../model'
 import { PublishForm } from './PublishForm'
 
 const targets: PublishTarget[] = [
@@ -69,7 +69,41 @@ describe('the words of a publish', () => {
   it('the button that makes what a kind publishes says what it makes', () => {
     expect(makeLabel('app')).toBe('Build')
     expect(makeLabel('sync')).toBe('Check and make the package')
-    expect(makeLabel('build')).toBe('Check and make the package')
+    expect(makeLabel('build')).toBe('Check and make the package and the models')
     expect(makeLabel('store')).toBe('Check and make the models')
+  })
+})
+
+describe('adopting a data source made by hand (plan 33 SC21f)', () => {
+  const refusal = { error: 'The Gateway refused ...', steps: [], adopt: { data_source: 'mdm', made_by: 'hand', publish_adopt: true } }
+
+  it('reads the data source and who made it from the Gateway refusal, and nothing from any other refusal', () => {
+    expect(adoptionRequest(refusal)).toEqual({ data_source: 'mdm', made_by: 'hand' })
+    expect(adoptionRequest({ error: 'no' })).toBeNull()
+    expect(adoptionRequest(null)).toBeNull()
+    expect(adoptionRequest('text')).toBeNull()
+    expect(adoptionRequest({ adopt: { made_by: 'hand' } })).toBeNull()
+  })
+
+  it('the confirmation names the data source, says it was made by hand and that the Gateway records who and when', () => {
+    const text = adoptionSentence({ data_source: 'mdm', made_by: 'hand' })
+    expect(text).toContain('The data source mdm on the Gateway was made by hand or by an administrator')
+    expect(text).toContain('records that you adopted it (who, when and which data source)')
+  })
+
+  it('shows the confirmation only when the Gateway asked for one, with both buttons', () => {
+    expect(draw({ initialTarget: 'serving', models: true })).not.toContain('wsp-publish-adopt')
+    const html = draw({ initialTarget: 'serving', models: true, adoption: { data_source: 'mdm', made_by: 'hand' } })
+    expect(html).toContain('data-testid="wsp-publish-adopt"')
+    expect(html).toContain('data-data-source="mdm"')
+    expect(html).toContain('Confirm and publish onto mdm')
+    expect(html).toContain('data-testid="wsp-publish-adopt-cancel"')
+    expect(draw({ initialTarget: 'serving', models: true, adoption: { data_source: 'mdm', made_by: 'hand' }, busy: true })).not.toContain('wsp-publish-adopt"')   // not while it publishes
+  })
+
+  it('a Build project\'s models say which data sources they are on and which were adopted', () => {
+    expect(publishedLine({ gateway: 'https://g', models: [{ model: 'sales', data_sources: { default: 'warehouse', b: 'warehouse' }, version: 1, adopted: ['warehouse'] }] }))
+      .toBe('Published sales on the data source warehouse as version 1 (adopted warehouse, made by hand) to https://g.')
+    expect(publishedLine({ gateway: 'https://g', models: [{ model: 't', data_source: 'mdm', version: 2, adopted: 'mdm' }] })).toContain('(adopted mdm, made by hand)')
   })
 })

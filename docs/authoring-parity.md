@@ -13,9 +13,9 @@ Summary (counts of the features below):
 | Product | built | partly | missing | not planned | features |
 | --- | --- | --- | --- | --- | --- |
 | Build | 10 | 3 | 6 | 6 | 25 |
-| Store | 5 | 1 | 1 | 3 | 10 |
+| Store | 6 | 1 | 0 | 3 | 10 |
 | Sync | 9 | 4 | 5 | 3 | 21 |
-| All | 24 | 8 | 12 | 12 | 56 |
+| All | 25 | 8 | 11 | 12 | 56 |
 
 ### Build
 
@@ -58,7 +58,7 @@ Summary (counts of the features below):
 | History of a model's text: earlier texts with who and when, diff against now, restore | `store/src/pages/HistoryTab.tsx`, `views/HistoryView.tsx` | `workspace/src/pages/WorkspacePage.tsx` (git history and changes of the draft; no restore button) | partly | SC21e |
 | Publish a model to the Gateway (the entity-model route) | `dbdatastore model publish` (the Store has no screen for it) | `workspace/src/pages/PublishForm.tsx` | built | SC21b |
 | Publish with the approval path (`approval: steward|owner` opens a change request) | Store server | none: the Workspace's merge is the author's review (SC21b) | not planned | SC21b |
-| Data source adoption for a publisher client (a data source made by hand is refused) | Gateway adopt route; the Store sends its own data source | none: open for the owner (SC21b) | missing | SC21f |
+| Data source adoption for a publisher client (a data source made by hand is refused) | Gateway adopt route; the Store sends its own data source | `workspace/src/pages/PublishForm.tsx`: the Gateway's refusal of a data source made by hand opens a confirmation that names the data source and who made it; **Confirm and publish** sends `adopt`, which the Gateway records (who, when, which; in its audit and the data source's metadata) | built | SC21f |
 | Storage: create tables, migrate by adding (dry run first), per copy and instance | `store/src/pages/StorageTab.tsx`, `views/StorageView.tsx` | none: an act on a database, the Store server's | not planned | SC21d |
 | Rows of an entity: edit with the store-ui controls | `store/src/pages/EntityPage.tsx` | none: data, not authoring | not planned | SC21d |
 

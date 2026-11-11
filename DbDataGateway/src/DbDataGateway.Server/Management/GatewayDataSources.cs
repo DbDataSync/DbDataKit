@@ -24,7 +24,7 @@ namespace DbDataGateway.Server.Management;
 /// </summary>
 public sealed partial class GatewayDataSources(
     string configDirectory, GatewayManagement validation, Action reload, Func<DataSourceCatalog> catalog, IAuditLog audit, GitCommitService? git, TimeProvider? clock = null, Func<string, PairedClient?>? findClient = null,
-    DbDataGateway.Server.Serving.PublishedDataSources? published = null)
+    DbDataGateway.Server.Serving.PublishedDataSources? published = null, DataSourceAdoptions? adoptions = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly WriteGuard _guard = new();
@@ -137,6 +137,8 @@ public sealed partial class GatewayDataSources(
             ["name"] = name, ["text"] = text, ["version"] = VersionOf(text), ["group"] = group,
             ["grants"] = GrantsView(DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, name + ".yaml").Definition, group),
             ["policy"] = PolicyView(DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, name + ".yaml").Definition, text, group),
+            // plan 33 SC21f: the publishing clients that put a model on this data source with `adopt` (who, when, for which model)
+            ["adoptions"] = adoptions?.Read(name) ?? [],
         });
     }
 

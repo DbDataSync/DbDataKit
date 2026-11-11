@@ -32,6 +32,10 @@ internal sealed class FakeGateway : IAsyncDisposable
     public ConcurrentDictionary<string, (int Version, string DataSource, string Text)> Models { get; } = new();
     public HashSet<string> DataSources { get; } = ["mdm"];
 
+    /// <summary>The data sources made by hand (not by the paired client): a model goes on one only when the request says <c>adopt</c>, and the adoption is recorded (plan 33 SC21f).</summary>
+    public HashSet<string> HandMade { get; } = [];
+    public ConcurrentQueue<string> Adoptions { get; } = new();
+
     /// <summary>The semantic models it serves (plan 33 SC20e): name to the version, the catalog and the data source each source maps to.</summary>
     public ConcurrentDictionary<string, (int Version, string Catalog, JsonObject Sources)> SemanticModels { get; } = new();
 
@@ -99,6 +103,10 @@ internal sealed class FakeGateway : IAsyncDisposable
             var sources = (JsonObject)body["sources"]!;
             foreach (var (source, dataSource) in sources)
                 if (!Owner.DataSources.Contains((string)dataSource!)) { await Reply(400, new { error = $"Source '{source}' maps to '{(string)dataSource!}', which is not a data source of this server." }); return; }
+            var adopt = (body["adopt"] as JsonArray)?.Select(a => (string?)a).ToList() ?? [];
+            foreach (var (source, dataSource) in sources)
+                if (Owner.HandMade.Contains((string)dataSource!) && !adopt.Contains((string)dataSource!)) { await Reply(400, new { error = $"Source '{source}' maps to '{(string)dataSource!}', which this client did not make; it was made by hand. Publish again with \"adopt\".", valid = false, adopt = new { data_source = (string)dataSource!, made_by = "hand", publish_adopt = true, field = "adopt" } }); return; }
+            foreach (var adopted in adopt.Where(a => a is not null && Owner.HandMade.Contains(a))) Owner.Adoptions.Enqueue($"{adopted} for {name} by {token.Client.Id} ({token.SubjectName})");
             var expected = (int?)body["expected_version"];
             var was = Owner.SemanticModels.TryGetValue(name, out var existing) ? existing.Version : (int?)null;
             if (was != expected) { await Reply(409, new { error = "The model changed since it was read; read it again and publish on that.", current_version = was }); return; }
@@ -107,7 +115,7 @@ internal sealed class FakeGateway : IAsyncDisposable
             var version = unchanged ? was!.Value : (was ?? 0) + 1;
             Owner.SemanticModels[name] = (version, catalog, (JsonObject)sources.DeepClone());
             Owner.Published.Enqueue(body);
-            await Reply(200, new { name, version, created = was is null, unchanged });
+            await Reply(200, new { name, version, created = was is null, unchanged, adopted = adopt.Where(x => x is not null && Owner.HandMade.Contains(x)).ToArray() });
         }
 
         public async Task Models(HttpContext context, string name)
@@ -130,6 +138,11 @@ internal sealed class FakeGateway : IAsyncDisposable
             if (Owner.RefuseWith is { } refusal) { await Reply(400, new { error = refusal }); return; }
             var dataSource = (string)body["data_source"]!;
             if (!Owner.DataSources.Contains(dataSource)) { await Reply(409, new { error = $"'{dataSource}' is not a data source of this server; publish the data source the model's tables are on first." }); return; }
+            if (Owner.HandMade.Contains(dataSource))
+            {
+                if ((string?)body["adopt"] != dataSource) { await Reply(400, new { error = $"'{dataSource}' is not a data source this client made: it was made by hand or by an administrator. Publish again with \"adopt\": \"{dataSource}\" to put the model on it.", valid = false, adopt = new { data_source = dataSource, made_by = "hand", publish_adopt = true, field = "adopt" } }); return; }
+                Owner.Adoptions.Enqueue($"{dataSource} for {name} by {token.Client.Id} ({token.SubjectName})");
+            }
             var expected = (int?)body["expected_version"];
             var was = Owner.Models.TryGetValue(name, out var existing) ? existing.Version : (int?)null;
             if (was != expected) { await Reply(409, new { error = "The model changed since it was read; read it again and publish on that.", current_version = was }); return; }
@@ -138,7 +151,7 @@ internal sealed class FakeGateway : IAsyncDisposable
             var version = unchanged ? was!.Value : (was ?? 0) + 1;
             Owner.Models[name] = (version, dataSource, text);
             Owner.Published.Enqueue(body);
-            await Reply(200, new { name, version, created = was is null, unchanged });
+            await Reply(200, new { name, version, created = was is null, unchanged, adopted = Owner.HandMade.Contains(dataSource) ? dataSource : null });
         }
 
         /// <summary>The Gateway's <c>PUT /api/v1/app-instances/{name}/channels/{channel}</c>: a preview instance of an instance that exists in production (here: the ones in <see cref="FakeGateway.Instances"/>).</summary>

@@ -259,6 +259,14 @@ public static class WorkspaceManagement
             }
         });
 
+        // the data sources a person confirmed adopting (plan 33 SC21f): the body's "adopt" is one name or a list of names
+        static IReadOnlyList<string>? AdoptNames(JsonNode? node) => node switch
+        {
+            JsonValue v when v.TryGetValue<string>(out var one) && !string.IsNullOrWhiteSpace(one) => [one.Trim()],
+            JsonArray list => [.. list.OfType<JsonValue>().Select(x => x.TryGetValue<string>(out var s) ? s.Trim() : "").Where(s => s.Length > 0)],
+            _ => null,
+        };
+
         app.MapPost("/api/v1/projects/{project}/workspaces/{id}/builds/{build}/publish", async (string project, string id, string build, HttpContext context) =>
         {
             if (InProject(project, context, ServerRole.Approver, out var hosted) is { } refused) return refused;
@@ -287,9 +295,10 @@ public static class WorkspaceManagement
                     if (body?["bind"] is JsonObject slots)
                         foreach (var slot in slots)
                             if (slot.Value is JsonValue v && v.TryGetValue<string>(out var connection)) bind[slot.Key] = connection;
-                    var options = new ArtifactPublishOptions(body?["channel"]?.GetValue<string>(), body?["serve"]?.GetValue<bool>() ?? false, body?["expected_version"]?.GetValue<int>(), bind, body?["data_source"]?.GetValue<string>());
+                    var options = new ArtifactPublishOptions(body?["channel"]?.GetValue<string>(), body?["serve"]?.GetValue<bool>() ?? false, body?["expected_version"]?.GetValue<int>(), bind, body?["data_source"]?.GetValue<string>(), AdoptNames(body?["adopt"]));
                     answer = await publishing.PublishArtifactAsync(producing, target, builds.ArtifactFolderOf(hosted.Id, buildId), options, Actor(token), steps.Add, context.RequestAborted);
                     answer["note"] = fullNote;
+                    if (options.Adopt is { Count: > 0 }) Audit(token, "build.adopt", $"{target1} -> {target}", "confirmed adoption of " + string.Join(", ", options.Adopt));
                 }
                 else
                     answer = await publishing.PublishAsync(target, builds.AppFolderOf(hosted.Id, buildId), fullNote, Actor(token), steps.Add, context.RequestAborted);
@@ -305,7 +314,9 @@ public static class WorkspaceManagement
             {
                 builds.RecordPublish(hosted.Id, buildId, new JsonObject { ["at"] = DateTimeOffset.UtcNow, ["by"] = Actor(token), ["target"] = target, ["ok"] = false, ["error"] = ex.Message });
                 Audit(token, "build.publish", $"{target1} -> {target}", "refused: " + ex.Message);
-                return Results.Json(new JsonObject { ["error"] = ex.Message, ["steps"] = new JsonArray([.. steps.Select(x => (JsonNode?)x)]) }, statusCode: ex.Status);
+                var failure = new JsonObject { ["error"] = ex.Message, ["steps"] = new JsonArray([.. steps.Select(x => (JsonNode?)x)]) };
+                if (ex.Adopt is not null) failure["adopt"] = ex.Adopt.DeepClone();       // the data source and who made it: the screen asks the person, then publishes again with "adopt"
+                return Results.Json(failure, statusCode: ex.Status);
             }
         });
 
