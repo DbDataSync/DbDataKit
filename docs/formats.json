@@ -32,6 +32,16 @@
       "files": [ { "path": "Shared/src/DbDataKit.Apps.Manifest/schemas/view-spec.schema.json", "sha256": null } ]
     },
     {
+      "id": "app",
+      "title": "App manifest (app.yaml, schemaVersion)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "registered with AP19, which added the operation `change request` beside read and write (additive: a manifest from before reads as it did); a newer one is refused naming both numbers; the loader is the definition",
+      "version_source": { "file": "Shared/src/DbDataKit.Apps.Manifest/AppManifestLoader.cs", "pattern": "public const int Version = (\\d+);" },
+      "files": [ { "path": "Shared/src/DbDataKit.Apps.Manifest/AppManifestLoader.cs", "sha256": null } ]
+    },
+    {
       "id": "dashboard",
       "title": "Views dashboard (a file, schema: dashboard/N; one number with the shared core and the other kind)",
       "current": 1,

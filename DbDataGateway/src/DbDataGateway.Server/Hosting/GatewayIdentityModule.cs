@@ -76,6 +76,8 @@ public sealed class GatewayIdentityModule(
             ? new EntraUpstream(authority, e.ClientId!, secrets.ResolveSecret(SecretsRuntime.EntraSecretKey, e.ClientSecret), e.TrustEmail)
             : null;
         var windows = current.Identity.Windows.Enabled ? new WindowsUpstream() : null;
+        // what the approved manifest of an app instance allows: with it the home makes the instance's access token (plan 26 AP19)
+        builder.Services.AddSingleton<DbDataKit.Identity.IAppGrants>(new DbDataKit.Apps.AppInstanceGrants(new DbDataKit.Apps.AppInstanceStore(new DbDataKit.State.DefinitionStore(state)), new DbDataKit.Apps.AppApprovalStore(new DbDataKit.State.DefinitionStore(state))));
         builder.AddIdentityHome(new IdentityHomeOptions(publicUrl, directory, _ => state, _ => protector, Auth, Entra: entra, Windows: windows, Tokens: new AccessTokenPolicy(current.Identity.AccessTokenMaxDays)));
 
         var app = builder.Build();

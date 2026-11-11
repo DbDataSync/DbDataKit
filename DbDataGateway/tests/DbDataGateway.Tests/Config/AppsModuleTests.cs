@@ -7,6 +7,7 @@ using DbDataKit.Identity;
 using DbDataKit.State;
 using DbDataKit.Web.Trust;
 using DbDataGateway.Server.State;
+using DbDataGateway.Server.Serving;
 using DbDataGateway.Server.Hosting;
 using DbDataGateway.Server.Configuration;
 using Microsoft.AspNetCore.Builder;
@@ -121,6 +122,23 @@ public sealed class AppsModuleTests : IAsyncLifetime
         Assert.Contains("src=\"/apps/acme/_app/\"", body);
         Assert.DoesNotContain("allow-same-origin", body);
         Assert.Equal("no-store", string.Join(' ', shell.Headers.GetValues("Cache-Control")));
+    }
+
+    [Fact]
+    public async Task Starting_the_apps_module_gives_each_instance_a_client_at_the_home_and_a_second_start_adds_none()
+    {
+        appsPort = FreePort();
+        var (clientId, _, _, database) = Prepare();
+        await StartAsync(clientId);
+
+        var clients = new OidcClients(database);
+        var instanceClient = clients.AppClientOf("acme");
+        Assert.NotNull(instanceClient);
+        Assert.False(instanceClient!.Confidential);                                                           // public, PKCE
+        Assert.Equal([$"https://localhost:{appsPort}{AppsEndpoints.CallbackPath}"], instanceClient.RedirectUris);
+        Assert.Empty(AppInstanceClients.Reconcile(database, new AppInstanceStore(new DefinitionStore(database)), AppInstanceClients.CallbackOf(new Uri($"https://localhost:{appsPort}/"))));   // nothing left to make
+        Assert.True(AppInstanceClients.Remove(clients, "acme"));
+        Assert.Null(clients.AppClientOf("acme"));
     }
 
     [Fact]

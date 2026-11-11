@@ -93,6 +93,22 @@ public sealed class AppDataGatewayTests : IDisposable
         Assert.Equal(401, (await Call("api/v1/models/territories/schema", null)).Status);
     }
 
+    [Fact]
+    public async Task An_app_with_change_request_may_read_and_propose_but_the_scope_never_says_write()
+    {
+        instances.PublishApp("schemaVersion: 1\nname: ask\nversion: 1.0.0\nentry: index.html\nroles: [viewer]\nmodels:\n  - model: territories\n    entities: {territory: [change request], region: [read]}\n", "ada");
+        instances.Save(new AppInstance("ask", "ask"), "ada");
+        var token = new AppTokenBroker(host.Issuer()).Issue(new AppSessions().Create(new DbDataKit.Identity.HomeIdentity("user-7", "Ada", null, [], new Dictionary<string, IReadOnlyList<string>> { ["app:ask"] = ["author"] })), "ask").Token;
+
+        Assert.Equal(200, (await Call("api/v1/models/territories/changes", token, "POST", body: "{\"changes\":[]}", instance: "ask")).Status);
+        var call = Assert.Single(data.Seen);
+        Assert.Equal(["territories/territory:propose", "territories/region:read"], call.Scope);
+        Assert.True(call.Proposes("territory"));
+        Assert.False(call.Proposes("region"));                                  // read only
+        Assert.True(call.Allows("territory", write: false));                   // proposing a change is reading the row first
+        Assert.False(call.Allows("territory", write: true));                    // and the app never applies one itself
+    }
+
     [Theory]
     [InlineData("api/v1/models")]
     [InlineData("api/v1/models/territories/storage/create")]

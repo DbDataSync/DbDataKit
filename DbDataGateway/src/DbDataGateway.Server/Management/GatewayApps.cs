@@ -28,7 +28,7 @@ namespace DbDataGateway.Server.Management;
 /// Every answer to a read says what the caller may do (<c>caller</c>: <c>can_publish</c>, <c>can_approve</c>), so a screen can say why a button is off; the roles are enforced here on every call, never by the screen.
 /// The author recorded is the person the token names, or the paired client when none is: never the operating-system user of the machine the command ran on.
 /// </summary>
-public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers> approvers, IAuditLog audit, TimeProvider? clock = null, Func<Uri?>? appsAddress = null)
+public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers> approvers, IAuditLog audit, TimeProvider? clock = null, Func<Uri?>? appsAddress = null, Action<string>? instanceSaved = null, Action<string>? instanceRemoved = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
@@ -159,7 +159,7 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
         var access = new JsonArray();
         foreach (var use in manifest.Models)
             foreach (var (entity, operations) in use.Entities.OrderBy(e => e.Key, StringComparer.Ordinal))
-                access.Add(new JsonObject { ["model"] = use.Model, ["entity"] = entity, ["operations"] = operations.HasFlag(DataOperations.Write) ? "read and write" : operations.HasFlag(DataOperations.Read) ? "read" : "nothing" });
+                access.Add(new JsonObject { ["model"] = use.Model, ["entity"] = entity, ["operations"] = operations.Describe() });
         var egress = new JsonArray();
         foreach (var (key, _, origins) in (manifest.Egress ?? AppEgress.None).Directives().Where(d => d.Origins.Count > 0))
             egress.Add(new JsonObject { ["directive"] = key, ["origins"] = new JsonArray([.. origins.Select(o => (JsonNode)o)]) });
@@ -229,7 +229,7 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
             {
                 ["id"] = a.Id, ["app"] = a.App, ["version"] = a.Version, ["hash"] = a.ContentHash, ["approved_by"] = a.ApprovedBy, ["approved_at"] = a.ApprovedAt, ["note"] = a.Note,
                 ["published_version"] = a.PublishedVersion, ["revoked"] = a.RevokedAt is not null, ["revoked_at"] = a.RevokedAt,
-                ["operations"] = new JsonArray([.. a.Operations.SelectMany(o => o.Entities.OrderBy(e => e.Key, StringComparer.Ordinal).Select(e => (JsonNode)new JsonObject { ["model"] = o.Model, ["entity"] = e.Key, ["operations"] = e.Value.HasFlag(DataOperations.Write) ? "read and write" : "read" }))]),
+                ["operations"] = new JsonArray([.. a.Operations.SelectMany(o => o.Entities.OrderBy(e => e.Key, StringComparer.Ordinal).Select(e => (JsonNode)new JsonObject { ["model"] = o.Model, ["entity"] = e.Key, ["operations"] = e.Value.Describe() }))]),
                 ["egress"] = new JsonArray([.. a.Egress.Directives().Where(d => d.Origins.Count > 0).Select(d => (JsonNode)new JsonObject { ["directive"] = d.Key, ["origins"] = new JsonArray([.. d.Origins.Select(o => (JsonNode)o)]) })]),
             })]),
             ["caller"] = Capabilities(caller),
@@ -252,6 +252,7 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
         {
             if (!new AppInstanceStore(definitions).RetireInstance(name, Who(caller), DefinitionStore.Production)) return Refused(caller, "app instance-remove", name, 404, $"The instance '{name}' is not served.");
             Record(caller, "app instance-remove", name, "retired");
+            instanceRemoved?.Invoke(name);
             return ManagementResult.Ok(new JsonObject { ["name"] = name, ["removed"] = true });
         }
         catch (AppInstanceException ex) { return Refused(caller, "app instance-remove", name, 409, ex.Message); }
@@ -357,6 +358,7 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
         {
             var saved = new AppInstanceStore(definitions).Save(new AppInstance(name, app, request.Pin, request.Title, request.Settings, request.Bindings), Who(caller));
             Record(caller, "app instance-save", name, $"version {saved.Version}");
+            instanceSaved?.Invoke(name);
             return ManagementResult.Ok(new JsonObject { ["name"] = name, ["app"] = app, ["version"] = saved.Version });
         }
         catch (AppInstanceException ex)

@@ -19,6 +19,18 @@ public sealed class StoreCallerAuditTests
     }
 
     [Fact]
+    public void A_batch_waits_when_the_model_asks_or_when_the_caller_may_only_propose_one_of_its_entities()
+    {
+        Func<string, bool> mayApply = entity => entity == "territory";   // the manifest gives `write` for territory and `change request` for region
+
+        Assert.False(GroupStoreApi.Waits(false, ["territory"], null));                 // a Store call applies as before
+        Assert.False(GroupStoreApi.Waits(false, ["territory"], mayApply));
+        Assert.True(GroupStoreApi.Waits(false, ["territory", "region"], mayApply));    // one entity the app may only propose holds the whole batch
+        Assert.True(GroupStoreApi.Waits(false, ["region"], mayApply));
+        Assert.True(GroupStoreApi.Waits(true, ["territory"], mayApply));               // the model's own rule still holds
+    }
+
+    [Fact]
     public void A_change_request_a_trusted_app_proposes_carries_the_approval_label_in_the_stores_list()
     {
         var folder = Path.Combine(Path.GetTempPath(), "cr-via-" + Guid.NewGuid().ToString("N")[..8]);

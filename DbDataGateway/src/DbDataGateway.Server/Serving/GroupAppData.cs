@@ -25,7 +25,7 @@ public sealed class GroupAppData(GroupStoreApi api) : IAppData
             AppDataRoute.Row => await api.RowAsync(caller, call.Model, call.Entity!, call.Query, cancellationToken),
             AppDataRoute.Rows => await api.RowsAsync(caller, call.Model, call.Entity!, call.Query, cancellationToken),
             AppDataRoute.Schema => api.Schema(caller, call.Model, entity => call.Allows(entity, write: false)),
-            _ => await api.ChangesAsync(caller, call.Model, call.Body, entity => call.Allows(entity, write: true), cancellationToken),
+            _ => await api.ChangesAsync(caller, call.Model, call.Body, call.Proposes, cancellationToken, mayApply: entity => call.Allows(entity, write: true)),
         };
         return Answer(answer);
     }

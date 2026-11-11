@@ -83,6 +83,16 @@ public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, S
             new OpenIdClientOptions(home.AbsoluteUri, current.Apps.Home.ClientId!, secret, new Uri(PublicUrlOf(current), AppsEndpoints.CallbackPath).AbsoluteUri),
             new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) });
         var key = await SigningKeyAsync(current, cancellationToken);
+        // an instance the home has no client for yet (saved with the offline command, or at another instance of the group) gets one now
+        try
+        {
+            foreach (var made in AppInstanceClients.Reconcile(state, instances, AppInstanceClients.CallbackOf(PublicUrlOf(current))))
+                loggers.CreateLogger("Apps").LogInformation("Registered an OpenID client for the app instance {Instance} at the identity home.", made);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            loggers.CreateLogger("Apps").LogWarning(ex, "The app instances' OpenID clients could not be registered; the host's own tokens serve until they are.");
+        }
         var app = builder.Build();
         app.MapGet("/health/live", () => Results.Text("Healthy"));
         app.MapApps(instances, new AppSite(instances, name => instances.Resolve(name) is { } r ? approvals.ApprovedEgress(r) : AppEgress.None, views: ViewsRuntime.FromDirectory(Path.Combine(AppContext.BaseDirectory, ViewsRuntimeFolder))), client, new AppSessions(refresh: client.RefreshAsync, refreshAfter: TimeSpan.FromSeconds(current.Apps.RolesRefreshSeconds), store: new AppSessionStore(state, sessionKey)),

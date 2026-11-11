@@ -24,7 +24,12 @@ public sealed record AppDataCall(
 {
     /// <summary>Whether the manifest lets the app read (or, with <paramref name="write"/>, write) the entity; write includes read.</summary>
     public bool Allows(string entity, bool write) =>
-        Scope.Contains(TokenScope.Entry(Model, entity, write: true), StringComparer.Ordinal) || (!write && Scope.Contains(TokenScope.Entry(Model, entity, write: false), StringComparer.Ordinal));
+        Scope.Contains(TokenScope.Entry(Model, entity, write: true), StringComparer.Ordinal)
+        || (!write && (Scope.Contains(TokenScope.Entry(Model, entity, write: false), StringComparer.Ordinal) || Scope.Contains(TokenScope.ProposeEntry(Model, entity), StringComparer.Ordinal)));
+
+    /// <summary>Whether the manifest lets the app propose a change to the entity: a write, or a <c>change request</c> (<see cref="TokenScope.ProposeEntry"/>).</summary>
+    public bool Proposes(string entity) =>
+        Scope.Contains(TokenScope.Entry(Model, entity, write: true), StringComparer.Ordinal) || Scope.Contains(TokenScope.ProposeEntry(Model, entity), StringComparer.Ordinal);
 }
 
 /// <summary>Which of the semantic calls an app may make: the models its manifest lists, one model's catalog, or a query.</summary>
