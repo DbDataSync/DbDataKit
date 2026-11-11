@@ -75,6 +75,7 @@ A document may say `locale: de` (one of `en de fr es it pt nl`, a closed table: 
 **decimal and group separators** (`1.234,5` in `de`, `1 234,5` with a narrow no-break space in `fr`) and the **month names** of a date (`MMMM`, `MMM`, so `März 2026`, `févr. 2026`); the numerals of a numeric pattern (`dd/MM/yyyy`),
 the minus sign and the currency symbol's place (before the number) do not change. The locale of a render is the request's (`ResolveAsync(..., locale:)`, an export's or a subscriber's choice), else the document's, else the host's
 `ResolverOptions.Locale`, else English; an unknown code in a request reads as English, in a document the loader refuses it with the list. The locale is not part of a cache key (the rows are the same; only their text changes).
+The table is checked against a vendored CLDR snapshot by a unit test in each language; what is checked and what a person must still judge is in [`locale-data.md`](locale-data.md).
 **Not localised:** a chart's quantitative axis and legend (d3 strings the client draws with English separators), the QIS view of the semantic library, and a currency symbol's place.
 
 #### The catalog's date format and a bare year (DBR47, DBR48)
