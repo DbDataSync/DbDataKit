@@ -130,7 +130,7 @@ Question: for everything a person authors, publishes by file or command, or has 
 Each needs a server route first (a screen is never built around a file). UI01 to UI05 and UI10 were built; what is left:
 
 - **UI06, the secrets overview of Sync, Build, Store and Workspace servers (OWNER).** `GET /api/v1/secrets/overview` (the shape of `SecretsOverview` in `DbDataKit.Secrets.Abstractions`) on each of these servers that keeps a secret store or names references, a relay row where the console limits calls, and `HOLDS_SECRETS` of the console's `secrets.ts` naming the product. Built for the Gateway (its data sources' references against its store) and the runner (the bindings' references against its store). Sync and Build resolve most references against the environment and the runner's store, so their overview is mostly `outside`; the owner decides first which store each is compared with.
-- **UI08, the connect step of a runner slot's binding test.** See the section "Closed" below when it is built.
+- **UI08, the connect step of a runner slot's binding test.** Not built: the binding test resolves the connection and its login but does not open the connection; the patch design (open through the provider's `TestAsync` for SQL Server and PostgreSQL, report only the failure's public message) is described in `docs/plans/open-work.md`, Build and Console sections, with the skipped SQL Server test T16.
 
 Run-time evidence of the editor screens (all 18 editor slices were built in batch 20, 2026-11-08; close a line by running it or building it, and delete it):
 
