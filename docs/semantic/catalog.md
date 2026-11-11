@@ -149,6 +149,9 @@ dimensions:
     attributes: {}
 ```
 
+- **Attribute format** (plan 32 DBR47): `format: {date: month-year}` on an attribute says how a person reads its members (a date preset `year`, `quarter`, `month`, `month-year`, `date`, `datetime`, or a pattern of
+  `yyyy yy Q MMMM MMM MM dd HH mm ss` and quoted text). The engine copies it to the result's descriptor as `x_format`, and dashboards and reports read it for a widget that gives no `format`; a
+  member that is not an ISO date or a four-digit year is shown as it is. Only the date mapping is accepted here.
 - The binding for a source says which column answers the attribute there. A measure can be grouped by an attribute
   only if its source has a binding for it. Missing bindings are what make a result set coarser than requested and
   trigger a spread.

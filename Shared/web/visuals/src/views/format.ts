@@ -11,7 +11,7 @@ export const MAX_DECIMALS = 10
 export const MAX_PATTERN_LENGTH = 40
 
 /** A catalog's own format of a field (`x_format` of the result's descriptor). */
-export interface CatalogFormat { style?: string; decimals?: number; currency?: string }
+export interface CatalogFormat { style?: string; decimals?: number; currency?: string; date?: string }
 export type ViewFormatValue = string | { style?: string; decimals?: number; currency?: string; grouping?: boolean; date?: string }
 /** What is wrong with a format: the key inside it (empty for the format itself) and the words. */
 export interface FormatProblem { key: string; message: string }
@@ -92,9 +92,19 @@ function parse(input: string): { problem?: string; parts: Part[] } {
  * (an ISO date or date-time, read as written, no time zone applied) and is otherwise returned as it is.
  */
 export function formatValue(value: unknown, format?: ViewFormatValue | null, catalog?: CatalogFormat | null): string {
-  if (typeof value === 'string') return isObject(format) && typeof format.date === 'string' ? formatDate(value, format.date) : value
+  const pattern = datePattern(format, catalog)
+  if (typeof value === 'string') return pattern === null ? value : formatDate(value, pattern)
+  // a bare whole number of four digits is a year when a date format reads it (DBR48)
+  if (typeof value === 'number' && pattern !== null && Number.isInteger(value) && value >= 1000 && value <= 9999) return formatDate(String(value), pattern)
   if (typeof value === 'number') return formatNumber(value, format, catalog)
   return value === null || value === undefined ? '' : String(value)
+}
+
+/** The date pattern a value is read under: the format's own `date`, or, when the widget gives no format (or says `catalog`), the catalog field's (`x_format` of an attribute); null when neither is a date format. */
+export function datePattern(format?: ViewFormatValue | null, catalog?: CatalogFormat | null): string | null {
+  if (isObject(format)) return typeof format.date === 'string' ? format.date : null
+  if (format === null || format === undefined || format === 'catalog') return typeof catalog?.date === 'string' ? catalog.date : null
+  return null
 }
 
 export function formatNumber(v: number, format?: ViewFormatValue | null, catalog?: CatalogFormat | null): string {

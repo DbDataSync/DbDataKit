@@ -7,7 +7,7 @@
       "current": 2,
       "previous": 1,
       "status": "open",
-      "note": "gains cache and checks; open until the first release that holds either (24a D5)",
+      "note": "gains cache and checks, and an optional attribute `format` ({date: ...}, plan 32 DBR47: additive, an older catalog reads as before); open until the first release that holds any of them (24a D5)",
       "version_source": { "file": "Shared/src/DbDataKit.DataModel/DataModelLoader.cs", "pattern": "public const int Version = (\\d+);" },
       "files": [ { "path": "Shared/src/DbDataKit.DataModel/DataModelLoader.cs", "sha256": null } ]
     },

@@ -55,7 +55,7 @@ and the view applies, so the person who owns the measure decides how it reads an
 `$1,234.50` (symbol, then the catalog's decimals); `compact` keeps the symbol and one decimal (`$4.2M`); a measure whose style is `percent` reads as a percentage
 under every preset, because its value is a fraction; `percent` on any other measure turns a fraction into a percentage. Negative numbers read `-$50.00`. A measure with no
 format reads as before. Fixture `view-fixtures/25`, and the symbols known so far are USD, EUR, GBP, JPY, CNY, INR and KRW (any other code is written before the number: `CAD 1,200`).
-Dimension formats (dates) and per-locale separators are not implemented.
+A date **attribute** can carry a `format: {date: ...}` in the catalog (descriptor `x_format`); dashboards and reports apply it ([catalog.md](catalog.md#dimensions-and-attributes)); the matrix view of the QIS renderer does not. Per-locale separators are not implemented here.
 
 The grid:
 

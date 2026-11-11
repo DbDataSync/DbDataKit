@@ -128,13 +128,32 @@ public static class ViewFormat
     /// </summary>
     public static string Text(JsonNode? value, JsonNode? format, JsonObject? catalog = null)
     {
+        var pattern = DatePattern(format, catalog);
         if (value is JsonValue v)
         {
-            if (v.TryGetValue<string>(out var text))
-                return format is JsonObject f && f["date"] is JsonValue dv && dv.TryGetValue<string>(out var pattern) ? Date(text, pattern) : text;
+            if (v.TryGetValue<string>(out var text)) return pattern is null ? text : Date(text, pattern);
+            // a bare whole number of four digits is a year when a date format reads it (DBR48): 2026 under {date: year} or an attribute whose catalog format is a date
+            if (pattern is not null && BareYear(v) is { } year) return Date(year, pattern);
             if (v.TryGetValue<double>(out var n)) return Number(n, format, catalog);
         }
         return value?.ToString() ?? "";
+    }
+
+    /// <summary>The date pattern a value is read under: the format's own <c>date</c>, or, when the widget gives no format, the catalog field's (<c>x_format</c> of an attribute); null when neither is a date format.</summary>
+    internal static string? DatePattern(JsonNode? format, JsonObject? catalog)
+    {
+        if (format is JsonObject o) return o["date"] is JsonValue dv && dv.TryGetValue<string>(out var p) ? p : null;
+        if (format is null || (format is JsonValue pv && pv.TryGetValue<string>(out var preset) && preset == "catalog"))
+            return catalog?["date"] is JsonValue cv && cv.TryGetValue<string>(out var c) ? c : null;
+        return null;
+    }
+
+    /// <summary>A whole number from 1000 to 9999, as the text of a year; null for any other number.</summary>
+    private static string? BareYear(JsonValue v)
+    {
+        if (v.TryGetValue<long>(out var l)) return l is >= 1000 and <= 9999 ? l.ToString(CultureInfo.InvariantCulture) : null;
+        if (v.TryGetValue<int>(out var i)) return i is >= 1000 and <= 9999 ? i.ToString(CultureInfo.InvariantCulture) : null;
+        return v.TryGetValue<double>(out var d) && d == Math.Floor(d) && d is >= 1000 and <= 9999 ? ((long)d).ToString(CultureInfo.InvariantCulture) : null;
     }
 
     /// <summary>A number under a format; a date mapping has no meaning for a number and reads as <c>full</c>.</summary>
@@ -184,7 +203,7 @@ public static class ViewFormat
     /// </summary>
     public static string Label(string label, JsonNode? format, JsonObject? catalog = null)
     {
-        if (format is JsonObject o && o["date"] is JsonValue dv && dv.TryGetValue<string>(out var pattern)) return Date(label, pattern);
+        if (DatePattern(format, catalog) is { } pattern) return Date(label, pattern);
         if (format is null || (format is JsonObject n && !n.ContainsKey("style"))) return label;
         return double.TryParse(label, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) ? Number(number, format, catalog) : label;
     }

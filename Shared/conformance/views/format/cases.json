@@ -449,6 +449,83 @@
     "style": "number"
    },
    "text": "abc"
+  },
+  {
+   "name": "a date catalog format is what an attribute without a format reads",
+   "value": "2026-03-05",
+   "catalog": {
+    "date": "month-year"
+   },
+   "text": "Mar 2026"
+  },
+  {
+   "name": "the preset catalog reads the date catalog format",
+   "value": "2026-03-05",
+   "format": "catalog",
+   "catalog": {
+    "date": "quarter"
+   },
+   "text": "Q1 2026"
+  },
+  {
+   "name": "a format of the widget wins over the catalog date format",
+   "value": "2026-03-05",
+   "format": {
+    "date": "yyyy"
+   },
+   "catalog": {
+    "date": "month-year"
+   },
+   "text": "2026"
+  },
+  {
+   "name": "a number format leaves the catalog date format alone",
+   "value": "2026-03-05",
+   "format": "full",
+   "catalog": {
+    "date": "month-year"
+   },
+   "text": "2026-03-05"
+  },
+  {
+   "name": "a bare whole year is read as a date under a date mapping",
+   "value": 2026,
+   "format": {
+    "date": "year"
+   },
+   "text": "2026"
+  },
+  {
+   "name": "a bare whole year reads as a date in a pattern",
+   "value": 2026,
+   "format": {
+    "date": "'FY'yy"
+   },
+   "text": "FY26"
+  },
+  {
+   "name": "a bare whole year is read as a date under the catalog date format",
+   "value": 2026,
+   "catalog": {
+    "date": "year"
+   },
+   "text": "2026"
+  },
+  {
+   "name": "a whole number that is not four digits is a number under a date mapping",
+   "value": 12,
+   "format": {
+    "date": "year"
+   },
+   "text": "12"
+  },
+  {
+   "name": "a fraction is never a year",
+   "value": 2026.5,
+   "format": {
+    "date": "year"
+   },
+   "text": "2,026.5"
   }
  ],
  "bad": [

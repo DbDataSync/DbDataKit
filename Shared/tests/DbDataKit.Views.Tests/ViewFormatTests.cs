@@ -55,6 +55,17 @@ public class ViewFormatTests
                 Assert.Equal(DbDataKit.Semantic.Presentation.MatrixView.Format(v, preset, catalog), ViewFormat.Number(v, JsonValue.Create(preset), catalog));
     }
 
+    [Fact]
+    public void A_member_label_reads_the_catalogs_date_format_when_the_widget_gives_none()
+    {
+        var catalog = new JsonObject { ["date"] = "month-year" };
+        Assert.Equal("Mar 2026", ViewFormat.Label("2026-03", null, catalog));
+        Assert.Equal("Mar 2026", ViewFormat.Label("2026-03", JsonValue.Create("catalog"), catalog));
+        Assert.Equal("2026", ViewFormat.Label("2026-03", new JsonObject { ["date"] = "yyyy" }, catalog));   // the widget's own format wins
+        Assert.Equal("2026-03", ViewFormat.Label("2026-03", null, null));
+        Assert.Equal("not a date", ViewFormat.Label("not a date", null, catalog));                           // text that is no date is left as it is
+    }
+
     [Theory]
     [InlineData("full", null, ",.2~f"), InlineData("compact", null, ".2~s"), InlineData("percent", null, ".0%")]
     public void A_preset_maps_to_a_d3_string(string preset, string? unused, string expected)
