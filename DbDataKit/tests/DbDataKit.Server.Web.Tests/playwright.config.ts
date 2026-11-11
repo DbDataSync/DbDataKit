@@ -15,6 +15,8 @@ const isWorker = process.env.TEST_WORKER_INDEX !== undefined
 if (!isWorker) {
   fs.rmSync(scratchDirectory, { recursive: true, force: true })
   fs.mkdirSync(scratchDirectory, { recursive: true })
+  // the console's delivery channel for subscriptions-delivery.spec.ts: a signed webhook at an address and a secret read from files that story writes (a local listener); a console reads settings.yaml when it starts
+  fs.writeFileSync(path.join(scratchDirectory, 'settings.yaml'), `delivery:\n  channels:\n    e2e-hook:\n      kind: webhook\n      url: file:${path.join(scratchDirectory, 'delivery-hook-url.txt').replace(/\\/g, '/')}\n      secret: file:${path.join(scratchDirectory, 'delivery-hook-secret.txt').replace(/\\/g, '/')}\n      allow_private: [127.0.0.1]\n`)
 }
 
 // A Build server for the console to pair with: a real one, in a directory of its own, with a pairing code made before it starts and written where the test can read it.

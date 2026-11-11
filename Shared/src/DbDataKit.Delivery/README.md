@@ -101,4 +101,6 @@ A channel's endpoint and its secret references are read here by `DeliverySetting
 
 ## Opening the module
 
-A host opens `DeliveryModule.Module` (install scope; it depends on `payloads`) with its other modules. Nothing in this slice opens it in a host: the console wires it with the screens (plan 22a GP18).
+A host opens `DeliveryModule.Module` (install scope; it depends on `payloads`) with its other modules. The console does (`ConsoleState.Modules`): it reads the `delivery:` section of `settings.yaml` in its directory, runs the sender as a hosted service and serves `/api/delivery` and the Delivery page (channels with a test send, subscriptions, the outbox). The console cannot draw a document, so a subscription is rendered by the process that runs the views module with the `views-export` task (`DbDataKit.Delivery.Runner`), over the same state; the console's "send now" is offered only when a process registers an `ISubscriptionRenderer`.
+
+**Planned (owner direction, plan 22a GP07 row):** the channels become connection kinds (`kind: http` for Slack, Teams and the signed webhook; `kind: smtp`), and `delivery:` shrinks to channel name to connection name plus limits.
