@@ -35,6 +35,60 @@ const scheduling: SchemaNode = {
   },
 }
 
+/** What a binding names: a script of the library and what it is given for the script's declared parameters (`ScriptBinding`). */
+const scriptBinding: SchemaNode = {
+  type: 'object',
+  required: ['scriptName'],
+  properties: { scriptName: { description: 'The name of a script of the library.', type: 'string' }, parameters: { description: 'What the binding supplies for the script\'s declared parameters, by name.', type: 'object', additionalProperties: { type: 'string' } } },
+}
+
+/** The slots a script is bound to at a level (`ScriptSlots`): a column or value expression, a row transform, a hook, a metadata provider, a source or verification query builder, a segmenting strategy, a lifecycle hook. */
+const scripts: SchemaNode = { type: 'object', description: 'Scripts bound at this level, by slot (sqlColumnExpression, valueColumnExpression, rowTransform, hook, metadataProvider, sourceQueryBuilder, verificationQueryBuilder, segmentingStrategy, lifecycleHook). An absent slot is the default behaviour.', additionalProperties: scriptBinding }
+
+const hook: SchemaNode = {
+  type: 'object',
+  description: 'One hook: SQL or a bound hook script, run on the target or the source.',
+  properties: {
+    name: { type: 'string' },
+    sql: { description: 'SQL to run at the point.', type: 'string' },
+    hook: { description: 'The name of a hook script instead of SQL.', type: 'string' },
+    parameters: { type: 'object', additionalProperties: { type: 'string' } },
+    connection: { description: 'The side it runs on: Target (the default) or Source.', enum: ['Target', 'Source'] },
+  },
+}
+
+/** Hooks by point (beforeStage, afterStage, beforeLoad, afterLoad), each point a list run in order. */
+const hooks: SchemaNode = { type: 'object', description: 'Hooks by point: beforeStage, afterStage, beforeLoad and afterLoad, each a list run in order.', additionalProperties: { type: 'array', items: hook } }
+
+/** A named way of dividing a table for a reload (`SegmentingStrategyConfig`): four columns come back (label, range_start, range_end, selected) from SQL or a bound script. */
+const segmentingStrategy: SchemaNode = {
+  type: 'object',
+  required: ['name', 'kind'],
+  properties: {
+    name: { description: 'What a mapping\'s default segmenting and a bulk load call it.', type: 'string' },
+    kind: { description: 'DuckDb computes the segments from the calendar and touches nothing; SourceSql and TargetSql run SQL against a connection; Script is a bound C# script.', enum: ['DuckDb', 'SourceSql', 'TargetSql', 'Script'] },
+    sql: { description: 'For the SQL kinds: a query returning label, range_start, range_end and (optionally) selected.', type: 'string' },
+    scriptName: { description: 'For Script: the script implementing the strategy.', type: 'string' },
+    parameters: { description: 'What the strategy supplies for a script\'s declared parameters.', type: 'object', additionalProperties: { type: 'string' } },
+  },
+}
+
+/** One segment of a reload (`BatchReloadSegment`): the mode says which of the other fields it needs (full: none; list: column and values; range: column, rangeMin and rangeMax; auto: column and bucketCount; custom: strategyName). */
+const segment: SchemaNode = {
+  type: 'object',
+  required: ['mode'],
+  properties: {
+    mode: { enum: ['full', 'list', 'range', 'auto', 'custom'] },
+    column: { description: 'The column the segment divides (not for full; optional for custom).', type: 'string' },
+    values: { description: 'list: the values, one segment.', type: 'array', items: { type: 'string' } },
+    rangeMin: { description: 'range: inclusive lower bound.', type: 'string' },
+    rangeMax: { description: 'range: exclusive upper bound.', type: 'string' },
+    label: { description: 'range: a name for the segment.', type: 'string' },
+    bucketCount: { description: 'auto: how many buckets.', type: 'integer', minimum: 1 },
+    strategyName: { description: 'custom: the name of one of the replication\'s segmenting strategies.', type: 'string' },
+  },
+}
+
 /**
  * The shape of a replication's `task.yaml`, for the form (`dbdatasync`'s strict readers are the authority and their words are what the Check shows: this schema only says which settings exist so the form can offer them, and keeps no rule the readers do not have).
  * The parts that are open sets of names (scripts, hooks, provisioning, segmenting, checks) are left to the YAML tab.
@@ -58,6 +112,9 @@ export const syncTaskSchema: SchemaNode = {
     },
     bulkLoad: { type: 'object', description: 'The full reload used for the first load or a repair.', properties: { reader: kindOptions('Reads the whole source.') } },
     endpoints: { type: 'object', description: 'The default source and target connection of the replication\'s mappings.', properties: { source: endpoint, target: endpoint } },
+    scripts,
+    hooks,
+    segmentingStrategies: { type: 'array', description: 'Named ways of dividing a table for a reload; a mapping\'s default segmenting and a bulk load refer to them by name.', items: segmentingStrategy },
     reconcile: {
       type: 'object',
       description: 'The periodic comparison of target and source.',
@@ -100,6 +157,9 @@ export const syncMappingSchema: SchemaNode = {
       items: { type: 'object', required: ['sourceColumn', 'targetColumn'], properties: { sourceColumn: { type: 'string' }, targetColumn: { type: 'string' }, transform: { description: 'An expression applied to the source value.', type: 'string' }, targetType: { type: 'string' } } },
     },
     primaryKey: { type: 'array', description: 'The target columns that identify a row.', items: { type: 'string' } },
+    scripts,
+    hooks,
+    defaultSegmenting: { type: 'array', description: 'How a reload of this table is divided when nothing else is chosen (empty: the whole table, full).', items: segment },
   },
 }
 
@@ -121,6 +181,23 @@ export const syncConnectionSchema: SchemaNode = {
         mode: { description: 'sql signs in with a login and a password; windows with the service\'s own account.', type: 'string' },
         user: { type: 'string' },
         password_secret: { description: 'A reference to the secret that holds the password: secret:dbdatakit:sync:connection:<name>. Never the password.', type: 'string' },
+      },
+    },
+    extensions: {
+      type: 'object',
+      properties: {
+        sync: {
+          type: 'object',
+          description: 'Sync\'s own settings of the connection.',
+          properties: {
+            run_user: { description: 'A second login a replication pass connects with (the run login); the read login above serves browsing and tests. Needs run_password_secret.', type: 'string' },
+            run_password_secret: { description: 'A reference to the secret that holds the run login\'s password: secret:dbdatakit:sync:connection:<name>-run. Never the password.', type: 'string' },
+            segment_order: { description: 'How the segments of a reload are ordered (Together by default).', type: 'string' },
+            test_query: { description: 'A query the connection test runs.', type: 'string' },
+            scripts,
+            hooks,
+          },
+        },
       },
     },
   },
@@ -145,8 +222,8 @@ export function secretFindings(text: string): SecretFinding[] {
   const found: SecretFinding[] = []
   text.replace(/\r\n/g, '\n').split('\n').forEach((line, i) => {
     if (line.trimStart().startsWith('#')) return
-    if (/^\s*password\s*:\s*\S/i.test(line)) { found.push({ line: i + 1, message: 'holds a password value under `password`. Name a secret with `password_secret: secret:dbdatakit:sync:connection:<name>` instead.' }); return }
-    const reference = /^\s*password_secret\s*:\s*['"]?([^'"\s]*)/i.exec(line)
+    if (/^\s*(?:run_)?password\s*:\s*\S/i.test(line)) { found.push({ line: i + 1, message: 'holds a password value under `password`. Name a secret with `password_secret: secret:dbdatakit:sync:connection:<name>` instead.' }); return }
+    const reference = /^\s*(?:run_)?password_secret\s*:\s*['"]?([^'"\s]*)/i.exec(line)
     if (reference && reference[1] !== '') {
       const why = referenceProblem(reference[1])
       if (why) { found.push({ line: i + 1, message: `has a \`password_secret\` that is not a reference. ${why}` }); return }

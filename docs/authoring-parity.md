@@ -14,8 +14,8 @@ Summary (counts of the features below):
 | --- | --- | --- | --- | --- | --- |
 | Build | 15 | 3 | 2 | 5 | 25 |
 | Store | 5 | 1 | 1 | 3 | 10 |
-| Sync | 9 | 4 | 5 | 3 | 21 |
-| All | 29 | 8 | 8 | 11 | 56 |
+| Sync | 11 | 3 | 4 | 3 | 21 |
+| All | 31 | 7 | 7 | 11 | 56 |
 
 ### Build
 
@@ -68,7 +68,7 @@ Summary (counts of the features below):
 | --- | --- | --- | --- | --- |
 | Connections: list, test a connection (reachable) | `sync/src/pages/ConnectionsPage.tsx`, `connection-edit/ConnectionTestCard.tsx` | `workspace/src/pages/SyncSetPanel.tsx` lists them; no test | partly | SC22h |
 | Connection edit as a form (engine, address, auth by secret reference); no password in git | `sync/src/pages/ConnectionEditPage.tsx` | `workspace/src/pages/SyncSetPanel.tsx`, `StructuredPanel.tsx`, `syncSchemas.ts` (form from `sync-connection`, secret findings) | built | SC22d |
-| The connection's run login (`extensions.sync.run_user`) | `sync/src/pages/connection-edit/RunLoginCard.tsx` | YAML text only | partly | SC22i |
+| The connection's run login (`extensions.sync.run_user`) | `sync/src/pages/connection-edit/RunLoginCard.tsx` | `workspace/src/syncSchemas.ts` (`extensions.sync.run_user` and its secret reference, in the connection form) | built | SC22i |
 | Replications: list with status, lag, enable and pause | `sync/src/pages/ReplicationsPage.tsx` | `workspace/src/pages/SyncSetPanel.tsx` (the list, `enabled` in the form); no run state | partly | SC22l |
 | Overview: per replication, what is wrong with it | `sync/src/pages/replication-detail/OverviewPanel.tsx` | `workspace/src/pages/SyncSetPanel.tsx` fed by the check of the draft (`WorkspacePage.tsx`) | built | SC22f |
 | Replication settings: notes, schedule, endpoints, pipeline (reader, cache, writer), reconcile | `replication-detail/OverviewPanel.tsx`, `EndpointsCard.tsx`, `ScheduleCard.tsx`, `ReconcileConfigCard.tsx` | `workspace/src/syncSchemas.ts` (the task form: scheduling, change processing, bulk load, endpoints, reconcile) | built | SC22d |
@@ -76,8 +76,8 @@ Summary (counts of the features below):
 | Table mappings: new, delete, edit tables, filter, query source | `replication-detail/TableMappingsPanel.tsx`, `TableMappingForm.tsx`, `SourceFilterCard.tsx` | `workspace/src/syncSchemas.ts` (the mapping form: sources, targets, filter, query) | built | SC22d |
 | Mapping editor with columns from the live database (the source column of each target column, same-name suggestions, types) | `replication-detail/ColumnMappingEditor.tsx`, `suggestMappings.ts`, `CachedMetadataCard.tsx` | `workspace/src/pages/MappingColumns.tsx` (from the catalog cache, `catalogCache.ts`) | built | SC22g |
 | Primary key (natural key picked from the target columns) | `replication-detail/PrimaryKeyCard.tsx`, `naturalKey.ts` | `workspace/src/pages/MappingColumns.tsx` (picks from the cached columns), `syncSchemas.ts` | built | SC22g |
-| Transforms per column, the mapping's whole pipeline (Custom Transforms tab, mapping preview) | `replication-detail/MappingPipelineCard.tsx`, `MappingPreview.tsx`, `OverviewPanel.tsx` | the transform text of a column mapping in the form; scripts and the pipeline in YAML | partly | SC22i |
-| Segmenting strategies and the default segmenting of a reload | `replication-detail/SegmentingStrategiesCard.tsx`, `DefaultSegmentingCard.tsx`, `BulkLoadForm.tsx` | YAML text only | missing | SC22i |
+| Transforms per column, the mapping's whole pipeline (Custom Transforms tab, mapping preview) | `replication-detail/MappingPipelineCard.tsx`, `MappingPreview.tsx`, `OverviewPanel.tsx` | `workspace/src/syncSchemas.ts`: the transform text of a column mapping, the `scripts` and `hooks` of the task and of a mapping as forms; no mapping preview (it reads rows) | partly | SC22i |
+| Segmenting strategies and the default segmenting of a reload | `replication-detail/SegmentingStrategiesCard.tsx`, `DefaultSegmentingCard.tsx`, `BulkLoadForm.tsx` | `workspace/src/syncSchemas.ts` (`segmentingStrategies` of the task, `defaultSegmenting` of a mapping; the bulk load itself is a run) | built | SC22i |
 | Provisioning: both sides' plan, preview, apply (DDL runs now) | `replication-detail/ProvisioningCard.tsx`, `ReplicationProvisioningPanel.tsx` | none | missing | SC22j |
 | Quality checks of a replication (`checks:` seven kinds, severity, on_error) | `replication-detail/ReplicationChecksPanel.tsx`, `checkForms.ts`, `ChecksCard.tsx` | YAML text only | missing | SC22k |
 | Scripts: the registry, write, compile, test against sample input, bind | `sync/src/pages/ScriptsPage.tsx`, `ScriptEditPage.tsx`, `script-edit/ScriptTestPanel.tsx` | none: the template has no scripts folder | missing | SC22k |
