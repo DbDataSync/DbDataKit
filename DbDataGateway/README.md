@@ -12,6 +12,7 @@ Flight SQL client ──gRPC/TLS──▶ DbDataGateway (x64) ──▶ SQL Serv
 ```
 
 * .NET 10, Kestrel, runs as a Windows service (also systemd/Docker). Windows Server 2016+ is supported.
+  A linux-x64 zip (framework-dependent, needs the .NET 10 runtime) is released beside the Windows one. Analysis Services sources, Windows password sign-in (`Auth.Windows`) and `Bitness: x86` ODBC sources are Windows-only (no 32-bit worker in the Linux zip): a Linux server refuses a configuration that asks for them, naming the setting.
   IIS is not used: gRPC over IIS needs HTTP/2 response trailers, which Windows Server 2016 IIS lacks.
 * Standalone: a self-contained single-file `dbdatagateway.exe` that generates its own self-signed TLS certificate.
 
@@ -583,7 +584,7 @@ exe: queries with every compression setting, updates, metadata and wrong-passwor
   so use read-only database accounts for read-only sources.
 * Transactions, `DoPut` bulk ingestion.
 * Pass-through and Windows-account logon have not been exercised against real accounts.
-* The Linux/Docker path (`Dockerfile`) has not been built or run in this repository's environment.
+* **Linux, what was run (plan 33 SC01 to SC03).** `scripts/package.sh linux-x64 <version> <dir>` built `dbdatagateway-v<version>-linux-x64.zip` (framework-dependent, about 60 MB, `libduckdb.so` and `apps-views/` at the root, no worker), the zip was unzipped, `./dbdatagateway help` printed the usage, and `./dbdatagateway server run` with a fresh data directory answered `https://127.0.0.1:<port>/health/live` (management API, self-signed). The suites run on Linux in CI (and the Linux unit tests of the Windows-only refusals: `Auth.Windows`, `Bitness: x86` and `Ssas` each fail the start with the setting named); the installer tests install a Linux zip of this shape with `install.sh`; the systemd unit has a golden test. **Not run:** ODBC drivers on Linux outside CI's SQL Server driver, Windows sign-in through Kerberos with a keytab (`Identity.Windows`), the container (`Dockerfile`) in this environment, `systemd` itself starting the unit, and any Windows-only path from Linux.
 
 ## Development
 
