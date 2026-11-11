@@ -1,0 +1,119 @@
+using System.Net;
+using System.Text.Json.Nodes;
+using DbDataKit.Web.Trust;
+
+namespace DbDataWorkspace.Tests;
+
+/// <summary>
+/// Publishing a Store project's models to a paired Gateway (plan 33 SC21b): the models go in the current format through the Gateway's entity-model route as the paired client, on a data source the Gateway already has (the model's storage connection
+/// unless the publish names another); the Workspace holds no connection and creates no table. The Gateway here is a fake with real pairing and the route's rules (a data source of its own, the version a publish is made over).
+/// </summary>
+[Collection(ServerCollection.Name)]
+public sealed class WorkspaceStorePublishTests
+{
+    private const string Project = "territories";
+
+    private static async Task<string> DraftAsync(WorkspaceHarness server)
+    {
+        Assert.Equal(HttpStatusCode.Created, (await server.AsAdmin(HttpMethod.Post, "/api/v1/projects", new JsonObject { ["id"] = Project, ["kind"] = "store" }.ToJsonString())).Response.StatusCode);
+        return (string)(await server.AsAda(HttpMethod.Post, $"/api/v1/projects/{Project}/workspaces", """{"name":"draft"}""")).Body!["id"]!;
+    }
+
+    private static async Task<string> BuildAsync(WorkspaceHarness server, string workspace, bool expectSuccess = true)
+    {
+        var made = await server.AsAda(HttpMethod.Post, $"/api/v1/projects/{Project}/workspaces/{workspace}/builds");
+        Assert.Equal(HttpStatusCode.Accepted, made.Response.StatusCode);
+        var build = (string)made.Body!["id"]!;
+        for (var i = 0; i < 300; i++)
+        {
+            var status = (string)(await server.AsAda(HttpMethod.Get, $"/api/v1/projects/{Project}/workspaces/{workspace}/builds/{build}")).Body!["build"]!["status"]!;
+            if (status is "succeeded" or "failed") { Assert.Equal(expectSuccess ? "succeeded" : "failed", status); return build; }
+            await Task.Delay(100);
+        }
+        throw new TimeoutException("the build did not finish");
+    }
+
+    private static Task<(HttpResponseMessage Response, JsonNode? Body)> Publish(WorkspaceHarness server, string workspace, string build, JsonObject body) =>
+        server.Send("grace", ServerRole.Approver, HttpMethod.Post, $"/api/v1/projects/{Project}/workspaces/{workspace}/builds/{build}/publish", body.ToJsonString());
+
+    private static async Task Pair(WorkspaceHarness server, FakeGateway gateway) =>
+        Assert.Equal(HttpStatusCode.Created, (await server.AsAdmin(HttpMethod.Post, "/api/v1/publisher-keys/edge/pair", new JsonObject { ["url"] = gateway.Url.ToString(), ["code"] = gateway.NewCode() }.ToJsonString())).Response.StatusCode);
+
+    [Fact]
+    public async Task A_model_is_published_in_the_current_format_on_the_data_source_its_storage_names_and_published_again_unchanged_or_changed_over_the_version_the_gateway_has()
+    {
+        await using var gateway = await FakeGateway.StartAsync();
+        await using var server = await WorkspaceHarness.StartAsync();
+        await Pair(server, gateway);
+        var workspace = await DraftAsync(server);
+        // a file of the previous format is published as the current one, and the draft's file stays as it was written
+        var path = $"/api/v1/projects/{Project}/workspaces/{workspace}/files/models/{Project}.yaml";
+        var text = (string)(await server.AsAda(HttpMethod.Get, path)).Body!["content"]!;
+        Assert.True((await server.AsAda(HttpMethod.Put, path, new JsonObject { ["content"] = text.Replace("schemaVersion: 2", "schemaVersion: 1") }.ToJsonString())).Response.IsSuccessStatusCode);
+        var first = await BuildAsync(server, workspace);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await server.AsAda(HttpMethod.Post, $"/api/v1/projects/{Project}/workspaces/{workspace}/builds/{first}/publish", """{"target":"edge"}""")).Response.StatusCode);
+        var published = await Publish(server, workspace, first, new JsonObject { ["target"] = "edge" });
+        Assert.Equal(HttpStatusCode.OK, published.Response.StatusCode);
+        var model = published.Body!["published"]!["models"]![0]!;
+        Assert.Equal((Project, "mdm", 1, true), ((string)model["model"]!, (string)model["data_source"]!, (int)model["version"]!, (bool)model["created"]!));
+        Assert.StartsWith("schemaVersion: 2", gateway.Models[Project].Text);
+        Assert.StartsWith("schemaVersion: 1", (string)(await server.AsAda(HttpMethod.Get, path)).Body!["content"]!);
+        Assert.Collection(gateway.Calls.Where(c => c.Contains("entity-models")), c => Assert.StartsWith("GET /api/v1/entity-models/territories as client:workspace-", c), c => Assert.StartsWith("PUT /api/v1/entity-models/territories as client:workspace-", c));
+        Assert.All(gateway.Calls, c => Assert.Contains("with publisher", c));
+
+        // the same model again leaves the Gateway's version where it was; a change goes over the version it has
+        var again = (await Publish(server, workspace, await BuildAsync(server, workspace), new JsonObject { ["target"] = "edge" })).Body!["published"]!["models"]![0]!;
+        Assert.Equal((1, true), ((int)again["version"]!, (bool)again["unchanged"]!));
+        var current = (string)(await server.AsAda(HttpMethod.Get, path)).Body!["content"]!;
+        Assert.True((await server.AsAda(HttpMethod.Put, path, new JsonObject { ["content"] = current.TrimEnd() + "\n      note: {type: VARCHAR(200)}\n" }.ToJsonString())).Response.IsSuccessStatusCode);
+        var changed = (await Publish(server, workspace, await BuildAsync(server, workspace), new JsonObject { ["target"] = "edge" })).Body!["published"]!["models"]![0]!;
+        Assert.Equal((2, false), ((int)changed["version"]!, (bool)changed["unchanged"]!));
+        Assert.DoesNotContain("seed", published.Body.ToJsonString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task A_data_source_the_gateway_does_not_have_and_a_gateways_refusal_come_back_in_its_words_and_a_runner_is_not_a_target()
+    {
+        await using var gateway = await FakeGateway.StartAsync();
+        await using var runner = await FakeRunner.StartAsync();
+        await using var server = await WorkspaceHarness.StartAsync();
+        await Pair(server, gateway);
+        Assert.Equal(HttpStatusCode.Created, (await server.AsAdmin(HttpMethod.Post, "/api/v1/publisher-keys/jobs/pair", new JsonObject { ["url"] = runner.Url.ToString(), ["code"] = runner.NewCode() }.ToJsonString())).Response.StatusCode);
+        var workspace = await DraftAsync(server);
+        var build = await BuildAsync(server, workspace);
+
+        var missing = await Publish(server, workspace, build, new JsonObject { ["target"] = "edge", ["data_source"] = "warehouse" });
+        Assert.Equal(HttpStatusCode.Conflict, missing.Response.StatusCode);
+        Assert.Contains("The Gateway refused the model territories on the data source 'warehouse' (409): 'warehouse' is not a data source of this server", (string)missing.Body!["error"]!);
+        gateway.DataSources.Add("warehouse");
+        Assert.Equal("warehouse", (string)(await Publish(server, workspace, build, new JsonObject { ["target"] = "edge", ["data_source"] = "warehouse" })).Body!["published"]!["models"]![0]!["data_source"]!);
+
+        gateway.RefuseWith = "The model does not load, so nothing was published.";
+        var refused = await Publish(server, workspace, build, new JsonObject { ["target"] = "edge" });
+        Assert.Contains("(400): The model does not load, so nothing was published.", (string)refused.Body!["error"]!);
+
+        var wrong = await Publish(server, workspace, build, new JsonObject { ["target"] = "jobs", ["channel"] = "prod" });
+        Assert.Equal(HttpStatusCode.Conflict, wrong.Response.StatusCode);
+        Assert.Contains("store kind of project is published to a gateway (model)", (string)wrong.Body!["error"]!);
+    }
+
+    [Fact]
+    public async Task A_model_that_does_not_check_fails_the_build_with_its_file_and_line_and_nothing_is_published()
+    {
+        await using var gateway = await FakeGateway.StartAsync();
+        await using var server = await WorkspaceHarness.StartAsync();
+        await Pair(server, gateway);
+        var workspace = await DraftAsync(server);
+        var path = $"/api/v1/projects/{Project}/workspaces/{workspace}/files/models/{Project}.yaml";
+        var text = (string)(await server.AsAda(HttpMethod.Get, path)).Body!["content"]!;
+        Assert.True((await server.AsAda(HttpMethod.Put, path, new JsonObject { ["content"] = text + "garbage: [\n" }.ToJsonString())).Response.IsSuccessStatusCode);
+
+        var build = await BuildAsync(server, workspace, expectSuccess: false);
+        var finding = (await server.AsAda(HttpMethod.Get, $"/api/v1/projects/{Project}/workspaces/{workspace}/builds/{build}")).Body!["result"]!["diagnostics"]!.AsArray().First(d => (string)d!["severity"]! == "error")!;
+        Assert.Equal($"models/{Project}.yaml", (string)finding["file"]!);
+        Assert.True((int)finding["line"]! > 0);
+        Assert.Equal(HttpStatusCode.Conflict, (await Publish(server, workspace, build, new JsonObject { ["target"] = "edge" })).Response.StatusCode);
+        Assert.Empty(gateway.Published);
+    }
+}

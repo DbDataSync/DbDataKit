@@ -27,6 +27,10 @@ internal sealed class FakeGateway : IAsyncDisposable
     public ConcurrentQueue<JsonObject> Published { get; } = new();
     public ConcurrentQueue<string> Calls { get; } = new();
     public string? RefuseWith { get; set; }
+
+    /// <summary>The entity models it serves (plan 33 SC21b): name to the version and the data source; and the data sources it has, which a model must name.</summary>
+    public ConcurrentDictionary<string, (int Version, string DataSource, string Text)> Models { get; } = new();
+    public HashSet<string> DataSources { get; } = ["mdm"];
     public string InstanceId { get; } = "fake-gateway-1";
 
     private FakeGateway(WebApplication app, Uri url, string directory, PairingCodes codes) => (this.app, Url, this.directory, Codes) = (app, url, directory, codes);
@@ -51,6 +55,8 @@ internal sealed class FakeGateway : IAsyncDisposable
         var gateway = new FakeGatewayState();
         app.MapPost("/api/v1/apps/check", async (HttpContext context) => await gateway.Handle(context, check: true));
         app.MapPut("/api/v1/apps/{name}", async (HttpContext context) => await gateway.Handle(context, check: false));
+        app.MapGet("/api/v1/entity-models/{name}", async (string name, HttpContext context) => await gateway.Models(context, name));
+        app.MapPut("/api/v1/entity-models/{name}", async (string name, HttpContext context) => await gateway.Models(context, name));
         await app.StartAsync();
         var made = new FakeGateway(app, new Uri(app.Urls.First().Replace("[::1]", "127.0.0.1")), directory, codes);
         gateway.Owner = made;
@@ -60,6 +66,37 @@ internal sealed class FakeGateway : IAsyncDisposable
     private sealed class FakeGatewayState
     {
         public FakeGateway Owner = null!;
+
+        public async Task Models(HttpContext context, string name)
+        {
+            var token = context.ManagementToken();
+            Owner.Calls.Enqueue($"{context.Request.Method} {context.Request.Path} as {token.SubjectId} ({token.SubjectName}) with {string.Join("+", ServerRoles.Names(token.Roles))}");
+            async Task Reply(int status, object body)
+            {
+                context.Response.StatusCode = status;
+                await context.Response.WriteAsJsonAsync(body);
+            }
+            if (!ManagementAuthorization.Authorize(token, ServerRole.Publisher).Allowed && !ManagementAuthorization.Authorize(token, ServerRole.Admin).Allowed) { await Reply(403, new { error = "Publishing models needs the publisher role." }); return; }
+            if (context.Request.Method == "GET")
+            {
+                if (!Owner.Models.TryGetValue(name, out var held)) { await Reply(404, new { error = $"There is no published entity model '{name}'." }); return; }
+                await Reply(200, new { name, current_version = held.Version, model = held.Text, data_source = held.DataSource });
+                return;
+            }
+            var body = (await System.Text.Json.JsonSerializer.DeserializeAsync<JsonObject>(context.Request.Body))!;
+            if (Owner.RefuseWith is { } refusal) { await Reply(400, new { error = refusal }); return; }
+            var dataSource = (string)body["data_source"]!;
+            if (!Owner.DataSources.Contains(dataSource)) { await Reply(409, new { error = $"'{dataSource}' is not a data source of this server; publish the data source the model's tables are on first." }); return; }
+            var expected = (int?)body["expected_version"];
+            var was = Owner.Models.TryGetValue(name, out var existing) ? existing.Version : (int?)null;
+            if (was != expected) { await Reply(409, new { error = "The model changed since it was read; read it again and publish on that.", current_version = was }); return; }
+            var text = (string)body["model"]!;
+            var unchanged = was is not null && existing.Text == text;
+            var version = unchanged ? was!.Value : (was ?? 0) + 1;
+            Owner.Models[name] = (version, dataSource, text);
+            Owner.Published.Enqueue(body);
+            await Reply(200, new { name, version, created = was is null, unchanged });
+        }
 
         public async Task Handle(HttpContext context, bool check)
         {
