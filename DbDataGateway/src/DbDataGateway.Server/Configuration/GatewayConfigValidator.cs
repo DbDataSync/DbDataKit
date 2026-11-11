@@ -31,6 +31,7 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
         ValidateCompression(o.Compression, "Compression", cx);
         ValidateDataSources(o, cx);
         ValidateJwt(o, cx);
+        ValidateWindowsSignIn(o, cx);
         ValidateSemantic(o, cx);
         ValidateState(o, cx);
 
@@ -272,7 +273,7 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
                 if (provider != "odbc")
                     cx.Error($"{at}.Bitness", "Bitness x86 works only with the odbc provider (the 32-bit worker hosts ODBC drivers).", "Use Provider odbc, or Bitness x64.");
                 else if (!OperatingSystem.IsWindows())
-                    cx.Warning($"{at}.Bitness", "Bitness x86 needs the 32-bit worker, which exists only on Windows.");
+                    cx.Error($"{at}.Bitness", "Bitness x86 needs the 32-bit worker (DbDataGateway.Worker), which exists only on Windows.", "Run this server on Windows, or use Bitness x64 with a 64-bit driver.");
             }
 
             if (provider == "flightsql" && source.AllowWrites)
@@ -321,6 +322,12 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
             && !o.Auth.Jwt.Mappings.Any(m => m.DataSources.Contains("*") || m.DataSources.Contains(name, StringComparer.OrdinalIgnoreCase)))
             cx.Warning($"{at}.Groups", $"The data source `{name}` names no home group and is not open to everyone, so no user of the identity home may use it.",
                 "List the home groups allowed to use it under `grants.groups` (connection/2; a published definition carries them) or, in a file made by hand, `extensions.gateway.groups`, or open it to everyone with `everyone: true` in the same place.");
+    }
+
+    private static void ValidateWindowsSignIn(GatewayOptions o, IConfigValidationContext cx)
+    {
+        if (o.Auth.Windows && !OperatingSystem.IsWindows())
+            cx.Error("Auth.Windows", "Windows password sign-in (a UPN checked by the operating system) runs only on Windows.", "Run this server on Windows, or set `Auth.Windows` to false (Entra, JWT and Kerberos through `Identity.Windows` work elsewhere).");
     }
 
     private static void ValidateJwt(GatewayOptions o, IConfigValidationContext cx)

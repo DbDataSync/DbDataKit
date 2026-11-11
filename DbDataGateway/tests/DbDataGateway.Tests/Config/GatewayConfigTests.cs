@@ -21,7 +21,9 @@ public sealed class GoldenCorpusTests
     public void Valid_files_validate(string name)
     {
         var load = ConfigTestSupport.LoadFile(Path.Combine(ConfigTestSupport.GoldenDirectory, name + ".json"));
-        Assert.True(load.Ok, ConfigTestSupport.Format(load));
+        // Off Windows a 32-bit (Bitness x86) source and Windows password sign-in are refused (WindowsOnlySettingsTests); those are the only errors a valid file may have.
+        bool onlyWindowsOnly = !OperatingSystem.IsWindows() && load.Diagnostics.Where(d => d.Severity == ConfigSeverity.Error).All(d => (d.KeyPath ?? "").EndsWith(".Bitness", StringComparison.Ordinal) || d.KeyPath == "Auth.Windows");
+        Assert.True(load.Ok || onlyWindowsOnly, ConfigTestSupport.Format(load));
     }
 
     [Theory]
@@ -125,7 +127,7 @@ public sealed class ShippedFilesTests
     {
         // Off Windows the path check rejects the example's Windows paths; those are the only errors it may have.
         var load = LoadDirectory(Shipped("config.example"));
-        Assert.All(load.Diagnostics.Where(d => d.Severity == ConfigSeverity.Error), d => Assert.EndsWith("lake.yaml", d.Path));
+        Assert.All(load.Diagnostics.Where(d => d.Severity == ConfigSeverity.Error), d => Assert.True((d.Path ?? "").EndsWith("lake.yaml", StringComparison.Ordinal) || (d.KeyPath ?? "").EndsWith(".Bitness", StringComparison.Ordinal), d.Path + " " + d.KeyPath));
         Assert.NotNull(load.Value);
         Assert.Equal(["erp", "lake", "legacy", "scratch", "warehouse"], load.Value!.DataSources.Keys.Order(StringComparer.Ordinal));
         Assert.Equal(["finance-reporting"], load.Value.DataSources["erp"].Groups);
