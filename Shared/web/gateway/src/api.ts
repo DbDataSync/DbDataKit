@@ -1,7 +1,7 @@
 import { put, request } from '@dbdatakit/shell'
 import type { InstanceRequest, NavigationRequest, PublishBody } from './appEditors'
 import type {
-  AdoptAnswer, EntityModelDetail, EntityModelRow, SemanticModelDetail, SemanticModelRow, AppApprovals, AppCheck, AppDetail, AppInstances, AppsList, NavigationSetRow, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SecretWritten, SecretsList, ServerSettings, SettingsCheck, SettingsEdit, SettingsWritten, SessionRow, TestResult, WriteDataSourceResult,
+  AdoptAnswer, SemanticCatalogView, EntityModelDetail, EntityModelRow, SemanticModelDetail, SemanticModelRow, AppApprovals, AppCheck, AppDetail, AppInstances, AppsList, NavigationSetRow, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SecretWritten, SecretsList, ServerSettings, SettingsCheck, SettingsEdit, SettingsWritten, SessionRow, TestResult, WriteDataSourceResult,
 } from './types'
 
 const v1 = '/api/v1'
@@ -26,6 +26,8 @@ export const gatewayApi = {
     semantic: {
       list: () => request<{ models: SemanticModelRow[] }>(`${v1}/semantic-models`).then((r) => r.models),
       read: (name: string) => request<SemanticModelDetail>(`${v1}/semantic-models/${enc(name)}`),
+      /** What the catalog says, for anyone who may query the model (viewer role; plan 14a SL12). */
+      catalog: (name: string) => request<SemanticCatalogView>(`${v1}/semantic-models/${enc(name)}/catalog`),
       /** Serves an earlier version again (every version is kept); no version means the one before the current. */
       rollback: (name: string, to?: number) => request<{ name: string; version: number; from_version: number }>(`${v1}/semantic-models/${enc(name)}/rollback`, { method: 'POST', body: JSON.stringify(to === undefined ? {} : { to_version: to }) }),
       remove: (name: string) => request<{ name: string; removed: boolean }>(`${v1}/semantic-models/${enc(name)}`, { method: 'DELETE' }),

@@ -85,6 +85,13 @@ test('publish a semantic model from Build to a Gateway, see its versions on the 
     await page.getByTestId('semantic-serve-1').click()
     await check(page.getByTestId('models-notice')).toContainText('serves version 1 now')
     await check(row.getByTestId('semantic-served')).toContainText('serving version 1')
+    // The model browser (plan 14a SL13): the model's name opens its content, with a measure and the link that follows it to the lineage; back to the list.
+    await page.getByTestId(`semantic-browse-${modelsBuild.model}`).click()
+    await check(page.getByTestId('model-name')).toHaveText(modelsBuild.model)
+    await expect(page.getByTestId('model-version')).toContainText('version 1')
+    await expect(page.getByTestId('model-measures').locator('[data-testid^="measure-"]').first()).toBeVisible()
+    await expect(page.locator('[data-testid^="lineage-"]').first()).toHaveAttribute('href', /\/lineage\?find=/)
+    await page.getByTestId('rail-models').click()
     await page.getByTestId(`semantic-remove-${modelsBuild.model}`).click()
     await expect(page.getByTestId(`semantic-remove-warning-${modelsBuild.model}`)).toContainText('every instance of the group')
     await page.getByTestId(`semantic-remove-confirm-${modelsBuild.model}`).click()

@@ -14,6 +14,12 @@ export function findCards(graph: LineageGraphDoc, text: string, limit = 12): Lin
     .slice(0, limit)
 }
 
+/** The one card whose name is exactly the text (case ignored), if there is exactly one. */
+export function exactCard(graph: LineageGraphDoc, text: string): LineageNodeDoc | undefined {
+  const hits = graph.nodes.filter((n) => isCard(n) && n.name.toLowerCase() === text.trim().toLowerCase())
+  return hits.length === 1 ? hits[0] : undefined
+}
+
 /** The sentence under a server's name in the list of what answered. */
 export function serverNote(s: { nodes: number | null; edges: number | null; error: string | null; problems: string[] }): string {
   if (s.error) return `did not give its lineage: ${s.error}`

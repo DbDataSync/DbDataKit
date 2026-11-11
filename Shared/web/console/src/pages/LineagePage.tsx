@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { LineageGraphView, projectLineage, reach } from '@dbdatakit/visuals'
 import { consoleApi } from '../api'
 import { ConsoleShell } from '../ConsoleShell'
-import { findCards, serverNote, withoutDeployments } from '../lineage'
+import { exactCard, findCards, serverNote, withoutDeployments } from '../lineage'
 import { panelLine, qualityApi } from '../quality'
 
 /**
@@ -18,8 +18,14 @@ export function LineagePage() {
   // the checks of the chosen dataset (plan 23a FQ17); a console without them still draws the graph
   const quality = useQuery({ queryKey: ['quality'], queryFn: qualityApi.overview, retry: false })
   const [selected, setSelected] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
+  // `?find=<name>` (the model browser's link, plan 14a SL13): the card of that name is chosen when the graph arrives, or the search is filled in
+  const wanted = useSearchParams()[0].get('find') ?? ''
+  const [search, setSearch] = useState(wanted)
   const graph = useMemo(() => (lineage.data ? withoutDeployments(lineage.data) : undefined), [lineage.data])
+  useEffect(() => {
+    const card = graph && wanted ? exactCard(graph, wanted) : undefined
+    if (card) { setSelected(card.id); setSearch('') }
+  }, [graph, wanted])
   const found = useMemo(() => (graph ? findCards(graph, search) : []), [graph, search])
   const chosen = graph?.nodes.find((n) => n.id === selected)
   const counts = useMemo(() => {

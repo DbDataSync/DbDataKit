@@ -1,6 +1,6 @@
 import type { LineageGraphDoc } from '@dbdatakit/visuals'
 import { describe, expect, it } from 'vitest'
-import { findCards, serverNote, withoutDeployments } from './lineage'
+import { exactCard, findCards, serverNote, withoutDeployments } from './lineage'
 
 describe('withoutDeployments', () => {
   it('drops the deployment nodes and the edges that touch them, and keeps the flow of data', () => {
@@ -51,5 +51,18 @@ describe('serverNote', () => {
     expect(serverNote({ nodes: 12, edges: 9, error: null, problems: [] })).toBe('12 nodes, 9 edges')
     expect(serverNote({ nodes: 12, edges: 9, error: null, problems: ['x', 'y'] })).toBe('12 nodes, 9 edges; 2 left out')
     expect(serverNote({ nodes: null, edges: null, error: 'It did not answer.', problems: [] })).toBe('did not give its lineage: It did not answer.')
+  })
+})
+
+describe('exactCard', () => {
+  const graph = { nodes: [
+    { id: 'a', kind: 'semantic_member', name: 'shop_sales: revenue', unknown_upstream: false },
+    { id: 'b', kind: 'dataset', name: 'orders', unknown_upstream: false },
+    { id: 'c', kind: 'dataset', name: 'orders', unknown_upstream: false },
+  ], edges: [], servers: [] } as unknown as LineageGraphDoc
+  it('finds a card by its whole name, ignoring case, and only when it is the one', () => {
+    expect(exactCard(graph, 'Shop_Sales: Revenue')?.id).toBe('a')
+    expect(exactCard(graph, 'orders')).toBeUndefined()
+    expect(exactCard(graph, 'nothing')).toBeUndefined()
   })
 })
