@@ -6,7 +6,7 @@ import { RenderedViews, type RenderedViewDocument } from '@dbdatakit/visuals'
 import { gatewayApi } from '../api'
 import { GatewayShell } from '../GatewayShell'
 import {
-  DEFAULT_LIMIT, bodyFor, cellText, clampLimit, members, pinLink, pinRequest, picksOf, refusal, requestText, roles, scansOf, sqlFromPicks, suggest, toggle, viewSpecFor,
+  DEFAULT_LIMIT, bodyFor, cellText, clampLimit, members, missingSlots, pinLink, pinRequest, picksOf, refusal, requestText, roles, scansOf, sqlFromPicks, suggest, toggle, viewSpecFor,
   type Encoding, type Mode, type Picks, type ViewShape,
 } from '../explorer'
 import type { RunResult } from '../runTypes'
@@ -43,6 +43,8 @@ export interface ExplorerViewProps {
   onRun: () => void
   onExplain: () => void
   onShape: (shape: ViewShape) => void
+  /** Ask the Gateway to draw the shape and encodings chosen (again): the button is off while a required slot is empty. */
+  onDraw: () => void
   onEncoding: (e: Encoding) => void
   onSaveName: (name: string) => void
   onSaveDescription: (text: string) => void
@@ -72,6 +74,7 @@ function Result(p: ExplorerViewProps) {
     )
   }
   const r = roles(result)
+  const missing = missingSlots(p.shape, p.encoding)
   const pinned = pinRequest(p.text, p.picks)
   const option = (names: string[]) => names.map((n) => <option key={n} value={n}>{n}</option>)
   return (
@@ -102,11 +105,13 @@ function Result(p: ExplorerViewProps) {
                 <select id="enc-value" data-testid="enc-value" value={p.encoding.value} onChange={(e) => p.onEncoding({ ...p.encoding, value: e.target.value })}><option value="">(none)</option>{option(result.columns.map((c) => c.name))}</select>
               </>
             )}
+            {p.shape !== 'table' && <button type="button" className="btn btn-sm btn-primary" data-testid="view-draw" disabled={missing.length > 0 || p.rendering} onClick={p.onDraw}>Draw</button>}
+            {p.shape !== 'table' && missing.length > 0 && <span className="hint" role="status" data-testid="view-missing">required slot is empty: {missing.join(', ')}</span>}
             {r.hasTotals && <span className="hint" data-testid="has-totals">The result carries totals.</span>}
           </div>}
           {p.renderError && <div role="alert" className="hint" style={wrap} data-testid="view-error">{p.renderError}</div>}
           {p.shape !== 'table' && p.rendering && !p.rendered && <div className="hint" data-testid="view-rendering">Drawing…</div>}
-          {p.shape !== 'table' && p.rendered && (
+          {p.shape !== 'table' && missing.length === 0 && p.rendered && (
             <div data-testid={p.rendered.status === 'failed' ? 'view-refused' : 'view-drawn'}>
               <RenderedViews document={p.rendered} />
             </div>
@@ -190,7 +195,7 @@ export function ExplorerView(p: ExplorerViewProps) {
 }
 
 const say = (e: unknown): string => {
-  if (e instanceof ApiError) return refusal(e.message, (e.body as { code?: unknown } | null)?.code)
+  if (e instanceof ApiError) { const body = e.body as { code?: unknown; path?: unknown } | null; return refusal(e.message, body?.code, body?.path) }
   return e instanceof Error ? e.message : String(e)
 }
 
@@ -213,6 +218,7 @@ export function ExplorerPage() {
   // the body of the last run and the id of the result the Gateway kept for it: another view of it is a render, not a run
   const last = useRef<{ body: Record<string, unknown>; id?: string }>({ body: {} })
   const drawn = useRef(0)
+  const [drawTick, setDrawTick] = useState(0)
   const [save, setSave] = useState<SaveForm>({ name: '', description: '', saved: null, error: null, busy: false })
 
   // a statement handed over by the address: a run record, a saved query, or plain text
@@ -256,7 +262,7 @@ export function ExplorerPage() {
   // the matrix or chart chosen is the Gateway's renderer's: ask it for the result kept, or, when that is gone, run the statement again with the view
   useEffect(() => {
     const ticket = ++drawn.current
-    const spec = result?.status === 'ok' && drawable(result) ? viewSpecFor(result, shape, encoding) : null
+    const spec = result?.status === 'ok' && drawable(result) && missingSlots(shape, encoding).length === 0 ? viewSpecFor(result, shape, encoding) : null
     setRenderError(null)
     if (!spec) { setRendered(undefined); setRendering(false); return }
     setRendering(true)
@@ -271,7 +277,7 @@ export function ExplorerPage() {
     draw().then((doc) => { if (ticket === drawn.current) setRendered(doc) })
       .catch((e) => { if (ticket === drawn.current) { setRendered(undefined); setRenderError(say(e)) } })
       .finally(() => { if (ticket === drawn.current) setRendering(false) })
-  }, [result, shape, encoding])
+  }, [result, shape, encoding, drawTick])
 
   const keep = async () => {
     const built = bodyFor(name, text, {})
@@ -287,7 +293,7 @@ export function ExplorerPage() {
 
   const props = useMemo<ExplorerViewProps>(() => ({
     model: name, catalog: catalog.data, catalogError: catalog.error, mode, text, picks, running, error, result, shape, encoding, rendered, rendering, renderError, save,
-    onMode, onText: setText, onToggle, onLimit, onRun: () => void send(false), onExplain: () => void send(true), onShape: setShape, onEncoding: setEncoding,
+    onMode, onText: setText, onToggle, onLimit, onRun: () => void send(false), onExplain: () => void send(true), onShape: setShape, onDraw: () => setDrawTick((t) => t + 1), onEncoding: setEncoding,
     onSaveName: (n) => setSave((s) => ({ ...s, name: n })), onSaveDescription: (d) => setSave((s) => ({ ...s, description: d })), onSave: () => void keep(),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [name, catalog.data, catalog.error, mode, text, picks, running, error, result, shape, encoding, rendered, rendering, renderError, save])

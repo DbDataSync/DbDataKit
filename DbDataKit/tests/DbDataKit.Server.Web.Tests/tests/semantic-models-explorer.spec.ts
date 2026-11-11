@@ -88,10 +88,13 @@ test('run a statement on a published model, explain it, draw it, keep it, share 
     await expect(page.locator('[data-testid^="vz-matrix-"]')).toBeVisible()
     await page.getByTestId('shape-bar').click()
     await expect(page.getByTestId('view-drawn')).toBeVisible()
-    // the matrix and the chart are the Gateway's renderer's (plan 14a D37): a matrix with no value is its refusal, in the engine's code, and not drawn by the browser
+    // the matrix and the chart are the Gateway's renderer's (plan 14a D37): the browser holds one precheck (D38), a required slot that is empty turns Draw off and says so, and nothing is sent
     await page.getByTestId('shape-matrix').click()
     await page.getByTestId('enc-value').selectOption('')
-    await expect(page.getByTestId('view-refused')).toContainText('schema_invalid')
+    await expect(page.getByTestId('view-draw')).toBeDisabled()
+    await expect(page.getByTestId('view-missing')).toContainText('required slot is empty')
+    await page.getByTestId('enc-value').selectOption({ index: 1 })
+    await expect(page.getByTestId('view-draw')).toBeEnabled()
     await expect(page.getByTestId('pin-result')).toHaveAttribute('href', /\/views\?pin_model=/)
 
     // Keep it, edit twice, restore the first, share, delete (the saved queries screen).
