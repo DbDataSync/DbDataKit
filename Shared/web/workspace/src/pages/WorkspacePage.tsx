@@ -7,6 +7,11 @@ import { commitState, conflictsOf, describeEvent, fileTree, languageOf, mergeSta
 import { WorkspaceShell } from '../WorkspaceShell'
 import { BuildsPanel } from './BuildsPanel'
 import { CheckPanel } from './CheckPanel'
+import { NewStoreModel, StoreModelEditor } from './StoreModelPanel'
+import { BuildPlanPanel } from './BuildPlanPanel'
+import { SyncFileEditor, SyncSetPanel } from './SyncSetPanel'
+import { editorKindOf } from '../editors'
+import { useLiveCheck } from '../useLiveCheck'
 
 const when = (iso: string) => (iso ? new Date(iso).toLocaleString() : '')
 
@@ -28,7 +33,7 @@ function Tree({ nodes, selected, onOpen, depth = 0 }: { nodes: TreeNode[]; selec
 }
 
 /** One file in the editor: what is on the server, what has been typed, and Save, Move and Delete for the owner. */
-function FileEditor({ project, id, path, editable, canWrite, onGone, onRenamed }: { project: string; id: string; path: string; editable: boolean; canWrite: boolean; onGone: () => void; onRenamed: (to: string) => void }) {
+function FileEditor({ project, id, kind, path, editable, canWrite, onGone, onRenamed, onOpen }: { project: string; id: string; kind?: string; path: string; editable: boolean; canWrite: boolean; onGone: () => void; onRenamed: (to: string) => void; onOpen: (path: string) => void }) {
   const client = useQueryClient()
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [target, setTarget] = useState('')
@@ -43,7 +48,8 @@ function FileEditor({ project, id, path, editable, canWrite, onGone, onRenamed }
     onSuccess: async (sent) => {
       // what the server holds is what was sent: set it before the draft goes, or the editor shows the old text for a moment and its change event makes that the draft again
       client.setQueryData(['workspace', 'file', project, id, path], sent)
-      setDrafts(({ [path]: _gone, ...rest }) => rest)
+      // a person who typed on while the save ran keeps what they typed (the live check saves as they type)
+      setDrafts((d) => (d[path] === sent ? (({ [path]: _gone, ...rest }) => rest)(d) : d))
       await client.invalidateQueries({ queryKey: ['workspace', 'files', project, id] })
       await refresh()
     },
@@ -58,6 +64,9 @@ function FileEditor({ project, id, path, editable, canWrite, onGone, onRenamed }
   })
   const state = saveState({ mine: editable, canWrite, dirty, busy: save.isPending })
   const problem = pathProblem(target.trim())
+  const editorKind = editorKindOf(kind, path)
+  const live = useLiveCheck({ project, id, text, enabled: editorKind !== null && editable && canWrite && !loaded.isLoading && !loaded.error, flush: async () => { if (dirty) await save.mutateAsync() } })
+  const onText = (value: string) => setDrafts((d) => ({ ...d, [path]: value }))
   return (
     <div data-testid="wsp-editor" data-path={path}>
       <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
@@ -85,9 +94,15 @@ function FileEditor({ project, id, path, editable, canWrite, onGone, onRenamed }
       )}
       <ErrorBanner error={loaded.error ?? save.error ?? move.error ?? remove.error} />
       {loaded.isLoading && <div className="empty">Loading...</div>}
-      {!loaded.error && !loaded.isLoading && (
+      {!loaded.error && !loaded.isLoading && editorKind === 'store-model' && (
+        <StoreModelEditor path={path} text={text} onText={onText} readOnly={!editable || !canWrite} live={live} onOpen={onOpen} />
+      )}
+      {!loaded.error && !loaded.isLoading && editorKind !== null && editorKind !== 'store-model' && (
+        <SyncFileEditor kind={editorKind} path={path} text={text} onText={onText} readOnly={!editable || !canWrite} live={live} onOpen={onOpen} />
+      )}
+      {!loaded.error && !loaded.isLoading && editorKind === null && (
         <CodeEditor value={text} language={languageOf(path)} readOnly={!editable || !canWrite} minLines={14} maxLines={30} testId="wsp-code"
-          onChange={(value) => setDrafts((d) => ({ ...d, [path]: value }))} />
+          onChange={onText} />
       )}
     </div>
   )
@@ -171,17 +186,27 @@ export function WorkspacePage() {
   const client = useQueryClient()
   const canWrite = useIsAdmin()
   const [selected, setSelected] = useState<string | null>(null)
-  const [tab, setTab] = useState<'changes' | 'history' | 'builds' | 'check'>('changes')
+  const [tab, setTab] = useState<'changes' | 'history' | 'builds' | 'check' | 'models'>('changes')
   const [newPath, setNewPath] = useState('')
   const [asking, setAsking] = useState(false)
   const [merged, setMerged] = useState<{ sha: string | null } | null>(null)
   const workspaces = useQuery({ queryKey: ['workspace', 'list', project], queryFn: () => workspaceApi.workspaces(project) })
   const files = useQuery({ queryKey: ['workspace', 'files', project, id], queryFn: () => workspaceApi.files(project, id), enabled: merged === null })
   const mine = workspaces.data?.find((w) => w.id === id)
+  const projects = useQuery({ queryKey: ['workspace', 'projects'], queryFn: () => workspaceApi.projects() })
+  const kind = projects.data?.find((p) => p.id === project)?.kind
   const create = useMutation({
     mutationFn: () => workspaceApi.writeFile(project, id, newPath.trim(), ''),
     onSuccess: async (r) => {
       setNewPath(''); setSelected(r.path)
+      await client.invalidateQueries({ queryKey: ['workspace', 'files', project, id] })
+      await client.invalidateQueries({ queryKey: ['workspace', 'changes', project, id] })
+    },
+  })
+  const make = useMutation({
+    mutationFn: async (made: { path: string; text: string }[]) => { for (const f of made) await workspaceApi.writeFile(project, id, f.path, f.text); return made[0].path },
+    onSuccess: async (first) => {
+      setSelected(first)
       await client.invalidateQueries({ queryKey: ['workspace', 'files', project, id] })
       await client.invalidateQueries({ queryKey: ['workspace', 'changes', project, id] })
     },
@@ -229,7 +254,9 @@ export function WorkspacePage() {
             <ErrorBanner error={abandon.error} />
             {!editable && <div className="hint" data-testid="wsp-readonly">This is {mine.owner}'s workspace: you can read it, and only they edit and commit it.</div>}
             <div className="row" style={{ gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-              <div className="card" style={{ flex: '0 0 260px', minWidth: 220 }} data-testid="wsp-files">
+              <div style={{ flex: '0 0 300px', minWidth: 240, display: 'grid', gap: 12 }}>
+              {kind === 'sync' && <SyncSetPanel paths={(files.data?.files ?? []).map((f) => f.path)} canWrite={editable && canWrite} busy={make.isPending} onOpen={setSelected} onCreate={(made) => make.mutate(made)} />}
+              <div className="card" data-testid="wsp-files">
                 <div className="card-body">
                   <div className="hint" style={{ marginBottom: 6 }}>Files</div>
                   <ErrorBanner error={files.error} />
@@ -242,21 +269,28 @@ export function WorkspacePage() {
                       {problem && <span className="hint" data-testid="wsp-new-why">{problem}</span>}
                     </form>
                   )}
-                  <ErrorBanner error={create.error} />
+                  {kind === 'store' && editable && canWrite && (
+                    <NewStoreModel taken={(files.data?.files ?? []).map((f) => f.path)} busy={make.isPending} onCreate={(path, text) => make.mutate([{ path, text }])} />
+                  )}
+                  <ErrorBanner error={create.error ?? make.error} />
                 </div>
+              </div>
               </div>
               <div style={{ flex: 1, minWidth: 320 }}>
                 {selected === null
                   ? <div className="empty" data-testid="wsp-pick">Pick a file to read{editable ? ' or edit' : ''} it.</div>
-                  : <FileEditor key={selected} project={project} id={id} path={selected} editable={editable} canWrite={canWrite} onGone={() => setSelected(null)} onRenamed={setSelected} />}
+                  : <FileEditor key={selected} project={project} id={id} kind={kind} path={selected} editable={editable && !(kind === 'build' && selected.startsWith('rendered/'))} canWrite={canWrite} onGone={() => setSelected(null)} onRenamed={setSelected} onOpen={setSelected} />}
                 <div className="row" style={{ gap: 8, margin: '18px 0 8px' }} role="tablist">
                   <button type="button" role="tab" aria-selected={tab === 'changes'} className={`btn ${tab === 'changes' ? 'btn-primary' : ''}`} data-testid="wsp-tab-changes" onClick={() => setTab('changes')}>Changes</button>
                   <button type="button" role="tab" aria-selected={tab === 'check'} className={`btn ${tab === 'check' ? 'btn-primary' : ''}`} data-testid="wsp-tab-check" onClick={() => setTab('check')}>Check</button>
+                  {kind === 'build' && <button type="button" role="tab" aria-selected={tab === 'models'} className={`btn ${tab === 'models' ? 'btn-primary' : ''}`} data-testid="wsp-tab-models" onClick={() => setTab('models')}>Models and plan</button>}
                   <button type="button" role="tab" aria-selected={tab === 'builds'} className={`btn ${tab === 'builds' ? 'btn-primary' : ''}`} data-testid="wsp-tab-builds" onClick={() => setTab('builds')}>Builds</button>
                   <button type="button" role="tab" aria-selected={tab === 'history'} className={`btn ${tab === 'history' ? 'btn-primary' : ''}`} data-testid="wsp-tab-history" onClick={() => setTab('history')}>History</button>
                 </div>
                 {tab === 'changes'
                   ? <ChangesPanel project={project} id={id} editable={editable} canWrite={canWrite} onMerged={(sha) => { setMerged({ sha }); void client.invalidateQueries({ queryKey: ['workspace', 'list', project] }) }} />
+                  : tab === 'models' && kind === 'build'
+                    ? <BuildPlanPanel project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} onOpen={setSelected} />
                   : tab === 'check'
                     ? <CheckPanel project={project} id={id} onOpen={setSelected} />
                     : tab === 'builds'

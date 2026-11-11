@@ -26,6 +26,7 @@ internal static class FakeSync
         var script = """
             #!/bin/bash
             out=""; root=""; pkg="orders-set"
+            echo "$@" >> "$(dirname "$0")/arguments.txt"
             while [ $# -gt 0 ]; do case "$1" in --out) out="$2"; shift;; --repo) root="$2"; shift;; --package) pkg="$2"; shift;; esac; shift; done
             if [ -n "$DBDATAKIT_TEST_MARKER" ]; then echo "$root/config/replications/orders/task.yaml: the environment of the server reached the program" >&2; exit 1; fi
             bad=$(grep -rl 'sourceColumns: \[\]' "$root/config/replications" 2>/dev/null | head -1)
