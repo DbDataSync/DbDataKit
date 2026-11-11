@@ -27,6 +27,8 @@ export default function MonacoDiff({ before, after, language = 'yaml', height = 
       originalEditable: false,
       automaticLayout: true,
       renderSideBySide: true,
+      // Never fall back to the inline view when the pane is narrow (the Workspace shows a diff in a column): the two panes are the design.
+      useInlineViewWhenSpaceIsLimited: false,
       // A YAML file is deep rather than wide, and the two panes halve the width available — so the
       // long values (a connection string, a transform expression) wrap instead of hiding behind a
       // horizontal scrollbar nobody notices.

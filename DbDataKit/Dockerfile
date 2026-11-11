@@ -15,7 +15,8 @@ COPY Shared/web/sync/package.json sync/package.json
 COPY Shared/web/console/package.json console/package.json
 RUN npm ci
 COPY Shared/web .
-# The docs of every module the console serves (a module registers its folder in its package.json: Sync's is DbDataSync/docs, with its pictures in DbDataSync/screenshots); the build fails without them.
+# The docs of every module the console serves, the console's own in DbDataKit/docs among them (a module registers its folder in its package.json: Sync's is DbDataSync/docs, with its pictures in DbDataSync/screenshots); the build fails without them.
+COPY DbDataKit/docs /src/DbDataKit/docs
 COPY DbDataSync/docs /src/DbDataSync/docs
 COPY DbDataSync/screenshots /src/DbDataSync/screenshots
 RUN npm run build -w @dbdatakit/console
