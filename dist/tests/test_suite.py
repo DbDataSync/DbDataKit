@@ -23,6 +23,14 @@ def check_balanced(text):
     stack, pairs, i = [], {")": "(", "]": "[", "}": "{"}, 0
     while i < len(text):
         c = text[i]
+        if text.startswith("<#", i):                                # a block comment
+            i = text.index("#>", i) + 2
+            continue
+        if c == "#":                                                # a line comment (a # inside a string is skipped with the string)
+            i = text.find("\n", i)
+            if i < 0:
+                break
+            continue
         if c in "'\"":
             j = i + 1
             while j < len(text):
@@ -338,6 +346,50 @@ class SuiteManifestTests(unittest.TestCase):
         r = run_bind(self.suite, self.tmp, self.tmp / "out", None, [])
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("--version", r.stderr)
+
+
+class SuiteInstallTestPlumbingTests(unittest.TestCase):
+    """What the Windows install test (dist/tests/suite-scoop-e2e.ps1, job suite-install-windows) relies on, checked here because the job itself needs Windows."""
+
+    def setUp(self):
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="suite-plumbing-"))
+        self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
+        self.suite = lay_out(self.tmp)
+
+    def test_a_base_url_serves_the_zips_from_another_address(self):
+        files = [self.tmp / "SHA256SUMS"]
+        files[0].write_text(sums_text(hashes()))
+        out = self.tmp / "local"
+        cmd = [sys.executable, "-I", str(DIST / "dist.py"), "bind", "--suite", str(self.suite), "--root", str(self.tmp), "--out", str(out), "--version", VERSION, "--sums", str(files[0]), "--base-url", "http://127.0.0.1:8099/"]
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = json.loads((out / "dbdatakit-full.json").read_text())
+        self.assertEqual(m["architecture"]["64bit"]["url"], [f"http://127.0.0.1:8099/{p}/v{VERSION}/{p}-v{VERSION}-win-x64.zip" for p, _, _ in MEMBERS])
+
+    def test_the_script_is_balanced_and_uses_what_the_manifest_has(self):
+        text = (DIST / "tests" / "suite-scoop-e2e.ps1").read_text(encoding="utf-8")
+        check_balanced(text)
+        for word in ("--base-url", "scoop install -g", "scoop update", "scoop uninstall -g", "'Pairing code:'", "is registered already", "is listed by the console already", "health check", "FIRST-RUN.txt", "instance list"):
+            self.assertIn(word, text)
+        # the lines the repeat step looks for are the ones the install script says
+        script = (DIST / "suite-scripts.ps1").read_text(encoding="utf-8")
+        self.assertIn("is registered already", script)
+        self.assertIn("is listed by the console already", script)
+
+    def test_the_job_runs_after_the_dry_run_checks_and_only_in_a_dry_run(self):
+        text = (REPO_ROOT / ".github" / "workflows" / "suite-release.yml").read_text(encoding="utf-8")
+        job = text[text.index("  suite-install-windows:"):]
+        self.assertIn("needs: [guard, verify]", job)
+        self.assertIn("inputs.dry_run", job)
+        self.assertIn("windows-latest", job)
+        self.assertIn("suite-scoop-e2e.ps1", job)
+
+    def test_the_script_parses_in_powershell(self):
+        if not PWSH:
+            self.skipTest("pwsh not available")
+        for name in (DIST / "tests" / "suite-scoop-e2e.ps1", DIST / "suite-scripts.ps1"):
+            r = subprocess.run([PWSH, "-NoProfile", "-Command", f"$e=$null;[void][System.Management.Automation.Language.Parser]::ParseFile('{name}',[ref]$null,[ref]$e);if($e){{$e|Out-String;exit 1}}"], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
 
 class ShippedSuiteTests(unittest.TestCase):

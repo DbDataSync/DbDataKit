@@ -377,3 +377,31 @@ jobs:
             esac
             echo "== $product"; ls -l "$dir"
           done
+
+  suite-install-windows:
+    # The whole single-server install on a real Windows machine (plan 33 SC14), from this dry run's packages: Scoop installs the dbdatakit-full manifest, every member's service starts and answers
+    # its health check, the console lists each as ready, an update and an uninstall keep their promises (dist/tests/suite-scoop-e2e.ps1). Written without a Windows machine: its first run is its proof.
+    if: ${{ inputs.dry_run && !cancelled() && needs.verify.result == 'success' }}
+    needs: [guard, verify]
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: The .NET 10 runtime for every account (the services do not read the runner's per-user install)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://dot.net/v1/dotnet-install.ps1 -OutFile "$env:RUNNER_TEMP\dotnet-install.ps1"
+          & "$env:RUNNER_TEMP\dotnet-install.ps1" -Runtime aspnetcore -Channel 10.0 -InstallDir "$env:ProgramFiles\dotnet"
+          if ($LASTEXITCODE -ne 0) { throw "dotnet-install exited $LASTEXITCODE" }
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          path: release
+      - name: Install, repeat, update and uninstall the suite with Scoop
+        shell: pwsh
+        run: ./dist/tests/suite-scoop-e2e.ps1 -Packages "$PWD\release" -Version "${{ needs.guard.outputs.version }}"
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: suite-install-logs
+          path: ${{ runner.temp }}/suite-scoop/logs/*.txt

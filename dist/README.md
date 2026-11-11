@@ -118,6 +118,8 @@ It is idempotent: a registered service is not registered again, a member the con
 
 **Uninstall and update.** `scoop uninstall -g` (Scoop's `$cmd` is `uninstall`) goes through the members in reverse order: `instance remove <product>` in the console, `server unpair` of the console's pairing on the member, stop, `service uninstall`; a step that fails is a warning and the next member goes on. The machine variables are removed as before (all but `DBDATAKIT_DATA`). Settings and data under `%ProgramData%\DbDataKit` stay; a purge is the administrator's, by hand. `scoop update` (any other `$cmd`) only stops the services before the files are replaced; the new version's `post_install` finds them registered from `current` and paired, and starts them.
 
+The job `suite-install-windows` of `suite-release.yml` (a dry run) runs `dist/tests/suite-scoop-e2e.ps1` on a Windows runner: it installs Scoop, serves the dry run's zips from the machine (`dist.py bind --suite --base-url`), checks a per-user install and an install over another route's service are refused, installs globally, checks every service runs and answers its health check and the console lists each member as ready, runs the install script again, updates to a second version and uninstalls.
+
 Use **one route per machine**: the package installs under Scoop's folder, while a product's own MSI, `install.ps1` or manifest uses its own and registers the same service names. A member that folds into another server leaves `dist/suite.json` in the same commit.
 
 ### The whole install on one server, one command

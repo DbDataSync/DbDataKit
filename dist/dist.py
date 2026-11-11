@@ -285,7 +285,7 @@ def suite_scripts(members, env):
     return post, undo
 
 
-def suite_manifest(members, version, repo, sums):
+def suite_manifest(members, version, repo, sums, base_url=None):
     """One manifest for all members: url, hash, extract_to and bin are lists in member order, and two scripts (suite-scripts.ps1): `post_install` registers each member's
     service, starts the console, pairs and starts the others (a global install only, refused when a member's service comes from another folder), and `pre_uninstall`
     unpairs and unregisters on a real uninstall and only stops the services on an update. The machine variables of every member's `globalEnv` are set between the checks and
@@ -297,7 +297,7 @@ def suite_manifest(members, version, repo, sums):
         if name not in sums:
             missing.append(f"{meta['product']} ({name})")
             continue
-        urls.append(f"https://github.com/{repo}/releases/download/{meta['product']}/v{version}/{name}")
+        urls.append(f"{base_url.rstrip('/')}/{meta['product']}/v{version}/{name}" if base_url else f"https://github.com/{repo}/releases/download/{meta['product']}/v{version}/{name}")
         hashes.append(sums[name])
         folders.append(folder)
         bins.append([f"{folder}\\{meta['platforms']['win-x64']['exe']}", _alias(meta)])
@@ -335,7 +335,7 @@ def bind_suite(args):
     sums = {}
     for path in args.sums:
         sums.update(parse_sums(pathlib.Path(path).read_text(encoding="utf-8")))
-    manifest = suite_manifest(members, args.version, args.repo, sums)
+    manifest = suite_manifest(members, args.version, args.repo, sums, args.base_url)
     out = pathlib.Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     target = out / f"{SUITE_PRODUCT}.json"
@@ -437,6 +437,7 @@ def main():
     b.add_argument("--version", help="the release version (no leading v); needed for the Scoop manifest")
     b.add_argument("--sums", nargs="+", help="the release's SHA256SUMS; needed with --version (with --suite, one per member or one for all)")
     b.add_argument("--repo", default=DEFAULT_REPO)
+    b.add_argument("--base-url", help="with --suite: serve the zips from <base-url>/<product>/v<version>/<zip> instead of the GitHub releases (the Windows install test serves them from this machine)")
     b.add_argument("--out", required=True)
     b.set_defaults(func=bind)
     args = parser.parse_args()
