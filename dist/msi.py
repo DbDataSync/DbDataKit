@@ -90,6 +90,18 @@ def _path_edit(add):
     )
 
 
+ANNOUNCE_VARIABLE = "DBDATAKIT_ANNOUNCE_URL"
+
+
+def _announce_set():
+    """Validates the ANNOUNCEURL property and sets the machine variable a server announces itself with (plan 33 SC10). No braces around a bracket (see _dotnet_check)."""
+    return (
+        "$ErrorActionPreference = 'Stop'; $u = '@{ANNOUNCEURL}'; "
+        "if ($u -notmatch '^https?://\\S+$' -or $u.Contains([string][char]39)) { Write-Error 'ANNOUNCEURL must be the console announce address, such as http://console:8481'; exit 1 }; "
+        f"[Environment]::SetEnvironmentVariable('{ANNOUNCE_VARIABLE}', $u, 'Machine')"
+    )
+
+
 def _dotnet_check(major, message):
     """Fails (exit 1, with the message) unless a shared runtime of that major version is under Program Files\\dotnet or DOTNET_ROOT."""
     return (
@@ -192,6 +204,11 @@ def wxs(meta, version, payload):
         check_id, check_condition = powershell("CheckDotnetRuntime", _dotnet_check(major, message), "NOT Installed AND NOT SKIPDOTNETCHECK",
                                                ignore=False, immediate=True)
         sequence.append(f'<Custom Action="{check_id}" Sequence="1460">{check_condition}</Custom>')
+    if meta.get("announces"):
+        # msiexec /i <file>.msi ANNOUNCEURL=http://console:8481: the server then waits in the console's pending list (dbdatakit instance pending); an administrator confirms.
+        # The variable is shared by the products on the machine, so a removal leaves it, as it leaves the data folders.
+        announce_id, announce_condition = powershell("SetAnnounceUrl", _announce_set(), 'ANNOUNCEURL AND NOT Installed', ignore=False, immediate=True)
+        sequence.append(f'<Custom Action="{announce_id}" Sequence="1470">{announce_condition}</Custom>')
     if msi.get("addToPath"):
         after_files.append(powershell("AddToPath", _path_edit(True), "NOT Installed", ignore=False))
         sequence.append(

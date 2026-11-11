@@ -14,6 +14,7 @@
     }
   },
   "windowsScope": "machine",
+  "announces": true,
   "service": {
     "name": "dbdatagateway",
     "register": "service install --name {name}",

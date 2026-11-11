@@ -156,7 +156,7 @@ class ShippedGlobalEnvTests(unittest.TestCase):
 
     SHARED = [{"name": "DBDATAKIT_DATA", "programData": "DbDataKit"}]
     # product folder -> the service name its folder has under the root
-    SERVICES = {"DbDataKit": "server", "DbDataRunner": "runner", "DbDataStore": "store", "DbDataWorkspace": "workspace", "DbDataSync": "sync"}
+    SERVICES = {"DbDataKit": "server", "DbDataRunner": "runner", "DbDataStore": "store", "DbDataWorkspace": "workspace", "DbDataSync": "sync", "DbDataBuild": "build"}
 
     def meta(self, path):
         return json.loads((REPO_ROOT / path).read_text(encoding="utf-8"))
@@ -188,6 +188,14 @@ class ShippedGlobalEnvTests(unittest.TestCase):
             self.assertIn(f"SuiteEnvironment.ResolveServiceFolder({settings}.ServiceName)", text, path)
             self.assertNotIn("CommonApplicationData", text, path)
             self.assertIn(f'ServiceName = "{service}"', (REPO_ROOT / home).read_text(encoding="utf-8"), home)
+
+    def test_builds_service_block_is_what_the_source_registers(self):
+        meta = self.meta("DbDataBuild/dist.json")
+        service = (REPO_ROOT / "DbDataBuild/src/DbDataBuild.Cli/Server/BuildService.cs").read_text(encoding="utf-8")
+        self.assertIn(f'RegistrationName = "{meta["service"]["name"]}"', service)
+        self.assertEqual(meta["service"]["register"], "service install")
+        self.assertEqual(meta["service"]["unregister"], "service uninstall")
+        self.assertEqual(meta["windowsScope"], "machine")      # a service belongs under Program Files
 
     def test_the_sync_manifest_names_the_folder_sync_defaults_to(self):
         cli = (REPO_ROOT / "DbDataSync/src/DbDataSync.Cli/CliOptions.cs").read_text(encoding="utf-8")
@@ -296,6 +304,16 @@ class BindTests(DistTestCase):
         self.assertIn("Product = 'widget'", (out / "install.ps1").read_text().replace('"', "'"))
         self.assertIn("RequiresVcRuntime = $true", (out / "install.ps1").read_text())
 
+    def test_the_announce_flag_is_bound(self):
+        out = self.fresh()
+        bind(out, meta=dict(META, announces=True))
+        self.assertIn("ANNOUNCES=1", (out / "install.sh").read_text())
+        self.assertIn("Announces = $true", (out / "install.ps1").read_text())
+        out2 = self.fresh()
+        bind(out2)
+        self.assertIn("ANNOUNCES=0", (out2 / "install.sh").read_text())
+        self.assertIn("Announces = $false", (out2 / "install.ps1").read_text())
+
     @unittest.skipIf(os.name == "nt", "install.sh is for Linux and macOS")
     def test_unbound_templates_refuse_to_run(self):
         r = subprocess.run(["bash", str(DIST / "install.sh")], capture_output=True, text=True)
@@ -309,6 +327,18 @@ class BashInstallerTests(DistTestCase):
         env = {**os.environ, "HOME": str(home), "XDG_DATA_HOME": str(home / "data")}
         return subprocess.run(["bash", str(self.tmp / "install.sh"), "--api-base", self.gh.base, *args],
                               capture_output=True, text=True, env=env)
+
+    def test_the_announce_address_is_named_for_a_product_that_announces_and_ignored_for_one_that_does_not(self):
+        announcing = self.fresh()
+        bind(announcing, meta=dict(META, announces=True))
+        env = {**os.environ, "HOME": str(announcing), "XDG_DATA_HOME": str(announcing / "data")}
+        r = subprocess.run(["bash", str(announcing / "install.sh"), "--api-base", self.gh.base, "--announce-url", "http://console:8481"], capture_output=True, text=True, env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("DBDATAKIT_ANNOUNCE_URL=http://console:8481", r.stdout)
+        r = self.run_sh(self.fresh(), "--announce-url", "http://console:8481")      # the widget of the shared bind does not announce
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("does not announce", r.stderr)
+        self.assertNotIn("DBDATAKIT_ANNOUNCE_URL", r.stdout)
 
     def test_latest_is_the_newest_stable_release_of_this_product(self):
         r = self.run_sh(self.fresh(), "--dry-run")

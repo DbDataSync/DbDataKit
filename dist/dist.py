@@ -13,7 +13,7 @@ writes out/<product>.json (Scoop), out/install.ps1 and out/install.sh (each only
     dist.py bind --suite dist/suite.json --version 2026.10.19.1200 --sums out/*/SHA256SUMS --out out/
 
 writes out/dbdatakit-full.json, one Scoop manifest for every member product of a suite release (plan 33 section 6a): the members' zips as
-`url`/`hash` lists, one `extract_to` folder and one `bin` alias each. It installs programs only (no post_install, no installer scripts).
+`url`/`hash` lists, one `extract_to` folder and one `bin` alias each. Its post_install registers and pairs the services, its pre_uninstall removes them (dist/suite-scripts.ps1).
 `--sums` takes one SHA256SUMS per member, or one file that covers all of them.
 """
 import argparse
@@ -194,8 +194,10 @@ def _alias(meta):
 _PAIR_ROLES = {"dbdatastore": "viewer,operator,author,approver,admin", "dbdataworkspace": "viewer,operator,author,admin"}
 _PAIR_ROLES_DEFAULT = "viewer,operator,admin"
 # The address a console pairs with, as each product's README gives its default listen address (the Gateway's is its management API, on by default and on this machine only, plan 33 D15).
-# A product not listed has no default this file can name (Sync's address is its `Url` setting), so its line stays generic.
+# A product not listed has no default this file can name, so the notes stay generic for it and the install script leaves it unpaired.
 _MANAGEMENT_ADDRESS = {
+    "dbdatakit": "https://localhost:8480",
+    "dbdatasync": "https://localhost:5080",
     "dbdatagateway": "https://localhost:8816",
     "dbdatarunner": "https://127.0.0.1:8495",
     "dbdatabuild": "https://127.0.0.1:8470",
@@ -205,11 +207,12 @@ _MANAGEMENT_ADDRESS = {
 
 
 def suite_notes(members):
-    """What an administrator runs by hand after the install, in member order (this first release registers and pairs nothing itself)."""
+    """What the install does, and the commands by hand that finish or repeat each step (the scripts name the failing member and stop, so an administrator can run the rest)."""
     lines = [
-        "This package installs the programs and nothing else: no service is registered, nothing is started and nothing is paired.",
-        "Use one install route per machine: do not mix it with a product's own MSI, install.ps1 or Scoop manifest (they share the program folders and the service names).",
-        "Run these by hand, in an elevated prompt, in this order:",
+        "A global install (scoop install -g, from an elevated prompt) registers each member's service, starts the console, pairs every other member with it (a single-use code, made and used by the install and never stored) and starts them. A per-user install is refused.",
+        "Updating (scoop update) stops the services, replaces the files and starts them again; nothing is registered or paired twice. Uninstalling (scoop uninstall -g) removes the pairings and the services; settings and data stay under %ProgramData%\\DbDataKit.",
+        "Use one install route per machine: do not mix it with a product's own MSI, install.ps1 or Scoop manifest (they share the program folders and the service names); the install is refused when a member's service comes from another folder.",
+        "If a step failed, the commands are, in an elevated prompt and in this order:",
     ]
     n = 0
     for meta, _ in members:
@@ -230,13 +233,63 @@ def suite_notes(members):
             f"{n}. Pair {_alias(meta)}: run '{_alias(meta)} server pair --max-role {_PAIR_ROLES.get(meta['product'], _PAIR_ROLES_DEFAULT)}' (it prints a single-use code), then "
             f"'{console} instance add {target} --code <code>'{note}."
         )
+    lines.append("The first administrator is invited with the link in %ProgramData%\\DbDataKit\\server\\FIRST-RUN.txt.")
     return "\n".join(lines)
 
 
-def suite_manifest(members, version, repo, sums):
-    """One manifest for all members: url, hash, extract_to and bin are lists in member order. Packaging only: the one script it carries is the members' own
-    `globalEnv` (machine variables after `scoop install -g`, removed on uninstall), so a command an administrator runs by hand reads the folder the service uses.
-    No service is registered, nothing is started and nothing is paired."""
+def _suite_regions():
+    """suite-scripts.ps1 cut into its regions: {name: [lines]}; the lines outside every region are the 'bound' block, which this file writes."""
+    regions, current = {}, None
+    for line in (HERE / "suite-scripts.ps1").read_text(encoding="utf-8").splitlines():
+        if line.startswith("#region "):
+            current = line[len("#region "):].strip()
+            regions[current] = []
+        elif line.startswith("#endregion"):
+            current = None
+        elif current:
+            regions[current].append(line)
+    return regions
+
+
+def _code_lines(lines):
+    return [line for line in lines if line.strip() and not line.lstrip().startswith("#")]
+
+
+def _suite_bound(members, env):
+    lines = ["$Members = @("]
+    for meta, folder in members:
+        service = meta.get("service") or {}
+        roles = _PAIR_ROLES.get(meta["product"], _PAIR_ROLES_DEFAULT)
+        lines.append("  @{ " + "; ".join([
+            f"Product = {_ps(meta['product'])}",
+            f"Folder = {_ps(folder)}",
+            f"Exe = {_ps(meta['platforms']['win-x64']['exe'])}",
+            f"Service = {_ps(service.get('name', ''))}",
+            f"Register = {_ps(service.get('register', '').replace('{name}', service.get('name', '')))}",
+            f"Unregister = {_ps(service.get('unregister', '').replace('{name}', service.get('name', '')))}",
+            f"Roles = {_ps(roles)}",
+            f"Address = {_ps(_MANAGEMENT_ADDRESS.get(meta['product'], ''))}",
+        ]) + " }")
+    lines.append(")")
+    lines.append("$MachineVars = @(" + ", ".join(f"@{{ Name = {_ps(e['name'])}; Folder = {_ps(e['programData'])} }}" for e in env) + ")")
+    return lines
+
+
+def suite_scripts(members, env):
+    """(post_install, pre_uninstall) as the lines of the manifest's two scripts (plan 33 SC12, SC13)."""
+    regions = _suite_regions()
+    bound = _suite_bound(members, env)
+    common = bound + _code_lines(regions["common"])
+    post = common + _code_lines(regions["post_install_check"]) + (_global_env_set(env) if env else []) + _code_lines(regions["post_install"])
+    undo = common + _code_lines(regions["pre_uninstall"]) + (_global_env_unset(env) if env else [])
+    return post, undo
+
+
+def suite_manifest(members, version, repo, sums, base_url=None):
+    """One manifest for all members: url, hash, extract_to and bin are lists in member order, and two scripts (suite-scripts.ps1): `post_install` registers each member's
+    service, starts the console, pairs and starts the others (a global install only, refused when a member's service comes from another folder), and `pre_uninstall`
+    unpairs and unregisters on a real uninstall and only stops the services on an update. The machine variables of every member's `globalEnv` are set between the checks and
+    the install, and removed (all but the shared data root) on uninstall."""
     urls, hashes, folders, bins = [], [], [], []
     missing = []
     for meta, folder in members:
@@ -244,27 +297,31 @@ def suite_manifest(members, version, repo, sums):
         if name not in sums:
             missing.append(f"{meta['product']} ({name})")
             continue
-        urls.append(f"https://github.com/{repo}/releases/download/{meta['product']}/v{version}/{name}")
+        urls.append(f"{base_url.rstrip('/')}/{meta['product']}/v{version}/{name}" if base_url else f"https://github.com/{repo}/releases/download/{meta['product']}/v{version}/{name}")
         hashes.append(sums[name])
         folders.append(folder)
         bins.append([f"{folder}\\{meta['platforms']['win-x64']['exe']}", _alias(meta)])
     if missing:
         raise SystemExit("SHA256SUMS does not list the win-x64 zip of suite member " + ", ".join(missing))
+    if not members[0][0].get("service"):
+        raise SystemExit(f"suite member {members[0][0]['product']} is the console (the first member) and must register a service")
+    env = _distinct_env([e for m, _ in members for e in (m.get("globalEnv") or [])])
+    if env:
+        _check_global_env(env)
+    post, undo = suite_scripts(members, env)
     manifest = {
         "version": version,
-        "description": "DbDataKit, every member product on one server: " + ", ".join(m["product"] for m, _ in members) + ". Installs the programs only.",
+        "description": "DbDataKit, every member product on one server: " + ", ".join(m["product"] for m, _ in members) + ". Registers each service and pairs it with the console.",
         "homepage": members[0][0]["homepage"],
         "license": members[0][0]["license"],
         "architecture": {"64bit": {"url": urls, "hash": hashes}},
         "extract_to": folders,
         "bin": bins,
         "notes": suite_notes(members),
+        "post_install": post,
+        "pre_uninstall": undo,
     }
-    env = [e for m, _ in members for e in (m.get("globalEnv") or [])]
     if env:
-        manifest["post_install"] = _global_env_set(env)
-        if unset := _global_env_unset(env):
-            manifest["pre_uninstall"] = unset
         manifest["notes"] += "\n" + _global_env_notes(env) + " Open a new terminal to see it, so the commands above read the folders the services use."
     if any(m.get("requiresVcRuntime") for m, _ in members):
         manifest["suggest"] = {"Visual C++ Redistributable": ["extras/vcredist2022"]}
@@ -278,7 +335,7 @@ def bind_suite(args):
     sums = {}
     for path in args.sums:
         sums.update(parse_sums(pathlib.Path(path).read_text(encoding="utf-8")))
-    manifest = suite_manifest(members, args.version, args.repo, sums)
+    manifest = suite_manifest(members, args.version, args.repo, sums, args.base_url)
     out = pathlib.Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     target = out / f"{SUITE_PRODUCT}.json"
@@ -312,6 +369,7 @@ def bind_ps1(template, meta, repo):
         f"  ServiceRegister = {_ps(service.get('register', ''))}",
         f"  RequiresDotnet = {_ps(meta.get('requiresDotnet', ''))}",
         f"  RequiresVcRuntime = ${'true' if meta.get('requiresVcRuntime') else 'false'}",
+        f"  Announces = ${'true' if meta.get('announces') else 'false'}",
         f"  Notes = {_ps(meta.get('notes', ''))}",
         "}",
     ])
@@ -332,6 +390,7 @@ def bind_sh(template, meta, repo):
         f"PRESERVE={_sh(' '.join(meta.get('preserve', [])))}",
         f"REQUIRES_DOTNET={_sh(meta.get('requiresDotnet') or next((p['requiresDotnet'] for p in unix.values() if p.get('requiresDotnet')), ''))}",
         f"NOTES={_sh(meta.get('notes', ''))}",
+        f"ANNOUNCES={'1' if meta.get('announces') else '0'}",
     ])
     return _replace_block(template, BEGIN, body)
 
@@ -380,6 +439,7 @@ def main():
     b.add_argument("--version", help="the release version (no leading v); needed for the Scoop manifest")
     b.add_argument("--sums", nargs="+", help="the release's SHA256SUMS; needed with --version (with --suite, one per member or one for all)")
     b.add_argument("--repo", default=DEFAULT_REPO)
+    b.add_argument("--base-url", help="with --suite: serve the zips from <base-url>/<product>/v<version>/<zip> instead of the GitHub releases (the Windows install test serves them from this machine)")
     b.add_argument("--out", required=True)
     b.set_defaults(func=bind)
     args = parser.parse_args()
