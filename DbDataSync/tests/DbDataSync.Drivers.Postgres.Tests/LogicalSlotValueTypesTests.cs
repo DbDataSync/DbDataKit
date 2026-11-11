@@ -44,6 +44,6 @@ public sealed class LogicalSlotValueTypesTests
         var file = new StagingMatrixFile(ExpectedPath());
         if (StagingMatrixFile.Update) { file.Write(actual); return; }
         var expected = file.Read();
-        Assert.True(expected.SequenceEqual(actual), "logical-slot value types changed (DBDATASYNC_MATRIX_UPDATE=1 regenerates the file):" + Environment.NewLine + StagingMatrixFile.Diff(expected, actual));
+        Assert.True(expected.SequenceEqual(actual), "logical-slot value types changed (DBDATAKIT_TEST_MATRIX_UPDATE=1 regenerates the file):" + Environment.NewLine + StagingMatrixFile.Diff(expected, actual));
     }
 }

@@ -18,7 +18,7 @@
 
       Plan 13 (K05): the package is DuckDB.NET.Data, managed bindings only, not `.Full` with its bundled 1.x engine. The engine
       (DuckDB 2.0.0) comes from the repository's duckdb.pin: DbDataSync.Libraries.DuckDbEngine downloads it next to the installed
-      assemblies, checking the archive's and the library's SHA-256 against the pin (DBDATASYNC_DUCKDB_ENGINE_SOURCE names a directory
+      assemblies, checking the archive's and the library's SHA-256 against the pin (DBDATAKIT_TEST_DUCKDB_ENGINE_SOURCE names a directory
       to take the archive from on a machine without internet access), and the Docker image carries it in its library cache.
     -->
     <PackageReference Include="DuckDB.NET.Data" ExcludeAssets="runtime;native" />

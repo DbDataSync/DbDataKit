@@ -87,7 +87,7 @@ public sealed class PostgresFlightTests : IAsyncLifetime
     {
         if (_app is not null) await _app.DisposeAsync();
         try { if (_dir.Length > 0) Directory.Delete(_dir, true); } catch (IOException) { }
-        if (Environment.GetEnvironmentVariable("DBGATEWAY_TEST_POSTGRES") is { Length: > 0 })
+        if (Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES") is { Length: > 0 })
         {
             try { await PostgresEnv.ExecuteAsync($"DROP SCHEMA IF EXISTS {Schema} CASCADE", $"DROP ROLE IF EXISTS {PassUser}"); }
             catch (Exception ex) when (ex is Npgsql.NpgsqlException or InvalidOperationException) { }

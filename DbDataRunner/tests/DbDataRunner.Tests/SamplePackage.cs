@@ -59,16 +59,16 @@ internal static class SamplePackage
     private static string Publish()
     {
         // a directory a person published beforehand (a run as an ordinary user cannot write the project's obj directory or read the root's package cache)
-        if (Environment.GetEnvironmentVariable("DBDATA_TEST_PUBLISHED_PACKAGE") is { Length: > 0 } published) return published;
+        if (Environment.GetEnvironmentVariable("DBDATAKIT_TEST_PUBLISHED_PACKAGE") is { Length: > 0 } published) return published;
 
         var project = FindProject();
         var output = Temp("dbdatarunner-publish-");
-        // the test project built the package already (a project reference), in the configuration the tests run in (DBDATA_TEST_CONFIGURATION names it when the layout is not the usual one); an artifacts path (DBDATA_TEST_ARTIFACTS_PATH) is where it was built when the build was given one
+        // the test project built the package already (a project reference), in the configuration the tests run in (DBDATAKIT_TEST_CONFIGURATION names it when the layout is not the usual one); an artifacts path (DBDATAKIT_TEST_ARTIFACTS_PATH) is where it was built when the build was given one
         var here = new DirectoryInfo(AppContext.BaseDirectory);   // <project>/bin/<configuration>/<framework>
-        var configuration = Environment.GetEnvironmentVariable("DBDATA_TEST_CONFIGURATION") is { Length: > 0 } named ? named : here.Parent?.Parent?.Name == "bin" ? here.Parent.Name : "Debug";
+        var configuration = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_CONFIGURATION") is { Length: > 0 } named ? named : here.Parent?.Parent?.Name == "bin" ? here.Parent.Name : "Debug";
         var info = new ProcessStartInfo("dotnet") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
         foreach (var argument in new[] { "publish", project, "--no-build", "-c", configuration, "-o", output, "--nologo", "-v", "q" }) info.ArgumentList.Add(argument);
-        if (Environment.GetEnvironmentVariable("DBDATA_TEST_ARTIFACTS_PATH") is { Length: > 0 } artifacts)
+        if (Environment.GetEnvironmentVariable("DBDATAKIT_TEST_ARTIFACTS_PATH") is { Length: > 0 } artifacts)
         {
             info.ArgumentList.Add("--artifacts-path");
             info.ArgumentList.Add(artifacts);

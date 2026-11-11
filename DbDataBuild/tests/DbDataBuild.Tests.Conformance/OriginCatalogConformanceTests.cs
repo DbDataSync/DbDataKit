@@ -130,8 +130,8 @@ public class OriginCatalogConformanceTests
 
     private static string RequireDriver()
     {
-        var driver = EngineEnv.Get("DBDATABUILD_TEST_ODBC_PG_DRIVER");
-        Skip.If(driver == null, "Set DBDATABUILD_TEST_ODBC_PG_DRIVER to the psqlodbc driver (scripts/fetch-psqlodbc.sh, then eval \"$(scripts/psqlodbc-env.sh)\").");
+        var driver = EngineEnv.Get("DBDATAKIT_TEST_ODBC_PG_DRIVER");
+        Skip.If(driver == null, "Set DBDATAKIT_TEST_ODBC_PG_DRIVER to the psqlodbc driver (scripts/fetch-psqlodbc.sh, then eval \"$(scripts/psqlodbc-env.sh)\").");
         return driver!;
     }
 

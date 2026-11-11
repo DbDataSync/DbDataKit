@@ -13,7 +13,7 @@ namespace DbDataKit.Views.Tests;
 
 /// <summary>
 /// The resolution of a layout as the viewer (plan 32 DBR04): <see cref="WidgetResolver"/> over a fake serving core with a small retail sample (<see cref="RetailServing"/>). The recorded widget results of the sample documents
-/// (<c>conformance/views/widget-results</c>, which <c>@dbdatakit/visuals</c> reads too) are what the resolver gives, and they satisfy the <c>rendered-widgets</c> schema. Set <c>DBDATA_REGENERATE_WIDGET_RESULTS=1</c> to write them again.
+/// (<c>conformance/views/widget-results</c>, which <c>@dbdatakit/visuals</c> reads too) are what the resolver gives, and they satisfy the <c>rendered-widgets</c> schema. Set <c>DBDATAKIT_TEST_REGENERATE_WIDGET_RESULTS=1</c> to write them again.
 /// </summary>
 public class ResolveTests
 {
@@ -81,7 +81,7 @@ public class ResolveTests
 
         // a text widget is drawn from the document and has no file (the fixture client needs none)
         var results = rendered.Widgets.Where(w => w.Value["type"]!.GetValue<string>() != "text").ToList();
-        var regenerate = Environment.GetEnvironmentVariable("DBDATA_REGENERATE_WIDGET_RESULTS") == "1";
+        var regenerate = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_REGENERATE_WIDGET_RESULTS") == "1";
         var folder = Path.Combine(regenerate ? SourceResultsRoot() : Path.Combine(Conformance.Root, "widget-results"), kind, name);
         if (regenerate)
         {

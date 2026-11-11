@@ -76,7 +76,7 @@ internal static class PackageFixture
     private static string Publish()
     {
         // a directory a person published beforehand (a run as an ordinary user cannot write the project's obj directory or read the root's package cache)
-        if (Environment.GetEnvironmentVariable("DBDATA_TEST_PUBLISHED_PACKAGE") is { Length: > 0 } published) return published;
+        if (Environment.GetEnvironmentVariable("DBDATAKIT_TEST_PUBLISHED_PACKAGE") is { Length: > 0 } published) return published;
 
         var project = FindProject();
         var output = Directory.CreateTempSubdirectory("dbdatakit-exec-publish-").FullName;

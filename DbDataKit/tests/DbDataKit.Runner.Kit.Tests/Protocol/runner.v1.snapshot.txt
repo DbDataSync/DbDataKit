@@ -1,6 +1,6 @@
 # The runner protocol dbdatakit.runner.v1: every message field, enum value and call, as the published packages know them.
 # Inside v1 nothing here is removed, renumbered, renamed or retyped (plan 28a DR4); a new field takes a new number.
-# Regenerate after an ADDITION (never to hide a removal): DBKIT_UPDATE_PROTOCOL_SNAPSHOT=1 dotnet test --project DbDataKit/tests/DbDataKit.Runner.Kit.Tests -- --filter-class '*ProtocolCompatibilityTests'
+# Regenerate after an ADDITION (never to hide a removal): DBDATAKIT_TEST_UPDATE_PROTOCOL_SNAPSHOT=1 dotnet test --project DbDataKit/tests/DbDataKit.Runner.Kit.Tests -- --filter-class '*ProtocolCompatibilityTests'
 message StartRequest = present
 message StartRequest field 1 = protocol_version string
 message StartRequest field 2 = client string

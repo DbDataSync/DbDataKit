@@ -37,7 +37,7 @@ public sealed class ConnectionTestFallbackTests : IClassFixture<TestApiFactory>
     };
 
     private static string ServerConnectionString =>
-        Environment.GetEnvironmentVariable("DBDATASYNC_TEST_POSTGRES_SERVER")
+        Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES_LOGICAL")
         ?? "Host=localhost;Port=15432;Username=dbdatasync;Password=DbDataSync_Test_Pw1;Database=postgres";
 
     private readonly HttpClient _client;

@@ -7,7 +7,7 @@ namespace DbDataKit.Views.Tests;
 
 /// <summary>
 /// The kinds <c>dashboard</c> and <c>report</c> in plan 30's registry (plan 32 DBR10). The validator, the format rule, the dependency check, the listing, promotion and rollback run on the state database of
-/// every engine (SQLite, and SQL Server and PostgreSQL when <c>DBDATA_TEST_SQLSERVER</c> / <c>DBDATA_TEST_POSTGRES</c> name a server); the validator's refusals need no database and run once.
+/// every engine (SQLite, and SQL Server and PostgreSQL when <c>DBDATAKIT_TEST_SQLSERVER</c> / <c>DBDATAKIT_TEST_POSTGRES</c> name a server); the validator's refusals need no database and run once.
 /// </summary>
 public sealed class ViewDefinitionTests : IDisposable
 {

@@ -44,11 +44,16 @@ class CheckEnvNames(unittest.TestCase):
     def test_the_name_of_a_secret_inside_a_variable_is_not_a_variable(self):
         self.assertEqual([], self.problems({"a.md": "DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_ORDERS and MY_DBDATA_X and xDBGATEWAY_Y\n"}))
 
-    def test_the_variables_of_tests_that_sc31b_renames_are_allowed(self):
-        text = "\n".join(["DBDATA_TEST_POSTGRES", "DBKIT_TEST_MSSQL", "DBDATASYNC_TEST_MSSQL_SERVER", "DBDATABUILD_TEST_FLIGHT", "DBPROXY_TEST_", "DBGATEWAY_TEST_SQLSERVER",
-                          "DBDATA_E2E_PG", "DBGATEWAY_E2E_ADDRESS", "DBDATA_CONFORMANCE_MYSQL", "DBDATA_REQUIRE_POSTGRES", "DBGATEWAY_REQUIRE_SQLSERVER", "DBDATASYNC_MATRIX_UPDATE",
-                          "DBDATASYNC_HARNESS_TABLES", "DBDATASYNC_DUCKDB_ENGINE_SOURCE", "DBDATA_UPDATE_GOLDEN", "DBDATA_BENCH_MAX_ROWS"]) + "\n"
-        self.assertEqual([], self.problems({"a.md": text}))
+    def test_the_old_variables_of_tests_are_not_allowed_any_more(self):
+        for name in ("DBDATA_TEST_POSTGRES", "DBKIT_TEST_MSSQL", "DBDATASYNC_TEST_MSSQL_SERVER", "DBDATABUILD_TEST_FLIGHT", "DBPROXY_TEST_", "DBGATEWAY_TEST_SQLSERVER",
+                     "DBDATA_E2E_PG", "DBGATEWAY_E2E_ADDRESS", "DBDATA_CONFORMANCE_MYSQL", "DBDATA_REQUIRE_POSTGRES", "DBGATEWAY_REQUIRE_SQLSERVER", "DBDATASYNC_MATRIX_UPDATE",
+                     "DBDATASYNC_HARNESS_TABLES", "DBDATASYNC_DUCKDB_ENGINE_SOURCE", "DBDATA_UPDATE_GOLDEN", "DBDATA_BENCH_MAX_ROWS", "DBGATEWAY_LIVE_USER",
+                     "DBGATEWAY_ADMIN_TESTS", "DBDATA_APP_STORE"):
+            with self.subTest(name):
+                self.assertEqual(1, len(self.problems({"a.md": name + "\n"})))
+
+    def test_the_variables_of_tests_are_dbdatakit_test(self):
+        self.assertEqual([], self.problems({"a.md": "DBDATAKIT_TEST_POSTGRES DBDATAKIT_TEST_REQUIRE_SQLSERVER DBDATAKIT_TEST_E2E_PG DBDATAKIT_TEST_PULL\n"}))
 
     def test_a_product_setting_that_looks_like_a_test_variable_is_not_allowed(self):
         self.assertEqual(1, len(self.problems({"a.md": "DBDATARUNNER_CHANNELS and DBDATAKIT_TEST_X\n"})))
@@ -60,7 +65,7 @@ class CheckEnvNames(unittest.TestCase):
             "DbDataKit/src/DbDataKit.State.Engines/SuiteEnvironment.cs",
             "DbDataKit/tests/DbDataKit.State.Engines.Tests/SuiteEnvironmentTests.cs",
             "DbDataRunner/tests/DbDataRunner.Tests/SuiteEnvironmentRefusalTests.cs",
-            "docs/plans/RELEASE-NOTES-PENDING.md", "docs/plans/33-fewer-services.md", "docs/ci-lessons.md")}
+            "docs/plans/RELEASE-NOTES-PENDING.md", "docs/plans/33-fewer-services.md", "docs/ci-lessons.md", "docs/testing-environment.md")}
         self.assertEqual([], self.problems(files))
         # and another plan is not
         self.assertEqual(2, len(self.problems({"docs/plans/28c-engines-on-runner.md": text})))

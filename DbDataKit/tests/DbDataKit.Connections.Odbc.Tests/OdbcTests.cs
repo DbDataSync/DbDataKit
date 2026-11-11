@@ -99,8 +99,8 @@ public class OdbcTests
     [Fact]
     public async Task Live_parameterised_query_with_read_only_access_when_configured()
     {
-        var cs = Environment.GetEnvironmentVariable("DBDATA_TEST_ODBC");
-        Assert.SkipWhen(string.IsNullOrEmpty(cs), "Set DBDATA_TEST_ODBC to a full ODBC connection string (credentials included) to run this.");
+        var cs = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_MSSQL_ODBC");
+        Assert.SkipWhen(string.IsNullOrEmpty(cs), "Set DBDATAKIT_TEST_MSSQL_ODBC to a full ODBC connection string (credentials included) to run this.");
         var login = new ResolvedLogin(LoginRole.Read, AuthMode.Sql, "env") { ConnectionString = SecretValue.From(cs!) };
         var ctx = new ConnectionContext
         {

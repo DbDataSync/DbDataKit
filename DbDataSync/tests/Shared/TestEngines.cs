@@ -3,7 +3,7 @@ using System.Data.Common;
 namespace DbDataSync.TestSupport;
 
 /// <summary>
-/// Where the test engines are, read from the <c>DBDATASYNC_TEST_*</c> variables that <c>testenv/testenv.sh env dbdatasync</c> prints, so
+/// Where the test engines are, read from the <c>DBDATAKIT_TEST_*</c> variables that <c>testenv/testenv.sh env dbdatasync</c> prints, so
 /// the places that need the port or the password on their own (a <c>ConnectionInput</c> with a <c>Port</c>, a secret preset for a spawned
 /// worker) say the same thing as the connection string the same test uses. Linked into every test project that needs it (see each csproj's
 /// <c>Shared\TestEngines.cs</c> item), like <c>MsSqlScratch</c>.
@@ -15,25 +15,25 @@ namespace DbDataSync.TestSupport;
 /// </summary>
 internal static class TestEngines
 {
-    /// <summary>The first SQL Server (<c>DBDATASYNC_TEST_MSSQL_SERVER</c>, or the source's variable): port 14330, SQL Server Agent on.</summary>
+    /// <summary>The first SQL Server (<c>DBDATAKIT_TEST_MSSQL</c>): port 14330, SQL Server Agent on.</summary>
     public static Engine MsSql { get; } = From(
         "Data Source=localhost,14330;User ID=sa;Password=DbDataSync_Test_Pw1;TrustServerCertificate=True",
-        "DBDATASYNC_TEST_MSSQL_SERVER", "DBDATASYNC_TEST_MSSQL_SOURCE_SERVER");
+        "DBDATAKIT_TEST_MSSQL");
 
-    /// <summary>The second SQL Server (<c>DBDATASYNC_TEST_MSSQL_TARGET_SERVER</c>): port 14331.</summary>
+    /// <summary>The second SQL Server (<c>DBDATAKIT_TEST_MSSQL_TARGET</c>): port 14331.</summary>
     public static Engine MsSqlTarget { get; } = From(
         "Data Source=localhost,14331;User ID=sa;Password=DbDataSync_Test_Pw1;TrustServerCertificate=True",
-        "DBDATASYNC_TEST_MSSQL_TARGET_SERVER");
+        "DBDATAKIT_TEST_MSSQL_TARGET");
 
-    /// <summary>The PostgreSQL with logical decoding (<c>DBDATASYNC_TEST_POSTGRES_SERVER</c>).</summary>
+    /// <summary>The PostgreSQL with logical decoding (<c>DBDATAKIT_TEST_POSTGRES_LOGICAL</c>).</summary>
     public static Engine Postgres { get; } = From(
         "Host=localhost;Port=15432;Username=dbdatasync;Password=DbDataSync_Test_Pw1;Database=postgres",
-        "DBDATASYNC_TEST_POSTGRES_SERVER");
+        "DBDATAKIT_TEST_POSTGRES_LOGICAL");
 
-    /// <summary>MySQL (<c>DBDATASYNC_TEST_MYSQL_SERVER</c>), as root.</summary>
+    /// <summary>MySQL (<c>DBDATAKIT_TEST_MYSQL</c>), as root.</summary>
     public static Engine MySql { get; } = From(
         "Server=localhost;Port=13306;UserID=root;Password=DbDataSync_Test_Pw1;AllowUserVariables=true;",
-        "DBDATASYNC_TEST_MYSQL_SERVER");
+        "DBDATAKIT_TEST_MYSQL");
 
     private static Engine From(string defaultConnectionString, params string[] variables)
     {

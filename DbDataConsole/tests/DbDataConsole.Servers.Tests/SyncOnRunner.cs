@@ -70,13 +70,13 @@ internal sealed class SyncOnRunner : IAsyncDisposable
     public RealProcess RunnerProcess { get; private set; } = null!;
 
     public static string? EnginesMissing =>
-        Environment.GetEnvironmentVariable("DBDATA_TEST_SQLSERVER") is null || Environment.GetEnvironmentVariable("DBDATA_TEST_POSTGRES") is null
-            ? "set DBDATA_TEST_SQLSERVER and DBDATA_TEST_POSTGRES (testenv/testenv.sh up mssql postgres; eval \"$(testenv/testenv.sh env dbdatakit)\") to run a replication on a real runner"
+        Environment.GetEnvironmentVariable("DBDATAKIT_TEST_SQLSERVER") is null || Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES") is null
+            ? "set DBDATAKIT_TEST_SQLSERVER and DBDATAKIT_TEST_POSTGRES (testenv/testenv.sh up mssql postgres; eval \"$(testenv/testenv.sh env dbdatakit)\") to run a replication on a real runner"
             : null;
 
     public static async Task<SyncOnRunner> StartAsync()
     {
-        var harness = new SyncOnRunner { SqlServer = Environment.GetEnvironmentVariable("DBDATA_TEST_SQLSERVER")!, Postgres = Environment.GetEnvironmentVariable("DBDATA_TEST_POSTGRES")! };
+        var harness = new SyncOnRunner { SqlServer = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_SQLSERVER")!, Postgres = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES")! };
         try { await harness.InitializeAsync(); }
         catch { await harness.DisposeAsync(); throw; }
         return harness;
@@ -407,7 +407,7 @@ internal sealed class SyncOnRunner : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         // for working on a failure: the programs and their directories are left as they are (the processes outlive the test run), and where they are is printed
-        if (Environment.GetEnvironmentVariable("DBDATA_E12E_KEEP") == "1")
+        if (Environment.GetEnvironmentVariable("DBDATAKIT_TEST_E12E_KEEP") == "1")
         {
             File.WriteAllText(Path.Combine(Path.GetTempPath(), "e12e-runner-output.txt"), RunnerProcess.Output);
             File.WriteAllText(Path.Combine(Path.GetTempPath(), "e12e-keep.txt"), $"root {Root}\nsync {SyncUrl}\nrunner {RunnerUrl}\nsource {SourceDatabase}\ndw {DwDatabase}\ntarget {TargetDatabase}\n");

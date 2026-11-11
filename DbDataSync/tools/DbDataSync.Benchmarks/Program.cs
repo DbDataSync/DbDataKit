@@ -24,7 +24,7 @@ if (Flag("--help") || Flag("-h"))
           --columns N     columns per row          (default 50)
           --batch N       batch size               (default 10000)
           --server S      SQL Server connection    (default: the docker-compose source instance,
-                                                    or $DBDATASYNC_TEST_MSSQL_SERVER)
+                                                    or $DBDATAKIT_TEST_MSSQL)
 
         Each representation is measured in its own process, so peak working set belongs to that
         variant alone, against two sinks: a real SqlBulkCopy, and a consumer that reads typed values.
@@ -37,7 +37,7 @@ var rows = int.Parse(Arg("--rows") ?? "200000");
 var columns = int.Parse(Arg("--columns") ?? "50");
 var batch = int.Parse(Arg("--batch") ?? "10000");
 var server = Arg("--server")
-    ?? Environment.GetEnvironmentVariable("DBDATASYNC_TEST_MSSQL_SERVER")
+    ?? Environment.GetEnvironmentVariable("DBDATAKIT_TEST_MSSQL")
     ?? "Data Source=localhost,14330;User ID=sa;Password=DbDataSync_Test_Pw1;TrustServerCertificate=True";
 
 // ---- child mode: run exactly one variant and report on stdout -----------------------------------

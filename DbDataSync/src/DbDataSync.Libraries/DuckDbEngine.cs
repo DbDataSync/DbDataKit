@@ -22,7 +22,7 @@ public static class DuckDbEngine
     public const string PackageId = "DuckDB.NET.Data";
 
     /// <summary>Names a directory (or an http(s) address) to take the archive from instead of the pin's release address.</summary>
-    public const string SourceVariable = "DBDATASYNC_DUCKDB_ENGINE_SOURCE";
+    public const string SourceVariable = "DBDATAKIT_TEST_DUCKDB_ENGINE_SOURCE";
 
     /// <summary>The variable scripts/fetch-duckdb.sh and .ps1 honour: another download base (<c>file://&lt;folder&gt;</c> or http(s)) tried before the pin's address.</summary>
     public const string ReleaseBaseVariable = "DUCKDB_RELEASE_BASE";

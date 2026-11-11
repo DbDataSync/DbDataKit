@@ -29,11 +29,11 @@ public sealed class CrossInstanceEndToEndTests : IClassFixture<TestApiFactory>, 
     };
 
     private static string SourceServerConnectionString =>
-        Environment.GetEnvironmentVariable("DBDATASYNC_TEST_MSSQL_SOURCE_SERVER")
+        Environment.GetEnvironmentVariable("DBDATAKIT_TEST_MSSQL")
         ?? "Data Source=localhost,14330;User ID=sa;Password=DbDataSync_Test_Pw1;TrustServerCertificate=True";
 
     private static string TargetServerConnectionString =>
-        Environment.GetEnvironmentVariable("DBDATASYNC_TEST_MSSQL_TARGET_SERVER")
+        Environment.GetEnvironmentVariable("DBDATAKIT_TEST_MSSQL_TARGET")
         ?? "Data Source=localhost,14331;User ID=sa;Password=DbDataSync_Test_Pw1;TrustServerCertificate=True";
 
     private readonly TestApiFactory _factory;

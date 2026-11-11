@@ -207,8 +207,8 @@ public class SqlServerTests
     [Fact]
     public async Task Live_round_trip_when_a_server_is_configured()
     {
-        var cs = Environment.GetEnvironmentVariable("DBDATA_TEST_SQLSERVER");
-        Assert.SkipWhen(string.IsNullOrEmpty(cs), "Set DBDATA_TEST_SQLSERVER to a connection string (credentials included) to run this.");
+        var cs = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_SQLSERVER");
+        Assert.SkipWhen(string.IsNullOrEmpty(cs), "Set DBDATAKIT_TEST_SQLSERVER to a connection string (credentials included) to run this.");
         var login = new ResolvedLogin(LoginRole.Read, AuthMode.Sql, "env") { ConnectionString = SecretValue.From(cs!) };
         var ctx = Ctx(d => { d.Address = null; d.Access = AccessMode.Readonly; d.Tls.TrustServerCertificate = true; }, login, LoginRole.Read);
         var result = await new SqlServerProvider().TestAsync(ctx);

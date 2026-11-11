@@ -74,10 +74,10 @@ public class PostgresTypesTests
     }
 }
 
-/// <summary>Live tests: skipped unless DBDATA_TEST_POSTGRES holds an Npgsql connection string to a scratch database.</summary>
+/// <summary>Live tests: skipped unless DBDATAKIT_TEST_POSTGRES holds an Npgsql connection string to a scratch database.</summary>
 public class PostgresLiveTests
 {
-    private static string? ConnectionString => Environment.GetEnvironmentVariable("DBDATA_TEST_POSTGRES");
+    private static string? ConnectionString => Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES");
 
     private static async Task<ConformanceEngine> EngineAsync(CancellationToken ct)
     {
@@ -115,7 +115,7 @@ public class PostgresLiveTests
     [MemberData(nameof(ScopedNames))]
     public async Task Caller_supplied_quoting_and_markers_conform_on_postgres(string name)
     {
-        Assert.SkipUnless(ConnectionString is not null, "set DBDATA_TEST_POSTGRES to run");
+        Assert.SkipUnless(ConnectionString is not null, "set DBDATAKIT_TEST_POSTGRES to run");
         var engine = (await EngineAsync(TestContext.Current.CancellationToken)) with { Syntax = CallerSyntax() };
         var c = StrategyCases.All.Single(x => x.Name == name);
         var result = await ConformanceRunner.RunAsync(engine, c, TestContext.Current.CancellationToken);
@@ -126,7 +126,7 @@ public class PostgresLiveTests
     [MemberData(nameof(Names))]
     public async Task Strategy_conformance_on_postgres(string name)
     {
-        Assert.SkipUnless(ConnectionString is not null, "set DBDATA_TEST_POSTGRES to run");
+        Assert.SkipUnless(ConnectionString is not null, "set DBDATAKIT_TEST_POSTGRES to run");
         var engine = await EngineAsync(TestContext.Current.CancellationToken);
         var c = StrategyCases.All.Single(x => x.Name == name);
         var result = await ConformanceRunner.RunAsync(engine, c, TestContext.Current.CancellationToken);
@@ -136,7 +136,7 @@ public class PostgresLiveTests
     [Fact]
     public async Task A_value_binary_copy_cannot_write_fails_naming_the_column_and_never_the_value()
     {
-        Assert.SkipUnless(ConnectionString is not null, "set DBDATA_TEST_POSTGRES to run");
+        Assert.SkipUnless(ConnectionString is not null, "set DBDATAKIT_TEST_POSTGRES to run");
         var ct = TestContext.Current.CancellationToken;
         var d = DialectCatalog.For(EngineId.Postgres);
         var schema = new TransferSchema([new("id", CanonicalType.Of(CanonicalKind.Int32)), new("at", CanonicalType.Timestamp(6, tz: true))]);
@@ -178,7 +178,7 @@ public class PostgresLiveTests
     [InlineData(TransactionMode.Single)]
     public async Task Binary_copy_writes_every_row(TransactionMode mode)
     {
-        Assert.SkipUnless(ConnectionString is not null, "set DBDATA_TEST_POSTGRES to run");
+        Assert.SkipUnless(ConnectionString is not null, "set DBDATAKIT_TEST_POSTGRES to run");
         var ct = TestContext.Current.CancellationToken;
         var d = DialectCatalog.For(EngineId.Postgres);
         var schema = new TransferSchema([new("id", CanonicalType.Of(CanonicalKind.Int32)), new("name", CanonicalType.String(20)), new("at", CanonicalType.Timestamp(6, tz: true)), new("u", new CanonicalType(CanonicalKind.Int16, Unsigned: true))]);

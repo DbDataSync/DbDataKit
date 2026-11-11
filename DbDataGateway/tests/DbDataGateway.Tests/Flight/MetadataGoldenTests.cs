@@ -17,7 +17,7 @@ namespace DbDataGateway.Tests.Flight;
 /// Golden outputs of every Flight SQL metadata response (GetCatalogs, GetDbSchemas, GetTables with and without schemas, GetTableTypes, GetPrimaryKeys,
 /// GetSqlInfo) for a DuckDB source and for the Microsoft Text ODBC driver (through the 32-bit worker). They were recorded from the implementation that built
 /// the answers with its own INFORMATION_SCHEMA SQL and the ODBC catalog calls, before the metadata moved onto the shared catalog readers (C5c), and the
-/// readers must reproduce them. Set DBGATEWAY_UPDATE_GOLDEN=1 to rewrite the files after a deliberate change (and justify the diff in the commit message).
+/// readers must reproduce them. Set DBDATAKIT_TEST_UPDATE_GOLDEN=1 to rewrite the files after a deliberate change (and justify the diff in the commit message).
 /// </summary>
 public sealed class MetadataGoldenTests : IAsyncLifetime
 {
@@ -175,7 +175,7 @@ public sealed class MetadataGoldenTests : IAsyncLifetime
         string actual = text.ToString().Replace(_dir, "<dir>", StringComparison.OrdinalIgnoreCase).Replace(_dir.Replace('\\', '/'), "<dir>", StringComparison.OrdinalIgnoreCase)
             .Replace("\r\n", "\n");
         string path = Path.Combine(WorkerBuild.RepositoryRoot(), "tests", "DbDataGateway.Tests", "Golden", fileName);
-        if (Environment.GetEnvironmentVariable("DBGATEWAY_UPDATE_GOLDEN") == "1" || !File.Exists(path))
+        if (Environment.GetEnvironmentVariable("DBDATAKIT_TEST_UPDATE_GOLDEN") == "1" || !File.Exists(path))
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllText(path, actual);

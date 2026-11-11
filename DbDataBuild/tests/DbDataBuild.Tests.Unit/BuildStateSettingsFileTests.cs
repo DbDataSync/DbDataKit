@@ -7,7 +7,7 @@ namespace DbDataBuild.Tests.Unit;
 
 /// <summary>
 /// Plan 29b C07: the Build server reads the <c>state:</c> section of its <c>server.yaml</c>, with the flag first, then the environment, then the file, then SQLite. The tests on SQL Server and PostgreSQL do nothing
-/// when <c>DBDATA_TEST_SQLSERVER</c> or <c>DBDATA_TEST_POSTGRES</c> is not set (xunit 2 cannot skip at run time).
+/// when <c>DBDATAKIT_TEST_SQLSERVER</c> or <c>DBDATAKIT_TEST_POSTGRES</c> is not set (xunit 2 cannot skip at run time).
 /// </summary>
 public sealed class BuildStateSettingsFileTests : IDisposable
 {

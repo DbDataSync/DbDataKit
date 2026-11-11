@@ -14,7 +14,7 @@ namespace DbDataConsole.Tests;
 public sealed class ConsoleActivityTests : IAsyncLifetime
 {
     private readonly string directory = Directory.CreateTempSubdirectory("ddk-console-activity").FullName;
-    private readonly string? server = Environment.GetEnvironmentVariable("DBDATA_TEST_POSTGRES");
+    private readonly string? server = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES");
     private readonly string database = $"console_activity_{Guid.NewGuid():N}";
     private string? connection;
 
@@ -81,7 +81,7 @@ public sealed class ConsoleActivityTests : IAsyncLifetime
     [Fact]
     public async Task On_a_shared_server_database_one_query_returns_what_every_service_wrote()
     {
-        if (connection is null) Assert.Skip("set DBDATA_TEST_POSTGRES to run on PostgreSQL");
+        if (connection is null) Assert.Skip("set DBDATAKIT_TEST_POSTGRES to run on PostgreSQL");
         var (app, http) = await Start(new StateSettings("postgres", connection));
         using (http) await using (app)
         {

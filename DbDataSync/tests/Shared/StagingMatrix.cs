@@ -94,7 +94,7 @@ public sealed class StagingMatrixFile(string path)
 
     public string[] Read() => File.Exists(path) ? File.ReadAllLines(path) : [];
 
-    public static bool Update => Environment.GetEnvironmentVariable("DBDATASYNC_MATRIX_UPDATE") == "1";
+    public static bool Update => Environment.GetEnvironmentVariable("DBDATAKIT_TEST_MATRIX_UPDATE") == "1";
 
     public static string Diff(IReadOnlyList<string> expected, IReadOnlyList<string> actual)
     {

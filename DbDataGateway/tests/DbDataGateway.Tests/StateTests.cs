@@ -56,8 +56,8 @@ public sealed class StateTests(GatewayFixture gateway) : IClassFixture<GatewayFi
     [Fact]
     public void A_postgresql_database_the_operator_names_keeps_the_feed_with_the_secret_resolved_when_it_is_opened()
     {
-        var server = Environment.GetEnvironmentVariable("DBDATA_TEST_POSTGRES");
-        if (server is null) Assert.Skip("set DBDATA_TEST_POSTGRES to run on PostgreSQL");
+        var server = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES");
+        if (server is null) Assert.Skip("set DBDATAKIT_TEST_POSTGRES to run on PostgreSQL");
 
         var name = $"gateway_state_{Guid.NewGuid():N}";
         using (var admin = new Npgsql.NpgsqlConnection(server))

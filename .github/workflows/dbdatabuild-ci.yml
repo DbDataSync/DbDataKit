@@ -147,7 +147,7 @@ jobs:
       - name: Runtime package tests
         shell: bash
         env:
-          DBDATABUILD_TEST_PUBLISHED: ${{ runner.temp }}/runtime
+          DBDATAKIT_TEST_PUBLISHED: ${{ runner.temp }}/runtime
         run: dotnet test tests/DbDataBuild.Tests.Conformance -c Release --no-build --filter "Group=runtime-package"
 
   # The web page in a real browser (B-PW): `dbdatabuild ui mcp` serves it by a one-time link, over a starter project; every screen, the plans screen, the apply panel and the markup rule

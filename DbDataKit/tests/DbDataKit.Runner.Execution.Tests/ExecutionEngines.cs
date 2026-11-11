@@ -6,8 +6,8 @@ using Npgsql;
 namespace DbDataKit.Runner.Execution.Tests;
 
 /// <summary>
-/// A throwaway state database per test on SQLite and, when the shared engines are up (<c>testenv/testenv.sh up mssql postgres</c>), on SQL Server and PostgreSQL (<c>DBDATA_TEST_SQLSERVER</c> and
-/// <c>DBDATA_TEST_POSTGRES</c>): the arrangement of the state suite. An engine whose variable is not set skips its rows, unless <c>DBDATA_REQUIRE_SQLSERVER</c> / <c>DBDATA_REQUIRE_POSTGRES</c> is true.
+/// A throwaway state database per test on SQLite and, when the shared engines are up (<c>testenv/testenv.sh up mssql postgres</c>), on SQL Server and PostgreSQL (<c>DBDATAKIT_TEST_SQLSERVER</c> and
+/// <c>DBDATAKIT_TEST_POSTGRES</c>): the arrangement of the state suite. An engine whose variable is not set skips its rows, unless <c>DBDATAKIT_TEST_REQUIRE_SQLSERVER</c> / <c>DBDATAKIT_TEST_REQUIRE_POSTGRES</c> is true.
 /// </summary>
 public sealed class ExecutionEngines : IDisposable
 {
@@ -18,13 +18,13 @@ public sealed class ExecutionEngines : IDisposable
 
     private static string? Server(string engine) => engine switch
     {
-        StateEngineIds.MsSql => Environment.GetEnvironmentVariable("DBDATA_TEST_SQLSERVER"),
-        StateEngineIds.Postgres => Environment.GetEnvironmentVariable("DBDATA_TEST_POSTGRES"),
+        StateEngineIds.MsSql => Environment.GetEnvironmentVariable("DBDATAKIT_TEST_SQLSERVER"),
+        StateEngineIds.Postgres => Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES"),
         _ => null,
     };
 
     private static bool Required(string engine) => string.Equals(
-        Environment.GetEnvironmentVariable(engine == StateEngineIds.MsSql ? "DBDATA_REQUIRE_SQLSERVER" : "DBDATA_REQUIRE_POSTGRES"), "true", StringComparison.OrdinalIgnoreCase);
+        Environment.GetEnvironmentVariable(engine == StateEngineIds.MsSql ? "DBDATAKIT_TEST_REQUIRE_SQLSERVER" : "DBDATAKIT_TEST_REQUIRE_POSTGRES"), "true", StringComparison.OrdinalIgnoreCase);
 
     private static DbProviderFactory Factory(string libraryId) => libraryId switch
     {
@@ -46,8 +46,8 @@ public sealed class ExecutionEngines : IDisposable
         var server = Server(engine);
         if (server is null)
         {
-            Assert.False(Required(engine), $"{engine} is required but its DBDATA_TEST_* variable is not set");
-            Assert.Skip($"set DBDATA_TEST_{(engine == StateEngineIds.MsSql ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
+            Assert.False(Required(engine), $"{engine} is required but its DBDATAKIT_TEST_* variable is not set");
+            Assert.Skip($"set DBDATAKIT_TEST_{(engine == StateEngineIds.MsSql ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
         }
 
         lock (Registration) StateDialectRegistry.Default.RegisterLibraryBackedEngines(Factory);

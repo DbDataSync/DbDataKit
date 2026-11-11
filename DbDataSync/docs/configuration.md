@@ -697,10 +697,9 @@ Its environment variables:
 
 | env var | default | meaning |
 | --- | --- | --- |
-| `DBKIT_TEST_PASSWORD` | `DbKit_Test_Pw1` | password of the shared test engines in `testenv/` (SQL Server's `sa`, PostgreSQL's `dbdatasync`); the same variable `testenv/testenv.sh up` reads |
-| ~~`DBDATASYNC_MSSQL_SA_PASSWORD`~~, ~~`DBDATASYNC_POSTGRES_PASSWORD`~~ | | retired with `DbDataSync/docker-compose.yml`: the harness refuses to start while either is set, and says to use `DBKIT_TEST_PASSWORD` |
-| `DBDATASYNC_HARNESS_TARGET_ENGINE` | `mssql` | or `postgres` — must agree across `up`/`verify`/`drift` |
-| `DBDATASYNC_HARNESS_TABLES` | `1` | how many generated tables — same rule |
+| `DBDATAKIT_TEST_PASSWORD` | `DbKit_Test_Pw1` | password of the shared test engines in `testenv/` (SQL Server's `sa`, PostgreSQL's `dbdatasync`); the same variable `testenv/testenv.sh up` reads |
+| `DBDATAKIT_TEST_HARNESS_TARGET_ENGINE` | `mssql` | or `postgres` — must agree across `up`/`verify`/`drift` |
+| `DBDATAKIT_TEST_HARNESS_TABLES` | `1` | how many generated tables — same rule |
 
 ## Next: Getting started
 

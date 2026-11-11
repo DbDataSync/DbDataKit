@@ -152,11 +152,11 @@ jobs:
         run: dotnet build DbDataSync.slnf --no-restore --configuration Release
       - name: Test (Integration)
         # The engines from testenv/ (SQL Server 14330 and 14331, PostgreSQL with logical decoding 15433, MySQL 13306,
-        # MariaDB 13307, Oracle 15210); the DBDATASYNC_TEST_* variables of the step above say where.
+        # MariaDB 13307, Oracle 15210); the DBDATAKIT_TEST_* variables of the step above say where.
         run: dotnet test DbDataSync.slnf --no-build --configuration Release --filter "Category=Integration"
         env:
           # The DuckDB extension test downloads httpfs for the pinned engine from DuckDB's extension server (K06).
-          DBDATASYNC_TEST_NETWORK: "true"
+          DBDATAKIT_TEST_NETWORK: "true"
       - name: Stop the databases
         if: always()
         working-directory: .

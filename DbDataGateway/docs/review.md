@@ -268,7 +268,7 @@ To do before moving:
    `TableEntry` mirror `OdbcIdentifierQuote`/`OdbcDriverInfo`/`OdbcColumn`/`OdbcPrimaryKey`/`OdbcTable`
    (`IQueryExecutor.cs:35-64`); `OdbcMetadata.cs` is a pure projection layer that would shrink. The worker protocol serialises
    these Core DTOs as JSON; switching the DTOs to the package records changes the wire contract (keep proxy and worker versions in lockstep - they ship in one zip).
-6. Pinning: tests rely on `DBPROXY_TEST_*` env vars and a local `.\SQLEXPRESS`; reuse the CI SQL Server container job.
+6. Pinning: tests rely on `DBDATAKIT_TEST_*` env vars and a local `.\SQLEXPRESS`; reuse the CI SQL Server container job.
 
 **Other shared-library candidates in this repo**
 
@@ -389,7 +389,7 @@ Rating: Critical / High / Medium / Low. Findings S-1.. in rough priority.
 * `ServiceInstaller` uses `ProcessStartInfo.ArgumentList` for `sc.exe` (no injection); `--password` is on the command line (see 4).
 * `install.ps1`: TLS 1.2 forced; checksum is fetched from the *same release* as the zip, so it protects integrity against corruption, not against a compromised release/account (no signature, no pinned hash, no Authenticode, no SLSA/attestation). The documented `irm | iex`-style one-liner executes remote code as admin. `Expand-Archive` of a verified zip into temp, then `Copy-Item` into Program Files (zip-slip is mitigated by the checksum, not by path validation). `-Repo` is overridable (supply-chain pivot only by the operator). The checksum line is matched with `-match [regex]::Escape(name)` (ok). No rollback of a failed upgrade (service is not restarted on failure: `finally` only deletes temp dir, so a partial copy leaves the service stopped).
 * `release.yml`: interpolates `${{ github.ref_name }}` directly into PowerShell single-quoted strings (`release.yml:22,28-29`) - a crafted tag name containing `'` would break out (requires tag-push rights, so low). Actions pinned by tag, not SHA (`actions/checkout@v4`, `actions/setup-dotnet@v4`). Release job has `contents: write` at workflow level (acceptable) and `GH_TOKEN` is the default token. Release does not run the Linux SQL Server job (`ci.yml`), only the Windows tests, and tests on tag push run all tests including SQL-Server tests that skip when the server is absent.
-* `ci.yml`: SQL Server SA password `Dbproxy-Ci-Passw0rd` is committed in the workflow (`MSSQL_SA_PASSWORD`, `DBPROXY_TEST_SQLSERVER_PASSWORD`). Throwaway container, low risk, but should use a generated value (`openssl rand`) and `::add-mask::`. Installs `msodbcsql18` from Microsoft's apt repository over HTTPS with `dpkg -i` of a downloaded `.deb` (standard Microsoft instructions). No `permissions:` block in `ci.yml` (defaults to the repo default; set `contents: read`). PRs from forks run the SQL container job with secrets-free config: fine.
+* `ci.yml`: SQL Server SA password `Dbproxy-Ci-Passw0rd` is committed in the workflow (`MSSQL_SA_PASSWORD`, `DBDATAKIT_TEST_MSSQL_PASSWORD`). Throwaway container, low risk, but should use a generated value (`openssl rand`) and `::add-mask::`. Installs `msodbcsql18` from Microsoft's apt repository over HTTPS with `dpkg -i` of a downloaded `.deb` (standard Microsoft instructions). No `permissions:` block in `ci.yml` (defaults to the repo default; set `contents: read`). PRs from forks run the SQL container job with secrets-free config: fine.
 * Python/ps1 tests: `run-interop.ps1` sets secrets only as process env vars for a temp data dir, sleeps 5 s instead of polling readiness, and uses `Stop-Process -Force`; `interop.py`/`sql_server_check.py` use `TLS_SKIP_VERIFY` (test only). No `eval`/`subprocess` with untrusted input.
 
 ### S-14 (Low) Dependency versions (from `Directory.Packages.props`)
@@ -417,7 +417,7 @@ Arrow type mapping, ODBC metadata (already extracted), identifier quoting, insta
 
 **Tests.** ~190 `[Fact]/[Theory]` (Auth 31, Flight e2e/TLS/JWT/metadata/params/compression/worker ~77, SqlServer ~16, type mapping 5, pending store 5, Metadata pkg 27).
 Strong: handshake/Basic/JWT/TLS end-to-end with real Kestrel (`ProxyFixture`), worker tests against the 32-bit Microsoft Text driver, interop with ADBC/pyarrow, CI guards
-(`--minimum-expected-tests`, `DBPROXY_REQUIRE_SQLSERVER`). Gaps: nothing on resource limits/DoS, hostile SQL/read-only bypass, ODBC pass-through string smuggling,
+(`--minimum-expected-tests`, `DBDATAKIT_TEST_REQUIRE_SQLSERVER`). Gaps: nothing on resource limits/DoS, hostile SQL/read-only bypass, ODBC pass-through string smuggling,
 Linux/Docker/systemd, option validation, large-result/memory profiling, Windows-account and pass-through against real accounts (README admits). Several tests need a local SQL
 Server/`SQLEXPRESS` or the Windows-only 32-bit Text driver, so they skip silently on dev machines. No coverage tooling.
 

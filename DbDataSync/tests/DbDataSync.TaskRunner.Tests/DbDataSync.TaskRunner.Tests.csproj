@@ -20,7 +20,7 @@
          test projects" framing did not anticipate, found by actually running the full suite rather than
          assumed. -->
     <PackageReference Include="Microsoft.Data.SqlClient" />
-    <!-- the runner's own state (progress, runs, scheduling) on PostgreSQL, when DBDATA_TEST_POSTGRES is set -->
+    <!-- the runner's own state (progress, runs, scheduling) on PostgreSQL, when DBDATAKIT_TEST_POSTGRES is set -->
     <PackageReference Include="Npgsql" />
     <!-- the targets of ChangeApplyReplicationTests (plan 28c, CW01): the other engines' providers, which the driver projects exclude at run time -->
     <PackageReference Include="MySqlConnector" />

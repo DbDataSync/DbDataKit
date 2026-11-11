@@ -4,18 +4,18 @@ namespace DbDataGateway.Tests.Support;
 
 /// <summary>
 /// Where the SQL Server tests connect. Defaults to a local SQL Express with Windows authentication. CI points them at a
-/// Docker container with DBGATEWAY_TEST_SQLSERVER (host or host,port), DBGATEWAY_TEST_SQLSERVER_USER and _PASSWORD
-/// (SQL authentication). With DBGATEWAY_REQUIRE_SQLSERVER=true an unreachable server fails the tests instead of skipping
+/// Docker container with DBDATAKIT_TEST_MSSQL_SERVER (host or host,port), DBDATAKIT_TEST_MSSQL_USER and _PASSWORD
+/// (SQL authentication). With DBDATAKIT_TEST_REQUIRE_SQLSERVER=true an unreachable server fails the tests instead of skipping
 /// them, so CI cannot go green without really running them.
 /// </summary>
 public static class SqlServerEnv
 {
-    public static readonly string Server = Environment.GetEnvironmentVariable("DBGATEWAY_TEST_SQLSERVER") ?? @".\SQLEXPRESS";
-    public static readonly string? User = Environment.GetEnvironmentVariable("DBGATEWAY_TEST_SQLSERVER_USER");
-    public static readonly string? Password = Environment.GetEnvironmentVariable("DBGATEWAY_TEST_SQLSERVER_PASSWORD");
+    public static readonly string Server = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_MSSQL_SERVER") ?? @".\SQLEXPRESS";
+    public static readonly string? User = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_MSSQL_USER");
+    public static readonly string? Password = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_MSSQL_PASSWORD");
 
     public static bool Required =>
-        string.Equals(Environment.GetEnvironmentVariable("DBGATEWAY_REQUIRE_SQLSERVER"), "true", StringComparison.OrdinalIgnoreCase);
+        string.Equals(Environment.GetEnvironmentVariable("DBDATAKIT_TEST_REQUIRE_SQLSERVER"), "true", StringComparison.OrdinalIgnoreCase);
 
     public static bool UsesSqlAuthentication => !string.IsNullOrEmpty(User);
 

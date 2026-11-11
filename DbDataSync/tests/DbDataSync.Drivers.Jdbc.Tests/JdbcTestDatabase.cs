@@ -12,11 +12,11 @@ namespace DbDataSync.Drivers.Jdbc.Tests;
 public sealed class JdbcTestDatabase : IAsyncLifetime
 {
     public static string ServerConnectionString { get; } =
-        Environment.GetEnvironmentVariable("DBDATASYNC_TEST_POSTGRES_SERVER")
+        Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES_LOGICAL")
         ?? "Host=localhost;Port=15432;Username=dbdatasync;Password=DbDataSync_Test_Pw1;Database=postgres";
 
     public static string JdbcUrl { get; } =
-        Environment.GetEnvironmentVariable("DBDATASYNC_TEST_POSTGRES_JDBC_URL")
+        Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES_LOGICAL_JDBC_URL")
         ?? "jdbc:postgresql://localhost:15432/";
 
     public string DatabaseName { get; } = $"dbdatasync_jdbc_test_{Guid.NewGuid():N}";

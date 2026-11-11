@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import pg from 'pg'
 
 // Plan 29b, C06: a real DbDataStore server is paired with the console, a PostgreSQL state connection is added and tested, the server is put into maintenance and moved onto it through the wizard, and after this test restarts the server
-// the panel shows the new engine. Needs a PostgreSQL to make a fresh database on (`DBDATA_E2E_PG`, an Npgsql connection string to any database of it with the right to create one; CI starts one). The Store is started and restarted by the test itself
+// the panel shows the new engine. Needs a PostgreSQL to make a fresh database on (`DBDATAKIT_TEST_E2E_PG`, an Npgsql connection string to any database of it with the right to create one; CI starts one). The Store is started and restarted by the test itself
 // (a restart is what the move asks the operator for), in a directory of its own. The console is the one of playwright.config.ts (its directory is the same temporary folder).
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
 const consoleDll = path.join(repoRoot, 'DbDataConsole/src/DbDataConsole.Server/bin/Debug/net10.0/dbdatakit.dll')
@@ -17,7 +17,7 @@ const scratchDirectory = process.env.DBDATAKIT_E2E_CONSOLE_DIR ?? path.join(os.t
 const storeDirectory = path.join(os.tmpdir(), 'dbdatakit-console-e2e-state-store')
 const storePort = Number(process.env.DBDATAKIT_E2E_STATE_STORE_PORT ?? 8495)
 const storeUrl = `https://localhost:${storePort}`
-const admin = process.env.DBDATA_E2E_PG
+const admin = process.env.DBDATAKIT_TEST_E2E_PG
 const storeName = 'Store state e2e'
 const connectionName = 'e2e-state-pg'
 
@@ -77,7 +77,7 @@ async function signInNewAdmin(page: Page, context: BrowserContext, baseURL: stri
 }
 
 test.describe.serial('moving a server\'s state from the console', () => {
-  test.skip(!admin, 'set DBDATA_E2E_PG to a PostgreSQL connection string that may create a database')
+  test.skip(!admin, 'set DBDATAKIT_TEST_E2E_PG to a PostgreSQL connection string that may create a database')
   test.setTimeout(240_000)
 
   const database = `c06_e2e_${Math.random().toString(36).slice(2, 10)}`

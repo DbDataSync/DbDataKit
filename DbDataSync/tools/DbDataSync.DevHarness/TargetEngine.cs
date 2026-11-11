@@ -11,7 +11,7 @@ namespace DbDataSync.DevHarness;
 /// what makes the incremental story demonstrable, and no other engine in scope has an equivalent yet.
 /// <para>
 /// Selected with <c>--target-engine postgres</c>, or by setting
-/// <c>DBDATASYNC_HARNESS_TARGET_ENGINE</c> once so every subsequent verb agrees without repeating the
+/// <c>DBDATAKIT_TEST_HARNESS_TARGET_ENGINE</c> once so every subsequent verb agrees without repeating the
 /// flag — <c>verify</c> and <c>drift</c> have to reach the same target <c>up</c> configured, and a
 /// flag silently forgotten on one of them reports a difference that is really a misconfiguration.
 /// </para>
@@ -24,7 +24,7 @@ public abstract class TargetEngine
     public static TargetEngine Resolve(HarnessArgs args)
     {
         var name = args.String("target-engine")
-            ?? Environment.GetEnvironmentVariable("DBDATASYNC_HARNESS_TARGET_ENGINE")
+            ?? Environment.GetEnvironmentVariable("DBDATAKIT_TEST_HARNESS_TARGET_ENGINE")
             ?? "mssql";
 
         return name.ToLowerInvariant() switch

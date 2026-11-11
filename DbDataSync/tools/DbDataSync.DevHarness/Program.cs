@@ -247,7 +247,7 @@ static void PrintUsage()
           columns cycling through string/decimal/int/bool/date, and UpdatedAtUtc — so table 1 is three
           columns wide and table 20 is twenty-two, and every representative type gets exercised. There
           is no relational structure between them. Every verb needs the same N, so set
-          DBDATASYNC_HARNESS_TABLES once rather than passing the flag each time: `verify` looking for
+          DBDATAKIT_TEST_HARNESS_TABLES once rather than passing the flag each time: `verify` looking for
           tables `up` never created reports a difference that is really a forgotten flag.
 
           `workload --parallelism P` splits the tables into P groups, each on its own connection,
@@ -259,14 +259,13 @@ static void PrintUsage()
           The source is always SQL Server — Change Tracking is what makes the incremental story
           demonstrable. With --target-engine postgres the replication runs BatchReload/StagingTable/
           DeleteInsert instead, because a non-SQL-Server target has no upsert writer yet, so it
-          reloads rather than applying changes. Set DBDATASYNC_HARNESS_TARGET_ENGINE once instead of
+          reloads rather than applying changes. Set DBDATAKIT_TEST_HARNESS_TARGET_ENGINE once instead of
           passing the flag to every verb — `verify` and `drift` must agree with what `up` configured.
 
         Environment:
-          DBKIT_TEST_PASSWORD               password of the shared test engines in testenv/ (SQL Server's sa, PostgreSQL's dbdatasync);
-                                            default DbKit_Test_Pw1. DBDATASYNC_MSSQL_SA_PASSWORD and DBDATASYNC_POSTGRES_PASSWORD are
-                                            retired and refused.
-          DBDATASYNC_HARNESS_TARGET_ENGINE  mssql (default) or postgres
-          DBDATASYNC_HARNESS_TABLES         how many tables to generate (default 1)
+          DBDATAKIT_TEST_PASSWORD               password of the shared test engines in testenv/ (SQL Server's sa, PostgreSQL's dbdatasync);
+                                            default DbKit_Test_Pw1.
+          DBDATAKIT_TEST_HARNESS_TARGET_ENGINE  mssql (default) or postgres
+          DBDATAKIT_TEST_HARNESS_TABLES         how many tables to generate (default 1)
         """);
 }

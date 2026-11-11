@@ -592,7 +592,7 @@ dotnet test            # unit + end-to-end tests (DuckDB; SQL Server tests skip 
 ```
 
 The tests publish the 32-bit worker on demand into `artifacts/worker-x86` and use the 32-bit-only Microsoft Text ODBC
-driver to prove queries really run in a 32-bit process. Set `DBGATEWAY_TEST_SQLSERVER` to point the SQL Server tests at
+driver to prove queries really run in a 32-bit process. Set `DBDATAKIT_TEST_MSSQL_SERVER` to point the SQL Server tests at
 another instance (Windows authentication).
 
 Layout: the shared `DbDataKit.*` packages (ODBC catalog, Connections providers, ...; project references into the hub while the adoption pass is offline), `src/DbDataGateway.Core` (Arrow conversion, ADO.NET executor, client, worker protocol),

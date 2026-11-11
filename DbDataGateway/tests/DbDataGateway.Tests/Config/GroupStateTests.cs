@@ -94,11 +94,11 @@ public sealed class GroupStateTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData("mssql", "DBKIT_TEST_MSSQL")]
-    [InlineData("postgres", "DBKIT_TEST_POSTGRES")]
+    [InlineData("mssql", "DBDATAKIT_TEST_MSSQL")]
+    [InlineData("postgres", "DBDATAKIT_TEST_POSTGRES")]
     public async Task Two_instances_on_a_server_state_share_sessions_and_audit_and_one_with_another_key_refuses_to_start(string engine, string variable)
     {
-        var server = Environment.GetEnvironmentVariable(variable) ?? Environment.GetEnvironmentVariable(engine == "mssql" ? "DBDATA_TEST_SQLSERVER" : "DBDATA_TEST_POSTGRES");
+        var server = Environment.GetEnvironmentVariable(variable) ?? Environment.GetEnvironmentVariable(engine == "mssql" ? "DBDATAKIT_TEST_SQLSERVER" : "DBDATAKIT_TEST_POSTGRES");
         if (server is null) Assert.Skip($"set {variable} to run on {engine}");
 
         var name = $"dbgateway_group_{Guid.NewGuid():N}";
@@ -178,7 +178,7 @@ public sealed class GroupStateTests : IAsyncLifetime
     /// <summary>A scratch database on <paramref name="engine"/>'s server, the state arguments that name it, and its removal; null (the test skipped) when the engine is not set up.</summary>
     private static (string[] State, Action Drop) ScratchState(string engine, string variable)
     {
-        var server = Environment.GetEnvironmentVariable(variable) ?? Environment.GetEnvironmentVariable(engine == "mssql" ? "DBDATA_TEST_SQLSERVER" : "DBDATA_TEST_POSTGRES");
+        var server = Environment.GetEnvironmentVariable(variable) ?? Environment.GetEnvironmentVariable(engine == "mssql" ? "DBDATAKIT_TEST_SQLSERVER" : "DBDATAKIT_TEST_POSTGRES");
         if (server is null) Assert.Skip($"set {variable} to run on {engine}");
         var name = $"dbgateway_group_{Guid.NewGuid():N}";
         void Admin(string sql)
@@ -237,8 +237,8 @@ public sealed class GroupStateTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData("mssql", "DBKIT_TEST_MSSQL")]
-    [InlineData("postgres", "DBKIT_TEST_POSTGRES")]
+    [InlineData("mssql", "DBDATAKIT_TEST_MSSQL")]
+    [InlineData("postgres", "DBDATAKIT_TEST_POSTGRES")]
     public async Task Two_instances_on_a_server_state_serve_one_identity_home_whichever_one_a_browser_or_console_reaches(string engine, string variable)
     {
         // plan 20 O02b: nothing a sign-in or a management call holds between two requests is one instance's
@@ -363,8 +363,8 @@ public sealed class GroupStateTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData("mssql", "DBKIT_TEST_MSSQL")]
-    [InlineData("postgres", "DBKIT_TEST_POSTGRES")]
+    [InlineData("mssql", "DBDATAKIT_TEST_MSSQL")]
+    [InlineData("postgres", "DBDATAKIT_TEST_POSTGRES")]
     public async Task A_model_published_through_one_instance_is_served_by_every_one_and_by_one_started_after_the_publisher_stopped(string engine, string variable)
     {
         // plan 20 O03: the published definitions are the group's; each instance follows them and keeps the last version it could load
@@ -466,8 +466,8 @@ public sealed class GroupStateTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData("mssql", "DBKIT_TEST_MSSQL")]
-    [InlineData("postgres", "DBKIT_TEST_POSTGRES")]
+    [InlineData("mssql", "DBDATAKIT_TEST_MSSQL")]
+    [InlineData("postgres", "DBDATAKIT_TEST_POSTGRES")]
     public async Task A_console_pairs_once_through_any_instance_of_a_group_and_every_instance_is_that_server_with_one_certificate(string engine, string variable)
     {
         // plan 20 O04: the group's instance id, paired clients, pairing codes and self-signed certificate are in its state
@@ -529,8 +529,8 @@ public sealed class GroupStateTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData("mssql", "DBKIT_TEST_MSSQL")]
-    [InlineData("postgres", "DBKIT_TEST_POSTGRES")]
+    [InlineData("mssql", "DBDATAKIT_TEST_MSSQL")]
+    [InlineData("postgres", "DBDATAKIT_TEST_POSTGRES")]
     public async Task A_semantic_package_a_build_server_deploys_once_through_one_instance_is_served_by_every_instance(string engine, string variable)
     {
         // plan 20 O04: the login, the data source and the model a publishing client sends through one instance are the group's
@@ -627,8 +627,8 @@ public sealed class GroupStateTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData("mssql", "DBKIT_TEST_MSSQL")]
-    [InlineData("postgres", "DBKIT_TEST_POSTGRES")]
+    [InlineData("mssql", "DBDATAKIT_TEST_MSSQL")]
+    [InlineData("postgres", "DBDATAKIT_TEST_POSTGRES")]
     public async Task A_rule_a_store_server_publishes_is_enforced_by_every_instance_of_the_group(string engine, string variable)
     {
         // plan 20 O10: the master data models a DbDataStore server publishes, with their rules, are the group's; each instance loads the version published and keeps the last one it could
@@ -774,8 +774,8 @@ public sealed class GroupStateTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData("mssql", "DBKIT_TEST_MSSQL")]
-    [InlineData("postgres", "DBKIT_TEST_POSTGRES")]
+    [InlineData("mssql", "DBDATAKIT_TEST_MSSQL")]
+    [InlineData("postgres", "DBDATAKIT_TEST_POSTGRES")]
     public async Task The_store_module_reads_and_writes_master_data_through_any_instance_with_no_store_server_running(string engine, string variable)
     {
         // plan 20 O08a: the serving layer's store module, called with identity home tokens, reads and writes through the model the store's server published; that server is not running here at all
@@ -890,8 +890,8 @@ public sealed class GroupStateTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData("mssql", "DBKIT_TEST_MSSQL")]
-    [InlineData("postgres", "DBKIT_TEST_POSTGRES")]
+    [InlineData("mssql", "DBDATAKIT_TEST_MSSQL")]
+    [InlineData("postgres", "DBDATAKIT_TEST_POSTGRES")]
     public async Task An_app_reads_and_writes_the_groups_published_model_through_the_apps_host_with_no_store_module_or_store_server(string engine, string variable)
     {
         // plan 20 O08c: the apps host answers an app's data calls from the model published to the group, in its own process; no store module listens and no DbDataStore server runs

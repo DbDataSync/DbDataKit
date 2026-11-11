@@ -15,7 +15,7 @@ Imported on 2026-10-27 from `DbDataSync/QueryIntentSpec` at `cddca24` (`qis/docs
 | `Qis.Engine/SqlServerExecutor.cs` | **not imported**: replaced by `DbDataKit.Semantic.Connections` (J03) |
 | `Qis.Engine/Extraction/Extractor.cs` | `DbDataKit.Semantic.Extraction` |
 | `qis/dotnet/src/Qis.Ssas` | `DbDataKit.Semantic.Ssas` |
-| `qis/dotnet/tests/Qis.Conformance/*.cs` (11 files, 503 tests) | `DbDataKit.Semantic.Tests`, all 11, the same count per class; the SQL Server and SSAS switches (`QIS_SQLSERVER`, `QIS_SSAS`) became `EngineConformanceTests` over the shared engines (`DBDATA_TEST_SQLSERVER`, `DBDATA_TEST_POSTGRES`, `DBDATA_TEST_SSAS`) |
+| `qis/dotnet/tests/Qis.Conformance/*.cs` (11 files, 503 tests) | `DbDataKit.Semantic.Tests`, all 11, the same count per class; the SQL Server and SSAS switches (`QIS_SQLSERVER`, `QIS_SSAS`) became `EngineConformanceTests` over the shared engines (`DBDATAKIT_TEST_SQLSERVER`, `DBDATAKIT_TEST_POSTGRES`, `DBDATAKIT_TEST_SSAS`) |
 | `qis/fixtures/` (321 files), `view-fixtures/` (25), `extraction-fixtures/` (12) | `.../Semantic.Tests/conformance/`, identical |
 | `qis/catalog/catalog.yaml`, `qis/data/seed*.sql` | `.../conformance/catalog`, `.../conformance/data`, identical |
 | `qis/ssas/model.tmsl.json` | `.../conformance/ssas/` |

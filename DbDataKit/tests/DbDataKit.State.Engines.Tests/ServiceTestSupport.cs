@@ -9,8 +9,8 @@ using Npgsql;
 namespace DbDataKit.State.Tests;
 
 /// <summary>
-/// Scratch databases for the snapshot-service tests: SQLite files always, and a scratch database on SQL Server and PostgreSQL when the shared engines are up (<c>DBDATA_TEST_SQLSERVER</c>,
-/// <c>DBDATA_TEST_POSTGRES</c>). A server endpoint's connection string holds a <b>secret reference</b> (<c>Password=secret:...</c>) and the resolver gives the real password, so every test also shows that the value
+/// Scratch databases for the snapshot-service tests: SQLite files always, and a scratch database on SQL Server and PostgreSQL when the shared engines are up (<c>DBDATAKIT_TEST_SQLSERVER</c>,
+/// <c>DBDATAKIT_TEST_POSTGRES</c>). A server endpoint's connection string holds a <b>secret reference</b> (<c>Password=secret:...</c>) and the resolver gives the real password, so every test also shows that the value
 /// does not leak.
 /// </summary>
 public sealed class ServiceScratch : IDisposable
@@ -52,8 +52,8 @@ public sealed class ServiceScratch : IDisposable
 
     public static string? Server(string engine) => engine switch
     {
-        "mssql" => Environment.GetEnvironmentVariable("DBDATA_TEST_SQLSERVER"),
-        "postgres" => Environment.GetEnvironmentVariable("DBDATA_TEST_POSTGRES"),
+        "mssql" => Environment.GetEnvironmentVariable("DBDATAKIT_TEST_SQLSERVER"),
+        "postgres" => Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES"),
         _ => null,
     };
 
@@ -66,8 +66,8 @@ public sealed class ServiceScratch : IDisposable
         var server = Server(engine);
         if (server is null)
         {
-            Assert.False(string.Equals(Environment.GetEnvironmentVariable(engine == "mssql" ? "DBDATA_REQUIRE_SQLSERVER" : "DBDATA_REQUIRE_POSTGRES"), "true", StringComparison.OrdinalIgnoreCase), $"{engine} is required but its DBDATA_TEST_* variable is not set");
-            Assert.Skip($"set DBDATA_TEST_{(engine == "mssql" ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
+            Assert.False(string.Equals(Environment.GetEnvironmentVariable(engine == "mssql" ? "DBDATAKIT_TEST_REQUIRE_SQLSERVER" : "DBDATAKIT_TEST_REQUIRE_POSTGRES"), "true", StringComparison.OrdinalIgnoreCase), $"{engine} is required but its DBDATAKIT_TEST_* variable is not set");
+            Assert.Skip($"set DBDATAKIT_TEST_{(engine == "mssql" ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
         }
 
         var name = $"dbdatakit_svc_{Guid.NewGuid():N}";

@@ -5,7 +5,7 @@ namespace DbDataKit.Metadata.Tests;
 
 /// <summary>
 /// Live-engine tests, skipped unless an environment variable names a server:
-/// <c>DBDATA_METADATA_ODBC</c> (an ODBC connection string), <c>DBDATA_METADATA_SQLSERVER</c> and <c>DBDATA_METADATA_POSTGRES</c> (ADO.NET connection strings; the provider
+/// <c>DBDATAKIT_TEST_METADATA_ODBC</c> (an ODBC connection string), <c>DBDATAKIT_TEST_METADATA_SQLSERVER</c> and <c>DBDATAKIT_TEST_METADATA_POSTGRES</c> (ADO.NET connection strings; the provider
 /// factory must be registered in this process, which needs a provider package this repo does not reference, so these skip with a note until one is added to the test project).
 /// </summary>
 public class LiveTests
@@ -15,8 +15,8 @@ public class LiveTests
     [Fact]
     public async Task Odbc_crawl_and_describe_against_a_real_driver()
     {
-        string? connectionString = Env("DBDATA_METADATA_ODBC");
-        Assert.SkipUnless(connectionString is not null, "Set DBDATA_METADATA_ODBC to an ODBC connection string");
+        string? connectionString = Env("DBDATAKIT_TEST_METADATA_ODBC");
+        Assert.SkipUnless(connectionString is not null, "Set DBDATAKIT_TEST_METADATA_ODBC to an ODBC connection string");
 
         using var probe = new System.Data.Odbc.OdbcConnection(connectionString);
         await using var reader = await OdbcCatalogReader.OpenAsync(connectionString!, probeConnection: probe);
@@ -32,8 +32,8 @@ public class LiveTests
     }
 
     [Theory]
-    [InlineData("DBDATA_METADATA_SQLSERVER", "DBDATA_METADATA_SQLSERVER_PROVIDER", "Microsoft.Data.SqlClient", "sqlserver")]
-    [InlineData("DBDATA_METADATA_POSTGRES", "DBDATA_METADATA_POSTGRES_PROVIDER", "Npgsql", "postgres")]
+    [InlineData("DBDATAKIT_TEST_METADATA_SQLSERVER", "DBDATAKIT_TEST_METADATA_SQLSERVER_PROVIDER", "Microsoft.Data.SqlClient", "sqlserver")]
+    [InlineData("DBDATAKIT_TEST_METADATA_POSTGRES", "DBDATAKIT_TEST_METADATA_POSTGRES_PROVIDER", "Npgsql", "postgres")]
     public async Task Provider_readers_against_a_real_server(string connectionVariable, string providerVariable, string defaultProvider, string engine)
     {
         string? connectionString = Env(connectionVariable);

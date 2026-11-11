@@ -156,10 +156,10 @@ public class ChainedReaderTests
     }
 }
 
-/// <summary>Live tests: skipped unless DBDATA_TEST_SQLSERVER holds a connection string to a scratch database.</summary>
+/// <summary>Live tests: skipped unless DBDATAKIT_TEST_SQLSERVER holds a connection string to a scratch database.</summary>
 public class SqlServerLiveTests
 {
-    private static string? ConnectionString => Environment.GetEnvironmentVariable("DBDATA_TEST_SQLSERVER");
+    private static string? ConnectionString => Environment.GetEnvironmentVariable("DBDATAKIT_TEST_SQLSERVER");
 
     private static async Task<ConformanceEngine> EngineAsync(CancellationToken ct)
     {
@@ -198,7 +198,7 @@ public class SqlServerLiveTests
     [MemberData(nameof(ScopedNames))]
     public async Task Caller_supplied_quoting_and_markers_conform_on_sql_server(string name)
     {
-        Assert.SkipUnless(ConnectionString is not null, "set DBDATA_TEST_SQLSERVER to run");
+        Assert.SkipUnless(ConnectionString is not null, "set DBDATAKIT_TEST_SQLSERVER to run");
         var engine = (await EngineAsync(TestContext.Current.CancellationToken)) with { Syntax = CallerSyntax() };
         var c = StrategyCases.All.Single(x => x.Name == name);
         var result = await ConformanceRunner.RunAsync(engine, c, TestContext.Current.CancellationToken);
@@ -209,7 +209,7 @@ public class SqlServerLiveTests
     [MemberData(nameof(Names))]
     public async Task Strategy_conformance_on_sql_server(string name)
     {
-        Assert.SkipUnless(ConnectionString is not null, "set DBDATA_TEST_SQLSERVER to run");
+        Assert.SkipUnless(ConnectionString is not null, "set DBDATAKIT_TEST_SQLSERVER to run");
         var engine = await EngineAsync(TestContext.Current.CancellationToken);
         var c = StrategyCases.All.Single(x => x.Name == name);
         var result = await ConformanceRunner.RunAsync(engine, c, TestContext.Current.CancellationToken);
@@ -219,7 +219,7 @@ public class SqlServerLiveTests
     [Fact]
     public async Task Bulk_copy_streams_many_batches_into_a_table()
     {
-        Assert.SkipUnless(ConnectionString is not null, "set DBDATA_TEST_SQLSERVER to run");
+        Assert.SkipUnless(ConnectionString is not null, "set DBDATAKIT_TEST_SQLSERVER to run");
         var ct = TestContext.Current.CancellationToken;
         var d = DialectCatalog.For(EngineId.SqlServer);
         var schema = new TransferSchema([new("id", CanonicalType.Of(CanonicalKind.Int32)), new("name", CanonicalType.String(20)), new("day", CanonicalType.Of(CanonicalKind.Date)), new("tiny", new CanonicalType(CanonicalKind.Int8, Unsigned: true))]);

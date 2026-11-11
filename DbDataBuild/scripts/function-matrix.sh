@@ -8,10 +8,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 OUT="${1:-docs/research}"
-if [ -z "${DBDATABUILD_TEST_MSSQL:-}" ] || [ -z "${DBDATABUILD_TEST_PG:-}" ]; then
+if [ -z "${DBDATAKIT_TEST_MSSQL:-}" ] || [ -z "${DBDATAKIT_TEST_POSTGRES:-}" ]; then
   eval "$(../testenv/testenv.sh env dbdatabuild)"
 fi
-[ -n "${DBDATABUILD_TEST_MSSQL:-}" ] && [ -n "${DBDATABUILD_TEST_PG:-}" ] || { echo "start the engines first: testenv/testenv.sh up mssql postgres" >&2; exit 1; }
+[ -n "${DBDATAKIT_TEST_MSSQL:-}" ] && [ -n "${DBDATAKIT_TEST_POSTGRES:-}" ] || { echo "start the engines first: testenv/testenv.sh up mssql postgres" >&2; exit 1; }
 mkdir -p "$OUT"
 DDB_FUNCTION_MATRIX_OUT="$(cd "$OUT" && pwd)" dotnet test tests/DbDataBuild.Tests.Conformance --filter "FullyQualifiedName~FunctionMatrixRun" --logger "console;verbosity=normal"
 if [ -z "${DDB_FUNCTION_MATRIX_ONLY:-}" ]; then

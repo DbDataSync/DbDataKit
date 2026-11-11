@@ -51,19 +51,19 @@ public abstract class MySqlFamilyTestDatabase : IAsyncLifetime
 }
 
 /// <summary>Points at the local <c>mysql</c> Docker container from testenv/ by default;
-/// override via DBDATASYNC_TEST_MYSQL_SERVER.</summary>
+/// override via DBDATAKIT_TEST_MYSQL.</summary>
 public sealed class MySqlTestDatabase : MySqlFamilyTestDatabase
 {
     protected override string ServerConnectionString { get; } =
-        Environment.GetEnvironmentVariable("DBDATASYNC_TEST_MYSQL_SERVER")
+        Environment.GetEnvironmentVariable("DBDATAKIT_TEST_MYSQL")
         ?? "Server=localhost;Port=13306;UserID=root;Password=DbDataSync_Test_Pw1;AllowUserVariables=true;";
 }
 
 /// <summary>Points at the local <c>mariadb</c> Docker container from testenv/ by default;
-/// override via DBDATASYNC_TEST_MARIADB_SERVER.</summary>
+/// override via DBDATAKIT_TEST_MARIADB.</summary>
 public sealed class MariaDbTestDatabase : MySqlFamilyTestDatabase
 {
     protected override string ServerConnectionString { get; } =
-        Environment.GetEnvironmentVariable("DBDATASYNC_TEST_MARIADB_SERVER")
+        Environment.GetEnvironmentVariable("DBDATAKIT_TEST_MARIADB")
         ?? "Server=localhost;Port=13307;UserID=root;Password=DbDataSync_Test_Pw1;AllowUserVariables=true;";
 }

@@ -165,13 +165,22 @@ public sealed class SuiteEnvironmentTests
     }
 
     [Fact]
-    public void The_prefix_rules_are_the_four_of_plan_33_and_leave_the_variables_of_tests_to_SC31b()
+    public void The_prefix_rules_are_the_four_of_plan_33_and_have_no_exception_for_the_variables_of_tests()
     {
         Assert.Equal(["DBDATA_SECRET_", "DBDATA_BUILD_", "DBGATEWAY_", "DBPROXY_"], SuiteEnvironment.OldPrefixes.Select(r => r.Prefix));
         foreach (var rule in SuiteEnvironment.OldPrefixes) Assert.StartsWith("DBDATAKIT_", rule.NewPrefix);
 
+        // SC31b: the variables of tests are DBDATAKIT_TEST_*, so a leftover DBGATEWAY_TEST_ or DBPROXY_ one is refused like any other (a CI machine or a shell
+        // that still sets an old test variable of another family, DBDATA_TEST_ or DBKIT_TEST_, has an unused variable, which nothing refuses)
         foreach (var test in new[] { "DBGATEWAY_TEST_SQLSERVER", "DBGATEWAY_E2E_ADDRESS", "DBGATEWAY_REQUIRE_POSTGRES", "DBGATEWAY_LIVE_USER", "DBGATEWAY_UPDATE_GOLDEN", "DBGATEWAY_ADMIN_TESTS", "DBPROXY_TEST_SQLSERVER_PASSWORD" })
-            Assert.Null(SuiteEnvironment.OldNameProblem(Env((test, "x")), () => [test]));
+        {
+            var problem = SuiteEnvironment.OldNameProblem(Env((test, "x")), () => [test]);
+            Assert.NotNull(problem);
+            Assert.Contains(test, problem);
+            Assert.Contains("DBDATAKIT_" + test[(test.IndexOf('_') + 1)..], problem);
+        }
+        Assert.Null(SuiteEnvironment.OldNameProblem(Env(("DBDATAKIT_TEST_SQLSERVER", "x"), ("DBDATAKIT_TEST_REQUIRE_POSTGRES", "x")), () => ["DBDATAKIT_TEST_SQLSERVER", "DBDATAKIT_TEST_REQUIRE_POSTGRES"]));
+        Assert.Null(SuiteEnvironment.OldNameProblem(Env(("DBDATA_TEST_SQLSERVER", "x"), ("DBKIT_TEST_MSSQL", "x"), ("DBDATA_REQUIRE_POSTGRES", "x")), () => ["DBDATA_TEST_SQLSERVER", "DBKIT_TEST_MSSQL", "DBDATA_REQUIRE_POSTGRES"]));
         // the prefix alone is not a variable of the family, and a name that only contains it is not one
         Assert.Null(SuiteEnvironment.OldNameProblem(Env(("DBGATEWAY_", "x"), ("X_DBGATEWAY_Y", "x")), () => ["DBGATEWAY_", "X_DBGATEWAY_Y"]));
         // the new spellings are never refused

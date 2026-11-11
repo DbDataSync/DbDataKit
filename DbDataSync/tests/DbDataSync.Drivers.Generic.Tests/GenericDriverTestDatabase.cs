@@ -17,7 +17,7 @@ public sealed class GenericDriverTestDatabase : IAsyncLifetime
     public static string Password { get; } = TestSupport.TestEngines.Postgres.Password;
 
     private static string ServerConnectionString =>
-        Environment.GetEnvironmentVariable("DBDATASYNC_TEST_POSTGRES_SERVER")
+        Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES_LOGICAL")
         ?? $"Host={Host};Port={Port};Username={User};Password={Password};Database=postgres";
 
     public string DatabaseName { get; } = $"dbdatasync_generic_test_{Guid.NewGuid():N}";

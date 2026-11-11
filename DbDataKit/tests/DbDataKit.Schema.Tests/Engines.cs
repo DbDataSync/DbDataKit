@@ -7,8 +7,8 @@ using Npgsql;
 namespace DbDataKit.Schema.Tests;
 
 /// <summary>
-/// A throwaway database per test on the shared engines (<c>testenv/testenv.sh up mssql postgres</c>, then <c>eval "$(testenv/testenv.sh env dbdatakit)"</c>): <c>DBDATA_TEST_SQLSERVER</c> and <c>DBDATA_TEST_POSTGRES</c> name a server. An engine
-/// whose variable is not set skips its rows, unless <c>DBDATA_REQUIRE_SQLSERVER</c> / <c>DBDATA_REQUIRE_POSTGRES</c> is <c>true</c>, which fails them instead.
+/// A throwaway database per test on the shared engines (<c>testenv/testenv.sh up mssql postgres</c>, then <c>eval "$(testenv/testenv.sh env dbdatakit)"</c>): <c>DBDATAKIT_TEST_SQLSERVER</c> and <c>DBDATAKIT_TEST_POSTGRES</c> name a server. An engine
+/// whose variable is not set skips its rows, unless <c>DBDATAKIT_TEST_REQUIRE_SQLSERVER</c> / <c>DBDATAKIT_TEST_REQUIRE_POSTGRES</c> is <c>true</c>, which fails them instead.
 /// </summary>
 public sealed class Engines : IAsyncDisposable
 {
@@ -23,18 +23,18 @@ public sealed class Engines : IAsyncDisposable
     public required DbConnection Connection { get; init; }
     public ShapeEngine Shape => Engine == SqlServer ? ShapeEngine.SqlServer : ShapeEngine.Postgres;
 
-    private static string? Server(string engine) => Environment.GetEnvironmentVariable(engine == SqlServer ? "DBDATA_TEST_SQLSERVER" : "DBDATA_TEST_POSTGRES");
+    private static string? Server(string engine) => Environment.GetEnvironmentVariable(engine == SqlServer ? "DBDATAKIT_TEST_SQLSERVER" : "DBDATAKIT_TEST_POSTGRES");
 
     private static bool Required(string engine) =>
-        string.Equals(Environment.GetEnvironmentVariable(engine == SqlServer ? "DBDATA_REQUIRE_SQLSERVER" : "DBDATA_REQUIRE_POSTGRES"), "true", StringComparison.OrdinalIgnoreCase);
+        string.Equals(Environment.GetEnvironmentVariable(engine == SqlServer ? "DBDATAKIT_TEST_REQUIRE_SQLSERVER" : "DBDATAKIT_TEST_REQUIRE_POSTGRES"), "true", StringComparison.OrdinalIgnoreCase);
 
     public static async Task<Engines> OpenAsync(string engine)
     {
         var server = Server(engine);
         if (server is null)
         {
-            Assert.False(Required(engine), $"{engine} is required but its DBDATA_TEST_* variable is not set");
-            Assert.Skip($"set DBDATA_TEST_{(engine == SqlServer ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
+            Assert.False(Required(engine), $"{engine} is required but its DBDATAKIT_TEST_* variable is not set");
+            Assert.Skip($"set DBDATAKIT_TEST_{(engine == SqlServer ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
         }
 
         var name = $"dbdatakit_schema_{Guid.NewGuid():N}";

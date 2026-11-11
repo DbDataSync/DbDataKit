@@ -14,7 +14,7 @@ namespace DbDataSync.Drivers.Generic.Tests;
 public sealed class QueryCatalogTests : IAsyncLifetime
 {
     private static string ServerConnectionString =>
-        Environment.GetEnvironmentVariable("DBDATASYNC_TEST_POSTGRES_SERVER")
+        Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES_LOGICAL")
         ?? "Host=localhost;Port=15432;Username=dbdatasync;Password=DbDataSync_Test_Pw1;Database=postgres";
 
     private readonly string _tableName = $"query_catalog_spike_{Guid.NewGuid():N}";

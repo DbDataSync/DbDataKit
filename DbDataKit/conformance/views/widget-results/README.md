@@ -13,7 +13,7 @@ A text widget has no file (the resolver also gives its substituted text, but the
 resolver or the sample, from `DbDataKit/`:
 
 ```
-DBDATA_REGENERATE_WIDGET_RESULTS=1 dotnet test --project tests/DbDataKit.Views.Tests --filter-class DbDataKit.Views.Tests.ResolveTests
+DBDATAKIT_TEST_REGENERATE_WIDGET_RESULTS=1 dotnet test --project tests/DbDataKit.Views.Tests --filter-class DbDataKit.Views.Tests.ResolveTests
 ```
 
 then run the `@dbdatakit/visuals` tests (`npx vitest run -u` rewrites the snapshots that draw them) and commit the files and the snapshots together. The console's M4 story shows real rows instead.

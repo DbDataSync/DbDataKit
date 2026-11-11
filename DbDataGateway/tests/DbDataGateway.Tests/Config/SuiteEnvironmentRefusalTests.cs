@@ -64,6 +64,9 @@ public sealed class GatewayPrefixRefusalTests
     [Theory]
     [InlineData("DBGATEWAY_Gateway__Management__Port", "DBDATAKIT_Gateway__Management__Port")]
     [InlineData("DBPROXY_Proxy__Listen__Port", "DBDATAKIT_Gateway__Listen__Port")]
+    // SC31b: the test variables have no exception any more; a leftover one is refused like the rest
+    [InlineData("DBGATEWAY_TEST_SQLSERVER", "DBDATAKIT_TEST_SQLSERVER")]
+    [InlineData("DBGATEWAY_REQUIRE_POSTGRES", "DBDATAKIT_REQUIRE_POSTGRES")]
     public async Task A_setting_with_an_old_prefix_stops_the_gateway_naming_the_new_name(string old, string replacement)
     {
         using var env = new EnvScope((old, "9000"));

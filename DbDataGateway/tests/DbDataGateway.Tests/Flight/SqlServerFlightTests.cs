@@ -259,7 +259,7 @@ public sealed class SqlServerFlightTests : IAsyncLifetime
     [Fact]
     public async Task Database_credentials_pass_through_to_the_server()
     {
-        Assert.SkipUnless(SqlServerEnv.UsesSqlAuthentication, "Needs SQL authentication credentials (DBGATEWAY_TEST_SQLSERVER_USER).");
+        Assert.SkipUnless(SqlServerEnv.UsesSqlAuthentication, "Needs SQL authentication credentials (DBDATAKIT_TEST_MSSQL_USER).");
 
         using (var good = await LoginAsync(SqlServerEnv.User!, SqlServerEnv.Password!))
         {

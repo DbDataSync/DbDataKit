@@ -32,11 +32,11 @@ public sealed class DescriptorDriverTests : IClassFixture<DescriptorDriverApiFac
     };
 
     private static string MsSqlServerConnectionString =>
-        Environment.GetEnvironmentVariable("DBDATASYNC_TEST_MSSQL_SERVER")
+        Environment.GetEnvironmentVariable("DBDATAKIT_TEST_MSSQL")
         ?? "Data Source=localhost,14330;User ID=sa;Password=DbDataSync_Test_Pw1;TrustServerCertificate=True";
 
     private static string MySqlServerConnectionString =>
-        Environment.GetEnvironmentVariable("DBDATASYNC_TEST_MYSQL_SERVER")
+        Environment.GetEnvironmentVariable("DBDATAKIT_TEST_MYSQL")
         ?? "Host=localhost;Port=13306;User Id=root;Password=DbDataSync_Test_Pw1;Connect Timeout=30";
 
     private readonly DescriptorDriverApiFactory _factory;

@@ -7,13 +7,13 @@ namespace DbDataSync.Drivers.MsSql.Tests;
 /// <summary>
 /// Creates a uniquely-named database (with Change Tracking enabled) on a real SQL Server instance
 /// for the lifetime of one test class, and drops it afterwards. Points at the local Docker container
-/// used during Phase 3 development by default; override via DBDATASYNC_TEST_MSSQL_SERVER for other
+/// used during Phase 3 development by default; override via DBDATAKIT_TEST_MSSQL for other
 /// environments (e.g. a future CI service container).
 /// </summary>
 public sealed class MsSqlTestDatabase : IAsyncLifetime
 {
     public static string ServerConnectionString { get; } =
-        Environment.GetEnvironmentVariable("DBDATASYNC_TEST_MSSQL_SERVER")
+        Environment.GetEnvironmentVariable("DBDATAKIT_TEST_MSSQL")
         ?? "Data Source=localhost,14330;User ID=sa;Password=DbDataSync_Test_Pw1;TrustServerCertificate=True";
 
     public string DatabaseName { get; } = $"DbDataSyncTest_{Guid.NewGuid():N}";

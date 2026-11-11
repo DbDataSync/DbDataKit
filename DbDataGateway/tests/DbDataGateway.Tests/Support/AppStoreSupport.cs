@@ -4,8 +4,8 @@ namespace DbDataGateway.Tests.Support;
 
 /// <summary>
 /// The vendored package store of the app build (plan 22a GP32, <c>DbDataKit/web/app-store/build.mjs</c>) for tests that build the app template with the suite's real libraries. It is made once per test run from the web workspace
-/// (<c>npm ci</c> in <c>DbDataKit/web</c> first) with Node, or taken from <c>DBDATA_APP_STORE</c> when that names a built one. Without Node or the workspace's packages the tests skip; with
-/// <c>DBDATA_REQUIRE_APP_STORE=true</c> (CI) they fail instead.
+/// (<c>npm ci</c> in <c>DbDataKit/web</c> first) with Node, or taken from <c>DBDATAKIT_TEST_APP_STORE</c> when that names a built one. Without Node or the workspace's packages the tests skip; with
+/// <c>DBDATAKIT_TEST_REQUIRE_APP_STORE=true</c> (CI) they fail instead.
 /// </summary>
 internal static class AppStoreSupport
 {
@@ -26,15 +26,15 @@ internal static class AppStoreSupport
     {
         var (folder, problem) = Store.Value;
         if (folder is not null) return folder;
-        Assert.False(string.Equals(Environment.GetEnvironmentVariable("DBDATA_REQUIRE_APP_STORE"), "true", StringComparison.OrdinalIgnoreCase), "the app store is required but could not be made: " + problem);
+        Assert.False(string.Equals(Environment.GetEnvironmentVariable("DBDATAKIT_TEST_REQUIRE_APP_STORE"), "true", StringComparison.OrdinalIgnoreCase), "the app store is required but could not be made: " + problem);
         Assert.Skip("no app store: " + problem);
         return "";
     }
 
     private static (string?, string?) Make()
     {
-        if (Environment.GetEnvironmentVariable("DBDATA_APP_STORE") is { Length: > 0 } given)
-            return File.Exists(Path.Combine(given, "store.json")) ? (given, null) : (null, $"DBDATA_APP_STORE={given} holds no store.json");
+        if (Environment.GetEnvironmentVariable("DBDATAKIT_TEST_APP_STORE") is { Length: > 0 } given)
+            return File.Exists(Path.Combine(given, "store.json")) ? (given, null) : (null, $"DBDATAKIT_TEST_APP_STORE={given} holds no store.json");
         var web = Path.Combine(RepoRoot(), "DbDataKit", "web");
         if (!Directory.Exists(Path.Combine(web, "node_modules", "react"))) return (null, $"{web} has no node_modules (run npm ci there)");
         var folder = Path.Combine(Path.GetTempPath(), "dbdata-app-store-" + Guid.NewGuid().ToString("N")[..8]);

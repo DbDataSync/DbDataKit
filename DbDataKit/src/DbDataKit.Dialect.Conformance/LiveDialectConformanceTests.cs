@@ -15,7 +15,7 @@ public interface ILiveEngine : IAsyncDisposable
 /// Live conformance: identical claims to the offline suite, checked against a real server. Every test is skipped unless the
 /// environment variable <see cref="EnvironmentVariable"/> holds a connection string, so CI without the engine stays green and
 /// says so. Derive per engine; supply <see cref="CreateDialect"/>, <see cref="Connect"/> and the env var name
-/// (convention: <c>DBDATA_CONFORMANCE_&lt;ENGINE&gt;</c>).
+/// (convention: <c>DBDATAKIT_TEST_CONFORMANCE_&lt;ENGINE&gt;</c>).
 /// </summary>
 public abstract class LiveDialectConformanceTests
 {

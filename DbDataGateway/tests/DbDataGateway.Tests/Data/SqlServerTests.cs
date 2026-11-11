@@ -9,7 +9,7 @@ namespace DbDataGateway.Tests.Data;
 
 /// <summary>
 /// Runs against a local SQL Server / SQL Express instance (Windows authentication) or the server named by the
-/// DBGATEWAY_TEST_SQLSERVER* variables (see <see cref="SqlServerEnv"/>) when one is reachable;
+/// DBDATAKIT_TEST_MSSQL_SERVER* variables (see <see cref="SqlServerEnv"/>) when one is reachable;
 /// otherwise the tests are skipped.
 /// </summary>
 public class SqlServerTests

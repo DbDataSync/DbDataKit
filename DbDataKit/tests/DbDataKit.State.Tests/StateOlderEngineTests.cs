@@ -4,9 +4,9 @@ namespace DbDataKit.State.Tests;
 
 /// <summary>
 /// Plan 29b U01, the N-1 half of the support matrix: the modules that need no feature apply and work on SQL Server 2022 and PostgreSQL 16, the vector module is refused on SQL Server 2022 and applied on PostgreSQL 16
-/// (the testenv image carries pgvector). Rows skip unless <c>DBDATA_TEST_SQLSERVER2022</c> / <c>DBDATA_TEST_POSTGRES16</c> name a server (<c>testenv.sh up mssql2022 postgres16</c>, then
-/// <c>testenv.sh env dbdatakit-older</c>), and fail instead of skipping with <c>DBDATA_REQUIRE_SQLSERVER2022</c> / <c>DBDATA_REQUIRE_POSTGRES16</c> set to true. The whole State suite also runs on them (the CI leg
-/// points <c>DBDATA_TEST_SQLSERVER</c> and <c>DBDATA_TEST_POSTGRES</c> at them).
+/// (the testenv image carries pgvector). Rows skip unless <c>DBDATAKIT_TEST_SQLSERVER2022</c> / <c>DBDATAKIT_TEST_POSTGRES16</c> name a server (<c>testenv.sh up mssql2022 postgres16</c>, then
+/// <c>testenv.sh env dbdatakit-older</c>), and fail instead of skipping with <c>DBDATAKIT_TEST_REQUIRE_SQLSERVER2022</c> / <c>DBDATAKIT_TEST_REQUIRE_POSTGRES16</c> set to true. The whole State suite also runs on them (the CI leg
+/// points <c>DBDATAKIT_TEST_SQLSERVER</c> and <c>DBDATAKIT_TEST_POSTGRES</c> at them).
 /// </summary>
 public sealed class StateOlderEngineTests : IDisposable
 {

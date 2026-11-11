@@ -15,7 +15,7 @@ namespace DbDataConsole.Servers.Tests;
 /// <summary>
 /// Plan 19, J12's end-to-end test: a project's semantic model, with the connection it reads, published by a real Build server to a real Gateway (each started from its built output), with a console in this process speaking for a signed-in person.
 /// The model is then served: the Gateway lists it at version 1, a client with an account on the Gateway asks it for the members of an attribute and gets the rows of the database behind it, and the Gateway's audit names the person and the Build server.
-/// It needs a SQL Server (<c>DBDATA_TEST_SQLSERVER</c>, the shared test engine): publishing a model checks that every table it names can be read, and a project's models build on SQL Server or PostgreSQL only. Without one it is skipped.
+/// It needs a SQL Server (<c>DBDATAKIT_TEST_SQLSERVER</c>, the shared test engine): publishing a model checks that every table it names can be read, and a project's models build on SQL Server or PostgreSQL only. Without one it is skipped.
 /// </summary>
 public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
 {
@@ -36,8 +36,8 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        server = Environment.GetEnvironmentVariable("DBDATA_TEST_SQLSERVER");
-        if (server is null) Assert.Skip("set DBDATA_TEST_SQLSERVER (testenv/testenv.sh up mssql; eval \"$(testenv/testenv.sh env dbdatakit)\") to publish a model against a real database");
+        server = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_SQLSERVER");
+        if (server is null) Assert.Skip("set DBDATAKIT_TEST_SQLSERVER (testenv/testenv.sh up mssql; eval \"$(testenv/testenv.sh env dbdatakit)\") to publish a model against a real database");
 
         // the database behind the model: the tables the project's marts models stand for, with the customers the test asks for (a third has no sales)
         database = "e2e_semantic_" + Guid.NewGuid().ToString("N")[..10];

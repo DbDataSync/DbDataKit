@@ -10,7 +10,7 @@ namespace DbDataGateway.Tests.Config;
 
 /// <summary>
 /// Plan 26, AP23: <c>apps init</c> and <c>apps build</c>. The build tests give the command a bundler of their own (it writes what Bun would, a script named after the entry), so no result depends on Bun being installed; one test
-/// runs the real Bun when it is there and skips (or fails with <c>DBDATA_REQUIRE_BUN=true</c>) when it is not.
+/// runs the real Bun when it is there and skips (or fails with <c>DBDATAKIT_TEST_REQUIRE_BUN=true</c>) when it is not.
 /// </summary>
 [Collection(ProcessStateCollection.Name)]
 public sealed class AppsBuildTests : IDisposable
@@ -239,7 +239,7 @@ public sealed class AppsBuildTests : IDisposable
         var bun = BunLocator.Locate();
         if (!bun.Found)
         {
-            Assert.False(string.Equals(Environment.GetEnvironmentVariable("DBDATA_REQUIRE_BUN"), "true", StringComparison.OrdinalIgnoreCase), "bun is required but was not found: " + bun.Problem);
+            Assert.False(string.Equals(Environment.GetEnvironmentVariable("DBDATAKIT_TEST_REQUIRE_BUN"), "true", StringComparison.OrdinalIgnoreCase), "bun is required but was not found: " + bun.Problem);
             Assert.Skip("bun is not installed");
         }
         var source = Folder("real");
@@ -266,7 +266,7 @@ public sealed class AppsBuildTests : IDisposable
     {
         var bun = BunLocator.Locate();
         if (bun.Found) return bun;
-        Assert.False(string.Equals(Environment.GetEnvironmentVariable("DBDATA_REQUIRE_BUN"), "true", StringComparison.OrdinalIgnoreCase), "bun is required but was not found: " + bun.Problem);
+        Assert.False(string.Equals(Environment.GetEnvironmentVariable("DBDATAKIT_TEST_REQUIRE_BUN"), "true", StringComparison.OrdinalIgnoreCase), "bun is required but was not found: " + bun.Problem);
         Assert.Skip("bun is not installed");
         return bun;
     }

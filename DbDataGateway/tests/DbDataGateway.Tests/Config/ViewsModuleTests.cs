@@ -154,11 +154,11 @@ public sealed partial class ViewsModuleTests : IAsyncLifetime
         return (response.StatusCode, text.Length > 0 ? JsonNode.Parse(text) : null);
     }
 
-    /// <summary>Playwright's Chromium (or DBDATA_TEST_CHROME_SYSTEM) of a cloud session, or null: the export test then skips and says so.</summary>
+    /// <summary>Playwright's Chromium (or DBDATAKIT_TEST_CHROME_SYSTEM) of a cloud session, or null: the export test then skips and says so.</summary>
     private static string? SystemChromium()
     {
-        if (Environment.GetEnvironmentVariable("DBDATA_TEST_CHROME_SYSTEM") is { Length: > 0 } env && File.Exists(env)) return env;
-        if (Environment.GetEnvironmentVariable("DBDATA_TEST_CHROMIUM") is { Length: > 0 } dir)
+        if (Environment.GetEnvironmentVariable("DBDATAKIT_TEST_CHROME_SYSTEM") is { Length: > 0 } env && File.Exists(env)) return env;
+        if (Environment.GetEnvironmentVariable("DBDATAKIT_TEST_CHROMIUM") is { Length: > 0 } dir)
             foreach (var name in new[] { "chrome-linux64/chrome", "chrome-win64/chrome.exe" })
                 if (File.Exists(Path.Combine(dir, name))) return Path.Combine(dir, name);
         if (Directory.Exists("/opt/pw-browsers"))
@@ -463,7 +463,7 @@ public sealed partial class ViewsModuleTests : IAsyncLifetime
     public async Task A_pdf_is_taken_from_the_module_listener_as_the_person_whose_token_asks_and_a_host_with_export_off_says_so()
     {
         var browser = SystemChromium();
-        if (browser is null) Assert.Skip("No Chromium found (DBDATA_TEST_CHROMIUM, DBDATA_TEST_CHROME_SYSTEM or /opt/pw-browsers): the Gateway's export test was not run.");
+        if (browser is null) Assert.Skip("No Chromium found (DBDATAKIT_TEST_CHROMIUM, DBDATAKIT_TEST_CHROME_SYSTEM or /opt/pw-browsers): the Gateway's export test was not run.");
         var assets = Path.Combine(dataDirectory, "print");
         Directory.CreateDirectory(assets);
         File.WriteAllText(Path.Combine(assets, "print.css"), "body { font-family: sans-serif }");

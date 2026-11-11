@@ -33,7 +33,7 @@ internal sealed class DirectorySource(string directory) : IArtifactSource
 }
 
 /// <summary>
-/// A runner in a test (plan 28c E03): a state database of the runner's modules on SQLite and, when the shared engines are up (<c>DBDATA_TEST_SQLSERVER</c>, <c>DBDATA_TEST_POSTGRES</c> from
+/// A runner in a test (plan 28c E03): a state database of the runner's modules on SQLite and, when the shared engines are up (<c>DBDATAKIT_TEST_SQLSERVER</c>, <c>DBDATAKIT_TEST_POSTGRES</c> from
 /// <c>testenv.sh env dbdatakit</c>), on SQL Server and PostgreSQL; the protocol host on a real socket; and the executor that starts the engine as the process of an executable package. What is real is what the
 /// runner does for a task: the token, the scratch directory, the environment, the read-only view of the package and the protocol; what is not is the scheduler, which E08 and E11 move.
 /// </summary>
@@ -84,8 +84,8 @@ internal sealed class RunnerRig : IDisposable
 
     private static string? Server(string engine) => engine switch
     {
-        DbDataKit.State.StateEngineIds.MsSql => System.Environment.GetEnvironmentVariable("DBDATA_TEST_SQLSERVER"),
-        DbDataKit.State.StateEngineIds.Postgres => System.Environment.GetEnvironmentVariable("DBDATA_TEST_POSTGRES"),
+        DbDataKit.State.StateEngineIds.MsSql => System.Environment.GetEnvironmentVariable("DBDATAKIT_TEST_SQLSERVER"),
+        DbDataKit.State.StateEngineIds.Postgres => System.Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES"),
         _ => null,
     };
 
@@ -114,7 +114,7 @@ internal sealed class RunnerRig : IDisposable
         }
         else
         {
-            var server = Server(engine) ?? throw new InvalidOperationException($"the state engine {engine} needs its DBDATA_TEST_* variable");
+            var server = Server(engine) ?? throw new InvalidOperationException($"the state engine {engine} needs its DBDATAKIT_TEST_* variable");
             lock (Registration) DbDataKit.State.StateDialectRegistry.Default.RegisterLibraryBackedEngines(Factory);
             var name = $"dbdatasync_e03_{Guid.NewGuid():N}";
             ExecuteOn(engine, server, engine == DbDataKit.State.StateEngineIds.MsSql ? $"CREATE DATABASE [{name}];" : $"CREATE DATABASE {name};");

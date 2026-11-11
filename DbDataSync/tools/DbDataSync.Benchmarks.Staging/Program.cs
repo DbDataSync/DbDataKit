@@ -30,8 +30,8 @@ if (Flag("--help") || Flag("-h"))
           --rows N         rows to stage                       (default 200000)
           --columns N      columns per row                     (default 20)
           --repeat N       runs per provider; the median is reported (default 3)
-          --mssql S        SQL Server connection string        (default $DBKIT_TEST_MSSQL, else the shared testenv instance)
-          --postgres S     PostgreSQL connection string        (default $DBKIT_TEST_POSTGRES, else the shared testenv instance)
+          --mssql S        SQL Server connection string        (default $DBDATAKIT_TEST_MSSQL, else the shared testenv instance)
+          --postgres S     PostgreSQL connection string        (default $DBDATAKIT_TEST_POSTGRES, else the shared testenv instance)
           --only NAME      run one provider: mssql-bulk-copy | mssql-batch-insert | postgres-copy | postgres-batch-insert
 
         Each run is its own process (peak working set belongs to that run alone) against a scratch database that is created and dropped here.
@@ -43,9 +43,9 @@ if (Flag("--help") || Flag("-h"))
 var rows = int.Parse(Arg("--rows") ?? "200000");
 var columns = int.Parse(Arg("--columns") ?? "20");
 var repeat = int.Parse(Arg("--repeat") ?? "3");
-var mssql = Arg("--mssql") ?? Environment.GetEnvironmentVariable("DBKIT_TEST_MSSQL")
+var mssql = Arg("--mssql") ?? Environment.GetEnvironmentVariable("DBDATAKIT_TEST_MSSQL")
     ?? "Data Source=localhost,14330;User ID=sa;Password=DbDataSync_Test_Pw1;TrustServerCertificate=True";
-var postgres = Arg("--postgres") ?? Environment.GetEnvironmentVariable("DBKIT_TEST_POSTGRES")
+var postgres = Arg("--postgres") ?? Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES")
     ?? "Host=localhost;Port=15432;Username=dbdatasync;Password=DbDataSync_Test_Pw1;Database=postgres";
 
 string[] providers = ["mssql-bulk-copy", "mssql-batch-insert", "postgres-copy", "postgres-batch-insert"];

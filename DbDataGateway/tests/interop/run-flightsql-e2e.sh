@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # The shared Flight SQL client (DbDataKit.Connections.FlightSql) against a real `dbdatagateway server` in front of SQL Server and DuckDB (plan 13, A18).
 #
-# Needs: the .NET SDK, curl, and a SQL Server connection string in DBKIT_TEST_MSSQL (testenv/testenv.sh up mssql; eval "$(testenv/testenv.sh env dbdatakit)").
+# Needs: the .NET SDK, curl, and a SQL Server connection string in DBDATAKIT_TEST_MSSQL (testenv/testenv.sh up mssql; eval "$(testenv/testenv.sh env dbdatakit)").
 # Builds the gateway, starts it on a free port with a throwaway data directory and a writable DuckDB file, waits for it to be ready, runs DbDataKit.Connections.FlightSql.Tests
-# with DBGATEWAY_E2E_* set (so its end-to-end class runs and may not skip), and stops the gateway.
+# with DBDATAKIT_TEST_E2E_* set (so its end-to-end class runs and may not skip), and stops the gateway.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 config="${CONFIGURATION:-Release}"
-: "${DBKIT_TEST_MSSQL:?set DBKIT_TEST_MSSQL to a SQL Server connection string (eval \"\$(testenv/testenv.sh env dbdatakit)\")}"
-port="${DBGATEWAY_E2E_PORT:-18815}"
+: "${DBDATAKIT_TEST_MSSQL:?set DBDATAKIT_TEST_MSSQL to a SQL Server connection string (eval \"\$(testenv/testenv.sh env dbdatakit)\")}"
+port="${DBDATAKIT_TEST_E2E_PORT:-18815}"
 user=e2e
 
 dotnet build "$root/DbDataGateway/src/DbDataGateway.Server" -c "$config" --nologo -v q
@@ -26,7 +26,7 @@ cleanup() {
     kill -9 "$gateway_pid" 2>/dev/null || true
     wait "$gateway_pid" 2>/dev/null || true
   fi
-  if [ "$status" -ne 0 ] && [ -f "$tmp/gateway.log" ]; then echo "---- gateway log ----"; tail -n "${DBGATEWAY_E2E_LOG_LINES:-60}" "$tmp/gateway.log"; fi
+  if [ "$status" -ne 0 ] && [ -f "$tmp/gateway.log" ]; then echo "---- gateway log ----"; tail -n "${DBDATAKIT_TEST_E2E_LOG_LINES:-60}" "$tmp/gateway.log"; fi
   rm -rf "$tmp" || { sleep 2; rm -rf "$tmp" || true; }   # a leftover temp directory is not a failure of the test
   exit "$status"
 }
@@ -43,7 +43,7 @@ export DBDATAKIT_Gateway__DataSources__duck__AllowWrites=true
 export DBDATAKIT_Gateway__DataSources__duck__Everyone=true
 export DBDATAKIT_Gateway__DataSources__mssql__Everyone=true
 export DBDATAKIT_Gateway__DataSources__mssql__Provider=sqlserver
-export DBDATAKIT_Gateway__DataSources__mssql__ConnectionString="$DBKIT_TEST_MSSQL"
+export DBDATAKIT_Gateway__DataSources__mssql__ConnectionString="$DBDATAKIT_TEST_MSSQL"
 
 # the e2e user: a service account of the identity home (in the gateway's state, under the data directory) and its personal access token, which is the password
 dotnet "$dll" identity service-account-add --name "$user" --repo "$tmp" >/dev/null
@@ -60,9 +60,9 @@ for _ in $(seq 1 60); do
 done
 [ "${ready:-0}" = 1 ] || { echo "the gateway was not ready after 60 s"; exit 1; }
 
-export DBGATEWAY_E2E_ADDRESS="https://127.0.0.1:$port"
-export DBGATEWAY_E2E_USER="$user"
-export DBGATEWAY_E2E_PASSWORD="$password"
-export DBGATEWAY_E2E_REQUIRED=true
+export DBDATAKIT_TEST_E2E_ADDRESS="https://127.0.0.1:$port"
+export DBDATAKIT_TEST_E2E_USER="$user"
+export DBDATAKIT_TEST_E2E_PASSWORD="$password"
+export DBDATAKIT_TEST_E2E_REQUIRED=true
 cd "$root/DbDataKit"
 dotnet test --project tests/DbDataKit.Connections.FlightSql.Tests -c "$config" "$@"

@@ -9,8 +9,8 @@ namespace DbDataKit.Apps.Bundling.Tests;
 
 /// <summary>
 /// Plan 22a GP33 (QG12): offline builds from a vendored package store and the administrator's allow-list. The store is a small one made here (the library <c>lib</c>, the allowable <c>foo</c> and <c>@scope/bar</c>, and <c>hidden</c>,
-/// which is in the store only as something <c>lib</c> needs), so the tests need no network and no Node. The ones that run Bun need it on the path (they skip without it, or fail with <c>DBDATA_REQUIRE_BUN=true</c>);
-/// the ones that need a network namespace skip where the machine cannot make one (or fail with <c>DBDATA_REQUIRE_NETNS=true</c>).
+/// which is in the store only as something <c>lib</c> needs), so the tests need no network and no Node. The ones that run Bun need it on the path (they skip without it, or fail with <c>DBDATAKIT_TEST_REQUIRE_BUN=true</c>);
+/// the ones that need a network namespace skip where the machine cannot make one (or fail with <c>DBDATAKIT_TEST_REQUIRE_NETNS=true</c>).
 /// </summary>
 public sealed class VendoredStoreTests : IDisposable
 {
@@ -79,14 +79,14 @@ public sealed class VendoredStoreTests : IDisposable
     private static void NeedBun()
     {
         if (BunAvailable()) return;
-        Assert.False(string.Equals(Environment.GetEnvironmentVariable("DBDATA_REQUIRE_BUN"), "true", StringComparison.OrdinalIgnoreCase), "bun is required but not on the path");
+        Assert.False(string.Equals(Environment.GetEnvironmentVariable("DBDATAKIT_TEST_REQUIRE_BUN"), "true", StringComparison.OrdinalIgnoreCase), "bun is required but not on the path");
         Assert.Skip("bun is not on the path");
     }
 
     private static void NeedNamespace()
     {
         if (NetworkIsolator.IsAvailable) return;
-        Assert.False(string.Equals(Environment.GetEnvironmentVariable("DBDATA_REQUIRE_NETNS"), "true", StringComparison.OrdinalIgnoreCase), "a network namespace is required but " + NetworkIsolator.WhyNot);
+        Assert.False(string.Equals(Environment.GetEnvironmentVariable("DBDATAKIT_TEST_REQUIRE_NETNS"), "true", StringComparison.OrdinalIgnoreCase), "a network namespace is required but " + NetworkIsolator.WhyNot);
         Assert.Skip(NetworkIsolator.WhyNot);
     }
 
