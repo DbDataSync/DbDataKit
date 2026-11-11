@@ -15,6 +15,13 @@ public static partial class AppManifestLoader
     /// <summary>An <c>export</c> that no <c>defineWidget</c> or <c>definePage</c> in the app's source registers.</summary>
     public const string CustomViewNotRegistered = "DBD-APP-022";
 
+    /// <summary>Warning: the app lists a dashboard or a report and this tool has no loader for them, so the file was not checked.</summary>
+    public const string ViewDocumentNotChecked = "DBD-APP-023";
+    /// <summary>A dashboard or report that queries a semantic model the manifest does not list under <c>semantic</c>, or a Store entity it does not list with <c>read</c>.</summary>
+    public const string ViewDocumentModel = "DBD-APP-024";
+    /// <summary>A custom widget whose component is not a widget of this app, or whose parameters are not the ones the manifest declares.</summary>
+    public const string ViewDocumentComponent = "DBD-APP-025";
+
     public static readonly string[] CustomViewKeys = ["name", "kind", "export", "title", "params", "queries", "formats", "page"];
     public static readonly string[] CustomViewFormats = ["pdf", "png"];
     public static readonly string[] CustomViewPageSizes = ["A3", "A4", "A5", "Letter", "Legal"];

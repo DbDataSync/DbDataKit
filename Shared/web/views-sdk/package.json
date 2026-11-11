@@ -1,0 +1,27 @@
+{
+  "name": "@dbdatakit/views-sdk",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "What the code of a custom view builds on (plan 32 DBR30): defineWidget and definePage, the props a host gives a view, useReady, PageBreak, HostLink, setParam and open. Imports only React.",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "react": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "happy-dom": "^21.0.4",
+    "typescript": "~6.0.2",
+    "vitest": "^5.0.1",
+    "react-dom": "^19.2.8",
+    "@types/react-dom": "^19.2.4"
+  }
+}

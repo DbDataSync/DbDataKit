@@ -33,6 +33,10 @@ An app whose manifest names `views` and no `entry` is declarative: its package h
 - **What each kind does.** *Grid*: columns under their labels, a text filter per `filters` attribute, a click on a sortable header sorts, `pageSize` rows a page, `links` (per row or of the page). *Form*: the spec's fields drawn with the model's own control for each (type, length, allowed values), `required`, `readonly` and `help` from the spec; a create form inserts, an edit form (`key` names the parameter that carries the row's key) updates on the version it read; a Store refusal (422) is drawn against the attribute it names, a conflict (409) says to reload. *Detail*: the sections' attributes of one row. *Dashboard*: `metric` (a figure), `bar` (the greatest `limit` groups), `line` (the first `limit` in order), `table`. A detail or edit view is addressed by one key attribute; an entity with a composite key is refused with that said.
 - **Routes.** The shell keeps the address after `#` (`/views/detail.yaml?code=NA`): the runtime tells it the view the person moves to and follows it when the address or the back button changes, the same `route` and `navigate` messages a code app uses.
 
+### Dashboards and reports in an app (plan 32 DBR13)
+
+An app lists a `dashboard/1` or `report/1` file under `views` like any view file (`views/overview.yaml`, [views.md](views.md)): a file whose `kind` is `report`, or `dashboard` with the `layouts` of a dashboard document, is read by the views loader and not as a `view-spec/1` (the mini dashboard of a view spec has no `layouts`). `app validate` and the Gateway's publish check load it with its file and line and check it against the manifest (`AppViewDocuments`, `DbDataKit.Views`; a tool without the views loader warns `DBD-APP-023` for each such file and checks nothing): every semantic model its widgets query is under `semantic`, every Store entity a `store` query reads is listed with `read` (`DBD-APP-024`); every drill and every link leads to a view, report, dashboard, page or form **of this app** (a name is the file's name without folder and extension, a page is a custom page of the manifest) with the names, types and required parameters the target has (`DBD-VIEW-039`, `-044`, `-045`, `-037`); a `type: custom` widget names `<this app>/<Export>` of a widget the manifest declares, gives only the parameters that widget declares, the required ones and each of its type (`DBD-APP-025`). **Not built:** drawing these files in the app's runtime (`ViewApp` does not draw them yet and the host leaves them out of its menu), the portal home's `dashboard` block, and dropping the mini `dashboard` kind of `view-spec/1` (the template and the territory sample still use it; decision in plan 32 DBR13).
+
 ## Starting an app: the template and the library set
 
 `apps new --dir <folder> [--name <app>]` makes a code app from the template (`DbDataGateway/templates/apps/app`, inside the program): `app.yaml`, `index.html`, `package.json` and `src/` with a React entry that draws the Store's own grid and form and the file that connects the app to its host. `apps build` bundles it (Bun) and `apps validate` and `apps publish` take the folder it makes. What an app imports without asking anyone is the **default library set**:
@@ -44,10 +48,36 @@ An app whose manifest names `views` and no `entry` is declarative: its package h
 | `@dbdatakit/visuals` | the renderers: `VegaChart`, `DataTable`, the dashboard and view components |
 | `@dbdatakit/semantic-client` | a typed client for semantic queries (`query(model, {measures, attributes, filters, order, limit})`, `catalog`, `models`) over a `fetch` the host supplies; the apps host serves its route ("The semantic route" below, plan 22a GP35c) |
 | `@dbdatakit/view-app` | the app's connection to its host: `connectHost` (the shell's token and route messages), `appStoreClient`, `appSemanticClient` |
+| `@dbdatakit/views-sdk` | the code of a custom view (below): `defineWidget`, `definePage`, the props a host gives a view, `useReady`, `PageBreak`, `HostLink`, `useSetParam`, `useOpen`; imports only React |
 
 **Spec files in a code app (GP34).** The template's screens are `view-spec/1` files under `views/`, listed in the manifest's `views`; the library's components draw them (`ViewApp` of `@dbdatakit/view-app`, the same grid, form, detail page and dashboard as the host draws for an app of views only, on the Store controls and the visuals). `apps build` reads the files with the host's own loader and hands the bundle `src/views.generated.json`, so the app draws what `apps validate` checked and a file that does not read is listed on the page, never half drawn. An app can be **only spec files**. One page can be **code**: a component in `src/pages/` registered in `src/pages/index.ts` (`{'pages/quota-report': {title, component}}`, props `client` (the Store client), `params` and `go`) is a menu entry beside the specs, on the same client and token; a code page whose key is a view file is drawn in place of that spec, and to remove a spec for good the author deletes the file and its line in `views:`. The other specs are untouched either way.
 
 `@dbdatakit/shell` is the console's shell (Monaco, router, query cache), not an app's: navigation belongs to the host's shell page (decision 2), so it is not in the default set. The packages come from a **vendored store** (`Shared/web/app-store/build.mjs`), not from a registry (next section).
+
+## Custom views: a widget or a page written as code (plan 32 section 9f, DBR30)
+
+A dashboard or report can place **a component of the app** (`type: custom`, `component: <app>/<Export>`, see [views.md](views.md)), and a whole dashboard or report can be **a page written as code**. Both are app code in the sandboxed document, built offline from the vendored store; the host never lets them fetch data on the paths that print or email: the view **declares its queries**, the host runs them as the viewer (as the subscriber for a subscription) and hands the rows in.
+
+```yaml
+# app.yaml: a mapping under `views` is a custom view; a plain path is still a view-spec, a dashboard or a report
+views:
+  - views/home.yaml
+  - name: orders-grid               # addresses the view; lower-case
+    kind: widget                    # widget | page
+    export: OrdersGrid              # what the code registers
+    params: [{name: region, type: string, required: true}]
+    queries:                        # run by the host as the viewer; one form each
+      orders: {semantic: {model: sales, request: {measures: [orders.net_revenue], attributes: [customers.region], limit: 100}}}
+      areas:  {store: {model: territories, entity: territory, limit: 50}}
+  - {name: regional-detail, kind: page, export: RegionalDetail, formats: [pdf, png], page: {size: A4, orientation: landscape}, queries: {...}}
+```
+
+```tsx
+import { defineWidget, useView, useSetParam, useReady } from '@dbdatakit/views-sdk'
+defineWidget('OrdersGrid', function OrdersGrid() { const { data, params, mode } = useView(); /* data.orders.rows ... */ return <table>...</table> })
+```
+
+`app validate` checks the entries (`DBD-APP-019` shape, `-020` a widget with no declared query, `-021` a query naming a semantic model the manifest does not list, a Store entity without `read`, or a member the model lacks, `-022` an `export` that no `defineWidget('Export', ...)` / `definePage` in the source registers) with the manifest's file and line, and the build refuses an import outside the default library and the allow-list naming file and line. The SDK's messages with the host (`views:ready`, `views:error`, `views:setParam`, `views:open`; `views:init`, `views:props`, `views:closed`) are the contract the shell and the exporter implement: a widget fires only a **named** link (`open(name, row)`), it cannot choose a target. Running a custom view on screen, in an export and by email is DBR31 to DBR34.
 
 ## Offline builds, the package store and the allow-list
 

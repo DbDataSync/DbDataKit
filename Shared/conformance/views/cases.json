@@ -1105,7 +1105,7 @@
       "as": "dashboard",
       "code": "DBD-106",
       "path": "widgets.grid.params.id",
-      "line": 28,
+      "line": 42,
       "schema": false
     },
     {
@@ -1123,8 +1123,8 @@
       "as": "dashboard",
       "code": "DBD-VIEW-020",
       "path": "widgets.grid.links[1]",
-      "line": 25,
-      "schema": false
+      "line": 45,
+      "schema": true
     },
     {
       "name": "custom-widget-with-a-query-of-its-own",

@@ -58,7 +58,7 @@ const ROW_FIELD = /^\$[A-Za-z_][A-Za-z0-9_.]*$/
  * `yyyy-MM-dd`); a list only for a list. `ViewsLoader.LinkTypeFits` in .NET is this rule.
  */
 export function linkTypeFits(given: string, givenMany: boolean, wanted: string, wantedMany: boolean): boolean {
-  return givenMany === wantedMany && (given === wanted || (wanted === 'number' && given === 'integer') || (wanted === 'date' && given === 'string'))
+  return givenMany === wantedMany && (wanted === 'any' || given === wanted || (wanted === 'number' && given === 'integer') || (wanted === 'date' && given === 'string'))
 }
 
 /** One value as written: `$params.name`, `$field` of the row, or a literal. */

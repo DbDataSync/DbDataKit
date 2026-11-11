@@ -122,6 +122,13 @@
       "wanted": "string",
       "wantedMany": true,
       "fits": true
+    },
+    {
+      "given": "integer",
+      "many": false,
+      "wanted": "any",
+      "wantedMany": false,
+      "fits": true
     }
   ]
 }

@@ -32,9 +32,11 @@ public static class AppValidator
     /// <param name="bundleDirectory">The built bundle, when there is one.</param>
     /// <param name="manifestFile">The manifest's file name in the folder.</param>
     /// <param name="modelEntities">The entities of each Store model the app can use, by model name (from the Store's schema); null skips the check, because no Store was asked.</param>
+    /// <param name="documents">The loader of the dashboards and reports the app lists under <c>views</c> (<c>DbDataKit.Views</c> implements it); null leaves them unchecked, with a warning for each.</param>
+    /// <param name="semanticMembers">The measure and attribute names of each semantic model (by model name), to check the members a custom view's declared queries name; null skips that check.</param>
     /// <param name="modelAttributes">The attributes of each entity of each Store model (model, entity, attributes), to check the attributes the view specs name; null skips that check (the specs' own shape and links, and the models and entities the manifest lists, are still checked).</param>
     public static AppValidation Validate(string sourceDirectory, string? bundleDirectory = null, IReadOnlyDictionary<string, IReadOnlySet<string>>? modelEntities = null, string manifestFile = "app.yaml",
-        IReadOnlyDictionary<string, IReadOnlyDictionary<string, IReadOnlySet<string>>>? modelAttributes = null)
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, IReadOnlySet<string>>>? modelAttributes = null, IReadOnlyDictionary<string, IReadOnlySet<string>>? semanticMembers = null, IViewDocumentChecker? documents = null)
     {
         var path = Path.Combine(sourceDirectory, manifestFile);
         if (!File.Exists(path))
@@ -45,7 +47,8 @@ public static class AppValidator
         {
             diagnostics.AddRange(AppChecks.Files(manifest, sourceDirectory, manifestFile));
             diagnostics.AddRange(AppChecks.HomeViews(manifest, home => File.Exists(Path.Combine(sourceDirectory, home)) ? File.ReadAllText(Path.Combine(sourceDirectory, home)) : null));
-            diagnostics.AddRange(AppChecks.ViewSpecs(manifest, view => File.Exists(Path.Combine(sourceDirectory, view)) ? File.ReadAllText(Path.Combine(sourceDirectory, view)) : null, modelAttributes));
+            diagnostics.AddRange(AppChecks.ViewSpecs(manifest, view => File.Exists(Path.Combine(sourceDirectory, view)) ? File.ReadAllText(Path.Combine(sourceDirectory, view)) : null, modelAttributes, documents));
+            if (manifest.CustomViews.Count > 0) diagnostics.AddRange(AppChecks.CustomViews(manifest, AppChecks.SourceFiles(sourceDirectory), semanticMembers, manifestFile));
             if (modelEntities is not null) diagnostics.AddRange(ModelUses(manifest, modelEntities, manifestFile));
             if (bundleDirectory is not null)
             {

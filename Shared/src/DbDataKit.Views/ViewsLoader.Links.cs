@@ -16,7 +16,7 @@ public static partial class ViewsLoader
     /// string for a date (a date is written <c>yyyy-MM-dd</c>); a list only for a list. The rule is the one of <c>linkTypeFits</c> in <c>@dbdatakit/visuals</c>.
     /// </summary>
     public static bool LinkTypeFits(string given, bool givenMany, string wanted, bool wantedMany) =>
-        givenMany == wantedMany && (given == wanted || (wanted == "number" && given == "integer") || (wanted == "date" && given == "string"));
+        givenMany == wantedMany && (wanted == "any" || given == wanted || (wanted == "number" && given == "integer") || (wanted == "date" && given == "string"));
 
     private sealed partial class Reader
     {

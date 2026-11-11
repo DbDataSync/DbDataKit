@@ -487,6 +487,9 @@ export function WidgetEditor({ id, widget, doc, catalog, catalogNote, apply, dia
             <label className="hint">values limit <input type="number" min={1} style={{ width: 70 }} data-testid={`ed-values-limit-${id}`} value={widget.values?.limit ?? ''} onChange={(e) => { if (widget.values?.attribute) setOrClear(['values', 'limit'], e.target.value === '' ? undefined : Number(e.target.value), 'values_limit') }} /></label>
           </>
         )}
+        {widget.type === 'custom' && (
+          <p className="hint" data-testid={`ed-custom-note-${id}`}>Code of an app ({(widget as { component?: string }).component}): its component, queries and parameters are the app&apos;s, edited in the Workspace&apos;s code editor; here the document gives it parameter values and the links it may open (YAML view).</p>
+        )}
         {widget.type === 'embed' && (
           <>
             <label className="hint">address <input data-testid={`ed-embed-url-${id}`} style={{ width: 360 }} value={widget.url} onChange={(e) => set(['url'], e.target.value, 'url')} /></label>

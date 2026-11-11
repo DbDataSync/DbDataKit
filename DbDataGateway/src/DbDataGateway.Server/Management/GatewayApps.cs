@@ -328,7 +328,8 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
             string? Text(string path) => package.Files.TryGetValue(path, out var bytes) ? Encoding.UTF8.GetString(bytes) : null;
             diagnostics.AddRange(AppChecks.FilesWhere(manifest, path => package.Files.ContainsKey(path)));
             diagnostics.AddRange(AppChecks.HomeViews(manifest, Text));
-            diagnostics.AddRange(AppChecks.ViewSpecs(manifest, Text));
+            diagnostics.AddRange(AppChecks.ViewSpecs(manifest, Text, documents: DbDataKit.Views.AppViewDocuments.Instance));
+            diagnostics.AddRange(AppChecks.CustomViews(manifest));
             var store = new AppInstanceStore(definitions);
             var (bundle, manifestHash) = AppApprovalStore.Hashes(package);
             var standing = AppApprovals.Find(new AppApprovalStore(definitions).ForApp(manifest.Name), manifest, bundle, manifestHash);

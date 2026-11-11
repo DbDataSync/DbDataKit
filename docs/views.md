@@ -22,6 +22,7 @@ shares are part of the **query**, run on the server as the viewer.
 | `text` | `text` | markdown, **no raw HTML, no image, links only to a path on the host** (`/docs/x`); `{{params.name}}` is substituted as text |
 | `image` | `hash: sha256:<64 hex>`, `media_type` (`image/png image/jpeg image/webp`), `alt`, `fit` | held in the definition's artifacts by hash; **no URL, no SVG** |
 | `control` | `parameter`, `control` (`select multiselect date daterange number toggle text`), `label`, `values: {attribute, limit}` | edits one parameter; no query |
+| `custom` | `component` (`<app>/<Export>`), `params` (a declared parameter's value: `$params.name` or a literal; no row field), `links` (the document's links it may open, by name) | code of an app, drawn by the app's own host in its sandboxed frame; what it declares (queries, parameters) is in the app's manifest ([apps.md](apps.md), "Custom views"); a document with one is checked against the manifest by `app validate`; the console's Views page shows a placeholder |
 | `embed` | `url` (an absolute https address, no credentials), `with` (query-string pairs: a name to `$params.name` or a literal), `link_text` | an external report server's report (plan 32 DBR19, plan 26 AP17), **dashboards only**: a report refuses it (`DBD-VIEW-038`). See [An embedded report](#an-embedded-report-dbr19) |
 
 ### An embedded report (DBR19)

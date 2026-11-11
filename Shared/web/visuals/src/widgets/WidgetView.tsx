@@ -110,7 +110,6 @@ export function WidgetView({ id, widget, result, loading = false, box, theme = '
       case 'image': content = <ImageBlock widget={widget} result={result as never} />; break
       case 'control': content = control(result); break
       case 'embed': content = <EmbedBlock widget={widget} result={result as never} />; break
-      case 'custom': content = <EmptyTile message={`Drawn by the app that owns it (${widget.component}).`} />; break
     }
   }
 

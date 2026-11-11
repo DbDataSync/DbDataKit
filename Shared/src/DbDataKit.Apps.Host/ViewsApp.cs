@@ -91,6 +91,8 @@ public static class ViewsApp
         foreach (var file in manifest.Views)
         {
             if (read(file) is not { } bytes) { problems.Add($"{file}: the package does not hold this file."); continue; }
+            // a dashboard or a report (dashboard/1, report/1) is not a view spec: it is checked by `app validate` and drawn by its own screen, which this runtime does not have yet (plan 32 DBR13)
+            if (ViewSpecLoader.IsDocument(Encoding.UTF8.GetString(bytes))) continue;
             var loaded = ViewSpecLoader.Load(Encoding.UTF8.GetString(bytes), file, manifest.Name);
             if (loaded.Spec is { } spec && loaded.Ok) views[file] = Spec(spec);
             else foreach (var d in loaded.Diagnostics) problems.Add($"{d.Path}:{d.Line}:{d.Column}: {d.Message}");

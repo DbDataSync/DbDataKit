@@ -52,6 +52,7 @@ const WELLS: Record<WidgetType, WellSpec[]> = {
   text: [],
   image: [],
   embed: [],
+  custom: [],
 }
 
 export const WIDGET_TYPES: readonly WidgetType[] = ['metric', 'chart', 'matrix', 'table', 'text', 'image', 'control', 'embed']
