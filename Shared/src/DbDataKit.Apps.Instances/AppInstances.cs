@@ -27,6 +27,24 @@ public sealed record ResolvedInstance(AppInstance Instance, int InstanceVersion,
 /// <summary>A publication the store refuses; the message says what to change.</summary>
 public sealed class AppInstanceException(string message) : Exception(message);
 
+/// <summary>
+/// How an instance of a channel other than production is addressed (plan 21, plan 22a GP35d): <c>&lt;name&gt;~&lt;channel&gt;</c>, so <c>acme~preview</c> is the instance <c>acme</c> as the <c>preview</c> channel has it. A name never holds the separator
+/// (<see cref="AppManifestLoader.NameRule"/>), so the address of a channel never collides with an instance's own.
+/// </summary>
+public static class AppInstanceName
+{
+    public const char Separator = '~';
+
+    /// <summary>The instance's name and its channel: production when the address names none.</summary>
+    public static (string Name, string Channel) Split(string address, string defaultChannel = DefinitionStore.Production)
+    {
+        var at = address.IndexOf(Separator);
+        return at <= 0 || at == address.Length - 1 ? (address, defaultChannel) : (address[..at], address[(at + 1)..]);
+    }
+
+    public static string Of(string name, string channel) => channel == DefinitionStore.Production ? name : name + Separator + channel;
+}
+
 /// <summary>What a token for an instance names as its audience, so one instance's validator refuses another's token (plan 26 section 6.1).</summary>
 public static class AppInstanceAudience
 {
@@ -106,6 +124,8 @@ public sealed class AppInstanceStore(DefinitionStore definitions)
     /// <summary>The instance with the app version it runs (its pin, or the channel's current) and that version's manifest; null when there is no such instance or its app has gone.</summary>
     public ResolvedInstance? Resolve(string name, string channel = DefinitionStore.Production)
     {
+        // `acme~preview` is the instance as the preview channel has it
+        (name, channel) = AppInstanceName.Split(name, channel);
         if (definitions.Current(InstanceKind, name, channel) is not { } stored) return null;
         var instance = Read(name, stored.Content);
         var app = instance.Pin is { } pin ? definitions.Get(AppKind, instance.App, pin) : definitions.Current(AppKind, instance.App, channel);

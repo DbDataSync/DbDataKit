@@ -32,6 +32,7 @@ public interface IAppGrants
 public static class AppScope
 {
     private const string WriteSuffix = ":write";
+    private const string ProposeSuffix = ":propose";
 
     public static IReadOnlyList<string> Narrow(IReadOnlyList<string> manifestScope, ServerRole held)
     {
@@ -39,7 +40,10 @@ public static class AppScope
         if (closed == ServerRole.None) return [];
         var mayWrite = closed.HasFlag(ServerRole.Author) || closed.HasFlag(ServerRole.Admin);
         // write includes read, so an entity the manifest lets the app write stays readable for a person who may not write
-        return [.. manifestScope.Select(entry => mayWrite || !entry.EndsWith(WriteSuffix, StringComparison.Ordinal) ? entry : entry[..^WriteSuffix.Length] + ":read").Distinct(StringComparer.Ordinal)];
+        // a change request waits for approval but is still a change: the Store asks the same role of it, so a person who may not write gets a read entry for it too
+        return [.. manifestScope.Select(entry => mayWrite ? entry
+            : entry.EndsWith(WriteSuffix, StringComparison.Ordinal) ? entry[..^WriteSuffix.Length] + ":read"
+            : entry.EndsWith(ProposeSuffix, StringComparison.Ordinal) ? entry[..^ProposeSuffix.Length] + ":read" : entry).Distinct(StringComparer.Ordinal)];
     }
 }
 
@@ -58,7 +62,11 @@ public sealed record AppAccessToken(string Instance, string SubjectId, string Cl
     /// <summary>Whether the token lets the app read (or, with <paramref name="write"/>, write) the entity; write includes read. A model or entity the scope does not name is refused.</summary>
     public bool Allows(string model, string entity, bool write) =>
         Scope.Contains(TokenScope.Entry(model, entity, write: true), StringComparer.Ordinal)
-        || (!write && Scope.Contains(TokenScope.Entry(model, entity, write: false), StringComparer.Ordinal));
+        || (!write && (Scope.Contains(TokenScope.Entry(model, entity, write: false), StringComparer.Ordinal) || Scope.Contains(TokenScope.ProposeEntry(model, entity), StringComparer.Ordinal)));
+
+    /// <summary>Whether the token lets the app propose a change to the entity, to wait for approval: a write entry or a <c>:propose</c> one.</summary>
+    public bool Proposes(string model, string entity) =>
+        Scope.Contains(TokenScope.Entry(model, entity, write: true), StringComparer.Ordinal) || Scope.Contains(TokenScope.ProposeEntry(model, entity), StringComparer.Ordinal);
 }
 
 public sealed record AppTokenResult(AppAccessToken? Token, AppTokenFailure Failure)

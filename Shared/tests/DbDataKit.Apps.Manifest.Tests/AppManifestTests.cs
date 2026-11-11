@@ -61,6 +61,26 @@ public sealed class AppManifestTests : IDisposable
         Assert.Equal(DataOperations.Read | DataOperations.Write, m.Models.Single().Entities["e"]);
     }
 
+    [Fact]
+    public void A_change_request_is_an_operation_that_implies_reading_and_that_write_includes()
+    {
+        var m = AppManifestLoader.Load("schemaVersion: 1\nname: a\nversion: 0.1.0\nentry: main.ts\nmodels:\n  - model: m\n    entities: {propose: [change request], both: [write, change request], plain: [read]}\n").Manifest!;
+        var entities = m.Models.Single().Entities;
+
+        Assert.Equal(DataOperations.Read | DataOperations.ChangeRequest, entities["propose"]);
+        Assert.Equal(DataOperations.Read | DataOperations.Write, entities["both"]);   // write already includes proposing
+        Assert.Equal("read and change request", entities["propose"].Describe());
+        Assert.Equal("read and write", entities["both"].Describe());
+    }
+
+    [Fact]
+    public void An_operation_that_is_not_read_write_or_change_request_is_refused_naming_the_three()
+    {
+        var result = AppManifestLoader.Load("schemaVersion: 1\nname: a\nversion: 0.1.0\nentry: main.ts\nmodels:\n  - model: m\n    entities: {e: [delete]}\n");
+
+        Assert.Contains(result.Diagnostics, d => d.Message.Contains("use read, write or change request"));
+    }
+
     [Theory]
     [InlineData("name: Sales", "is not an app name")]
     [InlineData("name: api", "keeps for itself")]

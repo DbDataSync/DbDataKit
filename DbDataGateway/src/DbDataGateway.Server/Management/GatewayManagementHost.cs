@@ -144,7 +144,8 @@ public static class GatewayManagementHost
                     return text is null ? null : DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, dataSource + ".yaml").Definition?.ManagedBy;
                 }, audit),
             apps: new GatewayApps(new DbDataKit.State.DefinitionStore(state), () => HomeApprovers.Open(state, app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue), audit,
-                appsAddress: () => { var current = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue; return GatewayModules.Has(current, GatewayModules.Apps) ? GatewayAppsModule.PublicUrlOf(current) : null; }));
+                appsAddress: () => { var current = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue; return GatewayModules.Has(current, GatewayModules.Apps) ? GatewayAppsModule.PublicUrlOf(current) : null; },
+                instanceSaved: name => AppClient(app, state, name, remove: false), instanceRemoved: name => AppClient(app, state, name, remove: true)));
         if (audit.ImportFile(dataDirectory) is > 0 and var imported)
             app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataGateway.Management").LogInformation("Read {Count} entries of {File} into the state's audit; the file is now {File}.imported.", imported, DbDataGateway.Server.State.StateAuditLog.LegacyFileName, DbDataGateway.Server.State.StateAuditLog.LegacyFileName);
         // a token one instance of a group accepted is refused by every other (plan 20 O02b): the used ids are in the state they share
@@ -184,6 +185,23 @@ public static class GatewayManagementHost
     }
 
     /// <summary>A local-channel message is <c>{"method":"GET","path":"/api/v1/config","body":"..."}</c>; the answer is <c>{"status":200,"body":{...}}</c>. The operating system decided who could connect, so the caller holds every role.</summary>
+    // the identity home's client of an app instance follows the instance (plan 26 AP19); a failure here never fails the save: the apps module makes the missing ones when it starts
+    private static void AppClient(WebApplication app, DbDataKit.State.StateDatabase state, string instance, bool remove)
+    {
+        try
+        {
+            var current = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue;
+            if (!GatewayModules.Has(current, GatewayModules.Apps)) return;
+            var clients = new DbDataKit.Identity.OidcClients(state);
+            if (remove) Serving.AppInstanceClients.Remove(clients, instance);
+            else Serving.AppInstanceClients.Ensure(clients, instance, Serving.AppInstanceClients.CallbackOf(GatewayAppsModule.PublicUrlOf(current)));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataGateway.Management").LogWarning(ex, "The OpenID client of the app instance {Instance} could not be {Change}.", instance, remove ? "removed" : "registered");
+        }
+    }
+
     internal static async Task<byte[]> HandleLocalAsync(GatewayManagement management, byte[] request, CancellationToken cancellationToken)
     {
         try

@@ -107,7 +107,7 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
     /// <c>{"changes": [...], "description": "..."}</c>: written at once, or kept as a change request (202) when the model asks for approval of this caller's writes. <paramref name="mayWrite"/>, when given, is asked about each
     /// change's entity first (an app's scope); a change outside it refuses the whole batch.
     /// </summary>
-    public async Task<StoreAnswer> ChangesAsync(StoreCaller caller, string name, byte[] body, Func<string, bool>? mayWrite, CancellationToken cancellationToken)
+    public async Task<StoreAnswer> ChangesAsync(StoreCaller caller, string name, byte[] body, Func<string, bool>? mayWrite, CancellationToken cancellationToken, Func<string, bool>? mayApply = null)
     {
         if (Needs(caller, ServerRole.Author) is { } denied) return denied;
         var (served, missing) = Served(name);
@@ -118,7 +118,8 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
         if (bad is not null) return StoreAnswer.Error(400, bad);
         if (mayWrite is not null && changes!.Select(c => c.Entity).FirstOrDefault(e => !mayWrite(e)) is { } outside)
             return StoreAnswer.Error(403, $"This app may not write `{outside}`: its manifest does not give it that entity to write.");
-        if (ChangeApproval.Needs(served!.Model, caller.IsAgent))
+        // an app that may only propose (the manifest's `change request`) never applies: its batch waits for approval whatever the model says, even if the model would apply a write at once
+        if (Waits(ChangeApproval.Needs(served!.Model, caller.IsAgent), changes!.Select(c => c.Entity), mayApply))
         {
             var request = requests.Propose(name, caller, (string?)node["description"], (JsonArray)JsonNode.Parse(list.ToJsonString())!);
             return new StoreAnswer(202, request.ToJson(withChanges: false));
@@ -129,6 +130,10 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
             return StoreAnswer.Ok(new JsonObject { ["applied"] = changes!.Count });
         }, cancellationToken);
     }
+
+    /// <summary>Whether a batch waits for approval: the model asks for it, or the caller may apply only some of its entities (an app whose manifest gives `change request` and not `write` for one of them).</summary>
+    internal static bool Waits(bool modelNeedsApproval, IEnumerable<string> entities, Func<string, bool>? mayApply) =>
+        modelNeedsApproval || (mayApply is not null && entities.Any(e => !mayApply(e)));
 
     public StoreAnswer Requests(StoreCaller caller, string name, string? state)
     {

@@ -37,6 +37,15 @@ public sealed class AppInstanceGrantsTests : IDisposable
     }
 
     [Fact]
+    public void A_change_request_entity_is_granted_as_propose_and_a_write_with_it_as_write()
+    {
+        instances.PublishApp("schemaVersion: 1\nname: ask\nversion: 1.0.0\nentry: index.html\nroles: [viewer]\nmodels:\n  - model: sales\n    entities: {order: [change request], customer: [write, change request], region: [read]}\n", "ada");
+        instances.Save(new AppInstance("ask", "ask"), "ada");
+
+        Assert.Equal(["sales/order:propose", "sales/customer:write", "sales/region:read"], new AppInstanceGrants(instances, approvals).ScopeOf("ask"));
+    }
+
+    [Fact]
     public void An_app_that_names_no_model_is_granted_an_empty_scope_not_nothing()
     {
         instances.PublishApp("schemaVersion: 1\nname: plain\nversion: 1.0.0\nentry: index.html\nroles: [viewer]\n", "ada");

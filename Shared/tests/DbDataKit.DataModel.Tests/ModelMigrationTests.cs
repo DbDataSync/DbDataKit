@@ -121,6 +121,81 @@ public sealed class ModelMigrationTests
         Assert.Contains(plan.Blocked, b => b.Contains("territory") && b.Contains("_instance") && b.Contains("planned change"));
     }
 
+    [Theory]
+    [InlineData("sqlserver")]
+    [InlineData("postgres")]
+    public void The_contract_plan_drops_what_the_model_no_longer_has_and_requires_what_it_requires_and_names_its_hash(string engine)
+    {
+        var live = new[]
+        {
+            new LiveColumn("territory", "code", false), new LiveColumn("territory", "name", false), new LiveColumn("territory", "note", true), new LiveColumn("territory", "region", true),
+            new LiveColumn("territory", "_version", false), new LiveColumn("office", "id", false), new LiveColumn("office", "territory", true), new LiveColumn("office", "_version", false), new LiveColumn("legacy", "id", false),
+        };
+
+        var plan = ModelStorage.PlanContract(Model(V2), engine, "sales__acme", live);
+
+        Assert.Empty(plan.Blocked);
+        Assert.Equal(["drop column territory.note", "make territory.region required"], plan.Steps.Select(s => s.Description));
+        Assert.Contains("DROP COLUMN", plan.Steps[0].Text, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(plan.Steps[0].NullCheck);
+        Assert.Contains("IS NULL", plan.Steps[1].NullCheck);   // a column that becomes required is only made so when no row lacks a value
+        Assert.Contains(plan.Notes, n => n.Contains("legacy") && n.Contains("left in place"));   // a table the model does not have is not dropped
+        Assert.Equal(64, plan.Hash.Length);
+        Assert.Equal(plan.Hash, ModelStorage.PlanContract(Model(V2), engine, "sales__acme", live).Hash);
+        Assert.NotEqual(plan.Hash, ModelStorage.PlanContract(Model(V2), engine, "sales__acme", live.Where(c => c.Column != "note").ToArray()).Hash);   // another plan, another hash
+        Assert.True(ModelStorage.PlanContract(Model(V1), engine, "sales__acme", live.Where(c => c.Table == "territory" && c.Column is not "region").ToArray()).Nothing);
+
+        // how rows are kept (instances, history) is not a contract step
+        var shared = ModelStorage.PlanContract(Model(V1.Replace("storage: {connection: mdm, instances: schema}", "storage: {connection: mdm}")), engine, "sales", [new("territory", "code", false), new("territory", "name", false), new("territory", "note", true), new("territory", "_instance", false)]);
+        Assert.Contains(shared.Blocked, b => b.Contains("_instance") && b.Contains("planned change"));
+        Assert.Empty(shared.Steps);
+    }
+
+    [Theory, MemberData(nameof(Engines.Both), MemberType = typeof(Engines))]
+    public async Task The_contract_step_runs_only_the_plan_that_was_read_refuses_a_column_with_missing_values_and_leaves_another_instance_at_the_old_version_alone(string engine)
+    {
+        await using var engines = await Engines.OpenAsync(engine);
+        var (v1, v2) = (Model(V1), Model(V2));
+        string Table(string schema) => engine == "sqlserver" ? $"[{schema}].[territory]" : $"{schema}.territory";
+        foreach (var schema in new[] { "sales__acme", "sales__globex" })
+        {
+            await ModelStorage.CreateAsync(engines.Connection, ModelStorage.Plan(v1, engine, schema));
+            await Run(engines, $"INSERT INTO {Table(schema)} (code, name, note, _version) VALUES ('NA', 'North', 'keep me', 1)");
+        }
+        // acme takes the expand step (region is added as nullable), then asks for the contract
+        await ModelStorage.ApplyExpandAsync(engines.Connection, ModelStorage.PlanExpand(v2, engine, "sales__acme", await ModelStorage.ReadLiveAsync(engines.Connection, "sales__acme")));
+        var plan = ModelStorage.PlanContract(v2, engine, "sales__acme", await ModelStorage.ReadLiveAsync(engines.Connection, "sales__acme"));
+        Assert.Equal(["drop column territory.note", "make territory.region required"], plan.Steps.Select(s => s.Description));
+
+        // only the plan that was read: another hash is refused and nothing changes
+        var wrong = await Assert.ThrowsAsync<StorageException>(() => ModelStorage.ApplyContractAsync(engines.Connection, plan, new string('0', 64)));
+        Assert.Contains("Read it again", wrong.Message);
+        // a row has no region: the whole plan is refused naming the column and the count, and note is still there
+        var missing = await Assert.ThrowsAsync<StorageException>(() => ModelStorage.ApplyContractAsync(engines.Connection, plan, plan.Hash));
+        Assert.Contains("make territory.region required: 1 row has no value", missing.Message);
+        Assert.Contains(await ModelStorage.ReadLiveAsync(engines.Connection, "sales__acme"), c => c is { Table: "territory", Column: "note" });
+
+        await Run(engines, $"UPDATE {Table("sales__acme")} SET region = 'EMEA' WHERE code = 'NA'");
+        await ModelStorage.ApplyContractAsync(engines.Connection, plan, plan.Hash);
+
+        var live = await ModelStorage.ReadLiveAsync(engines.Connection, "sales__acme");
+        Assert.DoesNotContain(live, c => c is { Table: "territory", Column: "note" });
+        Assert.Contains(live, c => c is { Table: "territory", Column: "region", Nullable: false });
+        Assert.True(ModelStorage.PlanContract(v2, engine, "sales__acme", live).Nothing);
+        Assert.True(ModelStorage.PlanExpand(v2, engine, "sales__acme", live).UpToDate);
+        await using var count = engines.Connection.CreateCommand();
+        count.CommandText = $"SELECT COUNT(*) FROM {Table("sales__acme")} WHERE region = 'EMEA'";
+        Assert.Equal(1L, Convert.ToInt64(await count.ExecuteScalarAsync()));
+        // a column that is required now refuses a row without it
+        await Assert.ThrowsAnyAsync<System.Data.Common.DbException>(() => Run(engines, $"INSERT INTO {Table("sales__acme")} (code, name, _version) VALUES ('EU', 'Europe', 1)"));
+
+        // globex runs the old version still: its tables, its note and its rows are as they were, and v1 still describes them
+        var globex = await ModelStorage.ReadLiveAsync(engines.Connection, "sales__globex");
+        Assert.Contains(globex, c => c is { Table: "territory", Column: "note" });
+        Assert.True(ModelStorage.PlanExpand(v1, engine, "sales__globex", globex).UpToDate);
+        await Run(engines, $"INSERT INTO {Table("sales__globex")} (code, name, note, _version) VALUES ('EU', 'Europe', 'still fine', 1)");
+    }
+
     private static async Task Run(Engines engines, string sql)
     {
         await using var command = engines.Connection.CreateCommand();

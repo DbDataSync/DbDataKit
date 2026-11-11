@@ -700,6 +700,43 @@ public sealed class AppsScreenTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_publisher_sends_a_build_to_the_preview_channel_and_saves_a_preview_of_an_instance_that_production_does_not_see()
+    {
+        Seed();
+        var next = Package("notes", "2.0.0", Models);
+
+        // the app first, then the instance of it; production keeps its own version throughout
+        var published = await CallAsync(ServerRole.Publisher, HttpMethod.Put, "/api/v1/apps/notes/channels/preview", Body(next, note: "from a workspace"));
+        Assert.Equal(HttpStatusCode.OK, published.Status);
+        Assert.Equal("preview", (string?)published.Body["channel"]);
+        Assert.Equal("1.1.0", Store.Resolve("acme")!.Manifest.Version);
+        Assert.Null(Store.Resolve("acme~preview"));   // no instance of it in the preview channel yet
+        var saved = await CallAsync(ServerRole.Publisher, HttpMethod.Put, "/api/v1/app-instances/acme/channels/preview", "{\"app\": \"notes\"}");
+        Assert.Equal(HttpStatusCode.OK, saved.Status);
+        Assert.Equal("/apps/acme~preview/", (string?)saved.Body["path"]);
+        Assert.Equal("2.0.0", Store.Resolve("acme~preview")!.Manifest.Version);
+        Assert.Equal("1.1.0", Store.Resolve("acme")!.Manifest.Version);
+        Assert.DoesNotContain(Store.List(), i => i.Name.Contains('~'));
+        var rows = (await CallAsync(ServerRole.Viewer, HttpMethod.Get, "/api/v1/app-instances")).Body["instances"]!.AsArray();
+        Assert.Equal(1, rows.Count(r => (string?)r!["name"] == "acme"));                       // the list is production's
+
+        // a preview is of an instance that exists in production; production and the preview are told apart by the path
+        var orphan = await CallAsync(ServerRole.Publisher, HttpMethod.Put, "/api/v1/app-instances/ghost/channels/preview", "{\"app\": \"notes\"}");
+        Assert.Equal(HttpStatusCode.BadRequest, orphan.Status);
+        Assert.Contains("no instance 'ghost' in production", (string)orphan.Body["error"]!);
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(ServerRole.Publisher, HttpMethod.Put, "/api/v1/apps/notes/channels/prod", Body(next))).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await CallAsync(ServerRole.Publisher, HttpMethod.Put, "/api/v1/apps/notes/channels/Bad_Name", Body(next))).Status);
+        Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(ServerRole.Viewer, HttpMethod.Put, "/api/v1/app-instances/acme/channels/preview", "{\"app\": \"notes\"}")).Status);
+
+        // removing the preview leaves production alone, instance first and then the app
+        Assert.Equal(HttpStatusCode.Conflict, (await CallAsync(ServerRole.Publisher, HttpMethod.Delete, "/api/v1/apps/notes/channels/preview")).Status);
+        Assert.Equal(HttpStatusCode.OK, (await CallAsync(ServerRole.Publisher, HttpMethod.Delete, "/api/v1/app-instances/acme/channels/preview")).Status);
+        Assert.Equal(HttpStatusCode.OK, (await CallAsync(ServerRole.Publisher, HttpMethod.Delete, "/api/v1/apps/notes/channels/preview")).Status);
+        Assert.Null(Store.Resolve("acme~preview"));
+        Assert.Equal("1.1.0", Store.Resolve("acme")!.Manifest.Version);
+    }
+
+    [Fact]
     public async Task The_address_of_an_instance_is_on_the_apps_host_when_the_gateway_serves_one()
     {
         Seed();

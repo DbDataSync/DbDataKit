@@ -90,6 +90,9 @@ public static class TokenScope
 {
     public static string Entry(string model, string entity, bool write) => $"{model}/{entity}:{(write ? "write" : "read")}";
 
+    /// <summary>The entry that lets a token propose a change to the entity, to wait for approval, without applying it (plan 26 AP19, the manifest's <c>change request</c>); write includes it.</summary>
+    public static string ProposeEntry(string model, string entity) => $"{model}/{entity}:propose";
+
     public static bool Allows(ValidatedToken token, string model, string entity, bool write) =>
         token.Scope is null
         || token.Scope.Contains(Entry(model, entity, write: true), StringComparer.Ordinal)

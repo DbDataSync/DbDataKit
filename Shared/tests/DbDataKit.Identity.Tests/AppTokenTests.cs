@@ -111,6 +111,26 @@ public sealed class AppTokenTests : IDisposable
     }
 
     [Fact]
+    public void A_change_request_entry_lets_a_person_who_may_write_propose_and_one_who_may_not_only_read()
+    {
+        _grants.Scopes["initech"] = [TokenScope.ProposeEntry("sales", "order"), TokenScope.Entry("sales", "customer", write: false)];
+        _home.Directory.AssignApp(AssignmentSubject.User(_ada.Id), "initech", ServerRole.Author);
+        _home.Directory.AssignApp(AssignmentSubject.User(_bob.Id), "initech", ServerRole.Viewer);
+        var initech = App("initech");
+
+        var author = _validator.Validate(SignIn(initech, _ada).Access, "initech").Token!;
+        Assert.True(author.Proposes("sales", "order"));
+        Assert.True(author.Allows("sales", "order", write: false));         // proposing a change to a row is reading it
+        Assert.False(author.Allows("sales", "order", write: true));         // and it never applies one
+        Assert.False(author.Proposes("sales", "customer"));
+
+        var reader = _validator.Validate(SignIn(initech, _bob).Access, "initech").Token!;
+        Assert.False(reader.Proposes("sales", "order"));                    // the Store asks the author role of a change, proposed or applied
+        Assert.True(reader.Allows("sales", "order", write: false));
+        Assert.DoesNotContain(reader.Scope, e => e.EndsWith(":propose", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void The_consoles_and_other_clients_tokens_are_unchanged_and_are_not_an_apps()
     {
         var other = _home.Clients.Register("A console", [Redirect], confidential: false).Client;

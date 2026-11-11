@@ -130,6 +130,8 @@ public static class ServerProducts
         ("GET", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/preview", ServerRole.Viewer),
         ("GET", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/preview/{path}", ServerRole.Viewer),
         ("POST", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/publish", ServerRole.Approver),
+        // GP35d: send the build to the Gateway's preview channel (a read-only preview instance with the instance's data); nothing goes to production, so the author may
+        ("POST", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/preview-data", ServerRole.Author),
         ("GET", "api/v1/publish-targets", ServerRole.Approver),
         // the publisher's key reference: which secret holds the key of a target and which Gateway it is paired with; an administrator's, audited at the server. The key itself is never in a call.
         ("GET", "api/v1/publisher-keys", ServerRole.Admin),

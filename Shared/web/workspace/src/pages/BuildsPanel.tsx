@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, ErrorBanner, Link } from '@dbdatakit/shell'
-import { workspaceApi, type BuildDetail, type BuildSummary, type PublishAnswer, type PublishOptions } from '../api'
+import { workspaceApi, type BuildDetail, type BuildSummary, type PreviewDataAnswer, type PublishAnswer, type PublishOptions } from '../api'
 import { buildBusy, buildButton, buildWord, diagnosticLine, makeLabel, notIsolated, publishedLine } from '../model'
+import { PreviewDataForm } from './PreviewDataForm'
 import { PublishForm } from './PublishForm'
 
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : '')
@@ -57,6 +58,10 @@ function BuildDetailView({ project, id, buildId, canWrite, kind }: { project: st
     mutationFn: (p) => workspaceApi.publish(project, id, buildId, p.target, p.note, p.options),
     onSettled: () => client.invalidateQueries({ queryKey: ['workspace', 'build', project, id, buildId] }),
   })
+  const previewData = useMutation<PreviewDataAnswer, Error, { target: string; instance: string }>({
+    mutationFn: (p) => workspaceApi.previewWithData(project, id, buildId, p.target, p.instance),
+    onSettled: () => client.invalidateQueries({ queryKey: ['workspace', 'build', project, id, buildId] }),
+  })
   const build = detail.data?.build
   const result = detail.data?.result ?? null
   if (!build) return <div data-testid="wsp-build-detail"><ErrorBanner error={detail.error} /></div>
@@ -97,11 +102,26 @@ function BuildDetailView({ project, id, buildId, canWrite, kind }: { project: st
               <>
                 <div className="row" style={{ gap: 8, margin: '10px 0', flexWrap: 'wrap', alignItems: 'center' }}>
                   <button type="button" className="btn" data-testid="wsp-preview-toggle" onClick={() => setPreviewing((v) => !v)}>{previewing ? 'Close the preview' : 'Preview'}</button>
-                  <span className="hint">The preview is read only: the page has no network and shows no data.</span>
+                  <span className="hint">This preview is read only: the page has no network and shows no data. "Preview with data" below sends the build to the Gateway instead.</span>
                 </div>
                 {previewing && (
                   <iframe title="Preview of the built app" data-testid="wsp-preview-frame" sandbox="allow-scripts" src={workspaceApi.previewUrl(project, id, build.id)}
                     style={{ width: '100%', height: 420, border: '1px solid var(--border, #ccc)', background: '#fff' }} />
+                )}
+                <PreviewDataForm canWrite={canWrite} status={build.status} targets={targets.data ?? []} busy={previewData.isPending} onSend={(target, instance) => previewData.mutate({ target, instance })} />
+                {previewData.isPending && <div className="hint" data-testid="wsp-preview-data-progress">Sending the build to the Gateway's preview channel...</div>}
+                {previewData.isError && <PublishFailure error={previewData.error} />}
+                {previewData.isSuccess && (
+                  <div data-testid="wsp-preview-data-done" data-instance={previewData.data.preview.instance ?? ''}>
+                    <div className="empty">
+                      The preview of {previewData.data.preview.instance} runs this build.{' '}
+                      {previewData.data.preview.preview_address
+                        ? <a href={previewData.data.preview.preview_address} target="_blank" rel="noopener noreferrer" data-testid="wsp-preview-data-link">Open the preview</a>
+                        : <span className="mono" data-testid="wsp-preview-data-path">{previewData.data.preview.preview_path}</span>}
+                      {' '}It is signed in as you, reads the instance's data and keeps no change.
+                    </div>
+                    <ol className="hint">{previewData.data.steps.map((s, i) => <li key={i} data-testid="wsp-preview-data-step">{s}</li>)}</ol>
+                  </div>
                 )}
               </>
             )}
@@ -121,7 +141,7 @@ function BuildDetailView({ project, id, buildId, canWrite, kind }: { project: st
             <div className="hint" style={{ marginTop: 8 }}>Published from this build</div>
             {detail.data!.publishes.map((p, i) => (
               <div key={i} data-testid="wsp-publish-record" data-ok={String(p.ok)}>
-                {p.by} to {p.target} {when(p.at)}: {p.ok ? (p.answer ? publishedLine(p.answer) : '') : p.error}
+                {p.by} {p.preview ? `previewed ${p.preview} on` : 'to'} {p.target} {when(p.at)}: {p.ok ? (p.answer ? publishedLine(p.answer) : '') : p.error}
               </div>
             ))}
           </div>

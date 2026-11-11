@@ -15,7 +15,8 @@ public sealed class AppTokenBroker(ConsoleTokenIssuer issuer)
 
     /// <summary>The scope a manifest's <c>models</c> grant: <c>model/entity:read</c> or <c>:write</c> for each entity it lists.</summary>
     public static IReadOnlyList<string> ScopeOf(AppManifest manifest) =>
-        [.. manifest.Models.SelectMany(m => m.Entities.Where(e => e.Value != DataOperations.None).Select(e => TokenScope.Entry(m.Model, e.Key, write: e.Value.HasFlag(DataOperations.Write))))];
+        [.. manifest.Models.SelectMany(m => m.Entities.Where(e => e.Value != DataOperations.None).Select(e =>
+            e.Value.HasFlag(DataOperations.ChangeRequest) && !e.Value.HasFlag(DataOperations.Write) ? TokenScope.ProposeEntry(m.Model, e.Key) : TokenScope.Entry(m.Model, e.Key, write: e.Value.HasFlag(DataOperations.Write))))];
 
     /// <summary>A token for the instance's own audience (<c>app:&lt;instance&gt;</c>): the apps host's data gateway (<see cref="AppDataGateway"/>) is what accepts it, and makes the token the Store sees.</summary>
     public AppToken Issue(AppSession session, string instance)
