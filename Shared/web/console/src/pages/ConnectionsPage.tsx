@@ -5,9 +5,10 @@ import { consoleApi } from '../api'
 import { canCopy, copyConnection, copyFailure, keepsConnections, loadConnections, type ConnectionRow, type CopyFailure } from '../connections'
 import { ConsoleShell } from '../ConsoleShell'
 import { ConnectionInventory } from './ConnectionInventory'
+import { OutsideConnections } from './OutsideConnections'
 import { StateConnections } from './StateConnections'
 
-const columns = '1.2fr 1.6fr 1fr 2.2fr 1fr'
+const columns = '1.2fr 1.6fr 0.8fr 1fr 2.2fr 1fr'
 const product: Record<ConnectionRow['product'], string> = { dbdatasync: 'Sync', dbdatagateway: 'Gateway' }
 
 /**
@@ -33,7 +34,7 @@ export function ConnectionsPage() {
       <div className="pane" data-testid="connections-page">
         <div className="page-head">
           <h1 className="page-title">Connections</h1>
-          <span className="page-note">The connections of your Sync servers and the data sources of your Gateways. Copy one to another server.</span>
+          <span className="page-note">The database connections of your Sync servers and Gateways (copy one to another server), and the connections to outside systems and model providers this console keeps.</span>
         </div>
         <ErrorBanner error={instances.error ?? view.error} />
         {(view.data?.problems ?? []).map((p) => (
@@ -42,11 +43,12 @@ export function ConnectionsPage() {
         {view.isSuccess && rows.length === 0 && <div className="empty" data-testid="connections-none">No connection on the servers that answered.</div>}
         {rows.length > 0 && (
           <div className="card flush" data-testid="connections-rows">
-            <div className="grid-head" style={{ gridTemplateColumns: columns, gap: 14 }}><span>Server</span><span>Name</span><span>Engine</span><span>Detail</span><span /></div>
+            <div className="grid-head" style={{ gridTemplateColumns: columns, gap: 14 }}><span>Server</span><span>Name</span><span>Kind</span><span>Engine</span><span>Detail</span><span /></div>
             {rows.map((row) => (
               <div key={row.key} className="grid-row" style={{ gridTemplateColumns: columns, gap: 14 }} data-testid="connection-row" data-server={row.serverName} data-name={row.name}>
                 <span>{row.serverName} <span className="page-note">({product[row.product]})</span></span>
                 <span className="mono">{row.name}</span>
+                <span data-testid="connection-kind">{row.kind}</span>
                 <span className="mono">{row.engine}</span>
                 <span data-testid="connection-detail">{row.detail}</span>
                 <span className="row" style={{ gap: 8 }}>
@@ -65,6 +67,7 @@ export function ConnectionsPage() {
             onClose={() => setCopying(null)}
           />
         )}
+        <OutsideConnections />
         <ConnectionInventory />
         <StateConnections />
       </div>

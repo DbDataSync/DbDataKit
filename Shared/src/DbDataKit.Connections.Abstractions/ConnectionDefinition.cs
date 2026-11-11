@@ -101,6 +101,113 @@ public sealed class GrantsSpec
 }
 
 /// <summary>
+/// How a connection of an outside kind (<c>http</c>, <c>model-provider</c>) signs in (plan 27a IX01 and IX02; <c>connection/2</c>, additive). Every secret is a <b>reference</b> (<c>secret:</c>, <c>env:</c>, <c>file:</c>, <c>keyring:</c>, <c>dpapi:</c>), never the value.
+/// <c>method</c> is <c>none</c>, <c>api_key</c> (<see cref="KeySecret"/> sent in the header or query parameter <see cref="Name"/>, after <see cref="Prefix"/>), <c>basic</c> (<see cref="User"/> and <see cref="PasswordSecret"/>),
+/// <c>oauth2_client_credentials</c> (<see cref="TokenUrl"/>, <see cref="ClientId"/>, <see cref="ClientSecretSecret"/>, <see cref="Scope"/>; the token is cached and refreshed) or <c>client_certificate</c> (a PKCS#12 file or a secret holding it as Base64).
+/// </summary>
+[ConfigSchema(Naming = KeyNaming.SnakeCase, Description = "How a connection of an outside kind signs in (connection/2).")]
+public sealed class SignInSpec
+{
+    [ConfigKey(Pattern = "none|api_key|basic|oauth2_client_credentials|client_certificate")]
+    public string Method { get; set; } = "none";
+
+    /// <summary>api_key: where the key goes, <c>header</c> or <c>query</c>.</summary>
+    [ConfigKey(Pattern = "header|query")]
+    public string In { get; set; } = "header";
+
+    /// <summary>api_key: the header or query parameter name (default <c>X-Api-Key</c>, or <c>api_key</c> in a query).</summary>
+    public string? Name { get; set; }
+
+    /// <summary>api_key: text written before the key in a header, such as <c>Bearer </c>.</summary>
+    public string? Prefix { get; set; }
+
+    public string? KeySecret { get; set; }
+    public string? User { get; set; }
+    public string? PasswordSecret { get; set; }
+    public string? TokenUrl { get; set; }
+    public string? ClientId { get; set; }
+    public string? ClientSecretSecret { get; set; }
+    public string? Scope { get; set; }
+
+    /// <summary>oauth2_client_credentials: how the client signs in to the token address, <c>basic</c> (default) or <c>body</c>.</summary>
+    [ConfigKey(Pattern = "basic|body")]
+    public string ClientAuth { get; set; } = "basic";
+
+    /// <summary>client_certificate: a PKCS#12 (.pfx) file on this machine ...</summary>
+    public string? CertificateFile { get; set; }
+
+    /// <summary>... or a secret reference that holds it as Base64.</summary>
+    public string? CertificateSecret { get; set; }
+    public string? CertificatePasswordSecret { get; set; }
+}
+
+/// <summary>One model of a provider: its id as the provider names it, its window and largest answer, its price per million tokens (null: not priced, as a local model).</summary>
+[ConfigSchema(Naming = KeyNaming.SnakeCase)]
+public sealed class ModelSpec
+{
+    [ConfigKey(Required = true)]
+    public string Id { get; set; } = "";
+    [ConfigKey(Min = 1000, Max = 10000000)]
+    public int? Window { get; set; }
+    [ConfigKey(Min = 16, Max = 1000000)]
+    public int? MaxOutput { get; set; }
+    public PriceSpec? Price { get; set; }
+}
+
+[ConfigSchema(Naming = KeyNaming.SnakeCase)]
+public sealed class PriceSpec
+{
+    [ConfigKey(Required = true, Min = 0)]
+    public decimal Input { get; set; }
+    [ConfigKey(Required = true, Min = 0)]
+    public decimal Output { get; set; }
+}
+
+/// <summary>The <c>model_provider:</c> section of a connection of kind <c>model-provider</c> (plan 27a AG05): which wire it speaks, cloud or local, what it is for and the models it allows. Its key is <c>sign_in.key_secret</c>.</summary>
+[ConfigSchema(Naming = KeyNaming.SnakeCase, Description = "A model provider (connection kind model-provider).")]
+public sealed class ModelProviderSpec
+{
+    /// <summary>anthropic | openai | foundry | ollama | openai-compatible.</summary>
+    [ConfigKey(Required = true, Pattern = "anthropic|openai|foundry|ollama|openai-compatible")]
+    public string Provider { get; set; } = "";
+
+    /// <summary>cloud | local; required for openai-compatible, otherwise cloud (local for ollama).</summary>
+    [ConfigKey(Pattern = "cloud|local")]
+    public string? Locality { get; set; }
+
+    /// <summary>chat | embeddings.</summary>
+    [ConfigKey(Pattern = "chat|embeddings")]
+    public string Purpose { get; set; } = "chat";
+
+    /// <summary>bearer | api-key | none; the provider's usual one when left out.</summary>
+    [ConfigKey(Pattern = "bearer|api-key|none")]
+    public string? AuthStyle { get; set; }
+
+    public List<ModelSpec> Models { get; set; } = [];
+
+    /// <summary>Where a provider is when no endpoint is written (a Foundry deployment and a compatible server have no default).</summary>
+    public static string? DefaultEndpoint(string provider) => provider switch
+    {
+        "anthropic" => "https://api.anthropic.com",
+        "openai" => "https://api.openai.com/v1",
+        "ollama" => "http://localhost:11434/v1",
+        _ => null,
+    };
+}
+
+/// <summary>The kinds of a connection (plan 27a IX01): a database (the default), an HTTP API, a model provider.</summary>
+public static class ConnectionKinds
+{
+    public const string Database = "database";
+    public const string Http = "http";
+    public const string ModelProvider = "model-provider";
+
+    public static readonly string[] All = [Database, Http, ModelProvider];
+
+    public static bool IsKnown(string? kind) => kind is not null && All.Contains(kind, StringComparer.Ordinal);
+}
+
+/// <summary>
 /// The shared connection definition, schema <c>connection/2</c> (and <c>connection/1</c>, which is read as before). Load it with <see cref="ConnectionDefinitionLoader"/>, which also enforces the rules a binder cannot.
 /// Format 2 adds the optional sections <c>cache</c>, <c>checks</c> (plan 24a D5 and UC03) and <c>grants</c> (plan 22a GP03); a file that says <c>connection/1</c> and has either is refused naming the file and line.
 /// </summary>
@@ -125,8 +232,31 @@ public sealed class ConnectionDefinition
 
     [ConfigKey(Required = true, Pattern = "[A-Za-z][A-Za-z0-9_.-]{0,63}")]
     public string Name { get; set; } = "";
-    /// <summary>sqlserver | postgres | mysql | oracle | duckdb | odbc | flightsql | jdbc | descriptor id.</summary>
-    [ConfigKey(Required = true)]
+    /// <summary>
+    /// What the connection is (format 2, plan 27a IX01): <c>database</c> (also when the key is left out), <c>http</c> or <c>model-provider</c>. Only the loader's <c>outsideKinds</c> option lets a program read the last two; a program that keeps database connections refuses
+    /// such a file naming it. A format-1 file cannot say it.
+    /// </summary>
+    public string? Kind { get; set; }
+
+    /// <summary>The kind, with <c>database</c> for a file that does not say.</summary>
+    [ConfigIgnore]
+    public string KindName => Kind ?? ConnectionKinds.Database;
+
+    /// <summary>True for a kind that is not a database (<c>http</c>, <c>model-provider</c>).</summary>
+    [ConfigIgnore]
+    public bool IsOutside => KindName != ConnectionKinds.Database;
+
+    /// <summary>The address of an outside system: an http or https address with no user name, password or query in it (a key is never part of the address).</summary>
+    public string? Endpoint { get; set; }
+
+    /// <summary>How an outside kind signs in; null: it does not.</summary>
+    public SignInSpec? SignIn { get; set; }
+
+    /// <summary>The model provider section (kind <c>model-provider</c>).</summary>
+    public ModelProviderSpec? ModelProvider { get; set; }
+
+    /// <summary>sqlserver | postgres | mysql | oracle | duckdb | odbc | flightsql | jdbc | descriptor id. Required for a database; an outside kind has none.</summary>
+    [ConfigKey]
     public string Engine { get; set; } = "";
     /// <summary>Optional dialect id override (Plan 05).</summary>
     public string? Dialect { get; set; }
