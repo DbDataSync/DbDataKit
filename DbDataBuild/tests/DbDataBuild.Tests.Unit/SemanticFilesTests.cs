@@ -62,6 +62,42 @@ public class SemanticFilesTests : IDisposable
     }
 
     [Fact]
+    public void Publish_to_gateway_with_out_writes_the_compiled_catalog_and_the_data_sources_without_any_login_and_sends_nothing()
+    {
+        var dir = Retail();
+        var target = Path.Combine(dir, "gateway-out");
+        var (exit, output, err) = Run("project", "publish", "--to", "gateway", "--project", dir, "--out", target);
+        Assert.True(exit == 0, output + err);
+
+        var manifest = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(target, "gateway.json")))!;
+        Assert.Equal("gateway-publish/1", (string?)manifest["schema"]);
+        var model = Assert.Single(manifest["models"]!.AsArray())!;
+        Assert.Equal("retail_sales", (string?)model["name"]);
+        Assert.Equal("sqlserver", (string?)model["sources"]!["default"]);
+        var catalog = File.ReadAllText(Path.Combine(target, (string)model["file"]!));
+        Assert.Equal(ProjectContext.Load(dir).Semantic.Models[0].Compilation!.Json.ToJsonString(), catalog);
+        var source = File.ReadAllText(Path.Combine(target, "data-sources", "sqlserver.yaml"));
+        Assert.Contains("name: sqlserver", source);
+        Assert.Contains("access: readonly", source);
+        Assert.DoesNotContain("secret", source, StringComparison.OrdinalIgnoreCase);       // no login, no reference to one
+
+        Assert.Equal(CliApp.ExitUsage, Run("project", "publish", "--to", "gateway", "--project", dir).Exit);                       // writes only
+        Assert.Equal(CliApp.ExitUsage, Run("project", "publish", "--to", "gateway", "--project", dir, "--out", target, "--server", "x").Exit);
+    }
+
+    [Fact]
+    public void Publish_to_gateway_names_the_file_of_a_semantic_model_that_does_not_compile_and_writes_nothing()
+    {
+        var dir = Retail();
+        Edit(SemanticFile(dir), "column: category_name", "column: category_nam");
+        var target = Path.Combine(dir, "gateway-out");
+        var (exit, output, err) = Run("project", "publish", "--to", "gateway", "--project", dir, "--out", target);
+        Assert.Equal(CliApp.ExitFindings, exit);
+        Assert.Contains("semantic/sales.yml", output + err);
+        Assert.False(Directory.Exists(target));
+    }
+
+    [Fact]
     public void A_PostgreSQL_connection_is_a_postgres_source_of_the_catalog_not_a_sqlserver_one()
     {
         var dir = Retail();

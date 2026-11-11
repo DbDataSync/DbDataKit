@@ -190,6 +190,16 @@
       "note": "new with plan 33 SC20i (decision D20): the tables and columns of a project's connections as a paired server answered a read-only call, committed in the draft so the build child, which has no network and no login, can offer a mapping its columns; it holds no secret and no row (a key that would carry one, or a value that looks like a password, a connection string, an address with a login or a secret reference, is refused with file, line and key path); the C# reader is the definition and Shared/web/workspace/src/catalogCache.ts its twin, both run over DbDataWorkspace/tests/DbDataWorkspace.Tests/Fixtures/catalog-cache",
       "version_source": { "file": "Shared/src/DbDataKit.Authoring.Server/CatalogCache.cs", "pattern": "public const int Version = (\\d+);" },
       "files": [ { "path": "Shared/src/DbDataKit.Authoring.Server/CatalogCache.cs", "sha256": null } ]
+    },
+    {
+      "id": "gateway-publish",
+      "title": "What a Gateway publish of a Build project sends (gateway.json, schema: gateway-publish/N, beside models/ and data-sources/)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "new with plan 33 SC20e: written by `dbdatabuild project publish --to gateway --out <folder>`, read by the Workspace server's Gateway publish; the compiled catalog of each semantic model and the read-only connection/2 document of each data source it reads, with no login and no reference to one",
+      "version_source": { "file": "DbDataBuild/src/DbDataBuild.Cli/Runner/ProjectPublishGateway.cs", "pattern": "Schema = \"gateway-publish/(\\d+)\";" },
+      "files": [ { "path": "DbDataBuild/src/DbDataBuild.Cli/Runner/ProjectPublishGateway.cs", "sha256": null } ]
     }
   ]
 }

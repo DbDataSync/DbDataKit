@@ -10,9 +10,12 @@ using DbDataKit.Web.Trust;
 namespace DbDataKit.Authoring.Server;
 
 /// <summary>A publish was refused or could not be done; <see cref="Status"/> is the HTTP status the route answers with, and the message is a sentence a person can act on (the Gateway's own words when it refused).</summary>
-public sealed class WorkspacePublishException(string message, int status) : Exception(message)
+public sealed class WorkspacePublishException(string message, int status, System.Text.Json.Nodes.JsonObject? adopt = null) : Exception(message)
 {
     public int Status { get; } = status;
+
+    /// <summary>Set when the Gateway refused for want of an adoption (plan 33 SC21f): the data source a model would go on and who made it (<c>data_source</c>, <c>made_by</c>); a screen asks the person and publishes again with <c>adopt</c>.</summary>
+    public System.Text.Json.Nodes.JsonObject? Adopt { get; } = adopt;
 }
 
 /// <summary>A server this server publishes to (a Gateway, or since plan 33 SC20b a Runner): where it is, its instance id, the certificate fingerprint every call pins, the roles the pairing allows, the name the client was paired under and the product it is (<c>gateway</c> or <c>runner</c>; a file written before the field existed has none, and those targets are Gateways). Kept in <c>publish-targets.json</c>, never the key.</summary>

@@ -6,7 +6,7 @@ namespace DbDataWorkspace.Tests;
 
 /// <summary>
 /// Publishing a Build project's package to a paired Runner (plan 33 SC20d, plan 28c E07): a build of a Build project is the check (<c>project show metadata</c>) and <c>project publish --to runner --out</c>, run by a stand-in <c>dbdatabuild</c>
-/// (<see cref="FakeBuild"/>); the package is then sent as the Sync set is, with the target's publisher key, to a fake Runner. Semantic models and data sources to a Gateway (SC20e) are not published from the Workspace: see the plan.
+/// (<see cref="FakeBuild"/>); the package is then sent as the Sync set is, with the target's publisher key, to a fake Runner. The compiled semantic models go to a Gateway over the data sources it has (SC20e), with no login.
 /// </summary>
 [Collection(ServerCollection.Name)]
 public sealed class WorkspaceBuildPublishTests
@@ -85,7 +85,59 @@ public sealed class WorkspaceBuildPublishTests
     }
 
     [Fact]
-    public async Task A_build_project_is_not_published_to_a_gateway_and_the_refusal_names_both()
+    public async Task The_semantic_models_of_a_build_project_are_published_to_a_gateway_over_its_data_sources_with_no_login_and_published_again_unchanged_or_refused_when_a_data_source_is_not_the_gateways()
+    {
+        await using var gateway = await FakeGateway.StartAsync();
+        await using var server = await WorkspaceHarness.StartAsync(buildExecutable: Fake());
+        Assert.Equal(HttpStatusCode.Created, (await server.AsAdmin(HttpMethod.Post, "/api/v1/publisher-keys/edge/pair", new JsonObject { ["url"] = gateway.Url.ToString(), ["code"] = gateway.NewCode() }.ToJsonString())).Response.StatusCode);
+        var workspace = await DraftAsync(server);
+        Assert.True((await server.AsAda(HttpMethod.Put, $"/api/v1/projects/{Project}/workspaces/{workspace}/files/semantic/sales.yml", """{"content":"name: sales\n"}""")).Response.IsSuccessStatusCode);
+        var build = await BuildAsync(server, workspace);
+
+        gateway.DataSources.Add("warehouse");
+        var published = await Publish(server, workspace, build, new JsonObject { ["target"] = "edge" });
+        Assert.Equal(HttpStatusCode.OK, published.Response.StatusCode);
+        var model = published.Body!["published"]!["models"]![0]!;
+        Assert.Equal(("sales", 1, true), ((string)model["model"]!, (int)model["version"]!, (bool)model["created"]!));
+        Assert.Equal("warehouse", (string)gateway.SemanticModels["sales"].Sources["default"]!);
+        Assert.Contains("name: sales", gateway.SemanticModels["sales"].Catalog);
+        Assert.All(gateway.Calls, c => { Assert.Contains("with publisher", c); });
+        Assert.DoesNotContain("secret", gateway.Published.Single().ToJsonString(), StringComparison.OrdinalIgnoreCase);   // no login, no reference to one
+
+        var again = (await Publish(server, workspace, await BuildAsync(server, workspace), new JsonObject { ["target"] = "edge" })).Body!["published"]!["models"]![0]!;
+        Assert.Equal((1, true), ((int)again["version"]!, (bool)again["unchanged"]!));
+
+        // a Gateway without the data source says so in its words, and nothing is claimed
+        gateway.DataSources.Remove("warehouse");
+        var refused = await Publish(server, workspace, await BuildAsync(server, workspace), new JsonObject { ["target"] = "edge" });
+        Assert.Equal(HttpStatusCode.Conflict, refused.Response.StatusCode);
+        Assert.Contains("'warehouse', which is not a data source of this server", (string)refused.Body!["error"]!);
+    }
+
+    [Fact]
+    public async Task The_semantic_models_of_a_build_project_go_over_a_hand_made_data_source_only_with_the_confirmation_naming_it()
+    {
+        await using var gateway = await FakeGateway.StartAsync();
+        gateway.DataSources.Add("warehouse");
+        gateway.HandMade.Add("warehouse");
+        await using var server = await WorkspaceHarness.StartAsync(buildExecutable: Fake());
+        Assert.Equal(HttpStatusCode.Created, (await server.AsAdmin(HttpMethod.Post, "/api/v1/publisher-keys/edge/pair", new JsonObject { ["url"] = gateway.Url.ToString(), ["code"] = gateway.NewCode() }.ToJsonString())).Response.StatusCode);
+        var workspace = await DraftAsync(server);
+        Assert.True((await server.AsAda(HttpMethod.Put, $"/api/v1/projects/{Project}/workspaces/{workspace}/files/semantic/sales.yml", """{"content":"name: sales\n"}""")).Response.IsSuccessStatusCode);
+        var build = await BuildAsync(server, workspace);
+
+        var refused = await Publish(server, workspace, build, new JsonObject { ["target"] = "edge" });
+        Assert.Equal(HttpStatusCode.Conflict, refused.Response.StatusCode);
+        Assert.Equal(("warehouse", "hand"), ((string)refused.Body!["adopt"]!["data_source"]!, (string)refused.Body["adopt"]!["made_by"]!));
+        Assert.Empty(gateway.SemanticModels);
+
+        var adopted = await Publish(server, workspace, build, new JsonObject { ["target"] = "edge", ["adopt"] = new JsonArray("warehouse") });
+        Assert.Equal(HttpStatusCode.OK, adopted.Response.StatusCode);
+        Assert.Contains("warehouse for sales by ", Assert.Single(gateway.Adoptions));
+    }
+
+    [Fact]
+    public async Task A_build_project_with_no_semantic_model_has_nothing_to_publish_to_a_gateway_and_the_refusal_says_so()
     {
         await using var gateway = await FakeGateway.StartAsync();
         await using var server = await WorkspaceHarness.StartAsync(buildExecutable: Fake());
@@ -93,9 +145,9 @@ public sealed class WorkspaceBuildPublishTests
         var workspace = await DraftAsync(server);
         var build = await BuildAsync(server, workspace);
 
-        var refused = await Publish(server, workspace, build, new JsonObject { ["target"] = "edge", ["channel"] = "prod" });
+        var refused = await Publish(server, workspace, build, new JsonObject { ["target"] = "edge" });
         Assert.Equal(HttpStatusCode.Conflict, refused.Response.StatusCode);
-        Assert.Contains("build kind of project is published to a runner (package)", (string)refused.Body!["error"]!);
-        Assert.Contains("'edge' is a gateway", (string)refused.Body["error"]!);
+        Assert.Contains("no semantic model to publish", (string)refused.Body!["error"]!);
+        Assert.Empty(gateway.SemanticModels);
     }
 }

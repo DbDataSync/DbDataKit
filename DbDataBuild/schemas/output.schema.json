@@ -3715,6 +3715,18 @@
         "written_to": {
           "type": "string"
         },
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "data_sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "promoted_from": {
           "type": "string"
         },
