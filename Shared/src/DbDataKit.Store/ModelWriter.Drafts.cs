@@ -64,6 +64,15 @@ public sealed partial class ModelWriter
         return await ExecuteAsync(null, $"DELETE FROM {DraftTableName} WHERE {Col("draft_id")} = @p0{Mine()}", [_draft], cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Removes the named drafts of this copy (the expiry of idle ones); returns how many writes went.</summary>
+    public async Task<int> DiscardDraftsAsync(IEnumerable<string> ids, CancellationToken cancellationToken = default)
+    {
+        if (!await DraftStorage.ExistsAsync(_connection, _schema, cancellationToken).ConfigureAwait(false)) return 0;
+        var removed = 0;
+        foreach (var id in ids) removed += await ExecuteAsync(null, $"DELETE FROM {DraftTableName} WHERE {Col("draft_id")} = @p0{Mine()}", [id], cancellationToken).ConfigureAwait(false);
+        return removed;
+    }
+
     /// <summary>The drafts this copy of the model holds, by id (what the expiry of previews walks).</summary>
     public async Task<IReadOnlyList<DraftSummary>> DraftsAsync(CancellationToken cancellationToken = default)
     {

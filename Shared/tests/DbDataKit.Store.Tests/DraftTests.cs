@@ -189,3 +189,25 @@ public sealed class DraftTests
         }
     }
 }
+
+/// <summary>Preview lifetimes (plan 21 CH07): an idle draft gets a notice and is removed on the day, with an injected clock.</summary>
+public sealed class DraftExpiryTests
+{
+    private static readonly DateTimeOffset Start = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+    [Fact]
+    public void An_idle_draft_is_warned_a_week_before_and_removed_on_the_day_and_a_busy_one_is_left()
+    {
+        DraftSummary[] drafts = [new("idle", 1, Start, Start), new("busy", 2, Start, Start.AddDays(20))];
+        Assert.Empty(DraftExpiry.Plan(drafts, Start.AddDays(22)).Warn);
+        var warned = DraftExpiry.Plan(drafts, Start.AddDays(23));
+        Assert.Equal(["idle"], warned.Warn.Select(d => d.Id));
+        Assert.Empty(warned.Remove);
+        var removed = DraftExpiry.Plan(drafts, Start.AddDays(30));
+        Assert.Equal(["idle"], removed.Remove.Select(d => d.Id));
+        Assert.Empty(removed.Warn);
+        Assert.Equal(["busy"], DraftExpiry.Plan(drafts, Start.AddDays(44)).Warn.Select(d => d.Id));
+        Assert.Equal(["idle", "busy"], DraftExpiry.Plan(drafts, Start.AddDays(50)).Remove.Select(d => d.Id));
+        Assert.Throws<ArgumentOutOfRangeException>(() => DraftExpiry.Plan(drafts, Start, idleDays: 0));
+    }
+}
