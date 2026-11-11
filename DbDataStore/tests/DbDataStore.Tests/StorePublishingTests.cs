@@ -163,7 +163,9 @@ public sealed class StorePublishingTests : IAsyncLifetime
         Assert.True(first.Exit == 0, first.Error);
         Assert.Equal(["/api/v1/secrets/mdm-write", "/api/v1/data-sources/mdm", "/api/v1/entity-models/territories"], _seen.Where(s => s.Method == "PUT").Select(s => s.Path));
         Assert.DoesNotContain("SENTINEL", (string)_seen.Single(s => s.Path == "/api/v1/data-sources/mdm" && s.Method == "PUT").Body!["text"]!);
-        Assert.Equal(Model(), (string)ModelPuts.Single().Body!["model"]!);
+        // the file says schemaVersion: 1; what is published is the current format of it (plan 33 6d, rule 5), and the data source is the current connection format
+        Assert.Equal(DbDataKit.DataModel.DataModelLoader.WithCurrentVersion(Model()), (string)ModelPuts.Single().Body!["model"]!);
+        Assert.StartsWith("schema: connection/2\n", (string)_seen.Single(s => s.Path == "/api/v1/data-sources/mdm" && s.Method == "PUT").Body!["text"]!);
         Assert.True(await HasColumnAsync("name"));
         Assert.Equal(["edge"], new StorePublications(StoreDir).Of("territories"));
 
@@ -190,7 +192,7 @@ public sealed class StorePublishingTests : IAsyncLifetime
         var second = await Cli("model", "publish", "territories");
         Assert.True(second.Exit == 0, second.Error);
         Assert.True(await HasColumnAsync("region"));
-        Assert.Equal(edited, (string)ModelPuts.Single().Body!["model"]!);
+        Assert.Equal(DbDataKit.DataModel.DataModelLoader.WithCurrentVersion(edited), (string)ModelPuts.Single().Body!["model"]!);
         Assert.Equal(1, (int)ModelPuts.Single().Body!["expected_version"]!);
 
         // taken off the group, it is read and written here again

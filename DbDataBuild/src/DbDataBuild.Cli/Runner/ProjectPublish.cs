@@ -214,6 +214,13 @@ internal static class RunnerProject
             var bytes = File.ReadAllBytes(file.Source);
             if (TextExtensions.Contains(Path.GetExtension(file.Path), StringComparer.OrdinalIgnoreCase) && !bytes.Contains((byte)0) && bytes.Contains((byte)'\r'))
                 bytes = new UTF8Encoding(false).GetBytes(new UTF8Encoding(false).GetString(bytes).Replace("\r\n", "\n"));
+            // a connection file leaves in the current format, whatever its own number says (plan 33 6d, rule 5); the file in the project is left as written
+            if (file.Path.StartsWith("connections/", StringComparison.Ordinal) && Path.GetExtension(file.Path) is ".yaml" or ".yml" && !bytes.Contains((byte)0))
+            {
+                var text = new UTF8Encoding(false).GetString(bytes);
+                var current = DbDataKit.Connections.ConnectionDefinitionLoader.WithCurrentVersion(text);
+                if (current != text) bytes = new UTF8Encoding(false).GetBytes(current);
+            }
             File.WriteAllBytes(target, bytes);
         }
     }

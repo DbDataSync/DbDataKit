@@ -26,6 +26,13 @@ public static class DataModelLoader
     /// <summary>The newest format this reads (<c>model/2</c>: the sections <c>cache</c> and <c>checks</c>, plan 24a UC03); format 1 is read as well.</summary>
     public const int Version = 2;
 
+    /// <summary>
+    /// <paramref name="text"/> with its top-level <c>schemaVersion:</c> line set to <see cref="Version"/>, the rest as written: what a save or a publish of a model that loads writes (plan 33 6d, rules 3 and 5), so a file
+    /// read in format 1 never leaves as 1. A text with no such line is unchanged.
+    /// </summary>
+    public static string WithCurrentVersion(string text) =>
+        System.Text.RegularExpressions.Regex.Replace(text, @"^schemaVersion:[ \t]*[""']?\d+[""']?", $"schemaVersion: {Version}", System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+
     public const string CacheNotInThisFormat = "DBD-MDL-007";
     public const string CannotBeCached = "DBD-MDL-008";
 

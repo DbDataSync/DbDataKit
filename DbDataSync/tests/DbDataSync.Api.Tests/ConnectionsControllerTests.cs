@@ -234,7 +234,7 @@ public sealed class ConnectionsControllerTests : IClassFixture<TestApiFactory>
         var answer = await Json(response);
 
         var text = answer.GetProperty("text").GetString()!;
-        Assert.Contains("schema: connection/1", text);
+        Assert.Contains("schema: connection/2", text);
         Assert.Contains($"password_secret: secret:dbdata:sync:connection:{name}", text);
         Assert.DoesNotContain("sup3r-s3cr3t", text);
         Assert.Equal(64, answer.GetProperty("version").GetString()!.Length);

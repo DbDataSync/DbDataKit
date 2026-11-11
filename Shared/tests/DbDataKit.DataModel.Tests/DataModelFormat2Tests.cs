@@ -43,6 +43,26 @@ public sealed class DataModelFormat2Tests
     }
 
     [Fact]
+    public void A_save_or_a_publish_writes_the_current_format_and_a_version_out_of_range_is_refused_naming_the_file()
+    {
+        // plan 33 6d: format 1 (the oldest still read) loads, and what a save or a publish writes of it is format 2, the rest as written
+        var current = DataModelLoader.WithCurrentVersion("# kept\n" + Model(1));
+        Assert.StartsWith("# kept\nschemaVersion: 2\n", current);
+        var loaded = Load(current);
+        Assert.True(loaded.Ok, string.Join("\n", loaded.Diagnostics));
+        Assert.Equal(2, loaded.Model!.SchemaVersion);
+        Assert.Equal(current, DataModelLoader.WithCurrentVersion(current));
+        Assert.StartsWith("schemaVersion: 2\n", DataModelLoader.WithCurrentVersion(Model(1).Replace("schemaVersion: 1", "schemaVersion: \"1\"")));
+
+        foreach (var outside in new[] { 0, 3 })
+        {
+            var refused = Load(Model(outside));
+            Assert.False(refused.Ok);
+            Assert.Contains(refused.Diagnostics, d => d.Path == "sales.model.yaml" && d.Message.Contains("schemaVersion", StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
     public void A_format_2_file_with_each_key_of_the_cache_section_loads()
     {
         var result = Load(Model(2, "cache: {enabled: true, ttl: 10m, scope: rules, dataset: region}\nchecks:\n  - {id: region_fresh, kind: freshness, dataset: region, max_age: 6h, severity: block}"));

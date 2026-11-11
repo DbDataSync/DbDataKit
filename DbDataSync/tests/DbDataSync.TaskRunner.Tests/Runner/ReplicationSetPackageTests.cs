@@ -123,6 +123,30 @@ public sealed class ReplicationSetPackageTests : IDisposable
     }
 
     [Fact]
+    public void FilesOfThePreviousFormatArePublishedInTheCurrentOne_AndTheFilesInTheRepositoryStayAsWritten()
+    {
+        // plan 33 6d, rule 5: a task file of format 1 and a connection/1 file leave as 2, whatever the repository holds
+        var task = Path.Combine(_root, "config", "replications", "orders", "task.yaml");
+        var connection = Path.Combine(_root, "config", "connections", "crm-src.yaml");
+        var taskAsWritten = System.Text.RegularExpressions.Regex.Replace(File.ReadAllText(task), @"^schemaVersion:.*$", "schemaVersion: 1", System.Text.RegularExpressions.RegexOptions.Multiline);
+        var connectionAsWritten = System.Text.RegularExpressions.Regex.Replace(File.ReadAllText(connection), @"^schema:.*$", "schema: connection/1", System.Text.RegularExpressions.RegexOptions.Multiline);
+        File.WriteAllText(task, taskAsWritten);
+        File.WriteAllText(connection, connectionAsWritten);
+
+        var built = Build(out var problems);
+        Assert.Empty(problems);
+        var directory = Path.Combine(_root, "out");
+        ReplicationSetPackage.Write(built, directory);
+
+        var published = File.ReadAllText(Path.Combine(directory, "files", "repo", "config", "replications", "orders", "task.yaml"));
+        Assert.Contains("schemaVersion: 2", published);
+        Assert.DoesNotContain("schemaVersion: 1", published);
+        Assert.StartsWith("schema: connection/2", File.ReadAllText(Path.Combine(directory, "files", "repo", "config", "connections", "crm-src.yaml")));
+        Assert.Equal(taskAsWritten, File.ReadAllText(task));
+        Assert.Equal(connectionAsWritten, File.ReadAllText(connection));
+    }
+
+    [Fact]
     public void AMappingWhoseColumnCacheIsMissingIsRefusedNamingTheMappingAndTheFile()
     {
         Replication("returns", ScheduleMode.Periodic, cron: "0 3 * * *", cached: false);
