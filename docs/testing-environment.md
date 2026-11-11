@@ -116,3 +116,27 @@ harness no longer refuses them: the password is `DBDATAKIT_TEST_PASSWORD`). GitH
 reference `DbDataSync.Drivers.Jdbc`, `DbDataSync.Api.Tests` has no IKVM, no pgJDBC jar and does not compile `JdbcTestQuery*` (the define `SKIP_JDBC` guards the
 rest), and `DbDataSync.Drivers.Jdbc` and `.Jdbc.Tests` build nothing (a message says so). No IKVM package is restored. Off by default, so CI is unchanged.
 Build the Sync projects one by one with it (not a solution that needs the Jdbc projects to produce output): `dotnet build DbDataSync/tests/DbDataSync.Api.Tests`.
+
+## Fast verifier runs
+
+A change is checked by the suites it can affect, not by all of them. What exists, from the cheapest cut to the most precise:
+
+- **Leave out the engines and the shell-outs by category.** VSTest projects (Sync, Build unit): `dotnet test --filter "Category!=Integration"`; add `&Category!=Slow` to leave out the tests tagged `[Trait("Category","Slow")]` (a test that waits for a timeout or shells out; CI still runs them, it does not pass this filter). Microsoft.Testing.Platform projects (Kit, Shared, Gateway, Console, Runner, Store, Workspace; xunit v3) take trait filters on the built executable: `--filter-not-trait "Category=Integration"`, `--filter-not-trait "Category=Slow"` (xunit v3 option names; run the executable with `--help` to confirm for the installed version).
+- **One class or one method.** MTP: `--filter-class "*Name"`, `--filter-method "*Name*"`; the xunit v3 in-process runner: `-class` and `-method`; VSTest: `--filter FullyQualifiedName~Name`. After a build, run the executable (`tests/<Name>/bin/Debug/net10.0/<Name>`) so no second build and no test-host handshake is needed.
+- **No JDBC and no IKVM** (about 4 GB of packages): `DBDATAKIT_TEST_SKIP_JDBC=true`, see above. `scripts/tests/test_skip_jdbc.py` checks that the projects named there keep their conditions.
+- **One build at a time, no compile server left behind.** When several agents share a machine and a lock around `dotnet`, add `-p:UseSharedCompilation=false` and keep `MSBUILDDISABLENODEREUSE=1`: the Roslyn server (`VBCSCompiler`) a build starts inherits the lock's file descriptor and holds `flock` for about 10 minutes after the build ended, which starves every waiter (observed: a queue of 12 commands blocked 40 minutes behind an idle compile server).
+- Delete `bin/` and `obj/` (and `node_modules/`) of a project after its run when disk is tight; `dotnet clean` leaves most of it.
+
+### The slowest groups
+
+Measured on the `DbDataSync` suites under `SkipJdbc` (VSTest `--logger trx`; the run time is what the runner reports, the wall time is longer by the restore and the build):
+
+| Group | Run time | How to skip it |
+| --- | --- | --- |
+| `DbDataSync.Api.Tests` as a whole (619 tests, 23 skipped, Windows-only ones among them) | 45 s | `-class` of the tests you changed |
+| `QualityEndpointTests.A_run_evaluates_the_replications_checks_and_records_a_result_even_when_the_target_cannot_be_reached` | 16 s (waits out an unreachable target) | `--filter "Category!=Slow"` (tagged) |
+| `RunnerOwnedRunsTests.A_line_of_a_run_on_the_runner_reaches_the_hub_within_a_second_of_being_written` | 3.2 s | `-class` |
+| `ScriptTestServiceTests` | 2.3 s in total | `-class` |
+| `DbDataSync.Certificates.Tests` (20 tests) | 4 s | |
+
+Every other Api test class is under 1.5 s. Tests that shell out (cost is the child process, usually `dotnet publish` of a fixture project, a Bun bundle or a spawned host): `DbDataSync.Libraries.Tests/FixturePublisher.cs` and `Shared/tests/DbDataKit.Runner.Execution.Tests/PackageFixture.cs` (`dotnet publish`; run once per class fixture), `DbDataSync.Cli.Tests` (`LauncherTests`, `PackagePublishOnRealRunnerTests`: spawn the CLI and a runner), `DbDataSync.TaskRunner.Tests` (`RunnerWithoutItsOwnerTests`, `SyncRuntimePackageTests`: spawn the TaskRunner), `DbDataSync.Api.Tests/RunLifecycleIntegrationTests.cs`, `Shared/tests/DbDataKit.Apps.Bundling.Tests` (Bun), `Shared/tests/DbDataKit.Scripting.Tests/CsxCompilerTests.cs`, `DbDataGateway.Tests` (`WorkerFixture`, `WorkerProcessHostTests`: the 32-bit ODBC worker), `DbDataBuild.Tests.Conformance` (engines) and `DbDataRunner.Tests/SamplePackage.cs`. The ones that need an engine or the network already carry `Category=Integration`.
