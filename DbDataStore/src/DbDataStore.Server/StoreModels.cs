@@ -160,12 +160,14 @@ public static partial class StoreModels
             if (!result.Ok) return Results.Json(new JsonObject { ["error"] = $"{name}.yaml is not a valid model, so nothing was saved.", ["diagnostics"] = Diagnostics(result.Diagnostics) }, statusCode: StatusCodes.Status422UnprocessableEntity);
             var path = FileOf(directory, name);
             var existed = File.Exists(path);
-            text = DbDataKit.DataModel.DataModelLoader.WithCurrentVersion(text);   // a save writes the current format, never the one that was read (plan 33 6d)
+            var before = existed ? await File.ReadAllTextAsync(path, context.RequestAborted) : null;
+            text =DbDataKit.DataModel.DataModelLoader.WithCurrentVersion(text);   // a save writes the current format, never the one that was read (plan 33 6d)
             System.IO.Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             var temporary = path + ".tmp";
             await File.WriteAllTextAsync(temporary, text.ReplaceLineEndings("\n"), new System.Text.UTF8Encoding(false), context.RequestAborted);
             File.Move(temporary, path, true);
-            var version = Snapshot(directory, name, text.ReplaceLineEndings("\n"));
+            var token = context.ManagementToken();
+            var version = StoreModelHistory.RecordSave(directory, name, text.ReplaceLineEndings("\n"), before, token.SubjectId, token.SubjectName);
             return Results.Json(new JsonObject { ["name"] = name, ["created"] = !existed, ["version"] = version, ["diagnostics"] = Diagnostics(result.Diagnostics) }, statusCode: existed ? StatusCodes.Status200OK : StatusCodes.Status201Created);
         });
 
@@ -174,7 +176,10 @@ public static partial class StoreModels
             var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Admin);
             if (!decision.Allowed) return Denied(decision);
             if (!IsValidName(name) || !File.Exists(FileOf(directory, name))) return Results.NotFound(new { error = $"There is no model '{name}'." });
+            var last = VersionOf(File.ReadAllText(FileOf(directory, name)));
             File.Delete(FileOf(directory, name));
+            var token = context.ManagementToken();
+            StoreModelHistory.Record(directory, name, new ModelHistoryEntry(last, DateTimeOffset.UtcNow, token.SubjectId, token.SubjectName, ModelHistoryEntry.Removed));
             return Results.NoContent();
         });
     }

@@ -9,6 +9,10 @@ export interface Diagnostic { code: string; severity: 'error' | 'warning' | 'inf
 /** A model as the Store holds it: its text, the version a save quotes, and what this caller may do (the server checks every call again). */
 export interface ModelDocument { name: string; text: string; version: string; diagnostics: Diagnostic[]; can: { save: boolean; remove: boolean; admin: boolean } }
 
+/** One save, creation or removal of a model's text: who and when; `current` is the text the model holds now. A text older than the journal has no author. */
+export interface HistoryEntry { version: string; at: string; by: string | null; by_name: string | null; kind: 'created' | 'saved' | 'removed' | string; current: boolean }
+export interface ModelHistory { name: string; exists: boolean; current: string | null; versions: HistoryEntry[] }
+
 export interface Statement { object: string; description: string; text: string }
 export interface StoragePlan { engine: string; statements: Statement[]; existing: string[] | null; connection_problem?: string }
 export interface MigrationPlan { up_to_date: boolean; applied: boolean; statements: Statement[]; blocked: string[]; notes: string[] }
@@ -45,6 +49,10 @@ export const storeApi = {
   save: (name: string, body: string, expectedVersion: string | null) =>
     request<{ name: string; created: boolean; version: string; diagnostics: Diagnostic[] }>(`/api/v1/models/${enc(name)}${expectedVersion ? `?expected_version=${enc(expectedVersion)}` : ''}`, { method: 'PUT', body, headers: { 'Content-Type': 'text/plain' } }),
   remove: (name: string) => request<void>(`/api/v1/models/${enc(name)}`, { method: 'DELETE' }),
+  /** The model's earlier texts, newest first (UI07): who saved each and when. */
+  history: (name: string) => request<ModelHistory>(`/api/v1/models/${enc(name)}/history`),
+  /** One earlier text; restoring it is an ordinary save of that text quoting the version the model holds now. */
+  historyText: (name: string, version: string) => request<{ name: string; version: string; text: string }>(`/api/v1/models/${enc(name)}/history/${enc(version)}`),
   instances: (name: string) => request<Instances>(`/api/v1/models/${enc(name)}/instances`),
   migrations: (name: string) => request<Migrations>(`/api/v1/models/${enc(name)}/migrations`),
   storage: (name: string, instance: string | null) => request<StoragePlan>(`${base(name, instance)}/storage`),

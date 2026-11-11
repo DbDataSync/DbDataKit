@@ -10,8 +10,7 @@ Status: **in progress**. What is built (the `model/1` format, rules, history, st
 | Native temporal tables | SQL Server and MariaDB system-versioned tables as a second history implementation behind one conformance suite (as-of reads, history of a row, corrections, concurrent edits). Only the application-managed one exists, so there is nothing for the suite to compare |
 | Entity roles | `role: dimension\|mapping\|calendar` is parsed and validated; nothing reads it. The semantic layer should use such an entity as a governed dimension, value map, bridge or calendar through the generated physical layer |
 | Structure changes | the expand step is built (new tables, new nullable columns). The contract step is not: NOT NULL, drop, retype, and changes of history or instance mode, each a planned change with a copy of the data (renaming or retyping) or an approval (dropping) |
-| Change events | not built: no event on an applied change (model, entity, change id) and no "on change" trigger next to cron in the scheduler, so a Sync or Build run cannot follow a change |
-| Rules at proposal time | a change request's rules run at approval, not when it is proposed |
+| Change events, the "on change" trigger | the event itself is built (`GET /api/v1/events`, in [DbDataStore/README.md](../../DbDataStore/README.md)); left: the "on change" trigger next to cron in the scheduler, so a Sync or Build run can follow a change, and the events of a model published to a serving group (it is written there, not on this server) |
 | Agent tools | model, row and change-request tools on the shared command surface (an agent proposes a model, proposes rows, fixes a validation error); the console's review screen |
 
 ## M4. Other engines
@@ -50,7 +49,7 @@ Design, kept as decided:
 | Serving layer | a data source on the model's connection, read-only like any other (entities as Flight SQL sources are plan 20 O08b) |
 | Semantic queries | an entity marked as a dimension, mapping or calendar becomes a governed dimension, value map, bridge or weighted relation |
 
-Also here: the change event itself (model, entity, change id) and the "on change" trigger. The service publishes its models through `DbDataKit.Metadata` records and the engine registry so every consumer sees the shape the service enforces.
+Also here: the "on change" trigger (the change event itself is built, see the first table). The service publishes its models through `DbDataKit.Metadata` records and the engine registry so every consumer sees the shape the service enforces.
 
 ## M8. Promotion
 

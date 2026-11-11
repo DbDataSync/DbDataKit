@@ -1,8 +1,9 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import type { ChangeRequestRow, CopyState, MigrationPlan, RequestList, StoragePlan } from '../api'
+import type { HistoryEntry, ChangeRequestRow, CopyState, MigrationPlan, RequestList, StoragePlan } from '../api'
 import { ChangeView, DecisionView, RequestRows } from './ChangesView'
 import { DiagnosticList, ModelEditorView, type EditorViewProps } from './ModelEditorView'
+import { HistoryView, type HistoryViewProps } from './HistoryView'
 import { CopyView, type CopyViewProps } from './StorageView'
 
 const none = () => {}
@@ -141,5 +142,38 @@ describe('the change request views', () => {
     expect(html).toContain('below the minimum 0')
     expect(html).toContain('data-rule="min"')
     expect(html).toContain('The request stays waiting')
+  })
+})
+
+const entry = (over: Partial<HistoryEntry> = {}): HistoryEntry => ({ version: 'b'.repeat(64), at: '2026-11-11T10:00:00Z', by: 'ada', by_name: 'Ada', kind: 'saved', current: false, ...over })
+const history = (over: Partial<HistoryViewProps> = {}): HistoryViewProps => ({
+  versions: [entry({ version: 'c'.repeat(64), current: true }), entry({ kind: 'created' })], selected: 'b'.repeat(64), onSelect: none, diff: <i>the diff</i>,
+  restore: { allowed: true, reason: null }, onRestore: none, done: null, refusal: null, removed: false, ...over,
+})
+
+describe('the history view', () => {
+  it('lists each text with its short version, who saved it and which is current, and shows the chosen one against the model now', () => {
+    const html = renderToStaticMarkup(<HistoryView {...history()} />)
+    expect(html.match(/data-testid="history-entry"/g)).toHaveLength(2)
+    expect(html).toContain('bbbbbbbb')
+    expect(html).toContain('Created by Ada')
+    expect(html).toContain('data-testid="history-current"')
+    expect(html).toContain('the diff')
+    expect(html).toMatch(/<button[^>]*data-testid="history-restore"/)
+    expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*data-testid="history-restore"/)
+  })
+  it('a restore that is off is disabled and says why beside itself', () => {
+    const html = renderToStaticMarkup(<HistoryView {...history({ restore: { allowed: false, reason: 'This is the text the model holds now.' } })} />)
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*data-testid="history-restore"/)
+    expect(html).toContain('data-testid="history-restore-why">This is the text the model holds now.')
+  })
+  it('says when nothing is kept, when the model is gone, and what a restore did or why it was refused', () => {
+    const empty = renderToStaticMarkup(<HistoryView {...history({ versions: [], selected: null })} />)
+    expect(empty).toContain('data-testid="history-empty"')
+    expect(empty).not.toContain('history-compare')
+    const html = renderToStaticMarkup(<HistoryView {...history({ removed: true, done: 'Restored: the model is now version bbbbbbbb.', refusal: 'm.yaml is not a valid model, so nothing was saved.' })} />)
+    expect(html).toContain('data-testid="history-removed"')
+    expect(html).toContain('Restored: the model is now version bbbbbbbb.')
+    expect(html).toContain('nothing was saved')
   })
 })

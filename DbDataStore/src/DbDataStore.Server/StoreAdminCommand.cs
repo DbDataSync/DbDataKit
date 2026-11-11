@@ -154,10 +154,11 @@ public static class StoreAdminCommand
         var directory = DirectoryOf(parsed);
         var path = StoreModels.FileOf(directory, name);
         var existed = File.Exists(path);
+        var before = existed ? await File.ReadAllTextAsync(path) : null;
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await File.WriteAllTextAsync(path + ".tmp", text, new System.Text.UTF8Encoding(false));
         File.Move(path + ".tmp", path, true);
-        StoreModels.Snapshot(directory, name, text);
+        StoreModelHistory.RecordSave(directory, name, text, before, "command-line", null);
         await context.Out.WriteLineAsync($"{(existed ? "Updated" : "Saved")} the model {name}.");
         context.Data["name"] = name;
         context.Data["created"] = !existed;
