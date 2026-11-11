@@ -118,6 +118,7 @@ public static class ConsoleHost
         // an outside agent (`ui mcp --report-to`) signs in as the person with a token made on the Agents page, as Basic credentials, and reaches the outside endpoints only
         builder.Services.AddSingleton<IPasswordCredentials>(sp => new AgentTokenCredentials(sp.GetRequiredService<ConsoleAgents>().Store, sp.GetRequiredService<IUserAccounts>()));
         builder.Services.AddSingleton<ConsoleQuality>();
+        builder.Services.AddSingleton(sp => new SetupItems(sp.GetRequiredService<StateDatabase>()));
         if (settings.Home is { } home)
         {
             // No users of its own: the first-run invitation would make one, so it is not made, and sign-in is the home's.

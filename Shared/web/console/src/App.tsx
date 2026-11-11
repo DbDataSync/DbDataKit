@@ -15,6 +15,7 @@ import { ServerModule } from './pages/ServerModule'
 import { ServerStatePage } from './pages/ServerStatePage'
 import { LineagePage } from './pages/LineagePage'
 import { QualityPage } from './pages/QualityPage'
+import { SetupPage } from './pages/SetupPage'
 import { DeploymentsPage } from './pages/DeploymentsPage'
 import { ViewsPage } from './pages/ViewsPage'
 import { AgentsPage } from './pages/AgentsPage'
@@ -45,6 +46,7 @@ export default function App() {
       <Route path="/docs/:module/*" element={<ModuleDocsPage />} />
       <Route path="/lineage" element={<LineagePage />} />
       <Route path="/quality" element={<QualityPage />} />
+      <Route path="/setup" element={<SetupPage />} />
       <Route path="/deployments" element={<DeploymentsPage />} />
       <Route path="/views" element={<ViewsPage />} />
       <Route path="/views/dashboards" element={<ViewsPage area="dashboards" />} />
