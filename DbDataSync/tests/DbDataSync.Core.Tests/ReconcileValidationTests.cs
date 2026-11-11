@@ -149,4 +149,26 @@ public sealed class ReconcileValidationTests
         Assert.Contains("SomeOtherColumn", ex.Message);
         Assert.Contains("Id", ex.Message);
     }
+
+    /// <summary>CW02b: a sweep every N passes needs no cadence (a count of passes is its own floor).</summary>
+    [Fact]
+    public void AfterEveryPasses_NeedsNoCadence()
+    {
+        var reconcile = new ReconcileConfig { Enabled = true, AfterEveryPasses = 3 };
+        ConfigValidation.ValidateReconcile(
+            reconcile, Mapping(KeyedSource, KeyMapped), "KeyReconcile", "KeyReconcileDelete", "MsSqlMerge", NoOptions);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-2)]
+    public void AfterEveryPasses_BelowOne_IsRejected_NamingTheSetting(int passes)
+    {
+        var reconcile = new ReconcileConfig { Enabled = true, AfterEveryPasses = passes };
+        var ex = Assert.Throws<ConfigValidationException>(() =>
+            ConfigValidation.ValidateReconcile(
+                reconcile, Mapping(KeyedSource, KeyMapped), "KeyReconcile", "KeyReconcileDelete", "MsSqlMerge", NoOptions));
+
+        Assert.Contains("afterEveryPasses", ex.Message);
+    }
 }

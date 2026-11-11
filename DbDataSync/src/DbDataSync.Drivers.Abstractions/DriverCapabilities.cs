@@ -63,7 +63,7 @@ public sealed record DriverCapabilities(
 /// </param>
 public sealed record ReaderCapability(
     string Kind, bool SupportsSegmentation, bool DetectsDeletes, IReadOnlyList<ParameterDescriptor> Parameters,
-    IReadOnlyList<ReadIntent> SupportedIntents);
+    IReadOnlyList<ReadIntent> SupportedIntents, bool DetectsKeyChanges = true);
 
 public sealed record StagingCapability(string Kind, IReadOnlyList<ParameterDescriptor> Parameters);
 

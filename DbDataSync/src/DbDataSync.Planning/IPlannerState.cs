@@ -19,6 +19,9 @@ public interface IPlannerState
     /// <summary>The rows each mapping's successful Primary passes read since its own cutoff: the input of an after-change reconcile strategy. A state that cannot say throws <see cref="NotSupportedException"/> naming this member.</summary>
     IReadOnlyDictionary<string, long> GetRowsReadSincePerMapping(string replication, IReadOnlyDictionary<string, DateTimeOffset> sinceByMapping);
 
+    /// <summary>How many successful Primary passes each mapping made since its own cutoff, whatever they read: the input of <see cref="ReconcileConfig.AfterEveryPasses"/>. A state that cannot say throws <see cref="NotSupportedException"/> naming this member.</summary>
+    IReadOnlyDictionary<string, long> GetPassesSincePerMapping(string replication, IReadOnlyDictionary<string, DateTimeOffset> sinceByMapping);
+
     /// <summary>Whether the mapping already has a reconcile sweep in flight (no second one is queued behind it).</summary>
     bool HasPendingReconcile(string replication, string mapping);
 
@@ -38,6 +41,9 @@ public sealed class LocalPlannerState(TaskRunStore taskRuns, WorkQueueStore work
 
     public IReadOnlyDictionary<string, long> GetRowsReadSincePerMapping(string replication, IReadOnlyDictionary<string, DateTimeOffset> sinceByMapping) =>
         taskRuns.GetRowsReadSincePerMapping(replication, sinceByMapping);
+
+    public IReadOnlyDictionary<string, long> GetPassesSincePerMapping(string replication, IReadOnlyDictionary<string, DateTimeOffset> sinceByMapping) =>
+        taskRuns.GetPassesSincePerMapping(replication, sinceByMapping);
 
     public bool HasPendingReconcile(string replication, string mapping) => workQueue.HasPendingReconcile(replication, mapping);
 

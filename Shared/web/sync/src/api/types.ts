@@ -400,6 +400,10 @@ export interface ReconcileConfig {
    * an operator's own on-demand trigger. */
   every: SchedulingConfig | null
   afterChange: AfterChangeStrategy
+  /** Run a sweep after every N successful change passes of the mapping since its last sweep (plan 28c CW02b);
+   * needs no `every`. Null or absent is off. It bounds how long an old key left by a primary key update stays in
+   * the target when the reader cannot see key changes (`Watermark`). */
+  afterEveryPasses?: number | null
   deleteGuard: DeleteGuard
   /** Null means the only real answer for each — `KeyReconcile`/`StagingTable`/`KeyReconcileDelete` —
    * present for the same structural reason `ChangeProcessingConfig`'s stages carry `options`, not
@@ -799,6 +803,11 @@ export interface ReaderCapability {
    * which can only see rows that still exist, and for a batch reload, whose deletes are the
    * reconciling writer's job rather than the reader's. */
   detectsDeletes: boolean
+  /** Whether a primary key update at the source (`UPDATE t SET id = 2 WHERE id = 1`) reaches the target as a
+   * delete of the old key plus the row of the new one (plan 28c CW02). False for a watermark scan and a scripted
+   * query: the row with the old key is not there to be read, so the old key stays in the target until a reload
+   * or the delete-reconcile sweep removes it. Absent from a server older than this, read as true. */
+  detectsKeyChanges?: boolean
   /**
    * `Changes` / `ChangesFromEarliest` / `ChangesFromLatest` this reader can honestly carry out — empty
    * for a reader with no incremental mode at all (batch reload). **Never carries `InitialLoad`**: every

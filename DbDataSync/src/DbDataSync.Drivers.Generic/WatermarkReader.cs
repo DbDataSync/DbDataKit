@@ -29,6 +29,11 @@ public sealed class WatermarkReader(SqlDialect dialect, ISegmentValueBinder bind
 {
     public string Kind => GenericDriverKinds.Watermark;
 
+    /// <summary>A scan sees only the rows that exist: after <c>UPDATE t SET id = 2 WHERE id = 1</c> the row with id 1 is not
+    /// there to be read, so its key stays in the target (and the new key is read only if the update moved the watermark
+    /// column). The delete-reconcile sweep, <c>reconcile.afterEveryPasses</c> to run it every N passes, removes it.</summary>
+    public bool DetectsKeyChanges => false;
+
     /// <summary>
     /// Not <see cref="ReadIntent.ChangesFromEarliest"/>: for this reader the feed <em>is</em> the table,
     /// so "read from the floor" is a full load under another name and offering it would be a button

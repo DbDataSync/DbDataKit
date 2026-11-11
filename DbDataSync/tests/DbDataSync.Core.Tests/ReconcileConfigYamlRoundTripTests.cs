@@ -87,6 +87,14 @@ public sealed class ReconcileConfigYamlRoundTripTests : IDisposable
         Assert.Equal(300, loaded.Every.FrequencySeconds);
     }
 
+    /// <summary>CW02b: <c>afterEveryPasses</c> is a plain optional number under <c>reconcile</c>; left out it stays null.</summary>
+    [Fact]
+    public void AfterEveryPasses_RoundTrips_AndIsNullWhenLeftOut()
+    {
+        Assert.Equal(3, RoundTrip(new ReconcileConfig { Enabled = true, AfterEveryPasses = 3 }).AfterEveryPasses);
+        Assert.Null(RoundTrip(new ReconcileConfig { Enabled = true }).AfterEveryPasses);
+    }
+
     [Fact]
     public void ADisabledReconcileConfig_WithNothingSet_LoadsWithSensibleDefaults()
     {

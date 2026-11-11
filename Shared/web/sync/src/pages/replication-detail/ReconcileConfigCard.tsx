@@ -105,6 +105,25 @@ export function ReconcileConfigCard({ reconcile, writerKind, onChange }: {
             </Field>
           </div>
 
+          <Field label="Sweep after every N passes">
+            <div className="row" style={{ gap: 6 }}>
+              <input
+                className="input sm mono"
+                style={{ width: 64 }}
+                type="number"
+                min={1}
+                placeholder="off"
+                value={reconcile.afterEveryPasses ?? ''}
+                onChange={(e) => onChange({ ...reconcile, afterEveryPasses: e.target.value === '' ? null : Math.max(1, Math.floor(Number(e.target.value))) })}
+                data-testid="reconcile-after-every-passes-input"
+              />
+              <span className="hint">
+                successful change passes since the last sweep; needs no cadence. Bounds how long an old key left by a
+                primary key update stays in the target when the reader (<span className="mono">Watermark</span>) cannot see it.
+              </span>
+            </div>
+          </Field>
+
           {needsEvery && (
             <span className="hint" style={{ color: 'var(--warn)' }} data-testid="reconcile-needs-every-hint">
               An after-change trigger needs a cadence set above — it never fires more often than the

@@ -164,6 +164,11 @@ public sealed class ReplicationPlanner(
             ? state.GetRowsReadSincePerMapping(name, sinceByMapping)
             : new Dictionary<string, long>();
 
+        // the same for the pass count: read only when a mapping asks for a sweep every N passes
+        var passesSince = candidates.Any(c => c.Config.AfterEveryPasses is not null)
+            ? state.GetPassesSincePerMapping(name, sinceByMapping)
+            : new Dictionary<string, long>();
+
         var enqueuedAny = false;
         foreach (var (mappingName, reconcile) in candidates)
         {
@@ -182,7 +187,11 @@ public sealed class ReplicationPlanner(
                 && (reconcile.Every is null || due)
                 && AfterChangeEvaluator.ShouldReconcile(reconcile.AfterChange, rowsReadSince.GetValueOrDefault(mappingName));
 
-            if (!cadenceDue && !afterChangeDue)
+            // every N successful passes since the last sweep (plan 28c CW02b): its own floor, so it needs no cadence
+            var afterPassesDue = reconcile.AfterEveryPasses is { } every
+                && passesSince.GetValueOrDefault(mappingName) >= every;
+
+            if (!cadenceDue && !afterChangeDue && !afterPassesDue)
                 continue;
 
             if (state.HasPendingReconcile(name, mappingName))
