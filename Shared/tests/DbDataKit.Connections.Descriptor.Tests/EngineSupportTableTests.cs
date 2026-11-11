@@ -34,4 +34,46 @@ public class EngineSupportTableTests
         foreach (var e in EngineRegistry.Builtin.Engines)
             Assert.Equal(e.Roles.Count > 0, text.Contains($"### {e.DisplayName}", StringComparison.Ordinal));
     }
+
+    private static readonly Dictionary<string, (string Readme, string Link)> Readmes = new()
+    {
+        ["sync"] = ("DbDataSync/README.md", "../docs/engine-support.md"),
+        ["gateway"] = ("DbDataGateway/README.md", "../docs/engine-support.md"),
+        ["build"] = ("DbDataBuild/README.md", "../docs/engine-support.md"),
+    };
+
+    [Theory]
+    [InlineData("sync")]
+    [InlineData("gateway")]
+    [InlineData("build")]
+    public void TheProductReadmeSectionIsTheGeneratedOne(string product)
+    {
+        var docs = Docs();
+        var root = Path.GetDirectoryName(Path.GetDirectoryName(docs))!;
+        var (readme, link) = Readmes[product];
+        var path = Path.Combine(root, readme);
+        var text = File.ReadAllText(path).Replace("\r\n", "\n");
+        var (begin, end) = EngineSupportTable.Markers(product);
+        var generated = EngineSupportTable.ProductSection(EngineRegistry.Builtin, product, link);
+        var from = text.IndexOf(begin, StringComparison.Ordinal);
+        if (Environment.GetEnvironmentVariable("UPDATE_GOLDEN") == "1" && from >= 0)
+        {
+            var to = text.IndexOf(end, from, StringComparison.Ordinal) + end.Length;
+            File.WriteAllText(path, text[..from] + generated + text[to..]);
+            return;
+        }
+        Assert.True(from >= 0, $"{readme} has no generated section: put the line {begin} and the line {end} where the table goes and run this test with UPDATE_GOLDEN=1");
+        var stop = text.IndexOf(end, from, StringComparison.Ordinal);
+        Assert.True(stop >= 0, $"{readme}: the line {end} is missing");
+        Assert.Equal(generated, text[from..(stop + end.Length)]);
+    }
+
+    [Fact]
+    public void ADescriptorChangeChangesTheProductSection()
+    {
+        var registry = EngineRegistry.Builtin;
+        var a = EngineSupportTable.ProductSection(registry, "gateway", "x");
+        Assert.Contains("PostgreSQL | yes | yes", a);
+        Assert.DoesNotContain("Oracle Database", a);
+    }
 }

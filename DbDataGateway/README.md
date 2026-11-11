@@ -16,6 +16,19 @@ Flight SQL client ──gRPC/TLS──▶ DbDataGateway (x64) ──▶ SQL Serv
   IIS is not used: gRPC over IIS needs HTTP/2 response trailers, which Windows Server 2016 IIS lacks.
 * Standalone: a self-contained single-file `dbdatagateway.exe` that generates its own self-signed TLS certificate.
 
+## Engines
+
+<!-- engine-support:begin gateway -->
+| Engine | Gateway source | Semantic emitter |
+| --- | --- | --- |
+| DuckDB | yes | yes |
+| Microsoft SQL Server | yes | yes |
+| ODBC | yes | no |
+| PostgreSQL | yes | yes |
+
+**yes** built and run against a real engine, **unverified** built and never run against one, **planned** not built. Generated from the engine registry; the notes behind each cell are in [engine-support.md](../docs/engine-support.md).
+<!-- engine-support:end -->
+
 ## Quick start
 
 ```powershell

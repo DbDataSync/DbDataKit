@@ -12,6 +12,19 @@ or on demand.
 A replication's source and target can be different engines — a SQL Server source can feed a
 PostgreSQL target, for example. Support varies by engine:
 
+<!-- engine-support:begin sync -->
+| Engine | Sync source | Sync target |
+| --- | --- | --- |
+| Arrow Flight SQL | yes | no |
+| DuckDB | yes | no |
+| Microsoft SQL Server | yes | yes |
+| MySQL and MariaDB | yes | yes |
+| Oracle Database | yes | yes |
+| PostgreSQL | yes | yes |
+
+**yes** built and run against a real engine, **unverified** built and never run against one, **planned** not built. Generated from the engine registry; the notes behind each cell are in [engine-support.md](../docs/engine-support.md).
+<!-- engine-support:end -->
+
 | Feature                       | SQL Server                     | PostgreSQL                | MySQL / MariaDB           | Oracle                            | DuckDB           |
 | ------------------------------ | ------------------------------- | -------------------------- | --------------------------- | ----------------------------------- | ------------------ |
 | Source (read from)            | Yes                             | Yes                        | Yes                         | Yes                                  | Yes (query only) |
