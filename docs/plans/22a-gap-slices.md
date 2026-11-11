@@ -1,6 +1,6 @@
 # Plan 22a: filling the suite's major gaps (direction and slices)
 
-Status: **proposed** (2026-11-07). This file is plans 22 and 22a in one: the **direction** the owner decided on 2026-10-27 (one question at a time; formerly plan 22) comes first, then the **slices** (what exists in the code, the order, decisions, questions, milestones, the slice rows). Both plan numbers, 22 and 22a, stay in the index and in the source comments.
+Status: **in progress** (proposed 2026-11-07; re-audited 2026-11-11: of GP01 to GP36 the rows marked done are built; **open:** GP01, GP02 and GP11 to GP15 (deferred until the rule language QG2 is answered, owner 2026-11-07), GP16 alerts, GP17 subscriptions (the library, store and rules are done), GP19 to GP22 backup and recovery, GP23 descriptions and owners in lineage, GP27 to GP29 OpenTelemetry, GP36 agents through MCP (partly); GP05 is dropped and GP10 decided). This file is plans 22 and 22a in one: the **direction** the owner decided on 2026-10-27 (one question at a time; formerly plan 22) comes first, then the **slices** (what exists in the code, the order, decisions, questions, milestones, the slice rows). Both plan numbers, 22 and 22a, stay in the index and in the source comments.
 
 A slice is one branch, one pull request, "done" is the test in the last column but one, and the status goes in the slice's row in the same change (the shape of [28a](28a-runner-slices.md) and [29a](29a-state-slices.md)).
 

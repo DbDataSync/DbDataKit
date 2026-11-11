@@ -1,6 +1,6 @@
 # Shared TLS / certificate / service rollout
 
-Status: in progress (follow-ups open). The rollout slices 0 to 11 are built and merged; their history is in git.
+Status: in progress (follow-ups open; low priority, owner 2026-11-09; re-audited 2026-11-11, nothing built or changed since: the owner's review of this plan is still to come). The rollout slices 0 to 11 are built and merged; their history is in git.
 
 - Certificates, the Windows store, AD CS enrollment, service control and the systemd and Docker generators live in `DbDataKit.Hosting.Certificates*`, `Hosting.WindowsService`, `Hosting.Systemd` and `Hosting.Cli`; Sync and Proxy use them (Sync's `config cert` verbs register on the shared `CertVerbs` table).
 - A managed self-signed PFX is encrypted with a random password in a protected file; there is no migration of an older unencrypted file (a documented breaking change, `DbDataSync/docs/certificates-self-signed.md`); renewal is `RenewBeforeDays` (default 30).

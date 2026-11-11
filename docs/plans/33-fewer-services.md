@@ -1,6 +1,6 @@
 # Plan 33: Fewer services to install
 
-Status: **proposed** (2026-11-10, the owner's direction; revised 2026-11-11). The suite installs as up to eight separate servers today. The owner wants **four service types**:
+Status: **in progress** (proposed 2026-11-10, the owner's direction; revised 2026-11-11; audited against the code 2026-11-11: 40 of the 77 slice rows are built, the rest are open as their rows say, SC20g, SC21d and SC22e are on hold until the owner has tested the Workspace's parity). The suite installs as up to eight separate servers today. The owner wants **four service types**:
 the **Console**, the **Workspace**, the **Gateway** and the **Runner**, with Store, Sync and Build becoming *authoring* that live in the
 console and workspace area and publish to the runner. This plan says what exists, what has to be true so that merging does not weaken security or deployment,
 and the slices. Same rules as the other slice plans: one slice, one commit in a batch, "done" is a test, the status goes in the row.
