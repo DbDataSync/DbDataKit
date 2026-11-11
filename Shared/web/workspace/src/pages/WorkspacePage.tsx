@@ -8,6 +8,7 @@ import { WorkspaceShell } from '../WorkspaceShell'
 import { BuildsPanel } from './BuildsPanel'
 import { CheckPanel } from './CheckPanel'
 import { NewStoreModel, StoreModelEditor } from './StoreModelPanel'
+import { SyncFileEditor, SyncSetPanel } from './SyncSetPanel'
 import { editorKindOf } from '../editors'
 import { useLiveCheck } from '../useLiveCheck'
 
@@ -63,7 +64,7 @@ function FileEditor({ project, id, kind, path, editable, canWrite, onGone, onRen
   const state = saveState({ mine: editable, canWrite, dirty, busy: save.isPending })
   const problem = pathProblem(target.trim())
   const editorKind = editorKindOf(kind, path)
-  const live = useLiveCheck({ project, id, text, enabled: editorKind === 'store-model' && editable && canWrite && !loaded.isLoading && !loaded.error, flush: async () => { if (dirty) await save.mutateAsync() } })
+  const live = useLiveCheck({ project, id, text, enabled: editorKind !== null && editable && canWrite && !loaded.isLoading && !loaded.error, flush: async () => { if (dirty) await save.mutateAsync() } })
   const onText = (value: string) => setDrafts((d) => ({ ...d, [path]: value }))
   return (
     <div data-testid="wsp-editor" data-path={path}>
@@ -95,7 +96,10 @@ function FileEditor({ project, id, kind, path, editable, canWrite, onGone, onRen
       {!loaded.error && !loaded.isLoading && editorKind === 'store-model' && (
         <StoreModelEditor path={path} text={text} onText={onText} readOnly={!editable || !canWrite} live={live} onOpen={onOpen} />
       )}
-      {!loaded.error && !loaded.isLoading && editorKind !== 'store-model' && (
+      {!loaded.error && !loaded.isLoading && editorKind !== null && editorKind !== 'store-model' && (
+        <SyncFileEditor kind={editorKind} path={path} text={text} onText={onText} readOnly={!editable || !canWrite} live={live} onOpen={onOpen} />
+      )}
+      {!loaded.error && !loaded.isLoading && editorKind === null && (
         <CodeEditor value={text} language={languageOf(path)} readOnly={!editable || !canWrite} minLines={14} maxLines={30} testId="wsp-code"
           onChange={onText} />
       )}
@@ -198,6 +202,14 @@ export function WorkspacePage() {
       await client.invalidateQueries({ queryKey: ['workspace', 'changes', project, id] })
     },
   })
+  const make = useMutation({
+    mutationFn: async (made: { path: string; text: string }[]) => { for (const f of made) await workspaceApi.writeFile(project, id, f.path, f.text); return made[0].path },
+    onSuccess: async (first) => {
+      setSelected(first)
+      await client.invalidateQueries({ queryKey: ['workspace', 'files', project, id] })
+      await client.invalidateQueries({ queryKey: ['workspace', 'changes', project, id] })
+    },
+  })
   const abandon = useMutation({
     mutationFn: () => workspaceApi.abandon(project, id),
     onSuccess: async () => { await client.invalidateQueries({ queryKey: ['workspace'] }); navigate('/') },
@@ -241,7 +253,9 @@ export function WorkspacePage() {
             <ErrorBanner error={abandon.error} />
             {!editable && <div className="hint" data-testid="wsp-readonly">This is {mine.owner}'s workspace: you can read it, and only they edit and commit it.</div>}
             <div className="row" style={{ gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-              <div className="card" style={{ flex: '0 0 260px', minWidth: 220 }} data-testid="wsp-files">
+              <div style={{ flex: '0 0 300px', minWidth: 240, display: 'grid', gap: 12 }}>
+              {kind === 'sync' && <SyncSetPanel paths={(files.data?.files ?? []).map((f) => f.path)} canWrite={editable && canWrite} busy={make.isPending} onOpen={setSelected} onCreate={(made) => make.mutate(made)} />}
+              <div className="card" data-testid="wsp-files">
                 <div className="card-body">
                   <div className="hint" style={{ marginBottom: 6 }}>Files</div>
                   <ErrorBanner error={files.error} />
@@ -255,11 +269,11 @@ export function WorkspacePage() {
                     </form>
                   )}
                   {kind === 'store' && editable && canWrite && (
-                    <NewStoreModel taken={(files.data?.files ?? []).map((f) => f.path)} busy={create.isPending}
-                      onCreate={(path, text) => workspaceApi.writeFile(project, id, path, text).then(async (r) => { setSelected(r.path); await client.invalidateQueries({ queryKey: ['workspace', 'files', project, id] }); await client.invalidateQueries({ queryKey: ['workspace', 'changes', project, id] }) })} />
+                    <NewStoreModel taken={(files.data?.files ?? []).map((f) => f.path)} busy={make.isPending} onCreate={(path, text) => make.mutate([{ path, text }])} />
                   )}
-                  <ErrorBanner error={create.error} />
+                  <ErrorBanner error={create.error ?? make.error} />
                 </div>
+              </div>
               </div>
               <div style={{ flex: 1, minWidth: 320 }}>
                 {selected === null
