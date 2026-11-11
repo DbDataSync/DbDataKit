@@ -85,12 +85,22 @@ public sealed class GatewayStoreModule(IOptionsMonitor<GatewayOptions> options, 
         }
 
         app.MapGet(prefix, (Func<HttpContext, Task<IResult>>)(context => As(context, caller => Task.FromResult(api.List(caller)))));
+        // `?draft=<id>` works in a draft (plan 21 CH01): reads show it on top of the data and changes are kept in it
+        static string? Draft(HttpContext context) => context.Request.Query["draft"].ToString() is { Length: > 0 } id ? id : null;
         app.MapGet(prefix + "/{name}/entities/{entity}/row", (string name, string entity, HttpContext context) =>
-            As(context, caller => api.RowAsync(caller, name, entity, Query(context), context.RequestAborted)));
+            As(context, caller => api.RowAsync(caller, name, entity, Query(context), context.RequestAborted, Draft(context))));
         app.MapGet(prefix + "/{name}/entities/{entity}/rows", (string name, string entity, HttpContext context) =>
-            As(context, caller => api.RowsAsync(caller, name, entity, Query(context), context.RequestAborted)));
+            As(context, caller => api.RowsAsync(caller, name, entity, Query(context), context.RequestAborted, Draft(context))));
         app.MapPost(prefix + "/{name}/changes", (string name, HttpContext context) =>
-            As(context, async caller => await api.ChangesAsync(caller, name, await Body(context), mayWrite: null, context.RequestAborted)));
+            As(context, async caller => await api.ChangesAsync(caller, name, await Body(context), mayWrite: null, context.RequestAborted, draft: Draft(context))));
+        app.MapGet(prefix + "/{name}/drafts", (string name, HttpContext context) =>
+            As(context, caller => api.DraftsAsync(caller, name, context.RequestAborted)));
+        app.MapGet(prefix + "/{name}/drafts/{id}", (string name, string id, HttpContext context) =>
+            As(context, caller => api.DraftAsync(caller, name, id, context.RequestAborted)));
+        app.MapDelete(prefix + "/{name}/drafts/{id}", (string name, string id, HttpContext context) =>
+            As(context, caller => api.DiscardDraftAsync(caller, name, id, context.RequestAborted)));
+        app.MapPost(prefix + "/{name}/drafts/{id}/submit", (string name, string id, HttpContext context) =>
+            As(context, async caller => await api.SubmitDraftAsync(caller, name, id, await Body(context), context.RequestAborted)));
         app.MapGet(prefix + "/{name}/requests", (string name, HttpContext context) =>
             As(context, caller => Task.FromResult(api.Requests(caller, name, context.Request.Query["state"].ToString()))));
         app.MapGet(prefix + "/{name}/requests/{id}", (string name, string id, HttpContext context) =>

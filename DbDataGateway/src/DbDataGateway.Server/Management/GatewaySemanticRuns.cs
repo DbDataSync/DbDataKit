@@ -13,7 +13,7 @@ namespace DbDataGateway.Server.Management;
 /// <summary>
 /// The record of a person's statements on the management API (plan 14a SL23/SL24, D21): <c>GET /api/v1/my/runs</c> (the caller's own, newest first; <c>?model=</c>, <c>?limit=</c>; an administrator may ask <c>?all=true</c> for
 /// everyone's), <c>GET /api/v1/my/runs/{id}</c> (one, with the request document, warnings and plan), <c>GET /api/v1/my/runs/counts</c> (the statements that ended with each error code in the last <c>?days=</c>, 7 by default) and
-/// <c>POST /api/v1/my/runs/{id}/replay</c> (the record's request is run again, as the caller, on the model version the record names). A record of another person is not found, whoever asks without being an administrator. A replay
+/// <c>POST /api/v1/my/runs/{id}/replay</c> (the record's request is run again, as the caller, on the model version the record names; the body may carry <c>keep</c> and <c>view</c> as a run does, D38: the view is drawn and never stored in the record). A record of another person is not found, whoever asks without being an administrator. A replay
 /// on a version that is gone (pruned, or the model unpublished) is answered 410 and says which version. A replay writes a record of its own that names the one it re-ran. The viewer role is enough; the caller is the person the
 /// console's token names, so the views module must be on.
 /// </summary>
@@ -48,7 +48,7 @@ public sealed class GatewaySemanticRuns(SemanticRunStore store, SemanticModels m
         if (record is null) return Problem(404, $"There is no run {id} of yours.");
         if (parts.Length == 1) return method == "GET" ? ManagementResult.Ok(Detail(record)) : Problem(405, "A run is read with GET.");
         if (parts[1] != "replay") return Problem(404, "There is no such call.");
-        return method == "POST" ? await ReplayAsync(record, who, caller, cancellationToken) : Problem(405, "A replay is started with POST.");
+        return method == "POST" ? await ReplayAsync(record, body, who, caller, cancellationToken) : Problem(405, "A replay is started with POST.");
     }
 
     private sealed record RunBody(string? Model, string? Sql, JsonObject? Request, JsonObject? Parameters, bool? Explain, int? Limit, bool? Keep, JsonObject? View);
@@ -82,26 +82,42 @@ public sealed class GatewaySemanticRuns(SemanticRunStore store, SemanticModels m
                 answer = await semantic.Queries.RunAsync(context, new ServingRequest.Semantic(source, request.ToJsonString(), new ServingLimits(MaxRows: limit)), cancellationToken);
             }
             await using var _ = answer;
-            JsonObject result;
-            if ((run.View is not null || run.Keep == true) && run.Explain != true && SemanticRest.StatusOf(answer) == "complete")
-            {
-                // a result that will be drawn is read once, the way a dashboard widget's answer is, and kept for a while so another view of it is not another run
-                JsonObject document;
-                try { document = await AnswerViews.ReadAsync(answer, limit, cancellationToken); }
-                catch (ViewsAnswerException ex) { return new ManagementResult(400, new JsonObject { ["error"] = ex.Message, ["code"] = ex.Code }); }
-                result = SemanticRest.ResultFrom(answer, document);
-                result["result_id"] = Hold(SemanticCallers.KeyOf(who), document);
-                if (run.View is not null) result["rendered_view"] = AnswerViews.Render(run.View.DeepClone().AsObject(), document);
-            }
-            else result = await SemanticRest.ResultAsync(answer, cancellationToken);
+            var result = await ShapeAsync(answer, limit, (run.View is not null || run.Keep == true) && run.Explain != true, run.View, who, cancellationToken);
             result["model_version"] = model.Version;
             return ManagementResult.Ok(result);
         }
+        catch (ViewsAnswerException ex) { return new ManagementResult(400, new JsonObject { ["error"] = ex.Message, ["code"] = ex.Code }); }
         catch (ServingException ex)
         {
             var status = ex switch { ServingNotFoundException => 404, ServingDeniedException or ServingUnauthenticatedException => 403, ServingBackendException => 502, _ => 400 };
             return new ManagementResult(status, new JsonObject { ["error"] = ex.Message, ["code"] = ex is ServingLimitException l ? l.Limit : SemanticRest.CodeOf(ex.Message) });
         }
+    }
+
+    /// <summary>
+    /// The one place an answer becomes the JSON the explorer reads, for a run and for a replay (plan 14a D37, D38). Without <paramref name="draw"/> (no <c>keep</c>, no <c>view</c>) it is the REST answer. A complete answer that will be drawn is read once, the way a
+    /// dashboard widget's answer is, kept for a while (<c>result_id</c>) and drawn as the view says (<c>rendered_view</c>). An answer with a column the views cannot read (a time of day, a binary, a list...) is not failed: it is answered through the REST path
+    /// as a table, nothing kept and nothing drawn, with a <c>notices</c> entry that names the column and its type, so the person sees the table and why there is no matrix or chart.
+    /// </summary>
+    internal async Task<JsonObject> ShapeAsync(IServingAnswer answer, int limit, bool draw, JsonObject? view, ServingCaller who, CancellationToken cancellationToken)
+    {
+        if (!draw || SemanticRest.StatusOf(answer) != "complete") return await SemanticRest.ResultAsync(answer, cancellationToken);
+        if (AnswerViews.UnreadableColumn(answer) is { } unreadable)
+        {
+            var table = await SemanticRest.ResultAsync(answer, cancellationToken);
+            table["notices"] = new JsonArray(new JsonObject
+            {
+                ["code"] = "view_unavailable", ["column"] = unreadable.Name, ["type"] = unreadable.Type,
+                ["message"] = $"matrix and chart are unavailable: column {unreadable.Name} has type {unreadable.Type}, which a view cannot read. The table shows what the REST answer holds of it (a value of that type is empty).",
+            });
+            return table;
+        }
+        // a result that will be drawn is read once, the way a dashboard widget's answer is, and kept for a while so another view of it is not another run
+        var document = await AnswerViews.ReadAsync(answer, limit, cancellationToken);
+        var result = SemanticRest.ResultFrom(answer, document);
+        result["result_id"] = Hold(SemanticCallers.KeyOf(who), document);
+        if (view is not null) result["rendered_view"] = AnswerViews.Render(view.DeepClone().AsObject(), document);
+        return result;
     }
 
     // ---- results kept for rendering (D37) ----
@@ -193,8 +209,14 @@ public sealed class GatewaySemanticRuns(SemanticRunStore store, SemanticModels m
         return body;
     }
 
-    private async Task<ManagementResult> ReplayAsync(SemanticRunRecord record, ServingCaller who, ManagementCaller caller, CancellationToken cancellationToken)
+    private sealed record ReplayBody(bool? Keep, JsonObject? View);
+
+    private async Task<ManagementResult> ReplayAsync(SemanticRunRecord record, string? body, ServingCaller who, ManagementCaller caller, CancellationToken cancellationToken)
     {
+        // the body is optional: {keep?, view?} as a run takes them (D38); the view is drawn, never stored in the record
+        ReplayBody? options;
+        try { options = string.IsNullOrWhiteSpace(body) ? null : JsonSerializer.Deserialize<ReplayBody>(body, new JsonSerializerOptions(JsonSerializerDefaults.Web)); }
+        catch (JsonException) { return Problem(400, "The body of a replay is empty or {\"keep\": true, \"view\": {<a view document>}}."); }
         var run = record.Run;
         if (run.Request is null || run.Kind is not ("query" or "explain" or "members"))
             return Problem(400, $"Run {record.Id} has no request to run again: it was {(run.Request is null ? "refused before it became one" : "a " + run.Kind)}.");
@@ -229,7 +251,8 @@ public sealed class GatewaySemanticRuns(SemanticRunStore store, SemanticModels m
         var context = new ServingContext(who, ClientAddress: null);
         try
         {
-            var result = await SemanticRest.RunAsync(((IServingServices)serving).WithSemantic(own), context, model.Name, request.ToJsonString(), SemanticRest.MaxRows, cancellationToken);
+            await using var answer = await ((IServingServices)serving).WithSemantic(own).Queries.RunAsync(context, new ServingRequest.Semantic(SemanticModels.SourcePrefix + model.Name, request.ToJsonString(), new ServingLimits(MaxRows: SemanticRest.MaxRows)), cancellationToken);
+            var result = await ShapeAsync(answer, SemanticRest.MaxRows, (options?.View is not null || options?.Keep == true) && run.Kind != "explain", options?.View, who, cancellationToken);
             var hash = result["request_hash"]?.GetValue<string>();
             var status = result["status"]?.GetValue<string>() ?? "complete";
             var rows = result["rows"] is JsonArray r ? r.Count : 0;
@@ -241,6 +264,12 @@ public sealed class GatewaySemanticRuns(SemanticRunStore store, SemanticModels m
             result["model_version"] = model.Version;
             result["same_hash"] = hash is not null && string.Equals(hash, run.RequestHash, StringComparison.Ordinal);
             return ManagementResult.Ok(result);
+        }
+        catch (ViewsAnswerException ex)
+        {
+            var id = store.Add(new SemanticRun(SemanticCallers.KeyOf(who), model.Name, model.Version, run.Kind, run.Text, run.Request, run.RequestHash, "failed", null, ex.Message, null, null, started, clock.ElapsedMilliseconds, 0, record.Id));
+            Record(caller, $"{model.Name}/{record.Id}", "replay failed");
+            return new ManagementResult(400, new JsonObject { ["error"] = ex.Message, ["code"] = ex.Code, ["run_id"] = id, ["replay_of"] = record.Id });
         }
         catch (ServingException ex)
         {

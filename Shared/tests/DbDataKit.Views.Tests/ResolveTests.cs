@@ -429,6 +429,58 @@ public class ResolveTests
     }
 
     [Fact]
+    public async Task A_locale_changes_the_separators_of_every_number_and_the_document_and_the_request_choose_it()
+    {
+        const string widgets = """
+              m:
+                type: metric
+                encodings: {value: sales.net_amount}
+                query: {model: retail_sales}
+              mx:
+                type: matrix
+                encodings:
+                  rows: [customers.region]
+                  values: [{field: sales.net_amount}]
+                query: {model: retail_sales}
+              tb:
+                type: table
+                encodings: {columns: [{field: customers.region}, {field: sales.net_amount, format: {style: currency, currency: EUR}}]}
+                query: {model: retail_sales}
+            """;
+        var doc = Doc(widgets);
+        var resolver = Resolver(new RetailServing());
+        var english = await resolver.ResolveAsync(Viewer(), doc, "desk");
+        var german = await resolver.ResolveAsync(Viewer(), doc, "desk", locale: "de");
+        string Swap(string text) => string.Concat(text.Select(c => c == ',' ? '.' : c == '.' ? ',' : c));
+        var en = Ok(english, "m")["value"]!["text"]!.GetValue<string>();
+        Assert.Equal(Swap(en), Ok(german, "m")["value"]!["text"]!.GetValue<string>());
+        Assert.Contains(",", Ok(german, "m")["value"]!["text"]!.GetValue<string>());
+        var cell = (JsonArray c) => c[0]!["text"]!.GetValue<string>();
+        var enCell = cell(Ok(english, "mx")["rows"]![0]!["cells"]!.AsArray());
+        Assert.Equal(Swap(enCell), cell(Ok(german, "mx")["rows"]![0]!["cells"]!.AsArray()));
+        Assert.Equal(Swap(Ok(english, "tb")["rows"]![0]!["cells"]![1]!["text"]!.GetValue<string>()), Ok(german, "tb")["rows"]![0]!["cells"]![1]!["text"]!.GetValue<string>());
+        // the document's own locale is used when the request says none, and the request wins
+        var inDocument = ViewsLoader.Load(ViewsYaml(widgets, "locale: fr\n"), "t.yaml");
+        Assert.True(inDocument.Ok, Conformance.Describe(inDocument.Diagnostics));
+        Assert.Equal("fr", inDocument.Document!.Locale);
+        var french = await resolver.ResolveAsync(Viewer(), inDocument.Document, "desk");
+        Assert.Equal(string.Concat(en.Select(c => c == ',' ? "\u202f" : c == '.' ? "," : c.ToString())), Ok(french, "m")["value"]!["text"]!.GetValue<string>());
+        var overridden = await resolver.ResolveAsync(Viewer(), inDocument.Document, "desk", locale: "en");
+        Assert.Equal(en, Ok(overridden, "m")["value"]!["text"]!.GetValue<string>());
+        // an unknown locale is refused by the loader with the list
+        var bad = ViewsLoader.Load(ViewsYaml(widgets, "locale: tlh\n"), "t.yaml");
+        Assert.False(bad.Ok);
+        Assert.Contains(bad.Diagnostics, d => d.KeyPath == "locale");
+    }
+
+    private static string ViewsYaml(string widgets, string extra)
+    {
+        var ids = Regex.Matches(widgets, @"^  ([a-z][a-z0-9_-]*):", RegexOptions.Multiline).Select(m => m.Groups[1].Value).ToList();
+        var tiles = string.Join("\n", ids.Select((id, i) => $"      - {{widget: {id}, x: 0, y: {i * 2}, w: 12, h: 2}}"));
+        return $"schemaVersion: 1\nkind: dashboard\ntitle: Test\n{extra}widgets:\n{widgets}\nlayouts:\n  - name: desk\n    type: reflow\n    default: true\n    grid: {{columns: 12, rows: {ids.Count * 2}}}\n    tiles:\n{tiles}\n";
+    }
+
+    [Fact]
     public async Task A_matrix_sorted_by_an_entry_and_by_the_axis_sort_is_that_widgets_error()
     {
         var doc = Doc("""

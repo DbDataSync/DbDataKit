@@ -21,3 +21,7 @@ The owner approved deleting all of them on 2026-11-07 and asked for the earlier 
 - The workflow **Delete merged branch** deletes the branch of a pull request when it merges, so the list does not grow again. Turning on the repository setting "Automatically delete head branches" does the same and is worth doing.
 
 To delete another branch later, add it to the list (with a comment saying why) and run the workflow; do not push a copy of the old content under a new name.
+
+## Backup branches
+
+`backup/*` branches hold pending work while it waits for CI (`docs/agent-workflow.md`, "Backups"). They clean themselves: the workflow **Backup branch cleanup** deletes a backup as soon as its tip is contained in `main`, on every push to `main` and hourly (`scripts/backup_branches.py clean`). Do not list them in `scripts/branches-to-delete.txt`.

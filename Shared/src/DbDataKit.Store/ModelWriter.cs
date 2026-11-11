@@ -35,7 +35,7 @@ public sealed record StoredRow(IReadOnlyDictionary<string, object?> Values, long
 /// groups it touched. Every rule that is broken is reported, and then nothing is written. Each change writes an audit record in the same transaction. A cross-row rule that spans a batch needs the whole batch: the rule is
 /// checked once at the end, not after each row.
 /// </summary>
-public sealed class ModelWriter
+public sealed partial class ModelWriter
 {
     private readonly DbDataKit.DataModel.DataModel _model;
     private readonly DbConnection _connection;
@@ -44,10 +44,14 @@ public sealed class ModelWriter
     private readonly TimeProvider _clock;
     private readonly string _schema;
     private readonly string? _instance;
+    private readonly string? _draft;
 
     // schema: where the tables are; the model's name when null. An instance of a model that keeps its instances in schemas names its own.
-    public ModelWriter(DbDataKit.DataModel.DataModel model, DbConnection connection, string engine, TimeProvider? clock = null, string? schema = null, string? instance = null)
+    // draft: the preview or channel whose draft layer this writer works in (plan 21 CH01): writes are kept in the draft and reads see the draft on top of the real data; null is the real data.
+    public ModelWriter(DbDataKit.DataModel.DataModel model, DbConnection connection, string engine, TimeProvider? clock = null, string? schema = null, string? instance = null, string? draft = null)
     {
+        if (draft is not null && !DraftId.IsMatch(draft)) throw new StoreNotSupportedException($"'{draft}' is not a draft id: letters, digits and . _ ~ : - , starting with a letter or digit, at most {DraftStorage.IdLength}.");
+        _draft = draft;
         _schema = schema ?? model.Name;
         if (model.Instances == InstanceMode.Column)
         {
@@ -71,6 +75,8 @@ public sealed class ModelWriter
             }
     }
 
+    private static readonly Regex DraftId = new("^[A-Za-z0-9][A-Za-z0-9._~:-]{0,199}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private static readonly Regex InstanceName = new("^[a-z0-9][a-z0-9_-]{0,63}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>For a model that keeps its instances in shared tables: the condition that keeps only this instance's rows (empty for any other model). The id was checked against <see cref="InstanceName"/>, so it is safe as a literal.</summary>
@@ -84,8 +90,8 @@ public sealed class ModelWriter
     private string OpenOnly(ModelEntity entity, string? alias = null) => (Dated(entity) ? $"{(alias is null ? "" : alias + ".")}{Col(ModelStorage.ValidToColumn)} IS NULL" : "1 = 1") + Mine(alias);
 
     /// <summary>The row with this key, or null.</summary>
-    public async Task<StoredRow?> GetAsync(string entityName, IReadOnlyDictionary<string, object?> key, CancellationToken cancellationToken = default) =>
-        (await ReadRowsAsync(null, RequireEntity(entityName), TypedKeyOrThrow(entityName, key), false, null, false, cancellationToken).ConfigureAwait(false)).FirstOrDefault();
+    public Task<StoredRow?> GetAsync(string entityName, IReadOnlyDictionary<string, object?> key, CancellationToken cancellationToken = default) =>
+        ViewAsync(async tx => (await ReadRowsAsync(tx, RequireEntity(entityName), TypedKeyOrThrow(entityName, key), false, null, false, cancellationToken).ConfigureAwait(false)).FirstOrDefault(), cancellationToken);
 
     /// <summary>One page of an entity's rows (the open versions, for an entity with history), in key order. <paramref name="limit"/> is at most 1000.</summary>
     public async Task<IReadOnlyList<StoredRow>> ListAsync(string entityName, int limit = 100, int offset = 0, CancellationToken cancellationToken = default)
@@ -97,8 +103,11 @@ public sealed class ModelWriter
         if (Dated(entity)) { columns.Add(ModelStorage.ValidFromColumn); columns.Add(ModelStorage.ValidToColumn); }
         var order = string.Join(", ", entity.Key.Select(Col));
         var paging = _engine == "sqlserver" ? $"OFFSET {offset} ROWS FETCH NEXT {limit} ROWS ONLY" : $"LIMIT {limit} OFFSET {offset}";
-        await using var command = Command(null, $"SELECT {string.Join(", ", columns.Select(Col))} FROM {Table(entity.Name)} WHERE {OpenOnly(entity)} ORDER BY {order} {paging}", []);
-        return await ReadAllAsync(command, entity, cancellationToken).ConfigureAwait(false);
+        return await ViewAsync<IReadOnlyList<StoredRow>>(async tx =>
+        {
+            await using var command = Command(tx, $"SELECT {string.Join(", ", columns.Select(Col))} FROM {Table(entity.Name)} WHERE {OpenOnly(entity)} ORDER BY {order} {paging}", []);
+            return await ReadAllAsync(command, entity, cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>The version of a row that held at a moment (an entity with effective-dated history), or null when it held none then.</summary>
@@ -106,7 +115,7 @@ public sealed class ModelWriter
     {
         var entity = RequireEntity(entityName);
         if (!Dated(entity)) throw new StoreNotSupportedException($"`{entityName}` keeps no history, so there is nothing to read as of a date.");
-        return (await ReadRowsAsync(null, entity, TypedKeyOrThrow(entityName, key), false, asOf, false, cancellationToken).ConfigureAwait(false)).FirstOrDefault();
+        return await ViewAsync(async tx => (await ReadRowsAsync(tx, entity, TypedKeyOrThrow(entityName, key), false, asOf, false, cancellationToken).ConfigureAwait(false)).FirstOrDefault(), cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Every version of a row, oldest first (an entity with effective-dated history).</summary>
@@ -114,7 +123,7 @@ public sealed class ModelWriter
     {
         var entity = RequireEntity(entityName);
         if (!Dated(entity)) throw new StoreNotSupportedException($"`{entityName}` keeps no history.");
-        return await ReadRowsAsync(null, entity, TypedKeyOrThrow(entityName, key), false, null, true, cancellationToken).ConfigureAwait(false);
+        return await ViewAsync<IReadOnlyList<StoredRow>>(async tx => await ReadRowsAsync(tx, entity, TypedKeyOrThrow(entityName, key), false, null, true, cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
     }
 
     private Dictionary<string, object?> TypedKeyOrThrow(string entityName, IReadOnlyDictionary<string, object?> key)
@@ -145,23 +154,11 @@ public sealed class ModelWriter
 
     private async Task ApplyCoreAsync(IReadOnlyList<RowChange> changes, WriteActor actor, bool commit, CancellationToken cancellationToken)
     {
-        var violations = new List<RuleViolation>();
+        if (_draft is not null) { await DraftApplyAsync(changes, actor, commit, cancellationToken).ConfigureAwait(false); return; }
         await using var transaction = await _connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var touched = new List<(ModelEntity Entity, Dictionary<string, object?>? Before, Dictionary<string, object?>? After)>();
-            foreach (var change in changes)
-            {
-                var entity = RequireEntity(change.Entity);
-                switch (change.Action)
-                {
-                    case RowAction.Insert: touched.Add(await InsertRowAsync(transaction, entity, change, actor, violations, cancellationToken).ConfigureAwait(false)); break;
-                    case RowAction.Update: touched.Add(await UpdateRowAsync(transaction, entity, change, actor, violations, cancellationToken).ConfigureAwait(false)); break;
-                    case RowAction.Delete: touched.Add(await DeleteRowAsync(transaction, entity, change, actor, violations, cancellationToken).ConfigureAwait(false)); break;
-                }
-            }
-            if (violations.Count == 0) await CheckRulesAsync(transaction, touched, violations, cancellationToken).ConfigureAwait(false);
-            if (violations.Count > 0) throw new WriteRefusedException(violations);
+            await ApplyInnerAsync(transaction, changes, actor, cancellationToken).ConfigureAwait(false);
             if (commit) await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             else await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
         }
@@ -170,6 +167,25 @@ public sealed class ModelWriter
             await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
             throw;
         }
+    }
+
+    /// <summary>Applies the changes in order inside a transaction that is not this method's (every rule, version check and audit row); throws what <see cref="ApplyAsync"/> throws, leaving the rollback to the caller.</summary>
+    private async Task ApplyInnerAsync(DbTransaction transaction, IReadOnlyList<RowChange> changes, WriteActor actor, CancellationToken cancellationToken)
+    {
+        var violations = new List<RuleViolation>();
+        var touched = new List<(ModelEntity Entity, Dictionary<string, object?>? Before, Dictionary<string, object?>? After)>();
+        foreach (var change in changes)
+        {
+            var entity = RequireEntity(change.Entity);
+            switch (change.Action)
+            {
+                case RowAction.Insert: touched.Add(await InsertRowAsync(transaction, entity, change, actor, violations, cancellationToken).ConfigureAwait(false)); break;
+                case RowAction.Update: touched.Add(await UpdateRowAsync(transaction, entity, change, actor, violations, cancellationToken).ConfigureAwait(false)); break;
+                case RowAction.Delete: touched.Add(await DeleteRowAsync(transaction, entity, change, actor, violations, cancellationToken).ConfigureAwait(false)); break;
+            }
+        }
+        if (violations.Count == 0) await CheckRulesAsync(transaction, touched, violations, cancellationToken).ConfigureAwait(false);
+        if (violations.Count > 0) throw new WriteRefusedException(violations);
     }
 
     // ---- insert, update, delete ----
@@ -570,13 +586,13 @@ public sealed class ModelWriter
     /// <summary>A value as the engine's driver takes it: SQL Server's driver has no date-only or time-only parameter in every version, so they become a date-time and a time span there.</summary>
     private object? ForEngine(object? value) => _engine == "sqlserver" ? value switch { DateOnly d => d.ToDateTime(TimeOnly.MinValue), TimeOnly t => t.ToTimeSpan(), _ => value } : value;
 
-    private async Task<int> ExecuteAsync(DbTransaction tx, string text, IReadOnlyList<object?> parameters, CancellationToken ct)
+    private async Task<int> ExecuteAsync(DbTransaction? tx, string text, IReadOnlyList<object?> parameters, CancellationToken ct)
     {
         await using var command = Command(tx, text, parameters);
         return await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
-    private async Task<object?> ScalarAsync(DbTransaction tx, string text, IReadOnlyList<object?> parameters, CancellationToken ct)
+    private async Task<object?> ScalarAsync(DbTransaction? tx, string text, IReadOnlyList<object?> parameters, CancellationToken ct)
     {
         await using var command = Command(tx, text, parameters);
         return await command.ExecuteScalarAsync(ct).ConfigureAwait(false);

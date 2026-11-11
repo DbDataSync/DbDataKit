@@ -525,7 +525,7 @@ public sealed partial class StateSnapshotWriterTests : IDisposable
         var cipher = new byte[Encoding.UTF8.GetByteCount(plain)];
         using (var aes = new AesGcm(key, 16)) aes.Encrypt(nonce, Encoding.UTF8.GetBytes(plain), cipher, tag);
         var stored = Convert.ToBase64String([.. nonce, .. cipher, .. tag]);
-        Execute(database, "trust", "INSERT INTO {table:group_secret} (name, value) VALUES ($name, $value);", c => c.Bind(database, "name", "dbdata:proxy:managed-build-1:warehouse").Bind(database, "value", stored));
+        Execute(database, "trust", "INSERT INTO {table:group_secret} (name, value) VALUES ($name, $value);", c => c.Bind(database, "name", "dbdatakit:gateway:managed-build-1:warehouse").Bind(database, "value", stored));
         var directory = NewDirectory();
 
         await Export(database, directory);

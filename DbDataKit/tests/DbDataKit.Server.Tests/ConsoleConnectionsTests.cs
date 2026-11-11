@@ -24,7 +24,7 @@ public sealed class ConsoleConnectionsTests : IAsyncLifetime
         engine: sqlserver
         managed_by: build-9
         address: { host: sql01, port: 1433, database: Erp }
-        auth: { mode: sql, user: svc_erp, password_secret: 'secret:dbdata:sync:connection:erp' }
+        auth: { mode: sql, user: svc_erp, password_secret: 'secret:dbdatakit:sync:connection:erp' }
         extensions:
           sync:
             test_query: SELECT 1
@@ -78,7 +78,7 @@ public sealed class ConsoleConnectionsTests : IAsyncLifetime
                 {
                     if (d0.Access == AccessMode.Readonly) refusals.Add(("DBD-SYNC", 1, "`access` is not a setting Sync uses."));
                     if (d0.ManagedBy is not null) refusals.Add(("DBD-SYNC", 1, "`managed_by` is not a setting Sync uses."));
-                    if (d0.Auth is { Mode: AuthMode.Sql } && d0.Auth.PasswordSecret != $"secret:dbdata:sync:connection:{name}") refusals.Add(("DBD-SYNC", 1, "the password reference must be `secret:dbdata:sync:connection:" + name + "`."));
+                    if (d0.Auth is { Mode: AuthMode.Sql } && d0.Auth.PasswordSecret != $"secret:dbdatakit:sync:connection:{name}") refusals.Add(("DBD-SYNC", 1, "the password reference must be `secret:dbdatakit:sync:connection:" + name + "`."));
                     if (d0.Auth is { Mode: AuthMode.Sql } && body["password"] is null) refusals.Add(("DBD-SYNC", 1, "No password was provided and no existing credential is stored."));
                 }
                 if (refusals.Count > 0)
@@ -150,13 +150,13 @@ public sealed class ConsoleConnectionsTests : IAsyncLifetime
         Assert.Equal("svc_erp", copy.Auth!.User);
         Assert.Null(copy.ManagedBy);                                         // build-9 is a client of the source's server
         Assert.Empty(copy.Extensions.Items);                                 // extensions.sync is not read by a Gateway
-        Assert.Equal("secret:dbdata:gateway:connection:erp-copy", copy.Auth.PasswordSecret);   // never Sync's store
+        Assert.Equal("secret:dbdatakit:gateway:connection:erp-copy", copy.Auth.PasswordSecret);   // never Sync's store
         Assert.DoesNotContain("sync", written.Replace("sqlserver", ""));
         Assert.Equal("Sync one", (string)body["from"]!);
         Assert.Equal("Gateway one", (string)body["to"]!);
         Assert.Contains(body["notes"]!.AsArray(), n => ((string)n!).Contains("managed_by (build-9)"));
         Assert.Contains(body["notes"]!.AsArray(), n => ((string)n!).Contains("extensions.sync"));
-        Assert.Equal(["secret:dbdata:gateway:connection:erp-copy"], body["secrets"]!.AsArray().Select(s => (string)s!));
+        Assert.Equal(["secret:dbdatakit:gateway:connection:erp-copy"], body["secrets"]!.AsArray().Select(s => (string)s!));
         Assert.Equal(SyncFile, syncFiles["erp"]);                            // the source is untouched
         Assert.Equal(["Ana"], callers.ToArray());                            // written as the person who copied
     }
@@ -169,7 +169,7 @@ public sealed class ConsoleConnectionsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, status);
         var written = syncFiles["erp-pg"];
         var copy = ConnectionDefinitionLoader.Load(written, "erp-pg.yaml").Require();
-        Assert.Equal("secret:dbdata:sync:connection:erp-pg", copy.Auth!.PasswordSecret);
+        Assert.Equal("secret:dbdatakit:sync:connection:erp-pg", copy.Auth!.PasswordSecret);
         Assert.Empty(copy.Extensions.Items);                                 // the Gateway's serving policy stays on the Gateway
         Assert.StartsWith("# the ERP reader", written);                      // the file is edited, not rewritten
         var sent = Assert.Single(syncWrites);

@@ -5,7 +5,7 @@ import path from 'node:path'
 import { scratchDirectory } from '../playwright.config'
 import { signInNewAdmin } from './people'
 
-// Plan 22a, GP18: the console's Delivery page. The console of this run is started with a `delivery:` section in its settings.yaml (playwright.config.ts) whose channel `e2e-hook` is a signed
+// Plan 22a, GP18: the console's Delivery page. The console of this run is started with a `delivery:` section in its settings.yaml (playwright.config.ts) that binds the channel `e2e-hook` to the connection `e2e-hook-conn`, a signed
 // webhook at an address read from a file this story writes: a local listener. The story presses Test send and sees the message arrive signed, subscribes to a view, and checks the
 // subscription says it cannot be sent from this console (no renderer here) while the History shows the test message with its try. Named to sort after `first-run` and `identity-home`.
 test('a webhook channel is tested and arrives at a local listener, and a subscription is made and listed', async ({ page, context, baseURL }) => {
@@ -31,7 +31,8 @@ test('a webhook channel is tested and arrives at a local listener, and a subscri
     await expect(page.getByTestId('delivery-test-result-e2e-hook')).toHaveAttribute('data-status', 'sent')
     expect(received).toHaveLength(1)
     expect(received[0].signature).toMatch(/^t=\d+,v1=[0-9a-f]{64}$/)
-    expect(received[0].body).toContain('DbData test message')
+    expect(received[0].body).toContain('[TEST, prod] DbData test message')
+    await expect(page.getByTestId('delivery-binding-target-e2e-hook-prod')).toContainText('(address hidden)')
 
     await page.getByTestId('delivery-tab-subscriptions').click()
     await page.getByTestId('subscription-new').click()

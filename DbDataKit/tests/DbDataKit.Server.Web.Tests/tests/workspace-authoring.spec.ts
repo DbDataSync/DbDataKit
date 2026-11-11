@@ -81,7 +81,7 @@ async function syncFlow(page: Page, fake: FakeWorkspace) {
   await page.getByTestId('wsp-new-connection-name').fill('third-db')
   await page.getByTestId('wsp-new-connection-go').click()
   await expect(page.locator('[data-testid="wsp-sync-connection"]')).toHaveCount(3)
-  expect(fake.files('plant', 'sync-edit')?.get('config/connections/third-db.yaml')).toContain('password_secret: secret:dbdata:sync:connection:third-db')
+  expect(fake.files('plant', 'sync-edit')?.get('config/connections/third-db.yaml')).toContain('password_secret: secret:dbdatakit:sync:connection:third-db')
   // a new replication between two of them: a task and a mapping
   await page.getByTestId('wsp-new-replication-name').fill('stock')
   await page.getByTestId('wsp-new-replication-go').click()
@@ -92,7 +92,7 @@ async function syncFlow(page: Page, fake: FakeWorkspace) {
   await page.getByTestId('form-field-auth.password_secret').fill('hunter2')
   await expect(page.getByTestId('wsp-secret-finding')).toContainText('Line')
   await expect(page.locator('[data-testid="wsp-live-finding"][data-code="DBD-WS-SYNC-SECRET"]')).toBeVisible({ timeout: 10_000 })
-  await page.getByTestId('form-field-auth.password_secret').fill('secret:dbdata:sync:connection:source-db')
+  await page.getByTestId('form-field-auth.password_secret').fill('secret:dbdatakit:sync:connection:source-db')
   await expect(page.getByTestId('wsp-secret-finding')).toHaveCount(0)
   await expect(live(page)).toHaveAttribute('data-errors', '0', { timeout: 10_000 })
   // a form edit of a task that was read as format 1 writes the current format

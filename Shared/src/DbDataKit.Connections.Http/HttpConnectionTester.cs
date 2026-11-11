@@ -20,6 +20,7 @@ public static class HttpConnectionTester
             new(ok, reached, signIn, message, kind, kind is { } k && ConnectionFailure.IsTemporaryKind(k), status, clock.ElapsedMilliseconds);
 
         var method = definition.SignIn?.Method ?? "none";
+        var shown = EndpointTemplate.Display(definition.Endpoint);   // the template (or "address hidden"), never the composed address
         var signIn = method == "none" ? "none" : "not checked";
         HttpConnectionClient connection;
         try { connection = HttpConnections.Create(definition, secrets, options); }
@@ -33,7 +34,7 @@ public static class HttpConnectionTester
                 var path = (definition.TestPath ?? "").TrimStart('/');
                 using var request = new HttpRequestMessage(HttpMethod.Get, path);
                 using var response = await connection.Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-                return Judge(definition, response.StatusCode, method, Done);
+                return Judge(definition, shown, response.StatusCode, method, Done);
             }
             catch (SecretNotSetException e)
             {
@@ -46,8 +47,8 @@ public static class HttpConnectionTester
                 if (failure.Kind == ConnectionFailureKind.Login) return Done(false, failure.Code?.StartsWith("oauth-", StringComparison.Ordinal) == true ? null : true, "rejected", $"The system did not accept the sign-in ({failure.Code}). Check the client id and its secret, and that this client may ask for a token.", failure.Kind);
                 var words = failure.Kind switch
                 {
-                    ConnectionFailureKind.Network => $"{definition.Endpoint} could not be reached: nothing answered there. Check the address and that the system is up.",
-                    ConnectionFailureKind.Timeout => $"{definition.Endpoint} did not answer in time.",
+                    ConnectionFailureKind.Network => $"{shown} could not be reached: nothing answered there. Check the address and that the system is up.",
+                    ConnectionFailureKind.Timeout => $"{shown} did not answer in time.",
                     ConnectionFailureKind.Tls => "A secure connection could not be established: the system's certificate is not trusted (or the client certificate is not accepted). Give the authority in `tls.ca_file`, or turn verification off for this connection if you must.",
                     _ => ConnectionFailure.TextFor(failure.Kind),
                 };
@@ -56,10 +57,10 @@ public static class HttpConnectionTester
         }
     }
 
-    private static HttpTestResult Judge(ConnectionDefinition d, HttpStatusCode status, string method, Func<bool, bool?, string, string, ConnectionFailureKind?, int?, HttpTestResult> done)
+    private static HttpTestResult Judge(ConnectionDefinition d, string shown, HttpStatusCode status, string method, Func<bool, bool?, string, string, ConnectionFailureKind?, int?, HttpTestResult> done)
     {
         var code = (int)status;
-        var at = d.TestPath is { Length: > 0 } p ? $"{d.Endpoint}/{p.TrimStart('/')}" : d.Endpoint;
+        var at = d.TestPath is { Length: > 0 } p ? $"{shown}/{p.TrimStart('/')}" : shown;
         var accepted = method == "none" ? "none" : "accepted";
         if (code is >= 200 and < 400) return done(true, true, accepted, $"{at} answered {code}" + (method == "none" ? "." : " and accepted the sign-in."), null, code);
         if (code == 401) return done(false, true, method == "none" ? "none" : "rejected", method == "none" ? $"{at} answered 401: it wants a sign-in, and this connection has none." : $"{at} answered, but did not accept the sign-in (401). Check the secret, and that it is the one for this system.", ConnectionFailureKind.Login, code);

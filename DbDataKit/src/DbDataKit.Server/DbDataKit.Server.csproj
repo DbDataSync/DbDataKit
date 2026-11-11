@@ -33,6 +33,7 @@
     <DbDataKitReference Include="Runner" />   <!-- the engine the console hosts a copy of as its embedded runner; plan 28 section 6a -->
     <DbDataKitReference Include="Runner.Api" />   <!-- the runner's management API, served for the people signed in to the console -->
     <DbDataKitReference Include="Agents" />
+    <DbDataKitReference Include="Views" />   <!-- the view schemas an agent's view in an answer is checked against; plan 27a AG22 -->
     <DbDataKitReference Include="Agents.Providers" />   <!-- the agent runtime the console hosts for back-end agents; plan 27a AG14 -->
     <DbDataKitReference Include="Knowledge" />   <!-- the knowledge items, scope and chunking its screens preview; plan 27a KN28, KN36 to KN38 -->
     <DbDataKitReference Include="Knowledge.Index" />   <!-- the catalog of subjects read from the lineage graph; plan 27a KN02 -->

@@ -258,7 +258,7 @@ public sealed partial class ManagementTests
         var stored = await CallAsAsync(build1, first, HttpMethod.Put, "/api/v1/secrets/warehouse", ServerRole.Publisher, SecretBody(password));
         Assert.Equal(HttpStatusCode.OK, stored.StatusCode);
         var answer = await stored.Content.ReadAsStringAsync();
-        Assert.Equal("secret:dbdata:gateway:managed-build-1:warehouse", (string)JsonNode.Parse(answer)!["reference"]!);
+        Assert.Equal("secret:dbdatakit:gateway:managed-build-1:warehouse", (string)JsonNode.Parse(answer)!["reference"]!);
         Assert.DoesNotContain(password, answer);
 
         string Names(string body) => string.Join(",", JsonNode.Parse(body)!["secrets"]!.AsArray().Select(n => (string)n!));
@@ -292,7 +292,7 @@ public sealed partial class ManagementTests
         var stored = JsonNode.Parse(await (await CallAsync(admin, HttpMethod.Put, "/api/v1/secrets/erp-login", ServerRole.Admin, SecretBody(value))).Content.ReadAsStringAsync())!;
         var reference = (string)stored["reference"]!;
         await CallAsync(admin, HttpMethod.Put, "/api/v1/secrets/spare", ServerRole.Admin, SecretBody("another"));
-        var ghost = "secret:dbdata:gateway:managed-nobody:ghost";
+        var ghost = "secret:dbdatakit:gateway:managed-nobody:ghost";
         await CallAsync(admin, HttpMethod.Put, "/api/v1/data-sources/ledger", ServerRole.Admin, Put(Conn.Yaml("ledger", "duckdb", "Data Source=:memory:", $"auth: {{ mode: sql, user: u, password_secret: '{reference}' }}"), null));
         await CallAsync(admin, HttpMethod.Put, "/api/v1/data-sources/crm", ServerRole.Admin, Put(Conn.Yaml("crm", "duckdb", "Data Source=:memory:", $"auth: {{ mode: sql, user: u, password_secret: '{ghost}' }}"), null));
 
@@ -342,7 +342,7 @@ public sealed partial class ManagementTests
         var answer = await stored.Content.ReadAsStringAsync();
         Assert.False((bool)JsonNode.Parse(answer)!["replaced"]!);
         var reference = (string)JsonNode.Parse(answer)!["reference"]!;
-        Assert.StartsWith("secret:dbdata:gateway:managed-", reference);
+        Assert.StartsWith("secret:dbdatakit:gateway:managed-", reference);
         Assert.EndsWith(":erp-login", reference);
         Assert.DoesNotContain(first, answer);
 

@@ -9,7 +9,7 @@ namespace DbDataKit.Connections.Abstractions.Tests;
 /// </summary>
 public sealed class ConnectionKindTests
 {
-    private const string Http = "schema: connection/2\nkind: http\nname: crm\nendpoint: https://api.example.com/v1\nsign_in:\n  method: api_key\n  name: X-Api-Key\n  key_secret: secret:dbdata:console:connection:crm:key\n";
+    private const string Http = "schema: connection/2\nkind: http\nname: crm\nendpoint: https://api.example.com/v1\nsign_in:\n  method: api_key\n  name: X-Api-Key\n  key_secret: secret:dbdatakit:server:connection:crm:key\n";
 
     private static ConnectionLoadResult Any(string yaml, string file = "connections/x.yml") => ConnectionDefinitionLoader.Load(yaml, file, outsideKinds: true);
 
@@ -48,7 +48,7 @@ public sealed class ConnectionKindTests
         Assert.True(d.IsOutside);
         Assert.Equal("https://api.example.com/v1", d.Endpoint);
         Assert.Equal("api_key", d.SignIn!.Method);
-        Assert.Equal("secret:dbdata:console:connection:crm:key", d.SignIn.KeySecret);
+        Assert.Equal("secret:dbdatakit:server:connection:crm:key", d.SignIn.KeySecret);
         Assert.Equal("header", d.SignIn.In);
     }
 
@@ -94,7 +94,7 @@ public sealed class ConnectionKindTests
     {
         var r = Any($"schema: connection/2\nkind: http\nname: x\n{endpoint}");
         Assert.False(r.Ok);
-        Assert.Contains("no user name, password or query", Errors(r), StringComparison.Ordinal);
+        Assert.Contains("`endpoint`", Errors(r), StringComparison.Ordinal);
     }
 
     [Fact]

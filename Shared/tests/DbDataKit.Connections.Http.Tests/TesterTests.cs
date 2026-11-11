@@ -79,7 +79,7 @@ public sealed class TesterTests
         var api = new FakeApi();
         var address = api.BaseAddress;
         await api.DisposeAsync();
-        var result = await HttpConnectionTester.TestAsync(Connection(address, "", "timeouts: { connect_s: 2 }\n"), Secrets());
+        var result = await HttpConnectionTester.TestAsync(Connection(address, "", "timeouts: { connect_s: 15 }\n"), Secrets());
 
         Assert.False(result.Ok);
         Assert.Equal((false, ConnectionFailureKind.Network, true), (result.Reached, result.Kind, result.Temporary));

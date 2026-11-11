@@ -104,7 +104,7 @@ public sealed class SubscriptionTests
     public void The_module_has_the_subscription_tables_in_its_second_migration_and_follows_the_conventions()
     {
         Assert.Empty(StateConventions.Violations(DeliveryModule.Module));
-        Assert.Equal(2, DeliveryModule.Module.Version);
+        Assert.Equal(3, DeliveryModule.Module.Version);
         Assert.Contains(DeliveryModule.Module.Retention, r => r is { Table: "subscription_run", TimeColumn: "started_at", DefaultDays: 90 });
         Assert.DoesNotContain(DeliveryModule.Module.Retention, r => r.Table == "subscription");
     }

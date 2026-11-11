@@ -71,6 +71,8 @@ export interface ViewsDoc {
   kind: 'dashboard' | 'report'
   title: string
   parameters?: ParameterDefinition[]
+  /** The language numbers and dates are written in (DBR46); `en` when absent. */
+  locale?: 'en' | 'de' | 'fr' | 'es' | 'it' | 'pt' | 'nl'
   widgets: Record<string, WidgetDoc>
   layouts: LayoutDoc[]
   refresh?: { every: string }

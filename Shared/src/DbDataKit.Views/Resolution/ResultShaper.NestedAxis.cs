@@ -78,7 +78,7 @@ internal static partial class ResultShaper
         {
             var level = nested.Levels[i];
             var catalog = fields[i].Catalog;
-            string Text(JsonNode? raw) => raw is null ? "(none)" : level.Format is null ? ResultTable.Label(raw) : Label(raw, level.Format, catalog);
+            string Text(JsonNode? raw) => raw is null ? "(none)" : level.Format is null ? ResultTable.Label(raw) : Label(raw, level.Format, catalog, answer.Locale);
             labelOf.Add(Text);
             var members = new List<JsonNode?>();
             foreach (var r in rows) { var raw = r[columns[i]]; if (!members.Any(m => JsonNode.DeepEquals(m, raw))) members.Add(raw?.DeepClone()); }

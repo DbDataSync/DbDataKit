@@ -66,8 +66,22 @@ format: {date: "dd/MM/yyyy HH:mm"}                        # or a pattern: yyyy y
 
 A number mapping's `decimals` defaults to the catalog's, a currency's to 2 (0 for JPY and KRW); the minus sign never shows on a value that rounds to zero; rounding is half away from zero on the value as written (its
 15 significant digits). A date reads an ISO date or date-time **as written** (no time zone is applied); text that is not a date is shown as it is. A format that cannot be read is refused with the key inside it
-(`DBD-106`, for example `` `date` pattern has the unknown token `yyy` ``); a pattern is a closed set of tokens, never a free format string. Month names and separators are the invariant (English) ones: locale data is not
-carried yet. **One formatter in two languages**: `ViewFormat` in `DbDataKit.Views` writes a cell's text on the server and `formatValue` in `@dbdatakit/visuals` is its twin, both run against `Shared/conformance/views/format/cases.json`.
+(`DBD-106`, for example `` `date` pattern has the unknown token `yyy` ``); a pattern is a closed set of tokens, never a free format string. Month names and separators are the **locale's** (below). **One formatter in two languages**: `ViewFormat` in `DbDataKit.Views` writes a cell's text on the server and `formatValue` in `@dbdatakit/visuals` is its twin, both run against `Shared/conformance/views/format/cases.json`.
+
+#### Locale (DBR46)
+
+A document may say `locale: de` (one of `en de fr es it pt nl`, a closed table: `Shared/web/visuals/src/views/locales.json`, which `DbDataKit.Views` embeds as the same file and the TypeScript twin imports). The locale sets a number's
+**decimal and group separators** (`1.234,5` in `de`, `1 234,5` with a narrow no-break space in `fr`) and the **month names** of a date (`MMMM`, `MMM`, so `März 2026`, `févr. 2026`); the numerals of a numeric pattern (`dd/MM/yyyy`),
+the minus sign and the currency symbol's place (before the number) do not change. The locale of a render is the request's (`ResolveAsync(..., locale:)`, an export's or a subscriber's choice), else the document's, else the host's
+`ResolverOptions.Locale`, else English; an unknown code in a request reads as English, in a document the loader refuses it with the list. The locale is not part of a cache key (the rows are the same; only their text changes).
+**Not localised:** a chart's quantitative axis and legend (d3 strings the client draws with English separators), the QIS view of the semantic library, and a currency symbol's place.
+
+#### The catalog's date format and a bare year (DBR47, DBR48)
+
+An **attribute** of the catalog may carry a `format` of its own, `{date: month-year}` (same presets and patterns as above; `docs/semantic/catalog.md`, "Attribute format"). The engine puts it in the result's descriptor as `x_format`, as it
+does for a measure, and a widget that gives a date attribute **no** `format` (or says `catalog`) reads it: a matrix axis, a chart's categorical channel and a table column all show `Mar 2026`, and a widget's own `format` wins.
+A whole number of four digits (1000 to 9999) is read as a **year** when a date format reads it, so a `year` attribute held as an integer (`2026`) formats as `{date: year}`, `{date: "'FY'yy"}` (`FY26`) or
+through the catalog's format; any other number stays a number. Both languages do the same (`ViewFormat.Text`, `ViewFormat.Label`, `formatValue`), with goldens in `cases.json`.
 
 #### Formats on attributes and axes (DBR41)
 
@@ -397,7 +411,7 @@ host's and the resolver knows no rule. The result is `{kind: "rendered_widgets",
 | --- | --- |
 | `metric` | `{value: {v, text}, compare: {v, text, change: {text, direction}}}`: the text is the number preset's (`catalog`, `full`, `compact`, `percent`, shaped by the catalog's format of the measure); the change is `(value - compare) / abs(compare)` of the two numbers the server gave, in percent |
 | `table` | `columns` (field, label, `align`: right for a measure, left otherwise) and `rows` of `{v, text}`; a total row of the result (a rolled-up row) is `total: true`, the rolled-up cells read "Total", and total rows come after the rows they total |
-| `matrix`, `chart` | the engine's `ViewRenderer` over the answer (the one place they become data); its refusal (`stack_not_additive`, `totals_missing`...) is the widget's error, at the document's encoding path; the Gateway's query explorer draws its matrix and chart through the same renderer (`POST /api/v1/my/runs` with a `view`, `.../{result_id}/render`; plan 14a D37), its refusal is the explorer's error |
+| `matrix`, `chart` | the engine's `ViewRenderer` over the answer (the one place they become data); its refusal (`stack_not_additive`, `totals_missing`...) is the widget's error, at the document's encoding path; the Gateway's query explorer draws its matrix and chart through the same renderer (`POST /api/v1/my/runs` with a `view`, `.../{result_id}/render`; plan 14a D37), its refusal is the explorer's error (shown with its code, path and message; the explorer has no view rules of its own beyond turning Draw off while a required slot, a Value for a matrix, an Along and a Value for a chart, is empty, D38; a replay takes `keep` and `view` too, `POST /api/v1/my/runs/{id}/replay`); an answer with a column the renderer cannot read (a time of day, a binary) is answered as a table with a `view_unavailable` notice that names the column and its type, D38 |
 | `text` | `{text}` with `{{params.x}}` substituted as text (a list joined by commas, nothing as empty); the renderer substitutes again and never makes markup from a value |
 | `image` | a `data:` URI of the bytes the host holds under the hash (`ImageBytes`), at most 1 MiB |
 | `control` | the values it lists, as the viewer may see them (`{"kind": "members", "attribute": ...}` on the model), `{value}` each; a control with no list has nothing to resolve |

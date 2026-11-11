@@ -67,7 +67,7 @@ test('the Connections page shows where each connection is used, answers the two 
   // Build: the connection file's engine, the reference of the read login, the server, the scheduled plan and the flows that write
   const build = row(page, buildName, inventoryBuild.connection)
   await expect(build).toBeVisible({ timeout: 30_000 })
-  await expect(build.getByTestId('inventory-secret')).toHaveText('secret:dbdata:build:connection:sqlserver:read')
+  await expect(build.getByTestId('inventory-secret')).toHaveText('secret:dbdatakit:build:connection:sqlserver:read')
   await expect(build.locator(`[data-testid="inventory-use"][data-process="plan"]`)).toContainText(`${inventoryBuild.project}/${inventoryBuild.connection}/${inventoryBuild.plan}`)
   await expect(build.locator('[data-testid="inventory-use"][data-process="flow"]').first()).toContainText('write login')
   await expect(build.locator('[data-testid="inventory-use"][data-process="server"]')).toContainText('read login')

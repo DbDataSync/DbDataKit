@@ -32,7 +32,7 @@ public static class PublishProducts
 
 /// <summary>
 /// Publishing a built app to a paired Gateway (plan 22a GP35, plan 30): the build's folder is sent as an app version through the Gateway's publish API (<c>POST /api/v1/apps/check</c>, then <c>PUT /api/v1/apps/{name}</c>), signed as the
-/// <b>publisher key</b> of the target. The key is an identity (an id and a signing seed) kept in this server's own secret store; what the <c>publisher_key</c> table holds is only its <b>reference</b> (<c>secret:dbdata:workspace:...</c>), read
+/// <b>publisher key</b> of the target. The key is an identity (an id and a signing seed) kept in this server's own secret store; what the <c>publisher_key</c> table holds is only its <b>reference</b> (<c>secret:dbdatakit:workspace:...</c>), read
 /// through the server's secret resolver at the moment of publishing and never returned by any call. A target is made by <see cref="PairAsync"/> (a single-use pairing code made on the Gateway with <c>server pair --max-role publisher</c>):
 /// it makes the key, pairs with the Gateway so it knows the key's public half, and records the reference and the Gateway's address and certificate fingerprint.
 /// </summary>

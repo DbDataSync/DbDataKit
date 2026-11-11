@@ -54,6 +54,9 @@ public static class StoreData
 
     private static bool Known(Exception ex) => ex is StoreConnectionException or WriteRefusedException or VersionConflictException or RowNotFoundException or StoreNotSupportedException or StorageException;
 
+    /// <summary>The draft a request works in (plan 21 CH01): <c>?draft=&lt;id&gt;</c> reads the data with the draft on top and keeps a write in the draft; none is the real data.</summary>
+    private static string? DraftOf(HttpContext context) => context.Request.Query["draft"].ToString() is { Length: > 0 } id ? id : null;
+
     private static string InstanceName(HttpContext context) => context.Request.RouteValues["instance"] as string ?? StoreInstances.Default;
 
     /// <summary>Where an instance of the model in the request is kept, or the 404 that says why not. The model's own copy (no instance in the path, or <c>default</c>) is always there.</summary>
@@ -67,7 +70,7 @@ public static class StoreData
         @"^/api/v1/models/(?<model>[^/]+)(/instances/[^/]+)?/(entities/(?<entity>[^/]+)/rows?|changes)$", System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.Compiled);
 
     private static readonly System.Text.RegularExpressions.Regex ModelDataPath = new(
-        @"^/api/v1/models/(?<model>[^/]+)(/instances/[^/]+)?/(entities/[^/]+/rows?|changes|requests(/.*)?|migrate(/contract)?|storage/create)$", System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.Compiled);
+        @"^/api/v1/models/(?<model>[^/]+)(/instances/[^/]+)?/(entities/[^/]+/rows?|changes|requests(/.*)?|drafts(/.*)?|migrate(/contract)?|storage/create)$", System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.Compiled);
 
     /// <summary>
     /// One data path per model (plan 20 O10b, owner decision 2026-11-04): a model published to a serving group is read and written there, by its published version, and this server refuses its rows, changes and change
@@ -349,7 +352,7 @@ public static class StoreData
             try
             {
                 await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
-                var writer = new ModelWriter(model, connection, connections.EngineOf(connectionName), schema: schema, instance: instanceId);
+                var writer = new ModelWriter(model, connection, connections.EngineOf(connectionName), schema: schema, instance: instanceId, draft: DraftOf(context));
                 if (context.Request.Query["history"] == "true")
                     return Results.Json(new JsonObject { ["versions"] = new JsonArray((await writer.HistoryAsync(entity, key, context.RequestAborted)).Select(r => (JsonNode)Row(r)).ToArray()) });
                 StoredRow? row;
@@ -379,7 +382,7 @@ public static class StoreData
             try
             {
                 await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
-                var rows = await new ModelWriter(model, connection, connections.EngineOf(connectionName), schema: schema, instance: instanceId).ListAsync(entity, limit, offset, context.RequestAborted);
+                var rows = await new ModelWriter(model, connection, connections.EngineOf(connectionName), schema: schema, instance: instanceId, draft: DraftOf(context)).ListAsync(entity, limit, offset, context.RequestAborted);
                 return Results.Json(new JsonObject { ["rows"] = new JsonArray(rows.Select(r => (JsonNode)Row(r)).ToArray()), ["limit"] = limit, ["offset"] = offset });
             }
             catch (Exception ex) when (Known(ex)) { return Fail(ex); }
@@ -403,6 +406,17 @@ public static class StoreData
             if (bad is not null) return bad;
             var token = context.ManagementToken();
             if (OutsideScope(token, name, changes!) is { } outside) return Results.Json(new { error = $"This token's scope does not include writing '{outside}'." }, statusCode: StatusCodes.Status403Forbidden);
+            // a draft keeps the writes of a preview or channel apart from the data (plan 21 CH01): checked by every rule on top of the draft, kept in it, never audited, never a change request until it is submitted
+            if (DraftOf(context) is { } draft)
+            {
+                try
+                {
+                    await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
+                    await new ModelWriter(model!, connection, connections.EngineOf(connectionName), schema: schema, instance: instanceId, draft: draft).ApplyAsync(changes!, new WriteActor(token.SubjectId, token.SubjectName), context.RequestAborted);
+                    return Results.Json(new { applied = changes!.Count, draft });
+                }
+                catch (Exception ex) when (Known(ex)) { return Fail(ex); }
+            }
             if (StoreChangeRequests.Needs(model!, token))
             {
                 // the rules run now, as they will at approval (plan 15 ST02): a proposal that breaks one, names a row that is gone or quotes a stale version is refused with the answer a direct write would get, and nothing is kept.
@@ -428,6 +442,91 @@ public static class StoreData
                 await new ModelWriter(model!, connection, connections.EngineOf(connectionName), schema: schema, instance: instanceId).ApplyAsync(changes!, new WriteActor(token.SubjectId, token.SubjectName), context.RequestAborted);
                 StoreEvents.Record(directory, name, InstanceName(context), changes!, token, null, DateTimeOffset.UtcNow);
                 return Results.Json(new { applied = changes!.Count });
+            }
+            catch (Exception ex) when (Known(ex)) { return Fail(ex); }
+        });
+
+        // the drafts of the model's copy (plan 21 CH01): a viewer lists them and reads one, an author discards one or submits it as a change request. Submitting proposes every write of the draft as one change request in the usual
+        // way (the rules run now, as at approval), keeps the row ids the draft gave, and removes the draft; a draft never becomes data by itself.
+        app.MapGet(prefix + "/drafts", async (string name, HttpContext context) =>
+        {
+            var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
+            if (!decision.Allowed) return Denied(decision);
+            var (model, problem) = await ModelAsync(directory, name, context.Request.RouteValues["instance"] as string);
+            if (problem is not null) return problem;
+            var (connectionName, schema, instanceId, notThere) = Where(directory, model!, context);
+            if (notThere is not null) return notThere;
+            try
+            {
+                await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
+                var drafts = await new ModelWriter(model!, connection, connections.EngineOf(connectionName), schema: schema, instance: instanceId).DraftsAsync(context.RequestAborted);
+                return Results.Json(new JsonObject { ["drafts"] = new JsonArray(drafts.Select(d => (JsonNode)new JsonObject { ["id"] = d.Id, ["writes"] = d.Writes, ["first_at"] = d.FirstAt.ToString("O"), ["last_at"] = d.LastAt.ToString("O") }).ToArray()) });
+            }
+            catch (Exception ex) when (Known(ex)) { return Fail(ex); }
+        });
+
+        app.MapGet(prefix + "/drafts/{id}", async (string name, string id, HttpContext context) =>
+        {
+            var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
+            if (!decision.Allowed) return Denied(decision);
+            var (model, problem) = await ModelAsync(directory, name, context.Request.RouteValues["instance"] as string);
+            if (problem is not null) return problem;
+            var (connectionName, schema, instanceId, notThere) = Where(directory, model!, context);
+            if (notThere is not null) return notThere;
+            try
+            {
+                await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
+                var entries = await new ModelWriter(model!, connection, connections.EngineOf(connectionName), schema: schema, instance: instanceId, draft: id).DraftEntriesAsync(context.RequestAborted);
+                return entries.Count == 0 ? Results.NotFound(new { error = $"There is no draft '{id}'." }) : Results.Json(DraftJson(id, entries));
+            }
+            catch (Exception ex) when (Known(ex)) { return Fail(ex); }
+        });
+
+        app.MapDelete(prefix + "/drafts/{id}", async (string name, string id, HttpContext context) =>
+        {
+            var decision = Writer(context);
+            if (!decision.Allowed) return Denied(decision);
+            var (model, problem) = await ModelAsync(directory, name, context.Request.RouteValues["instance"] as string);
+            if (problem is not null) return problem;
+            var (connectionName, schema, instanceId, notThere) = Where(directory, model!, context);
+            if (notThere is not null) return notThere;
+            try
+            {
+                await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
+                var removed = await new ModelWriter(model!, connection, connections.EngineOf(connectionName), schema: schema, instance: instanceId, draft: id).DiscardDraftAsync(context.RequestAborted);
+                return removed == 0 ? Results.NotFound(new { error = $"There is no draft '{id}'." }) : Results.Json(new { discarded = removed });
+            }
+            catch (Exception ex) when (Known(ex)) { return Fail(ex); }
+        });
+
+        app.MapPost(prefix + "/drafts/{id}/submit", async (string name, string id, HttpContext context) =>
+        {
+            var decision = Writer(context);
+            if (!decision.Allowed) return Denied(decision);
+            var (model, problem) = await ModelAsync(directory, name, context.Request.RouteValues["instance"] as string);
+            if (problem is not null) return problem;
+            var (connectionName, schema, instanceId, notThere) = Where(directory, model!, context);
+            if (notThere is not null) return notThere;
+            JsonNode? body = null;
+            if (context.Request.ContentLength is > 0)
+            {
+                try { body = await JsonNode.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted); }
+                catch (JsonException) { return Results.BadRequest(new { error = "The body is not JSON." }); }
+            }
+            var token = context.ManagementToken();
+            try
+            {
+                await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
+                var engine = connections.EngineOf(connectionName);
+                var draft = new ModelWriter(model!, connection, engine, schema: schema, instance: instanceId, draft: id);
+                var entries = await draft.DraftEntriesAsync(context.RequestAborted);
+                if (entries.Count == 0) return Results.NotFound(new { error = $"There is no draft '{id}'." });
+                var changes = entries.SelectMany(e => e.Changes).ToList();
+                // the rules and versions are asked of the real data now, as they will be at approval: a draft the data moved away from is refused with the answer a direct write would get, and the draft stays
+                await new ModelWriter(model!, connection, engine, schema: schema, instance: instanceId).ValidateAsync(changes, new WriteActor(token.SubjectId, token.SubjectName), context.RequestAborted);
+                var request = StoreChangeRequests.Propose(directory, name, InstanceName(context), token, (string?)body?["description"] ?? $"Submitted from the draft '{id}'", new JsonArray(changes.Select(c => (JsonNode)RowJson.Change(c)).ToArray()), DateTimeOffset.UtcNow);
+                await draft.DiscardDraftAsync(context.RequestAborted);
+                return Results.Json(request.ToJson(withChanges: false), statusCode: StatusCodes.Status202Accepted);
             }
             catch (Exception ex) when (Known(ex)) { return Fail(ex); }
         });
@@ -512,6 +611,17 @@ public static class StoreData
         catch (Exception ex) when (Known(ex)) { return Fail(ex); }
         return Results.Json(StoreChangeRequests.Decide(directory, request, ChangeRequest.Approved, token, note, DateTimeOffset.UtcNow).ToJson(withChanges: false));
     }
+
+    /// <summary>A draft as the wire has it: each write with its time, who made it, its changes and whether it still applies on top of the data (<see cref="DraftEntry"/>).</summary>
+    internal static JsonObject DraftJson(string id, IReadOnlyList<DraftEntry> entries) => new()
+    {
+        ["id"] = id,
+        ["writes"] = new JsonArray(entries.Select(e => (JsonNode)new JsonObject
+        {
+            ["seq"] = e.Seq, ["at"] = e.At.ToString("O"), ["actor"] = e.Actor.Id, ["actor_name"] = e.Actor.Name, ["applies"] = e.Applies, ["problem"] = e.Problem,
+            ["changes"] = new JsonArray(e.Changes.Select(c => (JsonNode)RowJson.Change(c)).ToArray()),
+        }).ToArray()),
+    };
 
     private static JsonArray Statements(StoragePlan plan) => Statements(plan.Statements);
 

@@ -258,7 +258,7 @@ public sealed class ManagementOptions
 /// <summary>
 /// The identity home as a module of the serving layer (plan 20, section 6 and O06): the OpenID Connect provider every console and app signs people in through, the passkey sign-in and invitations, on an HTTPS
 /// listener of its own (browsers reach it, so HTTP/1.1 as well as HTTP/2). Its people, roles, clients and signing keys are in the state database, so every instance of a group that shares it is the same home;
-/// the signing keys are protected with the secret <c>dbdata:gateway:identity:signing-keys</c>, made on the first start and copied to every other instance of the group.
+/// the signing keys are protected with the secret <c>dbdatakit:gateway:identity:signing-keys</c>, made on the first start and copied to every other instance of the group.
 /// </summary>
 /// <summary>The <c>apps</c> module (plan 26, AP05): where it listens. Its pages are https only.</summary>
 [ConfigSchema(Naming = KeyNaming.Verbatim)]
@@ -433,7 +433,7 @@ public sealed class IdentityEntraOptions
     /// <summary>The id of the app registered in the tenant for the home.</summary>
     public string? ClientId { get; set; }
 
-    /// <summary>That app's client secret, as a secret reference (<c>secret:dbdata:gateway:identity:entra</c>).</summary>
+    /// <summary>That app's client secret, as a secret reference (<c>secret:dbdatakit:gateway:identity:entra</c>).</summary>
     [Secret]
     public string? ClientSecret { get; set; }
 

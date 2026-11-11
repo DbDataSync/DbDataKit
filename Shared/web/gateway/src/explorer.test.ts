@@ -1,6 +1,6 @@
 import { validateViewDocument } from '@dbdatakit/visuals'
 import { describe, expect, it } from 'vitest'
-import { bodyFor, members, picksOf, pinRequest, refusal, requestFromPicks, requestText, roles, scansOf, sqlFromPicks, suggest, toggle, totalsOf, viewSpecFor } from './explorer'
+import { bodyFor, members, missingSlots, picksOf, pinRequest, refusal, requestFromPicks, requestText, roles, scansOf, sqlFromPicks, suggest, toggle, totalsOf, viewSpecFor } from './explorer'
 import type { RunResult } from './runTypes'
 import { view } from './modelBrowserFixture'
 
@@ -47,6 +47,8 @@ describe('what is sent', () => {
   it('puts the engine\'s code in front of its message once', () => {
     expect(refusal('The model has no measure x.', 'unknown_measure')).toBe('unknown_measure: The model has no measure x.')
     expect(refusal('unknown_measure at $: nope', 'unknown_measure')).toBe('unknown_measure at $: nope')
+    expect(refusal('The encoding is wrong.', 'schema_invalid', '$.views[0].values')).toBe('schema_invalid at $.views[0].values: The encoding is wrong.')
+    expect(refusal('schema_invalid at $.views[0]: nope', 'schema_invalid', '$.views[0]')).toBe('schema_invalid at $.views[0]: nope')
   })
   it('hands the pin panel the query body', () => {
     expect(JSON.parse(pinRequest(requestText(picks), picks)!)).toEqual({ attributes: ['customer.region'], measures: ['revenue'], limit: 50 })
@@ -63,6 +65,15 @@ describe('views of a result', () => {
   it('suggests the first attribute along, the second across and the first measure as the value', () => {
     expect(suggest(result())).toEqual({ rows: ['customer.region'], columns: ['quarter'], value: 'revenue' })
     expect(roles(result()).measures).toEqual(['revenue'])
+  })
+  it('names the required slots still empty and has no other rule about a view (D38)', () => {
+    const none = { rows: [], columns: [], value: '' }
+    expect(missingSlots('table', none)).toEqual([])
+    expect(missingSlots('matrix', none)).toEqual(['Value'])
+    expect(missingSlots('matrix', { ...none, value: 'revenue' })).toEqual([])
+    expect(missingSlots('bar', none)).toEqual(['Along', 'Value'])
+    expect(missingSlots('line', { rows: ['quarter'], columns: [], value: '' })).toEqual(['Value'])
+    expect(missingSlots('line', { rows: ['quarter'], columns: [], value: 'revenue' })).toEqual([])
   })
   it('asks the Gateway for a matrix by what is chosen and never carries a cell', () => {
     const spec = viewSpecFor(result(), 'matrix', suggest(result()))!

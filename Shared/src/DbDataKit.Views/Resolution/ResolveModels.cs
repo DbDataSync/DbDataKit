@@ -50,6 +50,9 @@ public sealed class ResolverOptions
     /// <summary>Rows a widget's answer may hold (the table limit of plan 32 section 4.6); an answer over it is an error entry, never a silently cut table. Also asked of the core as the request's own limit.</summary>
     public long MaxRows { get; init; } = 100_000;
 
+    /// <summary>The locale numbers and dates are written in when neither the request nor the document says one (plan 32 DBR46; the server's default). Null is English.</summary>
+    public string? Locale { get; init; }
+
     /// <summary>Widgets run at once.</summary>
     public int MaxParallelism { get; init; } = 4;
 

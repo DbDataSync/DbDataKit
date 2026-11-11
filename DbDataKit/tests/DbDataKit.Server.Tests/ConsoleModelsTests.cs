@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json.Nodes;
+using DbDataKit.Agents;
 using DbDataKit.Cli;
 using DbDataKit.Server;
 using DbDataKit.State;
@@ -22,7 +23,7 @@ public sealed class ConsoleModelsTests : IAsyncLifetime
 
     private const string Text = """{"id":"msg_2","type":"message","role":"assistant","model":"claude-sonnet-4-5","content":[{"type":"text","text":"It is a widget."}],"stop_reason":"end_turn","usage":{"input_tokens":120,"output_tokens":6}}""";
 
-    private const string Provider = "schema: connection/2\nkind: model-provider\nname: claude\nsign_in: { method: api_key, key_secret: secret:dbdata:console:connection:claude:key }\nmodel_provider:\n  provider: anthropic\n  models:\n    - { id: claude-sonnet-4-5, window: 200000, max_output: 8192, price: { input: 3, output: 15 } }\n";
+    private const string Provider = "schema: connection/2\nkind: model-provider\nname: claude\nsign_in: { method: api_key, key_secret: secret:dbdatakit:server:connection:claude:key }\nmodel_provider:\n  provider: anthropic\n  models:\n    - { id: claude-sonnet-4-5, window: 200000, max_output: 8192, price: { input: 3, output: 15 } }\n";
 
     private const string Slots = "model-slots: 1\nslots:\n  default:\n    \"*\":\n      - { provider: claude, model: claude-sonnet-4-5 }\n";
 
@@ -110,7 +111,7 @@ public sealed class ConsoleModelsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Conflict, (await Call(HttpMethod.Post, "/api/agents/conversations", admin, new StartConversationBody("helper"))).Status);
 
         // a provider whose key is written as itself is refused, and the refusal does not repeat it
-        var (refused, bad) = await Call(HttpMethod.Put, "/api/outside-connections/claude", admin, new YamlBody(Provider.Replace("secret:dbdata:console:connection:claude:key", Canary)));
+        var (refused, bad) = await Call(HttpMethod.Put, "/api/outside-connections/claude", admin, new YamlBody(Provider.Replace("secret:dbdatakit:server:connection:claude:key", Canary)));
         Assert.Equal(HttpStatusCode.UnprocessableEntity, refused);
         Assert.Contains("secret reference", (string)bad!["diagnostics"]![0]!["message"]!);
         Assert.DoesNotContain(Canary, bad.ToJsonString());
@@ -127,7 +128,7 @@ public sealed class ConsoleModelsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Put, "/api/outside-connections/claude/secrets/key", viewer, new SecretBody(Canary))).Status);
         var (stored, keyAnswer) = await Call(HttpMethod.Put, "/api/outside-connections/claude/secrets/key", admin, new SecretBody(Canary));
         Assert.Equal(HttpStatusCode.OK, stored);
-        Assert.Equal("secret:dbdata:console:connection:claude:key", (string)keyAnswer!["reference"]!);
+        Assert.Equal("secret:dbdatakit:server:connection:claude:key", (string)keyAnswer!["reference"]!);
         Assert.DoesNotContain(Canary, File.ReadAllText(Path.Combine(directory, "connections", "claude.yml")));
 
         // Test calls the provider with the key and says what the model answered
@@ -207,5 +208,56 @@ public sealed class ConsoleModelsTests : IAsyncLifetime
         var response = await bound.Client.GetResponseAsync([new Microsoft.Extensions.AI.ChatMessage(Microsoft.Extensions.AI.ChatRole.User, "hi")]);
         Assert.Equal("from the local model", response.Text);
         Assert.Equal(["/v1/messages", "/v1/messages", "/v1/messages", "/v1/chat/completions"], answers.Sent.Select(s => s.Path));
+    }
+
+    [Fact]
+    public async Task A_tenant_only_install_never_falls_from_a_local_model_to_a_cloud_one_and_a_change_of_the_policy_is_seen_at_once()
+    {
+        Directory.CreateDirectory(Path.Combine(directory, "connections"));
+        File.WriteAllText(Path.Combine(directory, "connections", "claude.yml"), Provider);
+        File.WriteAllText(Path.Combine(directory, "connections", "local.yml"), "schema: connection/2\nkind: model-provider\nname: local\nmodel_provider:\n  provider: ollama\n  models:\n    - { id: llama3.1:8b, window: 8000 }\n");
+        await Call(HttpMethod.Put, "/api/outside-connections/claude/secrets/key", admin, new SecretBody(Canary));
+        var slots = "model-slots: 1\nslots:\n  default:\n    \"*\":\n      - { provider: local, model: \"llama3.1:8b\" }\n      - { provider: claude, model: claude-sonnet-4-5 }\n";
+        Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Put, "/api/agents/models/slots", admin, new YamlBody(slots))).Status);
+        var models = app.Services.GetRequiredService<ConsoleModels>();
+        var hi = new[] { new Microsoft.Extensions.AI.ChatMessage(Microsoft.Extensions.AI.ChatRole.User, "hi") };
+        const string Down = """{"error":{"message":"busy"}}""";
+
+        // allowed (the default): the local model is down for every attempt and the cloud one answers
+        for (var i = 0; i < 3; i++) answers.Queue.Enqueue((HttpStatusCode.ServiceUnavailable, Down));
+        answers.Queue.Enqueue((HttpStatusCode.OK, Text));
+        Assert.Contains("widget", (await models.For("default", null)!.Client.GetResponseAsync(hi)).Text);
+        Assert.Equal("/v1/messages", answers.Sent[^1].Path);
+
+        // tenant-only: the same failure ends in a message and no request reaches the cloud provider
+        answers.Sent.Clear();
+        File.WriteAllText(Path.Combine(directory, "agent-policy.yml"), "agent-policy: 1\ndata-rules:\n  cloud-providers:\n    fallback: refuse\n");
+        for (var i = 0; i < 3; i++) answers.Queue.Enqueue((HttpStatusCode.ServiceUnavailable, Down));
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => models.For("default", null)!.Client.GetResponseAsync(hi));
+        Assert.Contains("No model of the slot answered", ex.Message);
+        Assert.DoesNotContain(answers.Sent, s => s.Path == "/v1/messages");
+        Assert.Equal(3, answers.Sent.Count);
+    }
+
+    [Fact]
+    public async Task A_person_lists_edits_and_deletes_their_own_memories_through_the_api_and_another_never_sees_them()
+    {
+        var agents = app.Services.GetRequiredService<ConsoleAgents>();
+        var users = app.Services.GetRequiredService<IUserAccounts>();
+        var adaId = app.Services.GetRequiredService<ISessionStore>().Resolve(admin, users)!.Id;
+        var on = new MemorySwitches(true, true);
+        var mine = agents.Memories.Remember(adaId, MemoryKind.Person, null, "helper", "Prefers tables.", on).Memory!;
+
+        var listed = await Get("/api/agents/memories", admin);
+        Assert.Equal(mine.Id, (string?)listed.Body![0]!["id"]);
+        Assert.Empty((JsonArray)(await Get("/api/agents/memories", viewer)).Body!);          // another person sees nothing
+        Assert.Equal(HttpStatusCode.NotFound, (await Call(HttpMethod.Delete, $"/api/agents/memories/{mine.Id}", viewer)).Status);
+        Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Put, $"/api/agents/memories/{mine.Id}", admin, new { text = "Prefers matrices." })).Status);
+        Assert.Equal("Prefers matrices.", (string?)(await Get("/api/agents/memories", admin)).Body![0]!["text"]);
+        Assert.Equal(HttpStatusCode.Conflict, (await Call(HttpMethod.Put, $"/api/agents/memories/{mine.Id}", admin, new { text = "password = hunter2hunter2" })).Status);
+        Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Delete, $"/api/agents/memories/{mine.Id}", admin)).Status);
+        Assert.Empty((JsonArray)(await Get("/api/agents/memories", admin)).Body!);
+        Assert.Contains(agents.Store.Audit(limit: 50), a => a.Kind == "memory-forgotten");
+        _ = users;
     }
 }

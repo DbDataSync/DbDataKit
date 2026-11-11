@@ -61,7 +61,8 @@ public sealed record ViewDocument(
     bool? Strict,
     int? MaxPages,
     int? MaxRows,
-    bool? CoverParameters)
+    bool? CoverParameters,
+    string? Locale = null)
 {
     public ViewLayout DefaultLayout => Layouts.First(l => l.IsDefault);
 

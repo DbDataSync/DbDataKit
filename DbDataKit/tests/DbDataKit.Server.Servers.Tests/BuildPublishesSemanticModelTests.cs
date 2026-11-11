@@ -80,7 +80,7 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
         Directory.CreateDirectory(Path.Combine(project, "connections"));
         File.WriteAllText(Path.Combine(project, "connections", "sqlserver.yaml"), "schema: connection/2\nname: sqlserver\nengine: sqlserver\ngrants:\n  everyone: true\n");
         await RealProcess.RunAsync(build, "server", "project", "add", "retail", "--path", project, "--repo", buildDirectory);
-        await RealProcess.RunWithInputAsync(build, readLogin + "\n", "secret", "set", "dbdata:build:connection:sqlserver:read", "--stdin", "--repo", buildDirectory);
+        await RealProcess.RunWithInputAsync(build, readLogin + "\n", "secret", "set", "dbdatakit:build:connection:sqlserver:read", "--stdin", "--repo", buildDirectory);
         var buildCode = Programs.CodeIn(await RealProcess.RunAsync(build, "server", "pair", "--repo", buildDirectory, "--max-role", "viewer,author,operator,approver,admin"));
         var buildUrl = new Uri($"https://127.0.0.1:{Programs.FreePort()}");
         var buildProcess = RealProcess.Start(build, ["server", "run", "--repo", buildDirectory, "--listen", buildUrl.AbsoluteUri.TrimEnd('/')]);

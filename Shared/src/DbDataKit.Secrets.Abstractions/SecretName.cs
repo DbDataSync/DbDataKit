@@ -3,13 +3,13 @@ using System.Text.RegularExpressions;
 namespace DbDataKit.Secrets;
 
 /// <summary>
-/// Convention <c>dbdata:&lt;product&gt;:&lt;kind&gt;:&lt;name&gt;[:&lt;part&gt;]</c>, e.g.
-/// <c>dbdata:build:connection:warehouse:write</c>. Segments are lower-cased and limited to
+/// Convention <c>dbdatakit:&lt;service&gt;:&lt;kind&gt;:&lt;name&gt;[:&lt;part&gt;]</c>, e.g.
+/// <c>dbdatakit:build:connection:warehouse:write</c>. Segments are lower-cased and limited to
 /// letters, digits, '.', '_' and '-' so names are safe as file names and env-var stems.
 /// </summary>
 public readonly partial record struct SecretName
 {
-    public const string Root = "dbdata";
+    public const string Root = "dbdatakit";
 
     public string Product { get; }
     public string Kind { get; }
@@ -36,7 +36,7 @@ public readonly partial record struct SecretName
 
     public static SecretName Parse(string text) =>
         TryParse(text, out var n) ? n : throw new FormatException(
-            $"'{text}' is not a secret name; expected 'dbdata:<product>:<kind>:<name>[:<part>]'.");
+            $"'{text}' is not a secret name; expected 'dbdatakit:<service>:<kind>:<name>[:<part>]'.");
 
     public static bool TryParse(string? text, out SecretName name)
     {

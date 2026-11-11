@@ -33,7 +33,7 @@ public sealed class SyncConnectionExtension
     [YamlMember(Alias = "run_user", ApplyNamingConventions = false)]
     public string? RunUser { get; set; }
 
-    /// <summary>The second secret (plan 28c, E20): the password of the <c>run</c> login, <c>secret:dbdata:sync:connection:&lt;name&gt;:run</c>. <c>auth.password_secret</c> is the <c>read</c> login's and serves both roles when this is absent.</summary>
+    /// <summary>The second secret (plan 28c, E20): the password of the <c>run</c> login, <c>secret:dbdatakit:sync:connection:&lt;name&gt;:run</c>. <c>auth.password_secret</c> is the <c>read</c> login's and serves both roles when this is absent.</summary>
     [YamlMember(Alias = "run_password_secret", ApplyNamingConventions = false)]
     public string? RunPasswordSecret { get; set; }
 }
@@ -44,7 +44,7 @@ public sealed class SyncConnectionExtension
 /// <list type="bullet">
 /// <item><c>engine</c> is the driver: <c>sqlserver</c>, <c>postgres</c>, <c>mysql</c>, <c>oracle</c>, <c>duckdb</c> and <c>flightsql</c> (with <c>dialect</c> for the Flight SQL variants) are Sync's built-in drivers under the names every product uses; any other value is a driver id as written.</item>
 /// <item><c>address</c> is host, port and database; <c>connection_string</c> is the engine-native address (then the database is <c>extensions.sync.database</c>).</item>
-/// <item><c>auth</c> is <c>sql</c> (a user and <c>password_secret: secret:dbdata:sync:connection:&lt;name&gt;</c>), <c>integrated</c> or <c>none</c>.</item>
+/// <item><c>auth</c> is <c>sql</c> (a user and <c>password_secret: secret:dbdatakit:sync:connection:&lt;name&gt;</c>), <c>integrated</c> or <c>none</c>.</item>
 /// <item><c>timeouts</c> are the connect and command seconds when they are between 1 and 86400; an unset timeout is the default of Sync (30 and 1800 seconds), not that of the shared type.</item>
 /// <item>What Sync does not use is refused by key, never ignored: <c>tls</c>, <c>read_login</c>, <c>write_login</c>, <c>connection_string_secret</c>, <c>access</c>, <c>managed_by</c>.</item>
 /// </list>
@@ -176,7 +176,7 @@ internal static partial class SyncConnectionFile
         if (auth is { Mode: DbDataKit.Connections.AuthMode.Sql, PasswordSecret: { } secret })
         {
             if (secret.StartsWith(SecretPrefix, StringComparison.OrdinalIgnoreCase)) credentialRef = secret[SecretPrefix.Length..];
-            else Error("Sync reads a connection's password from its own secret store; `auth.password_secret` must be `secret:dbdata:sync:connection:<name>`.", "auth.password_secret", (map.Get("auth") as YamlMapping)?.GetEntry("password_secret") ?? map.GetEntry("auth"));
+            else Error("Sync reads a connection's password from its own secret store; `auth.password_secret` must be `secret:dbdatakit:sync:connection:<name>`.", "auth.password_secret", (map.Get("auth") as YamlMapping)?.GetEntry("password_secret") ?? map.GetEntry("auth"));
         }
 
         var hasHost = !string.IsNullOrWhiteSpace(d.Address?.Host);
@@ -199,7 +199,7 @@ internal static partial class SyncConnectionFile
             if (auth is not { Mode: DbDataKit.Connections.AuthMode.Sql })
                 Error("`extensions.sync.run_password_secret` is the password of a second login, and the connection does not log in with a user and a password (`auth.mode: sql`).", "extensions.sync.run_password_secret", at);
             else if (!runSecret.StartsWith(SecretPrefix, StringComparison.OrdinalIgnoreCase))
-                Error("`extensions.sync.run_password_secret` must be `secret:dbdata:sync:connection:<name>:run`, a reference into Sync's secret store.", "extensions.sync.run_password_secret", at);
+                Error("`extensions.sync.run_password_secret` must be `secret:dbdatakit:sync:connection:<name>:run`, a reference into Sync's secret store.", "extensions.sync.run_password_secret", at);
         }
         else if (ext.RunUser is not null)
             Error("`extensions.sync.run_user` names the user of a second login, and there is no `extensions.sync.run_password_secret` for it.", "extensions.sync.run_user", (map.Get("extensions") as YamlMapping)?.GetEntry("sync"), "Add `run_password_secret`, or remove `run_user`.");
@@ -278,7 +278,7 @@ internal static partial class SyncConnectionFile
         DefaultDiagnosticCatalog.Instance.Create(SharedCodes.SchemaVersionInvalid, path, 1, 1,
             $"'{name}.yaml' is a connection in the form of earlier releases (it has `driverType` or `schemaVersion` and no `schema: connection/1`), which Sync no longer reads.",
             "Rewrite it as a connection/1 file: `schema: connection/1`, `name`, `engine` (sqlserver, postgres, mysql, oracle, duckdb, flightsql, or a driver id), `address: {host, port, database}` or `connection_string`, " +
-            $"`auth: {{mode: sql, user, password_secret: 'secret:dbdata:sync:connection:{name}'}}` (or `mode: integrated` / `none`), `timeouts: {{connect_s, command_s}}`, and `extensions.sync` for `segment_order`, `properties`, `scripts`, `hooks`, `test_query`, a second login (`run_user`, `run_password_secret`) and, with a `connection_string`, `database`. " +
+            $"`auth: {{mode: sql, user, password_secret: 'secret:dbdatakit:sync:connection:{name}'}}` (or `mode: integrated` / `none`), `timeouts: {{connect_s, command_s}}`, and `extensions.sync` for `segment_order`, `properties`, `scripts`, `hooks`, `test_query`, a second login (`run_user`, `run_password_secret`) and, with a `connection_string`, `database`. " +
             "The password stays in the secret store; see docs/configuration.md.", keyPath: null);
 
     private static (string? Driver, string? Error) DriverFor(ConnectionDefinition d)

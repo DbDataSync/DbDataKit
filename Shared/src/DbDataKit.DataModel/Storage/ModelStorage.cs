@@ -265,7 +265,7 @@ public static class ModelStorage
             foreach (var extra in have.Where(c => !wanted.Contains(c)).Order(StringComparer.Ordinal))
                 notes.Add($"`{table}.{extra}` is in the table and not in the model any more; it is left in place. Removing it is a contract step of its own.");
         }
-        foreach (var table in liveTables.Keys.Where(t => !full.TableColumns!.ContainsKey(t)).Order(StringComparer.Ordinal))
+        foreach (var table in liveTables.Keys.Where(t => !full.TableColumns!.ContainsKey(t) && t != DraftStorage.Table).Order(StringComparer.Ordinal))
             notes.Add($"`{table}` is in the schema and not in the model; it is left in place.");
         return new ExpandPlan(schema, statements, blocked, notes);
     }
@@ -299,7 +299,7 @@ public static class ModelStorage
                 steps.Add(new($"{schema}.{table}", $"make {table}.{column.Name} required", ddl.AlterColumn(schema, table, column),
                     $"SELECT COUNT(*) FROM {ddl.Qualified(schema, table)} WHERE {ddl.Quote(column.Name)} IS NULL"));
         }
-        foreach (var table in liveTables.Keys.Where(t => !full.TableColumns!.ContainsKey(t)).Order(StringComparer.Ordinal))
+        foreach (var table in liveTables.Keys.Where(t => !full.TableColumns!.ContainsKey(t) && t != DraftStorage.Table).Order(StringComparer.Ordinal))
             notes.Add($"`{table}` is in the schema and not in the model; it is left in place.");
         return new ContractPlan(schema, steps, blocked, notes, Hash(schema, steps));
     }

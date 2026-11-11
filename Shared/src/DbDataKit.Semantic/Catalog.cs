@@ -78,6 +78,8 @@ public sealed class AttributeDef
 
     public string Type { get; set; } = "string";
     public string? SortKey { get; set; }
+    /// <summary>How a person reads this attribute's members (<c>{date: month-year}</c>, plan 32 DBR47); carried to the descriptor as <c>x_format</c>. Null leaves it to the view.</summary>
+    public System.Text.Json.Nodes.JsonObject? Format { get; set; }
     /// <summary>The canonical members when the catalog lists them.</summary>
     public List<string>? MemberList { get; set; }
     /// <summary>The source whose dimension table holds the canonical members.</summary>
@@ -530,5 +532,15 @@ public sealed class Catalog
             return bestLen + Matches(a[..bestI], b[..bestJ]) + Matches(a[(bestI + bestLen)..], b[(bestJ + bestLen)..]);
         }
         return a.Length + b.Length == 0 ? 1 : 2.0 * Matches(a, b) / (a.Length + b.Length);
+    }
+}
+
+internal static class DescriptorFieldExtensions
+{
+    /// <summary>Puts an attribute's catalog format into its descriptor field as <c>x_format</c> (plan 32 DBR47); nothing when the catalog gives none.</summary>
+    public static System.Text.Json.Nodes.JsonObject WithAttributeFormat(this System.Text.Json.Nodes.JsonObject field, System.Text.Json.Nodes.JsonObject? format)
+    {
+        if (format is not null) field["x_format"] = format.DeepClone();
+        return field;
     }
 }

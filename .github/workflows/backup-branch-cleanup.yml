@@ -1,0 +1,40 @@
+# Deletes the `backup/*` branches that main has caught up with (their tip is contained in main), at once. Pending work is pushed to those branches by
+# scripts/backup_branches.py (docs/agent-workflow.md, "Backups"). On every push to main, hourly as a safety net, and by hand (dry run unless apply is true).
+name: Backup branch cleanup
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'true: delete; false: only list what would be deleted'
+        type: choice
+        options: ['false', 'true']
+        default: 'false'
+      hours:
+        description: 'Keep a backup whose tip commit is younger than this many hours (0: delete at once)'
+        default: '0'
+
+permissions:
+  contents: write
+
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Delete the backup branches main has caught up with
+        env:
+          APPLY: ${{ github.event_name != 'workflow_dispatch' && 'true' || inputs.apply }}
+          HOURS: ${{ inputs.hours || '0' }}
+        run: |
+          if [ "$APPLY" = "true" ]; then
+            python3 -I scripts/backup_branches.py clean --hours "$HOURS" --apply
+          else
+            python3 -I scripts/backup_branches.py clean --hours "$HOURS"
+          fi

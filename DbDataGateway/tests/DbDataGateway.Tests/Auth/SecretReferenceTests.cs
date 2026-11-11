@@ -82,9 +82,9 @@ public sealed class SecretReferenceTests : IDisposable
     public void Secret_name_reference_maps_to_an_environment_variable()
     {
         var (runtime, _) = Runtime();
-        Env("named-pw", EnvSecretProvider.VariableNameFor("dbdata:gateway:datasource:erp"));
+        Env("named-pw", EnvSecretProvider.VariableNameFor("dbdatakit:gateway:datasource:erp"));
         Assert.Equal("Server=db;Password=named-pw",
-            runtime.ResolveConnectionString("k", "Server=db;Password=secret:dbdata:gateway:datasource:erp", "sqlserver"));
+            runtime.ResolveConnectionString("k", "Server=db;Password=secret:dbdatakit:gateway:datasource:erp", "sqlserver"));
     }
 
     [Fact]

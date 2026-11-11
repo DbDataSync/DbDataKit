@@ -83,13 +83,22 @@ public sealed class WebhookChannelTests : IDisposable
 
     private static IDeliveryChannel Channel(string kind, string url, string[]? allow = null, int? timeout = null, SecretScrubber? scrubber = null, TimeProvider? time = null)
     {
-        var json = new JsonObject { ["kind"] = kind, ["url"] = "secret:hooks/url" };
-        if (allow is not null) json["allow_private"] = new JsonArray([.. allow.Select(a => (JsonNode?)JsonValue.Create(a))]);
-        if (kind == "webhook") json["secret"] = "secret:hooks/signing";
-        if (timeout is not null) json["timeout_seconds"] = timeout;
-        var settings = DeliverySettings.Read(new JsonObject { ["channels"] = new JsonObject { ["hook"] = json } }, "server.yaml", DeliveryKinds.Default());
-        var resolver = new MapResolver(new() { ["secret:hooks/url"] = url, ["secret:hooks/signing"] = "shared-signing-secret" });
-        return new DeliveryChannels(settings, DeliveryKinds.Default(), resolver, scrubber ?? new SecretScrubber(), time ?? new StateTestClock(Now)).Find("hook")!;
+        var (definition, resolver) = Connection(kind, url, allow, timeout);
+        return TestConnections.Single("hook", definition, resolver, scrubber, time ?? new StateTestClock(Now));
+    }
+
+    /// <summary>A webhook connection to <paramref name="url"/>: the address is a template, its origin visible and its path the secret part <c>{u}</c> (as an install keeps a Slack or Teams address).</summary>
+    internal static (DbDataKit.Connections.ConnectionDefinition Definition, MapResolver Resolver) Connection(string kind, string url, string[]? allow = null, int? timeout = null)
+    {
+        var uri = new Uri(url);
+        var origin = url[..(url.IndexOf("://", StringComparison.Ordinal) + 3 + uri.Authority.Length)];
+        var path = uri.AbsolutePath.TrimStart('/');
+        var format = kind == "webhook" ? "signed" : kind;
+        var yaml = $"schema: connection/2\nkind: http\nname: hook-conn\nendpoint: \"{origin}/{{u}}\"\nendpoint_secrets: {{ u: \"secret:hooks/u\" }}\nwebhook:\n  format: {format}\n";
+        if (allow is not null) yaml += "  allow_private: [" + string.Join(", ", allow.Select(a => $"\"{a}\"")) + "]\n";
+        if (timeout is not null) yaml += $"  timeout_seconds: {timeout}\n";
+        if (kind == "webhook") yaml += "sign_in: { method: signed_webhook, key_secret: \"secret:hooks/signing\" }\n";
+        return (TestConnections.Load(yaml), new MapResolver(new() { ["secret:hooks/u"] = path, ["secret:hooks/signing"] = "shared-signing-secret" }));
     }
 
     private static DeliveryPayload Payload(params DeliveryAttachment[] attachments) =>
@@ -231,7 +240,7 @@ public sealed class WebhookChannelTests : IDisposable
     [InlineData(408, DeliveryOutcome.Temporary)]
     public async Task The_answers_are_classified_as_the_plan_says(int status, DeliveryOutcome expected)
     {
-        var http = Http(_ => (status, status == 410 ? "gone" : "words from the far side", status == 429 ? new() { ["Retry-After"] = "30" } : null));
+        var http = Http(_ => (status, status == 410 ? "gone" : status == 204 ? "" : "words from the far side", status == 429 ? new() { ["Retry-After"] = "30" } : null));
         var result = await Channel("slack", http.Url(), ["127.0.0.1"]).SendAsync(Payload(), default);
         Assert.Equal(expected, result.Outcome);
         Assert.Contains($"{status}", result.Detail);
@@ -324,18 +333,22 @@ public sealed class WebhookChannelTests : IDisposable
         Assert.False(PrivateAddresses.Allows("hooks.internal.example", "evil.example", null));
     }
 
-    // ---- the settings ----
+    // ---- the connection ----
 
     [Fact]
-    public void The_settings_of_the_webhook_kinds_are_strict_and_the_address_is_always_a_secret_reference()
+    public void An_allow_list_entry_that_is_not_one_is_the_channels_problem()
     {
-        static string Refused(string channel) => Assert.Throws<DeliverySettingsException>(() => DeliverySettings.Read(JsonNode.Parse($"{{\"channels\": {{\"hook\": {channel}}}}}")!.AsObject(), "server.yaml", DeliveryKinds.Default())).Message;
-        Assert.Contains("delivery.channels.hook.url is a reference to a secret", Refused("""{"kind": "slack", "url": "https://hooks.slack.com/services/T0/B0/xyz"}"""));
-        Assert.Contains("delivery.channels.hook.url is required for a teams channel", Refused("""{"kind": "teams"}"""));
-        Assert.Contains("delivery.channels.hook.secret is required for a webhook channel", Refused("""{"kind": "webhook", "url": "env:HOOK_URL"}"""));
-        Assert.Contains("has no key `host` for a slack channel", Refused("""{"kind": "slack", "url": "env:U", "host": "x"}"""));
-        var settings = DeliverySettings.Read(JsonNode.Parse("""{"channels": {"hook": {"kind": "teams", "url": "env:U", "allow_private": ["10.1.0.0/99"]}}}""")!.AsObject(), "server.yaml", DeliveryKinds.Default());
-        var ex = Assert.Throws<DeliverySettingsException>(() => new DeliveryChannels(settings, DeliveryKinds.Default(), new MapResolver([]), new SecretScrubber()));
-        Assert.Contains("delivery.channels.hook.allow_private: `10.1.0.0/99` is not a host name, an address or a range", ex.Message);
+        var (definition, resolver) = Connection("teams", "https://hooks.example.com/in", ["10.1.0.0/16"]);
+        Assert.Contains("10.1.0.0/16", string.Join(",", definition.Webhook!.AllowPrivate));
+        // the reader refuses a range that is not one (10.1.0.0/99); the channel's own check is the second line of defence for a definition made in code
+        var made = new DbDataKit.Connections.ConnectionDefinition
+        {
+            Name = "bad", Kind = "http", Endpoint = "https://hooks.example.com/in",
+            Webhook = new DbDataKit.Connections.WebhookSpec { Format = "teams", AllowPrivate = ["10.1.0.0/99"] },
+        };
+        var channels = TestConnections.Channels(TestConnections.Settings("""{"hook": "bad"}"""), new FixedDeliveryConnections([made]), resolver);
+        var resolution = channels.Resolve("hook", null);
+        Assert.Null(resolution.Channel);
+        Assert.Contains("webhook.allow_private: `10.1.0.0/99` is not a host name, an address or a range", resolution.Problem);
     }
 }

@@ -42,3 +42,23 @@ The console's screens (plan 27a AG15 to AG17, AG29 to AG32) compute nothing of t
 - **The install policy as a file** (`PolicyEditing.Write`): an `agent-policy/1` text the loader reads back equal; `Describe(before, after)` lists what a change does in sentences and marks every one that makes the install less strict, which a host asks the person to confirm and records.
 - **The approval desk** (`ApprovalDesk`): the steps that wait for a person. `ApproverFor(conversation)` is the conversation's `IApprover`; `Answer` is the person's own act and counts only for the person a step is for; a step nobody answers within the timeout expires, which is a no. Nothing a model says reaches it.
 - **A session** (`AgentSession`): one conversation of an agent with a person. A message runs the loop with the gate, the limits (the agent's own narrow the install's) and the context of each turn, and writes to an `IConversationLog` the words, one record per model turn (tokens, cost, what the turn was given) and every event naming the person, the agent and its version. A run that ends on a limit, a denial or a refusal says so in the conversation's status; the next message goes on.
+
+## Memories (`MemoryService`)
+
+What an agent remembers, in two kinds: about a **person** (only that person lists, edits and deletes it; another person's id is simply not found) and about the **work** (a workspace or work item: whoever opens it). The agent writes with `memory_remember` (asks once per conversation) and forgets with `memory_forget` (asks every time); an install or an agent can only make these stricter. A value that looks like a secret is refused in words and nothing is written; a memory is at most 500 characters. Memories reach the model through the context assembly after the instructions and before references, newest first inside a room the host gives them, each recorded in the turn and re-read every turn so a deleted one is not given again. Each kind is turned off per agent (`memory:` in `agent.yml`) or for the install (`memory: { person: off }` in `agent-policy.yml`); off means neither written nor read. Shared learning is never memory: it is a suggestion to the knowledge owner. The store is `IMemoryStore` (the `agents` module's `memory` table in a host).
+
+## Subagents (`SubagentTools`)
+
+Each name in `subagents:` is a tool `agent_<name>` taking a `task` and the `context` the parent passes. It is the same person; its reach is what the parent can call, narrowed by the tools its own file names (it can never call a tool its parent could not); it has its own instructions and sees only the task and context; its steps ask through the parent's gate and desk; its turns, tool calls and tokens count to the parent (`ToolOutcome.Spent`); it nests two levels at most (a third is refused in words); its events carry its own name, its parent and its depth, so the transcript nests.
+
+## Views in an answer (`AnswerViewTool`)
+
+`show_view` is how an agent returns a table, a matrix or a chart: a dashboard widget and its data inline. The host passes a check (`DbDataKit.Views`'s `AgentAnswerViews.Check`: the dashboards' own widget reader and closed Vega-Lite subset, the kinds of the agent's `output:`, every encoded field a column, no address anywhere). A refusal says what is wrong so the model can correct the call. A link in the answer's text is only text; nothing is fetched.
+
+## Publishing (`AgentDefinitions`)
+
+The kinds `agent`, `skill` and `agent-policy` for plan 30's registry: validators, the agent's model slot as a slot of the version (`model:<slot>`, so a promotion with it unbound in the channel is refused naming it), `skill:` and `agent:` dependencies, formats, target types. One version per publish, the instruction files by hash, the same content again changes nothing.
+
+## When a model is down (`FallbackChatClient`, `AgentPolicy.CloudFallback`)
+
+A slot's list is retried with back-off, then falls through to the next model the install policy allows; `data-rules: cloud-providers: fallback: refuse` (a tenant-only install) keeps a cloud provider out of every position after the first.

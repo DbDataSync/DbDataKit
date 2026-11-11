@@ -203,7 +203,7 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
             if (string.IsNullOrWhiteSpace(entra.ClientId))
                 cx.Error("Identity.Entra.ClientId", "Entra sign-in needs the id of the app registered in the tenant for the home.", "Set `ClientId`.");
             if (string.IsNullOrWhiteSpace(entra.ClientSecret))
-                cx.Error("Identity.Entra.ClientSecret", "Entra sign-in needs the client secret of the app registered in the tenant for the home.", "Set `ClientSecret` to a secret reference, such as secret:dbdata:gateway:identity:entra.");
+                cx.Error("Identity.Entra.ClientSecret", "Entra sign-in needs the client secret of the app registered in the tenant for the home.", "Set `ClientSecret` to a secret reference, such as secret:dbdatakit:gateway:identity:entra.");
         }
         else if (!string.IsNullOrWhiteSpace(entra.ClientId) || !string.IsNullOrWhiteSpace(entra.ClientSecret))
             cx.Error("Identity.Entra.Authority", "Entra sign-in is set up without the tenant.", "Set `Authority` to the tenant's issuer, https://login.microsoftonline.com/<tenant id>/v2.0, or remove the `Entra` section.");

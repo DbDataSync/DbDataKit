@@ -11,7 +11,7 @@ namespace DbDataSync.Cli;
 /// already makes for a connection's own credential, reachable here without going through a
 /// connection's save flow. This is what "easily settable using the CLI tool" means concretely for
 /// phase 79's one standardized ref:
-/// <code>dbdatasync secret set dbdata:sync:config:stateConnectionString "Password=..."</code>
+/// <code>dbdatasync secret set dbdatakit:sync:config:stateConnectionString "Password=..."</code>
 /// </summary>
 public static class SecretCommand
 {
@@ -43,7 +43,7 @@ public static class SecretCommand
         }
         catch (FormatException ex)
         {
-            // a name that is not dbdata:sync:<kind>:<name> (the old dbdatasync:... form among them); the message never holds a value
+            // a name that is not dbdatakit:sync:<kind>:<name> (the old dbdatasync:... form among them); the message never holds a value
             Console.Error.WriteLine(ex.Message);
             return 1;
         }
@@ -124,7 +124,7 @@ public static class SecretCommand
     /// directory listing would. Given no ref, it checks <see cref="KnownRefs"/> — right now, just the
     /// one fixed ref this phase's starter file documents. Given one or more refs, it checks exactly
     /// those instead, which is how a script or an operator who already knows a connection's ref
-    /// (<c>dbdata:sync:connection:&lt;name&gt;</c>) checks it without this command having to know
+    /// (<c>dbdatakit:sync:connection:&lt;name&gt;</c>) checks it without this command having to know
     /// connections exist.
     /// </para>
     /// </summary>

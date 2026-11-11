@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildTarget, targetLine, bindingLine, connectCommand, providerTemplate, cost, eventWord, percent, promptingMeaning, promptingName, sessions, statusWord, tokenState, waitingOn, type AgentToken, type Approval, type AuditRow } from './agents'
+import { moveChoice, planOf, slotsToYaml, againstLimit, type SlotBindingView } from './agents'
 import { emptyPolicy, policyFromYaml, policyToYaml, settingMeaning } from './policyForm'
 import { contextLine, isPolicyItem, parseInPlay, policyItemId, policyItemText, workActions, workWord, type WorkItem } from './knowledge'
 
@@ -10,7 +11,7 @@ const approval = (status: string): Approval => ({ id: 'a', conversationId: 'c1',
 
 describe('model providers and slots', () => {
   it('starts a provider file of each kind with the reference the console keeps a typed key under, and none for a local server', () => {
-    expect(providerTemplate('anthropic', 'claude')).toContain('key_secret: secret:dbdata:console:connection:claude:key')
+    expect(providerTemplate('anthropic', 'claude')).toContain('key_secret: secret:dbdatakit:server:connection:claude:key')
     expect(providerTemplate('anthropic', 'claude')).toContain('kind: model-provider\n')
     expect(providerTemplate('anthropic', 'claude')).toContain('provider: anthropic\n')
     expect(providerTemplate('ollama', 'local')).not.toContain('key_secret')
@@ -147,5 +148,41 @@ describe('where a Build agent works (AG14)', () => {
     expect(targetLine(undefined)).toBe('the console')
     expect(targetLine({ server: 'b1', project: 'sales' })).toBe('b1 / sales (read only: no workspace)')
     expect(targetLine({ server: 'b1', project: 'sales', workspace: 'ws1' })).toBe('b1 / sales / workspace ws1')
+  })
+})
+
+describe('AG18 to AG21: the slot editor, the usage line and the policy switches', () => {
+  const view = (slot: string, channel: string, ...choices: [string, string][]): SlotBindingView => ({ slot, channel, choices: choices.map(([provider, model]) => ({ provider, model, usable: true, problem: null })) })
+
+  it('binds a slot differently in two channels and writes the file the server reads', () => {
+    const plan = planOf([view('default', '*', ['claude', 'claude-sonnet-4-5'], ['local', 'llama3.1:8b']), view('default', 'test', ['local', 'llama3.1:8b'])])
+    expect(plan.default['*']).toHaveLength(2)
+    expect(plan.default.test).toHaveLength(1)
+    const yaml = slotsToYaml(plan)
+    expect(yaml).toBe('model-slots: 1\nslots:\n  default:\n    "*":\n      - { provider: claude, model: "claude-sonnet-4-5" }\n      - { provider: local, model: "llama3.1:8b" }\n    test:\n      - { provider: local, model: "llama3.1:8b" }\n')
+  })
+
+  it('reorders a fallback one place and leaves an out-of-range move alone', () => {
+    expect(moveChoice(['a', 'b', 'c'], 2, -1)).toEqual(['a', 'c', 'b'])
+    expect(moveChoice(['a', 'b', 'c'], 0, -1)).toEqual(['a', 'b', 'c'])
+    expect(moveChoice(['a', 'b', 'c'], 2, 1)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('says what is used against a limit, and that none is set', () => {
+    expect(againstLimit(5, 20, 'cost')).toBe('cost: 5 of 20 (25%)')
+    expect(againstLimit(1234, null, 'tokens')).toBe('tokens: 1,234 (no limit set)')
+  })
+
+  it('writes the tenant-only rule and the memory switches only when they differ from the default, and reads them back', () => {
+    expect(policyToYaml(emptyPolicy())).toBe('agent-policy: 1\n')
+    const form = { ...emptyPolicy(), tenantOnly: true, memoryPerson: false }
+    const yaml = policyToYaml(form)
+    expect(yaml).toContain('fallback: refuse')
+    expect(yaml).toContain('person: off')
+    expect(yaml).not.toContain('work:')
+    const back = policyFromYaml(yaml).form!
+    expect(back.tenantOnly).toBe(true)
+    expect(back.memoryPerson).toBe(false)
+    expect(back.memoryWork).toBe(true)
   })
 })

@@ -10,7 +10,7 @@ namespace DbDataKit.Views;
 /// release, read as before), a number mapping <c>{style: number | currency | percent | compact, decimals, currency, grouping}</c>, or a date mapping <c>{date: preset | pattern}</c> where a pattern is a closed set of
 /// tokens (<c>yyyy yy Q MMMM MMM MM dd HH mm ss</c>) and literal text, never a free format string.
 /// The TypeScript twin is <c>src/views/format.ts</c> in <c>@dbdatakit/visuals</c>; both run the goldens of <c>conformance/views/format/cases.json</c>, so the screen, the PDF and an email read alike. Separators and
-/// month names are the invariant (English) ones; locale data is not carried yet (plan 32 section 9g, decision c: unverified).
+/// month names are the locale's (<c>locales.json</c>, plan 32 DBR46: en de fr es it pt nl; English when none is given).
 /// </summary>
 public static class ViewFormat
 {
@@ -25,7 +25,31 @@ public static class ViewFormat
         ["year"] = "yyyy", ["quarter"] = "'Q'Q yyyy", ["month"] = "MMM", ["month-year"] = "MMM yyyy", ["date"] = "yyyy-MM-dd", ["datetime"] = "yyyy-MM-dd HH:mm",
     };
 
-    private static readonly string[] Months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    /// <summary>What a locale changes: the two separators of a number and the names of the months (plan 32 DBR46). One closed table, <c>locales.json</c> beside the TypeScript twin, read by both.</summary>
+    public sealed record LocaleData(string Decimal, string Group, IReadOnlyList<string> Months, IReadOnlyList<string> Short);
+
+    private static readonly Lazy<IReadOnlyDictionary<string, LocaleData>> LocaleTable = new(() =>
+    {
+        var assembly = typeof(ViewFormat).Assembly;
+        using var stream = assembly.GetManifestResourceStream("DbDataKit.Views.locales.json")!;
+        var root = JsonNode.Parse(stream)!.AsObject();
+        return root.ToDictionary(e => e.Key, e => new LocaleData(
+            e.Value!["decimal"]!.GetValue<string>(), e.Value["group"]!.GetValue<string>(),
+            e.Value["months"]!.AsArray().Select(m => m!.GetValue<string>()).ToArray(), e.Value["short"]!.AsArray().Select(m => m!.GetValue<string>()).ToArray()));
+    });
+
+    /// <summary>The locales the formatter knows, <c>en</c> first: <c>en de fr es it pt nl</c>.</summary>
+    public static IReadOnlyList<string> Locales => [.. LocaleTable.Value.Keys];
+
+    /// <summary>The locale's data; an unknown or empty code reads as <c>en</c> (a caller that must refuse one uses <see cref="Locales"/>).</summary>
+    public static LocaleData Locale(string? code) => code is not null && LocaleTable.Value.TryGetValue(code, out var l) ? l : LocaleTable.Value["en"];
+
+    private static string Localize(string text, string? locale)
+    {
+        if (locale is null or "en") return text;
+        var l = Locale(locale);
+        return string.Concat(text.Select(c => c == ',' ? l.Group : c == '.' ? l.Decimal : c.ToString()));
+    }
     private const string TokenList = "yyyy, yy, Q, MMMM, MMM, MM, dd, HH, mm, ss";
 
     /// <summary>What is wrong with a format: the key inside it (empty for the format itself) and the words.</summary>
@@ -126,19 +150,40 @@ public static class ViewFormat
     /// A value as text under a format. A number takes a preset or a number mapping (the catalog's own format, <paramref name="catalog"/>, supplies the default decimals and what <c>catalog</c> and <c>full</c> read);
     /// a text takes a date mapping (an ISO date or date-time, read as written: no time zone is applied) and is otherwise returned as it is.
     /// </summary>
-    public static string Text(JsonNode? value, JsonNode? format, JsonObject? catalog = null)
+    public static string Text(JsonNode? value, JsonNode? format, JsonObject? catalog = null, string? locale = null)
     {
+        var pattern = DatePattern(format, catalog);
         if (value is JsonValue v)
         {
-            if (v.TryGetValue<string>(out var text))
-                return format is JsonObject f && f["date"] is JsonValue dv && dv.TryGetValue<string>(out var pattern) ? Date(text, pattern) : text;
-            if (v.TryGetValue<double>(out var n)) return Number(n, format, catalog);
+            if (v.TryGetValue<string>(out var text)) return pattern is null ? text : Date(text, pattern, locale);
+            // a bare whole number of four digits is a year when a date format reads it (DBR48): 2026 under {date: year} or an attribute whose catalog format is a date
+            if (pattern is not null && BareYear(v) is { } year) return Date(year, pattern, locale);
+            if (v.TryGetValue<double>(out var n)) return Number(n, format, catalog, locale);
         }
         return value?.ToString() ?? "";
     }
 
+    /// <summary>The date pattern a value is read under: the format's own <c>date</c>, or, when the widget gives no format, the catalog field's (<c>x_format</c> of an attribute); null when neither is a date format.</summary>
+    internal static string? DatePattern(JsonNode? format, JsonObject? catalog)
+    {
+        if (format is JsonObject o) return o["date"] is JsonValue dv && dv.TryGetValue<string>(out var p) ? p : null;
+        if (format is null || (format is JsonValue pv && pv.TryGetValue<string>(out var preset) && preset == "catalog"))
+            return catalog?["date"] is JsonValue cv && cv.TryGetValue<string>(out var c) ? c : null;
+        return null;
+    }
+
+    /// <summary>A whole number from 1000 to 9999, as the text of a year; null for any other number.</summary>
+    private static string? BareYear(JsonValue v)
+    {
+        if (v.TryGetValue<long>(out var l)) return l is >= 1000 and <= 9999 ? l.ToString(CultureInfo.InvariantCulture) : null;
+        if (v.TryGetValue<int>(out var i)) return i is >= 1000 and <= 9999 ? i.ToString(CultureInfo.InvariantCulture) : null;
+        return v.TryGetValue<double>(out var d) && d == Math.Floor(d) && d is >= 1000 and <= 9999 ? ((long)d).ToString(CultureInfo.InvariantCulture) : null;
+    }
+
     /// <summary>A number under a format; a date mapping has no meaning for a number and reads as <c>full</c>.</summary>
-    public static string Number(double v, JsonNode? format, JsonObject? catalog = null)
+    public static string Number(double v, JsonNode? format, JsonObject? catalog = null, string? locale = null) => Localize(NumberInvariant(v, format, catalog), locale);
+
+    private static string NumberInvariant(double v, JsonNode? format, JsonObject? catalog)
     {
         if (!double.IsFinite(v)) return v.ToString(CultureInfo.InvariantCulture);
         if (format is JsonObject o && o["style"] is JsonValue sv && sv.TryGetValue<string>(out var style))
@@ -182,11 +227,11 @@ public static class ViewFormat
     /// A member label (a text, or the text of a number) as it reads under a format: a date mapping reads an ISO date, a number format reads a number written as text (<c>2026</c>), and a text that is neither is returned
     /// as it is. A matrix axis and a categorical chart axis show their members through this, so the screen, the PDF and an email read alike.
     /// </summary>
-    public static string Label(string label, JsonNode? format, JsonObject? catalog = null)
+    public static string Label(string label, JsonNode? format, JsonObject? catalog = null, string? locale = null)
     {
-        if (format is JsonObject o && o["date"] is JsonValue dv && dv.TryGetValue<string>(out var pattern)) return Date(label, pattern);
+        if (DatePattern(format, catalog) is { } pattern) return Date(label, pattern, locale);
         if (format is null || (format is JsonObject n && !n.ContainsKey("style"))) return label;
-        return double.TryParse(label, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) ? Number(number, format, catalog) : label;
+        return double.TryParse(label, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) ? Number(number, format, catalog, locale) : label;
     }
 
     /// <summary>
@@ -277,8 +322,9 @@ public static class ViewFormat
     }
 
     /// <summary>A date or date-time as text under a preset or a pattern; text that is not an ISO date is returned as it is.</summary>
-    public static string Date(string text, string patternOrPreset)
+    public static string Date(string text, string patternOrPreset, string? locale = null)
     {
+        var names = Locale(locale);
         if (Parse(patternOrPreset, out var parts) is not null || !ParseDate(text, out var y, out var mo, out var d, out var h, out var mi, out var s)) return text;
         var sb = new StringBuilder();
         foreach (var p in parts)
@@ -288,8 +334,8 @@ public static class ViewFormat
                 PartKind.Year4 => y.ToString("0000", CultureInfo.InvariantCulture),
                 PartKind.Year2 => (y % 100).ToString("00", CultureInfo.InvariantCulture),
                 PartKind.Quarter => ((mo - 1) / 3 + 1).ToString(CultureInfo.InvariantCulture),
-                PartKind.MonthName => Months[mo - 1],
-                PartKind.MonthShort => Months[mo - 1][..3],
+                PartKind.MonthName => names.Months[mo - 1],
+                PartKind.MonthShort => names.Short[mo - 1],
                 PartKind.Month2 => mo.ToString("00", CultureInfo.InvariantCulture),
                 PartKind.Day2 => d.ToString("00", CultureInfo.InvariantCulture),
                 PartKind.Hour2 => h.ToString("00", CultureInfo.InvariantCulture),

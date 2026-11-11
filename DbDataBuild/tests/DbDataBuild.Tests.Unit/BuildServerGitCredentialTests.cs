@@ -19,7 +19,7 @@ namespace DbDataBuild.Tests.Unit;
 public sealed class BuildServerGitCredentialTests : IAsyncLifetime
 {
     private const string Token = "glpat-Zx9QwErTyUiOp0123456789";
-    private const string Secret = "dbdata:build:git:sales";
+    private const string Secret = "dbdatakit:build:git:sales";
     private readonly string root = Path.Combine(Path.GetTempPath(), "ddb-gitcred-" + Guid.NewGuid().ToString("N")[..8]);
     private readonly ConsoleIdentity console = new("console-1", ConsoleSigningKey.Generate());
     private readonly AuthenticatedGitServer remote = new("oauth2", Token);
@@ -221,7 +221,7 @@ public sealed class BuildServerGitCredentialTests : IAsyncLifetime
         Assert.Equal("secret:" + Secret, projects.Find("sales")!.GitCredential);
         Assert.Contains("credential secret:" + Secret, (await Run("server", "project", "list")).Text);
 
-        var notACredential = await Run("server", "project", "add", "other", "--git", RemoteUrl, "--git-credential", "secret:dbdata:sync:connection:x");
+        var notACredential = await Run("server", "project", "add", "other", "--git", RemoteUrl, "--git-credential", "secret:dbdatakit:sync:connection:x");
         Assert.NotEqual(0, notACredential.Exit);
         Assert.Contains("not a git credential", notACredential.Text);
     }
@@ -230,7 +230,7 @@ public sealed class BuildServerGitCredentialTests : IAsyncLifetime
     public async Task An_entry_that_names_a_credential_without_a_git_address_or_with_a_wrong_reference_is_skipped_and_reported()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(projects.Path)!);
-        await File.WriteAllTextAsync(projects.Path, "projects:\n  - {id: a, path: /x, git_credential: 'secret:dbdata:build:git:a'}\n  - {id: b, git: 'https://h/b.git', git_credential: 'env:TOKEN'}\n");
+        await File.WriteAllTextAsync(projects.Path, "projects:\n  - {id: a, path: /x, git_credential: 'secret:dbdatakit:build:git:a'}\n  - {id: b, git: 'https://h/b.git', git_credential: 'env:TOKEN'}\n");
 
         Assert.Empty(projects.All());
         Assert.Equal(2, projects.Problems.Count(p => p.Contains("git_credential")));

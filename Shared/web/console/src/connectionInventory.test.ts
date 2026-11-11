@@ -40,7 +40,7 @@ describe('the connection inventory', () => {
   })
 
   const row = (name: string, users: { process: string; name: string }[]): InventoryRow => ({
-    key: name, server: 's1', serverName: 'Sync', product: 'dbdatasync', name, kind: 'sync', engine: 'sqlserver', host: 'sql01:1433', database: 'Erp', secretRef: 'secret:dbdata:sync:connection:' + name, roles: [],
+    key: name, server: 's1', serverName: 'Sync', product: 'dbdatasync', name, kind: 'sync', engine: 'sqlserver', host: 'sql01:1433', database: 'Erp', secretRef: 'secret:dbdatakit:sync:connection:' + name, roles: [],
     usedBy: users.map((u) => ({ ...u, version: null, group: null, instance: null, channel: null, role: 'run' })),
   })
   const rows = [row('erp', [{ process: 'replication', name: 'orders' }, { process: 'server', name: 'this server' }]), row('wh', [{ process: 'replication', name: 'ledger' }])]

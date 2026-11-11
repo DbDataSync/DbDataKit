@@ -95,7 +95,7 @@ internal sealed class OAuthTokenSource(SignInSpec spec, ISecretResolver secrets,
 /// Signs each request of a connection of kind <c>http</c> in (plan 27a IX02): an API key in a header or the query, basic, or a bearer token of OAuth 2 client credentials. With OAuth 2 a request that the system refuses with 401 while it used a cached token is sent once more with
 /// a new one (the request is copied before it is sent, so it can be). A client certificate is not a header: it is on the connection (<see cref="HttpConnections"/>). Secrets are read for each request and dropped; none is kept here, in a message or a log.
 /// </summary>
-internal sealed class SignInHandler(SignInSpec spec, ISecretResolver secrets, OAuthTokenSource? tokens, HttpMessageHandler inner) : DelegatingHandler(inner)
+internal sealed class SignInHandler(SignInSpec spec, ISecretResolver secrets, OAuthTokenSource? tokens, HttpMessageHandler inner, TimeProvider time) : DelegatingHandler(inner)
 {
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
@@ -119,6 +119,14 @@ internal sealed class SignInHandler(SignInSpec spec, ISecretResolver secrets, OA
                 {
                     var password = await SecretText.ReadAsync(secrets, spec.PasswordSecret!, ct).ConfigureAwait(false);
                     request.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"{spec.User}:{password}")));
+                    break;
+                }
+            case "signed_webhook":
+                {
+                    var secret = await SecretText.ReadAsync(secrets, spec.KeySecret!, ct).ConfigureAwait(false);
+                    var body = request.Content is { } content ? await content.ReadAsStringAsync(ct).ConfigureAwait(false) : "";
+                    request.Headers.Remove(spec.Name ?? SignedWebhook.DefaultHeader);
+                    request.Headers.TryAddWithoutValidation(spec.Name ?? SignedWebhook.DefaultHeader, SignedWebhook.Sign(secret, body, time.GetUtcNow()));
                     break;
                 }
             case "oauth2_client_credentials":

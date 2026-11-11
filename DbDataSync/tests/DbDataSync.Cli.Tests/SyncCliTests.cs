@@ -102,12 +102,12 @@ public sealed class SyncCliTests
         var output = new StringWriter();
         var originalOut = Console.Out;
 
-        var exit = await SyncCli.Router().RunAsync(["secret", "list", "dbdata:sync:test:json-capture", "--repo", Directory.CreateTempSubdirectory("dbdatasync-json-").FullName, "--format", "json"],
+        var exit = await SyncCli.Router().RunAsync(["secret", "list", "dbdatakit:sync:test:json-capture", "--repo", Directory.CreateTempSubdirectory("dbdatasync-json-").FullName, "--format", "json"],
             new CliContext(output, new StringWriter(), TextReader.Null));
 
         using var document = JsonDocument.Parse(output.ToString());
         Assert.Equal(0, exit);
-        Assert.Contains("dbdata:sync:test:json-capture  not set", document.RootElement.GetProperty("messages")[0].GetString());
+        Assert.Contains("dbdatakit:sync:test:json-capture  not set", document.RootElement.GetProperty("messages")[0].GetString());
         Assert.Same(originalOut, Console.Out);   // the scope puts the console back
     }
 }

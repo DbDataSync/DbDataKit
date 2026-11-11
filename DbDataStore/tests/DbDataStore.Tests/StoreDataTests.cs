@@ -548,6 +548,50 @@ public abstract class StoreDataTests(string engine) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_draft_keeps_a_previews_writes_apart_from_the_data_and_submitting_it_makes_one_change_request_that_applies_by_the_usual_rules()
+    {
+        var send = await Client();
+        await send(HttpMethod.Put, "/api/v1/models/territories", Model, ServerRole.Author);
+        await send(HttpMethod.Post, "/api/v1/models/territories/storage/create", null, ServerRole.Admin);
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Post, "/api/v1/models/territories/changes", Insert("NA", "North", "10"), ServerRole.Author)).StatusCode);
+
+        // a write with ?draft= is kept in the draft: it reads back on top of the data there, and is not in the data or in another draft
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Post, "/api/v1/models/territories/changes?draft=acme~preview", Insert("EU", "Europe", "20"), ServerRole.Author)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await send(HttpMethod.Post, "/api/v1/models/territories/changes?draft=acme~preview", Insert("AS", "Asia", "1"), ServerRole.Viewer)).StatusCode);
+        Assert.Equal("Europe", (string)(await Json(await send(HttpMethod.Get, "/api/v1/models/territories/entities/territory/row?key.code=EU&draft=acme~preview", null, ServerRole.Viewer)))["values"]!["name"]!);
+        Assert.Equal(HttpStatusCode.NotFound, (await send(HttpMethod.Get, "/api/v1/models/territories/entities/territory/row?key.code=EU", null, ServerRole.Viewer)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await send(HttpMethod.Get, "/api/v1/models/territories/entities/territory/row?key.code=EU&draft=other", null, ServerRole.Viewer)).StatusCode);
+        Assert.Equal(["EU", "NA"], (await Json(await send(HttpMethod.Get, "/api/v1/models/territories/entities/territory/rows?draft=acme~preview", null, ServerRole.Viewer)))["rows"]!.AsArray().Select(r => (string)r!["values"]!["code"]!).Order().ToArray());
+        Assert.Single((await Json(await send(HttpMethod.Get, "/api/v1/models/territories/entities/territory/rows", null, ServerRole.Viewer)))["rows"]!.AsArray());
+
+        // a draft write breaks the model's rules like any other, and nothing is kept
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await send(HttpMethod.Post, "/api/v1/models/territories/changes?draft=acme~preview", Insert("XX", "Nowhere", "-1"), ServerRole.Author)).StatusCode);
+        var listed = await Json(await send(HttpMethod.Get, "/api/v1/models/territories/drafts", null, ServerRole.Viewer));
+        Assert.Equal([("acme~preview", 1)], listed["drafts"]!.AsArray().Select(d => ((string)d!["id"]!, (int)d["writes"]!)).ToArray());
+        var one = await Json(await send(HttpMethod.Get, "/api/v1/models/territories/drafts/acme~preview", null, ServerRole.Viewer));
+        Assert.True((bool)one["writes"]![0]!["applies"]!);
+        Assert.Equal(HttpStatusCode.NotFound, (await send(HttpMethod.Get, "/api/v1/models/territories/drafts/nothing", null, ServerRole.Viewer)).StatusCode);
+        Assert.Equal(0L, await CountAsync(database, "territories._audit WHERE entity = 'territory' AND row_key LIKE '%EU%'"));
+
+        // submitting makes one ordinary change request with the draft's change (the row's own key kept), removes the draft, and the request applies by the usual rules
+        Assert.Equal(HttpStatusCode.Forbidden, (await send(HttpMethod.Post, "/api/v1/models/territories/drafts/acme~preview/submit", null, ServerRole.Viewer)).StatusCode);
+        var submitted = await send(HttpMethod.Post, "/api/v1/models/territories/drafts/acme~preview/submit", """{"description":"from the preview"}""", ServerRole.Author);
+        Assert.Equal(HttpStatusCode.Accepted, submitted.StatusCode);
+        var request = await Json(submitted);
+        Assert.Equal(("pending", 1), (((string)request["state"]!), (int)request["change_count"]!));
+        Assert.Empty((await Json(await send(HttpMethod.Get, "/api/v1/models/territories/drafts", null, ServerRole.Viewer)))["drafts"]!.AsArray());
+        Assert.Equal(HttpStatusCode.NotFound, (await send(HttpMethod.Get, "/api/v1/models/territories/entities/territory/row?key.code=EU&draft=acme~preview", null, ServerRole.Viewer)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Post, $"/api/v1/models/territories/requests/{(string)request["id"]!}/approve", null, ServerRole.Author)).StatusCode);
+        Assert.Equal("Europe", (string)(await Json(await send(HttpMethod.Get, "/api/v1/models/territories/entities/territory/row?key.code=EU", null, ServerRole.Viewer)))["values"]!["name"]!);
+
+        // discarding removes a draft and nothing else; a second discard finds none
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Post, "/api/v1/models/territories/changes?draft=scratch", Insert("AS", "Asia", "3"), ServerRole.Author)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Delete, "/api/v1/models/territories/drafts/scratch", null, ServerRole.Author)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await send(HttpMethod.Delete, "/api/v1/models/territories/drafts/scratch", null, ServerRole.Author)).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await send(HttpMethod.Post, "/api/v1/models/territories/changes?draft=bad%20id", Insert("AS", "Asia", "3"), ServerRole.Author)).StatusCode);
+    }
+
+    [Fact]
     public async Task An_instance_behind_the_model_keeps_working_and_one_that_is_migrated_gets_the_new_structure()
     {
         var send = await Client();

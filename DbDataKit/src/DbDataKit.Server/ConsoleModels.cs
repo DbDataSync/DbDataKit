@@ -32,7 +32,7 @@ public sealed record AgentSlotView(string Slot, IReadOnlyList<string> Agents, bo
 /// <summary>
 /// The model providers and slots of the console (plan 27a AG05): a provider is a <b>connection of kind <c>model-provider</c></b> (<c>connections/&lt;name&gt;.yml</c>, kept by <see cref="ConsoleConnections"/>, plan 27a IX01) and the slots are <c>models/_slots.yml</c> (<c>model-slots/1</c>)
 /// in the console's directory; this builds the <see cref="IAgentModels"/> the agents use from them. A provider's key is a secret reference; the key itself is kept in the console's secret store (<see cref="ConsoleConnections.SecretNameFor"/>) when a person types it, and is never in a file, a view, an audit row or a message. <b>Fallback:</b> a slot bound to several
-/// models is tried in order with back-off (<see cref="FallbackChatClient"/>); the install policy's say on falling to a cloud provider (plan 27a AG21) is not read yet, so every choice may be used.
+/// models is tried in order with back-off (<see cref="FallbackChatClient"/>); the install policy's rule (<c>data-rules: cloud-providers: fallback: refuse</c>, a tenant-only install, plan 27a AG21) keeps a cloud provider out of every position after the first; the file is part of the cache stamp, so a change is seen by the next call.
 /// </summary>
 public sealed class ConsoleModels : IAgentModels
 {
@@ -56,8 +56,13 @@ public sealed class ConsoleModels : IAgentModels
 
     public string SlotsFile => Path.Combine(Folder, "_slots.yml");
 
+    private string PolicyFile => Path.Combine(_directory, "agent-policy.yml");
+
+    /// <summary>The install policy as far as the models need it (the rule on falling to a cloud provider); a policy that does not read binds nothing extra.</summary>
+    private AgentPolicy Policy() => File.Exists(PolicyFile) && AgentPolicyLoader.Load(File.ReadAllText(PolicyFile), "agent-policy.yml").Policy is { } p ? p : AgentPolicy.None;
+
     private string Stamp() =>
-        _connections.Stamp() + "#" + (!Directory.Exists(Folder) ? "" : string.Join('|', Directory.EnumerateFiles(Folder, "*.yml").Order(StringComparer.Ordinal).Select(f => $"{Path.GetFileName(f)}:{File.GetLastWriteTimeUtc(f).Ticks}:{new FileInfo(f).Length}")));
+        (File.Exists(PolicyFile) ? File.GetLastWriteTimeUtc(PolicyFile).Ticks + ":" + new FileInfo(PolicyFile).Length : "") + "#" + _connections.Stamp() + "#" + (!Directory.Exists(Folder) ? "" : string.Join('|', Directory.EnumerateFiles(Folder, "*.yml").Order(StringComparer.Ordinal).Select(f => $"{Path.GetFileName(f)}:{File.GetLastWriteTimeUtc(f).Ticks}:{new FileInfo(f).Length}")));
 
     // ---- reading ----
 
@@ -114,6 +119,7 @@ public sealed class ConsoleModels : IAgentModels
         var (_, slots) = ReadSlots();
         if (slots.Bindings is not { } bindings) return null;
         var providers = Definitions();
+        var policy = Policy();
         var usable = new List<(ModelBinding Binding, ModelEntry Model, ModelProviderDefinition Provider)>();
         foreach (var choice in bindings.For(slot, channel))
         {
@@ -126,7 +132,7 @@ public sealed class ConsoleModels : IAgentModels
         var first = usable[0];
         IChatClient client = usable.Count == 1
             ? first.Binding.Client
-            : new FallbackChatClient([.. usable.Select(u => u.Binding)], new AgentRunContext("console", slot, "1"), null, null, ModelProviderException.WorthRetrying);
+            : new FallbackChatClient([.. usable.Select(u => u.Binding)], new AgentRunContext("console", slot, "1"), null, b => policy.AllowsFallbackTo(b.Cloud), ModelProviderException.WorthRetrying);
         return new BoundModel(client, $"{first.Provider.Name}/{first.Model.Id}", first.Model.Price, first.Model.WindowTokens);
     }
 
@@ -155,7 +161,7 @@ public sealed class ConsoleModels : IAgentModels
         }
         var agentView = agentSlots.GroupBy(a => a.Slot, StringComparer.Ordinal).OrderBy(g => g.Key, StringComparer.Ordinal)
             .Select(g => new AgentSlotView(g.Key, [.. g.Select(a => a.Agent).Distinct().Order(StringComparer.Ordinal)], For(g.Key, null) is not null)).ToList();
-        return new ModelsView(providers, slotsYaml, slotDiagnostics, views, agentView, "secret:dbdata:console:connection:<name>:key");
+        return new ModelsView(providers, slotsYaml, slotDiagnostics, views, agentView, "secret:dbdatakit:server:connection:<name>:key");
     }
 
     private (bool Ok, string? Problem) KeyState(ModelProviderDefinition provider)

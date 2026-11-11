@@ -6,7 +6,7 @@ namespace DbDataKit.Secrets.Cli.Tests;
 
 public class SecretNounTests
 {
-    private const string Name = "dbdata:build:connection:wh:write";
+    private const string Name = "dbdatakit:build:connection:wh:write";
 
     private static (NounRouter Router, MemoryStore Store, FakeConsole Console) Make()
     {

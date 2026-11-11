@@ -7,6 +7,9 @@ namespace DbDataKit.Server;
 
 public sealed record SecretBody(string Value);
 
+/// <summary>A pasted webhook address, with (for a service the editor does not know) the path segments (from 0) and query keys that are secret.</summary>
+public sealed record WebhookBody(string Url, int[]? PathSegments = null, string[]? QueryKeys = null);
+
 /// <summary>
 /// The connections of outside systems the console keeps (plan 27a IX01): list with the kind, check and save a file (the shared loader's diagnostics with line), remove, keep a typed secret in the secret store. Reading is for anyone signed in and never
 /// holds a secret (a reference, and whether it can be read); changing is for an administrator. A typed secret is in no answer, no audit row and no file.
@@ -21,14 +24,15 @@ public sealed class OutsideConnectionsController(ConsoleConnections connections,
 
     [HttpGet]
     [Authorize(Policies.Viewer)]
-    public IActionResult List() => Ok(new { kinds = new[] { ConnectionKinds.Http, ConnectionKinds.ModelProvider }, connections = connections.List() });
+    public IActionResult List() => Ok(new { kinds = new[] { ConnectionKinds.Http, ConnectionKinds.ModelProvider, ConnectionKinds.Smtp }, flavors = new[] { "slack", "teams", "signed" }, connections = connections.List() });
 
     [HttpGet("template")]
     [Authorize(Policies.Admin)]
-    public IActionResult Template([FromQuery] string kind, [FromQuery] string name) =>
+    public IActionResult Template([FromQuery] string kind, [FromQuery] string name, [FromQuery] string? flavor = null) =>
         !ConsoleConnections.IsName(name) ? BadRequest(new { error = "A connection's name starts with a letter and has letters, digits, '-', '_' and '.'." })
-        : kind is ConnectionKinds.Http or ConnectionKinds.ModelProvider ? Ok(new { yaml = ConsoleConnections.Template(kind, name) })
-        : BadRequest(new { error = $"The console keeps connections of kind {ConnectionKinds.Http} and {ConnectionKinds.ModelProvider}." });
+        : flavor is not null && (kind != ConnectionKinds.Http || flavor is not ("slack" or "teams" or "signed")) ? BadRequest(new { error = "A flavor is slack, teams or signed, and goes with kind http." })
+        : kind is ConnectionKinds.Http or ConnectionKinds.ModelProvider or ConnectionKinds.Smtp ? Ok(new { yaml = ConsoleConnections.Template(kind, name, flavor) })
+        : BadRequest(new { error = $"The console keeps connections of kind {ConnectionKinds.Http}, {ConnectionKinds.ModelProvider} and {ConnectionKinds.Smtp}." });
 
     [HttpPost("{name}/check")]
     [Authorize(Policies.Admin)]
@@ -65,13 +69,36 @@ public sealed class OutsideConnectionsController(ConsoleConnections connections,
         return Ok(new { result.Ok, result.Reached, result.SignIn, result.Message, kind = result.Kind?.ToString(), result.Temporary, result.Status, result.Milliseconds });
     }
 
+    /// <summary>
+    /// Paste a webhook address: it is split into the visible template and the secret parts (a known service by its pattern, another by the segments and query keys the person marks as secret), each part is kept in the secret store, and only the template and the references come back.
+    /// A rotation is then one typed secret; the template is untouched. 422 when nothing is recognised and nothing is chosen (the answer says how many path segments there are and names the query keys, so the person can choose).
+    /// </summary>
+    [HttpPost("{name}/webhook")]
+    [Authorize(Policies.Admin)]
+    public async Task<IActionResult> Webhook(string name, [FromBody] WebhookBody body)
+    {
+        if (!ConsoleConnections.IsName(name)) return BadRequest(new { error = "That is not a connection's name." });
+        if (string.IsNullOrWhiteSpace(body.Url)) return BadRequest(new { error = "Paste the webhook's address." });
+        if (await connections.StoreWebhookAsync(name, body.Url, body.PathSegments, body.QueryKeys) is not { } split)
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(body.Url.Trim(), @"^https?://[^/?#]+(/[^?#]*)?(\?[^#]*)?$", System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (!m.Success) return BadRequest(new { error = "That is not an http or https address." });
+            var segments = (m.Groups[1].Success ? m.Groups[1].Value : "").Split('/', StringSplitOptions.RemoveEmptyEntries).Length;
+            var keys = (m.Groups[2].Success ? m.Groups[2].Value[1..] : "").Split('&', StringSplitOptions.RemoveEmptyEntries).Select(p => p.Split('=')[0]).ToArray();
+            return UnprocessableEntity(new { detected = false, error = "This address is not one of the services the editor knows (Slack, Discord, Teams). Say which path segments and query values are secret.", pathSegments = segments, queryKeys = keys });
+        }
+
+        Audit("connection-webhook-split", name, $"a {split.Service} address was split: template {split.Template}, secret parts {string.Join(", ", split.Secrets.Keys)}");
+        return Ok(new { detected = true, service = split.Service, format = split.Format, template = split.Template, secrets = split.Secrets });
+    }
+
     /// <summary>Keeps a typed secret (a key, a password, a client secret, a certificate) in the console's secret store under the connection's name and gives the reference to write in the file.</summary>
     [HttpPut("{name}/secrets/{field}")]
     [Authorize(Policies.Admin)]
     public async Task<IActionResult> SetSecret(string name, string field, [FromBody] SecretBody body)
     {
         if (!ConsoleConnections.IsName(name)) return BadRequest(new { error = "That is not a connection's name." });
-        if (!ConsoleConnections.SecretFields.Contains(field, StringComparer.Ordinal)) return BadRequest(new { error = $"A secret is one of: {string.Join(", ", ConsoleConnections.SecretFields)}." });
+        if (!ConsoleConnections.IsSecretField(field)) return BadRequest(new { error = $"A secret is one of: {string.Join(", ", ConsoleConnections.SecretFields)}, or the name of a placeholder of the endpoint (letters, digits and _)." });
         if (string.IsNullOrWhiteSpace(body.Value)) return BadRequest(new { error = "Type the secret." });
         var reference = await connections.StoreSecretAsync(name, field, body.Value.Trim());
         Audit("connection-secret-set", name, $"a {field} was stored for the connection, as {reference}");

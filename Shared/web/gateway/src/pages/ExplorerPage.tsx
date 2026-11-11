@@ -6,7 +6,7 @@ import { RenderedViews, type RenderedViewDocument } from '@dbdatakit/visuals'
 import { gatewayApi } from '../api'
 import { GatewayShell } from '../GatewayShell'
 import {
-  DEFAULT_LIMIT, bodyFor, cellText, clampLimit, members, pinLink, pinRequest, picksOf, refusal, requestText, roles, scansOf, sqlFromPicks, suggest, toggle, viewSpecFor,
+  DEFAULT_LIMIT, bodyFor, cellText, clampLimit, members, missingSlots, pinLink, pinRequest, picksOf, refusal, requestText, roles, scansOf, sqlFromPicks, suggest, toggle, viewSpecFor,
   type Encoding, type Mode, type Picks, type ViewShape,
 } from '../explorer'
 import type { RunResult } from '../runTypes'
@@ -43,6 +43,8 @@ export interface ExplorerViewProps {
   onRun: () => void
   onExplain: () => void
   onShape: (shape: ViewShape) => void
+  /** Ask the Gateway to draw the shape and encodings chosen (again): the button is off while a required slot is empty. */
+  onDraw: () => void
   onEncoding: (e: Encoding) => void
   onSaveName: (name: string) => void
   onSaveDescription: (text: string) => void
@@ -50,6 +52,9 @@ export interface ExplorerViewProps {
 }
 
 const SHAPES: Array<[ViewShape, string]> = [['table', 'Table'], ['matrix', 'Matrix'], ['bar', 'Bar chart'], ['line', 'Line chart']]
+
+/** A result the Gateway could draw: one that came with no `view_unavailable` notice (a column of a type the renderer cannot read, D38) shows as the table only. */
+const drawable = (result: RunResult) => !result.notices?.some((n) => n.code === 'view_unavailable')
 
 function Result(p: ExplorerViewProps) {
   const result = p.result!
@@ -69,6 +74,7 @@ function Result(p: ExplorerViewProps) {
     )
   }
   const r = roles(result)
+  const missing = missingSlots(p.shape, p.encoding)
   const pinned = pinRequest(p.text, p.picks)
   const option = (names: string[]) => names.map((n) => <option key={n} value={n}>{n}</option>)
   return (
@@ -77,14 +83,16 @@ function Result(p: ExplorerViewProps) {
         <span data-testid="qis-status">{result.status === 'ok' ? 'complete' : result.status}</span> · {result.rows.length} row{result.rows.length === 1 ? '' : 's'}
         {result.request_hash && <> · request <span className="mono" data-testid="request-hash">{result.request_hash}</span></>}
         {result.model_version != null && <> · model version {result.model_version}</>}
+        {result.replay_of != null && <> · <span data-testid="replay-note">replay of run {result.replay_of}, {result.same_hash ? 'the same request hash' : 'a different request hash'}</span></>}
       </div>
       {result.warnings.length > 0 && <ul data-testid="run-warnings">{result.warnings.map((w, i) => <li key={i} className="hint">{w}</li>)}</ul>}
+      {result.notices && result.notices.length > 0 && <ul data-testid="run-notices">{result.notices.map((n, i) => <li key={i} className="hint" style={wrap} data-testid={`run-notice-${n.code}`}>{n.message}</li>)}</ul>}
       {result.status === 'unsupported' && (
         <div role="alert" data-testid="run-unsupported">{result.reason}{result.remaining != null && <pre className="mono" style={wrap} data-testid="run-remaining">{JSON.stringify(result.remaining, null, 2)}</pre>}</div>
       )}
       {result.status === 'ok' && (
         <>
-          <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0' }} data-testid="view-choice">
+          {drawable(result) && <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0' }} data-testid="view-choice">
             {SHAPES.map(([id, label]) => (
               <button key={id} type="button" className={`btn btn-sm${p.shape === id ? ' btn-primary' : ''}`} aria-pressed={p.shape === id} data-testid={`shape-${id}`} onClick={() => p.onShape(id)}>{label}</button>
             ))}
@@ -98,16 +106,18 @@ function Result(p: ExplorerViewProps) {
                 <select id="enc-value" data-testid="enc-value" value={p.encoding.value} onChange={(e) => p.onEncoding({ ...p.encoding, value: e.target.value })}><option value="">(none)</option>{option(result.columns.map((c) => c.name))}</select>
               </>
             )}
+            {p.shape !== 'table' && <button type="button" className="btn btn-sm btn-primary" data-testid="view-draw" disabled={missing.length > 0 || p.rendering} onClick={p.onDraw}>Draw</button>}
+            {p.shape !== 'table' && missing.length > 0 && <span className="hint" role="status" data-testid="view-missing">required slot is empty: {missing.join(', ')}</span>}
             {r.hasTotals && <span className="hint" data-testid="has-totals">The result carries totals.</span>}
-          </div>
+          </div>}
           {p.renderError && <div role="alert" className="hint" style={wrap} data-testid="view-error">{p.renderError}</div>}
           {p.shape !== 'table' && p.rendering && !p.rendered && <div className="hint" data-testid="view-rendering">Drawing…</div>}
-          {p.shape !== 'table' && p.rendered && (
+          {p.shape !== 'table' && missing.length === 0 && p.rendered && (
             <div data-testid={p.rendered.status === 'failed' ? 'view-refused' : 'view-drawn'}>
               <RenderedViews document={p.rendered} />
             </div>
           )}
-          {p.shape === 'table' && (
+          {(p.shape === 'table' || !drawable(result)) && (
             <div className="card flush" style={{ overflowX: 'auto' }}>
               <table className="mono" data-testid="result-table" style={{ width: '100%' }}>
                 <thead><tr>{result.columns.map((c) => <th key={c.name} style={{ textAlign: 'left' }}>{c.name}</th>)}</tr></thead>
@@ -186,7 +196,7 @@ export function ExplorerView(p: ExplorerViewProps) {
 }
 
 const say = (e: unknown): string => {
-  if (e instanceof ApiError) return refusal(e.message, (e.body as { code?: unknown } | null)?.code)
+  if (e instanceof ApiError) { const body = e.body as { code?: unknown; path?: unknown } | null; return refusal(e.message, body?.code, body?.path) }
   return e instanceof Error ? e.message : String(e)
 }
 
@@ -209,7 +219,16 @@ export function ExplorerPage() {
   // the body of the last run and the id of the result the Gateway kept for it: another view of it is a render, not a run
   const last = useRef<{ body: Record<string, unknown>; id?: string }>({ body: {} })
   const drawn = useRef(0)
+  const [drawTick, setDrawTick] = useState(0)
   const [save, setSave] = useState<SaveForm>({ name: '', description: '', saved: null, error: null, busy: false })
+
+  // a result on show: the body that made it, and the id of the result the Gateway kept for it
+  const show = (answer: RunResult, body: Record<string, unknown>) => {
+    last.current = { body, id: answer.result_id }
+    setRendered(undefined)
+    setResult(answer)
+    if (answer.status === 'ok') setEncoding(suggest(answer))
+  }
 
   // a statement handed over by the address: a run record, a saved query, or plain text
   const runId = params.get('run')
@@ -219,7 +238,20 @@ export function ExplorerPage() {
   useEffect(() => {
     let live = true
     const open = (statement: string) => { if (live) { setText(statement); setMode(statement.trim().startsWith('{') ? 'json' : 'sql'); const p = picksOf(statement); if (p) setPicks(p) } }
-    if (runId) gatewayApi.runs.read(Number(runId)).then((r) => open(r.text)).catch((e) => live && setError(say(e)))
+    // a record opens by its replay (D38 (3)): one run, the rows and the kept result come back with the text, and a record that did not complete (a refusal) opens as text only
+    if (runId) {
+      gatewayApi.runs.read(Number(runId)).then(async (r) => {
+        open(r.text)
+        if (!live || r.request == null || r.status !== 'complete' || (r.kind !== 'query' && r.kind !== 'explain')) return
+        setError(null)
+        setRunning(true)
+        try {
+          const answer = await gatewayApi.runs.replay(r.id, r.kind === 'explain' ? {} : { keep: true })
+          const built = bodyFor(name, r.text, { explain: r.kind === 'explain', limit: picksOf(r.text)?.limit ?? DEFAULT_LIMIT })
+          if (live) show(answer, 'body' in built ? built.body : {})
+        } catch (e) { if (live) setError(say(e)) } finally { if (live) setRunning(false) }
+      }).catch((e) => live && setError(say(e)))
+    }
     else if (savedName) gatewayApi.savedQueries.read(name, savedName, savedOwner ?? undefined).then((q) => { open(q.sql ?? JSON.stringify(q.request, null, 2)); if (live && q.own) setSave((s) => ({ ...s, name: q.name, description: q.description ?? '' })) }).catch((e) => live && setError(say(e)))
     else if (given) open(given)
     return () => { live = false }
@@ -239,10 +271,7 @@ export function ExplorerPage() {
       // a result that may be drawn is kept by the Gateway, so a matrix or a chart of it later runs nothing
       const body = explain ? built.body : { ...built.body, keep: true }
       const answer = await gatewayApi.runs.run(body)
-      last.current = { body: built.body, id: answer.result_id }
-      setRendered(undefined)
-      setResult(answer)
-      if (answer.status === 'ok') setEncoding(suggest(answer))
+      show(answer, built.body)
     } catch (e) {
       setResult(undefined)
       setError(say(e))
@@ -252,7 +281,7 @@ export function ExplorerPage() {
   // the matrix or chart chosen is the Gateway's renderer's: ask it for the result kept, or, when that is gone, run the statement again with the view
   useEffect(() => {
     const ticket = ++drawn.current
-    const spec = result?.status === 'ok' ? viewSpecFor(result, shape, encoding) : null
+    const spec = result?.status === 'ok' && drawable(result) && missingSlots(shape, encoding).length === 0 ? viewSpecFor(result, shape, encoding) : null
     setRenderError(null)
     if (!spec) { setRendered(undefined); setRendering(false); return }
     setRendering(true)
@@ -267,7 +296,7 @@ export function ExplorerPage() {
     draw().then((doc) => { if (ticket === drawn.current) setRendered(doc) })
       .catch((e) => { if (ticket === drawn.current) { setRendered(undefined); setRenderError(say(e)) } })
       .finally(() => { if (ticket === drawn.current) setRendering(false) })
-  }, [result, shape, encoding])
+  }, [result, shape, encoding, drawTick])
 
   const keep = async () => {
     const built = bodyFor(name, text, {})
@@ -283,7 +312,7 @@ export function ExplorerPage() {
 
   const props = useMemo<ExplorerViewProps>(() => ({
     model: name, catalog: catalog.data, catalogError: catalog.error, mode, text, picks, running, error, result, shape, encoding, rendered, rendering, renderError, save,
-    onMode, onText: setText, onToggle, onLimit, onRun: () => void send(false), onExplain: () => void send(true), onShape: setShape, onEncoding: setEncoding,
+    onMode, onText: setText, onToggle, onLimit, onRun: () => void send(false), onExplain: () => void send(true), onShape: setShape, onDraw: () => setDrawTick((t) => t + 1), onEncoding: setEncoding,
     onSaveName: (n) => setSave((s) => ({ ...s, name: n })), onSaveDescription: (d) => setSave((s) => ({ ...s, description: d })), onSave: () => void keep(),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [name, catalog.data, catalog.error, mode, text, picks, running, error, result, shape, encoding, rendered, rendering, renderError, save])
