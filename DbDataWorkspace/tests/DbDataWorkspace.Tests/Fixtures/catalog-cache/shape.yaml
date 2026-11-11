@@ -1,0 +1,17 @@
+schema: catalog-cache/1
+generated_at: 2026-11-11T10:00:00Z
+source: {server: prod-gateway, product: gateway, url: "https://gateway"}
+connections:
+  source-db:
+    engine: postgres
+    tables:
+      - schema: public
+        name: orders
+        kind: materialized
+        columns:
+          - {name: id, type: integer, nullable: maybe, key: true, comment: x}
+      - schema: public
+        name: orders
+        kind: table
+        columns: []
+      - {schema: public, name: empty, kind: table}

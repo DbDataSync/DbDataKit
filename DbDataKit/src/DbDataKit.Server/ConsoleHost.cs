@@ -26,7 +26,7 @@ namespace DbDataKit.Server;
 /// </summary>
 public static class ConsoleHost
 {
-    public static readonly AuthProduct Auth = new("DbDataKit", "dbdatakit user invite");
+    public static readonly AuthProduct Auth = new("DbDataKit", "dbdatakit user invite", "dbdatakit setup link");
 
     public static string Version { get; } =
         (typeof(ConsoleHost).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0").Split('+')[0];
@@ -86,10 +86,14 @@ public static class ConsoleHost
         builder.Services.AddSingleton<DbDataKit.Monitoring.INotificationFeed>(sp => sp.GetRequiredService<NotificationFeedStore>());
         // how long a sign-in lasts: the session: section of settings.yaml (plan 13a U22); a file that sets it out of range stops the console from starting, with a message naming the setting
         builder.Services.AddSingleton(SessionSettingsFile.Load(settings.SettingsPath));
+        // how long the setup link of a new install lives: the setup: section (plan 23a FQ19, QF5)
+        builder.Services.AddSingleton(SetupLinkSettingsFile.Load(settings.SettingsPath));
         builder.Services.AddSessionAuth(Auth,
             sp => sp.GetRequiredService<StateDatabase>(),
             sp => PasskeyOptions.FromConfiguration(sp.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>(), Auth, settings.Public.GetLeftPart(UriPartial.Authority), [], []),
             _ => settings.Directory);
+        // the first-run link is a whole address: the one people open the console at (plan 23a FQ19)
+        builder.Services.AddSingleton(new BootstrapInviteLocation(settings.Directory, settings.Public.GetLeftPart(UriPartial.Authority)));
         // the servers this console manages, and the key it signs for them with
         builder.Services.AddSingleton(_ => ConsoleSecrets.Open(settings.Directory));
         builder.Services.AddSingleton(sp => new ConsoleKeyStore(sp.GetRequiredService<EncryptedFileSecretStore>(), sp.GetRequiredService<EncryptedFileSecretStore>()));
@@ -104,9 +108,11 @@ public static class ConsoleHost
         builder.Services.AddSingleton<ConsoleRelay>();
         builder.Services.AddSingleton<ConsoleLineage>();
         // the agents the console hosts and the knowledge its screens read (plan 27a AG14 to AG17, AG29 to AG32, KN28, KN36 to KN38); the model an agent's slot is bound to comes from IAgentModels (none until model providers are connections, AG05)
-        // the model providers and slots of models/ in the console's directory (plan 27a AG05): what an agent's slot is bound to; a test gives its own IAgentModels and ModelHttp
+        // the model providers (connections of kind model-provider) and the slots of models/_slots.yml (plan 27a AG05): what an agent's slot is bound to; a test gives its own IAgentModels and ModelHttp
         builder.Services.TryAddSingleton<ModelHttp>();
-        builder.Services.AddSingleton<ConsoleModels>(sp => new ConsoleModels(settings, sp.GetRequiredService<EncryptedFileSecretStore>(), sp.GetRequiredService<ModelHttp>()));
+        // the connections of outside systems (plan 27a IX01): connections/ in the console's directory
+        builder.Services.AddSingleton(sp => new ConsoleConnections(settings, sp.GetRequiredService<EncryptedFileSecretStore>()));
+        builder.Services.AddSingleton<ConsoleModels>(sp => new ConsoleModels(settings, sp.GetRequiredService<ConsoleConnections>(), sp.GetRequiredService<ModelHttp>()));
         builder.Services.TryAddSingleton<IAgentModels>(sp => sp.GetRequiredService<ConsoleModels>());
         builder.Services.TryAddSingleton<IAgentToolSource, ConsoleToolSource>();
         builder.Services.AddSingleton<ConsoleKnowledge>();
@@ -117,6 +123,7 @@ public static class ConsoleHost
         // delivery: the channels of settings.yaml, the outbox, the subscriptions and the sender that works through the outbox (plan 22a GP07 to GP09, GP17, GP18)
         builder.Services.AddSingleton(sp => new ConsoleDelivery(settings, sp.GetRequiredService<StateDatabase>(), sp.GetRequiredService<EncryptedFileSecretStore>(), sp.GetRequiredService<IUserAccounts>(), sp.GetService<DbDataKit.Delivery.ISubscriptionRenderer>()));
         builder.Services.AddHostedService<ConsoleDeliverySender>();
+        builder.Services.AddSingleton(sp => new SetupItems(sp.GetRequiredService<StateDatabase>()));
         if (settings.Home is { } home)
         {
             // No users of its own: the first-run invitation would make one, so it is not made, and sign-in is the home's.

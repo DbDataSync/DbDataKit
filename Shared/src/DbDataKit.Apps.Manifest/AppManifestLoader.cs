@@ -201,21 +201,23 @@ public static partial class AppManifestLoader
                 var model = Scalar(use, "model", required: true, use);
                 var entities = new Dictionary<string, DataOperations>();
                 if (use.Get("entities") is not YamlMapping entityMap || entityMap.Entries.Count == 0)
-                    Add(BadUse, (YamlNode?)use.Get("entities") ?? use, "`entities` names each entity the app uses and what it does: `territory: [read, write]`.");
+                    Add(BadUse, (YamlNode?)use.Get("entities") ?? use, "`entities` names each entity the app uses and what it does: `territory: [read, write]` or `territory: [read, change request]`.");
                 else
                     foreach (var entry in entityMap.Entries)
                     {
                         if (!Identifier.IsMatch(entry.Key.Value)) { Add(BadUse, entry.Key, $"`{entry.Key.Value}` is not an entity name."); continue; }
-                        if (entry.Value is not YamlSequence ops || ops.Items.Count == 0) { Add(BadUse, entry.Value, $"`{entry.Key.Value}` needs a list of operations: read, write."); continue; }
+                        if (entry.Value is not YamlSequence ops || ops.Items.Count == 0) { Add(BadUse, entry.Value, $"`{entry.Key.Value}` needs a list of operations: read, write, change request."); continue; }
                         var allowed = DataOperations.None;
                         foreach (var op in ops.Items)
                         {
                             if (op is YamlScalar { Value: "read" }) allowed |= DataOperations.Read;
                             else if (op is YamlScalar { Value: "write" }) allowed |= DataOperations.Write;
-                            else Add(BadUse, op, $"`{(op as YamlScalar)?.Value}` is not an operation: use read or write.");
+                            else if (op is YamlScalar { Value: "change request" }) allowed |= DataOperations.ChangeRequest;
+                            else Add(BadUse, op, $"`{(op as YamlScalar)?.Value}` is not an operation: use read, write or change request.");
                         }
-                        // writing a row is reading it first, so write implies read
-                        entities[entry.Key.Value] = allowed.HasFlag(DataOperations.Write) ? allowed | DataOperations.Read : allowed;
+                        // writing a row, or proposing a change to it, is reading it first, so both imply read; write includes proposing, so a `change request` beside it says nothing more
+                        if (allowed.HasFlag(DataOperations.Write)) allowed &= ~DataOperations.ChangeRequest;
+                        entities[entry.Key.Value] = allowed.HasFlag(DataOperations.Write) || allowed.HasFlag(DataOperations.ChangeRequest) ? allowed | DataOperations.Read : allowed;
                     }
                 if (model is not null) uses.Add(new AppModelUse(model.Value, entities));
             }

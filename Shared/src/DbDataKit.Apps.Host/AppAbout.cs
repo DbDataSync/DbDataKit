@@ -33,7 +33,7 @@ public static class AppAbout
         {
             html.Append("<ul class=\"access\">");
             foreach (var u in uses)
-                html.Append("<li>").Append(WebUtility.HtmlEncode($"{u.Model}.{u.Entity}: {(u.Operations.HasFlag(DataOperations.Write) ? "read and write" : u.Operations.HasFlag(DataOperations.Read) ? "read" : "nothing")}")).Append("</li>");
+                html.Append("<li>").Append(WebUtility.HtmlEncode($"{u.Model}.{u.Entity}: {u.Operations.Describe()}")).Append("</li>");
             html.Append("</ul>");
         }
         html.Append("<p>What it may do is also bounded by your own roles.</p>");

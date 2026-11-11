@@ -2,6 +2,7 @@ using System.Net.Http;
 using DbDataKit.Cli;
 using DbDataKit.Hosting.Cli;
 using DbDataKit.State;
+using DbDataKit.Web.Auth;
 using DbDataKit.Web.Trust;
 using Microsoft.AspNetCore.Builder;
 
@@ -27,6 +28,7 @@ public static class ConsoleCli
         ServerNoun.Create((args, context) => RunServerAsync(args, context, environment)),
         InstanceNoun(environment),
         UserNoun(environment),
+        SetupNoun(environment),
         RunnerNoun(environment),
         StateNoun(environment, configureMove),
         IdentityCli.Noun(environment),
@@ -116,7 +118,7 @@ public static class ConsoleCli
         var settings = new ConsoleSettings(directory, listen, publicUrl, announce, state.Settings, home) { StateSources = state.Sources };
         Directory.CreateDirectory(settings.Directory);
         var app = ConsoleHost.Build(settings, ConsoleHost.Certificate(settings.Directory), line => context.Error.WriteLine(line), parsed.Get("web-root"));
-        await context.Out.WriteLineAsync($"The console is on {listen} (people open it at {settings.Public}). The first administrator redeems the invitation in {Path.Combine(settings.Directory, "FIRST-RUN.txt")}.");
+        await context.Out.WriteLineAsync($"The console is on {listen} (people open it at {settings.Public}). The first administrator opens the setup link in {Path.Combine(settings.Directory, "FIRST-RUN.txt")} (it is in the log too; `dbdatakit setup link` makes a new one).");
         // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way
         await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(app, context.Cancellation);
         return CliExit.Ok;
@@ -382,6 +384,52 @@ public static class ConsoleCli
             (args, context) => UserSetEmailAsync(args, context, environment),
             DataSchemas.Object([("id", DataSchemas.String), ("email", DataSchemas.String)], "id", "email")),
     ]);
+
+    private static Noun SetupNoun(Func<string, string?>? environment) => new("setup", "First-run setup of this install",
+    [
+        new Verb("link", "Make a new setup link for the first administrator, on this machine, while the console has no user (the link works once and ends after setup.link_lifetime_hours, 24 by default)", EffectClass.RepoFilesOnly, "[--url <address>] [--repo <console directory>]",
+            (args, context) => SetupLinkAsync(args, context, environment),
+            DataSchemas.Object([("url", DataSchemas.String), ("expires", DataSchemas.String)], "url", "expires")),
+    ]);
+
+    /// <summary>
+    /// <c>setup link</c> (plan 23a FQ19): the console's first-run invitation made again, on the machine itself (it opens the console's own state and settings, which only an account that can read the directory can do; there is no API for it, so a remote
+    /// caller cannot ask for one). It replaces every unused link, rewrites <c>FIRST-RUN.txt</c>, and the audit records that it was made and by which account. Once the console has a user there is no setup link to make.
+    /// </summary>
+    private static async Task<int> SetupLinkAsync(string[] args, CliContext context, Func<string, string?>? environment)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "url" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0) { await context.Error.WriteLineAsync("Usage: setup link [--url <address>] [--repo <console directory>]"); return CliExit.Usage; }
+        var directory = DirectoryOf(parsed, environment);
+        SetupLinkSettings settings;
+        try { settings = SetupLinkSettingsFile.Load(Path.Combine(directory, ConsoleSettings.SettingsFileName)); }
+        catch (InvalidOperationException ex) { await context.Error.WriteLineAsync(ex.Message); return CliExit.Failure; }
+        var database = OpenState(parsed, environment);
+        if (new IdentityUserStore(database).Any())
+        {
+            await context.Error.WriteLineAsync("The console has a user already, so there is no setup link to make. To let someone in, make an invitation: dbdatakit user invite --email <address>.");
+            return CliExit.Failure;
+        }
+        var baseUrl = (parsed.Get("url") ?? ConsoleSettings.DefaultListen).TrimEnd('/');
+        var link = SetupLink.Make(new IdentityInviteStore(database), settings, baseUrl);
+        try
+        {
+            Directory.CreateDirectory(directory);
+            await File.WriteAllTextAsync(Path.Combine(directory, BootstrapInvite.FileName), SetupLink.FileText(link, ConsoleHost.Auth.SetupLinkCommand));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            await context.Error.WriteLineAsync($"Could not write {BootstrapInvite.FileName}: {ex.Message} (the link is below and works).");
+        }
+        // who made it and when it ends; never the code
+        new AuditLog(database, ConsoleState.ServiceId).Record(new AuditEvent("person", Environment.UserName, "setup.link", ViaKind: "command", TargetKind: "setup", TargetId: "first-administrator",
+            Detail: System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object?> { ["expires"] = link.ExpiresAtUtc.UtcDateTime.ToString("O") })));
+        await context.Out.WriteLineAsync($"A setup link for the first administrator. It works once and ends {link.ExpiresAtUtc:u}:");
+        await context.Out.WriteLineAsync($"    {link.Url}");
+        context.Data["url"] = link.Url;
+        context.Data["expires"] = link.ExpiresAtUtc.UtcDateTime.ToString("O");
+        return CliExit.Ok;
+    }
 
     /// <summary>Opens the state database the way the server does. It is made if there is none, so an invitation can be printed before the first start.</summary>
     private static StateDatabase OpenState(CliArgs parsed, Func<string, string?>? environment)

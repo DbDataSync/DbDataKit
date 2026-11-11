@@ -20,7 +20,7 @@ public static class BuildRunsModule
         StateScopeKind.Install,
         [
             """
-            -- A scheduled plan's run that has ended. owner is the hosted project, job the plan's subject ('<connection>/<plan>'), run_id the work item's run, exit the exit code of the refresh (0 succeeded;
+            -- A scheduled plan's run that has ended. owner is the hosted project, job the plan's subject ('<connection>/<plan>'), run_id the work item's run, exit_code the exit code of the refresh (0 succeeded;
             -- -1 it could not be started; anything else is the command's own failure).
             CREATE TABLE {table:plan_run} (
                 {{identity:id}},
@@ -30,7 +30,7 @@ public static class BuildRunsModule
                 run_id     {{uuid}} NOT NULL,
                 started_at {{time}} NOT NULL,
                 ended_at   {{time}} NOT NULL,
-                exit       {{int}} NOT NULL
+                exit_code  {{int}} NOT NULL
             );
             CREATE INDEX {index:plan_run_by_end} ON {table:plan_run}(service, ended_at);
             CREATE INDEX {index:plan_run_by_job} ON {table:plan_run}(service, owner, job, ended_at);
@@ -53,7 +53,7 @@ public sealed class PlanRunStore(StateDatabase database, string service)
         {
             using var connection = database.OpenConnection();
             using var cmd = database.Command(Module, connection,
-                "INSERT INTO {table:plan_run} (service, owner, job, run_id, started_at, ended_at, exit) VALUES ($service, $owner, $job, $run_id, $started, $ended, $exit);");
+                "INSERT INTO {table:plan_run} (service, owner, job, run_id, started_at, ended_at, exit_code) VALUES ($service, $owner, $job, $run_id, $started, $ended, $exit);");
             cmd.Bind(database, "service", service).Bind(database, "owner", project).Bind(database, "job", subject).Bind(database, "run_id", runId)
                 .Bind(database, "started", started).Bind(database, "ended", ended).Bind(database, "exit", (long)exit);
             cmd.ExecuteNonQuery();
@@ -65,7 +65,7 @@ public sealed class PlanRunStore(StateDatabase database, string service)
         {
             using var connection = database.OpenConnection();
             using var cmd = database.Command(Module, connection,
-                $"SELECT id, owner, job, run_id, started_at, ended_at, exit FROM {{table:plan_run}} WHERE service = $service {(project is null ? "" : "AND owner = $owner")} ORDER BY ended_at DESC, id DESC {database.Limit("limit")};");
+                $"SELECT id, owner, job, run_id, started_at, ended_at, exit_code FROM {{table:plan_run}} WHERE service = $service {(project is null ? "" : "AND owner = $owner")} ORDER BY ended_at DESC, id DESC {database.Limit("limit")};");
             cmd.Bind(database, "service", service).Bind(database, "limit", (long)limit);
             if (project is not null) cmd.Bind(database, "owner", project);
             using var reader = cmd.ExecuteReader();

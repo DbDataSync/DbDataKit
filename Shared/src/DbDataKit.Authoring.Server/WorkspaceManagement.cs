@@ -173,7 +173,7 @@ public static class WorkspaceManagement
             if (workspaces.Find(hosted.Id, id) is not { } workspace) return Results.NotFound();
             var kind = projects.Kinds.Find(store.FindProject(hosted.Id)!.Kind);
             if (kind is null) return Results.Json(new { error = $"The project '{hosted.Id}' is of a kind this server does not know ({store.FindProject(hosted.Id)!.Kind})." }, statusCode: StatusCodes.Status409Conflict);
-            var diagnostics = await kind.CheckAsync(workspaces.RootOf(workspace), context.RequestAborted);
+            var diagnostics = await DraftCheck.RunAsync(kind, workspaces.RootOf(workspace), context.RequestAborted);
             return Results.Json(new JsonObject
             {
                 ["kind"] = kind.Name,
@@ -226,6 +226,38 @@ public static class WorkspaceManagement
                 if (!Guid.TryParse(build, out var buildId) || builds.Find(hosted.Id, id, buildId) is not { } found) return Results.NotFound();
                 return WorkspacePreview.Serve(found.Row, builds.AppFolderOf(hosted.Id, buildId), path);
             });
+
+        // a preview with data (plan 22a GP35d): the build goes to the Gateway's preview channel and a preview of an instance runs it, signed in as the person at the Gateway, reading the data and writing nothing; an author may, because nothing goes to production
+        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/builds/{build}/preview-data", async (string project, string id, string build, HttpContext context) =>
+        {
+            if (InProject(project, context, ServerRole.Author, out var hosted) is { } refused) return refused;
+            if (!Guid.TryParse(build, out var buildId) || builds.Find(hosted.Id, id, buildId) is not { } found) return Results.NotFound();
+            var token = context.ManagementToken();
+            var body = await Body(context);
+            string? target, instance;
+            try { (target, instance) = (body?["target"]?.GetValue<string>(), body?["instance"]?.GetValue<string>()); }
+            catch (InvalidOperationException) { target = instance = null; }
+            if (target is null || string.IsNullOrWhiteSpace(instance)) return Results.Json(new { error = "The body is a JSON object with the \"target\" (the name of a publisher key) and the \"instance\" (the instance of the Gateway the preview is of)." }, statusCode: StatusCodes.Status400BadRequest);
+            if (projects.Kinds.Find(store.FindProject(hosted.Id)!.Kind) is not { Produces: false }) return Results.Json(new { error = "Only an app has a preview with data." }, statusCode: StatusCodes.Status409Conflict);
+            if (found.Row.Status != "succeeded") return Results.Json(new { error = $"This build is {found.Row.Status}, so there is nothing to preview. Only a build that succeeded is sent." }, statusCode: StatusCodes.Status409Conflict);
+            var steps = new List<string>();
+            var where = $"{hosted.Id}/{id}/{buildId} -> {target}/{instance}";
+            try
+            {
+                if (publishing.Find(target) is { } paired) WorkspacePublishing.RouteFor(projects.Kinds.Find(store.FindProject(hosted.Id)!.Kind)!, paired);
+                var note = $"Preview of workspace {id} of project {hosted.Id}, build {buildId:D}" + (found.Row.CommitSha is { } sha ? $", commit {sha[..Math.Min(12, sha.Length)]}" : "") + $", sent by {Actor(token)}.";
+                var answer = await publishing.PublishAsync(target, builds.AppFolderOf(hosted.Id, buildId), note, Actor(token), steps.Add, context.RequestAborted, previewInstance: instance);
+                builds.RecordPublish(hosted.Id, buildId, new JsonObject { ["at"] = DateTimeOffset.UtcNow, ["by"] = Actor(token), ["target"] = target, ["ok"] = true, ["preview"] = instance, ["answer"] = answer.DeepClone() });
+                Audit(token, "build.preview-data", where, "ok");
+                return Results.Json(new JsonObject { ["steps"] = new JsonArray([.. steps.Select(x => (JsonNode?)x)]), ["preview"] = answer });
+            }
+            catch (WorkspacePublishException ex)
+            {
+                builds.RecordPublish(hosted.Id, buildId, new JsonObject { ["at"] = DateTimeOffset.UtcNow, ["by"] = Actor(token), ["target"] = target, ["ok"] = false, ["preview"] = instance, ["error"] = ex.Message });
+                Audit(token, "build.preview-data", where, "refused: " + ex.Message);
+                return Results.Json(new { error = ex.Message, steps }, statusCode: ex.Status);
+            }
+        });
 
         app.MapPost("/api/v1/projects/{project}/workspaces/{id}/builds/{build}/publish", async (string project, string id, string build, HttpContext context) =>
         {

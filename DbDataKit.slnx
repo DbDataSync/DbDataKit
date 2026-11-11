@@ -49,6 +49,7 @@
     <Project Path="Shared/src/DbDataKit.Config/DbDataKit.Config.csproj" />
     <Project Path="Shared/src/DbDataKit.Connections.Abstractions/DbDataKit.Connections.Abstractions.csproj" />
     <Project Path="Shared/src/DbDataKit.Connections.Descriptor/DbDataKit.Connections.Descriptor.csproj" />
+    <Project Path="Shared/src/DbDataKit.Connections.Http/DbDataKit.Connections.Http.csproj" />
     <Project Path="Shared/src/DbDataKit.Connections.DuckDb/DbDataKit.Connections.DuckDb.csproj" />
     <Project Path="Shared/src/DbDataKit.Connections.Odbc/DbDataKit.Connections.Odbc.csproj" />
     <Project Path="Shared/src/DbDataKit.Connections.Postgres/DbDataKit.Connections.Postgres.csproj" />
@@ -160,6 +161,7 @@
     <Project Path="Shared/tests/DbDataKit.DataModel.Tests/DbDataKit.DataModel.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Connections.Abstractions.Tests/DbDataKit.Connections.Abstractions.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Connections.Descriptor.Tests/DbDataKit.Connections.Descriptor.Tests.csproj" />
+    <Project Path="Shared/tests/DbDataKit.Connections.Http.Tests/DbDataKit.Connections.Http.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Connections.DuckDb.Tests/DbDataKit.Connections.DuckDb.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Connections.Odbc.Tests/DbDataKit.Connections.Odbc.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Connections.Postgres.Tests/DbDataKit.Connections.Postgres.Tests.csproj" />

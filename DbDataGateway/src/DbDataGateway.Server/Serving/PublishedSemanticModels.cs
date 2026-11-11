@@ -84,7 +84,7 @@ public sealed partial class PublishedSemanticModels(DefinitionStore store, Seman
     private static SemanticModel Build(DefinitionVersion version)
     {
         var content = Parse(version);
-        return new SemanticModel(CatalogLoader.LoadText(content.Catalog, $"{DefinitionKind}/{version.Name} v{version.Version}"), content.Sources, content.Ssas);
+        return new SemanticModel(CatalogLoader.LoadText(content.Catalog, $"{DefinitionKind}/{version.Name} v{version.Version}"), content.Sources, content.Ssas) { Version = version.Version };
     }
 
     /// <summary>

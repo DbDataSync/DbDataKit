@@ -41,8 +41,21 @@ public sealed record AppEgress(
     public IEnumerable<string> All => Directives().SelectMany(d => d.Origins).Distinct(StringComparer.Ordinal);
 }
 
+/// <summary>
+/// What an app may do with an entity. <see cref="ChangeRequest"/> (plan 26 AP19) is proposing a change that waits for approval and is never applied by the app's own call, even where the model would apply a write at once;
+/// it is read plus propose. <see cref="Write"/> includes both, so an entity with write needs no <c>change request</c>.
+/// </summary>
 [Flags]
-public enum DataOperations { None = 0, Read = 1, Write = 2 }
+public enum DataOperations { None = 0, Read = 1, Write = 2, ChangeRequest = 4 }
+
+public static class DataOperationsText
+{
+    /// <summary>The words the about page, the approval list and the screens use: "read", "read and write", "read and change request" or "nothing".</summary>
+    public static string Describe(this DataOperations operations) =>
+        operations.HasFlag(DataOperations.Write) ? "read and write"
+        : operations.HasFlag(DataOperations.ChangeRequest) ? "read and change request"
+        : operations.HasFlag(DataOperations.Read) ? "read" : "nothing";
+}
 
 /// <summary>The entities of one Store model an app uses, and what it may do with each. The app's scoped token is the intersection of this and what the signed-in person may do.</summary>
 public sealed record AppModelUse(string Model, IReadOnlyDictionary<string, DataOperations> Entities);

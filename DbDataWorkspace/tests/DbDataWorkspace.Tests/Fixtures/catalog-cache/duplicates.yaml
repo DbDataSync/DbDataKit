@@ -1,0 +1,18 @@
+schema: catalog-cache/1
+generated_at: 2026-11-11T10:00:00Z
+source: {server: prod-gateway, product: gateway}
+connections:
+  source-db:
+    engine: postgres
+    tables:
+      - schema: public
+        name: orders
+        kind: table
+        columns:
+          - {name: id, type: integer}
+          - {name: ID, type: integer}
+      - schema: public
+        name: orders
+        kind: table
+        columns:
+          - {name: id, type: integer}

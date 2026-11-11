@@ -1,4 +1,5 @@
 using DbDataKit.Connections;
+using DbDataKit.Connections.Descriptor;
 using DbDataKit.Dialect;
 
 namespace DbDataKit.Lineage;
@@ -18,8 +19,6 @@ public sealed record DatasetIdentity(string Namespace, string Name)
 /// </summary>
 public static class LineageIdentity
 {
-    private static readonly Dictionary<string, int> DefaultPorts = new(StringComparer.Ordinal) { ["sqlserver"] = 1433, ["fabric"] = 1433, ["postgres"] = 5432, ["mysql"] = 3306, ["oracle"] = 1521 };
-
     private static readonly HashSet<string> ThisMachine = new(StringComparer.Ordinal) { ".", "(local)", "localhost", "127.0.0.1", "::1", "[::1]" };
 
     /// <summary>The dataset a table of this connection is.</summary>
@@ -32,7 +31,7 @@ public static class LineageIdentity
         var rules = Rules(engine);
         string Fold(string? name) => name is null ? "" : rules.FoldCase(name);
         var name = string.Join('.', new[] { Fold(database), Fold(schema), Fold(table) }.Where(p => p.Length > 0));
-        var server = host.Length == 0 ? "" : port is { } p && !(DefaultPorts.TryGetValue(engine, out var normal) && normal == p) ? $"{host}:{p}" : host;
+        var server = host.Length == 0 ? "" : port is { } p && EngineRegistry.Builtin.Find(engine)?.DefaultPort != p ? $"{host}:{p}" : host;
         return new DatasetIdentity($"{engine}://{server}", name);
     }
 

@@ -8,6 +8,7 @@ import { SERVER, mockWorkspace, type FakeWorkspace } from './workspace-fake'
 // `identity-home` (ci-lessons: a spec that signs in a new administrator sorts after them).
 test.setTimeout(120_000)
 
+// each workspace has a name of its own: the list shows the workspaces of every project, and the one just made is found by its name (two named alike made a click land on the first project's)
 async function makeProject(page: Page, id: string, kind: string, workspace: string) {
   await page.getByTestId('ws-new-project-open').click()
   await page.getByTestId('ws-new-project-id').fill(id)
@@ -70,7 +71,7 @@ async function storeFlow(page: Page, fake: FakeWorkspace) {
 
 async function syncFlow(page: Page, fake: FakeWorkspace) {
   await page.goto(`/servers/${SERVER}`)
-  await makeProject(page, 'plant', 'sync', 'edit')
+  await makeProject(page, 'plant', 'sync', 'sync-edit')
   await expect(page.getByTestId('wsp-sync-set')).toBeVisible()
   await expect(page.locator('[data-testid="wsp-sync-replication"]')).toHaveCount(1)
   await expect(page.locator('[data-testid="wsp-sync-connection"]')).toHaveCount(2)
@@ -80,12 +81,12 @@ async function syncFlow(page: Page, fake: FakeWorkspace) {
   await page.getByTestId('wsp-new-connection-name').fill('third-db')
   await page.getByTestId('wsp-new-connection-go').click()
   await expect(page.locator('[data-testid="wsp-sync-connection"]')).toHaveCount(3)
-  expect(fake.files('plant', 'edit')?.get('config/connections/third-db.yaml')).toContain('password_secret: secret:dbdata:sync:connection:third-db')
+  expect(fake.files('plant', 'sync-edit')?.get('config/connections/third-db.yaml')).toContain('password_secret: secret:dbdata:sync:connection:third-db')
   // a new replication between two of them: a task and a mapping
   await page.getByTestId('wsp-new-replication-name').fill('stock')
   await page.getByTestId('wsp-new-replication-go').click()
   await expect(page.locator('[data-testid="wsp-sync-replication"]')).toHaveCount(2)
-  expect([...fake.files('plant', 'edit')!.keys()]).toContain('config/replications/stock/table-mappings/stock.yaml')
+  expect([...fake.files('plant', 'sync-edit')!.keys()]).toContain('config/replications/stock/table-mappings/stock.yaml')
   // a password where a reference belongs: refused at once with its line, and the check of the draft says the same
   await page.locator('[data-testid="wsp-sync-connection"][data-name="source-db"] [data-testid="wsp-sync-open-connection"]').click()
   await page.getByTestId('form-field-auth.password_secret').fill('hunter2')
@@ -97,7 +98,7 @@ async function syncFlow(page: Page, fake: FakeWorkspace) {
   // a form edit of a task that was read as format 1 writes the current format
   await page.locator('[data-testid="wsp-sync-replication"][data-name="orders"] [data-testid="wsp-sync-open-task"]').click()
   await page.getByTestId('form-field-scheduling.cronExpression').fill('0 * * * *')
-  await expect.poll(() => fake.files('plant', 'edit')?.get('config/replications/orders/task.yaml') ?? '').toContain('schemaVersion: 2')
+  await expect.poll(() => fake.files('plant', 'sync-edit')?.get('config/replications/orders/task.yaml') ?? '').toContain('schemaVersion: 2')
   // publish to a Runner: the channel is asked for
   await publish(page, 'plant', 'main')
   expect(fake.published.at(-1)).toMatchObject({ project: 'plant', body: { target: 'plant', channel: 'main' } })
@@ -105,11 +106,16 @@ async function syncFlow(page: Page, fake: FakeWorkspace) {
 
 async function buildFlow(page: Page) {
   await page.goto(`/servers/${SERVER}`)
-  await makeProject(page, 'warehouse', 'build', 'edit')
+  await makeProject(page, 'warehouse', 'build', 'build-edit')
   // the models by folder and the compiled plan, read from the draft
   await page.getByTestId('wsp-tab-models').click()
   await expect(page.locator('[data-testid="wsp-build-model"]')).toHaveCount(2)
   await expect(page.locator('[data-testid="wsp-build-refresh-plan"][data-name="hourly"]')).toContainText('2 loads')
+  // SC20h: the load graph, read from the committed loads file of the draft (Build's own picture): a node per model, an edge for the one dependency; choosing one is Build's own behaviour
+  await expect(page.getByTestId('build-graph-node-orders')).toBeVisible()
+  await expect(page.getByTestId('build-graph-node-fct_sales')).toBeVisible()
+  await expect(page.getByTestId('build-graph-edge')).toHaveCount(1)
+  await expect(page.getByTestId('wsp-build-graph-count')).toContainText('2 models, 1 edge')
   // a model that reads a table nothing defines: the check names the model, its code and its line
   await page.getByTestId('wsp-tab-changes').click()
   await page.getByTestId('wsp-new-path').fill('models/staging/bad.sql')

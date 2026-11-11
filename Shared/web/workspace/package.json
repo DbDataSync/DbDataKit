@@ -11,6 +11,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@dbdatakit/build": "*",
     "@dbdatakit/shell": "*",
     "@dbdatakit/store": "*",
     "@tanstack/react-query": "^5.102.4",

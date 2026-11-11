@@ -54,8 +54,10 @@ public sealed class ProviderRecordingTests
         }
     }
 
-    private static ModelProviderDefinition Provider(Recording r) =>
-        ModelProviderLoader.Load($"model-provider: 1\nname: {r.Folder}-main\nkind: {r.Kind}\nendpoint: {r.Endpoint}\n{(r.Key is null ? "" : "api-key-secret: env:TEST_KEY\n")}models:\n  - {{ id: {r.Model}, window: 128000 }}\n", "p.yml").Definition!;
+    private static ModelProviderDefinition Provider(Recording r) => Read(
+        ModelProviderConnection.Load($"schema: connection/2\nkind: model-provider\nname: {r.Folder}-main\nendpoint: {r.Endpoint}\n{(r.Key is null ? "" : "sign_in: { method: api_key, key_secret: env:TEST_KEY }\n")}model_provider:\n  provider: {r.Kind}\n{(r.Kind == "openai-compatible" ? "  locality: local\n" : "")}  models:\n    - {{ id: {r.Model}, window: 128000 }}\n", "p.yml"));
+
+    private static ModelProviderDefinition Read(ModelProviderResult result) => result.Definition ?? throw new InvalidOperationException(string.Join("; ", result.Diagnostics));
 
     private static IChatClient Client(Recording r, Recorded handler) =>
         ProviderClients.Create(Provider(r), Provider(r).Models[0], r.Key, new HttpClient(handler));

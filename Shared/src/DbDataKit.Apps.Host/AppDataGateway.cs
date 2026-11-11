@@ -24,7 +24,12 @@ public sealed record AppDataCall(
 {
     /// <summary>Whether the manifest lets the app read (or, with <paramref name="write"/>, write) the entity; write includes read.</summary>
     public bool Allows(string entity, bool write) =>
-        Scope.Contains(TokenScope.Entry(Model, entity, write: true), StringComparer.Ordinal) || (!write && Scope.Contains(TokenScope.Entry(Model, entity, write: false), StringComparer.Ordinal));
+        Scope.Contains(TokenScope.Entry(Model, entity, write: true), StringComparer.Ordinal)
+        || (!write && (Scope.Contains(TokenScope.Entry(Model, entity, write: false), StringComparer.Ordinal) || Scope.Contains(TokenScope.ProposeEntry(Model, entity), StringComparer.Ordinal)));
+
+    /// <summary>Whether the manifest lets the app propose a change to the entity: a write, or a <c>change request</c> (<see cref="TokenScope.ProposeEntry"/>).</summary>
+    public bool Proposes(string entity) =>
+        Scope.Contains(TokenScope.Entry(Model, entity, write: true), StringComparer.Ordinal) || Scope.Contains(TokenScope.ProposeEntry(Model, entity), StringComparer.Ordinal);
 }
 
 /// <summary>Which of the semantic calls an app may make: the models its manifest lists, one model's catalog, or a query.</summary>
@@ -94,6 +99,10 @@ public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, Co
         var route = match.Groups["kind"].Value switch { "row" => AppDataRoute.Row, "rows" => AppDataRoute.Rows, "schema" => AppDataRoute.Schema, _ => AppDataRoute.Changes };
         if (route == AppDataRoute.Changes ? !HttpMethods.IsPost(method) : !HttpMethods.IsGet(method))
             return Refuse(405, route == AppDataRoute.Changes ? "Changes are sent with POST." : "Rows and the schema are read with GET.");
+
+        // a preview reads what its instance reads, and writes nothing: the draft layer that would take its writes is plan 21 CH01, not built, and previews are read-only by default (plan 21 decision 2)
+        if (route == AppDataRoute.Changes && AppInstanceName.Split(instance).Channel != DbDataKit.State.DefinitionStore.Production)
+            return Refuse(403, "This is a preview: it reads the instance's data and keeps no change. Publish the app to change data.");
 
         // the instance's binding says which copy of the model's data this app uses, unless the path names one
         var model = Uri.UnescapeDataString(match.Groups["model"].Value);

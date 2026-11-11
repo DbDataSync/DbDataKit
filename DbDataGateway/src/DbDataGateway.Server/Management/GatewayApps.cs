@@ -28,9 +28,10 @@ namespace DbDataGateway.Server.Management;
 /// Every answer to a read says what the caller may do (<c>caller</c>: <c>can_publish</c>, <c>can_approve</c>), so a screen can say why a button is off; the roles are enforced here on every call, never by the screen.
 /// The author recorded is the person the token names, or the paired client when none is: never the operating-system user of the machine the command ran on.
 /// </summary>
-public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers> approvers, IAuditLog audit, TimeProvider? clock = null, Func<Uri?>? appsAddress = null)
+public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers> approvers, IAuditLog audit, TimeProvider? clock = null, Func<Uri?>? appsAddress = null, Action<string>? instanceSaved = null, Action<string>? instanceRemoved = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private static readonly System.Text.RegularExpressions.Regex ChannelRule = new("^[a-z0-9][a-z0-9-]{0,31}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.Compiled);
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
     private readonly SemaphoreSlim _writing = new(1, 1);
 
@@ -81,6 +82,18 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
         {
             case ("apps", "DELETE", 1): return await WriteAsync(() => RemoveApp(Uri.UnescapeDataString(rest[0]), caller));
             case ("app-instances", "DELETE", 1): return await WriteAsync(() => RemoveInstance(Uri.UnescapeDataString(rest[0]), caller));
+            // a channel other than production (plan 21, plan 22a GP35d): the same calls, the channel in the path; production has the routes above only
+            case ("apps" or "app-instances", "PUT" or "DELETE", 3) when rest[1] == "channels":
+                if (!ChannelRule.IsMatch(rest[2]) || rest[2] is DefinitionStore.Production or "production")
+                    return ManagementResult.Problem(400, $"'{rest[2]}' is not a channel this route serves: a channel is lower-case letters, digits and '-', and production (prod) has the routes without 'channels'.");
+                var (target, channel) = (Uri.UnescapeDataString(rest[0]), rest[2]);
+                return await WriteAsync(() => (kind, method) switch
+                {
+                    ("apps", "PUT") => Publish(target, body, caller, channel),
+                    ("apps", _) => RemoveApp(target, caller, channel),
+                    (_, "PUT") => SaveInstance(target, body, caller, channel),
+                    _ => RemoveInstance(target, caller, channel),
+                });
             case ("apps", "POST", 1) when rest[0] == "check": return Check(body, caller);
             case ("apps", "PUT", 1): return await WriteAsync(() => Publish(Uri.UnescapeDataString(rest[0]), body, caller));
             case ("apps", "POST", 2) when rest[1] == "rollback": return await WriteAsync(() => Rollback(Uri.UnescapeDataString(rest[0]), body, caller));
@@ -159,7 +172,7 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
         var access = new JsonArray();
         foreach (var use in manifest.Models)
             foreach (var (entity, operations) in use.Entities.OrderBy(e => e.Key, StringComparer.Ordinal))
-                access.Add(new JsonObject { ["model"] = use.Model, ["entity"] = entity, ["operations"] = operations.HasFlag(DataOperations.Write) ? "read and write" : operations.HasFlag(DataOperations.Read) ? "read" : "nothing" });
+                access.Add(new JsonObject { ["model"] = use.Model, ["entity"] = entity, ["operations"] = operations.Describe() });
         var egress = new JsonArray();
         foreach (var (key, _, origins) in (manifest.Egress ?? AppEgress.None).Directives().Where(d => d.Origins.Count > 0))
             egress.Add(new JsonObject { ["directive"] = key, ["origins"] = new JsonArray([.. origins.Select(o => (JsonNode)o)]) });
@@ -229,29 +242,30 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
             {
                 ["id"] = a.Id, ["app"] = a.App, ["version"] = a.Version, ["hash"] = a.ContentHash, ["approved_by"] = a.ApprovedBy, ["approved_at"] = a.ApprovedAt, ["note"] = a.Note,
                 ["published_version"] = a.PublishedVersion, ["revoked"] = a.RevokedAt is not null, ["revoked_at"] = a.RevokedAt,
-                ["operations"] = new JsonArray([.. a.Operations.SelectMany(o => o.Entities.OrderBy(e => e.Key, StringComparer.Ordinal).Select(e => (JsonNode)new JsonObject { ["model"] = o.Model, ["entity"] = e.Key, ["operations"] = e.Value.HasFlag(DataOperations.Write) ? "read and write" : "read" }))]),
+                ["operations"] = new JsonArray([.. a.Operations.SelectMany(o => o.Entities.OrderBy(e => e.Key, StringComparer.Ordinal).Select(e => (JsonNode)new JsonObject { ["model"] = o.Model, ["entity"] = e.Key, ["operations"] = e.Value.Describe() }))]),
                 ["egress"] = new JsonArray([.. a.Egress.Directives().Where(d => d.Origins.Count > 0).Select(d => (JsonNode)new JsonObject { ["directive"] = d.Key, ["origins"] = new JsonArray([.. d.Origins.Select(o => (JsonNode)o)]) })]),
             })]),
             ["caller"] = Capabilities(caller),
         });
 
-    private ManagementResult RemoveApp(string name, ManagementCaller caller)
+    private ManagementResult RemoveApp(string name, ManagementCaller caller, string channel = DefinitionStore.Production)
     {
         try
         {
-            if (!new AppInstanceStore(definitions).RetireApp(name, Who(caller), DefinitionStore.Production)) return Refused(caller, "app remove", name, 404, $"The app '{name}' is not served.");
-            Record(caller, "app remove", name, "retired");
+            if (!new AppInstanceStore(definitions).RetireApp(name, Who(caller), channel)) return Refused(caller, "app remove", name, 404, $"The app '{name}' is not served{(channel == DefinitionStore.Production ? "" : " in " + channel)}.");
+            Record(caller, "app remove", name, channel == DefinitionStore.Production ? "retired" : $"retired from {channel}");
             return ManagementResult.Ok(new JsonObject { ["name"] = name, ["removed"] = true });
         }
         catch (AppInstanceException ex) { return Refused(caller, "app remove", name, 409, ex.Message); }
     }
 
-    private ManagementResult RemoveInstance(string name, ManagementCaller caller)
+    private ManagementResult RemoveInstance(string name, ManagementCaller caller, string channel = DefinitionStore.Production)
     {
         try
         {
-            if (!new AppInstanceStore(definitions).RetireInstance(name, Who(caller), DefinitionStore.Production)) return Refused(caller, "app instance-remove", name, 404, $"The instance '{name}' is not served.");
-            Record(caller, "app instance-remove", name, "retired");
+            if (!new AppInstanceStore(definitions).RetireInstance(name, Who(caller), channel)) return Refused(caller, "app instance-remove", name, 404, $"The instance '{name}' is not served{(channel == DefinitionStore.Production ? "" : " in " + channel)}.");
+            Record(caller, "app instance-remove", name, channel == DefinitionStore.Production ? "retired" : $"retired from {channel}");
+            if (channel == DefinitionStore.Production) instanceRemoved?.Invoke(name);
             return ManagementResult.Ok(new JsonObject { ["name"] = name, ["removed"] = true });
         }
         catch (AppInstanceException ex) { return Refused(caller, "app instance-remove", name, 409, ex.Message); }
@@ -275,7 +289,7 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
     private static string? ApproverName(string? by, ManagementCaller caller) =>
         !string.IsNullOrWhiteSpace(by) ? by : caller.Token is { IsConsole: false, Client.Kind: ClientKind.Console } t ? t.SubjectName ?? t.SubjectId : null;
 
-    private ManagementResult Publish(string name, string? body, ManagementCaller caller)
+    private ManagementResult Publish(string name, string? body, ManagementCaller caller, string channel = DefinitionStore.Production)
     {
         var request = Read<PublishRequest>(body);
         if (request?.Manifest is not { Length: > 0 } manifest)
@@ -286,9 +300,9 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
             var package = Package(manifest, request.Files);
             var load = AppManifestLoader.Load(package.ManifestYaml);
             if (load.Ok && load.Manifest!.Name != name) return Refused(caller, "app publish", name, 400, $"The manifest is named '{load.Manifest.Name}' and the call names '{name}'; they are the same name.");
-            var version = new AppInstanceStore(definitions).PublishApp(package, by, note: request.Note, approvals: new AppApprovalStore(definitions));
-            Record(caller, "app publish", name, $"version {version.Version}");
-            return ManagementResult.Ok(new JsonObject { ["name"] = version.Name, ["version"] = version.Version, ["files"] = package.Files.Count, ["published_by"] = by });
+            var version = new AppInstanceStore(definitions).PublishApp(package, by, channel, request.Note, new AppApprovalStore(definitions));
+            Record(caller, "app publish", name, channel == DefinitionStore.Production ? $"version {version.Version}" : $"version {version.Version} to {channel}");
+            return ManagementResult.Ok(new JsonObject { ["name"] = version.Name, ["version"] = version.Version, ["files"] = package.Files.Count, ["published_by"] = by, ["channel"] = channel });
         }
         catch (Exception ex) when (ex is AppInstanceException or AppPackageException)
         {
@@ -349,15 +363,32 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
         }
     }
 
-    private ManagementResult SaveInstance(string name, string? body, ManagementCaller caller)
+    private ManagementResult SaveInstance(string name, string? body, ManagementCaller caller, string channel = DefinitionStore.Production)
     {
         var request = Read<InstanceRequest>(body);
         if (request?.App is not { Length: > 0 } app) return ManagementResult.Problem(400, "The body is a JSON object: {\"app\": \"<app>\", \"pin\": <version>, \"title\": \"<text>\", \"settings\": {}, \"bindings\": {}}.");
         try
         {
-            var saved = new AppInstanceStore(definitions).Save(new AppInstance(name, app, request.Pin, request.Title, request.Settings, request.Bindings), Who(caller));
-            Record(caller, "app instance-save", name, $"version {saved.Version}");
-            return ManagementResult.Ok(new JsonObject { ["name"] = name, ["app"] = app, ["version"] = saved.Version });
+            var store = new AppInstanceStore(definitions);
+            IReadOnlyDictionary<string, string>? settings = request.Settings, bindings = request.Bindings;
+            if (channel != DefinitionStore.Production)
+            {
+                // an instance of another channel is a preview of the production instance of that name: who may open it is who may open that one, and it reads the data that one is bound to
+                if (store.Get(name) is not { } production)
+                    return Refused(caller, "app instance-save", name, 400, $"There is no instance '{name}' in production to preview. Save it there first: a {channel} instance is opened by the people who may open it.");
+                (settings, bindings) = (settings ?? production.Settings, bindings ?? production.Bindings);
+            }
+            var saved = store.Save(new AppInstance(name, app, request.Pin, request.Title, settings, bindings), Who(caller), channel);
+            Record(caller, "app instance-save", name, channel == DefinitionStore.Production ? $"version {saved.Version}" : $"version {saved.Version} in {channel}");
+            if (channel == DefinitionStore.Production) instanceSaved?.Invoke(name);
+            var result = new JsonObject { ["name"] = name, ["app"] = app, ["version"] = saved.Version, ["channel"] = channel };
+            if (channel != DefinitionStore.Production)
+            {
+                var address = AppInstanceName.Of(name, channel);
+                result["path"] = $"/apps/{address}/";
+                result["address"] = appsAddress?.Invoke() is { } host ? new Uri(host, $"/apps/{address}/").AbsoluteUri : null;
+            }
+            return ManagementResult.Ok(result);
         }
         catch (AppInstanceException ex)
         {

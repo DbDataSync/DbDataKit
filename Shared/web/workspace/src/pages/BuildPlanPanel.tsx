@@ -2,6 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { workspaceApi, type CheckDiagnostic } from '../api'
 import { findingsOfModel, modelsOf, planFilesOf, planSummary, planWord, type ModelEntry, type PlanConnection } from '../buildPlan'
+import { BuildGraphPanel } from './BuildGraphPanel'
 import { CheckResultView } from './CheckPanel'
 
 /** The models of a Build project by folder, each opening its files, with the errors and warnings the last check found in them. Drawn without a query so a test can render it. */
@@ -76,6 +77,8 @@ export function BuildPlanPanel({ project, id, paths, onOpen }: { project: string
       {check.data && <div style={{ marginTop: 10 }}><CheckResultView result={check.data} onOpen={onOpen} /></div>}
       <div className="hint" style={{ margin: '14px 0 4px' }}>Plan</div>
       <PlanView plans={plans} texts={texts.data ?? {}} onOpen={onOpen} />
+      <div className="hint" style={{ margin: '14px 0 4px' }}>Load graph</div>
+      <BuildGraphPanel project={project} id={id} paths={paths} />
     </div>
   )
 }

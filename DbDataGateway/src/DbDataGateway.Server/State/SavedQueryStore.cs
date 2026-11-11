@@ -9,7 +9,7 @@ using DbDataKit.State;
 namespace DbDataGateway.Server.State;
 
 /// <summary>A saved query as stored: who owns it, which version is current, and the definition.</summary>
-public sealed record SavedQueryRecord(long Id, string Owner, string Model, string Name, int Version, SavedQueryDef Query, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
+public sealed record SavedQueryRecord(long Id, string Owner, string Model, string Name, int Version, SavedQueryDef Query, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, string? OwnerName = null);
 
 /// <summary>One version of a saved query's history.</summary>
 public sealed record SavedQueryVersion(int Version, SavedQueryDef Query, string SavedBy, DateTimeOffset SavedAt);
@@ -30,7 +30,7 @@ public sealed partial class SavedQueryStore(StateDatabase database, TimeProvider
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
 
     /// <summary>Saves a new version of the owner's query, or creates it. <paramref name="expectedVersion"/> is the version the caller read (null to create; a query that exists is then a conflict).</summary>
-    public SavedQueryRecord Save(string owner, string model, string name, SavedQueryDef query, string savedBy, int? expectedVersion = null)
+    public SavedQueryRecord Save(string owner, string model, string name, SavedQueryDef query, string savedBy, int? expectedVersion = null, string? ownerName = null)
     {
         if (!NamePattern().IsMatch(name)) throw new ArgumentException("A saved query's name is lowercase letters, digits and underscores, starting with a letter.", nameof(name));
         if ((query.Sql is null) == (query.Request is null)) throw new ArgumentException("A saved query has a sql text or a request, and not both.", nameof(query));
@@ -48,10 +48,10 @@ public sealed partial class SavedQueryStore(StateDatabase database, TimeProvider
             if (current is null)
             {
                 using var insert = database.Command("serving", connection, transaction, """
-                    INSERT INTO {table:saved_query} (owner, model, name, version, description, query_sql, request_json, parameters_json, created_at, updated_at)
-                    VALUES ($owner, $model, $name, $version, $description, $sql, $request, $parameters, $now, $now);
+                    INSERT INTO {table:saved_query} (owner, model, name, version, description, query_sql, request_json, parameters_json, created_at, updated_at, owner_name)
+                    VALUES ($owner, $model, $name, $version, $description, $sql, $request, $parameters, $now, $now, $ownerName);
                     """);
-                BindDefinition(insert, owner, model, name, version, query).Bind(database, "now", now);
+                BindDefinition(insert, owner, model, name, version, query).Bind(database, "now", now).Bind(database, "ownerName", ownerName);
                 insert.ExecuteNonQuery();
                 using var lookup = database.Command("serving", connection, transaction, "SELECT id FROM {table:saved_query} WHERE owner = $owner AND model = $model AND name = $name;");
                 lookup.Bind(database, "owner", owner).Bind(database, "model", model).Bind(database, "name", name);
@@ -61,10 +61,10 @@ public sealed partial class SavedQueryStore(StateDatabase database, TimeProvider
             {
                 id = current.Id;
                 using var update = database.Command("serving", connection, transaction, """
-                    UPDATE {table:saved_query} SET version = $version, description = $description, query_sql = $sql, request_json = $request, parameters_json = $parameters, updated_at = $now
+                    UPDATE {table:saved_query} SET version = $version, description = $description, query_sql = $sql, request_json = $request, parameters_json = $parameters, updated_at = $now, owner_name = COALESCE($ownerName, owner_name)
                     WHERE id = $id;
                     """);
-                BindDefinition(update, owner, model, name, version, query).Bind(database, "now", now).Bind(database, "id", id);
+                BindDefinition(update, owner, model, name, version, query).Bind(database, "now", now).Bind(database, "id", id).Bind(database, "ownerName", ownerName, System.Data.DbType.String);
                 update.ExecuteNonQuery();
             }
             using var history = database.Command("serving", connection, transaction, """
@@ -183,14 +183,15 @@ public sealed partial class SavedQueryStore(StateDatabase database, TimeProvider
         Visible(caller, model).Where(v => string.Equals(v.Record.Name, name, StringComparison.Ordinal)).Select(v => v.Record.Query).FirstOrDefault();
 
     public IReadOnlyList<UserSavedQuery> List(ServingCaller caller, string model) =>
-        [.. Visible(caller, model).Select(v => new UserSavedQuery(v.Record.Name, v.Record.Owner, v.Record.Query))];
+        [.. Visible(caller, model).Select(v => new UserSavedQuery(v.Record.Name, v.Record.Owner, v.Record.Query, v.Record.OwnerName))];
 
     /// <summary>The caller's own queries on the model, then those shared with them, a name once (their own first, then the oldest share).</summary>
     private List<(SavedQueryRecord Record, bool Own)> Visible(ServingCaller caller, string model) =>
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            var grantees = new List<string> { "*", "user:" + caller.Name.ToLowerInvariant() };
+            var key = SavedQueryOwner.Of(caller);
+            var grantees = new List<string> { "*", "user:" + key };
             grantees.AddRange(caller.Roles.Select(role => "group:" + role.ToLowerInvariant()));
             var names = string.Join(", ", grantees.Select((_, i) => "$g" + i));
             using var command = database.Command("serving", connection, $$"""
@@ -198,17 +199,17 @@ public sealed partial class SavedQueryStore(StateDatabase database, TimeProvider
                 WHERE model = $model AND (owner = $owner OR id IN (SELECT query_id FROM {table:saved_query_share} WHERE LOWER(grantee) IN ({{names}})))
                 ORDER BY created_at, id;
                 """);
-            command.Bind(database, "model", model).Bind(database, "owner", caller.Name);
+            command.Bind(database, "model", model).Bind(database, "owner", key);
             for (int i = 0; i < grantees.Count; i++) command.Bind(database, "g" + i, grantees[i]);
             var found = ReadAll(command);
-            var ordered = found.Select(r => (Record: r, Own: string.Equals(r.Owner, caller.Name, StringComparison.OrdinalIgnoreCase)))
+            var ordered = found.Select(r => (Record: r, Own: string.Equals(r.Owner, key, StringComparison.OrdinalIgnoreCase)))
                 .OrderByDescending(x => x.Own).ThenBy(x => x.Record.CreatedAt).ToList();
             return ordered.GroupBy(x => x.Record.Name, StringComparer.Ordinal).Select(g => g.First()).OrderBy(x => x.Record.Name, StringComparer.Ordinal).ToList();
         });
 
     // ---------- rows ----------
 
-    private const string Select = "SELECT id, owner, model, name, version, description, query_sql, request_json, parameters_json, created_at, updated_at FROM {table:saved_query}";
+    private const string Select = "SELECT id, owner, model, name, version, description, query_sql, request_json, parameters_json, created_at, updated_at, owner_name FROM {table:saved_query}";
 
     private SavedQueryRecord? Read(DbConnection connection, DbTransaction? transaction, string owner, string model, string name)
     {
@@ -223,7 +224,7 @@ public sealed partial class SavedQueryStore(StateDatabase database, TimeProvider
         var all = new List<SavedQueryRecord>();
         while (reader.Read())
             all.Add(new SavedQueryRecord(reader.Int64(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.Int32(4), Definition(reader, 5),
-                reader.Time(9), reader.Time(10)));
+                reader.Time(9), reader.Time(10), reader.IsDBNull(11) ? null : reader.GetString(11)));
         return all;
     }
 
@@ -246,4 +247,18 @@ public sealed partial class SavedQueryStore(StateDatabase database, TimeProvider
 
     [GeneratedRegex(@"^(\*|user:[^\s]+|group:[^\s]+)$")]
     private static partial Regex GranteePattern();
+}
+
+/// <summary>
+/// Who owns a person's saved queries (plan 14a D35): the email or UPN the identity home knows them by, trimmed and lower case, never the display name (two people may share one). A caller with no email (a pass-through or
+/// Windows sign-in the home does not know) is keyed by their name in the same form, which is as exact as that name is.
+/// </summary>
+public static class SavedQueryOwner
+{
+    public static string Of(ServingCaller caller) => SemanticCallers.KeyOf(caller);
+
+    public static string Normalize(string key) => SemanticCallers.Normalize(key);
+
+    /// <summary>The display name beside the key, when it is not the key itself.</summary>
+    public static string? DisplayName(ServingCaller caller) => string.Equals(Of(caller), Normalize(caller.Name), StringComparison.Ordinal) ? null : caller.Name;
 }

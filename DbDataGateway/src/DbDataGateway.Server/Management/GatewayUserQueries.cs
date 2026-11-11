@@ -34,7 +34,7 @@ public sealed class GatewayUserQueries(SavedQueryStore store, SemanticModels mod
         if (views is null) return Problem(404, "This gateway does not serve the views module, which tells who a person is: list `views` under `modules:` in server.yaml.");
         if (caller.Token is not { } token) return Problem(403, "Saved queries are a person's: sign in through a console.");
         var who = (await views.ConsolePrincipalAsync(token, cancellationToken)).Caller;
-        var owner = who.Name;
+        var owner = SavedQueryOwner.Of(who);
         var parts = route.Length > Route.Length ? route[(Route.Length + 1)..].Split('/') : [];
         var q = query is null ? new System.Collections.Specialized.NameValueCollection() : System.Web.HttpUtility.ParseQueryString(query);
 
@@ -48,7 +48,7 @@ public sealed class GatewayUserQueries(SavedQueryStore store, SemanticModels mod
             return (method, action) switch
             {
                 ("GET", null) => Open(who, owner, model, name, q["owner"]),
-                ("PUT", null) => Save(owner, model, name, body, caller),
+                ("PUT", null) => Save(owner, SavedQueryOwner.DisplayName(who) ?? who.Name, model, name, body, caller),
                 ("DELETE", null) => Delete(owner, model, name, caller),
                 ("GET", "history") => History(owner, model, name),
                 ("POST", "restore") => Restore(owner, model, name, body, caller),
@@ -71,7 +71,7 @@ public sealed class GatewayUserQueries(SavedQueryStore store, SemanticModels mod
 
     private static JsonObject Describe(SavedQueryRecord r, string caller) => new()
     {
-        ["model"] = r.Model, ["name"] = r.Name, ["owner"] = r.Owner, ["own"] = string.Equals(r.Owner, caller, StringComparison.OrdinalIgnoreCase), ["version"] = r.Version,
+        ["model"] = r.Model, ["name"] = r.Name, ["owner"] = r.Owner, ["owner_name"] = r.OwnerName, ["own"] = string.Equals(r.Owner, caller, StringComparison.OrdinalIgnoreCase), ["version"] = r.Version,
         ["description"] = r.Query.Description, ["sql"] = r.Query.Sql, ["request"] = r.Query.Request?.DeepClone(), ["parameters"] = r.Query.Parameters.DeepClone(), ["updated_at"] = r.UpdatedAt,
     };
 
@@ -79,24 +79,25 @@ public sealed class GatewayUserQueries(SavedQueryStore store, SemanticModels mod
     private ManagementResult List(DbDataKit.Serving.ServingCaller who, string? model)
     {
         var items = new JsonArray();
-        foreach (var r in store.ListOwned(who.Name, model)) items.Add(Describe(r, who.Name));
+        var key = SavedQueryOwner.Of(who);
+        foreach (var r in store.ListOwned(key, model)) items.Add(Describe(r, key));
         if (!string.IsNullOrWhiteSpace(model))
-            foreach (var shared in store.List(who, model).Where(s => !string.Equals(s.Owner, who.Name, StringComparison.OrdinalIgnoreCase)))
-                items.Add(new JsonObject { ["model"] = model, ["name"] = shared.Name, ["owner"] = shared.Owner, ["own"] = false, ["description"] = shared.Query.Description, ["sql"] = shared.Query.Sql, ["request"] = shared.Query.Request?.DeepClone(), ["parameters"] = shared.Query.Parameters.DeepClone() });
+            foreach (var shared in store.List(who, model).Where(s => !string.Equals(s.Owner, key, StringComparison.OrdinalIgnoreCase)))
+                items.Add(new JsonObject { ["model"] = model, ["name"] = shared.Name, ["owner"] = shared.Owner, ["owner_name"] = shared.OwnerName, ["own"] = false, ["description"] = shared.Query.Description, ["sql"] = shared.Query.Sql, ["request"] = shared.Query.Request?.DeepClone(), ["parameters"] = shared.Query.Parameters.DeepClone() });
         return Ok(new JsonObject { ["queries"] = items });
     }
 
     private ManagementResult Open(DbDataKit.Serving.ServingCaller who, string owner, string model, string name, string? ownerOf)
     {
-        if (ownerOf is null || string.Equals(ownerOf, owner, StringComparison.OrdinalIgnoreCase))
-            return store.Get(owner, model, name) is { } own ? Ok(Describe(own, who.Name)) : Problem(404, $"You have no saved query '{name}' on {model}.");
+        if (ownerOf is null || string.Equals(SavedQueryOwner.Normalize(ownerOf), owner, StringComparison.OrdinalIgnoreCase))
+            return store.Get(owner, model, name) is { } own ? Ok(Describe(own, owner)) : Problem(404, $"You have no saved query '{name}' on {model}.");
         // another person's, only when it is shared with this caller
-        var shared = store.List(who, model).FirstOrDefault(s => s.Name == name && string.Equals(s.Owner, ownerOf, StringComparison.OrdinalIgnoreCase));
+        var shared = store.List(who, model).FirstOrDefault(s => s.Name == name && string.Equals(s.Owner, SavedQueryOwner.Normalize(ownerOf), StringComparison.OrdinalIgnoreCase));
         if (shared is null) return Problem(404, $"{ownerOf} has shared no saved query '{name}' on {model} with you.");
-        return Ok(new JsonObject { ["model"] = model, ["name"] = name, ["owner"] = shared.Owner, ["own"] = false, ["description"] = shared.Query.Description, ["sql"] = shared.Query.Sql, ["request"] = shared.Query.Request?.DeepClone(), ["parameters"] = shared.Query.Parameters.DeepClone() });
+        return Ok(new JsonObject { ["model"] = model, ["name"] = name, ["owner"] = shared.Owner, ["owner_name"] = shared.OwnerName, ["own"] = false, ["description"] = shared.Query.Description, ["sql"] = shared.Query.Sql, ["request"] = shared.Query.Request?.DeepClone(), ["parameters"] = shared.Query.Parameters.DeepClone() });
     }
 
-    private ManagementResult Save(string owner, string model, string name, string? body, ManagementCaller caller)
+    private ManagementResult Save(string owner, string ownerName, string model, string name, string? body, ManagementCaller caller)
     {
         SaveBody? request;
         try { request = string.IsNullOrWhiteSpace(body) ? null : JsonSerializer.Deserialize<SaveBody>(body, new JsonSerializerOptions(JsonSerializerDefaults.Web)); }
@@ -107,7 +108,7 @@ public sealed class GatewayUserQueries(SavedQueryStore store, SemanticModels mod
         var definition = new SavedQueryDef { Description = request.Description, Sql = request.Sql, Request = request.Request, Parameters = request.Parameters ?? new JsonObject() };
         if (Check(found.Catalog, definition) is { } refusal) { Record(caller, "saved-query save", $"{model}/{name}", "invalid"); return new ManagementResult(400, new JsonObject { ["error"] = refusal, ["valid"] = false }); }
         if (found.Catalog.Doc.Queries.ContainsKey(name)) return Problem(409, $"The model {model} has a saved query of its own named '{name}'; choose another name.");
-        var saved = store.Save(owner, found.Name, name, definition, owner, request.ExpectedVersion);
+        var saved = store.Save(owner, found.Name, name, definition, owner, request.ExpectedVersion, ownerName);
         Record(caller, "saved-query save", $"{model}/{name}", saved.Version == 1 ? "created" : "changed");
         return Ok(Describe(saved, owner));
     }
@@ -179,6 +180,7 @@ public sealed class GatewayUserQueries(SavedQueryStore store, SemanticModels mod
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException) { wanted = null; }
         if (wanted is null) return Problem(400, "The body is {\"grantees\": [\"user:<name>\", \"group:<name>\", \"*\"]}: the whole set it is shared with.");
         if (store.Get(owner, model, name) is null) return Problem(404, $"You have no saved query '{name}' on {model}.");
+        wanted = [.. wanted.Select(g => g.StartsWith("user:", StringComparison.OrdinalIgnoreCase) ? "user:" + SavedQueryOwner.Normalize(g[5..]) : g)];
         var now = store.Shares(owner, model, name);
         foreach (var g in wanted.Except(now, StringComparer.Ordinal)) store.Share(owner, model, name, g);
         foreach (var g in now.Except(wanted, StringComparer.Ordinal)) store.Unshare(owner, model, name, g);

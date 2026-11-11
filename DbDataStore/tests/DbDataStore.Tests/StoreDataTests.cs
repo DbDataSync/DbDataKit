@@ -495,6 +495,59 @@ public abstract class StoreDataTests(string engine) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_contract_step_is_a_planned_and_approved_change_of_one_copy_and_a_copy_still_at_the_old_version_keeps_working()
+    {
+        var send = await Client();
+        var v1 = Model.Replace("storage: {connection: mdm}", "storage: {connection: mdm, instances: schema}");
+        var v2 = v1.Replace("      quota: {type: \"DECIMAL(10,2)\", min: 0}", "      region: {type: VARCHAR(20), required: true}");   // a required column, and no quota any more
+        await send(HttpMethod.Put, "/api/v1/models/territories", v1, ServerRole.Author);
+        foreach (var instance in new[] { "acme", "globex" })
+        {
+            await send(HttpMethod.Put, $"/api/v1/models/territories/instances/{instance}", null, ServerRole.Admin);
+            await send(HttpMethod.Post, $"/api/v1/models/territories/instances/{instance}/storage/create", null, ServerRole.Admin);
+            Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Post, $"/api/v1/models/territories/instances/{instance}/changes", Insert("NA", instance + " North", "1"), ServerRole.Author)).StatusCode);
+        }
+        await send(HttpMethod.Put, "/api/v1/models/territories", v2, ServerRole.Author);
+        Assert.True((bool)(await Json(await send(HttpMethod.Post, "/api/v1/models/territories/instances/acme/migrate?apply=true", null, ServerRole.Admin)))["applied"]!);   // the expand step
+
+        // a dry run says what it would do and gives the plan's hash; it changes nothing, and only an administrator may ask
+        const string contract = "/api/v1/models/territories/instances/acme/migrate/contract";
+        Assert.Equal(HttpStatusCode.Forbidden, (await send(HttpMethod.Post, contract, null, ServerRole.Author)).StatusCode);
+        var plan = await Json(await send(HttpMethod.Post, contract, null, ServerRole.Admin));
+        Assert.False((bool)plan["nothing"]!);
+        Assert.False((bool)plan["applied"]!);
+        Assert.Equal(["drop column territory.quota", "make territory.region required"], plan["steps"]!.AsArray().Select(s => (string)s!["description"]!));
+        var hash = (string)plan["hash"]!;
+        // it names every copy and where it stands: globex still runs the old version
+        Assert.Equal(["default:unknown", "acme:current", "globex:behind"], plan["copies"]!.AsArray().Select(c => $"{(string)c!["name"]!}:{(string)c["status"]!}").ToArray());
+
+        // approving needs the hash of a plan that was read; a column the rows have no value for refuses the whole plan
+        var wrong = await send(HttpMethod.Post, contract + "?approve=" + new string('0', 64), null, ServerRole.Admin);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, wrong.StatusCode);
+        Assert.Contains("Read it again", (string)(await Json(wrong))["error"]!);
+        var missing = await send(HttpMethod.Post, contract + "?approve=" + hash, null, ServerRole.Admin);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, missing.StatusCode);
+        Assert.Contains("territory.region required: 1 row has no value", (string)(await Json(missing))["error"]!);
+        Assert.False((bool)(await Json(await send(HttpMethod.Post, contract, null, ServerRole.Admin)))["nothing"]!);   // nothing was changed
+
+        // give the row its region (acme runs the new version now), and the approved plan runs
+        var update = """{"changes":[{"action":"update","entity":"territory","key":{"code":"NA"},"expected_version":1,"values":{"region":"EMEA"}}]}""";
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Post, "/api/v1/models/territories/instances/acme/changes", update, ServerRole.Author)).StatusCode);
+        var applied = await Json(await send(HttpMethod.Post, contract + "?approve=" + hash, null, ServerRole.Admin));
+        Assert.True((bool)applied["applied"]!);
+        Assert.True((bool)applied["nothing"]!);
+        Assert.True((bool)(await Json(await send(HttpMethod.Post, "/api/v1/models/territories/instances/acme/migrate", null, ServerRole.Admin)))["up_to_date"]!);
+        Assert.Equal("EMEA", (string)(await Json(await send(HttpMethod.Get, "/api/v1/models/territories/instances/acme/entities/territory/rows", null, ServerRole.Viewer)))["rows"]![0]!["values"]!["region"]!);
+
+        // globex is at N while acme is at N+1: its table still has the quota, its writes still work, and it is still reported behind
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Post, "/api/v1/models/territories/instances/globex/changes", Insert("EU", "Globex Europe", "2"), ServerRole.Author)).StatusCode);
+        var after = await Json(await send(HttpMethod.Post, contract, null, ServerRole.Admin));
+        Assert.Equal(["default:unknown", "acme:current", "globex:behind"], after["copies"]!.AsArray().Select(c => $"{(string)c!["name"]!}:{(string)c["status"]!}").ToArray());
+        var globex = await Json(await send(HttpMethod.Post, "/api/v1/models/territories/instances/globex/migrate/contract", null, ServerRole.Admin));
+        Assert.Equal(["drop column territory.quota"], globex["steps"]!.AsArray().Select(s => (string)s!["description"]!));   // it contracts on its own, when it is asked
+    }
+
+    [Fact]
     public async Task An_instance_behind_the_model_keeps_working_and_one_that_is_migrated_gets_the_new_structure()
     {
         var send = await Client();

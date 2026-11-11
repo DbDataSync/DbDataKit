@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { appRows, sortApprovals, storeRows, waited, type ApprovalRow, type GatewayAppDetail, type StoreRequestList } from './approvals'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { appRows, decideRequest, decisionPath, decisionProblem, sortApprovals, storeRows, waited, type ApprovalRow, type GatewayAppDetail, type StoreRequestList } from './approvals'
 import type { InstanceSummary } from './api'
 
 const server = (id: string, name: string, product: string): InstanceSummary => ({ id, name, url: 'https://x', product, version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null })
@@ -69,5 +69,55 @@ describe('the order and the wait', () => {
     expect(waited('2026-11-05T12:00:00Z', now)).toBe('5 days')
     expect(waited(null, now)).toBe('')
     expect(waited('not a date', now)).toBe('')
+  })
+})
+
+afterEach(() => vi.unstubAllGlobals())
+
+describe('deciding a change request here (SC21c)', () => {
+  const pending = (instance = 'default'): ApprovalRow => storeRows(store, 'budgets', list(request({ instance })))[0]!
+
+  it('carries which request a row is, so it can be decided without opening the Store\'s screen', () => {
+    expect(pending().request).toEqual({ model: 'budgets', instance: 'default', id: 'r1' })
+    expect(appRows(gateway, detail(null, version(1)))[0]!.request).toBeUndefined()
+  })
+
+  it('addresses the Store\'s own approve and reject routes through the relay, the instance in the path when it is not the default', () => {
+    expect(decisionPath('st1', pending().request!, true)).toBe('/relay/st1/api/v1/models/budgets/requests/r1/approve')
+    expect(decisionPath('st1', pending('north').request!, false)).toBe('/relay/st1/api/v1/models/budgets/instances/north/requests/r1/reject')
+  })
+
+  it('asks for the reason before a rejection, never before an approval, and refuses what is not the person\'s to decide', () => {
+    expect(decisionProblem(pending(), true, '')).toBeNull()
+    expect(decisionProblem(pending(), false, '  ')).toMatch(/Say why/)
+    expect(decisionProblem(pending(), false, 'not this quarter')).toBeNull()
+    expect(decisionProblem({ ...pending(), canDecide: false }, true, '')).toMatch(/may not/)
+    expect(decisionProblem(appRows(gateway, detail(null, version(1)))[0]!, true, '')).toMatch(/own screen/)
+  })
+
+  it('approves through the relay with the note the person wrote', async () => {
+    const calls: { url: string; init: RequestInit }[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => { calls.push({ url, init }); return new Response(JSON.stringify({ id: 'r1', state: 'approved' }), { status: 200, headers: { 'Content-Type': 'application/json' } }) }))
+    await decideRequest(pending(), true, ' fine ')
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.url).toBe('/relay/st1/api/v1/models/budgets/requests/r1/approve')
+    expect(calls[0]!.init.method).toBe('POST')
+    expect(JSON.parse(calls[0]!.init.body as string)).toEqual({ note: 'fine' })
+  })
+
+  it('sends an empty body for an approval with no note, and carries the Store\'s own sentence when it refuses', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'The row no longer exists' }), { status: 409, headers: { 'Content-Type': 'application/json' } })))
+    await expect(decideRequest(pending(), true, '')).rejects.toThrow('The row no longer exists')
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await decideRequest(pending(), false, 'no')
+    expect(JSON.parse((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ note: 'no' })
+  })
+
+  it('does not call the server for an app version', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(decideRequest(appRows(gateway, detail(null, version(1)))[0]!, true, '')).rejects.toThrow(/own screen/)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

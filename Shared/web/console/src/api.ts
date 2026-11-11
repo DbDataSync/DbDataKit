@@ -1,5 +1,5 @@
 import { request } from '@dbdatakit/shell'
-import type { LineageGraphDoc } from '@dbdatakit/visuals'
+import type { LineageGraphDoc, LineageRunDoc } from '@dbdatakit/visuals'
 
 /** A server this console manages, with how it answered when it was last asked. */
 export interface InstanceSummary {
@@ -40,10 +40,22 @@ export interface LineageServer {
   at: string
 }
 
-/** The joined graph of the servers and what each said. `error` is set when their graphs cannot be joined. */
+/** What a block stops (plan 23a FQ16): the node whose check blocks, the checks, since when, and the nodes downstream of it. */
+export interface LineageBlock {
+  node: string
+  name: string
+  checks: string[]
+  since: string | null
+  stops: { id: string; name: string; kind: string; depth: number }[]
+}
+
+/** The joined graph of the servers and what each said. `error` is set when their graphs cannot be joined. Nodes whose datasets have checks carry `properties.check_status` (`blocked`, `fail`, `error` or `pass`), and `blocks` lists what each block stops. */
 export interface LineageAnswer extends LineageGraphDoc {
   fingerprint: string
   servers: LineageServer[]
+  blocks?: LineageBlock[]
+  /** The newest run of each edge the servers know (plan 18 G10b): a failed one is marked on its line. */
+  runs?: LineageRunDoc[]
   error?: string
 }
 

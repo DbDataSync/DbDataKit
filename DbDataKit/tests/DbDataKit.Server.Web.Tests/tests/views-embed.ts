@@ -4,7 +4,7 @@ const by = (page: Page, id: string) => page.getByTestId(id)
 
 /**
  * The `embed` widget (plan 32 DBR19): the palette offers it in a dashboard, its address, link text and query pairs are set in the editor, the preview draws a link (the fixture source approves no origin to frame), an
- * address that is not https is refused in the widget's words. (A report's palette has no embed: the loader refuses one in a report: golden `report-with-embed`; the palette filter itself is not checked here.) Written without a browser to run it: a verifier runs it once. The frame itself (an approved origin) needs a module with
+ * address that is not https is refused in the widget's words. (A report's palette has no embed: the loader refuses one in a report: golden `report-with-embed`; the palette filter itself is not checked here.) Run in a browser (the console only). The frame itself (an approved origin) needs a module with
  * `Resolver.FrameOrigins` set and a page whose Content-Security-Policy allows it, which the console's fixture source does not have; `embedBlock.test.tsx` and `ResolveTests` check it.
  */
 export async function embedStory(page: Page) {
@@ -27,5 +27,5 @@ export async function embedStory(page: Page) {
 
   // 2. An address that is not https is refused where it is.
   await by(page, 'ed-embed-url-embed').fill('http://reports.example.com/r')
-  await expect(by(page, 'ed-validity')).toContainText('https')
+  await expect(by(page, 'ed-problems')).toContainText('https')
 }

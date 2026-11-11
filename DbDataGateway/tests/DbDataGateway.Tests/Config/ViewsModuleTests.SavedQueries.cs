@@ -62,15 +62,15 @@ public sealed partial class ViewsModuleTests
         foreach (var other in new[] { cy.Id, bob.Id })
         {
             Assert.Empty((await ManagementAsync(HttpMethod.Get, $"/api/v1/my/queries?model={Model}", other, ServerRole.Viewer)).Body!["queries"]!.AsArray());
-            Assert.Equal(HttpStatusCode.NotFound, (await ManagementAsync(HttpMethod.Get, mine() + "?owner=Ada", other, ServerRole.Viewer)).Status);
+            Assert.Equal(HttpStatusCode.NotFound, (await ManagementAsync(HttpMethod.Get, mine() + "?owner=ada@example.invalid", other, ServerRole.Viewer)).Status);
         }
 
         // shared to Cy by name: Cy lists and opens the text; Bob still does not. Sharing again with another set replaces it (the whole set is sent)
-        var shared = await ManagementAsync(HttpMethod.Put, mine() + "/shares", ada.Id, ServerRole.Viewer, new JsonObject { ["grantees"] = new JsonArray("user:cy") });
-        Assert.Equal("user:cy", (string)shared.Body!["grantees"]![0]!);
+        var shared = await ManagementAsync(HttpMethod.Put, mine() + "/shares", ada.Id, ServerRole.Viewer, new JsonObject { ["grantees"] = new JsonArray("user:Cy@Example.invalid ") });
+        Assert.Equal("user:cy@example.invalid", (string)shared.Body!["grantees"]![0]!);
         var cyList = (await ManagementAsync(HttpMethod.Get, $"/api/v1/my/queries?model={Model}", cy.Id, ServerRole.Viewer)).Body!["queries"]!.AsArray();
-        Assert.Equal(("regions", "Ada", false), ((string)cyList[0]!["name"]!, (string)cyList[0]!["owner"]!, (bool)cyList[0]!["own"]!));
-        Assert.Equal(HttpStatusCode.OK, (await ManagementAsync(HttpMethod.Get, mine() + "?owner=Ada", cy.Id, ServerRole.Viewer)).Status);
+        Assert.Equal(("regions", "ada@example.invalid", false), ((string)cyList[0]!["name"]!, (string)cyList[0]!["owner"]!, (bool)cyList[0]!["own"]!));
+        Assert.Equal(HttpStatusCode.OK, (await ManagementAsync(HttpMethod.Get, mine() + "?owner=ada@example.invalid", cy.Id, ServerRole.Viewer)).Status);
         Assert.Empty((await ManagementAsync(HttpMethod.Get, $"/api/v1/my/queries?model={Model}", bob.Id, ServerRole.Viewer)).Body!["queries"]!.AsArray());
 
         await ManagementAsync(HttpMethod.Put, mine() + "/shares", ada.Id, ServerRole.Viewer, new JsonObject { ["grantees"] = new JsonArray("group:analysts") });

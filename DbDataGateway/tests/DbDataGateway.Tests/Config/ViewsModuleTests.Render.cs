@@ -1,0 +1,150 @@
+using System.Net;
+using System.Text.Json.Nodes;
+using DbDataKit.State;
+using DbDataKit.Web.Trust;
+using DbDataGateway.Tests.Support;
+
+namespace DbDataGateway.Tests.Config;
+
+/// <summary>
+/// Plan 14a SL16 (D37): the explorer's matrix and chart are the engine's <c>ViewRenderer</c>'s, the same code a dashboard's widgets go through (<c>ResultShaper</c>), so the two cannot disagree on a cell. The same request and the
+/// same view, run through the explorer's route (a view sent with the run, and the run's kept result rendered again) and through a dashboard's widget, give the same rendered matrix with its totals; a refused encoding comes back
+/// as the renderer's own error; a result is the person's who ran it and goes away.
+/// </summary>
+public sealed partial class ViewsModuleTests
+{
+    private static JsonObject MatrixView(bool totals) => new()
+    {
+        ["spec_version"] = "0.3", ["kind"] = "view", ["result"] = new JsonObject { ["ref"] = "result" },
+        ["views"] = new JsonArray(new JsonObject
+        {
+            ["type"] = "matrix", ["id"] = "grid",
+            ["rows"] = new JsonArray("customers.region"), ["columns"] = new JsonArray("date.fiscal_quarter"),
+            ["values"] = new JsonArray(new JsonObject { ["field"] = "orders.net_revenue" }),
+            ["totals"] = totals ? new JsonObject { ["rows"] = true, ["columns"] = true } : null,
+        }),
+    };
+
+    private static JsonObject MatrixRequest(bool totals)
+    {
+        var query = new JsonObject { ["attributes"] = new JsonArray("customers.region", "date.fiscal_quarter"), ["measures"] = new JsonArray("orders.net_revenue"), ["limit"] = 10000 };
+        if (totals) query["totals"] = new JsonObject { ["subtotal_by"] = new JsonArray("customers.region", "date.fiscal_quarter"), ["grand_total"] = true, ["cube"] = true };
+        return new JsonObject { ["spec_version"] = "0.3", ["kind"] = "query", ["query"] = query };
+    }
+
+    private static string MatrixDashboard() => $$"""
+        schemaVersion: 1
+        kind: dashboard
+        title: Grid
+        widgets:
+          grid:
+            type: matrix
+            encodings:
+              rows: [customers.region]
+              columns: [date.fiscal_quarter]
+              values: [{field: orders.net_revenue}]
+              totals: {rows: true, columns: true}
+            query: {model: {{Model}}}
+        layouts:
+          - name: desk
+            type: reflow
+            default: true
+            grid: {columns: 12, rows: 6}
+            tiles:
+              - {widget: grid, x: 0, y: 0, w: 12, h: 6}
+        """;
+
+    private static JsonNode WithoutId(JsonNode? matrix)
+    {
+        var copy = matrix!.DeepClone().AsObject();
+        copy.Remove("id");
+        return copy;
+    }
+
+    [Fact]
+    public async Task The_explorers_matrix_is_the_renderers_and_equals_a_dashboards_matrix_of_the_same_rows_and_a_refused_view_says_why()
+    {
+        await StartAsync();
+        var state = Get<StateDatabase>();
+        var (ada, _) = HomeSeed.Person(state, "Ada", "ada@example.invalid", Analysts);
+        var (cy, _) = HomeSeed.Person(state, "Cy", "cy@example.invalid", Analysts);
+        PublishModel();
+        const string runs = "/api/v1/my/runs";
+
+        // the dashboard's own matrix, totals and all
+        var board = await ManagementAsync(HttpMethod.Post, "/api/v1/views/preview", ada.Id, ServerRole.Viewer, new JsonObject { ["text"] = MatrixDashboard(), ["layout"] = "desk" });
+        Assert.Equal(HttpStatusCode.OK, board.Status);
+        var dashboard = board.Body!["widgets"]!["grid"]!;
+        Assert.True((string?)dashboard["type"] == "matrix", dashboard.ToJsonString());
+        Assert.Contains(dashboard["rows"]!.AsArray(), r => r!["total"]?.GetValue<bool>() == true);
+
+        // one round trip: the run answers its rows and the view drawn from them; the matrix is the dashboard's cell for cell
+        var withView = await ManagementAsync(HttpMethod.Post, runs, ada.Id, ServerRole.Viewer, new JsonObject { ["model"] = Model, ["request"] = MatrixRequest(true), ["view"] = MatrixView(true), ["limit"] = 10000 });
+        Assert.True(withView.Status == HttpStatusCode.OK, withView.Body?.ToJsonString());
+        Assert.Equal("ok", (string)withView.Body!["status"]!);
+        Assert.NotEmpty(withView.Body["rows"]!.AsArray());
+        Assert.NotNull(withView.Body["totals"]);
+        Assert.Contains(withView.Body["columns"]!.AsArray(), c => (string?)c!["binding"] == "customers.region");
+        var rendered = withView.Body["rendered_view"]!;
+        Assert.Equal(("rendered_view", "complete"), (((string)rendered["kind"]!), (string)rendered["status"]!));
+        Assert.Equal(WithoutId(dashboard).ToJsonString(), WithoutId(rendered["views"]![0]).ToJsonString());
+
+        // the kept result is drawn again, as another view, with nothing run again: the same matrix, and a chart of the same rows
+        var id = (string)withView.Body["result_id"]!;
+        var runsBefore = (await ManagementAsync(HttpMethod.Get, runs, ada.Id, ServerRole.Viewer)).Body!["runs"]!.AsArray().Count;
+        var again = await ManagementAsync(HttpMethod.Post, $"{runs}/{id}/render", ada.Id, ServerRole.Viewer, new JsonObject { ["view"] = MatrixView(true) });
+        Assert.Equal(HttpStatusCode.OK, again.Status);
+        Assert.Equal(rendered["views"]!.ToJsonString(), again.Body!["rendered_view"]!["views"]!.ToJsonString());
+        var chart = await ManagementAsync(HttpMethod.Post, $"{runs}/{id}/render", ada.Id, ServerRole.Viewer, new JsonObject
+        {
+            ["view"] = new JsonObject
+            {
+                ["spec_version"] = "0.3", ["kind"] = "view", ["result"] = new JsonObject { ["ref"] = "result" },
+                ["views"] = new JsonArray(new JsonObject
+                {
+                    ["type"] = "chart", ["id"] = "bars",
+                    ["vega_lite"] = new JsonObject { ["mark"] = "bar", ["encoding"] = new JsonObject
+                    {
+                        ["x"] = new JsonObject { ["field"] = "customers.region", ["type"] = "nominal" },
+                        ["y"] = new JsonObject { ["field"] = "orders.net_revenue", ["type"] = "quantitative" },
+                        ["color"] = new JsonObject { ["field"] = "date.fiscal_quarter", ["type"] = "nominal" },
+                    } },
+                }),
+            },
+        });
+        Assert.Equal("complete", (string)chart.Body!["rendered_view"]!["status"]!);
+        Assert.Equal("chart", (string)chart.Body["rendered_view"]!["views"]![0]!["type"]!);
+        Assert.Equal(runsBefore, (await ManagementAsync(HttpMethod.Get, runs, ada.Id, ServerRole.Viewer)).Body!["runs"]!.AsArray().Count);
+
+        // a view the result cannot give: the renderer's own code and words, as data (the run's rows are still there)
+        var noTotals = await ManagementAsync(HttpMethod.Post, runs, ada.Id, ServerRole.Viewer, new JsonObject { ["model"] = Model, ["request"] = MatrixRequest(false), ["view"] = MatrixView(true) });
+        Assert.Equal(HttpStatusCode.OK, noTotals.Status);
+        Assert.NotEmpty(noTotals.Body!["rows"]!.AsArray());
+        Assert.Null(noTotals.Body["totals"]);
+        Assert.Equal("failed", (string)noTotals.Body["rendered_view"]!["status"]!);
+        Assert.Equal("totals_missing", (string)noTotals.Body["rendered_view"]!["errors"]![0]!["code"]!);
+        var unknown = await ManagementAsync(HttpMethod.Post, $"{runs}/{(string)noTotals.Body["result_id"]!}/render", ada.Id, ServerRole.Viewer, new JsonObject
+        {
+            ["view"] = new JsonObject
+            {
+                ["spec_version"] = "0.3", ["kind"] = "view", ["result"] = new JsonObject { ["ref"] = "result" },
+                ["views"] = new JsonArray(new JsonObject { ["type"] = "matrix", ["id"] = "grid", ["rows"] = new JsonArray("customers.nowhere"), ["values"] = new JsonArray(new JsonObject { ["field"] = "orders.net_revenue" }) }),
+            },
+        });
+        Assert.Equal("unknown_field", (string)unknown.Body!["rendered_view"]!["errors"]![0]!["code"]!);
+
+        // a result is its runner's alone, and a gone or invented one is a 410 that says to run again; a body without a view is a 400, and the route takes POST
+        Assert.Equal(HttpStatusCode.Gone, (await ManagementAsync(HttpMethod.Post, $"{runs}/{id}/render", cy.Id, ServerRole.Viewer, new JsonObject { ["view"] = MatrixView(true) })).Status);
+        var gone = await ManagementAsync(HttpMethod.Post, $"{runs}/nothing/render", ada.Id, ServerRole.Viewer, new JsonObject { ["view"] = MatrixView(true) });
+        Assert.Equal(HttpStatusCode.Gone, gone.Status);
+        Assert.Equal("result_gone", (string)gone.Body!["code"]!);
+        Assert.Equal(HttpStatusCode.BadRequest, (await ManagementAsync(HttpMethod.Post, $"{runs}/{id}/render", ada.Id, ServerRole.Viewer, new JsonObject())).Status);
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, (await ManagementAsync(HttpMethod.Get, $"{runs}/{id}/render", ada.Id, ServerRole.Viewer)).Status);
+        Assert.Equal(HttpStatusCode.Forbidden, (await ManagementAsync(HttpMethod.Post, $"{runs}/{id}/render", ada.Id, ServerRole.None, new JsonObject { ["view"] = MatrixView(true) })).Status);
+
+        // a run that asks for no view is the old answer: no result id, no rendered view
+        var plain = await ManagementAsync(HttpMethod.Post, runs, ada.Id, ServerRole.Viewer, new JsonObject { ["model"] = Model, ["request"] = MatrixRequest(false) });
+        Assert.Null(plain.Body!["result_id"]);
+        Assert.Null(plain.Body["rendered_view"]);
+    }
+}

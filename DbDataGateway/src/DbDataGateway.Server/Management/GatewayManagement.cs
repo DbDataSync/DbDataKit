@@ -28,7 +28,7 @@ public sealed record ManagementResult(int Status, JsonNode Body)
 /// </list>
 /// A secret is never part of an answer: the settings are shown the way <c>config show</c> shows them, and the sentinel test puts a value in every place a secret can be and looks for it in every answer.
 /// </summary>
-public sealed partial class GatewayManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, GatewayDataSources? dataSources = null, GatewayIdentities? identities = null, GatewayActivity? activity = null, GatewayCertificate? certificate = null, DbDataKit.Config.Git.GitCommitService? git = null, GatewaySecrets? secrets = null, IPairingCodeStore? pairingCodes = null, GatewaySemanticModels? semanticModels = null, Func<IReadOnlyList<PairedClient>>? pairedClients = null, DbDataKit.Identity.IdentityAdminApi? identityAdmin = null, GatewayEntityModels? entityModels = null, DbDataKit.State.Api.StateManagement? stateApi = null, GatewayApps? apps = null, GatewayViewsManagement? views = null, IAuditLog? audit = null, GatewayServerSettings? serverSettings = null, GatewayUserQueries? userQueries = null)
+public sealed partial class GatewayManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, GatewayDataSources? dataSources = null, GatewayIdentities? identities = null, GatewayActivity? activity = null, GatewayCertificate? certificate = null, DbDataKit.Config.Git.GitCommitService? git = null, GatewaySecrets? secrets = null, IPairingCodeStore? pairingCodes = null, GatewaySemanticModels? semanticModels = null, Func<IReadOnlyList<PairedClient>>? pairedClients = null, DbDataKit.Identity.IdentityAdminApi? identityAdmin = null, GatewayEntityModels? entityModels = null, DbDataKit.State.Api.StateManagement? stateApi = null, GatewayApps? apps = null, GatewayViewsManagement? views = null, IAuditLog? audit = null, GatewayServerSettings? serverSettings = null, GatewayUserQueries? userQueries = null, GatewaySemanticRuns? semanticRuns = null)
 {
     public const string Prefix = "/api/v1";
 
@@ -45,6 +45,8 @@ public sealed partial class GatewayManagement(IConfigurationRoot configuration, 
             var answer = await stateApi.HandleAsync(method, route, body, caller.ToStateCaller(), cancellationToken);
             return new ManagementResult(answer.Status, answer.Body);
         }
+        if (semanticRuns is not null && GatewaySemanticRuns.Handles(route))
+            return await semanticRuns.HandleAsync(method, route, path.Contains('?') ? path[(path.IndexOf('?') + 1)..] : null, body, caller, cancellationToken);
         if (userQueries is not null && GatewayUserQueries.Handles(route))
             return await userQueries.HandleAsync(method, route, path.Contains('?') ? path[(path.IndexOf('?') + 1)..] : null, body, caller, cancellationToken);
         if (views is not null && GatewayViewsManagement.Handles(route))

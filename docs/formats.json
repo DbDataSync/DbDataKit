@@ -17,7 +17,7 @@
       "current": 2,
       "previous": 1,
       "status": "open",
-      "note": "gains cache and checks, and grants (22a GP03: who may read the data source, part of the published definition; the serving policy a definition carries is the existing `extensions.gateway`, so plan 13c D19 adds no key and no version); open until the first release that holds any of them (24a D5). Sync's second login (plan 28c E20: `extensions.sync.run_user`, `extensions.sync.run_password_secret`) is two optional keys of Sync's own extension block, additive: a file from before loads as it did, a misspelled key is refused with file and line, and no version number moves",
+      "note": "gains cache and checks, and grants (22a GP03: who may read the data source, part of the published definition; the serving policy a definition carries is the existing `extensions.gateway`, so plan 13c D19 adds no key and no version); open until the first release that holds any of them (24a D5). Sync's second login (plan 28c E20: `extensions.sync.run_user`, `extensions.sync.run_password_secret`) is two optional keys of Sync's own extension block, additive: a file from before loads as it did, a misspelled key is refused with file and line, and no version number moves. A `kind` (plan 27a IX01: `database` by default, `http`, `model-provider`) with `endpoint`, `sign_in` (IX02: the method and the references of its secrets), `test_path` (IX02: the address Test calls) and `model_provider` (AG05) are optional keys of format 2, additive: a database file reads exactly as before, a format-1 file that says a kind is refused naming the file, an unknown kind is refused naming the file, and a program that keeps database connections only refuses an outside file naming it",
       "version_source": { "file": "Shared/src/DbDataKit.Connections.Abstractions/ConnectionDefinition.cs", "pattern": "public const int CurrentVersion = (\\d+);" },
       "files": [ { "path": "Shared/src/DbDataKit.Connections.Abstractions/ConnectionDefinitionLoader.cs", "sha256": null } ]
     },
@@ -30,6 +30,16 @@
       "note": "new with GP06; a newer one is refused naming kind, file, app and both numbers",
       "version_source": { "file": "Shared/src/DbDataKit.Apps.Manifest/ViewSpecLoader.cs", "pattern": "public const int Version = (\\d+);" },
       "files": [ { "path": "Shared/src/DbDataKit.Apps.Manifest/schemas/view-spec.schema.json", "sha256": null } ]
+    },
+    {
+      "id": "app",
+      "title": "App manifest (app.yaml, schemaVersion)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "registered with AP19, which added the operation `change request` beside read and write (additive: a manifest from before reads as it did); a newer one is refused naming both numbers; the loader is the definition",
+      "version_source": { "file": "Shared/src/DbDataKit.Apps.Manifest/AppManifestLoader.cs", "pattern": "public const int Version = (\\d+);" },
+      "files": [ { "path": "Shared/src/DbDataKit.Apps.Manifest/AppManifestLoader.cs", "sha256": null } ]
     },
     {
       "id": "dashboard",
@@ -162,24 +172,24 @@
       "files": [ { "path": "Shared/src/DbDataKit.Agents/AgentPolicy.cs", "sha256": null } ]
     },
     {
-      "id": "model-provider",
-      "title": "Model provider (models/<name>.yml, model-provider: N)",
-      "current": 1,
-      "previous": 1,
-      "status": "open",
-      "note": "new with plan 27a AG05: kind (anthropic, openai, foundry, ollama, openai-compatible), endpoint, locality (cloud or local), purpose (chat or embeddings), auth, the key as a secret reference (a key written as itself is refused without being echoed), the models it allows with window, largest answer and price; the model half of the connection kinds of IX01, a file of its own until that slice gives connection a kind",
-      "version_source": { "file": "Shared/src/DbDataKit.Agents/ModelProviders.cs", "pattern": "public const int Version = (\\d+);" },
-      "files": [ { "path": "Shared/src/DbDataKit.Agents/ModelProviders.cs", "sha256": null } ]
-    },
-    {
       "id": "model-slots",
       "title": "Model slot bindings (models/_slots.yml, model-slots: N)",
       "current": 1,
       "previous": 1,
       "status": "open",
-      "note": "new with plan 27a AG05: per slot and per channel (or * for every channel) an ordered list of provider and model, the primary first and the fallback after it",
+      "note": "new with plan 27a AG05: per slot and per channel (or * for every channel) an ordered list of provider and model, the primary first and the fallback after it; a provider is the name of a connection of kind model-provider (plan 27a IX01; the earlier model-provider/1 files were never released and are gone)",
       "version_source": { "file": "Shared/src/DbDataKit.Agents/ModelSlots.cs", "pattern": "public const int Version = (\\d+);" },
       "files": [ { "path": "Shared/src/DbDataKit.Agents/ModelSlots.cs", "sha256": null } ]
+    },
+    {
+      "id": "catalog-cache",
+      "title": "Catalog cache of a Workspace draft (catalog-cache.yaml, schema: catalog-cache/N)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "new with plan 33 SC20i (decision D20): the tables and columns of a project's connections as a paired server answered a read-only call, committed in the draft so the build child, which has no network and no login, can offer a mapping its columns; it holds no secret and no row (a key that would carry one, or a value that looks like a password, a connection string, an address with a login or a secret reference, is refused with file, line and key path); the C# reader is the definition and Shared/web/workspace/src/catalogCache.ts its twin, both run over DbDataWorkspace/tests/DbDataWorkspace.Tests/Fixtures/catalog-cache",
+      "version_source": { "file": "Shared/src/DbDataKit.Authoring.Server/CatalogCache.cs", "pattern": "public const int Version = (\\d+);" },
+      "files": [ { "path": "Shared/src/DbDataKit.Authoring.Server/CatalogCache.cs", "sha256": null } ]
     }
   ]
 }

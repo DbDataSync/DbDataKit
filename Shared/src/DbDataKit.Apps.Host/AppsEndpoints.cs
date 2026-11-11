@@ -129,6 +129,9 @@ public static class AppsEndpoints
             if (!string.IsNullOrEmpty(path) && mount is null) { await Text(context, 404, "No such page."); return; }
             if (!context.Request.Path.Value!.EndsWith('/')) { context.Response.Redirect(context.Request.Path.Value + "/" + context.Request.QueryString); return; }
             if (resolved is null) { await Text(context, 404, "No such app."); return; }
+            // `acme~preview`: the instance as another channel has it (plan 21); a portal has no preview, an app's is read only
+            var previewing = AppInstanceName.Split(instance).Channel != DbDataKit.State.DefinitionStore.Production;
+            if (previewing && portal is not null) { await Text(context, 404, "A portal has no preview."); return; }
             if (await sessions.FindAsync(context.Request.Cookies[SessionCookie], context.RequestAborted) is not { } session)
             {
                 var back = portal is null ? LaunchUrl(instance) : context.Request.Path.Value!;
@@ -138,7 +141,7 @@ public static class AppsEndpoints
 
             // A portal with code of its own runs on this host's origin, so only with an approval for these exact bytes (AP16): then its page is its own document, which holds the session, asks for tokens and frames what it mounts
             // (its calls carry its approval: the token broker and the data gateway). Without one the person gets the default portal (the suite's own shell) and the reason, never the code.
-            string? notice = null;
+            string? notice = previewing ? $"Preview of {AppInstanceName.Split(instance).Name} ({AppInstanceName.Split(instance).Channel} channel, version {resolved.AppVersion.Version}). It reads the instance's data and keeps no change; its storage is its own." : null;
             if (portal is { Manifest: { Trust: AppTrust.Trusted, Entry: not null } })
             {
                 if (Unapproved(approvals, portal) is not { } notRun) { await Write(context, site.PortalPage(instance)); return; }
@@ -169,7 +172,7 @@ public static class AppsEndpoints
             if (portal is not null && mount is null)
                 await Write(context, AppShell.PortalHome(TitleOf(resolved), header ?? new AppShell.Header(PersonOf(session), [], PortalChrome.Look(instances, portal, session, null)), PortalChrome.Tiles(instances, portal, session), origins, notice is null ? HomeViewHtml.Render(instances, portal, session) : null));
             else
-                await Write(context, AppShell.Page(shown.Instance.Name, TitleOf(shown), header, origins));
+                await Write(context, AppShell.Page(mount is null ? instance : shown.Instance.Name, TitleOf(shown), header, origins));
         });
         return app;
     }

@@ -69,7 +69,26 @@ public static class SemanticRest
         return await ResultAsync(answer, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<JsonObject> ResultAsync(IServingAnswer answer, CancellationToken cancellationToken)
+    /// <summary>The code an engine refusal starts with (<c>unknown_attribute at query.measures[0]: ...</c>, <c>unknown_attribute: ...</c>); null when the message has none.</summary>
+    public static string? CodeOf(string message)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(message, @"^([a-z][a-z0-9_]+)(?: at [^:]*)?:");
+        return m.Success ? m.Groups[1].Value : null;
+    }
+
+    /// <summary>
+    /// Runs any request of the model as the caller (a query, an explain, a members request) and answers it as <see cref="ResultAsync"/> does; for a tool that is not an app (the console's run list replaying a record). The row
+    /// cap is <paramref name="maxRows"/> (up to <see cref="MaxRows"/>).
+    /// </summary>
+    public static async Task<JsonObject> RunAsync(IServingServices services, ServingContext context, string model, string requestJson, int maxRows, CancellationToken cancellationToken)
+    {
+        var answer = await services.Queries.RunAsync(context, new ServingRequest.Semantic(SemanticModels.SourcePrefix + model, requestJson, new ServingLimits(MaxRows: Math.Clamp(maxRows, 1, MaxRows))), cancellationToken).ConfigureAwait(false);
+        await using var _ = answer;
+        return await ResultAsync(answer, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>An answer as the JSON a REST caller reads (see <see cref="QueryAsync"/>); an explain's rows are its scans (status <c>explained</c>).</summary>
+    public static async Task<JsonObject> ResultAsync(IServingAnswer answer, CancellationToken cancellationToken)
     {
         var metadata = answer.Schema.Metadata ?? new Dictionary<string, string>();
         string? Meta(string key) => metadata.TryGetValue(SemanticAnswer.MetadataPrefix + key, out var v) ? v : null;
@@ -79,7 +98,8 @@ public static class SemanticRest
         if (Meta("warnings") is { } w && JsonNode.Parse(w) is JsonArray listed)
             foreach (var item in listed) warnings.Add(item is JsonValue v && v.TryGetValue<string>(out var text) ? text : item?.ToJsonString());
 
-        if (status != "complete")
+        // an explain or a members request has no engine status of a result: its rows are the answer
+        if (status is not (null or "complete" or "explained"))
         {
             var remaining = Meta("remaining");
             var reason = status == "partial"
@@ -106,8 +126,51 @@ public static class SemanticRest
                 rowsOut.Add(row);
             }
         }
-        return new JsonObject { ["status"] = "ok", ["columns"] = columns, ["rows"] = rowsOut, ["warnings"] = warnings, ["request_hash"] = hash };
+        return new JsonObject { ["status"] = status == "explained" ? "explained" : "ok", ["columns"] = columns, ["rows"] = rowsOut, ["warnings"] = warnings, ["request_hash"] = hash };
     }
+
+    /// <summary>
+    /// The same JSON as <see cref="ResultAsync"/> for a complete answer that was already read into a result document (<c>descriptor</c> and <c>rows</c> as objects by column name, the form the views read): the caller read the
+    /// batches once and keeps the document, so what it draws and what it answers cannot differ. The rows come in the schema's column order.
+    /// </summary>
+    public static JsonObject ResultFrom(IServingAnswer answer, JsonObject result)
+    {
+        var metadata = answer.Schema.Metadata ?? new Dictionary<string, string>();
+        string? Meta(string key) => metadata.TryGetValue(SemanticAnswer.MetadataPrefix + key, out var v) ? v : null;
+        var warnings = new JsonArray();
+        if (Meta("warnings") is { } w && JsonNode.Parse(w) is JsonArray listed)
+            foreach (var item in listed) warnings.Add(item is JsonValue v && v.TryGetValue<string>(out var text) ? text : item?.ToJsonString());
+        var types = new Dictionary<string, string>(StringComparer.Ordinal);
+        var bindings = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (result["descriptor"]?["schema"]?["fields"] is JsonArray fields)
+            foreach (var f in fields)
+                if (f?["name"]?.GetValue<string>() is { } n)
+                {
+                    types[n] = f["type"]?.GetValue<string>() ?? "string";
+                    if (f["x_binding"]?.GetValue<string>() is { } binding) bindings[n] = binding;
+                }
+        var names = answer.Schema.FieldsList.Select(f => f.Name).ToList();
+        // a column says which member of the model it is (`binding`), and a result with totals says which attributes each level rolled up, so a caller can ask a view for the totals the result has
+        var columns = new JsonArray([.. answer.Schema.FieldsList.Select(f =>
+        {
+            var column = new JsonObject { ["name"] = f.Name, ["type"] = types.TryGetValue(f.Name, out var t) ? t : TypeOf(f.DataType) };
+            if (bindings.TryGetValue(f.Name, out var b)) column["binding"] = b;
+            return (JsonNode)column;
+        })]);
+        var rows = new JsonArray([.. result["rows"]!.AsArray().Select(r => (JsonNode)new JsonArray([.. names.Select(n => r![n]?.DeepClone())]))]);
+        var body = new JsonObject { ["status"] = "ok", ["columns"] = columns, ["rows"] = rows, ["warnings"] = warnings, ["request_hash"] = Meta("request_hash") };
+        if (result["descriptor"]?["x_totals"] is JsonObject totals)
+            body["totals"] = new JsonObject
+            {
+                ["level_field"] = totals["level_field"]?.DeepClone(),
+                ["levels"] = new JsonArray([.. (totals["levels"] as JsonArray ?? []).Select(l => (JsonNode)new JsonObject { ["level"] = l?["level"]?.DeepClone(), ["rolled_up"] = l?["rolled_up"]?.DeepClone() ?? new JsonArray() })]),
+            };
+        return body;
+    }
+
+    /// <summary>The status the engine gave the answer (<c>complete</c> when it gave none), so a caller knows before reading whether the rows are a result.</summary>
+    public static string StatusOf(IServingAnswer answer) =>
+        answer.Schema.Metadata is { } m && m.TryGetValue(SemanticAnswer.MetadataPrefix + "status", out var s) ? s : "complete";
 
     private static string TypeOf(Apache.Arrow.Types.IArrowType type) => type switch
     {

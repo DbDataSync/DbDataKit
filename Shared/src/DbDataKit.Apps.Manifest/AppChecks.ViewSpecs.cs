@@ -48,8 +48,9 @@ public static partial class AppChecks
                     $"The manifest lists: {string.Join(", ", use.Entities.Keys.Order(StringComparer.Ordinal))}.");
                 return;
             }
-            if (!allowed.HasFlag(write ? DataOperations.Write : DataOperations.Read))
-                Problem(found, ViewSpecLoader.UnknownViewModel, spec.File, at, $"The view {(write ? "writes" : "reads")} `{spec.Model}.{entity}`, but the manifest asks only to {(write ? "read" : "write")} it.", $"Add `{(write ? "write" : "read")}` to `{entity}` under `models`.");
+            // a form may also submit as a change request: the manifest's `change request` is enough for it
+            if (!allowed.HasFlag(write ? DataOperations.Write : DataOperations.Read) && !(write && allowed.HasFlag(DataOperations.ChangeRequest)))
+                Problem(found, ViewSpecLoader.UnknownViewModel, spec.File, at, $"The view {(write ? "writes" : "reads")} `{spec.Model}.{entity}`, but the manifest asks only to {(write ? "read" : "write")} it.", $"Add `{(write ? "write` (or `change request" : "read")}` to `{entity}` under `models`.");
             if (modelAttributes is null || !modelAttributes.TryGetValue(spec.Model, out var entities) || !entities.TryGetValue(entity, out var known)) return;
             foreach (var (name, attributeAt) in attributes.Where(a => !known.Contains(a.Name)))
                 Problem(found, ViewSpecLoader.UnknownViewAttribute, spec.File, attributeAt, $"The view names `{entity}.{name}`, which the model `{spec.Model}` does not have.",

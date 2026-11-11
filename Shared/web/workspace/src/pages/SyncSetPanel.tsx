@@ -1,12 +1,15 @@
 import { useMemo, useState, type ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { SchemaSet } from '@dbdatakit/shell'
-import type { CheckDiagnostic } from '../api'
+import { workspaceApi, type CheckDiagnostic } from '../api'
 import { liveState, type EditorKind } from '../editors'
 import {
   SYNC_CONNECTION_SCHEMA, SYNC_MAPPING_SCHEMA, SYNC_TASK_SCHEMA, connectionPath, connectionsOf, newConnectionText, newReplicationFiles, replicationPath, replicationsOf,
   secretFindings, syncConnectionSchema, syncMappingSchema, syncNameProblem, syncSchemaOf, syncTaskSchema, withCurrentTaskVersion,
 } from '../syncSchemas'
 import type { LiveCheck } from '../useLiveCheck'
+import type { CacheRead } from '../catalogCache'
+import { MappingColumns } from './MappingColumns'
 import { StructuredEditor } from './StructuredPanel'
 
 const schemas = new SchemaSet({ [SYNC_TASK_SCHEMA]: syncTaskSchema, [SYNC_MAPPING_SCHEMA]: syncMappingSchema, [SYNC_CONNECTION_SCHEMA]: syncConnectionSchema })
@@ -23,14 +26,15 @@ export function SecretNotes({ text }: { text: string }) {
 }
 
 /** A file of a Sync replication set as a form (from the schema of its kind) or as YAML, with Sync's own readers' findings as the draft is checked. A task is written in the current format whatever it was read as. */
-export function SyncFileEditor({ kind, path, text, onText, readOnly, live, onOpen }: { kind: Extract<EditorKind, 'sync-task' | 'sync-mapping' | 'sync-connection'>; path: string; text: string; onText: (text: string) => void; readOnly: boolean; live: LiveCheck; onOpen?: (path: string) => void }) {
+export function SyncFileEditor({ kind, path, text, onText, readOnly, live, onOpen, catalog }: { catalog?: CacheRead | null; kind: Extract<EditorKind, 'sync-task' | 'sync-mapping' | 'sync-connection'>; path: string; text: string; onText: (text: string) => void; readOnly: boolean; live: LiveCheck; onOpen?: (path: string) => void }) {
   const diagnostics: CheckDiagnostic[] = live.diagnostics
   const state = liveState({ text, checkedText: live.checkedText, failed: live.failed, running: live.running })
   const set = kind === 'sync-task' ? (value: string) => onText(withCurrentTaskVersion(value)) : onText
   const notes = (
     <>
       {kind === 'sync-connection' && <SecretNotes text={text} />}
-      {kind === 'sync-mapping' && <div className="hint" style={{ marginTop: 10 }}>The column cache (<code>sourceColumns</code>, <code>targetColumns</code>) is what the check and the package are made from. It is edited in the YAML tab; reading it from the database is not done here.</div>}
+      {kind === 'sync-mapping' && <div className="hint" style={{ marginTop: 10 }}>The column cache (<code>sourceColumns</code>, <code>targetColumns</code>) is what the check and the package are made from. It is written from the catalog cache below (or edited in the YAML tab); no database is asked here.</div>}
+      {kind === 'sync-mapping' && <MappingColumns mapping={text} catalog={catalog ?? null} readOnly={readOnly} onApply={onText} />}
       {live.failed && <div className="banner error" role="alert" style={{ marginTop: 10 }} data-testid="wsp-live-failed"><span className="mark">!</span><span>{live.failed}</span></div>}
     </>
   )
@@ -111,5 +115,28 @@ export function SyncSetPanel({ paths, canWrite, busy, onOpen, onCreate, findings
         )}
       </div>
     </div>
+  )
+}
+
+/** The query that holds a draft's findings for the overview; every save, new file, move and delete invalidates it (`findingsKey(project, id)` is its prefix) so the counts follow the files. */
+export const findingsKey = (project: string, id: string) => ['workspace', 'findings', project, id] as const
+
+/** Why the counts are missing, when the check could not run. */
+export function CheckFailedNote({ error }: { error: unknown }) {
+  if (!error) return null
+  return <div className="hint" data-testid="wsp-sync-check-failed">The check could not run, so the counts are not shown: {error instanceof Error ? error.message : 'no answer'}</div>
+}
+
+/**
+ * The replication set with its counts fed (plan 33 SC22f): the check of the draft (Sync's own readers, through the check route) is asked when the page opens and again after each change to the files, and its diagnostics are
+ * counted per replication and per connection by `SyncSetPanel`. A check that cannot run says so under the list and the counts are left out: a count of zero must never mean "not checked".
+ */
+export function SyncSetOverview({ project, id, ...panel }: { project: string; id: string } & Omit<Parameters<typeof SyncSetPanel>[0], 'findings'>) {
+  const check = useQuery({ queryKey: findingsKey(project, id), queryFn: () => workspaceApi.check(project, id), staleTime: 30_000, retry: false })
+  return (
+    <>
+      <SyncSetPanel {...panel} findings={check.data?.diagnostics} />
+      <CheckFailedNote error={check.error} />
+    </>
   )
 }

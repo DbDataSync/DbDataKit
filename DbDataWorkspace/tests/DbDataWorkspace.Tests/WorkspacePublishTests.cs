@@ -93,6 +93,36 @@ public sealed class WorkspacePublishTests
     }
 
     [Fact]
+    public async Task A_build_is_sent_to_the_preview_channel_with_a_preview_instance_by_an_author_and_the_link_is_the_gateways_address()
+    {
+        await using var gateway = await FakeGateway.StartAsync();
+        await using var server = await WorkspaceHarness.StartAsync(apps: Real());
+        var (workspace, build) = await BuiltAsync(server);
+        await server.AsAdmin(HttpMethod.Post, "/api/v1/publisher-keys/edge/pair", new JsonObject { ["url"] = gateway.Url.ToString(), ["code"] = gateway.NewCode() }.ToJsonString());
+        var path = $"/api/v1/projects/orders/workspaces/{workspace}/builds/{build}/preview-data";
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await server.AsAda(HttpMethod.Post, path, """{"target":"edge"}""")).Response.StatusCode);   // names no instance
+        var sent = await server.AsAda(HttpMethod.Post, path, """{"target":"edge","instance":"orders"}""");   // an author may: nothing goes to production
+
+        Assert.Equal(HttpStatusCode.OK, sent.Response.StatusCode);
+        Assert.Equal("https://apps.fake.test:8818/apps/orders~preview/", (string)sent.Body!["preview"]!["preview_address"]!);
+        Assert.Equal("orders", (string)sent.Body["preview"]!["instance"]!);
+        Assert.Collection(gateway.Calls,
+            c => Assert.StartsWith("POST /api/v1/apps/check as client:workspace-", c),
+            c => Assert.StartsWith("PUT /api/v1/apps/orders/channels/preview as client:workspace-", c),
+            c => Assert.StartsWith("PUT /api/v1/app-instances/orders/channels/preview as client:workspace-", c));
+        Assert.DoesNotContain(gateway.Calls, c => c.StartsWith("PUT /api/v1/apps/orders as ", StringComparison.Ordinal));   // production was not touched
+        Assert.Contains("Preview of workspace", (string)gateway.Published.First()["note"]!);
+        Assert.Contains(server.Audit(), a => a.Command == "build.preview-data" && a.Outcome == "ok");
+
+        // an instance production does not have is the Gateway's refusal, in its words
+        var ghost = await server.AsAda(HttpMethod.Post, path, """{"target":"edge","instance":"ghost"}""");
+        Assert.Equal(HttpStatusCode.Conflict, ghost.Response.StatusCode);
+        Assert.Contains("no instance 'ghost' in production", (string)ghost.Body!["error"]!);
+        Assert.Equal(HttpStatusCode.Forbidden, (await server.Send("bob", ServerRole.Viewer, HttpMethod.Post, path, """{"target":"edge","instance":"orders"}""")).Response.StatusCode);
+    }
+
+    [Fact]
     public async Task A_build_is_published_as_the_paired_client_with_the_key_read_from_its_reference_and_the_gateway_checks_first()
     {
         await using var gateway = await FakeGateway.StartAsync();

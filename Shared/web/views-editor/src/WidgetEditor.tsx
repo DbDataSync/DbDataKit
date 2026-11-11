@@ -533,7 +533,7 @@ export function WidgetEditor({ id, widget, doc, catalog, catalogNote, apply, dia
         </ul>
       )}
 
-      {hasQuery && <Preview id={id} widget={widget} doc={doc} preview={preview} />}
+      {(hasQuery || widget.type === 'embed') && <Preview id={id} widget={widget} doc={doc} preview={preview} />}
 
       <div data-testid={`ed-options-${id}`} style={{ marginTop: 8 }}>
         <strong>How each layout shows it</strong> <span className="hint">widget_options</span>

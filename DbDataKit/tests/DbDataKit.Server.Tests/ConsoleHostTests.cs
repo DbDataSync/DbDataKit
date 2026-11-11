@@ -98,11 +98,27 @@ public sealed class ConsoleHostTests : IAsyncLifetime
     public async Task A_first_start_writes_the_first_run_invitation_and_the_invitation_is_good()
     {
         var text = File.ReadAllText(Path.Combine(directory, "FIRST-RUN.txt"));
-        Assert.Contains("dbdatakit user invite", text);
+        Assert.Contains("dbdatakit setup link", text);                                  // plan 23a FQ19: the file holds the link and the command that makes a new one
+        Assert.Contains("https://", text);                                              // a whole address, not a path to find
         var code = text.Split("/invite#")[1].Split('\n')[0].Trim();
 
         Assert.Equal(HttpStatusCode.OK, (await http.GetAsync($"/api/invites/check?code={code}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await http.GetAsync("/api/invites/check?code=not-a-code")).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_refused_invitation_names_the_command_that_makes_a_new_setup_link_and_nothing_remote_can_make_one()
+    {
+        var refused = await http.GetAsync("/api/invites/check?code=not-a-code");
+        Assert.Equal(HttpStatusCode.NotFound, refused.StatusCode);
+        Assert.Contains("dbdatakit setup link", await refused.Content.ReadAsStringAsync());
+
+        // no route makes a setup link: it is made on the machine (plan 23a FQ19); an anonymous call gets no link, and the install's invitations are the ones it had
+        var invites = new IdentityInviteStore(app.Services.GetRequiredService<StateDatabase>());
+        var outstanding = invites.ListOutstanding().Count;
+        foreach (var path in new[] { "/api/setup/link", "/api/invites/setup-link", "/api/setup" })
+            Assert.True((await http.PostAsync(path, null)).StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.MethodNotAllowed, path);
+        Assert.Equal(outstanding, invites.ListOutstanding().Count);
     }
 
     [Fact]

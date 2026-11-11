@@ -67,7 +67,7 @@ public static class StoreData
         @"^/api/v1/models/(?<model>[^/]+)(/instances/[^/]+)?/(entities/(?<entity>[^/]+)/rows?|changes)$", System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.Compiled);
 
     private static readonly System.Text.RegularExpressions.Regex ModelDataPath = new(
-        @"^/api/v1/models/(?<model>[^/]+)(/instances/[^/]+)?/(entities/[^/]+/rows?|changes|requests(/.*)?|migrate|storage/create)$", System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.Compiled);
+        @"^/api/v1/models/(?<model>[^/]+)(/instances/[^/]+)?/(entities/[^/]+/rows?|changes|requests(/.*)?|migrate(/contract)?|storage/create)$", System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.Compiled);
 
     /// <summary>
     /// One data path per model (plan 20 O10b, owner decision 2026-11-04): a model published to a serving group is read and written there, by its published version, and this server refuses its rows, changes and change
@@ -77,7 +77,8 @@ public static class StoreData
     public static IApplicationBuilder UsePublishedModels(this IApplicationBuilder app, string directory) => app.Use(async (context, next) =>
     {
         var match = ModelDataPath.Match(context.Request.Path.Value ?? "");
-        var dryRun = context.Request.Path.Value!.EndsWith("/migrate", StringComparison.Ordinal) && !string.Equals(context.Request.Query["apply"], "true", StringComparison.OrdinalIgnoreCase);
+        var dryRun = (context.Request.Path.Value!.EndsWith("/migrate", StringComparison.Ordinal) && !string.Equals(context.Request.Query["apply"], "true", StringComparison.OrdinalIgnoreCase))
+            || (context.Request.Path.Value!.EndsWith("/migrate/contract", StringComparison.Ordinal) && context.Request.Query["approve"].ToString().Length == 0);
         if (match.Success && !dryRun && new StorePublications(directory).Of(match.Groups["model"].Value) is { Count: > 0 } groups)
         {
             var model = match.Groups["model"].Value;
@@ -284,6 +285,54 @@ public static class StoreData
                 }, statusCode: plan.Blocked.Count > 0 && apply ? StatusCodes.Status422UnprocessableEntity : StatusCodes.Status200OK);
             }
             catch (Exception ex) when (Known(ex)) { return Fail(ex); }
+        });
+
+        // the contract step of expand-then-contract for this copy (plan 26 Z13b; plan 21 decision 4): the columns the model no longer has are dropped and the columns it requires are made required. A planned and approved change:
+        // without `approve` it is a dry run that says what it would do and gives the plan's hash; with `?approve=<hash>` of a plan that was read, exactly that plan runs, in one transaction, or nothing does
+        app.MapPost(prefix + "/migrate/contract", async (string name, HttpContext context) =>
+        {
+            var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Admin);
+            if (!decision.Allowed) return Denied(decision);
+            var (model, problem) = await ModelAsync(directory, name, context.Request.RouteValues["instance"] as string, current: true);
+            if (problem is not null) return problem;
+            var (connectionName, schema, instanceId, notThere) = Where(directory, model!, context);
+            if (notThere is not null) return notThere;
+            if (model!.Instances == InstanceMode.Column && instanceId != StoreInstances.Default)
+                return Results.Json(new { error = "This model's instances share their tables. Contract them once, through the model's own path." }, statusCode: StatusCodes.Status422UnprocessableEntity);
+            var approved = context.Request.Query["approve"].ToString();
+            try
+            {
+                var engine = connections.EngineOf(connectionName);
+                await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
+                var plan = ModelStorage.PlanContract(model, engine, schema, await ModelStorage.ReadLiveAsync(connection, schema, context.RequestAborted));
+                var applied = false;
+                if (approved.Length > 0)
+                {
+                    await ModelStorage.ApplyContractAsync(connection, plan, approved, context.RequestAborted);
+                    applied = plan.Steps.Count > 0;
+                    // a copy that has both its expand and its contract done runs the model as it is now
+                    var live = await ModelStorage.ReadLiveAsync(connection, schema, context.RequestAborted);
+                    if (applied && ModelStorage.PlanExpand(model, engine, schema, live).UpToDate && ModelStorage.PlanContract(model, engine, schema, live).Nothing)
+                        StoreInstances.Record(directory, name, InstanceName(context), ModelStorage.DefinitionHash(model, engine), StoreModels.CurrentVersion(directory, name), DateTimeOffset.UtcNow);
+                    plan = ModelStorage.PlanContract(model, engine, schema, live);
+                }
+                // what the person approving should see: the other copies of the model and where each stands, so a copy still at the old version is named before a column it reads is dropped
+                var current = ModelStorage.DefinitionHash(model, engine);
+                var copies = new List<StoreInstance> { StoreInstances.Find(directory, name, StoreInstances.Default) ?? new StoreInstance(StoreInstances.Default, null) };
+                copies.AddRange(StoreInstances.List(directory, name));
+                return Results.Json(new JsonObject
+                {
+                    ["nothing"] = plan.Nothing,
+                    ["applied"] = applied,
+                    ["hash"] = plan.Hash,
+                    ["steps"] = new JsonArray(plan.Steps.Select(s => (JsonNode)new JsonObject { ["object"] = s.Object, ["description"] = s.Description, ["text"] = s.Text, ["requires_every_row_to_have_a_value"] = s.NullCheck is not null }).ToArray()),
+                    ["blocked"] = new JsonArray(plan.Blocked.Select(b => (JsonNode)JsonValue.Create(b)!).ToArray()),
+                    ["notes"] = new JsonArray(plan.Notes.Select(n => (JsonNode)JsonValue.Create(n)!).ToArray()),
+                    ["copies"] = new JsonArray(copies.Select(i => (JsonNode)new JsonObject { ["name"] = i.Name, ["status"] = StoreInstances.StatusOf(model.Instances == InstanceMode.Column && i.Name != StoreInstances.Default ? copies[0] : i, current) }).ToArray()),
+                }, statusCode: plan.Blocked.Count > 0 && approved.Length > 0 ? StatusCodes.Status422UnprocessableEntity : StatusCodes.Status200OK);
+            }
+            catch (Exception ex) when (Known(ex)) { return Fail(ex); }
+            catch (System.Data.Common.DbException ex) { return Results.Json(new { error = "The database refused the change, and nothing was changed: " + ex.Message }, statusCode: StatusCodes.Status422UnprocessableEntity); }
         });
 
         // one row by its key: ?key.<attribute>=<value>; with ?as_of=<time> the version that held then, with ?history=true every version

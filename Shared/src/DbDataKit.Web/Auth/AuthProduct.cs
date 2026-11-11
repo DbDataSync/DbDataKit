@@ -8,7 +8,8 @@ namespace DbDataKit.Web.Auth;
 /// </summary>
 /// <param name="Name">The product's name; the cookie, scheme, section and claim derive from it.</param>
 /// <param name="InviteCommandText">The command that prints a fresh invitation when it is not <c>&lt;name&gt; invite</c> (the console's is <c>dbdatakit user invite</c>).</param>
-public sealed record AuthProduct(string Name, string? InviteCommandText = null)
+/// <param name="SetupLinkCommandText">The command that makes a new setup link for a host that has no user yet (the console's is <c>dbdatakit setup link</c>); without one it is <see cref="InviteCommand"/>.</param>
+public sealed record AuthProduct(string Name, string? InviteCommandText = null, string? SetupLinkCommandText = null)
 {
     private string Lower => Name.ToLowerInvariant();
 
@@ -31,6 +32,9 @@ public sealed record AuthProduct(string Name, string? InviteCommandText = null)
 
     /// <summary>The command that prints a fresh first-run invitation.</summary>
     public string InviteCommand => InviteCommandText ?? $"{Lower} invite";
+
+    /// <summary>The command that makes a new setup link while the host has no user (plan 23a FQ19).</summary>
+    public string SetupLinkCommand => SetupLinkCommandText ?? InviteCommand;
 
     /// <summary>What a change is attributed to when nobody is signed in: an unauthenticated deployment, or the server acting on its own.</summary>
     public GitAuthor SystemAuthor { get; } = new(Name, $"{Name.ToLowerInvariant()}@localhost");
