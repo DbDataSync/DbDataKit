@@ -123,6 +123,22 @@ public sealed class AppDataGatewayTests : IDisposable
     }
 
     [Fact]
+    public async Task A_preview_whose_author_turned_writes_on_works_in_a_draft_of_its_own_and_production_never_does()
+    {
+        const string manifest = "schemaVersion: 1\nname: notes\nversion: 1.1.0\nentry: index.html\nroles: [viewer]\nmodels:\n  - model: territories\n    entities: {territory: [read, write], region: [read]}\n";
+        instances.PublishApp(manifest, "ada", "preview");
+        instances.Save(new AppInstance("acme", "notes", Settings: new Dictionary<string, string> { [AppDataGateway.PreviewWritesSetting] = "true" }), "ada", "preview");
+        var preview = new AppTokenBroker(host.Issuer()).Issue(session, "acme~preview");
+
+        // reads and writes of the preview carry the preview's id as the draft the answerer works in; a draft named by the app's own query is not the app's to choose
+        Assert.Equal(200, (await Call("api/v1/models/territories/entities/territory/rows", preview.Token, query: "?draft=acme~other", instance: "acme~preview")).Status);
+        Assert.Equal(200, (await Call("api/v1/models/territories/changes", preview.Token, "POST", body: "{\"changes\":[]}", instance: "acme~preview")).Status);
+        Assert.Equal(["acme~preview", "acme~preview"], data.Seen.Select(c => c.Draft));
+        Assert.Equal(200, (await Call("api/v1/models/territories/changes", AppToken(), "POST", body: "{\"changes\":[]}")).Status);
+        Assert.Null(data.Seen[^1].Draft);                                         // production writes the data
+    }
+
+    [Fact]
     public async Task An_app_with_change_request_may_read_and_propose_but_the_scope_never_says_write()
     {
         instances.PublishApp("schemaVersion: 1\nname: ask\nversion: 1.0.0\nentry: index.html\nroles: [viewer]\nmodels:\n  - model: territories\n    entities: {territory: [change request], region: [read]}\n", "ada");

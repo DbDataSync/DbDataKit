@@ -20,7 +20,7 @@ public enum AppDataRoute { Row, Rows, Changes, Schema }
 /// </summary>
 public sealed record AppDataCall(
     string App, string SubjectId, string? SubjectName, ServerRole Roles, IReadOnlyList<string> Scope, AppDataRoute Route, string Model, string? Entity, string? Copy,
-    IReadOnlyDictionary<string, string> Query, byte[] Body, string? Via = null)
+    IReadOnlyDictionary<string, string> Query, byte[] Body, string? Via = null, string? Draft = null)
 {
     /// <summary>Whether the manifest lets the app read (or, with <paramref name="write"/>, write) the entity; write includes read.</summary>
     public bool Allows(string entity, bool write) =>
@@ -65,6 +65,9 @@ public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, Co
     // the path of a call as apps made it before the group served their data: a paired store's id first
     private static readonly Regex StorePath = new(@"^[^/]+/api/v1/", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
+    /// <summary>The instance setting of a preview that turns its writes on: they are kept in the preview's draft (plan 21 CH01).</summary>
+    public const string PreviewWritesSetting = "preview.writes";
+
     private readonly IPairedClients _self = new Self(new PairedClient(self.Id, "apps host", self.Key.PublicKey, ServerRole.Viewer | ServerRole.Operator | ServerRole.Author | ServerRole.Approver | ServerRole.Admin, ClientKind.Server));
 
     private sealed class Self(PairedClient client) : IPairedClients
@@ -100,16 +103,22 @@ public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, Co
         if (route == AppDataRoute.Changes ? !HttpMethods.IsPost(method) : !HttpMethods.IsGet(method))
             return Refuse(405, route == AppDataRoute.Changes ? "Changes are sent with POST." : "Rows and the schema are read with GET.");
 
-        // a preview reads what its instance reads, and writes nothing: the draft layer that would take its writes is plan 21 CH01, not built, and previews are read-only by default (plan 21 decision 2)
-        if (route == AppDataRoute.Changes && AppInstanceName.Split(instance).Channel != DbDataKit.State.DefinitionStore.Production)
-            return Refuse(403, "This is a preview: it reads the instance's data and keeps no change. Publish the app to change data.");
+        // a preview reads what its instance reads and is read-only by default (plan 21 decision 2); the author turns writes on with the instance setting `preview.writes`, and then its writes go to the draft layer of the preview
+        // (CH01: kept apart from the data, seen by this preview only, never history unless submitted as change requests), and what it reads shows the draft on top
+        string? draft = null;
+        if (AppInstanceName.Split(instance).Channel != DbDataKit.State.DefinitionStore.Production)
+        {
+            if (resolved.Instance.Settings.TryGetValue(PreviewWritesSetting, out var writes) && string.Equals(writes, "true", StringComparison.OrdinalIgnoreCase)) draft = instance;
+            else if (route == AppDataRoute.Changes)
+                return Refuse(403, $"This is a preview: it reads the instance's data and keeps no change. Turn writes on for the preview with the instance setting `{PreviewWritesSetting}: true` to keep its changes in a draft, or publish the app to change data.");
+        }
 
         // the instance's binding says which copy of the model's data this app uses, unless the path names one
         var model = Uri.UnescapeDataString(match.Groups["model"].Value);
         var copy = match.Groups["copy"].Success ? Uri.UnescapeDataString(match.Groups["copy"].Value) : resolved.Instance.Bindings.TryGetValue(model, out var bound) ? bound : null;
         var parameters = QueryHelpers.ParseQuery(query).ToDictionary(p => p.Key, p => p.Value.ToString(), StringComparer.Ordinal);
         var call = new AppDataCall(instance, token.SubjectId, token.SubjectName, token.Roles, AppTokenBroker.ScopeOf(resolved.Manifest), route, model,
-            match.Groups["entity"].Success ? Uri.UnescapeDataString(match.Groups["entity"].Value) : null, copy, parameters, body, via);
+            match.Groups["entity"].Success ? Uri.UnescapeDataString(match.Groups["entity"].Value) : null, copy, parameters, body, via, draft);
         var answer = await data.SendAsync(call, ct);
         return answer with { Headers = Cors };
     }

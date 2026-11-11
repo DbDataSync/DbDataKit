@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { StoreClientProvider, useLoad, useStoreClient } from './context'
 import { draftChange, keyOf, toInput } from './fields'
-import { ErrorNote, FormView, GridView, HistoryView, InstancePickerView } from './views'
+import { DraftBannerView, ErrorNote, FormView, GridView, HistoryView, InstancePickerView } from './views'
 import { StoreError, type ApplyResult, type EntitySchema, type ModelSchema, type RowValues, type StoredRow, type Violation } from './types'
 
 /** The controls: each reads and writes through the nearest StoreClientProvider, and nothing else of the host. */
@@ -118,6 +118,36 @@ export function InstanceScope({ instance, children }: { instance: string | null;
   return <StoreClientProvider client={client.withInstance(instance)}>{children}</StoreClientProvider>
 }
 
+/** Everything below reads and writes in one draft of the models (null: the real data): reads show the draft on top of the data, writes are kept in the draft (plan 21 CH01). */
+export function DraftScope({ draft, children }: { draft: string | null; children: ReactNode }) {
+  const client = useStoreClient()
+  return <StoreClientProvider client={client.withDraft(draft)}>{children}</StoreClientProvider>
+}
+
+/** The banner of the draft the client works in, with the buttons that discard it or submit it as a change request; nothing is drawn for the real data. `onChanged` runs after either, so the host reloads its rows. */
+export function DraftBanner({ model, refresh = 0, canWrite = true, onChanged, waitingLink }: { model: string; refresh?: number; canWrite?: boolean; onChanged?: () => void; waitingLink?: (requestId: string) => ReactNode }) {
+  const client = useStoreClient()
+  const info = useLoad(() => client.draft(model), [client, model, refresh])
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const [submitted, setSubmitted] = useState<string | null>(null)
+  if (!client.draftId) return null
+  const run = async (work: () => Promise<void>) => {
+    setBusy(true); setError(null)
+    try { await work(); info.reload(); onChanged?.() } catch (e) { setError(e instanceof Error ? e : new Error(String(e))) } finally { setBusy(false) }
+  }
+  const writes = info.data?.writes ?? []
+  return (
+    <>
+      <DraftBannerView draft={client.draftId} writes={writes.length} stale={writes.filter((w) => !w.applies).length} busy={busy || info.loading} canWrite={canWrite}
+        onDiscard={() => run(async () => { await client.discardDraft(model); setSubmitted(null) })}
+        onSubmit={() => run(async () => { setSubmitted((await client.submitDraft(model)).id) })} />
+      {submitted !== null && <div className="sui-notice" role="status" data-testid="sui-draft-submitted">The draft was sent as change request {submitted.slice(0, 8)}; its rows change when someone approves it. {waitingLink?.(submitted)}</div>}
+      <ErrorNote error={error ?? info.error} />
+    </>
+  )
+}
+
 /** A picker of the instances of a model; nothing is drawn for a model that keeps one copy. */
 export function InstancePicker({ model, value, onChange }: { model: string; value: string | null; onChange: (instance: string | null) => void }) {
   const client = useStoreClient()
@@ -139,16 +169,20 @@ export interface EntityEditorProps {
   columns?: string[]
   /** Where to send a person whose write is waiting for approval: shown beside the notice (a link to the host's change requests). */
   waitingLink?: (requestId: string) => ReactNode
+  /** Works in this draft (a preview's or a channel's, plan 21 CH01): rows show it on top of the data, a banner says so and offers to discard it or submit it as a change request. */
+  draft?: string | null
 }
 
 /** The grid and the form together: pick a row to edit it or its history, or start a new one. The one control most hosts want. */
-export function EntityEditor({ model, entity: entityName, instance = null, onInstance, canWrite = true, pageSize, columns, waitingLink }: EntityEditorProps) {
+export function EntityEditor({ model, entity: entityName, instance = null, onInstance, canWrite = true, pageSize, columns, waitingLink, draft = null }: EntityEditorProps) {
   const picker = onInstance ? <InstancePicker model={model} value={instance} onChange={onInstance} /> : null
   return (
     <>
       {picker}
       <InstanceScope instance={instance}>
-        <EditorBody key={instance ?? 'default'} model={model} entity={entityName} canWrite={canWrite} pageSize={pageSize} columns={columns} waitingLink={waitingLink} />
+        <DraftScope draft={draft}>
+          <EditorBody key={`${instance ?? 'default'}/${draft ?? ''}`} model={model} entity={entityName} canWrite={canWrite} pageSize={pageSize} columns={columns} waitingLink={waitingLink} />
+        </DraftScope>
       </InstanceScope>
     </>
   )
@@ -172,6 +206,7 @@ function EditorBody({ model, entity: entityName, canWrite, pageSize, columns, wa
           <button type="button" data-testid="sui-new" disabled={!canWrite} title={canWrite ? undefined : 'Changing rows needs the author or administrator role.'} onClick={() => { setSelected(null); setCreating(true) }}>New</button>
           {!canWrite && <span className="sui-hint" data-testid="sui-readonly">Changing rows needs the author or administrator role.</span>}
         </div>
+        <DraftBanner model={model} refresh={refresh} canWrite={canWrite} onChanged={() => { setSelected(null); setCreating(false); setRefresh((r) => r + 1) }} waitingLink={waitingLink} />
         {waiting !== null && (
           <div className="sui-notice" role="status" data-testid="sui-waiting">
             Not applied yet: your change was sent for approval{waiting ? ` as request ${waiting.slice(0, 8)}` : ''}. The rows change when someone approves it. {waitingLink?.(waiting)}
