@@ -102,7 +102,7 @@ public sealed class ConsoleDelivery
 
     private readonly ConsoleBindings _bindings;
 
-    public ConsoleDelivery(ConsoleSettings settings, StateDatabase state, ConsoleConnections connections, ConsoleBindings bindings, IUserAccounts users, ISubscriptionRenderer? renderer = null, TimeProvider? time = null)
+    public ConsoleDelivery(ConsoleSettings settings, StateDatabase state, ConsoleConnections connections, ConsoleBindings bindings, IUserAccounts users, ISubscriptionRenderer? renderer = null, TimeProvider? time = null, DbDataKit.Monitoring.INotificationFeed? notifications = null)
     {
         _directory = settings.Directory;
         _bindings = bindings;
@@ -118,7 +118,7 @@ public sealed class ConsoleDelivery
         Subscriptions = new SubscriptionStore(state);
         Service = new DeliveryService(Outbox, new PayloadStore(state), new CurrentChannels(this), Settings.Policy, Scrubber, Time, null, "console");
         CanRender = renderer is not null;
-        Runner = new SubscriptionService(Subscriptions, Service, renderer ?? new ConsoleNoRenderer(), new ConsoleSubscriberDirectory(users), Time);
+        Runner = new SubscriptionService(Subscriptions, Service, renderer ?? new ConsoleNoRenderer(), new ConsoleSubscriberDirectory(users), Time, null, notifications);
         Users = users;
     }
 

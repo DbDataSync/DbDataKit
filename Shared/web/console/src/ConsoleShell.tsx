@@ -79,6 +79,7 @@ const rail: RailItem[] = [
   { to: '/agents', title: 'Agents', icon: <AgentsIcon />, testId: 'rail-agents' },
   { to: '/knowledge', title: 'Knowledge', icon: <KnowledgeIcon />, testId: 'rail-knowledge' },
   { to: '/delivery', title: 'Delivery', icon: <MonitoringIcon />, testId: 'rail-delivery' },
+  { to: '/bindings', title: 'Bindings', icon: <ConnectionsIcon />, testId: 'rail-bindings' },
   { to: '/views', title: 'Views', icon: <ViewsIcon />, testId: 'rail-views' },
   { to: '/docs', title: 'Docs', icon: <DocsIcon />, testId: 'rail-docs' },
   { to: '/users', title: 'Users', icon: <UsersIcon />, testId: 'rail-users', adminOnly: true },

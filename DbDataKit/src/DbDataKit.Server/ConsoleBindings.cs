@@ -2,6 +2,7 @@ using DbDataKit.Config.Yaml;
 using DbDataKit.Connections;
 using DbDataKit.Connections.Bindings;
 using DbDataKit.Knowledge;
+using System.Text.Json;
 using DbDataKit.State;
 
 namespace DbDataKit.Server;
@@ -34,11 +35,13 @@ public sealed class ConsoleBindings
     private string _stamp = "\0";
     private (string Yaml, BindingsResult Result) _read = ("", new BindingsResult(BindingSet.Empty, []));
 
-    public ConsoleBindings(ConsoleSettings settings, ConsoleConnections connections, StateDatabase state)
+    private readonly AuditLog _audit;
+
+    public ConsoleBindings(ConsoleSettings settings, ConsoleConnections connections, AuditLog audit)
     {
         _directory = settings.Directory;
         _connections = connections;
-        Posture = new PostureGuard(state, ConsoleState.ServiceId);
+        _audit = audit;
         Targets = new ConsoleBindingTargets(connections);
     }
 
@@ -46,8 +49,6 @@ public sealed class ConsoleBindings
 
     /// <summary>The place of the earlier model slots (<c>model-slots/1</c>), refused when it is still there.</summary>
     public string EarlierModelSlotsFile => Path.Combine(_directory, "models", "_slots.yml");
-
-    public PostureGuard Posture { get; }
 
     public IBindingTargets Targets { get; }
 
@@ -170,23 +171,54 @@ public sealed class ConsoleBindings
         lock (_lock)
         {
             var before = Unconfirmed(Current);
-            var needs = Unconfirmed(set).Where(u => !Posture.IsAllowed(PostureSetting.ProductionBindingOnNonProduction, u.Scope) && confirmed?.Contains(u.Scope, StringComparer.Ordinal) != true).ToList();
+            var needs = Unconfirmed(set).Where(u => !Confirmed(u.Scope) && confirmed?.Contains(u.Scope, StringComparer.Ordinal) != true).ToList();
             if (needs.Count > 0) return new(false, diagnostics, needs);
 
             Directory.CreateDirectory(_directory);
             System.IO.File.WriteAllText(File, text);
             _stamp = "\0";
             var now = Unconfirmed(set);
-            foreach (var u in now.Where(u => !Posture.IsAllowed(PostureSetting.ProductionBindingOnNonProduction, u.Scope)))
-                Posture.Choose(PostureSetting.ProductionBindingOnNonProduction, u.Scope, actor, note ?? $"{u.Slot} ({u.Release}) uses {u.Connection}", confirmed: true);
+            foreach (var u in now.Where(u => !Confirmed(u.Scope)))
+                Choose(u.Scope, actor, note ?? $"{u.Slot} ({u.Release}) uses {u.Connection}");
             foreach (var gone in before.Where(b => now.All(n => n.Scope != b.Scope)))
-                Posture.Revoke(PostureSetting.ProductionBindingOnNonProduction, gone.Scope, actor, "the binding no longer shares production's connection");
+                Revoke(gone.Scope, actor, "the binding no longer shares production's connection");
         }
 
         Changed?.Invoke();
         return new(true, diagnostics, []);
     }
 
+    /// <summary>A recorded production-in-non-production choice: who, when, why.</summary>
+    public sealed record Choice(string Scope, string ChosenBy, DateTimeOffset ChosenAt, string? Note);
+
+    private string ChoicesFile => Path.Combine(_directory, "bindings-posture.json");
+
+    private Dictionary<string, Choice> Choices()
+    {
+        try { return System.IO.File.Exists(ChoicesFile) ? JsonSerializer.Deserialize<Dictionary<string, Choice>>(System.IO.File.ReadAllText(ChoicesFile)) ?? [] : []; }
+        catch (JsonException) { return []; }
+    }
+
+    private void SaveChoices(Dictionary<string, Choice> choices) => System.IO.File.WriteAllText(ChoicesFile, JsonSerializer.Serialize(choices, new JsonSerializerOptions { WriteIndented = true }));
+
     /// <summary>Whether the production-in-non-production choice of a scope was recorded (confirmed by an administrator).</summary>
-    public bool Confirmed(string scope) => Posture.IsAllowed(PostureSetting.ProductionBindingOnNonProduction, scope);
+    public bool Confirmed(string scope) => Choices().ContainsKey(scope);
+
+    public Choice? ChoiceOf(string scope) => Choices().GetValueOrDefault(scope);
+
+    private void Choose(string scope, string actor, string? note)
+    {
+        var all = Choices();
+        all[scope] = new Choice(scope, actor, DateTimeOffset.UtcNow, note);
+        SaveChoices(all);
+        _audit.Record(new AuditEvent("person", actor, "bindings.posture.choose", ViaKind: "console", TargetKind: PostureGuard.SettingKind, TargetId: PostureSetting.ProductionBindingOnNonProduction.Name, Detail: JsonSerializer.Serialize(new { scope, note })));
+    }
+
+    private void Revoke(string scope, string actor, string? note)
+    {
+        var all = Choices();
+        if (!all.Remove(scope)) return;
+        SaveChoices(all);
+        _audit.Record(new AuditEvent("person", actor, "bindings.posture.revoke", ViaKind: "console", TargetKind: PostureGuard.SettingKind, TargetId: PostureSetting.ProductionBindingOnNonProduction.Name, Detail: JsonSerializer.Serialize(new { scope, note })));
+    }
 }

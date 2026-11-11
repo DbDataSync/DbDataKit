@@ -388,7 +388,7 @@ public sealed class ConsoleDeliveryTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, saved);
         var bindings = app.Services.GetRequiredService<ConsoleBindings>();
         Assert.True(bindings.Confirmed("bindings/delivery/alerts/test"));
-        var choice = Assert.Single(bindings.Posture.Choices.List("bindings/delivery/alerts/test"));
+        var choice = bindings.ChoiceOf("bindings/delivery/alerts/test")!;
         Assert.False(string.IsNullOrEmpty(choice.ChosenBy));
         Assert.Equal("the test channel may use the live hook this week", choice.Note);
         var alerts = view!["view"]!["slots"]!.AsArray().Single(x => (string)x!["name"]! == "alerts")!;

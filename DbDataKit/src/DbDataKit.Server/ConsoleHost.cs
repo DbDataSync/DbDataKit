@@ -113,7 +113,7 @@ public static class ConsoleHost
         builder.Services.TryAddSingleton<ModelHttp>();
         // the connections of outside systems (plan 27a IX01): connections/ in the console's directory
         builder.Services.AddSingleton(sp => new ConsoleConnections(settings, sp.GetRequiredService<EncryptedFileSecretStore>()));
-        builder.Services.AddSingleton(sp => new ConsoleBindings(settings, sp.GetRequiredService<ConsoleConnections>(), sp.GetRequiredService<StateDatabase>()));
+        builder.Services.AddSingleton(sp => new ConsoleBindings(settings, sp.GetRequiredService<ConsoleConnections>(), sp.GetRequiredService<AuditLog>()));
         builder.Services.AddSingleton<ConsoleModels>(sp => new ConsoleModels(settings, sp.GetRequiredService<ConsoleConnections>(), sp.GetRequiredService<ConsoleBindings>(), sp.GetRequiredService<ModelHttp>()));
         builder.Services.TryAddSingleton<IAgentModels>(sp => sp.GetRequiredService<ConsoleModels>());
         builder.Services.TryAddSingleton<IAgentToolSource, ConsoleToolSource>();
@@ -124,7 +124,7 @@ public static class ConsoleHost
         builder.Services.AddSingleton<IPasswordCredentials>(sp => new AgentTokenCredentials(sp.GetRequiredService<ConsoleAgents>().Store, sp.GetRequiredService<IUserAccounts>()));
         builder.Services.AddSingleton<ConsoleQuality>();
         // delivery: the channels of settings.yaml, the outbox, the subscriptions and the sender that works through the outbox (plan 22a GP07 to GP09, GP17, GP18)
-        builder.Services.AddSingleton(sp => new ConsoleDelivery(settings, sp.GetRequiredService<StateDatabase>(), sp.GetRequiredService<ConsoleConnections>(), sp.GetRequiredService<ConsoleBindings>(), sp.GetRequiredService<IUserAccounts>(), sp.GetService<DbDataKit.Delivery.ISubscriptionRenderer>()));
+        builder.Services.AddSingleton(sp => new ConsoleDelivery(settings, sp.GetRequiredService<StateDatabase>(), sp.GetRequiredService<ConsoleConnections>(), sp.GetRequiredService<ConsoleBindings>(), sp.GetRequiredService<IUserAccounts>(), sp.GetService<DbDataKit.Delivery.ISubscriptionRenderer>(), null, sp.GetService<DbDataKit.Monitoring.INotificationFeed>()));
         builder.Services.AddHostedService<ConsoleDeliverySender>();
         builder.Services.AddSingleton(sp => new SetupItems(sp.GetRequiredService<StateDatabase>()));
         if (settings.Home is { } home)
