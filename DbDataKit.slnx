@@ -109,6 +109,7 @@
     <Project Path="Shared/src/DbDataKit.Runner.Kit.Testing/DbDataKit.Runner.Kit.Testing.csproj" />
     <Project Path="Shared/src/DbDataKit.Scheduling/DbDataKit.Scheduling.csproj" />
     <Project Path="Shared/src/DbDataKit.Delivery/DbDataKit.Delivery.csproj" />
+    <Project Path="Shared/src/DbDataKit.Delivery.Runner/DbDataKit.Delivery.Runner.csproj" />
     <Project Path="Shared/src/DbDataKit.Scripting/DbDataKit.Scripting.csproj" />
     <Project Path="Shared/src/DbDataKit.Identity/DbDataKit.Identity.csproj" />
     <Project Path="Shared/src/DbDataKit.State/DbDataKit.State.csproj" />

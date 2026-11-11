@@ -11,6 +11,8 @@
     <ProjectReference Include="..\DbDataKit.Views\DbDataKit.Views.csproj" />
     <!-- the PDF exporter (DBR15): the module draws its print page with it -->
     <ProjectReference Include="..\DbDataKit.Views.Export\DbDataKit.Views.Export.csproj" />
+    <!-- a subscription is rendered through this module as the subscriber (DBR18) -->
+    <ProjectReference Include="..\DbDataKit.Delivery\DbDataKit.Delivery.csproj" />
     <!-- IDrainCoordinator: the one drain of the suite -->
     <ProjectReference Include="..\DbDataKit.Hosting.Abstractions\DbDataKit.Hosting.Abstractions.csproj" />
   </ItemGroup>

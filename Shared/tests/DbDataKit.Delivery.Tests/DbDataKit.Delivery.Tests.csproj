@@ -5,6 +5,7 @@
     <PackageReference Include="JsonSchema.Net" />
     <Using Include="Xunit" />
     <ProjectReference Include="..\..\src\DbDataKit.Delivery\DbDataKit.Delivery.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Delivery.Runner\DbDataKit.Delivery.Runner.csproj" />
     <ProjectReference Include="..\..\src\DbDataKit.State.Engines\DbDataKit.State.Engines.csproj" />
     <!-- the throwaway state database per engine, the same one the State tests use -->
     <Compile Include="..\DbDataKit.State.Tests\StateEngines.cs" Link="StateEngines.cs" />

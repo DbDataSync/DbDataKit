@@ -43,7 +43,7 @@ public interface ISubscriptionRenderer
 }
 
 /// <summary>What one run of one subscription did.</summary>
-public sealed record SubscriptionRunResult(Guid SubscriptionId, string Name, string Outcome, string Detail, Guid? MessageId);
+public sealed record SubscriptionRunResult(Guid SubscriptionId, string Name, string Outcome, string Detail, Guid? MessageId, string? Code = null);
 
 /// <summary>
 /// Runs subscriptions (plan 22a GP17, DBR18's half that is not a runner): the due ones (<see cref="RunDueAsync"/>, called from the runner's task every minute) or one on request (<see cref="RunNowAsync"/>).
@@ -90,11 +90,11 @@ public sealed class SubscriptionService(SubscriptionStore store, DeliveryService
         var f = row.Fields;
         var label = $"'{f.Name}' ({f.Kind} {f.ViewName})";
 
-        SubscriptionRunResult Done(string outcome, string detail, Guid? message = null, string? problem = null)
+        SubscriptionRunResult Done(string outcome, string detail, Guid? message = null, string? problem = null, string? code = null)
         {
             store.RecordRun(row.Id, started, outcome, detail, message, runId, problem);
             _log.LogInformation("subscription {Subscription} {Name}: {Outcome} {Detail}", row.Id, f.Name, outcome, detail);
-            return new SubscriptionRunResult(row.Id, f.Name, outcome, detail, message);
+            return new SubscriptionRunResult(row.Id, f.Name, outcome, detail, message, code);
         }
 
         var channel = delivery.Channels.Find(f.Channel);
@@ -119,7 +119,7 @@ public sealed class SubscriptionService(SubscriptionStore store, DeliveryService
                 return await StopAsync(row, channel, started, person, lost.Reason, runId, ct).ConfigureAwait(false);
             case RenderResult.Failed failed:
                 await TellAsync(row, channel, [row.Owner], $"Subscription {label} could not be rendered", $"The {f.Kind} {f.ViewName} could not be drawn for {person.DisplayName}: {failed.Reason} ({failed.Code}). Nothing was sent. The subscription is still active and will try again at its next time ({f.Cron}, {f.TimeZone}).", ct).ConfigureAwait(false);
-                return Done(SubscriptionOutcomes.Failed, $"{failed.Reason} ({failed.Code})");
+                return Done(SubscriptionOutcomes.Failed, $"{failed.Reason} ({failed.Code})", problem: failed.Code == "unavailable" ? failed.Reason : null, code: failed.Code);
             case RenderResult.Rendered ok:
                 var notes = ok.Notes.Count == 0 ? "" : "\n\n" + string.Join("\n", ok.Notes.Select(n => "Note: " + n));
                 var text = $"{ok.Summary ?? $"The {f.Kind} {f.ViewName} is attached."}{notes}\n\nYou receive this because you subscribed to '{f.Name}' ({f.Cron}, {f.TimeZone}).";

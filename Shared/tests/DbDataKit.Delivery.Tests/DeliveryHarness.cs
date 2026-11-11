@@ -95,5 +95,5 @@ public sealed class DeliveryHarness : IDisposable
 /// <summary>The modules a host opens for delivery.</summary>
 public static class DeliverySetup
 {
-    public static IReadOnlyList<StateModule> Modules { get; } = [DeliveryModule.Module];
+    public static IReadOnlyList<StateModule> Modules { get; } = [DeliveryModule.Module, RunsModule.Module];
 }

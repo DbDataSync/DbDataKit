@@ -410,6 +410,7 @@ public sealed partial class ViewsApi(ViewsPublications published, IServingServic
                     ("warnings", result.Warnings.Count), ("fonts", result.EmbeddedFonts), ("parameters", parameterNames));
                 var headers = new Dictionary<string, string>(Definition(view)) { ["X-DbData-Export-Pages"] = result.Pages.ToString(CultureInfo.InvariantCulture), ["X-DbData-Export-Browser"] = result.BrowserVersion };
                 if (result.Warnings.Count > 0) headers["X-DbData-Export-Warnings"] = result.Warnings.Count.ToString(CultureInfo.InvariantCulture);
+                AddWidgetHeaders(headers, p.Rendered["widgets"] as JsonObject);
                 return Finish(who, ViewsAuditVerbs.Export, kind, view.Name, view.Version, AuditEvent.Ok, detail,
                     new ViewsAnswer(200, new JsonObject(), headers, new ViewsFile(result.Pdf, "application/pdf", $"{view.Name}-{p.Layout.Name}.pdf")));
             }
@@ -503,9 +504,22 @@ public sealed partial class ViewsApi(ViewsPublications published, IServingServic
         var detail = Detail(traceId, ("format", format), ("layout", p.Layout.Name), ("widget", widget), ("sheets", sheets.Count), ("rows", rows), ("errors", errors), ("bytes", content.Length),
             ("parameters", parameters?.Keys.Order(StringComparer.Ordinal).ToList()));
         var headers = new Dictionary<string, string>(Definition(view)) { ["X-DbData-Export-Rows"] = rows.ToString(CultureInfo.InvariantCulture) };
+        AddWidgetHeaders(headers, widgets);
         var file = $"{view.Name}-{widget ?? p.Layout.Name}.{format}";
         return Finish(who, ViewsAuditVerbs.Export, kind, view.Name, view.Version, AuditEvent.Ok, detail,
             new ViewsAnswer(200, new JsonObject(), headers, new ViewsFile(content, format == "csv" ? DataExports.CsvContentType : DataExports.XlsxContentType, file)));
+    }
+
+    /// <summary>
+    /// What an export tells a caller about the widgets of the layout (plan 32 DBR18, so a subscription can say so): <c>X-DbData-Export-Widgets</c> is how many the layout placed, <c>X-DbData-Export-Widgets-Failed</c> lists the ones that failed as
+    /// <c>id=code</c> separated by commas (the document shows each as an error block in its place). Absent when none failed. A widget id and a code hold no comma or equals sign.
+    /// </summary>
+    private static void AddWidgetHeaders(Dictionary<string, string> headers, JsonObject? widgets)
+    {
+        if (widgets is null) return;
+        headers["X-DbData-Export-Widgets"] = widgets.Count.ToString(CultureInfo.InvariantCulture);
+        var failed = widgets.Where(w => w.Value is JsonObject o && o["type"]?.GetValue<string>() == "error").Select(w => $"{w.Key}={((JsonObject)w.Value!)["code"]?.GetValue<string>() ?? "error"}").ToList();
+        if (failed.Count > 0) headers["X-DbData-Export-Widgets-Failed"] = string.Join(',', failed);
     }
 
     /// <summary>The names of a matrix's row-label columns: the fields of its <c>rows</c> encoding.</summary>

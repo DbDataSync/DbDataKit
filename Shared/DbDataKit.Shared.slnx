@@ -78,6 +78,7 @@
     <Project Path="src/DbDataKit.Runner.TaskHost/DbDataKit.Runner.TaskHost.csproj" />
     <Project Path="src/DbDataKit.Scheduling/DbDataKit.Scheduling.csproj" />
     <Project Path="src/DbDataKit.Delivery/DbDataKit.Delivery.csproj" />
+    <Project Path="src/DbDataKit.Delivery.Runner/DbDataKit.Delivery.Runner.csproj" />
     <Project Path="src/DbDataKit.Scripting/DbDataKit.Scripting.csproj" />
     <Project Path="src/DbDataKit.State/DbDataKit.State.csproj" />
     <Project Path="src/DbDataKit.State.Engines/DbDataKit.State.Engines.csproj" />
