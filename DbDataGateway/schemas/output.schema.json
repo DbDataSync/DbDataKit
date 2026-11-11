@@ -5785,6 +5785,12 @@
           "items": {
             "type": "string"
           }
+        },
+        "overridden_by_environment": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
@@ -5838,6 +5844,12 @@
           }
         },
         "statements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "overridden_by_environment": {
           "type": "array",
           "items": {
             "type": "string"
