@@ -37,6 +37,8 @@ describe('a line of the audit', () => {
   })
 
   it('says the server verbs with the name the server had, and the user verbs with the person\'s name', () => {
+    expect(what(entry({ verb: 'state.move.start', targetKind: 'path', targetId: '/api/state-moves/start' }))).toBe("started moving a server's state to another database")
+    expect(what(entry({ verb: 'state.connection.save', targetKind: 'state_connection', targetId: 'pg-main' }))).toBe('saved the state database pg-main')
     expect(what(entry({ verb: 'server.forget', detail: { serverName: 'Build prod' } }))).toBe('removed the server Build prod')
     expect(what(entry({ verb: 'server.confirm', detail: null }))).toBe('confirmed the waiting server st1')
     expect(what(entry({ verb: 'user.update', targetKind: 'user', targetId: 'u9', targetName: 'Bo' }))).toBe('changed the roles or details of Bo')

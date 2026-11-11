@@ -67,6 +67,12 @@ public static partial class ConsoleAuditTrail
         if (HttpMethods.IsDelete(method) && PendingServer().Match(path) is { Success: true } reject) return new Rule("server.reject", "server", Uri.UnescapeDataString(reject.Groups[1].Value));
         if (HttpMethods.IsDelete(method) && InstanceOf().Match(path) is { Success: true } forget) return new Rule("server.forget", "server", Uri.UnescapeDataString(forget.Groups[1].Value));
 
+        // the state wizard (plan 29b C06): a connection saved or removed, the check before a move (it opens the target with the console's login) and the start of a move
+        if (HttpMethods.IsPost(method) && path.Equals("/api/state-moves/preflight", StringComparison.OrdinalIgnoreCase)) return new Rule("state.move.check", "path", path);
+        if (HttpMethods.IsPost(method) && path.Equals("/api/state-moves/start", StringComparison.OrdinalIgnoreCase)) return new Rule("state.move.start", "path", path);
+        if (HttpMethods.IsPut(method) && StateConnectionOf().Match(path) is { Success: true } saved) return new Rule("state.connection.save", "state_connection", Uri.UnescapeDataString(saved.Groups[1].Value));
+        if (HttpMethods.IsDelete(method) && StateConnectionOf().Match(path) is { Success: true } removed) return new Rule("state.connection.remove", "state_connection", Uri.UnescapeDataString(removed.Groups[1].Value));
+
         // any other change made through the console's own API (state connections, a copy of a connection, an upgrade, the runner's settings)
         if (HttpMethods.IsPost(method) && ReadingSegments.Contains(path.Split('/')[^1])) return null;
         return new Rule("console.write", "path", path);
@@ -148,6 +154,7 @@ public static partial class ConsoleAuditTrail
     [GeneratedRegex(@"^/api/instances/pending/([^/]+)/confirm$", RegexOptions.IgnoreCase)] private static partial Regex PendingConfirm();
     [GeneratedRegex(@"^/api/instances/pending/([^/]+)$", RegexOptions.IgnoreCase)] private static partial Regex PendingServer();
     [GeneratedRegex(@"^/api/instances/([^/]+)$", RegexOptions.IgnoreCase)] private static partial Regex InstanceOf();
+    [GeneratedRegex(@"^/api/state-connections/([^/]+)$", RegexOptions.IgnoreCase)] private static partial Regex StateConnectionOf();
     [GeneratedRegex(@"^/api/users/([^/]+)$", RegexOptions.IgnoreCase)] private static partial Regex UserOf();
     [GeneratedRegex(@"^/api/users/([^/]+)/credentials/[^/]+$", RegexOptions.IgnoreCase)] private static partial Regex UserCredential();
 }
