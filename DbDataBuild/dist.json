@@ -12,9 +12,17 @@
       "exe": "dbdatabuild"
     }
   },
-  "windowsScope": "user",
+  "windowsScope": "machine",
+  "globalEnv": [
+    { "name": "DBDATAKIT_DATA", "programData": "DbDataKit" }
+  ],
+  "service": {
+    "name": "DbDataBuild",
+    "register": "service install",
+    "unregister": "service uninstall"
+  },
   "requiresVcRuntime": true,
-  "notes": "The server's state database is a SQLite file in its directory (the 'service' topology, no setup); for a database shared by a group or the install see: dbdatabuild state init",
+  "notes": "The server's state database is a SQLite file in its data directory (the 'service' topology, no setup); for a database shared by a group or the install see: dbdatabuild state init. The server is a Windows service (dbdatabuild service install, from an elevated prompt) that runs 'server run' with the data directory %ProgramData%\\DbDataKit\\build, where its identity, paired clients, project list and certificate live. It starts hosting no project: add the folder of each with: dbdatabuild server project add <id> --path <folder> (or --git <address>). Pair a console with it: dbdatabuild server pair --max-role admin. The command line itself needs no service and works on its own in any project folder.",
   "msi": {
     "upgradeCode": "0E2D6C1A-5B7F-4D3A-9C41-7A8B2F6E1D30",
     "addToPath": true

@@ -156,7 +156,7 @@ class ShippedGlobalEnvTests(unittest.TestCase):
 
     SHARED = [{"name": "DBDATAKIT_DATA", "programData": "DbDataKit"}]
     # product folder -> the service name its folder has under the root
-    SERVICES = {"DbDataKit": "server", "DbDataRunner": "runner", "DbDataStore": "store", "DbDataWorkspace": "workspace", "DbDataSync": "sync"}
+    SERVICES = {"DbDataKit": "server", "DbDataRunner": "runner", "DbDataStore": "store", "DbDataWorkspace": "workspace", "DbDataSync": "sync", "DbDataBuild": "build"}
 
     def meta(self, path):
         return json.loads((REPO_ROOT / path).read_text(encoding="utf-8"))
@@ -188,6 +188,14 @@ class ShippedGlobalEnvTests(unittest.TestCase):
             self.assertIn(f"SuiteEnvironment.ResolveServiceFolder({settings}.ServiceName)", text, path)
             self.assertNotIn("CommonApplicationData", text, path)
             self.assertIn(f'ServiceName = "{service}"', (REPO_ROOT / home).read_text(encoding="utf-8"), home)
+
+    def test_builds_service_block_is_what_the_source_registers(self):
+        meta = self.meta("DbDataBuild/dist.json")
+        service = (REPO_ROOT / "DbDataBuild/src/DbDataBuild.Cli/Server/BuildService.cs").read_text(encoding="utf-8")
+        self.assertIn(f'RegistrationName = "{meta["service"]["name"]}"', service)
+        self.assertEqual(meta["service"]["register"], "service install")
+        self.assertEqual(meta["service"]["unregister"], "service uninstall")
+        self.assertEqual(meta["windowsScope"], "machine")      # a service belongs under Program Files
 
     def test_the_sync_manifest_names_the_folder_sync_defaults_to(self):
         cli = (REPO_ROOT / "DbDataSync/src/DbDataSync.Cli/CliOptions.cs").read_text(encoding="utf-8")

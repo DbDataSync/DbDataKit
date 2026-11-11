@@ -91,7 +91,7 @@ jobs:
         include:
           - { product: dbdatagateway, display: DbDataGateway, exe: dbdatagateway.exe, service: dbdatagateway, runs: true,  path: false }
           - { product: dbdatasync,  display: DbDataSync,  exe: dbdatasync.exe,  service: DbDataSync,  runs: false, path: true }
-          - { product: dbdatabuild, display: DbDataBuild, exe: dbdatabuild.exe, service: '',          runs: false, path: true }
+          - { product: dbdatabuild, display: DbDataBuild, exe: dbdatabuild.exe, service: DbDataBuild, runs: false, path: true }
           - { product: dbdatakit,   display: DbDataKit,   exe: dbdatakit.exe,   service: DbDataKit, runs: false, path: false }
           - { product: dbdatarunner, display: DbDataRunner, exe: dbdatarunner.exe, service: DbDataRunner, runs: false, path: false }
     name: windows (${{ matrix.product }})
