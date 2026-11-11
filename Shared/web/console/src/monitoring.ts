@@ -7,11 +7,11 @@ export interface MonitorRow {
   serverName: string
   /** Unique among the rows: the server and what the row is about (for a notice, its number). */
   key: string
-  product: 'dbdatasync' | 'dbdatabuild' | 'dbdatagateway' | 'dbdatarunner'
-  kind: 'replication' | 'plan' | 'event' | 'task' | 'instance'
+  product: 'dbdatasync' | 'dbdatabuild' | 'dbdatagateway' | 'dbdatarunner' | 'dbdatastore' | 'dbdataworkspace' | 'unknown'
+  kind: 'replication' | 'plan' | 'event' | 'task' | 'instance' | 'certificate' | 'server'
   subject: string
   /** What to look at first: a failed last run, a lag past the limit, a notice from a Gateway, a hold, a run going, or nothing. */
-  state: 'failed' | 'gone' | 'lagging' | 'event' | 'paused' | 'running' | 'ok'
+  state: 'failed' | 'gone' | 'lagging' | 'expiring' | 'event' | 'paused' | 'running' | 'ok'
   detail: string
   /** Whether the person (or the server) holds it: a failed row can be held too, and then it is the hold that is released. */
   held: boolean
@@ -26,9 +26,9 @@ export interface MonitorRow {
 /** A replication whose slowest mapping is this far behind is shown as lagging. */
 export const LAG_LIMIT_MS = 15 * 60 * 1000
 
-const ORDER: Record<MonitorRow['state'], number> = { failed: 0, gone: 1, lagging: 2, event: 3, paused: 4, running: 5, ok: 6 }
+const ORDER: Record<MonitorRow['state'], number> = { failed: 0, gone: 1, lagging: 2, expiring: 3, event: 4, paused: 5, running: 6, ok: 7 }
 
-/** Failures first, then a runner that is gone, then lag, then a Gateway's notices, then holds; within a state, by server and name (a Gateway's notices keep the order they came in, newest first). */
+/** Failures first, then a runner that is gone, then lag, then a certificate near its end, then a Gateway's notices, then holds; within a state, by server and name (a Gateway's notices keep the order they came in, newest first). */
 export const sortRows = (rows: MonitorRow[]) =>
   [...rows].sort((a, b) => ORDER[a.state] - ORDER[b.state] || a.serverName.localeCompare(b.serverName) || (a.state === 'event' ? 0 : a.subject.localeCompare(b.subject)))
 
@@ -100,6 +100,31 @@ export function gatewayRow(server: InstanceSummary, notice: GatewayNotification)
   return { key: `${server.id}/notice/${notice.id}`, server: server.id, serverName: server.name, product: 'dbdatagateway', kind: 'event', subject: noticeTitle[notice.kind] ?? notice.kind, state: 'event', detail: notice.message, held: false, target: null }
 }
 
+/** What a Gateway says in `GET /api/v1/certificate`, and what a Sync server says in `GET /api/admin/certificate` (its `certificate` and `expiryWarningDays`): the figures the certificate screens show, read here so that an expiry is seen before a login fails. */
+export interface GatewayCertificate { present: boolean; subject?: string; days_left?: number; needs_renewal?: boolean; renew_before_days: number; warning?: string }
+export interface SyncCertificate { available: boolean; certificate: { subjectCommonName: string; daysRemaining: number } | null; expiryWarningDays: number }
+
+function certificateLine(subject: string, days: number): { state: 'failed' | 'expiring'; detail: string } {
+  if (days < 0) return { state: 'failed', detail: `The certificate for ${subject} expired ${-days} day${days === -1 ? '' : 's'} ago` }
+  return { state: 'expiring', detail: `The certificate for ${subject} ends in ${days} day${days === 1 ? '' : 's'}` }
+}
+
+/** A certificate of a server that is expired (a failure) or within its warning window (expiring); null when it is fine, when the server has none, or when it cannot say. A valid certificate is no row. It has no buttons: renewing is on the server's own certificate screen. */
+export function certificateRow(server: InstanceSummary, cert: GatewayCertificate | SyncCertificate): MonitorRow | null {
+  let subject: string, days: number, window: number
+  if ('present' in cert) {
+    if (!cert.present || cert.days_left === undefined) return null
+    subject = cert.subject ?? server.name; days = cert.days_left; window = cert.renew_before_days
+    if (cert.needs_renewal !== true && days > window) return null
+  } else {
+    if (!cert.available || cert.certificate === null) return null
+    subject = cert.certificate.subjectCommonName; days = cert.certificate.daysRemaining; window = cert.expiryWarningDays
+    if (days > window) return null
+  }
+  const { state, detail } = certificateLine(subject, days)
+  return { key: `${server.id}/certificate`, server: server.id, serverName: server.name, product: server.product === 'dbdatasync' ? 'dbdatasync' : 'dbdatagateway', kind: 'certificate', subject: 'Certificate', state, detail, held: false, target: null }
+}
+
 /** What a runner says in `GET /api/v1/status` about a task, and in `GET /api/v1/instances?all=true` about an instance. */
 export interface RunnerTask {
   package: string; channel: string; task: string; paused: boolean; paused_by?: string | null; running: number | boolean; queued?: number | boolean
@@ -132,6 +157,14 @@ export function runnerGoneRow(server: InstanceSummary, instance: RunnerInstanceR
   return { key: `${server.id}/instance/${instance.id}`, server: server.id, serverName: server.name, product: 'dbdatarunner', kind: 'instance', subject: `runner on ${instance.host}`, state: 'gone', detail: instance.state === 'Gone' ? 'The runner stopped' : 'The runner stopped reporting', held: false, target: null }
 }
 
+/** A server of any kind that does not answer, or answers that it is not ready: a failure, since none of its screens can be read or acted on until someone looks. The servers that answer are read for their own rows. It has no buttons: the Servers page is where it is looked at. */
+export function serverRow(server: InstanceSummary): MonitorRow | null {
+  const known = ['dbdatasync', 'dbdatabuild', 'dbdatagateway', 'dbdatarunner', 'dbdatastore', 'dbdataworkspace'] as const
+  const product = known.find((k) => k === server.product) ?? 'unknown'
+  const detail = !server.reachable ? `The server does not answer: ${server.problem ?? 'no answer'}` : server.ready === false ? `The server answers that it is not ready${server.problem ? `: ${server.problem}` : ''}` : null
+  return detail === null ? null : { key: `${server.id}/server`, server: server.id, serverName: server.name, product, kind: 'server', subject: 'Server', state: 'failed', detail, held: false, target: null }
+}
+
 const relay = (server: InstanceSummary, path: string) => `/relay/${server.id}${path}`
 const enc = encodeURIComponent
 
@@ -139,9 +172,13 @@ const enc = encodeURIComponent
 export async function loadRows(servers: InstanceSummary[], now: number = Date.now()): Promise<{ rows: MonitorRow[]; problems: { server: string; message: string }[] }> {
   const rows: MonitorRow[] = []
   const problems: { server: string; message: string }[] = []
+  rows.push(...servers.map(serverRow).filter((r): r is MonitorRow => r !== null))
   await Promise.all(servers.filter((s) => s.reachable).map(async (server) => {
     try {
       if (server.product === 'dbdatasync') {
+        // the certificate is asked on its own: a server that cannot say (no certificate screen, a refusal) shows no row for it and the replications still show
+        const cert = await request<SyncCertificate>(relay(server, '/api/admin/certificate')).then((c) => certificateRow(server, c), () => null)
+        if (cert) rows.push(cert)
         const names = await request<string[]>(relay(server, '/api/replications'))
         const found = await Promise.all(names.map(async (name) => {
           const [status, lag, runs] = await Promise.all([
@@ -159,6 +196,8 @@ export async function loadRows(servers: InstanceSummary[], now: number = Date.no
           rows.push(...jobs.map((job) => buildRow(server, project.id, job)))
         }
       } else if (server.product === 'dbdatagateway') {
+        const cert = await request<GatewayCertificate>(relay(server, '/api/v1/certificate')).then((c) => certificateRow(server, c), () => null)
+        if (cert) rows.push(cert)
         const { notifications } = await request<{ notifications: GatewayNotification[] }>(relay(server, '/api/v1/notifications'))
         // the feed lists the oldest first; the newest are what matters here
         rows.push(...notifications.filter((n) => now - Date.parse(n.created) <= NOTICE_WINDOW_MS).reverse().slice(0, 20).map((n) => gatewayRow(server, n)))

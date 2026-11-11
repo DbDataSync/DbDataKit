@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildRow, duration, moveBlock, ownerSentence, type PlanMove, LAG_LIMIT_MS, loadRows, NOTICE_WINDOW_MS, gatewayRow, runnerGoneRow, runnerTaskRow, sortRows, syncRow } from './monitoring'
+import { buildRow, certificateRow, serverRow, duration, moveBlock, ownerSentence, type PlanMove, LAG_LIMIT_MS, loadRows, NOTICE_WINDOW_MS, gatewayRow, runnerGoneRow, runnerTaskRow, sortRows, syncRow } from './monitoring'
 import type { InstanceSummary } from './api'
 
 const server = (id: string, name: string, product: string): InstanceSummary => ({ id, name, url: 'https://x', product, version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null })
@@ -74,11 +74,49 @@ describe('loading the rows of a Gateway', () => {
     globalThis.fetch = (async (url: string) => { asked.push(String(url)); return new Response(JSON.stringify({ notifications: feed }), { status: 200, headers: { 'content-type': 'application/json' } }) }) as typeof fetch
     try {
       const { rows, problems } = await loadRows([gateway], now)
-      expect(asked).toEqual(['/relay/p1/api/v1/notifications'])
+      expect(asked).toEqual(['/relay/p1/api/v1/certificate', '/relay/p1/api/v1/notifications'])
       expect(problems).toEqual([])
       expect(rows.map((r) => r.detail)).toEqual(['newer', 'older'])
       expect(NOTICE_WINDOW_MS).toBe(86_400_000)
     } finally { globalThis.fetch = real }
+  })
+})
+
+describe('certificate rows', () => {
+  const sync2 = server('s2', 'Sync two', 'dbdatasync')
+
+  it('shows a Gateway certificate that is inside its renewal window or has expired, and nothing for one that is fine', () => {
+    const fine = { present: true, subject: 'gw.example', days_left: 80, needs_renewal: false, renew_before_days: 30 }
+    expect(certificateRow(gateway, fine)).toBeNull()
+    expect(certificateRow(gateway, { ...fine, days_left: 12, needs_renewal: true })).toMatchObject({ state: 'expiring', kind: 'certificate', target: null, product: 'dbdatagateway', detail: 'The certificate for gw.example ends in 12 days' })
+    expect(certificateRow(gateway, { ...fine, days_left: 1, needs_renewal: true })?.detail).toBe('The certificate for gw.example ends in 1 day')
+    expect(certificateRow(gateway, { ...fine, days_left: -3, needs_renewal: true })).toMatchObject({ state: 'failed', detail: 'The certificate for gw.example expired 3 days ago' })
+    expect(certificateRow(gateway, { present: false, renew_before_days: 30 })).toBeNull()
+  })
+
+  it('shows a Sync certificate inside the warning days its server names, and nothing when the server has none or cannot say', () => {
+    const cert = (daysRemaining: number) => ({ available: true, certificate: { subjectCommonName: 'sync.example', daysRemaining }, expiryWarningDays: 21 })
+    expect(certificateRow(sync2, cert(60))).toBeNull()
+    expect(certificateRow(sync2, cert(20))).toMatchObject({ state: 'expiring', product: 'dbdatasync', key: 's2/certificate' })
+    expect(certificateRow(sync2, cert(-1))?.detail).toBe('The certificate for sync.example expired 1 day ago')
+    expect(certificateRow(sync2, { available: false, certificate: null, expiryWarningDays: 21 })).toBeNull()
+  })
+
+  it('sorts after lag and before a Gateway notice', () => {
+    const rows = sortRows([gatewayRow(gateway, { id: 1, kind: 'LimitReached', created: 't', message: 'm' }), certificateRow(gateway, { present: true, days_left: 5, needs_renewal: true, renew_before_days: 30 })!, syncRow(sync, 'a', status, { highestLagMs: LAG_LIMIT_MS * 2 }, { runs: [] })])
+    expect(rows.map((r) => r.state)).toEqual(['lagging', 'expiring', 'event'])
+  })
+})
+
+describe('a server that is down', () => {
+  it('is a failure row with the reason, for any kind of server, and a server that answers and is ready is none', () => {
+    const store = server('st1', 'Master data', 'dbdatastore')
+    expect(serverRow({ ...store, reachable: false, problem: 'connection refused' })).toMatchObject({ state: 'failed', product: 'dbdatastore', kind: 'server', target: null, detail: 'The server does not answer: connection refused' })
+    expect(serverRow({ ...store, reachable: false, problem: null })?.detail).toBe('The server does not answer: no answer')
+    expect(serverRow({ ...store, ready: false, problem: 'state database missing' })?.detail).toBe('The server answers that it is not ready: state database missing')
+    expect(serverRow({ ...store, product: null, reachable: false })?.product).toBe('unknown')
+    expect(serverRow(store)).toBeNull()
+    expect(serverRow({ ...store, ready: null })).toBeNull()
   })
 })
 

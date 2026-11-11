@@ -5,7 +5,7 @@ import { consoleApi } from '../api'
 import { ConsoleShell } from '../ConsoleShell'
 import { actions, loadRows, movePlan, moveBlock, ownerSentence, type MonitorRow, type PlanMove } from '../monitoring'
 
-const label: Record<MonitorRow['state'], string> = { failed: 'Failed', gone: 'Gone', lagging: 'Lagging', event: 'Notice', paused: 'Paused', running: 'Running', ok: 'OK' }
+const label: Record<MonitorRow['state'], string> = { failed: 'Failed', gone: 'Gone', lagging: 'Lagging', expiring: 'Expiring', event: 'Notice', paused: 'Paused', running: 'Running', ok: 'OK' }
 
 /**
  * One view of the replications and scheduled plans of every server the console manages (plan 13, M11): what failed or is behind is at the top, whichever server it is on, and a row can be held, released or run now. A Gateway's notices (a login locked out, a statement refused, a limit reached; the last day's, newest first) are listed with them. The figures are asked of each
@@ -46,7 +46,7 @@ export function MonitoringPage() {
       <div className="pane" data-testid="monitoring-page">
         <div className="page-head">
           <h1 className="page-title">Monitoring</h1>
-          <span className="page-note">Replications, scheduled plans, runner tasks and Gateway notices across your servers.</span>
+          <span className="page-note">Servers that are down, replications, scheduled plans, runner tasks, certificates near their end and Gateway notices across your servers.</span>
         </div>
         <ErrorBanner error={instances.error ?? view.error ?? act.error ?? moveIt.error} />
         {moved && <div className="hint" data-testid="monitoring-moved">{moved}</div>}
