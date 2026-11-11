@@ -44,3 +44,10 @@ Structure first (Markdown headings; a section too long splits at paragraphs, the
 ## The install knowledge project (`InstallKnowledge`)
 
 `InstallKnowledge.Write(folder)` makes the template of plan 27 section 3.5c: `shared/` (the whole install), `build/` and `sync-and-build/` (scoped by their `_knowledge.yml`) and `policy/` (guardrails owned by `administrators`; `CheckPolicyFolder` refuses anything else there).
+
+## What a host shows (`KnowledgeInsight`, `Worklists`)
+
+- **Chunk preview** (`KnowledgeInsight.Chunks`): an item as typed, read strictly (diagnostics with line and column), split as it would be embedded, each chunk with its heading path and tokens; given the published text, the chunks whose hash differs are marked changed, so editing one section changes one chunk.
+- **Scope preview** (`KnowledgeInsight.Scope`): what `ScopeMatcher` gives for what is in play and who asks, in order with the level each applies at, and the items left out with the reason (a reference is found by search, the subject is gone, not for this audience, what it is about is not in play).
+- **Re-pointing** (`KnowledgeInsight.Repoint`): rewrites the name of a subject where it is written (the subject carries its line); the rest of the file is untouched, and it refuses when the file is not as it was read.
+- **Worklists** (`Worklists.Build`): per owner, the items that are orphaned (with the subject that is gone), over a budget or marked for another look.
