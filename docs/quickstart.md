@@ -25,17 +25,19 @@ The demo database `demo` holds `customers` (4 rows) and `orders` (5 rows). `demo
 
 ## 2. Sign in
 
-The console has no user yet, so it makes a one-time invitation for the first administrator:
+The console has no user yet, so the first administrator comes in through a **setup link**: an address that works once and ends after 24 hours. Make it on the machine, with the address you will open the console at:
 
 ```
-docker compose -f dist/compose/quickstart.yml exec console cat /data/FIRST-RUN.txt
+docker compose -f dist/compose/quickstart.yml exec console dotnet /app/dbdatakit.dll setup link --url https://localhost:8480
 ```
 
-Open the `https://localhost:8480/invite#<code>` address in it and register a passkey. Your browser warns about the certificate (it is self-signed); accept it for `localhost`. If the invitation has expired, make a fresh one:
+Open the link it prints (`https://localhost:8480/invite#<code>`) and register a passkey: you are the first administrator. Your browser warns about the certificate (it is self-signed); accept it for `localhost`. If the link has ended or is lost, run the same command again: it makes a new one, and the old one stops working. Once someone has signed up there is no setup link to make; to let another person in, make an invitation:
 
 ```
 docker compose -f dist/compose/quickstart.yml exec console dotnet /app/dbdatakit.dll user invite --role admin --email you@example.com --url https://localhost:8480
 ```
+
+After you sign in, **Setup** in the rail lists the first steps (pair the servers, add a connection, make a first Build project) and finishes each one by what the console actually has.
 
 ## 3. Confirm the servers
 
