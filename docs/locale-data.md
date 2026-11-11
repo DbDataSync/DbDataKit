@@ -47,3 +47,15 @@ CLDR is a reference, not a verdict. Machines cannot say whether these read well 
 5. **The French group separator** U+202F (narrow no-break space) is what CLDR and ICU write today and what French typography prescribes, but some fonts and older PDF or email clients draw it as a missing glyph; U+00A0 is the fallback (CLDR used it before release 34). Check an export and a mail in the real clients.
 6. **Grouping of four-digit numbers** (`es`, `it`): CLDR's `minimumGroupingDigits` is 2 for `es` and `it` (`1234`, not `1.234`; groups start at five digits); the formatter groups from four digits in every locale. Decide whether `1.234` is acceptable in `es` and `it`.
 7. **Where sources disagree.** CLDR, ICU and local style guides differ (Spanish `sept`/`sep`, Portuguese stops), and `pt` means Brazilian Portuguese in CLDR (`pt-PT` is a locale of its own there, not compared). The table says `pt` once; if European Portuguese is wanted it is a new locale.
+
+## Follow-up work (owner, 2026-11-11: good enough for now, address when it comes up)
+
+Nothing here blocks a release. Each item changes output people see, so it needs a golden updated in `Shared/conformance/views/format/cases.json` and the same change on the .NET and TypeScript sides.
+
+1. **Currency symbol position:** follow CLDR (after the number in `de fr es it`, before it with a space in `pt nl`) instead of always in front.
+2. **Minimum grouping digits:** `es` and `it` write four-digit numbers without a group separator.
+3. **Compact suffixes per locale:** `K M B` are English in every locale today; CLDR has locale-specific ones.
+4. **German abbreviations with a day** (`Jan.`, `März`, `Sept.`): the table has one list per locale; a second list for the day-bearing pattern.
+5. **CNY symbol:** `¥` is allow-listed against CLDR's `CN¥`; decide and remove the allow-list row.
+6. **More locales and the chart axis** (d3 strings) are not covered by the check.
+7. **Rendering of U+202F** in real PDF and mail clients is a manual check.
