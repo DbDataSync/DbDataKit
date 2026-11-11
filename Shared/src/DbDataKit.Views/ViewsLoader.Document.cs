@@ -92,6 +92,8 @@ public static partial class ViewsLoader
             }
 
             var widgets = map.Get("widgets") is { } w ? ReadWidgets(w) : MissingList<ViewWidget>(map, "widgets");
+            if (map.Get("links") is { } lk) ReadLinks(lk, widgets);
+            ResolveLinkRefs();
             var layouts = map.Get("layouts") is { } ls ? ReadLayouts(ls, widgets) : MissingList<ViewLayout>(map, "layouts");
             if (kind == ViewKind.Report && widgets is not null)
                 foreach (var embed in widgets.Where(w => w.Type == "embed"))
@@ -101,7 +103,7 @@ public static partial class ViewsLoader
 
             CheckDocument(map, widgets, layouts, kioskLayout, kioskNode);
             if (Diagnostics.HasErrors()) return null;
-            return new ViewDocument(kind, title, parameters, widgets, layouts, font, refresh, kioskLayout, strict, pages, rows, cover, locale);
+            return new ViewDocument(kind, title, parameters, widgets, layouts, font, refresh, kioskLayout, strict, pages, rows, cover, locale, links);
         }
 
         private string? MissingKey(YamlMapping map, string key)

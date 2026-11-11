@@ -1,0 +1,127 @@
+{
+  "note": "The pure rules of the link vocabulary (plan 32 DBR35), run by DbDataKit.Views.Tests (LinkTypeFits) and @dbdatakit/visuals (linkTypeFits, printTreatment, linkValues, linkQuery).",
+  "targets": {
+    "page:regional-detail": [
+      {
+        "name": "region",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "name": "year",
+        "type": "integer"
+      }
+    ],
+    "report:region_detail": [
+      {
+        "name": "region",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "name": "year",
+        "type": "integer",
+        "required": true
+      }
+    ],
+    "dashboard:overview": [],
+    "view:customers": [
+      {
+        "name": "code",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "form:orders": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "integer"
+      },
+      {
+        "name": "customer_id",
+        "type": "integer"
+      },
+      {
+        "name": "region",
+        "type": "string"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      }
+    ]
+  },
+  "fits": [
+    {
+      "given": "string",
+      "many": false,
+      "wanted": "string",
+      "wantedMany": false,
+      "fits": true
+    },
+    {
+      "given": "integer",
+      "many": false,
+      "wanted": "integer",
+      "wantedMany": false,
+      "fits": true
+    },
+    {
+      "given": "integer",
+      "many": false,
+      "wanted": "number",
+      "wantedMany": false,
+      "fits": true
+    },
+    {
+      "given": "number",
+      "many": false,
+      "wanted": "integer",
+      "wantedMany": false,
+      "fits": false
+    },
+    {
+      "given": "string",
+      "many": false,
+      "wanted": "date",
+      "wantedMany": false,
+      "fits": true
+    },
+    {
+      "given": "string",
+      "many": false,
+      "wanted": "integer",
+      "wantedMany": false,
+      "fits": false
+    },
+    {
+      "given": "boolean",
+      "many": false,
+      "wanted": "string",
+      "wantedMany": false,
+      "fits": false
+    },
+    {
+      "given": "string",
+      "many": true,
+      "wanted": "string",
+      "wantedMany": false,
+      "fits": false
+    },
+    {
+      "given": "string",
+      "many": false,
+      "wanted": "string",
+      "wantedMany": true,
+      "fits": false
+    },
+    {
+      "given": "string",
+      "many": true,
+      "wanted": "string",
+      "wantedMany": true,
+      "fits": true
+    }
+  ]
+}

@@ -82,6 +82,7 @@ public static partial class ViewsLoader
                 if (q is not null) query = ReadQuery(q, J(path, "query"), out outputs);
                 if (map.Get("on_select") is { } os) OnSelect(os, J(path, "on_select"));
                 if (map.Get("drill") is { } dr) Drill(dr, J(path, "drill"));
+                if (type != "metric") ReadOnClick(map, path);
             }
             if (query is { Explicit: true } && outputs is not null)
                 foreach (var f in fields.Where(f => !outputs.Contains(f.Field)))

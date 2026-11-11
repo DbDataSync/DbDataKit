@@ -38,7 +38,7 @@ internal static class Conformance
     {
         if (node is not JsonObject o) return null;
         return o.ToDictionary(e => e.Key, e => (IReadOnlyList<ViewParameter>)e.Value!.AsArray()
-            .Select(p => new ViewParameter(p!["name"]!.GetValue<string>(), "string", null, false, p["required"]?.GetValue<bool>() ?? false, p["default"] is not null, null, 0)).ToList());
+            .Select(p => new ViewParameter(p!["name"]!.GetValue<string>(), p["type"]?.GetValue<string>() ?? "string", null, p["many"]?.GetValue<bool>() ?? false, p["required"]?.GetValue<bool>() ?? false, p["default"] is not null, null, 0)).ToList());
     }
 
     public static string Describe(IEnumerable<ConfigDiagnostic> diagnostics) => string.Join("\n", diagnostics.Select(d => $"{d} [{d.KeyPath}]"));

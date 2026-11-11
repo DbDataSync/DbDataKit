@@ -6,6 +6,8 @@ import type { Area, Json, ViewsIssue } from './common'
 import { checkWidgets } from './widgets'
 import type { Context, DrillTarget, WidgetInfo } from './widgets'
 import { MINIMUMS } from './limits'
+import { checkLinks, resolveLinkRefs } from './links'
+import type { LinkInfo } from './links'
 
 /**
  * The validators of `dashboard/1` and `report/1` (plan 32 section 3, DBR02): the same checks, codes and paths as the .NET loaders of `DbDataKit.Views`, from the same JSON Schemas (`core`, `dashboard`,
@@ -32,6 +34,7 @@ function top(schema: unknown): ValidateFunction {
   delete copy.$id
   const properties = copy.properties as Json
   properties.widgets = {}
+  properties.links = {}
   properties.layouts = {}
   return ajv.compile({ ...copy, $defs: defs })
 }
@@ -109,9 +112,13 @@ export function validateViewsDocument(document: unknown, options: ViewsOptions =
 
   run(topChecks[fileKind], document, { kind: 'top', of: fileKind }, '', issues)
   const declared = parameters(document.parameters, issues)
-  const context: Context = { kind: fileKind, declared, targets: options.targets, widgetIds: null }
+  const context: Context = { kind: fileKind, declared, targets: options.targets, widgetIds: null, clickRefs: [] }
   const widgets = document.widgets === undefined ? null : checkWidgets(document.widgets, context, issues)
   if (widgets) context.widgetIds = new Set(widgets.map((w) => w.id))
+  let links: Record<string, LinkInfo> = {}
+  if (document.links !== undefined)
+    links = checkLinks(document.links, { declared, parameterTypes: parameterTypes(document.parameters), widgetIds: context.widgetIds, targets: options.targets }, issues)
+  resolveLinkRefs(context.clickRefs ?? [], links, issues)
   const layouts = document.layouts === undefined ? null : checkLayouts(document.layouts, widgets, context, issues)
   if (!widgets || !layouts || issues.hasErrors) return issues.list
   checkDocument(fileKind, document, widgets, layouts, parameterInfo(document.parameters), issues)
@@ -120,6 +127,12 @@ export function validateViewsDocument(document: unknown, options: ViewsOptions =
 
 export const validateDashboard = (document: unknown, options: Omit<ViewsOptions, 'kind'> = {}) => validateViewsDocument(document, { ...options, kind: 'dashboard' })
 export const validateReport = (document: unknown, options: Omit<ViewsOptions, 'kind'> = {}) => validateViewsDocument(document, { ...options, kind: 'report' })
+
+function parameterTypes(raw: unknown): Map<string, { type: string; many: boolean }> {
+  const map = new Map<string, { type: string; many: boolean }>()
+  if (Array.isArray(raw)) for (const p of raw) if (isObject(p) && typeof p.name === 'string') map.set(p.name, { type: typeof p.type === 'string' ? p.type : 'string', many: p.many === true })
+  return map
+}
 
 function parameterInfo(raw: unknown): ParamInfo[] {
   return Array.isArray(raw) ? raw.filter(isObject).map((p) => ({ name: String(p.name), required: p.required === true, hasDefault: 'default' in p })) : []

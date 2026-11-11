@@ -16,9 +16,9 @@ shares are part of the **query**, run on the server as the viewer.
 | Type | Keys | Notes |
 | --- | --- | --- |
 | `metric` | `encodings: {value, compare}`, `label`, `format` (a preset or a mapping, see Formats), `query` | `compare` is a second measure of the same request |
-| `chart` | `mark`, `encodings` (channels, each a field name or the subset's `{field, type, sort, stack, title}` and `format`), `query`, `on_select`, `drill` | the subset is the QIS view's own (`vega-lite-subset.schema.json`); `format` is the widget's (see Formats) |
-| `matrix` | `encodings` (a QIS matrix view's own: `rows columns values values_on totals sort column_limit`; a `rows` or `columns` entry is a field or `{field, format, sort}`, a `values` entry takes a `format` mapping), `query`, `on_select`, `drill` | the encodings are `view.schema.json`'s definitions, referenced and not copied, except the axes and the values, which also take a format |
-| `table` | `encodings: {columns: [{field, label, format (a preset or a mapping), align, width}], sort}`, `query`, `drill` | a total row is a row of the result |
+| `chart` | `mark`, `encodings` (channels, each a field name or the subset's `{field, type, sort, stack, title}` and `format`), `query`, `on_select`, `drill`, `on_click` | the subset is the QIS view's own (`vega-lite-subset.schema.json`); `format` is the widget's (see Formats) |
+| `matrix` | `encodings` (a QIS matrix view's own: `rows columns values values_on totals sort column_limit`; a `rows` or `columns` entry is a field or `{field, format, sort}`, a `values` entry takes a `format` mapping), `query`, `on_select`, `drill`, `on_click` | the encodings are `view.schema.json`'s definitions, referenced and not copied, except the axes and the values, which also take a format |
+| `table` | `encodings: {columns: [{field, label, format (a preset or a mapping), align, width}], sort}`, `query`, `drill`, `on_click` | a total row is a row of the result |
 | `text` | `text` | markdown, **no raw HTML, no image, links only to a path on the host** (`/docs/x`); `{{params.name}}` is substituted as text |
 | `image` | `hash: sha256:<64 hex>`, `media_type` (`image/png image/jpeg image/webp`), `alt`, `fit` | held in the definition's artifacts by hash; **no URL, no SVG** |
 | `control` | `parameter`, `control` (`select multiselect date daterange number toggle text`), `label`, `values: {attribute, limit}` | edits one parameter; no query |
@@ -156,7 +156,11 @@ and sorts the rows loaded. The console's board sets `sortable`.
 | `DBD-VIEW-038` | an `embed` widget in a report |
 | `DBD-VIEW-007` | a query that is not one of the forms, or a mode that does not fit it |
 | `DBD-VIEW-008` | a parameter that is not declared (a marker, a `params` entry, a control, `on_select`, a drill, `{{params.x}}`) |
-| `DBD-VIEW-037` | a drill that does not give a required parameter of its target |
+| `DBD-VIEW-036` | a widget's `on_click` names a link the document does not declare |
+| `DBD-VIEW-037` | a drill or a link that does not give a required parameter of its target |
+| `DBD-VIEW-039` | a link to a dashboard, report, view, page or form the app does not have |
+| `DBD-VIEW-044` / `-045` | a name in a link's `with`, `new`, `edit` or `lock` that the target lacks; a value of the wrong type for it |
+| `DBD-VIEW-046` | `print: link` on a link shown in a dialog or panel (no address of its own) |
 | `DBD-VIEW-040` to `-043` | the derivation and the catalog check, [below](#deriving-the-request) (`-040` nothing to derive, `-041` no measure, `-042` totals twice or with nothing to roll up, `-043` a model the document does not depend on) |
 
 `ViewsLoader.LoadWidgets` (.NET) and `validateWidgets` (TypeScript) check a widgets map alone, as an assistant's answer, a portal block or a pin holds it. The shared documents and the expected code and path of each
@@ -600,6 +604,37 @@ answers, and `moduleClient` is the same interface over its REST (the routes abov
 legend, then its axis titles, then thins its ticks; a table and a matrix show the rows that fit and say "12 of 40 rows" with an action that maximizes the tile (where the widget scrolls). `widget_options: {density}` pins it.
 
 **Text and images.** Text is markdown without raw HTML, images or links off the host, `{{params.name}}` substituted as text; an image is drawn only from the `data:` URI of its raster, at most 1 MiB, never an SVG.
+
+## Links: one vocabulary for a click (plan 32 section 9f, DBR35)
+
+A document declares its **links** once, by name, and a widget names the one it follows. `drill` (above) is the same thing written in place and stays; a widget has `on_click` **or** `drill`, not both.
+
+```yaml
+links:
+  region-page: {page: regional-detail, with: {region: $customers.region, year: $params.year}, print: link}
+  order-form:  {form: orders, new: {customer_id: $customers.id, status: open}, as: dialog, then: refresh, lock: [status], print: hidden}
+  order:       {form: orders, edit: {id: $orders.id}, as: panel, then: [orders_table], label: Open the order}
+  year-report: {report: region_detail, with: {region: $params.region, year: 2026}}
+widgets:
+  by_region: {type: chart, ..., on_click: region-page}
+  orders_table: {type: table, ..., on_click: order}
+```
+
+| Key | Meaning |
+| --- | --- |
+| `dashboard`, `report`, `view`, `page`, `form` | the target: **exactly one**, a name in the **same app instance** (a view is named by its file without folder and extension). `page` is a custom page or a code page of the app; `form` is a form view |
+| `with` | the target's parameters (dashboard, report, view, page) |
+| `new` / `edit` | a form only: `new` the fields a row to create starts with, `edit` the key of the row to change (one of the two) |
+| values | `$field` of the clicked row (`$orders.id`, or the alias of a query output), `$params.name` of the document (it must be declared), or a literal (a string, a number, a boolean) |
+| `as` | `navigate` (default), `dialog` or `panel`: **the shell presents it**; a widget only sends the event, the shell opens the target in its own frame with the values in the route |
+| `then` | what re-runs when a dialog or panel closes or saves: `refresh` (the source widget's queries; the default for a form), `none` (the default for the others) or a list of widgets of the document |
+| `lock` | a form only: fields that `new` or `edit` gave and the form shows read-only. **A convenience of the screen, never a rule**: a prefilled value is a default, the form validates and the Store enforces its rules as the viewer |
+| `print`, `image` | what a PDF (`print`) and a PNG snapshot (`image`, defaults to `print`) draw: `hidden`, `normal` (as on screen, no link behaviour) or `link` (a PDF hyperlink to the target's address; **the address is never printed as text**). In a PNG `link` is drawn as `normal`. Left out, the element's meaning decides: an element that shows a value (text, a status icon chosen by a field's value) is `normal`, a pure affordance (a pencil, an "open" arrow) is `hidden`; nothing is `link` unless written |
+| `label` | the text of the affordance |
+
+**Publish checks.** Everything above is checked where the document is read. What needs the app is checked when the loader is given the `targets` of the app (`dashboard:name`, `report:name`, `view:name`, `page:name`, `form:name`, each with its parameters or, for a form, its fields and its key as required; `app validate` makes them, DBR13): the target exists in the app (`DBD-VIEW-039`), every name in `with`, `new`, `edit` and `lock` is the target's own (`DBD-VIEW-044`), each value fits the type of the parameter or field (`DBD-VIEW-045`: the same type, an integer for a number, a string for a date, a list only for a list; a `$field` of the row is not checked, its type is the catalog's), a required parameter (an edit form's key) that is not given is an error naming the link (`DBD-VIEW-037`), and `print: link` where the target has no address of its own (`as` is `dialog` or `panel`) is refused (`DBD-VIEW-046`). A widget names only links the document declares (`DBD-VIEW-036`).
+
+In TypeScript the same checks are `checkLinks` of `@dbdatakit/visuals`, with the pure parts a host and the exporter use: `describeLink`, `linkValues(link, row, params)` (what a click carries; a value that has nothing is left out, never the text `undefined`), `linkQuery` (the values as the route's query string) and `printTreatment(link, meaning, medium)`. The refusals are cases of `conformance/views`, run by both languages. A report's links are read the same way; what the viewer's shell does with `as` and `then` is [DBR36](plans/32-dashboards-and-reports.md), and what the exporter draws for `print` is DBR37.
 
 ## Interaction: cross-filter, drill, refresh and kiosk
 

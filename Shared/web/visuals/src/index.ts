@@ -9,6 +9,8 @@ export { MAXIMUM_LIMIT, SPEC_VERSION, defaultLimit, deriveRequest, memberProblem
 export type { CatalogRole, CatalogRoles, DerivableWidget, DerivedRequest, ParameterBinding, Well } from './views/derive'
 export { catalogDiagnostics, catalogFromModel, catalogRoles, retailCatalog } from './views/catalog'
 export type { Catalog, CatalogMember } from './views/catalog'
+export { LINK_AS, LINK_PRINT, LINK_TARGETS, checkLinks, describeLink, describeValue, linkQuery, linkTypeFits, linkValues, printTreatment } from './views/links'
+export type { ElementMeaning, LinkAs, LinkDoc, LinkInfo, LinkParams, LinkPrint, LinkRow, LinkScalar, LinkTargetKind, LinkTargetParam, LinkValue, PrintMedium } from './views/links'
 export { RUNNING_TOKENS, VIEWS_FORMAT, validateDashboard, validateReport, validateViewsDocument } from './views/document'
 export type { ViewKind, ViewsOptions } from './views/document'
 export { checkFormat, formatDate, formatNumber, formatValue } from './views/format'

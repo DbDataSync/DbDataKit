@@ -4,6 +4,7 @@ import {
 } from './common'
 import type { Json, ViewsIssue } from './common'
 import { checkFormat } from './format'
+import { isLinkName } from './links'
 import coreSchema from '../../schemas/core.schema.json'
 
 /**
@@ -12,7 +13,7 @@ import coreSchema from '../../schemas/core.schema.json'
  */
 
 /** The parameters of a document a drill may lead to. */
-export interface DrillTarget { name: string; required?: boolean; default?: unknown }
+export interface DrillTarget { name: string; required?: boolean; default?: unknown; type?: string; many?: boolean }
 
 const WIDGET_TYPES = ['metric', 'chart', 'matrix', 'table', 'text', 'image', 'control', 'embed'] as const
 const noProperties = (...names: string[]) => (copy: Json) => { for (const n of names) (copy.properties as Json)[n] = {} }
@@ -40,7 +41,11 @@ export const PARAM_USE = /\{\{\s*params\.([A-Za-z0-9_-]+)\s*\}\}/g
 export interface WidgetInfo { id: string; type: string; raw: Json }
 
 /** What reading widgets needs of the rest of the document. */
-export interface Context { kind?: 'dashboard' | 'report'; declared: Set<string>; targets?: Record<string, DrillTarget[]>; widgetIds: Set<string> | null }
+export interface Context {
+  kind?: 'dashboard' | 'report'; declared: Set<string>; targets?: Record<string, DrillTarget[]>; widgetIds: Set<string> | null
+  /** The links the widgets name (`on_click`), collected for the document to resolve once it has read `links`. */
+  clickRefs?: { name: string; path: string }[]
+}
 
 /**
  * The shape check of a widgets map alone: the same checks a document runs on its `widgets`, for a map an assistant's answer, a portal block or a pin holds. `parameters` are the names the widgets may use.
@@ -121,6 +126,10 @@ function checkWidget(id: string, raw: unknown, path: string, context: Context, i
     }
     if (raw.on_select !== undefined) onSelect(raw.on_select, join(path, 'on_select'), context, issues)
     if (raw.drill !== undefined) drill(raw.drill, join(path, 'drill'), context, issues)
+    if (raw.on_click !== undefined && type !== 'metric' && isLinkName(raw.on_click)) {
+      if (raw.drill !== undefined) issues.add('DBD-106', join(path, 'on_click'), 'A widget follows `on_click` (a link of the document) or `drill` (the same thing written in place), not both.')
+      else context.clickRefs?.push({ name: raw.on_click, path: join(path, 'on_click') })
+    }
   }
   return { id, type, raw }
 }

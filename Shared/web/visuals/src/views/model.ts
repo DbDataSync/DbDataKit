@@ -1,6 +1,7 @@
 import type { RenderedError } from '../types'
 import type { SelectableLayout } from './selectLayout'
 import type { ViewFormatValue } from './format'
+import type { LinkDoc } from './links'
 
 /**
  * The shapes of a dashboard or report document as the renderers and layout engines read it (plan 32 sections 2 and 3). They describe a document that has already passed `validateViewsDocument`, so
@@ -33,10 +34,11 @@ export interface ChartDoc extends WidgetCommon {
   query: QueryDoc
   on_select?: { set: string; from: string }
   drill?: unknown
+  on_click?: string
 }
-export interface MatrixDoc extends WidgetCommon { type: 'matrix'; encodings: Record<string, unknown>; query: QueryDoc; on_select?: { set: string; from: string }; drill?: unknown }
+export interface MatrixDoc extends WidgetCommon { type: 'matrix'; encodings: Record<string, unknown>; query: QueryDoc; on_select?: { set: string; from: string }; drill?: unknown; on_click?: string }
 export interface TableColumnDoc { field: string; label?: string; format?: ViewFormatValue; align?: 'left' | 'right' | 'center'; width?: number }
-export interface TableDoc extends WidgetCommon { type: 'table'; encodings: { columns: TableColumnDoc[]; sort?: unknown }; query: QueryDoc; drill?: unknown }
+export interface TableDoc extends WidgetCommon { type: 'table'; encodings: { columns: TableColumnDoc[]; sort?: unknown }; query: QueryDoc; drill?: unknown; on_click?: string }
 export interface TextDoc extends WidgetCommon { type: 'text'; text: string }
 export interface ImageDoc extends WidgetCommon { type: 'image'; hash: string; media_type: 'image/png' | 'image/jpeg' | 'image/webp'; alt: string; fit?: 'contain' | 'cover' }
 export interface ControlDoc extends WidgetCommon { type: 'control'; parameter: string; control?: ControlKind; label?: string; values?: { attribute: string; limit?: number } }
@@ -73,6 +75,8 @@ export interface ViewsDoc {
   parameters?: ParameterDefinition[]
   /** The language numbers and dates are written in (DBR46); `en` when absent. */
   locale?: 'en' | 'de' | 'fr' | 'es' | 'it' | 'pt' | 'nl'
+  /** The links the document declares by name (DBR35); a widget follows one with `on_click`. */
+  links?: Record<string, LinkDoc>
   widgets: Record<string, WidgetDoc>
   layouts: LayoutDoc[]
   refresh?: { every: string }

@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 1,
+  "kind": "dashboard",
+  "title": "Sales with links",
+  "parameters": [
+    {
+      "name": "region",
+      "type": "string",
+      "for": "customers.region"
+    },
+    {
+      "name": "year",
+      "type": "integer"
+    }
+  ],
+  "links": {
+    "region-page": {
+      "page": "regional-detail",
+      "with": {
+        "region": "$customers.region",
+        "year": "$params.year"
+      },
+      "as": "navigate",
+      "print": "link",
+      "form": "orders"
+    },
+    "order-form": {
+      "form": "orders",
+      "new": {
+        "customer_id": "$customers.id",
+        "region": "$customers.region",
+        "status": "open"
+      },
+      "as": "dialog",
+      "then": "refresh",
+      "lock": [
+        "region"
+      ],
+      "print": "hidden"
+    },
+    "order": {
+      "form": "orders",
+      "edit": {
+        "id": "$orders.id"
+      },
+      "as": "panel",
+      "then": [
+        "orders_table"
+      ],
+      "print": "normal",
+      "image": "normal",
+      "label": "Open the order"
+    },
+    "year-report": {
+      "report": "region_detail",
+      "with": {
+        "region": "$params.region",
+        "year": 2026
+      }
+    },
+    "other-dashboard": {
+      "dashboard": "overview"
+    },
+    "a-view": {
+      "view": "customers",
+      "with": {
+        "code": "$customers.code"
+      }
+    }
+  },
+  "widgets": {
+    "by_region": {
+      "type": "chart",
+      "title": "Revenue by region",
+      "mark": "bar",
+      "encodings": {
+        "x": "customers.region",
+        "y": "orders.net_revenue"
+      },
+      "query": {
+        "model": "sales",
+        "limit": 20
+      },
+      "on_click": "region-page"
+    },
+    "pivot": {
+      "type": "matrix",
+      "title": "Region and quarter",
+      "encodings": {
+        "rows": [
+          "customers.region"
+        ],
+        "columns": [
+          "date.fiscal_quarter"
+        ],
+        "values": [
+          {
+            "field": "orders.net_revenue"
+          }
+        ]
+      },
+      "query": {
+        "model": "sales",
+        "limit": 1000
+      },
+      "on_click": "year-report"
+    },
+    "orders_table": {
+      "type": "table",
+      "title": "Orders",
+      "encodings": {
+        "columns": [
+          {
+            "field": "orders.order_id"
+          },
+          {
+            "field": "customers.region"
+          }
+        ]
+      },
+      "query": {
+        "model": "sales",
+        "limit": 100
+      },
+      "on_click": "order"
+    }
+  },
+  "layouts": [
+    {
+      "name": "desk",
+      "type": "reflow",
+      "default": true,
+      "grid": {
+        "columns": 12
+      },
+      "tiles": [
+        {
+          "widget": "by_region",
+          "x": 0,
+          "y": 0,
+          "w": 6,
+          "h": 6
+        },
+        {
+          "widget": "pivot",
+          "x": 6,
+          "y": 0,
+          "w": 6,
+          "h": 6
+        },
+        {
+          "widget": "orders_table",
+          "x": 0,
+          "y": 6,
+          "w": 12,
+          "h": 6
+        }
+      ]
+    }
+  ]
+}

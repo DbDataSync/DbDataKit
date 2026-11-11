@@ -56,6 +56,7 @@ public class SchemaTests
             ["row_item"] = Props(At(core, "$defs/flow_row_block/properties/row/items")), ["widget_options"] = Props(At(core, "$defs/widget_options/additionalProperties")),
             ["refresh"] = Props(At(dashboard, "properties/refresh")), ["kiosk"] = Props(At(dashboard, "properties/kiosk")),
             ["limits"] = Props(At(report, "properties/limits")), ["cover"] = Props(At(report, "properties/cover")),
+            ["link"] = Props(At(core, "$defs/link")),
         };
         // `range` is the same shape as min and max; `layout.common` is what the three layout types share
         Assert.Equal(["max", "min"], Props(new JsonObject { ["properties"] = At(core, "$defs/range/properties").DeepClone() }));
@@ -116,7 +117,7 @@ public class SchemaTests
             Assert.Equal(ViewsFormat.Current, At(Load(kind), "properties/schemaVersion")["const"]!.GetValue<int>());
         }
         // what the kinds share is the same definition in both: the title, the parameters, the theme, the widgets and the layouts
-        foreach (var shared in new[] { "title", "parameters", "theme", "locale", "widgets", "layouts" })
+        foreach (var shared in new[] { "title", "parameters", "theme", "locale", "links", "widgets", "layouts" })
             Assert.Equal(At(Load("dashboard"), $"properties/{shared}/$ref")!.GetValue<string>(), At(Load("report"), $"properties/{shared}/$ref")!.GetValue<string>());
         Assert.Equal(ViewsFormat.Current, ViewsFormat.Previous);
     }

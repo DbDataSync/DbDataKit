@@ -26,6 +26,10 @@ refusals are `Shared/conformance/views/widgets`, which the .NET suite runs too. 
 overlapping, minimums at scale 1, page sizes and tokens, a declared parameter everywhere) and the rules of the kind. They return issues with a code and a **path** (`layouts[1].tiles[0].x`); the .NET loaders also give
 file, line and column. `VIEWS_FORMAT` is the one number of both kinds.
 
+**Links** (plan 32 DBR35): a document's `links` map and a widget's `on_click` are checked by `validateViewsDocument` (pass `targets` for the checks that need the app: `dashboard:name`, `report:name`, `view:name`, `page:name`, `form:name`, each with its parameters or fields and their types).
+`views/links.ts` is the pure part a host and the exporter use and has no DOM: `describeLink` reads a link with its defaults, `linkValues(link, row, params)` the values a click carries (a value that has nothing is left out), `linkQuery(values)` writes them as the route's
+query string, `linkTypeFits` is the rule a value's type is checked by (the same as `ViewsLoader.LinkTypeFits`) and `printTreatment(link, meaning, medium)` says what a PDF or a PNG draws for the link's element (`hidden`, `normal` or `link`; a value prints, a pure affordance does not).
+
 `selectLayout(document, context)` picks the layout to show: a named layout, else the most specific `when` that matches (ties by order), else the default; the same pure function as `LayoutSelector` in .NET, with the same goldens.
 
 ### Showing a document (plan 32 DBR05, DBR06, DBR22)
