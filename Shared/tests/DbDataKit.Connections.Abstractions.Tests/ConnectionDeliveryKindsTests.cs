@@ -12,7 +12,7 @@ public sealed class ConnectionDeliveryKindsTests
     private const string Slack = "schema: connection/2\nkind: http\nname: slack-ops\nendpoint: https://hooks.slack.com/services/{token}\nendpoint_secrets:\n  token: secret:dbdatakit:server:connection:slack-ops:token\nwebhook: { format: slack }\n";
     private const string Head = "schema: connection/2\nkind: http\nname: w\n";
 
-    private static ConnectionLoadResult Any(string yaml, string file = "connections/x.yml") => ConnectionDefinitionLoader.Load(yaml, file, outsideKinds: true);
+    private static ConnectionLoadResult Any(string yaml, string file = "connections/x.yml") => ConnectionDefinitionLoader.LoadConnectionOfAnyKind(yaml, file);
 
     private static string Errors(ConnectionLoadResult r) => string.Join("\n", r.Diagnostics.Where(d => d.Severity == ConfigSeverity.Error));
 
@@ -33,7 +33,7 @@ public sealed class ConnectionDeliveryKindsTests
     [Fact]
     public void A_program_that_keeps_database_connections_refuses_a_smtp_file_naming_it()
     {
-        var r = ConnectionDefinitionLoader.Load(Smtp, "connections/mail.yml");
+        var r = ConnectionDefinitionLoader.LoadDatabaseConnection(Smtp, "connections/mail.yml");
         Assert.False(r.Ok);
         Assert.Contains(r.Diagnostics, d => d.Code == ConnectionDefinitionLoader.KindNotKept && d.Message.Contains("connections/mail.yml", StringComparison.Ordinal));
     }
@@ -82,7 +82,7 @@ public sealed class ConnectionDeliveryKindsTests
         Assert.Contains("needs an `smtp` section", Errors(none), StringComparison.Ordinal);
         var onHttp = Any("schema: connection/2\nkind: http\nname: m\nendpoint: https://a.example.com\nsmtp: { host: h, sender: a@example.com }\n");
         Assert.False(onHttp.Ok);
-        var onDatabase = ConnectionDefinitionLoader.Load("schema: connection/2\nname: w\nengine: postgres\naddress: { host: h }\nsmtp: { host: h, sender: a@example.com }\n");
+        var onDatabase = ConnectionDefinitionLoader.LoadDatabaseConnection("schema: connection/2\nname: w\nengine: postgres\naddress: { host: h }\nsmtp: { host: h, sender: a@example.com }\n");
         Assert.Contains(onDatabase.Diagnostics, d => d.Code == ConnectionDefinitionLoader.BadOutside);
     }
 

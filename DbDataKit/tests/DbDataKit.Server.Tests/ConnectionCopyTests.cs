@@ -6,7 +6,7 @@ namespace DbDataKit.Server.Tests;
 /// <summary>What a copy of a connection file changes for another server (plan 13a, E05), and what it leaves exactly as it was.</summary>
 public sealed class ConnectionCopyTests
 {
-    private static ConnectionDefinition Read(CopyPlan plan) => ConnectionDefinitionLoader.Load(plan.Text ?? throw new InvalidOperationException(plan.Problem), "copy.yaml").Require();
+    private static ConnectionDefinition Read(CopyPlan plan) => ConnectionDefinitionLoader.LoadDatabaseConnection(plan.Text ?? throw new InvalidOperationException(plan.Problem), "copy.yaml").Require();
 
     private const string Base = """
         # kept

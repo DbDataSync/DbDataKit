@@ -105,7 +105,7 @@ public static class TestConnections
     /// <summary>A connection read with the shared strict loader; the test fails with the loader's words when it does not read.</summary>
     public static ConnectionDefinition Load(string yaml, string file = "connections/test.yml")
     {
-        var r = ConnectionDefinitionLoader.Load(yaml, file, addressRequired: false, outsideKinds: true);
+        var r = ConnectionDefinitionLoader.LoadConnectionOfAnyKind(yaml, file, addressRequired: false);
         Assert.True(r.Ok, string.Join("\n", r.Diagnostics));
         return r.Definition!;
     }

@@ -225,7 +225,7 @@ public sealed class GatewaySemanticModels(
         var file = Path.Combine(configDirectory, "connections", dataSource + ".yaml");
         // the group's published data sources (plan 20 O04b) are beside the configuration folder, as each instance serves them
         if (!File.Exists(file)) file = Path.Combine(PublishedDataSources.FolderIn(Path.GetDirectoryName(Path.GetFullPath(configDirectory))!), dataSource + ".yaml");
-        return File.Exists(file) ? DbDataKit.Connections.ConnectionDefinitionLoader.Load(File.ReadAllText(file), file).Definition?.ManagedBy : null;
+        return File.Exists(file) ? DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(File.ReadAllText(file), file).Definition?.ManagedBy : null;
     }
 
     private async Task<ManagementResult> RollbackAsync(string name, string? body, ManagementCaller caller)

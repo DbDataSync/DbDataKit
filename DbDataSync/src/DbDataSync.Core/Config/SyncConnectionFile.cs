@@ -148,7 +148,7 @@ internal static partial class SyncConnectionFile
         if (diags.Count == 0 && root is YamlMapping first && first.Get("schema") is null && IsEarlierForm(first))
             throw new ConfigFileException(path, [EarlierFormDiagnostic(path, name)]);
 
-        var loaded = ConnectionDefinitionLoader.Load(text, path);
+        var loaded = ConnectionDefinitionLoader.LoadDatabaseConnection(text, path);
         var errors = loaded.Diagnostics.Where(d => d.Severity == ConfigSeverity.Error).ToList();
         if (errors.Count > 0 || loaded.Definition is null) throw new ConfigFileException(path, errors);
         var d = loaded.Definition;

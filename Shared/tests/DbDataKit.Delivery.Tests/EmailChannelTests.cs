@@ -279,7 +279,7 @@ public sealed class EmailChannelTests : IDisposable
     [InlineData("smtp:\n  host: h\n  sender: a@b.example\n  tls: none\n", "clear text")]
     public void A_smtp_connection_that_does_not_read_cannot_be_a_channel(string section, string word)
     {
-        var r = DbDataKit.Connections.ConnectionDefinitionLoader.Load("schema: connection/2\nkind: smtp\nname: m\n" + section, "connections/m.yml", outsideKinds: true);
+        var r = DbDataKit.Connections.ConnectionDefinitionLoader.LoadConnectionOfAnyKind("schema: connection/2\nkind: smtp\nname: m\n" + section, "connections/m.yml");
         Assert.False(r.Ok);
         Assert.Contains(word, string.Join("\n", r.Diagnostics.Select(d => d.Message)), StringComparison.Ordinal);
     }

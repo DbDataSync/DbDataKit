@@ -55,7 +55,7 @@ public sealed partial class BuildServerProxyTests
         var text = ProxyPublisher.DataSourceText("w", "sqlserver", "secret:x", null, policy);
         Assert.DoesNotContain("allow_writes", text);
         Assert.EndsWith("extensions:\n  gateway:\n    batch_size: 9\n    compression:\n      enabled: true\n", text);
-        Assert.True(ConnectionDefinitionLoader.Load(text, "w.yaml").Ok);
+        Assert.True(ConnectionDefinitionLoader.LoadDatabaseConnection(text, "w.yaml").Ok);
     }
 
     [Fact]

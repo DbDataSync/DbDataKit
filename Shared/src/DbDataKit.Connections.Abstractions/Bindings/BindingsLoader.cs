@@ -229,7 +229,7 @@ public static class BindingsWriter
             text.Append(section).Append(":\n");
             foreach (var slot in slots)
             {
-                if (slot.Kind == SlotKind.Delivery && slot.PerChannel.Count == 1 && slot.PerChannel.TryGetValue(BindingSet.Production, out var only))
+                if (slot.Kind == SlotKind.Delivery && slot.PerChannel.Count == 1 && slot.PerChannel.TryGetValue(BindingSet.Production, out var only) && only[0].Model is null)
                 {
                     text.Append("  ").Append(Q(slot.Name)).Append(": ").Append(Entry(only[0])).Append('\n');
                     continue;

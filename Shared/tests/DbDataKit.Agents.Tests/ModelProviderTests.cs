@@ -53,7 +53,7 @@ public sealed class ModelProviderTests
     [InlineData("endpoint", "endpoint", "")]
     [InlineData("schema: connection/2", "schema: connection/3", "connection")]
     [InlineData("{ id: claude-sonnet-4-5, window: 200000,", "{ id: claude-sonnet-4-5, window: 5,", "window")]
-    [InlineData("kind: model-provider", "kind: http", "belongs to the kind")]
+    [InlineData("kind: model-provider", "kind: http", "accepts the chat model provider")]
     public void Each_bad_part_is_refused_with_file_and_line(string from, string to, string expected)
     {
         var yaml = from == "endpoint" ? Good.Replace("provider: anthropic\n", "provider: openai-compatible\n  locality: local\n") : Good.Replace(from, to);
@@ -78,7 +78,7 @@ public sealed class ModelProviderTests
     {
         var result = ModelProviderConnection.Load("schema: connection/2\nkind: http\nname: crm\nendpoint: https://api.example.com/v1\n", "connections/crm.yml");
         Assert.False(result.Ok);
-        Assert.Contains(result.Diagnostics, d => d.Message.Contains("not `model-provider`") && d.Path == "connections/crm.yml");
+        Assert.Contains(result.Diagnostics, d => d.Code == ConnectionDefinitionLoader.KindNotKept && d.Message.Contains("'crm'") && d.Message.Contains("`http`") && d.Message.Contains("embedding model provider") && d.Path == "connections/crm.yml");
     }
 
     private static IBindingTargets Targets(params ModelProviderDefinition[] providers) =>
