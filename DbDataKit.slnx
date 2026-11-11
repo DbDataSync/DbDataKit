@@ -90,6 +90,7 @@
     <Project Path="Shared/src/DbDataKit.Semantic/DbDataKit.Semantic.csproj" />
     <Project Path="Shared/src/DbDataKit.Metadata/DbDataKit.Metadata.csproj" />
     <Project Path="Shared/src/DbDataKit.Knowledge/DbDataKit.Knowledge.csproj" />
+    <Project Path="Shared/src/DbDataKit.Knowledge.Index/DbDataKit.Knowledge.Index.csproj" />
     <Project Path="Shared/src/DbDataKit.Agents/DbDataKit.Agents.csproj" />
     <Project Path="Shared/src/DbDataKit.Agents.Providers/DbDataKit.Agents.Providers.csproj" />
     <Project Path="Shared/src/DbDataKit.Lineage/DbDataKit.Lineage.csproj" />

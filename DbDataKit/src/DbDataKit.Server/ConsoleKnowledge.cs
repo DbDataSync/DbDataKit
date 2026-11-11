@@ -15,7 +15,7 @@ public sealed record ContextPartShare(string Layer, string Id, string Version, i
 
 /// <summary>
 /// The knowledge the console reads (plan 27a KN28, KN36, KN37, KN38): two projects in its directory, <c>install-knowledge/</c> (the template of KN35: the install's guardrails in <c>policy/</c>, owned by the administrators) and <c>knowledge/</c> (items about the install's objects),
-/// each read with the strict reader. What exists to be about is <c>knowledge-subjects.json</c> (a stand-in until the lineage graph is the catalog, KN02): objects that exist and objects that are gone. There is no index here (KN07 is not built): the screens show what the files
+/// each read with the strict reader. What exists to be about is <c>knowledge-subjects.json</c>: what an administrator says exists or is gone, and what the joined lineage graph of the servers says (<see cref="RefreshFromLineage"/>, plan 27a KN02), each entry saying which. There is no index here (KN07 is not built): the screens show what the files
 /// say and what they would be split into, never what a search finds.
 /// </summary>
 public sealed class ConsoleKnowledge(ConsoleSettings settings)
@@ -42,7 +42,7 @@ public sealed class ConsoleKnowledge(ConsoleSettings settings)
         return catalog;
     }
 
-    public sealed record SubjectEntry(string Type, string Name, string NarrowingKind, string NarrowingName, string Status);
+    public sealed record SubjectEntry(string Type, string Name, string NarrowingKind, string NarrowingName, string Status, string Source = "manual");
 
     public IReadOnlyList<SubjectEntry> Subjects()
     {
@@ -51,9 +51,52 @@ public sealed class ConsoleKnowledge(ConsoleSettings settings)
         {
             using var document = JsonDocument.Parse(File.ReadAllText(SubjectsFile));
             return [.. document.RootElement.GetProperty("subjects").EnumerateArray().Select(e => new SubjectEntry(e.GetProperty("type").GetString()!, e.GetProperty("name").GetString()!,
-                e.TryGetProperty("narrowingKind", out var k) ? k.GetString() ?? "" : "", e.TryGetProperty("narrowingName", out var n) ? n.GetString() ?? "" : "", e.TryGetProperty("status", out var s) ? s.GetString() ?? "exists" : "exists"))];
+                e.TryGetProperty("narrowingKind", out var k) ? k.GetString() ?? "" : "", e.TryGetProperty("narrowingName", out var n) ? n.GetString() ?? "" : "", e.TryGetProperty("status", out var s) ? s.GetString() ?? "exists" : "exists", e.TryGetProperty("source", out var src) ? src.GetString() ?? "manual" : "manual"))];
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException) { return []; }
+    }
+
+    private void WriteSubjects(IEnumerable<SubjectEntry> all)
+    {
+        Directory.CreateDirectory(settings.Directory);
+        File.WriteAllText(SubjectsFile, new JsonObject { ["subjects"] = new JsonArray(all.OrderBy(s => s.Type, StringComparer.Ordinal).ThenBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.NarrowingKind, StringComparer.Ordinal).ThenBy(s => s.NarrowingName, StringComparer.Ordinal).Select(s => (JsonNode)new JsonObject
+        { ["type"] = s.Type, ["name"] = s.Name, ["narrowingKind"] = s.NarrowingKind, ["narrowingName"] = s.NarrowingName, ["status"] = s.Status, ["source"] = s.Source }).ToArray()) }.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n");
+    }
+
+    /// <summary>The result of reading the subjects from the lineage graph: how many it shows, how many it showed before and no longer does (now gone), and whether every server answered (when not, nothing is marked gone: a server that did not answer is not a model that was dropped).</summary>
+    public sealed record SubjectRefresh(int Found, int NowGone, bool Complete, int Total);
+
+    /// <summary>
+    /// Reads what exists to be about from the lineage graph (plan 27a KN02): every subject the graph has a node for is recorded as existing, by the graph; one the graph showed before and does not show now is recorded as gone, but only when every server answered
+    /// (<paramref name="complete"/>) and only for a whole object (a member that vanished from a model that is still there is simply not found any more). What an administrator said by hand is never changed by it.
+    /// </summary>
+    public SubjectRefresh RefreshFromLineage(DbDataKit.Lineage.LineageGraph graph, bool complete)
+    {
+        var current = Subjects();
+        var manual = current.Where(e => e.Source != "lineage").ToList();
+        var earlier = current.Where(e => e.Source == "lineage").ToList();
+        var catalog = new LineageSubjectCatalog(graph);
+        var keyOf = (SubjectEntry e) => new KnowledgeSubject(e.Type, [e.Name], e.NarrowingKind, e.NarrowingName).Key;
+        var manualKeys = manual.Select(keyOf).ToHashSet(StringComparer.Ordinal);
+        var next = new List<SubjectEntry>(manual);
+        var present = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var subject in catalog.Subjects)
+        {
+            present.Add(subject.Key);
+            if (!manualKeys.Contains(subject.Key)) next.Add(new SubjectEntry(subject.Type, subject.Name, subject.NarrowingKind, subject.NarrowingName, "exists", "lineage"));
+        }
+        var nowGone = 0;
+        foreach (var e in earlier.Where(e => e.NarrowingKind.Length == 0))
+        {
+            var key = keyOf(e);
+            if (present.Contains(key) || manualKeys.Contains(key)) continue;
+            // gone stays gone; a subject that existed and is missing from a complete answer is newly gone; from an incomplete one it is left as it was
+            if (e.Status == "gone") next.Add(e);
+            else if (complete) { next.Add(e with { Status = "gone" }); nowGone++; }
+            else next.Add(e);
+        }
+        WriteSubjects(next);
+        return new SubjectRefresh(catalog.Subjects.Count, nowGone, complete, next.Count);
     }
 
     /// <summary>Says an object exists or is gone (a model was dropped). Administrators do it; the worklists follow.</summary>
@@ -62,9 +105,7 @@ public sealed class ConsoleKnowledge(ConsoleSettings settings)
         if (status is not ("exists" or "gone")) throw new ArgumentException("A subject exists or is gone.", nameof(status));
         var all = Subjects().Where(s => !(s.Type == type && s.Name == name && s.NarrowingKind == narrowingKind && s.NarrowingName == narrowingName)).ToList();
         all.Add(new SubjectEntry(type, name, narrowingKind, narrowingName, status));
-        Directory.CreateDirectory(settings.Directory);
-        File.WriteAllText(SubjectsFile, new JsonObject { ["subjects"] = new JsonArray(all.OrderBy(s => s.Type, StringComparer.Ordinal).ThenBy(s => s.Name, StringComparer.Ordinal).Select(s => (JsonNode)new JsonObject
-        { ["type"] = s.Type, ["name"] = s.Name, ["narrowingKind"] = s.NarrowingKind, ["narrowingName"] = s.NarrowingName, ["status"] = s.Status }).ToArray()) }.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n");
+        WriteSubjects(all);
     }
 
     public KnowledgeFolder? Folder(string name) => name switch

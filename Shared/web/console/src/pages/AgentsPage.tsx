@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom'
 import { CodeEditor, ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { ConsoleShell } from '../ConsoleShell'
 import {
-  agentsApi, bindingLine, connectCommand, keyReferenceFor, providerTemplate, cost, eventWord, percent, promptingMeaning, promptingName, sessions, statusWord, tokenState, waitingOn,
+  agentsApi, buildTarget, targetLine, bindingLine, connectCommand, keyReferenceFor, providerTemplate, cost, eventWord, percent, promptingMeaning, promptingName, sessions, statusWord, tokenState, waitingOn,
   type AgentDetail, type Approval, type AuditRow, type ConversationView, type Diagnostic, type MadeToken, type PolicyChange, type ProviderTest, type ProviderView,
 } from '../agents'
 import { outsideApi } from '../outsideConnections'
@@ -66,11 +66,41 @@ function ApprovalPrompt({ approval, onAnswer, busy }: { approval: Approval; onAn
 
 // ---- AG15: chat ----
 
+/** The Build server, project and workspace an agent works on (plan 27a AG14): the server is asked as the signed-in person, so the lists are what that person sees. */
+function BuildTargetPicker({ server, project, workspace, onChange, withWorkspace }: {
+  server: string; project: string; workspace: string; withWorkspace: boolean; onChange: (next: { server: string; project: string; workspace: string }) => void
+}) {
+  const targets = useQuery({ queryKey: ['agents', 'build-targets', server, project], queryFn: () => agentsApi.buildTargets(server || undefined, project || undefined), retry: false })
+  return (
+    <div style={{ margin: '8px 0' }} data-testid="build-target">
+      <div className="hint">Work on a Build project (optional): the server is asked as you.</div>
+      <select value={server} onChange={(e) => onChange({ server: e.target.value, project: '', workspace: '' })} aria-label="Build server" data-testid="build-server">
+        <option value="">No Build project</option>
+        {targets.data?.servers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+      </select>
+      {server && (
+        <select value={project} onChange={(e) => onChange({ server, project: e.target.value, workspace: '' })} aria-label="Project" data-testid="build-project">
+          <option value="">Choose a project…</option>
+          {targets.data?.projects?.map((p) => <option key={p.id} value={p.id}>{p.id}</option>)}
+        </select>
+      )}
+      {server && project && withWorkspace && (
+        <select value={workspace} onChange={(e) => onChange({ server, project, workspace: e.target.value })} aria-label="Workspace" data-testid="build-workspace">
+          <option value="">No workspace (read only)</option>
+          {targets.data?.workspaces?.map((w) => <option key={w.id} value={w.id}>{w.name ?? w.id}</option>)}
+        </select>
+      )}
+      <ErrorBanner error={targets.error} />
+    </div>
+  )
+}
+
 function ChatTab() {
   const client = useQueryClient()
   const isAdmin = useIsAdmin()
   const [agent, setAgent] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
+  const [where, setWhere] = useState({ server: '', project: '', workspace: '' })
   const [message, setMessage] = useState('')
   const [openTurn, setOpenTurn] = useState<number | null>(null)
   const agents = useQuery({ queryKey: ['agents', 'definitions'], queryFn: agentsApi.definitions })
@@ -79,7 +109,7 @@ function ChatTab() {
     queryKey: ['agents', 'conversation', selected], queryFn: () => agentsApi.conversation(selected!), enabled: selected !== null,
     refetchInterval: (q) => (q.state.data?.running || waitingOn(q.state.data?.approvals ?? []) ? 700 : false),
   })
-  const start = useMutation({ mutationFn: () => agentsApi.start(agent), onSuccess: async (c) => { setSelected(c.id); await client.invalidateQueries({ queryKey: ['agents', 'conversations'] }) } })
+  const start = useMutation({ mutationFn: () => agentsApi.start(agent, undefined, buildTarget(where.server, where.project, where.workspace)), onSuccess: async (c) => { setSelected(c.id); await client.invalidateQueries({ queryKey: ['agents', 'conversations'] }) } })
   const send = useMutation({
     mutationFn: () => agentsApi.send(selected!, message),
     onSuccess: async () => { setMessage(''); await client.invalidateQueries({ queryKey: ['agents', 'conversation', selected] }) },
@@ -103,6 +133,8 @@ function ChatTab() {
                 {agents.data?.map((a) => <option key={a.name} value={a.name}>{a.title ?? a.name}{a.modelBound ? '' : ' (no model bound)'}</option>)}
               </select>{' '}
               <button type="button" className="btn btn-sm btn-primary" disabled={!agent || start.isPending} onClick={() => start.mutate()} data-testid="chat-start">Start</button>
+              <BuildTargetPicker {...where} withWorkspace onChange={setWhere} />
+              <div className="hint" data-testid="chat-target-line">Works on: {targetLine(buildTarget(where.server, where.project, where.workspace))}</div>
             </div>
           ) : <div className="hint">Only an administrator talks to an agent here: its tools hold the console's own authority.</div>}
           <ErrorBanner error={start.error ?? agents.error} />
@@ -447,7 +479,31 @@ function AgentsTab() {
           ))}
         </div>
       </div>
-      <div style={{ flex: '1 1 520px', minWidth: 0 }}>{name ? <AgentEditor key={name} name={name} /> : <div className="hint">Choose an agent.</div>}</div>
+      <div style={{ flex: '1 1 520px', minWidth: 0 }}>
+        <BuildHelperInstall />
+        {name ? <AgentEditor key={name} name={name} /> : <div className="hint">Choose an agent.</div>}
+      </div>
+    </div>
+  )
+}
+
+/** Makes the build-helper agent from what a Build server offers an agent, and its skill (plan 27a AG14). */
+function BuildHelperInstall() {
+  const client = useQueryClient()
+  const isAdmin = useIsAdmin()
+  const [where, setWhere] = useState({ server: '', project: '', workspace: '' })
+  const install = useMutation({ mutationFn: () => agentsApi.installBuildHelper(where.server, where.project), onSuccess: () => client.invalidateQueries({ queryKey: ['agents'] }) })
+  if (!isAdmin) return null
+  return (
+    <div className="card" style={{ marginBottom: 12 }} data-testid="build-helper-install">
+      <div className="card-body">
+        <strong>The build helper</strong>
+        <div className="hint">An agent that works in a workspace of a Build project, as you, with Build's own skill. It is made from the commands the chosen server offers an agent (reads, and changes to the project's files in a workspace); never a command that reaches a database.</div>
+        <BuildTargetPicker {...where} withWorkspace={false} onChange={setWhere} />
+        <button type="button" className="btn btn-sm btn-primary" disabled={!where.server || !where.project || install.isPending} onClick={() => install.mutate()} data-testid="build-helper-make">Make or update the build helper</button>
+        {install.isSuccess && <span className="hint" data-testid="build-helper-done"> The build helper is ready: choose it in Chat with a project and a workspace.</span>}
+        <ErrorBanner error={install.error} />
+      </div>
     </div>
   )
 }

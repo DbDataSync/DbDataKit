@@ -106,6 +106,7 @@ public static class ConsoleHost
         builder.Services.AddSingleton(_ => new PendingInstances(settings.PendingPath));
         builder.Services.AddSingleton(RelayTimeouts.Default);
         builder.Services.AddSingleton<ConsoleRelay>();
+        builder.Services.TryAddSingleton<IBuildRelay>(sp => sp.GetRequiredService<ConsoleRelay>());   // an agent's Build commands run on a server as the person (plan 27a AG14)
         builder.Services.AddSingleton<ConsoleLineage>();
         // the agents the console hosts and the knowledge its screens read (plan 27a AG14 to AG17, AG29 to AG32, KN28, KN36 to KN38); the model an agent's slot is bound to comes from IAgentModels (none until model providers are connections, AG05)
         // the model providers (connections of kind model-provider) and the slots of models/_slots.yml (plan 27a AG05): what an agent's slot is bound to; a test gives its own IAgentModels and ModelHttp

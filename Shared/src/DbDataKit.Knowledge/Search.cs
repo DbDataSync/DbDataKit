@@ -162,7 +162,12 @@ public static class KnowledgeSearch
         var visible = new Dictionary<string, bool>(StringComparer.Ordinal);
         bool Allowed(IndexedChunk c) => visible.TryGetValue(c.Item.Id, out var yes) ? yes : visible[c.Item.Id] = KnowledgeAccess.Visible(c.Item, caller, catalog);
         var matches = index.Nearest(query, items * MaximumChunksPerItem * 4, Allowed);
+        return Assemble(matches, items);
+    }
 
+    /// <summary>Matches grouped per item (at most three chunks each, best first, adjacent ones joined into one excerpt), the items best first: what a search gives back whatever found the chunks (their meaning or their words).</summary>
+    public static IReadOnlyList<SearchHit> Assemble(IEnumerable<ChunkMatch> matches, int items)
+    {
         var hits = new List<SearchHit>();
         foreach (var group in matches.GroupBy(m => m.Indexed.Item.Id).Select(g => g.OrderByDescending(m => m.Score).Take(MaximumChunksPerItem).ToList()).OrderByDescending(g => g[0].Score).Take(items))
         {

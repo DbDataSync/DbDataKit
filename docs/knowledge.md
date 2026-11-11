@@ -1,6 +1,6 @@
 # Knowledge and search: what exists today
 
-**DbDataKnowledge is partly built: the library, not the product.** `DbDataKit.Knowledge` reads the item format; there is no index, no embedding connection, no `knowledge` command and no knowledge app. [Plan 27](plans/27-knowledge-agents-integrations-work.md) section 2 is the decided design; [plan 27a](plans/27a-knowledge-slices.md) slices it. This page lists the pieces that are built and that the design stands on, so a reader does not mistake the design for a feature.
+**DbDataKnowledge is partly built: the library and a search by words, not the product.** `DbDataKit.Knowledge` reads the item format and `DbDataKit.Knowledge.Index` finds chunks by their words on a state database; there is no vector index, no embedding connection, no `knowledge` command and no knowledge app. [Plan 27](plans/27-knowledge-agents-integrations-work.md) section 2 is the decided design; [plan 27a](plans/27a-knowledge-slices.md) slices it. This page lists the pieces that are built and that the design stands on, so a reader does not mistake the design for a feature.
 
 ## What a person or an agent can use now
 
@@ -19,10 +19,12 @@
 | --- | --- | --- |
 | The item, `knowledge/1` (KN01) | a Markdown file with a front matter (role: reference, instruction or guardrail; `about` subjects; `for` audience, agent and channel; `owner`; `chunking`), read strictly with file and line; a file in a project's `knowledge/` folder is about that project; `prompting`, `limits` and `data-rules` are refused with the place they belong (the install policy) | `KnowledgeItemLoader`, `schemas/knowledge.schema.json` |
 | Folder defaults (KN01) | `_knowledge.yml` gives the folders beneath it defaults, nearest wins | `KnowledgeProject.Load` |
-| Subjects and orphans (KN02) | a subject is checked against the catalog when an item is saved (never heard of: refused at its line); an item whose subjects are all gone is orphaned, reaches nobody and is listed | `SubjectResolver`, `ISubjectCatalog` |
+| Subjects and orphans (KN02) | a subject is checked against the catalog when an item is saved (never heard of: refused at its line); an item whose subjects are all gone is orphaned, reaches nobody and is listed; the catalog is read from the lineage graph (semantic models and their measures and dimensions, apps, integrations, Store models, connections) beside what an administrator says | `SubjectResolver`, `ISubjectCatalog`, `LineageSubjectCatalog`, `CompositeSubjectCatalog` |
 | Scope matching (KN03) | which instructions and guardrails apply to what is in play, broad to narrow, guardrails apart, by audience, agent and channel | `ScopeMatcher` |
 | The install knowledge project (KN35) | a template with `shared/`, `build/`, `sync-and-build/` and the administrators' `policy/` folder; `policy/` holds only guardrails owned by `administrators` | `InstallKnowledge` |
 | Chunking (KN04) | long references split at headings, then paragraphs, then sentences; tables and code are never cut; the chunk's hash is of what is embedded, so only a changed chunk is embedded again | `Chunker` |
+| The index on a state database (KN07, text-search half) | items, subjects and chunks per channel in the `knowledge` state module, found by their words with the engine's own text search (SQLite FTS5, PostgreSQL `tsvector`, a term match on SQL Server), under the same access filter, with the hash check that does not index an unchanged item again; no model and no vectors | `KnowledgeModule`, `KnowledgeStore`, `StateKnowledgeIndex` (`DbDataKit.Knowledge.Index`) |
+| Generated knowledge (KN12, the renderer and the index half) | what a published semantic model says about itself, one small item per subject with a stable id and the subject's own access, kept in step with the definition (an unchanged item is not indexed again, a dropped one is retired); the list of what has no description | `GeneratedKnowledge`, `GeneratedSync` |
 | Search and the access filter (KN09, with the fake of KN05) | a question is embedded and the nearest chunks are found among those the caller may see (a role on the subject; fail closed on a gone or unknown subject; an item with no subject follows its `for`), at most three chunks per item, adjacent ones joined | `KnowledgeSearch`, `KnowledgeAccess`, `InMemoryKnowledgeIndex`, `FakeEmbeddingGenerator` |
 
 [Shared/src/DbDataKit.Knowledge/README.md](../Shared/src/DbDataKit.Knowledge/README.md) describes each piece.
@@ -32,8 +34,8 @@
 | Designed in plan 27 section 2 | State today |
 | --- | --- |
 | The `knowledge/1` item format (role, scope, owner), `_knowledge.yml` defaults, knowledge projects in git | **built as a library** (above); not published, not served, no editor screen yet |
-| Generated knowledge from published definitions; the `build-metadata` kind (Build publishing its metadata to the serving group) | not started; the published kinds it would read are `semantic-model`, `entity-model`, `data-source`, `app` |
-| Chunking, embedding models (built in, Ollama, OpenAI-compatible), the vector index per channel, `sqlite-vec` | not started; only the engine feature check exists |
+| Generated knowledge from published definitions (the host that subscribes); the `build-metadata` kind (Build publishing its metadata to the serving group) | the renderer for a semantic model is built (above); nothing subscribes to published definitions yet and entity models, data sources and apps are not rendered; the published kinds are `semantic-model`, `entity-model`, `data-source`, `app` |
+| Embedding models (built in, Ollama, OpenAI-compatible), the vector index per channel, `sqlite-vec` | not started; only the engine feature check exists and search by words (above) |
 | `knowledge search`, `show`, `about`, `check`, `context`, `suggest`, `index` commands | not started |
 | The serving layer's `knowledge` module, suggestions and approvals at the edge, the knowledge app, `@dbdatakit/knowledge-ui` | not started |
 | Verified queries (`verified-query` items, "Verify this answer", re-verification when a model changes) | not started; saved queries and the JSON request are the pieces they pin |
@@ -43,7 +45,7 @@
 
 ## The console's knowledge screens (plan 27a KN28, KN36, KN37, KN38)
 
-The console reads two knowledge projects in its directory, `install-knowledge/` (the template of KN35: the install's guardrails in `policy/`, owned by the administrators) and `knowledge/` (items about the install's objects), and `knowledge-subjects.json` (what exists to be about and what is gone: a stand-in until the lineage graph is the catalog). The page `Knowledge` shows:
+The console reads two knowledge projects in its directory, `install-knowledge/` (the template of KN35: the install's guardrails in `policy/`, owned by the administrators) and `knowledge/` (items about the install's objects), and `knowledge-subjects.json` (what exists to be about and what is gone: read from the joined lineage graph by the button "Read from the lineage graph" on the worklists tab, which marks an object gone only when every server answered, plus what an administrator says by hand, which the reading never changes). The page `Knowledge` shows:
 
 - **Index and context**: items, chunks and failures per project, orphans, and what an agent would be given for what is in play, each part with its tokens and share of the budget. The page says that **no index is built**: there is no search here.
 - **Worklists**: per owner, the items whose subject is gone, with the actions: point it at another object (only that line of the file changes) or retire it.

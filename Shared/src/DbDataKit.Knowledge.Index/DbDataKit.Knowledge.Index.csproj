@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>DbDataKit.Knowledge.Index</PackageId>
+    <Description>The knowledge index on a state database (plan 27a KN07, text-search half): items and chunks per channel in the knowledge module, found by their words with the engine's own text search, under the access filter of DbDataKit.Knowledge. No model.</Description>
+    <IsPackable>true</IsPackable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Knowledge\DbDataKit.Knowledge.csproj" />
+    <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
+    <ProjectReference Include="..\DbDataKit.Lineage\DbDataKit.Lineage.csproj" />   <!-- the catalog of subjects read from the lineage graph (KN02) -->
+  </ItemGroup>
+</Project>

@@ -42,6 +42,19 @@ public sealed record KnowledgeSubject(string Type, IReadOnlyList<string> Names, 
 
     public override string ToString() => Key;
 
+    /// <summary>The subject a key names (<c>semantic-model:Sales/measure:revenue</c>, as <see cref="Key"/> writes it), or null when it is not a key.</summary>
+    public static KnowledgeSubject? TryParse(string key)
+    {
+        var parts = key.Split('/', 2);
+        var head = parts[0].Split(':', 2);
+        if (head.Length != 2 || head[0].Length == 0 || head[1].Length == 0) return null;
+        var names = head[1].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (names.Length == 0) return null;
+        if (parts.Length == 1) return new KnowledgeSubject(head[0], names);
+        var narrow = parts[1].Split(':', 2);
+        return narrow.Length == 2 && narrow[0].Length > 0 && narrow[1].Length > 0 ? new KnowledgeSubject(head[0], names, narrow[0], narrow[1]) : null;
+    }
+
     /// <summary>The same subject with no position, so two items about the same thing compare equal.</summary>
     public KnowledgeSubject Unpositioned() => this with { Line = 0, Column = 0 };
 }

@@ -5,7 +5,7 @@ import { CodeEditor, ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { ConsoleShell } from '../ConsoleShell'
 import { agentsApi, percent } from '../agents'
 import {
-  contextLine, isPolicyItem, knowledgeApi, parseInPlay, policyItemId, policyItemText, workActions, workWord,
+  contextLine, isPolicyItem, knowledgeApi, parseInPlay, policyItemId, policyItemText, refreshLine, subjectSource, workActions, workWord,
   type ChunkPreview, type KnowledgeOverview, type Reach, type ScopePreview, type WorkItem,
 } from '../knowledge'
 
@@ -104,10 +104,11 @@ function WorklistTab({ overview }: { overview: KnowledgeOverview }) {
   const repoint = useMutation({ mutationFn: ({ item, subject }: { item: WorkItem; subject: string }) => knowledgeApi.repoint(itemProject(item, overview), item.itemId, subject, target), onSuccess: (d) => { refresh(d); setRepointing(null); setTarget('') } })
   const retire = useMutation({ mutationFn: (item: WorkItem) => knowledgeApi.retire(itemProject(item, overview), item.itemId), onSuccess: () => client.invalidateQueries({ queryKey: ['knowledge'] }) })
   const subject = useMutation({ mutationFn: (status: 'exists' | 'gone') => knowledgeApi.setSubject(dropType, dropName, status), onSuccess: refresh })
+  const fromLineage = useMutation({ mutationFn: () => knowledgeApi.refreshSubjects(), onSuccess: (r) => refresh(r.overview) })
   return (
     <div data-testid="knowledge-worklist">
-      <ErrorBanner error={repoint.error ?? retire.error ?? subject.error} />
-      {!overview.hasSubjectCatalog && <div className="hint" data-testid="worklist-no-catalog">No catalog says what exists yet, so nothing can be orphaned. Say what exists below (a stand-in until the lineage graph is the catalog).</div>}
+      <ErrorBanner error={repoint.error ?? retire.error ?? subject.error ?? fromLineage.error} />
+      {!overview.hasSubjectCatalog && <div className="hint" data-testid="worklist-no-catalog">No catalog says what exists yet, so nothing can be orphaned. Read it from the lineage graph or say what exists below.</div>}
       {overview.worklists.length === 0 && <div className="empty" data-testid="worklist-empty">Nothing needs an owner's attention.</div>}
       {overview.worklists.map((l) => (
         <div key={l.owner} className="card" style={{ marginBottom: 12 }} data-testid="worklist" data-owner={l.owner}>
@@ -136,9 +137,11 @@ function WorklistTab({ overview }: { overview: KnowledgeOverview }) {
       {isAdmin && (
         <div className="card"><div className="card-body" data-testid="subject-catalog">
           <strong>What exists to be about</strong>
-          <p className="hint">Until the lineage graph says it, an administrator says which objects exist and which are gone. A model that is gone orphans its items.</p>
+          <p className="hint">What the lineage graph of the servers has a node for exists (semantic models and their measures and dimensions, apps, integrations, Store models, connections); one it showed before and no longer shows is gone, when every server answered. What an administrator says is never changed by it. A model that is gone orphans its items.</p>
+          <button type="button" className="btn btn-sm btn-primary" disabled={fromLineage.isPending} onClick={() => fromLineage.mutate()} data-testid="subjects-from-lineage">Read from the lineage graph</button>
+          {fromLineage.data && <div className="hint" data-testid="subjects-from-lineage-result" data-complete={fromLineage.data.complete}>{refreshLine(fromLineage.data)}</div>}
           <table className="table"><tbody>
-            {overview.subjects.map((s) => <tr key={`${s.type}:${s.name}:${s.narrowingKind}:${s.narrowingName}`} data-testid="subject" data-status={s.status}><td className="mono">{s.type}:{s.name}{s.narrowingKind ? `/${s.narrowingKind}:${s.narrowingName}` : ''}</td><td>{s.status}</td></tr>)}
+            {overview.subjects.map((s) => <tr key={`${s.type}:${s.name}:${s.narrowingKind}:${s.narrowingName}`} data-testid="subject" data-status={s.status}><td className="mono">{s.type}:{s.name}{s.narrowingKind ? `/${s.narrowingKind}:${s.narrowingName}` : ''}</td><td>{s.status}</td><td className="hint">{subjectSource(s)}</td></tr>)}
           </tbody></table>
           <input value={dropType} onChange={(e) => setDropType(e.target.value)} aria-label="Type" data-testid="subject-type" style={{ width: 160 }} />{' '}
           <input value={dropName} onChange={(e) => setDropName(e.target.value)} aria-label="Name" placeholder="name" data-testid="subject-name" />{' '}

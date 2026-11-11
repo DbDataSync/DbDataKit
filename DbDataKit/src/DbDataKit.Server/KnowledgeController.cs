@@ -24,7 +24,7 @@ public sealed record SubjectBody(string Type, string Name, string Status, string
 /// </summary>
 [ApiController]
 [Route("api/knowledge")]
-public sealed class KnowledgeController(ConsoleKnowledge knowledge, ConsoleAgents agents) : ControllerBase
+public sealed class KnowledgeController(ConsoleKnowledge knowledge, ConsoleAgents agents, ConsoleLineage lineage) : ControllerBase
 {
     [HttpGet("overview")]
     [Authorize(Policies.Viewer)]
@@ -73,6 +73,17 @@ public sealed class KnowledgeController(ConsoleKnowledge knowledge, ConsoleAgent
         if (body.Status is not ("exists" or "gone")) return BadRequest(new { error = "A subject exists or is gone." });
         knowledge.SetSubject(body.Type, body.Name, body.Status, body.NarrowingKind ?? "", body.NarrowingName ?? "");
         return Ok(knowledge.Overview());
+    }
+
+    /// <summary>Reads what exists to be about from the joined lineage graph of the servers, as the person who asks (plan 27a KN02): what it shows exists, what it showed before and no longer does is gone (only when every server answered).</summary>
+    [HttpPost("subjects/refresh")]
+    [Authorize(Policies.Admin)]
+    public async Task<IActionResult> RefreshSubjects(CancellationToken cancellation)
+    {
+        var joined = await lineage.JoinedAsync(refresh: true, cancellation);
+        var problems = joined.Servers.Where(s => s.Error is not null).Select(s => $"{s.Server}: {s.Error}").Concat(joined.JoinError is { } j ? [j] : []).ToList();
+        var result = knowledge.RefreshFromLineage(joined.Graph, complete: problems.Count == 0 && joined.Servers.Count > 0);   // nothing answered is not "everything was dropped"
+        return Ok(new { result.Found, result.NowGone, result.Complete, result.Total, problems, overview = knowledge.Overview() });
     }
 
     /// <summary>How the item as typed would be split, what changed against the saved version, and which agents it would reach and whether it would push one over its budget (KN36, KN38).</summary>

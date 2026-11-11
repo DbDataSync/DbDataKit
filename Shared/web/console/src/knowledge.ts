@@ -5,7 +5,20 @@ export interface KnowledgeFile { id: string; title: string; role: string; owner:
 export interface KnowledgeProjectSummary {
   name: 'install' | 'project'; exists: boolean; items: number; chunks: number; instructions: number; guardrails: number; references: number; failed: Diagnostic[]; orphans: string[]; files: KnowledgeFile[]
 }
-export interface SubjectEntry { type: string; name: string; narrowingKind: string; narrowingName: string; status: string }
+export interface SubjectEntry { type: string; name: string; narrowingKind: string; narrowingName: string; status: string; source?: string }
+
+/** What reading the subjects from the lineage graph found (plan 27a KN02): how many it shows, how many it showed before and no longer does, and whether every server answered. */
+export interface SubjectRefresh { found: number; nowGone: number; complete: boolean; total: number; problems: string[]; overview: KnowledgeOverview }
+
+/** The line that says what a reading of the lineage graph did, and why nothing was marked gone when it could not be sure. */
+export function refreshLine(r: Pick<SubjectRefresh, 'found' | 'nowGone' | 'complete' | 'problems'>): string {
+  const gone = r.nowGone === 1 ? '1 object is now gone' : `${r.nowGone} objects are now gone`
+  if (r.complete) return `The graph shows ${r.found} subject${r.found === 1 ? '' : 's'}; ${gone}.`
+  return `The graph shows ${r.found} subject${r.found === 1 ? '' : 's'}. Nothing was marked gone: ${r.problems.length > 0 ? `${r.problems[0]}${r.problems.length > 1 ? ` (and ${r.problems.length - 1} more)` : ''}` : 'no server has a lineage to answer with'}.`
+}
+
+/** Where a subject came from, for the list: the graph's own, or an administrator's word. */
+export const subjectSource = (s: SubjectEntry): string => (s.source === 'lineage' ? 'lineage graph' : 'said by an administrator')
 export interface WorkItem { kind: 'orphaned' | 'over-budget' | 'needs-look'; itemId: string; title: string; message: string; subject: string | null }
 export interface OwnerWorklist { owner: string; work: WorkItem[] }
 export interface KnowledgeOverview {
@@ -41,6 +54,7 @@ export const knowledgeApi = {
   save: (project: string, id: string, text: string) => refused(request<{ saved: boolean; diagnostics: Diagnostic[] }>(`/api/knowledge/items/${path(project, id)}`, json('PUT', { text }))),
   retire: (project: string, id: string) => request<void>(`/api/knowledge/items/${path(project, id)}`, json('DELETE')),
   repoint: (project: string, id: string, subject: string, newName: string) => request<KnowledgeOverview>(`/api/knowledge/repoint/${path(project, id)}`, json('POST', { subject, newName })),
+  refreshSubjects: () => request<SubjectRefresh>('/api/knowledge/subjects/refresh', json('POST')),
   setSubject: (type: string, name: string, status: 'exists' | 'gone') => request<KnowledgeOverview>('/api/knowledge/subjects', json('PUT', { type, name, status })),
   previewChunks: (project: string, id: string, text: string) => request<{ preview: ChunkPreview; reaches: Reach[] }>('/api/knowledge/preview/chunks', json('POST', { project, id, text })),
   previewScope: (inPlay: string[], audience: string, agent: string) => request<{ preview: ScopePreview; scopes: string[] }>('/api/knowledge/preview/scope', json('POST', { inPlay, audience, agent })),

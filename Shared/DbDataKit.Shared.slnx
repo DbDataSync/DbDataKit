@@ -55,6 +55,7 @@
     <Project Path="src/DbDataKit.Semantic.Ssas/DbDataKit.Semantic.Ssas.csproj" />
     <Project Path="src/DbDataKit.Metadata/DbDataKit.Metadata.csproj" />
     <Project Path="src/DbDataKit.Knowledge/DbDataKit.Knowledge.csproj" />
+    <Project Path="src/DbDataKit.Knowledge.Index/DbDataKit.Knowledge.Index.csproj" />
     <Project Path="src/DbDataKit.Agents/DbDataKit.Agents.csproj" />
     <Project Path="src/DbDataKit.Agents.Providers/DbDataKit.Agents.Providers.csproj" />
     <Project Path="src/DbDataKit.Lineage/DbDataKit.Lineage.csproj" />

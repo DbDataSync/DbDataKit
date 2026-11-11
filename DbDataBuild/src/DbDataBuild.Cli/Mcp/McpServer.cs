@@ -4,6 +4,7 @@ using DbDataBuild.Core;
 using DbDataBuild.Cli.Web;
 using DbDataBuild.Planning;
 using DbDataBuild.Tui.Model;
+using DbDataKit.Cli;
 
 namespace DbDataBuild.Cli.Mcp;
 
@@ -62,6 +63,30 @@ internal sealed class McpServer
     /// <summary>How long a person has to answer a question the server puts to them through the host.</summary>
     internal TimeSpan AnswerTimeout { get; set; } = TimeSpan.FromMinutes(10);
     private string? currentRequest;
+
+    /// <summary>
+    /// Where each call of this session is recorded (plan 27a AG29, <c>ui mcp --report-to</c>): what was asked, answered, refused and run, as the person whose token the reporter holds. The reporter is the one of
+    /// <c>DbDataKit.Cli</c>, which every product's <c>ui mcp</c> shares; Build's server only says what happened.
+    /// </summary>
+    internal IMcpAudit? Audit { get; init; }
+
+    /// <summary>Asks the person in the console's inbox when the client cannot (no elicitation): the step waits for the person's own answer there. Null: such a step is refused, as before.</summary>
+    internal Func<ApprovalRequest, CancellationToken, Task<ApprovalDecision>>? Inbox { get; init; }
+
+    private string agentName = "unknown";
+
+    private void Record(string outcome, string tool, string command, IReadOnlyList<string> args, string? note = null) =>
+        Audit?.Record(new McpAuditEntry(DateTimeOffset.UtcNow, Environment.UserName, agentName, tool, command, args, outcome, note));
+
+    /// <summary>The traits a command's impact gives it, as the shared gate names them (a command that reaches a target is every one of them).</summary>
+    internal static Traits TraitsOf(CommandInfo command) => command.Impact switch
+    {
+        Impact.None => Traits.ReadsDefinitions,
+        Impact.RepoFiles => TraitTable.For(EffectClass.RepoFilesOnly),
+        Impact.TrackingTables => TraitTable.For(EffectClass.TrackingTablesOnly),
+        Impact.TargetData => TraitTable.For(EffectClass.TargetDataWrites),
+        _ => TraitTable.For(EffectClass.TargetWrites),
+    };
 
     /// <summary>
     /// Reads requests until the input ends and answers them one at a time. A second thread keeps reading while a command runs, so that `notifications/cancelled` for the running request reaches it
@@ -261,6 +286,7 @@ internal sealed class McpServer
         clientHasUi = p?["capabilities"]?["extensions"]?[UiExtension] != null;
         // standard error is where a host keeps a server's log: say what this host can do, because a host that does not advertise MCP Apps silently gets no app
         var client = p?["clientInfo"];
+        agentName = $"{client?["name"]?.GetValue<string>() ?? "unknown"} {client?["version"]?.GetValue<string>()}".Trim();
         Console.Error.WriteLine($"dbdatabuild ui mcp: client {client?["name"]?.GetValue<string>() ?? "unknown"} {client?["version"]?.GetValue<string>()}; MCP Apps {(clientHasUi ? "advertised: the app is offered" : "not advertised: the app is not offered, and `show` gives the person a one-time link to the page in a browser")}; confirmations (elicitation) {(clientCanAsk ? "supported" : "not supported")}{(noShow ? "; `show` is switched off (--no-show)" : "")}.");
         return new JsonObject
         {
@@ -281,7 +307,12 @@ internal sealed class McpServer
         var arguments = p?["arguments"] as JsonObject ?? new JsonObject();
         if (!surface.TryBuildArguments(command, arguments, out var argv, out var problem)) return Failure(problem!);
 
-        if (ChangesSomething(command, argv) && Approval(command, argv) is { } refused) return Failure(refused);
+        var shownArgs = argv.Skip(command.Name.Split(' ').Length).Where(a => a != projectRoot).ToList();
+        var toolName = ToolSurface.ToolName(command);
+        if (ChangesSomething(command, argv))
+        {
+            if (Approval(command, argv, toolName, shownArgs) is { } refused) { Record("refused", toolName, command.Name, shownArgs, refused); return Failure(refused); }
+        }
 
         var progressToken = p?["_meta"]?["progressToken"]?.DeepClone();
         var steps = 0;
@@ -294,6 +325,7 @@ internal sealed class McpServer
 
         // exit 1 means findings: the document is the answer. Only a usage error or a crash is an error of the call.
         var failed = result.Exit >= CliApp.ExitUsage;
+        Record(failed ? "failed" : "ran", toolName, command.Name, shownArgs, failed ? "the command did not succeed" : null);
         var text = result.Out.Length > 0 ? result.Out.TrimEnd() : result.Err.Trim();
         JsonNode? document = null;
         if (text.Length <= MaxDocumentCharacters) { try { document = JsonNode.Parse(text) as JsonObject; } catch (JsonException) { } }
@@ -313,11 +345,23 @@ internal sealed class McpServer
     /// A command that changes a database is run only after the person says so, through the host (MCP elicitation), not the model: the question shows the exact command and, for apply, what the plan does;
     /// the answer must approve and type the command's name back. A host that cannot ask gets a refusal that says what to run by hand. Returns the refusal, or null when approved.
     /// </summary>
-    private string? Approval(CommandInfo command, IReadOnlyList<string> argv)
+    private string? Approval(CommandInfo command, IReadOnlyList<string> argv, string toolName, IReadOnlyList<string> shownArgs)
     {
         var shown = $"dbdatabuild {string.Join(' ', argv.Where((a, i) => a != "--project" && (i == 0 || argv[i - 1] != "--project")).Select(a => a.StartsWith(projectRoot, StringComparison.Ordinal) ? Path.GetRelativePath(projectRoot, a).Replace('\\', '/') : a))}";
-        if (!clientCanAsk) return $"`{command.Name}` changes a database, and this host cannot ask you to confirm it, so it is not run on an agent's say-so. Run it yourself: {shown}";
         var summary = command.Name == "connection deploy" ? PlanSummary(argv) : "";
+        if (!clientCanAsk)
+        {
+            if (Inbox is null) return $"`{command.Name}` changes a database, and this host cannot ask you to confirm it, so it is not run on an agent's say-so. Run it yourself: {shown}";
+            // the console's inbox asks the person (plan 27a AG29): their own answer there is the confirmation, as typing the name is in the host; an answer that does not come, or a console that cannot be reached, is a no
+            var request = new ApprovalRequest(toolName, shown + (summary.Length > 0 ? "  | " + string.Join(" ; ", summary.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()).Take(4)) : ""), [], TraitsOf(command), agentName);
+            Record("asked", toolName, command.Name, shownArgs, request.Preview);
+            ApprovalDecision decision;
+            try { decision = Inbox(request, CancellationToken.None).GetAwaiter().GetResult(); }
+            catch (Exception ex) { decision = new ApprovalDecision(false, $"asking the person failed: {ex.Message}"); }
+            Record(decision.Approved ? "approved" : "denied", toolName, command.Name, shownArgs, decision.Note);
+            return decision.Approved ? null : $"The person did not approve this command in the console's inbox{(string.IsNullOrWhiteSpace(decision.Note) ? "" : ": " + decision.Note)}. Nothing was run. Do not ask again unless they ask you to.";
+        }
+        Record("asked", toolName, command.Name, shownArgs, $"{command.Name}  [{string.Join(", ", TraitsOf(command).Names())}]");
         var id = "ddb-elicit-" + Interlocked.Increment(ref askCounter);
         var answer = new TaskCompletionSource<JsonObject>(TaskCreationOptions.RunContinuationsAsynchronously);
         awaiting[id] = answer;
@@ -348,6 +392,7 @@ internal sealed class McpServer
         var content = result?["content"] as JsonObject;
         var approved = (string?)result?["action"] == "accept" && content?["approve"] is JsonValue a && a.TryGetValue<bool>(out var yes) && yes
             && content["type_to_confirm"] is JsonValue t && t.TryGetValue<string>(out var typed) && typed.Trim() == command.Name;
+        Record(approved ? "approved" : "denied", toolName, command.Name, shownArgs);
         return approved ? null : "The person did not approve this command. Nothing was run. Do not ask again unless they ask you to.";
     }
 
