@@ -1,6 +1,6 @@
 import { createSemanticClient, type SemanticClient } from '@dbdatakit/semantic-client'
 import { createStoreClient, type Fetcher, type StoreClient } from '@dbdatakit/store-ui'
-import type { StoredRow } from '@dbdatakit/store-ui'
+import { parseShellTheme, type ShellTheme, type StoredRow } from '@dbdatakit/store-ui'
 
 /** The most rows a view reads of one entity. A grid and a dashboard shape what they read (filter, sort, total), so the read is bounded and says when it stopped. */
 export const ROW_CAP = 2000
@@ -30,14 +30,23 @@ export interface Host {
   route(path: string): void
   /** Called when the shell asks for a view (the address changed). Returns how to stop listening. */
   onNavigate(listener: (path: string) => void): () => void
+  /** Called with the shell's theme (a portal's look, `{type: 'theme', tokens}`), when it sends one. Returns how to stop listening. */
+  onTheme(listener: (theme: ShellTheme) => void): () => void
 }
 
 export function connectHost(win: Window = window): Host {
   const waiting = new Map<string, (m: { type: string; token?: string; expiresIn?: number; message?: string }) => void>()
   const listeners = new Set<(path: string) => void>()
+  const themeListeners = new Set<(theme: ShellTheme) => void>()
+  let lastTheme: ShellTheme | null = null   // the shell sends the theme once, when the frame loads: a listener added later still gets it
   win.addEventListener('message', (event: MessageEvent) => {
     const m = event.data
     if (event.source !== win.parent || !m || m.dbdata !== 'app/1') return
+    if (m.type === 'theme') {
+      const theme = parseShellTheme(m)
+      if (theme) { lastTheme = theme; themeListeners.forEach((l) => l(theme)) }
+      return
+    }
     if (m.type === 'token.request' || m.type === 'route') return   // our own requests, seen again where the page has no parent
     if (m.type === 'navigate' && typeof m.path === 'string') { listeners.forEach((l) => l(m.path)); return }
     waiting.get(m.id)?.(m)
@@ -60,6 +69,11 @@ export function connectHost(win: Window = window): Host {
     },
     route: (path) => win.parent.postMessage({ dbdata: 'app/1', type: 'route', path }, '*'),
     onNavigate: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },
+    onTheme: (listener) => {
+      themeListeners.add(listener)
+      if (lastTheme) listener(lastTheme)
+      return () => { themeListeners.delete(listener) }
+    },
   }
 }
 

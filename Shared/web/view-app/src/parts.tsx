@@ -1,5 +1,6 @@
 import { ErrorNote, FieldView, StoreError, ViolationList, formatCell, titleOf, type AttributeSchema, type EntitySchema, type StoredRow, type Violation } from '@dbdatakit/store-ui'
-import { DataTable, VegaChart, useTheme } from '@dbdatakit/visuals'
+import { DataTable, VegaChart } from '@dbdatakit/visuals'
+import { useScheme } from './scheme'
 import type { ReactNode } from 'react'
 import { chartDocument, formatNumber, measure, measureTitle, tableRows, type SortState } from './shape'
 import { linkRoute, type DashboardSpec, type DetailSpec, type FormSpec, type GridSpec, type LinkSpec } from './spec'
@@ -157,7 +158,7 @@ export function DetailPage({ spec, entity, row, params, go }: { spec: DetailSpec
 
 /** The widgets of a dashboard, in order: a figure for a metric, the shared chart renderer for a bar or a line, the shared table for a table. `rows` is the rows read of each widget's entity. */
 export function DashboardBoard({ spec, rows, truncated }: { spec: DashboardSpec; rows: Record<string, StoredRow[]>; truncated?: string[] }) {
-  const theme = useTheme('auto')
+  const theme = useScheme()
   return (
     <div className="va-dashboard" data-testid="va-dashboard">
       {spec.widgets.map((w, i) => {

@@ -1,6 +1,8 @@
 import { ErrorNote, StoreClientProvider, StoreError, draftChange, toInput, useLoad, type ModelSchema, type StoreClient, type StoredRow, type Violation } from '@dbdatakit/store-ui'
 import { useEffect, useMemo, useState, type ComponentType } from 'react'
 import { loadAll } from './data'
+import { rowKey } from './keys'
+import { SchemeContext, useShellTheme } from './scheme'
 import { DashboardBoard, DetailPage, FormFields, GridTable, Links, formAttributes } from './parts'
 import { nextSort, shapeRows, type SortState } from './shape'
 import { SUPPORTED_FORMAT, parseRoute, resolveParams, type DashboardSpec, type DetailSpec, type FormSpec, type GridSpec, type ViewSpec, type ViewsDoc } from './spec'
@@ -14,11 +16,6 @@ function useEntity(client: StoreClient, spec: { model: string; entity: string })
   const schema = useLoad<ModelSchema>(() => client.schema(spec.model), [client, spec.model])
   const entity = schema.data?.entities.find((e) => e.name === spec.entity)
   return { entity, error: schema.error ?? (schema.data && !entity ? new Error(`The model '${spec.model}' has no entity '${spec.entity}' for this app.`) : null) }
-}
-
-/** The one key attribute a detail or an edit form is addressed by. A composite key is not addressable by one parameter. */
-function keyAttribute(entity: { key: string[]; name: string }): string | Error {
-  return entity.key.length === 1 ? entity.key[0] : new Error(`'${entity.name}' has a key of ${entity.key.length} attributes; a view addresses a row by one.`)
 }
 
 export function GridScreen({ spec, client, params, go }: ScreenProps<GridSpec>) {
@@ -38,20 +35,21 @@ export function GridScreen({ spec, client, params, go }: ScreenProps<GridSpec>) 
 
 export function DetailScreen({ spec, client, params, go }: ScreenProps<DetailSpec>) {
   const { entity, error } = useEntity(client, spec)
-  const key = entity ? keyAttribute(entity) : null
-  const row = useLoad(async () => (entity && typeof key === 'string' ? client.row(spec.model, spec.entity, { [key]: params[spec.key] }) : null), [client, spec.model, spec.entity, entity, key, params[spec.key]])
+  const key = entity ? rowKey(entity, spec.key, params) : null
+  const keyText = key && !(key instanceof Error) ? JSON.stringify(key.key) : ''
+  const row = useLoad(async () => (entity && key && !(key instanceof Error) ? client.row(spec.model, spec.entity, key.key) : null), [client, spec.model, spec.entity, entity, keyText])
   if (error || row.error) return <ErrorNote error={error ?? row.error} />
   if (key instanceof Error) return <ErrorNote error={key} />
   if (!entity || row.loading) return <Loading />
-  if (!row.data) return <div className="sui-error" role="alert">{`There is no ${spec.entity} ${params[spec.key]}.`}</div>
+  if (!row.data) return <div className="sui-error" role="alert">{`There is no ${spec.entity} ${key?.label ?? ''}.`}</div>
   return <DetailPage spec={spec} entity={entity} row={row.data} params={params} go={go} />
 }
 
 export function FormScreen({ spec, client, params, go }: ScreenProps<FormSpec>) {
   const { entity, error } = useEntity(client, spec)
-  const key = entity ? keyAttribute(entity) : null
-  const keyValue = spec.key ? params[spec.key] : undefined
-  const existing = useLoad<StoredRow | null>(async () => (spec.mode === 'edit' && entity && typeof key === 'string' ? client.row(spec.model, spec.entity, { [key]: keyValue }) : null), [client, spec.mode, entity, key, keyValue])
+  const key = entity && spec.mode === 'edit' ? rowKey(entity, spec.key, params) : null
+  const keyText = key && !(key instanceof Error) ? JSON.stringify(key.key) : ''
+  const existing = useLoad<StoredRow | null>(async () => (spec.mode === 'edit' && entity && key && !(key instanceof Error) ? client.row(spec.model, spec.entity, key.key) : null), [client, spec.mode, entity, keyText])
   const [text, setText] = useState<Record<string, string>>({})
   const [problems, setProblems] = useState<Record<string, string>>({})
   const [violations, setViolations] = useState<Violation[]>([])
@@ -68,9 +66,9 @@ export function FormScreen({ spec, client, params, go }: ScreenProps<FormSpec>) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entity, rowId])
   if (error || existing.error) return <ErrorNote error={error ?? existing.error} />
-  if (key instanceof Error && spec.mode === 'edit') return <ErrorNote error={key} />
+  if (key instanceof Error) return <ErrorNote error={key} />
   if (!entity || existing.loading) return <Loading />
-  if (spec.mode === 'edit' && !row) return <div className="sui-error" role="alert">{`There is no ${spec.entity} ${keyValue}.`}</div>
+  if (spec.mode === 'edit' && !row) return <div className="sui-error" role="alert">{`There is no ${spec.entity} ${key?.label ?? ''}.`}</div>
 
   const submit = async () => {
     // the entity the form draws: only the attributes the view lists, so a change carries only what the person could see
@@ -124,7 +122,7 @@ export type CodePages = Record<string, CodePage>
 export interface ViewAppProps {
   doc: ViewsDoc
   client: StoreClient
-  host: Pick<Host, 'route' | 'onNavigate'>
+  host: Pick<Host, 'route' | 'onNavigate'> & Partial<Pick<Host, 'onTheme'>>
   /** Pages of code. An app can be only spec files (none here); one page can be code and the rest stay specs. */
   pages?: CodePages
 }
@@ -139,6 +137,7 @@ export function menuOf(doc: ViewsDoc, pages: CodePages = {}): { key: string; tit
 export function ViewApp({ doc, client, host, pages = {} }: ViewAppProps) {
   const [route, setRoute] = useState('/')
   useEffect(() => host.onNavigate((p) => setRoute(p)), [host])
+  const shellScheme = useShellTheme(host)   // the portal's look reaches the controls as --sui-* variables and the charts as a scheme
   const go = (r: string) => { setRoute(r); host.route(r) }
   if (doc.format !== SUPPORTED_FORMAT) return <div className="sui-error" role="alert">{`This host reads ${SUPPORTED_FORMAT}; the app's views are ${doc.format}.`}</div>
   const { file, query } = parseRoute(route)
@@ -162,6 +161,7 @@ export function ViewApp({ doc, client, host, pages = {} }: ViewAppProps) {
   const titleOf = page?.title ?? spec?.title ?? doc.title
   return (
     <StoreClientProvider client={client}>
+      <SchemeContext.Provider value={shellScheme}>
       <div className="va-app">
         {menu.length > 1 && (
           <nav className="va-menu" aria-label="Views">
@@ -172,6 +172,7 @@ export function ViewApp({ doc, client, host, pages = {} }: ViewAppProps) {
         {body}
         {spec && (spec.kind === 'grid' || spec.kind === 'dashboard') && <Links links={spec.links} row={null} params={resolveParams(spec.params, query).values} go={go} only={spec.kind === 'grid' ? 'page' : 'all'} />}
       </div>
+      </SchemeContext.Provider>
     </StoreClientProvider>
   )
 }
