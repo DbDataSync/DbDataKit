@@ -116,6 +116,8 @@ public static class ServerProducts
         ("POST", "api/v1/projects/{p}/workspaces/{id}/move", ServerRole.Author),
         ("GET", "api/v1/projects/{p}/workspaces/{id}/changes", ServerRole.Viewer),
         ("GET", "api/v1/projects/{p}/workspaces/{id}/history", ServerRole.Viewer),
+        ("GET", "api/v1/projects/{p}/workspaces/{id}/file-history/{path}", ServerRole.Viewer),
+        ("GET", "api/v1/projects/{p}/workspaces/{id}/file-at/{sha}/{path}", ServerRole.Viewer),
         ("POST", "api/v1/projects/{p}/workspaces/{id}/commit", ServerRole.Author),
         ("POST", "api/v1/projects/{p}/workspaces/{id}/push", ServerRole.Author),
         ("POST", "api/v1/projects/{p}/workspaces/{id}/merge", ServerRole.Approver),
@@ -123,6 +125,9 @@ public static class ServerProducts
         // plan 33 SC20a: the kinds of project (what a new project can be and where each publishes) and the check of a draft by its kind's validators
         ("GET", "api/v1/project-kinds", ServerRole.Viewer),
         ("GET", "api/v1/projects/{p}/workspaces/{id}/check", ServerRole.Viewer),
+        ("POST", "api/v1/projects/{p}/workspaces/{id}/compile", ServerRole.Viewer),
+        ("POST", "api/v1/projects/{p}/workspaces/{id}/lowered", ServerRole.Viewer),
+        ("POST", "api/v1/projects/{p}/workspaces/{id}/sample", ServerRole.Viewer),
         ("GET", "api/v1/app-build", ServerRole.Viewer),
         ("POST", "api/v1/projects/{p}/workspaces/{id}/builds", ServerRole.Author),
         ("GET", "api/v1/projects/{p}/workspaces/{id}/builds", ServerRole.Viewer),
@@ -141,7 +146,7 @@ public static class ServerProducts
     ];
 
     private static readonly IReadOnlyList<(string Method, Regex Pattern, ServerRole Needed)> WorkspaceTable =
-        [.. WorkspaceRoutes.Select(r => (r.Method, new Regex("^" + r.Route.Replace("{p}", "(?<p>[A-Za-z0-9._-]+)").Replace("{id}", "[A-Za-z0-9._-]+").Replace("{b}", "[0-9A-Fa-f-]{36}").Replace("{name}", "[A-Za-z0-9_-]+").Replace("{path}", ".+") + "/?$", RegexOptions.CultureInvariant), r.Needed))];
+        [.. WorkspaceRoutes.Select(r => (r.Method, new Regex("^" + r.Route.Replace("{p}", "(?<p>[A-Za-z0-9._-]+)").Replace("{id}", "[A-Za-z0-9._-]+").Replace("{b}", "[0-9A-Fa-f-]{36}").Replace("{sha}", "[0-9A-Fa-f]{7,40}").Replace("{name}", "[A-Za-z0-9_-]+").Replace("{path}", ".+") + "/?$", RegexOptions.CultureInvariant), r.Needed))];
 
     /// <summary>The role the relay requires of the signed-in person for a call to a server of this product, or null when the relay does not pass the call (or, for a product whose server alone decides, does not judge it).</summary>
     public static ServerRole? RoleNeeded(string? product, string method, string path)

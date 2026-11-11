@@ -207,6 +207,32 @@ public sealed partial class WorkspaceApiTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_earlier_texts_of_a_file_are_listed_by_the_commits_that_changed_it_and_read_as_each_committed_it()
+    {
+        var id = await Draft();
+        var file = Path.Combine(FolderOf(id), "views", "orders.yaml");
+        File.AppendAllText(file, "title: Orders\n");
+        await AsAda(HttpMethod.Post, $"/api/v1/projects/orders/workspaces/{id}/commit", """{"message":"Title the grid"}""");
+        File.AppendAllText(Path.Combine(FolderOf(id), "views", "other.yaml"), "x: 1\n");
+        await AsAda(HttpMethod.Post, $"/api/v1/projects/orders/workspaces/{id}/commit", """{"message":"Another file"}""");
+
+        var listed = await Json(await Send("vic", ServerRole.Viewer, HttpMethod.Get, $"/api/v1/projects/orders/workspaces/{id}/file-history/views/orders.yaml"));
+        var commits = listed["commits"]!.AsArray();
+        Assert.Equal(2, commits.Count);                                   // the first commit of the project (the file was added) and the title; the commit of another file is not in it
+        Assert.Equal("Title the grid", (string)commits[0]!["message"]!);
+
+        var before = await Json(await Send("vic", ServerRole.Viewer, HttpMethod.Get, $"/api/v1/projects/orders/workspaces/{id}/file-at/{(string)commits[1]!["sha"]!}/views/orders.yaml"));
+        Assert.Equal("schemaVersion: 1\nkind: grid\n", (string)before["content"]!);
+        var titled = await Json(await Send("vic", ServerRole.Viewer, HttpMethod.Get, $"/api/v1/projects/orders/workspaces/{id}/file-at/{(string)commits[0]!["sha"]!}/views/orders.yaml"));
+        Assert.Contains("title: Orders", (string)titled["content"]!);
+
+        Assert.Empty((await Json(await AsAda(HttpMethod.Get, $"/api/v1/projects/orders/workspaces/{id}/file-history/views/none.yaml")))["commits"]!.AsArray());
+        Assert.Equal(HttpStatusCode.NotFound, (await AsAda(HttpMethod.Get, $"/api/v1/projects/orders/workspaces/{id}/file-at/{(string)commits[1]!["sha"]!}/views/other.yaml")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await AsAda(HttpMethod.Get, $"/api/v1/projects/orders/workspaces/{id}/file-at/not-a-sha/views/orders.yaml")).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await AsAda(HttpMethod.Get, $"/api/v1/projects/orders/workspaces/{id}/file-at/0000000000000000000000000000000000000000/views/orders.yaml")).StatusCode);
+    }
+
+    [Fact]
     public async Task Merging_inside_the_server_needs_an_approver_updates_the_checkout_and_ends_the_workspace()
     {
         var id = await Draft();

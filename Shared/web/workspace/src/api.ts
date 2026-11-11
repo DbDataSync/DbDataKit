@@ -63,6 +63,16 @@ export interface PublishOptions { channel?: string; serve?: boolean; bind?: Reco
 /** A target's publisher key as a person may see it: the reference to the secret, never the key, and the Gateway it is paired with. */
 export interface PublisherKey { name: string; secret_ref: string; updated: string; gateway: { url: string; roles: string[]; client_name: string; paired: string } | null }
 
+/** One file a compile of a draft makes, against the draft's committed `rendered/`: its text comes with an added or changed one (`truncated` when it was too large to send). */
+export interface CompiledFile { path: string; status: 'added' | 'changed' | 'unchanged' | 'removed'; content: string | null; truncated: boolean }
+export interface CompileResult { ok: boolean; message: string | null; diagnostics: CheckDiagnostic[]; files: CompiledFile[] }
+/** What one model is lowered and rendered to: a file per connection, with its text. */
+export interface LoweredResult { ok: boolean; diagnostics: CheckDiagnostic[]; files: { path: string; content: string }[] }
+/** One table of a run on generated rows: columns, the rows kept (`row_count` is complete), or the error that stopped it. */
+export interface SampleTable { name: string; kind: string; origin: string | null; columns: { name: string; type: string }[]; row_count: number; rows: (string | null)[][]; error: string | null; warnings: string[] }
+export interface SampleResult { ok: boolean; diagnostics: CheckDiagnostic[]; data: { tables: SampleTable[] } | null }
+export interface SampleOptions { models?: string[]; rows?: number; seed?: number; limit?: number }
+
 const enc = encodeURIComponent
 /** A file's path as it goes in an address: each part escaped, the `/` between them kept. */
 export const filePath = (path: string) => path.split('/').map(enc).join('/')
@@ -76,6 +86,15 @@ export const workspaceApi = {
   createProject: (id: string, title: string | null, kind?: string) => request<ProjectSummary>('/api/v1/projects', json({ id, ...(title ? { title } : {}), ...(kind && kind !== 'app' ? { kind } : {}) })),
   projectKinds: () => request<{ kinds: ProjectKindInfo[] }>('/api/v1/project-kinds').then((r) => r.kinds),
   check: (project: string, id: string) => request<CheckResult>(`${ws(project, id)}/check`),
+  /** Compiles the draft on a copy, offline (plan 33 SC20l): what `project compile` would write into `rendered/`, shown against what is committed; nothing in the draft changes. */
+  compile: (project: string, id: string) => request<CompileResult>(`${ws(project, id)}/compile`, json({})),
+  /** The text one model file is lowered and rendered to, read only. */
+  lowered: (project: string, id: string, path: string) => request<LoweredResult>(`${ws(project, id)}/lowered`, json({ path })),
+  /** Models run on generated rows, offline: the same seed gives the same rows. */
+  sample: (project: string, id: string, options: SampleOptions = {}) => request<SampleResult>(`${ws(project, id)}/sample`, json(options)),
+  /** The commits in which one file changed (newest first), and its text as one of them committed it (plan 33 SC21e). */
+  fileHistory: (project: string, id: string, path: string) => request<{ path: string; commits: Commit[] }>(`${ws(project, id)}/file-history/${filePath(path)}`).then((r) => r.commits),
+  fileAt: (project: string, id: string, sha: string, path: string) => request<{ path: string; sha: string; content: string }>(`${ws(project, id)}/file-at/${enc(sha)}/${filePath(path)}`).then((r) => r.content),
   workspaces: (project: string) => request<{ workspaces: WorkspaceSummary[] }>(`/api/v1/projects/${enc(project)}/workspaces`).then((r) => r.workspaces),
   createWorkspace: (project: string, name: string) => request<WorkspaceSummary>(`/api/v1/projects/${enc(project)}/workspaces`, json({ name })),
   abandon: (project: string, id: string) => request<void>(`/api/v1/projects/${enc(project)}/workspaces/${enc(id)}`, { method: 'DELETE' }),

@@ -209,6 +209,33 @@ public static class WorkspaceApi
             return Results.Json(new { commits = GitWorkspaceOperations.History(workspaces.RootOf(workspace), workspace.Base).Select(c => new { sha = c.Sha, message = c.Message, author = c.AuthorName, when = c.WhenUtc }) });
         });
 
+        // the earlier texts of one file (plan 33 SC21e): the commits in which it changed, and its text as one of them committed it; a screen shows it beside the current text and the author puts it into the editor
+        app.MapGet("/api/v1/projects/{project}/workspaces/{id}/file-history/{**path}", (string project, string id, string path, HttpContext context) =>
+        {
+            if (Resolve(project, id, context, ServerRole.Viewer, false, out _, out var workspace) is { } refused) return refused;
+            try
+            {
+                var normal = WorkspaceFiles.Normalize(path);
+                return Results.Json(new { path = normal, commits = GitWorkspaceOperations.FileHistory(workspaces.RootOf(workspace), normal).Select(c => new { sha = c.Sha, message = c.Message, author = c.AuthorName, when = c.WhenUtc }) });
+            }
+            catch (WorkspaceFileException ex) { return FileFailed(ex); }
+            catch (GitOperationException ex) { return Failed(ex); }
+        });
+
+        app.MapGet("/api/v1/projects/{project}/workspaces/{id}/file-at/{sha}/{**path}", (string project, string id, string sha, string path, HttpContext context) =>
+        {
+            if (Resolve(project, id, context, ServerRole.Viewer, false, out _, out var workspace) is { } refused) return refused;
+            if (sha.Length is < 7 or > 40 || !sha.All(Uri.IsHexDigit)) return Results.Json(new { error = "A commit is named by its hexadecimal id (7 to 40 digits)." }, statusCode: StatusCodes.Status400BadRequest);
+            try
+            {
+                var normal = WorkspaceFiles.Normalize(path);
+                var content = GitWorkspaceOperations.FileAt(workspaces.RootOf(workspace), sha, normal);
+                return content is null ? Results.Json(new { error = $"{normal} is not a text file of that commit (it has none there, or it is binary or too large)." }, statusCode: StatusCodes.Status404NotFound) : Results.Json(new { path = normal, sha, content });
+            }
+            catch (WorkspaceFileException ex) { return FileFailed(ex); }
+            catch (GitOperationException ex) { return Failed(ex); }
+        });
+
         app.MapPost("/api/v1/projects/{project}/workspaces/{id}/commit", async (string project, string id, HttpContext context) =>
         {
             if (Resolve(project, id, context, ServerRole.Author, true, out _, out var workspace) is { } refused) return refused;

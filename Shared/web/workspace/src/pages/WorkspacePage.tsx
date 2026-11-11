@@ -9,6 +9,10 @@ import { BuildsPanel } from './BuildsPanel'
 import { CheckPanel } from './CheckPanel'
 import { NewStoreModel, StoreModelEditor } from './StoreModelPanel'
 import { BuildPlanPanel } from './BuildPlanPanel'
+import { BuildCompilePanel } from './BuildCompilePanel'
+import { BuildViewsPanel } from './BuildViewsPanel'
+import { FileHistory } from './FileHistory'
+import { BuildFileEditor, NewBuildConnection, NewBuildModel } from './BuildFilePanel'
 import { CatalogPanel, useCatalogRead } from './CatalogPanel'
 import { SyncFileEditor, SyncSetOverview, findingsKey } from './SyncSetPanel'
 import { editorKindOf } from '../editors'
@@ -40,6 +44,7 @@ function FileEditor({ project, id, kind, path, editable, canWrite, onGone, onRen
   const [target, setTarget] = useState('')
   const [moving, setMoving] = useState(false)
   const [asking, setAsking] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
   const loaded = useQuery({ queryKey: ['workspace', 'file', project, id, path], queryFn: () => workspaceApi.readFile(project, id, path), staleTime: Infinity, gcTime: 0, retry: false })
   const text = drafts[path] ?? loaded.data ?? ''
   const dirty = drafts[path] !== undefined && drafts[path] !== loaded.data
@@ -84,8 +89,10 @@ function FileEditor({ project, id, kind, path, editable, canWrite, onGone, onRen
             <button type="button" className="btn" data-testid="wsp-delete-cancel" onClick={() => setAsking(false)}>Keep it</button>
           </>
         )}
+        <button type="button" className="btn" data-testid="wsp-file-history-open" aria-pressed={showHistory} onClick={() => setShowHistory((v) => !v)}>Earlier texts</button>
         {state.why && <span className="hint" data-testid="wsp-save-why">{state.why}</span>}
       </div>
+      {showHistory && <FileHistory project={project} id={id} path={path} current={text} canRestore={editable && canWrite} onRestore={(earlier) => { onText(earlier); setShowHistory(false) }} />}
       {moving && (
         <form className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }} onSubmit={(e) => { e.preventDefault(); if (!problem && target.trim() !== '' && target.trim() !== path) move.mutate() }}>
           <input className="input mono" aria-label="New path" value={target} onChange={(e) => setTarget(e.target.value)} data-testid="wsp-move-target" />
@@ -99,7 +106,10 @@ function FileEditor({ project, id, kind, path, editable, canWrite, onGone, onRen
       {!loaded.error && !loaded.isLoading && editorKind === 'store-model' && (
         <StoreModelEditor path={path} text={text} onText={onText} readOnly={!editable || !canWrite} live={live} onOpen={onOpen} />
       )}
-      {!loaded.error && !loaded.isLoading && editorKind !== null && editorKind !== 'store-model' && (
+      {!loaded.error && !loaded.isLoading && editorKind === 'build-file' && (
+        <BuildFileEditor path={path} text={text} onText={onText} readOnly={!editable || !canWrite} live={live} onOpen={onOpen} />
+      )}
+      {!loaded.error && !loaded.isLoading && editorKind !== null && editorKind !== 'store-model' && editorKind !== 'build-file' && (
         <SyncFileEditor kind={editorKind} path={path} text={text} onText={onText} readOnly={!editable || !canWrite} live={live} onOpen={onOpen} catalog={catalog.read} />
       )}
       {!loaded.error && !loaded.isLoading && editorKind === null && (
@@ -188,7 +198,7 @@ export function WorkspacePage() {
   const client = useQueryClient()
   const canWrite = useIsAdmin()
   const [selected, setSelected] = useState<string | null>(null)
-  const [tab, setTab] = useState<'changes' | 'history' | 'builds' | 'check' | 'models' | 'catalog'>('changes')
+  const [tab, setTab] = useState<'changes' | 'history' | 'builds' | 'check' | 'models' | 'compile' | 'views' | 'catalog'>('changes')
   const [newPath, setNewPath] = useState('')
   const [asking, setAsking] = useState(false)
   const [merged, setMerged] = useState<{ sha: string | null } | null>(null)
@@ -276,6 +286,12 @@ export function WorkspacePage() {
                   {kind === 'store' && editable && canWrite && (
                     <NewStoreModel taken={(files.data?.files ?? []).map((f) => f.path)} busy={make.isPending} onCreate={(path, text) => make.mutate([{ path, text }])} />
                   )}
+                  {kind === 'build' && editable && canWrite && (
+                    <>
+                      <NewBuildModel paths={(files.data?.files ?? []).map((f) => f.path)} busy={make.isPending} onCreate={(made) => make.mutate(made)} />
+                      <NewBuildConnection paths={(files.data?.files ?? []).map((f) => f.path)} busy={make.isPending} onCreate={(path, text) => make.mutate([{ path, text }])} />
+                    </>
+                  )}
                   <ErrorBanner error={create.error ?? make.error} />
                 </div>
               </div>
@@ -288,6 +304,8 @@ export function WorkspacePage() {
                   <button type="button" role="tab" aria-selected={tab === 'changes'} className={`btn ${tab === 'changes' ? 'btn-primary' : ''}`} data-testid="wsp-tab-changes" onClick={() => setTab('changes')}>Changes</button>
                   <button type="button" role="tab" aria-selected={tab === 'check'} className={`btn ${tab === 'check' ? 'btn-primary' : ''}`} data-testid="wsp-tab-check" onClick={() => setTab('check')}>Check</button>
                   {kind === 'build' && <button type="button" role="tab" aria-selected={tab === 'models'} className={`btn ${tab === 'models' ? 'btn-primary' : ''}`} data-testid="wsp-tab-models" onClick={() => setTab('models')}>Models and plan</button>}
+                  {kind === 'build' && <button type="button" role="tab" aria-selected={tab === 'compile'} className={`btn ${tab === 'compile' ? 'btn-primary' : ''}`} data-testid="wsp-tab-compile" onClick={() => setTab('compile')}>Compile</button>}
+                  {kind === 'build' && <button type="button" role="tab" aria-selected={tab === 'views'} className={`btn ${tab === 'views' ? 'btn-primary' : ''}`} data-testid="wsp-tab-views" onClick={() => setTab('views')}>Views</button>}
                   {(kind === 'build' || kind === 'sync') && <button type="button" role="tab" aria-selected={tab === 'catalog'} className={`btn ${tab === 'catalog' ? 'btn-primary' : ''}`} data-testid="wsp-tab-catalog" onClick={() => setTab('catalog')}>Catalog</button>}
                   <button type="button" role="tab" aria-selected={tab === 'builds'} className={`btn ${tab === 'builds' ? 'btn-primary' : ''}`} data-testid="wsp-tab-builds" onClick={() => setTab('builds')}>Builds</button>
                   <button type="button" role="tab" aria-selected={tab === 'history'} className={`btn ${tab === 'history' ? 'btn-primary' : ''}`} data-testid="wsp-tab-history" onClick={() => setTab('history')}>History</button>
@@ -296,6 +314,10 @@ export function WorkspacePage() {
                   ? <ChangesPanel project={project} id={id} editable={editable} canWrite={canWrite} onMerged={(sha) => { setMerged({ sha }); void client.invalidateQueries({ queryKey: ['workspace', 'list', project] }) }} />
                   : tab === 'models' && kind === 'build'
                     ? <BuildPlanPanel project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} onOpen={setSelected} />
+                  : tab === 'compile' && kind === 'build'
+                    ? <BuildCompilePanel project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} canWrite={editable && canWrite} />
+                  : tab === 'views' && kind === 'build'
+                    ? <BuildViewsPanel project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} canWrite={editable && canWrite} />
                   : tab === 'catalog' && (kind === 'build' || kind === 'sync')
                     ? <CatalogPanel project={project} id={id} onOpen={setSelected} />
                   : tab === 'check'
