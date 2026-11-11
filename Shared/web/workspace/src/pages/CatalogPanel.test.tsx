@@ -31,3 +31,27 @@ describe('the catalog panel', () => {
     expect(html).not.toContain('wsp-catalog-table')
   })
 })
+
+describe('the shape preview (SC20k)', () => {
+  const sound2 = sound.replace('{name: total, type: numeric}', '{name: total, type: "numeric(12,2)", nullable: false}, {name: note, type: text}, {name: placed, type: timestamp}, {name: active, type: boolean}, {name: ref, type: uuid}, {name: blob, type: geometry}')
+
+  it('offers a preview per table and draws none until one is chosen', () => {
+    const html = renderToStaticMarkup(<CatalogView read={readCatalogCache(sound2)} present onOpen={() => {}} preview={null} onPreview={() => {}} />)
+    expect(html).toContain('Preview the shape')
+    expect(html).not.toContain('wsp-shape-table')
+  })
+
+  it('draws the chosen table: the types as headers, generated values, one null for a nullable column, and the note that they are not rows', () => {
+    const html = renderToStaticMarkup(<CatalogView read={readCatalogCache(sound2)} present onOpen={() => {}} preview="src/public.orders" onPreview={() => {}} />)
+    expect(html).toContain('Hide the shape')
+    expect(html).toContain('not rows of the database')
+    expect(html).toContain('id (key)')
+    expect(html).toContain('>1<')
+    expect(html).toContain('>21.00<')
+    expect(html).toContain('note_1')
+    expect(html).toContain('2026-01-01 08:00:00')
+    expect(html).toContain('00000000-0000-4000-8000-000000000001')
+    expect(html).toContain('&lt;geometry&gt;')
+    expect(html).toContain('>null<')
+  })
+})

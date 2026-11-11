@@ -1,10 +1,28 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { workspaceApi } from '../api'
-import { CATALOG_CACHE_FILE, readCatalogCache, tableLabel, type CacheRead } from '../catalogCache'
+import { shapePreview } from '../catalogPreview'
+import { CATALOG_CACHE_FILE, readCatalogCache, tableLabel, type CacheRead, type CacheTable } from '../catalogCache'
 
 /** The catalog cache without its query, so a test can draw it: what is cached per connection, or what is wrong with the file (the strict reader's words, with the key path). */
-export function CatalogView({ read, present, onOpen }: { read: CacheRead | null; present: boolean; onOpen: (path: string) => void }) {
+/** A table's shape: its columns with their types and a few rows made from the types. Labelled as generated, because the cache holds no row (D20). */
+export function ShapePreview({ table }: { table: CacheTable }) {
+  const { columns, rows } = shapePreview(table)
+  return (
+    <div className="card" style={{ margin: '6px 0', overflow: 'auto' }} data-testid="wsp-shape" data-table={tableLabel(table)}>
+      <div className="card-body">
+        <div className="hint" data-testid="wsp-shape-note">Generated from the column types, not rows of the database: the cache holds the shape of a table and never its rows.</div>
+        <table className="table" data-testid="wsp-shape-table">
+          <thead><tr>{columns.map((c) => <th key={c.name} title={`${c.type}${c.nullable ? '' : ', not null'}${c.key ? ', key' : ''}`}>{c.key ? `${c.name} (key)` : c.name}<div className="hint">{c.type}</div></th>)}</tr></thead>
+          <tbody>{rows.map((r, i) => <tr key={i}>{r.map((v, j) => <td key={j} className={v === null ? 'hint' : 'mono'}>{v ?? 'null'}</td>)}</tr>)}</tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+export function CatalogView({ read, present, onOpen, preview = null, onPreview }: { read: CacheRead | null; present: boolean; onOpen: (path: string) => void; preview?: string | null; onPreview?: (key: string | null) => void }) {
   if (!present) {
     return (
       <div className="empty" data-testid="wsp-catalog-none">
@@ -29,6 +47,8 @@ export function CatalogView({ read, present, onOpen }: { read: CacheRead | null;
             <div key={tableLabel(t)} className="grid-row" style={{ gap: 10, flexWrap: 'wrap' }} data-testid="wsp-catalog-table" data-table={tableLabel(t)}>
               <span className="mono">{tableLabel(t)}</span>
               <span className="hint">{t.kind}, {t.columns.length} {t.columns.length === 1 ? 'column' : 'columns'}</span>
+              {onPreview && <button type="button" className="btn-link" data-testid="wsp-catalog-preview" onClick={() => onPreview(preview === `${name}/${tableLabel(t)}` ? null : `${name}/${tableLabel(t)}`)}>{preview === `${name}/${tableLabel(t)}` ? 'Hide the shape' : 'Preview the shape'}</button>}
+              {preview === `${name}/${tableLabel(t)}` && <div style={{ flexBasis: '100%' }}><ShapePreview table={t} /></div>}
             </div>
           ))}
         </div>
@@ -48,10 +68,11 @@ export function useCatalogRead(project: string, id: string): { read: CacheRead |
 /** The cache of a draft, read through the file route and checked by the twin reader. */
 export function CatalogPanel({ project, id, onOpen }: { project: string; id: string; onOpen: (path: string) => void }) {
   const { read, present, error } = useCatalogRead(project, id)
+  const [preview, setPreview] = useState<string | null>(null)
   return (
     <>
       <ErrorBanner error={error} />
-      <CatalogView read={read} present={present} onOpen={onOpen} />
+      <CatalogView read={read} present={present} onOpen={onOpen} preview={preview} onPreview={setPreview} />
     </>
   )
 }

@@ -12,10 +12,10 @@ Summary (counts of the features below):
 
 | Product | built | partly | missing | not planned | features |
 | --- | --- | --- | --- | --- | --- |
-| Build | 8 | 2 | 10 | 5 | 25 |
+| Build | 9 | 3 | 8 | 5 | 25 |
 | Store | 5 | 1 | 1 | 3 | 10 |
 | Sync | 9 | 4 | 5 | 3 | 21 |
-| All | 22 | 7 | 16 | 11 | 56 |
+| All | 23 | 8 | 14 | 11 | 56 |
 
 ### Build
 
@@ -33,8 +33,8 @@ Summary (counts of the features below):
 | Compile: write the plan into `rendered/` and see what was written or removed | `build/src/pages/CompilePanel.tsx` | none: `rendered/` is read only | missing | SC20l |
 | The lowered SQL of a model (rendered files per model) | `build/src/pages/PreviewPanel.tsx` | `workspace/src/pages/BuildPlanPanel.tsx` opens a rendered file read only | partly | SC20l |
 | Offline sample: a model run on generated rows (Sample tab) | `build/src/pages/DeployTabs.tsx` (`SampleTab`), `PreviewPanel.tsx` | none | missing | SC20l |
-| Preview of a table or model: its columns and types, with generated values (never the database's rows) | `build/src/pages/PreviewPanel.tsx` | none | missing | SC20k |
-| Import tables from a database into the project (list what is not mapped yet, write the files) | `build/src/pages/ImportPanel.tsx`, `DefinitionPanel.tsx` | none | missing | SC20k |
+| Preview of a table or model: its columns and types, with generated values (never the database's rows) | `build/src/pages/PreviewPanel.tsx` | `workspace/src/pages/CatalogPanel.tsx` (from the catalog cache, `catalogCache.ts`) | built | SC20k |
+| Import tables from a database into the project (list what is not mapped yet, write the files) | `build/src/pages/ImportPanel.tsx`, `DefinitionPanel.tsx` | `workspace/src/pages/CatalogPanel.tsx` lists the cached tables; writing model files from them is not built | partly | SC20k |
 | Project tests (metadata rules and model tests, violating rows) | `build/src/pages/TestsPanel.tsx` | none: the tests read the target database | not planned | SC20o |
 | Status of a target (every declared object, what a deploy would do) | `build/src/pages/DeployTabs.tsx` (`StatusTab`) | none: reads a target database | not planned | SC20o |
 | Refresh plans: the compiled plans and what each loads | `build/src/pages/DeployTabs.tsx` (`PlansTab`) | `workspace/src/pages/BuildPlanPanel.tsx` (`PlanView`: the plan files, how many loads) | built | SC20f |
