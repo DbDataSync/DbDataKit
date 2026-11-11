@@ -13,6 +13,9 @@ public static class RowJson
     public static JsonNode? Value(object? value) => value switch
     {
         null => null,
+        JsonElement e => JsonNode.Parse(e.GetRawText()),
+        DateOnly d => JsonValue.Create(d.ToString("yyyy-MM-dd")),
+        TimeOnly t => JsonValue.Create(t.ToString("HH:mm:ss")),
         DateTimeOffset d => JsonValue.Create(d.ToString("O")),
         DateTime d => JsonValue.Create(d.ToString("O")),
         decimal d => JsonValue.Create(d),
@@ -37,6 +40,21 @@ public static class RowJson
 
     public static Dictionary<string, object?> ObjectOf(JsonNode? node) =>
         node is JsonObject o ? o.ToDictionary(p => p.Key, p => p.Value is null ? null : (object?)JsonSerializer.Deserialize<JsonElement>(p.Value.ToJsonString())) : [];
+
+    /// <summary>One change as the wire has it (the inverse of <see cref="Changes"/>).</summary>
+    public static JsonObject Change(RowChange change)
+    {
+        var node = new JsonObject { ["action"] = change.Action.ToString().ToLowerInvariant(), ["entity"] = change.Entity };
+        if (change.Action != RowAction.Insert) { node["key"] = Key(change.Key); node["expected_version"] = change.ExpectedVersion; }
+        if (change.Action != RowAction.Delete)
+        {
+            var values = new JsonObject();
+            foreach (var (name, value) in change.Values) values[name] = Value(value);
+            node["values"] = values;
+        }
+        if (change.EffectiveFrom is { } from) node["effective_from"] = from.ToString("O");
+        return node;
+    }
 
     /// <summary>The changes of a body's <c>changes</c> array, or the sentence that says what is wrong with it.</summary>
     public static (List<RowChange>? Changes, string? Problem) Changes(JsonArray list)

@@ -82,6 +82,12 @@ export type RowChange =
   | { action: 'update'; entity: string; key: RowValues; expected_version: number; values: RowValues; effective_from?: string }
   | { action: 'delete'; entity: string; key: RowValues; expected_version: number; effective_from?: string }
 
+/** One write of a draft (plan 21 CH01): when, by whom, its changes, and whether it still applies on top of the data (a write the data moved away from says why and is left out of what the draft shows). */
+export interface DraftWrite { seq: number; at: string; actor: string; actor_name: string | null; applies: boolean; problem: string | null; changes: RowChange[] }
+
+/** A draft: the writes a preview or a channel made, kept apart from the data. */
+export interface DraftInfo { id: string; writes: DraftWrite[] }
+
 /** What a write answered: applied at once (`{}`), or kept as a change request that waits for a person (the model asks for approval, or the caller is an agent). */
 export interface ApplyResult { waiting?: { id: string } }
 

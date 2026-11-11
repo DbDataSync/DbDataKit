@@ -22,10 +22,10 @@ public sealed class GroupAppData(GroupStoreApi api) : IAppData
         var caller = new StoreCaller(call.SubjectId, call.SubjectName, IsAgent: false, call.Roles, call.Via);
         var answer = call.Route switch
         {
-            AppDataRoute.Row => await api.RowAsync(caller, call.Model, call.Entity!, call.Query, cancellationToken),
-            AppDataRoute.Rows => await api.RowsAsync(caller, call.Model, call.Entity!, call.Query, cancellationToken),
+            AppDataRoute.Row => await api.RowAsync(caller, call.Model, call.Entity!, call.Query, cancellationToken, call.Draft),
+            AppDataRoute.Rows => await api.RowsAsync(caller, call.Model, call.Entity!, call.Query, cancellationToken, call.Draft),
             AppDataRoute.Schema => api.Schema(caller, call.Model, entity => call.Allows(entity, write: false)),
-            _ => await api.ChangesAsync(caller, call.Model, call.Body, call.Proposes, cancellationToken, mayApply: entity => call.Allows(entity, write: true)),
+            _ => await api.ChangesAsync(caller, call.Model, call.Body, call.Proposes, cancellationToken, mayApply: entity => call.Allows(entity, write: true), draft: call.Draft),
         };
         return Answer(answer);
     }

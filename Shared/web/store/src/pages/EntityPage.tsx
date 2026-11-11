@@ -9,12 +9,13 @@ export function EntityPage() {
   const { model = '', entity = '' } = useParams()
   const [search, setSearch] = useSearchParams()
   const instance = search.get('instance')
+  const draft = search.get('draft')
   const canWrite = useIsAdmin()
   return (
     <StoreShell crumbs={[{ label: 'Models', to: '/' }, { label: model, mono: true, to: `/model/${encodeURIComponent(model)}` }, { label: instance ? `${entity} (${instance})` : entity, mono: true, heading: true }]}>
       <div className="pane" data-testid="store-entity">
         <StoreClientProvider client={storeClient}>
-          <EntityEditor key={`${model}/${entity}`} model={model} entity={entity} canWrite={canWrite} waitingLink={() => <Link to={`/model/${encodeURIComponent(model)}/changes`} data-testid="sui-waiting-link">Open the change requests</Link>} instance={instance} onInstance={(next) => setSearch(next ? { instance: next } : {}, { replace: true })} />
+          <EntityEditor key={`${model}/${entity}`} model={model} entity={entity} canWrite={canWrite} waitingLink={() => <Link to={`/model/${encodeURIComponent(model)}/changes`} data-testid="sui-waiting-link">Open the change requests</Link>} instance={instance} onInstance={(next) => setSearch(next ? { ...(draft ? { draft } : {}), instance: next } : draft ? { draft } : {}, { replace: true })} draft={draft} />
         </StoreClientProvider>
       </div>
     </StoreShell>

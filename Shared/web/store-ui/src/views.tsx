@@ -4,6 +4,32 @@ import { StoreError, type InstanceList, type AttributeSchema, type EntitySchema,
 
 /** The presentational parts of the controls: props in, markup out, no client and no state, so a host can wire them to anything and a test can render them. */
 
+export interface DraftBannerProps {
+  /** The draft's id (the preview or channel it belongs to). */
+  draft: string
+  /** How many writes it holds, and how many of them no longer apply on top of the data. */
+  writes: number
+  stale: number
+  busy?: boolean
+  canWrite?: boolean
+  onDiscard?: () => void
+  onSubmit?: () => void
+}
+
+/** What a draft shows, said plainly: these rows are on top of the data and are not data until the draft is submitted and approved; with the two ways out. */
+export function DraftBannerView({ draft, writes, stale, busy, canWrite = true, onDiscard, onSubmit }: DraftBannerProps) {
+  return (
+    <div className="sui-notice sui-draft" role="status" data-testid="sui-draft-banner">
+      <span data-testid="sui-draft-text">
+        Draft <b>{draft}</b>: {writes === 0 ? 'nothing written yet' : `${writes} write${writes === 1 ? '' : 's'}`}. The rows below show the draft on top of the data; it is not data until it is submitted as a change request and approved.
+        {stale > 0 && <> {stale} write{stale === 1 ? '' : 's'} no longer {stale === 1 ? 'applies' : 'apply'} because the data changed under {stale === 1 ? 'it' : 'them'}.</>}
+      </span>
+      <button type="button" data-testid="sui-draft-submit" disabled={busy || !canWrite || writes === 0} onClick={onSubmit}>Submit as change request</button>
+      <button type="button" data-testid="sui-draft-discard" disabled={busy || !canWrite || writes === 0} onClick={onDiscard}>Discard draft</button>
+    </div>
+  )
+}
+
 export function ErrorNote({ error }: { error: Error | null | undefined }) {
   if (!error) return null
   return <div className="sui-error" role="alert" data-testid="sui-error">{error.message}</div>
