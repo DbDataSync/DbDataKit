@@ -66,6 +66,9 @@ public class RunnerHost(RunnerHostSettings settings, StateDatabase state, ILogge
     /// <summary>The runner group this instance belongs to.</summary>
     public string Group => settings.Group;
 
+    /// <summary>How this host turns a connection slot into a login, once it has started (null before): what a run uses, and what the binding test of the API tries (UI08).</summary>
+    public DbDataKit.Runner.Protocol.Server.ISlotResolver? Slots { get; private set; }
+
     /// <summary>The name this runner's scheduler claims work items under; the group view counts an instance's running items by it.</summary>
     public string WorkerId => _workerId;
 
@@ -101,6 +104,7 @@ public class RunnerHost(RunnerHostSettings settings, StateDatabase state, ILogge
         // connection slots (plan 28c E02): the bindings are the publisher's, the connections a directory of connection/1 files, the secrets the runner's own providers; every secret the resolver reveals is registered with the redactor the run log uses
         var redactor = new Redactor();
         var slots = new RunnerSlotResolver(publisher, settings.Connections ?? new DirectoryConnectionCatalog(settings.ConnectionsDirectory), settings.Secrets ?? RunnerHostSettings.DefaultSecrets(settings.SecretStore), redactor);
+        Slots = slots;
         var executor = new TaskExecutor(state, _host, new TaskExecutorOptions
         {
             DataDirectory = settings.Directory,

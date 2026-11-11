@@ -55,6 +55,7 @@ public static class ServerProducts
         new("GET", "api/v1/lineage", ServerRole.Viewer),
         new("GET", "api/v1/upgrade", ServerRole.Viewer),                                                    // UC09: the status of its own upgrade
         new("GET", "api/v1/certificate", ServerRole.Viewer),                                                // UI10: days left and subject of the certificate it presents, for Monitoring
+        new("GET", "api/v1/secrets/overview", ServerRole.Admin),                                            // UI06: names, dates and references of the secrets and what names them, never a value
         new("GET", "api/v1/definitions/integration", ServerRole.Viewer),
         new("GET", "api/v1/definitions/integration/{name}", ServerRole.Viewer),
         new("GET", "api/v1/instances/{id}/labels", ServerRole.Viewer),                                      // UE11
@@ -75,6 +76,7 @@ public static class ServerProducts
         new("PUT", "api/v1/artifacts/{sha}", ServerRole.Admin, ServerRole.Publisher),                      // UE10
         new("PUT", "api/v1/definitions/integration/{name}", ServerRole.Admin, ServerRole.Publisher),       // UE10
         new("PUT", "api/v1/bindings/{name}/integration/{name}", ServerRole.Admin, ServerRole.Publisher),   // UE08
+        new("POST", "api/v1/bindings/{name}/integration/{name}/test", ServerRole.Admin),                    // UI08: try a slot's binding (never a value in the answer)
         new("PUT", "api/v1/settings/require_signatures", ServerRole.Admin),                                // UE08
         new("PUT", "api/v1/instances/{id}/labels", ServerRole.Admin),                                      // UE11
         new("POST", "api/v1/upgrade", ServerRole.Admin),                                                   // UC09: prepare and apply its own upgrade
@@ -100,6 +102,7 @@ public static class ServerProducts
     public static IReadOnlyList<(string Method, string Route, ServerRole Needed)> WorkspaceRoutes { get; } =
     [
         ("GET", "api/v1/projects", ServerRole.Viewer),
+        ("GET", "api/v1/certificate", ServerRole.Viewer),   // UI10: days left and subject of the certificate it presents, for Monitoring
         ("POST", "api/v1/projects", ServerRole.Admin),
         ("GET", "api/v1/projects/{p}/workspaces", ServerRole.Viewer),
         ("POST", "api/v1/projects/{p}/workspaces", ServerRole.Author),

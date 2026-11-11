@@ -7,8 +7,8 @@ export interface RunRow {
   key: string
   server: string
   serverName: string
-  product: 'dbdatasync' | 'dbdatarunner'
-  /** What ran: `<replication>` (and the mapping or segment) for Sync, `<package>/<channel>/<task>` for a runner. */
+  product: 'dbdatasync' | 'dbdatarunner' | 'dbdatabuild'
+  /** What ran: `<replication>` (and the mapping or segment) for Sync, `<package>/<channel>/<task>` for a runner, `<project> <connection>/<plan>` for a Build plan. */
   subject: string
   state: 'failed' | 'running' | 'queued' | 'stopped' | 'succeeded'
   /** The failure in a sentence, or what the run did (rows written, items processed); empty when nothing is known. */
@@ -58,6 +58,16 @@ export function runnerRunRow(server: InstanceSummary, run: RunnerRun): RunRow {
   return { key: `${server.id}/runner/${run.id}`, server: server.id, serverName: server.name, product: 'dbdatarunner', subject: `${run.package}/${run.channel}/${run.task}`, state, detail, queued: null, started: run.started, ended: run.finished, link: `/servers/${server.id}/runs` }
 }
 
+/** A run of a scheduled Build plan, as `GET /api/v1/plan-runs` lists it (UI09), as far as this view reads it. */
+export interface BuildPlanRun { id: string; project: string; plan: string; started: string; finished: string; exit: number; outcome: string }
+
+/** One run of a scheduled Build plan: the exit code says how it ended (0 succeeded, -1 it could not be started). */
+export function buildRunRow(server: InstanceSummary, run: BuildPlanRun): RunRow {
+  const failed = run.exit !== 0
+  const detail = !failed ? '' : run.exit === -1 ? 'The scheduled run could not be started' : `The refresh ended with exit code ${run.exit}`
+  return { key: `${server.id}/build/${run.id}`, server: server.id, serverName: server.name, product: 'dbdatabuild', subject: `${run.project} ${run.plan}`, state: failed ? 'failed' : 'succeeded', detail, queued: null, started: run.started, ended: run.finished, link: `/servers/${server.id}/projects/${encodeURIComponent(run.project)}` }
+}
+
 /** The moment a row is ordered by: when it started, else when it was queued; unknown last. */
 export const timeOf = (row: RunRow): number => {
   const at = Date.parse(row.started ?? row.queued ?? '')
@@ -86,7 +96,7 @@ export const PER_SOURCE = 10
 const relay = (server: InstanceSummary, path: string) => `/relay/${server.id}${path}`
 const enc = encodeURIComponent
 
-/** The recent runs of every reachable Sync and runner server. A server that does not answer is reported beside the rows, never as a row, and never stops the others. */
+/** The recent runs of every reachable Sync, Build and runner server. A server that does not answer is reported beside the rows, never as a row, and never stops the others. */
 export async function loadRuns(servers: InstanceSummary[]): Promise<{ rows: RunRow[]; problems: { server: string; message: string }[] }> {
   const rows: RunRow[] = []
   const problems: { server: string; message: string }[] = []
@@ -99,6 +109,9 @@ export async function loadRuns(servers: InstanceSummary[]): Promise<{ rows: RunR
       } else if (server.product === 'dbdatarunner') {
         const { runs } = await request<{ runs: RunnerRun[] }>(relay(server, `/api/v1/runs?limit=${PER_SOURCE * 10}`))
         rows.push(...runs.map((r) => runnerRunRow(server, r)))
+      } else if (server.product === 'dbdatabuild') {
+        const { runs } = await request<{ runs: BuildPlanRun[] }>(relay(server, `/api/v1/plan-runs?limit=${PER_SOURCE * 5}`))
+        rows.push(...runs.map((r) => buildRunRow(server, r)))
       }
     } catch (error) {
       problems.push({ server: server.name, message: error instanceof Error ? error.message : 'No answer' })

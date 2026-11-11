@@ -32,7 +32,19 @@ public static class RunnerSecretsApi
     /// <summary>Opens the runner's store when a call needs it; throws (and says why) when the runner cannot store a secret.</summary>
     public delegate ISecretStore OpenStore();
 
-    public static void Map(IEndpointRouteBuilder app, StateDatabase state, OpenStore store, string prefix, RunnerCallerResolver callerOf, string serviceId = RunnerNames.ServiceId)
+    /// <summary>What the store holds with the date each was written when it says (names and dates, never values); the overview asks it. The default lists the names with no date.</summary>
+    public delegate Task<IReadOnlyList<SecretHeld>> ListHeld(ISecretStore store, CancellationToken ct);
+
+    public static async Task<IReadOnlyList<SecretHeld>> NamesOnly(ISecretStore store, CancellationToken ct)
+    {
+        var held = new List<SecretHeld>();
+        await foreach (var name in store.ListAsync("", ct)) held.Add(new SecretHeld(name, null));
+        return held;
+    }
+
+    /// <param name="connections">The connection inventory of this runner (<c>GET /api/v1/connections</c>), which <c>GET {prefix}/secrets/overview</c> reads the references from; null: the overview names no reference.</param>
+    /// <param name="listHeld">What the store holds, with dates; null: the names only.</param>
+    public static void Map(IEndpointRouteBuilder app, StateDatabase state, OpenStore store, string prefix, RunnerCallerResolver callerOf, string serviceId = RunnerNames.ServiceId, Func<JsonObject>? connections = null, ListHeld? listHeld = null)
     {
         var root = prefix.TrimEnd('/');
         var audit = new AuditLog(state, serviceId);
@@ -84,6 +96,25 @@ public static class RunnerSecretsApi
 
             Record(audit, SetVerb, callerOf(context).Actor, parsed.ToString(), AuditEvent.Ok, new { length = value.Length });
             return Results.Json(new JsonObject { ["name"] = parsed.ToString() });
+        });
+
+        // UI06: what the store holds against what the connections bound on this runner name: missing, present, outside and unused; names, references and dates only
+        app.MapGet($"{root}/secrets/overview", async (HttpContext context) =>
+        {
+            if (!callerOf(context).Authorize(ServerRole.Admin).Allowed) return Error(403, "This needs the admin role.");
+            IReadOnlyList<SecretHeld> held;
+            try { held = await (listHeld ?? NamesOnly)(store(), context.RequestAborted); }
+            catch (Exception ex) when (ex is not OperationCanceledException) { return Error(503, $"This runner cannot read its secrets: {ex.Message}"); }
+            var uses = new List<ReferenceUse>();
+            foreach (var connection in (connections?.Invoke()?["connections"] as JsonArray) ?? [])
+            {
+                if (connection is not JsonObject c) continue;
+                var users = (c["used_by"] as JsonArray)?.Select(u => (string?)u?["name"]).Where(n => !string.IsNullOrEmpty(n)).Select(n => n!).Distinct().ToList() ?? [];
+                foreach (var key in new[] { "secret_ref", "run_secret_ref" })
+                    if (SecretRef.TryParse((string?)c[key], out var reference))
+                        uses.AddRange((users.Count == 0 ? [(string)c["name"]!] : users).Select(u => new ReferenceUse(u, reference)));
+            }
+            return Results.Json(SecretsOverview.Build("dbdatarunner", "runner-store", held, uses));
         });
 
         app.MapGet($"{root}/secrets", async (HttpContext context) =>

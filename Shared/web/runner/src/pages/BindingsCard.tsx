@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ErrorBanner } from '@dbdatakit/shell'
-import { runnerApi, type BindRequest, type DefinitionDetail } from '../api'
+import { runnerApi, type BindRequest, type DefinitionDetail, type SlotTestAnswer } from '../api'
 import { bindingBlock, bindingsRequest, connectionNames, slotRows, unboundSlots, type BindingEdits, type SlotRow } from '../bindings'
 
 export interface BindingsCardViewProps {
@@ -19,6 +19,10 @@ export interface BindingsCardViewProps {
   failure: unknown
   onEdit: (slot: string, value: string) => void
   onSave: () => void
+  /** The answers of the runner's test of each slot's binding, by slot; the slot being tried now, or null. Optional: a view that offers no test leaves them out. */
+  tested?: Record<string, SlotTestAnswer>
+  trying?: string | null
+  onTry?: (slot: string) => void
 }
 
 /** The connections of one channel without their calls: each slot the manifests declare, what it is bound to, and the change. Hook-free so a test can draw it and press its button. */
@@ -45,6 +49,14 @@ export function BindingsCardView(p: BindingsCardViewProps) {
                 {p.canEdit
                   ? <input className="input mono" list={listId} value={typed ?? r.boundTo ?? ''} placeholder="connection name" aria-label={`Connection for ${r.slot}`} onChange={(e) => p.onEdit(r.slot, e.target.value)} data-testid="runner-binding-input" />
                   : <span className="mono" data-testid="runner-binding-value">{r.boundTo ?? 'not bound'}</span>}
+                {p.canEdit && p.onTry && r.boundTo !== null && typed === undefined && (
+                  <span className="row" style={{ gap: 8, gridColumn: '1 / -1' }}>
+                    <button type="button" className="btn" disabled={p.trying === r.slot} onClick={() => p.onTry?.(r.slot)} data-testid="runner-binding-try">{p.trying === r.slot ? 'Trying...' : 'Try this binding'}</button>
+                    {p.tested?.[r.slot] && (
+                      <span className={p.tested[r.slot]!.ok ? 'hint' : 'field-error'} role={p.tested[r.slot]!.ok ? 'status' : 'alert'} data-testid="runner-binding-tried" data-ok={p.tested[r.slot]!.ok} data-step={p.tested[r.slot]!.step}>{p.tested[r.slot]!.message}</span>
+                    )}
+                  </span>
+                )}
               </div>
             )
           })}
@@ -81,11 +93,19 @@ export function BindingsCard({ detail, channel, canEdit }: { detail: DefinitionD
     // a refusal usually means the channel changed since the page was read (a revision moved): read it again so the next try carries the revision it is now at, and keep what was typed
     onError: () => { void client.invalidateQueries({ queryKey: ['runner'] }) },
   })
+  const [tested, setTested] = useState<Record<string, SlotTestAnswer>>({})
+  const tryOne = useMutation({
+    mutationFn: (slot: string) => runnerApi.tryBinding(detail.name, channel, slot),
+    onSuccess: (answer, slot) => setTested((all) => ({ ...all, [slot]: answer })),
+    onError: (error, slot) => setTested((all) => ({ ...all, [slot]: { slot, bound_to: null, ok: false, step: 'binding', message: error instanceof Error ? error.message : 'The runner did not answer.', connected: false } })),
+  })
   return (
     <BindingsCardView
       channel={channel} rows={rows} canEdit={canEdit} edits={edits} known={connectionNames(connections.data)} busy={save.isPending} saved={saved} failure={save.error}
       onEdit={(slot, value) => { save.reset(); setSaved(null); setEdits({ ...edits, [slot]: value }) }}
       onSave={() => { const request = bindingsRequest(rows, edits); if (request) save.mutate(request) }}
+      tested={tested} trying={tryOne.isPending ? tryOne.variables ?? null : null}
+      onTry={(slot) => tryOne.mutate(slot)}
     />
   )
 }

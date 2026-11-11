@@ -15,7 +15,7 @@ namespace DbDataGateway.Server.Management;
 /// cannot reach the secrets an administrator keeps. An administrator uses the same calls, under their own client id (or <c>local</c> on the local channel).
 /// </para>
 /// </summary>
-public sealed partial class GatewaySecrets(ISecretStore store, IAuditLog audit, TimeProvider? clock = null)
+public sealed partial class GatewaySecrets(ISecretStore store, IAuditLog audit, TimeProvider? clock = null, Func<IEnumerable<ReferenceUse>>? references = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
@@ -38,6 +38,15 @@ public sealed partial class GatewaySecrets(ISecretStore store, IAuditLog audit, 
                 items.Add(new JsonObject { ["name"] = name.Name, ["reference"] = name.ToRef().ToString() });
             }
             return ManagementResult.Ok(new JsonObject { ["secrets"] = names, ["items"] = items });
+        }
+        // UI06: what the store holds against what the data sources name; an administrator's read (names, references and dates, never a value)
+        if (rest.Length == 2 && rest[1] == "overview" && method == "GET")
+        {
+            if (!caller.Holds(ServerRole.Admin)) return ManagementResult.Problem(403, "This needs the admin role.");
+            IReadOnlyList<SecretHeld> held;
+            if (store is DbDataKit.Secrets.Store.ISecretAdmin admin) held = [.. (await admin.ListInfoAsync("", cancellationToken)).Select(i => new SecretHeld(i.Name, i.Updated == default ? null : i.Updated))];
+            else { var names = new List<SecretHeld>(); await foreach (var n in store.ListAsync("", cancellationToken)) names.Add(new SecretHeld(n, null)); held = names; }
+            return ManagementResult.Ok(SecretsOverview.Build("dbdatagateway", "secret-store", held, references?.Invoke() ?? []));
         }
         if (rest.Length != 2) return ManagementResult.Problem(404, "There is no such call.");
         var given = Uri.UnescapeDataString(rest[1]);

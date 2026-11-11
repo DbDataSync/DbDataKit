@@ -11,6 +11,7 @@ import { MonitoringPage } from './pages/MonitoringPage'
 import { ApprovalsPage } from './pages/ApprovalsPage'
 import { RunsPage } from './pages/RunsPage'
 import { AuditPage } from './pages/AuditPage'
+import { SecretsPage } from './pages/SecretsPage'
 import { ServerModule } from './pages/ServerModule'
 import { ServerStatePage } from './pages/ServerStatePage'
 import { LineagePage } from './pages/LineagePage'
@@ -57,6 +58,7 @@ export default function App() {
       <Route path="/approvals" element={<ApprovalsPage />} />
       <Route path="/runs" element={<RunsPage />} />
       <Route path="/audit" element={<AuditPage />} />
+      <Route path="/secrets" element={<SecretsPage />} />
       <Route path="/users" element={<UsersPage />} />
       <Route path="*" element={<HomePage />} />
     </Routes>

@@ -124,6 +124,31 @@ public sealed class BuildSchedulerTests : IDisposable
     }
 
     [Fact]
+    public async Task Each_finished_run_is_listed_newest_first_with_when_and_how_it_ended()
+    {
+        // UI09: the scheduler kept only the last exit; now every run that ended is a row
+        scheduler.Tick();
+        clock.To(At(12, 16));
+        scheduler.Tick();
+        await RunNext();
+        clock.To(At(13, 16));
+        scheduler.Tick();
+        runner.Exit = 1;
+        await RunNext();
+
+        var runs = scheduler.RecentRuns(10);
+
+        Assert.Equal([1, 0], runs.Select(r => r.Exit));
+        Assert.Equal(["sqlserver/hourly", "sqlserver/hourly"], runs.Select(r => r.Subject));
+        Assert.Equal(["sales", "sales"], runs.Select(r => r.Project));
+        Assert.Equal(At(13, 16), runs[0].Started);
+        Assert.NotEqual(runs[0].RunId, runs[1].RunId);
+        Assert.Single(scheduler.RecentRuns(1));
+        // a restart keeps them
+        Assert.Equal(2, new BuildScheduler(projects, runner, BuildSchedulerSchema.Open(root, clock), clock, log.Add).RecentRuns(10).Count);
+    }
+
+    [Fact]
     public void A_plan_whose_run_is_still_going_is_not_queued_a_second_time()
     {
         scheduler.Tick();

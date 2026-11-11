@@ -66,6 +66,7 @@ public static class WorkspaceServer
         var maintenance = new MaintenanceGate();
         app.UseMaintenance(maintenance, context => context.ManagementTokenOrNull() is { } token && ManagementAuthorization.Authorize(token, ServerRole.Admin).Allowed);
         app.MapState(StateApi(settings, instanceId, maintenance));
+        app.MapCertificateStatus(() => certificate);   // days left and subject, for the console's Monitoring (UI10)
         var store = new WorkspaceStore(state);
         var workspaces = new DbDataKit.Authoring.Workspaces(settings.Directory, TimeProvider.System);
         var kinds = StandardProjectKinds.Create(new BuildTool(settings.BuildExecutable), new SyncTool(settings.SyncExecutable, platform: settings.SyncPlatform));

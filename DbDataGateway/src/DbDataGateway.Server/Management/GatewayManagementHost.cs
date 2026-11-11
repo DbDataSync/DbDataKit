@@ -117,7 +117,7 @@ public static class GatewayManagementHost
             new StateAuditSink(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>(), DbDataGateway.Server.State.GatewayState.ServiceId),
             instanceId, GatewayHost.Version, app.Services.GetRequiredService<DbDataGateway.Server.State.ServingInstanceLease>(), Move: true));
         management = new GatewayManagement(configuration, configDirectory, instanceId, GatewayHost.Version, dataSources, identities, activity, certificate, git,
-            new GatewaySecrets(app.Services.GetRequiredService<GroupSecretStore>() is { Enabled: true } group ? group : SecretsRuntime.OpenStore(options), audit), files.Codes(),
+            new GatewaySecrets(app.Services.GetRequiredService<GroupSecretStore>() is { Enabled: true } group ? group : SecretsRuntime.OpenStore(options), audit, references: dataSources.References), files.Codes(),
             new GatewaySemanticModels(app.Services.GetRequiredService<Serving.PublishedSemanticModels>(), app.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>(),
                 () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue, configDirectory, () => app.Services.GetRequiredService<DataSourceCatalog>(), audit),
             pairedClients: clients.All,

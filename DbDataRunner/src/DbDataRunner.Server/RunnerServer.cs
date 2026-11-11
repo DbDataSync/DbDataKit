@@ -86,7 +86,10 @@ public static class RunnerServer
         DbDataKit.Upgrade.UpgradeSetup.MapUpgrade(app, RunnerSettings.Product, Version, RunnerService.RegistrationName, settings.Listen.Port, new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), () => [.. clients.All().Select(c => new DbDataKit.Upgrade.PeerGeneration(c.Name, c.Generation))]);
         RunnerApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), instanceId, new RunnerApiOptions("/api/v1", RunnerCallers.TokenResolver, RunnerSettings.Product, Version));
         RunnerPublishApi.Map(app, new RunnerPublishing(state, settings.MaxArtifactBytes, settings.SignatureVerifier, settings.InstanceLease, new DbDataKit.Runner.Staging.ActivationOptions { MaxWait = settings.ActivationMaxWait }));
-        RunnerSecretsApi.Map(app, state, () => secretStore.Open(), "/api/v1", RunnerCallers.TokenResolver);
+        RunnerSecretsApi.Map(app, state, () => secretStore.Open(), "/api/v1", RunnerCallers.TokenResolver,
+            connections: () => RunnerConnections.Inventory(state, app.Services.GetRequiredService<RunnerEngine>().Group, RunnerSettings.Product),
+            listHeld: async (opened, ct) => opened is DbDataKit.Secrets.Store.ISecretAdmin admin ? [.. (await admin.ListInfoAsync("", ct)).Select(i => new DbDataKit.Secrets.SecretHeld(i.Name, i.Updated == default ? null : i.Updated))] : await RunnerSecretsApi.NamesOnly(opened, ct));   // UI06: the overview
+        RunnerBindingTestApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>().Slots, "/api/v1", RunnerCallers.TokenResolver);   // UI08: try a slot's binding
         RunnerGroupApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver);
         RunnerLineageApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver);
         return app;
