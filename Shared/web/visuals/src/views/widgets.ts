@@ -3,6 +3,7 @@ import {
   CHART_CHANNELS, COMPUTING, Issues, MARKS, NAME, VIEW, ajv, at, defs, isObject, isSafeTextLink, join, part, run,
 } from './common'
 import type { Json, ViewsIssue } from './common'
+import { checkFormat } from './format'
 import vegaSubsetSchema from '../../schemas/vega-lite-subset.schema.json'
 
 /**
@@ -75,6 +76,7 @@ function checkWidget(id: string, raw: unknown, path: string, context: Context, i
   if (typeof type !== 'string' || !(WIDGET_TYPES as readonly string[]).includes(type)) { issues.add('DBD-107', join(path, 'type'), `\`${String(type)}\` is not a widget type.`); return null }
 
   run(widgetChecks[type]!, raw, { kind: 'widget', type }, path, issues)
+  formats(raw, type, path, issues)
   const fields: Encoded[] = []
   const encodings = isObject(raw.encodings) ? raw.encodings : undefined
   const ep = join(path, 'encodings')
@@ -111,6 +113,20 @@ function checkWidget(id: string, raw: unknown, path: string, context: Context, i
     if (raw.drill !== undefined) drill(raw.drill, join(path, 'drill'), context, issues)
   }
   return { id, type, raw }
+}
+
+/** The formats a metric and a table's columns name (a matrix reads the engine's presets until DBR41); the words are `ViewFormat.Check`'s in .NET. */
+function formats(raw: Json, type: string, path: string, issues: Issues): void {
+  const one = (format: unknown, where: string) => {
+    if (format === undefined) return
+    const problem = checkFormat(format)
+    if (!problem) return
+    issues.add('DBD-106', problem.key !== '' && isObject(format) ? join(where, problem.key) : where, problem.message)
+  }
+  if (type === 'metric') one(raw.format, join(path, 'format'))
+  const columns = isObject(raw.encodings) ? raw.encodings.columns : undefined
+  if (type === 'table' && Array.isArray(columns))
+    columns.forEach((c, i) => { if (isObject(c)) one(c.format, join(at(join(join(path, 'encodings'), 'columns'), i), 'format')) })
 }
 
 /** A chart's mark and encodings: the Vega-Lite subset, closed. Anything that fetches or computes is refused by name (no computation in the chart spec). */
