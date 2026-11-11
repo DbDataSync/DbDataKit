@@ -15,6 +15,8 @@ export interface RenderedChart {
   /** A Vega-Lite spec inside the subset, with its data inline as `data.values`. */
   vega_lite: { data: { values: Array<Record<string, DataValue>> } } & Record<string, unknown>
   /** d3-format strings for the quantitative channels (a widget's chart `format`, plan 32 DBR41); a tooltip's is a list in the order of its entries. See `applyChartFormats`. */
+  /** The renderer drew a multi-level `x` as an inner `x` and the outer level as `column`: draw the column as group headers below the labels (DBR42). See `applyNestedAxis`. */
+  nested_axis?: boolean
   formats?: Partial<Record<'x' | 'y' | 'color' | 'column' | 'row', string>> & { tooltip?: Array<string | null> }
 }
 

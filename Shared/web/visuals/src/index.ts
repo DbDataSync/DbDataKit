@@ -13,6 +13,7 @@ export { RUNNING_TOKENS, VIEWS_FORMAT, validateDashboard, validateReport, valida
 export type { ViewKind, ViewsOptions } from './views/document'
 export { checkFormat, formatDate, formatNumber, formatValue } from './views/format'
 export { D3_FORMAT, applyChartFormats } from './views/chartFormat'
+export { applyNestedAxis } from './views/nestedAxis'
 export type { ChartFormats } from './views/chartFormat'
 export type { CatalogFormat, FormatProblem, ViewFormatValue } from './views/format'
 export { matches as layoutMatches, selectLayout, specificity as layoutSpecificity } from './views/selectLayout'

@@ -129,6 +129,7 @@
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "type": { "const": "chart" },
+        "nested_axis": { "description": "The renderer drew a multi-level `x` as an inner `x` and the outer level as the `column` channel (plan 32 DBR42): the client draws the column as group headers below the inner labels, with no space between groups.", "type": "boolean" },
         "formats": {
           "description": "d3-format strings the renderer's own format mapping made for the quantitative channels (plan 32 DBR41), by channel; a tooltip's is a list in the order of its entries (null where an entry has none). The client checks each against a fixed pattern before it gives it to Vega-Lite.",
           "type": "object",
