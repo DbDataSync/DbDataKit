@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using DbDataKit.Serving;
 using DbDataKit.Serving.Semantic;
 using DbDataKit.State;
+using DbDataKit.Views;
 using DbDataKit.Web.Trust;
 using DbDataGateway.Server.Serving;
 using DbDataGateway.Server.State;
@@ -41,6 +42,7 @@ public sealed class GatewaySemanticRuns(SemanticRunStore store, SemanticModels m
         if (parts.Length == 0 && method == "POST") return await RunAsync(body, who, cancellationToken);
         if (parts.Length == 0) return method == "GET" ? List(who, wantsAll, q["model"], int.TryParse(q["limit"], out var limit) ? limit : 100) : Problem(405, "The list is read with GET.");
         if (parts is ["counts"]) return method == "GET" ? Counts(who, wantsAll, int.TryParse(q["days"], out var days) ? Math.Clamp(days, 1, 365) : 7) : Problem(405, "The counts are read with GET.");
+        if (parts is [var kept, "render"] && !long.TryParse(kept, out _)) return method == "POST" ? Render(kept, body, who) : Problem(405, "A view is rendered with POST.");
         if (!long.TryParse(parts[0], out var id) || parts.Length > 2) return Problem(404, "There is no such call.");
         var record = store.Get(id, SemanticCallers.KeyOf(who), admin);
         if (record is null) return Problem(404, $"There is no run {id} of yours.");
@@ -49,7 +51,7 @@ public sealed class GatewaySemanticRuns(SemanticRunStore store, SemanticModels m
         return method == "POST" ? await ReplayAsync(record, who, caller, cancellationToken) : Problem(405, "A replay is started with POST.");
     }
 
-    private sealed record RunBody(string? Model, string? Sql, JsonObject? Request, JsonObject? Parameters, bool? Explain, int? Limit);
+    private sealed record RunBody(string? Model, string? Sql, JsonObject? Request, JsonObject? Parameters, bool? Explain, int? Limit, bool? Keep, JsonObject? View);
 
     /// <summary>
     /// <c>POST /api/v1/my/runs</c> <c>{model, sql | request, parameters?, explain?, limit?}</c>: the explorer's call (plan 14a SL14, SL15, D36). The statement runs as the caller through the semantic module, so it is checked, limited and recorded like one from any other
@@ -80,7 +82,18 @@ public sealed class GatewaySemanticRuns(SemanticRunStore store, SemanticModels m
                 answer = await semantic.Queries.RunAsync(context, new ServingRequest.Semantic(source, request.ToJsonString(), new ServingLimits(MaxRows: limit)), cancellationToken);
             }
             await using var _ = answer;
-            var result = await SemanticRest.ResultAsync(answer, cancellationToken);
+            JsonObject result;
+            if ((run.View is not null || run.Keep == true) && run.Explain != true && SemanticRest.StatusOf(answer) == "complete")
+            {
+                // a result that will be drawn is read once, the way a dashboard widget's answer is, and kept for a while so another view of it is not another run
+                JsonObject document;
+                try { document = await AnswerViews.ReadAsync(answer, limit, cancellationToken); }
+                catch (ViewsAnswerException ex) { return new ManagementResult(400, new JsonObject { ["error"] = ex.Message, ["code"] = ex.Code }); }
+                result = SemanticRest.ResultFrom(answer, document);
+                result["result_id"] = Hold(SemanticCallers.KeyOf(who), document);
+                if (run.View is not null) result["rendered_view"] = AnswerViews.Render(run.View.DeepClone().AsObject(), document);
+            }
+            else result = await SemanticRest.ResultAsync(answer, cancellationToken);
             result["model_version"] = model.Version;
             return ManagementResult.Ok(result);
         }
@@ -89,6 +102,46 @@ public sealed class GatewaySemanticRuns(SemanticRunStore store, SemanticModels m
             var status = ex switch { ServingNotFoundException => 404, ServingDeniedException or ServingUnauthenticatedException => 403, ServingBackendException => 502, _ => 400 };
             return new ManagementResult(status, new JsonObject { ["error"] = ex.Message, ["code"] = ex is ServingLimitException l ? l.Limit : SemanticRest.CodeOf(ex.Message) });
         }
+    }
+
+    // ---- results kept for rendering (D37) ----
+
+    private sealed record Held(string Owner, JsonObject Document, DateTimeOffset Expires);
+
+    private const int HeldMost = 32;
+    private static readonly TimeSpan HeldFor = TimeSpan.FromMinutes(10);
+    private readonly Dictionary<string, Held> _held = [];
+
+    /// <summary>Keeps a result document for its owner for ten minutes (at most 32 at a time on this instance, the oldest dropped first) and returns the id a render names it by.</summary>
+    private string Hold(string owner, JsonObject document)
+    {
+        var now = _clock.GetUtcNow();
+        var id = Guid.NewGuid().ToString("N");
+        lock (_held)
+        {
+            foreach (var key in _held.Where(h => h.Value.Expires <= now).Select(h => h.Key).ToList()) _held.Remove(key);
+            while (_held.Count >= HeldMost) _held.Remove(_held.MinBy(h => h.Value.Expires).Key);
+            _held[id] = new Held(owner, document, now + HeldFor);
+        }
+        return id;
+    }
+
+    /// <summary>
+    /// <c>POST /api/v1/my/runs/{result_id}/render</c> <c>{view}</c>: draws the result a run kept (<c>result_id</c> of a run that asked <c>keep</c> or sent a <c>view</c>) as the view document says, through the engine's
+    /// renderer, so the explorer and a dashboard cannot disagree on a cell. Nothing is run again and nothing is read from a source. Only the person who ran it can render it; a result that is gone (ten minutes, another instance,
+    /// the 33rd result) is a 410 that says to run the statement again. A refused encoding is a 200 whose <c>rendered_view</c> has <c>status: failed</c> and the engine's <c>errors</c>.
+    /// </summary>
+    private ManagementResult Render(string resultId, string? body, ServingCaller who)
+    {
+        JsonObject? request;
+        try { request = string.IsNullOrWhiteSpace(body) ? null : JsonNode.Parse(body) as JsonObject; }
+        catch (JsonException) { request = null; }
+        if (request?["view"] is not JsonObject view) return Problem(400, "The body is {\"view\": {<a view document: spec_version, kind, result, views>}}.");
+        Held? held;
+        lock (_held) held = _held.TryGetValue(resultId, out var h) && h.Owner == SemanticCallers.KeyOf(who) && h.Expires > _clock.GetUtcNow() ? h : null;
+        if (held is null)
+            return new ManagementResult(410, new JsonObject { ["error"] = "That result is no longer kept here (a result is kept for ten minutes, on the instance that ran it). Run the statement again.", ["code"] = "result_gone" });
+        return ManagementResult.Ok(new JsonObject { ["result_id"] = resultId, ["rendered_view"] = AnswerViews.Render(view.DeepClone().AsObject(), held.Document) });
     }
 
     /// <summary>The engine wants every query to state its limit; the explorer's text may leave it out, and then it gets the call's (a text that says LIMIT keeps its own).</summary>
