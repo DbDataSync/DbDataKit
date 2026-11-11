@@ -27,13 +27,15 @@ public sealed partial class WorkspaceBuilds : IDisposable
     private readonly Workspaces workspaces;
     private readonly Func<WorkspaceAppSettings> settings;
     private readonly Action<string> log;
+    private readonly ProjectKinds kinds;
     private readonly SemaphoreSlim slots = new(2);
     private readonly CancellationTokenSource stopping = new();
     private readonly List<Task> running = [];
 
     // settings is read for each build, so a changed server.yaml applies to the next one.
-    public WorkspaceBuilds(string directory, WorkspaceStore store, Workspaces workspaces, Func<WorkspaceAppSettings> settings, Action<string> log)
+    public WorkspaceBuilds(string directory, WorkspaceStore store, Workspaces workspaces, Func<WorkspaceAppSettings> settings, Action<string> log, ProjectKinds? kinds = null)
     {
+        this.kinds = kinds ?? StandardProjectKinds.Create();
         this.directory = directory;
         this.store = store;
         this.workspaces = workspaces;
@@ -49,6 +51,9 @@ public sealed partial class WorkspaceBuilds : IDisposable
 
     public string AppFolderOf(string project, Guid id) => Path.Combine(FolderOf(project, id), "app");
 
+    /// <summary>What a kind that produces something to publish wrote for a build (plan 33 SC20d, SC21b, SC22b): <c>package.yaml</c> and <c>files/</c>, or <c>models/</c>.</summary>
+    public string ArtifactFolderOf(string project, Guid id) => Path.Combine(FolderOf(project, id), "artifact");
+
     /// <summary>What a build needs and whether this machine has it.</summary>
     public WorkspaceBuildReadiness Readiness()
     {
@@ -62,7 +67,7 @@ public sealed partial class WorkspaceBuilds : IDisposable
     /// </summary>
     public WorkspaceBuildRow Request(AuthoringProject project, string kind, Workspace workspace, string requestedBy)
     {
-        if (kind != "app") throw new WorkspaceBuildException($"A {kind} project is not built here: only app projects are (plan 27 adds the others).", 409);
+        if (kind != "app") return RequestArtifact(project, kind, workspace, requestedBy);
         var readiness = Readiness();
         if (!readiness.Ready) throw new WorkspaceBuildException(string.Join(" ", readiness.Problems), 409);
         var root = workspaces.RootOf(workspace);
@@ -77,6 +82,84 @@ public sealed partial class WorkspaceBuilds : IDisposable
             running.Add(Task.Run(() => RunAsync(row, root, current, readiness.Store!, dirty)));
         }
         return row;
+    }
+
+    /// <summary>
+    /// A build of a project that is not an app (plan 33): the kind checks the draft (its validators, in a child process where the product has a program), and when that finds no error it makes what it publishes into <c>artifact/</c> of the build's folder
+    /// (<see cref="IProjectKind.ProduceAsync"/>). The findings are the build record, with file and line. Refused (409) for a kind that makes nothing to publish.
+    /// </summary>
+    private WorkspaceBuildRow RequestArtifact(AuthoringProject project, string kind, Workspace workspace, string requestedBy)
+    {
+        var projectKind = kinds.Find(kind) ?? throw new WorkspaceBuildException($"This server does not know the kind '{kind}' ({string.Join(", ", kinds.Names)}).", 409);
+        if (!projectKind.Produces) throw new WorkspaceBuildException($"A {kind} project is not built here: it is checked, and has nothing to publish.", 409);
+        var root = workspaces.RootOf(workspace);
+        var (commit, dirty) = Head(root);
+        var row = store.RequestBuild(project.Id, workspace.Id, requestedBy, commit);
+        lock (running)
+        {
+            running.RemoveAll(t => t.IsCompleted);
+            running.Add(Task.Run(() => RunKindAsync(row, projectKind, root, dirty)));
+        }
+        return row;
+    }
+
+    private async Task RunKindAsync(WorkspaceBuildRow row, IProjectKind projectKind, string root, bool dirty)
+    {
+        var folder = FolderOf(row.Project, row.Id);
+        try { await slots.WaitAsync(stopping.Token); }
+        catch (OperationCanceledException)
+        {
+            Safely(() => store.SetBuildStatus(row.Id, "canceled", "The server stopped before this build started."));
+            return;
+        }
+        try
+        {
+            Safely(() => store.SetBuildStatus(row.Id, "running"));
+            Directory.CreateDirectory(folder);
+            var started = DateTimeOffset.UtcNow;
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(stopping.Token);
+            limit.CancelAfter(TimeSpan.FromMinutes(10));
+            ProjectArtifact artifact;
+            try
+            {
+                var findings = await projectKind.CheckAsync(root, limit.Token);
+                if (findings.Any(d => d.IsError)) artifact = new(false, findings.First(d => d.IsError).Message, findings);
+                else
+                {
+                    var made = await projectKind.ProduceAsync(root, row.Project, ArtifactFolderOf(row.Project, row.Id), limit.Token);
+                    artifact = made with { Diagnostics = [.. findings, .. made.Diagnostics] };
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                var why = stopping.IsCancellationRequested ? "The server stopped while this build ran." : "The build took longer than ten minutes and was stopped.";
+                Safely(() => store.SetBuildStatus(row.Id, stopping.IsCancellationRequested ? "canceled" : "failed", why));
+                return;
+            }
+            catch (ProjectKindUnavailableException ex) { artifact = new(false, ex.Message, [new("error", "DBD-WS-UNAVAILABLE", ex.Message)]); }
+            var result = new JsonObject
+            {
+                ["status"] = artifact.Succeeded ? "succeeded" : "failed",
+                ["message"] = artifact.Message,
+                ["kind"] = projectKind.Name,
+                ["diagnostics"] = new JsonArray([.. artifact.Diagnostics.Select(d => (JsonNode?)new JsonObject { ["severity"] = d.Severity, ["code"] = d.Code, ["message"] = d.Message, ["file"] = d.File, ["line"] = d.Line })]),
+                ["info"] = new JsonObject((artifact.Info ?? new Dictionary<string, string>()).Select(i => KeyValuePair.Create(i.Key, (JsonNode?)JsonValue.Create(i.Value)))),
+                ["uncommitted_changes"] = dirty,
+                ["commit"] = row.CommitSha,
+                ["seconds"] = Math.Round((DateTimeOffset.UtcNow - started).TotalSeconds, 1),
+            };
+            File.WriteAllText(Path.Combine(folder, "result.json"), result.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            Safely(() => store.SetBuildStatus(row.Id, artifact.Succeeded ? "succeeded" : "failed", artifact.Message));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            Safely(() => store.SetBuildStatus(row.Id, "failed", $"The build could not be run: {ex.Message}"));
+            log($"Build {row.Id} of {row.Project}/{row.WorkspaceId} could not be run: {ex.Message}");
+        }
+        finally
+        {
+            slots.Release();
+        }
     }
 
     /// <summary>Waits for the builds in flight (tests, and a server that stops).</summary>

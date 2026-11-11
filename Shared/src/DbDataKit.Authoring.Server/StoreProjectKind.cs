@@ -20,8 +20,35 @@ public sealed partial class StoreProjectKind : IProjectKind
     public bool Buildable => false;
     public string? GitIgnore => null;
 
-    // SC21b adds the Gateway; a route is listed only when publishing it works
-    public IReadOnlyList<ProjectPublishRoute> Publishes { get; } = [];
+    public IReadOnlyList<ProjectPublishRoute> Publishes { get; } =
+        [new("gateway", "model", "The models in the current format, published to a Gateway that serves them, on a data source the Gateway already has (the model's storage connection by default). The Workspace holds no connection and creates no table.")];
+
+    public bool Produces => true;
+
+    /// <summary>
+    /// What a publish sends: each model of <c>models/</c> in the current format (<see cref="DataModelLoader.WithCurrentVersion"/>, so a file at the previous format is published as the current one and the draft's file is left as written), with the
+    /// data source it names in <c>storage.connection</c>, as <c>models/&lt;name&gt;.yaml</c> of the artifact and <c>info</c> (<c>models</c>, <c>data_sources</c>: <c>name=connection</c>, comma separated).
+    /// </summary>
+    public Task<ProjectArtifact> ProduceAsync(string root, string projectId, string outputFolder, CancellationToken cancellationToken)
+    {
+        var folder = Path.Combine(root, Folder);
+        var names = new List<string>();
+        var sources = new List<string>();
+        Directory.CreateDirectory(Path.Combine(outputFolder, "models"));
+        foreach (var file in Directory.EnumerateFiles(folder, "*.*", SearchOption.TopDirectoryOnly).Where(f => f.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".yml", StringComparison.OrdinalIgnoreCase)).Order(StringComparer.Ordinal))
+        {
+            var relative = Folder + "/" + Path.GetFileName(file);
+            var text = File.ReadAllText(file, Utf8).ReplaceLineEndings("\n");
+            var loaded = DataModelLoader.Load(text, relative);
+            if (loaded.Model is not { } model)
+                return Task.FromResult(new ProjectArtifact(false, $"{relative} is not a model that loads.", [new("error", "DBD-WS-STORE-LOAD", $"{relative} is not a model that loads.", relative)]));
+            File.WriteAllText(Path.Combine(outputFolder, "models", model.Name + ".yaml"), DataModelLoader.WithCurrentVersion(text), Utf8);
+            names.Add(model.Name);
+            sources.Add(model.Name + "=" + model.Connection);
+        }
+        var info = new Dictionary<string, string> { ["models"] = string.Join(", ", names), ["data_sources"] = string.Join(", ", sources) };
+        return Task.FromResult(new ProjectArtifact(true, $"{names.Count} model(s): {string.Join(", ", names)}.", [], info));
+    }
 
     private static readonly UTF8Encoding Utf8 = new(false, true);
 

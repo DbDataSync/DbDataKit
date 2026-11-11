@@ -142,17 +142,43 @@ export function buildButton(input: { canWrite: boolean; ready: boolean; problems
 export const notIsolated = (notes: readonly string[]) => notes.some((n) => n.includes('without network isolation'))
 
 /** A diagnostic as one line: `src/main.tsx:3` and the reason, or only the reason. */
-export const diagnosticLine = (d: { file?: string; line?: number; message: string }) => (d.file ? `${d.file}${d.line ? `:${d.line}` : ''}: ${d.message}` : d.message)
+export const diagnosticLine = (d: { file?: string | null; line?: number | null; message: string; code?: string }) => (d.file ? `${d.file}${d.line ? `:${d.line}` : ''}: ${d.code ? d.code + ' ' : ''}${d.message}` : `${d.code ? d.code + ' ' : ''}${d.message}`)
 
-/** What the Publish button is: the approver role (the console's administrator holds it), a succeeded build and a target the server can publish to. */
-export function publishButton(input: { canWrite: boolean; status: string; target: string; targets: readonly { name: string; can_publish: boolean }[]; busy: boolean }): { enabled: boolean; why: string | null } {
+/** The product a target is, in words: `Runner`, `Gateway` (a target from before products is a Gateway). */
+export const productWord = (product: string | null | undefined) => (product === 'runner' ? 'Runner' : product === 'gateway' || !product ? 'Gateway' : product)
+
+/** What the Publish button is: the approver role (the console's administrator holds it), a succeeded build and a target the server can publish to; a Runner also needs the channel the package goes to (plan 33 SC22c). */
+export function publishButton(input: { canWrite: boolean; status: string; target: string; targets: readonly { name: string; can_publish: boolean; product?: string | null; accepts?: boolean | null }[]; busy: boolean; channel?: string }): { enabled: boolean; why: string | null } {
   if (!input.canWrite) return { enabled: false, why: 'Publishing needs the approver or administrator role.' }
   if (input.status !== 'succeeded') return { enabled: false, why: 'Only a build that succeeded is published.' }
   if (input.target.trim() === '') return { enabled: false, why: input.targets.length === 0 ? 'No publisher key is set up: an administrator adds one under Publisher keys.' : null }
   const known = input.targets.find((t) => t.name === input.target.trim())
-  if (known && !known.can_publish) return { enabled: false, why: `The key ${known.name} is not paired with a Gateway that lets it publish.` }
+  if (known && !known.can_publish) return { enabled: false, why: `The key ${known.name} is not paired with a ${productWord(known.product)} that lets it publish.` }
+  if (known?.accepts === false) return { enabled: false, why: `This kind of project is not published to a ${productWord(known.product)}; choose a key paired with the product it goes to.` }
+  if (known?.product === 'runner' && (input.channel ?? '').trim() === '') return { enabled: false, why: 'Name the channel of the Runner the package goes to.' }
   return { enabled: !input.busy, why: null }
 }
+
+/** `slot=connection, slot2=connection2` as the object the publish sends, or the first thing wrong with the text (a pair with no `=`, an empty side). Blank is no binding. */
+export function parseBindings(text: string): { bind: Record<string, string>; problem: string | null } {
+  const bind: Record<string, string> = {}
+  for (const part of text.split(/[,\n]/).map((p) => p.trim()).filter((p) => p !== '')) {
+    const eq = part.indexOf('=')
+    if (eq <= 0 || eq === part.length - 1) return { bind: {}, problem: `"${part}" is not slot=connection.` }
+    bind[part.slice(0, eq).trim()] = part.slice(eq + 1).trim()
+  }
+  return { bind, problem: null }
+}
+
+/** What a publish came to, as one sentence, whatever it was: an app on a Gateway, a package staged or served on a Runner's channel, models on a Gateway's data sources. */
+export function publishedLine(p: { app?: string; version?: number; gateway?: string; package?: string; channel?: string; mode?: string; changed?: boolean; runner?: string; models?: { model: string; data_source: string; version?: number | null; unchanged?: boolean | null }[] }): string {
+  if (p.package) return `${p.mode === 'serve' ? 'Published' : 'Staged'} ${p.package} on ${p.channel} of ${p.runner ?? 'the Runner'} as version ${p.version}${p.changed === false ? ' (the same content as before, nothing changed)' : ''}.`
+  if (p.models) return `Published ${p.models.map((m) => `${m.model} on the data source ${m.data_source}${m.version ? ` as version ${m.version}${m.unchanged ? ' (unchanged)' : ''}` : ''}`).join(', ')} to ${p.gateway ?? 'the Gateway'}.`
+  return `Published ${p.app} to ${p.gateway}${p.version ? ` as version ${p.version}` : ''}.`
+}
+
+/** The words on the button that makes what a kind publishes: a Build or Sync project is made into a package, a Store project's models are made ready. */
+export const makeLabel = (kind: string) => (kind === 'store' ? 'Check and make the models' : kind === 'app' ? 'Build' : 'Check and make the package')
 
 /** Why a reference to a secret would be refused, or null. The server says the same; a pasted key must not reach it. */
 export function referenceProblem(reference: string): string | null {

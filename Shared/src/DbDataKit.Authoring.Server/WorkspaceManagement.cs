@@ -160,6 +160,7 @@ public static class WorkspaceManagement
                     ["title"] = k.Title,
                     ["description"] = k.Description,
                     ["buildable"] = k.Buildable,
+                    ["produces"] = k.Produces,
                     ["publishes"] = new JsonArray([.. k.Publishes.Select(r => (JsonNode?)new JsonObject { ["product"] = r.Product, ["what"] = r.What, ["description"] = r.Description })]),
                 })]),
             });
@@ -245,10 +246,28 @@ public static class WorkspaceManagement
                 if (publishing.Find(target) is { } paired && projects.Kinds.Find(store.FindProject(hosted.Id)!.Kind) is { } projectKind) WorkspacePublishing.RouteFor(projectKind, paired);
                 var provenance = $"From workspace {id} of project {hosted.Id}, build {buildId:D}" + (found.Row.CommitSha is { } sha ? $", commit {sha[..Math.Min(12, sha.Length)]}" : "") +
                     (found.Result?["uncommitted_changes"]?.GetValue<bool>() == true ? " (with changes not yet committed)" : "") + $", published by {Actor(token)}.";
-                var answer = await publishing.PublishAsync(target, builds.AppFolderOf(hosted.Id, buildId), string.IsNullOrWhiteSpace(note) ? provenance : note.Trim() + " | " + provenance, Actor(token), steps.Add, context.RequestAborted);
+                var fullNote = string.IsNullOrWhiteSpace(note) ? provenance : note.Trim() + " | " + provenance;
+                JsonObject answer;
+                if (projects.Kinds.Find(store.FindProject(hosted.Id)!.Kind) is { Produces: true } producing)
+                {
+                    // a package for a Runner or models for a Gateway (plan 33 SC20d, SC21b, SC22b): what the kind made is sent with the key of the target, and what the Runner or Gateway said is the answer
+                    var bind = new Dictionary<string, string>(StringComparer.Ordinal);
+                    if (body?["bind"] is JsonObject slots)
+                        foreach (var slot in slots)
+                            if (slot.Value is JsonValue v && v.TryGetValue<string>(out var connection)) bind[slot.Key] = connection;
+                    var options = new ArtifactPublishOptions(body?["channel"]?.GetValue<string>(), body?["serve"]?.GetValue<bool>() ?? false, body?["expected_version"]?.GetValue<int>(), bind, body?["data_source"]?.GetValue<string>());
+                    answer = await publishing.PublishArtifactAsync(producing, target, builds.ArtifactFolderOf(hosted.Id, buildId), options, Actor(token), steps.Add, context.RequestAborted);
+                    answer["note"] = fullNote;
+                }
+                else
+                    answer = await publishing.PublishAsync(target, builds.AppFolderOf(hosted.Id, buildId), fullNote, Actor(token), steps.Add, context.RequestAborted);
                 builds.RecordPublish(hosted.Id, buildId, new JsonObject { ["at"] = DateTimeOffset.UtcNow, ["by"] = Actor(token), ["target"] = target, ["ok"] = true, ["answer"] = answer.DeepClone() });
                 Audit(token, "build.publish", $"{target1} -> {target}", "ok");
                 return Results.Json(new JsonObject { ["steps"] = new JsonArray([.. steps.Select(x => (JsonNode?)x)]), ["published"] = answer });
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or FormatException)
+            {
+                return Results.Json(new { error = "The body's \"channel\" and \"data_source\" are text, \"serve\" is true or false, \"expected_version\" a number and \"bind\" an object of slot to connection name." }, statusCode: StatusCodes.Status400BadRequest);
             }
             catch (WorkspacePublishException ex)
             {

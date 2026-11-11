@@ -7,8 +7,8 @@ The server where people (and, later, agents) author projects in git workspaces (
 dbdataworkspace server run [--repo <server directory>] [--listen https://127.0.0.1:8471] [--state-engine sqlite|mssql|postgres --state-connection <connection string>]
 dbdataworkspace server pair --max-role <roles> [--repo <server directory>]
 dbdataworkspace server clients | unpair <client> [--repo <server directory>]
-dbdataworkspace project create <id> [--title <text>] [--kind app|build|store] [--repo <server directory>]   # a git repository in projects/<id> with a first commit
-dbdataworkspace project add <id> --path <repository folder> [--title <text>] [--kind app|build|store] [--repo <server directory>]   # host a repository that is already on this machine, in place
+dbdataworkspace project create <id> [--title <text>] [--kind app|build|store|sync] [--repo <server directory>]   # a git repository in projects/<id> with a first commit
+dbdataworkspace project add <id> --path <repository folder> [--title <text>] [--kind app|build|store|sync] [--repo <server directory>]   # host a repository that is already on this machine, in place
 dbdataworkspace project list [--repo <server directory>]
 dbdataworkspace workspace list [--project <id>] [--repo <server directory>]
 dbdataworkspace publisher pair <name> --url <https address of a Gateway's management API> --code <pairing code> [--client-name <text>] [--repo <server directory>]   # make the key for a target and pair it with a Gateway (the code: `server pair --max-role publisher` there)
@@ -63,6 +63,8 @@ Every call needs a token a paired console issued; the roles are the suite's (`Db
 | `GET /api/v1/publisher-keys`, `PUT\|DELETE /api/v1/publisher-keys/{name}` `{secret_ref}` | admin |
 | `POST /api/v1/publisher-keys/{name}/pair` `{url, code, product?}`, `GET /api/v1/publish-targets[?project=<id>]` | admin; approver (each target says its `product`, `gateway` or `runner`, found from the server's own `/version`; with `project`, `accepts` says whether that project's kind publishes to it; plan 33 SC20b) |
 | `GET /api/v1/state` and the maintenance calls | the shared state API (`DbDataKit.State.Api`) |
+
+A build of a project whose kind produces something to publish (`build`, `sync`, `store`) is the kind's check followed by its artifact in `builds/<project>/<id>/artifact/` (`package.yaml` and `files/` for a Runner, `models/` for a Gateway); `POST .../builds/{build}/publish` then takes `{target, note?}` and, by the target's product, `{channel, serve?, expected_version?, bind?}` for a Runner (the package is staged on the channel; `bind` is slot to connection name) or `{data_source?}` for a Gateway (the models' own storage connection by default). The answer is the Runner's or the Gateway's own; a refusal comes back in its words.
 
 The console relays an explicit table of these (`ServerProducts.WorkspaceRoutes` in `DbDataKit.Server`: 30 routes, each with its role, checked at the relay against what the person holds, in the route's project too, and by the server again), not the whole API; the publisher's key reference is not relayed.
 

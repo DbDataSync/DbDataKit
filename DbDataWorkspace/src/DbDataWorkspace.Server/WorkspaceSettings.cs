@@ -19,6 +19,9 @@ public sealed record WorkspaceSettings(string Directory, Uri Listen)
     /// <summary>The program that checks a Build project (<c>dbdatabuild</c>), when something other than "beside the server or on PATH" says (tests); null: found the usual way.</summary>
     public string? BuildExecutable { get; init; }
 
+    /// <summary>The path of <c>dbdatasync</c> when it is not beside the server or on PATH (a test, or a machine with Sync installed elsewhere); a Sync project is checked and published with it.</summary>
+    public string? SyncExecutable { get; init; }
+
     public const string Product = "dbdataworkspace";
     public const string DefaultListen = "https://127.0.0.1:8471";
 

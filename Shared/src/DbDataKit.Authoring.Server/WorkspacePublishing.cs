@@ -36,7 +36,7 @@ public static class PublishProducts
 /// through the server's secret resolver at the moment of publishing and never returned by any call. A target is made by <see cref="PairAsync"/> (a single-use pairing code made on the Gateway with <c>server pair --max-role publisher</c>):
 /// it makes the key, pairs with the Gateway so it knows the key's public half, and records the reference and the Gateway's address and certificate fingerprint.
 /// </summary>
-public sealed class WorkspacePublishing(string directory, WorkspaceStore store, Func<ISecretStore> keys, Func<ISecretResolver> secrets)
+public sealed partial class WorkspacePublishing(string directory, WorkspaceStore store, Func<ISecretStore> keys, Func<ISecretResolver> secrets)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     private readonly object gate = new();
@@ -136,11 +136,8 @@ public sealed class WorkspacePublishing(string directory, WorkspaceStore store, 
         }
     }
 
-    /// <summary>
-    /// Publishes the app in <paramref name="appFolder"/> (a build's output) to the target <paramref name="targetName"/>. <paramref name="step"/> is told each step as it happens (the screen's progress). The Gateway first checks what publishing
-    /// would do (its refusal, in its words, ends the publish before anything is stored); then the version is published. Returns what the Gateway answered.
-    /// </summary>
-    public async Task<JsonObject> PublishAsync(string targetName, string appFolder, string? note, string actor, Action<string> step, CancellationToken ct = default)
+    /// <summary>The target a publish names, its key's reference and the role the pairing lets it publish with (publisher, else admin). Refused, in words, when there is no key, no server paired with it or no role to publish with; <paramref name="what"/> says what is being published.</summary>
+    private (PublishTarget Target, PublisherKeyRow Key, ServerRole Role) ResolveTarget(string targetName, string what)
     {
         if (store.PublisherKeys().FirstOrDefault(k => k.Name == targetName) is not { } key)
             throw new WorkspacePublishException($"There is no publisher key called '{targetName}'. An administrator adds one (a reference to the secret that holds the key) under Publisher keys.", 409);
@@ -149,7 +146,18 @@ public sealed class WorkspacePublishing(string directory, WorkspaceStore store, 
         var ceiling = ServerRoles.TryParse(target.Roles, out var parsed) ? parsed : ServerRole.None;
         var role = ServerRoles.Allows(ceiling, ServerRole.Publisher) ? ServerRole.Publisher : ServerRoles.Allows(ceiling, ServerRole.Admin) ? ServerRole.Admin : ServerRole.None;
         if (role == ServerRole.None)
-            throw new WorkspacePublishException($"This server is paired with {target.Url} with the roles {string.Join(", ", target.Roles)}, and publishing an app needs the publisher role. Pair again with a code made by `server pair --max-role publisher` on the Gateway.", 409);
+            throw new WorkspacePublishException($"This server is paired with {target.Url} with the roles {string.Join(", ", target.Roles)}, and publishing {what} needs the publisher role. Pair again with a code made by `server pair --max-role publisher` on the Gateway.", 409);
+
+        return (target, key, role);
+    }
+
+    /// <summary>
+    /// Publishes the app in <paramref name="appFolder"/> (a build's output) to the target <paramref name="targetName"/>. <paramref name="step"/> is told each step as it happens (the screen's progress). The Gateway first checks what publishing
+    /// would do (its refusal, in its words, ends the publish before anything is stored); then the version is published. Returns what the Gateway answered.
+    /// </summary>
+    public async Task<JsonObject> PublishAsync(string targetName, string appFolder, string? note, string actor, Action<string> step, CancellationToken ct = default)
+    {
+        var (target, key, role) = ResolveTarget(targetName, "an app");
 
         step("Read the built app.");
         AppPackage package;
