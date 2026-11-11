@@ -13,6 +13,13 @@ public sealed class ModelHttp(HttpMessageHandler? handler = null)
     public HttpMessageHandler? Handler { get; } = handler;
 }
 
+/// <summary>The names of the slots the suite itself binds (an agent's own slot is named in its definition).</summary>
+public static class ModelSlotNames
+{
+    /// <summary>The slot a channel's knowledge index is embedded with (<see cref="SlotBindingsLoader.EmbeddingsSlot"/>).</summary>
+    public const string Embeddings = SlotBindingsLoader.EmbeddingsSlot;
+}
+
 public sealed record ModelView(string Id, int Window, int MaxOutput, decimal? PriceInput, decimal? PriceOutput);
 
 /// <summary>A provider as the screen lists it: its file, what the reader says, and whether its key can be read (never the key).</summary>
@@ -197,7 +204,43 @@ public sealed class ConsoleModels : IAgentModels
         return (true, diagnostics);
     }
 
-    /// <summary>Calls the provider's model with a one-word request and says what came of it; the key never appears in the result.</summary>
+    // ---- embeddings (plan 27a KN05, KN08) ----
+
+    /// <summary>The embedding model a channel's knowledge index is bound to, for the screen: what the <c>embeddings</c> slot names, whether it can be used now and why not.</summary>
+    public sealed record EmbeddingBindingView(string? Provider, string? Model, string? ModelId, bool Usable, string? Problem);
+
+    /// <summary>What the <c>embeddings</c> slot is bound to in a channel (the first choice; there is no fallback for an index, one model per index) and whether it can be used now.</summary>
+    public EmbeddingBindingView EmbeddingBinding(string? channel)
+    {
+        var (_, slots) = ReadSlots();
+        if (slots.Bindings is not { } bindings) return new(null, null, null, false, "The slots file does not read; fix it on the Models screen.");
+        if (bindings.For(ModelSlotNames.Embeddings, channel).FirstOrDefault() is not { } choice) return new(null, null, null, false, null);
+        var id = $"{choice.Provider}/{choice.Model}";
+        if (!Definitions().TryGetValue(choice.Provider, out var provider)) return new(choice.Provider, choice.Model, id, false, $"There is no provider `{choice.Provider}` that reads.");
+        if (provider.Purpose != "embeddings") return new(choice.Provider, choice.Model, id, false, $"`{choice.Provider}` is for {provider.Purpose}, not embeddings.");
+        if (provider.Model(choice.Model) is null) return new(choice.Provider, choice.Model, id, false, $"`{choice.Provider}` does not allow `{choice.Model}`.");
+        var (_, problem) = Key(provider);
+        return new(choice.Provider, choice.Model, id, problem is null, problem);
+    }
+
+    /// <summary>The generator of the embedding model a channel is bound to, with the id the index records it under (<c>connection/model</c>); null when nothing usable is bound.</summary>
+    public (IEmbeddingGenerator<string, Embedding<float>> Generator, string ModelId)? EmbeddingFor(string? channel)
+    {
+        var view = EmbeddingBinding(channel);
+        if (!view.Usable || view.ModelId is null) return null;
+        return EmbeddingById(view.ModelId) is { } generator ? (generator, view.ModelId) : null;
+    }
+
+    /// <summary>The generator for an id the index recorded (<c>connection/model</c>), as long as that connection and model still exist and its key can be read: how a question is embedded for an index made with an earlier model than the one now bound.</summary>
+    public IEmbeddingGenerator<string, Embedding<float>>? EmbeddingById(string modelId)
+    {
+        var slash = modelId.IndexOf('/', StringComparison.Ordinal);
+        if (slash <= 0 || !Definitions().TryGetValue(modelId[..slash], out var provider) || provider.Purpose != "embeddings" || provider.Model(modelId[(slash + 1)..]) is not { } model) return null;
+        var (key, problem) = Key(provider);
+        return problem is null ? EmbeddingClients.Create(provider, model, key, _http) : null;
+    }
+
+    /// <summary>Calls the provider's model with a one-word request and says what came of it (for an embedding provider: embeds a sample and says how many dimensions it gives); the key never appears in the result.</summary>
     public async Task<ProviderTestResult> TestAsync(string name, string modelId, CancellationToken cancellation = default)
     {
         var read = ReadProviders().FirstOrDefault(p => p.Name == name);
@@ -205,6 +248,8 @@ public sealed class ConsoleModels : IAgentModels
         if (provider.Model(modelId) is not { } model) return new ProviderTestResult(false, $"'{name}' does not allow the model '{modelId}'. It allows: {string.Join(", ", provider.Models.Select(m => m.Id))}.", null, null, null, 0, false);
         var (key, problem) = Key(provider);
         if (problem is not null) return new ProviderTestResult(false, problem, null, null, null, 0, false);
-        return await ProviderClients.TestAsync(provider, model, key, _http, cancellation).ConfigureAwait(false);
+        return provider.Purpose == "embeddings"
+            ? await EmbeddingClients.TestAsync(provider, model, key, _http, cancellation).ConfigureAwait(false)
+            : await ProviderClients.TestAsync(provider, model, key, _http, cancellation).ConfigureAwait(false);
     }
 }

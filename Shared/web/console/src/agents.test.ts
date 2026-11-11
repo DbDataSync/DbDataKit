@@ -17,6 +17,9 @@ describe('model providers and slots', () => {
     expect(providerTemplate('ollama', 'local')).not.toContain('key_secret')
     expect(providerTemplate('openai-compatible', 'lab')).toContain('locality: local')
     expect(providerTemplate('foundry', 'f')).toContain('endpoint: https://<resource>')
+    expect(providerTemplate('ollama', 'emb', 'embeddings')).toContain('purpose: embeddings')
+    expect(providerTemplate('ollama', 'emb', 'embeddings')).toContain('nomic-embed-text')
+    expect(providerTemplate('ollama', 'chatty')).not.toContain('purpose:')
   })
   it('says a slot binding as the primary and the fallback in order', () => {
     expect(bindingLine({ slot: 'default', channel: '*', choices: [{ provider: 'a', model: 'm', usable: true, problem: null }, { provider: 'b', model: 'n', usable: false, problem: 'x' }] })).toBe('a/m then b/n (not usable)')

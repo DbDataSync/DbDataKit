@@ -95,6 +95,23 @@ public sealed class ModelProviderTests
     }
 
     [Fact]
+    public void The_embeddings_slot_takes_a_provider_for_embeddings_and_refuses_a_chat_one_and_the_other_way_round()
+    {
+        var chat = ModelProviderConnection.Load(Good, "p.yml").Definition!;
+        var embeddings = ModelProviderConnection.Load(Good.Replace("name: claude", "name: embed").Replace("provider: anthropic", "provider: ollama\n  purpose: embeddings").Replace("sign_in: { method: api_key, key_secret: env:ANTHROPIC_API_KEY }\n", ""), "e.yml").Definition!;
+        var providers = new Dictionary<string, ModelProviderDefinition> { ["claude"] = chat, ["embed"] = embeddings };
+        var yaml = "model-slots: 1\nslots:\n  embeddings:\n    \"*\":\n      - { provider: embed, model: claude-sonnet-4-5 }\n    test:\n      - { provider: claude, model: claude-sonnet-4-5 }\n";
+
+        var problems = SlotBindingsLoader.Check(SlotBindingsLoader.Load(yaml, "s.yml").Bindings!, providers, "s.yml");
+
+        Assert.Equal("embeddings", SlotBindingsLoader.PurposeOf(SlotBindingsLoader.EmbeddingsSlot));
+        Assert.Equal("chat", SlotBindingsLoader.PurposeOf("default"));
+        var problem = Assert.Single(problems);
+        Assert.Contains("for chat, not embeddings", problem.Message);
+        Assert.Equal(7, problem.Line);
+    }
+
+    [Fact]
     public void A_choice_of_a_provider_or_model_that_is_not_there_or_not_for_chat_is_refused_naming_the_line()
     {
         var provider = ModelProviderConnection.Load(Good, "p.yml").Definition!;

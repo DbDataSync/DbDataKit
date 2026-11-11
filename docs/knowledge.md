@@ -35,7 +35,7 @@
 | --- | --- |
 | The `knowledge/1` item format (role, scope, owner), `_knowledge.yml` defaults, knowledge projects in git | **built as a library** (above); not published, not served, no editor screen yet |
 | Generated knowledge from published definitions (the host that subscribes); the `build-metadata` kind (Build publishing its metadata to the serving group) | the renderer for a semantic model is built (above); nothing subscribes to published definitions yet and entity models, data sources and apps are not rendered; the published kinds are `semantic-model`, `entity-model`, `data-source`, `app` |
-| Embedding models (built in, Ollama, OpenAI-compatible), the vector index per channel, `sqlite-vec` | not started; only the engine feature check exists and search by words (above) |
+| Embedding models (built in, Ollama, OpenAI-compatible), the vector index per channel, `sqlite-vec` | Ollama and OpenAI-compatible embedding connections are built (`EmbeddingClients`, with a Test that reports the dimensions); the vector index is built beside the words as the module `knowledge_vectors` (see above); the built-in ONNX model (KN06) is not; `sqlite-vec` is skipped (a prerelease package; owner, 2026-11-11) |
 | `knowledge search`, `show`, `about`, `check`, `context`, `suggest`, `index` commands | not started |
 | The serving layer's `knowledge` module, suggestions and approvals at the edge, the knowledge app, `@dbdatakit/knowledge-ui` | not started |
 | Verified queries (`verified-query` items, "Verify this answer", re-verification when a model changes) | not started; saved queries and the JSON request are the pieces they pin |
