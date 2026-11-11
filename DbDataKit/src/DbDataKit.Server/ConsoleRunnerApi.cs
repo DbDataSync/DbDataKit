@@ -51,6 +51,7 @@ public static class ConsoleRunnerApi
             var options = new RunnerApiOptions("", CallerOf, ConsoleSettings.Product, ConsoleHost.Version) { DecorateStatus = runner.DecorateStatus };
             RunnerApi.Map(group, state, Engine, ConsoleRunnerSettings.ServerId, options);
             RunnerGroupApi.Map(group, state, Engine, "", CallerOf, ConsoleState.ServiceId);
+            RunnerTrackingApi.Map(group, state, "", CallerOf, ConsoleState.ServiceId);   // plan 28c E18: the embedded runner's own copy of Build's tracking
             RunnerPublishApi.MapReadAndLifecycle(group, runner.Publishing, "", CallerOf);
             // upload, publish, bind and the require-signatures setting (plan 33 UE08, UE10): an administrator signed in here does them, a viewer is refused and audited; no owner rules, since no client's token is involved
             RunnerPublishApi.MapWrite(group, runner.Publishing, "", CallerOf);

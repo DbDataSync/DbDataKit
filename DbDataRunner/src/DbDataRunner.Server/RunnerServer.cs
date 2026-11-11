@@ -92,6 +92,7 @@ public static class RunnerServer
         RunnerBindingTestApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>().Slots, "/api/v1", RunnerCallers.TokenResolver);   // UI08: try a slot's binding
         RunnerGroupApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver);
         RunnerLineageApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver);
+        RunnerTrackingApi.Map(app, state, "/api/v1", RunnerCallers.TokenResolver);   // plan 28c E18: the runner's own copy of Build's tracking, and the resolve of its divergences
         return app;
     }
 }
