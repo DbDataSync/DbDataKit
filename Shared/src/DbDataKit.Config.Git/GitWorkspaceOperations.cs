@@ -78,6 +78,35 @@ public static class GitWorkspaceOperations
     }
 
     /// <summary>
+    /// The commits (newest first, at most <paramref name="max"/>) in which <paramref name="path"/> changed: added, edited or removed, against the commit's first parent. A file the repository never had has none. Committed history only:
+    /// a change not committed yet is not in it (it is the workspace's own text).
+    /// </summary>
+    public static IReadOnlyList<CommitInfo> FileHistory(string worktree, string path, int max = 50)
+    {
+        using var repo = new Repository(worktree);
+        var found = new List<CommitInfo>();
+        if (repo.Head.Tip is null) return found;
+        foreach (var commit in repo.Commits.QueryBy(new CommitFilter { IncludeReachableFrom = repo.Head.Tip, SortBy = CommitSortStrategies.Time }))
+        {
+            var now = commit[path]?.Target.Sha;
+            var before = commit.Parents.FirstOrDefault()?[path]?.Target.Sha;
+            if (now != before) found.Add(new CommitInfo(commit.Sha, commit.MessageShort, commit.Author.Name, commit.Author.Email, commit.Author.When.ToUniversalTime()));
+            if (found.Count >= max) break;
+        }
+        return found;
+    }
+
+    /// <summary>The text of <paramref name="path"/> as <paramref name="sha"/> committed it, or null when that commit has no such file or the file is not text (it has a NUL) or is longer than <paramref name="maxChars"/>. Throws when <paramref name="sha"/> is not a commit of the repository.</summary>
+    public static string? FileAt(string worktree, string sha, string path, int maxChars = 1024 * 1024)
+    {
+        using var repo = new Repository(worktree);
+        if (repo.Lookup<Commit>(sha) is not { } commit) throw new GitOperationException($"There is no commit {sha} in this workspace's repository.");
+        if (commit[path]?.Target is not Blob blob || blob.IsBinary || blob.Size > maxChars * 4L) return null;
+        var text = blob.GetContentText();
+        return text.Length > maxChars ? null : text;
+    }
+
+    /// <summary>
     /// Pushes <paramref name="branch"/> to the remote <c>origin</c>, as <paramref name="credential"/> when the remote needs a login (plan 13, W12; presented through libgit2's callback, never written anywhere). A refusal says which
     /// credential was refused, in words and without the token.
     /// </summary>

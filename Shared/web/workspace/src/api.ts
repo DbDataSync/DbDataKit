@@ -92,6 +92,9 @@ export const workspaceApi = {
   lowered: (project: string, id: string, path: string) => request<LoweredResult>(`${ws(project, id)}/lowered`, json({ path })),
   /** Models run on generated rows, offline: the same seed gives the same rows. */
   sample: (project: string, id: string, options: SampleOptions = {}) => request<SampleResult>(`${ws(project, id)}/sample`, json(options)),
+  /** The commits in which one file changed (newest first), and its text as one of them committed it (plan 33 SC21e). */
+  fileHistory: (project: string, id: string, path: string) => request<{ path: string; commits: Commit[] }>(`${ws(project, id)}/file-history/${filePath(path)}`).then((r) => r.commits),
+  fileAt: (project: string, id: string, sha: string, path: string) => request<{ path: string; sha: string; content: string }>(`${ws(project, id)}/file-at/${enc(sha)}/${filePath(path)}`).then((r) => r.content),
   workspaces: (project: string) => request<{ workspaces: WorkspaceSummary[] }>(`/api/v1/projects/${enc(project)}/workspaces`).then((r) => r.workspaces),
   createWorkspace: (project: string, name: string) => request<WorkspaceSummary>(`/api/v1/projects/${enc(project)}/workspaces`, json({ name })),
   abandon: (project: string, id: string) => request<void>(`/api/v1/projects/${enc(project)}/workspaces/${enc(id)}`, { method: 'DELETE' }),

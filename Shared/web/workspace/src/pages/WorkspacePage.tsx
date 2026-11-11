@@ -11,6 +11,7 @@ import { NewStoreModel, StoreModelEditor } from './StoreModelPanel'
 import { BuildPlanPanel } from './BuildPlanPanel'
 import { BuildCompilePanel } from './BuildCompilePanel'
 import { BuildViewsPanel } from './BuildViewsPanel'
+import { FileHistory } from './FileHistory'
 import { BuildFileEditor, NewBuildConnection, NewBuildModel } from './BuildFilePanel'
 import { CatalogPanel, useCatalogRead } from './CatalogPanel'
 import { SyncFileEditor, SyncSetOverview, findingsKey } from './SyncSetPanel'
@@ -43,6 +44,7 @@ function FileEditor({ project, id, kind, path, editable, canWrite, onGone, onRen
   const [target, setTarget] = useState('')
   const [moving, setMoving] = useState(false)
   const [asking, setAsking] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
   const loaded = useQuery({ queryKey: ['workspace', 'file', project, id, path], queryFn: () => workspaceApi.readFile(project, id, path), staleTime: Infinity, gcTime: 0, retry: false })
   const text = drafts[path] ?? loaded.data ?? ''
   const dirty = drafts[path] !== undefined && drafts[path] !== loaded.data
@@ -87,8 +89,10 @@ function FileEditor({ project, id, kind, path, editable, canWrite, onGone, onRen
             <button type="button" className="btn" data-testid="wsp-delete-cancel" onClick={() => setAsking(false)}>Keep it</button>
           </>
         )}
+        <button type="button" className="btn" data-testid="wsp-file-history-open" aria-pressed={showHistory} onClick={() => setShowHistory((v) => !v)}>Earlier texts</button>
         {state.why && <span className="hint" data-testid="wsp-save-why">{state.why}</span>}
       </div>
+      {showHistory && <FileHistory project={project} id={id} path={path} current={text} canRestore={editable && canWrite} onRestore={(earlier) => { onText(earlier); setShowHistory(false) }} />}
       {moving && (
         <form className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }} onSubmit={(e) => { e.preventDefault(); if (!problem && target.trim() !== '' && target.trim() !== path) move.mutate() }}>
           <input className="input mono" aria-label="New path" value={target} onChange={(e) => setTarget(e.target.value)} data-testid="wsp-move-target" />
