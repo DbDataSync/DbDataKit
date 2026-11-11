@@ -11,6 +11,7 @@ import { NewStoreModel, StoreModelEditor } from './StoreModelPanel'
 import { BuildPlanPanel } from './BuildPlanPanel'
 import { CatalogPanel, useCatalogRead } from './CatalogPanel'
 import { SyncFileEditor, SyncSetOverview, findingsKey } from './SyncSetPanel'
+import { IntegrationManifestEditor, IntegrationOverview } from './IntegrationPanel'
 import { editorKindOf } from '../editors'
 import { useLiveCheck } from '../useLiveCheck'
 
@@ -99,7 +100,10 @@ function FileEditor({ project, id, kind, path, editable, canWrite, onGone, onRen
       {!loaded.error && !loaded.isLoading && editorKind === 'store-model' && (
         <StoreModelEditor path={path} text={text} onText={onText} readOnly={!editable || !canWrite} live={live} onOpen={onOpen} />
       )}
-      {!loaded.error && !loaded.isLoading && editorKind !== null && editorKind !== 'store-model' && (
+      {!loaded.error && !loaded.isLoading && editorKind === 'integration-manifest' && (
+        <IntegrationManifestEditor path={path} text={text} onText={onText} readOnly={!editable || !canWrite} live={live} onOpen={onOpen} />
+      )}
+      {!loaded.error && !loaded.isLoading && editorKind !== null && editorKind !== 'store-model' && editorKind !== 'integration-manifest' && (
         <SyncFileEditor kind={editorKind} path={path} text={text} onText={onText} readOnly={!editable || !canWrite} live={live} onOpen={onOpen} catalog={catalog.read} />
       )}
       {!loaded.error && !loaded.isLoading && editorKind === null && (
@@ -260,6 +264,7 @@ export function WorkspacePage() {
             <div className="row" style={{ gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
               <div style={{ flex: '0 0 300px', minWidth: 240, display: 'grid', gap: 12 }}>
               {kind === 'sync' && <SyncSetOverview project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} canWrite={editable && canWrite} busy={make.isPending} onOpen={setSelected} onCreate={(made) => make.mutate(made)} />}
+              {kind === 'integration' && <IntegrationOverview project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} canWrite={editable && canWrite} busy={make.isPending} onOpen={setSelected} onCreate={(made) => make.mutate(made)} onBuildStarted={() => setTab('builds')} />}
               <div className="card" data-testid="wsp-files">
                 <div className="card-body">
                   <div className="hint" style={{ marginBottom: 6 }}>Files</div>
